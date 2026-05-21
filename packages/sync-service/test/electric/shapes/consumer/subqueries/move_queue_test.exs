@@ -8,17 +8,13 @@ defmodule Electric.Shapes.Consumer.Subqueries.MoveQueueTest do
   test "drops redundant move outs for values absent from the base view" do
     queue = MoveQueue.enqueue(MoveQueue.new(), @dep, %{move_out: [{1, "1"}]}, MapSet.new())
 
-    assert %MoveQueue{move_out: empty_out, move_in: empty_in} = queue
-    assert empty_out == %{}
-    assert empty_in == %{}
+    assert nil == MoveQueue.pop_next(queue)
   end
 
   test "drops redundant move ins for values already present in the base view" do
     queue = MoveQueue.enqueue(MoveQueue.new(), @dep, %{move_in: [{1, "1"}]}, MapSet.new([1]))
 
-    assert %MoveQueue{move_out: empty_out, move_in: empty_in} = queue
-    assert empty_out == %{}
-    assert empty_in == %{}
+    assert nil == MoveQueue.pop_next(queue)
   end
 
   test "cancels a pending move in with a later move out for the same value" do
@@ -27,9 +23,7 @@ defmodule Electric.Shapes.Consumer.Subqueries.MoveQueueTest do
       |> MoveQueue.enqueue(@dep, %{move_in: [{1, "1"}]}, MapSet.new())
       |> MoveQueue.enqueue(@dep, %{move_out: [{1, "1"}]}, MapSet.new())
 
-    assert %MoveQueue{move_out: empty_out, move_in: empty_in} = queue
-    assert empty_out == %{}
-    assert empty_in == %{}
+    assert nil == MoveQueue.pop_next(queue)
   end
 
   test "cancels a pending move out with a later move in for the same value" do
@@ -38,9 +32,7 @@ defmodule Electric.Shapes.Consumer.Subqueries.MoveQueueTest do
       |> MoveQueue.enqueue(@dep, %{move_out: [{1, "1"}]}, MapSet.new([1]))
       |> MoveQueue.enqueue(@dep, %{move_in: [{1, "1"}]}, MapSet.new([1]))
 
-    assert %MoveQueue{move_out: empty_out, move_in: empty_in} = queue
-    assert empty_out == %{}
-    assert empty_in == %{}
+    assert nil == MoveQueue.pop_next(queue)
   end
 
   test "merges repeated move ins and keeps the terminal tuple" do
@@ -49,8 +41,7 @@ defmodule Electric.Shapes.Consumer.Subqueries.MoveQueueTest do
       |> MoveQueue.enqueue(@dep, %{move_in: [{1, "01"}]}, MapSet.new())
       |> MoveQueue.enqueue(@dep, %{move_in: [{1, "1"}], move_out: []}, MapSet.new())
 
-    assert %MoveQueue{move_in: %{0 => {[{1, "1"}], _}}, move_out: empty_out} = queue
-    assert empty_out == %{}
+    assert {%{move_in_values: [{1, "1"}], move_out_values: []}, _queue} = MoveQueue.pop_next(queue)
   end
 
   test "merges repeated move outs and keeps the terminal tuple" do
@@ -59,66 +50,61 @@ defmodule Electric.Shapes.Consumer.Subqueries.MoveQueueTest do
       |> MoveQueue.enqueue(@dep, %{move_out: [{1, "01"}]}, MapSet.new([1]))
       |> MoveQueue.enqueue(@dep, %{move_out: [{1, "1"}], move_in: []}, MapSet.new([1]))
 
-    assert %MoveQueue{move_out: %{0 => {[{1, "1"}], _}}, move_in: empty_in} = queue
-    assert empty_in == %{}
+    assert {%{move_in_values: [], move_out_values: [{1, "1"}]}, _queue} = MoveQueue.pop_next(queue)
   end
 
-  test "orders surviving move outs before move ins" do
-    queue =
-      MoveQueue.new()
-      |> MoveQueue.enqueue(@dep, %{move_in: [{2, "2"}]}, MapSet.new([1]))
-      |> MoveQueue.enqueue(@dep, %{move_out: [{1, "1"}]}, MapSet.new([1]))
-
-    assert %MoveQueue{
-             move_out: %{0 => {[{1, "1"}], _}},
-             move_in: %{0 => {[{2, "2"}], _}}
-           } = queue
-  end
-
-  test "uses the provided base view when reducing buffering follow-up moves" do
-    queue =
-      MoveQueue.new()
-      |> MoveQueue.enqueue(@dep, %{move_in: [{2, "2"}]}, MapSet.new([1]))
-      |> MoveQueue.enqueue(@dep, %{move_out: [{2, "2"}]}, MapSet.new([1]))
-
-    assert %MoveQueue{move_out: empty_out, move_in: empty_in} = queue
-    assert empty_out == %{}
-    assert empty_in == %{}
-  end
-
-  test "pop_next returns the whole move out batch before the move in batch" do
+  test "pop_next returns one combined batch per dep carrying both kinds" do
     queue =
       MoveQueue.new()
       |> MoveQueue.enqueue(@dep, %{move_in: [{2, "2"}], move_out: [{1, "1"}]}, MapSet.new([1]))
       |> MoveQueue.enqueue(@dep, %{move_in: [{3, "3"}]}, MapSet.new([1]))
 
-    assert {{:move_out, 0, [{1, "1"}], []}, _to_time, queue} = MoveQueue.pop_next(queue)
-    assert queue.move_out == %{}
-    assert {[{2, "2"}, {3, "3"}], _} = Map.fetch!(queue.move_in, 0)
+    assert {
+             %{
+               dep_index: 0,
+               move_in_values: [{2, "2"}, {3, "3"}],
+               move_out_values: [{1, "1"}]
+             },
+             queue
+           } = MoveQueue.pop_next(queue)
 
-    assert {{:move_in, 0, [{2, "2"}, {3, "3"}], []}, _to_time, queue} =
-             MoveQueue.pop_next(queue)
-
-    assert queue.move_out == %{}
-    assert queue.move_in == %{}
     assert nil == MoveQueue.pop_next(queue)
+  end
+
+  test "carries the first from_time and the max to_time per dep" do
+    queue =
+      MoveQueue.new()
+      |> MoveQueue.enqueue(
+        @dep,
+        %{move_in: [{1, "1"}], from_time: 5, to_time: 6},
+        MapSet.new()
+      )
+      |> MoveQueue.enqueue(
+        @dep,
+        %{move_in: [{2, "2"}], from_time: 6, to_time: 9},
+        MapSet.new()
+      )
+
+    assert {%{from_time: 5, to_time: 9}, _queue} = MoveQueue.pop_next(queue)
   end
 
   test "accumulates txids from successive enqueues per dependency" do
     queue =
       MoveQueue.new()
-      |> MoveQueue.enqueue(
-        @dep,
-        %{move_in: [{1, "1"}], txids: [10]},
-        MapSet.new()
-      )
-      |> MoveQueue.enqueue(
-        @dep,
-        %{move_in: [{2, "2"}], txids: [20]},
-        MapSet.new()
-      )
+      |> MoveQueue.enqueue(@dep, %{move_in: [{1, "1"}], txids: [10]}, MapSet.new())
+      |> MoveQueue.enqueue(@dep, %{move_in: [{2, "2"}], txids: [20]}, MapSet.new())
 
-    assert {{:move_in, 0, _, [10, 20]}, _to_time, _queue} = MoveQueue.pop_next(queue)
+    assert {%{move_in_values: _, txids: [10, 20]}, _queue} = MoveQueue.pop_next(queue)
+  end
+
+  test "pops the lowest-indexed dep first across deps" do
+    queue =
+      MoveQueue.new()
+      |> MoveQueue.enqueue(1, %{move_in: [{2, "2"}]}, MapSet.new())
+      |> MoveQueue.enqueue(0, %{move_in: [{1, "1"}]}, MapSet.new())
+
+    assert {%{dep_index: 0}, queue} = MoveQueue.pop_next(queue)
+    assert {%{dep_index: 1}, _queue} = MoveQueue.pop_next(queue)
   end
 
   test "length counts queued values across both batches" do

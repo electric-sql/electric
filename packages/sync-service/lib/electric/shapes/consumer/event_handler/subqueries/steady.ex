@@ -55,10 +55,16 @@ defmodule Electric.Shapes.Consumer.EventHandler.Subqueries.Steady do
     mtv = MultiTimeView.for_stack(state.shape_info.stack_id)
     %{subquery_id: subquery_id, time: pinned_time} = Map.fetch!(state.subquery_refs, subquery_ref)
     dep_view = mtv |> MultiTimeView.values(subquery_id, pinned_time) |> MapSet.new()
-    next_state = %{state | queue: MoveQueue.enqueue(state.queue, dep_index, payload, dep_view)}
 
-    with {:ok, next_state, effects} <-
-           drain_queue(next_state, EffectList.new(), payload_time: payload[:to_time]) do
+    payload_with_default_from_time = Map.put_new(Map.new(payload), :from_time, pinned_time)
+
+    next_state = %{
+      state
+      | queue:
+          MoveQueue.enqueue(state.queue, dep_index, payload_with_default_from_time, dep_view)
+    }
+
+    with {:ok, next_state, effects} <- drain_queue(next_state, EffectList.new()) do
       {:ok, next_state, EffectList.to_list(effects)}
     end
   end
@@ -82,76 +88,87 @@ defmodule Electric.Shapes.Consumer.EventHandler.Subqueries.Steady do
       nil ->
         {:ok, state, effects}
 
-      {{dep_move_kind, dep_index, values, txids} = move, batch_to_time, queue} ->
-        subquery_ref = RefResolver.ref_from_dep_index!(state.shape_info.ref_resolver, dep_index)
-        subscription_active? = Keyword.get(opts, :subscription_active?, false)
-        latest_seen_lsn = Keyword.get(opts, :latest_seen_lsn)
+      {batch, queue} ->
+        subquery_ref =
+          RefResolver.ref_from_dep_index!(state.shape_info.ref_resolver, batch.dep_index)
 
-        case outer_move_kind(state.shape_info, dep_index, dep_move_kind) do
-          :move_in ->
-            %{time: from_time} = Map.fetch!(state.subquery_refs, subquery_ref)
-            to_time = batch_to_time || Keyword.get(opts, :payload_time, from_time)
+        polarity =
+          Map.fetch!(state.shape_info.dnf_plan.dependency_polarities, batch.dep_index)
 
-            with {:ok, next_state, start_effects} <-
-                   Buffering.start(
-                     state.shape_info,
-                     state.subquery_refs,
-                     queue,
-                     move,
-                     subquery_ref,
-                     from_time,
-                     to_time,
-                     subscribe_global_lsn?: not subscription_active?,
-                     latest_seen_lsn: latest_seen_lsn
-                   ) do
-              {:ok, next_state, EffectList.append_all(effects, start_effects)}
-            end
-
-          :move_out ->
-            %{subquery_id: subquery_id} = Map.fetch!(state.subquery_refs, subquery_ref)
-            from_time = state.subquery_refs[subquery_ref].time
-            same_dep_move_in_pending? = Map.has_key?(queue.move_in, dep_index)
-            to_time = batch_to_time || Keyword.get(opts, :payload_time, from_time)
-
-            # When the same dep has a queued move-in waiting, leave
-            # `subquery_refs.time` untouched: the upcoming Buffering session
-            # owns the final time advance (so its move-in query reads
-            # `views_before` at the pre-batch time and `views_after` at
-            # `to_time`, with the diff yielding the newly-added values).
-            next_subquery_refs =
-              if same_dep_move_in_pending? do
-                state.subquery_refs
-              else
-                advance_subquery_index_time(
-                  state.shape_info,
-                  subquery_ref,
-                  subquery_id,
-                  from_time,
-                  to_time
-                )
-
-                advance_subquery_time(state.subquery_refs, subquery_ref, to_time)
-              end
-
-            next_state = %{state | queue: queue, subquery_refs: next_subquery_refs}
-
-            index_effects =
-              IndexChanges.effects_for_complete(state.shape_info.dnf_plan, move, subquery_ref)
-
-            effects =
-              effects
-              |> EffectList.append(
-                MoveBroadcast.effect_for_move_out(dep_index, values, txids, state.shape_info)
-              )
-              |> EffectList.append_all(index_effects)
-
-            drain_queue(
-              next_state,
-              effects,
-              opts
-            )
+        if buffering_required?(polarity, batch) do
+          start_buffering(state, queue, batch, subquery_ref, effects, opts)
+        else
+          process_inline(state, queue, batch, subquery_ref, polarity, effects, opts)
         end
     end
+  end
+
+  defp buffering_required?(:positive, %{move_in_values: [_ | _]}), do: true
+  defp buffering_required?(:negated, %{move_out_values: [_ | _]}), do: true
+  defp buffering_required?(_, _), do: false
+
+  defp start_buffering(state, queue, batch, subquery_ref, effects, opts) do
+    subscription_active? = Keyword.get(opts, :subscription_active?, false)
+    latest_seen_lsn = Keyword.get(opts, :latest_seen_lsn)
+
+    with {:ok, next_state, start_effects} <-
+           Buffering.start(
+             state.shape_info,
+             state.subquery_refs,
+             queue,
+             batch,
+             subquery_ref,
+             subscribe_global_lsn?: not subscription_active?,
+             latest_seen_lsn: latest_seen_lsn
+           ) do
+      {:ok, next_state, EffectList.append_all(effects, start_effects)}
+    end
+  end
+
+  # Inline path: the batch carries only non-Buffering-kind moves (positive
+  # polarity move-out, or negated polarity move-in). No PG query needed —
+  # we broadcast the outer move-out, update routing, and advance time.
+  defp process_inline(state, queue, batch, subquery_ref, polarity, effects, opts) do
+    %{subquery_id: subquery_id, time: from_time} =
+      Map.fetch!(state.subquery_refs, subquery_ref)
+
+    to_time = batch.to_time || from_time
+
+    {outer_move_out_values, outer_move_out_kind} =
+      case polarity do
+        :positive -> {batch.move_out_values, :move_out}
+        :negated -> {batch.move_in_values, :move_in}
+      end
+
+    advance_subquery_index_time(
+      state.shape_info,
+      subquery_ref,
+      subquery_id,
+      from_time,
+      to_time
+    )
+
+    next_subquery_refs = advance_subquery_time(state.subquery_refs, subquery_ref, to_time)
+    next_state = %{state | queue: queue, subquery_refs: next_subquery_refs}
+
+    move = {outer_move_out_kind, batch.dep_index, outer_move_out_values, batch.txids}
+
+    index_effects =
+      IndexChanges.effects_for_complete(state.shape_info.dnf_plan, move, subquery_ref)
+
+    effects =
+      effects
+      |> EffectList.append(
+        MoveBroadcast.effect_for_move_out(
+          batch.dep_index,
+          outer_move_out_values,
+          batch.txids,
+          state.shape_info
+        )
+      )
+      |> EffectList.append_all(index_effects)
+
+    drain_queue(next_state, effects, opts)
   end
 
   defp advance_subquery_index_time(
@@ -188,18 +205,6 @@ defmodule Electric.Shapes.Consumer.EventHandler.Subqueries.Steady do
 
   def advance_subquery_time(subquery_refs, subquery_ref, to_time) do
     Map.update!(subquery_refs, subquery_ref, fn meta -> %{meta | time: to_time} end)
-  end
-
-  defp outer_move_kind(
-         %ShapeInfo{dnf_plan: %{dependency_polarities: polarities}},
-         dep_index,
-         move_kind
-       ) do
-    case {Map.fetch!(polarities, dep_index), move_kind} do
-      {:positive, effect} -> effect
-      {:negated, :move_in} -> :move_out
-      {:negated, :move_out} -> :move_in
-    end
   end
 
   defp append_txn_effects(%Transaction{} = txn, %__MODULE__{} = state) do

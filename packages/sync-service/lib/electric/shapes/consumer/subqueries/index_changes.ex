@@ -133,4 +133,89 @@ defmodule Electric.Shapes.Consumer.Subqueries.IndexChanges do
         []
     end
   end
+
+  @doc """
+  Effects to broaden the filter when entering Buffering for a combined
+  ActiveMove that may carry both `move_in_values` and `move_out_values`.
+
+  - Positive polarity: add `move_in_values` to the index (broadens).
+  - Negated polarity: remove `move_out_values` from the index (broadens).
+  """
+  @spec effects_for_buffering_active_move(
+          DnfPlan.t(),
+          Electric.Shapes.Consumer.Subqueries.ActiveMove.t()
+        ) :: [Effects.AddToSubqueryIndex.t() | Effects.RemoveFromSubqueryIndex.t()]
+  def effects_for_buffering_active_move(%DnfPlan{dependency_polarities: polarities}, active_move) do
+    polarity = Map.get(polarities, active_move.dep_index, :positive)
+
+    case polarity do
+      :positive ->
+        if active_move.move_in_values == [] do
+          []
+        else
+          [
+            %Effects.AddToSubqueryIndex{
+              dep_index: active_move.dep_index,
+              subquery_ref: active_move.subquery_ref,
+              values: active_move.move_in_values
+            }
+          ]
+        end
+
+      :negated ->
+        if active_move.move_out_values == [] do
+          []
+        else
+          [
+            %Effects.RemoveFromSubqueryIndex{
+              dep_index: active_move.dep_index,
+              subquery_ref: active_move.subquery_ref,
+              values: active_move.move_out_values
+            }
+          ]
+        end
+    end
+  end
+
+  @doc """
+  Effects to narrow the filter when a combined ActiveMove splices.
+
+  - Positive polarity: remove `move_out_values` from the index.
+  - Negated polarity: add `move_in_values` to the index.
+  """
+  @spec effects_for_complete_active_move(
+          DnfPlan.t(),
+          Electric.Shapes.Consumer.Subqueries.ActiveMove.t()
+        ) :: [Effects.AddToSubqueryIndex.t() | Effects.RemoveFromSubqueryIndex.t()]
+  def effects_for_complete_active_move(%DnfPlan{dependency_polarities: polarities}, active_move) do
+    polarity = Map.get(polarities, active_move.dep_index, :positive)
+
+    case polarity do
+      :positive ->
+        if active_move.move_out_values == [] do
+          []
+        else
+          [
+            %Effects.RemoveFromSubqueryIndex{
+              dep_index: active_move.dep_index,
+              subquery_ref: active_move.subquery_ref,
+              values: active_move.move_out_values
+            }
+          ]
+        end
+
+      :negated ->
+        if active_move.move_in_values == [] do
+          []
+        else
+          [
+            %Effects.AddToSubqueryIndex{
+              dep_index: active_move.dep_index,
+              subquery_ref: active_move.subquery_ref,
+              values: active_move.move_in_values
+            }
+          ]
+        end
+    end
+  end
 end

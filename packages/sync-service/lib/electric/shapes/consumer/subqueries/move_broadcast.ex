@@ -12,12 +12,24 @@ defmodule Electric.Shapes.Consumer.Subqueries.MoveBroadcast do
 
   @spec effect_for_move_in(move(), ShapeInfo.t()) :: %Effects.AppendControl{}
   def effect_for_move_in(active_move, %ShapeInfo{} = shape_info) do
+    polarity =
+      Map.get(shape_info.dnf_plan.dependency_polarities, active_move.dep_index, :positive)
+
+    # The active move's "outer move-in" values are the dep values whose
+    # entry into (positive) or exit from (negated) the dep view promotes
+    # rows into the outer shape.
+    outer_move_in_values =
+      case polarity do
+        :positive -> active_move.move_in_values
+        :negated -> active_move.move_out_values
+      end
+
     %Effects.AppendControl{
       message:
         make(
           shape_info.dnf_plan,
           active_move.dep_index,
-          active_move.values,
+          outer_move_in_values,
           active_move.txids,
           "move-in",
           shape_info.stack_id,

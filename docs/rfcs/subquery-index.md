@@ -843,7 +843,8 @@ When `shape_a` receives the `s7` move from `0` to `1`, `ActiveMove` stores:
   subquery_id: s7,
   from_time: 0,
   to_time: 1,
-  values: [{30, "30"}]
+  move_in_values:  [{30, "30"}],
+  move_out_values: []
 }
 ```
 
@@ -856,8 +857,29 @@ views_after_move: MapSet.new([10, 20, 30])
 
 Buffered row conversion evaluates exact membership by calling
 `MultiTimeView.member?/3` at `from_time` or `to_time`. Move-in SQL may
-materialize `values(s7, 1)` as a query-local parameter array, but that memory
+materialise `values(s7, 1)` as a query-local parameter array, but that memory
 belongs to the query task and is released after the query.
+
+If additional materializer payloads for `s7` queue up during `shape_a`'s
+buffering — say a move-in of `{40, "40"}` at time `2` and a move-out of
+`{20, "20"}` at time `3` — they reduce into the *next* combined batch the
+consumer pops after splicing this move:
+
+```elixir
+%ActiveMove{
+  subquery_id: s7,
+  from_time: 1,
+  to_time: 3,
+  move_in_values:  [{40, "40"}],
+  move_out_values: [{20, "20"}]
+}
+```
+
+`from_time` here is the consumer's processed time when the first follow-up
+payload arrived (i.e. `shape_a`'s previous `ActiveMove.to_time`); `to_time`
+is the max of the contributing `to_time`s; the value lists are the reduced
+net effect. By construction
+`MTV(s7, 3) = MTV(s7, 1) + {40} - {20}`.
 
 Steady memory added per active move is:
 
@@ -1191,7 +1213,20 @@ The registration side effects are:
 - wait until the dependency materializer has finished initial population
 - register the consumer with `SubqueryProgressMonitor`
 - set the consumer's initial `required_time` to `current_time`
+- **atomically add the consumer to the materializer's subscribers list**
+  before returning `current_time`
 - return `current_time` to the caller
+
+The atomic-subscribe step is required for correctness. A two-call shape
+("register, then subscribe") opens a race window where the materializer
+commits between the calls: those commits go to the *old* subscribers list
+and the new consumer never sees them. Its `current_time` stays at the value
+returned by `register`, but the materializer's logical time has advanced
+past it, so the consumer's first observable `materializer_changes` event
+arrives with a `from_time` strictly greater than `current_time` — and
+`MTV(current_time)` no longer reflects "what the consumer has processed."
+That breaks the times-as-views invariant the rest of the design depends on
+(see *Consumer Move Handling* below).
 
 This replaces the current `Materializer.get_link_values/1` setup path for
 subquery event handlers. The handler should keep compact references such as:
@@ -1211,19 +1246,25 @@ depend on it.
 
 ### Consumer Move Handling
 
-For a move from time `a` to time `b`, `ActiveMove` should store times, not
-views:
+For a move from time `a` to time `b`, `ActiveMove` should store times and
+the values whose membership changed between those times. It does *not* store
+view snapshots:
 
 ```elixir
 %ActiveMove{
   subquery_id: subquery_id,
+  dep_index: dep_index,
+  subquery_ref: subquery_ref,
   from_time: a,
   to_time: b,
-  values: values
+  move_in_values: ins,    # values entering the dep view in [a, b]
+  move_out_values: outs,  # values leaving the dep view in [a, b]
+  txids: [...],           # source PG xids
+  ...                     # snapshot/query state for the move-in query
 }
 ```
 
-Elixir-side evaluation of buffered transactions should use callbacks into
+Elixir-side evaluation of buffered transactions uses callbacks into
 `MultiTimeView`:
 
 ```elixir
@@ -1231,7 +1272,7 @@ before_member? = fn ref, value -> member?(ref, value, a) end
 after_member? = fn ref, value -> member?(ref, value, b) end
 ```
 
-For SQL move-in queries, the first implementation can still materialize
+For SQL move-in queries, the first implementation can still materialise
 query-local arrays by calling `MultiTimeView.values(subquery_id, time)`. The
 important change is that these arrays are transient query parameters, not
 long-lived per-consumer state.
@@ -1248,6 +1289,86 @@ implementation would update per-shape membership rows for subsequent routing.
 The important invariant is that live routing must not under-route, while
 `required_time` continues to pin `a` until the consumer no longer needs the old
 view.
+
+#### Combined Move Batches (Times vs Views)
+
+The pre-RFC implementation stores frozen `MapSet` `views_before_move` and
+`views_after_move`. Those snapshots are *path-dependent*: they reflect what
+this consumer has processed, in the order it chose to process it. The
+consumer's MoveQueue freely reorders move-outs ahead of move-ins because set
+operations on disjoint values commute, so the consumer's final view is
+unchanged.
+
+`MultiTimeView` doesn't have that freedom. `MTV(t)` is the materializer's
+canonical view at logical time `t` — and the materializer applies moves in
+PG commit order. Times are points in a totally ordered history, not view
+deltas. So the consumer cannot pop the move-out batch first and "advance to
+some intermediate time where only the outs have been applied" — no such
+time exists if a move-in committed between them.
+
+To preserve the times-as-views invariant
+(`MTV(consumer.time) = what the consumer has processed so far`), an
+`ActiveMove` covers a *single contiguous window* `[a, b]` per dep and carries
+*both* move-in and move-out values for that window. `MoveQueue.pop_next/1`
+returns one combined batch per dep at a time:
+
+```elixir
+{:ok, batch} = MoveQueue.pop_next(queue)
+# batch = %{
+#   dep_index: 0,
+#   move_in_values:  [{V2, "V2"}, {V3, "V3"}],
+#   move_out_values: [{V1, "V1"}],
+#   from_time: a,
+#   to_time: b,
+#   txids: [...]
+# }
+```
+
+The batch's `from_time` is the consumer's processed time when the *first*
+payload in the window arrived (preserved across subsequent enqueues for the
+same dep). The `to_time` is the max of the contributing payload `to_time`s.
+By construction of the queue's per-dep reduce,
+`MTV(b) = MTV(a) + move_in_values - move_out_values`.
+
+The splice plan for a combined batch emits effects in this order:
+
+```
+pre_ops           — buffered txns before move-in snapshot, evaluated at MTV(a)
+move_out_broadcast — for outer move-out values (may be empty)
+move_in_broadcast — for outer move-in values (may be empty)
+snapshot          — records loaded by the move-in query
+post_ops          — buffered txns after snapshot, evaluated at MTV(b)
+```
+
+`pre_ops` first means a buffered txn that references a value about to be
+moved out is stored at the *pre-batch* view (consistent with `MTV(a)`), and
+the subsequent move-out broadcast cleans it up — the client sees `UPDATE
+then DELETE` for that row, never `DELETE then UPDATE` (which would surface
+as "update for row that does not exist").
+
+For pure move-out batches (no move-in values, hence no PG query needed) the
+consumer skips Buffering and broadcasts the move-out inline, advancing time
+to `b` and recursing on the queue.
+
+#### MoveQueue Compaction Rules
+
+Per dep, within one contiguous window `[a, b]`, the queue may compact
+arbitrary sequences of moves into a single `(move_in_values, move_out_values)`
+pair as long as the net effect preserves
+`MTV(b) = MTV(a) + ins - outs`. Specifically:
+
+- multiple adds of the same value collapse to one (idempotent)
+- multiple removes of the same value collapse to one
+- `add V` then `remove V` cancel (net zero)
+- `remove V` then `add V` cancel (net zero)
+- adds and removes for disjoint values keep both
+
+This is the same reduce the pre-RFC queue uses; the only change is that the
+result is now expressed as two value lists carried by one `ActiveMove`,
+rather than two batches popped separately.
+
+Cross-dep compaction is not safe — each dep has its own `subquery_id` and
+its own MTV history. Each dep gets its own `ActiveMove`.
 
 ### Querying Changes
 

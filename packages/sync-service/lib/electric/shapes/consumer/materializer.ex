@@ -220,6 +220,22 @@ defmodule Electric.Shapes.Consumer.Materializer do
         time
       )
 
+    # Atomically subscribe `pid` so the returned `time` is the materializer's
+    # logical time at the consumer's first observable commit. Without this
+    # there's a race window between this call returning and the consumer's
+    # follow-up `subscribe/1` — any commits in that window go to other
+    # subscribers only, advancing the materializer's logical time past
+    # `time` while the new consumer never sees those events. The result is
+    # `MTV(from_time)` on the consumer's first batch reflecting moves the
+    # consumer never processed, which breaks the times-as-views invariant.
+    state =
+      if MapSet.member?(state.subscribers, pid) do
+        state
+      else
+        Process.monitor(pid)
+        %{state | subscribers: MapSet.put(state.subscribers, pid)}
+      end
+
     {:reply, {:ok, time}, state}
   end
 

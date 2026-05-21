@@ -32,20 +32,23 @@ defmodule Electric.Shapes.Consumer.EventHandler.Subqueries.Buffering do
           ShapeInfo.t(),
           Steady.subquery_refs(),
           MoveQueue.t(),
-          IndexChanges.move(),
+          MoveQueue.combined_batch(),
           [String.t()],
-          from_time :: non_neg_integer(),
-          to_time :: non_neg_integer(),
           keyword()
         ) :: {:ok, t(), [Effects.t()]}
   def start(
         %ShapeInfo{} = shape_info,
         subquery_refs,
         %MoveQueue{} = queue,
-        {dep_move_kind, dep_index, values, txids},
+        %{
+          dep_index: dep_index,
+          move_in_values: move_in_values,
+          move_out_values: move_out_values,
+          from_time: from_time,
+          to_time: to_time,
+          txids: txids
+        },
         subquery_ref,
-        from_time,
-        to_time,
         opts \\ []
       ) do
     %{subquery_id: subquery_id} = Map.fetch!(subquery_refs, subquery_ref)
@@ -58,9 +61,9 @@ defmodule Electric.Shapes.Consumer.EventHandler.Subqueries.Buffering do
         ActiveMove.start(
           subquery_id,
           dep_index,
-          dep_move_kind,
           subquery_ref,
-          values,
+          move_in_values,
+          move_out_values,
           from_time,
           to_time,
           txids
@@ -68,13 +71,14 @@ defmodule Electric.Shapes.Consumer.EventHandler.Subqueries.Buffering do
         |> ActiveMove.carry_latest_seen_lsn(Keyword.get(opts, :latest_seen_lsn))
     }
 
-    move = {dep_move_kind, dep_index, values, txids}
-
     effects =
       EffectList.new()
       |> maybe_subscribe_global_lsn(Keyword.get(opts, :subscribe_global_lsn?, true))
       |> EffectList.append_all(
-        IndexChanges.effects_for_buffering(state.shape_info.dnf_plan, move, subquery_ref)
+        IndexChanges.effects_for_buffering_active_move(
+          state.shape_info.dnf_plan,
+          state.active_move
+        )
       )
       |> EffectList.append(start_move_in_query_effect(state))
       |> EffectList.to_list()
@@ -148,12 +152,7 @@ defmodule Electric.Shapes.Consumer.EventHandler.Subqueries.Buffering do
     with {:ok, splice_plan} <-
            SplicePlan.build(active_move, state.shape_info, state.subquery_refs) do
       index_effects =
-        IndexChanges.effects_for_complete(
-          state.shape_info.dnf_plan,
-          {active_move.dep_move_kind, active_move.dep_index, active_move.values,
-           active_move.txids},
-          active_move.subquery_ref
-        )
+        IndexChanges.effects_for_complete_active_move(state.shape_info.dnf_plan, active_move)
 
       advance_consumer_to_after_move(state, active_move)
 
@@ -203,7 +202,7 @@ defmodule Electric.Shapes.Consumer.EventHandler.Subqueries.Buffering do
     %Effects.StartMoveInQuery{
       dnf_plan: shape_info.dnf_plan,
       trigger_dep_index: active_move.dep_index,
-      values: active_move.values,
+      values: active_move.move_in_values,
       subquery_id: active_move.subquery_id,
       subquery_ref: active_move.subquery_ref,
       from_time: active_move.from_time,

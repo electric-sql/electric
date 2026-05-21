@@ -15,18 +15,18 @@ defmodule Electric.Shapes.Consumer.Subqueries.ActiveMove do
   @enforce_keys [
     :subquery_id,
     :dep_index,
-    :dep_move_kind,
     :subquery_ref,
-    :values,
+    :move_in_values,
+    :move_out_values,
     :from_time,
     :to_time
   ]
   defstruct [
     :subquery_id,
     :dep_index,
-    :dep_move_kind,
     :subquery_ref,
-    :values,
+    :move_in_values,
+    :move_out_values,
     :from_time,
     :to_time,
     txids: [],
@@ -44,9 +44,9 @@ defmodule Electric.Shapes.Consumer.Subqueries.ActiveMove do
   @type t() :: %__MODULE__{
           subquery_id: term(),
           dep_index: non_neg_integer(),
-          dep_move_kind: :move_in | :move_out,
           subquery_ref: [String.t()],
-          values: [move_value()],
+          move_in_values: [move_value()],
+          move_out_values: [move_value()],
           from_time: non_neg_integer(),
           to_time: non_neg_integer(),
           txids: [non_neg_integer()],
@@ -64,9 +64,9 @@ defmodule Electric.Shapes.Consumer.Subqueries.ActiveMove do
   @spec start(
           subquery_id :: term(),
           non_neg_integer(),
-          :move_in | :move_out,
           [String.t()],
-          [move_value()],
+          move_in_values :: [move_value()],
+          move_out_values :: [move_value()],
           from_time :: non_neg_integer(),
           to_time :: non_neg_integer(),
           [non_neg_integer()]
@@ -74,9 +74,9 @@ defmodule Electric.Shapes.Consumer.Subqueries.ActiveMove do
   def start(
         subquery_id,
         dep_index,
-        dep_move_kind,
         subquery_ref,
-        values,
+        move_in_values,
+        move_out_values,
         from_time,
         to_time,
         txids \\ []
@@ -84,14 +84,29 @@ defmodule Electric.Shapes.Consumer.Subqueries.ActiveMove do
     %__MODULE__{
       subquery_id: subquery_id,
       dep_index: dep_index,
-      dep_move_kind: dep_move_kind,
       subquery_ref: subquery_ref,
-      values: values,
+      move_in_values: move_in_values,
+      move_out_values: move_out_values,
       from_time: from_time,
       to_time: to_time,
       txids: txids
     }
   end
+
+  @doc """
+  Returns true if the active move carries any move-in values that need a
+  PG query to load records.
+  """
+  @spec has_move_in?(t()) :: boolean()
+  def has_move_in?(%__MODULE__{move_in_values: []}), do: false
+  def has_move_in?(%__MODULE__{move_in_values: _}), do: true
+
+  @doc """
+  Returns true if the active move carries any move-out values to broadcast.
+  """
+  @spec has_move_out?(t()) :: boolean()
+  def has_move_out?(%__MODULE__{move_out_values: []}), do: false
+  def has_move_out?(%__MODULE__{move_out_values: _}), do: true
 
   @doc """
   Materialise the dependency view as a `MapSet` at the active move's
