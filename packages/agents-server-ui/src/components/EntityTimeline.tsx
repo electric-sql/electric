@@ -1,4 +1,5 @@
 import {
+  Component,
   memo,
   useCallback,
   useEffect,
@@ -53,6 +54,7 @@ import type {
   IncludesEntity,
   Manifest,
 } from '@electric-ax/agents-runtime/client'
+import type { ErrorInfo, ReactNode } from 'react'
 import type { PaneFindAdapter, PaneFindMatch } from '../hooks/usePaneFind'
 
 type RenderTimelineRow = EntityTimelineQueryRow
@@ -77,8 +79,14 @@ function stringifySearchPayload(value: unknown): string {
 }
 
 function runItemSearchText(item: EntityTimelineRunItem): string {
-  if (item.text) return item.text.content
+  if (item.text) {
+    return typeof item.text.content === `string` ? item.text.content : ``
+  }
   const toolCall = item.toolCall
+  if (!toolCall) {
+    console.error(`Run item has neither text nor toolCall`, { item })
+    return ``
+  }
   return [
     toolCall.tool_name,
     stringifySearchPayload(toolCall.args),
@@ -91,6 +99,72 @@ function runItemSearchText(item: EntityTimelineRunItem): string {
 
 function runSearchTextFromSnapshot(run: EntityTimelineRunRow): string {
   return run.items.toArray.map(runItemSearchText).join(` `)
+}
+
+interface TimelineRowErrorBoundaryProps {
+  rowKey: string
+  children: ReactNode
+}
+
+interface TimelineRowErrorBoundaryState {
+  rowKey: string
+  error: unknown
+}
+
+class TimelineRowErrorBoundary extends Component<
+  TimelineRowErrorBoundaryProps,
+  TimelineRowErrorBoundaryState
+> {
+  state: TimelineRowErrorBoundaryState = {
+    rowKey: this.props.rowKey,
+    error: null,
+  }
+
+  static getDerivedStateFromError(
+    error: unknown
+  ): Partial<TimelineRowErrorBoundaryState> {
+    return { error }
+  }
+
+  static getDerivedStateFromProps(
+    props: TimelineRowErrorBoundaryProps,
+    state: TimelineRowErrorBoundaryState
+  ): Partial<TimelineRowErrorBoundaryState> | null {
+    if (props.rowKey !== state.rowKey) {
+      return { rowKey: props.rowKey, error: null }
+    }
+    return null
+  }
+
+  componentDidCatch(error: unknown, info: ErrorInfo): void {
+    console.error(`Error rendering timeline row`, {
+      rowKey: this.props.rowKey,
+      error,
+      componentStack: info.componentStack,
+    })
+  }
+
+  render(): ReactNode {
+    if (!this.state.error) {
+      return this.props.children
+    }
+
+    const message =
+      this.state.error instanceof Error
+        ? this.state.error.message
+        : String(this.state.error)
+
+    return (
+      <Stack direction="column" gap={1}>
+        <Text tone="danger" size={2}>
+          Could not render this timeline row.
+        </Text>
+        <Text tone="muted" size={1}>
+          {message}
+        </Text>
+      </Stack>
+    )
+  }
 }
 
 /**
@@ -1395,23 +1469,25 @@ export function EntityTimeline({
                       paddingBottom: timelineRowGap(row),
                     }}
                   >
-                    <TimelineRow
-                      row={row}
-                      responseTimestamp={
-                        responseTimestampByRowKey.get(rowKey) ?? null
-                      }
-                      isInitialUserMessage={rowKey === firstInboxRowKey}
-                      entityStopped={entityStopped}
-                      isStreaming={rowKey === lastStreamingAgentKey}
-                      renderWidth={textColumnWidth}
-                      entityUrl={entityUrl}
-                      tileId={tileId ?? null}
-                      entityStatusByUrl={entityStatusByUrl}
-                      stopUserMessageKey={stopUserMessageKey}
-                      stopPending={stopPending}
-                      onStopGeneration={onStopGeneration}
-                      onRunSearchTextChange={updateRunSearchText}
-                    />
+                    <TimelineRowErrorBoundary rowKey={rowKey}>
+                      <TimelineRow
+                        row={row}
+                        responseTimestamp={
+                          responseTimestampByRowKey.get(rowKey) ?? null
+                        }
+                        isInitialUserMessage={rowKey === firstInboxRowKey}
+                        entityStopped={entityStopped}
+                        isStreaming={rowKey === lastStreamingAgentKey}
+                        renderWidth={textColumnWidth}
+                        entityUrl={entityUrl}
+                        tileId={tileId ?? null}
+                        entityStatusByUrl={entityStatusByUrl}
+                        stopUserMessageKey={stopUserMessageKey}
+                        stopPending={stopPending}
+                        onStopGeneration={onStopGeneration}
+                        onRunSearchTextChange={updateRunSearchText}
+                      />
+                    </TimelineRowErrorBoundary>
                   </div>
                 )
               })}
