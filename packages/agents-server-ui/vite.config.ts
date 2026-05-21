@@ -45,7 +45,7 @@ export default defineConfig(({ command, mode }) => {
       alias: [
         {
           find: /^@electric-ax\/agents-runtime\/client$/,
-          replacement: resolve(__dirname, `../agents-runtime/src/client.ts`),
+          replacement: resolve(PACKAGE_DIR, `../agents-runtime/src/client.ts`),
         },
         { find: `react`, replacement: localNodeModules(`react`) },
         { find: `react-dom`, replacement: localNodeModules(`react-dom`) },
@@ -58,10 +58,11 @@ export default defineConfig(({ command, mode }) => {
           replacement: localNodeModules(`react`, `jsx-dev-runtime.js`),
         },
       ],
-      dedupe: [`react`, `react-dom`],
+      dedupe: [`react`, `react-dom`, `@tanstack/db`],
     },
     plugins: [react(), ...(desktop ? [desktopHtmlMarker()] : [])],
     optimizeDeps: {
+      exclude: [`@durable-streams/state`, `@tanstack/db`, `@tanstack/react-db`],
       include: [
         `react`,
         `react-dom`,

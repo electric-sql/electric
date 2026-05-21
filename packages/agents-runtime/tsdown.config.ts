@@ -3,6 +3,7 @@ import type { Options } from 'tsdown'
 const config: Options = {
   entry: [`src/index.ts`, `src/react.ts`, `src/tools.ts`, `src/client.ts`],
   format: [`esm`, `cjs`],
+  external: [/^@tanstack\//, /^@durable-streams\//],
   dts: true,
   clean: true,
 }

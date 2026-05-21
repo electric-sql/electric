@@ -9,7 +9,7 @@ import {
 } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useLiveQuery } from '@tanstack/react-db'
-import { inArray } from '@tanstack/db'
+import { inArray } from '@durable-streams/state'
 import {
   measureElement as defaultMeasureElement,
   useVirtualizer,
@@ -32,7 +32,7 @@ import { useElectricAgents } from '../lib/ElectricAgentsProvider'
 import { warmMarkdownRenderCache } from '../lib/markdownRenderCache'
 import { Icon, IconButton, ScrollArea, Stack, Text, Tooltip } from '../ui'
 import { UserMessage } from './UserMessage'
-import { AgentResponse } from './AgentResponse'
+import { AgentResponseLive } from './AgentResponse'
 import { InlineEventCard } from './InlineEventCard'
 import { InlineStatusBadge } from './InlineStatusBadge'
 import {
@@ -45,11 +45,52 @@ import {
 } from '../lib/formatTime'
 import styles from './EntityTimeline.module.css'
 import type {
+  EntityTimelineSection,
+  EntityTimelineQueryRow,
+  EntityTimelineRunItem,
+  EntityTimelineRunRow,
   IncludesEntity,
   Manifest,
 } from '@electric-ax/agents-runtime/client'
-import type { TimelineEntry } from '../lib/timelineEntries'
 import type { PaneFindAdapter, PaneFindMatch } from '../hooks/usePaneFind'
+
+type RenderTimelineRow = EntityTimelineQueryRow
+type WakeSection = Extract<EntityTimelineSection, { kind: `wake` }>
+
+function renderRowKey(row: RenderTimelineRow): string {
+  return row.$key
+}
+
+function readInboxText(payload: unknown): string {
+  if (payload && typeof payload === `object`) {
+    const text = (payload as { text?: unknown }).text
+    if (typeof text === `string`) return text
+  }
+  return typeof payload === `string` ? payload : ``
+}
+
+function stringifySearchPayload(value: unknown): string {
+  if (value == null) return ``
+  if (typeof value === `string`) return value
+  return JSON.stringify(value)
+}
+
+function runItemSearchText(item: EntityTimelineRunItem): string {
+  if (item.text) return item.text.content
+  const toolCall = item.toolCall
+  return [
+    toolCall.tool_name,
+    stringifySearchPayload(toolCall.args),
+    stringifySearchPayload(toolCall.result),
+    stringifySearchPayload(toolCall.error),
+  ]
+    .filter((text) => text.length > 0)
+    .join(` `)
+}
+
+function runSearchTextFromSnapshot(run: EntityTimelineRunRow): string {
+  return run.items.toArray.map(runItemSearchText).join(` `)
+}
 
 /**
  * Width-aware row-height estimate used as the initial size hint for the
@@ -66,7 +107,7 @@ import type { PaneFindAdapter, PaneFindMatch } from '../hooks/usePaneFind'
  * width and multiply by the body line height.
  */
 function estimateRowHeight(
-  row: TimelineEntry | undefined,
+  row: RenderTimelineRow | undefined,
   contentWidth: number
 ): number {
   if (!row) return 120
@@ -77,26 +118,17 @@ function estimateRowHeight(
   const charsPerLine = Math.max(40, Math.floor(usableWidth / 7))
   const lineHeight = 22 // 14px font * ~1.55 leading
 
-  if (row.section.kind === `user_message`) {
-    const lines = Math.max(1, Math.ceil(row.section.text.length / charsPerLine))
-    // bubble padding (24) + meta row (~24) + content
+  if (row.inbox) {
+    const lines = Math.max(
+      1,
+      Math.ceil(readInboxText(row.inbox.payload).length / charsPerLine)
+    )
     return Math.max(64, 48 + lines * lineHeight) + timelineRowGap(row)
   }
-  if (row.section.kind === `wake`) {
+  if (row.wake || row.manifest) {
     return 76 + timelineRowGap(row)
   }
-  if (row.section.kind === `manifest`) {
-    return 76 + timelineRowGap(row)
-  }
-
-  const textLength = row.section.items.reduce((total: number, item) => {
-    if (item.kind === `text`) return total + item.text.length
-    // Tool calls render as a compact block; assume ~3 lines.
-    return total + charsPerLine * 3
-  }, 0)
-  const lines = Math.max(2, Math.ceil(textLength / charsPerLine))
-  // status row (~24) + content + a little breathing room
-  return Math.max(120, 32 + lines * lineHeight) + timelineRowGap(row)
+  return 120 + timelineRowGap(row)
 }
 
 const BOTTOM_PIN_THRESHOLD = 8
@@ -105,10 +137,8 @@ const ROW_GAP = 24
 const MANIFEST_ROW_GAP = 10
 const ROW_SETTLE_MS = 500
 
-function timelineRowGap(row: TimelineEntry): number {
-  return row.section.kind === `manifest` || row.section.kind === `wake`
-    ? MANIFEST_ROW_GAP
-    : ROW_GAP
+function timelineRowGap(row: RenderTimelineRow): number {
+  return row.manifest || row.wake ? MANIFEST_ROW_GAP : ROW_GAP
 }
 
 type TimelinePaneFindMatch = PaneFindMatch & {
@@ -117,42 +147,30 @@ type TimelinePaneFindMatch = PaneFindMatch & {
   rowOccurrence: number
 }
 
-function timelineRowSearchText(row: TimelineEntry): string {
-  const { section } = row
-  if (section.kind === `user_message`) return section.text
-  if (section.kind === `wake`) return wakeSectionText(section)
-  if (section.kind === `manifest`) return manifestSearchText(section.manifest)
-
-  return section.items
-    .map((item) => {
-      if (item.kind === `text`) return item.text
-      const parts = [
-        item.toolName,
-        JSON.stringify(item.args, null, 2),
-        item.result ?? ``,
-      ]
-      return parts.filter((part) => part.trim().length > 0).join(`\n`)
-    })
-    .filter((part) => part.trim().length > 0)
-    .join(`\n\n`)
-}
-
-function timelineRowLabel(row: TimelineEntry): string {
-  switch (row.section.kind) {
-    case `user_message`:
-      return `User message`
-    case `wake`:
-      return `Wake`
-    case `manifest`:
-      return `Manifest item`
-    case `agent_response`:
-      return `Agent response`
-  }
-}
-
-function wakeReason(
-  section: Extract<TimelineEntry[`section`], { kind: `wake` }>
+function timelineRowSearchText(
+  row: RenderTimelineRow,
+  runSearchTextByKey: Map<string, string>
 ): string {
+  if (row.inbox) return readInboxText(row.inbox.payload)
+  if (row.wake) {
+    return wakeSectionText({
+      kind: `wake`,
+      payload: row.wake.payload,
+      timestamp: Date.parse(row.wake.payload.timestamp),
+    })
+  }
+  if (row.manifest) return manifestSearchText(row.manifest)
+  return runSearchTextByKey.get(row.$key) ?? runSearchTextFromSnapshot(row.run)
+}
+
+function timelineRowLabel(row: RenderTimelineRow): string {
+  if (row.inbox) return `User message`
+  if (row.wake) return `Wake`
+  if (row.manifest) return `Manifest item`
+  return `Agent response`
+}
+
+function wakeReason(section: WakeSection): string {
   const { payload } = section
   if (payload.timeout) return `timeout`
   if (payload.finished_child) {
@@ -167,9 +185,7 @@ function wakeReason(
   return payload.source
 }
 
-function wakeSectionText(
-  section: Extract<TimelineEntry[`section`], { kind: `wake` }>
-): string {
+function wakeSectionText(section: WakeSection): string {
   return [
     `woke`,
     wakeReason(section),
@@ -181,7 +197,7 @@ function wakeSectionText(
 function WakeTimelineRow({
   section,
 }: {
-  section: Extract<TimelineEntry[`section`], { kind: `wake` }>
+  section: WakeSection
 }): React.ReactElement {
   const reason = wakeReason(section)
   const details = wakeDetails(section)
@@ -212,7 +228,7 @@ function WakeTimelineRow({
 }
 
 function wakeDetails(
-  section: Extract<TimelineEntry[`section`], { kind: `wake` }>
+  section: WakeSection
 ): Array<{ label: string; value: string }> {
   const { payload } = section
   const details = [
@@ -264,7 +280,7 @@ function wakeDetails(
 }
 
 function wakeChildOutput(
-  section: Extract<TimelineEntry[`section`], { kind: `wake` }>
+  section: WakeSection
 ): { label: string; value: string } | null {
   const child = section.payload.finished_child
   if (!child) return null
@@ -609,50 +625,65 @@ function entityUrlsFromKey(key: string): Array<string> {
   return key.length === 0 ? [] : key.split(`\0`)
 }
 
-// `section` and `responseTimestamp` are pulled out of the parent
-// `EntityTimelineEntry` so React.memo's shallow compare can hit on
-// the *section* identity. `buildTimelineEntries` returns a fresh
-// `entries` array (and fresh entry objects) on every chunk during
-// streaming, but the runtime caches finished agent sections in a
-// WeakMap keyed by the underlying run row — so unchanged rows
-// receive the identical `section` reference each render. With the
-// previous `row` prop, that hit was masked by the always-new wrapper
-// object; splitting the props lets memo skip every settled row and
-// only re-render the streaming row + the row that just settled.
 const TimelineRow = memo(function TimelineRow({
-  section,
+  row,
   responseTimestamp,
+  isInitialUserMessage,
   entityStopped,
   isStreaming,
   renderWidth,
   entityUrl,
   tileId,
   entityStatusByUrl,
+  onRunSearchTextChange,
 }: {
-  section: TimelineEntry[`section`]
-  responseTimestamp: TimelineEntry[`responseTimestamp`]
+  row: RenderTimelineRow
+  responseTimestamp: number | null
+  isInitialUserMessage: boolean
   entityStopped: boolean
   isStreaming: boolean
   renderWidth: number
   entityUrl: string | null
   tileId: string | null
   entityStatusByUrl: Map<string, IncludesEntity[`status`]>
+  onRunSearchTextChange: (rowKey: string, text: string) => void
 }): React.ReactElement {
-  if (section.kind === `user_message`) {
-    return <UserMessage section={section} />
+  if (row.inbox) {
+    const timestamp = Date.parse(row.inbox.timestamp)
+    return (
+      <UserMessage
+        section={{
+          kind: `user_message`,
+          from: row.inbox.from,
+          text: readInboxText(row.inbox.payload),
+          timestamp: Number.isFinite(timestamp) ? timestamp : Date.now(),
+          isInitial: isInitialUserMessage,
+        }}
+      />
+    )
   }
-  if (section.kind === `wake`) {
-    return <WakeTimelineRow section={section} />
+
+  if (row.wake) {
+    return (
+      <WakeTimelineRow
+        section={{
+          kind: `wake`,
+          payload: row.wake.payload,
+          timestamp: Date.parse(row.wake.payload.timestamp),
+        }}
+      />
+    )
   }
-  if (section.kind === `manifest`) {
+
+  if (row.manifest) {
     return (
       <ManifestTimelineRow
-        manifest={section.manifest}
+        manifest={row.manifest}
         entityUrl={entityUrl}
         tileId={tileId}
         entityStatus={
-          getManifestEntityUrl(section.manifest)
-            ? entityStatusByUrl.get(getManifestEntityUrl(section.manifest)!)
+          getManifestEntityUrl(row.manifest)
+            ? entityStatusByUrl.get(getManifestEntityUrl(row.manifest)!)
             : undefined
         }
       />
@@ -660,17 +691,19 @@ const TimelineRow = memo(function TimelineRow({
   }
 
   return (
-    <AgentResponse
-      section={section}
+    <AgentResponseLive
+      rowKey={row.$key}
+      run={row.run}
       isStreaming={!entityStopped && isStreaming}
       timestamp={responseTimestamp}
       renderWidth={renderWidth}
+      onSearchTextChange={onRunSearchTextChange}
     />
   )
 })
 
 export function EntityTimeline({
-  entries,
+  rows,
   loading,
   error,
   entityStopped,
@@ -680,7 +713,7 @@ export function EntityTimeline({
   entities = [],
   scrollToBottomSignal = 0,
 }: {
-  entries: Array<TimelineEntry>
+  rows: Array<EntityTimelineQueryRow>
   loading: boolean
   error: string | null
   entityStopped: boolean
@@ -690,7 +723,6 @@ export function EntityTimeline({
   entities?: Array<IncludesEntity>
   scrollToBottomSignal?: number
 }): React.ReactElement {
-  const rows = useMemo(() => entries, [entries])
   const { entitiesCollection } = useElectricAgents()
   const referencedEntityUrlKey = useMemo(
     () => stableEntityUrlKey(entities.map((entity) => entity.url)),
@@ -736,31 +768,67 @@ export function EntityTimeline({
   const spawnMarkerRef = useRef<HTMLSpanElement | null>(null)
   const [showJumpToBottom, setShowJumpToBottom] = useState(false)
   const [showTopDivider, setShowTopDivider] = useState(false)
+  const [runSearchTextByKey, setRunSearchTextByKey] = useState(
+    () => new Map<string, string>()
+  )
   const cachedSizeMapRef = useRef(new Map<string, number>())
   const lastMeasureAtRef = useRef(new Map<string, number>())
   const settledKeysRef = useRef(new Set<string>())
   const settleCheckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const handledScrollSignalRef = useRef(scrollToBottomSignal)
+  const previousStreamingAgentKeyRef = useRef<string | null>(null)
   const textColumnWidth = Math.max(0, contentWidth - CHAT_SURFACE_GUTTER)
 
-  const firstMessage = rows.find(
-    (
-      row
-    ): row is TimelineEntry & {
-      section: Extract<TimelineEntry[`section`], { kind: `user_message` }>
-    } => row.section.kind === `user_message`
-  )
-  const spawnTime = firstMessage?.section.timestamp ?? null
+  const spawnTime = useMemo(() => {
+    for (const row of rows) {
+      if (!row.inbox) continue
+      const timestamp = Date.parse(row.inbox.timestamp)
+      return Number.isFinite(timestamp) ? timestamp : null
+    }
+    return null
+  }, [rows])
 
   const lastStreamingAgentKey = useMemo(() => {
     for (let index = rows.length - 1; index >= 0; index--) {
       const row = rows[index]
-      if (row.section.kind === `agent_response`) {
-        return row.section.done ? null : row.key
+      if (row.run) {
+        return row.run.status === `started` ? row.$key : null
       }
     }
     return null
   }, [rows])
+
+  const firstInboxRowKey = useMemo(
+    () => rows.find((row) => row.inbox)?.$key ?? null,
+    [rows]
+  )
+  const responseTimestampByRowKey = useMemo(() => {
+    const timestampByRowKey = new Map<string, number | null>()
+    let lastUserTimestamp: number | null = null
+    for (const row of rows) {
+      if (row.inbox) {
+        const timestamp = Date.parse(row.inbox.timestamp)
+        lastUserTimestamp = Number.isFinite(timestamp) ? timestamp : null
+      } else if (row.run) {
+        timestampByRowKey.set(row.$key, lastUserTimestamp)
+      }
+    }
+    return timestampByRowKey
+  }, [rows])
+  const updateRunSearchText = useCallback((rowKey: string, text: string) => {
+    setRunSearchTextByKey((current) => {
+      if (text.length === 0) {
+        if (!current.has(rowKey)) return current
+        const next = new Map(current)
+        next.delete(rowKey)
+        return next
+      }
+      if (current.get(rowKey) === text) return current
+      const next = new Map(current)
+      next.set(rowKey, text)
+      return next
+    })
+  }, [])
 
   const persistSettledRows = useCallback(() => {
     if (!cacheKey || viewportWidth <= 0) return
@@ -831,9 +899,10 @@ export function EntityTimeline({
     count: rows.length,
     getScrollElement: () => viewport,
     estimateSize: (index) =>
-      cachedSizeMapRef.current.get(rows[index]?.key ?? ``) ??
-      estimateRowHeight(rows[index], textColumnWidth),
-    getItemKey: (index) => rows[index]?.key ?? index,
+      cachedSizeMapRef.current.get(
+        rows[index] ? renderRowKey(rows[index]!) : ``
+      ) ?? estimateRowHeight(rows[index], textColumnWidth),
+    getItemKey: (index) => (rows[index] ? renderRowKey(rows[index]!) : index),
     gap: 0,
     overscan: 6,
     measureElement: measureRowElement,
@@ -854,12 +923,13 @@ export function EntityTimeline({
         if (!query.trim()) return matches
 
         rows.forEach((row, rowIndex) => {
-          const text = timelineRowSearchText(row)
+          const rowKey = renderRowKey(row)
+          const text = timelineRowSearchText(row, runSearchTextByKey)
           const starts = getTextMatchStarts(text, query)
           starts.forEach((start, rowOccurrence) => {
             matches.push({
-              id: `${row.key}:${rowOccurrence}`,
-              rowKey: row.key,
+              id: `${rowKey}:${rowOccurrence}`,
+              rowKey,
               rowIndex,
               rowOccurrence,
               label: timelineRowLabel(row),
@@ -885,13 +955,29 @@ export function EntityTimeline({
         return getCurrentMatchIndexInRoot(root, query, match)
       },
     }
-  }, [contentElement, rowVirtualizer, rows])
+  }, [contentElement, rowVirtualizer, rows, runSearchTextByKey])
 
   usePaneFindAdapterRegistration(tileId ?? null, paneFindAdapter)
 
   useEffect(() => {
     rowVirtualizer.shouldAdjustScrollPositionOnItemSizeChange = () => false
   }, [rowVirtualizer])
+
+  const scrollToTimelineEnd = useCallback(
+    (opts?: { force?: boolean }) => {
+      if (!viewport || rows.length === 0) return
+      const force = opts?.force ?? false
+      rowVirtualizer.scrollToIndex(rows.length - 1, { align: `end` })
+
+      // The stopped/status footer sits outside the virtual list, so make sure the
+      // physical scroll container is also flush with its full content height.
+      requestAnimationFrame(() => {
+        if (!force && !isNearBottom.current) return
+        viewport.scrollTop = viewport.scrollHeight
+      })
+    },
+    [rowVirtualizer, rows.length, viewport]
+  )
 
   const scrollAreaRef = useCallback((node: HTMLDivElement | null) => {
     setViewport(node)
@@ -1050,11 +1136,46 @@ export function EntityTimeline({
     if (!isNearBottom.current) return
 
     const frame = requestAnimationFrame(() => {
-      rowVirtualizer.scrollToIndex(rows.length - 1, { align: `end` })
+      scrollToTimelineEnd()
     })
 
     return () => cancelAnimationFrame(frame)
-  }, [rowVirtualizer, rows, viewport])
+  }, [rows, scrollToTimelineEnd, viewport])
+
+  useLayoutEffect(() => {
+    if (!contentElement || !viewport) return
+
+    let frame: ReturnType<typeof requestAnimationFrame> | null = null
+    const pinToBottom = () => {
+      if (!isNearBottom.current) return
+      if (frame !== null) cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => {
+        frame = null
+        scrollToTimelineEnd()
+      })
+    }
+
+    const observer = new ResizeObserver(pinToBottom)
+    observer.observe(contentElement)
+    return () => {
+      observer.disconnect()
+      if (frame !== null) cancelAnimationFrame(frame)
+    }
+  }, [contentElement, scrollToTimelineEnd, viewport])
+
+  useLayoutEffect(() => {
+    const previousStreamingAgentKey = previousStreamingAgentKeyRef.current
+    previousStreamingAgentKeyRef.current = lastStreamingAgentKey
+    if (!previousStreamingAgentKey || lastStreamingAgentKey) return
+    if (!isNearBottom.current) return
+
+    setShowJumpToBottom(false)
+    const frame = requestAnimationFrame(() => {
+      scrollToTimelineEnd()
+    })
+
+    return () => cancelAnimationFrame(frame)
+  }, [lastStreamingAgentKey, scrollToTimelineEnd])
 
   useLayoutEffect(() => {
     if (handledScrollSignalRef.current === scrollToBottomSignal) return
@@ -1064,11 +1185,11 @@ export function EntityTimeline({
 
     if (!viewport || rows.length === 0) return
     const frame = requestAnimationFrame(() => {
-      rowVirtualizer.scrollToIndex(rows.length - 1, { align: `end` })
+      scrollToTimelineEnd({ force: true })
     })
 
     return () => cancelAnimationFrame(frame)
-  }, [rowVirtualizer, rows.length, scrollToBottomSignal, viewport])
+  }, [rows.length, scrollToBottomSignal, scrollToTimelineEnd, viewport])
 
   useEffect(
     () => () => {
@@ -1083,9 +1204,9 @@ export function EntityTimeline({
     if (rows.length > 0) {
       isNearBottom.current = true
       setShowJumpToBottom(false)
-      rowVirtualizer.scrollToIndex(rows.length - 1, { align: `end` })
+      scrollToTimelineEnd({ force: true })
     }
-  }, [rowVirtualizer, rows.length])
+  }, [rows.length, scrollToTimelineEnd])
 
   if (loading) {
     return (
@@ -1161,6 +1282,7 @@ export function EntityTimeline({
             >
               {rowVirtualizer.getVirtualItems().map((virtualRow) => {
                 const row = rows[virtualRow.index]
+                const rowKey = renderRowKey(row)
 
                 // Stable row key. The previous implementation appended
                 // `:${contentWidth}` to force remount on every column-width
@@ -1176,8 +1298,8 @@ export function EntityTimeline({
                     key={virtualRow.key}
                     ref={rowVirtualizer.measureElement}
                     data-index={virtualRow.index}
-                    data-item-key={row.key}
-                    data-pane-find-row-key={row.key}
+                    data-item-key={rowKey}
+                    data-pane-find-row-key={rowKey}
                     className={styles.virtualRow}
                     style={{
                       transform: `translateY(${virtualRow.start}px)`,
@@ -1185,14 +1307,18 @@ export function EntityTimeline({
                     }}
                   >
                     <TimelineRow
-                      section={row.section}
-                      responseTimestamp={row.responseTimestamp}
+                      row={row}
+                      responseTimestamp={
+                        responseTimestampByRowKey.get(rowKey) ?? null
+                      }
+                      isInitialUserMessage={rowKey === firstInboxRowKey}
                       entityStopped={entityStopped}
-                      isStreaming={row.key === lastStreamingAgentKey}
+                      isStreaming={rowKey === lastStreamingAgentKey}
                       renderWidth={textColumnWidth}
                       entityUrl={entityUrl}
                       tileId={tileId ?? null}
                       entityStatusByUrl={entityStatusByUrl}
+                      onRunSearchTextChange={updateRunSearchText}
                     />
                   </div>
                 )

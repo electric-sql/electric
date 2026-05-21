@@ -1,28 +1,55 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from '@tanstack/react-db'
 import {
-  buildTimelineEntries,
   compareTimelineOrders,
-  createEntityIncludesQuery,
-  normalizeEntityTimelineData,
+  createEntityTimelineQuery,
+  normalizeTimelineEntities,
 } from '@electric-ax/agents-runtime/client'
-import { eq } from '@tanstack/db'
+import { coalesce, eq } from '@durable-streams/state'
 import { connectEntityStream } from '../lib/entity-connection'
-import type { TimelineEntry } from '../lib/timelineEntries'
 import type {
   EntityStreamDBWithActions,
-  EntityTimelineData,
+  EntityTimelineQueryRow,
   IncludesInboxMessage,
   IncludesEntity,
   Manifest,
 } from '@electric-ax/agents-runtime/client'
 
+type TimelineEntityManifest =
+  | (Manifest & { kind: `child`; id: string; entity_url: string })
+  | (Manifest & {
+      kind: `source`
+      sourceType: `entity`
+      sourceRef: string
+      config: Record<string, unknown>
+    })
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === `object`
+}
+
+function isTimelineEntityManifest(
+  manifest: Manifest
+): manifest is TimelineEntityManifest {
+  if (manifest.kind === `child`) {
+    return (
+      typeof manifest.id === `string` && typeof manifest.entity_url === `string`
+    )
+  }
+  return (
+    manifest.kind === `source` &&
+    manifest.sourceType === `entity` &&
+    typeof manifest.sourceRef === `string` &&
+    isRecord(manifest.config)
+  )
+}
+
 export function useEntityTimeline(
   baseUrl: string | null,
   entityUrl: string | null
 ): {
-  entries: Array<TimelineEntry>
-  pendingInbox: EntityTimelineData[`inbox`]
+  timelineRows: Array<EntityTimelineQueryRow>
+  pendingInbox: Array<IncludesInboxMessage>
   entities: Array<IncludesEntity>
   generationActive: boolean
   db: EntityStreamDBWithActions | null
@@ -76,7 +103,10 @@ export function useEntityTimeline(
   }, [baseUrl, entityUrl])
 
   const { data: timelineRows = [] } = useLiveQuery(
-    (q) => (db ? createEntityIncludesQuery(db)(q) : undefined),
+    (q) => {
+      if (!db) return undefined
+      return createEntityTimelineQuery(db)(q)
+    },
     [db]
   )
   const { data: manifests = [] } = useLiveQuery(
@@ -94,62 +124,14 @@ export function useEntityTimeline(
         ? q
             .from({ inbox: db.collections.inbox })
             .where(({ inbox }) => eq(inbox.status, `pending`))
-            .orderBy(({ inbox }) => inbox._seq, `asc`)
+            .orderBy(({ inbox }) => coalesce(inbox._timeline_order, `~`), `asc`)
+            .orderBy(({ inbox }) =>
+              coalesce(inbox._seq, Number.MAX_SAFE_INTEGER)
+            )
         : undefined,
     [db]
   )
-  const timelineData = useMemo(
-    () =>
-      normalizeEntityTimelineData(
-        (timelineRows as Array<EntityTimelineData>)[0] ?? {
-          runs: [],
-          inbox: [],
-          wakes: [],
-          contextInserted: [],
-          contextRemoved: [],
-          entities: [],
-        }
-      ),
-    [timelineRows]
-  )
-
-  const entries = useMemo(() => {
-    const baseEntries = buildTimelineEntries(
-      timelineData.runs,
-      timelineData.inbox,
-      timelineData.wakes
-    )
-    const orderByKey = new Map<string, string | number>()
-    for (const run of timelineData.runs) {
-      orderByKey.set(`run:${run.key}`, run.order)
-    }
-    for (const msg of timelineData.inbox) {
-      orderByKey.set(`inbox:${msg.key}`, msg.order)
-    }
-    for (const wake of timelineData.wakes) {
-      orderByKey.set(`wake:${wake.key}`, wake.order)
-    }
-
-    const merged: Array<{ order: string | number; entry: TimelineEntry }> = [
-      ...baseEntries.map((entry) => ({
-        order: orderByKey.get(entry.key) ?? Number.MAX_SAFE_INTEGER,
-        entry,
-      })),
-      ...(manifests as Array<Manifest>).map((manifest) => ({
-        order: manifest._seq ?? Number.MAX_SAFE_INTEGER,
-        entry: {
-          key: `manifest:${manifest.key}`,
-          order: manifest._seq ?? Number.MAX_SAFE_INTEGER,
-          responseTimestamp: null,
-          section: { kind: `manifest` as const, manifest },
-        },
-      })),
-    ]
-
-    return merged
-      .sort((left, right) => compareTimelineOrders(left.order, right.order))
-      .map(({ entry }) => entry)
-  }, [manifests, timelineData.runs, timelineData.inbox, timelineData.wakes])
+  const typedTimelineRows = timelineRows as Array<EntityTimelineQueryRow>
 
   const pendingInbox = useMemo(
     () =>
@@ -157,7 +139,7 @@ export function useEntityTimeline(
         .map(
           (msg): IncludesInboxMessage => ({
             key: msg.key,
-            order: msg._seq ?? Number.MAX_SAFE_INTEGER,
+            order: msg._timeline_order ?? msg._seq ?? Number.MAX_SAFE_INTEGER,
             from: msg.from,
             payload: msg.payload,
             timestamp: msg.timestamp,
@@ -191,14 +173,37 @@ export function useEntityTimeline(
     [pendingInboxRows]
   )
   const generationActive = useMemo(
-    () => timelineData.runs.some((run) => run.status === `started`),
-    [timelineData.runs]
+    () => typedTimelineRows.some((row) => row.run?.status === `started`),
+    [typedTimelineRows]
+  )
+  const entities = useMemo(
+    () =>
+      normalizeTimelineEntities(
+        (manifests as Array<Manifest>).filter(isTimelineEntityManifest).map(
+          (manifest): IncludesEntity => ({
+            key:
+              manifest.kind === `child`
+                ? manifest.entity_url
+                : String(manifest.config.entityUrl ?? manifest.sourceRef),
+            kind: manifest.kind,
+            id: manifest.kind === `child` ? manifest.id : manifest.sourceRef,
+            url:
+              manifest.kind === `child`
+                ? manifest.entity_url
+                : String(manifest.config.entityUrl ?? manifest.sourceRef),
+            type: manifest.kind === `child` ? manifest.entity_type : undefined,
+            observed: manifest.kind === `source` || Boolean(manifest.observed),
+            wake: manifest.wake,
+          })
+        )
+      ),
+    [manifests]
   )
 
   return {
-    entries,
+    timelineRows: typedTimelineRows,
     pendingInbox,
-    entities: timelineData.entities,
+    entities,
     generationActive,
     db,
     loading,

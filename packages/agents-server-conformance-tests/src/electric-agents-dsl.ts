@@ -2305,7 +2305,8 @@ export function enabledElectricAgentsActions(
 export function applyElectricAgentsAction(
   model: ElectricAgentsWorldModel,
   action: ElectricAgentsAction,
-  targetIdx?: number
+  targetIdx?: number,
+  opts?: { typeName?: string }
 ): ElectricAgentsWorldModel {
   switch (action) {
     case `register_type`: {
@@ -2315,7 +2316,7 @@ export function applyElectricAgentsAction(
         entityTypes: [
           ...model.entityTypes,
           {
-            name: `prop-type-${typeNum}`,
+            name: opts?.typeName ?? `prop-type-${typeNum}`,
             hasCreationSchema: false,
             hasInputSchemas: false,
             hasOutputSchemas: false,
