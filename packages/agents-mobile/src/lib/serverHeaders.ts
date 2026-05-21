@@ -33,13 +33,19 @@ export async function prepareServerHeaders(
   const token = await cloudAuth.getAgentsToken(serviceId)
   registerActiveBaseUrl(serverUrl)
   if (token) {
-    registerActiveServerHeaders({
-      url: serverUrl,
-      headers: {
-        authorization: `Bearer ${token}`,
-        'x-electric-service': serviceId,
-      },
-    })
+    const headers: Record<string, string> = {
+      authorization: `Bearer ${token}`,
+      'x-electric-service': serviceId,
+    }
+    // Inform agents-server-ui's `resolveSenderPrincipalUrl` who the
+    // current user is. Without this, `sendMessage` falls back to
+    // `system:dev-local` (since `loadCloudAuthState` is gated on
+    // `window.electronAPI` and so returns `null` on React Native) —
+    // and the cloud server 400s because the sender doesn't match the
+    // authenticated bearer.
+    const userId = cloudAuth.getState().userId
+    if (userId) headers[`electric-principal`] = `user:${userId}`
+    registerActiveServerHeaders({ url: serverUrl, headers })
   } else {
     // Sign-in expired / token exchange failed — keep the base URL
     // registered (so URL-matching still works) but drop any stale
