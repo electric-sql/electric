@@ -124,7 +124,7 @@ Compacting should happen:
 - when the list is written to (e.g. when a value is moved in or out)
 - when an async compaction routine is run (the design of this will need to be discussed)
 
-Removing a subquery should not involve a full ETS table scan as this will be too slow with lots of subqueries. If the ETS table is orderd we should be able to find the first item for the subqery, delete that,  then find the next, and continue until the whole subquery is gone. That means it scales with the number of values (which is acceptable) rather than the number of subqueries.
+Removing a subquery should not involve a full ETS table scan as this will be too slow with lots of subqueries. If the ETS table is ordered we should be able to find the first item for the subquery, delete that, then find the next, and continue until the whole subquery is gone. That means removal scales with the number of values in the subquery being removed, rather than the total size of the ETS table.
 
 
 #### SubqueryIndex
