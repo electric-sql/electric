@@ -77,6 +77,7 @@ defmodule Electric.StatusMonitor do
   end
 
   @doc "Threshold at which the StatusMonitor flips its congestion flag. Exposed for tests."
+  @spec congested_threshold() :: pos_integer()
   def congested_threshold, do: @congested_threshold
 
   @spec status(String.t()) :: status()
@@ -266,15 +267,14 @@ defmodule Electric.StatusMonitor do
   defp poll_wait(stack_id, level, opts) do
     timeout = Keyword.fetch!(opts, :timeout)
 
-    # Mirror check_level/2: only :active and :waiting-for-:read_only count
-    # as ready. Sleeping is handled by the outer case in wait_until/3 before
-    # dispatch; once we're polling we treat it as not-ready so the loop
-    # behaves identically to a parked GenServer waiter.
+    # Reuse check_level/2 so the polling path's readiness contract is by
+    # construction identical to a parked GenServer waiter's. Sleeping is
+    # handled by the outer case in wait_until/3 before dispatch; once we're
+    # polling, check_level/2's catch-all returns :not_ready and we keep going.
     check = fn ->
-      case service_status(stack_id) do
-        :active -> {:ready, {:ok, :active}}
-        :waiting when level == :read_only -> {:ready, {:ok, :read_only}}
-        _ -> :not_ready
+      case check_level(level, stack_id) do
+        {:ok, _} = ready -> {:ready, ready}
+        :not_ready -> :not_ready
       end
     end
 
