@@ -169,8 +169,16 @@ Consumer event handler
 SubqueryIndex
   -> stores subquery groups, child nodes, and participant routing
   -> asks MultiTimeView for membership at some/all retained times for routing
-  -> asks MultiTimeView for membership at a consumer time for exact checks
+  -> over-routes when consumers diverge; exact split is the consumer's job
 ```
+
+Routing is intentionally conservative: when consumers diverge across logical
+times — including the common case of a single consumer that is mid-move and
+effectively reading at two times at once — the filter cannot encode that with
+a per-shape logical-time pin. Exact membership is therefore checked at
+`Shape.convert_change`/`WhereClause.includes_record?/3`, using a
+`subquery_member?` callback that the consumer builds from its own logical
+time(s) against `MultiTimeView`.
 
 ### Definitions
 
@@ -434,17 +442,29 @@ This is `O(number_of_affected_shapes)` for large negated groups. That is
 acceptable because a value absent from a large negated group genuinely affects
 all of those shapes.
 
-Exact filter verification uses the consumer's current logical time for the
-requested subquery:
+Exact membership verification is not done by the filter. The filter cannot
+correctly perform a per-shape split at routing time because, during a buffered
+move-in, a consumer is effectively reading at *both* `from_time` and `to_time`
+for the same subquery — splice-plan evaluates buffered transactions at
+`MTV(from_time)` for pre-ops and `MTV(to_time)` for post-ops. A single
+per-shape logical-time pin in the filter cannot represent that, and the filter
+does not know how a given record relates to a given consumer's move window
+without duplicating consumer state.
 
-```elixir
-MultiTimeView.member?(subquery_id, typed_value, logical_time)
-```
+Therefore the boundary at which exact membership is evaluated is the consumer,
+via the `subquery_member?` callback passed into `WhereClause.includes_record?/3`
+from `Shape.convert_change`. The consumer constructs that callback from its own
+per-subquery logical time(s) — one callback for the steady case, two callbacks
+(`old_member?` and `new_member?`) during a buffered move — and calls
+`MultiTimeView.member?(subquery_id, typed_value, logical_time)` against the
+shared view.
 
-`WhereClause.subquery_member_from_index/2` should therefore resolve
-`shape_handle + subquery_ref` to `{subquery_id, logical_time}` and call the
-shared view. The callback remains the boundary used by
-`WhereClause.includes_record?/3`.
+The filter does maintain `{shape_handle, subquery_ref} -> {subquery_id,
+logical_time}` rows so it can answer exact membership for sublink refs that
+survive in the residual `and_where` (i.e. sublinks at *other* positions in the
+shape's WHERE that were not the routed position). For those, the filter's
+`subquery_member_from_index` callback is sufficient because the shape is not
+mid-move on that other position at this routing step.
 
 ### Operation Examples And Costs
 
@@ -677,28 +697,28 @@ Routing does:
 2. Look up `{:positive, g_user_pos, 10}` and get `[c_s7_pos]`.
 3. Evaluate child condition `wc_s7_pos`, which considers `shape_a` and
    `shape_b`.
-4. For each candidate shape, exact subquery checks resolve:
+4. Return both as candidates. No exact membership check happens in the filter
+   at the routed position — that's the consumer's job in `convert_change`.
+
+In this case the consumers in both shapes will confirm `10 ∈ s7` at their
+logical time and the record is delivered:
 
 ```text
-{:shape_subquery, shape_a, ["$sublink", "0"]} -> {s7, 0}
-{:shape_subquery, shape_b, ["$sublink", "0"]} -> {s7, 0}
-MultiTimeView.member?(s7, 10, 0) -> true
+MultiTimeView.member?(s7, 10, 0) -> true   # shape_a
+MultiTimeView.member?(s7, 10, 0) -> true   # shape_b
 ```
 
 Both shapes are affected.
 
-Cost:
+Cost at the filter:
 
 ```text
-O(
-  children_for_value +
-  child_where_eval +
-  exact_subquery_checks * transition_history_length_for_value
-)
+O(children_for_value + child_where_eval)
 ```
 
 For this example, `children_for_value = 1`. There is no scan of all shapes and
-no scan of all values in `s7`.
+no scan of all values in `s7`. The per-consumer exact check is paid downstream
+in `convert_change`, at `O(transition_history_length_for_value)` per shape.
 
 #### `affected_shapes`: Positive Group With Divergent Consumer Times
 
@@ -724,24 +744,32 @@ For:
 %{"user_id" => 30}
 ```
 
-routing finds `c_s7_pos` because `30` is a member at some retained time. Exact
-checks then split the result:
+routing finds `c_s7_pos` because `30` is a member at some retained time. The
+filter returns both `shape_a` and `shape_b` as candidates — it does *not*
+attempt to split them at this point. The downstream exact check then drops the
+false positive at each consumer:
 
 ```text
-MultiTimeView.member?(s7, 30, 1) -> true
-MultiTimeView.member?(s7, 30, 0) -> false
+# In shape_a's consumer, evaluating includes_record? at logical_time 1:
+MultiTimeView.member?(s7, 30, 1) -> true   # shape_a keeps the record
+
+# In shape_b's consumer, evaluating includes_record? at logical_time 0:
+MultiTimeView.member?(s7, 30, 0) -> false  # shape_b drops the record
 ```
 
-Only `shape_a` is affected.
+End-to-end, only `shape_a` emits the change. `shape_b` over-routes briefly but
+filters the record in `Shape.convert_change`.
 
-Cost remains:
+Cost at the filter remains:
 
 ```text
-O(
-  children_for_value +
-  child_where_eval +
-  exact_subquery_checks * transition_history_length_for_value
-)
+O(children_for_value + child_where_eval)
+```
+
+The per-consumer exact check is paid downstream, in `convert_change`, at:
+
+```text
+O(transition_history_length_for_value) per shape
 ```
 
 The extra memory for the move is one history row for `{s7, 30}` plus one
@@ -765,24 +793,26 @@ present at time `1`. Negated routing does:
 not MultiTimeView.member_at_all_times?(s7, 30)
 ```
 
-3. Evaluate `wc_s7_neg` and exact membership at each candidate shape's
-   subquery logical time.
+3. Evaluate `wc_s7_neg` and return the attached negated shapes as candidates.
 
-For `shape_n` at logical time `0`, `NOT IN s7` is true for `30`. If it later
-advances to logical time `1`, `NOT IN s7` is false for `30`.
+Per-shape correctness for the negated case is again paid in
+`Shape.convert_change`: for `shape_n` at logical time `0`, `NOT IN s7` is true
+for `30`; if it later advances to logical time `1`, `NOT IN s7` is false for
+`30`. That distinction is made by the consumer, not the filter.
 
-Cost:
+Cost at the filter:
 
 ```text
 O(
   number_of_negated_children_in_group * transition_history_length_for_value +
-  child_where_eval +
-  exact_subquery_checks * transition_history_length_for_value
+  child_where_eval
 )
 ```
 
-This is intentionally proportional to the number of affected negated children.
-No complement index is stored.
+This is intentionally proportional to the number of negated children kept by
+routing. No complement index is stored. The per-consumer exact check is again
+paid downstream in `convert_change`, at
+`O(transition_history_length_for_value)` per shape.
 
 #### Dependency Move: Add Or Remove Values
 
