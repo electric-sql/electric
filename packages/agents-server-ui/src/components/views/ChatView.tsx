@@ -44,6 +44,94 @@ export function ChatView({
   )
 }
 
+export function ChatLogView({
+  baseUrl,
+  entityUrl,
+  entity,
+  entityStopped,
+  isSpawning,
+  tileId,
+  scrollToBottomSignal,
+  inlineQueuedMessages = [],
+}: ViewProps & {
+  scrollToBottomSignal?: number
+  inlineQueuedMessages?: Array<OptimisticInboxMessage>
+}): React.ReactElement {
+  const connectUrl = isSpawning ? null : entityUrl
+  const { entries, pendingInbox, entities, loading, error } = useEntityTimeline(
+    baseUrl || null,
+    connectUrl
+  )
+  const navigate = useNavigate()
+  const processedInboxKeys = useMemo(
+    () =>
+      new Set(
+        entries
+          .filter((entry) => entry.section.kind === `user_message`)
+          .map((entry) => entry.key.replace(/^inbox:/, ``))
+      ),
+    [entries]
+  )
+  const pendingInboxByKey = useMemo(
+    () => new Map(pendingInbox.map((message) => [message.key, message])),
+    [pendingInbox]
+  )
+  const projectedPendingMessage = useMemo(() => {
+    if (entity.status === `running`) return null
+    for (const message of inlineQueuedMessages) {
+      if (processedInboxKeys.has(message.key)) continue
+      return pendingInboxByKey.get(message.key) ?? message
+    }
+    return null
+  }, [
+    entity.status,
+    inlineQueuedMessages,
+    pendingInboxByKey,
+    processedInboxKeys,
+  ])
+  const visibleEntries = useMemo<Array<TimelineEntry>>(() => {
+    if (!projectedPendingMessage) return entries
+    const timestamp = Date.parse(projectedPendingMessage.timestamp)
+    const hasUserMessage = entries.some(
+      (entry) => entry.section.kind === `user_message`
+    )
+    return [
+      ...entries,
+      {
+        key: `pending-inbox:${projectedPendingMessage.key}`,
+        order: Number.MAX_SAFE_INTEGER,
+        responseTimestamp: null,
+        section: {
+          kind: `user_message`,
+          from: projectedPendingMessage.from ?? `user`,
+          text: readTextPayload(projectedPendingMessage.payload),
+          timestamp: Number.isFinite(timestamp) ? timestamp : Date.now(),
+          isInitial: !hasUserMessage,
+        },
+      },
+    ]
+  }, [entries, projectedPendingMessage])
+
+  useEffect(() => {
+    if (error && !isSpawning) {
+      void navigate({ to: `/` })
+    }
+  }, [error, navigate, isSpawning])
+
+  return (
+    <EntityTimeline
+      entries={visibleEntries}
+      loading={loading}
+      error={error}
+      entityStopped={entityStopped}
+      cacheKey={`${baseUrl}${connectUrl ?? ``}:${scrollToBottomSignal ?? 0}`}
+      tileId={tileId}
+      entityUrl={connectUrl}
+      entities={entities}
+    />
+  )
+}
+
 function GenericChatBody({
   baseUrl,
   entityUrl,

@@ -43,6 +43,18 @@
   pointer-events: auto;
 }
 
+/* Touch devices have no `:hover`, so the hover-reveal above never
+   fires and the toolbar would otherwise be permanently invisible /
+   unreachable on phones and tablets. Always show it when the
+   primary input is touch (`pointer: coarse` weeds out laptops with
+   a touchscreen + mouse, where hover still works fine). */
+@media (hover: none) and (pointer: coarse) {
+  .toolbar {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .toolbar {
     transition: none;

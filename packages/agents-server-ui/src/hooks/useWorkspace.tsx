@@ -226,5 +226,9 @@ export function useWorkspace(): WorkspaceContextValue {
   return ctx
 }
 
+export function useOptionalWorkspace(): WorkspaceContextValue | null {
+  return useContext(WorkspaceContext)
+}
+
 export { findTile, listTiles }
 export { dropPositionFromSplit }

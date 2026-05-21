@@ -208,8 +208,8 @@ export function createSendMessageAction({
           ? {}
           : { processed_at: now }),
       }
-      db.collections.inbox.insert(message)
       onOptimisticMessage?.(message)
+      db.collections.inbox.insert(message)
     },
     mutationFn: async ({ text, key, mode, position }) => {
       const url = entityApiUrl(baseUrl, entityUrl, `/send`)
