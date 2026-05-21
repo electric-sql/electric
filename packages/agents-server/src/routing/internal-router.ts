@@ -2,7 +2,10 @@
  * Sub-router for /_electric/* control-plane routes.
  */
 
-import { appendPathToUrl } from '@electric-ax/agents-runtime'
+import {
+  appendPathToUrl,
+  verifyWebhookSignature,
+} from '@electric-ax/agents-runtime'
 import { Type, type Static } from '@sinclair/typebox'
 import { and, eq } from 'drizzle-orm'
 import { Router, json, status } from 'itty-router'
@@ -16,10 +19,12 @@ import {
   ErrCodeCallbackNotFound,
   ErrCodeForkInProgress,
   ErrCodeSubscriptionNotFound,
+  ErrCodeUnauthorized,
 } from '../electric-agents-types.js'
 import { ATTR, tracer } from '../tracing.js'
 import { decodeJsonObject } from '../utils/server-utils.js'
 import { serverLog } from '../utils/log.js'
+import { applyDurableStreamsBearer } from '../stream-client.js'
 import { getDefaultWebhookSigner } from '../webhook-signing.js'
 import { cronRouter } from './cron-router.js'
 import { resolveDurableStreamsRoutingAdapter } from './durable-streams-routing-adapter.js'
@@ -31,6 +36,7 @@ import { runnersRouter } from './runners-router.js'
 import { routeBody, validateOptionalJsonBody, withSchema } from './schema.js'
 import { withLeadingSlash } from './tenant-stream-paths.js'
 import type { IRequest, RouterType } from 'itty-router'
+import type { WebhookSignatureVerifierConfig } from '@electric-ax/agents-runtime'
 import type { TenantContext } from './context.js'
 import type { DurableStreamsRoutingAdapter } from './durable-streams-routing-adapter.js'
 import type { WebhookSigner } from '../webhook-signing.js'
@@ -171,6 +177,83 @@ function resolveWebhookSigner(ctx: TenantContext): WebhookSigner {
   return ctx.webhookSigner ?? getDefaultWebhookSigner()
 }
 
+function durableStreamsWebhookJwksUrl(ctx: TenantContext): string {
+  if (!ctx.durableStreamsRouting) {
+    return appendPathToUrl(ctx.durableStreamsUrl, `/__ds/jwks.json`)
+  }
+
+  return resolveDurableStreamsRoutingAdapter(
+    ctx.durableStreamsRouting,
+    ctx.durableStreamsUrl
+  )
+    .controlUrl({
+      durableStreamsUrl: ctx.durableStreamsUrl,
+      serviceId: ctx.service,
+      requestUrl: appendPathToUrl(ctx.publicUrl, `/__ds/jwks.json`),
+    })
+    .toString()
+}
+
+function durableStreamsJwksFetchClient(ctx: TenantContext): typeof fetch {
+  return async (input, init) => {
+    const headers = new Headers(init?.headers)
+    await applyDurableStreamsBearer(headers, ctx.durableStreamsBearer, {
+      overwrite: false,
+    })
+    const nextInit: RequestInit & {
+      dispatcher?: TenantContext[`durableStreamsDispatcher`]
+    } = {
+      ...(init ?? {}),
+      headers,
+    }
+    if (ctx.durableStreamsDispatcher) {
+      nextInit.dispatcher = ctx.durableStreamsDispatcher
+    }
+    return await fetch(input, nextInit as RequestInit)
+  }
+}
+
+function resolveDurableStreamsWebhookSignature(
+  ctx: TenantContext
+): false | WebhookSignatureVerifierConfig {
+  if (ctx.durableStreamsWebhookSignature === false) return false
+
+  return {
+    jwksUrl:
+      ctx.durableStreamsWebhookSignature?.jwksUrl ??
+      durableStreamsWebhookJwksUrl(ctx),
+    toleranceSeconds: ctx.durableStreamsWebhookSignature?.toleranceSeconds,
+    cacheTtlMs: ctx.durableStreamsWebhookSignature?.cacheTtlMs,
+    fetchClient:
+      ctx.durableStreamsWebhookSignature?.fetchClient ??
+      durableStreamsJwksFetchClient(ctx),
+  }
+}
+
+async function verifyDurableStreamsWebhook(
+  request: IRequest,
+  ctx: TenantContext,
+  body: Uint8Array
+): Promise<Response | null> {
+  const config = resolveDurableStreamsWebhookSignature(ctx)
+  if (config === false) return null
+
+  const verification = await verifyWebhookSignature(
+    body,
+    request.headers.get(`webhook-signature`),
+    config
+  )
+  if (verification.ok) return null
+
+  return apiError(
+    verification.status,
+    verification.status === 401
+      ? ErrCodeUnauthorized
+      : `WEBHOOK_SIGNATURE_UNAVAILABLE`,
+    verification.error
+  )
+}
+
 function claimTokenFromRequest(request: IRequest): string | undefined {
   const electricClaimToken = request.headers.get(`electric-claim-token`)?.trim()
   if (electricClaimToken) return electricClaimToken
@@ -264,7 +347,11 @@ async function webhookForward(
     subscriptionId
   )
 
-  const lookupPromise: Promise<string | null> = tracer.startActiveSpan(
+  const body = await readRequestBody(request as Request)
+  const signatureError = await verifyDurableStreamsWebhook(request, ctx, body)
+  if (signatureError) return signatureError
+
+  const targetWebhookUrl: string | null = await tracer.startActiveSpan(
     `db.lookupSubscription`,
     async (span) => {
       try {
@@ -284,11 +371,6 @@ async function webhookForward(
       }
     }
   )
-
-  const [targetWebhookUrl, body] = await Promise.all([
-    lookupPromise,
-    readRequestBody(request as Request),
-  ])
 
   if (!targetWebhookUrl) {
     return apiError(

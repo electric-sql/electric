@@ -28,6 +28,7 @@ import type {
   AgentModel,
   EntityRegistry,
   RuntimeHandler,
+  WebhookSignatureVerifierConfig,
 } from '@electric-ax/agents-runtime'
 import type { Principal } from './principal.js'
 import type { EntityBridgeCoordinator } from './entity-bridge-manager.js'
@@ -50,6 +51,9 @@ export interface ElectricAgentsServerOptions {
   durableStreamsBearer?: DurableStreamsBearerProvider
   durableStreamsRouting?: DurableStreamsRoutingAdapter
   durableStreamsServer?: DurableStreamTestServer
+  durableStreamsWebhookSignature?:
+    | false
+    | Partial<WebhookSignatureVerifierConfig>
   webhookSigner?: WebhookSigner
   webhookSigningKey?: WebhookSigningKeyInput
   port: number
@@ -424,6 +428,8 @@ export class ElectricAgentsServer {
       durableStreamsBearer: this.options.durableStreamsBearer,
       durableStreamsRouting: this.options.durableStreamsRouting,
       durableStreamsDispatcher: this.streamsAgent,
+      durableStreamsWebhookSignature:
+        this.options.durableStreamsWebhookSignature,
       webhookSigner: this.webhookSigner,
       electricUrl: this.options.electricUrl,
       electricSecret: this.options.electricSecret,
