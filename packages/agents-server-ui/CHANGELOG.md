@@ -1,5 +1,11 @@
 # @electric-ax/agents-server-ui
 
+## 0.4.8
+
+### Patch Changes
+
+- 86e69d5: Add defensive null guards for timeline run items and an error boundary around each timeline row to prevent a single malformed row from crashing the entire view.
+
 ## 0.4.7
 
 ### Patch Changes
