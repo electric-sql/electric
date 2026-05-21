@@ -174,9 +174,9 @@ This is the existing Materializer. It will just need to be updated to:
 
 #### Logical Time
 
-Logical Time is monotonically incrementing counter per subquery.
+Logical Time is a monotonically incrementing counter per subquery.
 
-This needs to be a memory efficient data staructure that can be incremented indefinately. If it needs to wrap we need to make sure we use appropriate conparison functions when comparing times. Wrapping is an acceptable solution since there will only ever be so many moves in flight for any given subquery and memory would explode due to that before wrapping would cause comparison failures.
+Use a normal BEAM integer. It auto-promotes to a bignum when needed, so wrapping is unnecessary.
 
 #### SubqueryProgressMonitor
 
