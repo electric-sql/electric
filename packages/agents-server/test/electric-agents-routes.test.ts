@@ -68,6 +68,16 @@ function fakeInsertDb() {
   }
 }
 
+function fakeDeleteDb() {
+  const where = vi.fn().mockResolvedValue(undefined)
+  const delete_ = vi.fn(() => ({ where }))
+  return {
+    db: { delete: delete_ },
+    delete: delete_,
+    where,
+  }
+}
+
 const serviceRoutedTestAdapter: DurableStreamsRoutingAdapter = {
   streamUrl(input) {
     const incomingUrl = new URL(input.requestUrl, `http://localhost`)
@@ -565,6 +575,33 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
           },
         },
       })
+    } finally {
+      fetchSpy.mockRestore()
+    }
+  })
+
+  it(`forwards successful subscription deletes as bodyless 204 responses`, async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, `fetch`)
+      .mockResolvedValue(new Response(null, { status: 204 }))
+    const db = fakeDeleteDb()
+
+    try {
+      const result = await globalRouter.fetch(
+        createRequest(`DELETE`, `/__ds/subscriptions/horton-handler`),
+        {
+          service: `tenant-a`,
+          durableStreamsUrl: `http://durable.local/v1/stream/tenant-a`,
+          pgDb: db.db,
+          isShuttingDown: () => false,
+        } as unknown as TenantContext
+      )
+
+      expect(result.status).toBe(204)
+      await expect(result.text()).resolves.toBe(``)
+      expect(fetchSpy).toHaveBeenCalledOnce()
+      expect(db.delete).toHaveBeenCalledOnce()
+      expect(db.where).toHaveBeenCalledOnce()
     } finally {
       fetchSpy.mockRestore()
     }

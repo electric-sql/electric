@@ -100,11 +100,20 @@ function bodyFromBytes(body: Uint8Array): ArrayBuffer {
 }
 
 function responseFromUpstream(response: Response, body?: Uint8Array): Response {
-  return new Response(body ? bodyFromBytes(body) : response.body, {
+  const responseBody = forbidsResponseBody(response.status)
+    ? null
+    : body !== undefined
+      ? bodyFromBytes(body)
+      : response.body
+  return new Response(responseBody, {
     status: response.status,
     statusText: response.statusText,
     headers: responseHeaders(response),
   })
+}
+
+function forbidsResponseBody(status: number): boolean {
+  return status === 204 || status === 205 || status === 304
 }
 
 async function forwardToDurableStreams(
