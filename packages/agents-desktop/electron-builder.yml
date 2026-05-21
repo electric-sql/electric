@@ -10,6 +10,8 @@ files:
   - dist/**/*
   - assets/**/*
   - package.json
+  # Reproduction-only PR change: trigger the desktop app build without
+  # changing packaging behavior.
   - '!**/node_modules/@rollup/**'
 
 extraResources:
