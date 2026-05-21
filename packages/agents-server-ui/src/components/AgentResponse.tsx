@@ -253,6 +253,10 @@ function stringifyToolPayload(value: unknown): string | undefined {
   return JSON.stringify(value)
 }
 
+function textContent(item: EntityTimelineTextItem | null | undefined): string {
+  return typeof item?.content === `string` ? item.content : ``
+}
+
 function liveToolCallToContentItem(
   item: EntityTimelineToolCallItem
 ): Extract<EntityTimelineContentItem, { kind: `tool_call` }> {
@@ -300,9 +304,14 @@ function liveRunItemsToContentItems(
   const contentItems: Array<EntityTimelineContentItem> = []
   for (const item of items) {
     if (item.text) {
-      if (item.text.content.trim().length > 0) {
-        contentItems.push({ kind: `text`, text: item.text.content })
+      const content = textContent(item.text)
+      if (content.trim().length > 0) {
+        contentItems.push({ kind: `text`, text: content })
       }
+      continue
+    }
+    if (!item.toolCall) {
+      console.error(`Run item has neither text nor toolCall`, { item })
       continue
     }
     contentItems.push(liveToolCallToContentItem(item.toolCall))
@@ -327,7 +336,7 @@ const LiveTextItem = memo(function LiveTextItem({
 }): React.ReactElement {
   return (
     <MarkdownSegment
-      text={item.content}
+      text={textContent(item)}
       contentHash={0}
       isStreaming={isStreaming}
       renderWidth={renderWidth}
@@ -387,7 +396,7 @@ export const AgentResponseLive = memo(function AgentResponseLive({
     (run.status === `failed` ? `Run failed` : undefined)
   const lastItem = sortedItems[sortedItems.length - 1]
   const lastTextHasContent =
-    lastItem?.text !== undefined && lastItem.text.content.trim().length > 0
+    lastItem?.text !== undefined && textContent(lastItem.text).trim().length > 0
   const showThinking =
     isStreaming && !done && !failureText && !lastTextHasContent
   const showTimestamp = timestamp != null && !isStreaming
@@ -421,6 +430,11 @@ export const AgentResponseLive = memo(function AgentResponseLive({
               renderWidth={renderWidth}
             />
           )
+        }
+
+        if (!item.toolCall) {
+          console.error(`Run item has neither text nor toolCall`, { item })
+          return null
         }
 
         return (
