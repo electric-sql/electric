@@ -1327,10 +1327,13 @@ export function EntityTimeline({
       <ScrollArea
         viewportRef={scrollAreaRef}
         className={styles.scroll}
-        viewportClassName={styles.scrollViewport}
+        viewportClassName={`${styles.scrollViewport} mobile-chat-scroll-viewport`}
         scrollbars="vertical"
       >
-        <div ref={contentRef} className={styles.content}>
+        <div
+          ref={contentRef}
+          className={`${styles.content} mobile-chat-content`}
+        >
           <Stack>
             {spawnTime ? (
               <Tooltip content={formatAbsoluteDateTimeVerbose(spawnTime)}>

@@ -38,7 +38,7 @@ import { useTokens } from '../lib/ThemeProvider'
 import { fontSize, lineHeight, radii, spacing } from '../lib/theme'
 import type { Tokens } from '../lib/theme'
 import type { EmbedViewId } from '../lib/embedView'
-import type { ElectricEntity } from '../lib/agentsClient'
+import type { ElectricEntity, EntitySignal } from '../lib/agentsClient'
 
 export const CHAT_COMPOSER_BASE_HEIGHT = 76
 export const CHAT_COMPOSER_OVERLAP = 20
@@ -139,13 +139,15 @@ export function SessionScreen({
     messages: Array<OptimisticInboxMessage>
   ) => void
 }): React.ReactElement {
-  const { entitiesCollection, serverUrl } = useAgents()
+  const { entitiesCollection, serverUrl, signalEntity } = useAgents()
   const tokens = useTokens()
   const styles = useMemo(() => createStyles(tokens), [tokens])
   const [menuOpen, setMenuOpen] = useState(false)
   const [inlineQueuedMessages, setInlineQueuedMessages] = useState<
     Map<string, OptimisticInboxMessage>
   >(() => new Map())
+  const [stopPending, setStopPending] = useState(false)
+  const [signalError, setSignalError] = useState<string | null>(null)
   const inlineQueuedKeysRef = useRef(new Set<string>())
   const inlineTimeoutsRef = useRef(
     new Map<string, ReturnType<typeof setTimeout>>()
@@ -161,10 +163,8 @@ export function SessionScreen({
   const entity = matches.at(0) ?? null
   const streamEntityUrl =
     view === `chat` && entity?.status !== `spawning` ? entityUrl : null
-  const { timelineRows, pendingInbox, db } = useEntityTimeline(
-    serverUrl,
-    streamEntityUrl
-  )
+  const { timelineRows, pendingInbox, db, generationActive } =
+    useEntityTimeline(serverUrl, streamEntityUrl)
   const manifests = useMemo(
     () =>
       timelineRows
@@ -276,6 +276,67 @@ export function SessionScreen({
     onInlineQueuedMessagesChange?.(Array.from(inlineQueuedMessages.values()))
   }, [inlineQueuedMessages, onInlineQueuedMessagesChange])
 
+  useEffect(() => {
+    if (!generationActive) setStopPending(false)
+  }, [generationActive])
+
+  useEffect(() => {
+    setStopPending(false)
+    setSignalError(null)
+  }, [entityUrl])
+
+  const sendSignal = useCallback(
+    async (
+      signal: EntitySignal,
+      reason: string,
+      opts: { stopPending?: boolean } = {}
+    ): Promise<void> => {
+      if (!entity) return
+      if (opts.stopPending) setStopPending(true)
+      setSignalError(null)
+      try {
+        await signalEntity({ entityUrl, signal, reason })
+      } catch (err) {
+        if (opts.stopPending) setStopPending(false)
+        setSignalError(err instanceof Error ? err.message : String(err))
+      }
+    },
+    [entity, entityUrl, signalEntity]
+  )
+
+  const stopGeneration = useCallback((): void => {
+    if (!generationActive || stopPending) return
+    void sendSignal(`SIGINT`, `Stopped from mobile chat UI`, {
+      stopPending: true,
+    })
+  }, [generationActive, sendSignal, stopPending])
+
+  const stopImmediately = useCallback(async (): Promise<void> => {
+    if (!entity) return
+    setSignalError(null)
+    try {
+      await signalEntity({
+        entityUrl,
+        signal: `SIGSTOP`,
+        reason: `Stopped immediately from mobile session menu`,
+      })
+      await signalEntity({
+        entityUrl,
+        signal: `SIGINT`,
+        reason: `Interrupted current run for immediate stop`,
+      })
+    } catch (err) {
+      setSignalError(err instanceof Error ? err.message : String(err))
+    }
+  }, [entity, entityUrl, signalEntity])
+
+  const sendMenuSignal = useCallback(
+    (signal: EntitySignal): void => {
+      void sendSignal(signal, `Sent from mobile session menu`)
+    },
+    [sendSignal]
+  )
+
   const title = entity
     ? getEntityDisplayTitle(entity)
     : decodeURIComponent(entityUrl.replace(/^\//, ``))
@@ -309,17 +370,25 @@ export function SessionScreen({
           onOptimisticQueuedMessage={rememberInlineQueuedMessage}
           onOpenEntity={onOpenEntity}
           onOpenStateSource={onOpenStateSource}
+          generationActive={generationActive}
+          stopPending={stopPending}
+          onStop={stopGeneration}
           disabled={
-            !db || entity?.status === `stopped` || entity?.status === `spawning`
+            !db ||
+            entity?.status === `stopped` ||
+            entity?.status === `killed` ||
+            entity?.status === `spawning`
           }
           placeholder={
             entity?.status === `stopped`
               ? `Entity stopped`
-              : entity?.status === `spawning`
-                ? `Starting...`
-                : !db
-                  ? `Connecting...`
-                  : `Send a message...`
+              : entity?.status === `killed`
+                ? `Entity killed`
+                : entity?.status === `spawning`
+                  ? `Starting...`
+                  : !db
+                    ? `Connecting...`
+                    : `Send a message...`
           }
         />
       )}
@@ -330,6 +399,9 @@ export function SessionScreen({
         entity={entity}
         view={view}
         onSetView={onSetView}
+        signalError={signalError}
+        onSignal={sendMenuSignal}
+        onStopImmediately={() => void stopImmediately()}
       />
     </Screen>
   )
@@ -347,6 +419,9 @@ function NativeMessageComposer({
   onOptimisticQueuedMessage,
   onOpenEntity,
   onOpenStateSource,
+  generationActive,
+  stopPending,
+  onStop,
   disabled,
   placeholder,
 }: {
@@ -361,6 +436,9 @@ function NativeMessageComposer({
   onOptimisticQueuedMessage?: (message: OptimisticInboxMessage) => void
   onOpenEntity?: (entityUrl: string) => void
   onOpenStateSource?: (sourceId: string) => void
+  generationActive: boolean
+  stopPending: boolean
+  onStop: () => void
   disabled: boolean
   placeholder: string
 }): React.ReactElement {
@@ -403,6 +481,9 @@ function NativeMessageComposer({
     if (!db) return null
     return createSteerInboxMessageAction({ db, baseUrl: serverUrl, entityUrl })
   }, [db, serverUrl, entityUrl])
+  const showStop =
+    generationActive && text.length === 0 && !disabled && !editingMessage
+  const canStop = showStop && !stopPending
   const canSend = text.length > 0 && !disabled && !sending
   const setMeasuredInputHeight = (height: number): void => {
     const nextHeight = Math.min(
@@ -477,6 +558,14 @@ function NativeMessageComposer({
     setEditingMessage(null)
     onSendMessage?.()
     finishPersistedAction(tx.isPersisted.promise)
+  }
+
+  const handleComposerAction = (): void => {
+    if (showStop) {
+      if (canStop) onStop()
+      return
+    }
+    send()
   }
 
   const startEditing = useCallback(
@@ -601,24 +690,26 @@ function NativeMessageComposer({
           returnKeyType="default"
         />
         <Pressable
-          onPress={send}
-          disabled={!canSend}
+          onPress={handleComposerAction}
+          disabled={showStop ? stopPending : !canSend}
           hitSlop={8}
           accessibilityRole="button"
-          accessibilityLabel="Send message"
+          accessibilityLabel={showStop ? `Stop generating` : `Send message`}
           style={({ pressed }) => [
             styles.sendButton,
-            canSend ? styles.sendButtonActive : null,
-            pressed && canSend ? styles.sendButtonPressed : null,
+            canSend || showStop ? styles.sendButtonActive : null,
+            showStop ? styles.stopButton : null,
+            showStop && stopPending ? styles.stopButtonPending : null,
+            pressed && (canSend || showStop) ? styles.sendButtonPressed : null,
           ]}
         >
-          {sending ? (
+          {sending && !showStop ? (
             <ActivityIndicator size="small" color={tokens.textOnAccent} />
           ) : (
             <Icon
-              name="arrow-up"
-              size={18}
-              color={canSend ? tokens.textOnAccent : tokens.text4}
+              name={showStop ? `square` : `arrow-up`}
+              size={showStop ? 14 : 18}
+              color={canSend || showStop ? tokens.textOnAccent : tokens.text4}
               strokeWidth={2.4}
             />
           )}
@@ -1324,7 +1415,6 @@ function createComposerStyles(tokens: Tokens) {
       marginTop: -CHAT_COMPOSER_OVERLAP,
       paddingHorizontal: spacing.lg,
       paddingTop: 0,
-      backgroundColor: tokens.bg,
       zIndex: 10,
     },
     composer: {
@@ -1369,6 +1459,16 @@ function createComposerStyles(tokens: Tokens) {
     },
     sendButtonActive: {
       backgroundColor: tokens.accent9,
+    },
+    stopButton: {
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      margin: 5,
+      backgroundColor: tokens.accent9,
+    },
+    stopButtonPending: {
+      opacity: 0.72,
     },
     sendButtonPressed: {
       opacity: 0.8,
