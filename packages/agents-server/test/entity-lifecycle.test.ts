@@ -34,7 +34,7 @@ describe(`entity lifecycle`, () => {
     await Promise.allSettled([electricAgentsServer?.stop(), dsServer?.stop()])
   }, 120_000)
 
-  it(`killed entities remain readable with stopped status`, async () => {
+  it(`killed entities remain readable with killed status`, async () => {
     const createTypeResponse = await fetch(
       `${baseUrl}/_electric/entity-types`,
       {
@@ -59,9 +59,11 @@ describe(`entity lifecycle`, () => {
     expect(spawnResponse.status).toBe(201)
 
     const killResponse = await fetch(
-      `${baseUrl}/_electric/entities/task/demo-1`,
+      `${baseUrl}/_electric/entities/task/demo-1/signal`,
       {
-        method: `DELETE`,
+        method: `POST`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({ signal: `SIGKILL`, reason: `test cleanup` }),
       }
     )
     expect(killResponse.status).toBe(200)
@@ -71,7 +73,7 @@ describe(`entity lifecycle`, () => {
     await expect(getResponse.json()).resolves.toMatchObject({
       url: `/task/demo-1`,
       type: `task`,
-      status: `stopped`,
+      status: `killed`,
     })
 
     const headResponse = await fetch(
@@ -81,5 +83,34 @@ describe(`entity lifecycle`, () => {
       }
     )
     expect(headResponse.status).toBe(200)
+  })
+
+  it(`keeps lifecycle DELETE as a legacy kill alias`, async () => {
+    await fetch(`${baseUrl}/_electric/entity-types`, {
+      method: `POST`,
+      headers: { 'content-type': `application/json` },
+      body: JSON.stringify({
+        name: `task`,
+        description: `Task entity`,
+      }),
+    })
+
+    const spawnResponse = await fetch(
+      `${baseUrl}/_electric/entities/task/demo-delete-rejected`,
+      {
+        method: `PUT`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({}),
+      }
+    )
+    expect(spawnResponse.status).toBe(201)
+
+    const deleteResponse = await fetch(
+      `${baseUrl}/_electric/entities/task/demo-delete-rejected`,
+      {
+        method: `DELETE`,
+      }
+    )
+    expect(deleteResponse.status).toBe(200)
   })
 })

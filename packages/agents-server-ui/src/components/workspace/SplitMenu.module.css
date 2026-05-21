@@ -16,6 +16,86 @@
   user-select: none;
 }
 
+.submenuTrigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--ds-row-height-md);
+  padding: 3px 3px 3px 8px;
+  border-radius: var(--ds-radius-item);
+  font-size: var(--ds-text-sm);
+  line-height: 1.3;
+  font-family: var(--ds-font-body);
+  color: var(--ds-text-1);
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+  text-align: start;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.submenuTrigger[data-highlighted] {
+  background: var(--ds-bg-hover);
+}
+
+.submenuChevron {
+  margin-left: auto;
+  margin-right: 5px;
+  color: var(--ds-text-3);
+}
+
+.signalRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  grid-template-rows: auto auto;
+  column-gap: 18px;
+  row-gap: 1px;
+  align-items: baseline;
+  width: 100%;
+  margin-right: 5px;
+}
+
+.signalName {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+  color: var(--ds-text-1);
+  font-size: var(--ds-text-sm);
+  line-height: 1.3;
+}
+
+.signalDescription {
+  grid-column: 1;
+  grid-row: 2;
+  min-width: 0;
+  color: var(--ds-text-3);
+  font-size: var(--ds-font-size-1, 12px);
+  line-height: 1.3;
+}
+
+.signalShortcut {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: end;
+  color: var(--ds-gray-11);
+  font-size: var(--ds-text-sm);
+  line-height: 1.3;
+}
+
+.signalCode {
+  grid-column: 2;
+  grid-row: 2;
+  justify-self: end;
+  transform: translateY(-0.5px);
+  color: var(--ds-text-3);
+  font-family: var(--ds-font-mono);
+  font-size: var(--ds-font-size-1, 11px);
+  line-height: 1.3;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
 /* ---- ViewRow ----------------------------------------------------- */
 /* Layout inside the Menu.Item:
  *   [icon] Label [✓?] (spacer) [→][↓]

@@ -1,6 +1,8 @@
 import type { EntityTags, TagOperation } from './tags'
 import { appendPathToUrl } from './url'
 import type { ClaimTokenHeader, HeadersProvider } from './types'
+import type { EntitySignal } from './entity-schema'
+export type { EntitySignal } from './entity-schema'
 
 const ELECTRIC_PRINCIPAL_HEADER = `electric-principal`
 
@@ -77,11 +79,19 @@ export interface RegisterWakeOptions {
   manifestKey?: string
 }
 
+export interface SignalEntityOptions {
+  entityUrl: string
+  signal: EntitySignal
+  reason?: string
+  payload?: unknown
+}
+
 export interface RuntimeServerClient {
   sendEntityMessage: (options: SendEntityMessageOptions) => Promise<void>
   spawnEntity: (options: SpawnEntityOptions) => Promise<RuntimeEntityInfo>
   getEntityInfo: (entityUrl: string) => Promise<RuntimeEntityInfo>
   ensureSharedStateStream: (sharedStateId: string) => Promise<string>
+  signalEntity: (options: SignalEntityOptions) => Promise<{ txid: number }>
   deleteEntity: (entityUrl: string) => Promise<void>
   getSharedStateStreamPath: (sharedStateId: string) => string
   registerWake: (options: RegisterWakeOptions) => Promise<void>
@@ -144,8 +154,8 @@ export function getSharedStateStreamPath(sharedStateId: string): string {
   return `/_electric/shared-state/${sharedStateId}`
 }
 
-function entityRpcPath(entityUrl: string): string {
-  return `/_electric/entities${entityUrl}`
+function entityRpcPath(entityUrl: string, suffix = ``): string {
+  return `/_electric/entities${entityUrl}${suffix}`
 }
 
 export function createRuntimeServerClient(
@@ -342,14 +352,41 @@ export function createRuntimeServerClient(
     return streamPath
   }
 
-  const deleteEntity = async (entityUrl: string): Promise<void> => {
-    const response = await request(entityRpcPath(entityUrl), {
-      method: `DELETE`,
+  const signalEntity = async ({
+    entityUrl,
+    signal,
+    reason,
+    payload,
+  }: SignalEntityOptions): Promise<{ txid: number }> => {
+    const body: Record<string, unknown> = { signal }
+    if (reason !== undefined) body.reason = reason
+    if (payload !== undefined) body.payload = payload
+
+    const response = await request(entityRpcPath(entityUrl, `/signal`), {
+      method: `POST`,
+      headers: { 'content-type': `application/json` },
+      body: JSON.stringify(body),
     })
-    if (!response.ok && response.status !== 404) {
+    if (!response.ok) {
       throw new Error(
-        `delete ${entityUrl} failed (${response.status}): ${await readErrorText(response)}`
+        `signal ${entityUrl} ${signal} failed (${response.status}): ${await readErrorText(response)}`
       )
+    }
+    return (await response.json()) as { txid: number }
+  }
+
+  const deleteEntity = async (entityUrl: string): Promise<void> => {
+    try {
+      await signalEntity({
+        entityUrl,
+        signal: `SIGKILL`,
+        reason: `Runtime child cleanup`,
+      })
+    } catch (err) {
+      if (err instanceof Error && /\(404\)/.test(err.message)) {
+        return
+      }
+      throw err
     }
   }
 
@@ -540,6 +577,7 @@ export function createRuntimeServerClient(
     spawnEntity,
     getEntityInfo,
     ensureSharedStateStream,
+    signalEntity,
     deleteEntity,
     getSharedStateStreamPath,
     registerWake,

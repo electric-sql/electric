@@ -18,6 +18,7 @@ import {
   backfillEntityDispatchPolicy,
   linkEntityDispatchSubscription,
   resolveEffectiveDispatchPolicyForSpawn,
+  shouldLinkDispatchBeforeInitialMessage,
   unlinkEntityDispatchSubscription,
 } from './dispatch-policy.js'
 import { routeBody, withSchema } from './schema.js'
@@ -133,6 +134,22 @@ const setTagBodySchema = Type.Object({
   value: Type.String(),
 })
 
+const entitySignalSchema = Type.Union([
+  Type.Literal(`SIGINT`),
+  Type.Literal(`SIGHUP`),
+  Type.Literal(`SIGTERM`),
+  Type.Literal(`SIGKILL`),
+  Type.Literal(`SIGSTOP`),
+  Type.Literal(`SIGCONT`),
+  Type.Literal(`SIGUSR`),
+])
+
+const signalBodySchema = Type.Object({
+  signal: entitySignalSchema,
+  reason: Type.Optional(Type.String()),
+  payload: Type.Optional(Type.Unknown()),
+})
+
 const scheduleBodySchema = Type.Union([
   Type.Object({
     scheduleType: Type.Literal(`cron`),
@@ -161,6 +178,7 @@ type SendBody = Static<typeof sendBodySchema>
 type InboxMessageBody = Static<typeof inboxMessageBodySchema>
 type ForkBody = Static<typeof forkBodySchema>
 type SetTagBody = Static<typeof setTagBodySchema>
+type SignalBody = Static<typeof signalBodySchema>
 type ScheduleBody = Static<typeof scheduleBodySchema>
 type EntitiesRegisterBody = Static<typeof entitiesRegisterBodySchema>
 
@@ -187,6 +205,12 @@ entitiesRouter.put(
 entitiesRouter.get(`/:type/:instanceId`, withExistingEntity, getEntity)
 entitiesRouter.head(`/:type/:instanceId`, withExistingEntity, headEntity)
 entitiesRouter.delete(`/:type/:instanceId`, withExistingEntity, killEntity)
+entitiesRouter.post(
+  `/:type/:instanceId/signal`,
+  withExistingEntity,
+  withSchema(signalBodySchema),
+  signalEntity
+)
 entitiesRouter.post(
   `/:type/:instanceId/send`,
   withExistingEntity,
@@ -614,12 +638,20 @@ async function spawnEntity(
     wake: parsed.wake,
     created_by: principal.url,
   })
-  await linkEntityDispatchSubscription(ctx, entity)
+  const linkBeforeInitialMessage =
+    parsed.initialMessage !== undefined &&
+    shouldLinkDispatchBeforeInitialMessage(dispatchPolicy)
+  if (linkBeforeInitialMessage) {
+    await linkEntityDispatchSubscription(ctx, entity)
+  }
   if (parsed.initialMessage !== undefined) {
     await ctx.entityManager.send(entity.url, {
       from: principal.url,
       payload: parsed.initialMessage,
     })
+  }
+  if (!linkBeforeInitialMessage) {
+    await linkEntityDispatchSubscription(ctx, entity)
   }
 
   return json(
@@ -653,5 +685,29 @@ async function killEntity(
   await unlinkEntityDispatchSubscription(ctx, entity)
   const result = await ctx.entityManager.kill(entityUrl)
   ctx.runtime.claimWriteTokens.clearStream(ctx.service, entity.streams.main)
+  return json(result)
+}
+
+async function signalEntity(
+  request: AgentsRouteRequest,
+  ctx: TenantContext
+): Promise<Response> {
+  const principalMutationError = rejectPrincipalEntityMutation(
+    request,
+    `signaled`
+  )
+  if (principalMutationError) return principalMutationError
+
+  const parsed = routeBody<SignalBody>(request)
+  const { entityUrl, entity } = requireExistingEntityRoute(request)
+  const result = await ctx.entityManager.signal(entityUrl, {
+    signal: parsed.signal,
+    reason: parsed.reason,
+    payload: parsed.payload,
+  })
+  if (result.new_state === `stopped` || result.new_state === `killed`) {
+    await unlinkEntityDispatchSubscription(ctx, entity)
+    ctx.runtime.claimWriteTokens.clearStream(ctx.service, entity.streams.main)
+  }
   return json(result)
 }

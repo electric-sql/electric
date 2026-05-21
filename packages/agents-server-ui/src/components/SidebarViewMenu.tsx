@@ -10,8 +10,7 @@ import {
   ListFilter,
   Tag,
 } from 'lucide-react'
-import { useLiveQuery } from '@tanstack/react-db'
-import { eq, not } from '@tanstack/db'
+import { eq, not, useLiveQuery } from '@tanstack/react-db'
 import { Icon, IconButton, Menu, Text } from '../ui'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
 import {

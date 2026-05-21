@@ -10,9 +10,14 @@ import {
   useNavigate,
   useParams,
 } from '@tanstack/react-router'
+import { eq, useLiveQuery } from '@tanstack/react-db'
 import { z } from 'zod'
 import { getActiveBaseUrl, preloadEntityStream } from './lib/entity-connection'
-import { preloadAppCollections } from './lib/ElectricAgentsProvider'
+import {
+  preloadAppCollections,
+  useElectricAgents,
+  type EntitySignal,
+} from './lib/ElectricAgentsProvider'
 import { usePinnedEntities } from './hooks/usePinnedEntities'
 import {
   SidebarCollapsedProvider,
@@ -61,6 +66,53 @@ const SETTINGS_CATEGORY_IDS: ReadonlyArray<SettingsCategoryId> = [
   `mcp-servers`,
 ]
 
+function targetElement(event: KeyboardEvent): HTMLElement | null {
+  return event.target instanceof HTMLElement ? event.target : null
+}
+
+function isEditableTarget(target: HTMLElement | null): boolean {
+  if (!target) return false
+  const tag = target.tagName
+  return (
+    tag === `INPUT` ||
+    tag === `TEXTAREA` ||
+    tag === `SELECT` ||
+    target.isContentEditable
+  )
+}
+
+function isChatInputTarget(target: HTMLElement | null): boolean {
+  return Boolean(target?.closest(`[data-agent-chat-input]`))
+}
+
+function hasLocalEscapeHandler(target: HTMLElement | null): boolean {
+  return Boolean(
+    target?.closest(
+      [
+        `[data-pane-find-bar]`,
+        `[role="dialog"]`,
+        `[role="menu"]`,
+        `[role="menuitem"]`,
+        `[role="listbox"]`,
+        `[role="combobox"]`,
+      ].join(`,`)
+    )
+  )
+}
+
+function shouldHandleAgentSignalShortcut(
+  event: KeyboardEvent,
+  shortcut: `escape` | `shift+escape`
+): boolean {
+  const target = targetElement(event)
+
+  if (shortcut === `escape` || shortcut === `shift+escape`) {
+    if (hasLocalEscapeHandler(target)) return false
+    return !isEditableTarget(target) || isChatInputTarget(target)
+  }
+  return false
+}
+
 function RootLayout(): React.ReactElement {
   return (
     <SidebarCollapsedProvider>
@@ -85,10 +137,26 @@ function RootShell(): React.ReactElement {
   } = useSidebarCollapsed()
   const search = useSearchPalette()
   const { workspace, helpers } = useWorkspace()
+  const { entitiesCollection, signalEntity } = useElectricAgents()
   const { openFindForTile, findNextInTile, findPreviousInTile } =
     usePaneFindCommands()
   const nativeMenuHandlesAppHotkeys =
     typeof window !== `undefined` && Boolean(window.electronAPI)
+  const activeEntityUrl = helpers.activeTile?.entityUrl ?? null
+  const { data: activeEntityMatches = [] } = useLiveQuery(
+    (q) => {
+      if (!entitiesCollection || !activeEntityUrl) return undefined
+      return q
+        .from({ entity: entitiesCollection })
+        .where(({ entity }) => eq(entity.url, activeEntityUrl))
+    },
+    [entitiesCollection, activeEntityUrl]
+  )
+  const activeEntity = activeEntityMatches.at(0)
+  const activeEntityCanReceiveSignal =
+    activeEntity !== undefined &&
+    activeEntity.status !== `stopped` &&
+    activeEntity.status !== `killed`
 
   useHotkey(`mod+b`, toggle, { disabled: nativeMenuHandlesAppHotkeys })
   useHotkey(
@@ -149,6 +217,57 @@ function RootShell(): React.ReactElement {
     e.preventDefault()
     openNewSession()
   })
+
+  const signalActiveTile = useCallback(
+    (signal: EntitySignal, reason: string) => {
+      if (!activeEntityCanReceiveSignal) return false
+      const entityUrl = activeEntityUrl
+      if (!entityUrl || !signalEntity) return false
+      const tx = signalEntity({ entityUrl, signal, reason })
+      tx.isPersisted.promise.catch(() => {})
+      return true
+    },
+    [activeEntityCanReceiveSignal, activeEntityUrl, signalEntity]
+  )
+  const stopActiveTile = useCallback(() => {
+    if (!activeEntityCanReceiveSignal) return false
+    const entityUrl = activeEntityUrl
+    if (!entityUrl || !signalEntity) return false
+    const stopTx = signalEntity({
+      entityUrl,
+      signal: `SIGSTOP`,
+      reason: `Stopped immediately from keyboard`,
+    })
+    stopTx.isPersisted.promise
+      .then(() => {
+        const interruptTx = signalEntity({
+          entityUrl,
+          signal: `SIGINT`,
+          reason: `Interrupted current run for immediate stop`,
+        })
+        interruptTx.isPersisted.promise.catch(() => {})
+      })
+      .catch(() => {})
+    return true
+  }, [activeEntityCanReceiveSignal, activeEntityUrl, signalEntity])
+  useHotkey(
+    `escape`,
+    (e) => {
+      if (!shouldHandleAgentSignalShortcut(e, `escape`)) return
+      if (!signalActiveTile(`SIGINT`, `Interrupted from keyboard`)) return
+      e.preventDefault()
+    },
+    { ignoreInputs: false }
+  )
+  useHotkey(
+    `shift+escape`,
+    (e) => {
+      if (!shouldHandleAgentSignalShortcut(e, `shift+escape`)) return
+      if (!stopActiveTile()) return
+      e.preventDefault()
+    },
+    { ignoreInputs: false }
+  )
 
   useWorkspaceHotkeys({ disabled: nativeMenuHandlesAppHotkeys })
   useWorkspacePersistence()

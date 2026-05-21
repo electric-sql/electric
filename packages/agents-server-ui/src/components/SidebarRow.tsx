@@ -103,7 +103,7 @@ export const SidebarRow = memo(function SidebarRow({
   hoverHandle,
 }: SidebarRowProps): React.ReactElement {
   const { title } = getEntityDisplayTitle(entity)
-  const isStopped = entity.status === `stopped`
+  const isStopped = entity.status === `stopped` || entity.status === `killed`
   const hasChildren = childCount > 0
   const sessionId = entity.url.replace(/^\//, ``)
   const className = [

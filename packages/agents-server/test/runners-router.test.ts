@@ -493,6 +493,51 @@ describe(`runner routes`, () => {
     )
   })
 
+  it(`releases paused entity claims without dispatching pending work`, async () => {
+    const ctx = buildContext()
+    vi.mocked(ctx.streamClient.claimSubscription).mockResolvedValue({
+      wake_id: `wake-paused`,
+      generation: 7,
+      token: `claim-token`,
+      streams: [{ path: `chat/paused/main`, tail_offset: `12` }],
+    })
+    vi.mocked(ctx.entityManager.registry.getEntityByStream).mockResolvedValue({
+      url: `/chat/paused`,
+      type: `chat`,
+      status: `paused`,
+      streams: { main: `/chat/paused/main`, error: `/chat/paused/error` },
+      subscription_id: `runner:runner-1`,
+      write_token: `entity-token`,
+      tags: {},
+      created_at: 1,
+      updated_at: 1,
+    })
+
+    const response = await globalRouter.fetch(
+      request(`POST`, `/_electric/runners/runner-1/claim`, {
+        subscription_id: `runner:runner-1`,
+        stream: `chat/paused/main`,
+        generation: 7,
+      }),
+      ctx
+    )
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({ done: true })
+    expect(ctx.streamClient.releaseSubscription).toHaveBeenCalledWith(
+      `runner:runner-1`,
+      `claim-token`,
+      {
+        wake_id: `wake-paused`,
+        generation: 7,
+      }
+    )
+    expect(
+      ctx.entityManager.registry.materializeActiveClaim
+    ).not.toHaveBeenCalled()
+    expect(ctx.entityManager.registry.updateStatus).not.toHaveBeenCalled()
+  })
+
   it(`rejects invalid owner_principal with 400`, async () => {
     const response = await globalRouter.fetch(
       request(`POST`, `/_electric/runners`, {

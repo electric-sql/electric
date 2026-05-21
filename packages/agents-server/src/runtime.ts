@@ -533,7 +533,11 @@ export class ElectricAgentsTenantRuntime {
       return
     }
 
-    await this.manager.registry.updateStatus(entityUrl, `idle`)
+    const entity = await this.manager.registry.getEntity(entityUrl)
+    await this.manager.registry.updateStatus(
+      entityUrl,
+      entity?.status === `stopping` ? `stopped` : `idle`
+    )
     await this.entityBridgeManager.onEntityChanged(entityUrl)
   }
 }

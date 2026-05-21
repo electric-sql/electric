@@ -81,6 +81,15 @@ function createHandlers() {
         }) => Promise<void>
       >()
       .mockResolvedValue(undefined),
+    signal: vi
+      .fn<
+        (
+          url: string,
+          signal: string,
+          options: { reason?: string; payload?: string }
+        ) => Promise<void>
+      >()
+      .mockResolvedValue(undefined),
     kill: vi.fn<(url: string) => Promise<void>>().mockResolvedValue(undefined),
     start: vi
       .fn<(options: object) => Promise<StartedDevEnvironment>>()
@@ -298,6 +307,57 @@ describe(`createElectricProgram`, () => {
         from: `42`,
       })
     )
+  })
+
+  it(`passes signal arguments and options through commander`, async () => {
+    const handlers = await parse([
+      `agents`,
+      `signal`,
+      `/chat/test`,
+      `SIGINT`,
+      `--reason`,
+      `stop current run`,
+      `--payload`,
+      `{"source":"test"}`,
+    ])
+
+    expect(handlers.signal).toHaveBeenCalledWith(
+      `/chat/test`,
+      `SIGINT`,
+      expect.objectContaining({
+        reason: `stop current run`,
+        payload: `{"source":"test"}`,
+      })
+    )
+  })
+
+  it(`sends signal requests to the entity signal endpoint`, async () => {
+    const fetchMock = vi.spyOn(globalThis, `fetch`).mockResolvedValue(
+      new Response(JSON.stringify({ txid: 123 }), {
+        status: 200,
+        headers: { 'content-type': `application/json` },
+      })
+    )
+
+    try {
+      await createElectricCliHandlers(TEST_ENV).signal(`/chat/test`, `SIGUSR`, {
+        reason: `custom`,
+        payload: `{"ok":true}`,
+      })
+      expect(fetchMock).toHaveBeenCalledWith(
+        `http://localhost:4437/_electric/entities/chat/test/signal`,
+        expect.objectContaining({
+          method: `POST`,
+          body: JSON.stringify({
+            signal: `SIGUSR`,
+            reason: `custom`,
+            payload: { ok: true },
+          }),
+        })
+      )
+    } finally {
+      fetchMock.mockRestore()
+    }
   })
 
   it(`dispatches start without anthropic options`, async () => {

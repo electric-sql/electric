@@ -1,15 +1,17 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import {
+  ChevronRight,
   Copy,
   Eye,
   GitFork,
   Link2,
   MoreHorizontal,
+  OctagonX,
   Pin,
   PinOff,
+  Radio,
   SplitSquareHorizontal,
   SplitSquareVertical,
-  Trash2,
   X,
 } from 'lucide-react'
 import { useNavigate } from '@tanstack/react-router'
@@ -31,9 +33,89 @@ import {
 } from '../../ui'
 import { modKeyLabel } from '../../lib/keyLabels'
 import { getEntityDisplayTitle } from '../../lib/entityDisplay'
-import type { ElectricEntity } from '../../lib/ElectricAgentsProvider'
+import type {
+  ElectricEntity,
+  EntitySignal,
+} from '../../lib/ElectricAgentsProvider'
 import type { Tile } from '../../lib/workspace/types'
 import styles from './SplitMenu.module.css'
+
+const SIGNAL_OPTION_GROUPS: ReadonlyArray<
+  ReadonlyArray<{
+    id: string
+    shortName: string
+    description: string
+    signal?: EntitySignal
+    composite?: `stop-immediately`
+    shortcut?: string
+    code: string
+  }>
+> = [
+  [
+    {
+      id: `interrupt`,
+      signal: `SIGINT`,
+      shortName: `Interrupt`,
+      description: `Abort active run and continue`,
+      shortcut: `Esc`,
+      code: `SIGINT`,
+    },
+    {
+      id: `stop-immediately`,
+      composite: `stop-immediately`,
+      shortName: `Stop immediately`,
+      description: `Abort active run and pause`,
+      shortcut: `Shift+Esc`,
+      code: `SIGSTOP+SIGINT`,
+    },
+  ],
+  [
+    {
+      id: `stop`,
+      signal: `SIGSTOP`,
+      shortName: `Stop`,
+      description: `Pause after current run`,
+      code: `SIGSTOP`,
+    },
+    {
+      id: `reload`,
+      signal: `SIGHUP`,
+      shortName: `Reload`,
+      description: `Reload after current run`,
+      code: `SIGHUP`,
+    },
+    {
+      id: `resume`,
+      signal: `SIGCONT`,
+      shortName: `Resume`,
+      description: `Resume paused work`,
+      code: `SIGCONT`,
+    },
+    {
+      id: `custom`,
+      signal: `SIGUSR`,
+      shortName: `Custom`,
+      description: `Deliver to signal handler`,
+      code: `SIGUSR`,
+    },
+  ],
+  [
+    {
+      id: `terminate`,
+      signal: `SIGTERM`,
+      shortName: `Terminate`,
+      description: `Gracefully stop permanently`,
+      code: `SIGTERM`,
+    },
+    {
+      id: `kill`,
+      signal: `SIGKILL`,
+      shortName: `Kill`,
+      description: `Immediately kill permanently`,
+      code: `SIGKILL`,
+    },
+  ],
+]
 
 /**
  * Per-tile workspace menu. Shown in the tile header (the `…` button)
@@ -71,11 +153,13 @@ export function SplitMenu({
   entity: ElectricEntity | null
 }): React.ReactElement {
   const { workspace, helpers } = useWorkspace()
-  const { forkEntity, killEntity } = useElectricAgents()
+  const { forkEntity, killEntity, signalEntity } = useElectricAgents()
   const { pinnedUrls, togglePin } = usePinnedEntities()
   const navigate = useNavigate()
   const hasEntity = entity !== null && tile.entityUrl !== null
   const entityUrl = tile.entityUrl
+  const entityTerminal =
+    entity?.status === `stopped` || entity?.status === `killed`
   const pinned = entityUrl !== null && pinnedUrls.includes(entityUrl)
   // Hide "Close tile" when this is the only tile in the workspace —
   // closing it would leave the workspace empty (which the URL ↔
@@ -116,6 +200,47 @@ export function SplitMenu({
     if (!killEntity || entityUrl === null) return
     const tx = killEntity(entityUrl)
     tx.isPersisted.promise.catch(() => {})
+  }
+
+  const handleStopImmediately = () => {
+    if (!signalEntity || entityUrl === null) return
+    const stopTx = signalEntity({
+      entityUrl,
+      signal: `SIGSTOP`,
+      reason: `Stopped immediately from tile menu`,
+    })
+    stopTx.isPersisted.promise
+      .then(() => {
+        const interruptTx = signalEntity({
+          entityUrl,
+          signal: `SIGINT`,
+          reason: `Interrupted current run for immediate stop`,
+        })
+        interruptTx.isPersisted.promise.catch(() => {})
+      })
+      .catch(() => {})
+  }
+
+  const handleSignal = (signal: EntitySignal) => {
+    if (!signalEntity || entityUrl === null) return
+    const tx = signalEntity({
+      entityUrl,
+      signal,
+      reason: `Sent from tile menu`,
+    })
+    tx.isPersisted.promise.catch(() => {})
+  }
+
+  const handleSignalOption = (
+    option: (typeof SIGNAL_OPTION_GROUPS)[number][number]
+  ) => {
+    if (option.composite === `stop-immediately`) {
+      handleStopImmediately()
+      return
+    }
+    if (option.signal) {
+      handleSignal(option.signal)
+    }
   }
 
   const handleCopyLayoutLink = () => {
@@ -233,13 +358,53 @@ export function SplitMenu({
             </Menu.Item>
           )}
           {hasEntity && entity && forkEntity && !entity.parent && (
-            <Menu.Item
-              onSelect={handleFork}
-              disabled={entity.status === `stopped`}
-            >
+            <Menu.Item onSelect={handleFork} disabled={entityTerminal}>
               <UiIcon icon={GitFork} size={2} />
               <Text size={2}>Fork subtree</Text>
             </Menu.Item>
+          )}
+          {hasEntity && entity && !entityTerminal && signalEntity && (
+            <Menu.SubmenuRoot>
+              <Menu.SubmenuTrigger className={styles.submenuTrigger}>
+                <UiIcon icon={Radio} size={2} />
+                <Text size={2}>Send signal</Text>
+                <UiIcon
+                  icon={ChevronRight}
+                  size={2}
+                  className={styles.submenuChevron}
+                />
+              </Menu.SubmenuTrigger>
+              <Menu.Content side="left" align="start">
+                {SIGNAL_OPTION_GROUPS.map((group, groupIndex) => (
+                  <Fragment key={groupIndex}>
+                    {groupIndex > 0 && <Menu.Separator />}
+                    {group.map((option) => (
+                      <Menu.Item
+                        key={option.id}
+                        onSelect={() => handleSignalOption(option)}
+                      >
+                        <span className={styles.signalRow}>
+                          <span className={styles.signalName}>
+                            {option.shortName}
+                          </span>
+                          {option.shortcut && (
+                            <span className={styles.signalShortcut}>
+                              {option.shortcut}
+                            </span>
+                          )}
+                          <span className={styles.signalDescription}>
+                            {option.description}
+                          </span>
+                          <span className={styles.signalCode}>
+                            {option.code}
+                          </span>
+                        </span>
+                      </Menu.Item>
+                    ))}
+                  </Fragment>
+                ))}
+              </Menu.Content>
+            </Menu.SubmenuRoot>
           )}
 
           {!isOnlyTile && (
@@ -253,14 +418,11 @@ export function SplitMenu({
             </>
           )}
 
-          {hasEntity && entity && entity.status !== `stopped` && killEntity && (
+          {hasEntity && entity && !entityTerminal && killEntity && (
             <>
               <Menu.Separator />
-              <Menu.Item
-                onSelect={() => setShowKillConfirm(true)}
-                tone="danger"
-              >
-                <UiIcon icon={Trash2} size={2} />
+              <Menu.Item onSelect={() => setShowKillConfirm(true)}>
+                <UiIcon icon={OctagonX} size={2} />
                 <Text size={2}>Kill entity</Text>
               </Menu.Item>
             </>

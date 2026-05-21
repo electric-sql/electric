@@ -8,8 +8,7 @@ import {
 } from 'react'
 import { Dialog as BaseDialog } from '@base-ui/react/dialog'
 import { useNavigate } from '@tanstack/react-router'
-import { useLiveQuery } from '@tanstack/react-db'
-import { eq } from '@tanstack/db'
+import { eq, useLiveQuery } from '@tanstack/react-db'
 import {
   Copy,
   ExternalLink,
@@ -320,7 +319,8 @@ export function SearchPalette(): React.ReactElement | null {
       if (
         forkEntity &&
         !activeEntity.parent &&
-        activeEntity.status !== `stopped`
+        activeEntity.status !== `stopped` &&
+        activeEntity.status !== `killed`
       ) {
         out.push({
           kind: `action`,
@@ -343,7 +343,11 @@ export function SearchPalette(): React.ReactElement | null {
         })
       }
 
-      if (killEntity && activeEntity.status !== `stopped`) {
+      if (
+        killEntity &&
+        activeEntity.status !== `stopped` &&
+        activeEntity.status !== `killed`
+      ) {
         out.push({
           kind: `action`,
           id: `kill-current-entity`,

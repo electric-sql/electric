@@ -21,7 +21,14 @@ export interface ServerConfig {
   tenantId?: string
 }
 
-export type PublicEntityStatus = `spawning` | `running` | `idle` | `stopped`
+export type PublicEntityStatus =
+  | `spawning`
+  | `running`
+  | `idle`
+  | `paused`
+  | `stopping`
+  | `stopped`
+  | `killed`
 
 export interface PublicEntity {
   url: string

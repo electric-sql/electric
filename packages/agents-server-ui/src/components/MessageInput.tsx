@@ -1,5 +1,5 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { ArrowUp } from 'lucide-react'
+import { ArrowUp, Square } from 'lucide-react'
 import type { EntityStreamDBWithActions } from '@electric-ax/agents-runtime/client'
 import {
   createDeleteInboxMessageAction,
@@ -18,20 +18,26 @@ export function MessageInput({
   baseUrl,
   entityUrl,
   disabled,
+  generationActive = false,
+  stopPending = false,
   pendingMessages = [],
   inlineQueuedSubmits = false,
   onOptimisticQueuedMessage,
   drawer,
   onSend,
+  onStop,
 }: {
   db: EntityStreamDBWithActions | null
   baseUrl: string
   entityUrl: string
   disabled: boolean
+  generationActive?: boolean
+  stopPending?: boolean
   pendingMessages?: EntityTimelineData[`inbox`]
   inlineQueuedSubmits?: boolean
   onOptimisticQueuedMessage?: (message: OptimisticInboxMessage) => void
   onSend?: () => void
+  onStop?: () => void
   /**
    * Optional content rendered above the composer, sharing its docked
    * width and lift into the timeline above. The composer is z-indexed
@@ -95,6 +101,10 @@ export function MessageInput({
     return createSteerInboxMessageAction({ db, baseUrl, entityUrl })
   }, [db, baseUrl, entityUrl])
 
+  const inputText = value.trim()
+  const showStop = generationActive && inputText.length === 0 && !disabled
+  const canStop = showStop && !stopPending
+
   const handleSubmit = useCallback(() => {
     if (!value.trim() || disabled) return
     setError(null)
@@ -118,6 +128,14 @@ export function MessageInput({
       setError(err.message)
     })
   }, [value, sendAction, updateAction, editingMessage, disabled, onSend])
+
+  const handleComposerAction = useCallback(() => {
+    if (canStop) {
+      onStop?.()
+      return
+    }
+    handleSubmit()
+  }, [canStop, handleSubmit, onStop])
 
   const startEditing = useCallback(
     (message: EntityTimelineData[`inbox`][number]) => {
@@ -188,7 +206,8 @@ export function MessageInput({
     [updateAction]
   )
 
-  const isActive = Boolean(value.trim() && !disabled)
+  const isActive = Boolean(inputText && !disabled)
+  const isButtonActive = isActive || showStop
 
   return (
     <Stack direction="column" gap={0} className={styles.root}>
@@ -239,18 +258,29 @@ export function MessageInput({
             placeholder={disabled ? `Entity stopped` : `Send a message...`}
             disabled={disabled}
             rows={1}
+            data-agent-chat-input=""
             className={styles.textarea}
           />
           <button
             type="button"
-            aria-label="Send message"
-            onClick={handleSubmit}
-            disabled={!isActive}
-            className={[styles.composerSend, isActive ? styles.active : null]
+            aria-label={showStop ? `Stop generating` : `Send message`}
+            title={showStop ? `Stop generating` : `Send message`}
+            onClick={handleComposerAction}
+            disabled={showStop ? stopPending : !isButtonActive}
+            className={[
+              styles.composerSend,
+              isButtonActive ? styles.active : null,
+              showStop ? styles.stop : null,
+              stopPending && showStop ? styles.stopPending : null,
+            ]
               .filter(Boolean)
               .join(` `)}
           >
-            <Icon icon={ArrowUp} size={3} />
+            <Icon
+              icon={showStop ? Square : ArrowUp}
+              size={showStop ? 2 : 3}
+              {...(showStop ? { fill: `currentColor`, strokeWidth: 0 } : {})}
+            />
           </button>
         </div>
       </div>

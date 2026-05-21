@@ -51,9 +51,10 @@ interface PiAgentAdapterConfig {
 }
 
 interface PiAgentHandle {
-  run: (input?: string) => Promise<void>
+  run: (input?: string, abortSignal?: AbortSignal) => Promise<void>
   steer: (message: string) => void
   isRunning: () => boolean
+  abort: () => void
   dispose: () => void
 }
 
@@ -177,6 +178,7 @@ export function createPiAgentAdapter(
     let disposed = false
     let stepStartTime = 0
     let textStarted = false
+    let abortedRun = false
 
     const model = resolvePiModel({
       model: opts.model,
@@ -201,16 +203,17 @@ export function createPiAgentAdapter(
     ): () => void {
       const eventQueue: Array<AgentEvent> = []
       let processing = false
+      let consuming = true
       let done = false
       const eventCounts: Record<string, number> = {}
       let textDeltaCount = 0
       const logPrefix = `[${config.entityUrl}]`
 
       const processQueue = (): void => {
-        if (processing || eventQueue.length === 0) return
+        if (!consuming || processing || eventQueue.length === 0) return
         processing = true
 
-        while (eventQueue.length > 0) {
+        while (consuming && eventQueue.length > 0) {
           const event = eventQueue.shift()!
           eventCounts[event.type] = (eventCounts[event.type] ?? 0) + 1
 
@@ -267,7 +270,12 @@ export function createPiAgentAdapter(
                   | undefined
 
                 const isError =
-                  msg?.stopReason === `error` || !!msg?.errorMessage
+                  msg?.stopReason === `error` ||
+                  (!!msg?.errorMessage && msg.stopReason !== `aborted`)
+                const isAborted = msg?.stopReason === `aborted`
+                if (isAborted) {
+                  abortedRun = true
+                }
 
                 if (isError) {
                   runtimeLog.error(
@@ -295,9 +303,11 @@ export function createPiAgentAdapter(
                 )
                 const finishReason = isError
                   ? `error`
-                  : hasToolCalls
-                    ? `tool_calls`
-                    : `stop`
+                  : isAborted
+                    ? `aborted`
+                    : hasToolCalls
+                      ? `tool_calls`
+                      : `stop`
                 bridge.onStepEnd({
                   finishReason,
                   durationMs: Date.now() - stepStartTime,
@@ -335,7 +345,9 @@ export function createPiAgentAdapter(
               }
 
               case `agent_end`: {
-                bridge.onRunEnd({ finishReason: `stop` })
+                bridge.onRunEnd({
+                  finishReason: abortedRun ? `aborted` : `stop`,
+                })
                 runtimeLog.debug(
                   logPrefix,
                   `pi-adapter agent_end textDeltas=${textDeltaCount} ` +
@@ -352,45 +364,76 @@ export function createPiAgentAdapter(
         }
 
         processing = false
-        if (done) {
+        if (consuming && done) {
           running = false
           resolveWhenDone()
         }
       }
 
       const unsubscribe = agent.subscribe((event: AgentEvent) => {
+        if (!consuming) return
         eventQueue.push(event)
         processQueue()
       })
 
-      return unsubscribe
+      return () => {
+        consuming = false
+        eventQueue.length = 0
+        unsubscribe()
+      }
     }
 
     return {
-      async run(input?: string): Promise<void> {
+      async run(input?: string, abortSignal?: AbortSignal): Promise<void> {
         running = true
+        abortedRun = false
 
         bridge.onRunStart()
 
         return new Promise<void>((resolve, reject) => {
-          const unsubscribe = processAgentEvents(
+          let settled = false
+          let unsubscribe = (): void => {}
+          const finish = (finishReason: `stop` | `aborted` | `error`): void => {
+            if (settled) return
+            settled = true
+            running = false
+            abortSignal?.removeEventListener(`abort`, abortRun)
+            unsubscribe()
+            bridge.onRunEnd({ finishReason })
+          }
+          const abortRun = (): void => {
+            if (settled) return
+            abortedRun = true
+            agent.abort()
+            finish(`aborted`)
+            resolve()
+          }
+          unsubscribe = processAgentEvents(
             () => {
+              if (settled) return
+              settled = true
+              running = false
+              abortSignal?.removeEventListener(`abort`, abortRun)
               unsubscribe()
               resolve()
             },
             (err) => {
-              unsubscribe()
+              if (settled) return
+              finish(`error`)
               reject(err)
             }
           )
 
+          abortSignal?.addEventListener(`abort`, abortRun, { once: true })
           const runPromise =
             input !== undefined ? agent.prompt(input) : agent.continue()
+          if (abortSignal?.aborted) {
+            abortRun()
+          }
 
           Promise.resolve(runPromise).catch((err: Error) => {
-            running = false
-            bridge.onRunEnd({ finishReason: `error` })
-            unsubscribe()
+            if (settled) return
+            finish(`error`)
             reject(err)
           })
         })
@@ -408,8 +451,13 @@ export function createPiAgentAdapter(
         return running
       },
 
+      abort(): void {
+        agent.abort()
+      },
+
       dispose(): void {
         disposed = true
+        agent.abort()
         running = false
       },
     }

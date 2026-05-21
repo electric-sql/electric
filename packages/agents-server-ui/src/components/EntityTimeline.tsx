@@ -16,6 +16,7 @@ import {
 } from '@tanstack/react-virtual'
 import {
   ArrowDown,
+  CircleStop,
   Database,
   ExternalLink,
   FileJson,
@@ -125,7 +126,7 @@ function estimateRowHeight(
     )
     return Math.max(64, 48 + lines * lineHeight) + timelineRowGap(row)
   }
-  if (row.wake || row.manifest) {
+  if (row.wake || row.signal || row.manifest) {
     return 76 + timelineRowGap(row)
   }
   return 120 + timelineRowGap(row)
@@ -136,9 +137,10 @@ const CHAT_SURFACE_GUTTER = 24
 const ROW_GAP = 24
 const MANIFEST_ROW_GAP = 10
 const ROW_SETTLE_MS = 500
+type EntityStatus = NonNullable<IncludesEntity[`status`]>
 
 function timelineRowGap(row: RenderTimelineRow): number {
-  return row.manifest || row.wake ? MANIFEST_ROW_GAP : ROW_GAP
+  return row.manifest || row.wake || row.signal ? MANIFEST_ROW_GAP : ROW_GAP
 }
 
 type TimelinePaneFindMatch = PaneFindMatch & {
@@ -159,6 +161,7 @@ function timelineRowSearchText(
       timestamp: Date.parse(row.wake.payload.timestamp),
     })
   }
+  if (row.signal) return signalSearchText(row.signal)
   if (row.manifest) return manifestSearchText(row.manifest)
   return runSearchTextByKey.get(row.$key) ?? runSearchTextFromSnapshot(row.run)
 }
@@ -166,6 +169,7 @@ function timelineRowSearchText(
 function timelineRowLabel(row: RenderTimelineRow): string {
   if (row.inbox) return `User message`
   if (row.wake) return `Wake`
+  if (row.signal) return `Signal`
   if (row.manifest) return `Manifest item`
   return `Agent response`
 }
@@ -225,6 +229,54 @@ function WakeTimelineRow({
       </InlineEventCard>
     </div>
   )
+}
+
+function SignalTimelineRow({
+  signal,
+}: {
+  signal: NonNullable<RenderTimelineRow[`signal`]>
+}): React.ReactElement {
+  return (
+    <div className={styles.manifestRow}>
+      <InlineEventCard
+        icon={CircleStop}
+        title={`signal ${signal.signal}`}
+        summary={signalSummary(signal)}
+        headerSurface
+      />
+    </div>
+  )
+}
+
+function signalSearchText(
+  signal: NonNullable<RenderTimelineRow[`signal`]>
+): string {
+  return [
+    `signal`,
+    signal.signal,
+    signal.status,
+    signal.sender,
+    signal.reason,
+    signal.outcome,
+    signal.previous_state,
+    signal.new_state,
+  ]
+    .filter(Boolean)
+    .join(` `)
+}
+
+function signalSummary(
+  signal: NonNullable<RenderTimelineRow[`signal`]>
+): string {
+  const timestamp = Date.parse(signal.timestamp)
+  return [
+    signal.status,
+    signal.outcome,
+    signal.reason,
+    Number.isFinite(timestamp) ? formatChatTimestamp(timestamp) : null,
+  ]
+    .filter(Boolean)
+    .join(` · `)
 }
 
 function wakeDetails(
@@ -323,7 +375,7 @@ function ManifestTimelineRow({
   manifest: Manifest
   entityUrl: string | null
   tileId: string | null
-  entityStatus?: IncludesEntity[`status`]
+  entityStatus?: EntityStatus
 }): React.ReactElement {
   const workspace = useOptionalWorkspace()
   const navigate = useNavigate()
@@ -581,16 +633,20 @@ function getManifestStateSourceId(manifest: Manifest): string | null {
   return null
 }
 
-function statusTone(status: NonNullable<IncludesEntity[`status`]>) {
+function statusTone(status: EntityStatus) {
   switch (status) {
     case `idle`:
       return `success`
     case `spawning`:
+    case `paused`:
+    case `stopping`:
       return `warning`
     case `running`:
       return `info`
     case `stopped`:
       return `neutral`
+    case `killed`:
+      return `danger`
     default:
       return `neutral`
   }
@@ -635,6 +691,9 @@ const TimelineRow = memo(function TimelineRow({
   entityUrl,
   tileId,
   entityStatusByUrl,
+  stopUserMessageKey,
+  stopPending,
+  onStopGeneration,
   onRunSearchTextChange,
 }: {
   row: RenderTimelineRow
@@ -645,7 +704,10 @@ const TimelineRow = memo(function TimelineRow({
   renderWidth: number
   entityUrl: string | null
   tileId: string | null
-  entityStatusByUrl: Map<string, IncludesEntity[`status`]>
+  entityStatusByUrl: Map<string, EntityStatus>
+  stopUserMessageKey: string | null
+  stopPending: boolean
+  onStopGeneration?: () => void
   onRunSearchTextChange: (rowKey: string, text: string) => void
 }): React.ReactElement {
   if (row.inbox) {
@@ -659,6 +721,11 @@ const TimelineRow = memo(function TimelineRow({
           timestamp: Number.isFinite(timestamp) ? timestamp : Date.now(),
           isInitial: isInitialUserMessage,
         }}
+        showStop={
+          stopUserMessageKey !== null && row.$key === stopUserMessageKey
+        }
+        stopPending={stopPending}
+        onStop={onStopGeneration}
       />
     )
   }
@@ -673,6 +740,10 @@ const TimelineRow = memo(function TimelineRow({
         }}
       />
     )
+  }
+
+  if (row.signal) {
+    return <SignalTimelineRow signal={row.signal} />
   }
 
   if (row.manifest) {
@@ -712,6 +783,8 @@ export function EntityTimeline({
   entityUrl = null,
   entities = [],
   scrollToBottomSignal = 0,
+  stopPending = false,
+  onStopGeneration,
 }: {
   rows: Array<EntityTimelineQueryRow>
   loading: boolean
@@ -722,6 +795,8 @@ export function EntityTimeline({
   entityUrl?: string | null
   entities?: Array<IncludesEntity>
   scrollToBottomSignal?: number
+  stopPending?: boolean
+  onStopGeneration?: () => void
 }): React.ReactElement {
   const { entitiesCollection } = useElectricAgents()
   const referencedEntityUrlKey = useMemo(
@@ -738,9 +813,9 @@ export function EntityTimeline({
         return undefined
       }
       return q
-        .from({ e: entitiesCollection })
-        .where(({ e }) => inArray(e.url, referencedEntityUrls))
-        .select(({ e }) => ({
+        .from({ e: entitiesCollection as any })
+        .where(({ e }: any) => inArray(e.url, referencedEntityUrls))
+        .select(({ e }: any) => ({
           url: e.url,
           status: e.status,
         }))
@@ -748,9 +823,9 @@ export function EntityTimeline({
     [entitiesCollection, referencedEntityUrlKey]
   )
   const entityStatusByUrl = useMemo(() => {
-    const statusByUrl = new Map<string, IncludesEntity[`status`]>()
+    const statusByUrl = new Map<string, EntityStatus>()
     for (const entity of entities) {
-      statusByUrl.set(entity.url, entity.status)
+      if (entity.status) statusByUrl.set(entity.url, entity.status)
     }
     for (const entity of entityStatuses) {
       statusByUrl.set(entity.url, entity.status)
@@ -798,6 +873,20 @@ export function EntityTimeline({
     return null
   }, [rows])
 
+  const stopUserMessageKey = useMemo(() => {
+    if (!lastStreamingAgentKey) return null
+    const streamingIndex = rows.findIndex(
+      (row) => row.$key === lastStreamingAgentKey
+    )
+    if (streamingIndex < 0) return null
+    for (let index = streamingIndex - 1; index >= 0; index--) {
+      const row = rows[index]
+      if (row?.inbox) {
+        return row.$key
+      }
+    }
+    return null
+  }, [lastStreamingAgentKey, rows])
   const firstInboxRowKey = useMemo(
     () => rows.find((row) => row.inbox)?.$key ?? null,
     [rows]
@@ -1318,6 +1407,9 @@ export function EntityTimeline({
                       entityUrl={entityUrl}
                       tileId={tileId ?? null}
                       entityStatusByUrl={entityStatusByUrl}
+                      stopUserMessageKey={stopUserMessageKey}
+                      stopPending={stopPending}
+                      onStopGeneration={onStopGeneration}
                       onRunSearchTextChange={updateRunSearchText}
                     />
                   </div>

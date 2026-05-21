@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { GripVertical, X } from 'lucide-react'
-import { useLiveQuery } from '@tanstack/react-db'
-import { eq } from '@tanstack/db'
+import { eq, useLiveQuery } from '@tanstack/react-db'
 import { useElectricAgents } from '../../lib/ElectricAgentsProvider'
 import { useServerConnection } from '../../hooks/useServerConnection'
 import { listTiles, useWorkspace } from '../../hooks/useWorkspace'
@@ -49,7 +48,12 @@ export function TileContainer({
   }, [isActive, tile.id, helpers])
 
   return (
-    <div ref={tileRef} className={styles.tile} onMouseDownCapture={onActivate}>
+    <div
+      ref={tileRef}
+      className={styles.tile}
+      onFocusCapture={onActivate}
+      onMouseDownCapture={onActivate}
+    >
       {tile.entityUrl !== null ? (
         <EntityTileBody
           tile={tile}
@@ -96,7 +100,8 @@ function EntityTileBody({
   )
   const entity = matches.at(0) ?? null
   const isSpawning = entity?.status === `spawning`
-  const entityStopped = entity?.status === `stopped`
+  const entityStopped =
+    entity?.status === `stopped` || entity?.status === `killed`
 
   const setView = useCallback(
     (viewId: ViewId) => helpers.setTileView(tile.id, viewId),

@@ -343,9 +343,9 @@ export function runElectricAgentsConformanceTests(
         .spawn(`status-filter-agent`, `entity-1`)
         .spawn(`status-filter-agent`, `entity-2`)
         .kill()
-        .list({ status: `stopped` })
+        .list({ status: `killed` })
         .custom(async (ctx) => {
-          expect(ctx.lastListResult!.every((e) => e.status === `stopped`)).toBe(
+          expect(ctx.lastListResult!.every((e) => e.status === `killed`)).toBe(
             true
           )
         })
@@ -390,7 +390,7 @@ export function runElectricAgentsConformanceTests(
         })
         .spawn(`kill-test-agent`, `entity-1`)
         .kill()
-        .expectStatus(`stopped`)
+        .expectStatus(`killed`)
         .expectSendError(`NOT_RUNNING`, 409)
         .run())
 
@@ -416,8 +416,9 @@ export function runElectricAgentsConformanceTests(
           expect((msgReceived as any).value?.payload).toEqual({
             before: `kill`,
           })
-          const stopped = msgs.find((m) => m.type === `entity_stopped`)
-          expect(stopped).toBeDefined()
+          const signal = msgs.find((m) => m.type === `signal`)
+          expect(signal).toBeDefined()
+          expect((signal as any).value?.signal).toBe(`SIGKILL`)
         })
         .run())
 
@@ -442,9 +443,14 @@ export function runElectricAgentsConformanceTests(
           secondEntityUrl = ctx.currentEntityUrl
         })
         .custom(async (ctx) => {
-          const res = await electricAgentsFetch(ctx.baseUrl, firstEntityUrl!, {
-            method: `DELETE`,
-          })
+          const res = await electricAgentsFetch(
+            ctx.baseUrl,
+            `${firstEntityUrl!}/signal`,
+            {
+              method: `POST`,
+              body: JSON.stringify({ signal: `SIGKILL` }),
+            }
+          )
           expect(res.status).toBe(200)
           ctx.history.push({
             type: `entity_killed`,
@@ -491,9 +497,9 @@ export function runElectricAgentsConformanceTests(
           const entity = await pollEntityStatus(
             ctx.baseUrl,
             ctx.currentEntityUrl!,
-            [`stopped`]
+            [`killed`]
           )
-          expect(entity.status).toBe(`stopped`)
+          expect(entity.status).toBe(`killed`)
         })
         .expectSendError(`NOT_RUNNING`, 409)
         .run())
@@ -1544,9 +1550,14 @@ export function runElectricAgentsConformanceTests(
                   scenario.custom(async (ctx: RunContext) => {
                     const url = entityUrls[targetIdx]
                     if (!url) return
-                    const res = await electricAgentsFetch(ctx.baseUrl, url, {
-                      method: `DELETE`,
-                    })
+                    const res = await electricAgentsFetch(
+                      ctx.baseUrl,
+                      `${url}/signal`,
+                      {
+                        method: `POST`,
+                        body: JSON.stringify({ signal: `SIGKILL` }),
+                      }
+                    )
                     expect(res.status).toBe(200)
                     ctx.history.push({
                       type: `entity_killed`,
@@ -2093,8 +2104,11 @@ export function runElectricAgentsConformanceTests(
       })
       const res = await electricAgentsFetch(
         config.baseUrl,
-        `/${typeName}/nonexistent-id-12345`,
-        { method: `DELETE` }
+        `/${typeName}/nonexistent-id-12345/signal`,
+        {
+          method: `POST`,
+          body: JSON.stringify({ signal: `SIGKILL` }),
+        }
       )
       expect(res.status).toBe(404)
       const body = (await res.json()) as { error: { code: string } }
@@ -2919,9 +2933,9 @@ export function runCliConformanceTests(config: CliTestOptions): void {
           const entity = await pollEntityStatus(
             baseUrl,
             `/cli-kill-type/${id}`,
-            [`stopped`]
+            [`killed`]
           )
-          expect(entity.status).toBe(`stopped`)
+          expect(entity.status).toBe(`killed`)
         })
         .run()
     }, 15_000)
@@ -2968,9 +2982,9 @@ export function runCliConformanceTests(config: CliTestOptions): void {
           const entity = await pollEntityStatus(
             baseUrl,
             `/cli-lifecycle-type/${id}`,
-            [`stopped`]
+            [`killed`]
           )
-          expect(entity.status).toBe(`stopped`)
+          expect(entity.status).toBe(`killed`)
         })
         .exec(`ps`, `--status`, `running`)
         .expectExitCode(0)

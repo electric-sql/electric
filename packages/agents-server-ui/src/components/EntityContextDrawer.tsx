@@ -8,8 +8,7 @@ import {
   SplitSquareHorizontal,
   Trash2,
 } from 'lucide-react'
-import { useLiveQuery } from '@tanstack/react-db'
-import { inArray } from '@tanstack/db'
+import { inArray, useLiveQuery } from '@tanstack/react-db'
 import { useWorkspace } from '../hooks/useWorkspace'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
 import { Icon, IconButton, Text, Tooltip } from '../ui'

@@ -11,7 +11,7 @@
  *     .respondDone()
  *     .expectStatus('running')
  *     .kill()
- *     .expectStatus('stopped')
+ *     .expectStatus('killed')
  *     .run()
  */
 
@@ -1230,9 +1230,17 @@ async function executeStep(ctx: RunContext, step: Step): Promise<void> {
       if (!entityUrl)
         throw new Error(`No current entity — did you spawn first?`)
 
-      const res = await electricAgentsFetch(ctx.baseUrl, entityUrl, {
-        method: `DELETE`,
-      })
+      const res = await electricAgentsFetch(
+        ctx.baseUrl,
+        `${entityUrl}/signal`,
+        {
+          method: `POST`,
+          body: JSON.stringify({
+            signal: `SIGKILL`,
+            reason: `Killed by conformance test`,
+          }),
+        }
+      )
       expect(res.status).toBe(200)
 
       ctx.history.push({
@@ -2028,8 +2036,8 @@ function checkStreamPathsMatchEntityUrl(history: Array<HistoryEvent>): void {
 /**
  * Spec S4 — Safety: entity status transitions must be valid.
  * spawning → running is valid (at spawn time)
- * running/idle → stopped is valid (at kill time)
- * stopped → running is NOT valid
+ * running/idle → killed is valid (at kill time)
+ * killed → running is NOT valid
  * Soundness: Sound | Completeness: Incomplete (only checks observed status reads)
  */
 function checkStatusTransitionsValid(history: Array<HistoryEvent>): void {
@@ -2041,11 +2049,11 @@ function checkStatusTransitionsValid(history: Array<HistoryEvent>): void {
     }
     if (event.type === `entity_status_checked`) {
       const prev = lastStatus.get(event.entityUrl)
-      if (prev === `stopped`) {
+      if (prev === `killed`) {
         expect(
           event.status,
-          `Safety: entity ${event.entityUrl} transitioned from stopped to ${event.status}`
-        ).toBe(`stopped`)
+          `Safety: entity ${event.entityUrl} transitioned from killed to ${event.status}`
+        ).toBe(`killed`)
       }
       lastStatus.set(event.entityUrl, event.status)
     }
@@ -2237,7 +2245,7 @@ export interface EntityTypeModel {
 export interface EntityModel {
   url: string
   typeName: string
-  status: `running` | `stopped`
+  status: `running` | `killed`
   messageCount: number
 }
 
@@ -2368,7 +2376,7 @@ export function applyElectricAgentsAction(
       if (targetIdx === undefined) return model
       const entities = [...model.entities]
       const e = entities[targetIdx]!
-      entities[targetIdx] = { ...e, status: `stopped` }
+      entities[targetIdx] = { ...e, status: `killed` }
       return { ...model, entities }
     }
     case `check_status`:

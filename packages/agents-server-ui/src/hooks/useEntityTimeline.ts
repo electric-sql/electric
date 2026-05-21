@@ -113,8 +113,8 @@ export function useEntityTimeline(
     (q) =>
       db
         ? q
-            .from({ manifest: db.collections.manifests })
-            .orderBy(({ manifest }) => manifest._seq, `asc`)
+            .from({ manifest: db.collections.manifests as any })
+            .orderBy(({ manifest }: any) => manifest._seq, `asc`)
         : undefined,
     [db]
   )
@@ -122,10 +122,13 @@ export function useEntityTimeline(
     (q) =>
       db
         ? q
-            .from({ inbox: db.collections.inbox })
-            .where(({ inbox }) => eq(inbox.status, `pending`))
-            .orderBy(({ inbox }) => coalesce(inbox._timeline_order, `~`), `asc`)
-            .orderBy(({ inbox }) =>
+            .from({ inbox: db.collections.inbox as any })
+            .where(({ inbox }: any) => eq(inbox.status, `pending`))
+            .orderBy(
+              ({ inbox }: any) => coalesce(inbox._timeline_order, `~`),
+              `asc`
+            )
+            .orderBy(({ inbox }: any) =>
               coalesce(inbox._seq, Number.MAX_SAFE_INTEGER)
             )
         : undefined,

@@ -193,3 +193,29 @@
 .composerSend.active:hover {
   background: var(--ds-accent-10);
 }
+.composerSend.stop {
+  background: var(--ds-accent-9);
+  color: var(--ds-text-on-accent);
+}
+.composerSend.stop:hover {
+  background: var(--ds-accent-10);
+}
+.composerSend.stopPending {
+  cursor: progress;
+  opacity: 0.72;
+  animation: stopPendingPulse 1s ease-in-out infinite;
+}
+
+.composerSend.stopPending:hover {
+  background: var(--ds-accent-9);
+}
+
+@keyframes stopPendingPulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(0.92);
+  }
+}

@@ -217,6 +217,12 @@ export async function assertDispatchPolicyAllowed(
   }
 }
 
+export function shouldLinkDispatchBeforeInitialMessage(
+  policy: DispatchPolicy | undefined
+): boolean {
+  return policy?.targets[0] !== undefined
+}
+
 export async function linkEntityDispatchSubscription(
   ctx: TenantContext,
   entity: ElectricAgentsEntity

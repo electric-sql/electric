@@ -21,6 +21,7 @@ import type {
   AgentModel,
   AgentRunResult,
   AgentTool,
+  EntitySignal,
   EntityHandle,
   EntityStreamDBWithActions,
   HandlerContext,
@@ -66,6 +67,14 @@ export interface HandlerContextConfig<TState extends StateProxy = StateProxy> {
   writeEvent: (event: ChangeEvent) => void
   wakeSession: WakeSession
   wakeEvent: WakeEvent
+  runSignal?: AbortSignal
+  registerSignalHandler?: (
+    handler: (signal: {
+      signal: EntitySignal
+      reason?: string
+      payload?: unknown
+    }) => void | Promise<void>
+  ) => void
   doObserve: (
     source: ObservationSource,
     wake?: Wake
@@ -397,7 +406,7 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
           )
         }
 
-        await handle.run(runInput)
+        await handle.run(runInput, config.runSignal)
         runtimeLog.info(logPrefix, `agent.run completed`)
 
         return {
@@ -516,6 +525,7 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
     state: config.state,
     actions: config.actions,
     electricTools: config.electricTools,
+    signal: config.runSignal ?? new AbortController().signal,
     useAgent(cfg) {
       agentConfig = cfg
       return agent
@@ -575,6 +585,9 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         type: opts?.type,
         afterMs: opts?.afterMs,
       })
+    },
+    onSignal(handler): void {
+      config.registerSignalHandler?.(handler)
     },
     recordRun(): RunHandle {
       const key = nextRunKey()

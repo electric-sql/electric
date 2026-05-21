@@ -4,6 +4,7 @@ import {
   resolvePiModel,
   toAgentHistory,
 } from '../src/pi-adapter'
+import { createAssistantMessageEventStream } from '@mariozechner/pi-ai'
 import type { OutboundIdSeed } from '../src/outbound-bridge'
 import type { LLMMessage } from '../src/types'
 import type { ChangeEvent } from '@durable-streams/state'
@@ -52,7 +53,192 @@ describe(`createPiAgentAdapter`, () => {
     expect(typeof handle.run).toBe(`function`)
     expect(typeof handle.steer).toBe(`function`)
     expect(typeof handle.isRunning).toBe(`function`)
+    expect(typeof handle.abort).toBe(`function`)
     expect(typeof handle.dispose).toBe(`function`)
+  })
+
+  it(`aborts an active run when the run signal is aborted`, async () => {
+    let abortSeenResolve: (() => void) | null = null
+    const abortSeen = new Promise<void>((resolve) => {
+      abortSeenResolve = resolve
+    })
+    const abortedMessage: AssistantMessage = {
+      role: `assistant`,
+      content: [{ type: `text`, text: `` }],
+      api: `anthropic-messages`,
+      provider: `anthropic`,
+      model: `claude-sonnet-4-5-20250929`,
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          total: 0,
+        },
+      },
+      stopReason: `aborted`,
+      timestamp: Date.now(),
+    }
+
+    const factory = createPiAgentAdapter({
+      systemPrompt: `Test system prompt`,
+      model: `claude-sonnet-4-5-20250929`,
+      tools: [],
+      streamFn: (_model, _context, options) => {
+        const stream = createAssistantMessageEventStream()
+        if (options?.signal?.aborted) {
+          abortSeenResolve?.()
+          stream.end(abortedMessage)
+          return stream
+        }
+        options?.signal?.addEventListener(
+          `abort`,
+          () => {
+            abortSeenResolve?.()
+            stream.end(abortedMessage)
+          },
+          { once: true }
+        )
+        return stream
+      },
+    })
+
+    const handle = factory({
+      entityUrl: `test/entity-1`,
+      epoch: 1,
+      messages: [],
+      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0 },
+      writeEvent: (_event: ChangeEvent) => {},
+    })
+    const controller = new AbortController()
+    const runPromise = handle.run(`hello`, controller.signal)
+
+    controller.abort()
+    await abortSeen
+    await expect(runPromise).resolves.toBeUndefined()
+    expect(handle.isRunning()).toBe(false)
+  })
+
+  it(`settles an aborted run even if the model stream does not emit completion`, async () => {
+    const factory = createPiAgentAdapter({
+      systemPrompt: `Test system prompt`,
+      model: `claude-sonnet-4-5-20250929`,
+      tools: [],
+      streamFn: (_model, _context, options) => {
+        const stream = createAssistantMessageEventStream()
+        options?.signal?.addEventListener(`abort`, () => {}, { once: true })
+        return stream
+      },
+    })
+
+    const handle = factory({
+      entityUrl: `test/entity-1`,
+      epoch: 1,
+      messages: [],
+      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0 },
+      writeEvent: (_event: ChangeEvent) => {},
+    })
+    const controller = new AbortController()
+    const runPromise = handle.run(`hello`, controller.signal)
+
+    controller.abort()
+    await expect(
+      Promise.race([
+        runPromise.then(() => `resolved`),
+        new Promise((resolve) => setTimeout(() => resolve(`timed-out`), 50)),
+      ])
+    ).resolves.toBe(`resolved`)
+    expect(handle.isRunning()).toBe(false)
+  })
+
+  it(`stops consuming model events after an abort signal`, async () => {
+    let streamReadyResolve:
+      | ((stream: ReturnType<typeof createAssistantMessageEventStream>) => void)
+      | null = null
+    const streamReady = new Promise<
+      ReturnType<typeof createAssistantMessageEventStream>
+    >((resolve) => {
+      streamReadyResolve = resolve
+    })
+    const partialMessage: AssistantMessage = {
+      role: `assistant`,
+      content: [{ type: `text`, text: `` }],
+      api: `anthropic-messages`,
+      provider: `anthropic`,
+      model: `claude-sonnet-4-5-20250929`,
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          total: 0,
+        },
+      },
+      stopReason: `aborted`,
+      timestamp: Date.now(),
+    }
+
+    const factory = createPiAgentAdapter({
+      systemPrompt: `Test system prompt`,
+      model: `claude-sonnet-4-5-20250929`,
+      tools: [],
+      streamFn: () => {
+        const stream = createAssistantMessageEventStream()
+        streamReadyResolve?.(stream)
+        return stream
+      },
+    })
+    const events: Array<ChangeEvent> = []
+    const handle = factory({
+      entityUrl: `test/entity-1`,
+      epoch: 1,
+      messages: [],
+      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0 },
+      writeEvent: (event: ChangeEvent) => {
+        events.push(event)
+      },
+    })
+    const controller = new AbortController()
+    const runPromise = handle.run(`hello`, controller.signal)
+    const stream = await streamReady
+
+    controller.abort()
+    await runPromise
+    stream.push({
+      type: `text_delta`,
+      contentIndex: 0,
+      delta: `late token`,
+      partial: partialMessage,
+    })
+    await new Promise<void>((resolve) => queueMicrotask(resolve))
+
+    expect(events).not.toContainEqual(
+      expect.objectContaining({
+        type: `text_delta`,
+        value: expect.objectContaining({ delta: `late token` }),
+      })
+    )
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: `run`,
+        value: expect.objectContaining({
+          status: `completed`,
+          finish_reason: `aborted`,
+        }),
+      })
+    )
   })
 
   it(`isRunning returns false initially`, () => {

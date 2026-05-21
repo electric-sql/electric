@@ -37,6 +37,7 @@ import type {
   ContextEntryAttrs as EntityContextEntryAttrs,
   ContextInserted as EntityContextInserted,
   ContextRemoved as EntityContextRemoved,
+  EntitySignal,
   Manifest as EntityManifest,
   ManifestChildEntry as EntityManifestChildEntry,
   ManifestContextEntry as EntityManifestContextEntry,
@@ -45,6 +46,7 @@ import type {
   ManifestFutureSendScheduleEntry as EntityManifestFutureSendScheduleEntry,
   ManifestSharedStateEntry as EntityManifestSharedStateEntry,
   ManifestSourceEntry as EntityManifestSourceEntry,
+  Signal as EntitySignalEntry,
   WakeEntry,
 } from './entity-schema'
 import type { EntityTags, TagOperation } from './tags'
@@ -61,6 +63,7 @@ export type EntityStreamDBWithActions<
   actions: GeneratedStateActions<TState> & HandlerActions<TActions>
 }
 export type ChildStatus = ChildStatusEntry
+export type { EntitySignal }
 export type ObservationCollectionMap = Record<string, StateCollectionDefinition>
 export type ObservationStreamDB = BaseStreamDB<ObservationCollectionMap>
 export type EntitiesObservationHandle = ObservationHandle & {
@@ -318,6 +321,7 @@ export interface ContextEntry extends ContextEntryInput {
 export type TimelineItem =
   | { kind: `inbox`; at: number; payload: unknown }
   | { kind: `wake`; at: number; payload: unknown }
+  | { kind: `signal`; at: number; signal: EntitySignalEntry }
   | {
       kind: `run`
       at: number
@@ -846,6 +850,12 @@ export interface HandlerContext<
   events: Array<ChangeEvent>
   actions: TActions
   electricTools: Array<AgentTool>
+  /**
+   * Aborted when the current handler invocation should stop early, e.g. after
+   * SIGINT or terminal shutdown. Non-agent handlers should pass this to
+   * cancellable work such as fetches or subprocesses.
+   */
+  signal: AbortSignal
   useAgent: (config: AgentConfig) => AgentHandle
   useContext: (config: UseContextConfig) => void
   timelineMessages: (opts?: TimelineProjectionOpts) => Array<TimestampedMessage>
@@ -892,6 +902,20 @@ export interface HandlerContext<
     payload: unknown,
     opts?: { type?: string; afterMs?: number }
   ) => Promise<SendResult>
+  /**
+   * Register a handler for lifecycle signals delivered while this wake is active.
+   * Runtime/server-controlled signals are not delivered here: SIGINT aborts the
+   * active handler invocation, SIGSTOP/SIGCONT control pause/resume, and SIGKILL
+   * is terminal. The runtime currently delivers SIGHUP, SIGTERM, and SIGUSR to
+   * this handler.
+   */
+  onSignal: (
+    handler: (signal: {
+      signal: EntitySignal
+      reason?: string
+      payload?: unknown
+    }) => void | Promise<void>
+  ) => void
   /**
    * Record a non-LLM run on the entity's built-in `runs` collection.
    * Use this to bracket an external operation (CLI subprocess, HTTP

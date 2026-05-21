@@ -32,6 +32,7 @@ import type {
   WakeSession,
   WebhookNotification,
 } from './types'
+import type { Signal } from './entity-schema'
 import type { JsonBatch } from '@durable-streams/client'
 import type { ChangeEvent, StateEvent } from '@durable-streams/state'
 
@@ -464,6 +465,17 @@ export async function processWake(
   // Live event handler — wired after preload, processes child_status + inbox
   let idleTimer: ReturnType<typeof setTimeout> | null = null
   let idleController: AbortController | null = null
+  let runAbortController: AbortController | null = null
+  let activeSignalHandler:
+    | ((
+        signal: Pick<Signal, `signal` | `reason` | `payload`>
+      ) => void | Promise<void>)
+    | null = null
+  let pendingRunAbortRequested = false
+  let signalAbortRequested = false
+  let pauseRequested = false
+  let resumeRequested = false
+  const pendingSignalHandlers: Array<Promise<void>> = []
   const secondaryDbs: Array<{
     drainPendingWrites?: () => Promise<void>
     flushWrites?: () => Promise<void>
@@ -472,6 +484,7 @@ export async function processWake(
   }> = []
   let liveProcessError: Error | null = null
   let acceptLiveInputs = false
+  const handledSignalKeys = new Set<string>()
 
   const compareOffsets = (left: string, right: string): number => {
     if (left === right) return 0
@@ -551,6 +564,10 @@ export async function processWake(
   }
 
   function handleRuntimeSideEffectEvent(event: ChangeEvent): void {
+    if (event.type === `signal`) {
+      handleSignalEvent(event)
+      return
+    }
     if (event.type === `child_status` && result) {
       const spawnHandles = result.wakeSession.getSpawnHandles()
       const val = event.value as
@@ -566,6 +583,32 @@ export async function processWake(
             spawnHandle.resolveRun()
           }
         }
+      }
+    }
+  }
+
+  function handleLatestSignalEvents(events: Array<ChangeEvent>): void {
+    const latestSignalEvents = new Map<string, ChangeEvent>()
+    for (const event of events) {
+      if (event.type === `signal`) {
+        latestSignalEvents.set(String(event.key), event)
+      }
+    }
+
+    for (const event of events) {
+      if (event.type === `signal`) {
+        if (latestSignalEvents.get(String(event.key)) === event) {
+          handleSignalEvent(event)
+        }
+      }
+    }
+  }
+
+  function handleRuntimeSideEffectEvents(events: Array<ChangeEvent>): void {
+    handleLatestSignalEvents(events)
+    for (const event of events) {
+      if (event.type !== `signal`) {
+        handleRuntimeSideEffectEvent(event)
       }
     }
   }
@@ -608,6 +651,180 @@ export async function processWake(
 
   const isFreshEvent = (event: ChangeEvent): boolean => {
     return event.type === `inbox` || event.type === `wake`
+  }
+
+  const shouldHandleSignalEvent = (event: ChangeEvent): boolean => {
+    if (event.type !== `signal`) return false
+    const value = event.value as Partial<Signal> | undefined
+    if (value?.status === `unhandled`) return true
+
+    // The server handles SIGKILL because it is terminal and closes streams, but
+    // an active runtime still needs to observe the signal and abort in-flight
+    // model/tool work. Do not try to rewrite the already-closed stream.
+    return value?.signal === `SIGKILL` && value.status === `handled`
+  }
+
+  const markSignalHandled = (
+    event: ChangeEvent,
+    outcome:
+      | `aborted`
+      | `ignored`
+      | `shutdown_requested`
+      | `transitioned`
+      | `delivered`
+      | `failed`,
+    newState?: string
+  ): void => {
+    const value = event.value as Partial<Signal> | undefined
+    const key = String(event.key)
+    writeEvent(
+      entityStateSchema.signals.update({
+        key,
+        value: {
+          ...value,
+          status: `handled`,
+          handled_at: new Date().toISOString(),
+          handled_by: entityUrl,
+          outcome,
+          previous_state: notification.entity?.status,
+          ...(newState ? { new_state: newState } : {}),
+        } as never,
+      }) as ChangeEvent
+    )
+  }
+
+  const invokeSignalHandler = (
+    value: Partial<Signal>,
+    onSettled: (outcome: `delivered` | `failed`) => void
+  ): void => {
+    if (!activeSignalHandler || !value.signal) {
+      onSettled(`delivered`)
+      return
+    }
+
+    const task = Promise.resolve(
+      activeSignalHandler({
+        signal: value.signal,
+        reason: value.reason,
+        payload: value.payload,
+      })
+    ).then(
+      () => onSettled(`delivered`),
+      (err) => {
+        failBackgroundWake(err, `SIGNAL_HANDLER_FAILED`)
+        onSettled(`failed`)
+      }
+    )
+    pendingSignalHandlers.push(task)
+    void task.finally(() => {
+      const index = pendingSignalHandlers.indexOf(task)
+      if (index >= 0) pendingSignalHandlers.splice(index, 1)
+    })
+  }
+
+  const handleSignalEvent = (event: ChangeEvent): void => {
+    if (!shouldHandleSignalEvent(event)) return
+    const key = String(event.key)
+    if (handledSignalKeys.has(key)) return
+    handledSignalKeys.add(key)
+
+    const value = event.value as Partial<Signal>
+    const alreadyHandled = value.status === `handled`
+    switch (value.signal) {
+      case `SIGINT`:
+        if (runAbortController) {
+          log.info(`SIGINT received, aborting active handler invocation`)
+          runAbortController.abort()
+        } else if (notification.entity?.status === `running`) {
+          // SIGINT may arrive in the small window before the handler invocation
+          // controller exists. Only carry it forward for running entities; idle
+          // SIGINT is an ignored no-op and must not poison the next invocation.
+          log.info(
+            `SIGINT received before active run controller, queuing abort`
+          )
+          pendingRunAbortRequested = true
+        } else {
+          log.info(`SIGINT received with no active run, ignoring`)
+          markSignalHandled(event, `ignored`, notification.entity?.status)
+          void flushProducedWrites().catch((err) =>
+            failBackgroundWake(err, `SIGNAL_HANDLE_FAILED`)
+          )
+          return
+        }
+        markSignalHandled(event, `aborted`, notification.entity?.status)
+        void flushProducedWrites().catch((err) =>
+          failBackgroundWake(err, `SIGNAL_HANDLE_FAILED`)
+        )
+        return
+      case `SIGKILL`:
+        log.info(`SIGKILL received, aborting active run and closing wake`)
+        signalAbortRequested = true
+        runAbortController?.abort()
+        requestShutdown()
+        if (!alreadyHandled) {
+          markSignalHandled(event, `shutdown_requested`, `killed`)
+          void flushProducedWrites().catch((err) =>
+            failBackgroundWake(err, `SIGNAL_HANDLE_FAILED`)
+          )
+        }
+        return
+      case `SIGHUP`:
+        log.info(`SIGHUP received, closing wake after current checkpoint`)
+        requestShutdown()
+        invokeSignalHandler(value, () => {
+          markSignalHandled(
+            event,
+            `shutdown_requested`,
+            notification.entity?.status
+          )
+          void flushProducedWrites().catch((err) =>
+            failBackgroundWake(err, `SIGNAL_HANDLE_FAILED`)
+          )
+        })
+        return
+      case `SIGTERM`:
+        log.info(`SIGTERM received, closing wake after cleanup`)
+        requestShutdown()
+        invokeSignalHandler(value, (outcome) => {
+          markSignalHandled(
+            event,
+            outcome === `failed` ? `failed` : `shutdown_requested`,
+            `stopped`
+          )
+          void flushProducedWrites().catch((err) =>
+            failBackgroundWake(err, `SIGNAL_HANDLE_FAILED`)
+          )
+        })
+        return
+      case `SIGSTOP`:
+        log.info(`SIGSTOP received, pausing after current checkpoint`)
+        clearIdleTimer()
+        idleController?.abort()
+        pauseRequested = true
+        markSignalHandled(event, `transitioned`, `paused`)
+        void flushProducedWrites().catch((err) =>
+          failBackgroundWake(err, `SIGNAL_HANDLE_FAILED`)
+        )
+        return
+      case `SIGCONT`:
+        log.info(`SIGCONT received, resuming queued work`)
+        resumeRequested = true
+        clearIdleTimer()
+        idleController?.abort()
+        markSignalHandled(event, `transitioned`, `idle`)
+        void flushProducedWrites().catch((err) =>
+          failBackgroundWake(err, `SIGNAL_HANDLE_FAILED`)
+        )
+        return
+      case `SIGUSR`:
+        invokeSignalHandler(value, (outcome) => {
+          markSignalHandled(event, outcome, notification.entity?.status)
+          void flushProducedWrites().catch((err) =>
+            failBackgroundWake(err, `SIGNAL_HANDLE_FAILED`)
+          )
+        })
+        return
+    }
   }
 
   const filterAcceptedLiveEvents = (
@@ -696,9 +913,7 @@ export async function processWake(
         return
       }
       pendingLiveBatches.shift()
-      for (const event of changeEvents) {
-        handleRuntimeSideEffectEvent(event)
-      }
+      handleRuntimeSideEffectEvents(changeEvents)
       setSafeAckOffset(batch.offset)
     }
   }
@@ -738,9 +953,7 @@ export async function processWake(
     }
 
     if (selectedKind === null) {
-      for (const event of deltaEvents) {
-        handleRuntimeSideEffectEvent(event)
-      }
+      handleRuntimeSideEffectEvents(deltaEvents)
       setSafeAckOffset(batches[batches.length - 1]!.offset)
       return null
     }
@@ -754,9 +967,7 @@ export async function processWake(
       log.warn(
         `fresh ${selectedKind} batch did not contain runnable wake input; acking as no-op`
       )
-      for (const event of deltaEvents) {
-        handleRuntimeSideEffectEvent(event)
-      }
+      handleRuntimeSideEffectEvents(deltaEvents)
       setSafeAckOffset(batches[batches.length - 1]!.offset)
       return null
     }
@@ -794,6 +1005,8 @@ export async function processWake(
       setSafeAckOffset(batch.offset)
       return
     }
+
+    handleLatestSignalEvents(changeEvents)
 
     catchUpEvents.push(...changeEvents)
 
@@ -873,6 +1086,8 @@ export async function processWake(
     }
     claimedWake = true
     writeToken = claimed.writeToken ?? ``
+
+    handleRuntimeSideEffectEvents(catchUpEvents)
 
     // 3b. Start heartbeat once this worker owns the wake
     heartbeat = setInterval(() => {
@@ -1393,6 +1608,10 @@ export async function processWake(
     const waitForSharedStateWiring = async (): Promise<void> => {
       await pendingSharedStateWiring
     }
+    const waitForSignalHandlers = async (): Promise<void> => {
+      if (pendingSignalHandlers.length === 0) return
+      await Promise.allSettled([...pendingSignalHandlers])
+    }
     const drainAllPendingWrites = async (): Promise<void> => {
       await db.utils.drainPendingWrites()
       for (const sdb of secondaryDbs) {
@@ -1542,6 +1761,25 @@ export async function processWake(
     for (;;) {
       if (skipInitialHandlerPass) {
         skipInitialHandlerPass = false
+        if (signalAbortRequested) {
+          signalAbortRequested = false
+          drainNonFreshPendingBatches()
+          log.info(`signal abort completed, closing wake`)
+          break
+        }
+        if (pauseRequested) {
+          pauseRequested = false
+          drainNonFreshPendingBatches()
+          log.info(`pause requested, closing wake`)
+          break
+        }
+        if (resumeRequested) {
+          resumeRequested = false
+          if (await promoteNextPendingInboxMessage()) {
+            currentWakeEvents = []
+            continue
+          }
+        }
         const resumed = await awaitIdleForFreshWork(
           `skipping initial handler pass: no fresh wake input in catch-up; entering idle (${idleTimeout / 1000}s timeout)`
         )
@@ -1580,6 +1818,11 @@ export async function processWake(
         await promoteNextPendingInboxMessage()
       }
 
+      runAbortController = new AbortController()
+      if (pendingRunAbortRequested) {
+        pendingRunAbortRequested = false
+        runAbortController.abort()
+      }
       const { ctx: handlerCtx, getSleepRequested } = createHandlerContext({
         entityUrl,
         entityType: typeName,
@@ -1600,6 +1843,10 @@ export async function processWake(
         writeEvent,
         wakeSession,
         wakeEvent: currentWakeEvent,
+        runSignal: runAbortController.signal,
+        registerSignalHandler: (handler) => {
+          activeSignalHandler = handler
+        },
         doObserve,
         doSpawn,
         doMkdb,
@@ -1631,6 +1878,8 @@ export async function processWake(
         await definition.handler(handlerCtx, currentWakeEvent)
         handlerMs += +(performance.now() - handlerT0).toFixed(2)
         log.info(`handler returned`)
+        await waitForSignalHandlers()
+        activeSignalHandler = null
         await waitForSharedStateWiring()
         await drainAllPendingWrites()
         await Promise.all(pendingWakeRegistrations)
@@ -1649,6 +1898,9 @@ export async function processWake(
           throw liveProcessError
         }
       } catch (setupErr) {
+        runAbortController = null
+        await waitForSignalHandlers()
+        activeSignalHandler = null
         wakeSession.rollbackManifestEntries()
         const errMsg = toError(setupErr).message
         log.error(`handler failed for ${entityUrl}:`, errMsg)
@@ -1688,6 +1940,8 @@ export async function processWake(
         }
         throw setupErr
       }
+      runAbortController = null
+      activeSignalHandler = null
 
       if (!result) {
         result = {
@@ -1704,9 +1958,23 @@ export async function processWake(
         break
       }
 
+      if (signalAbortRequested) {
+        signalAbortRequested = false
+        drainNonFreshPendingBatches()
+        log.info(`signal abort completed, closing wake`)
+        break
+      }
+
       if (sleepRequested) {
         drainNonFreshPendingBatches()
         log.info(`handler returned with sleep(), closing immediately`)
+        break
+      }
+
+      if (pauseRequested) {
+        pauseRequested = false
+        drainNonFreshPendingBatches()
+        log.info(`pause requested, closing wake`)
         break
       }
 

@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { ChevronRight, SquarePen } from 'lucide-react'
-import { useLiveQuery } from '@tanstack/react-db'
-import { eq, not } from '@tanstack/db'
+import { eq, not, useLiveQuery } from '@tanstack/react-db'
 import { useNavigate } from '@tanstack/react-router'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
 import {

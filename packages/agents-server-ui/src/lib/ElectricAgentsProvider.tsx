@@ -1,14 +1,29 @@
 import { createContext, useContext, useEffect, useMemo, useRef } from 'react'
-import { createCollection } from '@tanstack/react-db'
+import { createCollection, createOptimisticAction } from '@tanstack/react-db'
 import { electricCollectionOptions } from '@tanstack/electric-db-collection'
-import { createOptimisticAction } from '@tanstack/db'
 import { z } from 'zod'
 import { appendPathToUrl } from '@electric-ax/agents-runtime/client'
 import type { ReactNode } from 'react'
 import { serverFetch } from './auth-fetch'
 import { entityApiUrl, entitySpawnApiUrl } from './entity-api'
 
-type EntityStatus = `spawning` | `running` | `idle` | `stopped`
+type EntityStatus =
+  | `spawning`
+  | `running`
+  | `idle`
+  | `paused`
+  | `stopping`
+  | `stopped`
+  | `killed`
+
+export type EntitySignal =
+  | `SIGINT`
+  | `SIGHUP`
+  | `SIGTERM`
+  | `SIGKILL`
+  | `SIGSTOP`
+  | `SIGCONT`
+  | `SIGUSR`
 
 // --- Schemas ---
 
@@ -16,7 +31,10 @@ const ENTITY_STATUSES: [EntityStatus, ...Array<EntityStatus>] = [
   `spawning`,
   `running`,
   `idle`,
+  `paused`,
+  `stopping`,
   `stopped`,
+  `killed`,
 ]
 
 const entitySchema = z.object({
@@ -251,6 +269,13 @@ interface SpawnInput {
   dispatch_policy?: RunnerDispatchPolicy
 }
 
+export interface SignalInput {
+  entityUrl: string
+  signal: EntitySignal
+  reason?: string
+  payload?: unknown
+}
+
 function createSpawnAction(
   baseUrl: string,
   entitiesCollection: EntitiesCollection
@@ -321,16 +346,84 @@ function createKillAction(
   return createOptimisticAction<string>({
     onMutate: (entityUrl) => {
       entitiesCollection.update(entityUrl, (draft) => {
-        draft.status = `stopped`
+        draft.status = `killed`
       })
     },
     mutationFn: async (entityUrl) => {
-      const res = await serverFetch(entityApiUrl(baseUrl, entityUrl), {
-        method: `DELETE`,
-      })
+      const res = await serverFetch(
+        entityApiUrl(baseUrl, entityUrl, `/signal`),
+        {
+          method: `POST`,
+          headers: { 'content-type': `application/json` },
+          body: JSON.stringify({
+            signal: `SIGKILL`,
+            reason: `Killed from agents UI`,
+          }),
+        }
+      )
       if (!res.ok) {
         const text = await res.text().catch(() => ``)
         throw new Error(text || `Kill failed (${res.status})`)
+      }
+      const data = (await res.json()) as { txid: number }
+      return { txid: data.txid }
+    },
+  })
+}
+
+function optimisticStatusForSignal(
+  status: EntityStatus,
+  signal: EntitySignal
+): EntityStatus | null {
+  switch (signal) {
+    case `SIGKILL`:
+      return `killed`
+    case `SIGINT`:
+      return null
+    case `SIGTERM`:
+      if (status === `idle` || status === `paused`) return `stopped`
+      if (status === `running`) return `stopping`
+      return null
+    case `SIGSTOP`:
+      return status === `idle` || status === `running` ? `paused` : null
+    case `SIGCONT`:
+      return status === `paused` ? `idle` : null
+    case `SIGHUP`:
+    case `SIGUSR`:
+      return null
+  }
+}
+
+function createSignalAction(
+  baseUrl: string,
+  entitiesCollection: EntitiesCollection
+) {
+  return createOptimisticAction<SignalInput>({
+    onMutate: ({ entityUrl, signal }) => {
+      entitiesCollection.update(entityUrl, (draft) => {
+        const optimisticStatus = optimisticStatusForSignal(draft.status, signal)
+        if (optimisticStatus) {
+          draft.status = optimisticStatus
+        }
+        draft.updated_at = Date.now()
+      })
+    },
+    mutationFn: async ({ entityUrl, signal, reason, payload }) => {
+      const body: Record<string, unknown> = { signal }
+      if (reason !== undefined) body.reason = reason
+      if (payload !== undefined) body.payload = payload
+
+      const res = await serverFetch(
+        entityApiUrl(baseUrl, entityUrl, `/signal`),
+        {
+          method: `POST`,
+          headers: { 'content-type': `application/json` },
+          body: JSON.stringify(body),
+        }
+      )
+      if (!res.ok) {
+        const text = await res.text().catch(() => ``)
+        throw new Error(text || `Signal failed (${res.status})`)
       }
       const data = (await res.json()) as { txid: number }
       return { txid: data.txid }
@@ -374,6 +467,7 @@ interface ElectricAgentsState {
   entityTypesCollection: EntityTypesCollection | null
   runnersCollection: RunnersCollection | null
   spawnEntity: ReturnType<typeof createSpawnAction> | null
+  signalEntity: ReturnType<typeof createSignalAction> | null
   killEntity: ReturnType<typeof createKillAction> | null
   forkEntity: ReturnType<typeof createForkEntity> | null
 }
@@ -383,6 +477,7 @@ const ElectricAgentsContext = createContext<ElectricAgentsState>({
   entityTypesCollection: null,
   runnersCollection: null,
   spawnEntity: null,
+  signalEntity: null,
   killEntity: null,
   forkEntity: null,
 })
@@ -412,6 +507,7 @@ export function ElectricAgentsProvider({
         entityTypesCollection: null,
         runnersCollection: null,
         spawnEntity: null,
+        signalEntity: null,
         killEntity: null,
         forkEntity: null,
       }
@@ -424,6 +520,7 @@ export function ElectricAgentsProvider({
       entityTypesCollection: entityTypes,
       runnersCollection: runners,
       spawnEntity: createSpawnAction(baseUrl, entities),
+      signalEntity: createSignalAction(baseUrl, entities),
       killEntity: createKillAction(baseUrl, entities),
       forkEntity: createForkEntity(baseUrl),
     }

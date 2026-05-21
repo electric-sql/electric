@@ -575,7 +575,7 @@ async function notificationFromClaim(
       404
     )
   }
-  if (entity.status === `stopped`) {
+  if (entity.status === `stopped` || entity.status === `paused`) {
     await ctx.streamClient.releaseSubscription(
       input.subscriptionId,
       input.claim.token,

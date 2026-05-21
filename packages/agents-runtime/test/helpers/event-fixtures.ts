@@ -43,6 +43,31 @@ export function ev(
         headers: normalizedHeaders,
       }) as ChangeEvent
 
+    case `signal`:
+      return (
+        operation === `insert`
+          ? entityStateSchema.signals.insert({
+              key,
+              value: {
+                signal: `SIGINT`,
+                status: `unhandled`,
+                timestamp: FIXED_TIMESTAMP,
+                ...value,
+              } as never,
+              headers: normalizedHeaders,
+            })
+          : entityStateSchema.signals.update({
+              key,
+              value: {
+                signal: `SIGINT`,
+                status: `handled`,
+                timestamp: FIXED_TIMESTAMP,
+                ...value,
+              } as never,
+              headers: normalizedHeaders,
+            })
+      ) as ChangeEvent
+
     case `run`:
       return (
         operation === `insert`

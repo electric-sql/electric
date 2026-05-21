@@ -226,6 +226,38 @@ describe(`dispatch policy routing`, () => {
     ).toBeLessThan((ctx.entityManager.send as any).mock.invocationCallOrder[0])
   })
 
+  it(`links webhook dispatch before sending spawn initialMessage`, async () => {
+    const dispatchPolicy: DispatchPolicy = {
+      targets: [{ type: `webhook`, url: `http://runtime.local/wake` }],
+    }
+    const ctx = buildContext()
+    ctx.entityManager.send = vi.fn(async () => undefined)
+
+    const response = await globalRouter.fetch(
+      request(`PUT`, `/_electric/entities/chat/one`, {
+        dispatch_policy: dispatchPolicy,
+        initialMessage: `hello`,
+      }),
+      ctx
+    )
+
+    expect(response.status).toBe(201)
+    expect(ctx.streamClient.putSubscription).toHaveBeenCalledWith(
+      expect.stringMatching(/^webhook:/),
+      expect.objectContaining({
+        type: `webhook`,
+        streams: [`/chat/one/main`],
+      })
+    )
+    expect(ctx.entityManager.send).toHaveBeenCalledWith(`/chat/one`, {
+      from: `/principal/user%3Aowner%40example.com`,
+      payload: `hello`,
+    })
+    expect(
+      (ctx.streamClient.putSubscription as any).mock.invocationCallOrder[0]
+    ).toBeLessThan((ctx.entityManager.send as any).mock.invocationCallOrder[0])
+  })
+
   it(`links legacy entities through the type default before sending`, async () => {
     const dispatchPolicy: DispatchPolicy = {
       targets: [{ type: `runner`, runnerId: `runner-1` }],

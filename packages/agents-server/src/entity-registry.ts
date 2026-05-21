@@ -15,6 +15,7 @@ import {
   assertEntityStatus,
   assertRunnerAdminStatus,
   assertRunnerKind,
+  isTerminalEntityStatus,
 } from './electric-agents-types.js'
 import { DEFAULT_TENANT_ID } from './tenant.js'
 import type { DrizzleDB } from './db/index.js'
@@ -726,10 +727,13 @@ export class PostgresRegistry {
   }
 
   async updateStatus(entityUrl: string, status: EntityStatus): Promise<void> {
-    const whereClause =
-      status === `stopped`
-        ? this.entityWhere(entityUrl)
-        : and(this.entityWhere(entityUrl), ne(entities.status, `stopped`))
+    const whereClause = isTerminalEntityStatus(status)
+      ? this.entityWhere(entityUrl)
+      : and(
+          this.entityWhere(entityUrl),
+          ne(entities.status, `stopped`),
+          ne(entities.status, `killed`)
+        )
 
     await this.db
       .update(entities)
@@ -740,21 +744,41 @@ export class PostgresRegistry {
   async updateStatusWithTxid(
     entityUrl: string,
     status: EntityStatus
-  ): Promise<number> {
+  ): Promise<number | null> {
     return await this.db.transaction(async (tx) => {
-      const whereClause =
-        status === `stopped`
-          ? this.entityWhere(entityUrl)
-          : and(this.entityWhere(entityUrl), ne(entities.status, `stopped`))
-
-      await tx
+      const rows = await tx
         .update(entities)
         .set({ status, updatedAt: Date.now() })
-        .where(whereClause)
-      const result = await tx.execute(
-        sql`SELECT pg_current_xact_id()::xid::text AS txid`
-      )
-      return parseInt((result[0] as { txid: string }).txid)
+        .where(
+          and(
+            this.entityWhere(entityUrl),
+            ne(entities.status, `stopped`),
+            ne(entities.status, `killed`)
+          )
+        )
+        .returning({
+          txid: sql<string>`pg_current_xact_id()::xid::text`,
+        })
+      return rows[0] ? parseInt(rows[0].txid) : null
+    })
+  }
+
+  async touchEntityWithTxid(entityUrl: string): Promise<number | null> {
+    return await this.db.transaction(async (tx) => {
+      const rows = await tx
+        .update(entities)
+        .set({ updatedAt: Date.now() })
+        .where(
+          and(
+            eq(entities.url, entityUrl),
+            ne(entities.status, `stopped`),
+            ne(entities.status, `killed`)
+          )
+        )
+        .returning({
+          txid: sql<string>`pg_current_xact_id()::xid::text`,
+        })
+      return rows[0] ? parseInt(rows[0].txid) : null
     })
   }
 
