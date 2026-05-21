@@ -1,15 +1,17 @@
 import {
+  and,
   coalesce,
   concat,
   createCollection,
   createLiveQueryCollection,
   eq,
   isNull,
+  like,
   localOnlyCollectionOptions,
   or,
   toArray,
 } from '@durable-streams/state'
-import * as TanStackDB from '@tanstack/db'
+import { caseWhen } from '@tanstack/db'
 import type {
   Collection,
   InitialQueryBuilder,
@@ -18,10 +20,6 @@ import type {
 import type { EntityStreamDB } from './entity-stream-db'
 import type { ChildStatusEntry, MessageReceived } from './entity-schema'
 import type { ManifestEntry, Wake, WakeMessage } from './types'
-
-const { caseWhen } = TanStackDB as typeof TanStackDB & {
-  caseWhen: <T>(condition: unknown, value: T) => T
-}
 
 export type EntityTimelineState =
   | `pending`
@@ -1164,7 +1162,11 @@ function buildEntityTimelineQuery(
     inbox = inbox.where(({ inbox }) =>
       or(
         eq(coalesce(inbox.status, `processed`), `processed`),
-        eq(inbox.$synced, false)
+        and(
+          eq(inbox.$synced, false),
+          eq(coalesce(inbox.status, `pending`), `pending`),
+          like(coalesce(inbox._timeline_order, ``), `~pending:%`)
+        )
       )
     )
   }
@@ -1218,6 +1220,7 @@ function buildEntityTimelineQuery(
             .from({ chunk: db.collections.textDeltas })
             .where(({ chunk }) => eq(chunk.text_id, text.key))
             .orderBy(({ chunk }) => coalesce(chunk._timeline_order, `~`))
+            .orderBy(({ chunk }) => chunk.key)
             .select(({ chunk }) => chunk.delta)
         )
       ),
@@ -1243,6 +1246,14 @@ function buildEntityTimelineQuery(
       .from({ item: runItemsSource })
       .where(({ item }) => eq(item.run_id, run.key))
       .orderBy(({ item }) => item.order)
+      .orderBy(({ item }) =>
+        coalesce(
+          caseWhen(item.text.key, `text`),
+          caseWhen(item.toolCall.key, `toolCall`),
+          ``
+        )
+      )
+      .orderBy(({ item }) => coalesce(item.text.key, item.toolCall.key, ``))
       .select(({ item }) => ({
         text: caseWhen(item.text.key, {
           key: item.text.key,
@@ -1258,6 +1269,7 @@ function buildEntityTimelineQuery(
       .where(({ step }) => eq(step.run_id, run.key))
       .orderBy(({ step }) => step.step_number)
       .orderBy(({ step }) => coalesce(step._timeline_order, `~`))
+      .orderBy(({ step }) => step.key)
       .select(({ step }) => ({
         key: step.key,
         run_id: step.run_id,
@@ -1294,6 +1306,18 @@ function buildEntityTimelineQuery(
         manifest._timeline_order,
         `~`
       )
+    )
+    .orderBy(({ inbox, run, wake, manifest }) =>
+      coalesce(
+        caseWhen(inbox.key, `inbox`),
+        caseWhen(run.key, `run`),
+        caseWhen(wake.key, `wake`),
+        caseWhen(manifest.key, `manifest`),
+        ``
+      )
+    )
+    .orderBy(({ inbox, run, wake, manifest }) =>
+      coalesce(inbox.key, run.key, wake.key, manifest.key, ``)
     )
 }
 

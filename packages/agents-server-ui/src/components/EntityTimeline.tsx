@@ -882,16 +882,21 @@ export function EntityTimeline({
     rowVirtualizer.shouldAdjustScrollPositionOnItemSizeChange = () => false
   }, [rowVirtualizer])
 
-  const scrollToTimelineEnd = useCallback(() => {
-    if (!viewport || rows.length === 0) return
-    rowVirtualizer.scrollToIndex(rows.length - 1, { align: `end` })
+  const scrollToTimelineEnd = useCallback(
+    (opts?: { force?: boolean }) => {
+      if (!viewport || rows.length === 0) return
+      const force = opts?.force ?? false
+      rowVirtualizer.scrollToIndex(rows.length - 1, { align: `end` })
 
-    // The stopped/status footer sits outside the virtual list, so make sure the
-    // physical scroll container is also flush with its full content height.
-    requestAnimationFrame(() => {
-      viewport.scrollTop = viewport.scrollHeight
-    })
-  }, [rowVirtualizer, rows.length, viewport])
+      // The stopped/status footer sits outside the virtual list, so make sure the
+      // physical scroll container is also flush with its full content height.
+      requestAnimationFrame(() => {
+        if (!force && !isNearBottom.current) return
+        viewport.scrollTop = viewport.scrollHeight
+      })
+    },
+    [rowVirtualizer, rows.length, viewport]
+  )
 
   const scrollAreaRef = useCallback((node: HTMLDivElement | null) => {
     setViewport(node)
@@ -1081,8 +1086,8 @@ export function EntityTimeline({
     const previousStreamingAgentKey = previousStreamingAgentKeyRef.current
     previousStreamingAgentKeyRef.current = lastStreamingAgentKey
     if (!previousStreamingAgentKey || lastStreamingAgentKey) return
+    if (!isNearBottom.current) return
 
-    isNearBottom.current = true
     setShowJumpToBottom(false)
     const frame = requestAnimationFrame(() => {
       scrollToTimelineEnd()
@@ -1099,7 +1104,7 @@ export function EntityTimeline({
 
     if (!viewport || rows.length === 0) return
     const frame = requestAnimationFrame(() => {
-      scrollToTimelineEnd()
+      scrollToTimelineEnd({ force: true })
     })
 
     return () => cancelAnimationFrame(frame)
@@ -1118,7 +1123,7 @@ export function EntityTimeline({
     if (rows.length > 0) {
       isNearBottom.current = true
       setShowJumpToBottom(false)
-      scrollToTimelineEnd()
+      scrollToTimelineEnd({ force: true })
     }
   }, [rows.length, scrollToTimelineEnd])
 

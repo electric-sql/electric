@@ -329,7 +329,7 @@ export const AgentResponseLive = memo(function AgentResponseLive({
 
         return (
           <ToolCallView
-            key={item.toolCall.key}
+            key={item.$key}
             item={liveToolCallToContentItem(item.toolCall)}
           />
         )

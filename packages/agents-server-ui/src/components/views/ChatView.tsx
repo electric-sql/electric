@@ -90,7 +90,7 @@ function GenericChatBody({
         ? [
             ...timelineRows,
             {
-              $key: `inbox:${inlinePendingInbox.key}`,
+              $key: `pending-inbox:${inlinePendingInbox.key}`,
               inbox: inlinePendingInbox,
             } as EntityTimelineQueryRow,
           ]
