@@ -13,11 +13,18 @@ import { nanoid } from 'nanoid'
 import { useElectricAgents } from '../../lib/ElectricAgentsProvider'
 import { useWorkspace } from '../../hooks/useWorkspace'
 import { useRecentWorkingDirectories } from '../../hooks/useRecentWorkingDirectories'
+import {
+  loadDesktopState,
+  onDesktopStateChanged,
+} from '../../lib/server-connection'
 import { Icon, Select, Stack, Text } from '../../ui'
 import { SchemaForm, hasSchemaProperties, isObjectSchema } from '../SchemaForm'
 import { WorkingDirectoryPicker } from '../WorkingDirectoryPicker'
 import styles from '../NewSessionPage.module.css'
-import type { ElectricEntityType } from '../../lib/ElectricAgentsProvider'
+import type {
+  ElectricEntityType,
+  ElectricRunner,
+} from '../../lib/ElectricAgentsProvider'
 import type { StandaloneViewProps } from '../../lib/workspace/viewRegistry'
 
 /**
@@ -92,7 +99,8 @@ export function NewSessionView({
   tileId,
   setToolbarTitle,
 }: StandaloneViewProps): React.ReactElement {
-  const { entityTypesCollection, spawnEntity } = useElectricAgents()
+  const { entityTypesCollection, runnersCollection, spawnEntity } =
+    useElectricAgents()
   const { helpers } = useWorkspace()
   const [selected, setSelected] = useState<ElectricEntityType | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -119,6 +127,63 @@ export function NewSessionView({
     [entityTypesCollection]
   )
 
+  const { data: enabledRunners = [] } = useLiveQuery(
+    (query) => {
+      if (!runnersCollection) return undefined
+      return query
+        .from({ r: runnersCollection })
+        .where(({ r }) => eq(r.admin_status, `enabled`))
+        .orderBy(({ r }) => r.label, `asc`)
+    },
+    [runnersCollection]
+  )
+
+  // The Electron shell registers its own pull-wake runner. When that
+  // runner is one of the available choices we prefer it as the default
+  // selection (preserves the old desktop behaviour of routing wakes to
+  // the bundled local runtime). `null` outside Electron / before the
+  // first state fetch.
+  const [desktopRunnerId, setDesktopRunnerId] = useState<string | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    void loadDesktopState().then((s) => {
+      if (cancelled) return
+      setDesktopRunnerId(s?.pullWakeRunnerId?.trim() || null)
+    })
+    const off = onDesktopStateChanged((s) =>
+      setDesktopRunnerId(s?.pullWakeRunnerId?.trim() || null)
+    )
+    return () => {
+      cancelled = true
+      off?.()
+    }
+  }, [])
+
+  const [selectedRunnerId, setSelectedRunnerId] = useState<string | null>(null)
+  // Re-evaluate the default whenever the list of runners or the
+  // desktop's runner id changes. Prefer the desktop's own runner if
+  // it's enabled, else fall back to the first runner.
+  useEffect(() => {
+    if (
+      selectedRunnerId &&
+      enabledRunners.some((r) => r.id === selectedRunnerId)
+    ) {
+      return
+    }
+    if (enabledRunners.length === 0) {
+      if (selectedRunnerId !== null) setSelectedRunnerId(null)
+      return
+    }
+    if (
+      desktopRunnerId &&
+      enabledRunners.some((r) => r.id === desktopRunnerId)
+    ) {
+      setSelectedRunnerId(desktopRunnerId)
+      return
+    }
+    setSelectedRunnerId(enabledRunners[0]!.id)
+  }, [enabledRunners, desktopRunnerId, selectedRunnerId])
+
   const defaultAgent = useMemo(
     () => entityTypes.find((t) => t.name === DEFAULT_AGENT_NAME) ?? null,
     [entityTypes]
@@ -142,16 +207,16 @@ export function NewSessionView({
       if (!spawnEntity) return
       setError(null)
       const name = nanoid(10)
-      const desktopState = await window.electronAPI?.getDesktopState?.()
-      const runnerId = desktopState?.pullWakeRunnerId?.trim() || null
       const tx = spawnEntity({
         type: typeName,
         name,
         args,
-        ...(runnerId
+        ...(selectedRunnerId
           ? {
               dispatch_policy: {
-                targets: [{ type: `runner` as const, runnerId }],
+                targets: [
+                  { type: `runner` as const, runnerId: selectedRunnerId },
+                ],
               },
             }
           : {}),
@@ -169,7 +234,7 @@ export function NewSessionView({
         )
       }
     },
-    [helpers, spawnEntity, tileId]
+    [helpers, selectedRunnerId, spawnEntity, tileId]
   )
 
   const handleSelectType = useCallback(
@@ -244,6 +309,9 @@ export function NewSessionView({
             error={error}
             workingDirectory={workingDirectory}
             onChangeWorkingDirectory={setWorkingDirectory}
+            runners={enabledRunners}
+            selectedRunnerId={selectedRunnerId}
+            onChangeSelectedRunner={setSelectedRunnerId}
           />
         )}
       </div>
@@ -260,6 +328,9 @@ function Picker({
   error,
   workingDirectory,
   onChangeWorkingDirectory,
+  runners,
+  selectedRunnerId,
+  onChangeSelectedRunner,
 }: {
   defaultAgent: ElectricEntityType | null
   otherAgents: Array<ElectricEntityType>
@@ -269,6 +340,9 @@ function Picker({
   error: string | null
   workingDirectory: string | null
   onChangeWorkingDirectory: (path: string | null) => void
+  runners: Array<ElectricRunner>
+  selectedRunnerId: string | null
+  onChangeSelectedRunner: (id: string | null) => void
 }): React.ReactElement {
   const hasAnyAgent = defaultAgent !== null || otherAgents.length > 0
   const [heroTitle] = useState(
@@ -297,6 +371,9 @@ function Picker({
           disabled={!spawnReady}
           workingDirectory={workingDirectory}
           onChangeWorkingDirectory={onChangeWorkingDirectory}
+          runners={runners}
+          selectedRunnerId={selectedRunnerId}
+          onChangeSelectedRunner={onChangeSelectedRunner}
         />
       )}
 
@@ -403,12 +480,18 @@ function DefaultAgentComposer({
   disabled,
   workingDirectory,
   onChangeWorkingDirectory,
+  runners,
+  selectedRunnerId,
+  onChangeSelectedRunner,
 }: {
   agent: ElectricEntityType
   onSubmit: (text: string, args: Record<string, unknown>) => void
   disabled?: boolean
   workingDirectory: string | null
   onChangeWorkingDirectory: (path: string | null) => void
+  runners: Array<ElectricRunner>
+  selectedRunnerId: string | null
+  onChangeSelectedRunner: (id: string | null) => void
 }): React.ReactElement {
   const [value, setValue] = useState(``)
   const [submitting, setSubmitting] = useState(false)
@@ -516,6 +599,14 @@ function DefaultAgentComposer({
             onChange={onChangeWorkingDirectory}
             disabled={submitting || disabled}
           />
+          {runners.length > 0 && (
+            <RunnerPickerPill
+              runners={runners}
+              value={selectedRunnerId}
+              onChange={onChangeSelectedRunner}
+              disabled={submitting || disabled}
+            />
+          )}
         </div>
         <div className={styles.composerSendCluster}>
           {submitting && <span className={styles.composerHint}>Starting…</span>}
@@ -536,6 +627,46 @@ function DefaultAgentComposer({
         </div>
       </div>
     </div>
+  )
+}
+
+function RunnerPickerPill({
+  runners,
+  value,
+  onChange,
+  disabled,
+}: {
+  runners: Array<ElectricRunner>
+  value: string | null
+  onChange: (id: string | null) => void
+  disabled?: boolean
+}): React.ReactElement | null {
+  if (runners.length === 0) return null
+  // `BaseSelect.Value` renders the textContent of the currently-
+  // selected `Select.Item`, so each item's children is what shows in
+  // the trigger pill. We just label items by their human-readable
+  // `label` field (falling back to id) and key the selection by id.
+  const placeholder = `Pick runner`
+  return (
+    <Select.Root<string>
+      value={value ?? undefined}
+      onValueChange={(next) => onChange(next)}
+      disabled={disabled}
+    >
+      <Select.Trigger
+        size="pill"
+        aria-label="Runner"
+        title="Pull-wake runner that will handle this session"
+        placeholder={placeholder}
+      />
+      <Select.Content>
+        {runners.map((runner) => (
+          <Select.Item key={runner.id} value={runner.id}>
+            {runner.label || runner.id}
+          </Select.Item>
+        ))}
+      </Select.Content>
+    </Select.Root>
   )
 }
 
