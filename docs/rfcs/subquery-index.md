@@ -192,7 +192,7 @@ This can be a separate process that the outer consumer calls to acknoledge that 
 
 The SubqueryProgressMonitor can be implimented as an ETS table ordered by subquery_id then logical time with an index to where an outer shape_id entry is so that when an outer consumer acks a logical time for a subquery, the outer shape can be found in the the ordered list and removed and replaced with the acked time. The minimum of theses times is the minimum in-flight logical time for the subquery. This should mean that updating a outer shape's logical time is O(1) and reading the minimum in-flight logical time is O(1). The SubqueryProgressMonitor should notify the MultiTimeView when the minimum in-flight logical time for a subquery changes so that the MultiTimeView can compact it's ETS table.
 
-The SubqueryProgressMonitor must know about all shapes for a subquery (so for example if it's not seen an ack from one of them it needs to know the minimum time is still 0) or a subquery and have those shapes removed
+The SubqueryProgressMonitor must know about every shape that reads a subquery, so that if it hasn't yet seen an ack from one of them it knows the minimum in-flight time is still 0. It must also be notified when a shape or a subquery is removed, so that the corresponding entries are cleaned up and stale entries don't hold the minimum back indefinitely.
 
 #### Consumer EventProcessors
 
