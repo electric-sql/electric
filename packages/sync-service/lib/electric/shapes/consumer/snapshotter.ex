@@ -226,6 +226,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
 
     Electric.Postgres.SnapshotQuery.execute_for_shape(db_pool, shape_handle, shape,
       stack_id: stack_id,
+      is_subquery_shape?: is_subquery_shape?,
       snapshot_info_fn: fn shape_handle, pg_snapshot, _lsn ->
         GenServer.cast(consumer, {:pg_snapshot_known, shape_handle, pg_snapshot})
       end,

@@ -42,7 +42,8 @@ defmodule Electric.Postgres.SnapshotQuery do
     query_fn = Access.fetch!(opts, :query_fn)
     snapshot_info_fn = Access.fetch!(opts, :snapshot_info_fn)
     query_reason = Access.get(opts, :query_reason, "initial_snapshot")
-    shape_attrs = shape_attrs(shape_handle, shape, query_reason)
+    is_subquery_shape? = Access.get(opts, :is_subquery_shape?, false)
+    shape_attrs = shape_attrs(shape_handle, shape, query_reason, is_subquery_shape?)
     stack_id = Access.fetch!(opts, :stack_id)
 
     OpenTelemetry.with_child_span(
@@ -103,12 +104,13 @@ defmodule Electric.Postgres.SnapshotQuery do
       raise SnapshotError.connection_not_available()
   end
 
-  defp shape_attrs(shape_handle, shape, query_reason) do
+  defp shape_attrs(shape_handle, shape, query_reason, is_subquery_shape?) do
     [
       "shape.handle": shape_handle,
       "shape.root_table": shape.root_table,
       "shape.where": if(not is_nil(shape.where), do: shape.where.query, else: nil),
-      "shape.query_reason": query_reason
+      "shape.query_reason": query_reason,
+      "shape.is_subquery": is_subquery_shape?
     ]
   end
 
