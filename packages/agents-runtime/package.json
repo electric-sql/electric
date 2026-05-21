@@ -74,6 +74,16 @@
         "default": "./dist/sandbox.cjs"
       }
     },
+    "./sandbox/docker": {
+      "import": {
+        "types": "./dist/sandbox-docker.d.ts",
+        "default": "./dist/sandbox-docker.js"
+      },
+      "require": {
+        "types": "./dist/sandbox-docker.d.cts",
+        "default": "./dist/sandbox-docker.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "peerDependencies": {

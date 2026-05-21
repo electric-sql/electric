@@ -6,6 +6,7 @@ const config: Options = {
     `src/react.ts`,
     `src/tools.ts`,
     `src/sandbox.ts`,
+    `src/sandbox-docker.ts`,
     `src/client.ts`,
   ],
   format: [`esm`, `cjs`],
