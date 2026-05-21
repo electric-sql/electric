@@ -259,6 +259,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
     end)
   end
 
+  @spec has_shape_handle?(stack_id(), shape_handle()) :: boolean()
   def has_shape_handle?(stack_id, shape_handle) do
     :ets.member(shape_meta_table(stack_id), shape_handle)
   end

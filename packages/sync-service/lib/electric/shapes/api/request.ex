@@ -9,6 +9,7 @@ defmodule Electric.Shapes.Api.Request do
     :global_last_seen_lsn,
     :new_changes_ref,
     :new_changes_pid,
+    :snapshot_status,
     read_only?: false,
     api: %Api{},
     params: %Api.Params{},
@@ -16,6 +17,7 @@ defmodule Electric.Shapes.Api.Request do
   ]
 
   @type shape_handle :: Electric.shape_handle()
+  @type snapshot_status :: nil | :started | {:error, term()}
   @type t() :: %__MODULE__{
           chunk_end_offset: nil | LogOffset.t(),
           handle: nil | shape_handle(),
@@ -23,6 +25,7 @@ defmodule Electric.Shapes.Api.Request do
           global_last_seen_lsn: nil | pos_integer(),
           new_changes_ref: nil | reference(),
           new_changes_pid: nil | pid(),
+          snapshot_status: snapshot_status(),
           api: Api.t(),
           params: Api.Params.t(),
           response: Api.Response.t()

@@ -17,6 +17,11 @@ defmodule Electric.Plug.ServeShapePlug do
   clause in `call/2` releases it — firing for success, halt, and exception
   paths alike.
 
+  Admission classification uses only `conn.query_params["handle"]` and a
+  single ETS membership check: requests with no handle or an unknown handle
+  are classified as `:initial`; requests with a known handle are `:existing`.
+  This avoids any SQLite access on the admission-control hot path.
+
   Using `after` (rather than `register_before_send`) is also what makes the
   streaming path correct: `before_send` fires when `send_chunked` starts
   streaming, not when it finishes, which would end the telemetry span before
@@ -27,9 +32,11 @@ defmodule Electric.Plug.ServeShapePlug do
 
   use Plug.Builder
 
-  alias Electric.Utils
+  alias Electric.ShapeCache
+  alias Electric.ShapeCache.ShapeStatus
   alias Electric.Shapes.Api
   alias Electric.Telemetry.OpenTelemetry
+  alias Electric.Utils
   alias Plug.Conn
 
   require Logger
@@ -39,13 +46,19 @@ defmodule Electric.Plug.ServeShapePlug do
 
   # These plugs are invoked inside the `call/2` function below, after `conn` has been preloaded with
   # query params and an OTEL span.
+
+  # put_resp_content_type runs first so admission rejections (503) still
+  # carry `Content-Type: application/json`.
   plug :put_resp_content_type, "application/json"
+  plug :check_admission
   plug :parse_body
   plug :validate_request
   plug :reject_subquery_shape_compaction_request
-  plug :resolve_existing_shape
-  plug :check_admission
   plug :load_shape
+  plug :hold_initial_until_snapshot_started
+  # Reclassify off :initial so the :initial admission slot becomes available
+  # for new requests while the current handler streams the response.
+  plug :reclassify_admission_kind
   plug :serve_shape_response
 
   @impl Plug
@@ -273,32 +286,9 @@ defmodule Electric.Plug.ServeShapePlug do
     end
   end
 
-  # Check if the shape already exists so admission control can classify
-  # accurately (:initial for new shapes, :existing for known shapes).
-  #
-  # Classification is stored in conn.private without touching request.params.handle.
-  # Mutating the request handle would flip `load_shape` from the no-handle
-  # `get_or_create_shape_handle` path to the strict-match `resolve_shape_handle`
-  # path; if the shape were cleaned between the two steps the client would see a
-  # 409 refetch flow for a handle they never sent.
-  defp resolve_existing_shape(%Conn{assigns: %{config: config, request: request}} = conn, _) do
-    stack_id = get_in(config, [:stack_id])
-
-    case Electric.Shapes.fetch_handle_by_shape(stack_id, request.params.shape_definition) do
-      {:ok, _handle} -> put_private(conn, :shape_exists?, true)
-      :error -> put_private(conn, :shape_exists?, false)
-    end
-  rescue
-    # Narrow rescue by design: guards against the startup race where the shape cache's ETS
-    # tables haven't been created yet — ETS operations (lookup, insert, whereis) raise
-    # ArgumentError on a missing table, which can happen when a request arrives before the
-    # shape subsystem finishes initializing.
-    ArgumentError -> put_private(conn, :shape_exists?, false)
-  end
-
   defp check_admission(%Conn{assigns: %{config: config}} = conn, _) do
     stack_id = get_in(config, [:stack_id])
-    kind = admission_kind(conn)
+    kind = admission_kind(conn, stack_id)
     max_concurrent = Map.fetch!(config[:api].max_concurrent_requests, kind)
 
     case Electric.AdmissionControl.try_acquire(stack_id, kind, max_concurrent: max_concurrent) do
@@ -333,12 +323,19 @@ defmodule Electric.Plug.ServeShapePlug do
     end
   end
 
-  defp admission_kind(conn) do
-    if conn.private[:shape_exists?] do
-      :existing
-    else
-      :initial
+  defp admission_kind(conn, stack_id) do
+    handle = conn.query_params["handle"]
+
+    cond do
+      is_nil(handle) -> :initial
+      ShapeStatus.has_shape_handle?(stack_id, handle) -> :existing
+      # Handle is present but unknown locally (stale from another instance,
+      # or for a shape this node has not yet recovered/created).
+      true -> :initial
     end
+  rescue
+    # Per-stack shape_meta_table may not exist yet during startup.
+    ArgumentError -> :initial
   end
 
   defp calculate_retry_after(_stack_id, _max_concurrent) do
@@ -355,6 +352,43 @@ defmodule Electric.Plug.ServeShapePlug do
       {stack_id, kind} -> Electric.AdmissionControl.release(stack_id, kind)
       nil -> :ok
     end
+  end
+
+  # This keeps the :initial permit held across Snapshotter PG-pool checkout so saturation of
+  # the snapshot pool turns into admission rejections at the gate rather than an unbounded
+  # Postgrex queue.
+  #
+  # The await outcome is stashed in `request.snapshot_status` and consumed by
+  # `Shapes.get_merged_log_stream` instead of being awaited again on the streaming path.
+  defp hold_initial_until_snapshot_started(
+         %Conn{assigns: %{request: %{handle: handle} = request}} = conn,
+         _
+       )
+       when is_binary(handle) do
+    case Process.get(@admission_permit_key) do
+      {stack_id, :initial} ->
+        result = ShapeCache.await_snapshot_start(handle, stack_id)
+        assign(conn, :request, %{request | snapshot_status: result})
+
+      _ ->
+        conn
+    end
+  end
+
+  defp hold_initial_until_snapshot_started(conn, _), do: conn
+
+  # Moves the handler out of :initial so the :initial bucket can admit the next
+  # validate-and-load wave while this request is still streaming the response body
+  # to the client.
+  defp reclassify_admission_kind(%Conn{assigns: %{config: config}} = conn, _) do
+    with {stack_id, :initial} <- Process.get(@admission_permit_key),
+         max = Map.fetch!(config[:api].max_concurrent_requests, :existing),
+         :ok <-
+           Electric.AdmissionControl.try_swap(stack_id, :initial, :existing, max_concurrent: max) do
+      Process.put(@admission_permit_key, {stack_id, :existing})
+    end
+
+    conn
   end
 
   defp load_shape(%Conn{assigns: %{request: request}} = conn, _) do

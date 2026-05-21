@@ -137,6 +137,54 @@ defmodule Electric.AdmissionControl do
   end
 
   @doc """
+  Move an in-flight permit from `from_kind` to `to_kind` for a stack.
+
+  The caller must already hold a `from_kind` permit (acquired via
+  `try_acquire/3`). Calling `try_swap/4` without an outstanding
+  `from_kind` permit will silently grant a phantom `to_kind` permit.
+
+  ## Options
+
+    * `:max_concurrent` — required. Cap for `to_kind`.
+    * `:table_name` — ETS table (default: `:electric_admission_control`).
+
+  """
+  @spec try_swap(String.t(), atom(), atom(), keyword()) :: :ok | {:error, :overloaded}
+  def try_swap(stack_id, from_kind, to_kind, opts)
+      when from_kind in @allowed_kinds and to_kind in @allowed_kinds do
+    table_name = Keyword.get(opts, :table_name, @table_name)
+    cap = Keyword.fetch!(opts, :max_concurrent)
+
+    # Plain increment, no threshold clamp. Returns the post-increment value.
+    new_to = incr(table_name, stack_id, to_kind)
+
+    if new_to > cap do
+      # Rollback the claimed permit since the bucket is already at capacity.
+      decr(table_name, stack_id, to_kind)
+
+      :telemetry.execute(
+        [:electric, :admission_control, :swap_rejected],
+        %{count: 1, current: new_to, limit: cap},
+        %{stack_id: stack_id, from: from_kind, to: to_kind}
+      )
+
+      {:error, :overloaded}
+    else
+      # Success: drop the from_kind permit. Clamp at 0 to be defensive
+      # against callers who lied about holding a from_kind permit.
+      decr(table_name, stack_id, from_kind)
+
+      :telemetry.execute(
+        [:electric, :admission_control, :swap],
+        %{count: 1, current: new_to, limit: cap},
+        %{stack_id: stack_id, from: from_kind, to: to_kind}
+      )
+
+      :ok
+    end
+  end
+
+  @doc """
   Get the current number of in-flight requests for a stack.
 
   Returns a map with `:initial` and `:existing` counts.
