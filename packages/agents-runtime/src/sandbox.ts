@@ -20,6 +20,8 @@ export type {
   Sandbox,
   SandboxExecOpts,
   SandboxExecResult,
+  SandboxFactory,
+  SandboxFactoryParams,
   DirEntry,
   FileStat,
   NetworkPolicy,

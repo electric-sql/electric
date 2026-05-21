@@ -10,6 +10,7 @@ import { DEFAULT_OUTPUT_SCHEMAS } from './default-output-schemas'
 import { passthrough } from './entity-schema'
 import { runtimeLog } from './log'
 import { appendPathToUrl } from './url'
+import type { SandboxFactory } from './sandbox/types'
 import type { EntityRegistry } from './define-entity'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type {
@@ -86,6 +87,14 @@ export interface RuntimeRouterConfig {
   onWakeError?: (error: Error) => boolean | void
   /** Max number of concurrent entity-type registrations (default: 8). */
   registrationConcurrency?: number
+  /**
+   * Runtime-wide fallback sandbox factory. Used when an entity
+   * definition does not declare its own `defaultSandbox`. If unset, the
+   * runtime uses `unrestrictedSandbox({ workingDirectory: process.cwd() })`
+   * and logs a one-time warning on the first wake of an entity type
+   * without an entity- or runtime-level factory.
+   */
+  defaultSandbox?: SandboxFactory
   /**
    * Public URL of this runtime, forwarded to the agents-server so it can be
    * included in GET /api/runtimes. If omitted the runtime is registered but
@@ -183,17 +192,40 @@ export function createRuntimeRouter(
     serverHeaders,
   } = normalized
 
+  const getRegisteredType = (name: string) =>
+    registry ? registry.get(name) : getEntityType(name)
+  const getRegisteredTypes = () =>
+    registry ? registry.list() : listEntityTypes()
+
+  // Single per-runtime warning emitted the first time we fall back to
+  // the built-in unrestricted-at-cwd factory because neither the entity
+  // definition nor the runtime config declared a sandbox factory.
+  const warnedFallbackTypes = new Set<string>()
+  const resolveSandboxFactory = (
+    entityType: string
+  ): SandboxFactory | undefined => {
+    const fromDefinition =
+      getRegisteredType(entityType)?.definition.defaultSandbox
+    if (fromDefinition) return fromDefinition
+    if (config.defaultSandbox) return config.defaultSandbox
+    if (!warnedFallbackTypes.has(entityType)) {
+      warnedFallbackTypes.add(entityType)
+      runtimeLog.warn(
+        `[agent-runtime]`,
+        `entity type "${entityType}" has no defaultSandbox and runtime has no defaultSandbox config; falling back to unrestrictedSandbox({ workingDirectory: process.cwd() }). Set EntityDefinition.defaultSandbox or createRuntimeRouter({ defaultSandbox }) to silence.`
+      )
+    }
+    return undefined
+  }
+
   const wakeConfig: ProcessWakeConfig = {
     baseUrl,
     registry,
     createElectricTools,
     idleTimeout,
     heartbeatInterval,
+    resolveSandboxFactory,
   }
-  const getRegisteredType = (name: string) =>
-    registry ? registry.get(name) : getEntityType(name)
-  const getRegisteredTypes = () =>
-    registry ? registry.list() : listEntityTypes()
   const debugRegistrationTiming =
     process.env.ELECTRIC_AGENTS_DEBUG_REGISTRATION_TIMING === `1`
   const pendingWakes = new Set<Promise<void>>()

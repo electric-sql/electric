@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createRuntimeServerClient } from '../src/runtime-server-client'
 import { createHandlerContext } from '../src/context-factory'
+import { testSandboxStub } from './helpers/context-test-helpers'
 
 describe(`runtime-server-client.setTag`, () => {
   it(`sends POST with bearer token and tag body`, async () => {
@@ -90,6 +91,7 @@ describe(`createHandlerContext: tags + tag mutations`, () => {
       state: {},
       actions: {},
       electricTools: [],
+      sandbox: testSandboxStub,
       events: [],
       writeEvent: () => {},
       wakeSession: {} as any,

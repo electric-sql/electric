@@ -386,10 +386,12 @@ function createAssistantHandler(options: {
         : workingDirectory
     const modelConfig = resolveBuiltinModelConfig(modelCatalog, ctx.args)
     const agentsMd = readAgentsMd(effectiveCwd)
-    const sandbox = await chooseDefaultSandbox(effectiveCwd)
+    // `ctx.sandbox` is constructed by the runtime at wake-session start
+    // via the `defaultSandbox` factory registered below, and disposed
+    // when the wake-session ends.
     const tools = [
       ...ctx.electricTools,
-      ...createHortonTools(sandbox, ctx, readSet, {
+      ...createHortonTools(ctx.sandbox, ctx, readSet, {
         docsSearchTool,
         modelConfig,
         modelCatalog,
@@ -540,12 +542,8 @@ function createAssistantHandler(options: {
       tools: tools as AgentTool[],
       ...(streamFn && { streamFn }),
     })
-    try {
-      await ctx.agent.run()
-      await titlePromise
-    } finally {
-      await sandbox.dispose()
-    }
+    await ctx.agent.run()
+    await titlePromise
   }
 }
 
@@ -616,9 +614,26 @@ export function registerHorton(
       ),
   })
 
+  // The pool calls this once per cold acquire for the entity; subsequent
+  // wakes reuse the cached sandbox. Mirrors the per-handler `effectiveCwd`
+  // computation so a per-spawn `workingDirectory` arg still wins over the
+  // registration default.
+  const hortonDefaultSandbox = ({
+    args,
+  }: {
+    args: Readonly<Record<string, unknown>>
+  }) =>
+    chooseDefaultSandbox(
+      typeof args.workingDirectory === `string` &&
+        args.workingDirectory.trim().length > 0
+        ? args.workingDirectory
+        : workingDirectory
+    )
+
   registry.define(`horton`, {
     description: `Friendly capable assistant — chat, code, research, dispatch`,
     creationSchema: hortonCreationSchema,
+    defaultSandbox: hortonDefaultSandbox,
     handler: assistantHandler,
   })
 
@@ -626,6 +641,7 @@ export function registerHorton(
   if (streamFn) {
     registry.define(`chat`, {
       description: `Compatibility alias for the built-in assistant type.`,
+      defaultSandbox: hortonDefaultSandbox,
       handler: assistantHandler,
     })
     typeNames.push(`chat`)

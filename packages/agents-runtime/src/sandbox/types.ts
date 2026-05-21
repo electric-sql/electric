@@ -63,9 +63,32 @@ export interface Sandbox {
    */
   updateNetworkPolicy(policy: NetworkPolicy): Promise<void>
 
-  /** Call once at end of lifetime. Not idempotent. */
+  /**
+   * Terminal teardown. Provider implementations may map this to a
+   * state-preserving call (pause/stop/snapshot/hibernate/suspend)
+   * provided the next factory invocation can transparently reattach
+   * using `entityUrl` alone. Not idempotent.
+   */
   dispose(): Promise<void>
 }
+
+/**
+ * Factory invoked by the runtime at the start of each wake-session to
+ * construct `ctx.sandbox`. Closures may hold caches as in-process
+ * optimizations, but correctness must not depend on the cache
+ * surviving a host cold start — provider-side identity must be
+ * derivable from `entityUrl` alone (deterministic name, label, etc.)
+ * so a wake delivered to a freshly cold-started ephemeral host
+ * (Cloudflare Workers, Lambda) can still reattach to the warm
+ * provider-side sandbox.
+ */
+export interface SandboxFactoryParams {
+  entityUrl: string
+  entityType: string
+  args: Readonly<Record<string, unknown>>
+}
+
+export type SandboxFactory = (params: SandboxFactoryParams) => Promise<Sandbox>
 
 export type NetworkPolicy =
   | { mode: `allow-all` }

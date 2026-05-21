@@ -15,6 +15,7 @@ import { createContextTools } from './tools/context-tools'
 import { CACHE_TIERS } from './types'
 import { composeToolsWithProviders } from './tool-providers'
 import type { ChangeEvent } from '@durable-streams/state'
+import type { Sandbox } from './sandbox/types'
 import type {
   AgentConfig,
   AgentHandle,
@@ -62,6 +63,7 @@ export interface HandlerContextConfig<TState extends StateProxy = StateProxy> {
   state: TState
   actions: Record<string, (...args: Array<unknown>) => unknown>
   electricTools: Array<AgentTool>
+  sandbox: Sandbox
   events: Array<ChangeEvent>
   writeEvent: (event: ChangeEvent) => void
   wakeSession: WakeSession
@@ -516,6 +518,7 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
     state: config.state,
     actions: config.actions,
     electricTools: config.electricTools,
+    sandbox: config.sandbox,
     useAgent(cfg) {
       agentConfig = cfg
       return agent

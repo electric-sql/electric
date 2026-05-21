@@ -293,13 +293,16 @@ export function registerWorker(
   const { workingDirectory, streamFn, modelCatalog } = options
   registry.define(`worker`, {
     description: `Internal — generic worker spawned by other agents. Configure via spawn args (systemPrompt + tools + optional sharedDb).`,
+    defaultSandbox: () => chooseDefaultSandbox(workingDirectory),
     async handler(ctx) {
       const args = parseWorkerArgs(ctx.args)
       const readSet = new Set<string>()
-      const sandbox = await chooseDefaultSandbox(workingDirectory)
+      // ctx.sandbox is provisioned and disposed by the runtime sandbox
+      // pool — subsequent wakes for the same worker reuse the same
+      // instance until idle-TTL eviction.
       const builtinTools = buildToolsForWorker(
         args.tools,
-        sandbox,
+        ctx.sandbox,
         ctx,
         readSet
       )
@@ -328,11 +331,7 @@ export function registerWorker(
         tools: [...builtinTools, ...sharedStateTools],
         ...(streamFn && { streamFn }),
       })
-      try {
-        await ctx.agent.run()
-      } finally {
-        await sandbox.dispose()
-      }
+      await ctx.agent.run()
     },
   })
 }
