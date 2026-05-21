@@ -29,10 +29,13 @@ import styles from './AgentResponse.module.css'
 import type {
   EntityTimelineContentItem,
   EntityTimelineRunRow,
+  EntityTimelineRunItem,
   EntityTimelineTextItem,
   EntityTimelineToolCallItem,
   EntityTimelineSection,
 } from '@electric-ax/agents-runtime/client'
+
+type EntityTimelineErrorItem = EntityTimelineRunRow[`errors`][`toArray`][number]
 
 type AgentResponseSection = Extract<
   EntityTimelineSection,
@@ -244,6 +247,12 @@ function toolItemToCopyText(item: EntityTimelineContentItem): string {
   return parts.join(`\n`)
 }
 
+function stringifyToolPayload(value: unknown): string | undefined {
+  if (value == null) return undefined
+  if (typeof value === `string`) return value
+  return JSON.stringify(value)
+}
+
 function liveToolCallToContentItem(
   item: EntityTimelineToolCallItem
 ): Extract<EntityTimelineContentItem, { kind: `tool_call` }> {
@@ -256,9 +265,55 @@ function liveToolCallToContentItem(
         ? (item.args as Record<string, unknown>)
         : {},
     status: item.status,
-    result: typeof item.result === `string` ? item.result : undefined,
-    isError: Boolean(item.error),
+    result: stringifyToolPayload(item.result),
+    isError: item.status === `failed` || Boolean(item.error),
   }
+}
+
+function runItemKind(item: EntityTimelineRunItem): `text` | `toolCall` {
+  return item.text ? `text` : `toolCall`
+}
+
+function runItemKey(item: EntityTimelineRunItem): string {
+  return item.text?.key ?? item.toolCall?.key ?? ``
+}
+
+function compareLiveRunItems(
+  left: EntityTimelineRunItem,
+  right: EntityTimelineRunItem
+): number {
+  const orderCompare = compareTimelineOrderValues(
+    left.text?.order ?? left.toolCall?.order ?? `~`,
+    right.text?.order ?? right.toolCall?.order ?? `~`
+  )
+  if (orderCompare !== 0) return orderCompare
+
+  const kindCompare = runItemKind(left).localeCompare(runItemKind(right))
+  if (kindCompare !== 0) return kindCompare
+
+  return runItemKey(left).localeCompare(runItemKey(right))
+}
+
+function liveRunItemsToContentItems(
+  items: Array<EntityTimelineRunItem>
+): Array<EntityTimelineContentItem> {
+  const contentItems: Array<EntityTimelineContentItem> = []
+  for (const item of items) {
+    if (item.text) {
+      if (item.text.content.trim().length > 0) {
+        contentItems.push({ kind: `text`, text: item.text.content })
+      }
+      continue
+    }
+    contentItems.push(liveToolCallToContentItem(item.toolCall))
+  }
+  return contentItems
+}
+
+function errorText(errors: Array<EntityTimelineErrorItem>): string | undefined {
+  return errors.length > 0
+    ? errors.map((error) => error.message).join(`; `)
+    : undefined
 }
 
 const LiveTextItem = memo(function LiveTextItem({
@@ -282,36 +337,77 @@ const LiveTextItem = memo(function LiveTextItem({
 })
 
 export const AgentResponseLive = memo(function AgentResponseLive({
+  rowKey,
   run,
   isStreaming,
   timestamp,
   renderWidth = 0,
+  onSearchTextChange,
 }: {
+  rowKey: string
   run: EntityTimelineRunRow
   isStreaming: boolean
   timestamp?: number | null
   renderWidth?: number
+  onSearchTextChange?: (rowKey: string, text: string) => void
 }): React.ReactElement {
   const { data: items = [] } = useLiveQuery(
     (q) => (run.items ? q.from({ item: run.items }) : undefined),
     [run.items]
   )
+  const { data: errors = [] } = useLiveQuery(
+    (q) => (run.errors ? q.from({ error: run.errors }) : undefined),
+    [run.errors]
+  )
   const sortedItems = useMemo(
-    () =>
-      [...items].sort((a, b) =>
-        compareTimelineOrderValues(
-          a.text?.order ?? a.toolCall?.order ?? `~`,
-          b.text?.order ?? b.toolCall?.order ?? `~`
-        )
-      ),
+    () => [...items].sort(compareLiveRunItems),
     [items]
   )
-  const done = run.status !== `started`
+  const contentItems = useMemo(
+    () => liveRunItemsToContentItems(sortedItems),
+    [sortedItems]
+  )
+  const copyText = useMemo(
+    () =>
+      contentItems
+        .map(toolItemToCopyText)
+        .filter((text) => text.trim().length > 0)
+        .join(`\n\n`),
+    [contentItems]
+  )
+  const searchText = useMemo(() => copyText, [copyText])
+  useEffect(() => {
+    onSearchTextChange?.(rowKey, searchText)
+    return () => onSearchTextChange?.(rowKey, ``)
+  }, [onSearchTextChange, rowKey, searchText])
+
+  const done = run.status === `completed`
+  const failureText =
+    errorText(errors as Array<EntityTimelineErrorItem>) ??
+    (run.status === `failed` ? `Run failed` : undefined)
   const lastItem = sortedItems[sortedItems.length - 1]
-  const lastTextHasContent = lastItem?.text !== undefined
-  const showThinking = isStreaming && !done && !lastTextHasContent
+  const lastTextHasContent =
+    lastItem?.text !== undefined && lastItem.text.content.trim().length > 0
+  const showThinking =
+    isStreaming && !done && !failureText && !lastTextHasContent
   const showTimestamp = timestamp != null && !isStreaming
-  const hasLeadingMeta = showThinking || done
+  const hasLeadingMeta = showThinking || done || Boolean(failureText)
+  const [copied, setCopied] = useState(false)
+  const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current)
+    }
+  }, [])
+
+  const copyResponseText = async () => {
+    if (!copyText) return
+    await navigator.clipboard.writeText(copyText)
+    setCopied(true)
+    if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current)
+    copiedTimerRef.current = setTimeout(() => setCopied(false), 1200)
+  }
 
   return (
     <Stack direction="column" gap={2} className={styles.root}>
@@ -342,6 +438,11 @@ export const AgentResponseLive = memo(function AgentResponseLive({
             ✓ done
           </Text>
         )}
+        {failureText && (
+          <Text size={1} tone="danger">
+            ✗ {failureText}
+          </Text>
+        )}
         {showTimestamp && (
           <>
             {hasLeadingMeta && (
@@ -351,6 +452,24 @@ export const AgentResponseLive = memo(function AgentResponseLive({
             )}
             <TimeText ts={timestamp} className={styles.timeText} />
           </>
+        )}
+        {(done || failureText) && copyText && (
+          <Tooltip content={copied ? `Copied!` : `Copy response`} side="top">
+            <IconButton
+              size={1}
+              variant="ghost"
+              tone="neutral"
+              className={styles.copyButton}
+              onClick={() => void copyResponseText()}
+              aria-label="Copy response text"
+            >
+              {copied ? (
+                <Icon icon={Check} size={1} />
+              ) : (
+                <Icon icon={Copy} size={1} />
+              )}
+            </IconButton>
+          </Tooltip>
         )}
       </Stack>
     </Stack>

@@ -8,7 +8,7 @@ import {
   useState,
 } from 'react'
 import { useLiveQuery } from '@tanstack/react-db'
-import { inArray } from '@tanstack/db'
+import { inArray } from '@durable-streams/state'
 import {
   measureElement as defaultMeasureElement,
   useVirtualizer,
@@ -46,6 +46,8 @@ import styles from './EntityTimeline.module.css'
 import type {
   EntityTimelineSection,
   EntityTimelineQueryRow,
+  EntityTimelineRunItem,
+  EntityTimelineRunRow,
   IncludesEntity,
   Manifest,
 } from '@electric-ax/agents-runtime/client'
@@ -64,6 +66,29 @@ function readInboxText(payload: unknown): string {
     if (typeof text === `string`) return text
   }
   return typeof payload === `string` ? payload : ``
+}
+
+function stringifySearchPayload(value: unknown): string {
+  if (value == null) return ``
+  if (typeof value === `string`) return value
+  return JSON.stringify(value)
+}
+
+function runItemSearchText(item: EntityTimelineRunItem): string {
+  if (item.text) return item.text.content
+  const toolCall = item.toolCall
+  return [
+    toolCall.tool_name,
+    stringifySearchPayload(toolCall.args),
+    stringifySearchPayload(toolCall.result),
+    stringifySearchPayload(toolCall.error),
+  ]
+    .filter((text) => text.length > 0)
+    .join(` `)
+}
+
+function runSearchTextFromSnapshot(run: EntityTimelineRunRow): string {
+  return run.items.toArray.map(runItemSearchText).join(` `)
 }
 
 /**
@@ -121,7 +146,10 @@ type TimelinePaneFindMatch = PaneFindMatch & {
   rowOccurrence: number
 }
 
-function timelineRowSearchText(row: RenderTimelineRow): string {
+function timelineRowSearchText(
+  row: RenderTimelineRow,
+  runSearchTextByKey: Map<string, string>
+): string {
   if (row.inbox) return readInboxText(row.inbox.payload)
   if (row.wake) {
     return wakeSectionText({
@@ -131,7 +159,7 @@ function timelineRowSearchText(row: RenderTimelineRow): string {
     })
   }
   if (row.manifest) return manifestSearchText(row.manifest)
-  return ``
+  return runSearchTextByKey.get(row.$key) ?? runSearchTextFromSnapshot(row.run)
 }
 
 function timelineRowLabel(row: RenderTimelineRow): string {
@@ -590,20 +618,26 @@ function entityUrlsFromKey(key: string): Array<string> {
 
 const TimelineRow = memo(function TimelineRow({
   row,
+  responseTimestamp,
+  isInitialUserMessage,
   entityStopped,
   isStreaming,
   renderWidth,
   entityUrl,
   tileId,
   entityStatusByUrl,
+  onRunSearchTextChange,
 }: {
   row: RenderTimelineRow
+  responseTimestamp: number | null
+  isInitialUserMessage: boolean
   entityStopped: boolean
   isStreaming: boolean
   renderWidth: number
   entityUrl: string | null
   tileId: string | null
   entityStatusByUrl: Map<string, IncludesEntity[`status`]>
+  onRunSearchTextChange: (rowKey: string, text: string) => void
 }): React.ReactElement {
   if (row.inbox) {
     const timestamp = Date.parse(row.inbox.timestamp)
@@ -614,7 +648,7 @@ const TimelineRow = memo(function TimelineRow({
           from: row.inbox.from,
           text: readInboxText(row.inbox.payload),
           timestamp: Number.isFinite(timestamp) ? timestamp : Date.now(),
-          isInitial: false,
+          isInitial: isInitialUserMessage,
         }}
       />
     )
@@ -649,9 +683,12 @@ const TimelineRow = memo(function TimelineRow({
 
   return (
     <AgentResponseLive
+      rowKey={row.$key}
       run={row.run}
       isStreaming={!entityStopped && isStreaming}
+      timestamp={responseTimestamp}
       renderWidth={renderWidth}
+      onSearchTextChange={onRunSearchTextChange}
     />
   )
 })
@@ -722,6 +759,9 @@ export function EntityTimeline({
   const spawnMarkerRef = useRef<HTMLSpanElement | null>(null)
   const [showJumpToBottom, setShowJumpToBottom] = useState(false)
   const [showTopDivider, setShowTopDivider] = useState(false)
+  const [runSearchTextByKey, setRunSearchTextByKey] = useState(
+    () => new Map<string, string>()
+  )
   const cachedSizeMapRef = useRef(new Map<string, number>())
   const lastMeasureAtRef = useRef(new Map<string, number>())
   const settledKeysRef = useRef(new Set<string>())
@@ -748,6 +788,38 @@ export function EntityTimeline({
     }
     return null
   }, [rows])
+
+  const firstInboxRowKey = useMemo(
+    () => rows.find((row) => row.inbox)?.$key ?? null,
+    [rows]
+  )
+  const responseTimestampByRowKey = useMemo(() => {
+    const timestampByRowKey = new Map<string, number | null>()
+    let lastUserTimestamp: number | null = null
+    for (const row of rows) {
+      if (row.inbox) {
+        const timestamp = Date.parse(row.inbox.timestamp)
+        lastUserTimestamp = Number.isFinite(timestamp) ? timestamp : null
+      } else if (row.run) {
+        timestampByRowKey.set(row.$key, lastUserTimestamp)
+      }
+    }
+    return timestampByRowKey
+  }, [rows])
+  const updateRunSearchText = useCallback((rowKey: string, text: string) => {
+    setRunSearchTextByKey((current) => {
+      if (text.length === 0) {
+        if (!current.has(rowKey)) return current
+        const next = new Map(current)
+        next.delete(rowKey)
+        return next
+      }
+      if (current.get(rowKey) === text) return current
+      const next = new Map(current)
+      next.set(rowKey, text)
+      return next
+    })
+  }, [])
 
   const persistSettledRows = useCallback(() => {
     if (!cacheKey || viewportWidth <= 0) return
@@ -843,7 +915,7 @@ export function EntityTimeline({
 
         rows.forEach((row, rowIndex) => {
           const rowKey = renderRowKey(row)
-          const text = timelineRowSearchText(row)
+          const text = timelineRowSearchText(row, runSearchTextByKey)
           const starts = getTextMatchStarts(text, query)
           starts.forEach((start, rowOccurrence) => {
             matches.push({
@@ -874,7 +946,7 @@ export function EntityTimeline({
         return getCurrentMatchIndexInRoot(root, query, match)
       },
     }
-  }, [contentElement, rowVirtualizer, rows])
+  }, [contentElement, rowVirtualizer, rows, runSearchTextByKey])
 
   usePaneFindAdapterRegistration(tileId ?? null, paneFindAdapter)
 
@@ -1227,12 +1299,17 @@ export function EntityTimeline({
                   >
                     <TimelineRow
                       row={row}
+                      responseTimestamp={
+                        responseTimestampByRowKey.get(rowKey) ?? null
+                      }
+                      isInitialUserMessage={rowKey === firstInboxRowKey}
                       entityStopped={entityStopped}
                       isStreaming={rowKey === lastStreamingAgentKey}
                       renderWidth={textColumnWidth}
                       entityUrl={entityUrl}
                       tileId={tileId ?? null}
                       entityStatusByUrl={entityStatusByUrl}
+                      onRunSearchTextChange={updateRunSearchText}
                     />
                   </div>
                 )
