@@ -642,14 +642,19 @@ function RunnerPickerPill({
   disabled?: boolean
 }): React.ReactElement | null {
   if (runners.length === 0) return null
-  // `BaseSelect.Value` renders the textContent of the currently-
-  // selected `Select.Item`, so each item's children is what shows in
-  // the trigger pill. We just label items by their human-readable
-  // `label` field (falling back to id) and key the selection by id.
-  const placeholder = `Pick runner`
+  // The trigger needs to display the runner's *label*, not its id.
+  // base-ui's `Select.Value` falls back to rendering the raw value
+  // string when its `children` render function is omitted — which
+  // would show the runner UUID. Use `renderValue` to look the label
+  // up out of the current `runners` list instead.
+  const renderValue = (id: string | null): React.ReactNode => {
+    if (!id) return `Pick runner`
+    const runner = runners.find((r) => r.id === id)
+    return runner ? runner.label || runner.id : id
+  }
   return (
     <Select.Root<string>
-      value={value ?? undefined}
+      value={value}
       onValueChange={(next) => onChange(next)}
       disabled={disabled}
     >
@@ -657,7 +662,8 @@ function RunnerPickerPill({
         size="pill"
         aria-label="Runner"
         title="Pull-wake runner that will handle this session"
-        placeholder={placeholder}
+        placeholder="Pick runner"
+        renderValue={renderValue}
       />
       <Select.Content>
         {runners.map((runner) => (

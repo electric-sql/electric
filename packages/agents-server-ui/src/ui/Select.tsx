@@ -37,6 +37,13 @@ interface TriggerProps {
   [`aria-label`]?: string
   /** Tooltip-style hint shown on hover. */
   title?: string
+  /**
+   * Custom renderer for the displayed value. Use when the option's
+   * value is an opaque key (e.g. an entity id) and the user-facing
+   * label lives elsewhere. Without this, base-ui's `Select.Value`
+   * falls back to rendering the value as text.
+   */
+  renderValue?: (value: string | null) => ReactNode
 }
 
 interface ContentProps {
@@ -86,6 +93,7 @@ function Trigger({
   autoFocus,
   [`aria-label`]: ariaLabel,
   title,
+  renderValue,
 }: TriggerProps): React.ReactElement {
   const cls = [size === `pill` ? styles.triggerPill : styles.trigger, className]
     .filter(Boolean)
@@ -99,7 +107,11 @@ function Trigger({
       aria-label={ariaLabel}
       title={title}
     >
-      <BaseSelect.Value placeholder={placeholder} />
+      <BaseSelect.Value placeholder={placeholder}>
+        {renderValue
+          ? (value) => renderValue(value as string | null)
+          : undefined}
+      </BaseSelect.Value>
       <BaseSelect.Icon className={styles.icon}>
         <Icon icon={ChevronDown} size={iconSize} />
       </BaseSelect.Icon>
