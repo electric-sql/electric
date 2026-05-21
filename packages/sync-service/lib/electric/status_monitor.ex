@@ -26,7 +26,7 @@ defmodule Electric.StatusMonitor do
 
   @db_state_key :db_state
   @congested_key :waiters_congested
-  @congested_threshold 100
+  @congested_threshold 1000
   @spin_prevention_delay 10
 
   def start_link(opts) do
@@ -62,12 +62,12 @@ defmodule Electric.StatusMonitor do
   end
 
   @doc """
-  Returns true once the StatusMonitor's waiter set has crossed
-  `congested_threshold/0`. The flag is cleared once the set drains back to 0.
+  Returns true once the StatusMonitor process has accumulated `congested_threshold/0` waiters
+  The flag is cleared once the set of waiters drains back to 0.
 
   Used by callers to decide between a `GenServer.call` wait (low latency
   when uncontended) and a `PollWait.until/3` wait (bounded mailbox growth
-  under burst). Cheap: one ETS read against the per-stack status table.
+  under burst).
   """
   @spec congested?(String.t()) :: boolean()
   def congested?(stack_id) do
@@ -76,7 +76,7 @@ defmodule Electric.StatusMonitor do
     ArgumentError -> false
   end
 
-  @doc "Threshold at which the StatusMonitor flips its congestion flag. Exposed for tests."
+  @doc false
   @spec congested_threshold() :: pos_integer()
   def congested_threshold, do: @congested_threshold
 
@@ -267,18 +267,14 @@ defmodule Electric.StatusMonitor do
   defp poll_wait(stack_id, level, opts) do
     timeout = Keyword.fetch!(opts, :timeout)
 
-    # Reuse check_level/2 so the polling path's readiness contract is by
-    # construction identical to a parked GenServer waiter's. Sleeping is
-    # handled by the outer case in wait_until/3 before dispatch; once we're
-    # polling, check_level/2's catch-all returns :not_ready and we keep going.
-    check = fn ->
+    check_fn = fn ->
       case check_level(level, stack_id) do
         {:ok, _} = ready -> {:ready, ready}
         :not_ready -> :not_ready
       end
     end
 
-    case PollWait.until(check, timeout) do
+    case PollWait.until(check_fn, timeout) do
       {:ready, value} -> value
       :timeout -> {:error, timeout_message(stack_id)}
     end
