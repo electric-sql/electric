@@ -1,8 +1,9 @@
 import { readFile, writeFile } from 'node:fs/promises'
-import { relative, resolve } from 'node:path'
+import { relative } from 'node:path'
 import { createTwoFilesPatch } from 'diff'
 import { Type } from '@sinclair/typebox'
 import { runtimeLog } from '../log'
+import { resolveInsideWorkdir } from './path-guard'
 import type { AgentTool } from '@mariozechner/pi-agent-core'
 
 const READ_GUARD_MESSAGE = (rel: string): string =>
@@ -45,19 +46,17 @@ export function createEditTool(
         replace_all?: boolean
       }
       try {
-        const resolved = resolve(workingDirectory, filePath)
-        const rel = relative(workingDirectory, resolved)
-        if (rel.startsWith(`..`)) {
+        const guard = await resolveInsideWorkdir(filePath, workingDirectory)
+        if (!guard.ok) {
           return {
             content: [
-              {
-                type: `text` as const,
-                text: `Error: Path "${filePath}" is outside the working directory`,
-              },
+              { type: `text` as const, text: `Error: ${guard.reason}` },
             ],
             details: { replacements: 0 },
           }
         }
+        const resolved = guard.resolved
+        const rel = relative(workingDirectory, resolved)
 
         if (!readSet.has(resolved)) {
           return {
