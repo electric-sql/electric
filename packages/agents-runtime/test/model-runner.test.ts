@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest'
 const completeSimple = vi.fn()
 const getModel = vi.fn(() => ({ provider: `openai-codex`, id: `gpt-5.4-mini` }))
 
-vi.mock(`@mariozechner/pi-ai`, () => ({ completeSimple, getModel }))
+vi.mock(`@earendil-works/pi-ai`, () => ({ completeSimple, getModel }))
 
 const { completeWithLowCostModel } = await import(`../src/model-runner`)
 

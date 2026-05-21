@@ -31,7 +31,7 @@ import type {
   PullWakeRunnerConfig,
 } from '@electric-ax/agents-runtime'
 import type { ChangeEvent } from '@durable-streams/state'
-import type { StreamFn } from '@mariozechner/pi-agent-core'
+import type { StreamFn } from '@earendil-works/pi-agent-core'
 
 export interface BuiltinAgentsServerOptions {
   agentServerUrl: string

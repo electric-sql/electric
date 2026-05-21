@@ -4,7 +4,7 @@ import { Readability } from '@mozilla/readability'
 import { JSDOM, VirtualConsole } from 'jsdom'
 import TurndownService from 'turndown'
 import { completeWithLowCostModel } from '../model-runner'
-import type { AgentTool } from '@mariozechner/pi-agent-core'
+import type { AgentTool } from '@earendil-works/pi-agent-core'
 import type { LowCostModelCatalog, LowCostModelConfig } from '../model-runner'
 
 const MAX_RAW_CHARS = 100_000

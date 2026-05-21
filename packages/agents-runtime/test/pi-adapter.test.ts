@@ -12,7 +12,7 @@ import type {
   Model,
   ToolResultMessage,
   UserMessage,
-} from '@mariozechner/pi-ai'
+} from '@earendil-works/pi-ai'
 
 interface PiAgentAdapterConfig {
   entityUrl: string

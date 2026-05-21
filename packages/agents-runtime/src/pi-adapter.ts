@@ -7,8 +7,8 @@
  * - Delegating ID management and event writing to OutboundBridge
  */
 
-import { Agent } from '@mariozechner/pi-agent-core'
-import { getModel } from '@mariozechner/pi-ai'
+import { Agent } from '@earendil-works/pi-agent-core'
+import { getModel } from '@earendil-works/pi-ai'
 import { createOutboundBridge } from './outbound-bridge'
 import { runtimeLog } from './log'
 import type { OutboundIdSeed } from './outbound-bridge'
@@ -18,12 +18,12 @@ import type {
   AgentMessage,
   AgentTool,
   StreamFn,
-} from '@mariozechner/pi-agent-core'
+} from '@earendil-works/pi-agent-core'
 import type {
   KnownProvider,
   Model,
   SimpleStreamOptions,
-} from '@mariozechner/pi-ai'
+} from '@earendil-works/pi-ai'
 import type { LLMMessage } from './types'
 
 // ============================================================================
@@ -89,9 +89,16 @@ export function toAgentHistory(
   const history: Array<AgentMessage> = []
   const toolNamesById = new Map<string, string>()
 
-  const lastAssistant = (): AgentMessage | undefined => {
+  const lastAssistant = ():
+    | (AgentMessage & { role: `assistant`; content: Array<unknown> })
+    | undefined => {
     const last = history[history.length - 1]
-    return last?.role === `assistant` ? last : undefined
+    return last?.role === `assistant`
+      ? (last as AgentMessage & {
+          role: `assistant`
+          content: Array<unknown>
+        })
+      : undefined
   }
 
   for (const message of messages) {

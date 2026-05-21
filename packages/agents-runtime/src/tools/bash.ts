@@ -1,6 +1,6 @@
 import { exec } from 'node:child_process'
 import { Type } from '@sinclair/typebox'
-import type { AgentTool } from '@mariozechner/pi-agent-core'
+import type { AgentTool } from '@earendil-works/pi-agent-core'
 
 const TIMEOUT_MS = 30_000
 const MAX_OUTPUT_CHARS = 50_000

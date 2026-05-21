@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { completeSimple, getModel } from '@mariozechner/pi-ai'
+import { completeSimple, getModel } from '@earendil-works/pi-ai'
 import type { AgentConfig } from './types'
-import type { KnownProvider } from '@mariozechner/pi-ai'
+import type { KnownProvider } from '@earendil-works/pi-ai'
 
 export interface LowCostModelChoice {
   provider: KnownProvider | string

@@ -13,7 +13,7 @@ import {
   type BuiltinAgentModelConfig,
   type BuiltinModelCatalog,
 } from '../model-catalog'
-import type { AgentTool, StreamFn } from '@mariozechner/pi-agent-core'
+import type { AgentTool, StreamFn } from '@earendil-works/pi-agent-core'
 import type {
   EntityRegistry,
   HandlerContext,

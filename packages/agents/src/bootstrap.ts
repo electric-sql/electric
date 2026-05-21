@@ -22,7 +22,7 @@ import type {
   RuntimeHandler,
 } from '@electric-ax/agents-runtime'
 import type { ChangeEvent } from '@durable-streams/state'
-import type { StreamFn } from '@mariozechner/pi-agent-core'
+import type { StreamFn } from '@earendil-works/pi-agent-core'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { SkillsRegistry } from '@electric-ax/agents-runtime'
 
