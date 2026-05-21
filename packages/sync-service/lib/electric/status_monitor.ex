@@ -229,38 +229,27 @@ defmodule Electric.StatusMonitor do
   defp do_wait_until(stack_id, level, opts) do
     timeout = Keyword.fetch!(opts, :timeout)
 
-    try do
-      case stack_id |> name() |> GenServer.whereis() do
-        nil ->
-          maybe_retry_wait_until(
-            stack_id,
-            level,
-            opts,
-            timeout,
-            "Status monitor not found for stack ID: #{stack_id}"
-          )
+    check_fn = fn ->
+      case monitor_lookup(stack_id) do
+        {:ready, pid} ->
+          try do
+            {:ready, GenServer.call(pid, {:wait_until, level, timeout}, :infinity)}
+          catch
+            :exit, _reason -> :not_ready
+          end
 
-        pid when is_pid(pid) ->
-          GenServer.call(pid, {:wait_until, level, timeout}, :infinity)
+        _ ->
+          :not_ready
       end
-    rescue
-      ArgumentError ->
-        maybe_retry_wait_until(
-          stack_id,
-          level,
-          opts,
-          timeout,
-          "Stack ID not recognised: #{stack_id}"
-        )
-    catch
-      :exit, _reason ->
-        maybe_retry_wait_until(
-          stack_id,
-          level,
-          opts,
-          timeout,
-          "Stack #{inspect(stack_id)} has terminated"
-        )
+    end
+
+    case PollWait.until(check_fn, timeout,
+           initial_interval: @spin_prevention_delay,
+           max_interval: @spin_prevention_delay,
+           jitter: 0.0
+         ) do
+      {:ready, result} -> result
+      :timeout -> {:error, monitor_unavailable_reason(stack_id)}
     end
   end
 
@@ -280,21 +269,21 @@ defmodule Electric.StatusMonitor do
     end
   end
 
-  defp maybe_retry_wait_until(_stack_id, _level, _opts, timeout, last_error)
-       when timeout <= @spin_prevention_delay do
-    {:error, last_error}
+  defp monitor_lookup(stack_id) do
+    case stack_id |> name() |> GenServer.whereis() do
+      nil -> :monitor_not_found
+      pid when is_pid(pid) -> {:ready, pid}
+    end
+  rescue
+    ArgumentError -> :registry_not_found
   end
 
-  defp maybe_retry_wait_until(stack_id, level, opts, timeout, _) do
-    Process.sleep(@spin_prevention_delay)
-
-    remaining_timeout =
-      case timeout do
-        :infinity -> :infinity
-        _ -> timeout - @spin_prevention_delay
-      end
-
-    wait_until(stack_id, level, Keyword.put(opts, :timeout, remaining_timeout))
+  defp monitor_unavailable_reason(stack_id) do
+    case monitor_lookup(stack_id) do
+      :monitor_not_found -> "Status monitor not found for stack ID: #{stack_id}"
+      :registry_not_found -> "Stack ID not recognised: #{stack_id}"
+      {:ready, _} -> "Stack #{inspect(stack_id)} has terminated"
+    end
   end
 
   @doc "Convenience wrapper: wait until fully active. Returns `:ok` on success."
