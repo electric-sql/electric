@@ -15,8 +15,6 @@ defmodule Electric.Shapes.Consumer.Effects do
   alias Electric.Shapes.Shape
   alias Electric.Telemetry.OpenTelemetry
 
-  require Logger
-
   defmodule AppendChanges do
     @moduledoc false
     defstruct changes: [], xid: nil

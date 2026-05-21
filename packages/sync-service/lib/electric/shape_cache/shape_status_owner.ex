@@ -13,9 +13,9 @@ defmodule Electric.ShapeCache.ShapeStatusOwner do
 
   use GenServer
 
-  alias Electric.ShapeCache.ShapeStatus
-
   require Logger
+
+  alias Electric.ShapeCache.ShapeStatus
 
   @schema NimbleOptions.new!(stack_id: [type: :string, required: true])
 
