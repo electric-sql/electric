@@ -10,9 +10,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@durable-streams/state": "npm:@electric-ax/durable-streams-state-beta@^0.3.0",
-    "@electric-ax/agents-runtime": "^0.0.4",
-    "@mariozechner/pi-agent-core": "^0.57.1",
+    "@durable-streams/state": "https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@5d5c217",
+    "@electric-ax/agents-runtime": "workspace:*",
     "@radix-ui/react-icons": "^1.3.0",
     "@radix-ui/themes": "^3.3.0",
     "@sinclair/typebox": "^0.34.0",
@@ -20,7 +19,8 @@
     "@tanstack/react-db": "^0.1.78",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "zod": "^4.3.6"
+    "zod": "^4.3.6",
+    "@earendil-works/pi-agent-core": "^0.75.4"
   },
   "devDependencies": {
     "@types/react": "^19.2.14",

@@ -22,7 +22,7 @@ import { serverLog } from './utils/log.js'
 import type { DrizzleDB, PgClient } from './db/index.js'
 import type { Server } from 'node:http'
 import type { DurableStreamTestServer } from '@durable-streams/server'
-import type { StreamFn } from '@mariozechner/pi-agent-core'
+import type { StreamFn } from '@earendil-works/pi-agent-core'
 import type {
   AgentModel,
   EntityRegistry,

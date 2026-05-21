@@ -2,7 +2,7 @@ import { readFile, stat } from 'node:fs/promises'
 import { relative, resolve } from 'node:path'
 import { Type } from '@sinclair/typebox'
 import { runtimeLog } from '../log'
-import type { AgentTool } from '@mariozechner/pi-agent-core'
+import type { AgentTool } from '@earendil-works/pi-agent-core'
 
 const MAX_FILE_SIZE = 512 * 1024 // 512 KB
 

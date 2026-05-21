@@ -12,7 +12,7 @@ Tools are functions the LLM can call during the agent loop. Each tool has a name
 
 ## AgentTool interface
 
-Re-exported from [`@mariozechner/pi-agent-core`](https://github.com/badlogic/pi-mono):
+Re-exported from [`@earendil-works/pi-agent-core`](https://github.com/earendil-works/pi-mono):
 
 ```ts
 interface AgentTool<TParameters extends TSchema = TSchema, TDetails = any> {

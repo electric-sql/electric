@@ -3,7 +3,7 @@ import { relative, resolve } from 'node:path'
 import { createTwoFilesPatch } from 'diff'
 import { Type } from '@sinclair/typebox'
 import { runtimeLog } from '../log'
-import type { AgentTool } from '@mariozechner/pi-agent-core'
+import type { AgentTool } from '@earendil-works/pi-agent-core'
 
 const READ_GUARD_MESSAGE = (rel: string): string =>
   `File ${rel} has not been read in this session (sessions are per-wake — re-read after waking from a worker).`

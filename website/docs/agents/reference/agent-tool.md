@@ -8,7 +8,7 @@ outline: [2, 3]
 
 # AgentTool
 
-Interface for tools the LLM can call during the agent loop. Re-exported from [`@mariozechner/pi-agent-core`](https://github.com/badlogic/pi-mono).
+Interface for tools the LLM can call during the agent loop. Re-exported from [`@earendil-works/pi-agent-core`](https://github.com/earendil-works/pi-mono).
 
 **Source:** `@electric-ax/agents-runtime` (re-export)
 

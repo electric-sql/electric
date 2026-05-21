@@ -22,12 +22,12 @@ import type {
 import type {
   AgentTool as PiAgentTool,
   StreamFn,
-} from '@mariozechner/pi-agent-core'
+} from '@earendil-works/pi-agent-core'
 import type {
   KnownProvider,
   Model,
   SimpleStreamOptions,
-} from '@mariozechner/pi-ai'
+} from '@earendil-works/pi-ai'
 import type {
   EntityStreamDB as RuntimeEntityStreamDB,
   EntityStreamDBWithActions as RuntimeEntityStreamDBWithActions,

@@ -50,7 +50,6 @@
     "@durable-streams/state": "https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@5d5c217",
     "@electric-ax/agents-runtime": "workspace:*",
     "@electric-sql/client": "^1.5.18",
-    "@mariozechner/pi-agent-core": "^0.70.2",
     "@opentelemetry/api": "^1.9.1",
     "@sinclair/typebox": "^0.34.48",
     "@whatwg-node/server": "^0.10.18",
@@ -63,7 +62,8 @@
     "pino": "^10.3.1",
     "pino-pretty": "^13.0.0",
     "postgres": "^3.4.0",
-    "undici": "^7.24.7"
+    "undici": "^7.24.7",
+    "@earendil-works/pi-agent-core": "^0.75.4"
   },
   "devDependencies": {
     "@electric-ax/agents": "workspace:*",
