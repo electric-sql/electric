@@ -117,7 +117,7 @@ member_at_all_times?(subquery_id, value) = false
 
 These are useful for the where clause filter which needs to keep the filter broad enough so that all consumers get all the changes they need while they may be at any of the logical times.
 
-For each subquery there will be a minimum logical time needed (the minimum in-flight logical time for the subquery) which the SubqueryProgressMonitor will set on the MultiTimeView. This allows the MultiTimeViewETS table to be compacted for memory and performace efficientcy. For any given list(times) it can be compacted by removing times from before the minimum in-flight logical time, making sure to update the :in/:out marker at the beginning of the list appropriately or removing it if there are no times left.
+For each subquery there will be a minimum logical time needed (the minimum in-flight logical time for the subquery) which the SubqueryProgressMonitor will set on the MultiTimeView. This allows the MultiTimeView ETS table to be compacted for memory and performace efficientcy. For any given list(times) it can be compacted by removing times from before the minimum in-flight logical time, making sure to update the :in/:out marker at the beginning of the list appropriately or removing it if there are no times left.
 
 Compacting should happen:
 - when the list is read (e.g. when member? for the value is called)
@@ -190,7 +190,7 @@ The SubqueryProgressMonitor must know about all shapes for a subquery (so for ex
 
 These should be updated so that rather than holding views of the subquery, they just hold the logical time. so the before and after views should instead just be the before and after logical times.
 - `convert_change` should have a function passed to it that access MultiTimeView.member? at the specified time
-- the move-in query needs entire views at specific times and so should call MultiTimeView.get(time) and care should be made to not keep this in memory for too long, perhaps we should GC the consumer process afterwards, or perhaps the task process that runs the query should call MultiTimeView.get(time) so that the memory is freed when the process ends
+- the move-in query needs entire views at specific times and so should call MultiTimeView.values(subquery_id, time) and care should be made to not keep this in memory for too long, perhaps we should GC the consumer process afterwards, or perhaps the task process that runs the query should call MultiTimeView.values(subquery_id, time) so that the memory is freed when the process ends
 
 ### Concurrency model
 
