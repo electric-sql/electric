@@ -2,7 +2,7 @@
   "name": "@electric-ax/agents-desktop",
   "productName": "Electric Agents",
   "private": true,
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Desktop app for Electric Agents",
   "author": "ElectricSQL <info@electric-sql.com>",
   "homepage": "https://electric-sql.com",
