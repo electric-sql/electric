@@ -142,6 +142,12 @@ subquery_group_id -> {node_id, field, polarity} and
 
 and there's one child_node_id per subquery_id for the group. child_node_id is smaller in memory so we keep that in places where it's going to be repeated lots in the ETS table (e.g. in `subquery_group_id, value -> list(child_node_id)`)
 
+To support removal without a full table scan, also keep:
+
+subquery_id -> list({subquery_group_id, child_node_id})
+
+This gives the groups a subquery participates in (and its child node within each), which is needed by both the removal path below and the new-child seeding path above.
+
 
 So for `afffected_shapes` for a particular value, we'd look up the list of child_node_ids from the subquery_group_id, value pair then lookup the subquery_ids from the child_node_ids then for each subquery_id:
 
@@ -165,7 +171,7 @@ If the MultiTimeView has not been marked ready by the Materializer yet, the Subq
 
 When a new child_node_id is created for `{subquery_group_id, subquery_id}` and the subquery is already ready, the routing rows for that group must be seeded synchronously by iterating `MultiTimeView.values(subquery_id, current_time)` and appending the new child_node_id to each `subquery_group_id, value -> list(child_node_id)` entry. The child must not be exposed to routing until this seed completes, otherwise routing will miss values that the new child should match.
 
-Removal of a subquery must not scale with the total number of shapes or the number of subqueries in the group, but can scale with the number of values for the subquery. This can be achived by getting the getting the values for the subquery from the MultiTimeView (as discussed above in the MultiTimeView section when talking about subquery removal) - whilst iterating though those values we can also delete those values in the SubqueryIndex for all the groups that it's in.
+Removal of a subquery must not scale with the total number of shapes or the number of subqueries in the group, but can scale with the number of values for the subquery. This can be achieved by reading `subquery_id -> list({subquery_group_id, child_node_id})` to find the groups the subquery participates in, then iterating its values from the MultiTimeView (as discussed above in the MultiTimeView section) and deleting the corresponding `subquery_group_id, value -> list(child_node_id)` entries in each of those groups.
 
 #### Materializer
 
