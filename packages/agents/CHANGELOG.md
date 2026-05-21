@@ -1,5 +1,13 @@
 # @electric-ax/agents
 
+## 0.4.6
+
+### Patch Changes
+
+- Updated dependencies [e13cad1]
+- Updated dependencies [4d9c36e]
+  - @electric-ax/agents-runtime@0.3.2
+
 ## 0.4.5
 
 ### Patch Changes

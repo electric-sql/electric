@@ -1,5 +1,16 @@
 # @electric-ax/agents-mobile
 
+## 0.0.2
+
+### Patch Changes
+
+- 4d9c36e: Add a fine-grained reactive entity timeline query and migrate the agents UI to use it. Timeline rows are maintained by TanStack DB using multi-source queries and live child collections, so streamed agent responses update incrementally without rematerializing the whole chat timeline. Update the mobile app to consume the row-based timeline shape and pin React to the React Native renderer version. Keep the conformance property-test model aligned with generated entity type names.
+- Updated dependencies [e13cad1]
+- Updated dependencies [da26799]
+- Updated dependencies [4d9c36e]
+  - @electric-ax/agents-runtime@0.3.2
+  - @electric-ax/agents-server-ui@0.4.7
+
 ## 0.0.1
 
 ### Patch Changes
