@@ -360,11 +360,17 @@ export class PostgresRegistry {
     input: MaterializeHeartbeatClaimInput
   ): Promise<void> {
     const heartbeatAt = input.heartbeatAt ?? new Date()
+    // Only touch leaseExpiresAt when the caller explicitly provides one.
+    // The lease was set at materializeActiveClaim time from the upstream
+    // lease_ttl_ms and remains the authoritative expiry; heartbeats are
+    // alive-pings, not lease extensions.
     await this.db
       .update(consumerClaims)
       .set({
         lastHeartbeatAt: heartbeatAt,
-        leaseExpiresAt: input.leaseExpiresAt ?? null,
+        ...(input.leaseExpiresAt !== undefined
+          ? { leaseExpiresAt: input.leaseExpiresAt }
+          : {}),
         updatedAt: heartbeatAt,
       })
       .where(
