@@ -236,7 +236,7 @@ function RootShell(): React.ReactElement {
     const stopTx = signalEntity({
       entityUrl,
       signal: `SIGSTOP`,
-      reason: `Stopped immediately from keyboard`,
+      reason: `Stopped immediately`,
     })
     stopTx.isPersisted.promise
       .then(() => {
@@ -254,7 +254,7 @@ function RootShell(): React.ReactElement {
     `escape`,
     (e) => {
       if (!shouldHandleAgentSignalShortcut(e, `escape`)) return
-      if (!signalActiveTile(`SIGINT`, `Interrupted from keyboard`)) return
+      if (!signalActiveTile(`SIGINT`, `Interrupted current run`)) return
       e.preventDefault()
     },
     { ignoreInputs: false }
