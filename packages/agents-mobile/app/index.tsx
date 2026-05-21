@@ -15,6 +15,7 @@ export default function SessionsRoute(): React.ReactElement {
       onNewSession={() => router.push(`/new-session`)}
       onChangeServer={() => router.push(`/server-setup`)}
       onOpenDiagnostics={() => router.push(`/diagnostics`)}
+      onOpenAccount={() => router.push(`/account`)}
     />
   )
 }

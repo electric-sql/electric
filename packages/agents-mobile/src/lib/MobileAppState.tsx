@@ -3,11 +3,20 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import type { ReactNode } from 'react'
 
 const SERVER_URL_KEY = `electric-agents-mobile.server-url`
+const ONBOARDING_DISMISSED_KEY = `electric-agents-mobile.onboarding-dismissed`
 
 type MobileAppState = {
   loading: boolean
   serverUrl: string | null
   saveServerUrl: (next: string) => Promise<void>
+  /**
+   * Whether the user has finished or explicitly opted out of the
+   * first-launch onboarding wizard (cloud sign-in + server URL).
+   * Persisted in `AsyncStorage` so the wizard only auto-shows again
+   * if the user uninstalls / clears app data.
+   */
+  onboardingDismissed: boolean
+  setOnboardingDismissed: (next: boolean) => Promise<void>
 }
 
 const MobileAppStateContext = createContext<MobileAppState | null>(null)
@@ -19,10 +28,17 @@ export function MobileAppStateProvider({
 }): React.ReactElement {
   const [loading, setLoading] = useState(true)
   const [serverUrl, setServerUrl] = useState<string | null>(null)
+  const [onboardingDismissed, setOnboardingDismissedState] = useState(false)
 
   useEffect(() => {
-    AsyncStorage.getItem(SERVER_URL_KEY)
-      .then((stored) => setServerUrl(stored))
+    Promise.all([
+      AsyncStorage.getItem(SERVER_URL_KEY),
+      AsyncStorage.getItem(ONBOARDING_DISMISSED_KEY),
+    ])
+      .then(([storedUrl, storedOnboarding]) => {
+        setServerUrl(storedUrl)
+        setOnboardingDismissedState(storedOnboarding === `true`)
+      })
       .finally(() => setLoading(false))
   }, [])
 
@@ -34,8 +50,17 @@ export function MobileAppStateProvider({
         await AsyncStorage.setItem(SERVER_URL_KEY, next)
         setServerUrl(next)
       },
+      onboardingDismissed,
+      setOnboardingDismissed: async (next: boolean) => {
+        if (next) {
+          await AsyncStorage.setItem(ONBOARDING_DISMISSED_KEY, `true`)
+        } else {
+          await AsyncStorage.removeItem(ONBOARDING_DISMISSED_KEY)
+        }
+        setOnboardingDismissedState(next)
+      },
     }),
-    [loading, serverUrl]
+    [loading, serverUrl, onboardingDismissed]
   )
 
   return (

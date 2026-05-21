@@ -59,11 +59,13 @@ export function SessionListScreen({
   onNewSession,
   onChangeServer,
   onOpenDiagnostics,
+  onOpenAccount,
 }: {
   onOpenSession: (entityUrl: string) => void
   onNewSession: () => void
   onChangeServer: () => void
   onOpenDiagnostics: () => void
+  onOpenAccount: () => void
 }): React.ReactElement {
   const { entitiesCollection, serverUrl } = useAgents()
   const tokens = useTokens()
@@ -295,6 +297,7 @@ export function SessionListScreen({
         serverHealth={serverStatus}
         onChangeServer={onChangeServer}
         onOpenDiagnostics={onOpenDiagnostics}
+        onOpenAccount={onOpenAccount}
       />
     </Screen>
   )

@@ -50,12 +50,14 @@ export function HomeMenu({
   serverHealth,
   onChangeServer,
   onOpenDiagnostics,
+  onOpenAccount,
 }: {
   open: boolean
   onClose: () => void
   serverHealth: ServerHealth
   onChangeServer: () => void
   onOpenDiagnostics: () => void
+  onOpenAccount: () => void
 }): React.ReactElement {
   const tokens = useTokens()
   const { serverUrl, entitiesCollection } = useAgents()
@@ -127,6 +129,10 @@ export function HomeMenu({
             handleClose()
             onOpenDiagnostics()
           }}
+          onOpenAccount={() => {
+            handleClose()
+            onOpenAccount()
+          }}
         />
       )}
 
@@ -170,6 +176,7 @@ function RootPage({
   onShowStatuses,
   onChangeServer,
   onOpenDiagnostics,
+  onOpenAccount,
 }: {
   serverName: string
   dotColor: string
@@ -179,6 +186,7 @@ function RootPage({
   onShowStatuses: () => void
   onChangeServer: () => void
   onOpenDiagnostics: () => void
+  onOpenAccount: () => void
 }): React.ReactElement {
   const tokens = useTokens()
   return (
@@ -281,6 +289,21 @@ function RootPage({
 
       <BottomSheetSeparator />
 
+      <BottomSheetItem
+        label="Account"
+        icon={
+          <Icon name="server" size={18} color={tokens.text2} strokeWidth={2} />
+        }
+        trailing={
+          <Icon
+            name="chevron-right"
+            size={18}
+            color={tokens.text3}
+            strokeWidth={2}
+          />
+        }
+        onPress={onOpenAccount}
+      />
       <BottomSheetItem
         label="Diagnostics"
         icon={
