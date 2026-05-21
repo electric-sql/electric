@@ -25,6 +25,7 @@ import {
   readTextPayload,
 } from '@electric-ax/agents-server-ui/src/lib/sendMessage'
 import type { OptimisticInboxMessage } from '@electric-ax/agents-server-ui/src/lib/sendMessage'
+import type { EntityTimelineQueryRow } from '@electric-ax/agents-runtime/client'
 import { Header, HeaderBackButton } from '../components/Header'
 import { Icon } from '../components/Icon'
 import { Screen } from '../components/Screen'
@@ -50,7 +51,6 @@ const INLINE_QUEUED_TIMEOUT_MS = 15_000
 type EntityStreamState = ReturnType<typeof useEntityTimeline>
 type EntityStreamDB = EntityStreamState[`db`]
 type PendingInboxMessage = EntityStreamState[`pendingInbox`][number]
-type TimelineEntry = EntityStreamState[`entries`][number]
 
 export function ChatSessionScreen({
   entityUrl,
@@ -161,24 +161,26 @@ export function SessionScreen({
   const entity = matches.at(0) ?? null
   const streamEntityUrl =
     view === `chat` && entity?.status !== `spawning` ? entityUrl : null
-  const { entries, pendingInbox, db } = useEntityTimeline(
+  const { timelineRows, pendingInbox, db } = useEntityTimeline(
     serverUrl,
     streamEntityUrl
   )
   const manifests = useMemo(
     () =>
-      entries
-        .filter(isManifestEntry)
-        .map((entry) => entry.section.manifest as ManifestRecord),
-    [entries]
+      timelineRows
+        .filter((row): row is EntityTimelineQueryRow & { manifest: object } =>
+          Boolean(row.manifest)
+        )
+        .map((row) => row.manifest as ManifestRecord),
+    [timelineRows]
   )
   const processedInboxKeySignature = useMemo(
     () =>
-      entries
-        .filter((entry) => entry.section.kind === `user_message`)
-        .map((entry) => entry.key.replace(/^inbox:/, ``))
+      timelineRows
+        .filter((row) => row.inbox)
+        .map((row) => row.inbox!.key)
         .join(`\0`),
-    [entries]
+    [timelineRows]
   )
   const processedInboxKeys = useMemo(
     () =>
@@ -632,12 +634,6 @@ type DrawerEntity = Pick<
 >
 
 type ManifestRecord = Record<string, unknown>
-
-function isManifestEntry(entry: TimelineEntry): entry is TimelineEntry & {
-  section: { kind: `manifest`; manifest: unknown }
-} {
-  return entry.section.kind === `manifest`
-}
 
 type DrawerEntry = {
   key: string
