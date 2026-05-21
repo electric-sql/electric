@@ -2,14 +2,17 @@ import { createContext, useContext, useMemo, type ReactNode } from 'react'
 import {
   createEntitiesCollection,
   createEntityTypesCollection,
+  createRunnersCollection,
   type EntitiesCollection,
   type EntityTypesCollection,
+  type RunnersCollection,
 } from './agentsClient'
 
 type AgentsContextValue = {
   serverUrl: string
   entitiesCollection: EntitiesCollection
   entityTypesCollection: EntityTypesCollection
+  runnersCollection: RunnersCollection
 }
 
 const AgentsContext = createContext<AgentsContextValue | null>(null)
@@ -26,6 +29,7 @@ export function AgentsProvider({
       serverUrl,
       entitiesCollection: createEntitiesCollection(serverUrl),
       entityTypesCollection: createEntityTypesCollection(serverUrl),
+      runnersCollection: createRunnersCollection(serverUrl),
     }
   }, [serverUrl])
 

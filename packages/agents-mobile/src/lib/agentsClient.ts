@@ -38,13 +38,27 @@ export const entityTypeSchema = z.object({
   updated_at: z.string(),
 })
 
+// Minimal subset of the runners shape — just the columns the mobile
+// picker needs to identify a runner and pass it as the dispatch
+// target on spawn.
+export const runnerSchema = z.object({
+  id: z.string(),
+  owner_principal: z.string(),
+  label: z.string(),
+  kind: z.string(),
+  admin_status: z.enum([`enabled`, `disabled`]),
+  last_seen_at: z.string().nullable().optional(),
+})
+
 export type ElectricEntity = z.infer<typeof entitySchema>
 export type ElectricEntityType = z.infer<typeof entityTypeSchema>
+export type ElectricRunner = z.infer<typeof runnerSchema>
 
 export type EntitiesCollection = ReturnType<typeof createEntitiesCollection>
 export type EntityTypesCollection = ReturnType<
   typeof createEntityTypesCollection
 >
+export type RunnersCollection = ReturnType<typeof createRunnersCollection>
 
 export function normalizeServerUrl(input: string): string {
   const trimmed = input.trim().replace(/\/+$/, ``)
@@ -115,14 +129,46 @@ export function createEntityTypesCollection(baseUrl: string) {
   )
 }
 
+export function createRunnersCollection(baseUrl: string) {
+  return createCollection(
+    electricCollectionOptions({
+      id: `mobile-runners:${baseUrl}`,
+      schema: runnerSchema,
+      shapeOptions: {
+        url: appendPathToUrl(baseUrl, `/_electric/electric/v1/shape`),
+        fetchClient: serverFetch,
+        params: {
+          table: `runners`,
+          columns: [
+            `id`,
+            `owner_principal`,
+            `label`,
+            `kind`,
+            `admin_status`,
+            `last_seen_at`,
+          ],
+        },
+      },
+      getKey: (item) => item.id,
+    })
+  )
+}
+
 export async function spawnEntity({
   baseUrl,
   type,
   initialMessage,
+  runnerId,
 }: {
   baseUrl: string
   type: string
   initialMessage?: string
+  // When set, the cloud agents-server routes wake events for this
+  // entity to the named pull-wake runner. Without it, dispatch falls
+  // back to the entity type's `default_dispatch_policy` — typically a
+  // webhook to a local serveEndpoint, which the cloud server can't
+  // reach.
+  runnerId?: string
 }): Promise<string> {
   const name = makeEntityName()
   const entityUrl = `/${type}/${name}`
@@ -135,6 +181,11 @@ export async function spawnEntity({
   const body: Record<string, unknown> = {}
   const text = initialMessage?.trim()
   if (text) body.initialMessage = text
+  if (runnerId) {
+    body.dispatch_policy = {
+      targets: [{ type: `runner`, runnerId }],
+    }
+  }
   const spawnRes = await serverFetch(
     appendPathToUrl(
       baseUrl,

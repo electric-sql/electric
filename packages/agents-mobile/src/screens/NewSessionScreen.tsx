@@ -10,11 +10,16 @@ import {
   View,
 } from 'react-native'
 import { useLiveQuery } from '@tanstack/react-db'
+import { eq } from '@tanstack/db'
 import { Header, HeaderBackButton } from '../components/Header'
 import { PrimaryButton } from '../components/PrimaryButton'
 import { Screen } from '../components/Screen'
 import { useAgents } from '../lib/AgentsProvider'
-import { spawnEntity, type ElectricEntityType } from '../lib/agentsClient'
+import {
+  spawnEntity,
+  type ElectricEntityType,
+  type ElectricRunner,
+} from '../lib/agentsClient'
 import { useTokens } from '../lib/ThemeProvider'
 import { fontSize, lineHeight, radii, spacing } from '../lib/theme'
 import type { Tokens } from '../lib/theme'
@@ -28,11 +33,12 @@ export function NewSessionScreen({
   onBack: () => void
   onOpenSession: (entityUrl: string) => void
 }): React.ReactElement {
-  const { entityTypesCollection, serverUrl } = useAgents()
+  const { entityTypesCollection, runnersCollection, serverUrl } = useAgents()
   const tokens = useTokens()
   const styles = useMemo(() => createStyles(tokens), [tokens])
   const [message, setMessage] = useState(``)
   const [selectedType, setSelectedType] = useState<string | null>(null)
+  const [selectedRunner, setSelectedRunner] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -42,6 +48,15 @@ export function NewSessionScreen({
         .from({ type: entityTypesCollection })
         .orderBy(({ type }) => type.name, `asc`),
     [entityTypesCollection]
+  )
+
+  const { data: enabledRunners = [] } = useLiveQuery(
+    (query) =>
+      query
+        .from({ runner: runnersCollection })
+        .where(({ runner }) => eq(runner.admin_status, `enabled`))
+        .orderBy(({ runner }) => runner.label, `asc`),
+    [runnersCollection]
   )
 
   const visibleTypes = useMemo(
@@ -56,9 +71,22 @@ export function NewSessionScreen({
     [visibleTypes]
   )
   const activeTypeName = selectedType ?? defaultType?.name ?? null
+  // Auto-pick when there's exactly one runner so the common case
+  // (single desktop runtime) doesn't require a click.
+  const activeRunnerId =
+    selectedRunner ??
+    (enabledRunners.length === 1 ? enabledRunners[0]!.id : null)
 
   const start = async () => {
     if (!activeTypeName || loading) return
+    if (!activeRunnerId) {
+      setError(
+        enabledRunners.length === 0
+          ? `No runners are online for this server.`
+          : `Pick a runner to handle this session.`
+      )
+      return
+    }
     setLoading(true)
     setError(null)
     try {
@@ -66,6 +94,7 @@ export function NewSessionScreen({
         baseUrl: serverUrl,
         type: activeTypeName,
         initialMessage: message,
+        runnerId: activeRunnerId,
       })
       onOpenSession(entityUrl)
     } catch (err) {
@@ -132,6 +161,26 @@ export function NewSessionScreen({
             </Text>
           )}
 
+          <Text style={styles.sectionLabel}>Runner</Text>
+          {enabledRunners.length === 0 ? (
+            <Text style={styles.empty}>
+              No runners are online. Start a local runtime (e.g. the desktop
+              app) to register one.
+            </Text>
+          ) : (
+            <View style={styles.typeList}>
+              {enabledRunners.map((runner) => (
+                <RunnerCard
+                  key={runner.id}
+                  runner={runner}
+                  tokens={tokens}
+                  selected={runner.id === activeRunnerId}
+                  onPress={() => setSelectedRunner(runner.id)}
+                />
+              ))}
+            </View>
+          )}
+
           {error && (
             <View style={styles.errorRow}>
               <Text style={styles.errorText}>{error}</Text>
@@ -142,7 +191,7 @@ export function NewSessionScreen({
             <PrimaryButton
               title="Start session"
               loading={loading}
-              disabled={!activeTypeName || loading}
+              disabled={!activeTypeName || !activeRunnerId || loading}
               onPress={start}
             />
           </View>
@@ -175,6 +224,31 @@ function AgentTypeCard({
           {type.description}
         </Text>
       ) : null}
+    </TouchableOpacity>
+  )
+}
+
+function RunnerCard({
+  runner,
+  tokens,
+  selected,
+  onPress,
+}: {
+  runner: ElectricRunner
+  tokens: Tokens
+  selected: boolean
+  onPress: () => void
+}): React.ReactElement {
+  const styles = useMemo(() => createStyles(tokens), [tokens])
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      style={[styles.typeCard, selected ? styles.typeCardSelected : null]}
+    >
+      <Text style={styles.typeName}>{runner.label || runner.id}</Text>
+      <Text numberOfLines={1} style={styles.typeDescription}>
+        {runner.kind} · {runner.id}
+      </Text>
     </TouchableOpacity>
   )
 }
