@@ -4,10 +4,6 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-overrides:
-  '@tanstack/db': https://pkg.pr.new/@tanstack/db@1537
-  '@tanstack/db-ivm': https://pkg.pr.new/@tanstack/db-ivm@1537
-
 patchedDependencies:
   '@microsoft/fetch-event-source':
     hash: 46f4e76dd960e002a542732bb4323817a24fce1673cb71e2f458fe09776fa188
@@ -106,8 +102,8 @@ importers:
         specifier: ^0.34.0
         version: 0.34.49
       '@tanstack/db':
-        specifier: https://pkg.pr.new/@tanstack/db@1537
-        version: https://pkg.pr.new/@tanstack/db@1537(typescript@5.8.3)
+        specifier: ^0.6.0
+        version: 0.6.5(typescript@5.8.3)
       '@tanstack/react-db':
         specifier: ^0.1.78
         version: 0.1.83(react@19.2.5)(typescript@5.8.3)
@@ -186,8 +182,8 @@ importers:
         specifier: ^0.34.0
         version: 0.34.49
       '@tanstack/db':
-        specifier: https://pkg.pr.new/@tanstack/db@1537
-        version: https://pkg.pr.new/@tanstack/db@1537(typescript@5.8.3)
+        specifier: ^0.6.0
+        version: 0.6.5(typescript@5.8.3)
       '@tanstack/react-db':
         specifier: ^0.1.78
         version: 0.1.83(react@19.2.5)(typescript@5.8.3)
@@ -1684,8 +1680,8 @@ importers:
         specifier: ^1.1.0
         version: 1.1.0
       '@tanstack/db':
-        specifier: https://pkg.pr.new/@tanstack/db@1537
-        version: https://pkg.pr.new/@tanstack/db@1537(typescript@5.8.3)
+        specifier: ^0.6.6
+        version: 0.6.6(typescript@5.8.3)
       '@tanstack/react-db':
         specifier: '>=0.1.78'
         version: 0.1.83(react@19.2.0)(typescript@5.8.3)
@@ -1888,14 +1884,14 @@ importers:
         specifier: ^1.0.2
         version: 1.0.2(react@19.2.0)
       '@tanstack/db':
-        specifier: https://pkg.pr.new/@tanstack/db@1537
-        version: https://pkg.pr.new/@tanstack/db@1537(typescript@5.8.3)
+        specifier: ^0.6.6
+        version: 0.6.6(typescript@5.8.3)
       '@tanstack/electric-db-collection':
-        specifier: https://pkg.pr.new/@tanstack/electric-db-collection@1537
-        version: https://pkg.pr.new/@tanstack/electric-db-collection@1537(typescript@5.8.3)
+        specifier: ^0.3.4
+        version: 0.3.4(typescript@5.8.3)
       '@tanstack/react-db':
-        specifier: https://pkg.pr.new/@tanstack/react-db@1537
-        version: https://pkg.pr.new/@tanstack/react-db@1537(react@19.2.0)(typescript@5.8.3)
+        specifier: ^0.1.84
+        version: 0.1.84(react@19.2.0)(typescript@5.8.3)
       '@tanstack/react-router':
         specifier: ^1.167.4
         version: 1.168.23(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
@@ -1979,8 +1975,8 @@ importers:
         specifier: ^1.5.18
         version: link:../typescript-client
       '@tanstack/db':
-        specifier: https://pkg.pr.new/@tanstack/db@1537
-        version: https://pkg.pr.new/@tanstack/db@1537(typescript@5.8.3)
+        specifier: ^0.6.4
+        version: 0.6.5(typescript@5.8.3)
       '@tanstack/react-db':
         specifier: ^0.1.82
         version: 0.1.83(react@19.2.0)(typescript@5.8.3)
@@ -4235,6 +4231,9 @@ packages:
   '@electric-sql/client@1.5.18':
     resolution: {integrity: sha512-OgzAqrLO750gHMB30PhZU5WJn5CwjILztef3CM0mRpAPi1XUS3j5f99wMdE/ro/LoTIx6pDw+Q8uiaf4pY+GPA==}
     hasBin: true
+
+  '@electric-sql/d2mini@0.1.8':
+    resolution: {integrity: sha512-ovLncfKvj6fTHA7qqaHt/cOzU/2JvhOw9lySYdZtmnecGv/1IiCH9HFrj6gAie07QLq3mqiNLdjZoDcO4w6Rzg==}
 
   '@electric-sql/pglite-react@0.2.17':
     resolution: {integrity: sha512-TEdV1UAUO50gb/okYcVaiG2dQdox53K2E8jSEl0Wa/97x3Xi238ls7ZB7wgmoqNgy45f/tgYxyztml03EFClng==}
@@ -9106,15 +9105,38 @@ packages:
     peerDependencies:
       vite: ^5.2.0 || ^6 || ^7
 
-  '@tanstack/db-ivm@https://pkg.pr.new/@tanstack/db-ivm@1537':
-    resolution: {tarball: https://pkg.pr.new/@tanstack/db-ivm@1537}
-    version: 0.1.18
+  '@tanstack/db-ivm@0.1.13':
+    resolution: {integrity: sha512-sBOWGY4tqMEym2ewjdWrDb5c5c8akvgnEbGVPAtkfFS3QVV0zfVb5RJAkAc8GSxb3ByVfYjyaShVr0kMJhMuow==}
     peerDependencies:
       typescript: '>=4.7'
 
-  '@tanstack/db@https://pkg.pr.new/@tanstack/db@1537':
-    resolution: {tarball: https://pkg.pr.new/@tanstack/db@1537}
-    version: 0.6.5
+  '@tanstack/db-ivm@0.1.18':
+    resolution: {integrity: sha512-+pZJiRKdoKRM5Epq9T7otD9ZJl82pRFauo7LKuJGrarjVKQ7r+QQlPe3kGdN9LEKSnuNGIWjX9OOY4M8kH4eLw==}
+    peerDependencies:
+      typescript: '>=4.7'
+
+  '@tanstack/db@0.0.27':
+    resolution: {integrity: sha512-zFrfYxBF+8zbxlp0nXtcJnLaj0ZN5sxij3F0r+mVFVC1GNHcgJFZp81RuMJbx9nuC4c2h3P9r2Mb81e6wnJyeA==}
+    peerDependencies:
+      typescript: '>=4.7'
+
+  '@tanstack/db@0.0.33':
+    resolution: {integrity: sha512-G5h2dlrC3CFtZIBqnfb4Zgyvcl1XqHrKwT8itbrLGUirEcZ6n/ck5iClDROyondc7Z3qk+qHURMTprLlWR698A==}
+    peerDependencies:
+      typescript: '>=4.7'
+
+  '@tanstack/db@0.5.8':
+    resolution: {integrity: sha512-X6z/OFTzQ8tyOKiWCEqQPSH/w+pmEWack+EMPweAyssXvT6qbfBayRxSoKl93ZTTdgWHBpGlQE75+vVkT1Szqw==}
+    peerDependencies:
+      typescript: '>=4.7'
+
+  '@tanstack/db@0.6.5':
+    resolution: {integrity: sha512-gtCuAo4UtC9SR/kTMu5fVEff6qZ2R1FZi9X7MybtHKA6wve7RePifGG6qBI4OmMB+7juT5/+glNbnqZOrG0/pg==}
+    peerDependencies:
+      typescript: '>=4.7'
+
+  '@tanstack/db@0.6.6':
+    resolution: {integrity: sha512-v1Mphjtwy/6m3ixhNFackRp8XYgdJYGFUUBQ80d0lsipk0MYKHIoePpHGSum95nerLDcP/8+fu5qj0Vrvmskqw==}
     peerDependencies:
       typescript: '>=4.7'
 
@@ -9151,9 +9173,8 @@ packages:
   '@tanstack/electric-db-collection@0.2.8':
     resolution: {integrity: sha512-vxs+ne3WKcIJuxJCU7X+vv8DUwmqB+229MFqoF1mJQcvZrs2aPkA5UJQ0P6Y3TSLQ305Mx1ypnuDlF5buzE/mg==}
 
-  '@tanstack/electric-db-collection@https://pkg.pr.new/@tanstack/electric-db-collection@1537':
-    resolution: {tarball: https://pkg.pr.new/@tanstack/electric-db-collection@1537}
-    version: 0.3.3
+  '@tanstack/electric-db-collection@0.3.4':
+    resolution: {integrity: sha512-fzXsfG1+huBBVrioyodiQjdO0B1+iRNoaGMc9Q/EgLL4PBuNUcBIStkAqq9jEWg5roMqHHXRGRcP7zyiZYliuw==}
 
   '@tanstack/history@1.139.0':
     resolution: {integrity: sha512-l6wcxwDBeh/7Dhles23U1O8lp9kNJmAb2yNjekR6olZwCRNAVA8TCXlVCrueELyFlYZqvQkh0ofxnzG62A1Kkg==}
@@ -9166,6 +9187,10 @@ packages:
   '@tanstack/intent@0.0.9':
     resolution: {integrity: sha512-Ionw2sYSXlbg9AsA0iXDEo+kO75uzgKeX7B9YV6I2O9+CAYaqxblyM0ASIMGirqfv8NkHvBK4wb5zXjrqDUT+A==}
     hasBin: true
+
+  '@tanstack/pacer-lite@0.1.1':
+    resolution: {integrity: sha512-y/xtNPNt/YeyoVxE/JCx+T7yjEzpezmbb+toK8DDD1P4m7Kzs5YR956+7OKexG3f8aXgC3rLZl7b1V+yNUSy5w==}
+    engines: {node: '>=18'}
 
   '@tanstack/pacer-lite@0.2.1':
     resolution: {integrity: sha512-3PouiFjR4B6x1c969/Pl4ZIJleof1M0n6fNX8NRiC9Sqv1g06CVDlEaXUR4212ycGFyfq4q+t8Gi37Xy+z34iQ==}
@@ -9195,9 +9220,8 @@ packages:
     peerDependencies:
       react: '>=16.8.0'
 
-  '@tanstack/react-db@https://pkg.pr.new/@tanstack/react-db@1537':
-    resolution: {tarball: https://pkg.pr.new/@tanstack/react-db@1537}
-    version: 0.1.83
+  '@tanstack/react-db@0.1.84':
+    resolution: {integrity: sha512-2BrOdAX2hZTS2Z6nZZ0HySf+oSL+IIq6y2Yfh5np1d/J7omPkb8Q77OCO4o4efDMYAnK6LTXYHtWP8X2a7bBeQ==}
     peerDependencies:
       react: '>=16.8.0'
 
@@ -15749,6 +15773,9 @@ packages:
 
   muggle-string@0.4.1:
     resolution: {integrity: sha512-VNTrAak/KhO2i8dqqnqnAHOa3cYBwXEZe9h+D5h/1ZqFSTEFHdM65lR7RoIqq3tBBYavsOXV84NoHXZ0AkPyqQ==}
+
+  murmurhash-js@1.0.0:
+    resolution: {integrity: sha512-TvmkNhkv8yct0SVBSy+o8wYzXjE4Zz3PCesbfs8HiCXXdcTuocApFv11UWlNFWKYsP2okqrhb7JNlSm9InBhIw==}
 
   mute-stream@1.0.0:
     resolution: {integrity: sha512-avsJQhyd+680gKXyG/sQc0nXaC6rBkPOfyHYcFb9+hdkqQkR9bdnkJ0AMZhke0oesPqIO+mFFJ+IdBc7mst4IA==}
@@ -23175,7 +23202,7 @@ snapshots:
     dependencies:
       '@durable-streams/client': https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@5d5c217
       '@standard-schema/spec': 1.1.0
-      '@tanstack/db': https://pkg.pr.new/@tanstack/db@1537(typescript@5.8.3)
+      '@tanstack/db': 0.6.6(typescript@5.8.3)
     transitivePeerDependencies:
       - typescript
 
@@ -23190,7 +23217,7 @@ snapshots:
       '@mariozechner/pi-agent-core': 0.70.2(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(ws@8.20.0)(zod@4.3.6)
       '@mariozechner/pi-ai': 0.70.2(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(ws@8.20.0)(zod@4.3.6)
       '@standard-schema/spec': 1.1.0
-      '@tanstack/db': https://pkg.pr.new/@tanstack/db@1537(typescript@5.8.3)
+      '@tanstack/db': 0.6.6(typescript@5.8.3)
       cron-parser: 5.5.0
       pino: 10.3.1
       pino-pretty: 13.1.3
@@ -23222,7 +23249,7 @@ snapshots:
     dependencies:
       '@durable-streams/client': '@electric-ax/durable-streams-client-beta@0.3.0'
       '@standard-schema/spec': 1.1.0
-      '@tanstack/db': https://pkg.pr.new/@tanstack/db@1537(typescript@5.8.3)
+      '@tanstack/db': 0.6.6(typescript@5.8.3)
     transitivePeerDependencies:
       - typescript
 
@@ -23230,7 +23257,7 @@ snapshots:
     dependencies:
       '@electric-ax/durable-streams-client-beta': 0.3.1
       '@standard-schema/spec': 1.1.0
-      '@tanstack/db': https://pkg.pr.new/@tanstack/db@1537(typescript@5.8.3)
+      '@tanstack/db': 0.6.6(typescript@5.8.3)
     transitivePeerDependencies:
       - typescript
 
@@ -23249,6 +23276,12 @@ snapshots:
       '@microsoft/fetch-event-source': 2.0.1(patch_hash=46f4e76dd960e002a542732bb4323817a24fce1673cb71e2f458fe09776fa188)
     optionalDependencies:
       '@rollup/rollup-darwin-arm64': 4.46.1
+
+  '@electric-sql/d2mini@0.1.8':
+    dependencies:
+      fractional-indexing: 3.2.0
+      murmurhash-js: 1.0.0
+      sorted-btree: 1.8.1
 
   '@electric-sql/pglite-react@0.2.17(@electric-sql/pglite@0.2.17)(react@18.3.1)':
     dependencies:
@@ -28346,29 +28379,48 @@ snapshots:
       tailwindcss: 4.1.11
       vite: 7.1.7(@types/node@22.19.1)(jiti@2.6.1)(lightningcss@1.30.1)(terser@5.46.2)(tsx@4.20.3)(yaml@2.8.1)
 
-  '@tanstack/db-ivm@https://pkg.pr.new/@tanstack/db-ivm@1537(typescript@5.7.2)':
+  '@tanstack/db-ivm@0.1.13(typescript@5.7.2)':
     dependencies:
       fractional-indexing: 3.2.0
       sorted-btree: 1.8.1
       typescript: 5.7.2
 
-  '@tanstack/db-ivm@https://pkg.pr.new/@tanstack/db-ivm@1537(typescript@5.8.3)':
+  '@tanstack/db-ivm@0.1.18(typescript@5.8.3)':
     dependencies:
       fractional-indexing: 3.2.0
       sorted-btree: 1.8.1
       typescript: 5.8.3
 
-  '@tanstack/db@https://pkg.pr.new/@tanstack/db@1537(typescript@5.7.2)':
+  '@tanstack/db@0.0.27(typescript@5.8.3)':
+    dependencies:
+      '@electric-sql/d2mini': 0.1.8
+      '@standard-schema/spec': 1.1.0
+      typescript: 5.8.3
+
+  '@tanstack/db@0.0.33(typescript@5.8.3)':
+    dependencies:
+      '@electric-sql/d2mini': 0.1.8
+      '@standard-schema/spec': 1.1.0
+      typescript: 5.8.3
+
+  '@tanstack/db@0.5.8(typescript@5.7.2)':
     dependencies:
       '@standard-schema/spec': 1.1.0
-      '@tanstack/db-ivm': https://pkg.pr.new/@tanstack/db-ivm@1537(typescript@5.7.2)
-      '@tanstack/pacer-lite': 0.2.1
+      '@tanstack/db-ivm': 0.1.13(typescript@5.7.2)
+      '@tanstack/pacer-lite': 0.1.1
       typescript: 5.7.2
 
-  '@tanstack/db@https://pkg.pr.new/@tanstack/db@1537(typescript@5.8.3)':
+  '@tanstack/db@0.6.5(typescript@5.8.3)':
     dependencies:
       '@standard-schema/spec': 1.1.0
-      '@tanstack/db-ivm': https://pkg.pr.new/@tanstack/db-ivm@1537(typescript@5.8.3)
+      '@tanstack/db-ivm': 0.1.18(typescript@5.8.3)
+      '@tanstack/pacer-lite': 0.2.1
+      typescript: 5.8.3
+
+  '@tanstack/db@0.6.6(typescript@5.8.3)':
+    dependencies:
+      '@standard-schema/spec': 1.1.0
+      '@tanstack/db-ivm': 0.1.18(typescript@5.8.3)
       '@tanstack/pacer-lite': 0.2.1
       typescript: 5.8.3
 
@@ -28421,7 +28473,7 @@ snapshots:
     dependencies:
       '@electric-sql/client': link:packages/typescript-client
       '@standard-schema/spec': 1.1.0
-      '@tanstack/db': https://pkg.pr.new/@tanstack/db@1537(typescript@5.8.3)
+      '@tanstack/db': 0.0.33(typescript@5.8.3)
       '@tanstack/store': 0.7.2
       debug: 4.4.1
       typescript: 5.8.3
@@ -28432,18 +28484,18 @@ snapshots:
     dependencies:
       '@electric-sql/client': 1.2.0
       '@standard-schema/spec': 1.1.0
-      '@tanstack/db': https://pkg.pr.new/@tanstack/db@1537(typescript@5.7.2)
+      '@tanstack/db': 0.5.8(typescript@5.7.2)
       '@tanstack/store': 0.8.0
       debug: 4.4.3
     transitivePeerDependencies:
       - supports-color
       - typescript
 
-  '@tanstack/electric-db-collection@https://pkg.pr.new/@tanstack/electric-db-collection@1537(typescript@5.8.3)':
+  '@tanstack/electric-db-collection@0.3.4(typescript@5.8.3)':
     dependencies:
       '@electric-sql/client': 1.5.18
       '@standard-schema/spec': 1.1.0
-      '@tanstack/db': https://pkg.pr.new/@tanstack/db@1537(typescript@5.8.3)
+      '@tanstack/db': 0.6.6(typescript@5.8.3)
       '@tanstack/store': 0.9.3
       debug: 4.4.3
     transitivePeerDependencies:
@@ -28457,6 +28509,8 @@ snapshots:
   '@tanstack/intent@0.0.9':
     dependencies:
       yaml: 2.8.1
+
+  '@tanstack/pacer-lite@0.1.1': {}
 
   '@tanstack/pacer-lite@0.2.1': {}
 
@@ -28473,7 +28527,7 @@ snapshots:
 
   '@tanstack/react-db@0.0.27(react@19.1.0)(typescript@5.8.3)':
     dependencies:
-      '@tanstack/db': https://pkg.pr.new/@tanstack/db@1537(typescript@5.8.3)
+      '@tanstack/db': 0.0.27(typescript@5.8.3)
       react: 19.1.0
       use-sync-external-store: 1.5.0(react@19.1.0)
     transitivePeerDependencies:
@@ -28481,7 +28535,7 @@ snapshots:
 
   '@tanstack/react-db@0.1.52(react@19.2.0)(typescript@5.7.2)':
     dependencies:
-      '@tanstack/db': https://pkg.pr.new/@tanstack/db@1537(typescript@5.7.2)
+      '@tanstack/db': 0.5.8(typescript@5.7.2)
       react: 19.2.0
       use-sync-external-store: 1.6.0(react@19.2.0)
     transitivePeerDependencies:
@@ -28489,7 +28543,7 @@ snapshots:
 
   '@tanstack/react-db@0.1.83(react@19.2.0)(typescript@5.8.3)':
     dependencies:
-      '@tanstack/db': https://pkg.pr.new/@tanstack/db@1537(typescript@5.8.3)
+      '@tanstack/db': 0.6.5(typescript@5.8.3)
       react: 19.2.0
       use-sync-external-store: 1.6.0(react@19.2.0)
     transitivePeerDependencies:
@@ -28497,15 +28551,15 @@ snapshots:
 
   '@tanstack/react-db@0.1.83(react@19.2.5)(typescript@5.8.3)':
     dependencies:
-      '@tanstack/db': https://pkg.pr.new/@tanstack/db@1537(typescript@5.8.3)
+      '@tanstack/db': 0.6.5(typescript@5.8.3)
       react: 19.2.5
       use-sync-external-store: 1.6.0(react@19.2.5)
     transitivePeerDependencies:
       - typescript
 
-  '@tanstack/react-db@https://pkg.pr.new/@tanstack/react-db@1537(react@19.2.0)(typescript@5.8.3)':
+  '@tanstack/react-db@0.1.84(react@19.2.0)(typescript@5.8.3)':
     dependencies:
-      '@tanstack/db': https://pkg.pr.new/@tanstack/db@1537(typescript@5.8.3)
+      '@tanstack/db': 0.6.6(typescript@5.8.3)
       react: 19.2.0
       use-sync-external-store: 1.6.0(react@19.2.0)
     transitivePeerDependencies:
@@ -37135,6 +37189,8 @@ snapshots:
       msgpackr-extract: 3.0.3
 
   muggle-string@0.4.1: {}
+
+  murmurhash-js@1.0.0: {}
 
   mute-stream@1.0.0: {}
 

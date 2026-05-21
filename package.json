@@ -39,10 +39,6 @@
     "*.{json,css,md,vue,yml,yaml}": "node_modules/.bin/prettier --write"
   },
   "pnpm": {
-    "overrides": {
-      "@tanstack/db": "https://pkg.pr.new/@tanstack/db@1537",
-      "@tanstack/db-ivm": "https://pkg.pr.new/@tanstack/db-ivm@1537"
-    },
     "patchedDependencies": {
       "@microsoft/fetch-event-source": "patches/@microsoft__fetch-event-source.patch"
     }
