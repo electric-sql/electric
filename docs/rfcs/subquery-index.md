@@ -94,8 +94,8 @@ It's implimented as an ETS table (one ETS table per stack_id)
 subquery_id, value -> list(times)
 
 the meaning of the result:
-  doesn't exist - the value is not a member of the subquery for all logical times
-  [] - the value is a member of the subquery for all logical times
+  doesn't exist - the value is not a member of the subquery at any retained logical time
+  [] - the value is a member of the subquery at every retained logical time
   [:out, 9] - the value was out of the set before 9 and in the set from time 9 and above
   [:out, 9, 11] - the value was out of the set before 9 and in the set from 9 to 10 and out the set again from time 11 and above
   [:in, 9] - the value was in of the set before 9 and out the set from time 9 and above
