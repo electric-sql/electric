@@ -924,9 +924,8 @@ defmodule Electric.Shapes.FilterTest do
     # `Filter.add_shape` stored for the shape's dependency (handles either
     # a real dep_handle or the `{shape_handle, dep_index}` fallback that
     # `register_shape` falls back to when `shape_dependencies_handles`
-    # isn't populated), seeds `MultiTimeView` with the values, binds the
-    # shape's `subquery_ref` at logical time 0, and wires positive routing
-    # rows so `affected_shapes/2` can find each value.
+    # isn't populated), seeds `MultiTimeView` with the values, and wires
+    # positive routing rows so `affected_shapes/2` can find each value.
     defp seed_membership(filter, shape_id, _shape, subquery_ref, values) do
       index = Filter.subquery_index(filter)
       mtv = index.multi_time_view
@@ -935,8 +934,6 @@ defmodule Electric.Shapes.FilterTest do
 
       MultiTimeView.init_subquery(mtv, subquery_id, values)
       MultiTimeView.mark_ready(mtv, subquery_id)
-
-      :ok = SubqueryIndex.set_shape_subquery(index, shape_id, subquery_ref, subquery_id, 0)
 
       for v <- values do
         :ok = SubqueryIndex.add_positive_route(index, subquery_id, v)
@@ -1177,9 +1174,15 @@ defmodule Electric.Shapes.FilterTest do
            "CREATE TABLE IF NOT EXISTS or_parent (id INT PRIMARY KEY)",
            "CREATE TABLE IF NOT EXISTS or_child (id INT PRIMARY KEY, par_id INT REFERENCES or_parent(id), value TEXT NOT NULL)"
          ]
-    test "mixed OR+subquery shape falls back to other_shapes verification", %{
+    test "mixed OR+subquery shape over-routes through other_shapes", %{
       inspector: inspector
     } do
+      # A mixed OR shape lands in the catch-all `other_shapes` path because
+      # neither side of the OR is individually optimisable. The filter
+      # cannot evaluate the sublink (it would need a consumer's logical
+      # time, which it intentionally doesn't track), so any record reaches
+      # the shape and the consumer's `Shape.convert_change` makes the final
+      # decision.
       {:ok, shape} =
         Shape.new("or_child",
           inspector: inspector,
@@ -1217,7 +1220,10 @@ defmodule Electric.Shapes.FilterTest do
         record: %{"id" => "50", "par_id" => "99", "value" => "other"}
       }
 
-      assert Filter.affected_shapes(filter, insert_no_match) == MapSet.new([])
+      # Over-routed: the filter cannot resolve the sublink at the OR's left
+      # branch without a per-consumer logical time, so it includes shape1
+      # and lets the consumer drop the record.
+      assert Filter.affected_shapes(filter, insert_no_match) == MapSet.new(["shape1"])
     end
 
     @tag with_sql: [
@@ -1351,11 +1357,10 @@ defmodule Electric.Shapes.FilterTest do
       SubqueryIndex.mark_ready(index, "shape1")
 
       # Before remove, the shape routes records whose value is in the
-      # subquery view, and the shape is bound to the dep's subquery_id.
+      # subquery view.
       hit = %NewRecord{relation: {"public", "child"}, record: %{"id" => "1", "par_id" => "9"}}
       assert Filter.affected_shapes(filter, hit) == MapSet.new(["shape1"])
       assert SubqueryIndex.has_positions?(index, "shape1")
-      assert SubqueryIndex.get_shape_subquery(index, "shape1", subquery_ref) != nil
 
       Filter.remove_shape(filter, "shape1")
 
@@ -1363,7 +1368,6 @@ defmodule Electric.Shapes.FilterTest do
       # are gone.
       assert Filter.affected_shapes(filter, hit) == MapSet.new([])
       refute SubqueryIndex.has_positions?(index, "shape1")
-      assert SubqueryIndex.get_shape_subquery(index, "shape1", subquery_ref) == nil
     end
 
     @tag with_sql: [

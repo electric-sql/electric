@@ -14,7 +14,6 @@ defmodule Electric.Shapes.Consumer.EventHandler.Subqueries.Buffering do
   alias Electric.Shapes.Consumer.Subqueries.RefResolver
   alias Electric.Shapes.Consumer.Subqueries.ShapeInfo
   alias Electric.Shapes.Consumer.Subqueries.SplicePlan
-  alias Electric.Shapes.Filter.Indexes.SubqueryIndex
   alias Electric.Shapes.Filter.Indexes.SubqueryIndex.MultiTimeView
   alias Electric.Shapes.Filter.Indexes.SubqueryIndex.ProgressMonitor
 
@@ -211,26 +210,12 @@ defmodule Electric.Shapes.Consumer.EventHandler.Subqueries.Buffering do
   end
 
   defp advance_consumer_to_after_move(%__MODULE__{shape_info: shape_info}, active_move) do
-    case SubqueryIndex.for_stack(shape_info.stack_id) do
-      nil ->
-        :ok
-
-      index ->
-        SubqueryIndex.set_shape_subquery(
-          index,
-          shape_info.shape_handle,
-          active_move.subquery_ref,
-          active_move.subquery_id,
-          active_move.to_time
-        )
-
-        ProgressMonitor.notify_processed_up_to(
-          shape_info.stack_id,
-          active_move.from_time,
-          active_move.subquery_id,
-          shape_info.shape_handle
-        )
-    end
+    ProgressMonitor.notify_processed_up_to(
+      shape_info.stack_id,
+      active_move.from_time,
+      active_move.subquery_id,
+      shape_info.shape_handle
+    )
   end
 
   defp maybe_subscribe_global_lsn(effects, true) do

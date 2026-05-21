@@ -339,7 +339,7 @@ defmodule Electric.Shapes.Filter.WhereCondition do
   end
 
   defp other_shapes_affected(
-         %Filter{subquery_index: index, where_cond_table: table},
+         %Filter{where_cond_table: table},
          condition_id,
          record
        ) do
@@ -350,7 +350,7 @@ defmodule Electric.Shapes.Filter.WhereCondition do
       [shape_count: map_size(other_shapes)],
       fn ->
         for {{shape_id, _branch_key}, where} <- other_shapes,
-            other_shape_matches?(index, shape_id, where, record),
+            other_shape_matches?(where, record),
             into: MapSet.new() do
           shape_id
         end
@@ -358,11 +358,16 @@ defmodule Electric.Shapes.Filter.WhereCondition do
     )
   end
 
-  defp other_shape_matches?(index, shape_id, where, record) do
+  # The filter cannot evaluate subquery membership itself (see
+  # `WhereClause.subquery_member_unknown/0`). For non-subquery conjuncts in
+  # the residual `and_where` this still produces a precise answer; a sublink
+  # in the residual makes the runner error out, which we treat as "include"
+  # so the consumer does the exact check in `Shape.convert_change`.
+  defp other_shape_matches?(where, record) do
     case WhereClause.includes_record_result(
            where,
            record,
-           WhereClause.subquery_member_from_index(index, shape_id)
+           WhereClause.subquery_member_unknown()
          ) do
       {:ok, included?} -> included?
       :error -> true

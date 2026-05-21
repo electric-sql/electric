@@ -32,7 +32,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
   end
 
   describe "register_shape/4" do
-    test "stores polarity per subquery_ref and marks the shape as fallback", %{index: index} do
+    test "marks the shape as fallback for both polarities", %{index: index} do
       SubqueryIndex.register_shape(index, "s1", make_plan(), [@dep_handle_a])
 
       assert SubqueryIndex.fallback?(index, "s1")
@@ -46,27 +46,10 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
 
       assert SubqueryIndex.fallback?(index, "s2")
     end
-
-    test "membership_or_fallback? defaults to true for positive fallback", %{index: index} do
-      SubqueryIndex.register_shape(index, "s1", make_plan(), [@dep_handle_a])
-
-      assert SubqueryIndex.membership_or_fallback?(index, "s1", @subquery_ref, 99)
-    end
-
-    test "membership_or_fallback? defaults to false for negated fallback", %{index: index} do
-      SubqueryIndex.register_shape(
-        index,
-        "s1",
-        make_plan(polarity: :negated),
-        [@dep_handle_a]
-      )
-
-      refute SubqueryIndex.membership_or_fallback?(index, "s1", @subquery_ref, 99)
-    end
   end
 
   describe "unregister_shape/2" do
-    test "drops polarity, dep_handle, and fallback rows", %{index: index} do
+    test "drops dep_handle and fallback rows", %{index: index} do
       SubqueryIndex.register_shape(index, "s1", make_plan(), [@dep_handle_a])
       SubqueryIndex.unregister_shape(index, "s1")
 
@@ -170,7 +153,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
   end
 
   describe "affected_shapes/4 (positive routing)" do
-    test "returns shapes whose subquery has the value at the shape's logical time", %{
+    test "routes shapes by value-keyed positive routing", %{
       filter: filter,
       index: index,
       mtv: mtv,
@@ -180,7 +163,6 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
       MultiTimeView.mark_ready(mtv, @dep_handle_a)
 
       register_node_shape(filter, condition_id, "s1")
-      SubqueryIndex.set_shape_subquery(index, "s1", @subquery_ref, @dep_handle_a, 0)
       SubqueryIndex.mark_ready(index, "s1")
 
       assert MapSet.new(["s1"]) ==
@@ -192,12 +174,18 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
                )
     end
 
-    test "diverging consumer times: routing keeps the value, exact check splits the result", %{
+    test "diverging consumer times: filter over-routes both shapes", %{
       filter: filter,
       index: index,
       mtv: mtv,
       condition_id: condition_id
     } do
+      # The filter is time-unaware by design: it routes on the retained
+      # window, so a value that is a member at *some* time fans out to every
+      # attached shape. Per-consumer correctness is left to
+      # `Shape.convert_change`, which evaluates membership at the consumer's
+      # own logical time(s) — including both `from_time` and `to_time`
+      # during a buffered move.
       MultiTimeView.init_subquery(mtv, @dep_handle_a, [])
       MultiTimeView.mark_ready(mtv, @dep_handle_a)
 
@@ -207,23 +195,16 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
       MultiTimeView.mark_in(mtv, @dep_handle_a, 30, 1)
       SubqueryIndex.add_positive_route(index, @dep_handle_a, 30)
 
-      SubqueryIndex.set_shape_subquery(index, "s_old", @subquery_ref, @dep_handle_a, 0)
-      SubqueryIndex.set_shape_subquery(index, "s_new", @subquery_ref, @dep_handle_a, 1)
       SubqueryIndex.mark_ready(index, "s_old")
       SubqueryIndex.mark_ready(index, "s_new")
 
-      affected =
-        SubqueryIndex.affected_shapes(
-          filter,
-          condition_id,
-          @field,
-          %{"par_id" => "30"}
-        )
-
-      assert MapSet.new(["s_old", "s_new"]) == affected
-
-      refute SubqueryIndex.member?(index, "s_old", @subquery_ref, 30)
-      assert SubqueryIndex.member?(index, "s_new", @subquery_ref, 30)
+      assert MapSet.new(["s_old", "s_new"]) ==
+               SubqueryIndex.affected_shapes(
+                 filter,
+                 condition_id,
+                 @field,
+                 %{"par_id" => "30"}
+               )
     end
 
     test "returns only shapes registered under the requested field key", %{
@@ -247,16 +228,6 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
         SubqueryIndex.mark_ready(index, shape)
       end
 
-      SubqueryIndex.set_shape_subquery(index, "local", @subquery_ref, @dep_handle_a, 0)
-
-      SubqueryIndex.set_shape_subquery(
-        index,
-        "other_field",
-        @other_subquery_ref,
-        @dep_handle_a,
-        0
-      )
-
       assert MapSet.new(["local"]) ==
                SubqueryIndex.affected_shapes(
                  filter,
@@ -279,7 +250,6 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
         and_where: where("name ILIKE 'keep%'", %{["name"] => :text})
       )
 
-      SubqueryIndex.set_shape_subquery(index, "tail", @subquery_ref, @dep_handle_a, 0)
       SubqueryIndex.mark_ready(index, "tail")
 
       assert MapSet.new(["tail"]) ==
@@ -326,7 +296,6 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
       MultiTimeView.mark_ready(mtv, @dep_handle_a)
 
       register_node_shape(filter, condition_id, "n1", polarity: :negated)
-      SubqueryIndex.set_shape_subquery(index, "n1", @subquery_ref, @dep_handle_a, 0)
       SubqueryIndex.mark_ready(index, "n1")
 
       assert MapSet.new() ==
@@ -358,7 +327,6 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
       register_node_shape(filter, condition_id, "n1", polarity: :negated)
       MultiTimeView.mark_in(mtv, @dep_handle_a, 30, 1)
 
-      SubqueryIndex.set_shape_subquery(index, "n1", @subquery_ref, @dep_handle_a, 0)
       SubqueryIndex.mark_ready(index, "n1")
 
       assert MapSet.new(["n1"]) ==
@@ -529,29 +497,6 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
 
       refute SubqueryIndex.fallback?(index, "s1")
       assert :ets.match(table, {{:node_fallback, :_, :_, :_, "s1"}, :_}) == []
-    end
-  end
-
-  describe "member?/5 and membership_or_fallback?/5" do
-    test "membership_or_fallback? defers to MultiTimeView at the shape's logical time", %{
-      filter: filter,
-      index: index,
-      mtv: mtv,
-      condition_id: condition_id
-    } do
-      MultiTimeView.init_subquery(mtv, @dep_handle_a, [5])
-      MultiTimeView.mark_ready(mtv, @dep_handle_a)
-
-      register_node_shape(filter, condition_id, "s1")
-      SubqueryIndex.set_shape_subquery(index, "s1", @subquery_ref, @dep_handle_a, 0)
-      SubqueryIndex.mark_ready(index, "s1")
-
-      assert SubqueryIndex.membership_or_fallback?(index, "s1", @subquery_ref, 5)
-      refute SubqueryIndex.membership_or_fallback?(index, "s1", @subquery_ref, 99)
-    end
-
-    test "member? without a stored logical time returns false", %{index: index} do
-      refute SubqueryIndex.member?(index, "no_such_shape", @subquery_ref, 1)
     end
   end
 

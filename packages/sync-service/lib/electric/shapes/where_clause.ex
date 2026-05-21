@@ -1,7 +1,6 @@
 defmodule Electric.Shapes.WhereClause do
   alias PgInterop.Sublink
   alias Electric.Replication.Eval.Runner
-  alias Electric.Shapes.Filter.Indexes.SubqueryIndex
   alias Electric.Shapes.Filter.Indexes.SubqueryIndex.MultiTimeView
 
   @spec includes_record_result(
@@ -46,16 +45,21 @@ defmodule Electric.Shapes.WhereClause do
   end
 
   @doc """
-  Build a subquery_member? callback that queries the SubqueryIndex.
+  Build a subquery_member? callback that signals "unknown" by raising.
 
-  Used for filter-side exact verification: checks whether a specific
-  shape currently contains a typed value for a canonical subquery ref.
+  The filter cannot answer subquery membership correctly: a consumer that is
+  mid-move on a subquery is effectively reading at two logical times at once,
+  which a single per-shape pin cannot represent. So whenever the filter is
+  evaluating a residual `and_where` that contains a sublink, this callback
+  raises. The runner catches the raise and throws `:could_not_compute`,
+  which propagates as `:error` from `includes_record_result/3` — the caller
+  treats that as "over-route, let the consumer do the exact check in
+  `Shape.convert_change`".
   """
-  @spec subquery_member_from_index(SubqueryIndex.t(), term()) ::
-          ([String.t()], term() -> boolean())
-  def subquery_member_from_index(index, shape_handle) do
-    fn subquery_ref, typed_value ->
-      SubqueryIndex.membership_or_fallback?(index, shape_handle, subquery_ref, typed_value)
+  @spec subquery_member_unknown() :: ([String.t()], term() -> boolean())
+  def subquery_member_unknown do
+    fn _subquery_ref, _typed_value ->
+      raise "subquery membership cannot be evaluated at the filter; consumer must check"
     end
   end
 

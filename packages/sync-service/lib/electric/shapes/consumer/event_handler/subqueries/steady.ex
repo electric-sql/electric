@@ -13,7 +13,6 @@ defmodule Electric.Shapes.Consumer.EventHandler.Subqueries.Steady do
   alias Electric.Shapes.Consumer.Subqueries.MoveQueue
   alias Electric.Shapes.Consumer.Subqueries.RefResolver
   alias Electric.Shapes.Consumer.Subqueries.ShapeInfo
-  alias Electric.Shapes.Filter.Indexes.SubqueryIndex
   alias Electric.Shapes.Filter.Indexes.SubqueryIndex.MultiTimeView
   alias Electric.Shapes.Filter.Indexes.SubqueryIndex.ProgressMonitor
 
@@ -173,31 +172,17 @@ defmodule Electric.Shapes.Consumer.EventHandler.Subqueries.Steady do
 
   defp advance_subquery_index_time(
          %ShapeInfo{} = shape_info,
-         subquery_ref,
+         _subquery_ref,
          subquery_id,
          from_time,
-         to_time
+         _to_time
        ) do
-    case SubqueryIndex.for_stack(shape_info.stack_id) do
-      nil ->
-        :ok
-
-      index ->
-        SubqueryIndex.set_shape_subquery(
-          index,
-          shape_info.shape_handle,
-          subquery_ref,
-          subquery_id,
-          to_time
-        )
-
-        ProgressMonitor.notify_processed_up_to(
-          shape_info.stack_id,
-          from_time,
-          subquery_id,
-          shape_info.shape_handle
-        )
-    end
+    ProgressMonitor.notify_processed_up_to(
+      shape_info.stack_id,
+      from_time,
+      subquery_id,
+      shape_info.shape_handle
+    )
   end
 
   @doc false

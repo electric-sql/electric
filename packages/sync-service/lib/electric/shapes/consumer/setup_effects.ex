@@ -2,7 +2,6 @@ defmodule Electric.Shapes.Consumer.SetupEffects do
   # Executes ordered boot-time setup effects for consumer handler initialization.
 
   alias Electric.Replication.ShapeLogCollector
-  alias Electric.Shapes.Consumer.EventHandler.Subqueries.Steady
   alias Electric.Shapes.Consumer.State
   alias Electric.Shapes.Filter.Indexes.SubqueryIndex
 
@@ -44,23 +43,14 @@ defmodule Electric.Shapes.Consumer.SetupEffects do
     end
   end
 
-  defp execute_effect(
-         %SeedSubqueryIndex{},
-         %State{event_handler: %Steady{subquery_refs: refs}} = state
-       ) do
+  defp execute_effect(%SeedSubqueryIndex{}, %State{} = state) do
     case SubqueryIndex.for_stack(state.stack_id) do
       nil ->
         {:ok, state}
 
       index ->
-        for {ref, %{subquery_id: subquery_id, time: time}} <- refs do
-          SubqueryIndex.set_shape_subquery(index, state.shape_handle, ref, subquery_id, time)
-        end
-
-        SubqueryIndex.mark_ready(index, state.shape_handle)
+        :ok = SubqueryIndex.mark_ready(index, state.shape_handle)
         {:ok, state}
     end
   end
-
-  defp execute_effect(%SeedSubqueryIndex{}, %State{} = state), do: {:ok, state}
 end

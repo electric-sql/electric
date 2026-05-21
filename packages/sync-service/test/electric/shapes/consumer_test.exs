@@ -2265,6 +2265,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
     test "consumer startup registers with the stack-scoped subquery index", ctx do
       alias Electric.Shapes.Filter.Indexes.SubqueryIndex
+      alias Electric.Shapes.Filter.Indexes.SubqueryIndex.MultiTimeView
 
       {shape_handle, _} =
         ShapeCache.get_or_create_shape_handle(@shape_with_subquery, ctx.stack_id)
@@ -2276,21 +2277,22 @@ defmodule Electric.Shapes.ConsumerTest do
 
       # Filter.add_shape registers the outer shape with the index. After
       # the consumer's initial materialisation lands, the shape is no
-      # longer in fallback (its subquery_ref is bound to the dep's
-      # subquery_id at the materializer's current logical time).
+      # longer in fallback, the dep view is ready at logical time 0, and
+      # the dep handle has been recorded for the shape.
       assert SubqueryIndex.has_positions?(index, shape_handle)
       refute SubqueryIndex.fallback?(index, shape_handle)
 
       {:ok, shape} = Electric.Shapes.fetch_shape_by_handle(ctx.stack_id, shape_handle)
       [dep_handle] = shape.shape_dependencies_handles
 
-      assert {^dep_handle, 0} =
-               SubqueryIndex.get_shape_subquery(index, shape_handle, ["$sublink", "0"])
+      assert MultiTimeView.ready?(index.multi_time_view, dep_handle)
+      assert MultiTimeView.current_time(index.multi_time_view, dep_handle) == 0
     end
 
     test "consumer steady dependency move_in advances the shape's subquery index time",
          ctx do
       alias Electric.Shapes.Filter.Indexes.SubqueryIndex
+      alias Electric.Shapes.Filter.Indexes.SubqueryIndex.MultiTimeView
 
       parent = self()
 
@@ -2312,11 +2314,12 @@ defmodule Electric.Shapes.ConsumerTest do
       :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
 
       index = SubqueryIndex.for_stack(ctx.stack_id)
-      {:ok, _shape} = Electric.Shapes.fetch_shape_by_handle(ctx.stack_id, shape_handle)
+      mtv = index.multi_time_view
+      {:ok, shape} = Electric.Shapes.fetch_shape_by_handle(ctx.stack_id, shape_handle)
+      [dep_handle] = shape.shape_dependencies_handles
 
-      # Before any dep moves: shape's subquery_ref is bound at logical
-      # time 0 and the dep view is empty, so no value is a member yet.
-      refute SubqueryIndex.member?(index, shape_handle, ["$sublink", "0"], 1)
+      # Before any dep moves: dep view is empty at logical time 0.
+      refute MultiTimeView.member?(mtv, dep_handle, 1, 0)
 
       # Send a new record for the dependency table to trigger a move_in
       ShapeLogCollector.handle_event(
@@ -2332,10 +2335,9 @@ defmodule Electric.Shapes.ConsumerTest do
 
       assert_receive {:query_requested, consumer_pid}
 
-      # While the move-in query is buffering, the consumer's subquery
-      # time is still at 0, so the new value is not yet visible through
-      # `member?/4` (which reads at the shape's stored logical time).
-      refute SubqueryIndex.member?(index, shape_handle, ["$sublink", "0"], 1)
+      # While the move-in query is buffering, the dep view at time 0 is
+      # unchanged — value 1 is still not a member there.
+      refute MultiTimeView.member?(mtv, dep_handle, 1, 0)
 
       send(consumer_pid, {:pg_snapshot_known, {100, 300, []}})
 
@@ -2365,9 +2367,11 @@ defmodule Electric.Shapes.ConsumerTest do
       ref = Shapes.Consumer.register_for_changes(ctx.stack_id, shape_handle)
       assert_receive {^ref, :new_changes, _offset}, @receive_timeout
 
-      # After splice the shape's subquery time has advanced past the
-      # move-in, and value 1 is now visible at the shape's stored time.
-      assert SubqueryIndex.member?(index, shape_handle, ["$sublink", "0"], 1)
+      # After splice the materializer's logical time has advanced past
+      # the move-in, and value 1 is now visible at the new current time.
+      current = MultiTimeView.current_time(mtv, dep_handle)
+      assert current > 0
+      assert MultiTimeView.member?(mtv, dep_handle, 1, current)
     end
 
     test "consumer cleanup removes shape rows from the subquery index", ctx do

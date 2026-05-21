@@ -5,12 +5,13 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   # reference the same subquery: groups (per filter node + polarity), child
   # nodes (per group + dependency subquery), value-keyed positive routing,
   # group-keyed negated routing, and child participants. Per-shape value
-  # membership is *not* stored here — exact-membership checks resolve
-  # `{shape_handle, subquery_ref}` to `{subquery_id, logical_time}` and call
-  # the shared `MultiTimeView` at that time.
-  #
-  # See `docs/rfcs/subquery-index.md`, sections *SubqueryIndex Data Model*
-  # and *Routing*.
+  # membership is *not* stored here, and the filter is intentionally
+  # time-unaware: it routes conservatively across all retained logical times
+  # and lets each consumer's `Shape.convert_change` do the exact check at its
+  # own per-subquery logical time(s). See `docs/rfcs/subquery-index.md`
+  # §Routing for why a per-shape logical-time pin in the filter cannot
+  # represent a consumer that is mid-move on a subquery (it reads at both
+  # `from_time` and `to_time` simultaneously).
   @moduledoc false
 
   import Electric, only: [is_stack_id: 1]
@@ -63,19 +64,14 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   end
 
   @doc """
-  Register per-shape metadata: per-occurrence polarity, per-dep-index
-  dependency handle (a.k.a. `subquery_id`), and the fallback flag.
+  Register per-shape metadata: per-dep-index dependency handle (a.k.a.
+  `subquery_id`) and the fallback flag.
 
   `dep_handles` is the outer shape's `shape_dependencies_handles` list,
   indexed by `dep_index`.
   """
   @spec register_shape(t(), term(), DnfPlan.t(), [term()]) :: :ok
   def register_shape(%SubqueryIndex{table: table}, shape_handle, %DnfPlan{} = plan, dep_handles) do
-    for {_pos, info} <- plan.positions, info.is_subquery do
-      polarity = if info.negated, do: :negated, else: :positive
-      :ets.insert(table, {{:polarity, shape_handle, info.subquery_ref}, polarity})
-    end
-
     for dep_index <- Map.keys(plan.dependency_polarities) do
       dep_handle = Enum.at(dep_handles, dep_index) || {shape_handle, dep_index}
       :ets.insert(table, {{:dep_handle, shape_handle, dep_index}, dep_handle})
@@ -88,9 +84,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   @doc "Remove all metadata for `shape_handle`."
   @spec unregister_shape(t(), term()) :: :ok
   def unregister_shape(%SubqueryIndex{table: table}, shape_handle) do
-    :ets.match_delete(table, {{:polarity, shape_handle, :_}, :_})
     :ets.match_delete(table, {{:dep_handle, shape_handle, :_}, :_})
-    :ets.match_delete(table, {{:shape_subquery, shape_handle, :_}, :_})
     :ets.delete(table, {:fallback, shape_handle})
     :ok
   end
@@ -200,35 +194,6 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
         end
 
         node_status(table, condition_id, optimisation.field)
-    end
-  end
-
-  @doc """
-  Record that `shape_handle`'s `subquery_ref` should read at `time` against
-  the dependency view identified by `subquery_id`. Called after the
-  consumer has registered with the materializer in phase 2 of the RFC.
-  """
-  @spec set_shape_subquery(t(), term(), [String.t()], term(), non_neg_integer()) :: :ok
-  def set_shape_subquery(
-        %SubqueryIndex{table: table},
-        shape_handle,
-        subquery_ref,
-        subquery_id,
-        time
-      ) do
-    :ets.insert(table, {{:shape_subquery, shape_handle, subquery_ref}, {subquery_id, time}})
-    :ok
-  end
-
-  @spec get_shape_subquery(t(), term(), [String.t()]) :: {term(), non_neg_integer()} | nil
-  def get_shape_subquery(%SubqueryIndex{table: table}, shape_handle, subquery_ref) do
-    do_get_shape_subquery(table, shape_handle, subquery_ref)
-  end
-
-  defp do_get_shape_subquery(table, shape_handle, subquery_ref) do
-    case :ets.lookup(table, {:shape_subquery, shape_handle, subquery_ref}) do
-      [{_, mapping}] -> mapping
-      [] -> nil
     end
   end
 
@@ -361,67 +326,6 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
           acc
       end
     end)
-  end
-
-  @doc """
-  Exact membership for `shape_handle + subquery_ref + typed_value`. Resolves
-  to `{subquery_id, logical_time}` and consults the shared `MultiTimeView`.
-  Falls back to polarity-based answer while the shape is in fallback or
-  before its consumer has registered a logical time.
-  """
-  @spec membership_or_fallback?(t(), term(), [String.t()], term()) :: boolean()
-  def membership_or_fallback?(
-        %SubqueryIndex{table: table, multi_time_view: mtv},
-        shape_handle,
-        subquery_ref,
-        typed_value
-      ) do
-    if shape_in_fallback?(table, shape_handle) do
-      polarity_default(table, shape_handle, subquery_ref)
-    else
-      case do_get_shape_subquery(table, shape_handle, subquery_ref) do
-        {subquery_id, time} when not is_nil(mtv) ->
-          MultiTimeView.member?(mtv, subquery_id, typed_value, time)
-
-        _ ->
-          polarity_default(table, shape_handle, subquery_ref)
-      end
-    end
-  end
-
-  @doc """
-  Strict exact membership without the fallback shortcut. Returns `false`
-  when no logical time has been set for `{shape_handle, subquery_ref}`.
-  """
-  @spec member?(t(), term(), [String.t()], term()) :: boolean()
-  def member?(%SubqueryIndex{multi_time_view: nil}, _shape_handle, _subquery_ref, _typed_value),
-    do: false
-
-  def member?(
-        %SubqueryIndex{table: table, multi_time_view: mtv},
-        shape_handle,
-        subquery_ref,
-        typed_value
-      ) do
-    case do_get_shape_subquery(table, shape_handle, subquery_ref) do
-      {subquery_id, time} -> MultiTimeView.member?(mtv, subquery_id, typed_value, time)
-      nil -> false
-    end
-  end
-
-  defp polarity_default(table, shape_handle, subquery_ref) do
-    case :ets.lookup(table, {:polarity, shape_handle, subquery_ref}) do
-      [{_, :positive}] ->
-        true
-
-      [{_, :negated}] ->
-        false
-
-      [] ->
-        raise ArgumentError,
-              "missing polarity for shape #{inspect(shape_handle)} and ref " <>
-                inspect(subquery_ref)
-    end
   end
 
   defp ensure_node_meta(table, condition_id, field_key, testexpr) do
