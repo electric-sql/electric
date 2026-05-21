@@ -100,6 +100,11 @@ function buildContext(overrides: Partial<TenantContext> = {}): TenantContext {
       registry: {
         getEntityByStream: vi.fn().mockResolvedValue(entity),
         updateStatus: vi.fn().mockResolvedValue(undefined),
+        materializeReleasedClaim: vi.fn().mockResolvedValue({
+          claim: null,
+          entityCleared: true,
+        }),
+        materializeHeartbeatClaim: vi.fn().mockResolvedValue(undefined),
       },
       enrichPayload: vi.fn(async (payload: Record<string, unknown>) => ({
         ...payload,
@@ -579,5 +584,183 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
     } finally {
       fetchSpy.mockRestore()
     }
+  })
+
+  describe(`callback-forward done releases the durable claim independently of the in-memory write token`, () => {
+    const upstreamOk = (): void => {
+      vi.spyOn(globalThis, `fetch`).mockResolvedValue(
+        new Response(JSON.stringify({ ok: true, next_wake: false }), {
+          headers: { 'content-type': `application/json` },
+        })
+      )
+    }
+
+    it(`releases the consumer_claims row and marks the entity idle when the consumer holds the in-memory write token`, async () => {
+      const select = selectDb([
+        {
+          callbackUrl: `http://durable.local/v1/stream-meta/subscriptions/horton-handler/callback?service=tenant-a`,
+          primaryStream: `/horton/demo/main`,
+        },
+      ])
+      upstreamOk()
+      const ctx = buildContext({
+        pgDb: { select: select.select } as any,
+      })
+      ctx.runtime.claimWriteTokens.mint(
+        `tenant-a`,
+        `/horton/demo/main`,
+        `wake-1`
+      )
+
+      try {
+        const response = await globalRouter.fetch(
+          new Request(`http://agents.local/_electric/callback-forward/wake-1`, {
+            method: `POST`,
+            headers: {
+              'content-type': `application/json`,
+              authorization: `Bearer callback-token`,
+            },
+            body: JSON.stringify({
+              epoch: 7,
+              acks: [{ path: `/horton/demo/main`, offset: `1` }],
+              done: true,
+            }),
+          }),
+          ctx
+        )
+
+        expect(response.status).toBe(200)
+        expect(
+          ctx.entityManager.registry.materializeReleasedClaim
+        ).toHaveBeenCalledWith(
+          expect.objectContaining({
+            consumerId: `wake-1`,
+            epoch: 7,
+            ackedStreams: [{ path: `/horton/demo/main`, offset: `1` }],
+          })
+        )
+        expect(ctx.entityManager.registry.updateStatus).toHaveBeenCalledWith(
+          `/horton/demo`,
+          `idle`
+        )
+      } finally {
+        vi.mocked(globalThis.fetch).mockRestore()
+      }
+    })
+
+    it(`releases the consumer_claims row and marks the entity idle when no in-memory write token is present for the consumer`, async () => {
+      const select = selectDb([
+        {
+          callbackUrl: `http://durable.local/v1/stream-meta/subscriptions/horton-handler/callback?service=tenant-a`,
+          primaryStream: `/horton/demo/main`,
+        },
+      ])
+      upstreamOk()
+      const ctx = buildContext({
+        pgDb: { select: select.select } as any,
+      })
+
+      try {
+        const response = await globalRouter.fetch(
+          new Request(`http://agents.local/_electric/callback-forward/wake-1`, {
+            method: `POST`,
+            headers: {
+              'content-type': `application/json`,
+              authorization: `Bearer callback-token`,
+            },
+            body: JSON.stringify({
+              epoch: 7,
+              acks: [{ path: `/horton/demo/main`, offset: `1` }],
+              done: true,
+            }),
+          }),
+          ctx
+        )
+
+        expect(response.status).toBe(200)
+        expect(
+          ctx.entityManager.registry.materializeReleasedClaim
+        ).toHaveBeenCalledWith(
+          expect.objectContaining({
+            consumerId: `wake-1`,
+            epoch: 7,
+          })
+        )
+        expect(ctx.entityManager.registry.updateStatus).toHaveBeenCalledWith(
+          `/horton/demo`,
+          `idle`
+        )
+      } finally {
+        vi.mocked(globalThis.fetch).mockRestore()
+      }
+    })
+
+    it(`releases the consumer_claims row for the old consumer when a newer consumer has taken over the in-memory token, without disturbing the newer consumer's token or the entity status`, async () => {
+      const select = selectDb([
+        {
+          callbackUrl: `http://durable.local/v1/stream-meta/subscriptions/horton-handler/callback?service=tenant-a`,
+          primaryStream: `/horton/demo/main`,
+        },
+      ])
+      upstreamOk()
+      const ctx = buildContext({
+        pgDb: { select: select.select } as any,
+      })
+      // The newer consumer is the active dispatch in the DB, so releasing
+      // the older consumer's row must not clear the entity's dispatch state.
+      ;(
+        ctx.entityManager.registry.materializeReleasedClaim as any
+      ).mockResolvedValue({ claim: null, entityCleared: false })
+
+      ctx.runtime.claimWriteTokens.mint(
+        `tenant-a`,
+        `/horton/demo/main`,
+        `wake-1`
+      )
+      ctx.runtime.claimWriteTokens.mint(
+        `tenant-a`,
+        `/horton/demo/main`,
+        `wake-2`
+      )
+
+      try {
+        await globalRouter.fetch(
+          new Request(`http://agents.local/_electric/callback-forward/wake-1`, {
+            method: `POST`,
+            headers: {
+              'content-type': `application/json`,
+              authorization: `Bearer callback-token`,
+            },
+            body: JSON.stringify({
+              epoch: 7,
+              acks: [{ path: `/horton/demo/main`, offset: `1` }],
+              done: true,
+            }),
+          }),
+          ctx
+        )
+
+        expect(
+          ctx.entityManager.registry.materializeReleasedClaim
+        ).toHaveBeenCalledWith(
+          expect.objectContaining({
+            consumerId: `wake-1`,
+            epoch: 7,
+          })
+        )
+        // The newer consumer owns the entity now — its status must stay
+        // as-is and its in-memory write token must remain intact.
+        expect(ctx.entityManager.registry.updateStatus).not.toHaveBeenCalled()
+        expect(
+          ctx.runtime.claimWriteTokens.owns(
+            `tenant-a`,
+            `/horton/demo/main`,
+            `wake-2`
+          )
+        ).toBe(true)
+      } finally {
+        vi.mocked(globalThis.fetch).mockRestore()
+      }
+    })
   })
 })

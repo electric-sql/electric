@@ -624,8 +624,15 @@ async function callbackForward(
       const entity = await ctx.entityManager.registry.getEntityByStream(
         target.primaryStream
       )
-      if (entity && stillOwnsClaim) {
-        if (epoch !== undefined) {
+
+      // Release the consumer_claims row by its DB identity (consumerId,
+      // epoch). The in-memory write token is a separate concern (write
+      // authorization during the run); release of the durable row must
+      // succeed even if the token was lost (server restart) or evicted
+      // (a later wake re-minted for the same stream).
+      let entityCleared = false
+      if (epoch !== undefined) {
+        const result =
           await ctx.entityManager.registry.materializeReleasedClaim?.({
             consumerId,
             epoch,
@@ -643,28 +650,41 @@ async function callbackForward(
                 })
               : undefined,
           })
-        }
+        entityCleared = result?.entityCleared ?? false
+      }
+
+      // Transition entity back to idle when either signal says it's safe:
+      // - entityCleared: our release just cleared the entity's active
+      //   dispatch state, so no in-flight wake remains.
+      // - stillOwnsClaim: this consumer is still the in-memory write-token
+      //   owner, so no newer wake has displaced it. Covers two cases:
+      //   (a) retry of a failed done (first attempt cleared the DB state
+      //   but failed to update status), (b) server restart scenarios where
+      //   the token is intact even though entityDispatchState may diverge.
+      // If both are false, a newer wake owns the entity — leave status as-is.
+      if (entity && (entityCleared || stillOwnsClaim)) {
         await ctx.entityManager.registry.updateStatus(entity.url, `idle`)
-        ctx.runtime.claimWriteTokens.clearStream(
-          ctx.service,
-          target.primaryStream
-        )
         await ctx.entityBridgeManager.onEntityChanged(entity.url)
         serverLog.info(
           `[callback-forward] status updated to idle for ${entity.url}`
         )
-      } else if (stillOwnsClaim) {
+      } else if (!entity) {
+        serverLog.warn(
+          `[callback-forward] done received but no entity found for stream=${target.primaryStream}`
+        )
+      }
+
+      // Clear the in-memory write token only if this consumer still owns it.
+      // If a newer wake has taken over, that newer wake owns the token now
+      // and we must not clear it out from under it.
+      if (stillOwnsClaim) {
         ctx.runtime.claimWriteTokens.clearStream(
           ctx.service,
           target.primaryStream
         )
       } else if (entity) {
         serverLog.info(
-          `[callback-forward] done ignored for stale claim stream=${target.primaryStream} consumer=${consumerId}`
-        )
-      } else {
-        serverLog.warn(
-          `[callback-forward] done received but no entity found for stream=${target.primaryStream}`
+          `[callback-forward] done arrived after in-memory token evicted (stream=${target.primaryStream} consumer=${consumerId})`
         )
       }
     } else if (requestBody?.done === true) {
