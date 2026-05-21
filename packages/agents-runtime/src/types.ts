@@ -32,6 +32,7 @@ import type {
   EntityStreamDB as RuntimeEntityStreamDB,
   EntityStreamDBWithActions as RuntimeEntityStreamDBWithActions,
 } from './entity-stream-db'
+import type { Sandbox, SandboxFactory } from './sandbox/types'
 import type {
   ChildStatusEntry,
   ContextEntryAttrs as EntityContextEntryAttrs,
@@ -662,6 +663,13 @@ export interface ProcessWakeConfig {
   idleTimeout?: number
   /** Heartbeat interval in ms (default: 10_000) */
   heartbeatInterval?: number
+  /**
+   * Resolves the sandbox factory for an entity type. Called once per
+   * wake-session at sandbox construction. Returning `undefined` lets
+   * `processWake` fall back to
+   * `unrestrictedSandbox({ workingDirectory: process.cwd() })`.
+   */
+  resolveSandboxFactory?: (entityType: string) => SandboxFactory | undefined
 }
 
 export type WakePhase = `setup` | `active` | `closing` | `closed`
@@ -846,6 +854,17 @@ export interface HandlerContext<
   events: Array<ChangeEvent>
   actions: TActions
   electricTools: Array<AgentTool>
+  /**
+   * Sandbox for this wake. Provisioned by the runtime via the entity
+   * type's `defaultSandbox` factory (or the runtime-level fallback) at
+   * the start of each wake-session and disposed in `processWake`'s
+   * outer `finally`. A single wake-session that drains multiple queued
+   * wakes for the same entity reuses one sandbox; across wake-sessions
+   * a new sandbox is constructed and inter-wake state preservation is
+   * the provider's responsibility. Handlers must NOT call
+   * `sandbox.dispose()` — `processWake` owns disposal.
+   */
+  sandbox: Sandbox
   useAgent: (config: AgentConfig) => AgentHandle
   useContext: (config: UseContextConfig) => void
   timelineMessages: (opts?: TimelineProjectionOpts) => Array<TimestampedMessage>
@@ -923,6 +942,15 @@ export interface EntityDefinition<
   creationSchema?: TCreationSchema
   inboxSchemas?: Record<string, StandardJSONSchemaV1>
   outputSchemas?: Record<string, StandardJSONSchemaV1>
+
+  /**
+   * Factory used by the runtime to construct `ctx.sandbox` at the
+   * start of each wake-session. If unset, the runtime falls back to
+   * the `defaultSandbox` configured on `createRuntimeRouter`, and
+   * finally to an `unrestrictedSandbox` rooted at `process.cwd()`
+   * with a one-time warning.
+   */
+  defaultSandbox?: SandboxFactory
 
   handler: (
     ctx: HandlerContext<

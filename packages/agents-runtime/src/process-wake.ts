@@ -9,7 +9,9 @@ import { createHandlerContext } from './context-factory'
 import { createSetupContext } from './setup-context'
 import { createEntityLogPrefix, runtimeLog } from './log'
 import { createRuntimeServerClient } from './runtime-server-client'
+import { unrestrictedSandbox } from './sandbox/unrestricted'
 import { appendPathToUrl } from './url'
+import type { Sandbox, SandboxFactory } from './sandbox/types'
 import type {
   CronObservationSource,
   EntitiesObservationSource,
@@ -460,6 +462,10 @@ export async function processWake(
   let finalError: Error | AggregateError | null = null
   let shutdownRequested = shutdownSignal?.aborted ?? false
   let ackCurrentWakeOnFailure = false
+  // Sandbox is acquired once per wake-session (after entityArgs is known)
+  // and released/disposed in the outer finally. Lives at function scope so
+  // both the try and finally can see it.
+  let sandbox: Sandbox | null = null
 
   // Live event handler — wired after preload, processes child_status + inbox
   let idleTimer: ReturnType<typeof setTimeout> | null = null
@@ -913,6 +919,15 @@ export async function processWake(
     }, heartbeatInterval)
 
     const entityArgs = Object.freeze(notification.entity?.spawnArgs ?? {})
+
+    const sandboxFactory: SandboxFactory =
+      config.resolveSandboxFactory?.(typeName) ??
+      (() => unrestrictedSandbox({ workingDirectory: process.cwd() }))
+    sandbox = await sandboxFactory({
+      entityUrl,
+      entityType: typeName,
+      args: entityArgs,
+    })
 
     // ---- Send executor — ctx.send() calls this directly (no queue) ----
     const executeSend = (send: {
@@ -1597,6 +1612,10 @@ export async function processWake(
         events: currentWakeEvents,
         actions: setupCtx.actions,
         electricTools,
+        // Non-null at this point: the sandbox was acquired earlier in
+        // this try block (after entityArgs); TS narrowing doesn't survive
+        // the surrounding for-loop, so assert.
+        sandbox: sandbox!,
         writeEvent,
         wakeSession,
         wakeEvent: currentWakeEvent,
@@ -1815,6 +1834,13 @@ export async function processWake(
       }
     }
     db.close()
+    if (sandbox) {
+      try {
+        await sandbox.dispose()
+      } catch (err) {
+        cleanupErrors.push(toError(err))
+      }
+    }
     if (claimedWake) {
       log.info(
         doneOffset === `-1`

@@ -1,12 +1,13 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { dirname, relative, resolve } from 'node:path'
+import { dirname, relative } from 'node:path'
 import { createTwoFilesPatch } from 'diff'
 import { Type } from '@sinclair/typebox'
 import { runtimeLog } from '../log'
+import { resolveSafePath } from './safe-path'
+import type { Sandbox } from '../sandbox/types'
 import type { AgentTool } from '@mariozechner/pi-agent-core'
 
 export function createWriteTool(
-  workingDirectory: string,
+  sandbox: Sandbox,
   readSet?: Set<string>
 ): AgentTool {
   return {
@@ -27,9 +28,11 @@ export function createWriteTool(
         content: string
       }
       try {
-        const resolved = resolve(workingDirectory, filePath)
-        const rel = relative(workingDirectory, resolved)
-        if (rel.startsWith(`..`)) {
+        const resolved = await resolveSafePath(
+          sandbox.workingDirectory,
+          filePath
+        )
+        if (!resolved) {
           return {
             content: [
               {
@@ -40,19 +43,17 @@ export function createWriteTool(
             details: { bytesWritten: 0 },
           }
         }
+        const rel = relative(sandbox.workingDirectory, resolved)
 
         let original = ``
-        let existed = true
-        try {
-          original = await readFile(resolved, `utf-8`)
-        } catch (err) {
-          const code = (err as NodeJS.ErrnoException).code
-          if (code !== `ENOENT`) throw err
-          existed = false
+        const existed = await sandbox.exists(resolved)
+        if (existed) {
+          const buf = await sandbox.readFile(resolved)
+          original = buf.toString(`utf-8`)
         }
 
-        await mkdir(dirname(resolved), { recursive: true })
-        await writeFile(resolved, content, `utf-8`)
+        await sandbox.mkdir(dirname(resolved), { recursive: true })
+        await sandbox.writeFile(resolved, content)
         readSet?.add(resolved)
 
         const bytesWritten = Buffer.byteLength(content, `utf-8`)

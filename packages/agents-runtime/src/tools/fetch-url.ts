@@ -4,6 +4,7 @@ import { Readability } from '@mozilla/readability'
 import { JSDOM, VirtualConsole } from 'jsdom'
 import TurndownService from 'turndown'
 import { completeWithLowCostModel } from '../model-runner'
+import type { Sandbox } from '../sandbox/types'
 import type { AgentTool } from '@mariozechner/pi-agent-core'
 import type { LowCostModelCatalog, LowCostModelConfig } from '../model-runner'
 
@@ -47,6 +48,7 @@ function createPiRunnerExtractor(opts: {
 }
 
 export function createFetchUrlTool(
+  sandbox: Sandbox,
   opts: {
     extractWithLLM?: ExtractWithLLM
     catalog?: LowCostModelCatalog
@@ -69,7 +71,7 @@ export function createFetchUrlTool(
     execute: async (_toolCallId, params) => {
       const { url, prompt } = params as { url: string; prompt: string }
       try {
-        const res = await fetch(url, {
+        const res = await sandbox.fetch(url, {
           headers: {
             'User-Agent': `Mozilla/5.0 (compatible; DurableStreamsAgent/1.0)`,
             Accept: `text/html,application/xhtml+xml,text/plain,*/*`,
@@ -119,5 +121,3 @@ export function createFetchUrlTool(
     },
   }
 }
-
-export const fetchUrlTool: AgentTool = createFetchUrlTool()

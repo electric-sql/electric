@@ -1,8 +1,9 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, realpath, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createWriteTool } from '../src/tools/write'
+import { unrestrictedSandbox } from '../src/sandbox/unrestricted'
 
 describe(`write tool`, () => {
   let cwd: string
@@ -16,8 +17,9 @@ describe(`write tool`, () => {
   })
 
   it(`writes a new file and updates the readSet`, async () => {
+    const sandbox = await unrestrictedSandbox({ workingDirectory: cwd })
     const readSet = new Set<string>()
-    const tool = createWriteTool(cwd, readSet)
+    const tool = createWriteTool(sandbox, readSet)
     const result = await tool.execute(`call-1`, {
       path: `hello.txt`,
       content: `hi there`,
@@ -25,28 +27,36 @@ describe(`write tool`, () => {
     expect(result.content[0]).toMatchObject({ type: `text` })
     const written = await readFile(join(cwd, `hello.txt`), `utf-8`)
     expect(written).toBe(`hi there`)
-    expect(readSet.has(join(cwd, `hello.txt`))).toBe(true)
+    // readSet now stores realpath-canonical paths (write goes through
+    // resolveSafePath), so checks compare to the canonical form.
+    expect(readSet.has(join(await realpath(cwd), `hello.txt`))).toBe(true)
+    await sandbox.dispose()
   })
 
   it(`creates parent directories as needed`, async () => {
-    const tool = createWriteTool(cwd)
+    const sandbox = await unrestrictedSandbox({ workingDirectory: cwd })
+    const tool = createWriteTool(sandbox)
     await tool.execute(`call-2`, {
       path: `nested/dir/file.txt`,
       content: `nested content`,
     })
     const written = await readFile(join(cwd, `nested/dir/file.txt`), `utf-8`)
     expect(written).toBe(`nested content`)
+    await sandbox.dispose()
   })
 
   it(`overwrites existing files`, async () => {
-    const tool = createWriteTool(cwd)
+    const sandbox = await unrestrictedSandbox({ workingDirectory: cwd })
+    const tool = createWriteTool(sandbox)
     await tool.execute(`a`, { path: `f.txt`, content: `first` })
     await tool.execute(`b`, { path: `f.txt`, content: `second` })
     expect(await readFile(join(cwd, `f.txt`), `utf-8`)).toBe(`second`)
+    await sandbox.dispose()
   })
 
   it(`rejects paths that escape the working directory`, async () => {
-    const tool = createWriteTool(cwd)
+    const sandbox = await unrestrictedSandbox({ workingDirectory: cwd })
+    const tool = createWriteTool(sandbox)
     const result = await tool.execute(`x`, {
       path: `../escape.txt`,
       content: `nope`,
@@ -54,5 +64,6 @@ describe(`write tool`, () => {
     expect((result.content[0] as { text: string }).text).toMatch(
       /outside the working directory/
     )
+    await sandbox.dispose()
   })
 })

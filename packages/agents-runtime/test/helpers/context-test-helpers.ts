@@ -1,4 +1,5 @@
 import { vi } from 'vitest'
+import { tmpdir } from 'node:os'
 import { createHandlerContext } from '../../src/context-factory'
 import { assembleContext } from '../../src/context-assembly'
 import { ENTITY_COLLECTIONS, builtInCollections } from '../../src/entity-schema'
@@ -13,6 +14,29 @@ import type {
   UseContextConfig,
   WakeSession,
 } from '../../src/types'
+import type { Sandbox } from '../../src/sandbox/types'
+
+// Minimal sandbox stub for tests that exercise HandlerContext shape but
+// don't actually call sandbox methods. Production wakes get a real
+// sandbox from the entity type's defaultSandbox factory.
+export const testSandboxStub: Sandbox = {
+  name: `test-stub`,
+  workingDirectory: tmpdir(),
+  exec: async () => {
+    throw new Error(`test sandbox stub: exec not implemented`)
+  },
+  readFile: async () => Buffer.alloc(0),
+  writeFile: async () => {},
+  mkdir: async () => {},
+  readdir: async () => [],
+  exists: async () => false,
+  remove: async () => {},
+  stat: async () => ({ type: `file`, size: 0, mtimeMs: 0 }),
+  fetch: async () => new Response(``),
+  getUrl: async () => `http://localhost:0`,
+  updateNetworkPolicy: async () => {},
+  dispose: async () => {},
+}
 
 type DebugContext = {
   __debug: {
@@ -278,6 +302,7 @@ export function createTestHandlerContext(
     actions: {},
     electricTools: [],
     events: [],
+    sandbox: testSandboxStub,
     writeEvent,
     wakeSession: createFakeWakeSession(db),
     wakeEvent: {

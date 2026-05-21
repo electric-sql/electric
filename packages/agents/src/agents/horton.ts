@@ -26,9 +26,10 @@ import {
   createWriteTool,
   braveSearchTool,
   createFetchUrlTool,
-  fetchUrlTool,
   createSendTool,
 } from '@electric-ax/agents-runtime/tools'
+import { chooseDefaultSandbox } from '@electric-ax/agents-runtime/sandbox'
+import type { Sandbox } from '@electric-ax/agents-runtime/sandbox'
 import { completeWithLowCostModel } from '@electric-ax/agents-runtime'
 import type { MessageReceived } from '@electric-ax/agents-runtime'
 import { mcp } from '@electric-ax/agents-mcp'
@@ -273,7 +274,7 @@ The current year is ${new Date().getFullYear()}.`
 }
 
 export function createHortonTools(
-  workingDirectory: string,
+  sandbox: Sandbox,
   ctx: HandlerContext,
   readSet: Set<string>,
   opts: {
@@ -284,21 +285,21 @@ export function createHortonTools(
   } = {}
 ): Array<AgentTool> {
   return [
-    createBashTool(workingDirectory),
-    createReadFileTool(workingDirectory, readSet),
-    createWriteTool(workingDirectory, readSet),
-    createEditTool(workingDirectory, readSet),
+    createBashTool(sandbox),
+    createReadFileTool(sandbox, readSet),
+    createWriteTool(sandbox, readSet),
+    createEditTool(sandbox, readSet),
     braveSearchTool,
     ...(opts.modelCatalog && opts.modelConfig
       ? [
-          createFetchUrlTool({
+          createFetchUrlTool(sandbox, {
             catalog: opts.modelCatalog,
             modelConfig: opts.modelConfig,
             log: (message) => serverLog.info(message),
             logPrefix: opts.logPrefix ?? `[horton]`,
           }),
         ]
-      : [fetchUrlTool]),
+      : [createFetchUrlTool(sandbox)]),
     createSpawnWorkerTool(ctx, opts.modelConfig),
     createSendTool(ctx.send),
     ...(opts.docsSearchTool ? [opts.docsSearchTool] : []),
@@ -385,9 +386,12 @@ function createAssistantHandler(options: {
         : workingDirectory
     const modelConfig = resolveBuiltinModelConfig(modelCatalog, ctx.args)
     const agentsMd = readAgentsMd(effectiveCwd)
+    // `ctx.sandbox` is constructed by the runtime at wake-session start
+    // via the `defaultSandbox` factory registered below, and disposed
+    // when the wake-session ends.
     const tools = [
       ...ctx.electricTools,
-      ...createHortonTools(effectiveCwd, ctx, readSet, {
+      ...createHortonTools(ctx.sandbox, ctx, readSet, {
         docsSearchTool,
         modelConfig,
         modelCatalog,
@@ -610,9 +614,26 @@ export function registerHorton(
       ),
   })
 
+  // The pool calls this once per cold acquire for the entity; subsequent
+  // wakes reuse the cached sandbox. Mirrors the per-handler `effectiveCwd`
+  // computation so a per-spawn `workingDirectory` arg still wins over the
+  // registration default.
+  const hortonDefaultSandbox = ({
+    args,
+  }: {
+    args: Readonly<Record<string, unknown>>
+  }) =>
+    chooseDefaultSandbox(
+      typeof args.workingDirectory === `string` &&
+        args.workingDirectory.trim().length > 0
+        ? args.workingDirectory
+        : workingDirectory
+    )
+
   registry.define(`horton`, {
     description: `Friendly capable assistant — chat, code, research, dispatch`,
     creationSchema: hortonCreationSchema,
+    defaultSandbox: hortonDefaultSandbox,
     handler: assistantHandler,
   })
 
@@ -620,6 +641,7 @@ export function registerHorton(
   if (streamFn) {
     registry.define(`chat`, {
       description: `Compatibility alias for the built-in assistant type.`,
+      defaultSandbox: hortonDefaultSandbox,
       handler: assistantHandler,
     })
     typeNames.push(`chat`)

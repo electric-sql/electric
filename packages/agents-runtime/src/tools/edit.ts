@@ -1,15 +1,16 @@
-import { readFile, writeFile } from 'node:fs/promises'
-import { relative, resolve } from 'node:path'
+import { relative } from 'node:path'
 import { createTwoFilesPatch } from 'diff'
 import { Type } from '@sinclair/typebox'
 import { runtimeLog } from '../log'
+import { resolveSafePath } from './safe-path'
+import type { Sandbox } from '../sandbox/types'
 import type { AgentTool } from '@mariozechner/pi-agent-core'
 
 const READ_GUARD_MESSAGE = (rel: string): string =>
   `File ${rel} has not been read in this session (sessions are per-wake — re-read after waking from a worker).`
 
 export function createEditTool(
-  workingDirectory: string,
+  sandbox: Sandbox,
   readSet: Set<string>
 ): AgentTool {
   return {
@@ -45,9 +46,11 @@ export function createEditTool(
         replace_all?: boolean
       }
       try {
-        const resolved = resolve(workingDirectory, filePath)
-        const rel = relative(workingDirectory, resolved)
-        if (rel.startsWith(`..`)) {
+        const resolved = await resolveSafePath(
+          sandbox.workingDirectory,
+          filePath
+        )
+        if (!resolved) {
           return {
             content: [
               {
@@ -58,6 +61,7 @@ export function createEditTool(
             details: { replacements: 0 },
           }
         }
+        const rel = relative(sandbox.workingDirectory, resolved)
 
         if (!readSet.has(resolved)) {
           return {
@@ -66,7 +70,7 @@ export function createEditTool(
           }
         }
 
-        const original = await readFile(resolved, `utf-8`)
+        const original = (await sandbox.readFile(resolved)).toString(`utf-8`)
 
         if (!replace_all) {
           const first = original.indexOf(old_string)
@@ -98,7 +102,7 @@ export function createEditTool(
             original.slice(0, first) +
             new_string +
             original.slice(first + old_string.length)
-          await writeFile(resolved, updated, `utf-8`)
+          await sandbox.writeFile(resolved, updated)
           const patch = createTwoFilesPatch(rel, rel, original, updated)
           return {
             content: [
@@ -125,7 +129,7 @@ export function createEditTool(
           }
         }
         const updated = parts.join(new_string)
-        await writeFile(resolved, updated, `utf-8`)
+        await sandbox.writeFile(resolved, updated)
         const patch = createTwoFilesPatch(rel, rel, original, updated)
         return {
           content: [
