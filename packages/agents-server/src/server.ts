@@ -19,6 +19,7 @@ import {
 } from './electric-agents-types.js'
 import { ElectricAgentsError } from './entity-manager.js'
 import { serverLog } from './utils/log.js'
+import { createEd25519WebhookSigner } from './webhook-signing.js'
 import type { DrizzleDB, PgClient } from './db/index.js'
 import type { Server } from 'node:http'
 import type { DurableStreamTestServer } from '@durable-streams/server'
@@ -27,6 +28,7 @@ import type {
   AgentModel,
   EntityRegistry,
   RuntimeHandler,
+  WebhookSignatureVerifierConfig,
 } from '@electric-ax/agents-runtime'
 import type { Principal } from './principal.js'
 import type { EntityBridgeCoordinator } from './entity-bridge-manager.js'
@@ -34,6 +36,10 @@ import type { DurableStreamsRoutingAdapter } from './routing/durable-streams-rou
 import type { OssServerContext } from './routing/oss-server-router.js'
 import type { StartedStandaloneAgentsRuntime } from './standalone-runtime.js'
 import type { DurableStreamsBearerProvider } from './stream-client.js'
+import type {
+  WebhookSigner,
+  WebhookSigningKeyInput,
+} from './webhook-signing.js'
 
 const MOCK_AGENT_HANDLER_PATH = `/_electric/mock-agent-handler`
 
@@ -45,6 +51,11 @@ export interface ElectricAgentsServerOptions {
   durableStreamsBearer?: DurableStreamsBearerProvider
   durableStreamsRouting?: DurableStreamsRoutingAdapter
   durableStreamsServer?: DurableStreamTestServer
+  durableStreamsWebhookSignature?:
+    | false
+    | Partial<WebhookSignatureVerifierConfig>
+  webhookSigner?: WebhookSigner
+  webhookSigningKey?: WebhookSigningKeyInput
   port: number
   host?: string
   workingDirectory?: string
@@ -141,6 +152,7 @@ export class ElectricAgentsServer {
   private shuttingDown = false
   private streamsAgent?: Agent
   private standaloneRuntime?: StartedStandaloneAgentsRuntime
+  private readonly webhookSigner: WebhookSigner
 
   streamClient: StreamClient
   readonly options: ElectricAgentsServerOptions
@@ -152,6 +164,9 @@ export class ElectricAgentsServer {
       )
     }
     this.options = options
+    this.webhookSigner =
+      options.webhookSigner ??
+      createEd25519WebhookSigner({ privateKey: options.webhookSigningKey })
     this.streamClient = options.durableStreamsUrl
       ? new StreamClient(options.durableStreamsUrl, {
           bearer: options.durableStreamsBearer,
@@ -413,6 +428,9 @@ export class ElectricAgentsServer {
       durableStreamsBearer: this.options.durableStreamsBearer,
       durableStreamsRouting: this.options.durableStreamsRouting,
       durableStreamsDispatcher: this.streamsAgent,
+      durableStreamsWebhookSignature:
+        this.options.durableStreamsWebhookSignature,
+      webhookSigner: this.webhookSigner,
       electricUrl: this.options.electricUrl,
       electricSecret: this.options.electricSecret,
       ownAgentHandlerPaths: this.mockAgentBootstrap

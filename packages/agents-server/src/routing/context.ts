@@ -1,4 +1,5 @@
 import type { Agent } from 'undici'
+import type { WebhookSignatureVerifierConfig } from '@electric-ax/agents-runtime'
 import type { DrizzleDB } from '../db/index.js'
 import type { EntityBridgeCoordinator } from '../entity-bridge-manager.js'
 import type { EntityManager } from '../entity-manager.js'
@@ -7,6 +8,7 @@ import type { StreamClient } from '../stream-client.js'
 import type { DurableStreamsRoutingAdapter } from './durable-streams-routing-adapter.js'
 import type { Principal } from '../principal.js'
 import type { DurableStreamsBearerProvider } from '../stream-client.js'
+import type { WebhookSigner } from '../webhook-signing.js'
 
 /**
  * Per-request tenant context passed through every router and handler.
@@ -24,6 +26,10 @@ export interface TenantContext {
   durableStreamsBearer?: DurableStreamsBearerProvider
   durableStreamsRouting?: DurableStreamsRoutingAdapter
   durableStreamsDispatcher: Agent
+  durableStreamsWebhookSignature?:
+    | false
+    | Partial<WebhookSignatureVerifierConfig>
+  webhookSigner?: WebhookSigner
   electricUrl?: string
   electricSecret?: string
   ownAgentHandlerPaths?: ReadonlyArray<string>
