@@ -593,6 +593,18 @@ export const AgentResponse = memo(function AgentResponse({
             </IconButton>
           </Tooltip>
         )}
+        {section.done && copyText && (
+          <button
+            type="button"
+            className={styles.copyButton}
+            onClick={() => void copyResponseText()}
+            aria-label="Copy response text"
+            title={copied ? `Copied` : `Copy all response text`}
+          >
+            {copied ? <Check size={12} /> : <Copy size={12} />}
+            <span>{copied ? `Copied` : `Copy`}</span>
+          </button>
+        )}
       </Stack>
     </Stack>
   )

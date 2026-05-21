@@ -1,5 +1,17 @@
 # @electric-ax/agents-server-ui
 
+## 0.4.5
+
+### Patch Changes
+
+- e6a0bff: Add configurable UI port via `ELECTRIC_DESKTOP_UI_PORT` env var for parallel desktop development. Include version in desktop artifact filename.
+- 99ac6fd: Pin Durable Streams dependencies to commit `5d5c217` so local development resolves the same subscription-control routing code as the PR build.
+- Updated dependencies [9c275b7]
+- Updated dependencies [1ab43f5]
+- Updated dependencies [99ac6fd]
+- Updated dependencies [adc99e9]
+  - @electric-ax/agents-runtime@0.3.0
+
 ## 0.4.4
 
 ### Patch Changes

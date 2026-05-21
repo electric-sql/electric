@@ -97,7 +97,7 @@ describe(`createHandlerContext: tags + tag mutations`, () => {
       doObserve: () => Promise.resolve({} as any),
       doSpawn: () => Promise.resolve({} as any),
       doMkdb: () => ({}) as any,
-      executeSend: () => {},
+      executeSend: async () => ({ sent: true, targetUrl: `/horton/x` }),
       doSetTag: async (key, value) => {
         calls.push({ key, value })
       },

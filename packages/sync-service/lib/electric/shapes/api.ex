@@ -707,7 +707,8 @@ defmodule Electric.Shapes.Api do
            since: offset,
            up_to: chunk_end_offset,
            live_sse: in_sse?,
-           read_only?: request.read_only?
+           read_only?: request.read_only?,
+           snapshot_status: request.snapshot_status
          ) do
       {:ok, log} ->
         if live? && Enum.take(log, 1) == [] do

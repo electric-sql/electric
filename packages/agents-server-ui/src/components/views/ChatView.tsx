@@ -6,6 +6,7 @@ import { MessageInput } from '../MessageInput'
 import { EntityContextDrawer } from '../EntityContextDrawer'
 import type { ViewProps } from '../../lib/workspace/viewRegistry'
 import type { EntityTimelineQueryRow } from '@electric-ax/agents-runtime/client'
+import type { OptimisticInboxMessage } from '../../lib/sendMessage'
 
 /**
  * The default view: chat / timeline + message composer.
@@ -36,6 +37,79 @@ export function ChatView({
       entityStopped={entityStopped}
       isSpawning={isSpawning}
       tileId={tileId}
+    />
+  )
+}
+
+export function ChatLogView({
+  baseUrl,
+  entityUrl,
+  entity,
+  entityStopped,
+  isSpawning,
+  tileId,
+  scrollToBottomSignal,
+  inlineQueuedMessages = [],
+}: ViewProps & {
+  scrollToBottomSignal?: number
+  inlineQueuedMessages?: Array<OptimisticInboxMessage>
+}): React.ReactElement {
+  const connectUrl = isSpawning ? null : entityUrl
+  const { timelineRows, pendingInbox, entities, loading, error } =
+    useEntityTimeline(baseUrl || null, connectUrl)
+  const navigate = useNavigate()
+  const processedInboxKeys = useMemo(
+    () =>
+      new Set(
+        timelineRows.filter((row) => row.inbox).map((row) => row.inbox!.key)
+      ),
+    [timelineRows]
+  )
+  const pendingInboxByKey = useMemo(
+    () => new Map(pendingInbox.map((message) => [message.key, message])),
+    [pendingInbox]
+  )
+  const projectedPendingMessage = useMemo(() => {
+    if (entity.status === `running`) return null
+    for (const message of inlineQueuedMessages) {
+      if (processedInboxKeys.has(message.key)) continue
+      return pendingInboxByKey.get(message.key) ?? message
+    }
+    return null
+  }, [
+    entity.status,
+    inlineQueuedMessages,
+    pendingInboxByKey,
+    processedInboxKeys,
+  ])
+  const visibleRows = useMemo<Array<EntityTimelineQueryRow>>(() => {
+    if (!projectedPendingMessage) return timelineRows
+    return [
+      ...timelineRows,
+      {
+        $key: `pending-inbox:${projectedPendingMessage.key}`,
+        inbox: projectedPendingMessage,
+      } as EntityTimelineQueryRow,
+    ]
+  }, [projectedPendingMessage, timelineRows])
+
+  useEffect(() => {
+    if (error && !isSpawning) {
+      void navigate({ to: `/` })
+    }
+  }, [error, navigate, isSpawning])
+
+  return (
+    <EntityTimeline
+      rows={visibleRows}
+      loading={loading}
+      error={error}
+      entityStopped={entityStopped}
+      cacheKey={`${baseUrl}${connectUrl ?? ``}:${scrollToBottomSignal ?? 0}`}
+      tileId={tileId}
+      entityUrl={connectUrl}
+      entities={entities}
+      scrollToBottomSignal={scrollToBottomSignal}
     />
   )
 }

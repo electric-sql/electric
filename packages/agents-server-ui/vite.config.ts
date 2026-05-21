@@ -1,3 +1,4 @@
+import { resolve } from 'node:path'
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'node:path'
@@ -40,19 +41,26 @@ export default defineConfig(({ command, mode }) => {
 
   return {
     base: desktop ? (desktopServe ? `/` : `./`) : `/__agent_ui/`,
-    plugins: [react(), ...(desktop ? [desktopHtmlMarker()] : [])],
     resolve: {
-      alias: {
-        react: localNodeModules(`react`),
-        'react-dom': localNodeModules(`react-dom`),
-        'react/jsx-runtime': localNodeModules(`react`, `jsx-runtime.js`),
-        'react/jsx-dev-runtime': localNodeModules(
-          `react`,
-          `jsx-dev-runtime.js`
-        ),
-      },
+      alias: [
+        {
+          find: /^@electric-ax\/agents-runtime\/client$/,
+          replacement: resolve(PACKAGE_DIR, `../agents-runtime/src/client.ts`),
+        },
+        { find: `react`, replacement: localNodeModules(`react`) },
+        { find: `react-dom`, replacement: localNodeModules(`react-dom`) },
+        {
+          find: `react/jsx-runtime`,
+          replacement: localNodeModules(`react`, `jsx-runtime.js`),
+        },
+        {
+          find: `react/jsx-dev-runtime`,
+          replacement: localNodeModules(`react`, `jsx-dev-runtime.js`),
+        },
+      ],
       dedupe: [`react`, `react-dom`, `@tanstack/db`],
     },
+    plugins: [react(), ...(desktop ? [desktopHtmlMarker()] : [])],
     optimizeDeps: {
       exclude: [`@durable-streams/state`, `@tanstack/db`, `@tanstack/react-db`],
       include: [

@@ -351,6 +351,153 @@ defmodule Electric.AdmissionControlTest do
     end
   end
 
+  describe "try_swap/4" do
+    setup do
+      table_name = :"swap_counter_#{System.unique_integer([:positive])}"
+      {:ok, _} = start_supervised({AdmissionControl, table_name: table_name, name: nil})
+      %{table_name: table_name}
+    end
+
+    test "moves the in-flight count from :initial to :existing", %{table_name: t} do
+      :ok = AdmissionControl.try_acquire("s", :initial, table_name: t, max_concurrent: 10)
+      assert %{initial: 1, existing: 0} = AdmissionControl.get_current("s", table_name: t)
+
+      assert :ok =
+               AdmissionControl.try_swap("s", :initial, :existing,
+                 table_name: t,
+                 max_concurrent: 10
+               )
+
+      assert %{initial: 0, existing: 1} = AdmissionControl.get_current("s", table_name: t)
+    end
+
+    test "returns {:error, :overloaded} when the destination bucket is full",
+         %{table_name: t} do
+      # Saturate :existing.
+      for _ <- 1..3 do
+        :ok = AdmissionControl.try_acquire("s", :existing, table_name: t, max_concurrent: 3)
+      end
+
+      :ok = AdmissionControl.try_acquire("s", :initial, table_name: t, max_concurrent: 10)
+
+      assert {:error, :overloaded} =
+               AdmissionControl.try_swap("s", :initial, :existing,
+                 table_name: t,
+                 max_concurrent: 3
+               )
+
+      # On failure, source must be unchanged.
+      assert %{initial: 1, existing: 3} = AdmissionControl.get_current("s", table_name: t)
+    end
+
+    test "is atomic under concurrent swap attempts at the cap", %{table_name: t} do
+      # Acquire 10 :initial permits, cap :existing at 5, run 10 concurrent swaps,
+      # exactly 5 should succeed.
+      for _ <- 1..10 do
+        :ok = AdmissionControl.try_acquire("s", :initial, table_name: t, max_concurrent: 100)
+      end
+
+      tasks =
+        for _ <- 1..10 do
+          Task.async(fn ->
+            AdmissionControl.try_swap("s", :initial, :existing,
+              table_name: t,
+              max_concurrent: 5
+            )
+          end)
+        end
+
+      results = Task.await_many(tasks)
+      assert Enum.count(results, &(&1 == :ok)) == 5
+      assert Enum.count(results, &(&1 == {:error, :overloaded})) == 5
+      assert %{initial: 5, existing: 5} = AdmissionControl.get_current("s", table_name: t)
+    end
+
+    test "concurrent rejected swaps preserve the destination counter", %{table_name: t} do
+      # Pre-saturate :existing at cap=5 via direct acquires.
+      for _ <- 1..5 do
+        :ok =
+          AdmissionControl.try_acquire("s", :existing, table_name: t, max_concurrent: 5)
+      end
+
+      # Pre-acquire 10 :initial permits so we have real permits to swap from.
+      for _ <- 1..10 do
+        :ok =
+          AdmissionControl.try_acquire("s", :initial, table_name: t, max_concurrent: 100)
+      end
+
+      assert %{initial: 10, existing: 5} = AdmissionControl.get_current("s", table_name: t)
+
+      # All swaps target a saturated :existing — all must reject.
+      tasks =
+        for _ <- 1..10 do
+          Task.async(fn ->
+            AdmissionControl.try_swap("s", :initial, :existing,
+              table_name: t,
+              max_concurrent: 5
+            )
+          end)
+        end
+
+      results = Task.await_many(tasks)
+
+      assert Enum.all?(results, &(&1 == {:error, :overloaded}))
+
+      # Both buckets are exactly back to their starting values.
+      assert %{initial: 10, existing: 5} = AdmissionControl.get_current("s", table_name: t)
+    end
+
+    test "from_kind cap is preserved against concurrent try_acquire during swap", %{table_name: t} do
+      # Saturate :initial at cap=2.
+      :ok =
+        AdmissionControl.try_acquire("s", :initial, table_name: t, max_concurrent: 2)
+
+      :ok =
+        AdmissionControl.try_acquire("s", :initial, table_name: t, max_concurrent: 2)
+
+      # Saturate :existing at cap=2 so every swap rejects (which is the
+      # scenario where the from_kind transient under-count would otherwise
+      # bite on rollback).
+      :ok =
+        AdmissionControl.try_acquire("s", :existing, table_name: t, max_concurrent: 2)
+
+      :ok =
+        AdmissionControl.try_acquire("s", :existing, table_name: t, max_concurrent: 2)
+
+      # Race many try_swap calls (all will reject) against many
+      # try_acquire(:initial) calls (all should reject — :initial is at cap).
+      swap_tasks =
+        for _ <- 1..50 do
+          Task.async(fn ->
+            AdmissionControl.try_swap("s", :initial, :existing,
+              table_name: t,
+              max_concurrent: 2
+            )
+          end)
+        end
+
+      acquire_tasks =
+        for _ <- 1..50 do
+          Task.async(fn ->
+            AdmissionControl.try_acquire("s", :initial, table_name: t, max_concurrent: 2)
+          end)
+        end
+
+      swap_results = Task.await_many(swap_tasks)
+      acquire_results = Task.await_many(acquire_tasks)
+
+      # Every swap rejects (:existing is at cap).
+      assert Enum.all?(swap_results, &(&1 == {:error, :overloaded}))
+
+      # Every acquire rejects (:initial was at cap and try_swap never
+      # creates a transient under-count for from_kind).
+      assert Enum.all?(acquire_results, &(&1 == {:error, :overloaded}))
+
+      # Both buckets stayed at exactly their caps.
+      assert %{initial: 2, existing: 2} = AdmissionControl.get_current("s", table_name: t)
+    end
+  end
+
   describe "default table name" do
     setup [:with_stack_id_from_test]
 

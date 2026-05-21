@@ -13,6 +13,7 @@ export const WORKER_TOOL_NAMES = [
   `web_search`,
   `fetch_url`,
   `spawn_worker`,
+  `send`,
 ] as const
 
 export type WorkerToolName = (typeof WORKER_TOOL_NAMES)[number]

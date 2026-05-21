@@ -1,5 +1,13 @@
 # @electric-ax/agents-desktop
 
+## 0.1.5
+
+### Patch Changes
+
+- 1df4d63: Add CI workflows for desktop app build artifacts and canary publishing.
+- d78075a: Restore the user's shell PATH in the packaged desktop app so CLI tools like `gh` are discoverable when launched from Finder or other GUI launchers.
+- e6a0bff: Add configurable UI port via `ELECTRIC_DESKTOP_UI_PORT` env var for parallel desktop development. Include version in desktop artifact filename.
+
 ## 0.1.4
 
 ### Patch Changes

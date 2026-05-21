@@ -71,6 +71,7 @@ describe(`horton tool composition`, () => {
         `web_search`,
         `fetch_url`,
         `spawn_worker`,
+        `send`,
       ])
     )
   })
