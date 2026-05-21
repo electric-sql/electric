@@ -1,6 +1,6 @@
 {
   "name": "@electric-ax/agents-server",
-  "version": "0.4.4",
+  "version": "0.4.6",
   "description": "Electric Agents entity runtime server",
   "author": "Durable Stream contributors",
   "bin": {
@@ -46,7 +46,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
     "@durable-streams/client": "https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@5d5c217",
-    "@durable-streams/server": "https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/server@5d5c217",
+    "@durable-streams/server": "https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/server@eac712f",
     "@durable-streams/state": "https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@5d5c217",
     "@electric-ax/agents-runtime": "workspace:*",
     "@electric-sql/client": "^1.5.18",

@@ -3,6 +3,7 @@ defmodule Electric.Shapes do
   alias Electric.ShapeCache.Storage
   alias Electric.ShapeCache
   alias Electric.ShapeCache.ShapeStatus
+  alias Electric.Shapes.Api
   alias Electric.Shapes.Shape
   alias Electric.Telemetry.OpenTelemetry
 
@@ -13,27 +14,54 @@ defmodule Electric.Shapes do
 
   @doc """
   Get the snapshot followed by the log.
+
+  Accepts a `:snapshot_status` opt carrying the outcome of a prior
+  `await_snapshot_start` call (typically performed by the admission
+  plug, which holds an `:initial` permit across the wait so the snapshot
+  pool is protected by admission-gate backpressure). When set, the
+  redundant wait is skipped; this is required for correctness on the
+  snapshot-failure path, where re-issuing the GenServer call would race
+  against the consumer's `stop_and_clean`.
   """
+  @spec get_merged_log_stream(stack_id(), shape_handle(),
+          since: LogOffset.t(),
+          up_to: LogOffset.t(),
+          read_only?: boolean(),
+          snapshot_status: Api.Request.snapshot_status()
+        ) :: {:ok, Storage.log()} | {:error, term()}
   def get_merged_log_stream(stack_id, shape_handle, opts)
       when is_shape_handle(shape_handle) and is_stack_id(stack_id) do
     offset = Access.get(opts, :since, LogOffset.before_all())
     max_offset = Access.get(opts, :up_to, LogOffset.last())
 
-    if ShapeCache.has_shape?(shape_handle, stack_id) do
-      with :started <- ShapeCache.await_snapshot_start(shape_handle, stack_id) do
-        storage =
-          Storage.for_shape(
-            shape_handle,
-            Storage.for_stack(stack_id, read_only?: opts[:read_only?])
-          )
+    case Access.get(opts, :snapshot_status) do
+      {:error, _} = error ->
+        error
 
-        {:ok, Storage.get_log_stream(offset, max_offset, storage)}
-      end
-    else
-      # If we have a shape handle, but no shape, it means the shape was deleted. Send a 409
-      # and expect the client to retry - if the state of the world allows, it'll get a new handle.
-      {:error, Electric.Shapes.Api.Error.must_refetch()}
+      :started ->
+        {:ok, build_log_stream(stack_id, shape_handle, offset, max_offset, opts)}
+
+      nil ->
+        if ShapeCache.has_shape?(shape_handle, stack_id) do
+          with :started <- ShapeCache.await_snapshot_start(shape_handle, stack_id) do
+            {:ok, build_log_stream(stack_id, shape_handle, offset, max_offset, opts)}
+          end
+        else
+          # If we have a shape handle, but no shape, it means the shape was deleted. Send a 409
+          # and expect the client to retry - if the state of the world allows, it'll get a new handle.
+          {:error, Electric.Shapes.Api.Error.must_refetch()}
+        end
     end
+  end
+
+  defp build_log_stream(stack_id, shape_handle, offset, max_offset, opts) do
+    storage =
+      Storage.for_shape(
+        shape_handle,
+        Storage.for_stack(stack_id, read_only?: opts[:read_only?])
+      )
+
+    Storage.get_log_stream(offset, max_offset, storage)
   end
 
   @doc """

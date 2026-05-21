@@ -66,6 +66,19 @@ export type {
   DurableStreamsRoutingAdapter,
   DurableStreamsRoutingInput,
 } from './routing/durable-streams-routing-adapter.js'
+export {
+  createEd25519WebhookSigner,
+  getDefaultWebhookSigner,
+  webhookSigningMetadata,
+} from './webhook-signing.js'
+export type {
+  Ed25519WebhookSignerOptions,
+  WebhookJwks,
+  WebhookPublicJwk,
+  WebhookSigner,
+  WebhookSigningKeyInput,
+  WebhookSigningMetadata,
+} from './webhook-signing.js'
 export type { EntityBridgeCoordinator } from './entity-bridge-manager.js'
 export {
   DEFAULT_TENANT_ID,

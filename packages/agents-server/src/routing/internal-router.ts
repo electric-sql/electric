@@ -2,7 +2,10 @@
  * Sub-router for /_electric/* control-plane routes.
  */
 
-import { appendPathToUrl } from '@electric-ax/agents-runtime'
+import {
+  appendPathToUrl,
+  verifyWebhookSignature,
+} from '@electric-ax/agents-runtime'
 import { Type, type Static } from '@sinclair/typebox'
 import { and, eq } from 'drizzle-orm'
 import { Router, json, status } from 'itty-router'
@@ -16,10 +19,13 @@ import {
   ErrCodeCallbackNotFound,
   ErrCodeForkInProgress,
   ErrCodeSubscriptionNotFound,
+  ErrCodeUnauthorized,
 } from '../electric-agents-types.js'
 import { ATTR, tracer } from '../tracing.js'
 import { decodeJsonObject } from '../utils/server-utils.js'
 import { serverLog } from '../utils/log.js'
+import { applyDurableStreamsBearer } from '../stream-client.js'
+import { getDefaultWebhookSigner } from '../webhook-signing.js'
 import { cronRouter } from './cron-router.js'
 import { resolveDurableStreamsRoutingAdapter } from './durable-streams-routing-adapter.js'
 import { electricProxyRouter } from './electric-proxy-router.js'
@@ -30,8 +36,10 @@ import { runnersRouter } from './runners-router.js'
 import { routeBody, validateOptionalJsonBody, withSchema } from './schema.js'
 import { withLeadingSlash } from './tenant-stream-paths.js'
 import type { IRequest, RouterType } from 'itty-router'
+import type { WebhookSignatureVerifierConfig } from '@electric-ax/agents-runtime'
 import type { TenantContext } from './context.js'
 import type { DurableStreamsRoutingAdapter } from './durable-streams-routing-adapter.js'
+import type { WebhookSigner } from '../webhook-signing.js'
 
 const wakeRegistrationBodySchema = Type.Object({
   subscriberUrl: Type.String(),
@@ -137,11 +145,20 @@ function bodyFromBytes(body: Uint8Array): ArrayBuffer {
 }
 
 function responseFromUpstream(response: Response, body?: Uint8Array): Response {
-  return new Response(body ? bodyFromBytes(body) : response.body, {
+  const responseBody = forbidsResponseBody(response.status)
+    ? null
+    : body !== undefined
+      ? bodyFromBytes(body)
+      : response.body
+  return new Response(responseBody, {
     status: response.status,
     statusText: response.statusText,
     headers: responseHeaders(response),
   })
+}
+
+function forbidsResponseBody(status: number): boolean {
+  return status === 204 || status === 205 || status === 304
 }
 
 function forwardHeadersFromRequest(request: IRequest): Headers {
@@ -154,6 +171,87 @@ function durableStreamsSubscriptionCallback(value: string): string | null {
   return value.startsWith(DS_SUBSCRIPTION_CALLBACK_PREFIX)
     ? value.slice(DS_SUBSCRIPTION_CALLBACK_PREFIX.length)
     : null
+}
+
+function resolveWebhookSigner(ctx: TenantContext): WebhookSigner {
+  return ctx.webhookSigner ?? getDefaultWebhookSigner()
+}
+
+function durableStreamsWebhookJwksUrl(ctx: TenantContext): string {
+  if (!ctx.durableStreamsRouting) {
+    return appendPathToUrl(ctx.durableStreamsUrl, `/__ds/jwks.json`)
+  }
+
+  return resolveDurableStreamsRoutingAdapter(
+    ctx.durableStreamsRouting,
+    ctx.durableStreamsUrl
+  )
+    .controlUrl({
+      durableStreamsUrl: ctx.durableStreamsUrl,
+      serviceId: ctx.service,
+      requestUrl: appendPathToUrl(ctx.publicUrl, `/__ds/jwks.json`),
+    })
+    .toString()
+}
+
+function durableStreamsJwksFetchClient(ctx: TenantContext): typeof fetch {
+  return async (input, init) => {
+    const headers = new Headers(init?.headers)
+    await applyDurableStreamsBearer(headers, ctx.durableStreamsBearer, {
+      overwrite: false,
+    })
+    const nextInit: RequestInit & {
+      dispatcher?: TenantContext[`durableStreamsDispatcher`]
+    } = {
+      ...(init ?? {}),
+      headers,
+    }
+    if (ctx.durableStreamsDispatcher) {
+      nextInit.dispatcher = ctx.durableStreamsDispatcher
+    }
+    return await fetch(input, nextInit as RequestInit)
+  }
+}
+
+function resolveDurableStreamsWebhookSignature(
+  ctx: TenantContext
+): false | WebhookSignatureVerifierConfig {
+  if (ctx.durableStreamsWebhookSignature === false) return false
+
+  return {
+    jwksUrl:
+      ctx.durableStreamsWebhookSignature?.jwksUrl ??
+      durableStreamsWebhookJwksUrl(ctx),
+    toleranceSeconds: ctx.durableStreamsWebhookSignature?.toleranceSeconds,
+    cacheTtlMs: ctx.durableStreamsWebhookSignature?.cacheTtlMs,
+    fetchClient:
+      ctx.durableStreamsWebhookSignature?.fetchClient ??
+      durableStreamsJwksFetchClient(ctx),
+  }
+}
+
+async function verifyDurableStreamsWebhook(
+  request: IRequest,
+  ctx: TenantContext,
+  body: Uint8Array
+): Promise<Response | null> {
+  const config = resolveDurableStreamsWebhookSignature(ctx)
+  if (config === false) return null
+
+  const verification = await verifyWebhookSignature(
+    body,
+    request.headers.get(`webhook-signature`),
+    config
+  )
+  if (verification.ok) return null
+
+  return apiError(
+    verification.status,
+    verification.status === 401
+      ? ErrCodeUnauthorized
+      : `WEBHOOK_SIGNATURE_UNAVAILABLE`,
+    verification.error
+  )
 }
 
 function claimTokenFromRequest(request: IRequest): string | undefined {
@@ -249,7 +347,11 @@ async function webhookForward(
     subscriptionId
   )
 
-  const lookupPromise: Promise<string | null> = tracer.startActiveSpan(
+  const body = await readRequestBody(request as Request)
+  const signatureError = await verifyDurableStreamsWebhook(request, ctx, body)
+  if (signatureError) return signatureError
+
+  const targetWebhookUrl: string | null = await tracer.startActiveSpan(
     `db.lookupSubscription`,
     async (span) => {
       try {
@@ -269,11 +371,6 @@ async function webhookForward(
       }
     }
   )
-
-  const [targetWebhookUrl, body] = await Promise.all([
-    lookupPromise,
-    readRequestBody(request as Request),
-  ])
 
   if (!targetWebhookUrl) {
     return apiError(
@@ -439,6 +536,10 @@ async function webhookForward(
   const headers = forwardHeadersFromRequest(request)
   headers.set(`content-type`, `application/json`)
   headers.delete(`content-length`)
+  headers.set(
+    `webhook-signature`,
+    await resolveWebhookSigner(ctx).sign(forwardBody)
+  )
 
   let upstream: Response
   try {
@@ -624,8 +725,15 @@ async function callbackForward(
       const entity = await ctx.entityManager.registry.getEntityByStream(
         target.primaryStream
       )
-      if (entity && stillOwnsClaim) {
-        if (epoch !== undefined) {
+
+      // Release the consumer_claims row by its DB identity (consumerId,
+      // epoch). The in-memory write token is a separate concern (write
+      // authorization during the run); release of the durable row must
+      // succeed even if the token was lost (server restart) or evicted
+      // (a later wake re-minted for the same stream).
+      let entityCleared = false
+      if (epoch !== undefined) {
+        const result =
           await ctx.entityManager.registry.materializeReleasedClaim?.({
             consumerId,
             epoch,
@@ -643,31 +751,44 @@ async function callbackForward(
                 })
               : undefined,
           })
-        }
+        entityCleared = result?.entityCleared ?? false
+      }
+
+      // Transition entity back to idle when either signal says it's safe:
+      // - entityCleared: our release just cleared the entity's active
+      //   dispatch state, so no in-flight wake remains.
+      // - stillOwnsClaim: this consumer is still the in-memory write-token
+      //   owner, so no newer wake has displaced it. Covers two cases:
+      //   (a) retry of a failed done (first attempt cleared the DB state
+      //   but failed to update status), (b) server restart scenarios where
+      //   the token is intact even though entityDispatchState may diverge.
+      // If both are false, a newer wake owns the entity — leave status as-is.
+      if (entity && (entityCleared || stillOwnsClaim)) {
         await ctx.entityManager.registry.updateStatus(
           entity.url,
           entity.status === `stopping` ? `stopped` : `idle`
-        )
-        ctx.runtime.claimWriteTokens.clearStream(
-          ctx.service,
-          target.primaryStream
         )
         await ctx.entityBridgeManager.onEntityChanged(entity.url)
         serverLog.info(
           `[callback-forward] status updated after done for ${entity.url}`
         )
-      } else if (stillOwnsClaim) {
+      } else if (!entity) {
+        serverLog.warn(
+          `[callback-forward] done received but no entity found for stream=${target.primaryStream}`
+        )
+      }
+
+      // Clear the in-memory write token only if this consumer still owns it.
+      // If a newer wake has taken over, that newer wake owns the token now
+      // and we must not clear it out from under it.
+      if (stillOwnsClaim) {
         ctx.runtime.claimWriteTokens.clearStream(
           ctx.service,
           target.primaryStream
         )
       } else if (entity) {
         serverLog.info(
-          `[callback-forward] done ignored for stale claim stream=${target.primaryStream} consumer=${consumerId}`
-        )
-      } else {
-        serverLog.warn(
-          `[callback-forward] done received but no entity found for stream=${target.primaryStream}`
+          `[callback-forward] done arrived after in-memory token evicted (stream=${target.primaryStream} consumer=${consumerId})`
         )
       }
     } else if (requestBody?.done === true) {

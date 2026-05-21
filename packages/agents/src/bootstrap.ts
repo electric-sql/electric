@@ -12,7 +12,7 @@ import { serverLog } from './log'
 import { registerHorton } from './agents/horton'
 import { registerWorker } from './agents/worker'
 import { createBuiltinModelCatalog } from './model-catalog'
-import { createSkillsRegistry } from './skills/registry'
+import { createSkillsRegistry } from '@electric-ax/agents-runtime'
 import type {
   AgentTool,
   DispatchPolicy,
@@ -24,7 +24,7 @@ import type {
 import type { ChangeEvent } from '@durable-streams/state'
 import type { StreamFn } from '@mariozechner/pi-agent-core'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import type { SkillsRegistry } from './skills/types'
+import type { SkillsRegistry } from '@electric-ax/agents-runtime'
 
 export const DEFAULT_BUILTIN_AGENT_HANDLER_PATH = `/_electric/builtin-agent-handler`
 

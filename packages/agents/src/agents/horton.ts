@@ -4,7 +4,7 @@ import { eq, not, queryOnce } from '@durable-streams/state'
 import { z } from 'zod'
 import { serverLog } from '../log'
 import { createHortonDocsSupport } from '../docs/knowledge-base'
-import { createSkillTools } from '../skills/tools'
+import { createSkillTools } from '@electric-ax/agents-runtime'
 import { createSpawnWorkerTool } from '../tools/spawn-worker'
 import {
   modelChoiceValues,
@@ -27,11 +27,12 @@ import {
   braveSearchTool,
   createFetchUrlTool,
   fetchUrlTool,
+  createSendTool,
 } from '@electric-ax/agents-runtime/tools'
 import { completeWithLowCostModel } from '@electric-ax/agents-runtime'
 import type { MessageReceived } from '@electric-ax/agents-runtime'
 import { mcp } from '@electric-ax/agents-mcp'
-import type { SkillsRegistry } from '../skills/types'
+import type { SkillsRegistry } from '@electric-ax/agents-runtime'
 
 export const HORTON_MODEL = `claude-sonnet-4-6`
 
@@ -236,6 +237,7 @@ When a user opens with a greeting ("hi", "hello", "hey", etc.) or a broad statem
 - web_search: search the web
 - fetch_url: fetch and convert a URL to markdown
 - spawn_worker: dispatch a subagent for an isolated task
+- send: send a message to an Electric Agent/entity by entity URL
 ${docsTools}${skillsTools}
 
 # Working with files
@@ -298,6 +300,7 @@ export function createHortonTools(
         ]
       : [fetchUrlTool]),
     createSpawnWorkerTool(ctx, opts.modelConfig),
+    createSendTool(ctx.send),
     ...(opts.docsSearchTool ? [opts.docsSearchTool] : []),
   ]
 }

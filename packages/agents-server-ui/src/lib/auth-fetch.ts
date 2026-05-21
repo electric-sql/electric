@@ -174,6 +174,23 @@ export function registerActiveServerHeaders(
       : null
 }
 
+/**
+ * Snapshot of the currently-registered server + headers. Mobile uses
+ * this to forward headers to its DOM-embed children, which run in a
+ * separate JS context with their own `auth-fetch` module instance and
+ * therefore can't see the registration done on the native side.
+ */
+export function getActiveServerHeadersSnapshot(): {
+  url: string
+  headers: Record<string, string>
+} | null {
+  if (!activeServerHeaders) return null
+  return {
+    url: activeServerHeaders.baseUrl,
+    headers: { ...activeServerHeaders.headers },
+  }
+}
+
 export function getConfiguredServerHeaders(
   input: RequestInfo | URL
 ): Record<string, string> {

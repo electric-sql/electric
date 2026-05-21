@@ -117,7 +117,9 @@ export {
 export type { EntityMembershipRow, EntityTags, TagOperation } from './tags'
 export {
   createEntityIncludesQuery,
+  createEntityTimelineQuery,
   createEntityErrorsQuery,
+  createPendingTimelineOrder,
   getEntityState,
   normalizeEntityTimelineData,
   normalizeTimelineEntities,
@@ -126,6 +128,14 @@ export {
 export type {
   EntityTimelineData,
   EntityTimelineContentItem,
+  EntityTimelineInboxMode,
+  EntityTimelineQueryOptions,
+  EntityTimelineQueryRow,
+  EntityTimelineRunRow,
+  EntityTimelineRunItem,
+  EntityTimelineTextChunk,
+  EntityTimelineTextItem,
+  EntityTimelineToolCallItem,
   IncludesEntity,
   EntityTimelineSection,
   EntityTimelineState,
@@ -210,6 +220,14 @@ export type {
 export { processWake } from './process-wake'
 export type { ProcessWakeConfig } from './types'
 
+// Skills loader + tools. Markdown skill packs with frontmatter for
+// triggers / when-to-use / keywords. createSkillTools mounts
+// use_skill / remove_skill on an entity so the agent loads a skill
+// body (and any sibling reference docs) on demand.
+export { createSkillsRegistry } from './skills/registry'
+export { createSkillTools } from './skills/tools'
+export type { SkillsRegistry, SkillMeta } from './skills/types'
+
 export { DEFAULT_OUTPUT_SCHEMAS } from './default-output-schemas'
 export { createContextEntriesApi } from './context-entries'
 export { assembleContext } from './context-assembly'
@@ -229,6 +247,7 @@ export type {
 } from './model-runner'
 
 export { createRuntimeHandler, createRuntimeRouter } from './create-handler'
+export { verifyWebhookSignature } from './webhook-signature'
 export { createPullWakeRunner } from './pull-wake-runner'
 export type {
   RuntimeRouter,
@@ -237,6 +256,12 @@ export type {
   RuntimeHandlerConfig,
   RuntimeHandlerResult,
 } from './create-handler'
+export type {
+  WebhookJwks,
+  WebhookPublicJwk,
+  WebhookSignatureVerificationResult,
+  WebhookSignatureVerifierConfig,
+} from './webhook-signature'
 export type {
   PullWakeEvent,
   PullWakeRunner,

@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import { ClaimWriteTokenStore } from '../src/claim-write-token-store'
 import { globalRouter } from '../src/routing/global-router'
+import { createEd25519WebhookSigner } from '../src/webhook-signing'
 import type { TenantContext } from '../src/routing/context'
 import type { DurableStreamsRoutingAdapter } from '../src/routing/durable-streams-routing-adapter'
+import type { WebhookSigner } from '../src/webhook-signing'
 
 function request(method: string, path: string, body?: unknown): Request {
   return new Request(`http://agents.local${path}`, {
@@ -10,6 +12,22 @@ function request(method: string, path: string, body?: unknown): Request {
     headers:
       body === undefined ? undefined : { 'content-type': `application/json` },
     body: body === undefined ? undefined : JSON.stringify(body),
+  })
+}
+
+async function signedWebhookRequest(
+  path: string,
+  body: unknown,
+  signer: WebhookSigner
+): Promise<Request> {
+  const bodyText = JSON.stringify(body)
+  return new Request(`http://agents.local${path}`, {
+    method: `POST`,
+    headers: {
+      'content-type': `application/json`,
+      'webhook-signature': await signer.sign(bodyText),
+    },
+    body: bodyText,
   })
 }
 
@@ -40,6 +58,17 @@ function insertDb() {
   const values = vi.fn(() => ({ onConflictDoUpdate }))
   const insert = vi.fn(() => ({ values }))
   return { insert, values, onConflictDoUpdate }
+}
+
+function jwksFetch(signer: WebhookSigner): typeof fetch {
+  return vi.fn(async () => {
+    return new Response(JSON.stringify(await signer.jwks()), {
+      headers: {
+        'content-type': `application/jwk-set+json`,
+        'cache-control': `public, max-age=0`,
+      },
+    })
+  }) as unknown as typeof fetch
 }
 
 const serviceRoutedTestAdapter: DurableStreamsRoutingAdapter = {
@@ -95,11 +124,17 @@ function buildContext(overrides: Partial<TenantContext> = {}): TenantContext {
     publicUrl: `http://agents.local`,
     durableStreamsUrl: `http://durable.local/v1/stream/tenant-a`,
     durableStreamsDispatcher: undefined as any,
+    durableStreamsWebhookSignature: false,
     pgDb: undefined as any,
     entityManager: {
       registry: {
         getEntityByStream: vi.fn().mockResolvedValue(entity),
         updateStatus: vi.fn().mockResolvedValue(undefined),
+        materializeReleasedClaim: vi.fn().mockResolvedValue({
+          claim: null,
+          entityCleared: true,
+        }),
+        materializeHeartbeatClaim: vi.fn().mockResolvedValue(undefined),
       },
       enrichPayload: vi.fn(async (payload: Record<string, unknown>) => ({
         ...payload,
@@ -126,6 +161,133 @@ function buildContext(overrides: Partial<TenantContext> = {}): TenantContext {
 }
 
 describe(`webhook forwarding for Durable Streams subscriptions`, () => {
+  it(`validates upstream Durable Streams webhook signatures before forwarding`, async () => {
+    const select = selectDb([
+      { webhookUrl: `http://runtime.local/_electric/builtin-agent-handler` },
+    ])
+    const insert = insertDb()
+    const upstreamSigner = createEd25519WebhookSigner({ kid: `ds_upstream` })
+    const upstreamJwksUrl = `http://durable.local/v1/stream/tenant-a-default/__ds/jwks.json`
+    const downstreamSigner = {
+      sign: vi.fn(() => `t=1,kid=agents,ed25519=runtime_signature`),
+      jwks: vi.fn(() => ({ keys: [] })),
+    }
+    const fetchSpy = vi
+      .spyOn(globalThis, `fetch`)
+      .mockImplementation(async (input) => {
+        if (String(input) === upstreamJwksUrl) {
+          return new Response(JSON.stringify(await upstreamSigner.jwks()), {
+            headers: {
+              'content-type': `application/jwk-set+json`,
+              'cache-control': `public, max-age=0`,
+            },
+          })
+        }
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { 'content-type': `application/json` },
+        })
+      })
+
+    try {
+      const response = await globalRouter.fetch(
+        await signedWebhookRequest(
+          `/_electric/webhook-forward/horton-handler`,
+          {
+            subscription_id: `horton-handler`,
+            wake_id: `wake-signed`,
+            generation: 1,
+            streams: [
+              {
+                path: `horton/demo/main`,
+                acked_offset: `0`,
+                tail_offset: `1`,
+                has_pending: true,
+              },
+            ],
+            callback_url: `http://durable.local/v1/stream/tenant-a/__ds/subscriptions/horton-handler/callback`,
+            callback_token: `callback-token`,
+          },
+          upstreamSigner
+        ),
+        buildContext({
+          durableStreamsUrl: `http://durable.local/v1/stream/tenant-a-default`,
+          durableStreamsWebhookSignature: undefined,
+          pgDb: { select: select.select, insert: insert.insert } as any,
+          webhookSigner: downstreamSigner,
+        })
+      )
+
+      expect(response.status).toBe(200)
+      expect(fetchSpy).toHaveBeenCalledTimes(2)
+      expect(String(fetchSpy.mock.calls[0]![0])).toBe(upstreamJwksUrl)
+      const forwardedHeaders = new Headers(fetchSpy.mock.calls[1]![1]?.headers)
+      expect(forwardedHeaders.get(`webhook-signature`)).toBe(
+        `t=1,kid=agents,ed25519=runtime_signature`
+      )
+    } finally {
+      fetchSpy.mockRestore()
+    }
+  })
+
+  it(`rejects webhook-forward requests with invalid upstream DS signatures`, async () => {
+    const select = selectDb([
+      { webhookUrl: `http://runtime.local/_electric/builtin-agent-handler` },
+    ])
+    const trustedSigner = createEd25519WebhookSigner({ kid: `ds_trusted` })
+    const untrustedSigner = createEd25519WebhookSigner({
+      kid: `ds_untrusted`,
+    })
+    const fetchJwks = jwksFetch(trustedSigner)
+    const fetchSpy = vi.spyOn(globalThis, `fetch`).mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), {
+        headers: { 'content-type': `application/json` },
+      })
+    )
+
+    try {
+      const response = await globalRouter.fetch(
+        await signedWebhookRequest(
+          `/_electric/webhook-forward/horton-handler`,
+          {
+            subscription_id: `horton-handler`,
+            wake_id: `wake-invalid`,
+            generation: 1,
+            streams: [
+              {
+                path: `horton/demo/main`,
+                acked_offset: `0`,
+                tail_offset: `1`,
+                has_pending: true,
+              },
+            ],
+          },
+          untrustedSigner
+        ),
+        buildContext({
+          durableStreamsWebhookSignature: {
+            jwksUrl: `http://durable.local/v1/stream/tenant-a/__ds/jwks.json?case=invalid`,
+            fetchClient: fetchJwks,
+            cacheTtlMs: 0,
+          },
+          pgDb: { select: select.select } as any,
+        })
+      )
+
+      expect(response.status).toBe(401)
+      await expect(response.json()).resolves.toMatchObject({
+        error: {
+          code: `UNAUTHORIZED`,
+          message: `Unknown webhook signing key`,
+        },
+      })
+      expect(fetchJwks).toHaveBeenCalledOnce()
+      expect(select.select).not.toHaveBeenCalled()
+      expect(fetchSpy).not.toHaveBeenCalled()
+    } finally {
+      fetchSpy.mockRestore()
+    }
+  })
+
   it(`adapts the new webhook wake payload into the runtime wake payload`, async () => {
     const select = selectDb([
       { webhookUrl: `http://runtime.local/_electric/builtin-agent-handler` },
@@ -136,6 +298,10 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
         headers: { 'content-type': `application/json` },
       })
     )
+    const webhookSigner = {
+      sign: vi.fn(() => `t=1,kid=ds_test,ed25519=test_signature`),
+      jwks: vi.fn(() => ({ keys: [] })),
+    }
 
     try {
       const response = await globalRouter.fetch(
@@ -156,6 +322,7 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
         }),
         buildContext({
           pgDb: { select: select.select, insert: insert.insert } as any,
+          webhookSigner,
         })
       )
 
@@ -177,6 +344,10 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
           url: `/horton/demo`,
         },
       })
+      expect(webhookSigner.sign).toHaveBeenCalledWith(expect.any(Uint8Array))
+      expect(new Headers(init?.headers).get(`webhook-signature`)).toBe(
+        `t=1,kid=ds_test,ed25519=test_signature`
+      )
       expect(insert.values).toHaveBeenCalledWith({
         tenantId: `tenant-a`,
         consumerId: `wake-1`,
@@ -579,5 +750,183 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
     } finally {
       fetchSpy.mockRestore()
     }
+  })
+
+  describe(`callback-forward done releases the durable claim independently of the in-memory write token`, () => {
+    const upstreamOk = (): void => {
+      vi.spyOn(globalThis, `fetch`).mockResolvedValue(
+        new Response(JSON.stringify({ ok: true, next_wake: false }), {
+          headers: { 'content-type': `application/json` },
+        })
+      )
+    }
+
+    it(`releases the consumer_claims row and marks the entity idle when the consumer holds the in-memory write token`, async () => {
+      const select = selectDb([
+        {
+          callbackUrl: `http://durable.local/v1/stream-meta/subscriptions/horton-handler/callback?service=tenant-a`,
+          primaryStream: `/horton/demo/main`,
+        },
+      ])
+      upstreamOk()
+      const ctx = buildContext({
+        pgDb: { select: select.select } as any,
+      })
+      ctx.runtime.claimWriteTokens.mint(
+        `tenant-a`,
+        `/horton/demo/main`,
+        `wake-1`
+      )
+
+      try {
+        const response = await globalRouter.fetch(
+          new Request(`http://agents.local/_electric/callback-forward/wake-1`, {
+            method: `POST`,
+            headers: {
+              'content-type': `application/json`,
+              authorization: `Bearer callback-token`,
+            },
+            body: JSON.stringify({
+              epoch: 7,
+              acks: [{ path: `/horton/demo/main`, offset: `1` }],
+              done: true,
+            }),
+          }),
+          ctx
+        )
+
+        expect(response.status).toBe(200)
+        expect(
+          ctx.entityManager.registry.materializeReleasedClaim
+        ).toHaveBeenCalledWith(
+          expect.objectContaining({
+            consumerId: `wake-1`,
+            epoch: 7,
+            ackedStreams: [{ path: `/horton/demo/main`, offset: `1` }],
+          })
+        )
+        expect(ctx.entityManager.registry.updateStatus).toHaveBeenCalledWith(
+          `/horton/demo`,
+          `idle`
+        )
+      } finally {
+        vi.mocked(globalThis.fetch).mockRestore()
+      }
+    })
+
+    it(`releases the consumer_claims row and marks the entity idle when no in-memory write token is present for the consumer`, async () => {
+      const select = selectDb([
+        {
+          callbackUrl: `http://durable.local/v1/stream-meta/subscriptions/horton-handler/callback?service=tenant-a`,
+          primaryStream: `/horton/demo/main`,
+        },
+      ])
+      upstreamOk()
+      const ctx = buildContext({
+        pgDb: { select: select.select } as any,
+      })
+
+      try {
+        const response = await globalRouter.fetch(
+          new Request(`http://agents.local/_electric/callback-forward/wake-1`, {
+            method: `POST`,
+            headers: {
+              'content-type': `application/json`,
+              authorization: `Bearer callback-token`,
+            },
+            body: JSON.stringify({
+              epoch: 7,
+              acks: [{ path: `/horton/demo/main`, offset: `1` }],
+              done: true,
+            }),
+          }),
+          ctx
+        )
+
+        expect(response.status).toBe(200)
+        expect(
+          ctx.entityManager.registry.materializeReleasedClaim
+        ).toHaveBeenCalledWith(
+          expect.objectContaining({
+            consumerId: `wake-1`,
+            epoch: 7,
+          })
+        )
+        expect(ctx.entityManager.registry.updateStatus).toHaveBeenCalledWith(
+          `/horton/demo`,
+          `idle`
+        )
+      } finally {
+        vi.mocked(globalThis.fetch).mockRestore()
+      }
+    })
+
+    it(`releases the consumer_claims row for the old consumer when a newer consumer has taken over the in-memory token, without disturbing the newer consumer's token or the entity status`, async () => {
+      const select = selectDb([
+        {
+          callbackUrl: `http://durable.local/v1/stream-meta/subscriptions/horton-handler/callback?service=tenant-a`,
+          primaryStream: `/horton/demo/main`,
+        },
+      ])
+      upstreamOk()
+      const ctx = buildContext({
+        pgDb: { select: select.select } as any,
+      })
+      // The newer consumer is the active dispatch in the DB, so releasing
+      // the older consumer's row must not clear the entity's dispatch state.
+      ;(
+        ctx.entityManager.registry.materializeReleasedClaim as any
+      ).mockResolvedValue({ claim: null, entityCleared: false })
+
+      ctx.runtime.claimWriteTokens.mint(
+        `tenant-a`,
+        `/horton/demo/main`,
+        `wake-1`
+      )
+      ctx.runtime.claimWriteTokens.mint(
+        `tenant-a`,
+        `/horton/demo/main`,
+        `wake-2`
+      )
+
+      try {
+        await globalRouter.fetch(
+          new Request(`http://agents.local/_electric/callback-forward/wake-1`, {
+            method: `POST`,
+            headers: {
+              'content-type': `application/json`,
+              authorization: `Bearer callback-token`,
+            },
+            body: JSON.stringify({
+              epoch: 7,
+              acks: [{ path: `/horton/demo/main`, offset: `1` }],
+              done: true,
+            }),
+          }),
+          ctx
+        )
+
+        expect(
+          ctx.entityManager.registry.materializeReleasedClaim
+        ).toHaveBeenCalledWith(
+          expect.objectContaining({
+            consumerId: `wake-1`,
+            epoch: 7,
+          })
+        )
+        // The newer consumer owns the entity now — its status must stay
+        // as-is and its in-memory write token must remain intact.
+        expect(ctx.entityManager.registry.updateStatus).not.toHaveBeenCalled()
+        expect(
+          ctx.runtime.claimWriteTokens.owns(
+            `tenant-a`,
+            `/horton/demo/main`,
+            `wake-2`
+          )
+        ).toBe(true)
+      } finally {
+        vi.mocked(globalThis.fetch).mockRestore()
+      }
+    })
   })
 })

@@ -1435,7 +1435,6 @@ export function runElectricAgentsConformanceTests(
             const baseUrl = config.baseUrl
 
             const entityUrls: Array<string> = []
-            const registeredTypeNames: Array<string> = []
 
             const scenario = electricAgents(baseUrl)
 
@@ -1446,6 +1445,7 @@ export function runElectricAgentsConformanceTests(
             }
 
             let entityCounter = 0
+            let typeCounter = 0
 
             for (const action of actions) {
               const valid = enabledElectricAgentsActions(model)
@@ -1453,9 +1453,8 @@ export function runElectricAgentsConformanceTests(
 
               switch (action) {
                 case `register_type`: {
-                  const typeNum = model.entityTypes.length
+                  const typeNum = typeCounter++
                   const typeName = `prop-type-${runId}-${typeNum}`
-                  registeredTypeNames.push(typeName)
                   scenario.subscription(
                     `/${typeName}/**`,
                     `prop-sub-${typeName}`
@@ -1465,7 +1464,12 @@ export function runElectricAgentsConformanceTests(
                     description: `Property-based test type ${typeNum}`,
                     creation_schema: { type: `object` },
                   })
-                  model = applyElectricAgentsAction(model, `register_type`)
+                  model = applyElectricAgentsAction(
+                    model,
+                    `register_type`,
+                    undefined,
+                    { typeName }
+                  )
                   break
                 }
 
@@ -1482,15 +1486,14 @@ export function runElectricAgentsConformanceTests(
                     .filter((i) => i >= 0)
                   if (deletableIndices.length === 0) break
                   const deleteIdx = deletableIndices[0]!
-                  scenario.deleteType(registeredTypeNames[deleteIdx]!)
-                  registeredTypeNames.splice(deleteIdx, 1)
+                  scenario.deleteType(model.entityTypes[deleteIdx]!.name)
                   model = applyElectricAgentsAction(model, `delete_type`)
                   break
                 }
 
                 case `spawn`: {
-                  if (registeredTypeNames.length === 0) break
-                  const typeName = registeredTypeNames[0]!
+                  if (model.entityTypes.length === 0) break
+                  const typeName = model.entityTypes[0]!.name
                   const instanceId = `entity-${entityCounter++}`
                   scenario.spawn(typeName, instanceId)
                   scenario.custom(async (ctx: RunContext) => {

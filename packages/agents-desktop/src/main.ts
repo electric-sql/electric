@@ -27,6 +27,7 @@ import {
   session,
   shell,
 } from 'electron'
+import fixPath from 'fix-path'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { readFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
@@ -230,6 +231,10 @@ const INITIAL_SERVER_URL =
   process.env.ELECTRIC_DESKTOP_SERVER_URL?.trim() ||
   process.env.ELECTRIC_AGENTS_SERVER_URL?.trim() ||
   null
+
+// GUI-launched desktop apps don't inherit the user's shell PATH — restore it
+// so child processes can find CLI tools like `gh`.
+fixPath()
 
 if (DESKTOP_USER_DATA_DIR) {
   app.setPath(`userData`, path.resolve(DESKTOP_USER_DATA_DIR))

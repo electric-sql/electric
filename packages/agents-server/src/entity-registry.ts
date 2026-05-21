@@ -361,11 +361,17 @@ export class PostgresRegistry {
     input: MaterializeHeartbeatClaimInput
   ): Promise<void> {
     const heartbeatAt = input.heartbeatAt ?? new Date()
+    // Only touch leaseExpiresAt when the caller explicitly provides one.
+    // The lease was set at materializeActiveClaim time from the upstream
+    // lease_ttl_ms and remains the authoritative expiry; heartbeats are
+    // alive-pings, not lease extensions.
     await this.db
       .update(consumerClaims)
       .set({
         lastHeartbeatAt: heartbeatAt,
-        leaseExpiresAt: input.leaseExpiresAt ?? null,
+        ...(input.leaseExpiresAt !== undefined
+          ? { leaseExpiresAt: input.leaseExpiresAt }
+          : {}),
         updatedAt: heartbeatAt,
       })
       .where(
@@ -379,7 +385,7 @@ export class PostgresRegistry {
 
   async materializeReleasedClaim(
     input: MaterializeReleasedClaimInput
-  ): Promise<ConsumerClaim | null> {
+  ): Promise<{ claim: ConsumerClaim | null; entityCleared: boolean }> {
     const releasedAt = input.releasedAt ?? new Date()
     const rows = await this.db
       .update(consumerClaims)
@@ -399,8 +405,13 @@ export class PostgresRegistry {
       .returning()
 
     const claim = rows[0] ? this.rowToConsumerClaim(rows[0]) : null
+    let entityCleared = false
     if (claim) {
-      await this.db
+      // entityCleared distinguishes "we were the active dispatch and now it's
+      // empty" from "a newer claim was already active for this entity." The
+      // WHERE clause matches our (consumerId, epoch) so an evicted-by-newer
+      // case correctly returns zero rows.
+      const cleared = await this.db
         .update(entityDispatchState)
         .set({
           activeConsumerId: null,
@@ -420,8 +431,10 @@ export class PostgresRegistry {
             eq(entityDispatchState.activeEpoch, input.epoch)
           )
         )
+        .returning({ entityUrl: entityDispatchState.entityUrl })
+      entityCleared = cleared.length > 0
     }
-    return claim
+    return { claim, entityCleared }
   }
 
   async getActiveClaimsForRunner(
