@@ -1,5 +1,17 @@
 # electric-ax
 
+## 0.2.4
+
+### Patch Changes
+
+- 99ac6fd: Pin Durable Streams dependencies to commit `5d5c217` so local development resolves the same subscription-control routing code as the PR build.
+- Updated dependencies [9c275b7]
+- Updated dependencies [1ab43f5]
+- Updated dependencies [99ac6fd]
+- Updated dependencies [adc99e9]
+  - @electric-ax/agents-runtime@0.3.0
+  - @electric-ax/agents@0.4.4
+
 ## 0.2.3
 
 ### Patch Changes
