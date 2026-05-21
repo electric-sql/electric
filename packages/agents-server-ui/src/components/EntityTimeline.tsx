@@ -256,7 +256,7 @@ function signalSearchText(
     signal.signal,
     signal.status,
     signal.sender,
-    signalDisplayReason(signal.reason),
+    signal.reason,
     signal.outcome,
     signal.previous_state,
     signal.new_state,
@@ -272,21 +272,11 @@ function signalSummary(
   return [
     signal.status,
     signal.outcome,
-    signalDisplayReason(signal.reason),
+    signal.reason,
     Number.isFinite(timestamp) ? formatChatTimestamp(timestamp) : null,
   ]
     .filter(Boolean)
     .join(` · `)
-}
-
-function signalDisplayReason(reason: string | undefined): string | undefined {
-  if (reason === `Interrupted from keyboard`) {
-    return `Interrupted current run`
-  }
-  if (reason === `Stopped immediately from keyboard`) {
-    return `Stopped immediately`
-  }
-  return reason
 }
 
 function wakeDetails(
