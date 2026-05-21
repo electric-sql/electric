@@ -163,6 +163,8 @@ This will ensure that the rows are included for all available times.
 
 If the MultiTimeView has not been marked ready by the Materializer yet, the SubqueryIndex should return WhereCondition.affected_shapes(child_node_id)
 
+When a new child_node_id is created for `{subquery_group_id, subquery_id}` and the subquery is already ready, the routing rows for that group must be seeded synchronously by iterating `MultiTimeView.values(subquery_id, current_time)` and appending the new child_node_id to each `subquery_group_id, value -> list(child_node_id)` entry. The child must not be exposed to routing until this seed completes, otherwise routing will miss values that the new child should match.
+
 Removal of a subquery must not scale with the total number of shapes or the number of subqueries in the group, but can scale with the number of values for the subquery. This can be achived by getting the getting the values for the subquery from the MultiTimeView (as discussed above in the MultiTimeView section when talking about subquery removal) - whilst iterating though those values we can also delete those values in the SubqueryIndex for all the groups that it's in.
 
 #### Materializer
