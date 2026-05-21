@@ -38,10 +38,25 @@ html[data-electric-mobile-dom='true'] {
     'Courier New', monospace;
 }
 
-html[data-electric-mobile-dom='true']
-  [class*='EntityTimeline'][class*='_content_'] {
-  padding: var(--ds-space-4) var(--ds-space-4) 96px !important;
+html[data-electric-mobile-dom='true'] .mobile-chat-content {
+  padding: var(--ds-space-4) var(--ds-space-2)
+    calc(var(--ds-space-4) + var(--mobile-chat-bottom-inset, 0px)) !important;
   max-width: 100% !important;
+}
+
+html[data-electric-mobile-dom='true'] .mobile-chat-scroll-viewport {
+  mask-image: linear-gradient(
+    to bottom,
+    #000 0,
+    #000 calc(100% - min(160px, var(--mobile-chat-bottom-inset, 20px))),
+    transparent 100%
+  ) !important;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    #000 0,
+    #000 calc(100% - min(160px, var(--mobile-chat-bottom-inset, 20px))),
+    transparent 100%
+  ) !important;
 }
 
 html[data-electric-mobile-dom='true'] [class*='MessageInput'][class*='_root_'] {
@@ -56,6 +71,10 @@ html[data-electric-mobile-dom='true'] [class*='MessageInput'][class*='_root_'] {
 html[data-electric-mobile-dom='true']
   [class*='UserMessage'][class*='_bubble_'] {
   padding: var(--ds-space-2) var(--ds-space-3) !important;
+}
+
+html[data-electric-mobile-dom='true'] .mobile-user-message-root {
+  width: max(0px, calc(100% - 24px)) !important;
 }
 
 html[data-electric-mobile-dom='true']

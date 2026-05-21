@@ -3,8 +3,10 @@ import {
   createEntitiesCollection,
   createEntityTypesCollection,
   createRunnersCollection,
+  signalEntity,
   type EntitiesCollection,
   type EntityTypesCollection,
+  type EntitySignal,
   type RunnersCollection,
 } from './agentsClient'
 
@@ -13,6 +15,12 @@ type AgentsContextValue = {
   entitiesCollection: EntitiesCollection
   entityTypesCollection: EntityTypesCollection
   runnersCollection: RunnersCollection
+  signalEntity: (input: {
+    entityUrl: string
+    signal: EntitySignal
+    reason?: string
+    payload?: unknown
+  }) => Promise<void>
 }
 
 const AgentsContext = createContext<AgentsContextValue | null>(null)
@@ -30,6 +38,7 @@ export function AgentsProvider({
       entitiesCollection: createEntitiesCollection(serverUrl),
       entityTypesCollection: createEntityTypesCollection(serverUrl),
       runnersCollection: createRunnersCollection(serverUrl),
+      signalEntity: (input) => signalEntity({ baseUrl: serverUrl, ...input }),
     }
   }, [serverUrl])
 

@@ -1,4 +1,10 @@
-import { createContext, useContext, useMemo, type ReactElement } from 'react'
+import {
+  createContext,
+  useContext,
+  useMemo,
+  type CSSProperties,
+  type ReactElement,
+} from 'react'
 import {
   RouterProvider,
   createMemoryHistory,
@@ -69,6 +75,7 @@ type EmbedState = {
   theme: EmbedTheme
   scrollToBottomSignal?: number
   inlineQueuedMessages?: Array<OptimisticInboxMessage>
+  bottomInset?: number
   // Forwarded across the Expo-DOM boundary so the embed's auth-fetch
   // module instance (separate from the native side) can inject the
   // Cloud `Authorization` + `x-electric-service` headers on every
@@ -163,6 +170,7 @@ function EmbedSurface({ state }: { state: EmbedState }): ReactElement {
       serverUrl={state.serverUrl}
       scrollToBottomSignal={state.scrollToBottomSignal}
       inlineQueuedMessages={state.inlineQueuedMessages}
+      bottomInset={state.bottomInset}
     />
   )
 }
@@ -173,12 +181,14 @@ function EntityHost({
   serverUrl,
   scrollToBottomSignal,
   inlineQueuedMessages,
+  bottomInset,
 }: {
   entityUrl: string
   view: EmbedView
   serverUrl: string
   scrollToBottomSignal?: number
   inlineQueuedMessages?: Array<OptimisticInboxMessage>
+  bottomInset?: number
 }): ReactElement {
   const { entitiesCollection } = useElectricAgents()
   const { data: matches = [], isLoading } = useLiveQuery(
@@ -215,8 +225,11 @@ function EntityHost({
     )
   }
   if (view === `chat-log`) {
+    const style = {
+      '--mobile-chat-bottom-inset': `${Math.max(0, bottomInset ?? 0)}px`,
+    } as CSSProperties
     return (
-      <div className={styles.column}>
+      <div className={styles.column} style={style}>
         <ChatLogView
           {...props}
           scrollToBottomSignal={scrollToBottomSignal}
