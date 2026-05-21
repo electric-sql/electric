@@ -7,9 +7,7 @@ defmodule Electric.PollWait do
   instead of stampeding the same millisecond window.
 
   All defaults can be overridden per-call so the primitive can be shared
-  between consumers with very different latency profiles (e.g. StatusMonitor
-  readiness on a seconds-to-minutes timescale vs ShapeCache creation on a
-  tens-of-milliseconds timescale).
+  between consumers with very different latency profiles.
   """
 
   @default_initial_interval 25
@@ -55,8 +53,8 @@ defmodule Electric.PollWait do
     end
   end
 
-  # Returns interval ± jitter*interval, clamped to >= 1ms so we never busy-loop.
-  defp jittered(interval, jitter) when jitter <= 0.0, do: max(1, interval)
+  # Returns interval ± jitter*interval, clamped to >= 10ms so we never busy-loop.
+  defp jittered(interval, jitter) when jitter <= 0.0, do: max(10, interval)
 
   defp jittered(interval, jitter) do
     spread = max(1, round(interval * jitter))
