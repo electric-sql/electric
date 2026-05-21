@@ -8,6 +8,7 @@ import {
   TextInput,
   View,
 } from 'react-native'
+import { CloudServerPicker } from '../components/CloudServerPicker'
 import { PrimaryButton } from '../components/PrimaryButton'
 import { Screen } from '../components/Screen'
 import { useTokens } from '../lib/ThemeProvider'
@@ -71,6 +72,11 @@ export function ServerSetupScreen({
               Horton runtime.
             </Text>
           </View>
+
+          <CloudServerPicker
+            onPick={(picked) => setValue(picked)}
+            disabled={loading}
+          />
 
           <View style={styles.field}>
             <Text style={styles.label}>Server URL</Text>

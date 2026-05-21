@@ -9,6 +9,7 @@ import {
   TextInput,
   View,
 } from 'react-native'
+import { CloudServerPicker } from '../components/CloudServerPicker'
 import { Icon } from '../components/Icon'
 import { PrimaryButton } from '../components/PrimaryButton'
 import { Screen } from '../components/Screen'
@@ -191,6 +192,11 @@ export function OnboardingScreen({
                 Mobile connects to a running server. It does not bundle a local
                 Horton runtime.
               </Text>
+
+              <CloudServerPicker
+                onPick={(picked) => setServerUrlValue(picked)}
+                disabled={submittingServer}
+              />
 
               <View style={styles.field}>
                 <Text style={styles.label}>Server URL</Text>
