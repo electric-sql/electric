@@ -617,22 +617,20 @@ defmodule Electric.StatusMonitorTest do
     test "flips back to false when waiters drain via :timeout_waiter rather than readiness",
          %{stack_id: stack_id} do
       start_link_supervised!({StatusMonitor, stack_id: stack_id})
-
-      threshold = StatusMonitor.congested_threshold()
       pid = GenServer.whereis(StatusMonitor.name(stack_id))
 
-      waiters =
-        for _ <- 1..threshold do
-          Task.async(fn -> StatusMonitor.wait_until(stack_id, :active, timeout: 50) end)
-        end
+      # Enqueue a real waiter on the GenServer.call path (flag is still false
+      # here, so the call path is taken and the waiter lands in state.waiters).
+      task = Task.async(fn -> StatusMonitor.wait_until(stack_id, :active, timeout: 50) end)
+      wait_until_waiters_count(pid, 1)
 
-      wait_until_waiters_count(pid, threshold)
+      # Now force the flag on. When the waiter's deadline fires, the
+      # :timeout_waiter handler removes it from state.waiters (size → 0) and
+      # calls maybe_clear_congested/2, which is what we're testing.
+      force_congested(stack_id)
       assert StatusMonitor.congested?(stack_id) == true
 
-      # All waiters time out — :timeout_waiter is the drain path.
-      results = Enum.map(waiters, &Task.await(&1, 1_000))
-      assert Enum.all?(results, &match?({:error, _}, &1))
-
+      assert {:error, _} = Task.await(task, 1_000)
       StatusMonitor.wait_for_messages_to_be_processed(stack_id)
       assert StatusMonitor.congested?(stack_id) == false
     end
