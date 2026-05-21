@@ -16,6 +16,7 @@ import {
 } from '@tanstack/react-virtual'
 import {
   ArrowDown,
+  CircleStop,
   Database,
   ExternalLink,
   FileJson,
@@ -125,7 +126,7 @@ function estimateRowHeight(
     )
     return Math.max(64, 48 + lines * lineHeight) + timelineRowGap(row)
   }
-  if (row.wake || row.manifest) {
+  if (row.wake || row.signal || row.manifest) {
     return 76 + timelineRowGap(row)
   }
   return 120 + timelineRowGap(row)
@@ -139,7 +140,7 @@ const ROW_SETTLE_MS = 500
 type EntityStatus = NonNullable<IncludesEntity[`status`]>
 
 function timelineRowGap(row: RenderTimelineRow): number {
-  return row.manifest || row.wake ? MANIFEST_ROW_GAP : ROW_GAP
+  return row.manifest || row.wake || row.signal ? MANIFEST_ROW_GAP : ROW_GAP
 }
 
 type TimelinePaneFindMatch = PaneFindMatch & {
@@ -160,6 +161,7 @@ function timelineRowSearchText(
       timestamp: Date.parse(row.wake.payload.timestamp),
     })
   }
+  if (row.signal) return signalSearchText(row.signal)
   if (row.manifest) return manifestSearchText(row.manifest)
   return runSearchTextByKey.get(row.$key) ?? runSearchTextFromSnapshot(row.run)
 }
@@ -167,6 +169,7 @@ function timelineRowSearchText(
 function timelineRowLabel(row: RenderTimelineRow): string {
   if (row.inbox) return `User message`
   if (row.wake) return `Wake`
+  if (row.signal) return `Signal`
   if (row.manifest) return `Manifest item`
   return `Agent response`
 }
@@ -226,6 +229,54 @@ function WakeTimelineRow({
       </InlineEventCard>
     </div>
   )
+}
+
+function SignalTimelineRow({
+  signal,
+}: {
+  signal: NonNullable<RenderTimelineRow[`signal`]>
+}): React.ReactElement {
+  return (
+    <div className={styles.manifestRow}>
+      <InlineEventCard
+        icon={CircleStop}
+        title={`signal ${signal.signal}`}
+        summary={signalSummary(signal)}
+        headerSurface
+      />
+    </div>
+  )
+}
+
+function signalSearchText(
+  signal: NonNullable<RenderTimelineRow[`signal`]>
+): string {
+  return [
+    `signal`,
+    signal.signal,
+    signal.status,
+    signal.sender,
+    signal.reason,
+    signal.outcome,
+    signal.previous_state,
+    signal.new_state,
+  ]
+    .filter(Boolean)
+    .join(` `)
+}
+
+function signalSummary(
+  signal: NonNullable<RenderTimelineRow[`signal`]>
+): string {
+  const timestamp = Date.parse(signal.timestamp)
+  return [
+    signal.status,
+    signal.outcome,
+    signal.reason,
+    Number.isFinite(timestamp) ? formatChatTimestamp(timestamp) : null,
+  ]
+    .filter(Boolean)
+    .join(` · `)
 }
 
 function wakeDetails(
@@ -689,6 +740,10 @@ const TimelineRow = memo(function TimelineRow({
         }}
       />
     )
+  }
+
+  if (row.signal) {
+    return <SignalTimelineRow signal={row.signal} />
   }
 
   if (row.manifest) {

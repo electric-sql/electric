@@ -247,6 +247,7 @@ export interface EntityTimelineRunRow {
 
 export type EntityTimelineInboxRow = IncludesInboxMessage
 export type EntityTimelineWakeRow = IncludesWakeMessage
+export type EntityTimelineSignalRow = IncludesSignal
 
 export type EntityTimelineQueryRow =
   | {
@@ -254,6 +255,7 @@ export type EntityTimelineQueryRow =
       inbox: EntityTimelineInboxRow
       run?: undefined
       wake?: undefined
+      signal?: undefined
       manifest?: undefined
     }
   | {
@@ -261,6 +263,7 @@ export type EntityTimelineQueryRow =
       inbox?: undefined
       run: EntityTimelineRunRow
       wake?: undefined
+      signal?: undefined
       manifest?: undefined
     }
   | {
@@ -268,6 +271,7 @@ export type EntityTimelineQueryRow =
       inbox?: undefined
       run?: undefined
       wake: EntityTimelineWakeRow
+      signal?: undefined
       manifest?: undefined
     }
   | {
@@ -275,6 +279,15 @@ export type EntityTimelineQueryRow =
       inbox?: undefined
       run?: undefined
       wake?: undefined
+      signal: EntityTimelineSignalRow
+      manifest?: undefined
+    }
+  | {
+      $key: string
+      inbox?: undefined
+      run?: undefined
+      wake?: undefined
+      signal?: undefined
       manifest: ManifestEntry
     }
 
@@ -1181,6 +1194,7 @@ type EntityTimelineQueryBuilder = (q: InitialQueryBuilder) => QueryBuilder<any>
  * - `{ inbox }` for user inbox messages.
  * - `{ run }` for agent runs.
  * - `{ wake }` for wake events.
+ * - `{ signal }` for entity signals.
  * - `{ manifest }` for manifest entries.
  *
  * Run rows include live child collections rather than materialized arrays:
@@ -1244,6 +1258,24 @@ function buildEntityTimelineQuery(
         finished_child: wake.finished_child,
         other_children: wake.other_children,
       },
+    }))
+
+  const signalSource = q
+    .from({ signal: db.collections.signals })
+    .select(({ signal }) => ({
+      key: signal.key,
+      order: coalesce(signal._timeline_order, `~`),
+      signal: signal.signal,
+      status: signal.status,
+      sender: signal.sender,
+      reason: signal.reason,
+      payload: signal.payload,
+      timestamp: signal.timestamp,
+      handled_at: signal.handled_at,
+      handled_by: signal.handled_by,
+      outcome: signal.outcome,
+      previous_state: signal.previous_state,
+      new_state: signal.new_state,
     }))
 
   const runItemsSource = q
@@ -1342,28 +1374,31 @@ function buildEntityTimelineQuery(
       inbox: inboxSource,
       run: runSource,
       wake: wakeSource,
+      signal: signalSource,
       manifest: db.collections.manifests,
     })
-    .orderBy(({ inbox, run, wake, manifest }) =>
+    .orderBy(({ inbox, run, wake, signal, manifest }) =>
       coalesce(
         inbox.order,
         run.order,
         wake.order,
+        signal.order,
         manifest._timeline_order,
         `~`
       )
     )
-    .orderBy(({ inbox, run, wake, manifest }) =>
+    .orderBy(({ inbox, run, wake, signal, manifest }) =>
       coalesce(
         caseWhen(inbox.key, `inbox`),
         caseWhen(run.key, `run`),
         caseWhen(wake.key, `wake`),
+        caseWhen(signal.key, `signal`),
         caseWhen(manifest.key, `manifest`),
         ``
       )
     )
-    .orderBy(({ inbox, run, wake, manifest }) =>
-      coalesce(inbox.key, run.key, wake.key, manifest.key, ``)
+    .orderBy(({ inbox, run, wake, signal, manifest }) =>
+      coalesce(inbox.key, run.key, wake.key, signal.key, manifest.key, ``)
     )
 }
 
