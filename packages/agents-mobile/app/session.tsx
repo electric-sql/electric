@@ -22,6 +22,7 @@ import {
 import type { EmbedViewId } from '../src/lib/embedView'
 import SessionChatLogDomEmbedModule from '@electric-ax/agents-server-ui/src/embed/SessionChatLogDomEmbed'
 import SessionStateInspectorDomEmbedModule from '@electric-ax/agents-server-ui/src/embed/SessionStateInspectorDomEmbed'
+import { getActiveServerHeadersSnapshot } from '@electric-ax/agents-server-ui/src/lib/auth-fetch'
 import type { OptimisticInboxMessage } from '@electric-ax/agents-server-ui/src/lib/sendMessage'
 
 const HEADER_HEIGHT = 44
@@ -35,6 +36,7 @@ type SessionDomEmbedProps = {
   onRequestOpenEntity: (entityUrl: string) => Promise<void>
   style?: StyleProp<ViewStyle>
   matchContents?: boolean
+  serverHeaders?: { url: string; headers: Record<string, string> } | null
   dom?: unknown
 }
 
@@ -67,6 +69,10 @@ export default function SessionRoute(): React.ReactElement {
     ? params.entityUrl[0]
     : (params.entityUrl ?? ``)
   const view = params.view === `state-explorer` ? `state-explorer` : `chat`
+
+  // Read once per render — the DOM embed receives this as a prop and
+  // re-registers it on its side of the JS-context boundary.
+  const serverHeaders = getActiveServerHeadersSnapshot()
 
   const embedTop = insets.top + HEADER_HEIGHT
   const composerInset =
@@ -124,6 +130,7 @@ export default function SessionRoute(): React.ReactElement {
             theme={scheme}
             scrollToBottomSignal={chatLogScrollSignal}
             inlineQueuedMessages={inlineQueuedMessages}
+            serverHeaders={serverHeaders}
             onRequestOpenEntity={async (target) => openSession(target)}
             dom={domOptions(styles, embedSize, tokens.bg)}
           />
@@ -134,6 +141,7 @@ export default function SessionRoute(): React.ReactElement {
             serverUrl={serverUrl}
             entityUrl={entityUrl}
             theme={scheme}
+            serverHeaders={serverHeaders}
             onRequestOpenEntity={async (target) => openSession(target)}
             dom={domOptions(styles, embedSize, tokens.bg)}
           />

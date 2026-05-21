@@ -14,6 +14,7 @@ import { PrimaryButton } from '../components/PrimaryButton'
 import { Screen } from '../components/Screen'
 import { useCloudAuth } from '../lib/CloudAuthContext'
 import { checkServerHealth, normalizeServerUrl } from '../lib/agentsClient'
+import { prepareServerHeaders } from '../lib/serverHeaders'
 import { useTokens } from '../lib/ThemeProvider'
 import { fontSize, lineHeight, radii, rowHeight, spacing } from '../lib/theme'
 import type { Tokens } from '../lib/theme'
@@ -85,6 +86,10 @@ export function OnboardingScreen({
     setSubmittingServer(true)
     setServerError(null)
     try {
+      // Inject Cloud auth headers (if applicable) before the health
+      // check probes the server — Cloud agent servers reject
+      // unauthenticated requests with 401.
+      await prepareServerHeaders(normalized)
       await checkServerHealth(normalized)
       await onComplete({ serverUrl: normalized })
     } catch (err) {

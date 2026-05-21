@@ -13,6 +13,7 @@ import { Screen } from '../components/Screen'
 import { useTokens } from '../lib/ThemeProvider'
 import { fontSize, lineHeight, radii, rowHeight, spacing } from '../lib/theme'
 import { checkServerHealth, normalizeServerUrl } from '../lib/agentsClient'
+import { prepareServerHeaders } from '../lib/serverHeaders'
 import type { Tokens } from '../lib/theme'
 
 export function ServerSetupScreen({
@@ -39,6 +40,10 @@ export function ServerSetupScreen({
     setLoading(true)
     setError(null)
     try {
+      // Inject Cloud auth headers (if applicable) before the health
+      // check probes the server — Cloud agent servers reject
+      // unauthenticated requests with 401.
+      await prepareServerHeaders(normalized)
       await checkServerHealth(normalized)
       await onSave(normalized)
     } catch (err) {
