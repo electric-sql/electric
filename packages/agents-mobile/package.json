@@ -10,6 +10,7 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
+    "coverage": "vitest run --coverage --passWithNoTests",
     "doctor": "expo-doctor"
   },
   "dependencies": {
@@ -38,6 +39,7 @@
   },
   "devDependencies": {
     "@types/react": "^19.1.17",
+    "@vitest/coverage-v8": "^4.1.0",
     "babel-preset-expo": "~54.0.10",
     "typescript": "^5.9.3",
     "vitest": "^4.1.5"
