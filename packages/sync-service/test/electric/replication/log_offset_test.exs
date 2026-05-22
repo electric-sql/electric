@@ -35,4 +35,10 @@ defmodule Electric.Replication.LogOffsetTest do
     assert to_charlist(LogOffset.new(10, 2)) == ~c"10_2"
     assert to_charlist(LogOffset.before_all()) == ~c"-1"
   end
+
+  test "from_string rejects invalid negative offset parts without raising" do
+    assert {:error, "has invalid format"} = LogOffset.from_string("0_-1")
+    assert {:error, "has invalid format"} = LogOffset.from_string("-2_0")
+    assert {:error, "has invalid format"} = LogOffset.from_string("-1_inf")
+  end
 end
