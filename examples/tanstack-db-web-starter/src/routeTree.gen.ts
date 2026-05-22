@@ -66,11 +66,11 @@ const AuthenticatedProjectProjectIdRoute =
   } as any)
 
 export interface FileRoutesByFullPath {
+  "/": typeof AuthenticatedIndexRoute
   "/login": typeof LoginRoute
   "/api/projects": typeof ApiProjectsRoute
   "/api/todos": typeof ApiTodosRoute
   "/api/users": typeof ApiUsersRoute
-  "/": typeof AuthenticatedIndexRoute
   "/project/$projectId": typeof AuthenticatedProjectProjectIdRoute
   "/api/auth/$": typeof ApiAuthSplatRoute
   "/api/trpc/$": typeof ApiTrpcSplatRoute
@@ -100,11 +100,11 @@ export interface FileRoutesById {
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
+    | "/"
     | "/login"
     | "/api/projects"
     | "/api/todos"
     | "/api/users"
-    | "/"
     | "/project/$projectId"
     | "/api/auth/$"
     | "/api/trpc/$"
@@ -153,7 +153,7 @@ declare module "@tanstack/react-router" {
     "/_authenticated": {
       id: "/_authenticated"
       path: ""
-      fullPath: ""
+      fullPath: "/"
       preLoaderRoute: typeof AuthenticatedRouteImport
       parentRoute: typeof rootRouteImport
     }

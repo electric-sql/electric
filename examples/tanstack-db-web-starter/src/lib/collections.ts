@@ -45,7 +45,7 @@ export const projectCollection = createCollection(
     },
     schema: selectProjectSchema,
     getKey: (item) => item.id,
-    onInsert: async ({ transaction }) => {
+    onInsert: async ({ transaction, collection }) => {
       const { modified: newProject } = transaction.mutations[0]
       const result = await trpc.projects.create.mutate({
         name: newProject.name,
@@ -54,9 +54,9 @@ export const projectCollection = createCollection(
         shared_user_ids: newProject.shared_user_ids,
       })
 
-      return { txid: result.txid }
+      await collection.utils.awaitTxId(result.txid)
     },
-    onUpdate: async ({ transaction }) => {
+    onUpdate: async ({ transaction, collection }) => {
       const { modified: updatedProject } = transaction.mutations[0]
       const result = await trpc.projects.update.mutate({
         id: updatedProject.id,
@@ -67,15 +67,15 @@ export const projectCollection = createCollection(
         },
       })
 
-      return { txid: result.txid }
+      await collection.utils.awaitTxId(result.txid)
     },
-    onDelete: async ({ transaction }) => {
+    onDelete: async ({ transaction, collection }) => {
       const { original: deletedProject } = transaction.mutations[0]
       const result = await trpc.projects.delete.mutate({
         id: deletedProject.id,
       })
 
-      return { txid: result.txid }
+      await collection.utils.awaitTxId(result.txid)
     },
   })
 )
@@ -99,7 +99,7 @@ export const todoCollection = createCollection(
     },
     schema: selectTodoSchema,
     getKey: (item) => item.id,
-    onInsert: async ({ transaction }) => {
+    onInsert: async ({ transaction, collection }) => {
       const { modified: newTodo } = transaction.mutations[0]
       const result = await trpc.todos.create.mutate({
         user_id: newTodo.user_id,
@@ -109,9 +109,9 @@ export const todoCollection = createCollection(
         user_ids: newTodo.user_ids,
       })
 
-      return { txid: result.txid }
+      await collection.utils.awaitTxId(result.txid)
     },
-    onUpdate: async ({ transaction }) => {
+    onUpdate: async ({ transaction, collection }) => {
       const { modified: updatedTodo } = transaction.mutations[0]
       const result = await trpc.todos.update.mutate({
         id: updatedTodo.id,
@@ -121,15 +121,15 @@ export const todoCollection = createCollection(
         },
       })
 
-      return { txid: result.txid }
+      await collection.utils.awaitTxId(result.txid)
     },
-    onDelete: async ({ transaction }) => {
+    onDelete: async ({ transaction, collection }) => {
       const { original: deletedTodo } = transaction.mutations[0]
       const result = await trpc.todos.delete.mutate({
         id: deletedTodo.id,
       })
 
-      return { txid: result.txid }
+      await collection.utils.awaitTxId(result.txid)
     },
   })
 )
