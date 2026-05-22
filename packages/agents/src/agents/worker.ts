@@ -143,7 +143,7 @@ function buildToolsForWorker(
         out.push(createSpawnWorkerTool(ctx))
         break
       case `send`:
-        out.push(createSendTool(ctx.send))
+        out.push(createSendTool(ctx.send, { selfEntityUrl: ctx.entityUrl }))
         break
     }
   }

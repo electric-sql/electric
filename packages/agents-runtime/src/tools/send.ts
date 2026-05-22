@@ -7,6 +7,11 @@ type SendFn = (
   opts?: { type?: string; afterMs?: number }
 ) => Promise<SendResult>
 
+export interface CreateSendToolOptions {
+  /** Optional URL of the current entity, used when the tool is called with `self: true`. */
+  selfEntityUrl?: string
+}
+
 function asToolResult(value: unknown) {
   return {
     content: [
@@ -20,15 +25,25 @@ function asToolResult(value: unknown) {
   }
 }
 
-export function createSendTool(send: SendFn): AgentTool {
+export function createSendTool(
+  send: SendFn,
+  opts: CreateSendToolOptions = {}
+): AgentTool {
   return {
     name: `send`,
     label: `Send Message`,
-    description: `Send a message to an Electric Agent/entity by entity URL. Use afterMs to schedule delayed delivery.`,
+    description: `Send a message to an Electric Agent/entity. Set self: true to send to yourself; use this with afterMs to schedule future work for yourself. Otherwise provide entityUrl.`,
     parameters: Type.Object({
-      entityUrl: Type.String({
-        description: `Target entity URL to send the message to.`,
-      }),
+      entityUrl: Type.Optional(
+        Type.String({
+          description: `Target entity URL to send the message to. Omit when self is true.`,
+        })
+      ),
+      self: Type.Optional(
+        Type.Boolean({
+          description: `Send to this agent/entity. Use self: true with afterMs when scheduling future work for yourself.`,
+        })
+      ),
       payload: Type.Any({
         description: `Message payload to deliver to the target entity.`,
       }),
@@ -42,8 +57,9 @@ export function createSendTool(send: SendFn): AgentTool {
       ),
     }),
     execute: async (_toolCallId, params) => {
-      const { entityUrl, payload, type, afterMs } = params as {
-        entityUrl: string
+      const { entityUrl, self, payload, type, afterMs } = params as {
+        entityUrl?: string
+        self?: boolean
         payload: unknown
         type?: string
         afterMs?: number
@@ -57,17 +73,34 @@ export function createSendTool(send: SendFn): AgentTool {
           throw new Error(`afterMs must be a non-negative finite number`)
         }
 
-        const result = await send(entityUrl, payload, { type, afterMs })
-        return asToolResult({ sent: true, entityUrl, type, afterMs, result })
+        if (self && !opts.selfEntityUrl) {
+          throw new Error(`self is not available in this context`)
+        }
+        if (!self && !entityUrl) {
+          throw new Error(`provide entityUrl or set self: true`)
+        }
+
+        const targetUrl = self ? opts.selfEntityUrl! : entityUrl!
+        const result = await send(targetUrl, payload, { type, afterMs })
+        return asToolResult({
+          sent: true,
+          entityUrl,
+          self,
+          targetUrl,
+          type,
+          afterMs,
+          result,
+        })
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err)
         return asToolResult({
           sent: false,
           error: true,
           entityUrl,
+          self,
           type,
           afterMs,
-          message: `Failed to send to ${entityUrl}: ${message}`,
+          message: `Failed to send to ${self ? `self` : (entityUrl ?? `target`)}: ${message}`,
         })
       }
     },

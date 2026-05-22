@@ -30,11 +30,56 @@ describe(`send tool`, () => {
             {
               sent: true,
               entityUrl: `http://localhost:4437/entities/agent-1`,
+              targetUrl: `http://localhost:4437/entities/agent-1`,
               type: `note`,
               afterMs: 250,
               result: {
                 sent: true,
                 targetUrl: `http://localhost:4437/entities/agent-1`,
+              },
+            },
+            null,
+            2
+          ),
+        },
+      ],
+    })
+  })
+
+  it(`sends to the current entity when self is true`, async () => {
+    const send = vi.fn(async () => ({
+      sent: true as const,
+      targetUrl: `/horton/current`,
+    }))
+    const tool = createSendTool(send, { selfEntityUrl: `/horton/current` })
+
+    const result = await tool.execute?.(`call-1`, {
+      self: true,
+      payload: { task: `check_ci` },
+      type: `scheduled_check`,
+      afterMs: 300_000,
+    })
+
+    expect(send).toHaveBeenCalledWith(
+      `/horton/current`,
+      { task: `check_ci` },
+      { type: `scheduled_check`, afterMs: 300_000 }
+    )
+    expect(result).toMatchObject({
+      details: {},
+      content: [
+        {
+          type: `text`,
+          text: JSON.stringify(
+            {
+              sent: true,
+              self: true,
+              targetUrl: `/horton/current`,
+              type: `scheduled_check`,
+              afterMs: 300_000,
+              result: {
+                sent: true,
+                targetUrl: `/horton/current`,
               },
             },
             null,
