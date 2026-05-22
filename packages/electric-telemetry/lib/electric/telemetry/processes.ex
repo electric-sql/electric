@@ -34,7 +34,7 @@ defmodule ElectricTelemetry.Processes do
   as a companion attribute on telemetry events. See `proc_subtype/1` for the
   per-bucket rules.
   """
-  @spec proc_type_and_subtype(pid()) :: {term(), binary() | nil}
+  @spec proc_type_and_subtype(pid()) :: {atom() | binary(), binary() | nil}
   def proc_type_and_subtype(pid) do
     info = info(pid)
     type = proc_type(pid, info)
