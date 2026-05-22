@@ -106,8 +106,7 @@ defmodule ElectricTelemetry.SystemMonitor do
     state =
       %{
         state
-        | long_message_queue_pids:
-            Map.put(state.long_message_queue_pids, pid, {type, subtype})
+        | long_message_queue_pids: Map.put(state.long_message_queue_pids, pid, {type, subtype})
       }
       |> maybe_start_long_message_queue_timer()
 
