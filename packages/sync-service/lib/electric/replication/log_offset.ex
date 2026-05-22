@@ -377,8 +377,8 @@ defmodule Electric.Replication.LogOffset do
         with [tx_offset_str, op_offset_str] <- String.split(str, "_"),
              {tx_offset, ""} <- Integer.parse(tx_offset_str),
              {op_offset, ""} <- parse_int_or_inf(op_offset_str),
-             offset <- new(tx_offset, op_offset) do
-          {:ok, offset}
+             true <- valid_offset_parts?(tx_offset, op_offset) do
+          {:ok, new(tx_offset, op_offset)}
         else
           _ -> {:error, "has invalid format"}
         end
@@ -387,6 +387,18 @@ defmodule Electric.Replication.LogOffset do
 
   defp parse_int_or_inf("inf"), do: {:infinity, ""}
   defp parse_int_or_inf(int), do: Integer.parse(int)
+
+  defp valid_offset_parts?(-1, 0), do: true
+
+  defp valid_offset_parts?(tx_offset, op_offset)
+       when is_integer(tx_offset) and tx_offset >= 0 and is_integer(op_offset) and op_offset >= 0,
+       do: true
+
+  defp valid_offset_parts?(tx_offset, :infinity)
+       when is_integer(tx_offset) and tx_offset >= 0,
+       do: true
+
+  defp valid_offset_parts?(_, _), do: false
 
   defimpl Inspect do
     def inspect(%LogOffset{tx_offset: -1, op_offset: 0}, _opts) do

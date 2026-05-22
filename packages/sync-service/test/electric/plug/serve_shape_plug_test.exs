@@ -145,6 +145,22 @@ defmodule Electric.Plug.ServeShapePlugTest do
              }
     end
 
+    test "returns 400 for offset with negative parts", ctx do
+      conn =
+        ctx
+        |> conn(:get, %{"table" => "foo"}, "?offset=0_-1")
+        |> call_serve_shape_plug(ctx)
+
+      assert conn.status == 400
+
+      assert Jason.decode!(conn.resp_body) == %{
+               "message" => "Invalid request",
+               "errors" => %{
+                 "offset" => ["has invalid format"]
+               }
+             }
+    end
+
     test "returns 400 when table param is missing", ctx do
       conn =
         ctx
