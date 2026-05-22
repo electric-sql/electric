@@ -51,6 +51,7 @@ export interface SpawnEntityOptions {
     debounceMs?: number
     timeoutMs?: number
     includeResponse?: boolean
+    manifestKey?: string
   }
 }
 

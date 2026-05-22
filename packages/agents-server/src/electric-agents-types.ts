@@ -400,6 +400,7 @@ export interface TypedSpawnRequest {
     debounceMs?: number
     timeoutMs?: number
     includeResponse?: boolean
+    manifestKey?: string
   }
 }
 
