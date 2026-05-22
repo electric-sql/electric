@@ -169,6 +169,24 @@ Electric caches shape logs on disk. Ephemeral storage causes full re-sync on eve
 
 Source: `website/docs/guides/deployment.md:133-157`
 
+### HIGH Bun proxy bottlenecks at 256 concurrent fetches
+
+Wrong:
+
+```sh
+bun run proxy.ts
+```
+
+Correct:
+
+```sh
+BUN_CONFIG_MAX_HTTP_REQUESTS=4096 bun run proxy.ts
+```
+
+When deploying an auth/caching proxy in front of Electric on the Bun runtime, set `BUN_CONFIG_MAX_HTTP_REQUESTS` to match expected concurrent shape requests. Bun's default cap of 256 simultaneous `fetch()` calls queues excess requests silently — the proxy appears responsive but upstream calls to Electric stall, surfacing as latency under load rather than errors. Max value is 65,336. Node and Deno do not impose this cap.
+
+Source: https://bun.com/docs/runtime/networking/fetch
+
 ### MEDIUM Using deprecated ELECTRIC_QUERY_DATABASE_URL
 
 Wrong:

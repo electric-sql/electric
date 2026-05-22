@@ -57,6 +57,9 @@ You also often want to proxy requests to Electric through your API, or other pro
 
 Note also that, when running Electric behind a CDN, you may want your proxy in front of the CDN. This is where primitives like [edge functions](/docs/sync/integrations/supabase#sync-into-edge-function) and [edge workers](/docs/sync/integrations/cloudflare#workers) can be very useful.
 
+> [!Tip] Running the proxy on Bun?
+> Raise `BUN_CONFIG_MAX_HTTP_REQUESTS` to match your concurrency. See [Bun fetch concurrency cap](/docs/sync/guides/troubleshooting#bun-fetch-concurrency-cap-why-is-my-proxy-slow-under-load) in troubleshooting.
+
 ### Securing data access
 
 By default, Electric exposes public access to the contents of your database. You generally don't want to expose the contents of your database, so you need to [lock down access](/docs/sync/guides/security#secure-data-access) to the Electric HTTP API.
