@@ -253,8 +253,63 @@ function materializeRunItem(run: IncludesRun): TimelineItem {
   return {
     kind: `run`,
     at: orderToOffset(run.order),
+    ...(run.finish_reason ? { finishReason: run.finish_reason } : {}),
     items: items.map(({ order: _order, ...item }) => item),
   }
+}
+
+function isAbortSignalEntry(entry: {
+  kind: string
+  item: unknown
+}): entry is { kind: `signal`; item: IncludesSignal } {
+  if (entry.kind !== `signal`) return false
+  const signal = entry.item as IncludesSignal
+  return signal.signal === `SIGINT` && signal.outcome === `aborted`
+}
+
+function isAbortedRunEntry(entry: {
+  kind: string
+  item: unknown
+}): entry is { kind: `run`; item: IncludesRun } {
+  return (
+    entry.kind === `run` &&
+    (entry.item as IncludesRun).finish_reason === `aborted`
+  )
+}
+
+function reorderInterruptedRuns<T extends { kind: string; item: unknown }>(
+  sortedItems: Array<T>
+): Array<T> {
+  const items = [...sortedItems]
+
+  for (let signalIndex = 0; signalIndex < items.length; signalIndex++) {
+    const signalEntry = items[signalIndex]
+    if (!signalEntry || !isAbortSignalEntry(signalEntry)) continue
+
+    // Runtime output is buffered through its producer, while SIGINT is appended
+    // directly by the server. Under interruption the signal can therefore get a
+    // lower stream offset than the aborted run it interrupted. For model-facing
+    // context, present the interrupted assistant run before the interrupt marker
+    // so the next user message is interpreted against a coherent transcript.
+    let runIndex = -1
+    for (let index = signalIndex + 1; index < items.length; index++) {
+      const candidate = items[index]
+      if (!candidate) continue
+      if (isAbortSignalEntry(candidate)) break
+      if (isAbortedRunEntry(candidate)) {
+        runIndex = index
+        break
+      }
+    }
+
+    if (runIndex === -1) continue
+
+    const [run] = items.splice(runIndex, 1)
+    items.splice(signalIndex, 0, run!)
+    signalIndex++
+  }
+
+  return items
 }
 
 export function materializeTimeline(
@@ -275,40 +330,42 @@ export function materializeTimeline(
         order: TimelineOrder
         item: IncludesContextRemoved
       }
-  > = [
-    ...data.inbox
-      .filter((item) => (item.status ?? `processed`) === `processed`)
-      .map((item) => ({
-        kind: `inbox` as const,
+  > = reorderInterruptedRuns(
+    [
+      ...data.inbox
+        .filter((item) => (item.status ?? `processed`) === `processed`)
+        .map((item) => ({
+          kind: `inbox` as const,
+          order: item.order,
+          item,
+        })),
+      ...data.wakes.map((item) => ({
+        kind: `wake` as const,
         order: item.order,
         item,
       })),
-    ...data.wakes.map((item) => ({
-      kind: `wake` as const,
-      order: item.order,
-      item,
-    })),
-    ...(data.signals ?? []).map((item) => ({
-      kind: `signal` as const,
-      order: item.order,
-      item,
-    })),
-    ...data.runs.map((item) => ({
-      kind: `run` as const,
-      order: item.order,
-      item,
-    })),
-    ...data.contextInserted.map((item) => ({
-      kind: `context_inserted` as const,
-      order: item.order,
-      item,
-    })),
-    ...data.contextRemoved.map((item) => ({
-      kind: `context_removed` as const,
-      order: item.order,
-      item,
-    })),
-  ].sort((left, right) => compareTimelineOrders(left.order, right.order))
+      ...(data.signals ?? []).map((item) => ({
+        kind: `signal` as const,
+        order: item.order,
+        item,
+      })),
+      ...data.runs.map((item) => ({
+        kind: `run` as const,
+        order: item.order,
+        item,
+      })),
+      ...data.contextInserted.map((item) => ({
+        kind: `context_inserted` as const,
+        order: item.order,
+        item,
+      })),
+      ...data.contextRemoved.map((item) => ({
+        kind: `context_removed` as const,
+        order: item.order,
+        item,
+      })),
+    ].sort((left, right) => compareTimelineOrders(left.order, right.order))
+  )
 
   const supersededIds = new Set<string>()
   const contextSuperseded = new Set<string>()

@@ -393,9 +393,16 @@ export function createPiAgentAdapter(
         return new Promise<void>((resolve, reject) => {
           let settled = false
           let unsubscribe = (): void => {}
+          let abortFallback: ReturnType<typeof setTimeout> | null = null
+          const clearAbortFallback = (): void => {
+            if (!abortFallback) return
+            clearTimeout(abortFallback)
+            abortFallback = null
+          }
           const finish = (finishReason: `stop` | `aborted` | `error`): void => {
             if (settled) return
             settled = true
+            clearAbortFallback()
             running = false
             abortSignal?.removeEventListener(`abort`, abortRun)
             unsubscribe()
@@ -405,14 +412,22 @@ export function createPiAgentAdapter(
             if (settled) return
             abortedRun = true
             agent.abort()
-            finish(`aborted`)
-            resolve()
+
+            // Let pi-agent-core settle its own abort lifecycle. It normally
+            // emits an aborted message/agent_end sequence, which we want to
+            // persist so the next context contains a coherent interrupted run.
+            // Keep a short fallback in case a provider/tool ignores AbortSignal.
+            abortFallback ??= setTimeout(() => {
+              finish(`aborted`)
+              resolve()
+            }, 5000)
           }
           unsubscribe = processAgentEvents(
             () => {
               if (settled) return
               settled = true
               running = false
+              clearAbortFallback()
               abortSignal?.removeEventListener(`abort`, abortRun)
               unsubscribe()
               resolve()
@@ -433,6 +448,7 @@ export function createPiAgentAdapter(
 
           Promise.resolve(runPromise).catch((err: Error) => {
             if (settled) return
+            if (abortedRun) return
             finish(`error`)
             reject(err)
           })
