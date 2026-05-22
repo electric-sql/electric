@@ -87,12 +87,18 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
 
   def metrics(telemetry_opts) do
     [
-      last_value("process.memory.total", tags: [:process_type], unit: :byte),
-      last_value("process.bin_memory.total", tags: [:process_type], unit: :byte),
-      last_value("process.bin_memory.max_bin_count", tags: [:process_type]),
-      last_value("process.bin_memory.avg_bin_count", tags: [:process_type]),
-      last_value("process.bin_memory.max_ref_count", tags: [:process_type]),
-      last_value("process.bin_memory.avg_ref_count", tags: [:process_type]),
+      last_value("process.memory.total",
+        tags: [:process_type, :process_subtype],
+        unit: :byte
+      ),
+      last_value("process.bin_memory.total",
+        tags: [:process_type, :process_subtype],
+        unit: :byte
+      ),
+      last_value("process.bin_memory.max_bin_count", tags: [:process_type, :process_subtype]),
+      last_value("process.bin_memory.avg_bin_count", tags: [:process_type, :process_subtype]),
+      last_value("process.bin_memory.max_ref_count", tags: [:process_type, :process_subtype]),
+      last_value("process.bin_memory.avg_ref_count", tags: [:process_type, :process_subtype]),
       last_value("ets.memory.total", tags: [:table_type], unit: :byte),
       last_value("system.cpu.core_count"),
       last_value("system.cpu.utilization.total"),
@@ -113,12 +119,15 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
       last_value("vm.memory.processes_used", unit: :byte),
       last_value("vm.memory.system", unit: :byte),
       last_value("vm.memory.total", unit: :byte),
-      sum("vm.monitor.long_message_queue.length", tags: [:process_type]),
+      sum("vm.monitor.long_message_queue.length", tags: [:process_type, :process_subtype]),
       distribution("vm.monitor.long_schedule.timeout",
-        tags: [:process_type],
+        tags: [:process_type, :process_subtype],
         unit: :millisecond
       ),
-      distribution("vm.monitor.long_gc.timeout", tags: [:process_type], unit: :millisecond),
+      distribution("vm.monitor.long_gc.timeout",
+        tags: [:process_type, :process_subtype],
+        unit: :millisecond
+      ),
       last_value("vm.persistent_term.count"),
       last_value("vm.persistent_term.memory", unit: :byte),
       last_value("vm.reductions.total"),
@@ -182,7 +191,7 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
       :telemetry.execute(
         [:process, :memory],
         %{total: map.proc_mem},
-        %{process_type: to_string(map.type)}
+        %{process_type: to_string(map.type), process_subtype: map.subtype}
       )
     end
   end
@@ -198,7 +207,7 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
           max_ref_count: map.max_ref_count,
           avg_ref_count: map.avg_ref_count
         },
-        %{process_type: to_string(map.type)}
+        %{process_type: to_string(map.type), process_subtype: map.subtype}
       )
     end
   end

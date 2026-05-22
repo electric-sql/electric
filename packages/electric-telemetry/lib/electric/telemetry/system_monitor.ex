@@ -12,7 +12,7 @@ defmodule ElectricTelemetry.SystemMonitor do
 
   use GenServer
 
-  import ElectricTelemetry.Processes, only: [proc_type: 1]
+  import ElectricTelemetry.Processes, only: [proc_type_and_subtype: 1]
 
   require Logger
 
@@ -36,13 +36,16 @@ defmodule ElectricTelemetry.SystemMonitor do
   end
 
   def handle_info({:monitor, gc_pid, :long_gc, info}, state) do
-    type = proc_type(gc_pid)
+    {type, subtype} = proc_type_and_subtype(gc_pid)
 
     Logger.debug(
-      "Long GC detected for pid #{inspect(gc_pid)} (#{inspect(type)}): took #{Keyword.fetch!(info, :timeout)}ms. #{inspect(info, limit: :infinity)}"
+      "Long GC detected for pid #{inspect(gc_pid)} (#{inspect(type)}/#{inspect(subtype)}): took #{Keyword.fetch!(info, :timeout)}ms. #{inspect(info, limit: :infinity)}"
     )
 
-    :telemetry.execute(@vm_monitor_long_gc, Map.new(info), %{process_type: type})
+    :telemetry.execute(@vm_monitor_long_gc, Map.new(info), %{
+      process_type: type,
+      process_subtype: subtype
+    })
 
     {:noreply, state}
   end
@@ -52,13 +55,16 @@ defmodule ElectricTelemetry.SystemMonitor do
       "Long schedule detected for port #{inspect(port)}, took #{Keyword.fetch!(info, :timeout)}ms"
     )
 
-    :telemetry.execute(@vm_monitor_long_schedule, Map.new(info), %{process_type: :port})
+    :telemetry.execute(@vm_monitor_long_schedule, Map.new(info), %{
+      process_type: :port,
+      process_subtype: nil
+    })
 
     {:noreply, state}
   end
 
   def handle_info({:monitor, pid, :long_schedule, info}, state) when is_pid(pid) do
-    type = proc_type(pid)
+    {type, subtype} = proc_type_and_subtype(pid)
 
     Logger.debug(fn ->
       locations =
@@ -76,26 +82,33 @@ defmodule ElectricTelemetry.SystemMonitor do
           ""
         end
 
-      "Long schedule detected for pid #{inspect(pid)} (#{inspect(type)}), took #{Keyword.fetch!(info, :timeout)}ms" <>
+      "Long schedule detected for pid #{inspect(pid)} (#{inspect(type)}/#{inspect(subtype)}), took #{Keyword.fetch!(info, :timeout)}ms" <>
         locs_str
     end)
 
     :telemetry.execute(@vm_monitor_long_schedule, %{timeout: Keyword.fetch!(info, :timeout)}, %{
-      process_type: type
+      process_type: type,
+      process_subtype: subtype
     })
 
     {:noreply, state}
   end
 
   def handle_info({:monitor, pid, :long_message_queue, true}, state) do
-    type = proc_type(pid)
+    {type, subtype} = proc_type_and_subtype(pid)
 
-    Logger.debug("Long message queue detected for pid #{inspect(pid)} (#{inspect(type)})")
+    Logger.debug(
+      "Long message queue detected for pid #{inspect(pid)} (#{inspect(type)}/#{inspect(subtype)})"
+    )
 
-    log_long_message_queue_event(pid, type)
+    log_long_message_queue_event(pid, type, subtype)
 
     state =
-      %{state | long_message_queue_pids: Map.put(state.long_message_queue_pids, pid, type)}
+      %{
+        state
+        | long_message_queue_pids:
+            Map.put(state.long_message_queue_pids, pid, {type, subtype})
+      }
       |> maybe_start_long_message_queue_timer()
 
     {:noreply, state}
@@ -114,17 +127,18 @@ defmodule ElectricTelemetry.SystemMonitor do
   end
 
   def handle_info(:recheck_message_queues, state) do
-    Enum.each(state.long_message_queue_pids, fn {pid, type} ->
-      log_long_message_queue_event(pid, type)
+    Enum.each(state.long_message_queue_pids, fn {pid, {type, subtype}} ->
+      log_long_message_queue_event(pid, type, subtype)
     end)
 
     {:noreply, state}
   end
 
-  defp log_long_message_queue_event(pid, type) do
+  defp log_long_message_queue_event(pid, type, subtype) do
     with {:message_queue_len, queue_len} <- Process.info(pid, :message_queue_len) do
       :telemetry.execute(@vm_monitor_long_message_queue, %{length: queue_len}, %{
-        process_type: type
+        process_type: type,
+        process_subtype: subtype
       })
     end
   end

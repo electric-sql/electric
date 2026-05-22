@@ -119,6 +119,110 @@ defmodule ElectricTelemetry.ProcessesTest do
     end
   end
 
+  describe "proc_subtype/1 and proc_type_and_subtype/1 for :supervisor" do
+    test "returns the registered name when the supervisor is named" do
+      name = :"sup_named_#{System.unique_integer([:positive])}"
+      {:ok, pid} = Supervisor.start_link([], strategy: :one_for_one, name: name)
+
+      assert {:supervisor, subtype} = proc_type_and_subtype(pid)
+      assert subtype == Atom.to_string(name)
+      assert proc_subtype(pid) == Atom.to_string(name)
+
+      Supervisor.stop(pid)
+    end
+
+    test "falls back to $ancestors atom for an unnamed supervisor" do
+      parent_name = :"sup_parent_#{System.unique_integer([:positive])}"
+      Process.register(self(), parent_name)
+
+      {:ok, pid} = Supervisor.start_link([], strategy: :one_for_one)
+
+      assert {:supervisor, subtype} = proc_type_and_subtype(pid)
+      assert subtype == Atom.to_string(parent_name)
+
+      Supervisor.stop(pid)
+      Process.unregister(parent_name)
+    end
+
+    test "returns nil when neither registered name nor named ancestor is available" do
+      # Run the supervisor from a spawned, unregistered process so the entire $ancestors
+      # chain is pids rather than atoms.
+      parent = self()
+
+      spawn_link(fn ->
+        {:ok, pid} = Supervisor.start_link([], strategy: :one_for_one)
+        send(parent, {:sup, pid})
+        Process.sleep(:infinity)
+      end)
+
+      assert_receive {:sup, pid}, 200
+
+      assert {:supervisor, nil} = proc_type_and_subtype(pid)
+    end
+  end
+
+  describe "proc_subtype/1 and proc_type_and_subtype/1 for :erlang" do
+    test "falls back to initial_call MFA for an anonymous spawn_link" do
+      pid = spawn_link(fn -> Process.sleep(:infinity) end)
+
+      assert {:erlang, ":erlang.apply/2"} = proc_type_and_subtype(pid)
+      assert proc_subtype(pid) == ":erlang.apply/2"
+    end
+
+    test "uses the registered name when an :erlang-typed process is named" do
+      name = :"erlang_named_#{System.unique_integer([:positive])}"
+      pid = spawn_link(fn -> Process.sleep(:infinity) end)
+      Process.register(pid, name)
+
+      assert {:erlang, subtype} = proc_type_and_subtype(pid)
+      assert subtype == Atom.to_string(name)
+    end
+  end
+
+  describe "proc_subtype/1 and proc_type_and_subtype/1 for :logger_olp" do
+    test "uses the registered name as the handler id" do
+      parent = self()
+      name = :"logger_olp_test_#{System.unique_integer([:positive])}"
+
+      pid =
+        spawn_link(fn ->
+          # Mimic an OLP-spawned process: `$initial_call` MFA module is `:logger_olp`,
+          # which is how the real OLP processes show up via proc_lib.
+          Process.put(:"$initial_call", {:logger_olp, :init, 1})
+          Process.register(self(), name)
+          send(parent, :ready)
+          Process.sleep(:infinity)
+        end)
+
+      assert_receive :ready, 200
+
+      assert {:logger_olp, subtype} = proc_type_and_subtype(pid)
+      assert subtype == Atom.to_string(name)
+    end
+
+    test "returns nil subtype for an unregistered :logger_olp-typed process" do
+      parent = self()
+
+      pid =
+        spawn_link(fn ->
+          Process.put(:"$initial_call", {:logger_olp, :init, 1})
+          send(parent, :ready)
+          Process.sleep(:infinity)
+        end)
+
+      assert_receive :ready, 200
+
+      assert {:logger_olp, nil} = proc_type_and_subtype(pid)
+    end
+  end
+
+  describe "proc_type_and_subtype/1 for non-subtyped buckets" do
+    test "returns nil subtype for a labelled (non-bucketed) process" do
+      pid = spawn_with_label(:my_process)
+      assert {:my_process, nil} = proc_type_and_subtype(pid)
+    end
+  end
+
   describe "top_memory_by_type/[1, 2]" do
     test "handles dead processes" do
       parent = self()
