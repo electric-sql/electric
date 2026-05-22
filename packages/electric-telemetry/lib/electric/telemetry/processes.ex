@@ -204,10 +204,11 @@ defmodule ElectricTelemetry.Processes do
   defp proc_subtype(_type, _info), do: nil
 
   defp registered_name_string(info) do
+    # `Process.info/2` returns `[]` for unregistered processes and the atom name
+    # otherwise. Be explicit about excluding `nil` here so the clause order isn't
+    # load-bearing — `is_atom(nil)` is true and would otherwise yield `"nil"`.
     case info[:registered_name] do
-      [] -> nil
-      nil -> nil
-      name when is_atom(name) -> Atom.to_string(name)
+      name when is_atom(name) and not is_nil(name) -> Atom.to_string(name)
       _ -> nil
     end
   end
