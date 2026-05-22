@@ -223,6 +223,24 @@ defmodule ElectricTelemetry.ProcessesTest do
     end
   end
 
+  describe "proc_type_and_subtype/1 and proc_subtype/1 for dead processes" do
+    test "returns {:dead, nil} / nil for a process that has exited" do
+      pid =
+        spawn_link(fn ->
+          receive do
+            :die -> :ok
+          end
+        end)
+
+      ref = Process.monitor(pid)
+      send(pid, :die)
+      assert_receive {:DOWN, ^ref, :process, ^pid, :normal}
+
+      assert {:dead, nil} = proc_type_and_subtype(pid)
+      assert proc_subtype(pid) == nil
+    end
+  end
+
   describe "top_memory_by_type/[1, 2]" do
     test "handles dead processes" do
       parent = self()
