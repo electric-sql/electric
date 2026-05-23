@@ -194,7 +194,7 @@ export function createEventSourceTools(opts: {
   const listSourcesTool: AgentTool = {
     name: `list_event_sources`,
     label: `List Event Sources`,
-    description: `List event sources this entity can subscribe to. Use bucket templates and paramsSchema to choose sourceKey, bucketKey, and params for subscribe_event_source.`,
+    description: `List external event feeds you can subscribe to, such as webhook integrations from GitHub, Stripe, email, CI, or other services. Each source may expose bucket templates; use paramsSchema to choose sourceKey, bucketKey, and params for subscribe_event_source.`,
     parameters: Type.Object({}),
     execute: withEventSourceToolLogging(
       entityUrl,
@@ -206,7 +206,7 @@ export function createEventSourceTools(opts: {
   const listSubscriptionsTool: AgentTool = {
     name: `list_event_source_subscriptions`,
     label: `List Event Subscriptions`,
-    description: `List this entity's active manifest-backed event source subscriptions.`,
+    description: `List your active event source subscriptions: external feeds and buckets that are currently configured to wake you when matching events arrive.`,
     parameters: Type.Object({}),
     execute: withEventSourceToolLogging(
       entityUrl,
@@ -218,33 +218,35 @@ export function createEventSourceTools(opts: {
   const subscribeTool: AgentTool = {
     name: `subscribe_event_source`,
     label: `Subscribe Event Source`,
-    description: `Subscribe this entity to a discoverable event source bucket. The optional filterKey is recorded for provenance; precise source-event filtering is not applied until source filters are enabled server-side.`,
+    description: `Subscribe to a discoverable external event feed or one of its buckets so matching future events wake you. Use filterKey only when list_event_sources advertises a named filter you want; filters are advisory until server-side source filters are enabled.`,
     parameters: Type.Object({
       id: Type.Optional(
         Type.String({
           description: `Optional stable subscription id. Defaults to a deterministic id from sourceKey, bucketKey, params, and filterKey.`,
         })
       ),
-      sourceKey: Type.String({ description: `Event source key` }),
+      sourceKey: Type.String({
+        description: `Event source key from list_event_sources`,
+      }),
       bucketKey: Type.Optional(
         Type.String({
-          description: `Bucket template key from list_event_sources`,
+          description: `Bucket template key from list_event_sources. Omit to subscribe to the source root stream.`,
         })
       ),
       params: Type.Optional(
         Type.Record(Type.String(), Type.Unknown(), {
-          description: `Bucket template parameters`,
+          description: `Values for the selected bucket template, matching its paramsSchema.`,
         })
       ),
       filterKey: Type.Optional(
         Type.String({
-          description: `Optional named filter key. Stored for provenance in this version.`,
+          description: `Optional named filter key advertised by the source. Advisory in this version.`,
         })
       ),
       lifetime: Type.Optional(lifetimeSchema),
       reason: Type.Optional(
         Type.String({
-          description: `Short reason for this subscription`,
+          description: `Short human-readable reason for this subscription`,
         })
       ),
     }),
@@ -277,7 +279,7 @@ export function createEventSourceTools(opts: {
   const unsubscribeTool: AgentTool = {
     name: `unsubscribe_event_source`,
     label: `Unsubscribe Event Source`,
-    description: `Remove an event source subscription from this entity's manifest.`,
+    description: `Stop being woken by an event source subscription.`,
     parameters: Type.Object({
       id: Type.String({ description: `Subscription id` }),
     }),

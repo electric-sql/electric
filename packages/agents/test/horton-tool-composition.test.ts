@@ -117,6 +117,16 @@ describe(`horton tool composition`, () => {
         `unsubscribe_event_source`,
       ])
     )
+    expect(
+      tools.find((tool) => tool.name === `list_event_sources`)?.description
+    ).toContain(`external event feeds`)
+    expect(
+      tools.find((tool) => tool.name === `list_event_sources`)?.description
+    ).not.toContain(`this entity`)
+    expect(
+      tools.find((tool) => tool.name === `list_event_source_subscriptions`)
+        ?.description
+    ).not.toContain(`manifest-backed`)
   })
 
   it(`includes event source electric tools in Horton and describes them in the prompt`, async () => {

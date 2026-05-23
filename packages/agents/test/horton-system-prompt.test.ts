@@ -29,6 +29,8 @@ describe(`buildHortonSystemPrompt`, () => {
 
     expect(prompt).toContain(`list_event_sources`)
     expect(prompt).toContain(`subscribe_event_source`)
+    expect(prompt).toContain(`external webhook/event feeds`)
+    expect(prompt).toContain(`subscribe yourself`)
   })
 
   it(`omits event source tools when they are unavailable`, () => {

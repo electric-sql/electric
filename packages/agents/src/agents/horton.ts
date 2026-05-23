@@ -175,7 +175,7 @@ export function buildHortonSystemPrompt(
     ? `\n- search_durable_agents_docs: hybrid search over the built-in Durable Agents docs index`
     : ``
   const eventSourceTools = opts.hasEventSourceTools
-    ? `\n- list_event_sources: list webhook-backed event sources this session can subscribe to\n- subscribe_event_source: subscribe this Horton session to a source bucket so matching future events wake it\n- list_event_source_subscriptions: list active event source subscriptions for this session\n- unsubscribe_event_source: remove an event source subscription by id`
+    ? `\n- list_event_sources: list external webhook/event feeds you can subscribe to, including available buckets and parameters\n- subscribe_event_source: subscribe yourself to one of those feeds or buckets so matching future events wake you\n- list_event_source_subscriptions: list your active event source subscriptions\n- unsubscribe_event_source: remove one of your event source subscriptions by id`
     : ``
   const skillsTools = opts.hasSkills
     ? `\n- use_skill: load a skill (knowledge, instructions, or a tutorial) into your context to help with the user's request\n- remove_skill: unload a skill from context when you're done with it`
