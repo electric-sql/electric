@@ -192,11 +192,32 @@ export {
 } from './runtime-server-client'
 export type {
   RuntimeServerClientConfig,
+  RuntimeServerClient,
   RuntimeEntityInfo,
   DispatchPolicy,
   SpawnEntityOptions,
   SendEntityMessageOptions,
 } from './runtime-server-client'
+export {
+  buildEventSourceManifestEntry,
+  buildEventSourceSubscriptionId,
+  defaultEventSourceSubscriptionLifetime,
+  eventSourceSubscriptionManifestKey,
+  renderEventSourceBucketPath,
+  resolveEventSourceSubscription,
+} from './event-sources'
+export type {
+  EventSourceBucket,
+  EventSourceContract,
+  EventSourceFilter,
+  EventSourceFilterCondition,
+  EventSourceStatus,
+  EventSourceSubscription,
+  EventSourceSubscriptionInput,
+  EventSourceType,
+  ResolvedEventSourceSubscription,
+  SubscriptionLifetime,
+} from './event-sources'
 export { createAgentsClient } from './agents-client'
 export type { AgentsClient, AgentsClientConfig } from './agents-client'
 

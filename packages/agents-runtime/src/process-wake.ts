@@ -1820,6 +1820,17 @@ export async function processWake(
                 entityUrl,
                 ...opts,
               }),
+            listEventSources: () => serverClient.listEventSources(),
+            subscribeToEventSource: (opts) =>
+              serverClient.subscribeToEventSource({
+                entityUrl,
+                ...opts,
+              }),
+            unsubscribeFromEventSource: (opts) =>
+              serverClient.unsubscribeFromEventSource({
+                entityUrl,
+                ...opts,
+              }),
           })
         : []
 

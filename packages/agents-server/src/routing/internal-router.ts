@@ -117,6 +117,7 @@ export const internalRouter: InternalRoutes = Router<
 })
 
 internalRouter.get(`/health`, () => json({ status: `ok` }))
+internalRouter.get(`/event-sources`, listEventSources)
 internalRouter.post(
   `/wake`,
   withSchema(wakeRegistrationBodySchema),
@@ -333,6 +334,16 @@ async function registerWake(
   const opts = routeBody<WakeRegistrationBody>(request)
   await ctx.entityManager.registerWake(opts)
   return status(204)
+}
+
+async function listEventSources(
+  _request: IRequest,
+  ctx: TenantContext
+): Promise<Response> {
+  const eventSources = ctx.eventSources
+    ? await ctx.eventSources.listEventSources()
+    : []
+  return json({ eventSources })
 }
 
 async function webhookForward(
