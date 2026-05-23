@@ -7,17 +7,18 @@ import {
   manifestSharedStateKey,
   manifestSourceKey,
 } from '../src/manifest-helpers'
-import { cron, db, entity } from '../src/observation-sources'
+import { cron, db, entity, webhook } from '../src/observation-sources'
 import { createSetupContext } from '../src/setup-context'
 import { ENTITY_COLLECTIONS, passthrough } from '../src/entity-schema'
 import { createLocalOnlyTestCollection } from './helpers/local-only'
 import type { ChangeEvent } from '@durable-streams/state'
 import type {
   EntityStreamDBWithActions,
+  ObservationStreamDB,
   ObservationSource,
   SharedStateSchemaMap,
 } from '../src/types'
-import type { SetupContextResult } from '../src/setup-context'
+import type { SetupContextResult, WiringConfig } from '../src/setup-context'
 
 const passthroughSchema = passthrough<Record<string, unknown>>()
 
@@ -145,7 +146,8 @@ describe(`createSetupContext`, () => {
     effectScope?: any,
     args: Record<string, unknown> = {},
     customStateNames: Array<string> = [],
-    actions: Record<string, ReturnType<typeof vi.fn>> = {}
+    actions: Record<string, ReturnType<typeof vi.fn>> = {},
+    wiring?: WiringConfig
   ) {
     effectScope ??= {
       register: vi.fn(),
@@ -167,6 +169,7 @@ describe(`createSetupContext`, () => {
         serverBaseUrl: `http://localhost:3000`,
         effectScope,
         customStateNames,
+        wiring,
       }),
       db,
       writes,
@@ -1246,7 +1249,8 @@ describe(`entity patterns`, () => {
     effectScope?: any,
     args: Record<string, unknown> = {},
     customStateNames: Array<string> = [],
-    actions: Record<string, ReturnType<typeof vi.fn>> = {}
+    actions: Record<string, ReturnType<typeof vi.fn>> = {},
+    wiring?: WiringConfig
   ) {
     effectScope ??= {
       register: vi.fn(),
@@ -1268,6 +1272,7 @@ describe(`entity patterns`, () => {
         serverBaseUrl: `http://localhost:3000`,
         effectScope,
         customStateNames,
+        wiring,
       }),
       db,
       writes,
@@ -2385,5 +2390,42 @@ describe(`entity patterns`, () => {
     expect(handleInfo).toBeDefined()
     expect(handleInfo!.sourceType).toBe(`webhook`)
     expect(typeof handleInfo!.wireDb).toBe(`function`)
+  })
+
+  it(`ctx.observe(webhook(...)) ensures the exact stream before opening it`, async () => {
+    const observedDb = {
+      collections: {
+        events: createMockCollection([]),
+      },
+    } as unknown as ObservationStreamDB
+    const ensureSourceStream = vi.fn().mockResolvedValue(undefined)
+    const createSourceDb = vi.fn().mockResolvedValue(observedDb)
+    const wiring: WiringConfig = {
+      createOrGetChild: vi.fn(),
+      createChildDb: vi.fn(),
+      createSourceDb,
+      ensureSourceStream,
+      createSharedStateDb: vi.fn(),
+    } as unknown as WiringConfig
+
+    const { ctx } = makeCtx([], {}, undefined, {}, [], {}, wiring)
+    const source = webhook(`repo`, { bucket: `prs/123` })
+
+    const handle = await ctx.observe(source)
+
+    expect(ensureSourceStream).toHaveBeenCalledWith(
+      `/_webhooks/repo/prs/123`,
+      `application/json`
+    )
+    expect(createSourceDb).toHaveBeenCalledWith(
+      `http://localhost:3000/_webhooks/repo/prs/123`,
+      source.schema,
+      expect.any(Function),
+      { preload: true }
+    )
+    expect(ensureSourceStream.mock.invocationCallOrder[0]).toBeLessThan(
+      createSourceDb.mock.invocationCallOrder[0]!
+    )
+    expect(handle.db).toBe(observedDb)
   })
 })

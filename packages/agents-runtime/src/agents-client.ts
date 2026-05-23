@@ -74,6 +74,13 @@ export function createAgentsClient(config: AgentsClientConfig): AgentsClient {
         )
       }
 
+      if (source.ensureStream) {
+        await serverClient.ensureStream(
+          source.streamUrl,
+          source.ensureStream.contentType
+        )
+      }
+
       const db = createStreamDB({
         streamOptions: {
           url: appendPathToUrl(config.baseUrl, source.streamUrl),

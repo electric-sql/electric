@@ -537,6 +537,9 @@ export interface ObservationSource {
   readonly sourceRef: string
   readonly streamUrl?: string
   readonly schema?: Record<string, CollectionDefinition>
+  readonly ensureStream?: {
+    contentType: string
+  }
 
   wake?: () => SourceWakeConfig
   toManifestEntry: () => ManifestSourceEntry

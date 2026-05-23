@@ -3,6 +3,46 @@ import { createRuntimeServerClient } from '../src/runtime-server-client'
 import { createHandlerContext } from '../src/context-factory'
 
 describe(`runtime-server-client.setTag`, () => {
+  it(`ensureStream creates an exact stream path with the requested content type`, async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = []
+    const fakeFetch = vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push({ url, init })
+      return new Response(null, { status: 201 })
+    }) as unknown as typeof fetch
+
+    const client = createRuntimeServerClient({
+      baseUrl: `http://test.example?service=tenant-a&secret=s1`,
+      fetch: fakeFetch,
+    })
+
+    await expect(
+      client.ensureStream(`/_webhooks/repo/prs/123`, `application/json`)
+    ).resolves.toBe(`/_webhooks/repo/prs/123`)
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0]!.url).toBe(
+      `http://test.example/_webhooks/repo/prs/123?service=tenant-a&secret=s1`
+    )
+    expect(calls[0]!.init?.method).toBe(`PUT`)
+    expect(new Headers(calls[0]!.init?.headers).get(`content-type`)).toBe(
+      `application/json`
+    )
+  })
+
+  it(`ensureStream treats existing streams as success`, async () => {
+    const fakeFetch = vi.fn(
+      async () => new Response(`already exists`, { status: 409 })
+    ) as unknown as typeof fetch
+    const client = createRuntimeServerClient({
+      baseUrl: `http://test.example`,
+      fetch: fakeFetch,
+    })
+
+    await expect(client.ensureStream(`/_webhooks/repo`)).resolves.toBe(
+      `/_webhooks/repo`
+    )
+  })
+
   it(`sends POST with bearer token and tag body`, async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = []
     const fakeFetch = vi.fn(async (url: string, init?: RequestInit) => {

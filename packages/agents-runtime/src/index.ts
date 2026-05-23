@@ -208,13 +208,25 @@ export {
   manifestSourceKey,
 } from './manifest-helpers'
 
-export { entity, cron, entities, tagged, db } from './observation-sources'
+export {
+  entity,
+  cron,
+  entities,
+  tagged,
+  db,
+  webhook,
+  getWebhookStreamPath,
+  webhookObservationCollections,
+  webhookEventRowSchema,
+} from './observation-sources'
 export type {
   EntityObservationSource,
   CronObservationSource,
   EntitiesObservationSource,
   TaggedObservationSource,
   DbObservationSource,
+  WebhookObservationSource,
+  WebhookEventRow,
   EntitiesQuery,
   TaggedQuery,
 } from './observation-sources'

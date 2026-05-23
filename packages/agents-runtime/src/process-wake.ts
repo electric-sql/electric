@@ -1267,6 +1267,13 @@ export async function processWake(
         return sourceDb
       },
 
+      ensureSourceStream: async (
+        sourceStreamUrl: string,
+        contentType: string
+      ): Promise<void> => {
+        await serverClient.ensureStream(sourceStreamUrl, contentType)
+      },
+
       createSharedStateDb: async (
         ssId: string,
         mode: `create` | `connect`,
