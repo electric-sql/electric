@@ -11,10 +11,17 @@ import { createEntityLogPrefix, runtimeLog } from './log'
 import { createRuntimeServerClient } from './runtime-server-client'
 import { appendPathToUrl } from './url'
 import { manifestChildKey } from './manifest-helpers'
+import {
+  buildHydratedEventSourceWake,
+  eventSourceWakeInfoFromManifests,
+} from './event-sources'
+import { webhookObservationCollections } from './observation-sources'
+import type { HydratedEventSourceWake } from './event-sources'
 import type {
   CronObservationSource,
   EntitiesObservationSource,
   EntityObservationSource,
+  WebhookEventRow,
 } from './observation-sources'
 import type {
   CollectionDefinition,
@@ -1459,6 +1466,35 @@ export async function processWake(
     })
     setupCtx.restorePersistedSharedStateHandles()
 
+    const hydrateCurrentEventSourceWake =
+      async (): Promise<HydratedEventSourceWake | null> => {
+        const info = eventSourceWakeInfoFromManifests({
+          wakeEvent: currentWakeEvent,
+          manifests: db.collections.manifests.toArray,
+        })
+        if (!info) return null
+
+        try {
+          const sourceStreamUrl = info.sourceUrl.startsWith(`/`)
+            ? appendPathToUrl(baseUrl, info.sourceUrl)
+            : info.sourceUrl
+          const sourceDb = await wiringConfig.createSourceDb(
+            sourceStreamUrl,
+            webhookObservationCollections,
+            undefined,
+            { preload: true }
+          )
+          const rows = (sourceDb.collections.events?.toArray ??
+            []) as unknown as Array<WebhookEventRow>
+          return buildHydratedEventSourceWake(info, rows)
+        } catch (error) {
+          log.warn(
+            `failed to hydrate event source wake source=${info.sourceUrl}: ${error instanceof Error ? error.message : String(error)}`
+          )
+          return null
+        }
+      }
+
     const doObserve = async (
       source: ObservationSource,
       wake?: Wake
@@ -1867,6 +1903,7 @@ export async function processWake(
         registerSignalHandler: (handler) => {
           activeSignalHandler = handler
         },
+        hydratedEventSourceWake: await hydrateCurrentEventSourceWake(),
         doObserve,
         doSpawn,
         doMkdb,

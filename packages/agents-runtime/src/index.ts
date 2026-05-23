@@ -200,8 +200,10 @@ export type {
 } from './runtime-server-client'
 export {
   buildEventSourceManifestEntry,
+  buildHydratedEventSourceWake,
   buildEventSourceSubscriptionId,
   defaultEventSourceSubscriptionLifetime,
+  eventSourceWakeInfoFromManifests,
   eventSourceSubscriptionManifestKey,
   renderEventSourceBucketPath,
   resolveEventSourceSubscription,
@@ -215,6 +217,9 @@ export type {
   EventSourceSubscription,
   EventSourceSubscriptionInput,
   EventSourceType,
+  EventSourceWakeChange,
+  EventSourceWakeInfo,
+  HydratedEventSourceWake,
   ResolvedEventSourceSubscription,
   SubscriptionLifetime,
 } from './event-sources'

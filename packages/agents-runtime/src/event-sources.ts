@@ -1,4 +1,5 @@
 import { getWebhookStreamPath } from './observation-sources'
+import type { WebhookEventRow } from './observation-sources'
 
 export type EventSourceType = `webhook`
 export type EventSourceStatus = `active` | `disabled` | `revoked`
@@ -81,6 +82,45 @@ export type ResolvedEventSourceSubscription = {
   contract: EventSourceContract
   bucket?: EventSourceBucket
   bucketPath?: string
+}
+
+export type EventSourceWakeChange = {
+  collection: string
+  kind: `insert` | `update` | `delete`
+  key: string
+}
+
+export type EventSourceWakeInfo = {
+  sourceUrl: string
+  sourceType: EventSourceType
+  endpointKey: string
+  sourceKey: string
+  subscriptionId: string
+  bucket?: string
+  bucketKey?: string
+  params: Record<string, unknown>
+  filterKey?: string
+  reason?: string
+  changes: Array<EventSourceWakeChange>
+}
+
+export type HydratedEventSourceWake = {
+  type: `event_source_wake`
+  source: string
+  sourceType: EventSourceType
+  endpointKey: string
+  sourceKey: string
+  subscription: {
+    id: string
+    bucketKey?: string
+    params: Record<string, unknown>
+    filterKey?: string
+    reason?: string
+  }
+  bucket: string | null
+  changes: Array<EventSourceWakeChange>
+  events: Array<WebhookEventRow>
+  missingEventKeys?: Array<string>
 }
 
 const DEFAULT_LIFETIME: SubscriptionLifetime = { kind: `until_entity_stopped` }
@@ -247,6 +287,106 @@ export function buildEventSourceManifestEntry(
   }
 }
 
+export function eventSourceWakeInfoFromManifests(input: {
+  wakeEvent: {
+    type?: unknown
+    source?: unknown
+    payload?: unknown
+  }
+  manifests: Array<unknown>
+}): EventSourceWakeInfo | null {
+  const wakePayload = asRecord(input.wakeEvent.payload)
+  const sourceUrl =
+    typeof wakePayload?.source === `string`
+      ? wakePayload.source
+      : typeof input.wakeEvent.source === `string`
+        ? input.wakeEvent.source
+        : null
+  if (input.wakeEvent.type !== `wake` || !sourceUrl) return null
+
+  const changes = normalizeEventSourceWakeChanges(wakePayload?.changes)
+  if (!changes.some((change) => change.collection === `webhook_event`)) {
+    return null
+  }
+
+  for (const candidate of input.manifests) {
+    const manifest = asRecord(candidate)
+    if (!manifest) continue
+    if (manifest.kind !== `source` || manifest.sourceType !== `webhook`) {
+      continue
+    }
+
+    const config = asRecord(manifest.config)
+    const eventSource = asRecord(config?.eventSource)
+    if (!config || !eventSource) continue
+    if (config.streamUrl !== sourceUrl) continue
+
+    const endpointKey = stringFrom(config.endpointKey)
+    const sourceKey = stringFrom(eventSource.sourceKey)
+    const subscriptionId = stringFrom(eventSource.id)
+    if (!endpointKey || !sourceKey || !subscriptionId) continue
+
+    return {
+      sourceUrl,
+      sourceType: `webhook`,
+      endpointKey,
+      sourceKey,
+      subscriptionId,
+      ...(typeof config.bucket === `string` ? { bucket: config.bucket } : {}),
+      ...(typeof eventSource.bucketKey === `string`
+        ? { bucketKey: eventSource.bucketKey }
+        : {}),
+      params: asRecord(eventSource.params) ?? {},
+      ...(typeof eventSource.filterKey === `string`
+        ? { filterKey: eventSource.filterKey }
+        : {}),
+      ...(typeof eventSource.reason === `string`
+        ? { reason: eventSource.reason }
+        : {}),
+      changes,
+    }
+  }
+
+  return null
+}
+
+export function buildHydratedEventSourceWake(
+  info: EventSourceWakeInfo,
+  events: Array<WebhookEventRow>
+): HydratedEventSourceWake {
+  const eventKeys = new Set(
+    info.changes
+      .filter((change) => change.collection === `webhook_event`)
+      .map((change) => change.key)
+      .filter(Boolean)
+  )
+  const matchedEvents =
+    eventKeys.size === 0
+      ? []
+      : events.filter((event) => eventKeys.has(event.key))
+  const matchedKeys = new Set(matchedEvents.map((event) => event.key))
+  const missingEventKeys = [...eventKeys].filter((key) => !matchedKeys.has(key))
+
+  return {
+    type: `event_source_wake`,
+    source: info.sourceUrl,
+    sourceType: info.sourceType,
+    endpointKey: info.endpointKey,
+    sourceKey: info.sourceKey,
+    subscription: {
+      id: info.subscriptionId,
+      ...(info.bucketKey ? { bucketKey: info.bucketKey } : {}),
+      params: info.params,
+      ...(info.filterKey ? { filterKey: info.filterKey } : {}),
+      ...(info.reason ? { reason: info.reason } : {}),
+    },
+    bucket: info.bucket ?? null,
+    changes: info.changes,
+    events: matchedEvents,
+    ...(missingEventKeys.length > 0 ? { missingEventKeys } : {}),
+  }
+}
+
 function stringifyBucketParam(value: unknown, name: string): string {
   if (
     typeof value !== `string` &&
@@ -268,6 +408,39 @@ function normalizeIdentifierPart(input: string): string {
     .replace(/[^a-z0-9._-]+/g, `-`)
     .replace(/^-+|-+$/g, ``)
   return normalized.length > 0 ? normalized.slice(0, 80) : `event-source`
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === `object` && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null
+}
+
+function stringFrom(value: unknown): string | null {
+  return typeof value === `string` && value.length > 0 ? value : null
+}
+
+function normalizeEventSourceWakeChanges(
+  value: unknown
+): Array<EventSourceWakeChange> {
+  if (!Array.isArray(value)) return []
+
+  return value.flatMap((entry): Array<EventSourceWakeChange> => {
+    const record = asRecord(entry)
+    if (!record) return []
+    const collection = stringFrom(record.collection)
+    const key = stringFrom(record.key)
+    const kind =
+      record.kind === `delete`
+        ? `delete`
+        : record.kind === `update`
+          ? `update`
+          : record.kind === `insert`
+            ? `insert`
+            : null
+    if (!collection || !key || !kind) return []
+    return [{ collection, kind, key }]
+  })
 }
 
 function stableJson(value: unknown): string {

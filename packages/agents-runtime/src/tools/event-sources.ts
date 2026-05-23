@@ -218,7 +218,7 @@ export function createEventSourceTools(opts: {
   const subscribeTool: AgentTool = {
     name: `subscribe_event_source`,
     label: `Subscribe Event Source`,
-    description: `Subscribe to a discoverable external event feed or one of its buckets so matching future events wake you. Use filterKey only when list_event_sources advertises a named filter you want; filters are advisory until server-side source filters are enabled.`,
+    description: `Subscribe to a discoverable external event feed or one of its buckets so matching future events wake you with the matching event data in your next message. Use filterKey only when list_event_sources advertises a named filter you want; filters are advisory until server-side source filters are enabled.`,
     parameters: Type.Object({
       id: Type.Optional(
         Type.String({
