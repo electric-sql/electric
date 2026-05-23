@@ -380,7 +380,9 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
 
         const latestMessageRole = messages.at(-1)?.role
         const runInput =
-          input !== undefined || latestMessageRole !== `user`
+          input !== undefined ||
+          config.hydratedEventSourceWake != null ||
+          latestMessageRole !== `user`
             ? effectiveInput
             : undefined
 
