@@ -6,7 +6,7 @@ import {
   eventSourceSubscriptionManifestKey,
 } from '../event-sources'
 import type { AgentTool } from '@mariozechner/pi-agent-core'
-import type { EntityStreamDBWithActions } from '../entity-stream-db'
+import type { EntityStreamDBWithActions } from '../types'
 import type {
   EventSourceContract,
   EventSourceSubscription,

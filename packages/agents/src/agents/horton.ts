@@ -164,6 +164,7 @@ export function buildHortonSystemPrompt(
   workingDirectory: string,
   opts: {
     hasDocsSupport?: boolean
+    hasEventSourceTools?: boolean
     hasSkills?: boolean
     docsUrl?: string
     modelProvider?: string
@@ -172,6 +173,9 @@ export function buildHortonSystemPrompt(
 ): string {
   const docsTools = opts.hasDocsSupport
     ? `\n- search_durable_agents_docs: hybrid search over the built-in Durable Agents docs index`
+    : ``
+  const eventSourceTools = opts.hasEventSourceTools
+    ? `\n- list_event_sources: list webhook-backed event sources this session can subscribe to\n- subscribe_event_source: subscribe this Horton session to a source bucket so matching future events wake it\n- list_event_source_subscriptions: list active event source subscriptions for this session\n- unsubscribe_event_source: remove an event source subscription by id`
     : ``
   const skillsTools = opts.hasSkills
     ? `\n- use_skill: load a skill (knowledge, instructions, or a tutorial) into your context to help with the user's request\n- remove_skill: unload a skill from context when you're done with it`
@@ -238,7 +242,7 @@ When a user opens with a greeting ("hi", "hello", "hey", etc.) or a broad statem
 - fetch_url: fetch and convert a URL to markdown
 - spawn_worker: dispatch a subagent for an isolated task
 - send: send a message to an Electric Agent/entity. To schedule future work for yourself, call send with self: true and afterMs.
-${docsTools}${skillsTools}
+${eventSourceTools}${docsTools}${skillsTools}
 
 # Working with files
 - Prefer edit over write when modifying existing files.
@@ -270,6 +274,12 @@ Report outcomes faithfully. If a command failed, say so with the relevant output
 
 Working directory: ${workingDirectory}
 The current year is ${new Date().getFullYear()}.`
+}
+
+function getToolName(tool: unknown): string | null {
+  if (typeof tool !== `object` || tool === null) return null
+  const name = (tool as { name?: unknown }).name
+  return typeof name === `string` ? name : null
 }
 
 export function createHortonTools(
@@ -398,6 +408,9 @@ function createAssistantHandler(options: {
         : []),
       ...mcp.tools(),
     ]
+    const hasEventSourceTools = tools.some(
+      (tool) => getToolName(tool) === `list_event_sources`
+    )
 
     const titlePromise =
       ctx.firstWake && !ctx.tags.title
@@ -530,6 +543,7 @@ function createAssistantHandler(options: {
         docsUrl,
         modelProvider: modelConfig.provider,
         modelId: String(modelConfig.model),
+        hasEventSourceTools,
       }),
       ...modelConfig,
       // mcp.tools() inserts sentinel objects that the runtime's

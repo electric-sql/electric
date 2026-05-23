@@ -8,6 +8,7 @@ import {
   createEntityRegistry,
   createRuntimeHandler,
 } from '@electric-ax/agents-runtime'
+import { createEventSourceTools } from '@electric-ax/agents-runtime/tools'
 import { serverLog } from './log'
 import { registerHorton } from './agents/horton'
 import { registerWorker } from './agents/worker'
@@ -17,11 +18,10 @@ import type {
   AgentTool,
   DispatchPolicy,
   EntityRegistry,
-  EntityStreamDBWithActions,
   HeadersProvider,
+  ProcessWakeConfig,
   RuntimeHandler,
 } from '@electric-ax/agents-runtime'
-import type { ChangeEvent } from '@durable-streams/state'
 import type { StreamFn } from '@mariozechner/pi-agent-core'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { SkillsRegistry } from '@electric-ax/agents-runtime'
@@ -36,6 +36,10 @@ export interface AgentHandlerResult {
   skillsRegistry: SkillsRegistry | null
 }
 
+export type BuiltinElectricToolsFactory = NonNullable<
+  ProcessWakeConfig[`createElectricTools`]
+>
+
 export interface BuiltinAgentHandlerOptions {
   agentServerUrl: string
   serveEndpoint?: string
@@ -49,30 +53,35 @@ export interface BuiltinAgentHandlerOptions {
   defaultDispatchPolicyForType?: (
     typeName: string
   ) => DispatchPolicy | undefined
-  createElectricTools?: (context: {
-    entityUrl: string
-    entityType: string
-    args: Readonly<Record<string, unknown>>
-    db: EntityStreamDBWithActions
-    events: Array<ChangeEvent>
-    upsertCronSchedule: (opts: {
-      id: string
-      expression: string
-      timezone?: string
-      payload?: unknown
-      debounceMs?: number
-      timeoutMs?: number
-    }) => Promise<{ txid: string }>
-    upsertFutureSendSchedule: (opts: {
-      id: string
-      payload: unknown
-      targetUrl?: string
-      fireAt: string
-      from?: string
-      messageType?: string
-    }) => Promise<{ txid: string }>
-    deleteSchedule: (opts: { id: string }) => Promise<{ txid: string }>
-  }) => Array<AgentTool> | Promise<Array<AgentTool>>
+  createElectricTools?: BuiltinElectricToolsFactory
+}
+
+function toolName(tool: AgentTool): string | null {
+  return typeof tool.name === `string` ? tool.name : null
+}
+
+function dedupeToolsByName(tools: Array<AgentTool>): Array<AgentTool> {
+  const seen = new Set<string>()
+  const deduped: Array<AgentTool> = []
+
+  for (const tool of tools) {
+    const name = toolName(tool)
+    if (name && seen.has(name)) continue
+    if (name) seen.add(name)
+    deduped.push(tool)
+  }
+
+  return deduped
+}
+
+export function createBuiltinElectricTools(
+  custom?: BuiltinElectricToolsFactory
+): BuiltinElectricToolsFactory {
+  return async (context) => {
+    const builtinTools = createEventSourceTools(context)
+    const customTools = custom ? await custom(context) : []
+    return dedupeToolsByName([...builtinTools, ...customTools])
+  }
 }
 
 export async function createBuiltinAgentHandler(
@@ -144,7 +153,7 @@ export async function createBuiltinAgentHandler(
     defaultDispatchPolicyForType,
     serverHeaders,
     idleTimeout: 5 * 60_000,
-    createElectricTools,
+    createElectricTools: createBuiltinElectricTools(createElectricTools),
     publicUrl,
     name: runtimeName ?? `builtin-agents`,
   })
