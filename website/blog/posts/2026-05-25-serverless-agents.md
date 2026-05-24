@@ -17,6 +17,7 @@ published: true
   import Card from '../../src/components/home/Card.vue'
   import YoutubeEmbed from '../../src/components/YoutubeEmbed.vue'
   import AgentLoopFillDemo from '../../src/components/streams-home/AgentLoopFillDemo.vue'
+  import HomeCompositionHero from "../../src/components/home/HomeCompositionHero.vue"
 </script>
 
 <style scoped>
@@ -26,22 +27,26 @@ published: true
     border-radius: 2px;
     overflow: hidden;
   }
+  figure.section-image {
+    position: relative;
+    display: block;
+    margin: 48px 0 -49px 0;
+    z-index: 2;
+    padding-top: 32px;
+    border-top: 1px solid var(--vp-c-divider);
+  }
+  .layers-illustration-wrapper {
+    background: rgb(17, 19, 23);
+    position: relative;
+    width: 100%;
+    aspect-ratio: 5.6 / 4;
+  }
+  @media (max-width: 860px) {
+    .layers-illustration-wrapper {
+      aspect-ratio: 7 / 4;
+    }
+  }
 </style>
-
-In the last few weeks, every major AI platform has shipped [managed&nbsp;agents](#managed-agents).
-
-They're responding to the same demand, for infrastructure to bring agents online, with the same kind of [sandbox-based architecture](#the-rise-of-the-sandbox). That architecture is&nbsp;wrong.
-
-Managed agents don't belong in sandboxes. They belong in functions, with stateless agent logic, durability in the data layer and tool execution in backend&nbsp;systems.
-
-That's the architecture &mdash; [serverless agents](#principles-of-serverless-agents) &mdash; to wire agents into the workforce.
-
-> [!Warning] <span style="font-weight: 700; font-size: 110%; color: var(--vp-c-warning-1)">λ</span>&nbsp; Serverless agents with Electric
-> Build and run serverless agents with [Electric&nbsp;Agents](/agents/). See the [introductory blog&nbsp;post](/blog/2026/04/29/introducing-electric-agents) and dive into the [Quickstart](/docs/agents/quickstart) and [Walkthrough](/docs/agents/walkthrough)&nbsp;guides&nbsp;now.
-
-<div class="embed-container">
-  <YoutubeEmbed video-id="..." title="Serverless agents -- agents in functions, not sandboxes" />
-</div>
 
 <!--
 
@@ -73,6 +78,22 @@ You can build and run serverless agents today on the Electric Agents platform:
 
 -->
 
+In the last few weeks, every major AI platform has shipped [managed&nbsp;agents](#managed-agents).
+
+They're responding to the same demand, for infrastructure to bring agents online, with the same kind of [sandbox-based architecture](#the-rise-of-the-sandbox). That architecture is&nbsp;wrong.
+
+Managed agents don't belong in sandboxes. They belong in functions, with stateless agent logic, durability in the data layer and tool execution in backend&nbsp;systems.
+
+That's the architecture &mdash; [serverless agents](#principles-of-serverless-agents) &mdash; to wire agents into the workforce.
+
+> [!Warning] <span style="font-weight: 700; font-size: 110%; color: var(--vp-c-warning-1)">λ</span>&nbsp; Serverless agents with Electric
+> Build and run serverless agents with [Electric&nbsp;Agents](/agents/). See the [introductory blog&nbsp;post](/blog/2026/04/29/introducing-electric-agents) and dive into the [Quickstart](/docs/agents/quickstart) and [Walkthrough](/docs/agents/walkthrough)&nbsp;guides&nbsp;now.
+
+<div class="embed-container">
+  <YoutubeEmbed video-id="..." title="Serverless agents -- agents in functions, not sandboxes" />
+</div>
+
+
 ## Managed agents
 
 In the last few weeks, what seems like every major AI platform has shipped their version of managed agents:
@@ -103,7 +124,7 @@ For this to happen, agents need to be brought online, scaled out and integrated 
   </a>
 </figure>
 
-They need to be part of the team. Which means being wired into the tools that teams use to collaborate and get stuff done. They need to be tracked and managed, which means wiring them into governance processes and systems of record.
+They need to be part of the team. Which means being wired into the tools that teams use to collaborate and get stuff done. They need to be tracked and managed, wiring them into governance processes and systems of record.
 
 ### The rise of the sandbox
 
@@ -155,17 +176,17 @@ Running an agent inside its own VM or Docker container, or even a Firecracker, u
 
 </figure>
 
-Most agent operations, be they tool calls or LLM instruction, are I/O based. You send a request to the Anthropic API and wait for the response to be streamed back. There's really no need to hold a whole computer in memory just to make an API request.
+Most agent operations, be they tool calls or LLM instruction, are I/O based. You send a request to a data system or the Anthropic API and wait for the response to be streamed back. There's really no need to hold a whole computer in memory just to make an API request.
 
 This tends not to matter when you're running at smaller scale. The value of the agent system and the cost of LLM inference outweigh the cost of standard compute. However, it does matter when you have lots of agents.
 
-If your business is running on agents and those agents are spawning sub-agents every time there's a customer interaction, efficiency does matter and sandboxes are a blunt instrument with a lot of wasted compute.
+If your business is running on agents, and those agents are spawning sub-agents every time there's a customer interaction, then sandboxes are a blunt instrument with a lot of wasted compute.
 
 ### 2. Fragmentation
 
-More fundamentally, sandboxes lead to fragmentation of artefacts and decision traces.
+Perhaps most fundamentally, sandboxes lead to fragmentation of artefacts and decision traces.
 
-A harness looping away inside a computer creates artefacts using operating system primitives like files and processes. If the whole point and power of the agent is that it can do what it likes inside that computer then it's going to create a whole load of arbitrary activity and artefacts.
+A harness looping away inside a computer uses operating system primitives like files and processes. If the power of the agent is that it can do what it likes on that computer, then it's going to generate a whole load of arbitrary activity and artefacts.
 
 For example, if I run Claude Code on my local computer and ask it to spawn sub-agents to do some parallel research, it's going to:
 
@@ -182,16 +203,19 @@ For example, if I run Claude Code on my local computer and ask it to spawn sub-a
 
 That's exactly what you *don't* want from agents you're running your business on. Because what happens when you want to manage, monitor, collaborate on or review the agent activity? What are you going to do, `ssh` into the sandbox?
 
-No, what you want is to be able to track and trace all the activity and artefacts and wire them into the [context graph](https://foundationcapital.com/ideas/context-graphs-ais-trillion-dollar-opportunity).
+No, you need to be able to track and trace the activity and artefacts and [wire them into the business](https://foundationcapital.com/ideas/context-graphs-ais-trillion-dollar-opportunity).
 
 ### 3. Coordination
 
-In traditional software you were deploying deterministic systems with known topologies. Agents are not like that. Agents can spawn other agents, in increasingly dynamic and sophisticated topologies.
+Traditional software is deterministic and deployed with pre-defined topologies. Agents are not like that. Agents can spawn other agents, in increasingly dynamic and sophisticated topologies.
 
 Coordination between managed agents has all the challenges of traditional distributed systems (durability, addressability, reactivity, spawning, signaling, scheduling, communication, coordination, concurrency, contention) but amplified by the scale, parallelism and dynamic nature of agents.
 
-Sandboxes compound the problem by forcing you to pre-define the APIs and communication topologies between managed agents.
+Sandboxes compound the problem by forcing you to pre-define the APIs and communication topologies between managed agents. Managing this kind of combinatorical complexity with manual data wiring hits a wall at agent scale.
 
+<figure class="section-image">
+  <img src="/img/blog/serverless-agents/header5.jpg" />
+</figure>
 
 ## Breaking out of the sandbox
 
@@ -233,44 +257,40 @@ What happens if you turn the *agent* inside-out and put the session log on the o
 
 The answer is that it solves the dynamic coordination challenge. Allowing agents, users and systems to connect-to and monitor other agents by subscribing to and interacting directly with the log &mdash; rather than going through a pre-defined interface.
 
-## Principles of serverless agents
+<figure class="section-image">
+  <img src="/img/blog/serverless-agents/header9.jpg" />
+</figure>
+
+## Serverless agents
 
 Pulling apart the harness, rethinking isolation and turning the agent inside-out leads to a new architecture of **serverless agents**.
 
 One where you treat agents as logical entities, model agents as data, separate agent logic from tool execution, run the agent loop as a stateless function and execute tool calls through your backend systems.
 
-### 1. Treat agents as logical entities
-Agents are logical entities. They exist, even when they're not running.
+### Principles
 
-### 2. Model agents as data, not compute
-Agents are not compute, they're data. They live in the data layer, specifically in the session log, with durable state, not durable execution.
+The key principles of serverless agent architecture are:
 
-### 3. Separate agent logic from tool execution
-The agent loop decides and dispatches. Isolation lives at the tool execution layer, where the side effects actually happen.
+1. **Treat agents as logical entities** <br /> Agents are logical entities that exist, even when they're not running.
+2. **Model agents as data, not compute** <br /> Agents live in the data layer. Durable state, not durable execution.
+3. **Separate agent logic from tool execution** <br /> Pull apart the harness to seperate the brains from the execution.
+4. **Run the agent loop as a stateless function** <br /> With durability in the data layer and the ability to scale to zero.
+5. **execute tool calls through backend systems** <br /> for isolation and so artefacts and decision traces can be captured
 
-### 4. Run the agent loop as a stateless function
-With state in the data layer and tool execution decoupled, the agent loop can be run as a stateless function with elastic scale.
+### Benefits
 
-### 5. Execute tool calls through backend systems
-When you execute tool calls on backend systems you control, artefacts and decision traces can be captured, fragmentation goes away and integration is native.
+The result is a better way to scale-out and integrate agents into the business:
 
+1. **scale**: workforce-scale agent deployment becomes more efficient and elastic
+2. **integration**: no fragmentation; thinking and artefacts can be wired into the business
+3. **collaboration**: teams can collaborate across and around agent sessions
+4. **transformation**: businesses can integrate agents into the workforce
 
-## Benefits to the business
-
-The result is a better way to scale-out and integrate agents into the business.
-
-### Scale
-Workforce-scale agent deployment becomes more efficient and scalable: scale to millions when work flows in, scale to zero when it doesn't.
-
-### Integration
-Decisions, traces, artefacts and side effects happen, and can be captured-in, backend systems you control and can monitor.
-
-### Collaboration
-Sessions become shareable, forkable and replayable. Teams can collaborate across and between agent sessions, wiring them in to the way work gets done.
-
-### Transformation
-Businesses can integrate agents into the workforce. Increasing efficiency and ultimately remaining competitive in the agentic economy.
-
+<figure class="section-image">
+  <div class="layers-illustration-wrapper">
+    <HomeCompositionHero />
+  </div>
+</figure>
 
 ## Building with Electric
 
