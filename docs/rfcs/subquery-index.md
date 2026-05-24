@@ -200,6 +200,36 @@ These should be updated so that rather than holding views of the subquery, they 
 - `convert_change` should have a function passed to it that accesses MultiTimeView.member? at the specified time
 - the move-in query needs entire views at specific times and so should call MultiTimeView.values(subquery_id, time) and care should be made to not keep this in memory for too long, perhaps we should GC the consumer process afterwards, or perhaps the task process that runs the query should call MultiTimeView.values(subquery_id, time) so that the memory is freed when the process ends
 
+#### MoveQueue
+
+The Materializer emits `:materializer_changes` messages carrying changed values for a subquery at a new logical time. The consumer's MoveQueue buffers these and yields combined batches one at a time.
+
+A batch covers a contiguous logical-time window `[a, b]` for a single subquery and carries both move-in and move-out values:
+
+```elixir
+%{
+  subquery_id: s7,
+  from_time: a,
+  to_time: b,
+  move_in_values:  [...],
+  move_out_values: [...]
+}
+```
+
+By construction `MTV(b) = MTV(a) + move_in_values - move_out_values`. The ins and outs are kept together because times in MTV are points in a totally ordered history per subquery — there is no intermediate time at which only the move-outs of `[a, b]` have been applied.
+
+##### Compaction rules
+
+Per subquery within `[a, b]`, sequences of moves compact into a single `(move_in_values, move_out_values)` pair as long as the net effect preserves `MTV(b) = MTV(a) + ins - outs`:
+
+- repeated adds of the same value collapse to one
+- repeated removes of the same value collapse to one
+- `add V` then `remove V` cancel
+- `remove V` then `add V` cancel
+- adds and removes for disjoint values are kept
+
+Each subquery is compacted independently — moves for subquery A do not affect the contiguous window for subquery B.
+
 ### Concurrency model
 
 Reads and writes to the MultiTimeView and SubqueryIndex ETS tables will mostly not be concurrent:
