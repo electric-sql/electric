@@ -101,7 +101,7 @@ the meaning of the result:
   [:in, 9] - the value was in the set before 9 and out of the set from time 9 and above
   [:in, 9, 11] - the value was in the set before 9 and out of the set from 9 to 10 and in the set again from time 11 and above
 
-note: the list(times) structure above has been chosen for memory efficiency, but if you can think of a smaller structure let me know. for example if `[]` takes up more space than `true` then we should use `true` since this will be the most common case and we want to be memory efficient.
+note: the list(times) structure above has been chosen for memory efficiency. `[]` represents the always-present case (the most common case) and is an immediate term on BEAM, so it adds no per-row overhead beyond the key itself.
 
 so for subquery_id, value - [:in, 9, 11]
 
