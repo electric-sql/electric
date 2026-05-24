@@ -194,7 +194,7 @@ export function createEventSourceTools(opts: {
   const listSourcesTool: AgentTool = {
     name: `list_event_sources`,
     label: `List Event Sources`,
-    description: `List external event feeds you can subscribe to, such as webhook integrations from GitHub, Stripe, email, CI, or other services. Each source may expose bucket templates; use paramsSchema to choose sourceKey, bucketKey, and params for subscribe_event_source.`,
+    description: `List external event feeds you can subscribe to, such as webhook integrations from GitHub, Stripe, email, CI, or other services. Sources may expose named buckets and optional filters; use paramsSchema to choose sourceKey, bucketKey, params, and filterKey for subscribe_event_source.`,
     parameters: Type.Object({}),
     execute: withEventSourceToolLogging(
       entityUrl,
@@ -230,7 +230,7 @@ export function createEventSourceTools(opts: {
       }),
       bucketKey: Type.Optional(
         Type.String({
-          description: `Bucket template key from list_event_sources. Omit to subscribe to the source root stream.`,
+          description: `Bucket key from list_event_sources. Omit to subscribe to the source root stream.`,
         })
       ),
       params: Type.Optional(
