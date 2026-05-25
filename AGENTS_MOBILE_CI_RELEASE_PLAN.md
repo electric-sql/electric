@@ -177,6 +177,7 @@ The config should include:
 - `android.versionCode`: from CI
 - `ios.bundleIdentifier`: `com.electricsql.agents.mobile`
 - `ios.buildNumber`: from CI
+- `ios.infoPlist.ITSAppUsesNonExemptEncryption`: `false`, assuming the app only uses standard/exempt encryption such as HTTPS.
 
 ### EAS Config
 
@@ -475,6 +476,7 @@ Before the Apple Developer account is ready:
 - Done: iOS export check passes locally and in mobile CI checks.
 - Done: added `preview-ios-simulator` EAS profile.
 - Done: added manual `agents_mobile_ios_simulator.yml` workflow.
+- Done: set `ITSAppUsesNonExemptEncryption` to `false` to avoid App Store Connect encryption metadata blocking simulator/TestFlight setup for standard HTTPS-only encryption.
 - Next: run a simulator EAS build from CI to confirm native iOS compilation.
 
 After the Apple Developer account is ready:
