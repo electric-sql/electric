@@ -90,7 +90,7 @@ async function fetchAvailableModelIds(
             signal: AbortSignal.timeout(3_000),
           })
         : provider === `deepseek`
-          ? await fetch(`https://api.deepseek.com/models`, {
+          ? await fetch(`https://api.deepseek.com/v1/models`, {
               headers: {
                 authorization: `Bearer ${process.env.DEEPSEEK_API_KEY ?? ``}`,
               },

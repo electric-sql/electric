@@ -130,8 +130,9 @@ type ApiKeys = {
   openai: string | null
   /**
    * Optional. Mirrored to `DEEPSEEK_API_KEY` so Horton's local
-   * runtime can use DeepSeek models. Optional — the first-launch dialog
-   * does not require it when an Anthropic or OpenAI key is already set.
+   * runtime can use DeepSeek models. Treated as a peer LLM provider:
+   * setting it alone is sufficient to satisfy the "has any LLM key"
+   * check and dismiss the first-launch dialog.
    */
   deepseek: string | null
   /**

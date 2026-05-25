@@ -143,13 +143,18 @@ describe(`model catalog`, () => {
     process.env.DEEPSEEK_API_KEY = `test-deepseek-key`
     vi.stubGlobal(
       `fetch`,
-      vi.fn(async () => ({
-        ok: true,
-        status: 200,
-        json: async () => ({
-          data: [{ id: `deepseek-v4-flash` }, { id: `deepseek-v4-pro` }],
-        }),
-      }))
+      vi.fn(async (url: string) => {
+        if (String(url).includes(`deepseek.com`)) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              data: [{ id: `deepseek-v4-flash` }, { id: `deepseek-v4-pro` }],
+            }),
+          }
+        }
+        return { ok: false, status: 401, json: async () => ({}) }
+      })
     )
 
     const catalog = await createBuiltinModelCatalog()
