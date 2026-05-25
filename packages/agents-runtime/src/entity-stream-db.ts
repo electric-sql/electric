@@ -296,13 +296,21 @@ export function createEntityStreamDB(
     onBeforeBatch: (batch) => {
       opts?.onBeforeBatch?.(batch)
       replayBatchOffset.current = batch.offset
-      // The anchor offset for every item in this batch is the END
-      // offset of the PREVIOUS batch (or `null` for the very first
-      // batch of a fresh read). PR #347's `Stream-Fork-Sub-Offset` is
-      // interpreted as "N messages past the anchor offset," so per-
-      // item sub-offset = position-in-batch + 1 (inclusive count).
-      const batchAnchor = previousBatchOffset
-      batch.items.forEach((item, itemIndex) => {
+      // PR #347's `Stream-Fork-Sub-Offset` addresses items WITHIN A
+      // SINGLE LOG ENTRY (the first log entry past the anchor), not
+      // items globally past the anchor. To mint server-compatible
+      // pointers we group items in the batch by their `headers.offset`
+      // (= the end offset of the log entry that produced them, stable
+      // at write time). Each contiguous group of items sharing an
+      // `headers.offset` is one log entry; within it sub-offsets are
+      // 1..K. The anchor offset for that group is the END offset of
+      // the PRECEDING log entry — either the previous distinct
+      // `headers.offset` we saw in this batch, or `previousBatchOffset`
+      // for the first group in a fresh batch.
+      let currentEntryOffset: string | null = null
+      let priorEntryOffset: string | null = previousBatchOffset
+      let positionInEntry = 0
+      batch.items.forEach((item) => {
         if (isControlEvent(item)) {
           if (item.headers.control === `reset`) {
             for (const offsets of rowOffsetsByCollection.values()) {
@@ -312,15 +320,31 @@ export function createEntityStreamDB(
               orders.clear()
             }
             previousBatchOffset = null
+            currentEntryOffset = null
+            priorEntryOffset = null
+            positionInEntry = 0
           }
           return
         }
         if (!isChangeEvent(item)) return
         const collectionName = collectionNameByEventType.get(item.type)
         if (!collectionName) return
+
+        const itemEntryOffset =
+          typeof (item.headers as Record<string, unknown>).offset === `string`
+            ? ((item.headers as Record<string, unknown>).offset as string)
+            : null
+        if (itemEntryOffset !== currentEntryOffset) {
+          // Boundary into a new log entry.
+          priorEntryOffset = currentEntryOffset ?? previousBatchOffset
+          currentEntryOffset = itemEntryOffset
+          positionInEntry = 0
+        }
+        positionInEntry++
+
         const pointer: EventPointer = {
-          offset: batchAnchor,
-          subOffset: itemIndex + 1,
+          offset: priorEntryOffset,
+          subOffset: positionInEntry,
         }
         rowOffsetsByCollection.get(collectionName)?.set(item.key, pointer)
 

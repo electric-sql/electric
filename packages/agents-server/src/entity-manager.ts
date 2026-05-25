@@ -1301,6 +1301,8 @@ export class EntityManager {
     streamPath: string
   ): number {
     // Count events at-or-before the anchor and validate the anchor exists.
+    // `pointer.offset === null` is the stream-start anchor — no events
+    // precede it, so `positionAtAnchor` stays at 0.
     let positionAtAnchor = 0
     let anchorSeen = pointer.offset === null
     for (const event of events) {
@@ -1308,12 +1310,9 @@ export class EntityManager {
       const eventOffset =
         typeof headers?.offset === `string` ? headers.offset : undefined
       if (eventOffset === undefined) continue
-      if (pointer.offset !== null && eventOffset === pointer.offset) {
-        anchorSeen = true
-      }
-      if (pointer.offset === null || eventOffset <= pointer.offset) {
-        positionAtAnchor++
-      }
+      if (pointer.offset === null) continue
+      if (eventOffset === pointer.offset) anchorSeen = true
+      if (eventOffset <= pointer.offset) positionAtAnchor++
     }
     if (!anchorSeen) {
       throw new ElectricAgentsError(
