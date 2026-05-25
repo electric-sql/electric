@@ -53,4 +53,53 @@ describe(`StreamClient.fork`, () => {
       sourceEvent,
     ])
   })
+
+  it(`forks at a sub-offset to truncate source history`, async () => {
+    // The durable-streams TS server treats one POST as one message,
+    // regardless of content type — so writing the source as a single
+    // body=JSON.stringify([a,b,c]) creates ONE flattened message of
+    // three JSON values. Sub-offset 2 then slices that to two values.
+    await client.create(`/source-sub-offset`, {
+      contentType: `application/json`,
+      body: JSON.stringify([
+        { key: `a`, value: 1 },
+        { key: `b`, value: 2 },
+        { key: `c`, value: 3 },
+      ]),
+    })
+
+    await client.fork(`/fork-truncated`, `/source-sub-offset`, {
+      forkPointer: { offset: null, subOffset: 2 },
+    })
+
+    await expect(client.readJson(`/fork-truncated`)).resolves.toEqual([
+      { key: `a`, value: 1 },
+      { key: `b`, value: 2 },
+    ])
+  })
+
+  it(`readJsonWithPointers yields per-item pointers anchored on previous batch`, async () => {
+    const events = [
+      { key: `a`, value: 1 },
+      { key: `b`, value: 2 },
+    ]
+    await client.create(`/source-pointers`, {
+      contentType: `application/json`,
+      body: JSON.stringify(events),
+    })
+
+    const itemsWithPointers =
+      await client.readJsonWithPointers<(typeof events)[number]>(
+        `/source-pointers`
+      )
+
+    expect(itemsWithPointers).toHaveLength(2)
+    // First batch: anchor is `null` (stream start), subOffsets are 1-indexed.
+    expect(itemsWithPointers[0]!.item).toEqual(events[0])
+    expect(itemsWithPointers[0]!.pointer.offset).toBeNull()
+    expect(itemsWithPointers[0]!.pointer.subOffset).toBe(1)
+    expect(itemsWithPointers[1]!.item).toEqual(events[1])
+    expect(itemsWithPointers[1]!.pointer.offset).toBeNull()
+    expect(itemsWithPointers[1]!.pointer.subOffset).toBe(2)
+  })
 })

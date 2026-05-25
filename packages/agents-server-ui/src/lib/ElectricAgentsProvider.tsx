@@ -3,6 +3,7 @@ import { createCollection, createOptimisticAction } from '@tanstack/react-db'
 import { electricCollectionOptions } from '@tanstack/electric-db-collection'
 import { z } from 'zod'
 import { appendPathToUrl } from '@electric-ax/agents-runtime/client'
+import type { EventPointer } from '@electric-ax/agents-runtime'
 import type { ReactNode } from 'react'
 import { serverFetch } from './auth-fetch'
 import { entityApiUrl, entitySpawnApiUrl } from './entity-api'
@@ -511,11 +512,24 @@ function createSignalAction(
 }
 
 function createForkEntity(baseUrl: string) {
-  return async (entityUrl: string): Promise<{ url: string }> => {
+  return async (
+    entityUrl: string,
+    opts?: { pointer?: EventPointer }
+  ): Promise<{ url: string }> => {
+    // Wire convention is snake_case; in-code TS is camelCase. See Q4
+    // "Field-naming convention" in docs/fork-at-message.md.
+    const body = opts?.pointer
+      ? {
+          fork_pointer: {
+            offset: opts.pointer.offset,
+            sub_offset: opts.pointer.subOffset,
+          },
+        }
+      : {}
     const res = await serverFetch(entityApiUrl(baseUrl, entityUrl, `/fork`), {
       method: `POST`,
       headers: { 'content-type': `application/json` },
-      body: JSON.stringify({}),
+      body: JSON.stringify(body),
     })
     if (!res.ok) {
       const text = await res.text().catch(() => ``)

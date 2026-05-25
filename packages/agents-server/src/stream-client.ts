@@ -4,6 +4,7 @@ import {
   FetchError,
   IdempotentProducer,
 } from '@durable-streams/client'
+import type { EventPointer } from '@electric-ax/agents-runtime'
 import { ErrCodeNotFound } from './electric-agents-types.js'
 import { ATTR, injectTraceHeaders, withSpan } from './tracing.js'
 import type { HeadersRecord, MaybePromise } from '@durable-streams/client'
@@ -242,7 +243,11 @@ export class StreamClient {
     })
   }
 
-  async fork(path: string, sourcePath: string): Promise<void> {
+  async fork(
+    path: string,
+    sourcePath: string,
+    opts?: { forkPointer?: EventPointer }
+  ): Promise<void> {
     return await withSpan(`stream.fork`, async (span) => {
       span.setAttributes({
         [ATTR.STREAM_PATH]: path,
@@ -251,6 +256,17 @@ export class StreamClient {
       const headers: Record<string, string> = {
         'content-type': `application/json`,
         'Stream-Forked-From': new URL(this.streamUrl(sourcePath)).pathname,
+      }
+      if (opts?.forkPointer) {
+        // PR #347 returns 400 if Stream-Fork-Sub-Offset > 0 without an
+        // accompanying Stream-Fork-Offset. When our pointer's offset is
+        // `null` (anchor at stream start), send the explicit zero-offset
+        // string to satisfy that constraint.
+        const ZERO_OFFSET = `0000000000000000_0000000000000000`
+        headers[`Stream-Fork-Offset`] = opts.forkPointer.offset ?? ZERO_OFFSET
+        if (opts.forkPointer.subOffset > 0) {
+          headers[`Stream-Fork-Sub-Offset`] = String(opts.forkPointer.subOffset)
+        }
       }
       injectTraceHeaders(headers)
 
@@ -402,6 +418,70 @@ export class StreamClient {
         live: false,
       })
       return await response.json<T>()
+    })
+  }
+
+  async readJsonWithPointers<T = unknown>(
+    path: string,
+    fromOffset?: string
+  ): Promise<Array<{ item: T; pointer: EventPointer }>> {
+    return await withSpan(`stream.readJsonWithPointers`, async (span) => {
+      span.setAttributes({
+        [ATTR.STREAM_PATH]: path,
+        [ATTR.STREAM_OP]: `readJsonWithPointers`,
+      })
+      const handle = new DurableStream({
+        url: this.streamUrl(path),
+        headers: this.streamHeaders(),
+      })
+      const response = await handle.stream<T>({
+        offset: fromOffset ?? `-1`,
+        live: false,
+      })
+      // Per-item pointer = { offset: anchor, subOffset: position-in-batch + 1 }
+      // where anchor is the END offset of the PREVIOUS batch (null for the
+      // very first batch). Matches `entity-stream-db.ts`'s onBeforeBatch
+      // semantics so the pointers we mint here align with PR #347's
+      // `Stream-Fork-Sub-Offset` interpretation ("N messages past anchor").
+      //
+      // We must NOT await `response.closed` to know when the read finishes —
+      // the inner reader marks the response closed when it observes
+      // `upToDate` in the HTTP response *before* the subscriber loop has
+      // had a chance to deliver the buffered batch to our callback. So we
+      // resolve when our subscriber sees the `upToDate=true` boundary
+      // batch instead, which is guaranteed to fire for live:false reads
+      // (even on an empty source: the server still returns a final batch
+      // with `items=[]` and `upToDate=true`). `response.closed` is used
+      // only to propagate hard errors.
+      return await new Promise<Array<{ item: T; pointer: EventPointer }>>(
+        (resolve, reject) => {
+          const result: Array<{ item: T; pointer: EventPointer }> = []
+          let previousBatchOffset: string | null = null
+          let settled = false
+          response.subscribeJson<T>((batch) => {
+            const batchAnchor = previousBatchOffset
+            batch.items.forEach((item, itemIndex) => {
+              result.push({
+                item,
+                pointer: {
+                  offset: batchAnchor,
+                  subOffset: itemIndex + 1,
+                },
+              })
+            })
+            previousBatchOffset = batch.offset
+            if (batch.upToDate && !settled) {
+              settled = true
+              resolve(result)
+            }
+          })
+          response.closed.catch((err) => {
+            if (settled) return
+            settled = true
+            reject(err)
+          })
+        }
+      )
     })
   }
 

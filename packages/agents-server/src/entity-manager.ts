@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import fastq from 'fastq'
 import {
   assertTags,
+  comparePointers,
   entityStateSchema,
   getCronStreamPath,
   getSharedStateStreamPath,
@@ -12,6 +13,7 @@ import {
   manifestSourceKey,
   resolveCronScheduleSpec,
 } from '@electric-ax/agents-runtime'
+import type { EventPointer } from '@electric-ax/agents-runtime'
 import {
   ErrCodeDuplicateURL,
   ErrCodeEntityPersistFailed,
@@ -161,6 +163,16 @@ type ForkSubtreeOptions = {
   rootInstanceId?: string
   waitTimeoutMs?: number
   waitPollMs?: number
+  /**
+   * Optional anchor pointing at an event on the source root's `main` stream.
+   * When set: only events at or before the pointer are kept on the root's
+   * forked `main`, and the root's manifest is filtered so that descendants
+   * spawned after the pointer are dropped from the fork (their now-orphan
+   * subtrees are not forked). Per Q2 of the fork-at-message RFC, the
+   * pointer only applies to the root's `main` stream — `error` and
+   * shared-state streams clone at HEAD regardless.
+   */
+  forkPointer?: EventPointer
 }
 
 type ForkEntityPlan = {
@@ -883,9 +895,85 @@ export class EntityManager {
         )
       }
 
-      const snapshot = await this.readForkStateSnapshot(sourceTree)
+      // When forking at a pointer, pre-read the root's main with per-item
+      // pointers, validate the pointer against the stream, and materialise
+      // the root-at-pointer snapshot fragments. The pointer ONLY applies
+      // to the root's `main` stream (Q2). Descendants kept by the manifest
+      // filter (Q3) are forked at HEAD.
+      let preFilteredRoot:
+        | {
+            manifests: Map<string, Record<string, unknown>>
+            childStatuses: Map<string, Record<string, unknown>>
+            replayWatermarks: Map<string, Record<string, unknown>>
+            sharedStateIds: Set<string>
+          }
+        | undefined
+      if (opts.forkPointer) {
+        const itemsWithPointers = await this.streamClient.readJsonWithPointers<
+          Record<string, unknown>
+        >(sourceRoot.streams.main)
+        this.validateForkPointer(
+          itemsWithPointers,
+          opts.forkPointer,
+          sourceRoot.streams.main
+        )
+        const filteredEvents = itemsWithPointers
+          .filter(
+            ({ pointer }) => comparePointers(pointer, opts.forkPointer!) <= 0
+          )
+          .map(({ item }) => item)
+        const rootManifests = this.reduceStateRows(filteredEvents, `manifest`)
+        const sharedStateIds = new Set<string>()
+        for (const manifest of rootManifests.values()) {
+          this.collectSharedStateIds(manifest, sharedStateIds)
+        }
+        preFilteredRoot = {
+          manifests: rootManifests,
+          childStatuses: this.reduceStateRows(filteredEvents, `child_status`),
+          replayWatermarks: this.reduceStateRows(
+            filteredEvents,
+            `replay_watermark`
+          ),
+          sharedStateIds,
+        }
+      }
+
+      const effectiveSubtree = preFilteredRoot
+        ? this.computeEffectiveSubtree(
+            sourceTree,
+            sourceRoot.url,
+            preFilteredRoot.manifests
+          )
+        : sourceTree
+
+      const snapshot = await this.readForkStateSnapshot(
+        // Skip the root when we've already pre-filtered it — avoid both a
+        // wasted HEAD read of main and a re-population that would clobber
+        // the filtered entries.
+        preFilteredRoot
+          ? effectiveSubtree.filter((entity) => entity.url !== sourceRoot.url)
+          : effectiveSubtree
+      )
+      if (preFilteredRoot) {
+        snapshot.manifestsByEntity.set(
+          sourceRoot.url,
+          preFilteredRoot.manifests
+        )
+        snapshot.childStatusesByEntity.set(
+          sourceRoot.url,
+          preFilteredRoot.childStatuses
+        )
+        snapshot.replayWatermarksByEntity.set(
+          sourceRoot.url,
+          preFilteredRoot.replayWatermarks
+        )
+        for (const id of preFilteredRoot.sharedStateIds) {
+          snapshot.sharedStateIds.add(id)
+        }
+      }
+
       const suffix = randomUUID().slice(0, 8)
-      const entityUrlMap = await this.buildForkEntityUrlMap(sourceTree, {
+      const entityUrlMap = await this.buildForkEntityUrlMap(effectiveSubtree, {
         suffix,
         rootUrl,
         rootInstanceId: opts.rootInstanceId,
@@ -896,14 +984,14 @@ export class EntityManager {
       )
       const stringMap = this.buildForkStringMap(entityUrlMap, sharedStateIdMap)
       const entityPlans = this.buildForkEntityPlans(
-        sourceTree,
+        effectiveSubtree,
         entityUrlMap,
         stringMap
       )
 
       this.addForkLocks(
         this.forkWriteLockedEntities,
-        sourceTree.map((entity) => entity.url),
+        effectiveSubtree.map((entity) => entity.url),
         writeEntityLocks
       )
       this.addForkLocks(
@@ -921,11 +1009,17 @@ export class EntityManager {
 
       try {
         for (const plan of entityPlans) {
+          const isRoot = plan.source.url === rootUrl
           await this.streamClient.fork(
             plan.fork.streams.main,
-            plan.source.streams.main
+            plan.source.streams.main,
+            isRoot && opts.forkPointer
+              ? { forkPointer: opts.forkPointer }
+              : undefined
           )
           createdStreams.push(plan.fork.streams.main)
+          // `error` always clones at HEAD (Q2 — no canonical mapping
+          // between main-offset and error-offset).
           await this.streamClient.fork(
             plan.fork.streams.error,
             plan.source.streams.error
@@ -1173,6 +1267,104 @@ export class EntityManager {
 
       await sleep(Math.min(pollMs, Math.max(0, deadline - Date.now())))
     }
+  }
+
+  /**
+   * Validate `forkPointer` against `itemsWithPointers` (the source root's
+   * `main` stream read with per-item pointers). Throws a 400 if the pointer
+   * doesn't address a real item. A pointer is valid when:
+   *   - some batch X exists whose anchor offset matches `pointer.offset`
+   *     (or both are `null`, i.e. stream start), AND
+   *   - `pointer.subOffset` is in `[1, X.items.length]`.
+   *
+   * The UI sources fork pointers from `__electricRowOffsets`, so any
+   * invalid pointer is a client bug we want to surface, not paper over.
+   */
+  private validateForkPointer(
+    itemsWithPointers: ReadonlyArray<{ pointer: EventPointer }>,
+    pointer: EventPointer,
+    streamPath: string
+  ): void {
+    let maxSubOffsetForAnchor: number | undefined
+    for (const { pointer: p } of itemsWithPointers) {
+      if (p.offset === pointer.offset) {
+        if (
+          maxSubOffsetForAnchor === undefined ||
+          p.subOffset > maxSubOffsetForAnchor
+        ) {
+          maxSubOffsetForAnchor = p.subOffset
+        }
+      }
+    }
+    if (maxSubOffsetForAnchor === undefined) {
+      throw new ElectricAgentsError(
+        ErrCodeInvalidRequest,
+        `fork_pointer.offset (${pointer.offset ?? `<stream-start>`}) does not match any chunk anchor on ${streamPath}`,
+        400
+      )
+    }
+    if (pointer.subOffset < 1 || pointer.subOffset > maxSubOffsetForAnchor) {
+      throw new ElectricAgentsError(
+        ErrCodeInvalidRequest,
+        `fork_pointer.sub_offset ${pointer.subOffset} out of range for chunk on ${streamPath} (valid: 1..${maxSubOffsetForAnchor})`,
+        400
+      )
+    }
+  }
+
+  /**
+   * Compute the subset of `sourceTree` that survives the Q3 manifest filter
+   * applied at the root. After filtering the root's manifest at the fork
+   * pointer, only children whose manifest entries landed at or before the
+   * pointer remain; those kept children carry their CURRENT (HEAD) subtree
+   * along with them (Q3 "loose on descendants"). Children dropped from the
+   * root's manifest, and any of their descendants, are excluded.
+   */
+  private computeEffectiveSubtree(
+    sourceTree: ReadonlyArray<ElectricAgentsEntity>,
+    rootUrl: string,
+    filteredRootManifests: ReadonlyMap<string, Record<string, unknown>>
+  ): Array<ElectricAgentsEntity> {
+    const keptChildUrls = new Set<string>()
+    for (const value of filteredRootManifests.values()) {
+      if (value.kind === `child` && typeof value.entity_url === `string`) {
+        keptChildUrls.add(value.entity_url)
+      }
+    }
+
+    const childrenByParent = new Map<string, Array<ElectricAgentsEntity>>()
+    for (const entity of sourceTree) {
+      if (!entity.parent) continue
+      const list = childrenByParent.get(entity.parent) ?? []
+      list.push(entity)
+      childrenByParent.set(entity.parent, list)
+    }
+
+    const rootEntity = sourceTree.find((e) => e.url === rootUrl)
+    if (!rootEntity) return []
+
+    const result: Array<ElectricAgentsEntity> = [rootEntity]
+    const queue: Array<ElectricAgentsEntity> = []
+    for (const child of childrenByParent.get(rootUrl) ?? []) {
+      if (keptChildUrls.has(child.url)) {
+        queue.push(child)
+      }
+    }
+    const seen = new Set<string>([rootUrl])
+    while (queue.length > 0) {
+      const entity = queue.shift()!
+      if (seen.has(entity.url)) continue
+      seen.add(entity.url)
+      result.push(entity)
+      // Below the kept-children level the existing recursive subtree is
+      // included unchanged — see Q3 in docs/fork-at-message.md.
+      for (const grandchild of childrenByParent.get(entity.url) ?? []) {
+        if (!seen.has(grandchild.url)) {
+          queue.push(grandchild)
+        }
+      }
+    }
+    return result
   }
 
   private async listEntitySubtree(
