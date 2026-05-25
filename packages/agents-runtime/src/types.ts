@@ -325,6 +325,7 @@ export type TimelineItem =
   | {
       kind: `run`
       at: number
+      finishReason?: string
       items: Array<
         | { kind: `text`; text: string; status: `streaming` | `completed` }
         | {
