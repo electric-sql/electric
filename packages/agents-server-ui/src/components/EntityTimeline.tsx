@@ -790,6 +790,7 @@ const TimelineRow = memo(function TimelineRow({
   stopUserMessageKey,
   stopPending,
   onStopGeneration,
+  onForkFromHere,
   onRunSearchTextChange,
 }: {
   row: RenderTimelineRow
@@ -805,6 +806,9 @@ const TimelineRow = memo(function TimelineRow({
   stopUserMessageKey: string | null
   stopPending: boolean
   onStopGeneration?: () => void
+  /** When set on a user-message row, enables the "Fork from here" hover
+   * button. Caller pre-resolved the pointer; we just invoke. */
+  onForkFromHere?: () => void
   onRunSearchTextChange: (rowKey: string, text: string) => void
 }): React.ReactElement {
   if (row.inbox) {
@@ -824,6 +828,7 @@ const TimelineRow = memo(function TimelineRow({
         }
         stopPending={stopPending}
         onStop={onStopGeneration}
+        onForkFromHere={onForkFromHere}
       />
     )
   }
@@ -884,6 +889,7 @@ export function EntityTimeline({
   scrollToBottomSignal = 0,
   stopPending = false,
   onStopGeneration,
+  forkFromHereByInboxKey,
 }: {
   rows: Array<EntityTimelineQueryRow>
   loading: boolean
@@ -897,6 +903,13 @@ export function EntityTimeline({
   scrollToBottomSignal?: number
   stopPending?: boolean
   onStopGeneration?: () => void
+  /**
+   * Per-inbox-row click handlers for the "Fork from here" hover button.
+   * The map is keyed by the row's `$key`; rows not in the map (or when
+   * the prop is omitted) get no fork affordance. The caller resolves
+   * the fork pointer and runs the fork → navigate flow.
+   */
+  forkFromHereByInboxKey?: Map<string, () => void>
 }): React.ReactElement {
   const { entitiesCollection } = useElectricAgents()
   const referencedEntityUrlKey = useMemo(
@@ -1545,6 +1558,7 @@ export function EntityTimeline({
                         stopUserMessageKey={stopUserMessageKey}
                         stopPending={stopPending}
                         onStopGeneration={onStopGeneration}
+                        onForkFromHere={forkFromHereByInboxKey?.get(rowKey)}
                         onRunSearchTextChange={updateRunSearchText}
                       />
                     </TimelineRowErrorBoundary>

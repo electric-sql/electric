@@ -2,6 +2,7 @@ import { memo, useState } from 'react'
 import {
   Download,
   File as FileIcon,
+  GitFork,
   Image as ImageIcon,
   Square,
 } from 'lucide-react'
@@ -35,12 +36,20 @@ export const UserMessage = memo(function UserMessage({
   showStop = false,
   stopPending = false,
   onStop,
+  onForkFromHere,
 }: {
   section: UserMessageSection
   attachments?: Array<UserMessageAttachment>
   showStop?: boolean
   stopPending?: boolean
   onStop?: () => void
+  /**
+   * When provided, renders a hover-revealed "Fork from here" button on
+   * the bubble. The caller is responsible for eligibility — pass
+   * `undefined` for messages where no preceding completed run anchors a
+   * fork. See docs/fork-at-message.md Q4.
+   */
+  onForkFromHere?: () => void
 }): React.ReactElement {
   const sender = formatSender(section.from)
 
@@ -73,6 +82,17 @@ export const UserMessage = memo(function UserMessage({
             onClick={onStop}
           >
             <Icon icon={Square} size={2} fill="currentColor" strokeWidth={0} />
+          </button>
+        )}
+        {!showStop && onForkFromHere && (
+          <button
+            type="button"
+            aria-label="Fork from here"
+            title="Fork from here — re-roll the conversation starting at this message"
+            className={styles.forkButton}
+            onClick={onForkFromHere}
+          >
+            <Icon icon={GitFork} size={2} />
           </button>
         )}
         {attachments.length > 0 && (

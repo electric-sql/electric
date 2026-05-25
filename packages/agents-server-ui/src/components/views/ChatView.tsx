@@ -9,6 +9,7 @@ import { useElectricAgents } from '../../lib/ElectricAgentsProvider'
 import { schemaModelSupportsImageInput } from '../../lib/modelCapabilities'
 import type { ViewProps } from '../../lib/workspace/viewRegistry'
 import type { EntityTimelineQueryRow } from '@electric-ax/agents-runtime/client'
+import type { EventPointer } from '@electric-ax/agents-runtime'
 import type { OptimisticInboxMessage } from '../../lib/sendMessage'
 
 /**
@@ -142,7 +143,8 @@ function GenericChatBody({
     loading,
     error,
   } = useEntityTimeline(baseUrl || null, entityUrl)
-  const { signalEntity, entityTypesCollection } = useElectricAgents()
+  const { signalEntity, forkEntity, entityTypesCollection } =
+    useElectricAgents()
   const navigate = useNavigate()
   const [sentMessageSignal, setSentMessageSignal] = useState(0)
   const [stopPending, setStopPending] = useState(false)
@@ -227,6 +229,40 @@ function GenericChatBody({
     })
   }, [entityUrl, generationActive, signalEntity, stopPending])
 
+  // "Fork from here" anchor map. For each user-message inbox row, the
+  // anchor is the LATEST preceding completed `runs` row — its pointer
+  // identifies "fork up to and including this response, drop everything
+  // after." See docs/fork-at-message.md Q4. Rows without a preceding
+  // completed run (first message, in-flight run, etc.) get no entry,
+  // which suppresses the affordance in UserMessage.
+  const forkFromHereByInboxKey = useMemo(() => {
+    if (!forkEntity || !entityUrl || !db) return undefined
+    const runOffsets = db.collections.runs.__electricRowOffsets
+    if (!runOffsets) return undefined
+    const map = new Map<string, () => void>()
+    let anchor: EventPointer | null = null
+    for (const row of timelineRowsWithInlinePending) {
+      if (row.run && row.run.status === `completed`) {
+        const pointer = runOffsets.get(row.run.key)
+        if (pointer) anchor = pointer
+      }
+      if (row.inbox && anchor) {
+        const capturedAnchor = anchor
+        map.set(row.$key, () => {
+          void forkEntity(entityUrl, { pointer: capturedAnchor })
+            .then((res) =>
+              navigate({
+                to: `/entity/$`,
+                params: { _splat: res.url.replace(/^\//, ``) },
+              })
+            )
+            .catch(() => {})
+        })
+      }
+    }
+    return map
+  }, [timelineRowsWithInlinePending, db, forkEntity, entityUrl, navigate])
+
   return (
     <>
       <EntityTimeline
@@ -242,6 +278,7 @@ function GenericChatBody({
         scrollToBottomSignal={sentMessageSignal}
         onStopGeneration={stopGeneration}
         stopPending={stopPending}
+        forkFromHereByInboxKey={forkFromHereByInboxKey}
       />
       <MessageInput
         db={db}
