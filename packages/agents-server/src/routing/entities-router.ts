@@ -84,6 +84,7 @@ const spawnBodySchema = Type.Object({
       debounceMs: Type.Optional(Type.Number()),
       timeoutMs: Type.Optional(Type.Number()),
       includeResponse: Type.Optional(Type.Boolean()),
+      manifestKey: Type.Optional(Type.String()),
     })
   ),
 })

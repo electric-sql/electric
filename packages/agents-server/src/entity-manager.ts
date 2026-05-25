@@ -554,6 +554,7 @@ export class EntityManager {
         timeoutMs: req.wake.timeoutMs,
         oneShot: false,
         includeResponse: req.wake.includeResponse,
+        manifestKey: req.wake.manifestKey,
       })
     }
 

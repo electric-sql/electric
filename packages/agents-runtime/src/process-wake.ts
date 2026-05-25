@@ -10,6 +10,7 @@ import { createSetupContext } from './setup-context'
 import { createEntityLogPrefix, runtimeLog } from './log'
 import { createRuntimeServerClient } from './runtime-server-client'
 import { appendPathToUrl } from './url'
+import { manifestChildKey } from './manifest-helpers'
 import type {
   CronObservationSource,
   EntitiesObservationSource,
@@ -1198,6 +1199,7 @@ export async function processWake(
                 typeof opts.wake === `object` && opts.wake.on === `runFinished`
                   ? opts.wake.includeResponse
                   : undefined,
+              manifestKey: manifestChildKey(childType, childId),
             }
           : undefined
         return serverClient.spawnEntity({
