@@ -1,8 +1,8 @@
 ---
-'@electric-ax/agents': minor
-'@electric-ax/agents-runtime': minor
-'@electric-ax/agents-server-ui': minor
-'@electric-ax/agents-desktop': minor
+'@electric-ax/agents': patch
+'@electric-ax/agents-runtime': patch
+'@electric-ax/agents-server-ui': patch
+'@electric-ax/agents-desktop': patch
 ---
 
 Add DeepSeek as a supported LLM provider.
