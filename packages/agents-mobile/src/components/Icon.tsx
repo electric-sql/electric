@@ -31,7 +31,9 @@ export type IconName =
   | `swap`
   | `chat`
   | `database`
+  | `radio`
   | `arrow-up`
+  | `square`
 
 const PATHS: Record<IconName, string> = {
   back: `M15 18l-6-6 6-6`,
@@ -52,7 +54,9 @@ const PATHS: Record<IconName, string> = {
   swap: `M7 4l-3 3 3 3M4 7h13M17 14l3 3-3 3M20 17H7`,
   chat: `M4 4h16v12H8l-4 4Z`,
   database: `M5 5c0-1.1 3.1-2 7-2s7 .9 7 2v14c0 1.1-3.1 2-7 2s-7-.9-7-2V5ZM5 12c0 1.1 3.1 2 7 2s7-.9 7-2`,
+  radio: `M4.9 19.1a10 10 0 0 1 0-14.2M7.8 16.2a6 6 0 0 1 0-8.4M10.6 13.4a2 2 0 0 1 0-2.8M14 12h.01M16.2 7.8a6 6 0 0 1 0 8.4M19.1 4.9a10 10 0 0 1 0 14.2`,
   'arrow-up': `M12 19V5M5 12l7-7 7 7`,
+  square: `M7 7h10v10H7z`,
 }
 
 export function Icon({
@@ -72,6 +76,14 @@ export function Icon({
         <Circle cx={5} cy={12} r={1.7} fill={color} />
         <Circle cx={12} cy={12} r={1.7} fill={color} />
         <Circle cx={19} cy={12} r={1.7} fill={color} />
+      </Svg>
+    )
+  }
+
+  if (name === `square`) {
+    return (
+      <Svg width={size} height={size} viewBox="0 0 24 24">
+        <Path d={PATHS[name]} fill={color} />
       </Svg>
     )
   }

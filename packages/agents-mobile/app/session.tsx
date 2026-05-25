@@ -33,6 +33,7 @@ type SessionDomEmbedProps = {
   theme: `light` | `dark`
   scrollToBottomSignal?: number
   inlineQueuedMessages?: Array<OptimisticInboxMessage>
+  bottomInset?: number
   onRequestOpenEntity: (entityUrl: string) => Promise<void>
   style?: StyleProp<ViewStyle>
   matchContents?: boolean
@@ -83,9 +84,9 @@ export default function SessionRoute(): React.ReactElement {
     () => ({
       top: embedTop,
       width: windowDimensions.width,
-      height: Math.max(0, windowDimensions.height - embedTop - composerInset),
+      height: Math.max(0, windowDimensions.height - embedTop),
     }),
-    [composerInset, embedTop, windowDimensions.height, windowDimensions.width]
+    [embedTop, windowDimensions.height, windowDimensions.width]
   )
   const embedSize = useMemo(
     () => ({
@@ -130,6 +131,7 @@ export default function SessionRoute(): React.ReactElement {
             theme={scheme}
             scrollToBottomSignal={chatLogScrollSignal}
             inlineQueuedMessages={inlineQueuedMessages}
+            bottomInset={composerInset}
             serverHeaders={serverHeaders}
             onRequestOpenEntity={async (target) => openSession(target)}
             dom={domOptions(styles, embedSize, tokens.bg)}
