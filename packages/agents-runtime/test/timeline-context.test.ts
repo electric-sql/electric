@@ -10,13 +10,17 @@ import type {
   IncludesSignal,
   IncludesWakeMessage,
 } from '../src/entity-timeline'
+import type { EventPointer } from '../src/event-pointer'
 
 function order(index: number): string {
   return index.toString().padStart(20, `0`)
 }
 
-function offset(index: number): string {
-  return `0000000000000000_${index.toString().padStart(16, `0`)}`
+function offset(index: number): EventPointer {
+  return {
+    offset: `0000000000000000_${index.toString().padStart(16, `0`)}`,
+    subOffset: 1,
+  }
 }
 
 describe(`timeline context`, () => {

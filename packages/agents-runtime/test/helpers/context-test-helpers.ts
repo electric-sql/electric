@@ -5,6 +5,7 @@ import { ENTITY_COLLECTIONS, builtInCollections } from '../../src/entity-schema'
 import { timelineToMessages } from '../../src/timeline-context'
 import { createLocalOnlyTestCollection } from './local-only'
 import type { ChangeEvent } from '@durable-streams/state'
+import type { EventPointer } from '../../src/event-pointer'
 import type {
   ContextEntry,
   HandlerContext,
@@ -40,8 +41,11 @@ type FixtureEvent = {
   value?: Record<string, unknown>
 }
 
-function offset(at: number): string {
-  return `0000000000000000_${at.toString().padStart(16, `0`)}`
+function offset(at: number): EventPointer {
+  return {
+    offset: `0000000000000000_${at.toString().padStart(16, `0`)}`,
+    subOffset: 1,
+  }
 }
 
 function rowForFixture(item: FixtureEvent): {
@@ -150,7 +154,7 @@ function rowForFixture(item: FixtureEvent): {
 
 export function buildStreamFixture(items: Array<FixtureEvent>) {
   const rowsByCollection = new Map<string, Array<Record<string, unknown>>>()
-  const offsetsByCollection = new Map<string, Map<string, string>>()
+  const offsetsByCollection = new Map<string, Map<string, EventPointer>>()
 
   for (const [, name] of Object.entries(ENTITY_COLLECTIONS)) {
     rowsByCollection.set(name, [])

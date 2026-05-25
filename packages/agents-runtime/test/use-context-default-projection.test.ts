@@ -64,11 +64,16 @@ describe(`timelineMessages default projection`, () => {
     ])
 
     const messages = timelineMessages(db)
+    // Order token format: `stream:<padded-offset>:<padded-subOffset>` —
+    // see `formatPointerOrderToken` in `src/event-pointer.ts`. Both
+    // the `superseded_at_offset` attribute and the `load(...)` arg
+    // round-trip through the same formatter, so the LLM sees the same
+    // string in both places.
     expect(messages[0]!.content).toContain(
-      `superseded_at_offset="0000000000000000_0000000000000001"`
+      `superseded_at_offset="stream:0000000000000000_0000000000000001:00000001"`
     )
     expect(messages[0]!.content).toContain(
-      `load="load_context_history('search:a', '0000000000000000_0000000000000001')"`
+      `load="load_context_history('search:a', 'stream:0000000000000000_0000000000000001:00000001')"`
     )
     expect(messages[0]!.content).toMatch(/\/>$/)
     expect(messages[1]!.content).toContain(`>new</search_results>`)

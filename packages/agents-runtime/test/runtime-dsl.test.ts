@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { queryOnce } from '@durable-streams/state'
 import { z } from 'zod'
 import { entity, manifestSourceKey } from '../src/index'
+import { comparePointers, type EventPointer } from '../src/event-pointer'
 import { db } from '../src/observation-sources'
 import { runtimeTest } from './runtime-dsl'
 import type { RuntimeHistorySummaryEntry } from './runtime-dsl'
@@ -307,16 +308,16 @@ function sortRowsByCollectionOrder<
   TRow extends { key: string | number },
 >(collection: {
   toArray: Array<TRow>
-  __electricRowOffsets?: Map<string | number, string>
+  __electricRowOffsets?: Map<string | number, EventPointer>
 }): Array<TRow> {
   return [...collection.toArray].sort((left, right) => {
-    const leftOffset = collection.__electricRowOffsets?.get(left.key)
-    const rightOffset = collection.__electricRowOffsets?.get(right.key)
-    if (leftOffset && rightOffset) {
-      return leftOffset.localeCompare(rightOffset)
+    const leftPointer = collection.__electricRowOffsets?.get(left.key)
+    const rightPointer = collection.__electricRowOffsets?.get(right.key)
+    if (leftPointer && rightPointer) {
+      return comparePointers(leftPointer, rightPointer)
     }
-    if (leftOffset) return -1
-    if (rightOffset) return 1
+    if (leftPointer) return -1
+    if (rightPointer) return 1
 
     const leftSeq = Reflect.get(left, `_seq`)
     const rightSeq = Reflect.get(right, `_seq`)

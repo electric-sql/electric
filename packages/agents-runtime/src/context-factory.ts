@@ -2,6 +2,7 @@ import { queryOnce } from '@durable-streams/state'
 import { assembleContext } from './context-assembly'
 import { createContextEntriesApi } from './context-entries'
 import { entityStateSchema } from './entity-schema'
+import { formatPointerOrderToken } from './event-pointer'
 import { createOutboundBridge, loadOutboundIdSeed } from './outbound-bridge'
 import { createPiAgentAdapter } from './pi-adapter'
 import {
@@ -437,9 +438,13 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
 
   function readContextHistoryOffset(row: { key: string }): string | undefined {
     const contextInserted = config.db.collections.contextInserted
-    const rowOffset = contextInserted.__electricRowOffsets?.get(row.key)
-    if (typeof rowOffset === `string`) {
-      return rowOffset
+    const pointer = contextInserted.__electricRowOffsets?.get(row.key)
+    if (pointer) {
+      // Format the pointer as a stable, sortable string. Matches the
+      // `_timeline_order` produced by `entity-stream-db` so that
+      // `loadContextHistory(id, offset)` can round-trip lookups
+      // against the same row.
+      return formatPointerOrderToken(pointer)
     }
 
     const seq = Reflect.get(row, `_seq`)
