@@ -177,18 +177,22 @@ Example shape:
   },
   "build": {
     "preview": {
+      "node": "24.11.1",
       "distribution": "internal",
       "android": {
         "buildType": "apk"
       }
     },
     "canary": {
-      "distribution": "store",
-      "channel": "canary"
+      "node": "24.11.1",
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      }
     },
     "production": {
-      "distribution": "store",
-      "channel": "production"
+      "node": "24.11.1",
+      "distribution": "store"
     }
   },
   "submit": {
