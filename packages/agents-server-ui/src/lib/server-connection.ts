@@ -84,6 +84,12 @@ export interface ServerConnectionState {
 export interface ApiKeys {
   anthropic: string | null
   openai: string | null
+  /**
+   * Optional. When set, mirrors to `DEEPSEEK_API_KEY` so the runtime
+   * can use DeepSeek models. Does not count toward "has any LLM key"
+   * on its own (parallel to how `brave` is optional).
+   */
+  deepseek: string | null
   brave: string | null
 }
 

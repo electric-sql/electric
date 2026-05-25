@@ -129,6 +129,12 @@ type ApiKeys = {
   anthropic: string | null
   openai: string | null
   /**
+   * Optional. Mirrored to `DEEPSEEK_API_KEY` so Horton's local
+   * runtime can use DeepSeek models. Optional — the first-launch dialog
+   * does not require it when an Anthropic or OpenAI key is already set.
+   */
+  deepseek: string | null
+  /**
    * Optional. Mirrored to `BRAVE_SEARCH_API_KEY` so Horton's
    * `brave_search` tool can call the Brave API directly. When unset
    * Horton falls back to Anthropic's built-in web search (which uses
@@ -421,11 +427,17 @@ const DEFAULT_SETTINGS: DesktopSettings = {
 const ENV_API_KEYS_SNAPSHOT: ApiKeys = {
   anthropic: process.env.ANTHROPIC_API_KEY?.trim() || null,
   openai: process.env.OPENAI_API_KEY?.trim() || null,
+  deepseek: process.env.DEEPSEEK_API_KEY?.trim() || null,
   brave: process.env.BRAVE_SEARCH_API_KEY?.trim() || null,
 }
 
 let settings: DesktopSettings = { ...DEFAULT_SETTINGS }
-let apiKeys: ApiKeys = { anthropic: null, openai: null, brave: null }
+let apiKeys: ApiKeys = {
+  anthropic: null,
+  openai: null,
+  deepseek: null,
+  brave: null,
+}
 let state: DesktopState = {
   servers: [],
   selectedServerId: null,
@@ -987,7 +999,7 @@ function defaultSelectedServerId(): string | null {
 
 function normalizeApiKeys(value: unknown): ApiKeys {
   if (!value || typeof value !== `object`) {
-    return { anthropic: null, openai: null, brave: null }
+    return { anthropic: null, openai: null, deepseek: null, brave: null }
   }
   const maybe = value as Partial<Record<keyof ApiKeys, unknown>>
   const pick = (raw: unknown): string | null => {
@@ -998,21 +1010,23 @@ function normalizeApiKeys(value: unknown): ApiKeys {
   return {
     anthropic: pick(maybe.anthropic),
     openai: pick(maybe.openai),
+    deepseek: pick(maybe.deepseek),
     brave: pick(maybe.brave),
   }
 }
 
 function hasAnyApiKey(keys: ApiKeys): boolean {
-  return Boolean(keys.anthropic || keys.openai || keys.brave)
+  return Boolean(keys.anthropic || keys.openai || keys.deepseek || keys.brave)
 }
 
 async function loadApiKeysFromSecret(ref: string): Promise<ApiKeys> {
   const raw = await getSecretStore().get(ref)
-  if (!raw) return { anthropic: null, openai: null, brave: null }
+  if (!raw)
+    return { anthropic: null, openai: null, deepseek: null, brave: null }
   try {
     return normalizeApiKeys(JSON.parse(raw))
   } catch {
-    return { anthropic: null, openai: null, brave: null }
+    return { anthropic: null, openai: null, deepseek: null, brave: null }
   }
 }
 
@@ -1086,7 +1100,11 @@ function applyApiKeys(): void {
   const resolveSlot = (
     saved: string | null,
     env: string | null,
-    name: `ANTHROPIC_API_KEY` | `OPENAI_API_KEY` | `BRAVE_SEARCH_API_KEY`
+    name:
+      | `ANTHROPIC_API_KEY`
+      | `OPENAI_API_KEY`
+      | `DEEPSEEK_API_KEY`
+      | `BRAVE_SEARCH_API_KEY`
   ): void => {
     const value = saved ?? env
     if (value) {
@@ -1101,6 +1119,11 @@ function applyApiKeys(): void {
     `ANTHROPIC_API_KEY`
   )
   resolveSlot(apiKeys.openai, ENV_API_KEYS_SNAPSHOT.openai, `OPENAI_API_KEY`)
+  resolveSlot(
+    apiKeys.deepseek,
+    ENV_API_KEYS_SNAPSHOT.deepseek,
+    `DEEPSEEK_API_KEY`
+  )
   resolveSlot(
     apiKeys.brave,
     ENV_API_KEYS_SNAPSHOT.brave,
@@ -2249,7 +2272,7 @@ function getApiKeysStatus(): ApiKeysStatus {
   // Brave is optional (falls back to Anthropic built-in search), so
   // it doesn't count toward "the app is configured" — the dialog
   // only auto-opens when the user has no LLM provider key at all.
-  const hasAnyKey = Boolean(saved.anthropic || saved.openai)
+  const hasAnyKey = Boolean(saved.anthropic || saved.openai || saved.deepseek)
   // Only suggest env values for slots the user hasn't already saved
   // — once they've persisted a key for a provider, the dialog should
   // show their saved value rather than the (potentially different)
@@ -2257,6 +2280,7 @@ function getApiKeysStatus(): ApiKeysStatus {
   const suggested: ApiKeys = {
     anthropic: saved.anthropic ? null : ENV_API_KEYS_SNAPSHOT.anthropic,
     openai: saved.openai ? null : ENV_API_KEYS_SNAPSHOT.openai,
+    deepseek: saved.deepseek ? null : ENV_API_KEYS_SNAPSHOT.deepseek,
     brave: saved.brave ? null : ENV_API_KEYS_SNAPSHOT.brave,
   }
   return { hasAnyKey, saved, suggested }

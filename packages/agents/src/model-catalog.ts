@@ -48,6 +48,7 @@ type PersistedModelConfig = Pick<AgentConfig, `model` | `provider`> & {
 const DEFAULT_ANTHROPIC_MODEL = `claude-sonnet-4-6`
 const DEFAULT_OPENAI_MODEL = `gpt-4.1`
 const DEFAULT_CODEX_MODEL = `gpt-5.4`
+const DEFAULT_DEEPSEEK_MODEL = `deepseek-v4-flash`
 
 function modelValue(provider: BuiltinModelProvider, id: string): string {
   return `${provider}:${id}`
@@ -56,6 +57,7 @@ function modelValue(provider: BuiltinModelProvider, id: string): string {
 function providerLabel(provider: BuiltinModelProvider): string {
   if (provider === `anthropic`) return `Anthropic`
   if (provider === `openai-codex`) return `OpenAI Codex`
+  if (provider === `deepseek`) return `DeepSeek`
   return `OpenAI`
 }
 
@@ -87,12 +89,19 @@ async function fetchAvailableModelIds(
             },
             signal: AbortSignal.timeout(3_000),
           })
-        : await fetch(`https://api.openai.com/v1/models`, {
-            headers: {
-              authorization: `Bearer ${process.env.OPENAI_API_KEY ?? ``}`,
-            },
-            signal: AbortSignal.timeout(3_000),
-          })
+        : provider === `deepseek`
+          ? await fetch(`https://api.deepseek.com/models`, {
+              headers: {
+                authorization: `Bearer ${process.env.DEEPSEEK_API_KEY ?? ``}`,
+              },
+              signal: AbortSignal.timeout(3_000),
+            })
+          : await fetch(`https://api.openai.com/v1/models`, {
+              headers: {
+                authorization: `Bearer ${process.env.OPENAI_API_KEY ?? ``}`,
+              },
+              signal: AbortSignal.timeout(3_000),
+            })
 
     if (res.status === 401 || res.status === 403) return new Set()
     if (!res.ok) return null
@@ -218,6 +227,10 @@ export async function createBuiltinModelCatalog(
     choices.find(
       (choice) =>
         choice.provider === `openai-codex` && choice.id === DEFAULT_CODEX_MODEL
+    ) ??
+    choices.find(
+      (choice) =>
+        choice.provider === `deepseek` && choice.id === DEFAULT_DEEPSEEK_MODEL
     ) ??
     choices[0]!
 

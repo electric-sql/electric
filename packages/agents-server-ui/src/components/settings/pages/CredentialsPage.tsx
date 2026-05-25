@@ -55,6 +55,8 @@ export function CredentialsPage(): React.ReactElement {
                 anthropic:
                   status.saved.anthropic ?? status.suggested.anthropic ?? ``,
                 openai: status.saved.openai ?? status.suggested.openai ?? ``,
+                deepseek:
+                  status.saved.deepseek ?? status.suggested.deepseek ?? ``,
                 brave: status.saved.brave ?? status.suggested.brave ?? ``,
               }}
               showSuggestionHint={
@@ -62,13 +64,15 @@ export function CredentialsPage(): React.ReactElement {
                 Boolean(
                   status.suggested.anthropic ||
                     status.suggested.openai ||
+                    status.suggested.deepseek ||
                     status.suggested.brave
                 )
               }
-              onSave={async ({ anthropic, openai, brave }) => {
+              onSave={async ({ anthropic, openai, deepseek, brave }) => {
                 await persistApiKeys({
                   anthropic: anthropic.trim() || null,
                   openai: openai.trim() || null,
+                  deepseek: deepseek.trim() || null,
                   brave: brave.trim() || null,
                 })
                 const next = await loadApiKeysStatus()

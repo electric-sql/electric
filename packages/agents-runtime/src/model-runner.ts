@@ -25,6 +25,7 @@ const PREFERRED_IDS_BY_PROVIDER: Record<string, Array<string>> = {
   anthropic: [`claude-3-5-haiku-latest`, `claude-3-5-haiku-20241022`],
   openai: [`gpt-4.1-nano`, `gpt-4o-mini`, `gpt-4.1-mini`],
   'openai-codex': [`gpt-5.4-mini`, `gpt-5.1-codex-mini`],
+  deepseek: [`deepseek-v4-flash`, `deepseek-v4-pro`],
 }
 
 function hasEnv(name: string): boolean {
@@ -49,12 +50,17 @@ export function readCodexAccessToken(): string | undefined {
   }
 }
 
-export type AvailableProvider = `anthropic` | `openai` | `openai-codex`
+export type AvailableProvider =
+  | `anthropic`
+  | `openai`
+  | `openai-codex`
+  | `deepseek`
 
 export function detectAvailableProviders(): Array<AvailableProvider> {
   const providers: Array<AvailableProvider> = []
   if (hasEnv(`ANTHROPIC_API_KEY`)) providers.push(`anthropic`)
   if (hasEnv(`OPENAI_API_KEY`)) providers.push(`openai`)
+  if (hasEnv(`DEEPSEEK_API_KEY`)) providers.push(`deepseek`)
   if (readCodexAccessToken() !== undefined) providers.push(`openai-codex`)
   return providers
 }
@@ -77,6 +83,13 @@ function envCatalog(): LowCostModelCatalog {
       provider: `openai-codex`,
       id: `gpt-5.4-mini`,
       reasoning: false,
+    })
+  }
+  if (providers.includes(`deepseek`)) {
+    choices.push({
+      provider: `deepseek`,
+      id: `deepseek-v4-flash`,
+      reasoning: true,
     })
   }
   return { choices, defaultChoice: choices[0] }

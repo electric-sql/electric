@@ -109,6 +109,7 @@ type ServerConnectionState = {
 type ApiKeys = {
   anthropic: string | null
   openai: string | null
+  deepseek: string | null
   brave: string | null
 }
 

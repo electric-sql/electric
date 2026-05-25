@@ -6,6 +6,7 @@ import styles from './ApiKeysForm.module.css'
 export type ApiKeysFormValues = {
   anthropic: string
   openai: string
+  deepseek: string
   brave: string
 }
 
@@ -55,11 +56,13 @@ export function ApiKeysForm({
 }: ApiKeysFormProps): React.ReactElement {
   const [anthropic, setAnthropic] = useState(initial.anthropic)
   const [openai, setOpenai] = useState(initial.openai)
+  const [deepseek, setDeepseek] = useState(initial.deepseek)
   const [brave, setBrave] = useState(initial.brave)
   const [saving, setSaving] = useState(false)
   const canSave =
     anthropic.trim().length > 0 ||
     openai.trim().length > 0 ||
+    deepseek.trim().length > 0 ||
     brave.trim().length > 0
 
   const handleSubmit = useCallback(
@@ -68,12 +71,12 @@ export function ApiKeysForm({
       if (!canSave || saving) return
       setSaving(true)
       try {
-        await onSave({ anthropic, openai, brave })
+        await onSave({ anthropic, openai, deepseek, brave })
       } finally {
         setSaving(false)
       }
     },
-    [anthropic, openai, brave, canSave, saving, onSave]
+    [anthropic, openai, deepseek, brave, canSave, saving, onSave]
   )
 
   return (
@@ -109,6 +112,18 @@ export function ApiKeysForm({
             placeholder="sk-…"
             value={openai}
             onChange={(e) => setOpenai(e.target.value)}
+            size={2}
+          />
+        </Field>
+        <Field
+          label="DeepSeek API key (optional)"
+          description="Used for DeepSeek models. Looks like sk-…"
+        >
+          <Input
+            type="password"
+            placeholder="sk-…"
+            value={deepseek}
+            onChange={(e) => setDeepseek(e.target.value)}
             size={2}
           />
         </Field>
