@@ -87,6 +87,76 @@ describe(`event source subscription routes`, () => {
       eventSources: [githubContract],
     })
   })
+
+  it(`hides disabled and agent-invisible event sources from discovery`, async () => {
+    const hiddenContract: EventSourceContract = {
+      ...githubContract,
+      sourceKey: `hidden-repo`,
+      agentVisible: false,
+    }
+    const disabledContract: EventSourceContract = {
+      ...githubContract,
+      sourceKey: `disabled-repo`,
+      status: `disabled`,
+    }
+    const ctx = tenantContext({
+      eventSources: {
+        listEventSources: () => [
+          githubContract,
+          hiddenContract,
+          disabledContract,
+        ],
+        getEventSource: (sourceKey: string) =>
+          [githubContract, hiddenContract, disabledContract].find(
+            (source) => source.sourceKey === sourceKey
+          ),
+      },
+    })
+
+    const response = await internalRouter.fetch(
+      new Request(`http://agents.test/_electric/event-sources`),
+      ctx
+    )
+
+    expect(response?.status).toBe(200)
+    await expect(response!.json()).resolves.toEqual({
+      eventSources: [githubContract],
+    })
+  })
+
+  it(`rejects subscriptions whose params do not match the bucket schema`, async () => {
+    const upsertEventSourceSubscription = vi.fn()
+    const ensureEventSourceWakeSource = vi.fn(async () => {})
+    const ctx = tenantContext({
+      upsertEventSourceSubscription,
+      ensureEventSourceWakeSource,
+    })
+
+    const response = await internalRouter.fetch(
+      new Request(
+        `http://agents.test/_electric/entities/coder/session-1/event-source-subscriptions/watch-pr-bad`,
+        {
+          method: `PUT`,
+          headers: { 'content-type': `application/json` },
+          body: JSON.stringify({
+            sourceKey: `github-repo`,
+            bucketKey: `pull_request`,
+            params: { number: `123` },
+          }),
+        }
+      ),
+      ctx
+    )
+
+    expect(response?.status).toBe(400)
+    await expect(response!.json()).resolves.toMatchObject({
+      error: {
+        message: expect.stringMatching(/paramsSchema.*number/),
+      },
+    })
+    expect(ensureEventSourceWakeSource).not.toHaveBeenCalled()
+    expect(upsertEventSourceSubscription).not.toHaveBeenCalled()
+  })
 })
 
 function tenantContext(
@@ -94,6 +164,7 @@ function tenantContext(
     upsertEventSourceSubscription?: unknown
     deleteEventSourceSubscription?: unknown
     ensureEventSourceWakeSource?: TenantContext[`ensureEventSourceWakeSource`]
+    eventSources?: TenantContext[`eventSources`]
   } = {}
 ): TenantContext {
   const registry = {
@@ -138,7 +209,7 @@ function tenantContext(
     streamClient: {} as never,
     runtime: {} as never,
     entityBridgeManager: {} as never,
-    eventSources: {
+    eventSources: overrides.eventSources ?? {
       listEventSources: () => [githubContract],
       getEventSource: (sourceKey: string) =>
         sourceKey === githubContract.sourceKey ? githubContract : undefined,
@@ -164,7 +235,11 @@ const githubContract: EventSourceContract = {
       key: `pull_request`,
       label: `Pull request`,
       pathTemplate: `prs/:number`,
-      paramsSchema: {},
+      paramsSchema: {
+        type: `object`,
+        required: [`number`],
+        properties: { number: { type: `number` } },
+      },
     },
   ],
 }

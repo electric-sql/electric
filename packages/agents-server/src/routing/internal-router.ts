@@ -36,7 +36,10 @@ import { runnersRouter } from './runners-router.js'
 import { routeBody, validateOptionalJsonBody, withSchema } from './schema.js'
 import { withLeadingSlash } from './tenant-stream-paths.js'
 import type { IRequest, RouterType } from 'itty-router'
-import type { WebhookSignatureVerifierConfig } from '@electric-ax/agents-runtime'
+import type {
+  EventSourceContract,
+  WebhookSignatureVerifierConfig,
+} from '@electric-ax/agents-runtime'
 import type { TenantContext } from './context.js'
 import type { DurableStreamsRoutingAdapter } from './durable-streams-routing-adapter.js'
 import type { WebhookSigner } from '../webhook-signing.js'
@@ -343,7 +346,11 @@ async function listEventSources(
   const eventSources = ctx.eventSources
     ? await ctx.eventSources.listEventSources()
     : []
-  return json({ eventSources })
+  return json({ eventSources: eventSources.filter(isAgentVisibleEventSource) })
+}
+
+function isAgentVisibleEventSource(source: EventSourceContract): boolean {
+  return source.agentVisible === true && source.status === `active`
 }
 
 async function webhookForward(

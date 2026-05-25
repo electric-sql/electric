@@ -115,6 +115,118 @@ describe(`runtime-server-client.setTag`, () => {
   })
 })
 
+describe(`runtime-server-client event sources`, () => {
+  it(`lists event sources from the runtime server`, async () => {
+    const fakeFetch = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            eventSources: [
+              {
+                sourceKey: `github-repo`,
+                sourceType: `webhook`,
+                endpointKey: `github-repo`,
+                status: `active`,
+                label: `GitHub repository`,
+                agentVisible: true,
+                buckets: [],
+                revision: 1,
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: { 'content-type': `application/json` },
+          }
+        )
+    ) as unknown as typeof fetch
+    const client = createRuntimeServerClient({
+      baseUrl: `http://test.example?service=tenant-a`,
+      fetch: fakeFetch,
+    })
+
+    await expect(client.listEventSources()).resolves.toMatchObject([
+      { sourceKey: `github-repo` },
+    ])
+    expect(fakeFetch).toHaveBeenCalledWith(
+      `http://test.example/_electric/event-sources?service=tenant-a`,
+      expect.objectContaining({ method: `GET` })
+    )
+  })
+
+  it(`subscribes to event sources with a deterministic id and JSON body`, async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = []
+    const subscription = {
+      id: `github-repo-pull-request-1kwxl2f`,
+      entityUrl: `/coder/session-1`,
+      sourceKey: `github-repo`,
+      bucketKey: `pull_request`,
+      params: { number: 123 },
+      filterApplied: false,
+      contractRevision: 1,
+      sourceUrl: `/_webhooks/github-repo/prs/123`,
+      sourceType: `webhook`,
+      manifestKey: `event-source:github-repo-pull-request-1kwxl2f`,
+      lifetime: { kind: `until_entity_stopped` },
+      createdBy: `tool`,
+      createdAt: `2026-05-23T00:00:00.000Z`,
+    }
+    const fakeFetch = vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push({ url, init })
+      return new Response(JSON.stringify({ txid: `tx-1`, subscription }), {
+        status: 200,
+        headers: { 'content-type': `application/json` },
+      })
+    }) as unknown as typeof fetch
+    const client = createRuntimeServerClient({
+      baseUrl: `http://test.example`,
+      fetch: fakeFetch,
+    })
+
+    await expect(
+      client.subscribeToEventSource({
+        entityUrl: `/coder/session-1`,
+        sourceKey: `github-repo`,
+        bucketKey: `pull_request`,
+        params: { number: 123 },
+        reason: `Watch PR feedback`,
+      })
+    ).resolves.toEqual({ txid: `tx-1`, subscription })
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0]!.url).toMatch(
+      /^http:\/\/test\.example\/_electric\/entities\/coder\/session-1\/event-source-subscriptions\/github-repo-pull_request-/
+    )
+    expect(calls[0]!.init?.method).toBe(`PUT`)
+    expect(JSON.parse(calls[0]!.init!.body as string)).toEqual({
+      sourceKey: `github-repo`,
+      bucketKey: `pull_request`,
+      params: { number: 123 },
+      reason: `Watch PR feedback`,
+    })
+  })
+
+  it(`surfaces event source subscription failures`, async () => {
+    const fakeFetch = vi.fn(
+      async () =>
+        new Response(`invalid params`, {
+          status: 400,
+        })
+    ) as unknown as typeof fetch
+    const client = createRuntimeServerClient({
+      baseUrl: `http://test.example`,
+      fetch: fakeFetch,
+    })
+
+    await expect(
+      client.subscribeToEventSource({
+        entityUrl: `/coder/session-1`,
+        sourceKey: `github-repo`,
+      })
+    ).rejects.toThrow(/subscribeToEventSource failed \(400\): invalid params/)
+  })
+})
+
 describe(`createHandlerContext: tags + tag mutations`, () => {
   it(`exposes tags snapshot and forwards setTag/removeTag`, async () => {
     const calls: Array<Record<string, unknown>> = []

@@ -1,4 +1,6 @@
+import Ajv from 'ajv'
 import { getWebhookStreamPath } from './observation-sources'
+import type { ErrorObject, ValidateFunction } from 'ajv'
 import type { WebhookEventRow } from './observation-sources'
 
 export type EventSourceType = `webhook`
@@ -124,6 +126,11 @@ export type HydratedEventSourceWake = {
 }
 
 const DEFAULT_LIFETIME: SubscriptionLifetime = { kind: `until_entity_stopped` }
+const paramsSchemaValidator = new Ajv({ allErrors: true, strict: false })
+const paramsSchemaCache = new WeakMap<
+  Record<string, unknown>,
+  ValidateFunction
+>()
 
 export function defaultEventSourceSubscriptionLifetime(): SubscriptionLifetime {
   return { ...DEFAULT_LIFETIME }
@@ -208,6 +215,10 @@ export function resolveEventSourceSubscription(input: {
     )
   }
 
+  if (bucket) {
+    validateBucketParams(bucket, params)
+  }
+
   const bucketPath = bucket
     ? renderEventSourceBucketPath(bucket, params)
     : undefined
@@ -244,6 +255,50 @@ export function resolveEventSourceSubscription(input: {
       createdAt: input.createdAt ?? new Date().toISOString(),
     },
   }
+}
+
+function validateBucketParams(
+  bucket: EventSourceBucket,
+  params: Record<string, unknown>
+): void {
+  const schema = bucket.paramsSchema
+  let validate = paramsSchemaCache.get(schema)
+
+  if (!validate) {
+    try {
+      validate = paramsSchemaValidator.compile(schema)
+    } catch (error) {
+      throw new Error(
+        `Invalid paramsSchema for bucket "${bucket.key}": ${error instanceof Error ? error.message : String(error)}`
+      )
+    }
+    paramsSchemaCache.set(schema, validate)
+  }
+
+  if (validate(params)) return
+
+  throw new Error(
+    `Bucket params do not match paramsSchema for "${bucket.key}": ${formatParamsSchemaErrors(validate.errors)}`
+  )
+}
+
+function formatParamsSchemaErrors(
+  errors: Array<ErrorObject> | null | undefined
+): string {
+  if (!errors || errors.length === 0) return `validation failed`
+  return errors.map(formatParamsSchemaError).join(`; `)
+}
+
+function formatParamsSchemaError(error: ErrorObject): string {
+  const missingProperty =
+    error.keyword === `required` &&
+    typeof (error.params as { missingProperty?: unknown }).missingProperty ===
+      `string`
+      ? (error.params as { missingProperty: string }).missingProperty
+      : undefined
+  const path =
+    error.instancePath || (missingProperty ? `/${missingProperty}` : `/`)
+  return `${path} ${error.message ?? `is invalid`}`
 }
 
 export function buildEventSourceManifestEntry(

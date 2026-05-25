@@ -2173,6 +2173,19 @@ export class EntityManager {
     }
   ): Promise<{ txid: string; subscription: EventSourceSubscription }> {
     const manifestKey = req.subscription.manifestKey
+    const txid = randomUUID()
+    await this.writeManifestEntry(
+      entityUrl,
+      manifestKey,
+      `upsert`,
+      req.manifest,
+      {
+        txid,
+      }
+    )
+
+    // The manifest is the durable source of truth. Register side effects after
+    // it is appended so failures can be repaired by manifest replay.
     await this.wakeRegistry.unregisterByManifestKey(
       entityUrl,
       manifestKey,
@@ -2191,17 +2204,6 @@ export class EntityManager {
       manifestKey,
     })
 
-    const txid = randomUUID()
-    await this.writeManifestEntry(
-      entityUrl,
-      manifestKey,
-      `upsert`,
-      req.manifest,
-      {
-        txid,
-      }
-    )
-
     return { txid, subscription: req.subscription }
   }
 
@@ -2210,16 +2212,16 @@ export class EntityManager {
     req: { id: string }
   ): Promise<{ txid: string }> {
     const manifestKey = eventSourceSubscriptionManifestKey(req.id)
+    const txid = randomUUID()
+    await this.writeManifestEntry(entityUrl, manifestKey, `delete`, undefined, {
+      txid,
+    })
+
     await this.wakeRegistry.unregisterByManifestKey(
       entityUrl,
       manifestKey,
       this.tenantId
     )
-
-    const txid = randomUUID()
-    await this.writeManifestEntry(entityUrl, manifestKey, `delete`, undefined, {
-      txid,
-    })
 
     return { txid }
   }

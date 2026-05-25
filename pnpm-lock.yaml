@@ -140,7 +140,7 @@ importers:
     dependencies:
       '@electric-ax/agents-runtime':
         specifier: latest
-        version: 0.3.1(@tanstack/react-db@0.1.84(react@19.2.5)(typescript@5.8.3))(react@19.2.5)(typescript@5.8.3)
+        version: link:../../packages/agents-runtime
       '@sinclair/typebox':
         specifier: ^0.34.49
         version: 0.34.49
@@ -174,7 +174,7 @@ importers:
         version: link:../../packages/agents-runtime
       '@mariozechner/pi-agent-core':
         specifier: ^0.70.2
-        version: 0.70.2(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(ws@8.20.0)(zod@4.3.6)
+        version: 0.70.2(zod@4.3.6)
       '@radix-ui/themes':
         specifier: ^3.3.0
         version: 3.3.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
@@ -1779,6 +1779,9 @@ importers:
       '@tanstack/react-db':
         specifier: '>=0.1.78'
         version: 0.1.83(react@19.2.0)(typescript@5.8.3)
+      ajv:
+        specifier: ^8.18.0
+        version: 8.20.0
       cron-parser:
         specifier: ^5.5.0
         version: 5.5.0
@@ -4296,22 +4299,8 @@ packages:
     resolution: {integrity: sha512-XQsZgjm2EcVUiZQf11UBJQfmZeEmOW8DpI1gsFeln6w0ae0ii4dMQEQ0kjl6DspdWX1aGY1/loyXnP0JS06e/A==}
     engines: {node: '>=0.8.0'}
 
-  '@electric-ax/agents-mcp@0.2.2':
-    resolution: {integrity: sha512-BqbdWsJXoESeLwRpewx9vHAT4I/BexqiE+g/CmP5nkgIS/E2j68AeBnhx5+ahDQX6AqrFLzxKdFSXCLm9L6OeQ==}
-
   '@electric-ax/agents-runtime@0.0.4':
     resolution: {integrity: sha512-+JvbpN3XAzT0PbTwqKBQCzYYFozC7tE1mFz8y4gpRmLFXSTw4CMkY0vjVVHv3N+Klclk+pX3oGpsEl+ZHwFaNQ==}
-    peerDependencies:
-      '@tanstack/react-db': '>=0.1.78'
-      react: '>=18'
-    peerDependenciesMeta:
-      '@tanstack/react-db':
-        optional: true
-      react:
-        optional: true
-
-  '@electric-ax/agents-runtime@0.3.1':
-    resolution: {integrity: sha512-BA1kF6RPna+5Q3jq/uOGpiFg8W3bvBlVAXUZBmN/jln+jLtC9WAvSZe+6i+Z+cj68irCrggX5VcOsHOXZW4J/w==}
     peerDependencies:
       '@tanstack/react-db': '>=0.1.78'
       react: '>=18'
@@ -24084,7 +24073,7 @@ snapshots:
     dependencies:
       '@durable-streams/client': https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@eac712f
       '@standard-schema/spec': 1.1.0
-      '@tanstack/db': 0.6.5(typescript@5.8.3)
+      '@tanstack/db': 0.6.6(typescript@5.8.3)
     transitivePeerDependencies:
       - typescript
 
@@ -24095,14 +24084,6 @@ snapshots:
   '@egjs/hammerjs@2.0.17':
     dependencies:
       '@types/hammerjs': 2.0.46
-
-  '@electric-ax/agents-mcp@0.2.2(zod@4.4.3)':
-    dependencies:
-      '@modelcontextprotocol/sdk': 1.29.0(zod@4.4.3)
-    transitivePeerDependencies:
-      - '@cfworker/json-schema'
-      - supports-color
-      - zod
 
   '@electric-ax/agents-runtime@0.0.4(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(@tanstack/react-db@0.1.83(react@19.2.5)(typescript@5.8.3))(react@19.2.5)(typescript@5.8.3)(ws@8.20.0)':
     dependencies:
@@ -24124,42 +24105,6 @@ snapshots:
       - '@modelcontextprotocol/sdk'
       - aws-crt
       - bufferutil
-      - supports-color
-      - typescript
-      - utf-8-validate
-      - ws
-
-  '@electric-ax/agents-runtime@0.3.1(@tanstack/react-db@0.1.84(react@19.2.5)(typescript@5.8.3))(react@19.2.5)(typescript@5.8.3)':
-    dependencies:
-      '@anthropic-ai/sdk': 0.78.0(zod@4.4.3)
-      '@durable-streams/client': https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@5d5c217
-      '@durable-streams/state': https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@5d5c217(typescript@5.8.3)
-      '@electric-ax/agents-mcp': 0.2.2(zod@4.4.3)
-      '@mariozechner/pi-agent-core': 0.70.2(zod@4.4.3)
-      '@mariozechner/pi-ai': 0.70.2(zod@4.4.3)
-      '@mozilla/readability': 0.6.0
-      '@sinclair/typebox': 0.34.49
-      '@standard-schema/spec': 1.1.0
-      '@tanstack/db': 0.6.6(typescript@5.8.3)
-      cron-parser: 5.5.0
-      diff: 9.0.0
-      jsdom: 28.1.0(@noble/hashes@2.0.1)
-      pino: 10.3.1
-      pino-pretty: 13.1.3
-      turndown: 7.2.4
-      turndown-plugin-gfm: 1.0.2
-      zod: 4.4.3
-      zod-to-json-schema: 3.25.2(zod@4.4.3)
-    optionalDependencies:
-      '@tanstack/react-db': 0.1.84(react@19.2.5)(typescript@5.8.3)
-      react: 19.2.5
-    transitivePeerDependencies:
-      - '@cfworker/json-schema'
-      - '@modelcontextprotocol/sdk'
-      - '@noble/hashes'
-      - aws-crt
-      - bufferutil
-      - canvas
       - supports-color
       - typescript
       - utf-8-validate
@@ -26436,6 +26381,19 @@ snapshots:
       - ws
       - zod
 
+  '@mariozechner/pi-agent-core@0.70.2(zod@4.3.6)':
+    dependencies:
+      '@mariozechner/pi-ai': 0.70.2(zod@4.3.6)
+      typebox: 1.1.34
+    transitivePeerDependencies:
+      - '@modelcontextprotocol/sdk'
+      - aws-crt
+      - bufferutil
+      - supports-color
+      - utf-8-validate
+      - ws
+      - zod
+
   '@mariozechner/pi-agent-core@0.70.2(zod@4.4.3)':
     dependencies:
       '@mariozechner/pi-ai': 0.70.2(zod@4.4.3)
@@ -26496,6 +26454,28 @@ snapshots:
       - zod
 
   '@mariozechner/pi-ai@0.70.2(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(ws@8.20.0)(zod@4.3.6)':
+    dependencies:
+      '@anthropic-ai/sdk': 0.90.0(zod@4.3.6)
+      '@aws-sdk/client-bedrock-runtime': 3.1037.0
+      '@google/genai': 1.50.1(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))
+      '@mistralai/mistralai': 2.2.1
+      chalk: 5.6.2
+      openai: 6.26.0(ws@8.20.0)(zod@4.3.6)
+      partial-json: 0.1.7
+      proxy-agent: 6.5.0
+      typebox: 1.1.34
+      undici: 7.25.0
+      zod-to-json-schema: 3.25.2(zod@4.3.6)
+    transitivePeerDependencies:
+      - '@modelcontextprotocol/sdk'
+      - aws-crt
+      - bufferutil
+      - supports-color
+      - utf-8-validate
+      - ws
+      - zod
+
+  '@mariozechner/pi-ai@0.70.2(zod@4.3.6)':
     dependencies:
       '@anthropic-ai/sdk': 0.90.0(zod@4.3.6)
       '@aws-sdk/client-bedrock-runtime': 3.1037.0
@@ -30193,15 +30173,6 @@ snapshots:
     transitivePeerDependencies:
       - typescript
 
-  '@tanstack/react-db@0.1.84(react@19.2.5)(typescript@5.8.3)':
-    dependencies:
-      '@tanstack/db': 0.6.6(typescript@5.8.3)
-      react: 19.2.5
-      use-sync-external-store: 1.6.0(react@19.2.5)
-    transitivePeerDependencies:
-      - typescript
-    optional: true
-
   '@tanstack/react-query-persist-client@5.59.20(@tanstack/react-query@5.59.20(react@18.3.1))(react@18.3.1)':
     dependencies:
       '@tanstack/query-persist-client-core': 5.59.20
@@ -32489,9 +32460,9 @@ snapshots:
       clean-stack: 2.2.0
       indent-string: 4.0.0
 
-  ajv-formats@2.1.1(ajv@8.18.0):
+  ajv-formats@2.1.1(ajv@8.20.0):
     optionalDependencies:
-      ajv: 8.18.0
+      ajv: 8.20.0
 
   ajv-formats@3.0.1(ajv@8.20.0):
     optionalDependencies:
@@ -32501,9 +32472,9 @@ snapshots:
     dependencies:
       ajv: 6.12.6
 
-  ajv-keywords@5.1.0(ajv@8.18.0):
+  ajv-keywords@5.1.0(ajv@8.20.0):
     dependencies:
-      ajv: 8.18.0
+      ajv: 8.20.0
       fast-deep-equal: 3.1.3
 
   ajv@6.12.6:
@@ -42127,9 +42098,9 @@ snapshots:
   schema-utils@4.3.2:
     dependencies:
       '@types/json-schema': 7.0.15
-      ajv: 8.18.0
-      ajv-formats: 2.1.1(ajv@8.18.0)
-      ajv-keywords: 5.1.0(ajv@8.18.0)
+      ajv: 8.20.0
+      ajv-formats: 2.1.1(ajv@8.20.0)
+      ajv-keywords: 5.1.0(ajv@8.20.0)
 
   search-insights@2.17.2: {}
 

@@ -79,3 +79,87 @@ describe(`ElectricAgentsManager.validateWriteEvent`, () => {
     expect((manager as any).isValidWriteToken(entity, `claim-token`)).toBe(true)
   })
 })
+
+describe(`ElectricAgentsManager event source subscriptions`, () => {
+  it(`persists the manifest before registering wake side effects`, async () => {
+    const calls: Array<string> = []
+    const manager = createManifestManager(calls)
+
+    await manager.upsertEventSourceSubscription(`/coder/session-1`, {
+      subscription: {
+        id: `watch-pr-123`,
+        entityUrl: `/coder/session-1`,
+        sourceKey: `github-repo`,
+        bucketKey: `pull_request`,
+        params: { number: 123 },
+        filterApplied: false,
+        contractRevision: 1,
+        sourceUrl: `/_webhooks/github-repo/prs/123`,
+        sourceType: `webhook`,
+        manifestKey: `event-source:watch-pr-123`,
+        lifetime: { kind: `until_entity_stopped` },
+        createdBy: `tool`,
+        createdAt: `2026-05-23T00:00:00.000Z`,
+      },
+      manifest: {
+        key: `event-source:watch-pr-123`,
+        kind: `source`,
+        sourceType: `webhook`,
+        sourceRef: `github-repo/prs/123`,
+        config: {
+          endpointKey: `github-repo`,
+          streamUrl: `/_webhooks/github-repo/prs/123`,
+        },
+        wake: {
+          on: `change`,
+          collections: [`webhook_event`],
+          ops: [`insert`],
+        },
+      },
+    })
+
+    expect(calls).toEqual([`append`, `unregister`, `register`])
+  })
+
+  it(`persists subscription deletion before unregistering wake side effects`, async () => {
+    const calls: Array<string> = []
+    const manager = createManifestManager(calls)
+
+    await manager.deleteEventSourceSubscription(`/coder/session-1`, {
+      id: `watch-pr-123`,
+    })
+
+    expect(calls).toEqual([`append`, `unregister`])
+  })
+})
+
+function createManifestManager(calls: Array<string>) {
+  return new EntityManager({
+    registry: {
+      tenantId: `tenant-a`,
+      getEntity: vi.fn().mockResolvedValue({
+        url: `/coder/session-1`,
+        streams: { main: `/_entities/coder/session-1` },
+      }),
+      getEntityType: vi.fn(),
+      replaceEntityManifestSource: vi.fn(),
+      close: vi.fn(),
+    } as any,
+    streamClient: {
+      append: vi.fn(async () => {
+        calls.push(`append`)
+      }),
+    } as any,
+    validator: new SchemaValidator(),
+    wakeRegistry: {
+      setTimeoutCallback: vi.fn(),
+      setDebounceCallback: vi.fn(),
+      unregisterByManifestKey: vi.fn(async () => {
+        calls.push(`unregister`)
+      }),
+      register: vi.fn(async () => {
+        calls.push(`register`)
+      }),
+    } as any,
+  })
+}

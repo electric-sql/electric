@@ -77,6 +77,20 @@ describe(`event source helpers`, () => {
     })
   })
 
+  it(`rejects bucket params that do not match paramsSchema`, () => {
+    expect(() =>
+      resolveEventSourceSubscription({
+        contract: githubContract,
+        entityUrl: `/coder/session-1`,
+        request: {
+          sourceKey: `github-repo`,
+          bucketKey: `pull_request`,
+          params: { number: `123` },
+        },
+      })
+    ).toThrow(/Bucket params do not match paramsSchema.*number/)
+  })
+
   it(`builds deterministic subscription ids`, () => {
     const left = buildEventSourceSubscriptionId({
       sourceKey: `github-repo`,
