@@ -207,9 +207,9 @@ export function OnboardingModal(): React.ReactElement | null {
             <Dialog.Title>Set up your API keys</Dialog.Title>
             <Dialog.Description>
               Electric Agents bundles a local runtime that calls the LLM
-              provider of your choice. Provide an Anthropic and/or OpenAI API
-              key — they're stored on this machine only. Brave Search is
-              optional and powers the web-search tool.
+              provider of your choice. Provide an Anthropic, OpenAI, or DeepSeek
+              API key (you can configure more than one) — stored on this machine
+              only. Brave Search is optional and powers the web-search tool.
             </Dialog.Description>
             <ApiKeysForm
               initial={{
@@ -219,19 +219,25 @@ export function OnboardingModal(): React.ReactElement | null {
                   ``,
                 openai:
                   keysStatus.suggested.openai ?? keysStatus.saved.openai ?? ``,
+                deepseek:
+                  keysStatus.suggested.deepseek ??
+                  keysStatus.saved.deepseek ??
+                  ``,
                 brave:
                   keysStatus.suggested.brave ?? keysStatus.saved.brave ?? ``,
               }}
               showSuggestionHint={Boolean(
                 keysStatus.suggested.anthropic ||
                   keysStatus.suggested.openai ||
+                  keysStatus.suggested.deepseek ||
                   keysStatus.suggested.brave
               )}
               autoFocus
-              onSave={async ({ anthropic, openai, brave }) => {
+              onSave={async ({ anthropic, openai, deepseek, brave }) => {
                 await persistApiKeys({
                   anthropic: anthropic.trim() || null,
                   openai: openai.trim() || null,
+                  deepseek: deepseek.trim() || null,
                   brave: brave.trim() || null,
                 })
                 // Finishing the keys step means onboarding is done.

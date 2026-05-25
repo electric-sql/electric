@@ -74,16 +74,26 @@ export interface ServerConnectionState {
  * `null` means "not set". The renderer never reads these from
  * `process.env` directly — that only exists in main.
  *
- * - `anthropic` / `openai`: at least one is required for the local
- *   Horton runtime to be useful; the dialog auto-opens until one is
- *   set.
- * - `brave`: optional. Mirrored to `BRAVE_SEARCH_API_KEY` to enable
- *   Horton's `brave_search` tool; without it, web search falls back
- *   to Anthropic's built-in search.
+ * - `anthropic` / `openai` / `deepseek`: LLM provider keys. At least
+ *   one is required for the local Horton runtime to be useful; the
+ *   first-launch dialog auto-opens until one is set.
+ * - `brave`: optional search-tool auxiliary. Mirrored to
+ *   `BRAVE_SEARCH_API_KEY` to enable Horton's `brave_search` tool;
+ *   without it, web search falls back to Anthropic's built-in search.
+ *   Does NOT count toward "has any LLM key" on its own.
  */
 export interface ApiKeys {
   anthropic: string | null
   openai: string | null
+  /**
+   * Optional. Mirrored to `DEEPSEEK_API_KEY` so the runtime can use
+   * DeepSeek models. Treated as a peer LLM provider alongside
+   * `anthropic` and `openai` — setting it alone is enough to satisfy
+   * the "has any LLM key" check and dismiss the first-launch dialog.
+   * Contrast with `brave`, which is a search-tool auxiliary and never
+   * counts toward that check.
+   */
+  deepseek: string | null
   brave: string | null
 }
 

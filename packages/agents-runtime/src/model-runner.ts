@@ -25,6 +25,7 @@ const PREFERRED_IDS_BY_PROVIDER: Record<string, Array<string>> = {
   anthropic: [`claude-3-5-haiku-latest`, `claude-3-5-haiku-20241022`],
   openai: [`gpt-4.1-nano`, `gpt-4o-mini`, `gpt-4.1-mini`],
   'openai-codex': [`gpt-5.4-mini`, `gpt-5.1-codex-mini`],
+  deepseek: [`deepseek-v4-flash`, `deepseek-v4-pro`],
 }
 
 function hasEnv(name: string): boolean {
@@ -49,12 +50,17 @@ export function readCodexAccessToken(): string | undefined {
   }
 }
 
-export type AvailableProvider = `anthropic` | `openai` | `openai-codex`
+export type AvailableProvider =
+  | `anthropic`
+  | `openai`
+  | `openai-codex`
+  | `deepseek`
 
 export function detectAvailableProviders(): Array<AvailableProvider> {
   const providers: Array<AvailableProvider> = []
   if (hasEnv(`ANTHROPIC_API_KEY`)) providers.push(`anthropic`)
   if (hasEnv(`OPENAI_API_KEY`)) providers.push(`openai`)
+  if (hasEnv(`DEEPSEEK_API_KEY`)) providers.push(`deepseek`)
   if (readCodexAccessToken() !== undefined) providers.push(`openai-codex`)
   return providers
 }
@@ -79,6 +85,19 @@ function envCatalog(): LowCostModelCatalog {
       reasoning: false,
     })
   }
+  if (providers.includes(`deepseek`)) {
+    // pi-ai marks deepseek-v4-flash as reasoning:true (it supports extended
+    // thinking). We mirror that here so completeWithLowCostModel forwards the
+    // reasoning flag to the provider correctly, even though this means short
+    // low-cost calls (e.g. title generation) will pay a small reasoning-token
+    // overhead when DeepSeek is the only configured provider. A non-reasoning
+    // DeepSeek SKU should be preferred here once pi-ai exposes one.
+    choices.push({
+      provider: `deepseek`,
+      id: `deepseek-v4-flash`,
+      reasoning: true,
+    })
+  }
   return { choices, defaultChoice: choices[0] }
 }
 
@@ -88,9 +107,12 @@ export function selectLowCostModelChoice(
 ): LowCostModelChoice {
   const configuredProvider =
     modelConfig.provider ?? catalog.defaultChoice?.provider
-  const providerOrder = [configuredProvider, `openai`, `anthropic`].filter(
-    (provider): provider is string => Boolean(provider)
-  )
+  const providerOrder = [
+    configuredProvider,
+    `openai`,
+    `anthropic`,
+    `deepseek`,
+  ].filter((provider): provider is string => Boolean(provider))
 
   for (const provider of providerOrder) {
     for (const id of PREFERRED_IDS_BY_PROVIDER[provider] ?? []) {
