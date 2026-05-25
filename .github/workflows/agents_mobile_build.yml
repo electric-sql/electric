@@ -1,0 +1,237 @@
+name: Agents Mobile Build
+
+on:
+  workflow_call:
+    inputs:
+      channel:
+        required: true
+        type: string
+      version:
+        required: true
+        type: string
+      git_ref:
+        required: true
+        type: string
+      platform:
+        required: false
+        type: string
+        default: android
+      profile:
+        required: true
+        type: string
+      submit:
+        required: false
+        type: boolean
+        default: false
+      release_tag:
+        required: false
+        type: string
+        default: ''
+      release_name:
+        required: false
+        type: string
+        default: ''
+
+jobs:
+  build:
+    name: Build ${{ inputs.platform }} ${{ inputs.profile }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      issues: write
+      pull-requests: write
+    outputs:
+      build_url: ${{ steps.capture-build.outputs.build_url }}
+      build_id: ${{ steps.capture-build.outputs.build_id }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5.0.0
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.git_ref }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.tool-versions'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm --filter @electric-ax/agents-mobile... install --frozen-lockfile
+
+      - name: Run mobile CI checks
+        run: pnpm --filter @electric-ax/agents-mobile run ci:check
+
+      - name: Run iOS export check
+        if: ${{ inputs.platform == 'ios' || inputs.platform == 'all' }}
+        run: pnpm --filter @electric-ax/agents-mobile run export:ios
+
+      - name: Setup EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Create or update PR build comment
+        if: ${{ inputs.channel == 'pr' && github.event_name == 'pull_request' }}
+        uses: actions/github-script@v7
+        continue-on-error: true
+        with:
+          script: |
+            const marker = '<!-- electric-agents-mobile-pr-build -->'
+            const { owner, repo } = context.repo
+            const issue_number = context.payload.pull_request.number
+            const sha = context.payload.pull_request.head.sha
+            const shortSha = sha.slice(0, 7)
+            const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`
+            const body = [
+              marker,
+              '## Electric Agents Mobile Build',
+              '',
+              `Android preview build for commit \`${shortSha}\` is in progress.`,
+              '',
+              '| Platform | Profile | Status | Build |',
+              '| --- | --- | --- | --- |',
+              `| Android | \`${process.env.BUILD_PROFILE}\` | Building | Pending |`,
+              '',
+              `[Workflow run](${runUrl})`,
+            ].join('\n')
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            })
+            const existing = comments.find((comment) => comment.body?.includes(marker))
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body,
+              })
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body,
+              })
+            }
+        env:
+          BUILD_PROFILE: ${{ inputs.profile }}
+
+      - name: Run EAS build
+        id: eas-build
+        continue-on-error: true
+        working-directory: packages/agents-mobile
+        env:
+          ELECTRIC_AGENTS_MOBILE_BUILD_NUMBER: ${{ github.run_number }}
+        run: |
+          set -euo pipefail
+
+          args=(
+            build
+            --platform "${{ inputs.platform }}"
+            --profile "${{ inputs.profile }}"
+            --non-interactive
+            --wait
+            --json
+          )
+
+          if [[ "${{ inputs.submit }}" == "true" ]]; then
+            args+=(--auto-submit)
+          fi
+
+          eas "${args[@]}" > eas-build.json
+          cat eas-build.json
+
+      - name: Capture EAS build output
+        id: capture-build
+        if: ${{ steps.eas-build.outcome == 'success' }}
+        working-directory: packages/agents-mobile
+        run: |
+          node <<'EOF' >> "$GITHUB_OUTPUT"
+          const fs = require('node:fs')
+          const raw = fs.readFileSync('eas-build.json', 'utf8')
+          const parsed = JSON.parse(raw)
+          const builds = Array.isArray(parsed) ? parsed : [parsed]
+          const first = builds[0] ?? {}
+          const buildId = first.id ?? ''
+          const url =
+            first.buildDetailsPageUrl ??
+            first.buildUrl ??
+            first.url ??
+            first.artifacts?.buildUrl ??
+            (buildId
+              ? `https://expo.dev/accounts/electric-ax/projects/agents-mobile/builds/${buildId}`
+              : '')
+
+          console.log(`build_id=${buildId}`)
+          console.log(`build_url=${url}`)
+          EOF
+
+      - name: Update PR build comment
+        if: ${{ always() && inputs.channel == 'pr' && github.event_name == 'pull_request' }}
+        uses: actions/github-script@v7
+        continue-on-error: true
+        env:
+          BUILD_OUTCOME: ${{ steps.eas-build.outcome }}
+          BUILD_PROFILE: ${{ inputs.profile }}
+          BUILD_URL: ${{ steps.capture-build.outputs.build_url }}
+        with:
+          script: |
+            const marker = '<!-- electric-agents-mobile-pr-build -->'
+            const { owner, repo } = context.repo
+            const issue_number = context.payload.pull_request.number
+            const sha = context.payload.pull_request.head.sha
+            const shortSha = sha.slice(0, 7)
+            const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`
+            const outcome = process.env.BUILD_OUTCOME
+            const status = outcome === 'success' ? 'Passed' : 'Failed'
+            const buildUrl = process.env.BUILD_URL
+            const buildCell = buildUrl ? `[EAS build](${buildUrl})` : 'Unavailable'
+            const body = [
+              marker,
+              '## Electric Agents Mobile Build',
+              '',
+              `Android preview build for commit \`${shortSha}\`.`,
+              '',
+              '| Platform | Profile | Status | Build |',
+              '| --- | --- | --- | --- |',
+              `| Android | \`${process.env.BUILD_PROFILE}\` | ${status} | ${buildCell} |`,
+              '',
+              `[Workflow run](${runUrl})`,
+            ].join('\n')
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            })
+            const existing = comments.find((comment) => comment.body?.includes(marker))
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body,
+              })
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body,
+              })
+            }
+
+      - name: Fail when EAS build fails
+        if: ${{ steps.eas-build.outcome != 'success' }}
+        run: exit 1

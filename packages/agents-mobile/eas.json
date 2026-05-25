@@ -1,0 +1,47 @@
+{
+  "cli": {
+    "version": ">= 15.0.0",
+    "appVersionSource": "local"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "channel": "development"
+    },
+    "preview": {
+      "distribution": "internal",
+      "channel": "preview",
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "canary": {
+      "distribution": "internal",
+      "channel": "canary",
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "canary-store": {
+      "distribution": "store",
+      "channel": "canary"
+    },
+    "production": {
+      "distribution": "store",
+      "channel": "production"
+    }
+  },
+  "submit": {
+    "canary-store": {
+      "android": {
+        "track": "internal"
+      }
+    },
+    "production": {
+      "android": {
+        "track": "production"
+      }
+    }
+  }
+}
