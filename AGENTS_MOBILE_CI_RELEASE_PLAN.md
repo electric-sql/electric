@@ -477,7 +477,9 @@ Before the Apple Developer account is ready:
 - Done: added `preview-ios-simulator` EAS profile.
 - Done: added manual `agents_mobile_ios_simulator.yml` workflow.
 - Done: set `ITSAppUsesNonExemptEncryption` to `false` to avoid App Store Connect encryption metadata blocking simulator/TestFlight setup for standard HTTPS-only encryption.
-- Next: run a simulator EAS build from CI to confirm native iOS compilation.
+- Done: confirmed native iOS simulator compilation with EAS build `8b8a5b65-a189-4319-83ae-baaacca23f97`.
+  - Simulator artifact: `https://expo.dev/artifacts/eas/iepfJtpqS5QpRP1ktVDT8v.tar.gz`
+- Note: the manual `agents_mobile_ios_simulator.yml` workflow can only be dispatched from GitHub after the workflow file exists on the default branch.
 
 After the Apple Developer account is ready:
 
