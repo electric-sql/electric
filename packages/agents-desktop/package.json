@@ -27,7 +27,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@electric-sql/client": "^1.5.18",
+    "@electric-sql/client": "^1.5.19",
     "@mixmark-io/domino": "^2.2.0",
     "better-sqlite3": "^12.9.0",
     "fix-path": "^4.0.0",
