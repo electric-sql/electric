@@ -6,6 +6,7 @@ description: >
   definition (table, where, params), content-encoding/content-length header
   cleanup, CORS configuration for electric-offset/electric-handle/
   electric-schema/electric-cursor headers, auth token injection,
+  Bun fetch concurrency cap (BUN_CONFIG_MAX_HTTP_REQUESTS default 256),
   ELECTRIC_SECRET/SOURCE_SECRET server-side only, tenant isolation via
   WHERE positional params, onError 401 token refresh, and subset security
   (AND semantics). Load when creating proxy routes, adding auth, or
@@ -213,6 +214,24 @@ originUrl.searchParams.set('params[1]', user.orgId)
 String interpolation in WHERE clauses enables SQL injection. Use positional params (`$1`, `$2`).
 
 Source: `website/docs/guides/auth.md`
+
+### HIGH Bun fetch concurrency cap (256) bottlenecks the proxy under load
+
+Wrong:
+
+```sh
+bun run proxy.ts
+```
+
+Correct:
+
+```sh
+BUN_CONFIG_MAX_HTTP_REQUESTS=4096 bun run proxy.ts
+```
+
+Bun caps simultaneous `fetch()` calls at **256 per process** by default. Excess requests queue silently — the proxy keeps accepting inbound connections but upstream calls to Electric stall, surfacing as latency spikes rather than errors. Raise `BUN_CONFIG_MAX_HTTP_REQUESTS` (max 65,336) to match your expected concurrent shape requests. Node and Deno do not impose this cap.
+
+Source: https://bun.com/docs/runtime/networking/fetch
 
 ### HIGH Not exposing Electric response headers via CORS
 
