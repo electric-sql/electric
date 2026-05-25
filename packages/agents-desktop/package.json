@@ -13,6 +13,7 @@
     "dev": "pnpm run ensure:electron && concurrently -k -n ui,desktop -c cyan,green \"pnpm run dev:ui\" \"pnpm run dev:desktop\"",
     "dev:ui": "pnpm --filter @electric-ax/agents-server-ui dev:desktop",
     "dev:desktop": "wait-on -d 200 http-get://localhost:${ELECTRIC_DESKTOP_UI_PORT:-5183} && vite",
+    "dev:local-cloud": "NODE_OPTIONS=--use-system-ca ELECTRIC_DASHBOARD_URL=https://localhost:8082 ELECTRIC_AGENTS_URL=http://localhost:8006 pnpm run dev",
     "build:icons": "node scripts/build-icons.mjs",
     "dist": "pnpm run build && pnpm run build:icons && pnpm run rebuild:native && electron-builder --publish never",
     "dist:linux": "pnpm run build && pnpm run build:icons && pnpm run rebuild:native && electron-builder --linux --publish never",
