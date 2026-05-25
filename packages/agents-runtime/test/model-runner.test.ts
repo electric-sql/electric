@@ -87,7 +87,10 @@ describe(`selectLowCostModelChoice with deepseek`, () => {
         reasoning: true,
       },
     }
-    const choice = selectLowCostModelChoice(catalog, { provider: `deepseek` })
+    const choice = selectLowCostModelChoice(catalog, {
+      provider: `deepseek`,
+      model: `deepseek-v4-flash`,
+    })
     expect(choice.provider).toBe(`deepseek`)
     expect(choice.id).toBe(`deepseek-v4-flash`)
   })

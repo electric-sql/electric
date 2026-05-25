@@ -207,9 +207,9 @@ export function OnboardingModal(): React.ReactElement | null {
             <Dialog.Title>Set up your API keys</Dialog.Title>
             <Dialog.Description>
               Electric Agents bundles a local runtime that calls the LLM
-              provider of your choice. Provide an Anthropic, OpenAI, and/or
-              DeepSeek API key — they're stored on this machine only. Brave
-              Search is optional and powers the web-search tool.
+              provider of your choice. Provide an Anthropic, OpenAI, or DeepSeek
+              API key (you can configure more than one) — stored on this machine
+              only. Brave Search is optional and powers the web-search tool.
             </Dialog.Description>
             <ApiKeysForm
               initial={{

@@ -86,6 +86,12 @@ function envCatalog(): LowCostModelCatalog {
     })
   }
   if (providers.includes(`deepseek`)) {
+    // pi-ai marks deepseek-v4-flash as reasoning:true (it supports extended
+    // thinking). We mirror that here so completeWithLowCostModel forwards the
+    // reasoning flag to the provider correctly, even though this means short
+    // low-cost calls (e.g. title generation) will pay a small reasoning-token
+    // overhead when DeepSeek is the only configured provider. A non-reasoning
+    // DeepSeek SKU should be preferred here once pi-ai exposes one.
     choices.push({
       provider: `deepseek`,
       id: `deepseek-v4-flash`,
@@ -101,9 +107,12 @@ export function selectLowCostModelChoice(
 ): LowCostModelChoice {
   const configuredProvider =
     modelConfig.provider ?? catalog.defaultChoice?.provider
-  const providerOrder = [configuredProvider, `openai`, `anthropic`].filter(
-    (provider): provider is string => Boolean(provider)
-  )
+  const providerOrder = [
+    configuredProvider,
+    `openai`,
+    `anthropic`,
+    `deepseek`,
+  ].filter((provider): provider is string => Boolean(provider))
 
   for (const provider of providerOrder) {
     for (const id of PREFERRED_IDS_BY_PROVIDER[provider] ?? []) {
