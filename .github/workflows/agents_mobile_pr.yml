@@ -79,6 +79,9 @@ jobs:
       - name: Install dependencies
         run: pnpm --filter @electric-ax/agents-mobile... install --frozen-lockfile
 
+      - name: Build mobile dependencies
+        run: pnpm -r --filter @electric-ax/agents-mobile^... --if-present run build
+
       - name: Run mobile CI checks
         run: pnpm --filter @electric-ax/agents-mobile run ci:check
 

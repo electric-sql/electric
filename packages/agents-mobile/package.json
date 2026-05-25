@@ -43,6 +43,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@types/node": "^25.9.1",
     "@types/react": "19.1.17",
     "@vitest/coverage-v8": "^4.1.0",
     "babel-preset-expo": "~54.0.10",
