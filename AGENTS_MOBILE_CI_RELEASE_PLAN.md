@@ -117,14 +117,15 @@ We have a Google Play account, so Android can be the first publishing target.
 
 Needed:
 
-- Final Android package id: `com.electricsql.agents.mobile`.
-- Google Play app created.
-- Initial manual upload if Google requires it before API-based submission.
-- Google Play service account key configured for EAS Submit, preferably stored in Expo credentials rather than checked into GitHub.
+- Done: final Android package id is `com.electricsql.agents.mobile`.
+- Done: Google Play app is created.
+- Done: Google Play service account has been created and invited to the Play Console app.
+- Done: Google Play service account JSON is stored as the GitHub Actions repository secret `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`.
+- Still possible: initial manual upload may be required if Google blocks API-based submission until the first AAB is uploaded through Play Console.
 - Track decision:
-  - Canary: EAS internal distribution first, plus Google Play internal track when credentials are ready.
+  - Canary: EAS internal distribution first; Google Play internal track can now be wired once we enable submit in CI.
   - Stable: production track, or staged rollout if preferred.
-  - Google Play app/store setup is deferred until after the first EAS build path is working.
+  - Google Play app/store setup questionnaires may still need finishing before production release.
 
 ### Apple
 
@@ -409,15 +410,17 @@ Avoid tying Android `versionCode` directly to semver components unless we are co
 
 - Done: added `agents_mobile_canary.yml`.
 - Done: build Android from `main` using the EAS `canary` internal distribution profile.
-- Deferred: submit to Google Play internal track after credentials are configured.
+- Ready to wire: submit to Google Play internal track using `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`.
 - Keep iOS skipped with a clear condition/comment.
 
 ### Phase 4: Add Stable Release Publishing
 
-- Extend `changesets_release.yml`.
-- Capture mobile release tag/version.
-- Trigger Android production EAS build.
-- Submit to Google Play production or staged rollout track.
+- Done: extended `changesets_release.yml`.
+- Done: capture mobile release tag/version from `publishedPackages`.
+- Done: trigger Android production EAS build when `@electric-ax/agents-mobile` is published.
+- Done: write `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` to a temporary CI file for EAS Submit.
+- Done: submit stable Android builds to the Google Play production track through EAS Submit.
+- Still possible: Google Play may require an initial manual AAB upload or additional store setup before the first API-based production submission succeeds.
 
 ### Phase 5: Add iOS
 

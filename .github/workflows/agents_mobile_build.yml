@@ -129,6 +129,28 @@ jobs:
         env:
           BUILD_PROFILE: ${{ inputs.profile }}
 
+      - name: Write Google Play service account key
+        if: ${{ inputs.submit && (inputs.platform == 'android' || inputs.platform == 'all') }}
+        env:
+          GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${GOOGLE_PLAY_SERVICE_ACCOUNT_JSON}" ]]; then
+            echo "GOOGLE_PLAY_SERVICE_ACCOUNT_JSON is required when submit is true" >&2
+            exit 1
+          fi
+
+          node <<'EOF'
+          const fs = require('node:fs')
+          const path = 'packages/agents-mobile/google-service-account.json'
+          const raw = process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON
+          JSON.parse(raw)
+          fs.writeFileSync(path, raw)
+          EOF
+
+          chmod 600 packages/agents-mobile/google-service-account.json
+
       - name: Run EAS build
         id: eas-build
         continue-on-error: true
