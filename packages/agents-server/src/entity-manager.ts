@@ -2,7 +2,6 @@ import { createHash, randomUUID } from 'node:crypto'
 import fastq from 'fastq'
 import {
   assertTags,
-  comparePointers,
   entityStateSchema,
   getCronStreamPath,
   getSharedStateStreamPath,
@@ -895,11 +894,21 @@ export class EntityManager {
         )
       }
 
-      // When forking at a pointer, pre-read the root's main with per-item
-      // pointers, validate the pointer against the stream, and materialise
-      // the root-at-pointer snapshot fragments. The pointer ONLY applies
-      // to the root's `main` stream (Q2). Descendants kept by the manifest
+      // When forking at a pointer, pre-read the root's main, validate the
+      // pointer against the source's true history, and materialise the
+      // root-at-pointer snapshot fragments. The pointer ONLY applies to
+      // the root's `main` stream (Q2). Descendants kept by the manifest
       // filter (Q3) are forked at HEAD.
+      //
+      // Pointer→position translation: the runtime mints pointers as
+      // `{ offset: previousBatchOffset, subOffset: itemIndex+1 }`, where
+      // the anchor offset is the END of the delivery batch that
+      // PRECEDED the targeted event. The durable-streams server
+      // interprets `{ X, N }` as "from offset X, take N flattened
+      // messages forward" — independent of how delivery is chunked. We
+      // mirror that interpretation here by translating the pointer to a
+      // 1-indexed CUMULATIVE position in the source's flattened
+      // history, then filtering events with position ≤ that target.
       let preFilteredRoot:
         | {
             manifests: Map<string, Record<string, unknown>>
@@ -909,19 +918,18 @@ export class EntityManager {
           }
         | undefined
       if (opts.forkPointer) {
-        const itemsWithPointers = await this.streamClient.readJsonWithPointers<
+        const sourceEvents = await this.streamClient.readJson<
           Record<string, unknown>
         >(sourceRoot.streams.main)
-        this.validateForkPointer(
-          itemsWithPointers,
+        const flat = sourceEvents.flatMap((item) =>
+          Array.isArray(item) ? item : [item]
+        ) as Array<Record<string, unknown>>
+        const target = this.resolveForkPointerTarget(
+          flat,
           opts.forkPointer,
           sourceRoot.streams.main
         )
-        const filteredEvents = itemsWithPointers
-          .filter(
-            ({ pointer }) => comparePointers(pointer, opts.forkPointer!) <= 0
-          )
-          .map(({ item }) => item)
+        const filteredEvents = flat.slice(0, target)
         const rootManifests = this.reduceStateRows(filteredEvents, `manifest`)
         const sharedStateIds = new Set<string>()
         for (const manifest of rootManifests.values()) {
@@ -1270,46 +1278,59 @@ export class EntityManager {
   }
 
   /**
-   * Validate `forkPointer` against `itemsWithPointers` (the source root's
-   * `main` stream read with per-item pointers). Throws a 400 if the pointer
-   * doesn't address a real item. A pointer is valid when:
-   *   - some batch X exists whose anchor offset matches `pointer.offset`
-   *     (or both are `null`, i.e. stream start), AND
-   *   - `pointer.subOffset` is in `[1, X.items.length]`.
+   * Translate `forkPointer` into a 1-indexed CUMULATIVE position in the
+   * source's flattened history. Throws a 400 if the pointer doesn't
+   * address a real event.
    *
-   * The UI sources fork pointers from `__electricRowOffsets`, so any
-   * invalid pointer is a client bug we want to surface, not paper over.
+   * Semantics (mirroring PR #347's durable-streams server interpretation):
+   * `{ offset: X, subOffset: N }` means "from anchor X, take N flattened
+   * messages forward." Concretely, the target event is the N-th event
+   * after the last event whose `headers.offset` is ≤ X. (When `X` is
+   * `null`, the anchor is the stream start and the target is the N-th
+   * event from the very beginning.) The returned position is the count
+   * of events to KEEP — events 1..position survive the filter.
+   *
+   * A pointer is valid when:
+   *   - `pointer.offset` is `null` (stream start) OR matches some
+   *     event's `headers.offset` value, AND
+   *   - `pointer.subOffset` is in `[1, total events past the anchor]`.
    */
-  private validateForkPointer(
-    itemsWithPointers: ReadonlyArray<{ pointer: EventPointer }>,
+  private resolveForkPointerTarget(
+    events: ReadonlyArray<Record<string, unknown>>,
     pointer: EventPointer,
     streamPath: string
-  ): void {
-    let maxSubOffsetForAnchor: number | undefined
-    for (const { pointer: p } of itemsWithPointers) {
-      if (p.offset === pointer.offset) {
-        if (
-          maxSubOffsetForAnchor === undefined ||
-          p.subOffset > maxSubOffsetForAnchor
-        ) {
-          maxSubOffsetForAnchor = p.subOffset
-        }
+  ): number {
+    // Count events at-or-before the anchor and validate the anchor exists.
+    let positionAtAnchor = 0
+    let anchorSeen = pointer.offset === null
+    for (const event of events) {
+      const headers = isRecord(event.headers) ? event.headers : undefined
+      const eventOffset =
+        typeof headers?.offset === `string` ? headers.offset : undefined
+      if (eventOffset === undefined) continue
+      if (pointer.offset !== null && eventOffset === pointer.offset) {
+        anchorSeen = true
+      }
+      if (pointer.offset === null || eventOffset <= pointer.offset) {
+        positionAtAnchor++
       }
     }
-    if (maxSubOffsetForAnchor === undefined) {
+    if (!anchorSeen) {
       throw new ElectricAgentsError(
         ErrCodeInvalidRequest,
-        `fork_pointer.offset (${pointer.offset ?? `<stream-start>`}) does not match any chunk anchor on ${streamPath}`,
+        `fork_pointer.offset (${pointer.offset ?? `<stream-start>`}) does not match any event's Stream-Next-Offset on ${streamPath}`,
         400
       )
     }
-    if (pointer.subOffset < 1 || pointer.subOffset > maxSubOffsetForAnchor) {
+    const eventsPastAnchor = events.length - positionAtAnchor
+    if (pointer.subOffset < 1 || pointer.subOffset > eventsPastAnchor) {
       throw new ElectricAgentsError(
         ErrCodeInvalidRequest,
-        `fork_pointer.sub_offset ${pointer.subOffset} out of range for chunk on ${streamPath} (valid: 1..${maxSubOffsetForAnchor})`,
+        `fork_pointer.sub_offset ${pointer.subOffset} out of range past anchor on ${streamPath} (valid: 1..${eventsPastAnchor})`,
         400
       )
     }
+    return positionAtAnchor + pointer.subOffset
   }
 
   /**
