@@ -1,5 +1,16 @@
 # @electric-ax/agents-server
 
+## 0.4.8
+
+### Patch Changes
+
+- dffbf62: fix: no more duplicated runFinished wakes
+- Updated dependencies [9c2c3ae]
+- Updated dependencies [a70567e]
+- Updated dependencies [b3d4f02]
+- Updated dependencies [dffbf62]
+  - @electric-ax/agents-runtime@0.3.3
+
 ## 0.4.7
 
 ### Patch Changes
