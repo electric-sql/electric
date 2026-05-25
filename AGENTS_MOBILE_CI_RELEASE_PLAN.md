@@ -67,7 +67,8 @@ Initial scope:
 
 Later:
 
-- Add iOS simulator or internal builds after Apple Developer setup.
+- Add optional/manual iOS simulator builds before Apple Developer setup.
+- Add signed iOS internal builds after Apple Developer setup.
 - Optionally add EAS Update preview comments for Expo Go/dev-build convenience, but not as the main CI artifact.
 
 ### Canary
@@ -100,6 +101,23 @@ Later:
 
 - Add iOS App Store/TestFlight submission from the same release trigger.
 
+### iOS Simulator
+
+Purpose: prove that the app can compile as a native iOS app before Apple Developer signing is available.
+
+Initial scope:
+
+- Use an EAS `preview-ios-simulator` profile with `ios.simulator: true`.
+- Trigger manually via `agents_mobile_ios_simulator.yml`.
+- Run the same mobile dependency build, typecheck, Expo doctor, Android export, and iOS export checks before starting the EAS build.
+- Do not require Apple Developer credentials, provisioning profiles, App Store Connect, or TestFlight.
+
+Limitations:
+
+- Simulator artifacts are for local simulator testing only; they cannot be installed on physical devices.
+- This does not validate App Store signing, entitlements, TestFlight submission, or App Review metadata.
+- Signed device/TestFlight builds remain blocked on Apple Developer account access.
+
 ## Required Expo and Store Setup
 
 ### Expo
@@ -129,7 +147,7 @@ Needed:
 
 ### Apple
 
-Apple publishing should remain planned but disabled until the account exists.
+Apple publishing should remain planned but disabled until the account exists. iOS simulator builds can run before that because they do not require signing.
 
 Needed later:
 
@@ -137,6 +155,7 @@ Needed later:
 - Bundle id, matching Android: `com.electricsql.agents.mobile`.
 - App Store Connect app.
 - EAS-managed iOS credentials.
+- Signed iOS internal distribution profile.
 - TestFlight submit profile.
 
 ## Package and Config Changes
@@ -165,6 +184,7 @@ Add `packages/agents-mobile/eas.json` with at least:
 
 - `development`: for local development builds if needed.
 - `preview`: internal distribution, Android APK.
+- `preview-ios-simulator`: unsigned iOS simulator build.
 - `canary`: internal distribution or store-submittable Android build.
 - `production`: store-submittable Android App Bundle.
 
@@ -182,6 +202,13 @@ Example shape:
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      }
+    },
+    "preview-ios-simulator": {
+      "node": "24.11.1",
+      "distribution": "internal",
+      "ios": {
+        "simulator": true
       }
     },
     "canary": {
@@ -243,6 +270,7 @@ Mirror the desktop workflow structure:
 .github/workflows/agents_mobile_pr.yml
 .github/workflows/agents_mobile_canary.yml
 .github/workflows/agents_mobile_build.yml
+.github/workflows/agents_mobile_ios_simulator.yml
 scripts/ci/mobile-affected.mjs
 ```
 
@@ -367,6 +395,24 @@ Extend the existing changesets job:
     - `git_ref: ${{ needs.changesets.outputs.mobile_release_tag }}`
     - `submit: true`
 
+### `agents_mobile_ios_simulator.yml`
+
+Manual workflow with inputs:
+
+- `git_ref`: optional branch, tag, or SHA to build.
+
+Behavior:
+
+- Calls `agents_mobile_build.yml` with:
+  - `channel: ios-simulator`
+  - `profile: preview-ios-simulator`
+  - `platform: ios`
+  - `submit: false`
+- Requires `EXPO_TOKEN`.
+- Does not require Apple Developer credentials.
+
+This workflow is intentionally manual at first to control EAS build volume and because simulator artifacts are useful for targeted iOS smoke testing rather than every PR.
+
 ## Versioning Strategy
 
 Changesets should continue to own semantic app versions.
@@ -424,11 +470,18 @@ Avoid tying Android `versionCode` directly to semver components unless we are co
 
 ### Phase 5: Add iOS
 
+Before the Apple Developer account is ready:
+
+- Done: iOS export check passes locally and in mobile CI checks.
+- Done: added `preview-ios-simulator` EAS profile.
+- Done: added manual `agents_mobile_ios_simulator.yml` workflow.
+- Next: run a simulator EAS build from CI to confirm native iOS compilation.
+
 After the Apple Developer account is ready:
 
 - Add bundle id and App Store Connect app.
 - Configure EAS iOS credentials.
-- Enable iOS preview/canary builds.
+- Enable signed iOS preview/canary builds.
 - Add TestFlight submission.
 - Enable stable iOS release submission.
 

@@ -16,6 +16,13 @@
         "buildType": "apk"
       }
     },
+    "preview-ios-simulator": {
+      "node": "24.11.1",
+      "distribution": "internal",
+      "ios": {
+        "simulator": true
+      }
+    },
     "canary": {
       "node": "24.11.1",
       "distribution": "internal",
