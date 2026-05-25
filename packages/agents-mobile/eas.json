@@ -35,11 +35,13 @@
   "submit": {
     "canary-store": {
       "android": {
+        "serviceAccountKeyPath": "./google-service-account.json",
         "track": "internal"
       }
     },
     "production": {
       "android": {
+        "serviceAccountKeyPath": "./google-service-account.json",
         "track": "production"
       }
     }
