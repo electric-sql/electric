@@ -413,14 +413,13 @@ export function createPiAgentAdapter(
             abortedRun = true
             agent.abort()
 
-            // Let pi-agent-core settle its own abort lifecycle. It normally
-            // emits an aborted message/agent_end sequence, which we want to
-            // persist so the next context contains a coherent interrupted run.
-            // Keep a short fallback in case a provider/tool ignores AbortSignal.
+            // Let pi-agent-core settle synchronous abort events first. If the
+            // provider/tool ignores AbortSignal and emits nothing, close the
+            // run on the next macrotask so callers are not left waiting.
             abortFallback ??= setTimeout(() => {
               finish(`aborted`)
               resolve()
-            }, 5000)
+            }, 0)
           }
           unsubscribe = processAgentEvents(
             () => {
