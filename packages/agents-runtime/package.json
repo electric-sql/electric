@@ -89,6 +89,7 @@
     "@sinclair/typebox": "^0.34.48",
     "@standard-schema/spec": "^1.1.0",
     "@tanstack/db": "^0.6.6",
+    "ajv": "^8.18.0",
     "cron-parser": "^5.5.0",
     "diff": "^9.0.0",
     "jsdom": "^28.1.0",

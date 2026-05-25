@@ -192,11 +192,37 @@ export {
 } from './runtime-server-client'
 export type {
   RuntimeServerClientConfig,
+  RuntimeServerClient,
   RuntimeEntityInfo,
   DispatchPolicy,
   SpawnEntityOptions,
   SendEntityMessageOptions,
 } from './runtime-server-client'
+export {
+  buildEventSourceManifestEntry,
+  buildHydratedEventSourceWake,
+  buildEventSourceSubscriptionId,
+  defaultEventSourceSubscriptionLifetime,
+  eventSourceWakeInfoFromManifests,
+  eventSourceSubscriptionManifestKey,
+  renderEventSourceBucketPath,
+  resolveEventSourceSubscription,
+} from './event-sources'
+export type {
+  EventSourceBucket,
+  EventSourceContract,
+  EventSourceFilter,
+  EventSourceFilterCondition,
+  EventSourceStatus,
+  EventSourceSubscription,
+  EventSourceSubscriptionInput,
+  EventSourceType,
+  EventSourceWakeChange,
+  EventSourceWakeInfo,
+  HydratedEventSourceWake,
+  ResolvedEventSourceSubscription,
+  SubscriptionLifetime,
+} from './event-sources'
 export { createAgentsClient } from './agents-client'
 export type { AgentsClient, AgentsClientConfig } from './agents-client'
 
@@ -208,13 +234,25 @@ export {
   manifestSourceKey,
 } from './manifest-helpers'
 
-export { entity, cron, entities, tagged, db } from './observation-sources'
+export {
+  entity,
+  cron,
+  entities,
+  tagged,
+  db,
+  webhook,
+  getWebhookStreamPath,
+  webhookObservationCollections,
+  webhookEventRowSchema,
+} from './observation-sources'
 export type {
   EntityObservationSource,
   CronObservationSource,
   EntitiesObservationSource,
   TaggedObservationSource,
   DbObservationSource,
+  WebhookObservationSource,
+  WebhookEventRow,
   EntitiesQuery,
   TaggedQuery,
 } from './observation-sources'

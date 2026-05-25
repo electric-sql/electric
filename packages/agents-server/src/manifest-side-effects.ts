@@ -1,5 +1,6 @@
 import {
   getCronStreamPathFromSpec,
+  getWebhookStreamPath,
   getSharedStateStreamPath,
   resolveCronScheduleSpec,
 } from '@electric-ax/agents-runtime'
@@ -54,6 +55,16 @@ export function extractManifestSourceUrl(
       return typeof manifest.sourceRef === `string`
         ? getSharedStateStreamPath(manifest.sourceRef)
         : undefined
+    }
+
+    if (manifest.sourceType === `webhook`) {
+      if (typeof config?.streamUrl === `string`) return config.streamUrl
+      if (typeof config?.endpointKey === `string`) {
+        return getWebhookStreamPath(
+          config.endpointKey,
+          typeof config.bucket === `string` ? config.bucket : undefined
+        )
+      }
     }
 
     return undefined

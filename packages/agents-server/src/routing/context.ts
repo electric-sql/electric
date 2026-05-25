@@ -1,5 +1,8 @@
 import type { Agent } from 'undici'
-import type { WebhookSignatureVerifierConfig } from '@electric-ax/agents-runtime'
+import type {
+  EventSourceContract,
+  WebhookSignatureVerifierConfig,
+} from '@electric-ax/agents-runtime'
 import type { DrizzleDB } from '../db/index.js'
 import type { EntityBridgeCoordinator } from '../entity-bridge-manager.js'
 import type { EntityManager } from '../entity-manager.js'
@@ -9,6 +12,18 @@ import type { DurableStreamsRoutingAdapter } from './durable-streams-routing-ada
 import type { Principal } from '../principal.js'
 import type { DurableStreamsBearerProvider } from '../stream-client.js'
 import type { WebhookSigner } from '../webhook-signing.js'
+
+export interface EventSourceCatalog {
+  listEventSources: () =>
+    | Array<EventSourceContract>
+    | Promise<Array<EventSourceContract>>
+  getEventSource: (
+    sourceKey: string
+  ) =>
+    | EventSourceContract
+    | undefined
+    | Promise<EventSourceContract | undefined>
+}
 
 /**
  * Per-request tenant context passed through every router and handler.
@@ -38,5 +53,7 @@ export interface TenantContext {
   streamClient: StreamClient
   runtime: ElectricAgentsTenantRuntime
   entityBridgeManager: EntityBridgeCoordinator
+  eventSources?: EventSourceCatalog
+  ensureEventSourceWakeSource?: (sourceUrl: string) => Promise<void> | void
   isShuttingDown: () => boolean
 }

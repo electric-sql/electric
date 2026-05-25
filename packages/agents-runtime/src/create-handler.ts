@@ -24,6 +24,11 @@ import type {
 } from './types'
 import type { ChangeEvent } from '@durable-streams/state'
 import type { DispatchPolicy } from './runtime-server-client'
+import type {
+  EventSourceContract,
+  EventSourceSubscription,
+  EventSourceSubscriptionInput,
+} from './event-sources'
 
 export interface RuntimeRouterConfig {
   /** Base URL of the durable streams server (e.g. http://localhost:4200) */
@@ -85,6 +90,13 @@ export interface RuntimeRouterConfig {
       messageType?: string
     }) => Promise<{ txid: string }>
     deleteSchedule: (opts: { id: string }) => Promise<{ txid: string }>
+    listEventSources: () => Promise<Array<EventSourceContract>>
+    subscribeToEventSource: (
+      opts: EventSourceSubscriptionInput
+    ) => Promise<{ txid: string; subscription: EventSourceSubscription }>
+    unsubscribeFromEventSource: (opts: {
+      id: string
+    }) => Promise<{ txid: string }>
   }) => Array<AgentTool> | Promise<Array<AgentTool>>
   /**
    * Optional observer for background wake failures. Return true to mark the

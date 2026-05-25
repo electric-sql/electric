@@ -10,7 +10,16 @@ export {
   normalizeEntityTimelineData,
   normalizeTimelineEntities,
 } from './entity-timeline'
-export { db, entities, entity, tagged } from './observation-sources'
+export {
+  db,
+  entities,
+  entity,
+  tagged,
+  webhook,
+  getWebhookStreamPath,
+  webhookObservationCollections,
+  webhookEventRowSchema,
+} from './observation-sources'
 export { appendPathToUrl } from './url'
 export { buildSections, buildTimelineEntries } from './use-chat'
 
@@ -25,6 +34,8 @@ export type {
   DbObservationSource,
   EntitiesObservationSource,
   EntityObservationSource,
+  WebhookObservationSource,
+  WebhookEventRow,
   EntitiesQuery,
   TaggedObservationSource,
   TaggedQuery,

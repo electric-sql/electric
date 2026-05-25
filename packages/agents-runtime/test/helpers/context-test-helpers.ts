@@ -11,8 +11,10 @@ import type {
   LLMMessage,
   TimestampedMessage,
   UseContextConfig,
+  WakeEvent,
   WakeSession,
 } from '../../src/types'
+import type { HydratedEventSourceWake } from '../../src/event-sources'
 
 type DebugContext = {
   __debug: {
@@ -273,6 +275,8 @@ export function createTestHandlerContext(
   opts: {
     db?: ReturnType<typeof buildStreamFixture>
     writeEvent?: (event: ChangeEvent) => void
+    wakeEvent?: WakeEvent
+    hydratedEventSourceWake?: HydratedEventSourceWake | null
   } = {}
 ) {
   const db = opts.db ?? buildStreamFixture([])
@@ -293,7 +297,7 @@ export function createTestHandlerContext(
     events: [],
     writeEvent,
     wakeSession: createFakeWakeSession(db),
-    wakeEvent: {
+    wakeEvent: opts.wakeEvent ?? {
       type: `inbox`,
       source: `/test`,
       fromOffset: 0,
@@ -301,6 +305,7 @@ export function createTestHandlerContext(
       eventCount: 1,
       payload: `hi`,
     },
+    hydratedEventSourceWake: opts.hydratedEventSourceWake,
     doObserve: vi.fn(),
     doSpawn: vi.fn(),
     doMkdb: vi.fn(),

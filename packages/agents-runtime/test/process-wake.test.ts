@@ -2,6 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createTransaction } from '@durable-streams/state'
 import { createAssistantMessageEventStream } from '@mariozechner/pi-ai'
 import { getCronSourceRef } from '../src/cron-utils'
+import {
+  buildEventSourceManifestEntry,
+  resolveEventSourceSubscription,
+  type EventSourceContract,
+} from '../src/event-sources'
 import { manifestSourceKey } from '../src/manifest-helpers'
 import { db } from '../src/observation-sources'
 import { processWake } from '../src/process-wake'
@@ -33,6 +38,11 @@ const {
   mockStreamHead,
   mockStreamJson,
   mockDurableStreamStream,
+  mockCreateStreamDB,
+  mockSourceDbClose,
+  mockSourceDbPreload,
+  mockSourceEvents,
+  mockInitialManifests,
   mockEntityOnEvent,
   mockEntityOnBatch,
 } = vi.hoisted(() => ({
@@ -55,6 +65,11 @@ const {
   }),
   mockStreamJson: vi.fn().mockResolvedValue([]),
   mockDurableStreamStream: vi.fn(),
+  mockCreateStreamDB: vi.fn(),
+  mockSourceDbClose: vi.fn(),
+  mockSourceDbPreload: vi.fn().mockResolvedValue(undefined),
+  mockSourceEvents: { current: [] as Array<Record<string, unknown>> },
+  mockInitialManifests: { current: [] as Array<Record<string, unknown>> },
   mockEntityOnEvent: { current: null as ((event: unknown) => void) | null },
   mockEntityOnBatch: {
     current: null as
@@ -72,6 +87,27 @@ const mockStreamResponse = {
 }
 
 mockDurableStreamStream.mockResolvedValue(mockStreamResponse)
+
+vi.mock(`@durable-streams/state`, async (importOriginal) => {
+  const actual = await importOriginal<any>()
+  return {
+    ...actual,
+    createStreamDB: vi.fn().mockImplementation((opts: unknown) => {
+      mockCreateStreamDB(opts)
+      return {
+        collections: {
+          events: {
+            get toArray() {
+              return mockSourceEvents.current
+            },
+          },
+        },
+        close: mockSourceDbClose,
+        preload: mockSourceDbPreload,
+      }
+    }),
+  }
+})
 
 vi.mock(`@durable-streams/client`, async (importOriginal) => {
   const actual = await importOriginal<any>()
@@ -114,7 +150,7 @@ vi.mock(`../src/entity-stream-db`, () => ({
       }
     ) => {
       const manifests = createLocalOnlyTestCollection<Record<string, unknown>>(
-        []
+        mockInitialManifests.current
       )
       const errors = createLocalOnlyTestCollection<Record<string, unknown>>([])
       const runs = createLocalOnlyTestCollection<Record<string, unknown>>([])
@@ -349,6 +385,28 @@ const sharedFindingsSchema = {
   },
 }
 
+const githubEventSourceContract: EventSourceContract = {
+  sourceKey: `github-repo`,
+  sourceType: `webhook`,
+  endpointKey: `github-repo`,
+  status: `active`,
+  label: `GitHub repository`,
+  agentVisible: true,
+  revision: 1,
+  buckets: [
+    {
+      key: `pull_request`,
+      label: `Pull request`,
+      pathTemplate: `prs/:number`,
+      paramsSchema: {
+        type: `object`,
+        required: [`number`],
+        properties: { number: { type: `number` } },
+      },
+    },
+  ],
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -362,6 +420,12 @@ describe(`processWake`, () => {
     clearRegistry()
     mockConstructedProducers.length = 0
     mockDbPreload.mockResolvedValue(undefined)
+    mockInitialManifests.current = []
+    mockCreateStreamDB.mockClear()
+    mockSourceDbClose.mockClear()
+    mockSourceDbPreload.mockClear()
+    mockSourceDbPreload.mockResolvedValue(undefined)
+    mockSourceEvents.current = []
     mockStreamOffset.value = `10_100`
     mockDbOffset.value = `10_100`
     mockEntityOnEvent.current = null
@@ -1587,6 +1651,113 @@ describe(`processWake`, () => {
         }),
       ])
     )
+  })
+
+  it(`hydrates dynamic event source wake rows into the agent trigger message`, async () => {
+    const sourceUrl = `/_webhooks/github-repo/prs/42`
+    const resolved = resolveEventSourceSubscription({
+      contract: githubEventSourceContract,
+      entityUrl: `http://localhost:3000/test-agent/agent-1`,
+      request: {
+        id: `watch-pr-42`,
+        sourceKey: `github-repo`,
+        bucketKey: `pull_request`,
+        params: { number: 42 },
+        reason: `Watch PR comments`,
+      },
+      createdAt: `2026-05-23T00:00:00.000Z`,
+    })
+    mockInitialManifests.current = [buildEventSourceManifestEntry(resolved)]
+    mockSourceEvents.current = [
+      {
+        key: `event-42`,
+        body: {
+          comment: {
+            body: `Please tell the user a joke when this wakes you up.`,
+          },
+        },
+        event_type: `issue_comment`,
+        endpoint_key: `github-repo`,
+        bucket: `prs/42`,
+        stream_path: sourceUrl,
+        headers: { 'x-github-event': `issue_comment` },
+        received_at: `2026-05-23T00:00:00.000Z`,
+        request: {
+          method: `POST`,
+          content_type: `application/json`,
+          size_bytes: 2,
+          query: {},
+        },
+      },
+    ]
+    let receivedMessage = ``
+
+    defineEntity(`test-agent`, {
+      handler: async (ctx) => {
+        ctx.useAgent({
+          systemPrompt: `test`,
+          model: `test-model`,
+          tools: [],
+          testResponses: async (message) => {
+            receivedMessage = message
+            return undefined
+          },
+        })
+        await ctx.agent.run()
+      },
+    })
+
+    await processWake(
+      makeNotification({
+        wakeEvent: {
+          type: `wake`,
+          source: sourceUrl,
+          fromOffset: 0,
+          toOffset: 0,
+          eventCount: 1,
+          payload: {
+            source: sourceUrl,
+            timeout: false,
+            changes: [
+              {
+                collection: `webhook_event`,
+                kind: `insert`,
+                key: `event-42`,
+              },
+            ],
+          },
+        },
+      }),
+      BASE_CONFIG
+    )
+
+    expect(mockCreateStreamDB).toHaveBeenCalledWith(
+      expect.objectContaining({
+        streamOptions: expect.objectContaining({
+          url: `http://localhost:3000/_webhooks/github-repo/prs/42`,
+        }),
+      })
+    )
+    expect(JSON.parse(receivedMessage)).toMatchObject({
+      type: `event_source_wake`,
+      source: sourceUrl,
+      subscription: {
+        id: `watch-pr-42`,
+        bucketKey: `pull_request`,
+        params: { number: 42 },
+        reason: `Watch PR comments`,
+      },
+      events: [
+        {
+          key: `event-42`,
+          body: {
+            comment: {
+              body: `Please tell the user a joke when this wakes you up.`,
+            },
+          },
+        },
+      ],
+    })
   })
 
   it(`closes the StreamDB when preflight stream loading fails`, async () => {

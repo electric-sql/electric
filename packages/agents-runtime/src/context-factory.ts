@@ -14,6 +14,7 @@ import { sliceChars } from './token-budget'
 import { createContextTools } from './tools/context-tools'
 import { CACHE_TIERS } from './types'
 import { composeToolsWithProviders } from './tool-providers'
+import type { HydratedEventSourceWake } from './event-sources'
 import type { ChangeEvent } from '@durable-streams/state'
 import type {
   AgentConfig,
@@ -75,6 +76,7 @@ export interface HandlerContextConfig<TState extends StateProxy = StateProxy> {
       payload?: unknown
     }) => void | Promise<void>
   ) => void
+  hydratedEventSourceWake?: HydratedEventSourceWake | null
   doObserve: (
     source: ObservationSource,
     wake?: Wake
@@ -160,7 +162,8 @@ function getTriggerMessageText(
   db: Pick<EntityStreamDBWithActions, `collections`>,
   wakeEvent: WakeEvent,
   events: Array<ChangeEvent>,
-  wakeOffset: string
+  wakeOffset: string,
+  hydratedEventSourceWake?: HydratedEventSourceWake | null
 ): string {
   if (wakeEvent.type === `inbox`) {
     let latestPayload: unknown = wakeEvent.payload
@@ -194,6 +197,10 @@ function getTriggerMessageText(
   }
 
   if (wakeEvent.type === `wake` && typeof wakeEvent.source === `string`) {
+    if (hydratedEventSourceWake) {
+      return asMessageText(hydratedEventSourceWake)
+    }
+
     const cronPayload = getCronScheduleTriggerPayload(db, wakeEvent.source)
     if (cronPayload !== undefined) {
       return asMessageText(cronPayload)
@@ -337,7 +344,8 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         config.db,
         config.wakeEvent,
         config.events,
-        config.wakeOffset
+        config.wakeOffset,
+        config.hydratedEventSourceWake
       )
       const effectiveInput = input ?? messageText
 
@@ -372,7 +380,9 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
 
         const latestMessageRole = messages.at(-1)?.role
         const runInput =
-          input !== undefined || latestMessageRole !== `user`
+          input !== undefined ||
+          config.hydratedEventSourceWake != null ||
+          latestMessageRole !== `user`
             ? effectiveInput
             : undefined
 
