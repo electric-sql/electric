@@ -249,8 +249,31 @@ export function MessageInput({
             ref={textareaRef}
             value={value}
             onChange={(e) => setValue(e.target.value)}
+            // Tell mobile virtual keyboards that Enter means "send" so the
+            // GBoard / iOS keyboard surfaces a send-shaped action key and
+            // — critically on Android Chrome — fires `keydown` with
+            // `key === 'Enter'` reliably. Without this hint the soft
+            // keyboard's return key inside a textarea inserts a newline
+            // and may fire `key === 'Unidentified'` / `keyCode === 229`.
+            enterKeyHint="send"
             onKeyDown={(e) => {
-              if (e.key === `Enter` && !e.shiftKey) {
+              if (e.key !== `Enter` || e.shiftKey) return
+              // Don't submit while an IME composition is in progress —
+              // Enter is committing the candidate, not sending. Android
+              // Chrome reports composing as `keyCode === 229` rather than
+              // setting `isComposing`, so check both.
+              if (e.nativeEvent.isComposing || e.keyCode === 229) return
+              e.preventDefault()
+              handleSubmit()
+            }}
+            // Fallback for soft keyboards (notably Android Chrome / GBoard)
+            // that route the return key through `beforeinput` as an
+            // `insertLineBreak` without firing a `keydown` we can match
+            // on `key === 'Enter'`.
+            onBeforeInput={(e) => {
+              if (
+                (e.nativeEvent as InputEvent).inputType === `insertLineBreak`
+              ) {
                 e.preventDefault()
                 handleSubmit()
               }
@@ -265,6 +288,16 @@ export function MessageInput({
             type="button"
             aria-label={showStop ? `Stop generating` : `Send message`}
             title={showStop ? `Stop generating` : `Send message`}
+            // Keep the textarea focused when the user taps Send on a
+            // touch device. Without this, tapping the button blurs the
+            // textarea, dismisses the on-screen keyboard, and the
+            // viewport reflows between pointerdown and pointerup — the
+            // resulting `click` lands on a different element and the
+            // send never fires. `preventDefault` here skips the implicit
+            // focus transfer; the `click` still dispatches normally.
+            onPointerDown={(e) => {
+              if (e.pointerType !== `mouse`) e.preventDefault()
+            }}
             onClick={handleComposerAction}
             disabled={showStop ? stopPending : !isButtonActive}
             className={[
