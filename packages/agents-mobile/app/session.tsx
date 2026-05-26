@@ -12,6 +12,7 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAgents } from '../src/lib/AgentsProvider'
+import { useAgentsRouteGuard } from '../src/lib/useAgentsRouteGuard'
 import { useColorSchemeMode, useTokens } from '../src/lib/ThemeProvider'
 import {
   CHAT_COMPOSER_BASE_HEIGHT,
@@ -46,12 +47,27 @@ const SessionChatLogDomEmbed =
 const SessionStateInspectorDomEmbed =
   SessionStateInspectorDomEmbedModule as ComponentType<SessionDomEmbedProps>
 
-export default function SessionRoute(): React.ReactElement {
+export default function SessionRoute(): React.ReactElement | null {
   const params = useLocalSearchParams<{
     entityUrl?: string
     view?: EmbedViewId
   }>()
   const router = useRouter()
+  const guard = useAgentsRouteGuard()
+  if (guard) return guard
+  return <SessionRouteInner params={params} router={router} />
+}
+
+function SessionRouteInner({
+  params,
+  router,
+}: {
+  params: {
+    entityUrl?: string | Array<string>
+    view?: EmbedViewId
+  }
+  router: ReturnType<typeof useRouter>
+}): React.ReactElement {
   const { serverUrl } = useAgents()
   const tokens = useTokens()
   const scheme = useColorSchemeMode()

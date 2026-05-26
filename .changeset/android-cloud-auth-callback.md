@@ -37,4 +37,15 @@ to the welcome screen. Multiple layers had to be hardened:
   instead of `router.replace` inside an effect — the effect-based
   version raced with Expo Router's own intent handling in dev
   builds, leaving the route stuck on the spinner even though
-  sign-in had succeeded.
+  sign-in had succeeded. The redirect destination also takes the
+  user's onboarding / server state into account so a first-time
+  signer-in goes back to `/onboarding` to finish the wizard
+  instead of being bounced through `/` (where `SessionListScreen`
+  would crash on `useAgents` because `AgentsProvider` isn't
+  mounted yet).
+* Routes that call `useAgents()` (`/`, `/session`, `/new-session`,
+  `/diagnostics`) now go through a `useAgentsRouteGuard` helper
+  that emits a `<Redirect>` to `/onboarding` / `/server-setup` when
+  the user hasn't finished setup yet, so transient mounts during
+  redirect chains can't render those screens before the root
+  layout's own redirects catch up.
