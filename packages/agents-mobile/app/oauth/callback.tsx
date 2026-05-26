@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as Linking from 'expo-linking'
-import { useLocalSearchParams, useRouter } from 'expo-router'
+import { Redirect, useLocalSearchParams } from 'expo-router'
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
 import {
   cloudAuth,
@@ -14,25 +14,33 @@ import type { Tokens } from '../../src/lib/theme'
 /**
  * Landing route for `electric-agents://oauth/callback?...` deep links.
  *
- * As of the fix for #4416 the deep link is also consumed at the app
- * level by `CloudAuthProvider`'s global listener — that's the path
- * that actually drives the state machine. This route exists so that:
+ * The cloud-auth state machine is the single source of truth; this
+ * route just renders the right thing while it's in flight and bails
+ * to a real screen the moment it resolves.
  *
- *   1. Expo Router has a real screen to render for the redirect
- *      pathname instead of falling through to "Unmatched Route" on
- *      cold start.
- *   2. We can show the user a sensible loading / error state and
- *      navigate them somewhere useful once the singleton settles.
+ * Three things drive the state machine here:
  *
- * We **subscribe to `cloudAuth` state** rather than processing the URL
- * ourselves, so the global listener (and `signIn`'s own callback
- * handling) remain the single source of truth. We also call
- * `handleDeepLink` defensively in case neither has had a chance to
- * fire yet (e.g. extremely fast cold start where the route mounted
- * before the provider's effect ran).
+ *   1. `signIn()`'s own success path (when `WebBrowser` returns the
+ *      URL directly).
+ *   2. The global `Linking.addEventListener` set up by
+ *      `CloudAuthProvider` (warm starts where the OS hands the URL to
+ *      the live JS context).
+ *   3. This route's defensive `handleDeepLink` calls below (cold
+ *      starts where the app was relaunched onto `/oauth/callback`
+ *      before either of the other two listeners could attach).
+ *
+ * `cloudAuth.completeCallbackUrl` deduplicates them via
+ * `completingUrl` so it doesn't matter which gets there first — at
+ * most one consumes the pending request, the rest no-op.
+ *
+ * Navigation away from here uses `<Redirect>` (rendered during the
+ * render phase) instead of `router.replace` in an effect, because
+ * `useEffect`-driven navigation is too easy to race with Expo
+ * Router's own intent handling: in dev mode we saw the route mount,
+ * status flip to `signed-in`, the effect fire, and then nothing —
+ * the route was already torn down before `router.replace` finished
+ * scheduling.
  */
-
-const STATUS_TIMEOUT_MS = 15000
 
 type RouteStatus =
   | { kind: `working` }
@@ -40,50 +48,47 @@ type RouteStatus =
   | { kind: `error`; message: string }
 
 export default function OAuthCallbackRoute(): React.ReactElement {
-  const router = useRouter()
   const params = useLocalSearchParams()
   const tokens = useTokens()
   const styles = useMemo(() => createStyles(tokens), [tokens])
-  const navigatedRef = useRef(false)
-  const [status, setStatus] = useState<RouteStatus>(() =>
-    deriveStatus(cloudAuth.getState())
-  )
 
   const token = pickParam(params.token)
   const stateParam = pickParam(params.state)
   const email = pickParam(params.email)
   const expiresAt = pickParam(params.expiresAt)
 
-  // Subscribe to the singleton so we can react to the global listener
-  // / signIn() finishing the flow without re-running our own copy of
-  // it.
+  const [status, setStatus] = useState<RouteStatus>(() =>
+    deriveStatus(cloudAuth.getState())
+  )
+
   useEffect(() => {
+    // Sync once on mount in case the state changed between the
+    // `useState` initializer and this effect attaching (very narrow
+    // window but happens in practice when `signIn`'s success path
+    // resolves synchronously after Expo Router navigated us here).
+    setStatus(deriveStatus(cloudAuth.getState()))
     const unsubscribe = cloudAuth.subscribe((next) => {
       setStatus(deriveStatus(next))
     })
     return unsubscribe
   }, [])
 
-  // Defensive: feed any URL we have access to into the singleton so
-  // the cold-start case (route mounts with the params present before
-  // either the global listener or signIn() has run) still completes.
-  // `handleDeepLink` is idempotent — if another handler beat us to it
-  // this is a no-op.
+  // Feed any URL we can find into the singleton. Idempotent — if
+  // another handler beat us to it `handleDeepLink` is a no-op.
+  const dispatchedRef = useRef(false)
   useEffect(() => {
+    if (dispatchedRef.current) return
     const callbackUrl = buildCallbackUrl(token, stateParam, email, expiresAt)
     if (callbackUrl) {
+      dispatchedRef.current = true
       void cloudAuth.handleDeepLink(callbackUrl)
-      return
     }
+  }, [token, stateParam, email, expiresAt])
 
-    // No params on this render (common on cold start before Expo
-    // Router has hydrated query params). Listen for the URL directly
-    // and pull the initial URL off the activity intent.
-    const subscription = Linking.addEventListener(`url`, ({ url }) => {
-      if (isCallbackUrl(url)) {
-        void cloudAuth.handleDeepLink(url)
-      }
-    })
+  useEffect(() => {
+    // Cold-start safety net: also pull the URL off the activity
+    // intent and listen for any URL events that fire while we're
+    // mounted.
     void Linking.getInitialURL()
       .then((url) => {
         if (url && isCallbackUrl(url)) {
@@ -91,53 +96,33 @@ export default function OAuthCallbackRoute(): React.ReactElement {
         }
       })
       .catch(() => {
-        // Ignored — the listener (and CloudAuthProvider's own copy)
-        // will still get a shot at it.
+        // ignored — the listener / global handler still get a shot.
       })
+    const subscription = Linking.addEventListener(`url`, ({ url }) => {
+      if (isCallbackUrl(url)) {
+        void cloudAuth.handleDeepLink(url)
+      }
+    })
     return () => subscription.remove()
-  }, [email, expiresAt, stateParam, token])
+  }, [])
 
-  // Once the singleton resolves, send the user to a useful screen.
-  // We never bail on a timer just for the URL not arriving — that's
-  // what produced the earlier "back to welcome with no sign-in"
-  // regression. The only timeout left covers a true wedge (something
-  // crashed mid-flight) and surfaces it as an error so the user can
-  // retry instead of being silently bounced.
-  useEffect(() => {
-    if (navigatedRef.current) return
-    if (status.kind === `signed-in`) {
-      navigatedRef.current = true
-      router.replace(`/`)
-      return
-    }
-    if (status.kind === `error`) {
-      navigatedRef.current = true
-      // Drop the user back at onboarding so the welcome screen can
-      // render the error in its red banner. They can immediately
-      // retry from there.
-      router.replace(`/onboarding`)
-      return
-    }
-    const timeout = setTimeout(() => {
-      if (navigatedRef.current) return
-      console.warn(`[agents-mobile] cloud-auth callback wedged; bailing`)
-      navigatedRef.current = true
-      router.replace(`/onboarding`)
-    }, STATUS_TIMEOUT_MS)
-    return () => clearTimeout(timeout)
-  }, [router, status])
-
-  const message =
-    status.kind === `error`
-      ? status.message
-      : status.kind === `signed-in`
-        ? `Signed in. Returning to the app…`
-        : `Finishing sign-in…`
+  // Render-phase navigation. `<Redirect>` is processed by Expo
+  // Router's render tree directly, which sidesteps the effect-timing
+  // issues we hit with `router.replace` (route would tear down before
+  // the replace landed).
+  if (status.kind === `signed-in`) {
+    return <Redirect href="/" />
+  }
+  if (status.kind === `error`) {
+    // Drop the user back at onboarding so the welcome screen's error
+    // banner renders the message and they can immediately retry.
+    return <Redirect href="/onboarding" />
+  }
 
   return (
     <View style={styles.root}>
-      {status.kind !== `error` && <ActivityIndicator color={tokens.accent11} />}
-      <Text style={styles.text}>{message}</Text>
+      <ActivityIndicator color={tokens.accent11} />
+      <Text style={styles.text}>Finishing sign-in…</Text>
     </View>
   )
 }
