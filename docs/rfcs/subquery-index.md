@@ -252,12 +252,20 @@ For a pure move-out batch (no move-in values, so no PG query is needed) the cons
 
 ### Concurrency model
 
-Reads and writes to the MultiTimeView and SubqueryIndex ETS tables will mostly not be concurrent:
-- add_shape and remove_shape will happen on the ShapeLogCollector process
-- add_value and remove_value will happen while the ShapeLogCollector process is blocked so acts as if it were on the ShapeLogCollector process (ShapeLogCollector calls the Consumer which calls the Materializer which calls the SubqueryIndex to add/remove values, all synchronously)
-- a Materializer seeding a subquery will happen when the Materializer is ready (so asynchronously to the ShapeLogCollector process) but will then call mark_ready on the SubqueryIndex which is an atomic process
-- read of MultiTimeView may happen async by a consumer, but will be a read at a specific logical time so concurrency should not be an issue
-- the minimum in-flight logical time for a subquery will be updated by the SubqueryProgressMonitor async, but this will just update a single number, so concurrency should not be an issue
+Reads and writes to the MultiTimeView and SubqueryIndex ETS tables are either serialized through the ShapeLogCollector (SLC) or async with a clear safety argument:
+
+- `add_shape` and `remove_shape` run on the SLC process — the filter mutations themselves happen there. The consumer calls into SLC synchronously, so the consumer is blocked.
+- First-child seeding from MTV happens on SLC when `add_shape` creates a new child node. SLC reads `values(subquery_id, current_time)` from the MTV ETS table directly. The child must not be exposed to routing until the seed completes, so no concurrent reader can observe a partial state.
+- `add_value` and `remove_value` happen while SLC is blocked (SLC → Consumer → Materializer → SubqueryIndex, all synchronous), so they act as if on SLC.
+- Initial Materializer population of a new subquery runs async to SLC. It is safe because `ready?(subquery_id)` is false throughout and nothing routes through the subquery until `mark_ready` runs.
+- First-child seeding when MTV is not yet ready: the child stays in fallback routing until MTV becomes ready and the materializer triggers the deferred seed. Safe for the same reason as initial population — nothing routes through the child until the seed completes.
+- `mark_ready(subquery_id)` is a single atomic ETS write that flips the ready flag.
+- Reads of MultiTimeView from consumers (`member?`, `values`) happen async to SLC but are always at a specific logical time. Concurrent writes by the materializer can only affect newer times (logical time is monotonically increasing), and compaction can only affect times below `min_required_time` which no consumer can read.
+- The SubqueryProgressMonitor sets `min_required_time` on MTV async, but this is a single-integer update per subquery.
+- Periodic compaction runs async. It only removes transitions at or before `min_required_time`, so by construction it cannot change membership at any time a consumer can still read.
+- Opportunistic compaction runs on whichever process is doing the read or write. The same `min_required_time` bound applies, so it is safe for the same reason as periodic compaction.
+- `remove_subquery` runs async, driven by the dependency shape lifecycle. It is safe because dependent consumers and their child nodes are removed first; once routing through that subquery is gone, no other process reads the rows it deletes.
+- Consumer death releases pinned times via process monitor, async. The released time can only raise `min_required_time`; concurrent compaction sees the new minimum the next time it runs.
 
 ## Operations
 
