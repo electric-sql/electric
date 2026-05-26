@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import * as Linking from 'expo-linking'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
 import { CLOUD_AUTH_REDIRECT_URI, cloudAuth } from '../../src/lib/cloudAuth'
@@ -15,26 +16,28 @@ export default function OAuthCallbackRoute(): React.ReactElement {
   const styles = useMemo(() => createStyles(tokens), [tokens])
   const completedRef = useRef(false)
   const [message, setMessage] = useState(`Finishing sign-in...`)
+  const token = getParam(params.token)
+  const state = getParam(params.state)
+  const email = getParam(params.email)
+  const expiresAt = getParam(params.expiresAt)
 
   useEffect(() => {
     if (completedRef.current) return
-    completedRef.current = true
 
     let cancelled = false
     let timeout: ReturnType<typeof setTimeout> | null = null
+    let subscription: { remove: () => void } | null = null
 
     const finish = () => {
       if (timeout) clearTimeout(timeout)
+      if (subscription) subscription.remove()
       if (!cancelled) router.replace(`/`)
     }
 
-    try {
-      const callbackUrl = buildCallbackUrl(params)
-      if (!callbackUrl) {
-        finish()
-        return
-      }
-
+    const complete = (callbackUrl: string) => {
+      if (completedRef.current) return
+      completedRef.current = true
+      if (timeout) clearTimeout(timeout)
       timeout = setTimeout(() => {
         console.warn(`[agents-mobile] cloud-auth callback timed out`)
         setMessage(`Taking longer than expected...`)
@@ -47,6 +50,38 @@ export default function OAuthCallbackRoute(): React.ReactElement {
           console.warn(`[agents-mobile] cloud-auth callback failed:`, err)
         })
         .finally(finish)
+    }
+
+    try {
+      const callbackUrl = buildCallbackUrl(token, state, email, expiresAt)
+      if (callbackUrl) {
+        complete(callbackUrl)
+      } else {
+        subscription = Linking.addEventListener(`url`, ({ url }) => {
+          if (url.startsWith(CLOUD_AUTH_REDIRECT_URI)) {
+            complete(url)
+          }
+        })
+
+        void Linking.getInitialURL()
+          .then((url) => {
+            if (!url || cancelled || completedRef.current) return
+            if (url.startsWith(CLOUD_AUTH_REDIRECT_URI)) {
+              complete(url)
+            }
+          })
+          .catch((err) => {
+            console.warn(`[agents-mobile] cloud-auth initial URL failed:`, err)
+          })
+
+        timeout = setTimeout(() => {
+          console.warn(
+            `[agents-mobile] cloud-auth callback URL was not received`
+          )
+          setMessage(`Taking longer than expected...`)
+          finish()
+        }, CALLBACK_TIMEOUT_MS)
+      }
     } catch (err) {
       console.warn(`[agents-mobile] cloud-auth callback route failed:`, err)
       finish()
@@ -55,8 +90,9 @@ export default function OAuthCallbackRoute(): React.ReactElement {
     return () => {
       cancelled = true
       if (timeout) clearTimeout(timeout)
+      if (subscription) subscription.remove()
     }
-  }, [params, router])
+  }, [email, expiresAt, router, state, token])
 
   return (
     <View style={styles.root}>
@@ -66,11 +102,12 @@ export default function OAuthCallbackRoute(): React.ReactElement {
   )
 }
 
-function buildCallbackUrl(params: ReturnType<typeof useLocalSearchParams>) {
-  const token = getParam(params.token)
-  const state = getParam(params.state)
-  const email = getParam(params.email)
-  const expiresAt = getParam(params.expiresAt)
+function buildCallbackUrl(
+  token: string | null,
+  state: string | null,
+  email: string | null,
+  expiresAt: string | null
+) {
   if (!token || !state || !email || !expiresAt) return null
 
   return (
