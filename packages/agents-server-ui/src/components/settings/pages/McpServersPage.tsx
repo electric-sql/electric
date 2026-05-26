@@ -6,7 +6,14 @@ import {
 } from '../../../hooks/useMcpServersIpc'
 import type { McpServerRow, McpStatus } from '../../../hooks/mcpServerTypes'
 import { Badge, Button, Text } from '../../../ui'
-import { SettingsRow, SettingsScreen, SettingsSection } from '../SettingsScreen'
+import {
+  SettingsActions,
+  SettingsInset,
+  SettingsPanel,
+  SettingsRow,
+  SettingsScreen,
+  SettingsSection,
+} from '../SettingsScreen'
 
 const STATUS_TONES: Record<
   McpStatus,
@@ -38,11 +45,11 @@ export function McpServersPage(): React.ReactElement {
           title="About"
           description="MCP server management is part of the desktop app. The web build connects to a remote agents-server instead."
         >
-          <div style={{ padding: `16px` }}>
+          <SettingsPanel>
             <Text size={2} tone="muted">
               Run Electric Agents on your machine to manage MCP servers here.
             </Text>
-          </div>
+          </SettingsPanel>
         </SettingsSection>
       </SettingsScreen>
     )
@@ -52,22 +59,22 @@ export function McpServersPage(): React.ReactElement {
     <SettingsScreen title="MCP Servers">
       {ipc.loading ? (
         <SettingsSection title="Loading">
-          <div style={{ padding: `16px` }}>
+          <SettingsPanel>
             <Text size={2} tone="muted">
               Connecting to runtime…
             </Text>
-          </div>
+          </SettingsPanel>
         </SettingsSection>
       ) : ipc.servers.length === 0 ? (
         <SettingsSection
           title="No servers"
           description="MCP servers declared in mcp.json will appear here once the runtime starts."
         >
-          <div style={{ padding: `16px` }}>
+          <SettingsPanel>
             <Text size={2} tone="muted">
               No MCP servers registered.
             </Text>
-          </div>
+          </SettingsPanel>
         </SettingsSection>
       ) : (
         <SettingsSection
@@ -132,7 +139,7 @@ function ServerEntry({
       />
 
       {/* Status-line slot — always rendered so row height stays stable. */}
-      <div style={{ padding: `0 16px 12px` }}>
+      <SettingsInset>
         {server.status === `error` && server.error ? (
           <Text size={1} tone="danger">
             {server.error.kind}: {server.error.message}
@@ -206,16 +213,9 @@ function ServerEntry({
               ))}
             </ul>
           )}
-      </div>
+      </SettingsInset>
 
-      <div
-        style={{
-          display: `flex`,
-          flexWrap: `wrap`,
-          gap: 8,
-          padding: `0 16px 16px`,
-        }}
-      >
+      <SettingsActions>
         {server.status === `disabled` ? (
           <Button
             variant="soft"
@@ -259,7 +259,7 @@ function ServerEntry({
             </Button>
           </>
         )}
-      </div>
+      </SettingsActions>
     </>
   )
 }

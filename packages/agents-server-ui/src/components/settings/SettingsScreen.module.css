@@ -172,6 +172,11 @@
   flex-shrink: 0;
 }
 
+.sectionAction[data-align='description'] {
+  margin-left: 12px;
+  padding-top: 24px;
+}
+
 .sectionDescription {
   margin: 0;
   font-size: var(--ds-text-sm);
@@ -184,6 +189,33 @@
   border-radius: var(--ds-radius-3);
   background: color-mix(in oklab, var(--ds-surface-raised) 35%, var(--ds-bg));
   overflow: hidden;
+}
+
+.panel {
+  padding: 12px 16px;
+}
+
+.inset {
+  padding: 0 16px 12px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--ds-space-2);
+  padding: 0 16px 16px;
+}
+
+.actions[data-separator='true'] {
+  padding-top: 12px;
+  border-top: 1px solid var(--ds-border-1);
+}
+
+.actions:first-child,
+.actions[data-separator='true']:first-child {
+  padding-top: 12px;
+  border-top: 0;
 }
 
 /* Stacked rows inside a section — labelled left, control on the
@@ -214,6 +246,16 @@
   min-width: 44%;
 }
 
+.row[data-layout='stacked'] {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.row[data-layout='stacked'] .rowText {
+  width: 100%;
+}
+
 .rowLabel {
   font-size: var(--ds-text-sm);
   color: var(--ds-text-1);
@@ -238,6 +280,12 @@
 
 .row[data-layout='split'] .rowControl {
   flex: 1 1 56%;
+}
+
+.row[data-layout='stacked'] .rowControl {
+  width: 100%;
+  justify-content: stretch;
+  text-align: left;
 }
 
 .rowControl > * {

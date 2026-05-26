@@ -6,7 +6,11 @@ import {
   type ApiKeysStatus,
 } from '../../../lib/server-connection'
 import { Text } from '../../../ui'
-import { SettingsScreen, SettingsSection } from '../SettingsScreen'
+import {
+  SettingsPanel,
+  SettingsScreen,
+  SettingsSection,
+} from '../SettingsScreen'
 
 export function CredentialsPage(): React.ReactElement {
   const isDesktop = typeof window !== `undefined` && Boolean(window.electronAPI)
@@ -36,53 +40,52 @@ export function CredentialsPage(): React.ReactElement {
         }
       >
         {!isDesktop ? (
-          <div style={{ padding: `16px` }}>
+          <SettingsPanel>
             <Text size={2} tone="muted">
               No editable provider keys in the web build.
             </Text>
-          </div>
+          </SettingsPanel>
         ) : !status ? (
-          <div style={{ padding: `16px` }}>
+          <SettingsPanel>
             <Text size={2} tone="muted">
               Loading…
             </Text>
-          </div>
+          </SettingsPanel>
         ) : (
-          <div style={{ padding: `16px` }}>
-            <ApiKeysForm
-              key={savedAt ?? `initial`}
-              initial={{
-                anthropic:
-                  status.saved.anthropic ?? status.suggested.anthropic ?? ``,
-                openai: status.saved.openai ?? status.suggested.openai ?? ``,
-                deepseek:
-                  status.saved.deepseek ?? status.suggested.deepseek ?? ``,
-                brave: status.saved.brave ?? status.suggested.brave ?? ``,
-              }}
-              showSuggestionHint={
-                !status.hasAnyKey &&
-                Boolean(
-                  status.suggested.anthropic ||
-                    status.suggested.openai ||
-                    status.suggested.deepseek ||
-                    status.suggested.brave
-                )
-              }
-              onSave={async ({ anthropic, openai, deepseek, brave }) => {
-                await persistApiKeys({
-                  anthropic: anthropic.trim() || null,
-                  openai: openai.trim() || null,
-                  deepseek: deepseek.trim() || null,
-                  brave: brave.trim() || null,
-                })
-                const next = await loadApiKeysStatus()
-                if (next) setStatus(next)
-                setSavedAt(Date.now())
-              }}
-              saveLabel="Save changes"
-              savingLabel="Saving…"
-            />
-          </div>
+          <ApiKeysForm
+            key={savedAt ?? `initial`}
+            layout="settings"
+            initial={{
+              anthropic:
+                status.saved.anthropic ?? status.suggested.anthropic ?? ``,
+              openai: status.saved.openai ?? status.suggested.openai ?? ``,
+              deepseek:
+                status.saved.deepseek ?? status.suggested.deepseek ?? ``,
+              brave: status.saved.brave ?? status.suggested.brave ?? ``,
+            }}
+            showSuggestionHint={
+              !status.hasAnyKey &&
+              Boolean(
+                status.suggested.anthropic ||
+                  status.suggested.openai ||
+                  status.suggested.deepseek ||
+                  status.suggested.brave
+              )
+            }
+            onSave={async ({ anthropic, openai, deepseek, brave }) => {
+              await persistApiKeys({
+                anthropic: anthropic.trim() || null,
+                openai: openai.trim() || null,
+                deepseek: deepseek.trim() || null,
+                brave: brave.trim() || null,
+              })
+              const next = await loadApiKeysStatus()
+              if (next) setStatus(next)
+              setSavedAt(Date.now())
+            }}
+            saveLabel="Save changes"
+            savingLabel="Saving…"
+          />
         )}
       </SettingsSection>
     </SettingsScreen>

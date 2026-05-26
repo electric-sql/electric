@@ -84,11 +84,13 @@ export function SettingsSection({
   title,
   description,
   action,
+  actionAlign = `title`,
   children,
 }: {
   title: string
   description?: ReactNode
   action?: ReactNode
+  actionAlign?: `title` | `description`
   children?: ReactNode
 }): React.ReactElement {
   return (
@@ -100,11 +102,48 @@ export function SettingsSection({
             <p className={styles.sectionDescription}>{description}</p>
           )}
         </div>
-        {action && <div className={styles.sectionAction}>{action}</div>}
+        {action && (
+          <div className={styles.sectionAction} data-align={actionAlign}>
+            {action}
+          </div>
+        )}
       </header>
       {children && <div className={styles.sectionBody}>{children}</div>}
     </section>
   )
+}
+
+export function SettingsPanel({
+  children,
+}: {
+  children: ReactNode
+}): React.ReactElement {
+  return <div className={styles.panel}>{children}</div>
+}
+
+export function SettingsActions({
+  children,
+  separator = false,
+}: {
+  children: ReactNode
+  separator?: boolean
+}): React.ReactElement {
+  return (
+    <div
+      className={styles.actions}
+      data-separator={separator ? `true` : undefined}
+    >
+      {children}
+    </div>
+  )
+}
+
+export function SettingsInset({
+  children,
+}: {
+  children: ReactNode
+}): React.ReactElement {
+  return <div className={styles.inset}>{children}</div>
 }
 
 /**
@@ -117,15 +156,19 @@ export function SettingsRow({
   control,
   wrapControlValue,
   splitLayout,
+  stackedControl,
 }: {
   label: ReactNode
   description?: ReactNode
   control: ReactNode
   wrapControlValue?: boolean
   splitLayout?: boolean
+  stackedControl?: boolean
 }): React.ReactElement {
+  const layout = stackedControl ? `stacked` : splitLayout ? `split` : undefined
+
   return (
-    <div className={styles.row} data-layout={splitLayout ? `split` : undefined}>
+    <div className={styles.row} data-layout={layout}>
       <div className={styles.rowText}>
         <span className={styles.rowLabel}>{label}</span>
         {description && (

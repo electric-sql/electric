@@ -9,9 +9,14 @@ import {
   Trash2,
   UserCircle,
 } from 'lucide-react'
-import { Button, ConfirmDialog, Icon, Stack, Text } from '../../../ui'
+import { Button, ConfirmDialog, Icon, Text } from '../../../ui'
 import { clearAllLocalData } from '../../../lib/server-connection'
-import { SettingsRow, SettingsScreen, SettingsSection } from '../SettingsScreen'
+import {
+  SettingsPanel,
+  SettingsRow,
+  SettingsScreen,
+  SettingsSection,
+} from '../SettingsScreen'
 import type { SettingsCategoryId } from '../SettingsSidebar'
 
 /**
@@ -115,33 +120,33 @@ export function GeneralPage(): React.ReactElement {
           title="Reset"
           description="Reset this desktop app back to first-run setup."
         >
-          <Stack direction="column" gap={3} style={{ padding: `16px` }}>
-            <SettingsRow
-              label="Clear all local data"
-              description={
-                isDesktop
-                  ? `Deletes saved settings, API keys, server connections, and sign-in state. The app will restart into onboarding.`
-                  : `Only available in the desktop app.`
-              }
-              control={
-                <Button
-                  variant="soft"
-                  tone="danger"
-                  size={2}
-                  disabled={!isDesktop || isClearing}
-                  onClick={() => setShowResetConfirm(true)}
-                >
-                  <Icon icon={Trash2} size={2} />
-                  {isClearing ? `Restarting…` : `Clear all local data`}
-                </Button>
-              }
-            />
-            {error && (
+          <SettingsRow
+            label="Clear all local data"
+            description={
+              isDesktop
+                ? `Deletes saved settings, API keys, server connections, and sign-in state. The app will restart into onboarding.`
+                : `Only available in the desktop app.`
+            }
+            control={
+              <Button
+                variant="soft"
+                tone="danger"
+                size={2}
+                disabled={!isDesktop || isClearing}
+                onClick={() => setShowResetConfirm(true)}
+              >
+                <Icon icon={Trash2} size={2} />
+                {isClearing ? `Restarting…` : `Clear all local data`}
+              </Button>
+            }
+          />
+          {error && (
+            <SettingsPanel>
               <Text size={2} tone="danger">
                 {error}
               </Text>
-            )}
-          </Stack>
+            </SettingsPanel>
+          )}
         </SettingsSection>
       </SettingsScreen>
 

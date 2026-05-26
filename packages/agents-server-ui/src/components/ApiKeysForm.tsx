@@ -1,6 +1,11 @@
 import { useCallback, useState } from 'react'
 import { Eye, EyeOff, Sparkles } from 'lucide-react'
 import { Button, Field, Icon, IconButton, Input, Stack, Text } from '../ui'
+import {
+  SettingsActions,
+  SettingsPanel,
+  SettingsRow,
+} from './settings/SettingsScreen'
 import styles from './ApiKeysForm.module.css'
 
 export type ApiKeysFormValues = {
@@ -31,6 +36,8 @@ interface ApiKeysFormProps {
   savingLabel?: string
   /** Auto-focus the Anthropic field on mount. Defaults to `false`. */
   autoFocus?: boolean
+  /** Use Settings rows instead of the compact onboarding form layout. */
+  layout?: `form` | `settings`
 }
 
 /**
@@ -55,6 +62,7 @@ export function ApiKeysForm({
   saveLabel = `Save`,
   savingLabel = `Saving…`,
   autoFocus = false,
+  layout = `form`,
 }: ApiKeysFormProps): React.ReactElement {
   const [anthropic, setAnthropic] = useState(initial.anthropic)
   const [openai, setOpenai] = useState(initial.openai)
@@ -92,6 +100,100 @@ export function ApiKeysForm({
   const toggleVisible = useCallback((field: ApiKeyFieldId) => {
     setVisibleKeys((current) => ({ ...current, [field]: !current[field] }))
   }, [])
+
+  if (layout === `settings`) {
+    return (
+      <form onSubmit={handleSubmit} className={styles.settingsForm}>
+        {showSuggestionHint && (
+          <SettingsPanel>
+            <div className={styles.hint}>
+              <Icon icon={Sparkles} size={2} />
+              <Text size={1} tone="muted">
+                Pre-filled from your environment. Click save to persist them.
+              </Text>
+            </div>
+          </SettingsPanel>
+        )}
+        <SettingsRow
+          label="Anthropic API key"
+          description="Used for Claude models. Looks like sk-ant-…"
+          stackedControl
+          control={
+            <ApiKeyInput
+              field="anthropic"
+              placeholder="sk-ant-…"
+              value={anthropic}
+              visible={visibleKeys.anthropic}
+              onChange={setAnthropic}
+              onToggleVisible={toggleVisible}
+              autoFocus={autoFocus}
+            />
+          }
+        />
+        <SettingsRow
+          label="OpenAI API key"
+          description="Used for GPT models. Looks like sk-…"
+          stackedControl
+          control={
+            <ApiKeyInput
+              field="openai"
+              placeholder="sk-…"
+              value={openai}
+              visible={visibleKeys.openai}
+              onChange={setOpenai}
+              onToggleVisible={toggleVisible}
+            />
+          }
+        />
+        <SettingsRow
+          label="DeepSeek API key"
+          description="Used for DeepSeek models. Looks like sk-…"
+          stackedControl
+          control={
+            <ApiKeyInput
+              field="deepseek"
+              placeholder="sk-…"
+              value={deepseek}
+              visible={visibleKeys.deepseek}
+              onChange={setDeepseek}
+              onToggleVisible={toggleVisible}
+            />
+          }
+        />
+        <SettingsRow
+          label="Brave Search API key"
+          description="Powers the web-search tool. Without it, search falls back to Anthropic's built-in search."
+          stackedControl
+          control={
+            <ApiKeyInput
+              field="brave"
+              placeholder="BSA…"
+              value={brave}
+              visible={visibleKeys.brave}
+              onChange={setBrave}
+              onToggleVisible={toggleVisible}
+            />
+          }
+        />
+        <SettingsActions separator>
+          {onSecondary && secondaryLabel && (
+            <Button
+              type="button"
+              variant="soft"
+              tone="neutral"
+              onClick={onSecondary}
+              disabled={saving}
+            >
+              {secondaryLabel}
+            </Button>
+          )}
+          <Button type="submit" disabled={!canSave || saving}>
+            {saving ? savingLabel : saveLabel}
+          </Button>
+        </SettingsActions>
+      </form>
+    )
+  }
 
   return (
     <form onSubmit={handleSubmit} className={styles.form}>

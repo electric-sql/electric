@@ -29,7 +29,14 @@ import {
   Text,
   Tooltip,
 } from '../../../ui'
-import { SettingsRow, SettingsScreen, SettingsSection } from '../SettingsScreen'
+import {
+  SettingsActions,
+  SettingsInset,
+  SettingsPanel,
+  SettingsRow,
+  SettingsScreen,
+  SettingsSection,
+} from '../SettingsScreen'
 import {
   cloudOpenCreateAgentsServer,
   prepareCloudAgentServerConnection,
@@ -122,21 +129,21 @@ export function ServersPage(): React.ReactElement {
           }
         >
           {cloudDescription && (
-            <div style={{ padding: `8px 16px 0` }}>
+            <SettingsPanel>
               <Text
                 size={1}
                 tone={cloudState?.status === `error` ? `danger` : `muted`}
               >
                 {cloudDescription}
               </Text>
-            </div>
+            </SettingsPanel>
           )}
           {servers.length === 0 ? (
-            <div style={{ padding: 16 }}>
+            <SettingsPanel>
               <Text size={2} tone="muted">
                 No servers yet. Add one below or sign in to Electric Cloud.
               </Text>
-            </div>
+            </SettingsPanel>
           ) : (
             servers.map((item) => (
               <ServerRow
@@ -286,7 +293,7 @@ function ServerRow({
         canUseLocalRuntime ||
         item.connection?.runtimeError ||
         item.connection?.lastError) && (
-        <div style={{ padding: `0 16px 12px` }}>
+        <SettingsInset>
           <Stack direction="column" gap={1}>
             {item.url && item.url !== item.description && (
               <Text size={1} tone="muted" family="mono">
@@ -330,17 +337,9 @@ function ServerRow({
               </Text>
             )}
           </Stack>
-        </div>
+        </SettingsInset>
       )}
-      <div
-        style={{
-          display: `flex`,
-          flexWrap: `wrap`,
-          justifyContent: `flex-end`,
-          gap: 8,
-          padding: `0 16px 16px`,
-        }}
-      >
+      <SettingsActions>
         {item.server && (
           <Button
             variant="soft"
@@ -385,7 +384,7 @@ function ServerRow({
             <Icon icon={Trash2} size={2} /> Forget
           </Button>
         )}
-      </div>
+      </SettingsActions>
     </>
   )
 }
@@ -531,7 +530,7 @@ function AddServerForm({
         display: `flex`,
         flexDirection: `column`,
         gap: 16,
-        padding: 16,
+        padding: `12px 16px`,
       }}
     >
       <Stack direction="column" gap={3}>
@@ -552,7 +551,9 @@ function AddServerForm({
             size={2}
           />
         </Field>
-        {isDesktop && (
+      </Stack>
+      <Stack direction="row" align="center" justify="between" gap={3}>
+        {isDesktop ? (
           <label style={{ display: `flex`, gap: 8, alignItems: `center` }}>
             <input
               type="checkbox"
@@ -561,9 +562,9 @@ function AddServerForm({
             />
             <Text size={2}>Start local runtime when connecting</Text>
           </label>
+        ) : (
+          <span />
         )}
-      </Stack>
-      <Stack justify="end">
         <Button type="submit" disabled={!canSubmit}>
           Add and connect
         </Button>

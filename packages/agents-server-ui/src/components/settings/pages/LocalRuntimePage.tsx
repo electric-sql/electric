@@ -18,7 +18,12 @@ import {
 } from '../../../lib/ElectricAgentsProvider'
 import { formatRelativeTime } from '../../../lib/formatTime'
 import { Badge, Button, Icon, Select, Stack, Text } from '../../../ui'
-import { SettingsRow, SettingsScreen, SettingsSection } from '../SettingsScreen'
+import {
+  SettingsPanel,
+  SettingsRow,
+  SettingsScreen,
+  SettingsSection,
+} from '../SettingsScreen'
 import type { ServerConfig } from '../../../lib/types'
 
 const STATUS_TONES: Record<
@@ -269,12 +274,12 @@ export function LocalRuntimePage(): React.ReactElement {
           title="About"
           description="The local runtime is bundled with the Electric Agents desktop app. The web build connects to a remote agents-server instead."
         >
-          <div style={{ padding: `16px` }}>
+          <SettingsPanel>
             <Text size={2} tone="muted">
               Run Electric Agents on your machine to manage the bundled local
               Horton runtime here.
             </Text>
-          </div>
+          </SettingsPanel>
         </SettingsSection>
       </SettingsScreen>
     )
@@ -422,9 +427,9 @@ export function LocalRuntimePage(): React.ReactElement {
       <SettingsSection
         title="Controls"
         description="Restart picks up new API keys or other environment changes; stop frees the port if you'd rather connect to a different server."
-      >
-        <div style={{ padding: `16px` }}>
-          <Stack gap={2}>
+        actionAlign="description"
+        action={
+          <Stack direction="row" gap={2}>
             {canStart ? (
               <Button
                 variant="solid"
@@ -471,8 +476,8 @@ export function LocalRuntimePage(): React.ReactElement {
               <Icon icon={Square} size={2} /> Stop runtime
             </Button>
           </Stack>
-        </div>
-      </SettingsSection>
+        }
+      />
     </SettingsScreen>
   )
 }

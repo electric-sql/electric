@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react'
 import { ExternalLink, Github, LogOut } from 'lucide-react'
 import { Badge, Button, Icon, Stack, Text } from '../../../ui'
-import { SettingsRow, SettingsScreen, SettingsSection } from '../SettingsScreen'
+import {
+  SettingsActions,
+  SettingsPanel,
+  SettingsRow,
+  SettingsScreen,
+  SettingsSection,
+} from '../SettingsScreen'
 import {
   cloudOpenDashboard,
   cloudSignIn,
@@ -49,12 +55,12 @@ export function AccountPage(): React.ReactElement {
           title="Electric Cloud"
           description="Sign-in is only available in the desktop build of Electric Agents."
         >
-          <div style={{ padding: `16px` }}>
+          <SettingsPanel>
             <Text size={2} tone="muted">
               Open this app in the desktop runtime to sign in to your Electric
               Cloud account.
             </Text>
-          </div>
+          </SettingsPanel>
         </SettingsSection>
       </SettingsScreen>
     )
@@ -76,7 +82,7 @@ export function AccountPage(): React.ReactElement {
         }
       >
         {isSignedIn ? (
-          <Stack direction="column" gap={3} style={{ padding: `16px` }}>
+          <>
             <SettingsRow
               label="Account"
               description={
@@ -118,7 +124,7 @@ export function AccountPage(): React.ReactElement {
                 )
               }
             />
-            <Stack direction="row" gap={2} style={{ marginTop: `8px` }}>
+            <SettingsActions>
               <Button
                 variant="solid"
                 tone="neutral"
@@ -141,48 +147,50 @@ export function AccountPage(): React.ReactElement {
                 <Icon icon={LogOut} size={2} />
                 Sign out
               </Button>
-            </Stack>
-          </Stack>
+            </SettingsActions>
+          </>
         ) : (
-          <Stack direction="column" gap={3} style={{ padding: `16px` }}>
-            {state?.error && (
-              <Text size={2} tone="danger">
-                {state.error}
-              </Text>
-            )}
-            <Stack direction="row" gap={2}>
-              <Button
-                variant="solid"
-                tone="neutral"
-                size={2}
-                disabled={isBusy}
-                onClick={() => {
-                  void cloudSignIn(`github`)
-                }}
-              >
-                <Icon icon={Github} size={2} />
-                Sign in with GitHub
-              </Button>
-              <Button
-                variant="soft"
-                tone="neutral"
-                size={2}
-                disabled={isBusy}
-                onClick={() => {
-                  void cloudSignIn(`google`)
-                }}
-              >
-                Sign in with Google
-              </Button>
-            </Stack>
-            <Text size={1} tone="muted">
-              Opens a sign-in window pointed at{` `}
+          <SettingsPanel>
+            <Stack direction="column" gap={3}>
+              {state?.error && (
+                <Text size={2} tone="danger">
+                  {state.error}
+                </Text>
+              )}
+              <Stack direction="row" gap={2}>
+                <Button
+                  variant="solid"
+                  tone="neutral"
+                  size={2}
+                  disabled={isBusy}
+                  onClick={() => {
+                    void cloudSignIn(`github`)
+                  }}
+                >
+                  <Icon icon={Github} size={2} />
+                  Sign in with GitHub
+                </Button>
+                <Button
+                  variant="soft"
+                  tone="neutral"
+                  size={2}
+                  disabled={isBusy}
+                  onClick={() => {
+                    void cloudSignIn(`google`)
+                  }}
+                >
+                  Sign in with Google
+                </Button>
+              </Stack>
               <Text size={1} tone="muted">
-                dashboard.electric-sql.cloud
+                Opens a sign-in window pointed at{` `}
+                <Text size={1} tone="muted">
+                  dashboard.electric-sql.cloud
+                </Text>
+                . The window closes automatically once you've authorized.
               </Text>
-              . The window closes automatically once you've authorized.
-            </Text>
-          </Stack>
+            </Stack>
+          </SettingsPanel>
         )}
       </SettingsSection>
     </SettingsScreen>
