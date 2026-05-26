@@ -115,6 +115,7 @@ defmodule Electric.MixProject do
 
   defp dev_and_test_deps do
     [
+      {:benchee, "~> 1.3", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:test], runtime: false},
       {:excoveralls, "~> 0.18", only: [:test], runtime: false},
       {:junit_formatter, "~> 3.4", only: [:test], runtime: false},
