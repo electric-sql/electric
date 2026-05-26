@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
 import { CLOUD_AUTH_REDIRECT_URI, cloudAuth } from '../../src/lib/cloudAuth'
@@ -6,37 +6,62 @@ import { useTokens } from '../../src/lib/ThemeProvider'
 import { fontSize, lineHeight, spacing } from '../../src/lib/theme'
 import type { Tokens } from '../../src/lib/theme'
 
+const CALLBACK_TIMEOUT_MS = 8000
+
 export default function OAuthCallbackRoute(): React.ReactElement {
   const router = useRouter()
   const params = useLocalSearchParams()
   const tokens = useTokens()
   const styles = useMemo(() => createStyles(tokens), [tokens])
   const completedRef = useRef(false)
+  const [message, setMessage] = useState(`Finishing sign-in...`)
 
   useEffect(() => {
     if (completedRef.current) return
     completedRef.current = true
 
-    const callbackUrl = buildCallbackUrl(params)
-    if (!callbackUrl) {
-      router.replace(`/`)
-      return
+    let cancelled = false
+    let timeout: ReturnType<typeof setTimeout> | null = null
+
+    const finish = () => {
+      if (timeout) clearTimeout(timeout)
+      if (!cancelled) router.replace(`/`)
     }
 
-    let cancelled = false
-    void cloudAuth.completeCallbackUrl(callbackUrl).finally(() => {
-      if (!cancelled) router.replace(`/`)
-    })
+    try {
+      const callbackUrl = buildCallbackUrl(params)
+      if (!callbackUrl) {
+        finish()
+        return
+      }
+
+      timeout = setTimeout(() => {
+        console.warn(`[agents-mobile] cloud-auth callback timed out`)
+        setMessage(`Taking longer than expected...`)
+        finish()
+      }, CALLBACK_TIMEOUT_MS)
+
+      void cloudAuth
+        .completeCallbackUrl(callbackUrl)
+        .catch((err) => {
+          console.warn(`[agents-mobile] cloud-auth callback failed:`, err)
+        })
+        .finally(finish)
+    } catch (err) {
+      console.warn(`[agents-mobile] cloud-auth callback route failed:`, err)
+      finish()
+    }
 
     return () => {
       cancelled = true
+      if (timeout) clearTimeout(timeout)
     }
   }, [params, router])
 
   return (
     <View style={styles.root}>
       <ActivityIndicator color={tokens.accent11} />
-      <Text style={styles.text}>Finishing sign-in…</Text>
+      <Text style={styles.text}>{message}</Text>
     </View>
   )
 }
@@ -48,12 +73,17 @@ function buildCallbackUrl(params: ReturnType<typeof useLocalSearchParams>) {
   const expiresAt = getParam(params.expiresAt)
   if (!token || !state || !email || !expiresAt) return null
 
-  const url = new URL(CLOUD_AUTH_REDIRECT_URI)
-  url.searchParams.set(`token`, token)
-  url.searchParams.set(`state`, state)
-  url.searchParams.set(`email`, email)
-  url.searchParams.set(`expiresAt`, expiresAt)
-  return url.toString()
+  return (
+    `${CLOUD_AUTH_REDIRECT_URI}?` +
+    [
+      [`token`, token],
+      [`state`, state],
+      [`email`, email],
+      [`expiresAt`, expiresAt],
+    ]
+      .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
+      .join(`&`)
+  )
 }
 
 function getParam(value: string | string[] | undefined): string | null {
