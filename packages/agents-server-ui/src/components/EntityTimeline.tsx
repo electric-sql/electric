@@ -10,7 +10,7 @@ import {
 } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useLiveQuery } from '@tanstack/react-db'
-import { inArray } from '@durable-streams/state'
+import { eq, inArray } from '@durable-streams/state'
 import {
   measureElement as defaultMeasureElement,
   useVirtualizer,
@@ -922,6 +922,21 @@ export function EntityTimeline({
     },
     [entitiesCollection, referencedEntityUrlKey]
   )
+  // Pull the sandbox profile name for the currently-focused entity so
+  // we can surface it as a read-only badge next to the spawned marker.
+  // The sandbox choice is set at spawn time and immutable for the
+  // entity's lifetime, so a single read here is sufficient.
+  const { data: focusedEntity = [] } = useLiveQuery(
+    (q) => {
+      if (!entitiesCollection || !entityUrl) return undefined
+      return q
+        .from({ e: entitiesCollection as any })
+        .where(({ e }: any) => eq(e.url, entityUrl))
+        .select(({ e }: any) => ({ sandbox: e.sandbox }))
+    },
+    [entitiesCollection, entityUrl]
+  )
+  const sandboxProfileName = focusedEntity[0]?.sandbox?.profile ?? null
   const entityStatusByUrl = useMemo(() => {
     const statusByUrl = new Map<string, EntityStatus>()
     for (const entity of entities) {
@@ -1464,7 +1479,7 @@ export function EntityTimeline({
           ref={contentRef}
           className={`${styles.content} mobile-chat-content`}
         >
-          <Stack>
+          <Stack gap={2} direction="row">
             {spawnTime ? (
               <Tooltip content={formatAbsoluteDateTimeVerbose(spawnTime)}>
                 <span ref={spawnMarkerRef} className={styles.statusPill}>
@@ -1485,6 +1500,15 @@ export function EntityTimeline({
                   spawned
                 </Text>
               </span>
+            )}
+            {sandboxProfileName && (
+              <Tooltip content={`Sandbox: ${sandboxProfileName}`}>
+                <span className={styles.statusPill}>
+                  <Text size={1} tone="muted" className={styles.statusText}>
+                    sandbox · {sandboxProfileName}
+                  </Text>
+                </span>
+              </Tooltip>
             )}
           </Stack>
 

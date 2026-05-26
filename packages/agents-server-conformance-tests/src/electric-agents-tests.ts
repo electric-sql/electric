@@ -1887,31 +1887,59 @@ export function runElectricAgentsConformanceTests(
       return block?.type === `text` && block.text ? block.text : ``
     }
 
+    async function makeSandbox(workingDirectory: string) {
+      const { unrestrictedSandbox } = await import(
+        `../../agents-runtime/src/sandbox/unrestricted`
+      )
+      return unrestrictedSandbox({ workingDirectory })
+    }
+
     test(`bash tool captures stdout and stderr`, async () => {
       const { createBashTool } = await import(`../../agents-runtime/src/tools`)
-      const tool = createBashTool(`/tmp`)
-      const result = await tool.execute(`test-tc`, {
-        command: `echo "hello" && echo "error" >&2`,
-      })
-      expect(firstText(result)).toContain(`hello`)
-      expect(firstText(result)).toContain(`error`)
-      expect(result.details.exitCode).toBe(0)
+      const sandbox = await makeSandbox(`/tmp`)
+      try {
+        const tool = createBashTool(sandbox)
+        const result = await tool.execute(`test-tc`, {
+          command: `echo "hello" && echo "error" >&2`,
+        })
+        expect(firstText(result)).toContain(`hello`)
+        expect(firstText(result)).toContain(`error`)
+        expect(result.details.exitCode).toBe(0)
+      } finally {
+        await sandbox.dispose()
+      }
     })
 
     test(`bash tool enforces timeout`, async () => {
       const { createBashTool } = await import(`../../agents-runtime/src/tools`)
-      const tool = createBashTool(`/tmp`)
-      const result = await tool.execute(`test-tc`, { command: `sleep 60` })
-      expect(result.details.timedOut).toBe(true)
+      const sandbox = await makeSandbox(`/tmp`)
+      try {
+        const tool = createBashTool(sandbox)
+        const result = await tool.execute(`test-tc`, { command: `sleep 60` })
+        expect(result.details.timedOut).toBe(true)
+      } finally {
+        await sandbox.dispose()
+      }
     }, 35_000)
 
     test(`read_file rejects paths outside working directory`, async () => {
       const { createReadFileTool } = await import(
         `../../agents-runtime/src/tools`
       )
-      const tool = createReadFileTool(`/tmp/test-workdir`)
-      const result = await tool.execute(`test-tc`, { path: `../../etc/passwd` })
-      expect(firstText(result)).toContain(`outside the working directory`)
+      const fs = await import(`node:fs/promises`)
+      const dir = `/tmp/test-workdir-${Date.now()}`
+      await fs.mkdir(dir, { recursive: true })
+      const sandbox = await makeSandbox(dir)
+      try {
+        const tool = createReadFileTool(sandbox)
+        const result = await tool.execute(`test-tc`, {
+          path: `../../etc/passwd`,
+        })
+        expect(firstText(result)).toContain(`outside the working directory`)
+      } finally {
+        await sandbox.dispose()
+        await fs.rm(dir, { recursive: true, force: true })
+      }
     })
 
     test(`read_file rejects binary files`, async () => {
@@ -1927,11 +1955,15 @@ export function runElectricAgentsConformanceTests(
       const binPath = path.join(dir, `test.bin`)
       await fs.writeFile(binPath, Buffer.from([0x00, 0x01, 0x02, 0xff]))
 
-      const tool = createReadFileTool(dir)
-      const result = await tool.execute(`test-tc`, { path: `test.bin` })
-      expect(firstText(result)).toContain(`binary file`)
-
-      await fs.rm(dir, { recursive: true })
+      const sandbox = await makeSandbox(dir)
+      try {
+        const tool = createReadFileTool(sandbox)
+        const result = await tool.execute(`test-tc`, { path: `test.bin` })
+        expect(firstText(result)).toContain(`binary file`)
+      } finally {
+        await sandbox.dispose()
+        await fs.rm(dir, { recursive: true })
+      }
     })
 
     test(`read_file rejects oversized files`, async () => {
@@ -1947,11 +1979,15 @@ export function runElectricAgentsConformanceTests(
       // Write 600KB file (over 512KB limit)
       await fs.writeFile(bigPath, `x`.repeat(600 * 1024))
 
-      const tool = createReadFileTool(dir)
-      const result = await tool.execute(`test-tc`, { path: `big.txt` })
-      expect(firstText(result)).toContain(`too large`)
-
-      await fs.rm(dir, { recursive: true })
+      const sandbox = await makeSandbox(dir)
+      try {
+        const tool = createReadFileTool(sandbox)
+        const result = await tool.execute(`test-tc`, { path: `big.txt` })
+        expect(firstText(result)).toContain(`too large`)
+      } finally {
+        await sandbox.dispose()
+        await fs.rm(dir, { recursive: true })
+      }
     })
 
     test(`web_search tool has correct interface`, async () => {
@@ -1961,9 +1997,17 @@ export function runElectricAgentsConformanceTests(
     })
 
     test(`fetch_url tool has correct interface`, async () => {
-      const { fetchUrlTool } = await import(`../../agents-runtime/src/tools`)
-      expect(fetchUrlTool.name).toBe(`fetch_url`)
-      expect(typeof fetchUrlTool.execute).toBe(`function`)
+      const { createFetchUrlTool } = await import(
+        `../../agents-runtime/src/tools`
+      )
+      const sandbox = await makeSandbox(`/tmp`)
+      try {
+        const tool = createFetchUrlTool(sandbox)
+        expect(tool.name).toBe(`fetch_url`)
+        expect(typeof tool.execute).toBe(`function`)
+      } finally {
+        await sandbox.dispose()
+      }
     })
   })
 

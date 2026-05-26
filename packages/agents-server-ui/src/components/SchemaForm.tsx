@@ -94,11 +94,18 @@ export function SchemaForm({
   submitLabel = `Create`,
   onSubmit,
   onCancel,
+  extraRows,
 }: {
   schema: unknown
   submitLabel?: string
   onSubmit: (args: Record<string, unknown>) => void
   onCancel?: () => void
+  /**
+   * Optional rows rendered above the schema-derived fields. Used to
+   * surface spawn-time controls that aren't part of the entity's
+   * creation_schema (e.g., the sandbox profile picker).
+   */
+  extraRows?: React.ReactNode
 }): React.ReactElement {
   if (isObjectSchema(schema)) {
     return (
@@ -107,6 +114,7 @@ export function SchemaForm({
         submitLabel={submitLabel}
         onSubmit={onSubmit}
         onCancel={onCancel}
+        extraRows={extraRows}
       />
     )
   }
@@ -115,6 +123,7 @@ export function SchemaForm({
       submitLabel={submitLabel}
       onSubmit={onSubmit}
       onCancel={onCancel}
+      extraRows={extraRows}
     />
   )
 }
@@ -124,11 +133,13 @@ function ObjectSchemaForm({
   submitLabel,
   onSubmit,
   onCancel,
+  extraRows,
 }: {
   schema: ObjectSchema
   submitLabel: string
   onSubmit: (args: Record<string, unknown>) => void
   onCancel?: () => void
+  extraRows?: React.ReactNode
 }): React.ReactElement {
   const properties = schema.properties
   const requiredSet = useMemo(
@@ -195,6 +206,7 @@ function ObjectSchemaForm({
   return (
     <form onSubmit={handleSubmit}>
       <Stack direction="column" gap={3}>
+        {extraRows}
         {Object.entries(properties).map(([key, prop], i) => (
           <SchemaField
             key={key}
@@ -383,10 +395,12 @@ function RawJsonForm({
   submitLabel,
   onSubmit,
   onCancel,
+  extraRows,
 }: {
   submitLabel: string
   onSubmit: (args: Record<string, unknown>) => void
   onCancel?: () => void
+  extraRows?: React.ReactNode
 }): React.ReactElement {
   const [raw, setRaw] = useState(`{}`)
   const [parseError, setParseError] = useState<string | null>(null)
@@ -416,6 +430,7 @@ function RawJsonForm({
   return (
     <form onSubmit={handleSubmit}>
       <Stack direction="column" gap={2}>
+        {extraRows}
         <Text size={2}>Arguments (JSON)</Text>
         <Textarea
           value={raw}

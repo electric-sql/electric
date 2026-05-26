@@ -17,6 +17,15 @@ const MUST_EXTERNALIZE = new Set([
   `jsdom`,
   `pino`,
   `pino-pretty`,
+  // `inlineDynamicImports` would inline the lazy `dockerode` import (and its
+  // native `ssh2`/`cpu-features` deps), which rollup can't bundle. Externalize
+  // the chain: it's an optional runtime dep, gracefully absent otherwise.
+  `dockerode`,
+  `ssh2`,
+  `cpu-features`,
+  // Same treatment for the lazy `e2b` import behind the remote sandbox
+  // profile — an optional runtime dep, required from node_modules at runtime.
+  `e2b`,
 ])
 
 function externalizeBareImports(

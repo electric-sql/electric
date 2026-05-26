@@ -867,6 +867,9 @@ function ProviderItem({
         deepseek: keysStatus.saved.deepseek ?? null,
         moonshot: keysStatus.saved.moonshot ?? null,
         brave: keysStatus.saved.brave ?? null,
+        // e2b is configured in Settings → Credentials, not onboarding;
+        // preserve any saved value so editing another key here can't wipe it.
+        e2b: keysStatus.saved.e2b ?? null,
         [provider.id]: next,
       }
       await persistApiKeys(nextKeys)

@@ -1,4 +1,3 @@
-import fs from 'node:fs'
 import path from 'node:path'
 import { z } from 'zod'
 import { serverLog } from '../log'
@@ -26,9 +25,9 @@ import {
   createWriteTool,
   braveSearchTool,
   createFetchUrlTool,
-  fetchUrlTool,
   createSendTool,
 } from '@electric-ax/agents-runtime/tools'
+import type { Sandbox } from '@electric-ax/agents-runtime/sandbox'
 import { completeWithLowCostModel } from '@electric-ax/agents-runtime'
 import { mcp } from '@electric-ax/agents-mcp'
 import type { SkillsRegistry } from '@electric-ax/agents-runtime'
@@ -282,7 +281,7 @@ function getToolName(tool: unknown): string | null {
 }
 
 export function createHortonTools(
-  workingDirectory: string,
+  sandbox: Sandbox,
   ctx: HandlerContext,
   readSet: Set<string>,
   opts: {
@@ -293,21 +292,21 @@ export function createHortonTools(
   } = {}
 ): Array<AgentTool> {
   return [
-    createBashTool(workingDirectory),
-    createReadFileTool(workingDirectory, readSet),
-    createWriteTool(workingDirectory, readSet),
-    createEditTool(workingDirectory, readSet),
+    createBashTool(sandbox),
+    createReadFileTool(sandbox, readSet),
+    createWriteTool(sandbox, readSet),
+    createEditTool(sandbox, readSet),
     braveSearchTool,
     ...(opts.modelCatalog && opts.modelConfig
       ? [
-          createFetchUrlTool({
+          createFetchUrlTool(sandbox, {
             catalog: opts.modelCatalog,
             modelConfig: opts.modelConfig,
             log: (message) => serverLog.info(message),
             logPrefix: opts.logPrefix ?? `[horton]`,
           }),
         ]
-      : [fetchUrlTool]),
+      : [createFetchUrlTool(sandbox)]),
     createSpawnWorkerTool(ctx, opts.modelConfig),
     createSendTool(ctx.send, { selfEntityUrl: ctx.entityUrl }),
     ...(opts.docsSearchTool ? [opts.docsSearchTool] : []),
@@ -419,25 +418,25 @@ function messageSeq(message: { _seq?: unknown }): number {
 
 type HortonDocsSupport = NonNullable<ReturnType<typeof createHortonDocsSupport>>
 
-function readAgentsMd(workingDirectory: string): string | null {
-  const agentsMdPath = path.join(workingDirectory, `AGENTS.md`)
+async function readAgentsMd(sandbox: Sandbox): Promise<string | null> {
+  // Read through the sandbox, not the host fs, so the path and contents match
+  // where the agent's tools actually operate — the remote VM's working
+  // directory for a remote sandbox, the host project root for a local one.
+  const agentsMdPath = path.posix.join(sandbox.workingDirectory, `AGENTS.md`)
   try {
-    if (!fs.existsSync(agentsMdPath) || !fs.statSync(agentsMdPath).isFile()) {
-      return null
-    }
-    const content = fs.readFileSync(agentsMdPath, `utf8`)
+    const content = (await sandbox.readFile(agentsMdPath)).toString(`utf8`)
     return [
       `<context_file kind="instructions" path="${agentsMdPath}">`,
       content,
       `</context_file>`,
     ].join(`\n`)
   } catch {
+    // Missing, unreadable, or outside the sandbox's read policy — no context.
     return null
   }
 }
 
 function createAssistantHandler(options: {
-  workingDirectory: string
   streamFn?: StreamFn
   docsSupport: HortonDocsSupport | null
   docsSearchTool?: AgentTool
@@ -446,7 +445,6 @@ function createAssistantHandler(options: {
   docsUrl?: string
 }) {
   const {
-    workingDirectory,
     streamFn,
     docsSupport,
     docsSearchTool,
@@ -461,19 +459,21 @@ function createAssistantHandler(options: {
     wake: WakeEvent
   ): Promise<void> {
     const readSet = new Set<string>()
-    // `workingDirectory` may be overridden per-spawn — used by the
-    // desktop UI's directory picker so each Horton session can run
-    // against its own project root without restarting the runtime.
-    const effectiveCwd =
-      typeof ctx.args.workingDirectory === `string` &&
-      ctx.args.workingDirectory.trim().length > 0
-        ? ctx.args.workingDirectory
-        : workingDirectory
     const modelConfig = resolveBuiltinModelConfig(modelCatalog, ctx.args)
-    const agentsMd = readAgentsMd(effectiveCwd)
+    // The sandbox's own working directory is the single source of truth for
+    // where the agent operates — `/work` in a remote VM, or the host project
+    // root for a local sandbox (the local profile derives that from
+    // `args.workingDirectory`, so the desktop directory picker still applies).
+    // Report it in the prompt and read AGENTS.md from it so the model never
+    // sees a host path it can't actually reach.
+    const sandboxCwd = ctx.sandbox.workingDirectory
+    const agentsMd = await readAgentsMd(ctx.sandbox)
+    // `ctx.sandbox` is constructed by the runtime at wake-session
+    // start from the profile named on `entity.sandbox.profile` (set at
+    // spawn time) and disposed when the wake-session ends.
     const tools = [
       ...ctx.electricTools,
-      ...createHortonTools(effectiveCwd, ctx, readSet, {
+      ...createHortonTools(ctx.sandbox, ctx, readSet, {
         docsSearchTool,
         modelConfig,
         modelCatalog,
@@ -612,7 +612,7 @@ function createAssistantHandler(options: {
     }
 
     ctx.useAgent({
-      systemPrompt: buildHortonSystemPrompt(effectiveCwd, {
+      systemPrompt: buildHortonSystemPrompt(sandboxCwd, {
         hasDocsSupport: Boolean(docsSupport),
         hasSkills,
         docsUrl,
@@ -672,7 +672,6 @@ export function registerHorton(
   })
 
   const assistantHandler = createAssistantHandler({
-    workingDirectory,
     streamFn,
     docsSupport,
     docsSearchTool,

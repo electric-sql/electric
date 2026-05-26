@@ -87,6 +87,9 @@ export function createSpawnWorkerTool(
           {
             initialMessage,
             wake: { on: `runFinished`, includeResponse: true },
+            // Run the worker in the parent's sandbox so they share one
+            // filesystem. No-op when the parent has no shareable sandbox.
+            sandbox: `inherit`,
           }
         )
         const workerUrl = handle.entityUrl

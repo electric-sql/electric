@@ -8,6 +8,7 @@ export const EMPTY_API_KEYS: ApiKeys = {
   deepseek: null,
   moonshot: null,
   brave: null,
+  e2b: null,
 }
 
 export const GLOBAL_API_KEYS_REF = `api-keys:global`
@@ -19,6 +20,7 @@ export function captureEnvApiKeys(env: NodeJS.ProcessEnv): ApiKeys {
     deepseek: env.DEEPSEEK_API_KEY?.trim() || null,
     moonshot: env.MOONSHOT_API_KEY?.trim() || null,
     brave: env.BRAVE_SEARCH_API_KEY?.trim() || null,
+    e2b: env.E2B_API_KEY?.trim() || null,
   }
 }
 
@@ -36,6 +38,7 @@ export function normalizeApiKeys(value: unknown): ApiKeys {
     deepseek: pick(maybe.deepseek),
     moonshot: pick(maybe.moonshot),
     brave: pick(maybe.brave),
+    e2b: pick(maybe.e2b),
   }
 }
 
@@ -45,7 +48,8 @@ export function hasAnyApiKey(keys: ApiKeys): boolean {
       keys.openai ||
       keys.deepseek ||
       keys.moonshot ||
-      keys.brave
+      keys.brave ||
+      keys.e2b
   )
 }
 
@@ -93,6 +97,7 @@ export function applyApiKeysToEnv(
       | `DEEPSEEK_API_KEY`
       | `MOONSHOT_API_KEY`
       | `BRAVE_SEARCH_API_KEY`
+      | `E2B_API_KEY`
   ): void => {
     const next = value ?? fallback
     if (next) {
@@ -106,6 +111,7 @@ export function applyApiKeysToEnv(
   resolveSlot(saved.deepseek, launchEnv.deepseek, `DEEPSEEK_API_KEY`)
   resolveSlot(saved.moonshot, launchEnv.moonshot, `MOONSHOT_API_KEY`)
   resolveSlot(saved.brave, launchEnv.brave, `BRAVE_SEARCH_API_KEY`)
+  resolveSlot(saved.e2b, launchEnv.e2b, `E2B_API_KEY`)
 }
 
 export type ApiKeyStatusDeps = {
@@ -119,8 +125,8 @@ export async function getApiKeysStatus(
   deps: ApiKeyStatusDeps
 ): Promise<ApiKeysStatus> {
   const saved = deps.apiKeys
-  // Brave is optional (falls back to Anthropic built-in search), so it doesn't
-  // count toward "the app is configured".
+  // Brave and E2B are optional: search falls back to Anthropic's built-in tool,
+  // and E2B only enables the remote sandbox profile.
   const hasAnyKey = Boolean(
     saved.anthropic || saved.openai || saved.deepseek || saved.moonshot
   )
@@ -130,6 +136,7 @@ export async function getApiKeysStatus(
     deepseek: saved.deepseek ? null : deps.launchEnv.deepseek,
     moonshot: saved.moonshot ? null : deps.launchEnv.moonshot,
     brave: saved.brave ? null : deps.launchEnv.brave,
+    e2b: saved.e2b ? null : deps.launchEnv.e2b,
   }
   const codex = await deps.getCodexStatus()
   const modelPicker = createModelPickerStatus({
@@ -167,7 +174,8 @@ export async function setApiKeys(
     normalized.openai !== deps.apiKeys.openai ||
     normalized.deepseek !== deps.apiKeys.deepseek ||
     normalized.moonshot !== deps.apiKeys.moonshot ||
-    normalized.brave !== deps.apiKeys.brave
+    normalized.brave !== deps.apiKeys.brave ||
+    normalized.e2b !== deps.apiKeys.e2b
   Object.assign(deps.apiKeys, normalized)
   await saveApiKeysToSecret(deps.secretStore, deps.apiKeysRef(), deps.apiKeys)
   applyApiKeysToEnv(deps.apiKeys, deps.launchEnv, deps.env)

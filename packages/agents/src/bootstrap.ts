@@ -9,6 +9,12 @@ import {
   createRuntimeHandler,
 } from '@electric-ax/agents-runtime'
 import { createEventSourceTools } from '@electric-ax/agents-runtime/tools'
+import {
+  chooseDefaultSandbox,
+  isE2BAvailable,
+  remoteSandbox,
+  type SandboxProfile,
+} from '@electric-ax/agents-runtime/sandbox'
 import { serverLog } from './log'
 import { registerHorton } from './agents/horton'
 import { registerWorker } from './agents/worker'
@@ -148,6 +154,8 @@ export async function createBuiltinAgentHandler(
   registerWorker(registry, { workingDirectory: cwd, streamFn, modelCatalog })
   typeNames.push(`worker`)
 
+  const sandboxProfiles = await buildBuiltinSandboxProfiles(cwd)
+
   const runtime = createRuntimeHandler({
     baseUrl: agentServerUrl,
     serveEndpoint,
@@ -159,6 +167,7 @@ export async function createBuiltinAgentHandler(
     createElectricTools: createBuiltinElectricTools(createElectricTools),
     publicUrl,
     name: runtimeName ?? `builtin-agents`,
+    sandboxProfiles,
   })
 
   return {
@@ -197,3 +206,162 @@ export async function registerBuiltinAgentTypes(
 }
 
 export const registerAgentTypes = registerBuiltinAgentTypes
+
+/**
+ * Guard so repeated `buildBuiltinSandboxProfiles` calls in one process don't
+ * re-run the boot sweep.
+ */
+let dockerSweptOnBoot = false
+
+type SweepOrphanedDockerSandboxes =
+  // eslint-disable-next-line quotes -- type-position import() requires a string literal
+  (typeof import('@electric-ax/agents-runtime/sandbox/docker'))['sweepOrphanedDockerSandboxes']
+
+function sweepOrphanedDockerSandboxesOnce(
+  sweep: SweepOrphanedDockerSandboxes
+): void {
+  if (dockerSweptOnBoot) return
+  dockerSweptOnBoot = true
+  // One-shot, at boot: reclaim any sandbox containers a previous (crashed)
+  // process left behind. Fire-and-forget — nothing is acquired yet, and within
+  // a live process shared containers are stopped (not removed) when idle.
+  sweep()
+    .then((removed) => {
+      if (removed.length > 0) {
+        serverLog.info(
+          `[builtin-agents] docker sandbox boot sweep removed ${removed.length} leftover container(s)`
+        )
+      }
+    })
+    .catch((err) =>
+      serverLog.warn(
+        `[builtin-agents] docker sandbox boot sweep error: ${err instanceof Error ? err.message : String(err)}`
+      )
+    )
+}
+
+/**
+ * Built-in sandbox profiles. `local` is always available. `docker` is
+ * gated on Docker being reachable so a user without Docker installed
+ * sees only what works — the UI never offers a non-functional choice.
+ */
+async function buildBuiltinSandboxProfiles(
+  workingDirectory: string
+): Promise<Array<SandboxProfile>> {
+  const profiles: Array<SandboxProfile> = [
+    {
+      name: `local`,
+      label: `Local`,
+      description: `Runs on the host without isolation. Full filesystem access.`,
+      factory: ({ args }) =>
+        chooseDefaultSandbox(resolveCwd(args, workingDirectory)),
+    },
+  ]
+
+  try {
+    const { isDockerAvailable } = await import(
+      `@electric-ax/agents-runtime/sandbox/docker`
+    )
+    if (await isDockerAvailable()) {
+      const { dockerSandbox, sweepOrphanedDockerSandboxes } = await import(
+        `@electric-ax/agents-runtime/sandbox/docker`
+      )
+      // Reclaim containers a previous crashed process may have left running.
+      // No periodic reaper: within a live process, shared containers stop
+      // themselves a short while after their last lease disposes (debounced
+      // idle-stop), and ephemeral ones are killed on dispose.
+      sweepOrphanedDockerSandboxesOnce(sweepOrphanedDockerSandboxes)
+      profiles.push({
+        name: `docker`,
+        label: `Docker`,
+        description: `Runs in a hardened Docker container. Network, CPU, memory, and processes are constrained.`,
+        factory: ({
+          args,
+          sandboxKey,
+          persistent,
+          owner,
+          entityType,
+          entityUrl,
+        }) => {
+          const cwd = readWorkingDirectoryArg(args)
+          return dockerSandbox({
+            initialNetworkPolicy: { mode: `allow-all` },
+            extraMounts: cwd
+              ? [{ hostPath: cwd, containerPath: `/work`, readOnly: false }]
+              : undefined,
+            // The container is always named-by-key and reattachable; `persistent`
+            // chooses idle teardown (stop vs remove) and `owner` gates creation
+            // (an attacher reattaches only). All resolved upstream from config.
+            reuseKey: sandboxKey,
+            persistent,
+            owner,
+            // Observability: tag the container/labels with who spawned it.
+            entityType,
+            entityUrl,
+          })
+        },
+      })
+    } else {
+      serverLog.info(
+        `[builtin-agents] docker daemon not reachable — docker sandbox profile not registered`
+      )
+    }
+  } catch (err) {
+    serverLog.warn(
+      `[builtin-agents] failed to probe docker availability: ${err instanceof Error ? err.message : String(err)}`
+    )
+  }
+
+  // e2b is a remote provider: gated on an API key (the same way docker is
+  // gated on a reachable daemon) plus the optional `e2b` peer dep being
+  // installed, so we never advertise a profile that can't run.
+  if (process.env.E2B_API_KEY) {
+    if (await isE2BAvailable()) {
+      profiles.push({
+        name: `e2b`,
+        label: `E2B`,
+        description: `Runs in a remote E2B microVM. Persistent sandboxes survive across wakes and are reachable from any runner.`,
+        // Off-host: the server skips the single-runner co-location guard for
+        // keyed sandboxes on this profile (any runner can reach the VM).
+        remote: true,
+        factory: ({ sandboxKey, persistent, owner }) =>
+          remoteSandbox({
+            provider: `e2b`,
+            apiKey: process.env.E2B_API_KEY,
+            // Always reattachable by key; `persistent` chooses whether dispose
+            // suspends (preserves) or kills, and `owner` gates creation (an
+            // attacher reconnects only).
+            sandboxKey,
+            persistent,
+            owner,
+            initialNetworkPolicy: { mode: `allow-all` },
+          }),
+      })
+    } else {
+      serverLog.info(
+        `[builtin-agents] E2B_API_KEY set but the "e2b" package is not installed — e2b sandbox profile not registered`
+      )
+    }
+  }
+
+  // console.log (not serverLog): visible in the Electron main process, where
+  // the pino-based serverLog transport doesn't render.
+  console.log(
+    `[builtin-agents] sandbox profiles advertised: ${profiles.map((p) => p.name).join(`, `)}`
+  )
+  return profiles
+}
+
+function readWorkingDirectoryArg(
+  args: Readonly<Record<string, unknown>>
+): string | null {
+  const v = args.workingDirectory
+  return typeof v === `string` && v.trim().length > 0 ? v : null
+}
+
+function resolveCwd(
+  args: Readonly<Record<string, unknown>>,
+  fallback: string
+): string {
+  return readWorkingDirectoryArg(args) ?? fallback
+}

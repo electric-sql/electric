@@ -131,7 +131,7 @@ export function buildElectricProxyTarget(options: {
   } else if (table === `runners`) {
     target.searchParams.set(
       `columns`,
-      `"tenant_id","id","owner_principal","label","kind","admin_status","wake_stream","created_at","updated_at"`
+      `"tenant_id","id","owner_principal","label","kind","admin_status","wake_stream","sandbox_profiles","created_at","updated_at"`
     )
     applyTenantShapeWhere(target, options.tenantId, [
       `owner_principal = ${sqlStringLiteral(options.principalUrl ?? ``)}`,

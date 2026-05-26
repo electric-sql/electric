@@ -81,6 +81,7 @@ export const entityMembershipRowSchema = z.object({
   status: z.enum(entityStatuses),
   tags: z.record(z.string(), z.string()).default({}),
   spawn_args: z.record(z.string(), z.unknown()).default({}),
+  sandbox: z.object({ profile: z.string() }).nullable().optional(),
   parent: z.string().nullable().optional(),
   type_revision: z.number().int().nullable().optional(),
   inbox_schemas: z.record(z.string(), z.unknown()).nullable().optional(),

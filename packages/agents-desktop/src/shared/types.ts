@@ -99,6 +99,7 @@ export type ApiKeys = {
   deepseek: string | null
   moonshot: string | null
   brave: string | null
+  e2b: string | null
 }
 
 export type ModelPickerChoice = {

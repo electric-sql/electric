@@ -1,13 +1,14 @@
-import { readFile, stat } from 'node:fs/promises'
-import { relative, resolve } from 'node:path'
+import { resolve } from 'node:path'
 import { Type } from '@sinclair/typebox'
 import { runtimeLog } from '../log'
+import { SandboxError } from '../sandbox/types'
+import type { Sandbox } from '../sandbox/types'
 import type { AgentTool } from '@mariozechner/pi-agent-core'
 
 const MAX_FILE_SIZE = 512 * 1024 // 512 KB
 
 export function createReadFileTool(
-  workingDirectory: string,
+  sandbox: Sandbox,
   readSet?: Set<string>
 ): AgentTool {
   return {
@@ -22,21 +23,11 @@ export function createReadFileTool(
     execute: async (_toolCallId, params) => {
       const { path: filePath } = params as { path: string }
       try {
-        const resolved = resolve(workingDirectory, filePath)
-        const rel = relative(workingDirectory, resolved)
-        if (rel.startsWith(`..`)) {
-          return {
-            content: [
-              {
-                type: `text` as const,
-                text: `Error: Path "${filePath}" is outside the working directory`,
-              },
-            ],
-            details: { charCount: 0 },
-          }
-        }
-
-        const fileStat = await stat(resolved)
+        // Path resolution and workspace containment are the sandbox's job
+        // (it owns the filesystem); a denied path rejects with
+        // SandboxError('policy'), handled below. We only stat for the size
+        // gate, which is a tool-level concern.
+        const fileStat = await sandbox.stat(filePath)
         if (fileStat.size > MAX_FILE_SIZE) {
           return {
             content: [
@@ -49,7 +40,7 @@ export function createReadFileTool(
           }
         }
 
-        const buffer = await readFile(resolved)
+        const buffer = await sandbox.readFile(filePath)
 
         // Detect binary: check for null bytes in the first 8KB (same heuristic git/grep use).
         const sample = buffer.subarray(0, 8192)
@@ -66,12 +57,23 @@ export function createReadFileTool(
         }
 
         const text = buffer.toString(`utf-8`)
-        readSet?.add(resolved)
+        readSet?.add(resolve(sandbox.workingDirectory, filePath))
         return {
           content: [{ type: `text` as const, text }],
           details: { charCount: text.length },
         }
       } catch (err) {
+        if (err instanceof SandboxError && err.kind === `policy`) {
+          return {
+            content: [
+              {
+                type: `text` as const,
+                text: `Error: Path "${filePath}" is outside the working directory`,
+              },
+            ],
+            details: { charCount: 0 },
+          }
+        }
         runtimeLog.warn(
           `[read tool]`,
           `failed to read ${filePath}: ${err instanceof Error ? err.message : String(err)}`

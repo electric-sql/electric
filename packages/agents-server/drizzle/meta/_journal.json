@@ -71,6 +71,13 @@
       "when": 1778540000000,
       "tag": "0009_entity_signal_statuses",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1779062400000,
+      "tag": "0010_sandbox_profiles",
+      "breakpoints": true
     }
   ]
 }

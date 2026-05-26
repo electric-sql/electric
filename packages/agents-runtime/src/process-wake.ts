@@ -9,6 +9,8 @@ import { createHandlerContext } from './context-factory'
 import { createSetupContext } from './setup-context'
 import { createEntityLogPrefix, runtimeLog } from './log'
 import { createRuntimeServerClient } from './runtime-server-client'
+import { unrestrictedSandbox } from './sandbox/unrestricted'
+import { resolveSandboxIdentity } from './sandbox/identity'
 import { appendPathToUrl } from './url'
 import { manifestChildKey } from './manifest-helpers'
 import {
@@ -17,6 +19,8 @@ import {
 } from './event-sources'
 import { webhookObservationCollections } from './observation-sources'
 import type { HydratedEventSourceWake } from './event-sources'
+import { SandboxError } from './sandbox/types'
+import type { Sandbox } from './sandbox/types'
 import type {
   CronObservationSource,
   EntitiesObservationSource,
@@ -34,6 +38,7 @@ import type {
   ProcessWakeConfig,
   SendResult,
   SharedStateSchemaMap,
+  SpawnSandboxOption,
   Wake,
   WakeEvent,
   WakeMessage,
@@ -469,6 +474,17 @@ export async function processWake(
   let finalError: Error | AggregateError | null = null
   let shutdownRequested = shutdownSignal?.aborted ?? false
   let ackCurrentWakeOnFailure = false
+  // Sandbox is acquired once per wake-session (after entityArgs is known)
+  // and released/disposed in the outer finally. Lives at function scope so
+  // both the try and finally can see it.
+  let sandbox: Sandbox | null = null
+  // The sandbox identity this wake resolved to (profile + resolved key +
+  // persistent), captured so the spawn glue can propagate it to an `inherit`
+  // child as explicit values — a per-wake parent's live key is never stored on
+  // the entity, so only the running wake can hand it down.
+  let resolvedSandboxSelection:
+    | { profile: string; key: string; persistent: boolean }
+    | undefined
 
   // Live event handler — wired after preload, processes child_status + inbox
   let idleTimer: ReturnType<typeof setTimeout> | null = null
@@ -483,6 +499,14 @@ export async function processWake(
   let signalAbortRequested = false
   let pauseRequested = false
   let resumeRequested = false
+  // Set when this wake observes its entity transition to a terminal status
+  // (SIGKILL ⇒ killed, SIGTERM ⇒ stopped): the entity is gone for good, so its
+  // sandbox should be reclaimed (wiped) on dispose rather than preserved. A
+  // mere runner shutdown (the entity lives on) must NOT set this. Seeded from
+  // the incoming status in case the wake is delivered already-terminal.
+  let entityTerminated =
+    notification.entity?.status === `killed` ||
+    notification.entity?.status === `stopped`
   const pendingSignalHandlers: Array<Promise<void>> = []
   const secondaryDbs: Array<{
     drainPendingWrites?: () => Promise<void>
@@ -767,6 +791,7 @@ export async function processWake(
       case `SIGKILL`:
         log.info(`SIGKILL received, aborting active run and closing wake`)
         signalAbortRequested = true
+        entityTerminated = true
         runAbortController?.abort()
         requestShutdown()
         if (!alreadyHandled) {
@@ -793,6 +818,7 @@ export async function processWake(
       case `SIGTERM`:
         log.info(`SIGTERM received, closing wake after cleanup`)
         requestShutdown()
+        entityTerminated = true
         invokeSignalHandler(value, (outcome) => {
           markSignalHandled(
             event,
@@ -1137,6 +1163,57 @@ export async function processWake(
 
     const entityArgs = Object.freeze(notification.entity?.spawnArgs ?? {})
 
+    // Sandbox is a per-runner concern: profiles live on the runner's
+    // advertisement (validated server-side at spawn time). The
+    // wake-time job is just to look up the chosen profile by name.
+    // When no profile was picked at spawn we fall back to an
+    // in-process unrestricted sandbox at the host's cwd — matches the
+    // pre-profiles default and keeps tests/dev simple.
+    const sandboxConfig = notification.entity?.sandbox
+    const requestedProfileName = sandboxConfig?.profile
+    if (requestedProfileName) {
+      const profile = config.sandboxProfiles?.get(requestedProfileName)
+      if (!profile) {
+        throw new SandboxError(
+          `unavailable`,
+          `[agent-runtime] sandbox profile "${requestedProfileName}" requested for entity "${entityUrl}" is not registered on this runtime. Available profiles: ${[...(config.sandboxProfiles?.keys() ?? [])].join(`, `) || `(none)`}.`
+        )
+      }
+      // Resolve identity (explicit / per-entity / per-wake key), durability
+      // (`persistent`), and ownership (`owner`) here, upstream of the provider.
+      // The provider only ever sees a resolved key + persistent + owner —
+      // "full isolation" is purely a unique per-wake key, never a separate path.
+      const resolved = resolveSandboxIdentity(
+        {
+          key: sandboxConfig.key,
+          scope: sandboxConfig.scope,
+          persistent: sandboxConfig.persistent,
+          owner: sandboxConfig.owner,
+        },
+        { entityUrl, wakeId }
+      )
+      resolvedSandboxSelection = {
+        profile: requestedProfileName,
+        key: resolved.sandboxKey,
+        persistent: resolved.persistent,
+      }
+      sandbox = await profile.factory({
+        sandboxKey: resolved.sandboxKey,
+        persistent: resolved.persistent,
+        owner: resolved.owner,
+        entityUrl,
+        entityType: typeName,
+        args: entityArgs,
+      })
+    } else {
+      sandbox = await unrestrictedSandbox({ workingDirectory: process.cwd() })
+    }
+    // Record which sandbox each wake actually resolved to — the isolation
+    // boundary is security-relevant, so keep it legible in the runtime log.
+    log.info(
+      `[sandbox] entity=${entityUrl} requested=${requestedProfileName ?? `(none)`} resolved=${sandbox.name} cwd=${sandbox.workingDirectory}`
+    )
+
     // ---- Send executor — ctx.send() calls this directly (no queue) ----
     const executeSend = (send: {
       targetUrl: string
@@ -1183,6 +1260,7 @@ export async function processWake(
           initialMessage?: unknown
           wake?: Wake
           tags?: Record<string, string>
+          sandbox?: SpawnSandboxOption
         }
       ): Promise<{ entityUrl: string; streamPath: string }> => {
         const wakeOpt = opts?.wake
@@ -1209,6 +1287,29 @@ export async function processWake(
               manifestKey: manifestChildKey(childType, childId),
             }
           : undefined
+        // `inherit` means "adopt this wake's RESOLVED sandbox" (profile +
+        // resolved key + persistent). We send them as EXPLICIT values rather
+        // than `inherit: true` so a per-wake parent's live key — which is never
+        // stored on the entity — propagates to the child; the child then shares
+        // this wake's exact container/workspace. If this wake has no sandbox,
+        // inherit gracefully yields none.
+        const requestedInherit =
+          opts?.sandbox === `inherit` ||
+          (typeof opts?.sandbox === `object` && opts.sandbox.inherit === true)
+        const sandbox = requestedInherit
+          ? resolvedSandboxSelection
+            ? {
+                profile: resolvedSandboxSelection.profile,
+                key: resolvedSandboxSelection.key,
+                persistent: resolvedSandboxSelection.persistent,
+                // The child ATTACHES to this wake's sandbox — it never owns or
+                // tears down the owner's container/workspace.
+                owner: false,
+              }
+            : undefined
+          : opts?.sandbox === `inherit`
+            ? undefined
+            : opts?.sandbox
         return serverClient.spawnEntity({
           type: childType,
           id: childId,
@@ -1216,6 +1317,7 @@ export async function processWake(
           parentUrl,
           initialMessage: opts?.initialMessage,
           tags: opts?.tags,
+          sandbox,
           wake: wakeOpt,
         })
       },
@@ -1896,6 +1998,10 @@ export async function processWake(
         events: currentWakeEvents,
         actions: setupCtx.actions,
         electricTools,
+        // Non-null at this point: the sandbox was acquired earlier in
+        // this try block (after entityArgs); TS narrowing doesn't survive
+        // the surrounding for-loop, so assert.
+        sandbox: sandbox!,
         writeEvent,
         wakeSession,
         wakeEvent: currentWakeEvent,
@@ -2146,6 +2252,16 @@ export async function processWake(
       }
     }
     db.close()
+    if (sandbox) {
+      try {
+        // When the entity reached a terminal status this wake, reclaim (wipe)
+        // its sandbox; otherwise release the lease and let the owner's idle
+        // policy (stop/remove) apply. Attacher leases ignore `reclaim`.
+        await sandbox.dispose({ reclaim: entityTerminated })
+      } catch (err) {
+        cleanupErrors.push(toError(err))
+      }
+    }
     if (claimedWake) {
       log.info(
         doneOffset === `-1`

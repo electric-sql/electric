@@ -49,6 +49,7 @@ export const entities = pgTable(
       .notNull()
       .default(sql`'{}'::text[]`),
     spawnArgs: jsonb(`spawn_args`).default({}),
+    sandbox: jsonb(`sandbox`),
     parent: text(`parent`),
     createdBy: text(`created_by`),
     typeRevision: integer(`type_revision`),
@@ -111,6 +112,7 @@ export const runners = pgTable(
     kind: text(`kind`).notNull().default(`local`),
     adminStatus: text(`admin_status`).notNull().default(`enabled`),
     wakeStream: text(`wake_stream`).notNull(),
+    sandboxProfiles: jsonb(`sandbox_profiles`).notNull().default([]),
     createdAt: timestamp(`created_at`, { withTimezone: true })
       .notNull()
       .defaultNow(),

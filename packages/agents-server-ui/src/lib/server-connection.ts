@@ -92,6 +92,8 @@ export interface ServerConnectionState {
  *   `BRAVE_SEARCH_API_KEY` to enable Horton's `brave_search` tool;
  *   without it, web search falls back to Anthropic's built-in search.
  *   Does NOT count toward "has any LLM key" on its own.
+ * - `e2b`: optional. Mirrored to `E2B_API_KEY` to enable the remote
+ *   sandbox profile; without it the e2b profile isn't offered.
  */
 export interface ApiKeys {
   anthropic: string | null
@@ -112,6 +114,7 @@ export interface ApiKeys {
    */
   moonshot: string | null
   brave: string | null
+  e2b: string | null
 }
 
 export type CodexAuthSource = `desktop-oauth` | `codex-cli` | `opencode`

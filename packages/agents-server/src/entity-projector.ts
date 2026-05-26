@@ -38,6 +38,7 @@ interface EntityShapeRow extends Row<unknown> {
   status: `spawning` | `running` | `idle` | `stopped`
   tags: EntityTags
   spawn_args?: Record<string, unknown> | null
+  sandbox?: { profile: string } | null
   parent?: string | null
   type_revision?: number | null
   inbox_schemas?: Record<string, Record<string, unknown>> | null
@@ -53,6 +54,7 @@ const ENTITY_SHAPE_COLUMNS = [
   `status`,
   `tags`,
   `spawn_args`,
+  `sandbox`,
   `parent`,
   `type_revision`,
   `inbox_schemas`,
@@ -108,6 +110,7 @@ function toMemberRow(entity: EntityShapeRow): EntityMembershipRow {
     status: entity.status,
     tags: entity.tags,
     spawn_args: entity.spawn_args ?? {},
+    sandbox: entity.sandbox ?? null,
     parent: entity.parent ?? null,
     type_revision: entity.type_revision ?? null,
     inbox_schemas: entity.inbox_schemas ?? null,

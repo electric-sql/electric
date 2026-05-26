@@ -26,6 +26,7 @@ import type {
   EntityStatus,
   RunnerAdminStatus,
   RunnerKind,
+  SandboxProfileAdvertisement,
   SourceStreamOffset,
   ConsumerClaim,
   DispatchPolicy,
@@ -73,6 +74,13 @@ export interface TagStreamOutboxRow {
   createdAt: Date
 }
 
+export interface SandboxProfileInput {
+  name: string
+  label: string
+  description?: string
+  remote?: boolean
+}
+
 export interface RegisterRunnerInput {
   id: string
   ownerPrincipal: string
@@ -80,6 +88,13 @@ export interface RegisterRunnerInput {
   kind?: RunnerKind
   adminStatus?: RunnerAdminStatus
   wakeStream?: string
+  /**
+   * Full-set replacement: provide the complete list of profiles the
+   * runner currently exposes. Existing rows for the runner are
+   * removed and the supplied set is inserted in one transaction.
+   * Omit (or pass undefined) to leave the existing set untouched.
+   */
+  sandboxProfiles?: ReadonlyArray<SandboxProfileInput>
 }
 
 export interface HeartbeatRunnerInput {
@@ -148,6 +163,17 @@ export class PostgresRegistry {
   ): Promise<ElectricAgentsRunner> {
     const now = new Date()
     const wakeStream = input.wakeStream ?? runnerWakeStream(input.id)
+    // Full-set replace: when the caller provides a profile list it
+    // overwrites whatever the runner previously advertised. Omitting
+    // the field on a re-registration preserves the existing value.
+    const sandboxProfilesValue = input.sandboxProfiles
+      ? input.sandboxProfiles.map((p) => ({
+          name: p.name,
+          label: p.label,
+          ...(p.description !== undefined && { description: p.description }),
+          ...(p.remote !== undefined && { remote: p.remote }),
+        }))
+      : undefined
 
     await this.db
       .insert(runners)
@@ -159,6 +185,9 @@ export class PostgresRegistry {
         kind: input.kind ?? `local`,
         adminStatus: input.adminStatus ?? `enabled`,
         wakeStream,
+        ...(sandboxProfilesValue !== undefined && {
+          sandboxProfiles: sandboxProfilesValue,
+        }),
         updatedAt: now,
       })
       .onConflictDoUpdate({
@@ -169,6 +198,9 @@ export class PostgresRegistry {
           kind: input.kind ?? `local`,
           adminStatus: input.adminStatus ?? `enabled`,
           wakeStream,
+          ...(sandboxProfilesValue !== undefined && {
+            sandboxProfiles: sandboxProfilesValue,
+          }),
           updatedAt: now,
         },
       })
@@ -178,6 +210,68 @@ export class PostgresRegistry {
       throw new Error(`Failed to read back runner "${input.id}"`)
     }
     return runner
+  }
+
+  /**
+   * Returns the distinct sandbox profile names currently advertised by
+   * at least one runner in this tenant. Used by spawn validation to
+   * assert the chosen profile is actually serviceable.
+   */
+  async listSandboxProfileNames(): Promise<Array<string>> {
+    const rows = await this.db
+      .select({ sandboxProfiles: runners.sandboxProfiles })
+      .from(runners)
+      .where(eq(runners.tenantId, this.tenantId))
+    const names = new Set<string>()
+    for (const row of rows) {
+      const list = row.sandboxProfiles as
+        | Array<{ name?: unknown }>
+        | null
+        | undefined
+      if (!Array.isArray(list)) continue
+      for (const entry of list) {
+        if (entry && typeof entry.name === `string`) names.add(entry.name)
+      }
+    }
+    return [...names]
+  }
+
+  /**
+   * Every sandbox profile advertised by a runner in this tenant (one entry
+   * per runner that advertises it — names may repeat across runners). Used by
+   * spawn validation for unpinned dispatch to learn whether a chosen profile
+   * is remote (so a shared sandbox can skip the single-runner guard).
+   */
+  async listSandboxProfiles(): Promise<Array<SandboxProfileAdvertisement>> {
+    const rows = await this.db
+      .select({ sandboxProfiles: runners.sandboxProfiles })
+      .from(runners)
+      .where(eq(runners.tenantId, this.tenantId))
+    const profiles: Array<SandboxProfileAdvertisement> = []
+    for (const row of rows) {
+      const list = row.sandboxProfiles as
+        | Array<{
+            name?: unknown
+            label?: unknown
+            description?: unknown
+            remote?: unknown
+          }>
+        | null
+        | undefined
+      if (!Array.isArray(list)) continue
+      for (const entry of list) {
+        if (!entry || typeof entry.name !== `string`) continue
+        profiles.push({
+          name: entry.name,
+          label: typeof entry.label === `string` ? entry.label : entry.name,
+          ...(typeof entry.description === `string` && {
+            description: entry.description,
+          }),
+          ...(typeof entry.remote === `boolean` && { remote: entry.remote }),
+        })
+      }
+    }
+    return profiles
   }
 
   async getRunner(id: string): Promise<ElectricAgentsRunner | null> {
@@ -613,6 +707,7 @@ export class PostgresRegistry {
             tags: normalizeTags(entity.tags),
             tagsIndex: buildTagsIndex(entity.tags),
             spawnArgs: entity.spawn_args ?? {},
+            sandbox: entity.sandbox ?? null,
             parent: entity.parent ?? null,
             createdBy: entity.created_by ?? null,
             typeRevision: entity.type_revision ?? null,
@@ -1223,6 +1318,8 @@ export class PostgresRegistry {
       write_token: row.writeToken,
       tags: (row.tags as EntityTags | null | undefined) ?? {},
       spawn_args: row.spawnArgs as Record<string, unknown> | undefined,
+      sandbox:
+        (row.sandbox as ElectricAgentsEntity[`sandbox`] | null) ?? undefined,
       parent: row.parent ?? undefined,
       created_by: row.createdBy ?? undefined,
       type_revision: row.typeRevision ?? undefined,
@@ -1295,6 +1392,13 @@ export class PostgresRegistry {
       kind: assertRunnerKind(row.kind),
       admin_status: assertRunnerAdminStatus(row.adminStatus),
       wake_stream: row.wakeStream,
+      sandbox_profiles:
+        (row.sandboxProfiles as Array<{
+          name: string
+          label: string
+          description?: string
+          remote?: boolean
+        }> | null) ?? [],
       created_at: row.createdAt.toISOString(),
       updated_at: row.updatedAt.toISOString(),
     }

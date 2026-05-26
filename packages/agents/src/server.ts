@@ -378,6 +378,7 @@ export class BuiltinAgentsServer {
         : pullWake.headers
     )
     headers.set(`content-type`, `application/json`)
+    const profiles = this.bootstrap?.runtime.sandboxProfileDescriptors ?? []
     const response = await fetch(
       appendPathToUrl(this.options.agentServerUrl, `/_electric/runners`),
       {
@@ -389,6 +390,7 @@ export class BuiltinAgentsServer {
           label: pullWake.label ?? `Built-in agents`,
           kind: `local`,
           admin_status: `enabled`,
+          sandbox_profiles: profiles,
         }),
       }
     )

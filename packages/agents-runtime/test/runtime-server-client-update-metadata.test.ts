@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createRuntimeServerClient } from '../src/runtime-server-client'
 import { createHandlerContext } from '../src/context-factory'
+import { testSandboxStub } from './helpers/context-test-helpers'
 
 describe(`runtime-server-client.setTag`, () => {
   it(`ensureStream creates an exact stream path with the requested content type`, async () => {
@@ -242,6 +243,7 @@ describe(`createHandlerContext: tags + tag mutations`, () => {
       state: {},
       actions: {},
       electricTools: [],
+      sandbox: testSandboxStub,
       events: [],
       writeEvent: () => {},
       wakeSession: {} as any,

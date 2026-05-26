@@ -14,6 +14,7 @@ export type ApiKeysFormValues = {
   deepseek: string
   moonshot: string
   brave: string
+  e2b: string
 }
 
 type ApiKeyFieldId = keyof ApiKeysFormValues
@@ -43,6 +44,7 @@ interface ApiKeysFormProps {
   showModelKeys?: boolean
   showBrave?: boolean
   modelControls?: Partial<Record<ModelApiKeyFieldId, ReactNode>>
+  showE2b?: boolean
   /**
    * When `true`, persist on field blur (after the user has typed)
    * instead of waiting for a Save click. Hides the explicit
@@ -80,6 +82,7 @@ export function ApiKeysForm({
   showModelKeys = true,
   showBrave = true,
   modelControls,
+  showE2b = true,
   autoSave = false,
 }: ApiKeysFormProps): React.ReactElement {
   const [anthropic, setAnthropic] = useState(initial.anthropic)
@@ -87,6 +90,7 @@ export function ApiKeysForm({
   const [deepseek, setDeepseek] = useState(initial.deepseek)
   const [moonshot, setMoonshot] = useState(initial.moonshot)
   const [brave, setBrave] = useState(initial.brave)
+  const [e2b, setE2b] = useState(initial.e2b)
   const [visibleKeys, setVisibleKeys] = useState<
     Record<ApiKeyFieldId, boolean>
   >({
@@ -95,6 +99,7 @@ export function ApiKeysForm({
     deepseek: false,
     moonshot: false,
     brave: false,
+    e2b: false,
   })
   const [saving, setSaving] = useState(false)
   // Tracks the last set of values we've actually persisted, so an
@@ -111,6 +116,7 @@ export function ApiKeysForm({
     deepseek: false,
     moonshot: false,
     brave: false,
+    e2b: false,
   })
 
   const canSave =
@@ -119,18 +125,36 @@ export function ApiKeysForm({
         openai.trim().length > 0 ||
         deepseek.trim().length > 0 ||
         moonshot.trim().length > 0)) ||
-    (showBrave && brave.trim().length > 0)
+    (showBrave && brave.trim().length > 0) ||
+    (showE2b && e2b.trim().length > 0)
 
   const handleSave = useCallback(async (): Promise<void> => {
     if (!canSave || saving) return
     setSaving(true)
     try {
-      await onSave({ anthropic, openai, deepseek, moonshot, brave })
-      persistedRef.current = { anthropic, openai, deepseek, moonshot, brave }
+      await onSave({ anthropic, openai, deepseek, moonshot, brave, e2b })
+      persistedRef.current = {
+        anthropic,
+        openai,
+        deepseek,
+        moonshot,
+        brave,
+        e2b,
+      }
     } finally {
       setSaving(false)
     }
-  }, [anthropic, openai, deepseek, moonshot, brave, canSave, saving, onSave])
+  }, [
+    anthropic,
+    openai,
+    deepseek,
+    moonshot,
+    brave,
+    e2b,
+    canSave,
+    saving,
+    onSave,
+  ])
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
@@ -168,9 +192,19 @@ export function ApiKeysForm({
         deepseek,
         moonshot,
         brave,
+        e2b,
       })
     },
-    [autoSave, anthropic, openai, deepseek, moonshot, brave, persistIfDirty]
+    [
+      autoSave,
+      anthropic,
+      openai,
+      deepseek,
+      moonshot,
+      brave,
+      e2b,
+      persistIfDirty,
+    ]
   )
 
   const wrapOnChange = useCallback(
@@ -301,6 +335,24 @@ export function ApiKeysForm({
             }
           />
         )}
+        {showE2b && (
+          <SettingsRow
+            label="E2B API"
+            description="Enables the E2B remote-sandbox profile, which runs agents in isolated cloud microVMs. Looks like e2b_…"
+            splitLayout
+            control={
+              <ApiKeyInput
+                field="e2b"
+                placeholder="e2b_…"
+                value={e2b}
+                visible={visibleKeys.e2b}
+                onChange={wrapOnChange(`e2b`, setE2b)}
+                onBlur={() => handleAutoSaveBlur(`e2b`)}
+                onToggleVisible={toggleVisible}
+              />
+            }
+          />
+        )}
         {showActions && (
           <SettingsActions separator>
             {onSecondary && secondaryLabel && (
@@ -410,6 +462,21 @@ export function ApiKeysForm({
               value={brave}
               visible={visibleKeys.brave}
               onChange={setBrave}
+              onToggleVisible={toggleVisible}
+            />
+          </Field>
+        )}
+        {showE2b && (
+          <Field
+            label="E2B API (optional)"
+            description="Enables the E2B remote-sandbox profile, which runs agents in isolated cloud microVMs. Looks like e2b_…"
+          >
+            <ApiKeyInput
+              field="e2b"
+              placeholder="e2b_…"
+              value={e2b}
+              visible={visibleKeys.e2b}
+              onChange={setE2b}
               onToggleVisible={toggleVisible}
             />
           </Field>

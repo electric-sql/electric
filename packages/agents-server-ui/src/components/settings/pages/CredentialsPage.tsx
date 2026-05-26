@@ -167,8 +167,10 @@ export function CredentialsPage(): React.ReactElement {
                 moonshot:
                   status.saved.moonshot ?? status.suggested.moonshot ?? ``,
                 brave: status.saved.brave ?? ``,
+                e2b: status.saved.e2b ?? ``,
               }}
               showBrave={false}
+              showE2b={false}
               showSuggestionHint={
                 !status.hasAnyKey &&
                 Boolean(
@@ -185,6 +187,7 @@ export function CredentialsPage(): React.ReactElement {
                   deepseek: deepseek.trim() || null,
                   moonshot: moonshot.trim() || null,
                   brave: status.saved.brave ?? null,
+                  e2b: status.saved.e2b ?? null,
                 })
                 await refreshStatus()
               }}
@@ -237,7 +240,7 @@ export function CredentialsPage(): React.ReactElement {
       {isDesktop && status && (
         <SettingsSection
           title="Tools"
-          description="Optional tool provider keys used by local agents."
+          description="Optional tool and sandbox provider keys used by local agents."
         >
           <ApiKeysForm
             layout="settings"
@@ -248,18 +251,21 @@ export function CredentialsPage(): React.ReactElement {
               deepseek: status.saved.deepseek ?? ``,
               moonshot: status.saved.moonshot ?? ``,
               brave: status.saved.brave ?? status.suggested.brave ?? ``,
+              e2b: status.saved.e2b ?? status.suggested.e2b ?? ``,
             }}
             showModelKeys={false}
             showSuggestionHint={
-              !status.saved.brave && Boolean(status.suggested.brave)
+              (!status.saved.brave && Boolean(status.suggested.brave)) ||
+              (!status.saved.e2b && Boolean(status.suggested.e2b))
             }
-            onSave={async ({ brave }) => {
+            onSave={async ({ brave, e2b }) => {
               await persistApiKeys({
                 anthropic: status.saved.anthropic ?? null,
                 openai: status.saved.openai ?? null,
                 deepseek: status.saved.deepseek ?? null,
                 moonshot: status.saved.moonshot ?? null,
                 brave: brave.trim() || null,
+                e2b: e2b.trim() || null,
               })
               await refreshStatus()
             }}
