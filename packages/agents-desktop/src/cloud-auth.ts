@@ -261,6 +261,14 @@ export class CloudAuth {
     void shell.openExternal(getCloudBaseUrl())
   }
 
+  openCreateAgentsServer(): void {
+    const url = new URL(`/`, getCloudBaseUrl())
+    url.searchParams.set(`intent`, `create`)
+    url.searchParams.set(`serviceType`, `streams`)
+    url.searchParams.set(`variant`, `agent-streams`)
+    void shell.openExternal(url.toString())
+  }
+
   /**
    * Open the OAuth flow for `provider` in a new BrowserWindow. Resolves
    * when the user completes (or cancels) the flow.

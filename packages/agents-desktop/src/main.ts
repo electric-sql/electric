@@ -2734,6 +2734,9 @@ function registerIpcHandlers(): void {
   ipcMain.handle(`desktop:cloud-auth-open-dashboard`, () => {
     getCloudAuth().openDashboard()
   })
+  ipcMain.handle(`desktop:cloud-auth-open-create-agents-server`, () => {
+    getCloudAuth().openCreateAgentsServer()
+  })
 
   // ── Cloud agent servers ─────────────────────────────────────────
   // The user-scoped shape stream of agent stream services

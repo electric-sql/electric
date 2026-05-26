@@ -137,6 +137,14 @@
 
 .sectionHeader {
   display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--ds-space-3);
+}
+
+.sectionHeaderText {
+  min-width: 0;
+  display: flex;
   flex-direction: column;
   gap: 4px;
 }
@@ -146,6 +154,10 @@
   font-size: var(--ds-text-base);
   font-weight: 500;
   color: var(--ds-text-1);
+}
+
+.sectionAction {
+  flex-shrink: 0;
 }
 
 .sectionDescription {

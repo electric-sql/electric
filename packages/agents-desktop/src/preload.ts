@@ -422,6 +422,8 @@ const api = {
       ipcRenderer.invoke(`desktop:cloud-auth-sign-out`),
     openDashboard: (): Promise<void> =>
       ipcRenderer.invoke(`desktop:cloud-auth-open-dashboard`),
+    openCreateAgentsServer: (): Promise<void> =>
+      ipcRenderer.invoke(`desktop:cloud-auth-open-create-agents-server`),
     onStateChanged: (
       callback: (state: CloudAuthState) => void
     ): (() => void) => {

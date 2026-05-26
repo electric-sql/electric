@@ -349,6 +349,7 @@ declare global {
         signIn: (provider: CloudAuthProvider) => Promise<void>
         signOut: () => Promise<void>
         openDashboard: () => Promise<void>
+        openCreateAgentsServer: () => Promise<void>
         onStateChanged: (
           callback: (state: CloudAuthState) => void
         ) => () => void
@@ -507,6 +508,10 @@ export async function cloudSignOut(): Promise<void> {
 
 export async function cloudOpenDashboard(): Promise<void> {
   await window.electronAPI?.cloudAuth?.openDashboard?.()
+}
+
+export async function cloudOpenCreateAgentsServer(): Promise<void> {
+  await window.electronAPI?.cloudAuth?.openCreateAgentsServer?.()
 }
 
 export function onCloudAuthStateChanged(

@@ -3,12 +3,12 @@ import {
   Brain,
   ChevronDown,
   Cloud,
+  ExternalLink,
   Laptop,
   Plug,
   RefreshCw,
-  Square,
   Trash2,
-  Zap,
+  Unplug,
 } from 'lucide-react'
 import {
   useAvailableServers,
@@ -28,6 +28,7 @@ import {
 } from '../../../ui'
 import { SettingsRow, SettingsScreen, SettingsSection } from '../SettingsScreen'
 import {
+  cloudOpenCreateAgentsServer,
   prepareCloudAgentServerConnection,
   type CloudAgentServersState,
   type ConnectServerOptions,
@@ -170,11 +171,28 @@ export function ServersPage(): React.ReactElement {
           )}
         </SettingsSection>
         <SettingsSection
-          title="Add Server"
+          title="Electric Cloud"
+          description="Create a hosted agents server in Electric Cloud."
+          action={
+            <Button
+              variant="solid"
+              tone="accent"
+              disabled={!isDesktop}
+              onClick={() => {
+                void cloudOpenCreateAgentsServer()
+              }}
+            >
+              <Icon icon={ExternalLink} size={2} />
+              Create Server in Electric Cloud
+            </Button>
+          }
+        />
+        <SettingsSection
+          title="Add Local Or Self-Hosted Server"
           description={
             isDesktop
-              ? `Add a server URL manually. New connections start the local runtime by default.`
-              : `Add another agents server URL for this browser.`
+              ? `Add a local or self-hosted server URL manually. New connections start the local runtime by default.`
+              : `Add another local or self-hosted agents server URL for this browser.`
           }
         >
           <AddServerForm
@@ -302,7 +320,7 @@ function ServerRow({
               <Icon icon={RefreshCw} size={2} /> Retry
             </Button>
             <Button variant="soft" tone="neutral" onClick={onDisconnect}>
-              <Icon icon={Square} size={2} /> Disconnect
+              <Icon icon={Plug} size={2} /> Disconnect
             </Button>
           </>
         ) : isDesktop ? (
@@ -340,7 +358,7 @@ function ConnectSplitButton({
         style={{ borderTopRightRadius: 0, borderBottomRightRadius: 0 }}
         onClick={() => onConnect({ localRuntimeEnabled: true })}
       >
-        <Icon icon={Zap} size={2} /> Connect
+        <Icon icon={Unplug} size={2} /> Connect
       </Button>
       <Menu.Root open={open} onOpenChange={setOpen}>
         <Menu.Trigger

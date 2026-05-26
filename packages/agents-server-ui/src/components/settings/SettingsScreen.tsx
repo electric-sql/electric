@@ -78,21 +78,26 @@ export function SettingsScreen({
 export function SettingsSection({
   title,
   description,
+  action,
   children,
 }: {
   title: string
   description?: ReactNode
-  children: ReactNode
+  action?: ReactNode
+  children?: ReactNode
 }): React.ReactElement {
   return (
     <section className={styles.section}>
       <header className={styles.sectionHeader}>
-        <h2 className={styles.sectionTitle}>{title}</h2>
-        {description && (
-          <p className={styles.sectionDescription}>{description}</p>
-        )}
+        <div className={styles.sectionHeaderText}>
+          <h2 className={styles.sectionTitle}>{title}</h2>
+          {description && (
+            <p className={styles.sectionDescription}>{description}</p>
+          )}
+        </div>
+        {action && <div className={styles.sectionAction}>{action}</div>}
       </header>
-      <div className={styles.sectionBody}>{children}</div>
+      {children && <div className={styles.sectionBody}>{children}</div>}
     </section>
   )
 }
