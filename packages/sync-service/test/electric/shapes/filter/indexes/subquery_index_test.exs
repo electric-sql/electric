@@ -77,8 +77,8 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
       register_node_shape(filter, condition_id, "s2")
 
       children =
-        :ets.match(table, {{:shape_child, "s1", :"$1", :_}, :_}) ++
-          :ets.match(table, {{:shape_child, "s2", :"$1", :_}, :_})
+        :ets.match(table, {{:shape_child, "s1"}, {:"$1", :_}}) ++
+          :ets.match(table, {{:shape_child, "s2"}, {:"$1", :_}})
 
       assert children |> Enum.uniq() |> length() == 1
     end
@@ -92,8 +92,8 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
 
       register_node_shape(filter, condition_id, "s2", dep_handles: [@dep_handle_b])
 
-      [[c1]] = :ets.match(table, {{:shape_child, "s1", :"$1", :_}, :_})
-      [[c2]] = :ets.match(table, {{:shape_child, "s2", :"$1", :_}, :_})
+      [[c1]] = :ets.match(table, {{:shape_child, "s1"}, {:"$1", :_}})
+      [[c2]] = :ets.match(table, {{:shape_child, "s2"}, {:"$1", :_}})
 
       assert c1 != c2
     end
@@ -112,7 +112,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
       [[_, group_id]] =
         :ets.match(table, {{:group, condition_id, @field, :"$1"}, :"$2"})
 
-      assert :ets.match(table, {{:positive, group_id, :"$1", :_}, :_}) |> Enum.sort() ==
+      assert :ets.match(table, {{:positive, group_id, :"$1"}, :_}) |> Enum.sort() ==
                [[10], [20]] |> Enum.sort()
     end
 
@@ -127,9 +127,9 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
 
       register_node_shape(filter, condition_id, "s1")
 
-      before_routes = :ets.match(table, {{:positive, :_, :_, :_}, :_})
+      before_routes = :ets.match(table, {{:positive, :_, :_}, :_})
       register_node_shape(filter, condition_id, "s2")
-      after_routes = :ets.match(table, {{:positive, :_, :_, :_}, :_})
+      after_routes = :ets.match(table, {{:positive, :_, :_}, :_})
 
       assert Enum.sort(before_routes) == Enum.sort(after_routes)
     end
@@ -147,8 +147,8 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
 
       register_node_shape(filter, condition_id, "n1", polarity: :negated)
 
-      assert :ets.match(table, {{:negated, :_, :_}, :_}) |> length() == 1
-      assert :ets.match(table, {{:positive, :_, :_, :_}, :_}) == []
+      assert :ets.match(table, {{:negated, :_}, :_}) |> length() == 1
+      assert :ets.match(table, {{:positive, :_, :_}, :_}) == []
     end
   end
 
@@ -373,17 +373,17 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
 
       register_node_shape(filter, condition_id, "s1")
 
-      shape_rows_before = :ets.match(table, {{:shape_child, "s1", :_, :_}, :_})
+      shape_rows_before = :ets.lookup(table, {:shape_child, "s1"})
 
       SubqueryIndex.add_positive_route(index, @dep_handle_a, 42)
 
       [[group_id]] = :ets.match(table, {{:group, condition_id, @field, :positive}, :"$1"})
-      assert :ets.match(table, {{:positive, group_id, 42, :_}, :_}) |> length() == 1
+      assert :ets.lookup(table, {:positive, group_id, 42}) |> length() == 1
 
       SubqueryIndex.remove_positive_route(index, @dep_handle_a, 42)
-      assert :ets.match(table, {{:positive, group_id, 42, :_}, :_}) == []
+      assert :ets.lookup(table, {:positive, group_id, 42}) == []
 
-      assert :ets.match(table, {{:shape_child, "s1", :_, :_}, :_}) == shape_rows_before
+      assert :ets.lookup(table, {:shape_child, "s1"}) == shape_rows_before
     end
   end
 
@@ -421,7 +421,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
       assert :deleted =
                SubqueryIndex.remove_shape(filter, condition_id, "s2", subquery_optimisation(), [])
 
-      assert :ets.match(table, {{:positive, :_, :_, :_}, :_}) == []
+      assert :ets.match(table, {{:positive, :_, :_}, :_}) == []
       assert :ets.match(table, {{:child_meta, :_}, :_}) == []
     end
 
@@ -491,12 +491,12 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
     } do
       register_node_shape(filter, condition_id, "s1")
       assert SubqueryIndex.fallback?(index, "s1")
-      assert :ets.match(table, {{:node_fallback, :_, :_, :_, "s1"}, :_}) != []
+      assert :ets.match(table, {{:node_fallback, :_, :_}, {:_, "s1"}}) != []
 
       SubqueryIndex.mark_ready(index, "s1")
 
       refute SubqueryIndex.fallback?(index, "s1")
-      assert :ets.match(table, {{:node_fallback, :_, :_, :_, "s1"}, :_}) == []
+      assert :ets.match(table, {{:node_fallback, :_, :_}, {:_, "s1"}}) == []
     end
   end
 

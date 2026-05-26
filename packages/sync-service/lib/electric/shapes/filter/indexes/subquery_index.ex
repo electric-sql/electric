@@ -35,11 +35,11 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
     table =
       case Keyword.get(opts, :stack_id) do
         nil ->
-          :ets.new(:subquery_index, [:set, :public])
+          :ets.new(:subquery_index, [:bag, :public])
 
         stack_id ->
           try do
-            :ets.new(table_name(stack_id), [:set, :public, :named_table])
+            :ets.new(table_name(stack_id), [:bag, :public, :named_table])
           rescue
             ArgumentError -> table_name(stack_id)
           end
@@ -134,13 +134,13 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
       branch_key
     )
 
-    :ets.insert(table, {{:child_shape, child_node_id, shape_handle, branch_key}, true})
-    :ets.insert(table, {{:shape_child, shape_handle, child_node_id, branch_key}, true})
+    :ets.insert(table, {{:child_shape, child_node_id}, {shape_handle, branch_key}})
+    :ets.insert(table, {{:shape_child, shape_handle}, {child_node_id, branch_key}})
 
     if shape_in_fallback?(table, shape_handle) do
       :ets.insert(
         table,
-        {{:node_fallback, condition_id, optimisation.field, child_node_id, shape_handle}, true}
+        {{:node_fallback, condition_id, optimisation.field}, {child_node_id, shape_handle}}
       )
     end
 
@@ -181,12 +181,12 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
             branch_key
           )
 
-        :ets.delete(table, {:child_shape, child_node_id, shape_handle, branch_key})
-        :ets.delete(table, {:shape_child, shape_handle, child_node_id, branch_key})
+        :ets.delete_object(table, {{:child_shape, child_node_id}, {shape_handle, branch_key}})
+        :ets.delete_object(table, {{:shape_child, shape_handle}, {child_node_id, branch_key}})
 
-        :ets.match_delete(
+        :ets.delete_object(
           table,
-          {{:node_fallback, condition_id, optimisation.field, child_node_id, shape_handle}, :_}
+          {{:node_fallback, condition_id, optimisation.field}, {child_node_id, shape_handle}}
         )
 
         if child_empty?(table, child_node_id) do
@@ -201,7 +201,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   @spec mark_ready(t(), term()) :: :ok
   def mark_ready(%SubqueryIndex{table: table}, shape_handle) do
     :ets.delete(table, {:fallback, shape_handle})
-    :ets.match_delete(table, {{:node_fallback, :_, :_, :_, shape_handle}, :_})
+    :ets.match_delete(table, {{:node_fallback, :_, :_}, {:_, shape_handle}})
     :ok
   end
 
@@ -215,7 +215,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   @doc "Whether `shape_handle` is attached to at least one indexed subquery node."
   @spec has_positions?(t(), term()) :: boolean()
   def has_positions?(%SubqueryIndex{table: table}, shape_handle) do
-    :ets.match(table, {{:shape_child, shape_handle, :_, :_}, :_}, 1) != :"$end_of_table"
+    :ets.member(table, {:shape_child, shape_handle})
   end
 
   @doc """
@@ -228,7 +228,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
     for child_node_id <- children_for_subquery(table, subquery_id) do
       case :ets.lookup(table, {:child_meta, child_node_id}) do
         [{_, %{polarity: :positive, group_id: group_id}}] ->
-          :ets.insert(table, {{:positive, group_id, value, child_node_id}, true})
+          :ets.insert(table, {{:positive, group_id, value}, child_node_id})
 
         _ ->
           :ok
@@ -248,7 +248,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
     for child_node_id <- children_for_subquery(table, subquery_id) do
       case :ets.lookup(table, {:child_meta, child_node_id}) do
         [{_, %{polarity: :positive, group_id: group_id}}] ->
-          :ets.delete(table, {:positive, group_id, value, child_node_id})
+          :ets.delete_object(table, {{:positive, group_id, value}, child_node_id})
 
         _ ->
           :ok
@@ -374,7 +374,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
 
         :ets.insert(table, {{:child, group_id, subquery_id}, child_node_id})
         :ets.insert(table, {{:child_meta, child_node_id}, meta})
-        :ets.insert(table, {{:subquery_child, subquery_id, child_node_id}, true})
+        :ets.insert(table, {{:subquery_child, subquery_id}, child_node_id})
 
         seed_child_routing(table, mtv, child_node_id, meta)
         {child_node_id, next_condition_id}
@@ -382,9 +382,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   end
 
   defp children_for_subquery(table, subquery_id) do
-    table
-    |> :ets.match({{:subquery_child, subquery_id, :"$1"}, :_})
-    |> Enum.map(fn [cnid] -> cnid end)
+    for {_, cnid} <- :ets.lookup(table, {:subquery_child, subquery_id}), do: cnid
   end
 
   defp seed_child_routing(_table, nil, _child_node_id, _meta), do: :ok
@@ -400,7 +398,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
 
       time ->
         for value <- MultiTimeView.values(mtv, subquery_id, time) do
-          :ets.insert(table, {{:positive, group_id, value, child_node_id}, true})
+          :ets.insert(table, {{:positive, group_id, value}, child_node_id})
         end
 
         :ok
@@ -411,7 +409,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
          polarity: :negated,
          group_id: group_id
        }) do
-    :ets.insert(table, {{:negated, group_id, child_node_id}, true})
+    :ets.insert(table, {{:negated, group_id}, child_node_id})
     :ok
   end
 
@@ -428,32 +426,30 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   end
 
   defp lookup_child_for_shape(table, condition_id, field_key, polarity, shape_handle, branch_key) do
-    case :ets.lookup(table, {:group, condition_id, field_key, polarity}) do
-      [{_, group_id}] ->
-        children =
-          table
-          |> :ets.match({{:child, group_id, :_}, :"$1"})
-          |> Enum.map(fn [cnid] -> cnid end)
+    with [{_, group_id}] <- :ets.lookup(table, {:group, condition_id, field_key, polarity}),
+         {cnid, next} when not is_nil(cnid) <-
+           Enum.find_value(
+             :ets.lookup(table, {:shape_child, shape_handle}),
+             {nil, nil},
+             fn
+               {_, {cnid, ^branch_key}} ->
+                 case :ets.lookup(table, {:child_meta, cnid}) do
+                   [{_, %{group_id: ^group_id, next_condition_id: next}}] -> {cnid, next}
+                   _ -> nil
+                 end
 
-        child_node_id =
-          Enum.find(children, fn cnid ->
-            :ets.member(table, {:shape_child, shape_handle, cnid, branch_key})
-          end)
-
-        if child_node_id do
-          [{_, %{next_condition_id: next_condition_id}}] =
-            :ets.lookup(table, {:child_meta, child_node_id})
-
-          {child_node_id, next_condition_id}
-        end
-
-      [] ->
-        nil
+               _ ->
+                 nil
+             end
+           ) do
+      {cnid, next}
+    else
+      _ -> nil
     end
   end
 
   defp child_empty?(table, child_node_id) do
-    :ets.match(table, {{:child_shape, child_node_id, :_, :_}, :_}) == []
+    not :ets.member(table, {:child_shape, child_node_id})
   end
 
   defp delete_child(table, mtv, child_node_id) do
@@ -466,17 +462,17 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
           :positive ->
             if mtv != nil do
               for value <- MultiTimeView.values(mtv, meta.subquery_id) do
-                :ets.delete(table, {:positive, meta.group_id, value, child_node_id})
+                :ets.delete_object(table, {{:positive, meta.group_id, value}, child_node_id})
               end
             end
 
           :negated ->
-            :ets.delete(table, {:negated, meta.group_id, child_node_id})
+            :ets.delete_object(table, {{:negated, meta.group_id}, child_node_id})
         end
 
-        :ets.match_delete(table, {{:node_fallback, :_, :_, child_node_id, :_}, :_})
+        :ets.match_delete(table, {{:node_fallback, :_, :_}, {child_node_id, :_}})
         :ets.delete(table, {:child, meta.group_id, meta.subquery_id})
-        :ets.delete(table, {:subquery_child, meta.subquery_id, child_node_id})
+        :ets.delete_object(table, {{:subquery_child, meta.subquery_id}, child_node_id})
         :ets.delete(table, {:child_meta, child_node_id})
 
         if group_empty?(table, meta.group_id) do
@@ -495,10 +491,9 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   end
 
   defp cleanup_child_shapes(table, child_node_id) do
-    for [shape_handle, branch_key] <-
-          :ets.match(table, {{:child_shape, child_node_id, :"$1", :"$2"}, :_}) do
-      :ets.delete(table, {:shape_child, shape_handle, child_node_id, branch_key})
-      :ets.delete(table, {:child_shape, child_node_id, shape_handle, branch_key})
+    for {_, {shape_handle, branch_key}} <- :ets.lookup(table, {:child_shape, child_node_id}) do
+      :ets.delete_object(table, {{:shape_child, shape_handle}, {child_node_id, branch_key}})
+      :ets.delete_object(table, {{:child_shape, child_node_id}, {shape_handle, branch_key}})
     end
   end
 
@@ -516,10 +511,9 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
         MapSet.new()
 
       [{_, group_id}] ->
-        table
-        |> :ets.match({{:positive, group_id, value, :"$1"}, :_})
-        |> Enum.map(fn [cnid] -> cnid end)
-        |> MapSet.new()
+        for {_, cnid} <- :ets.lookup(table, {:positive, group_id, value}),
+            into: MapSet.new(),
+            do: cnid
     end
   end
 
@@ -529,11 +523,10 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
         MapSet.new()
 
       [{_, group_id}] ->
-        for [cnid] <- :ets.match(table, {{:negated, group_id, :"$1"}, :_}),
+        for {_, cnid} <- :ets.lookup(table, {:negated, group_id}),
             keep_negated_child?(table, mtv, cnid, value),
-            into: MapSet.new() do
-          cnid
-        end
+            into: MapSet.new(),
+            do: cnid
     end
   end
 
@@ -550,10 +543,9 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   end
 
   defp fallback_children(table, condition_id, field_key) do
-    table
-    |> :ets.match({{:node_fallback, condition_id, field_key, :"$1", :_}, :_})
-    |> Enum.map(fn [cnid] -> cnid end)
-    |> MapSet.new()
+    for {_, {cnid, _shape}} <- :ets.lookup(table, {:node_fallback, condition_id, field_key}),
+        into: MapSet.new(),
+        do: cnid
   end
 
   defp all_children(table, condition_id, field_key) do
