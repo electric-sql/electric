@@ -46,14 +46,6 @@ interface EntityWriteUtils {
 type EntityCollectionMeta = {
   __electricSourceDb?: EntityStreamDBWithActions
   __electricSourceId?: string
-  /**
-   * Per-row durable-stream pointer (`{ offset, subOffset }`). Populated
-   * by the batch callback in `entity-stream-db` and consumed by code
-   * that needs to address a specific event on the stream — most
-   * notably the fork-at-message UX, which uses these pointers as
-   * inputs to PR #347's `Stream-Fork-Offset` + `Stream-Fork-Sub-Offset`
-   * headers.
-   */
   __electricRowOffsets?: Map<string | number, EventPointer>
   __electricTimelineOrders?: Map<string | number, string>
 }
@@ -163,8 +155,7 @@ export function createEntityStreamDB(
   // Tracks the END offset of the previous batch — i.e. the START
   // offset of the next batch's items, which is the anchor we pair
   // with each item's sub-offset to form an `EventPointer`. `null`
-  // before any batch has arrived (= "anchor at stream start"; matches
-  // PR #347's "omitted Stream-Fork-Offset" semantic).
+  // before any batch has arrived (anchor at stream start).
   let previousBatchOffset: string | null = null
   // Build a reverse map from TanStack DB collection id to schema key
   const collIdToSchemaKey: Record<string, string> = {}
@@ -296,17 +287,17 @@ export function createEntityStreamDB(
     onBeforeBatch: (batch) => {
       opts?.onBeforeBatch?.(batch)
       replayBatchOffset.current = batch.offset
-      // PR #347's `Stream-Fork-Sub-Offset` addresses items WITHIN A
-      // SINGLE LOG ENTRY (the first log entry past the anchor), not
-      // items globally past the anchor. To mint server-compatible
-      // pointers we group items in the batch by their `headers.offset`
-      // (= the end offset of the log entry that produced them, stable
-      // at write time). Each contiguous group of items sharing an
-      // `headers.offset` is one log entry; within it sub-offsets are
-      // 1..K. The anchor offset for that group is the END offset of
-      // the PRECEDING log entry — either the previous distinct
-      // `headers.offset` we saw in this batch, or `previousBatchOffset`
-      // for the first group in a fresh batch.
+      // `Stream-Fork-Sub-Offset` addresses items WITHIN A SINGLE LOG
+      // ENTRY (the first log entry past the anchor), not items globally
+      // past the anchor. To mint server-compatible pointers we group
+      // items in the batch by their `headers.offset` (= the end offset
+      // of the log entry that produced them, stable at write time).
+      // Each contiguous group of items sharing an `headers.offset` is
+      // one log entry; within it sub-offsets are 1..K. The anchor
+      // offset for that group is the END offset of the PRECEDING log
+      // entry — either the previous distinct `headers.offset` we saw
+      // in this batch, or `previousBatchOffset` for the first group in
+      // a fresh batch.
       let currentEntryOffset: string | null = null
       let priorEntryOffset: string | null = previousBatchOffset
       let positionInEntry = 0
@@ -723,7 +714,7 @@ export function createEntityStreamDB(
         // a wire batch). It carries a single event, so the pointer's
         // sub-offset is always 1 ("the one item past this anchor").
         // If no real offset is available, synthesize a monotonically-
-        // increasing `local:…` token so successive applyEvent calls
+        // increasing `local:...` token so successive applyEvent calls
         // still sort in invocation order.
         const offset =
           event.headers.offset ??

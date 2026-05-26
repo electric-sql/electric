@@ -136,9 +136,8 @@ const forkBodySchema = Type.Object({
   instance_id: Type.Optional(Type.String()),
   waitTimeoutMs: Type.Optional(Type.Number()),
   // Optional anchor pointing at an event on the source root's `main`
-  // stream. See docs/fork-at-message.md. Wire shape is snake_case; the
-  // route handler translates to camelCase before forwarding to
-  // entity-manager.
+  // stream. Wire shape is snake_case; the route handler translates to
+  // camelCase before forwarding to entity-manager.
   fork_pointer: Type.Optional(
     Type.Object({
       offset: Type.Union([Type.String(), Type.Null()]),

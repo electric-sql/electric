@@ -47,7 +47,7 @@ export const UserMessage = memo(function UserMessage({
    * When provided, renders a hover-revealed "Fork from here" button on
    * the bubble. The caller is responsible for eligibility — pass
    * `undefined` for messages where no preceding completed run anchors a
-   * fork. See docs/fork-at-message.md Q4.
+   * fork.
    */
   onForkFromHere?: () => void
 }): React.ReactElement {

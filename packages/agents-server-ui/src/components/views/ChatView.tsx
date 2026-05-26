@@ -232,9 +232,9 @@ function GenericChatBody({
   // "Fork from here" anchor map. For each user-message inbox row, the
   // anchor is the LATEST preceding completed `runs` row — its pointer
   // identifies "fork up to and including this response, drop everything
-  // after." See docs/fork-at-message.md Q4. Rows without a preceding
-  // completed run (first message, in-flight run, etc.) get no entry,
-  // which suppresses the affordance in UserMessage.
+  // after." Rows without a preceding completed run (first message,
+  // in-flight run, etc.) get no entry, which suppresses the affordance
+  // in UserMessage.
   const forkFromHereByInboxKey = useMemo(() => {
     if (!forkEntity || !entityUrl || !db) return undefined
     const runOffsets = db.collections.runs.__electricRowOffsets

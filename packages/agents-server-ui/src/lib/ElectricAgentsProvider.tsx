@@ -516,8 +516,7 @@ function createForkEntity(baseUrl: string) {
     entityUrl: string,
     opts?: { pointer?: EventPointer }
   ): Promise<{ url: string }> => {
-    // Wire convention is snake_case; in-code TS is camelCase. See Q4
-    // "Field-naming convention" in docs/fork-at-message.md.
+    // Wire convention is snake_case; in-code TS is camelCase.
     const body = opts?.pointer
       ? {
           fork_pointer: {

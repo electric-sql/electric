@@ -167,9 +167,9 @@ type ForkSubtreeOptions = {
    * When set: only events at or before the pointer are kept on the root's
    * forked `main`, and the root's manifest is filtered so that descendants
    * spawned after the pointer are dropped from the fork (their now-orphan
-   * subtrees are not forked). Per Q2 of the fork-at-message RFC, the
-   * pointer only applies to the root's `main` stream — `error` and
-   * shared-state streams clone at HEAD regardless.
+   * subtrees are not forked). The pointer applies only to the root's
+   * `main` stream — `error` and shared-state streams clone at HEAD
+   * regardless.
    */
   forkPointer?: EventPointer
 }
@@ -890,9 +890,9 @@ export class EntityManager {
       // the root to be idle (which would block the "click fork right
       // after the response landed" case, since the runtime keeps the
       // worker warm for `idleTimeout`). We still wait+lock any kept
-      // descendants below (after `computeEffectiveSubtree` runs),
-      // since per Q3 those are HEAD-cloned and need a stable snapshot.
-      // For HEAD-forks the old all-idle requirement still applies.
+      // descendants below (after `computeEffectiveSubtree` runs), since
+      // those are HEAD-cloned and need a stable snapshot. For HEAD-forks
+      // the old all-idle requirement still applies.
       let sourceTree: Array<ElectricAgentsEntity>
       if (opts.forkPointer) {
         const rootEntity = await this.registry.getEntity(rootUrl)
@@ -925,9 +925,9 @@ export class EntityManager {
 
       // When forking at a pointer, pre-read the root's main, validate the
       // pointer against the source's true history, and materialise the
-      // root-at-pointer snapshot fragments. The pointer ONLY applies to
-      // the root's `main` stream (Q2). Descendants kept by the manifest
-      // filter (Q3) are forked at HEAD.
+      // root-at-pointer snapshot fragments. The pointer only applies to
+      // the root's `main` stream. Descendants kept by the manifest filter
+      // are forked at HEAD.
       //
       // Pointer→position translation: the runtime mints pointers as
       // `{ offset: previousBatchOffset, subOffset: itemIndex+1 }`, where
@@ -1068,8 +1068,8 @@ export class EntityManager {
               : undefined
           )
           createdStreams.push(plan.fork.streams.main)
-          // `error` always clones at HEAD (Q2 — no canonical mapping
-          // between main-offset and error-offset).
+          // `error` always clones at HEAD — no canonical mapping
+          // between main-offset and error-offset.
           await this.streamClient.fork(
             plan.fork.streams.error,
             plan.source.streams.error
@@ -1228,7 +1228,7 @@ export class EntityManager {
   /**
    * Variant of {@link waitForIdleSubtree} that takes an explicit entity
    * list instead of walking the registry from `rootUrl`. Used by the
-   * pointer-fork path to wait+lock only the kept descendants (Q3), since
+   * pointer-fork path to wait+lock only the kept descendants, since
    * the root is being forked from history and doesn't need to be idle.
    */
   private async waitForGivenEntitiesIdle(
@@ -1391,7 +1391,7 @@ export class EntityManager {
    * source's flattened history. Throws a 400 if the pointer doesn't
    * address a real event.
    *
-   * Semantics (mirroring PR #347's durable-streams server interpretation):
+   * Semantics (mirroring the durable-streams server interpretation):
    * `{ offset: X, subOffset: N }` means "from anchor X, take N flattened
    * messages forward." Concretely, the target event is the N-th event
    * after the last event whose `headers.offset` is ≤ X. (When `X` is
@@ -1442,12 +1442,12 @@ export class EntityManager {
   }
 
   /**
-   * Compute the subset of `sourceTree` that survives the Q3 manifest filter
+   * Compute the subset of `sourceTree` that survives the manifest filter
    * applied at the root. After filtering the root's manifest at the fork
    * pointer, only children whose manifest entries landed at or before the
    * pointer remain; those kept children carry their CURRENT (HEAD) subtree
-   * along with them (Q3 "loose on descendants"). Children dropped from the
-   * root's manifest, and any of their descendants, are excluded.
+   * along with them. Children dropped from the root's manifest, and any
+   * of their descendants, are excluded.
    */
   private computeEffectiveSubtree(
     sourceTree: ReadonlyArray<ElectricAgentsEntity>,
@@ -1486,7 +1486,7 @@ export class EntityManager {
       seen.add(entity.url)
       result.push(entity)
       // Below the kept-children level the existing recursive subtree is
-      // included unchanged — see Q3 in docs/fork-at-message.md.
+      // included unchanged — kept descendants are HEAD-cloned.
       for (const grandchild of childrenByParent.get(entity.url) ?? []) {
         if (!seen.has(grandchild.url)) {
           queue.push(grandchild)

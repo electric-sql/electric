@@ -258,10 +258,10 @@ export class StreamClient {
         'Stream-Forked-From': new URL(this.streamUrl(sourcePath)).pathname,
       }
       if (opts?.forkPointer) {
-        // PR #347 returns 400 if Stream-Fork-Sub-Offset > 0 without an
-        // accompanying Stream-Fork-Offset. When our pointer's offset is
-        // `null` (anchor at stream start), send the explicit zero-offset
-        // string to satisfy that constraint.
+        // The durable-streams server returns 400 if Stream-Fork-Sub-Offset
+        // > 0 without an accompanying Stream-Fork-Offset. When our
+        // pointer's offset is `null` (anchor at stream start), send the
+        // explicit zero-offset string to satisfy that constraint.
         const ZERO_OFFSET = `0000000000000000_0000000000000000`
         headers[`Stream-Fork-Offset`] = opts.forkPointer.offset ?? ZERO_OFFSET
         if (opts.forkPointer.subOffset > 0) {
@@ -441,7 +441,7 @@ export class StreamClient {
       // Per-item pointer = { offset: anchor, subOffset: position-in-batch + 1 }
       // where anchor is the END offset of the PREVIOUS batch (null for the
       // very first batch). Matches `entity-stream-db.ts`'s onBeforeBatch
-      // semantics so the pointers we mint here align with PR #347's
+      // semantics so the pointers we mint here align with the durable-streams
       // `Stream-Fork-Sub-Offset` interpretation ("N messages past anchor").
       //
       // We must NOT await `response.closed` to know when the read finishes —

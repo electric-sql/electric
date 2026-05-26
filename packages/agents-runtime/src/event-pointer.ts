@@ -3,7 +3,7 @@
  *
  * It is the pair the agents-server uses on the wire when forking: it
  * maps directly to the `Stream-Fork-Offset` + `Stream-Fork-Sub-Offset`
- * headers defined by durable-streams PR #347.
+ * headers in the Durable Streams protocol.
  *
  * Semantics:
  *
@@ -12,26 +12,26 @@
  *     omitting the `Stream-Fork-Offset` header).
  *   - `subOffset` is the count of JSON messages past the anchor to
  *     include in the fork. So sub-offset `N` includes items
- *     `[0, 1, … N-1]` of the chunk that starts at `offset`.
+ *     `[0, 1, ... N-1]` of the chunk that starts at `offset`.
  *
  * A pointer addresses inclusively-through-and-stops-at-item-(subOffset-1).
  * For "fork up to and including item at batch-index `j`," set
  * `subOffset = j + 1`.
  *
  * Why this shape and not the wire's opaque offset alone:
- * PR #347 ships fork-side sub-offsets but explicitly does NOT add
- * read-side sub-offsets — the wire never tells the client the
- * sub-offset of a delivered item. We compute them locally by counting
- * positions within each `JsonBatch.items` and pairing them with the
- * batch's start offset (= the previous batch's `Stream-Next-Offset`,
- * or `null` for the first batch of a fresh read).
+ * the protocol ships fork-side sub-offsets but does NOT add read-side
+ * sub-offsets — the wire never tells the client the sub-offset of a
+ * delivered item. We compute them locally by counting positions within
+ * each `JsonBatch.items` and pairing them with the batch's start
+ * offset (= the previous batch's `Stream-Next-Offset`, or `null` for
+ * the first batch of a fresh read).
  *
  * Limitation: local counting is correct when reads start from the
  * beginning of the stream. If a future read-side feature ever lets us
  * resume from an arbitrary mid-chunk cursor, our local counter would
- * miscount items that the server already skipped past. PR #347
- * reserves the read-side spec for a future revision; when it lands
- * the local counter goes away in favour of wire-provided values.
+ * miscount items that the server already skipped past. When the
+ * protocol grows wire-provided values for that case, the local
+ * counter goes away.
  */
 export interface EventPointer {
   /** Anchor offset on the source stream, or `null` for stream-start. */
@@ -58,7 +58,7 @@ const SUB_OFFSET_WIDTH = 8
  * The token prefix that signals "this row was sourced from a stream
  * event" (as opposed to a pending optimistic row, a `_seq`-based
  * fallback, etc.). Kept identical to the previous single-offset
- * format so existing `like(_timeline_order, 'stream:…')` queries keep
+ * format so existing `like(_timeline_order, 'stream:...')` queries keep
  * matching after the upgrade.
  */
 export const STREAM_TOKEN_PREFIX = `stream:`
