@@ -259,3 +259,57 @@ Reads and writes to the MultiTimeView and SubqueryIndex ETS tables will mostly n
 - read of MultiTimeView may happen async by a consumer, but will be a read at a specific logical time so concurrency should not be an issue
 - the minimum in-flight logical time for a subquery will be updated by the SubqueryProgressMonitor async, but this will just update a single number, so concurrency should not be an issue
 
+## Operations
+
+Every operation the design needs to support, with cost and where it runs relative to the ShapeLogCollector (SLC). Context values:
+
+- **SLC** — runs on the SLC process
+- **blocked SLC** — runs on another process while SLC is synchronously waiting for it
+- **async** — runs independently of SLC
+
+### Routing (hot path, per WAL record)
+
+| Operation                                                | Cost                                                              | Context           |
+| -------------------------------------------------------- | ----------------------------------------------------------------- | ----------------- |
+| `affected_shapes(value)` for a positive group            | O(children_for_value + child_where_eval)                          | SLC               |
+| `affected_shapes(value)` for a negated group             | O(negated_children_in_group × history_length + child_where_eval)  | SLC               |
+| `member?(subquery_id, value, time)` from `convert_change`| O(history_length_for_value)                                       | async (consumer)  |
+
+### Subquery and group lifecycle
+
+| Operation                                                | Cost                                                                                | Context                                              |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| Subquery group addition (first occurrence at filter node)| O(1)                                                                                | SLC (during `add_shape`)                             |
+| Subquery group removal (last child removed)              | O(1)                                                                                | SLC (during `remove_shape`)                          |
+| `mark_ready(subquery_id)` after initial materialization  | O(1), atomic                                                                        | async                                                |
+| `remove_subquery(subquery_id)`                           | O(values_in_subquery + children_for_subquery + Σ shapes_per_child)                  | async (driven by dependency shape lifecycle)         |
+
+### Shape lifecycle
+
+| Operation                                                | Cost                                                                                              | Context                                  |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| `add_shape` onto an existing child                       | O(participants_for_shape)                                                                         | SLC                                      |
+| `add_shape` creating a new child, MTV ready              | O(values_in_subquery + participants_for_shape) — seed runs synchronously before child is exposed  | blocked SLC                              |
+| `add_shape` creating a new child, MTV not ready          | O(1) to attach to fallback; seeding runs when MTV becomes ready                                   | SLC, then async seed                     |
+| `add_shape` for a previously-unseen subquery             | dependency materializer startup + initial population (not O(1)), then as above                    | async setup, blocked SLC for the seed    |
+| Consumer registration (from `add_shape`)                 | O(1) inside the materializer's subscribe `handle_call`                                            | blocked SLC                              |
+| `remove_shape`, other shapes remain on the child         | O(participants_for_shape)                                                                         | SLC                                      |
+| `remove_shape`, last shape on the child                  | O(values_in_subquery + child_metadata)                                                            | SLC                                      |
+
+### Value changes (materializer-driven)
+
+| Operation                                                | Cost                                                                       | Context                                                          |
+| -------------------------------------------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `add_value` / `remove_value`                             | O(changed_values × positive_children_for_subquery + history_update)        | blocked SLC (SLC → Consumer → Materializer → SubqueryIndex)      |
+| `values(subquery_id, time)` for a synchronous seed       | O(values_in_subquery × history_eval)                                       | blocked SLC                                                      |
+| `values(subquery_id, time)` for a move-in query          | O(values_in_subquery × history_eval)                                       | async (consumer's query task)                                    |
+
+### Progress and compaction
+
+| Operation                                                | Cost                                                              | Context                                  |
+| -------------------------------------------------------- | ----------------------------------------------------------------- | ---------------------------------------- |
+| `notify_processed_up_to(time, subquery_id)`              | O(1) update + O(1) or O(log consumers) min recompute              | async (consumer → monitor)               |
+| Compaction triggered by min advance                      | incremental, O(values_touched + stale_routes_removed)             | async                                    |
+| Opportunistic compaction at read/write                   | O(history_length_for_value)                                       | wherever the read/write runs             |
+| Consumer death releasing pinned times                    | O(subqueries_consumer_reads) via process monitor                  | async                                    |
+
