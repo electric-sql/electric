@@ -1,8 +1,11 @@
 import { useRouter } from 'expo-router'
 import { SessionListScreen } from '../src/screens/SessionListScreen'
+import { useAgentsRouteGuard } from '../src/lib/useAgentsRouteGuard'
 
-export default function SessionsRoute(): React.ReactElement {
+export default function SessionsRoute(): React.ReactElement | null {
   const router = useRouter()
+  const guard = useAgentsRouteGuard()
+  if (guard) return guard
 
   return (
     <SessionListScreen

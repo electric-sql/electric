@@ -7,6 +7,7 @@ import {
   isCallbackUrl,
   type CloudAuthState,
 } from '../../src/lib/cloudAuth'
+import { useMobileAppState } from '../../src/lib/MobileAppState'
 import { useTokens } from '../../src/lib/ThemeProvider'
 import { fontSize, lineHeight, spacing } from '../../src/lib/theme'
 import type { Tokens } from '../../src/lib/theme'
@@ -51,6 +52,7 @@ export default function OAuthCallbackRoute(): React.ReactElement {
   const params = useLocalSearchParams()
   const tokens = useTokens()
   const styles = useMemo(() => createStyles(tokens), [tokens])
+  const { serverUrl, onboardingDismissed } = useMobileAppState()
 
   const token = pickParam(params.token)
   const stateParam = pickParam(params.state)
@@ -110,7 +112,19 @@ export default function OAuthCallbackRoute(): React.ReactElement {
   // Router's render tree directly, which sidesteps the effect-timing
   // issues we hit with `router.replace` (route would tear down before
   // the replace landed).
+  //
+  // Pick the destination based on what's already set up. We avoid
+  // redirecting to `/` unless the user already has a server configured,
+  // because the home route renders `SessionListScreen` which calls
+  // `useAgents()` — and `AgentsProvider` is conditional on `serverUrl`
+  // being set. A first-time user signing in mid-onboarding would
+  // otherwise briefly mount `SessionListScreen` without the provider
+  // before the root navigator's own redirect chain catches up,
+  // producing a "useAgents must be used inside AgentsProvider" render
+  // error.
   if (status.kind === `signed-in`) {
+    if (!onboardingDismissed) return <Redirect href="/onboarding" />
+    if (!serverUrl) return <Redirect href="/server-setup" />
     return <Redirect href="/" />
   }
   if (status.kind === `error`) {
