@@ -33,12 +33,15 @@ async function readBody(req: IncomingMessage): Promise<string> {
 async function startRecordingAgentsServer(): Promise<{
   url: string
   entityTypeBodies: Array<Record<string, unknown>>
+  requestUrls: Array<string>
   stop: () => Promise<void>
 }> {
   const entityTypeBodies: Array<Record<string, unknown>> = []
+  const requestUrls: Array<string> = []
   const httpServer: Server = createServer(async (req, res) => {
     const body = await readBody(req)
-    if (req.method === `POST` && req.url === `/_electric/entity-types`) {
+    requestUrls.push(req.url ?? ``)
+    if (req.method === `POST` && req.url?.endsWith(`/_electric/entity-types`)) {
       entityTypeBodies.push(JSON.parse(body) as Record<string, unknown>)
     }
 
@@ -57,6 +60,7 @@ async function startRecordingAgentsServer(): Promise<{
   return {
     url: `http://127.0.0.1:${addr.port}`,
     entityTypeBodies,
+    requestUrls,
     stop: () =>
       new Promise<void>((resolve, reject) =>
         httpServer.close((err) => (err ? reject(err) : resolve()))
@@ -93,5 +97,23 @@ describe(`BuiltinAgentsServer pull-wake registration`, () => {
         (body) => body.default_dispatch_policy !== undefined
       )
     ).toBe(false)
+  })
+
+  it(`registers through tenant path-prefixed server URLs`, async () => {
+    agentsServer = await startRecordingAgentsServer()
+    builtinServer = new BuiltinAgentsServer({
+      agentServerUrl: `${agentsServer.url}/t/svc-agent-1/v1`,
+      mockStreamFn,
+      pullWake: { runnerId: `test-runner`, registerRunner: true },
+    })
+
+    await builtinServer.start()
+
+    expect(agentsServer.requestUrls).toContain(
+      `/t/svc-agent-1/v1/_electric/entity-types`
+    )
+    expect(agentsServer.requestUrls).toContain(
+      `/t/svc-agent-1/v1/_electric/runners`
+    )
   })
 })

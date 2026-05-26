@@ -3,19 +3,16 @@ const TENANT_API_VERSION = `v1`
 const TENANT_ROUTING_QUERY_PARAMS = [`service`, `tenant`, `tenant_id`]
 
 export function appendPathToUrl(baseUrl: string, path: string): string {
-  return appendPathToParsedUrl(normalizeAgentServerBaseUrl(baseUrl), path)
-}
-
-function appendPathToParsedUrl(base: URL, path: string): string {
+  const base = normalizeAgentServerBaseUrl(baseUrl)
   const pathUrl = new URL(path, `http://electric-agents.local`)
   const basePath =
     base.pathname === `/` ? `` : base.pathname.replace(/\/+$/, ``)
-  const pathName = pathUrl.pathname.startsWith(`/`)
+  const suffix = pathUrl.pathname.startsWith(`/`)
     ? pathUrl.pathname
     : `/${pathUrl.pathname}`
   const target = new URL(base)
 
-  target.pathname = `${basePath}${pathName}`
+  target.pathname = `${basePath}${suffix}`
   target.search = ``
   target.hash = pathUrl.hash
 

@@ -694,7 +694,7 @@ describe(`createRuntimeHandler`, () => {
     )
   })
 
-  it(`preserves base URL query params when registering types`, async () => {
+  it(`preserves tenant path prefixes when registering types`, async () => {
     defineEntity(`schema-agent`, { handler: async () => {} })
 
     const fetchMock = vi.spyOn(globalThis, `fetch`).mockResolvedValue(
@@ -705,14 +705,14 @@ describe(`createRuntimeHandler`, () => {
     )
 
     const handler = createRuntimeHandler({
-      baseUrl: `http://localhost:3000?service=tenant-a&secret=shared-secret`,
+      baseUrl: `http://localhost:3000/t/tenant-a/v1`,
       handlerUrl: `http://localhost:4000/electric-agents`,
     })
 
     await handler.registerTypes()
 
     expect(fetchMock).toHaveBeenCalledWith(
-      `http://localhost:3000/_electric/entity-types?service=tenant-a&secret=shared-secret`,
+      `http://localhost:3000/t/tenant-a/v1/_electric/entity-types`,
       expect.objectContaining({
         method: `POST`,
       })

@@ -18,6 +18,7 @@
 import { createServer as createHttpServer } from 'node:http'
 import { Shape, ShapeStream } from '@electric-sql/client'
 import { expect } from 'vitest'
+import { appendPathToUrl } from './url'
 import type { IncomingMessage, Server, ServerResponse } from 'node:http'
 import type { ElectricAgentsEntityRow } from '../../agents-server/src/electric-agents-types.js'
 
@@ -188,7 +189,7 @@ export async function fetchShapeRows<T = Record<string, unknown>>(
   table: string
 ): Promise<Array<T>> {
   const stream = new ShapeStream({
-    url: `${baseUrl}/_electric/electric/v1/shape`,
+    url: appendPathToUrl(baseUrl, `/_electric/electric/v1/shape`),
     params: { table },
     subscribe: false,
   })
@@ -469,7 +470,7 @@ async function electricAgentsFetch(
   path: string,
   opts: RequestInit = {}
 ): Promise<Response> {
-  return fetch(`${baseUrl}${routeControlPlanePath(path)}`, {
+  return fetch(appendPathToUrl(baseUrl, routeControlPlanePath(path)), {
     ...opts,
     headers: {
       'content-type': `application/json`,
@@ -495,7 +496,10 @@ function isEntityStreamPath(pathname: string): boolean {
 }
 
 function subscriptionEndpoint(baseUrl: string, id: string): string {
-  return `${baseUrl}/__ds/subscriptions/${encodeURIComponent(id)}`
+  return appendPathToUrl(
+    baseUrl,
+    `/__ds/subscriptions/${encodeURIComponent(id)}`
+  )
 }
 
 function subscriptionPattern(pattern: string): string {
@@ -1259,7 +1263,10 @@ async function executeStep(ctx: RunContext, step: Step): Promise<void> {
           : ctx.currentEntityStreams.main
 
       const res = await fetch(
-        `${ctx.baseUrl}${streamPath}?offset=0000000000000000_0000000000000000`
+        appendPathToUrl(
+          ctx.baseUrl,
+          `${streamPath}?offset=0000000000000000_0000000000000000`
+        )
       )
 
       if (res.status === 200) {

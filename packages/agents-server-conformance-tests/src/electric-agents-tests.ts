@@ -19,6 +19,7 @@ import {
   fetchShapeRows,
 } from './electric-agents-dsl'
 import { cliTest } from './cli-dsl'
+import { appendPathToUrl } from './url'
 import type {
   ElectricAgentsAction,
   ElectricAgentsWorldModel,
@@ -38,7 +39,7 @@ async function electricAgentsFetch(
   path: string,
   opts: RequestInit = {}
 ): Promise<Response> {
-  return fetch(`${baseUrl}${routeControlPlanePath(path)}`, {
+  return fetch(appendPathToUrl(baseUrl, routeControlPlanePath(path)), {
     ...opts,
     headers: {
       'content-type': `application/json`,
@@ -72,7 +73,9 @@ async function pollEntityStatus(
   const deadline = Date.now() + timeoutMs
 
   while (Date.now() < deadline) {
-    const res = await fetch(`${baseUrl}${routeControlPlanePath(entityUrl)}`)
+    const res = await fetch(
+      appendPathToUrl(baseUrl, routeControlPlanePath(entityUrl))
+    )
     expect(res.status).toBe(200)
     const entity = (await res.json()) as Record<string, unknown>
     if (statuses.includes(String(entity.status))) {
@@ -107,13 +110,13 @@ export function runElectricAgentsConformanceTests(
         .expectStatus(`running`)
         .custom(async (ctx) => {
           const mainRes = await fetch(
-            `${ctx.baseUrl}${ctx.currentEntityStreams!.main}`,
+            appendPathToUrl(ctx.baseUrl, ctx.currentEntityStreams!.main),
             { method: `HEAD` }
           )
           expect(mainRes.status).toBe(200)
 
           const errorRes = await fetch(
-            `${ctx.baseUrl}${ctx.currentEntityStreams!.error}`,
+            appendPathToUrl(ctx.baseUrl, ctx.currentEntityStreams!.error),
             { method: `HEAD` }
           )
           expect(errorRes.status).toBe(200)
@@ -125,7 +128,10 @@ export function runElectricAgentsConformanceTests(
       electricAgents(config.baseUrl)
         .custom(async (ctx) => {
           const res = await fetch(
-            `${ctx.baseUrl}${routeControlPlanePath(`/unregistered/entity-1`)}`,
+            appendPathToUrl(
+              ctx.baseUrl,
+              routeControlPlanePath(`/unregistered/entity-1`)
+            ),
             {
               method: `PUT`,
               headers: { 'content-type': `application/json` },
@@ -228,9 +234,10 @@ export function runElectricAgentsConformanceTests(
       electricAgents(config.baseUrl)
         .custom(async (ctx) => {
           const res = await fetch(
-            `${ctx.baseUrl}${routeControlPlanePath(
-              `/nonexistent-type/nonexistent-id/send`
-            )}`,
+            appendPathToUrl(
+              ctx.baseUrl,
+              routeControlPlanePath(`/nonexistent-type/nonexistent-id/send`)
+            ),
             {
               method: `POST`,
               headers: { 'content-type': `application/json` },
@@ -620,15 +627,18 @@ export function runElectricAgentsConformanceTests(
           creation_schema: { type: `object` },
         })
         .custom(async (ctx) => {
-          const res = await fetch(`${ctx.baseUrl}/_electric/entity-types`, {
-            method: `POST`,
-            headers: { 'content-type': `application/json` },
-            body: JSON.stringify({
-              name: typeName,
-              description: `Duplicate registration`,
-              creation_schema: { type: `object` },
-            }),
-          })
+          const res = await fetch(
+            appendPathToUrl(ctx.baseUrl, `/_electric/entity-types`),
+            {
+              method: `POST`,
+              headers: { 'content-type': `application/json` },
+              body: JSON.stringify({
+                name: typeName,
+                description: `Duplicate registration`,
+                creation_schema: { type: `object` },
+              }),
+            }
+          )
           expect(res.status).toBe(201)
           const body = (await res.json()) as {
             name: string
@@ -646,11 +656,14 @@ export function runElectricAgentsConformanceTests(
       electricAgents(config.baseUrl)
         .custom(async (ctx) => {
           // Missing name, description, and creation_schema
-          const res = await fetch(`${ctx.baseUrl}/_electric/entity-types`, {
-            method: `POST`,
-            headers: { 'content-type': `application/json` },
-            body: JSON.stringify({}),
-          })
+          const res = await fetch(
+            appendPathToUrl(ctx.baseUrl, `/_electric/entity-types`),
+            {
+              method: `POST`,
+              headers: { 'content-type': `application/json` },
+              body: JSON.stringify({}),
+            }
+          )
           expect([400, 422]).toContain(res.status)
         })
         .skipInvariants()
@@ -722,9 +735,10 @@ export function runElectricAgentsConformanceTests(
       electricAgents(config.baseUrl)
         .custom(async (ctx) => {
           const res = await fetch(
-            `${ctx.baseUrl}${routeControlPlanePath(
-              `/nonexistent/should-fail`
-            )}`,
+            appendPathToUrl(
+              ctx.baseUrl,
+              routeControlPlanePath(`/nonexistent/should-fail`)
+            ),
             {
               method: `PUT`,
               headers: { 'content-type': `application/json` },
@@ -754,9 +768,10 @@ export function runElectricAgentsConformanceTests(
         })
         .custom(async (ctx) => {
           const res = await fetch(
-            `${ctx.baseUrl}${routeControlPlanePath(
-              `/${typeName}/child-entity`
-            )}`,
+            appendPathToUrl(
+              ctx.baseUrl,
+              routeControlPlanePath(`/${typeName}/child-entity`)
+            ),
             {
               method: `PUT`,
               headers: { 'content-type': `application/json` },
@@ -797,9 +812,10 @@ export function runElectricAgentsConformanceTests(
         })
         .custom(async (ctx) => {
           const res = await fetch(
-            `${ctx.baseUrl}${routeControlPlanePath(
-              `/${typeName}/orphan-entity`
-            )}`,
+            appendPathToUrl(
+              ctx.baseUrl,
+              routeControlPlanePath(`/${typeName}/orphan-entity`)
+            ),
             {
               method: `PUT`,
               headers: { 'content-type': `application/json` },
@@ -826,7 +842,10 @@ export function runElectricAgentsConformanceTests(
         })
         .custom(async (ctx) => {
           const res = await fetch(
-            `${ctx.baseUrl}${routeControlPlanePath(ctx.currentEntityUrl!)}`
+            appendPathToUrl(
+              ctx.baseUrl,
+              routeControlPlanePath(ctx.currentEntityUrl!)
+            )
           )
           const entity = (await res.json()) as Record<string, unknown>
           const tags = entity.tags as Record<string, string>
@@ -847,9 +866,10 @@ export function runElectricAgentsConformanceTests(
         })
         .custom(async (ctx) => {
           const res = await fetch(
-            `${ctx.baseUrl}${routeControlPlanePath(
-              `/${typeName}/should-fail`
-            )}`,
+            appendPathToUrl(
+              ctx.baseUrl,
+              routeControlPlanePath(`/${typeName}/should-fail`)
+            ),
             {
               method: `PUT`,
               headers: { 'content-type': `application/json` },
@@ -872,7 +892,10 @@ export function runElectricAgentsConformanceTests(
         .spawn(typeName, `entity-1`)
         .custom(async (ctx) => {
           const res = await fetch(
-            `${ctx.baseUrl}${routeControlPlanePath(ctx.currentEntityUrl!)}`
+            appendPathToUrl(
+              ctx.baseUrl,
+              routeControlPlanePath(ctx.currentEntityUrl!)
+            )
           )
           const entity = (await res.json()) as { tags: Record<string, string> }
           expect(entity.tags).toEqual({})
@@ -1087,7 +1110,7 @@ export function runElectricAgentsConformanceTests(
             writeHeaders[`authorization`] = `Bearer ${ctx.currentWriteToken}`
           }
           const res = await fetch(
-            `${ctx.baseUrl}${ctx.currentEntityUrl!}/main`,
+            appendPathToUrl(ctx.baseUrl, `${ctx.currentEntityUrl!}/main`),
             {
               method: `POST`,
               headers: writeHeaders,
@@ -1168,9 +1191,10 @@ export function runElectricAgentsConformanceTests(
             tagHeaders[`authorization`] = `Bearer ${ctx.currentWriteToken}`
           }
           const res = await fetch(
-            `${ctx.baseUrl}${routeControlPlanePath(
-              `${ctx.currentEntityUrl!}/tags/owner`
-            )}`,
+            appendPathToUrl(
+              ctx.baseUrl,
+              routeControlPlanePath(`${ctx.currentEntityUrl!}/tags/owner`)
+            ),
             {
               method: `POST`,
               headers: tagHeaders,
@@ -1199,9 +1223,10 @@ export function runElectricAgentsConformanceTests(
             tagHeaders.authorization = `Bearer ${ctx.currentWriteToken}`
           }
           const res = await fetch(
-            `${ctx.baseUrl}${routeControlPlanePath(
-              `${ctx.currentEntityUrl!}/tags/priority`
-            )}`,
+            appendPathToUrl(
+              ctx.baseUrl,
+              routeControlPlanePath(`${ctx.currentEntityUrl!}/tags/priority`)
+            ),
             {
               method: `DELETE`,
               headers: tagHeaders,
@@ -1285,7 +1310,10 @@ export function runElectricAgentsConformanceTests(
         })
         .custom(async (ctx) => {
           const res = await fetch(
-            `${ctx.baseUrl}/_electric/entity-types/${typeName}/schemas`,
+            appendPathToUrl(
+              ctx.baseUrl,
+              `/_electric/entity-types/${typeName}/schemas`
+            ),
             {
               method: `PATCH`,
               headers: { 'content-type': `application/json` },
@@ -1325,7 +1353,10 @@ export function runElectricAgentsConformanceTests(
         .custom(async (ctx) => {
           // Amend schemas to add a new key after entity is spawned
           const res = await fetch(
-            `${ctx.baseUrl}/_electric/entity-types/${typeName}/schemas`,
+            appendPathToUrl(
+              ctx.baseUrl,
+              `/_electric/entity-types/${typeName}/schemas`
+            ),
             {
               method: `PATCH`,
               headers: { 'content-type': `application/json` },
@@ -1344,9 +1375,10 @@ export function runElectricAgentsConformanceTests(
         .custom(async (ctx) => {
           // Existing entities pick up newly added schema keys.
           const res = await fetch(
-            `${ctx.baseUrl}${routeControlPlanePath(
-              `${ctx.currentEntityUrl!}/send`
-            )}`,
+            appendPathToUrl(
+              ctx.baseUrl,
+              routeControlPlanePath(`${ctx.currentEntityUrl!}/send`)
+            ),
             {
               method: `POST`,
               headers: { 'content-type': `application/json` },
@@ -1393,14 +1425,17 @@ export function runElectricAgentsConformanceTests(
           await receiver.start(manifest)
 
           try {
-            const res = await fetch(`${ctx.baseUrl}/_electric/entity-types`, {
-              method: `POST`,
-              headers: { 'content-type': `application/json` },
-              body: JSON.stringify({
-                name: `bar`,
-                serve_endpoint: receiver.url,
-              }),
-            })
+            const res = await fetch(
+              appendPathToUrl(ctx.baseUrl, `/_electric/entity-types`),
+              {
+                method: `POST`,
+                headers: { 'content-type': `application/json` },
+                body: JSON.stringify({
+                  name: `bar`,
+                  serve_endpoint: receiver.url,
+                }),
+              }
+            )
             // The server should reject due to name mismatch
             expect([400, 409, 422]).toContain(res.status)
           } finally {
@@ -2459,7 +2494,7 @@ export function runElectricAgentsConformanceTests(
         .spawn(`auth-notoken-agent-${id}`, `entity-1`)
         .custom(async (ctx) => {
           const res = await fetch(
-            `${ctx.baseUrl}${ctx.currentEntityUrl!}/main`,
+            appendPathToUrl(ctx.baseUrl, `${ctx.currentEntityUrl!}/main`),
             {
               method: `POST`,
               headers: { 'content-type': `application/json` },
@@ -2491,7 +2526,7 @@ export function runElectricAgentsConformanceTests(
         .spawn(`auth-wrongtoken-agent-${id}`, `entity-1`)
         .custom(async (ctx) => {
           const res = await fetch(
-            `${ctx.baseUrl}${ctx.currentEntityUrl!}/main`,
+            appendPathToUrl(ctx.baseUrl, `${ctx.currentEntityUrl!}/main`),
             {
               method: `POST`,
               headers: {
@@ -2545,9 +2580,10 @@ export function runElectricAgentsConformanceTests(
         .spawn(`auth-meta-notoken-agent-${id}`, `entity-1`)
         .custom(async (ctx) => {
           const res = await fetch(
-            `${ctx.baseUrl}${routeControlPlanePath(
-              `${ctx.currentEntityUrl!}/tags/key`
-            )}`,
+            appendPathToUrl(
+              ctx.baseUrl,
+              routeControlPlanePath(`${ctx.currentEntityUrl!}/tags/key`)
+            ),
             {
               method: `POST`,
               headers: { 'content-type': `application/json` },
@@ -2593,9 +2629,10 @@ export function runElectricAgentsConformanceTests(
         .spawn(`auth-send-noauth-agent-${id}`, `entity-1`)
         .custom(async (ctx) => {
           const res = await fetch(
-            `${ctx.baseUrl}${routeControlPlanePath(
-              `${ctx.currentEntityUrl!}/send`
-            )}`,
+            appendPathToUrl(
+              ctx.baseUrl,
+              routeControlPlanePath(`${ctx.currentEntityUrl!}/send`)
+            ),
             {
               method: `POST`,
               headers: { 'content-type': `application/json` },
@@ -2621,7 +2658,10 @@ export function runElectricAgentsConformanceTests(
         .spawn(`auth-noleak-agent-${id}`, `entity-1`)
         .custom(async (ctx) => {
           const res = await fetch(
-            `${ctx.baseUrl}${routeControlPlanePath(ctx.currentEntityUrl!)}`
+            appendPathToUrl(
+              ctx.baseUrl,
+              routeControlPlanePath(ctx.currentEntityUrl!)
+            )
           )
           expect(res.status).toBe(200)
           const entity = await res.json()
@@ -2758,7 +2798,10 @@ export function runCliConformanceTests(config: CliTestOptions): void {
         // Verify via API that the entity actually exists
         .verifyApi(async (baseUrl) => {
           const res = await fetch(
-            `${baseUrl}${routeControlPlanePath(`/cli-spawn-type/${id}`)}`
+            appendPathToUrl(
+              baseUrl,
+              routeControlPlanePath(`/cli-spawn-type/${id}`)
+            )
           )
           expect(res.status).toBe(200)
           const entity = (await res.json()) as Record<string, unknown>
@@ -2846,13 +2889,19 @@ export function runCliConformanceTests(config: CliTestOptions): void {
         // Verify the message actually landed in the stream via API
         .verifyApi(async (baseUrl) => {
           const res = await fetch(
-            `${baseUrl}${routeControlPlanePath(`/cli-send-type/${id}`)}`
+            appendPathToUrl(
+              baseUrl,
+              routeControlPlanePath(`/cli-send-type/${id}`)
+            )
           )
           expect(res.status).toBe(200)
           const entity = (await res.json()) as Record<string, unknown>
           const streams = entity.streams as { main: string }
           const streamRes = await fetch(
-            `${baseUrl}${streams.main}?offset=0000000000000000_0000000000000000`
+            appendPathToUrl(
+              baseUrl,
+              `${streams.main}?offset=0000000000000000_0000000000000000`
+            )
           )
           const events = (await streamRes.json()) as Array<
             Record<string, unknown>
@@ -2896,7 +2945,10 @@ export function runCliConformanceTests(config: CliTestOptions): void {
         // Verify API agrees with CLI output
         .verifyApi(async (baseUrl) => {
           const res = await fetch(
-            `${baseUrl}${routeControlPlanePath(`/cli-inspect-etype/${id}`)}`
+            appendPathToUrl(
+              baseUrl,
+              routeControlPlanePath(`/cli-inspect-etype/${id}`)
+            )
           )
           expect(res.status).toBe(200)
           const entity = (await res.json()) as Record<string, unknown>
@@ -2963,7 +3015,10 @@ export function runCliConformanceTests(config: CliTestOptions): void {
         .expectStdout(/Spawned/)
         .verifyApi(async (baseUrl) => {
           const res = await fetch(
-            `${baseUrl}${routeControlPlanePath(`/cli-lifecycle-type/${id}`)}`
+            appendPathToUrl(
+              baseUrl,
+              routeControlPlanePath(`/cli-lifecycle-type/${id}`)
+            )
           )
           expect(res.status, `entity should exist after spawn`).toBe(200)
           const entity = (await res.json()) as Record<string, unknown>
@@ -3050,9 +3105,12 @@ export function runMockAgentTests(config: MockAgentTestOptions): void {
     instanceId: string
   ): Promise<Record<string, unknown>> {
     const res = await fetch(
-      `${baseUrl}${routeControlPlanePath(
-        `/${encodeURIComponent(typeName)}/${encodeURIComponent(instanceId)}`
-      )}`,
+      appendPathToUrl(
+        baseUrl,
+        routeControlPlanePath(
+          `/${encodeURIComponent(typeName)}/${encodeURIComponent(instanceId)}`
+        )
+      ),
       {
         method: `PUT`,
         headers: { 'content-type': `application/json` },
@@ -3069,7 +3127,7 @@ export function runMockAgentTests(config: MockAgentTestOptions): void {
     text: string
   ): Promise<void> {
     const res = await fetch(
-      `${baseUrl}${routeControlPlanePath(`${entityUrl}/send`)}`,
+      appendPathToUrl(baseUrl, routeControlPlanePath(`${entityUrl}/send`)),
       {
         method: `POST`,
         headers: { 'content-type': `application/json` },
@@ -3090,14 +3148,17 @@ export function runMockAgentTests(config: MockAgentTestOptions): void {
     const start = Date.now()
     while (Date.now() - start < timeoutMs) {
       const entityRes = await fetch(
-        `${baseUrl}${routeControlPlanePath(entityUrl)}`
+        appendPathToUrl(baseUrl, routeControlPlanePath(entityUrl))
       )
       if (!entityRes.ok) throw new Error(`Entity ${entityUrl} not found`)
       const entity = (await entityRes.json()) as Record<string, unknown>
 
       const streams = entity.streams as { main: string }
       const streamRes = await fetch(
-        `${baseUrl}${streams.main}?offset=0000000000000000_0000000000000000`
+        appendPathToUrl(
+          baseUrl,
+          `${streams.main}?offset=0000000000000000_0000000000000000`
+        )
       )
       const events = (await streamRes.json()) as Array<Record<string, unknown>>
 
@@ -3200,14 +3261,17 @@ export function runMockAgentCliTests(config: MockAgentCliTestOptions): void {
         .wait(3000)
         .verifyApi(async (baseUrl) => {
           const res = await fetch(
-            `${baseUrl}${routeControlPlanePath(`/chat/${id}`)}`
+            appendPathToUrl(baseUrl, routeControlPlanePath(`/chat/${id}`))
           )
           expect(res.status, `entity should exist`).toBe(200)
           const entity = (await res.json()) as Record<string, unknown>
 
           const streams = entity.streams as { main: string }
           const streamRes = await fetch(
-            `${baseUrl}${streams.main}?offset=0000000000000000_0000000000000000`
+            appendPathToUrl(
+              baseUrl,
+              `${streams.main}?offset=0000000000000000_0000000000000000`
+            )
           )
           const events = (await streamRes.json()) as Array<
             Record<string, unknown>
@@ -3242,14 +3306,17 @@ export function runMockAgentCliTests(config: MockAgentCliTestOptions): void {
         .expectStdout(/running|idle/)
         .verifyApi(async (baseUrl) => {
           const res = await fetch(
-            `${baseUrl}${routeControlPlanePath(`/chat/${id}`)}`
+            appendPathToUrl(baseUrl, routeControlPlanePath(`/chat/${id}`))
           )
           expect(res.status).toBe(200)
           const entity = (await res.json()) as Record<string, unknown>
 
           const streams = entity.streams as { main: string }
           const streamRes = await fetch(
-            `${baseUrl}${streams.main}?offset=0000000000000000_0000000000000000`
+            appendPathToUrl(
+              baseUrl,
+              `${streams.main}?offset=0000000000000000_0000000000000000`
+            )
           )
           const events = (await streamRes.json()) as Array<
             Record<string, unknown>

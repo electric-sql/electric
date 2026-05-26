@@ -11,7 +11,7 @@ describe(`runtime-server-client.setTag`, () => {
     }) as unknown as typeof fetch
 
     const client = createRuntimeServerClient({
-      baseUrl: `http://test.example?service=tenant-a&secret=s1`,
+      baseUrl: `http://test.example/t/tenant-a/v1`,
       fetch: fakeFetch,
     })
 
@@ -21,7 +21,7 @@ describe(`runtime-server-client.setTag`, () => {
 
     expect(calls).toHaveLength(1)
     expect(calls[0]!.url).toBe(
-      `http://test.example/_webhooks/repo/prs/123?service=tenant-a&secret=s1`
+      `http://test.example/t/tenant-a/v1/_webhooks/repo/prs/123`
     )
     expect(calls[0]!.init?.method).toBe(`PUT`)
     expect(new Headers(calls[0]!.init?.headers).get(`content-type`)).toBe(
@@ -84,7 +84,7 @@ describe(`runtime-server-client.setTag`, () => {
     }) as unknown as typeof fetch
 
     const client = createRuntimeServerClient({
-      baseUrl: `http://test.example?secret=s1`,
+      baseUrl: `http://test.example/t/tenant-a/v1`,
       fetch: fakeFetch,
       headers: { authorization: `Bearer tenant-token` },
       writeTokenHeader: `electric-claim-token`,
@@ -93,7 +93,7 @@ describe(`runtime-server-client.setTag`, () => {
     await client.setTag(`/horton/abc`, `title`, `Refactor auth`, `wt-1234`)
 
     expect(calls[0]!.url).toBe(
-      `http://test.example/_electric/entities/horton/abc/tags/title?secret=s1`
+      `http://test.example/t/tenant-a/v1/_electric/entities/horton/abc/tags/title`
     )
     const headers = new Headers(calls[0]!.init?.headers)
     expect(headers.get(`authorization`)).toBe(`Bearer tenant-token`)
@@ -141,7 +141,7 @@ describe(`runtime-server-client event sources`, () => {
         )
     ) as unknown as typeof fetch
     const client = createRuntimeServerClient({
-      baseUrl: `http://test.example?service=tenant-a`,
+      baseUrl: `http://test.example/t/tenant-a/v1`,
       fetch: fakeFetch,
     })
 
@@ -149,7 +149,7 @@ describe(`runtime-server-client event sources`, () => {
       { sourceKey: `github-repo` },
     ])
     expect(fakeFetch).toHaveBeenCalledWith(
-      `http://test.example/_electric/event-sources?service=tenant-a`,
+      `http://test.example/t/tenant-a/v1/_electric/event-sources`,
       expect.objectContaining({ method: `GET` })
     )
   })

@@ -321,6 +321,7 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
           callback_token: `callback-token`,
         }),
         buildContext({
+          publicUrl: `http://agents.local/t/tenant-a/v1`,
           pgDb: { select: select.select, insert: insert.insert } as any,
           webhookSigner,
         })
@@ -337,7 +338,7 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
         wakeId: `wake-1`,
         streamPath: `/horton/demo/main`,
         streams: [{ path: `/horton/demo/main`, offset: `1` }],
-        callback: `http://agents.local/_electric/callback-forward/wake-1`,
+        callback: `http://agents.local/t/tenant-a/v1/_electric/callback-forward/wake-1`,
         claimToken: `callback-token`,
         entity: {
           type: `horton`,

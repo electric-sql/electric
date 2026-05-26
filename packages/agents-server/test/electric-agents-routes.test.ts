@@ -494,7 +494,7 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
         }),
         {
           service: `tenant-a`,
-          publicUrl: `http://agents.local`,
+          publicUrl: `http://agents.local/t/tenant-a/v1`,
           durableStreamsUrl: `http://durable.local/v1/stream/tenant-a`,
           pgDb: db.db,
           isShuttingDown: () => false,
@@ -510,7 +510,7 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
         type: `webhook`,
         pattern: `horton/**`,
         webhook: {
-          url: `http://agents.local/_electric/webhook-forward/horton-handler`,
+          url: `http://agents.local/t/tenant-a/v1/_electric/webhook-forward/horton-handler`,
         },
       })
       expect(db.values).toHaveBeenCalledWith({
@@ -557,7 +557,7 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
         }),
         {
           service: `tenant-a`,
-          publicUrl: `http://agents.local`,
+          publicUrl: `http://agents.local/t/tenant-a/v1`,
           durableStreamsUrl: `http://durable.local/v1/stream/tenant-a`,
           webhookSigner,
           pgDb: db.db,
@@ -571,7 +571,7 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
           signing: {
             alg: `ed25519`,
             kid: `ds_test`,
-            jwks_url: `http://agents.local/__ds/jwks.json`,
+            jwks_url: `http://agents.local/t/tenant-a/v1/__ds/jwks.json`,
           },
         },
       })

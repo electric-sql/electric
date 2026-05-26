@@ -19,8 +19,8 @@ import type {
   Registry as McpRegistry,
 } from '@electric-ax/agents-mcp'
 import {
-  createPullWakeRunner,
   appendPathToUrl,
+  createPullWakeRunner,
   registerToolProvider,
   unregisterToolProvider,
 } from '@electric-ax/agents-runtime'

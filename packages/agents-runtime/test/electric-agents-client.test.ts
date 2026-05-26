@@ -102,9 +102,9 @@ describe(`createAgentsClient`, () => {
     expect(db).toBe(mockState.observedDb)
   })
 
-  it(`preserves base URL query params on observed stream URLs`, async () => {
+  it(`preserves tenant path prefixes on observed stream URLs`, async () => {
     const client = createAgentsClient({
-      baseUrl: `http://electric-agents.test?service=tenant-a&secret=shared-secret`,
+      baseUrl: `http://electric-agents.test/t/tenant-a/v1`,
     })
 
     const source = entities({
@@ -117,7 +117,7 @@ describe(`createAgentsClient`, () => {
 
     expect(mockState.createStreamDB).toHaveBeenCalledWith({
       streamOptions: {
-        url: `http://electric-agents.test${source.streamUrl}?service=tenant-a&secret=shared-secret`,
+        url: `http://electric-agents.test/t/tenant-a/v1${source.streamUrl}`,
         contentType: `application/json`,
       },
       state: source.schema,
@@ -153,7 +153,7 @@ describe(`createAgentsClient`, () => {
 
   it(`observe(webhook(...)) ensures the exact stream before preloading it`, async () => {
     const client = createAgentsClient({
-      baseUrl: `http://electric-agents.test?service=tenant-a&secret=shared-secret`,
+      baseUrl: `http://electric-agents.test/t/tenant-a/v1`,
     })
 
     const source = webhook(`repo`, { bucket: `prs/123` })
@@ -166,7 +166,7 @@ describe(`createAgentsClient`, () => {
     )
     expect(mockState.createStreamDB).toHaveBeenCalledWith({
       streamOptions: {
-        url: `http://electric-agents.test/_webhooks/repo/prs/123?service=tenant-a&secret=shared-secret`,
+        url: `http://electric-agents.test/t/tenant-a/v1/_webhooks/repo/prs/123`,
         contentType: `application/json`,
       },
       state: source.schema,

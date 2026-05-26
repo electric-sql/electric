@@ -34,7 +34,7 @@ export async function createEntityStreamDB(opts: {
   const { baseUrl, entityUrl, initialOffset, headers: serverHeaders } = opts
 
   console.log(
-    `[createEntityStreamDB] Creating entity stream DB for ${baseUrl}${entityUrl}`
+    `[createEntityStreamDB] Creating entity stream DB for ${appendPathToUrl(baseUrl, entityUrl)}`
   )
 
   const requestHeaders = {

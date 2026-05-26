@@ -183,7 +183,7 @@ function resolveWebhookSigner(ctx: TenantContext): WebhookSigner {
 
 function durableStreamsWebhookJwksUrl(ctx: TenantContext): string {
   if (!ctx.durableStreamsRouting) {
-    return appendPathToUrl(ctx.durableStreamsUrl, `/__ds/jwks.json`)
+    return appendPathToBackendUrl(ctx.durableStreamsUrl, `/__ds/jwks.json`)
   }
 
   return resolveDurableStreamsRoutingAdapter(
@@ -196,6 +196,28 @@ function durableStreamsWebhookJwksUrl(ctx: TenantContext): string {
       requestUrl: appendPathToUrl(ctx.publicUrl, `/__ds/jwks.json`),
     })
     .toString()
+}
+
+function appendPathToBackendUrl(baseUrl: string, path: string): string {
+  const base = new URL(baseUrl)
+  const pathUrl = new URL(path, `http://electric-agents.local`)
+  const basePath =
+    base.pathname === `/` ? `` : base.pathname.replace(/\/+$/, ``)
+  const suffix = pathUrl.pathname.startsWith(`/`)
+    ? pathUrl.pathname
+    : `/${pathUrl.pathname}`
+  const target = new URL(base)
+
+  target.pathname = `${basePath}${suffix}`
+  target.search = ``
+  target.hash = pathUrl.hash
+  base.searchParams.forEach((value, key) => {
+    target.searchParams.append(key, value)
+  })
+  pathUrl.searchParams.forEach((value, key) => {
+    target.searchParams.append(key, value)
+  })
+  return target.toString()
 }
 
 function durableStreamsJwksFetchClient(ctx: TenantContext): typeof fetch {
