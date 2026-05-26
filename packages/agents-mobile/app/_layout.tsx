@@ -54,14 +54,19 @@ function RootNavigator(): React.ReactElement {
   // redirect — the wizard subsumes the URL input as its step 2, and
   // dismissing it falls back to `/server-setup` only if the user
   // still hasn't configured a server.
-  if (!onboardingDismissed && pathname !== `/onboarding`) {
+  if (
+    !onboardingDismissed &&
+    pathname !== `/onboarding` &&
+    pathname !== `/oauth/callback`
+  ) {
     return <Redirect href="/onboarding" />
   }
 
   if (
     !serverUrl &&
     pathname !== `/server-setup` &&
-    pathname !== `/onboarding`
+    pathname !== `/onboarding` &&
+    pathname !== `/oauth/callback`
   ) {
     return <Redirect href="/server-setup" />
   }
