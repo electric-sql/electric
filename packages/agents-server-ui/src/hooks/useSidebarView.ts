@@ -3,13 +3,19 @@ import { useSyncExternalStore } from 'react'
 const STORAGE_KEY = `electric-agents-ui.sidebar.view`
 
 /** Available grouping modes for the session list. */
-export type SidebarGroupBy = `date` | `type` | `status` | `workingDir`
+export type SidebarGroupBy =
+  | `date`
+  | `type`
+  | `status`
+  | `workingDir`
+  | `runner`
 
 export const SIDEBAR_GROUP_BY_OPTIONS: ReadonlyArray<SidebarGroupBy> = [
   `date`,
   `type`,
   `status`,
   `workingDir`,
+  `runner`,
 ]
 
 export const SIDEBAR_GROUP_BY_LABELS: Record<SidebarGroupBy, string> = {
@@ -17,6 +23,7 @@ export const SIDEBAR_GROUP_BY_LABELS: Record<SidebarGroupBy, string> = {
   type: `Type`,
   status: `Status`,
   workingDir: `Working dir`,
+  runner: `Runner`,
 }
 
 interface SidebarViewState {
@@ -26,12 +33,16 @@ interface SidebarViewState {
   hiddenTypes: Set<string>
   /** Statuses to hide. Same exclusion-set convention as hiddenTypes. */
   hiddenStatuses: Set<string>
+  /** Runner ids to hide. Same exclusion-set convention. The literal
+   *  `none` sentinel hides entities with no pinned runner. */
+  hiddenRunners: Set<string>
 }
 
 const DEFAULT_STATE: SidebarViewState = {
   groupBy: `date`,
   hiddenTypes: new Set(),
   hiddenStatuses: new Set(),
+  hiddenRunners: new Set(),
 }
 
 /**
@@ -85,11 +96,21 @@ class SidebarViewStore {
     this.notify()
   }
 
+  toggleRunnerVisibility = (runner: string): void => {
+    const next = new Set(this.state.hiddenRunners)
+    if (next.has(runner)) next.delete(runner)
+    else next.add(runner)
+    this.state = { ...this.state, hiddenRunners: next }
+    this.persist()
+    this.notify()
+  }
+
   resetVisibility = (): void => {
     this.state = {
       ...this.state,
       hiddenTypes: new Set(),
       hiddenStatuses: new Set(),
+      hiddenRunners: new Set(),
     }
     this.persist()
     this.notify()
@@ -115,6 +136,7 @@ class SidebarViewStore {
           groupBy: this.state.groupBy,
           hiddenTypes: Array.from(this.state.hiddenTypes),
           hiddenStatuses: Array.from(this.state.hiddenStatuses),
+          hiddenRunners: Array.from(this.state.hiddenRunners),
         })
       )
     } catch {
@@ -133,6 +155,7 @@ function readInitial(): SidebarViewState {
       groupBy: SidebarGroupBy
       hiddenTypes: Array<string>
       hiddenStatuses: Array<string>
+      hiddenRunners: Array<string>
     }>
     return {
       groupBy: SIDEBAR_GROUP_BY_OPTIONS.includes(
@@ -145,6 +168,9 @@ function readInitial(): SidebarViewState {
       ),
       hiddenStatuses: new Set(
         Array.isArray(parsed.hiddenStatuses) ? parsed.hiddenStatuses : []
+      ),
+      hiddenRunners: new Set(
+        Array.isArray(parsed.hiddenRunners) ? parsed.hiddenRunners : []
       ),
     }
   } catch {
@@ -162,4 +188,8 @@ export function useSidebarView(): SidebarViewState {
 export const setSidebarGroupBy = store.setGroupBy
 export const toggleSidebarTypeVisibility = store.toggleTypeVisibility
 export const toggleSidebarStatusVisibility = store.toggleStatusVisibility
+export const toggleSidebarRunnerVisibility = store.toggleRunnerVisibility
 export const resetSidebarVisibility = store.resetVisibility
+
+/** Sentinel id used for the "no pinned runner" bucket / filter entry. */
+export const RUNNER_NONE = `none`

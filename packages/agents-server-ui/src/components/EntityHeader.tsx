@@ -5,6 +5,7 @@ import { Icon as UiIcon, IconButton, Text, Tooltip } from '../ui'
 import type { BadgeTone } from '../ui'
 import { MainHeader } from './MainHeader'
 import { InlineStatusBadge } from './InlineStatusBadge'
+import { EntityRuntimeBadges } from './EntityRuntimeBadges'
 import { listViews, type ViewId } from '../lib/workspace/viewRegistry'
 import styles from './EntityHeader.module.css'
 import type { ElectricEntity } from '../lib/ElectricAgentsProvider'
@@ -171,6 +172,8 @@ function EntityActions({
       >
         {entity.status}
       </InlineStatusBadge>
+
+      <EntityRuntimeBadges entity={entity} />
 
       {showViewStrip &&
         availableViews.map((view) => {

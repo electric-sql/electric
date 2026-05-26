@@ -8,15 +8,19 @@ import {
   ChevronsUpDown,
   Folder,
   ListFilter,
+  Server,
   Tag,
 } from 'lucide-react'
 import { eq, not, useLiveQuery } from '@tanstack/react-db'
 import { Icon, IconButton, Menu, Text } from '../ui'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
+import { getEntityRunnerId } from '../lib/entityRuntime'
 import {
+  RUNNER_NONE,
   SIDEBAR_GROUP_BY_LABELS,
   SIDEBAR_GROUP_BY_OPTIONS,
   setSidebarGroupBy,
+  toggleSidebarRunnerVisibility,
   toggleSidebarStatusVisibility,
   toggleSidebarTypeVisibility,
   useSidebarView,
@@ -36,6 +40,7 @@ const GROUP_BY_ICONS: Record<SidebarGroupBy, React.ReactElement> = {
   type: <Icon icon={Tag} size={2} />,
   status: <Icon icon={Activity} size={2} />,
   workingDir: <Icon icon={Folder} size={2} />,
+  runner: <Icon icon={Server} size={2} />,
 }
 
 /**
@@ -55,7 +60,7 @@ const GROUP_BY_ICONS: Record<SidebarGroupBy, React.ReactElement> = {
  */
 export function SidebarViewMenu(): React.ReactElement {
   const view = useSidebarView()
-  const { entitiesCollection } = useElectricAgents()
+  const { entitiesCollection, runnersCollection } = useElectricAgents()
 
   // Distinct types currently present in the entities collection —
   // drives the "Show > Type" submenu so newly-introduced agent kinds
@@ -71,6 +76,7 @@ export function SidebarViewMenu(): React.ReactElement {
           url: e.url,
           type: e.type,
           parent: e.parent,
+          dispatch_policy: e.dispatch_policy,
         }))
     },
     [entitiesCollection]
@@ -80,6 +86,41 @@ export function SidebarViewMenu(): React.ReactElement {
     for (const e of entities) seen.add(e.type)
     return Array.from(seen).sort((a, b) => a.localeCompare(b))
   }, [entities])
+
+  // Runner id → label, for the "Show > Runner" submenu.
+  const { data: runners = [] } = useLiveQuery(
+    (q) => {
+      if (!runnersCollection) return undefined
+      return q.from({ r: runnersCollection })
+    },
+    [runnersCollection]
+  )
+  const runnerLabelById = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const r of runners) map.set(r.id, r.label || r.id)
+    return map
+  }, [runners])
+
+  // Distinct runners pinned across the current entities, plus whether any
+  // entity has no pinned runner (drives the trailing "None" filter entry).
+  const { distinctRunners, hasNoneRunner } = useMemo(() => {
+    const ids = new Set<string>()
+    let none = false
+    for (const e of entities) {
+      const id = getEntityRunnerId(e as never)
+      if (id === null) none = true
+      else ids.add(id)
+    }
+    const list = Array.from(ids)
+      .map((id) => ({
+        id,
+        label:
+          runnerLabelById.get(id) ??
+          (id.length > 12 ? `${id.slice(0, 8)}…` : id),
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label))
+    return { distinctRunners: list, hasNoneRunner: none }
+  }, [entities, runnerLabelById])
 
   // "Expand all" needs to know which URLs are expandable (i.e. roots
   // with children). The Sidebar already builds this graph; for menu
@@ -203,6 +244,64 @@ export function SidebarViewMenu(): React.ReactElement {
                   </Menu.Item>
                 )
               })}
+            </Menu.Content>
+          </Menu.SubmenuRoot>
+
+          <Menu.SubmenuRoot>
+            <Menu.SubmenuTrigger className={styles.submenuTrigger}>
+              <Icon icon={Server} size={2} />
+              <Text size={2}>Runner</Text>
+              <Icon
+                icon={ChevronRight}
+                size={2}
+                className={styles.submenuChevron}
+              />
+            </Menu.SubmenuTrigger>
+            <Menu.Content side="left" align="start">
+              {distinctRunners.length === 0 && !hasNoneRunner ? (
+                <Menu.Item disabled>
+                  <Text size={2} tone="muted">
+                    No runners yet
+                  </Text>
+                </Menu.Item>
+              ) : (
+                <>
+                  {distinctRunners.map((r) => {
+                    const visible = !view.hiddenRunners.has(r.id)
+                    return (
+                      <Menu.Item
+                        key={r.id}
+                        onSelect={() => toggleSidebarRunnerVisibility(r.id)}
+                      >
+                        <Text size={2}>{r.label}</Text>
+                        {visible && (
+                          <Icon
+                            icon={Check}
+                            size={2}
+                            className={styles.activeMark}
+                          />
+                        )}
+                      </Menu.Item>
+                    )
+                  })}
+                  {hasNoneRunner && (
+                    <Menu.Item
+                      onSelect={() =>
+                        toggleSidebarRunnerVisibility(RUNNER_NONE)
+                      }
+                    >
+                      <Text size={2}>None</Text>
+                      {!view.hiddenRunners.has(RUNNER_NONE) && (
+                        <Icon
+                          icon={Check}
+                          size={2}
+                          className={styles.activeMark}
+                        />
+                      )}
+                    </Menu.Item>
+                  )}
+                </>
+              )}
             </Menu.Content>
           </Menu.SubmenuRoot>
         </Menu.Group>

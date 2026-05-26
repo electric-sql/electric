@@ -1052,13 +1052,6 @@ function DefaultAgentComposer({
         </div>
       </div>
       <div className={styles.composerMeta}>
-        {!selectedProfileIsRemote && (
-          <WorkingDirectoryPicker
-            value={workingDirectory}
-            onChange={onChangeWorkingDirectory}
-            disabled={submitting || disabled}
-          />
-        )}
         {runners.length > 0 && (
           <RunnerPickerPill
             runners={runners}
@@ -1086,6 +1079,16 @@ function DefaultAgentComposer({
             {sandboxProfiles[0]!.label}
           </span>
         ) : null}
+        {/* Working directory comes last: the chosen sandbox decides whether a
+            host directory is even relevant. A remote sandbox runs in the
+            provider VM, so the picker is hidden for those profiles. */}
+        {!selectedProfileIsRemote && (
+          <WorkingDirectoryPicker
+            value={workingDirectory}
+            onChange={onChangeWorkingDirectory}
+            disabled={submitting || disabled}
+          />
+        )}
       </div>
     </div>
   )

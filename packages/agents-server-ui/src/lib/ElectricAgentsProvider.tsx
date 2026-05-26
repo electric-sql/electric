@@ -38,6 +38,25 @@ const ENTITY_STATUSES: [EntityStatus, ...Array<EntityStatus>] = [
   `killed`,
 ]
 
+// A dispatch policy pins an entity's wakes to a target. We only need the
+// `runner` target's id for display ("which runner runs this session"); other
+// target kinds (e.g. webhook) carry no runner. Kept permissive so an unknown
+// target shape syncs without tripping validation.
+const dispatchPolicySchema = z.object({
+  targets: z
+    .array(
+      z.object({
+        type: z.string(),
+        runnerId: z.string().optional(),
+        url: z.string().optional(),
+        subscription_id: z.string().optional(),
+      })
+    )
+    .default([]),
+})
+
+export type ElectricDispatchPolicy = z.infer<typeof dispatchPolicySchema>
+
 const entitySchema = z.object({
   url: z.string(),
   type: z.string(),
@@ -48,6 +67,7 @@ const entitySchema = z.object({
     .object({ profile: z.string(), key: z.string().optional() })
     .nullable()
     .optional(),
+  dispatch_policy: dispatchPolicySchema.nullable().optional(),
   parent: z.string().nullable(),
   type_revision: z.coerce.number().nullable().optional(),
   inbox_schemas: z.record(z.unknown()).nullable().optional(),
@@ -156,6 +176,7 @@ function createEntitiesCollection(baseUrl: string) {
             `tags`,
             `spawn_args`,
             `sandbox`,
+            `dispatch_policy`,
             `parent`,
             `type_revision`,
             `inbox_schemas`,
@@ -352,7 +373,7 @@ function createSpawnAction(
   entitiesCollection: EntitiesCollection
 ) {
   return createOptimisticAction<SpawnInput>({
-    onMutate: ({ type, name, tags, args, sandbox }) => {
+    onMutate: ({ type, name, tags, args, sandbox, dispatch_policy }) => {
       entitiesCollection.insert({
         url: `/${type}/${name}`,
         type,
@@ -360,6 +381,9 @@ function createSpawnAction(
         tags: tags ?? {},
         spawn_args: args ?? {},
         sandbox: sandbox ?? null,
+        // Mirror the pinned runner optimistically so the runner badge shows
+        // immediately on spawn rather than after the first server sync.
+        dispatch_policy: dispatch_policy ?? null,
         parent: null,
         created_at: Date.now(),
         updated_at: Date.now(),

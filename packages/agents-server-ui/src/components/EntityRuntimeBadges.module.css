@@ -1,0 +1,68 @@
+.badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Unstyled button so a Badge can act as a popover trigger while staying
+   keyboard-focusable. */
+.badgeTrigger {
+  display: inline-flex;
+  align-items: center;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.badgeTrigger:disabled {
+  cursor: default;
+}
+
+.badgeLabel {
+  max-width: 14ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.popoverBody {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 200px;
+  max-width: 320px;
+}
+
+.popoverTitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.rowLabel {
+  flex: 0 0 auto;
+}
+
+.rowValue {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
