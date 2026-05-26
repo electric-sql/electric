@@ -358,16 +358,6 @@ export class CloudAuth {
           // on means a user already signed into GitHub or Google in
           // their phone's browser skips the password prompt.
           preferEphemeralSession: false,
-          // Android-specific: opening the Custom Tab in a separate task
-          // (the default) lets Android 13+ aggressively kill our task
-          // when the OAuth page is showing, which breaks the redirect
-          // back to the app (returns `dismiss`, no Linking events).
-          // Forcing the browser into our own task and keeping us in
-          // recents stops the OS from doing that.
-          // See: https://github.com/expo/expo/issues/44284,
-          // https://github.com/expo/expo/issues/8072
-          createTask: false,
-          showInRecents: true,
         }
       )
     } catch (err) {

@@ -14,11 +14,11 @@ to the welcome screen. Multiple layers had to be hardened:
   kills our process while the browser is open and then relaunches
   via the redirect) are forwarded to `getIntent()` for
   `expo-linking` / `expo-web-browser` to pick up. Mitigates
-  [expo/expo#44284](https://github.com/expo/expo/issues/44284).
-* `openAuthSessionAsync` now uses `createTask: false` +
-  `showInRecents: true` so the Custom Tab runs inside our task and
-  the OS doesn't aggressively reclaim our process while the user is
-  signing in.
+  [expo/expo#44284](https://github.com/expo/expo/issues/44284). The
+  plugin imports `expo/config-plugins` (not `@expo/config-plugins`)
+  because pnpm doesn't hoist the latter into the package's
+  `node_modules`, which broke `expo cli config --json` inside EAS
+  Build.
 * The OAuth deep link is consumed by a **global listener mounted in
   `CloudAuthProvider`** (in addition to the `/oauth/callback`
   route), so cold-start redirects are completed even before Expo
@@ -29,7 +29,12 @@ to the welcome screen. Multiple layers had to be hardened:
 * `signIn` waits a few seconds for the deep link to arrive when the
   browser session returns `dismiss`, instead of immediately
   rolling state back to `signed-out`.
-* The `/oauth/callback` route now subscribes to the cloud-auth
-  state and only navigates once it actually settles, surfacing
-  parse / state-mismatch errors instead of silently bouncing the
-  user back to the welcome screen.
+* `completeCallbackUrl` is idempotent so the three concurrent
+  handlers (browser-session result, global Linking listener,
+  `/oauth/callback` route) can't trample each other.
+* The `/oauth/callback` route subscribes to cloud-auth state and
+  navigates with `<Redirect>` (rendered during the render phase)
+  instead of `router.replace` inside an effect — the effect-based
+  version raced with Expo Router's own intent handling in dev
+  builds, leaving the route stuck on the spinner even though
+  sign-in had succeeded.

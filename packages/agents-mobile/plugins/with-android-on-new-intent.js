@@ -1,5 +1,10 @@
 // @ts-check
-const { withMainActivity } = require(`@expo/config-plugins`)
+// NOTE: import via `expo/config-plugins` (not `@expo/config-plugins`)
+// because pnpm doesn't hoist the latter into agents-mobile's
+// node_modules, so `require('@expo/config-plugins')` fails inside
+// EAS Build's read-config step. `expo` is a direct dep and re-exports
+// the plugin helpers.
+const { withMainActivity } = require(`expo/config-plugins`)
 
 /**
  * Expo config plugin: inject an `onNewIntent` override into the
