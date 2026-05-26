@@ -165,7 +165,7 @@ function createEntityTypesCollection(baseUrl: string) {
   )
 }
 
-function createRunnersCollection(baseUrl: string) {
+export function createRunnersCollection(baseUrl: string) {
   return createCollection(
     electricCollectionOptions({
       id: `runners`,

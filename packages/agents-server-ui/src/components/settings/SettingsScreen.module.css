@@ -114,12 +114,24 @@
   padding: 8px 32px 64px;
 }
 
-.pageTitle {
+.pageTitleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ds-space-3);
   margin: 16px 0 24px;
+}
+
+.pageTitle {
+  margin: 0;
   font-size: var(--ds-text-2xl);
   line-height: 1.2;
   font-weight: 600;
   color: var(--ds-text-1);
+}
+
+.pageAction {
+  flex-shrink: 0;
 }
 
 .sections {
@@ -192,8 +204,9 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  flex: 1;
-  min-width: 0;
+  flex: 0 1 44%;
+  min-width: 44%;
+  align-self: flex-start;
 }
 
 .rowLabel {
@@ -208,9 +221,22 @@
 }
 
 .rowControl {
-  flex-shrink: 0;
+  min-width: 0;
+  flex: 1 1 56%;
   align-self: flex-start;
   display: inline-flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 6px;
+  text-align: right;
+}
+
+.rowControl > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.wrapControlValue > * {
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }

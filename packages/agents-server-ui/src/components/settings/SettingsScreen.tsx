@@ -23,9 +23,11 @@ import styles from './SettingsScreen.module.css'
  */
 export function SettingsScreen({
   title,
+  action,
   children,
 }: {
   title: string
+  action?: ReactNode
   children: ReactNode
 }): React.ReactElement {
   // On narrow viewports the SettingsSidebar floats over the
@@ -59,7 +61,10 @@ export function SettingsScreen({
       </div>
       <ScrollArea className={styles.scroll}>
         <div className={styles.body} data-desktop-selection-context>
-          <h1 className={styles.pageTitle}>{title}</h1>
+          <div className={styles.pageTitleRow}>
+            <h1 className={styles.pageTitle}>{title}</h1>
+            {action && <div className={styles.pageAction}>{action}</div>}
+          </div>
           <Stack direction="column" gap={6} className={styles.sections}>
             {children}
           </Stack>
@@ -110,10 +115,12 @@ export function SettingsRow({
   label,
   description,
   control,
+  wrapControlValue,
 }: {
   label: ReactNode
   description?: ReactNode
   control: ReactNode
+  wrapControlValue?: boolean
 }): React.ReactElement {
   return (
     <div className={styles.row}>
@@ -123,7 +130,13 @@ export function SettingsRow({
           <span className={styles.rowDescription}>{description}</span>
         )}
       </div>
-      <div className={styles.rowControl}>{control}</div>
+      <div
+        className={`${styles.rowControl} ${
+          wrapControlValue ? styles.wrapControlValue : ``
+        }`}
+      >
+        {control}
+      </div>
     </div>
   )
 }

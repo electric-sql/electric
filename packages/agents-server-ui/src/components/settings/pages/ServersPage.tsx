@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from '@tanstack/react-router'
 import {
   Brain,
   ChevronDown,
@@ -21,10 +22,12 @@ import {
   ConfirmDialog,
   Field,
   Icon,
+  IconButton,
   Input,
   Menu,
   Stack,
   Text,
+  Tooltip,
 } from '../../../ui'
 import { SettingsRow, SettingsScreen, SettingsSection } from '../SettingsScreen'
 import {
@@ -50,6 +53,7 @@ const STATUS_TONES: Record<
 }
 
 export function ServersPage(): React.ReactElement {
+  const navigate = useNavigate()
   const {
     addServer,
     setActiveServer,
@@ -165,6 +169,14 @@ export function ServersPage(): React.ReactElement {
                 onForget={() => {
                   if (item.server) setServerToForget(item.server)
                 }}
+                onInspectRuntime={() => {
+                  if (!item.server) return
+                  void navigate({
+                    to: `/settings/$category`,
+                    params: { category: `local-runtime` },
+                    search: { serverId: item.server.id },
+                  })
+                }}
                 isDesktop={isDesktop}
               />
             ))
@@ -233,6 +245,7 @@ function ServerRow({
   onDisconnect,
   onToggleLocalRuntime,
   onForget,
+  onInspectRuntime,
   isDesktop,
 }: {
   item: AvailableServer
@@ -241,36 +254,70 @@ function ServerRow({
   onDisconnect: () => void
   onToggleLocalRuntime: () => void
   onForget: () => void
+  onInspectRuntime: () => void
   isDesktop: boolean
 }): React.ReactElement {
   const statusInfo = STATUS_TONES[item.status]
   const connectedIntent = item.server?.desiredState === `connected`
   const canUseLocalRuntime = isDesktop && item.isSaved
+  const canInspectRuntime =
+    canUseLocalRuntime &&
+    connectedIntent &&
+    item.status === `connected` &&
+    item.server?.localRuntimeEnabled !== false
   const badgeText = item.isCloud ? item.cloudPath : item.description
   return (
     <>
       <SettingsRow
         label={item.name}
         description={
+          <Stack direction="row" gap={2} align="center">
+            <ServerKindBadge item={item} />
+            {badgeText && (
+              <Text size={1} tone="muted">
+                {badgeText}
+              </Text>
+            )}
+          </Stack>
+        }
+        control={<Badge tone={statusInfo.tone}>{statusInfo.label}</Badge>}
+      />
+      {(item.url ||
+        canUseLocalRuntime ||
+        item.connection?.runtimeError ||
+        item.connection?.lastError) && (
+        <div style={{ padding: `0 16px 12px` }}>
           <Stack direction="column" gap={1}>
-            <Stack direction="row" gap={2} align="center">
-              <ServerKindBadge item={item} />
-              {badgeText && (
-                <Text size={1} tone="muted">
-                  {badgeText}
-                </Text>
-              )}
-            </Stack>
             {item.url && item.url !== item.description && (
               <Text size={1} tone="muted" family="mono">
                 {item.url}
               </Text>
             )}
             {canUseLocalRuntime && (
-              <Text size={1} tone="muted">
-                Local runtime:{` `}
-                {runtimeStatusLabel(item.runtimeStatus)}
-              </Text>
+              <span
+                style={{
+                  display: `inline-flex`,
+                  alignItems: `center`,
+                  gap: 6,
+                }}
+              >
+                <Text size={1} tone="muted">
+                  Local runtime: {runtimeStatusLabel(item.runtimeStatus)}
+                </Text>
+                {canInspectRuntime && (
+                  <Tooltip content="Inspect local runtime">
+                    <IconButton
+                      size={1}
+                      variant="ghost"
+                      tone="neutral"
+                      onClick={onInspectRuntime}
+                      aria-label={`Inspect runtime for ${item.name}`}
+                    >
+                      <Icon icon={ExternalLink} size={1} />
+                    </IconButton>
+                  </Tooltip>
+                )}
+              </span>
             )}
             {item.connection?.runtimeError && (
               <Text size={1} tone="danger">
@@ -283,9 +330,8 @@ function ServerRow({
               </Text>
             )}
           </Stack>
-        }
-        control={<Badge tone={statusInfo.tone}>{statusInfo.label}</Badge>}
-      />
+        </div>
+      )}
       <div
         style={{
           display: `flex`,
