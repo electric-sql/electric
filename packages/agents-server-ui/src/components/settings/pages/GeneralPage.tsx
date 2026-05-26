@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Trash2 } from 'lucide-react'
-import { Button, Dialog, Icon, Stack, Text } from '../../../ui'
+import { Button, ConfirmDialog, Icon, Stack, Text } from '../../../ui'
 import { clearAllLocalData } from '../../../lib/server-connection'
 import { SettingsRow, SettingsScreen, SettingsSection } from '../SettingsScreen'
 
@@ -81,45 +81,23 @@ export function GeneralPage(): React.ReactElement {
         </SettingsSection>
       </SettingsScreen>
 
-      <Dialog.Root
+      <ConfirmDialog
         open={showResetConfirm}
         onOpenChange={(open) => {
           if (!isClearing) setShowResetConfirm(open)
         }}
-      >
-        <Dialog.Content maxWidth={440}>
-          <Dialog.Title>Clear all local data?</Dialog.Title>
-          <Dialog.Description>
-            This deletes saved settings, API keys, server connections, and
-            sign-in state. Electric Agents will restart and return to the
-            onboarding flow.
-          </Dialog.Description>
-          <Stack justify="end" gap={2}>
-            <Dialog.Close
-              render={
-                <Button variant="soft" tone="neutral" disabled={isClearing}>
-                  Cancel
-                </Button>
-              }
-            />
-            <Button
-              tone="danger"
-              disabled={isClearing}
-              onClick={() => {
-                void handleClearAllLocalData()
-              }}
-            >
-              <Icon icon={Trash2} size={2} />
-              {isClearing ? `Restarting…` : `Clear data and restart`}
-            </Button>
-          </Stack>
-          {error && (
-            <Text size={2} tone="danger">
-              {error}
-            </Text>
-          )}
-        </Dialog.Content>
-      </Dialog.Root>
+        title="Clear all local data?"
+        description="This deletes saved settings, API keys, server connections, and sign-in state. Electric Agents will restart and return to the onboarding flow."
+        confirmLabel="Clear data and restart"
+        loadingLabel="Restarting..."
+        confirmTone="danger"
+        confirmIcon={Trash2}
+        loading={isClearing}
+        error={error}
+        onConfirm={() => {
+          void handleClearAllLocalData()
+        }}
+      />
     </>
   )
 }

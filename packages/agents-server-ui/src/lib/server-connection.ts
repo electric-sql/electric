@@ -41,6 +41,10 @@ export interface DesktopState {
   pullWakeRunnerId: string | null
 }
 
+export interface ConnectServerOptions {
+  localRuntimeEnabled?: boolean
+}
+
 export interface DesktopServerFetchRequest {
   url: string
   method: string
@@ -258,8 +262,12 @@ declare global {
       setNativeAppearance?: (appearance: DesktopAppearance) => Promise<void>
       setActiveServer?: (server: ServerConfig | null) => Promise<void>
       setSelectedServer?: (serverId: string | null) => Promise<void>
-      connectServer?: (serverId: string) => Promise<void>
+      connectServer?: (
+        serverId: string,
+        options?: ConnectServerOptions
+      ) => Promise<void>
       disconnectServer?: (serverId: string) => Promise<void>
+      forgetServer?: (serverId: string) => Promise<void>
       restartRuntime?: () => Promise<void>
       restartServerRuntime?: (serverId: string) => Promise<void>
       stopRuntime?: () => Promise<void>
@@ -430,12 +438,19 @@ export async function saveSelectedServer(
   await window.electronAPI?.setSelectedServer?.(serverId)
 }
 
-export async function connectServer(serverId: string): Promise<void> {
-  await window.electronAPI?.connectServer?.(serverId)
+export async function connectServer(
+  serverId: string,
+  options?: ConnectServerOptions
+): Promise<void> {
+  await window.electronAPI?.connectServer?.(serverId, options)
 }
 
 export async function disconnectServer(serverId: string): Promise<void> {
   await window.electronAPI?.disconnectServer?.(serverId)
+}
+
+export async function forgetServer(serverId: string): Promise<void> {
+  await window.electronAPI?.forgetServer?.(serverId)
 }
 
 export function onDesktopStateChanged(

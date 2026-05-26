@@ -1,17 +1,36 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Brain, RefreshCw, Square, Trash2, Zap } from 'lucide-react'
+import { useState } from 'react'
+import {
+  Brain,
+  ChevronDown,
+  Cloud,
+  Laptop,
+  Plug,
+  RefreshCw,
+  Square,
+  Trash2,
+  Zap,
+} from 'lucide-react'
+import {
+  useAvailableServers,
+  type AvailableServer,
+} from '../../../hooks/useAvailableServers'
 import { useServerConnection } from '../../../hooks/useServerConnection'
-import { Badge, Button, Field, Icon, Input, Stack, Text } from '../../../ui'
+import {
+  Badge,
+  Button,
+  ConfirmDialog,
+  Field,
+  Icon,
+  Input,
+  Menu,
+  Stack,
+  Text,
+} from '../../../ui'
 import { SettingsRow, SettingsScreen, SettingsSection } from '../SettingsScreen'
 import {
-  loadCloudAgentServersState,
-  loadDesktopState,
-  onCloudAgentServersStateChanged,
-  onDesktopStateChanged,
   prepareCloudAgentServerConnection,
-  type CloudAgentServer,
   type CloudAgentServersState,
-  type DiscoveredServer,
+  type ConnectServerOptions,
   type LocalRuntimeStatus,
   type ServerConnectionStatus,
 } from '../../../lib/server-connection'
@@ -31,268 +50,218 @@ const STATUS_TONES: Record<
 
 export function ServersPage(): React.ReactElement {
   const {
-    servers,
-    activeServer,
-    connected,
-    connections,
     addServer,
     setActiveServer,
     connectServer,
     disconnectServer,
-    removeServer,
+    forgetServer,
     updateServer,
   } = useServerConnection()
-  const [discovered, setDiscovered] = useState<Array<DiscoveredServer>>([])
+  const { servers, cloudState } = useAvailableServers()
   const isDesktop = typeof window !== `undefined` && Boolean(window.electronAPI)
-  const connectionByServer = useMemo(
-    () => new Map(connections.map((entry) => [entry.serverId, entry])),
-    [connections]
-  )
-  const savedUrls = useMemo(() => new Set(servers.map((s) => s.url)), [servers])
-  const savedCloudTenantIds = useMemo(
-    () =>
-      new Set(
-        servers
-          .filter((s) => s.source === `electric-cloud` && s.tenantId)
-          .map((s) => s.tenantId as string)
-      ),
-    [servers]
-  )
-  const newDiscovered = useMemo(
-    () =>
-      discovered
-        .filter((entry) => !savedUrls.has(entry.url))
-        .sort((a, b) => a.port - b.port),
-    [discovered, savedUrls]
-  )
-  const statusForServer = (server: ServerConfig): ServerConnectionStatus => {
-    const stored = connectionByServer.get(server.id)?.status
-    if (stored) return stored
-    if (!isDesktop && server.id === activeServer?.id) {
-      return connected ? `connected` : `offline`
-    }
-    return server.desiredState === `connected` ? `offline` : `disconnected`
-  }
-  const runtimeStatusForServer = (server: ServerConfig): LocalRuntimeStatus => {
-    if (!isDesktop) return `disabled`
-    return (
-      connectionByServer.get(server.id)?.localRuntimeStatus ??
-      (server.localRuntimeEnabled ? `stopped` : `disabled`)
-    )
-  }
-
-  useEffect(() => {
-    if (!isDesktop) return
-    let cancelled = false
-    void loadDesktopState().then((state) => {
-      if (!cancelled) setDiscovered(state?.discoveredServers ?? [])
-    })
-    const off = onDesktopStateChanged((state) =>
-      setDiscovered(state.discoveredServers ?? [])
-    )
-    return () => {
-      cancelled = true
-      off?.()
-    }
-  }, [isDesktop])
-
-  const [cloudAgents, setCloudAgents] = useState<CloudAgentServersState | null>(
+  const [serverToForget, setServerToForget] = useState<ServerConfig | null>(
     null
   )
-  useEffect(() => {
-    if (!isDesktop) return
-    let cancelled = false
-    void loadCloudAgentServersState().then((state) => {
-      if (!cancelled) setCloudAgents(state)
-    })
-    const off = onCloudAgentServersStateChanged((next) => {
-      setCloudAgents(next)
-    })
-    return () => {
-      cancelled = true
-      off?.()
+
+  const connectAvailableServer = async (
+    item: AvailableServer,
+    options: ConnectServerOptions
+  ): Promise<void> => {
+    if (item.server) {
+      connectServer(item.server.id, options)
+      return
     }
-  }, [isDesktop])
+    if (item.cloudServer) {
+      const result = await prepareCloudAgentServerConnection(
+        item.cloudServer.id
+      )
+      if (!result) throw new Error(`Could not prepare the cloud connection.`)
+      addServer(
+        {
+          name: item.cloudServer.name,
+          url: result.url,
+          source: `electric-cloud`,
+          desiredState: `connected`,
+          localRuntimeEnabled: options.localRuntimeEnabled !== false,
+          tenantId: result.tenantId,
+        },
+        options
+      )
+      return
+    }
+    if (item.discoveredServer) {
+      addServer(
+        {
+          name: item.name,
+          url: item.discoveredServer.url,
+          source: `local-discovery`,
+          desiredState: `connected`,
+          localRuntimeEnabled: options.localRuntimeEnabled !== false,
+        },
+        options
+      )
+    }
+  }
+
+  const cloudDescription = cloudStatusDescription(cloudState)
 
   return (
-    <SettingsScreen title="Servers">
-      <SettingsSection
-        title="Configured Servers"
-        description={
-          isDesktop
-            ? `Manage remote agents servers and the optional local runtime attached to each connected server.`
-            : `Manage the agents server this web UI connects to. Local runtimes are only available in the desktop app.`
-        }
-      >
-        {servers.length === 0 ? (
-          <div style={{ padding: `16px` }}>
-            <Text size={2} tone="muted">
-              No configured servers yet. Add one from the server switcher.
-            </Text>
-          </div>
-        ) : (
-          servers.map((server) => (
-            <ServerRow
-              key={server.id}
-              server={server}
-              selected={server.id === activeServer?.id}
-              status={statusForServer(server)}
-              lastError={connectionByServer.get(server.id)?.lastError ?? null}
-              runtimeStatus={runtimeStatusForServer(server)}
-              runtimeUrl={connectionByServer.get(server.id)?.runtimeUrl ?? null}
-              runtimeError={
-                connectionByServer.get(server.id)?.runtimeError ?? null
-              }
-              onSelect={() => setActiveServer(server)}
-              onConnect={() => connectServer(server.id)}
-              onDisconnect={() => disconnectServer(server.id)}
-              onToggleLocalRuntime={() => {
-                if (!isDesktop) return
-                updateServer({
-                  ...server,
-                  localRuntimeEnabled: server.localRuntimeEnabled === false,
-                })
-              }}
-              onRemove={() => {
-                if (
-                  window.confirm(
-                    `Remove ${server.name}? This will remove it from your configured servers.`
-                  )
-                ) {
-                  removeServer(server.url)
-                }
-              }}
-              isDesktop={isDesktop}
-            />
-          ))
-        )}
-      </SettingsSection>
-      {isDesktop && (
-        <CloudAgentServersSection
-          state={cloudAgents}
-          savedTenantIds={savedCloudTenantIds}
-          onAdd={addServer}
-        />
-      )}
-      <SettingsSection
-        title="Add Server"
-        description={
-          isDesktop
-            ? `Add a remote agents server. Connecting can run with or without a local bundled runtime.`
-            : `Add another agents server URL for this browser. Local runtime options are not available on the web.`
-        }
-      >
-        <AddServerForm
-          onAdd={(server) => {
-            addServer(server)
-          }}
-        />
-      </SettingsSection>
-      {isDesktop && newDiscovered.length > 0 && (
+    <>
+      <SettingsScreen title="Servers">
         <SettingsSection
-          title="Discovered Local Servers"
-          description="Local servers are not saved until you connect them."
+          title="Servers"
+          description={
+            isDesktop
+              ? `Connect to local, self-hosted, or Electric Cloud agents servers.`
+              : `Manage the agents server this web UI connects to.`
+          }
         >
-          {newDiscovered.map((entry) => (
-            <SettingsRow
-              key={entry.url}
-              label={`localhost:${entry.port}`}
-              description={entry.url}
-              control={
-                <Button
-                  variant="soft"
-                  tone="neutral"
-                  onClick={() =>
-                    addServer({
-                      name: `localhost:${entry.port}`,
-                      url: entry.url,
-                      source: `local-discovery`,
-                      desiredState: `connected`,
+          {cloudDescription && (
+            <div style={{ padding: `8px 16px 0` }}>
+              <Text
+                size={1}
+                tone={cloudState?.status === `error` ? `danger` : `muted`}
+              >
+                {cloudDescription}
+              </Text>
+            </div>
+          )}
+          {servers.length === 0 ? (
+            <div style={{ padding: 16 }}>
+              <Text size={2} tone="muted">
+                No servers yet. Add one below or sign in to Electric Cloud.
+              </Text>
+            </div>
+          ) : (
+            servers.map((item) => (
+              <ServerRow
+                key={item.key}
+                item={item}
+                onSelect={() => item.server && setActiveServer(item.server)}
+                onConnect={(options) => {
+                  void connectAvailableServer(item, options)
+                }}
+                onDisconnect={() =>
+                  item.server && disconnectServer(item.server.id)
+                }
+                onToggleLocalRuntime={() => {
+                  if (!item.server) return
+                  const localRuntimeEnabled =
+                    item.server.localRuntimeEnabled === false
+                  updateServer({
+                    ...item.server,
+                    localRuntimeEnabled,
+                  })
+                  if (
+                    localRuntimeEnabled &&
+                    item.server.desiredState === `connected`
+                  ) {
+                    connectServer(item.server.id, {
                       localRuntimeEnabled: true,
                     })
                   }
-                >
-                  Connect
-                </Button>
-              }
-            />
-          ))}
+                }}
+                onForget={() => {
+                  if (item.server) setServerToForget(item.server)
+                }}
+                isDesktop={isDesktop}
+              />
+            ))
+          )}
         </SettingsSection>
-      )}
-    </SettingsScreen>
+        <SettingsSection
+          title="Add Server"
+          description={
+            isDesktop
+              ? `Add a server URL manually. New connections start the local runtime by default.`
+              : `Add another agents server URL for this browser.`
+          }
+        >
+          <AddServerForm
+            onAdd={(server) => {
+              addServer(server, {
+                localRuntimeEnabled: server.localRuntimeEnabled,
+              })
+            }}
+          />
+        </SettingsSection>
+      </SettingsScreen>
+      <ConfirmDialog
+        open={serverToForget !== null}
+        onOpenChange={(open) => {
+          if (!open) setServerToForget(null)
+        }}
+        title={
+          serverToForget ? `Forget ${serverToForget.name}?` : `Forget server?`
+        }
+        description="This will disconnect the server and remove its saved settings."
+        confirmLabel="Forget server"
+        confirmTone="danger"
+        confirmIcon={Trash2}
+        onConfirm={() => {
+          if (!serverToForget) return
+          forgetServer(serverToForget.id)
+          setServerToForget(null)
+        }}
+      />
+    </>
   )
 }
 
 function ServerRow({
-  server,
-  selected,
-  status,
-  runtimeStatus,
-  lastError,
-  runtimeUrl,
-  runtimeError,
+  item,
   onSelect,
   onConnect,
   onDisconnect,
   onToggleLocalRuntime,
-  onRemove,
+  onForget,
   isDesktop,
 }: {
-  server: ServerConfig
-  selected: boolean
-  status: ServerConnectionStatus
-  runtimeStatus: LocalRuntimeStatus
-  lastError: string | null
-  runtimeUrl: string | null
-  runtimeError: string | null
+  item: AvailableServer
   onSelect: () => void
-  onConnect: () => void
+  onConnect: (options: ConnectServerOptions) => void
   onDisconnect: () => void
   onToggleLocalRuntime: () => void
-  onRemove: () => void
+  onForget: () => void
   isDesktop: boolean
 }): React.ReactElement {
-  const statusInfo = STATUS_TONES[status]
-  const connectedIntent = server.desiredState === `connected`
+  const statusInfo = STATUS_TONES[item.status]
+  const connectedIntent = item.server?.desiredState === `connected`
+  const canUseLocalRuntime = isDesktop && item.isSaved
+  const badgeText = item.isCloud ? item.cloudPath : item.description
   return (
     <>
       <SettingsRow
-        label={server.name}
+        label={item.name}
         description={
           <Stack direction="column" gap={1}>
-            <Text size={1} tone="muted" family="mono">
-              {server.url}
-            </Text>
-            {runtimeUrl && (
+            <Stack direction="row" gap={2} align="center">
+              <ServerKindBadge item={item} />
+              {badgeText && (
+                <Text size={1} tone="muted">
+                  {badgeText}
+                </Text>
+              )}
+            </Stack>
+            {item.url && !item.isCloud && item.url !== item.description && (
               <Text size={1} tone="muted" family="mono">
-                Runtime: Pull-wake
+                {item.url}
               </Text>
             )}
-            {isDesktop ? (
+            {canUseLocalRuntime && (
               <Text size={1} tone="muted">
-                <Icon icon={Brain} size={1} /> Local runtime for this server:
-                {` `}
-                {runtimeStatus}
-              </Text>
-            ) : (
-              <Text size={1} tone="muted">
-                Local runtime: desktop app only
+                Local runtime:{` `}
+                {runtimeStatusLabel(item.runtimeStatus)}
               </Text>
             )}
-            {runtimeError && (
+            {item.connection?.runtimeError && (
               <Text size={1} tone="danger">
-                Runtime: {runtimeError}
+                Runtime: {item.connection.runtimeError}
               </Text>
             )}
-            {isDesktop && (
-              <Text size={1} tone="muted">
-                Logs: runtime logs are written under the app data logs
-                directory.
-              </Text>
-            )}
-            {lastError && (
+            {item.connection?.lastError && (
               <Text size={1} tone="danger">
-                {lastError}
+                {item.connection.lastError}
               </Text>
             )}
           </Stack>
@@ -308,17 +277,28 @@ function ServerRow({
           padding: `0 16px 16px`,
         }}
       >
-        <Button
-          variant="soft"
-          tone="neutral"
-          onClick={onSelect}
-          disabled={selected}
-        >
-          {selected ? `Selected` : `Select`}
-        </Button>
+        {item.server && (
+          <Button
+            variant="soft"
+            tone="neutral"
+            onClick={onSelect}
+            disabled={item.isSelected}
+          >
+            {item.isSelected ? `Selected` : `Select`}
+          </Button>
+        )}
         {isDesktop && connectedIntent ? (
           <>
-            <Button variant="soft" tone="neutral" onClick={onConnect}>
+            <Button
+              variant="soft"
+              tone="neutral"
+              onClick={() =>
+                onConnect({
+                  localRuntimeEnabled:
+                    item.server?.localRuntimeEnabled !== false,
+                })
+              }
+            >
               <Icon icon={RefreshCw} size={2} /> Retry
             </Button>
             <Button variant="soft" tone="neutral" onClick={onDisconnect}>
@@ -326,180 +306,126 @@ function ServerRow({
             </Button>
           </>
         ) : isDesktop ? (
-          <Button variant="solid" tone="accent" onClick={onConnect}>
-            <Icon icon={Zap} size={2} /> Connect
-          </Button>
+          <ConnectSplitButton onConnect={onConnect} />
         ) : null}
-        {isDesktop && (
+        {canUseLocalRuntime && connectedIntent && (
           <Button variant="soft" tone="neutral" onClick={onToggleLocalRuntime}>
             <Icon icon={Brain} size={2} />
-            {server.localRuntimeEnabled === false
+            {item.server?.localRuntimeEnabled === false
               ? `Enable local runtime`
               : `Disable local runtime`}
           </Button>
         )}
-        <Button variant="soft" tone="neutral" onClick={onRemove}>
-          <Icon icon={Trash2} size={2} /> Remove
-        </Button>
+        {item.server && (
+          <Button variant="soft" tone="neutral" onClick={onForget}>
+            <Icon icon={Trash2} size={2} /> Forget
+          </Button>
+        )}
       </div>
     </>
   )
 }
 
-function CloudAgentServersSection({
-  state,
-  savedTenantIds,
-  onAdd,
+function ConnectSplitButton({
+  onConnect,
 }: {
-  state: CloudAgentServersState | null
-  savedTenantIds: Set<string>
-  onAdd: (server: {
-    name: string
-    url: string
-    source: `manual` | `local-discovery` | `electric-cloud`
-    desiredState: `connected` | `disconnected`
-    localRuntimeEnabled: boolean
-    tenantId?: string
-  }) => void
+  onConnect: (options: ConnectServerOptions) => void
 }): React.ReactElement {
-  const status = state?.status ?? `idle`
-  const servers = state?.servers ?? []
-  const description =
-    status === `idle`
-      ? `Sign in to Electric Cloud (Settings → Account) to see the agent servers your workspaces have access to.`
-      : status === `loading`
-        ? `Loading agent servers from Electric Cloud…`
-        : status === `unauthorized`
-          ? `Sign-in expired. Sign back in (Settings → Account) to refresh the list.`
-          : servers.length === 0
-            ? `No agent servers in your workspaces yet. Create one from the Electric Cloud dashboard.`
-            : `Agent servers across the workspaces you're a member of. Click Connect on one to make it the active server for this window.`
-
+  const [open, setOpen] = useState(false)
   return (
-    <SettingsSection title="Cloud Agent Servers" description={description}>
-      {state?.error && status !== `unauthorized` && (
-        <div style={{ padding: `8px 16px 0` }}>
-          <Text size={1} tone="danger">
-            {state.error}
-          </Text>
-        </div>
-      )}
-      {servers.length > 0 && (
-        <div>
-          {servers.map((server) => (
-            <CloudAgentServerRow
-              key={server.id}
-              server={server}
-              savedTenantIds={savedTenantIds}
-              onAdd={onAdd}
-            />
-          ))}
-        </div>
-      )}
-    </SettingsSection>
+    <div style={{ display: `inline-flex`, gap: 1 }}>
+      <Button
+        variant="solid"
+        tone="accent"
+        style={{ borderTopRightRadius: 0, borderBottomRightRadius: 0 }}
+        onClick={() => onConnect({ localRuntimeEnabled: true })}
+      >
+        <Icon icon={Zap} size={2} /> Connect
+      </Button>
+      <Menu.Root open={open} onOpenChange={setOpen}>
+        <Menu.Trigger
+          render={
+            <Button
+              variant="solid"
+              tone="accent"
+              aria-label="Connection options"
+              style={{
+                borderTopLeftRadius: 0,
+                borderBottomLeftRadius: 0,
+                paddingInline: 8,
+              }}
+            >
+              <Icon icon={ChevronDown} size={2} />
+            </Button>
+          }
+        />
+        <Menu.Content side="bottom" align="end">
+          <Menu.Item onSelect={() => onConnect({ localRuntimeEnabled: true })}>
+            Connect and start local runtime
+          </Menu.Item>
+          <Menu.Item onSelect={() => onConnect({ localRuntimeEnabled: false })}>
+            Connect without local runtime
+          </Menu.Item>
+        </Menu.Content>
+      </Menu.Root>
+    </div>
   )
 }
 
-function CloudAgentServerRow({
-  server,
-  savedTenantIds,
-  onAdd,
+function ServerKindBadge({
+  item,
 }: {
-  server: CloudAgentServer
-  savedTenantIds: Set<string>
-  onAdd: (server: {
-    name: string
-    url: string
-    source: `manual` | `local-discovery` | `electric-cloud`
-    desiredState: `connected` | `disconnected`
-    localRuntimeEnabled: boolean
-    tenantId?: string
-  }) => void
+  item: AvailableServer
 }): React.ReactElement {
-  const [connecting, setConnecting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const alreadyAdded = savedTenantIds.has(server.id)
-
-  const path = [
-    server.workspaceName,
-    server.projectName,
-    server.environmentName,
-  ]
-    .filter((segment): segment is string => Boolean(segment))
-    .join(` › `)
-
-  const handleConnect = async (): Promise<void> => {
-    if (connecting || alreadyAdded) return
-    setConnecting(true)
-    setError(null)
-    try {
-      const result = await prepareCloudAgentServerConnection(server.id)
-      if (!result) {
-        throw new Error(`Could not prepare the cloud connection.`)
-      }
-      onAdd({
-        name: server.name,
-        url: result.url,
-        source: `electric-cloud`,
-        desiredState: `connected`,
-        // The cloud-agents-server itself is just a tenanted router —
-        // entity-type registration (Horton, Worker) and the actual
-        // runtime execution still live on this machine. Same wiring
-        // as a local server; the only difference is the agents-server
-        // URL points at the cloud instead of `localhost`.
-        localRuntimeEnabled: true,
-        // Persisted alongside the URL so main's webRequest hook + the
-        // undici global interceptor can look up the matching agents
-        // token from SecretStore on every outbound request to this server.
-        tenantId: result.tenantId,
-      })
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setConnecting(false)
-    }
+  if (item.isCloud) {
+    return (
+      <Badge tone="info" size={1}>
+        <Icon icon={Cloud} size={1} /> Cloud
+      </Badge>
+    )
   }
-
+  if (item.isLocal) {
+    return (
+      <Badge tone="neutral" size={1}>
+        <Icon icon={Laptop} size={1} /> Local
+      </Badge>
+    )
+  }
   return (
-    <SettingsRow
-      label={server.name}
-      description={
-        <Stack direction="column" gap={1}>
-          {path && (
-            <Text size={1} tone="muted">
-              {path}
-            </Text>
-          )}
-          <Text size={1} tone="muted" family="mono">
-            {server.id}
-          </Text>
-          {error && (
-            <Text size={1} tone="danger">
-              {error}
-            </Text>
-          )}
-        </Stack>
-      }
-      control={
-        <Stack direction="row" gap={2} align="center">
-          <Badge tone="info" size={1}>
-            Cloud
-          </Badge>
-          <Button
-            variant="soft"
-            tone="neutral"
-            size={1}
-            disabled={connecting || alreadyAdded}
-            onClick={() => {
-              void handleConnect()
-            }}
-          >
-            {alreadyAdded ? `Added` : connecting ? `Connecting…` : `Connect`}
-          </Button>
-        </Stack>
-      }
-    />
+    <Badge tone="neutral" size={1}>
+      <Icon icon={Plug} size={1} /> Self-hosted
+    </Badge>
   )
+}
+
+function runtimeStatusLabel(status: LocalRuntimeStatus): string {
+  switch (status) {
+    case `disabled`:
+      return `disabled`
+    case `stopped`:
+      return `stopped`
+    case `starting`:
+      return `starting`
+    case `running`:
+      return `running`
+    case `error`:
+      return `error`
+  }
+}
+
+function cloudStatusDescription(
+  state: CloudAgentServersState | null
+): string | null {
+  if (!state) return null
+  if (state.status === `idle`) {
+    return `Sign in to Electric Cloud from Account settings to see cloud servers.`
+  }
+  if (state.status === `loading`) return `Loading Electric Cloud servers...`
+  if (state.status === `unauthorized`) {
+    return `Electric Cloud sign-in expired. Sign back in from Account settings.`
+  }
+  if (state.status === `error`) return state.error
+  return null
 }
 
 function AddServerForm({
@@ -569,7 +495,7 @@ function AddServerForm({
               checked={localRuntimeEnabled}
               onChange={(event) => setLocalRuntimeEnabled(event.target.checked)}
             />
-            <Text size={2}>Start a local runtime for this server</Text>
+            <Text size={2}>Start local runtime when connecting</Text>
           </label>
         )}
       </Stack>

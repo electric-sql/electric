@@ -8,12 +8,14 @@ import {
 import {
   connectServer as connectDesktopServer,
   disconnectServer as disconnectDesktopServer,
+  forgetServer as forgetDesktopServer,
   loadDesktopState,
   loadServers,
   onDesktopStateChanged,
   saveActiveServer,
   saveSelectedServer,
   saveServers,
+  type ConnectServerOptions,
   type ServerConnectionState as RuntimeConnectionState,
 } from '../lib/server-connection'
 import { appendPathToUrl } from '@electric-ax/agents-runtime/client'
@@ -98,11 +100,12 @@ interface ServerConnectionState {
   connection: RuntimeConnectionState | null
   connections: Array<RuntimeConnectionState>
   setActiveServer: (server: ServerConfig | null) => void
-  addServer: (server: ServerInput) => void
+  addServer: (server: ServerInput, options?: ConnectServerOptions) => void
   removeServer: (url: string) => void
   updateServer: (server: ServerConfig) => void
-  connectServer: (serverId: string) => void
+  connectServer: (serverId: string, options?: ConnectServerOptions) => void
   disconnectServer: (serverId: string) => void
+  forgetServer: (serverId: string) => void
 }
 
 const ServerConnectionContext = createContext<ServerConnectionState | null>(
@@ -270,9 +273,12 @@ export function ServerConnectionProvider({
   }, [])
 
   const addServer = useCallback(
-    (server: ServerInput) => {
+    (server: ServerInput, options?: ConnectServerOptions) => {
       if (servers.some((s) => s.url === server.url)) return
       const normalized = normalizeServerConfig(server as ServerConfig)
+      if (typeof options?.localRuntimeEnabled === `boolean`) {
+        normalized.localRuntimeEnabled = options.localRuntimeEnabled
+      }
       const next = [...servers, normalized]
       setServers(next)
       setActiveServerState(normalized)
@@ -281,7 +287,7 @@ export function ServerConnectionProvider({
       void saveServers(next).then(async () => {
         if (window.electronAPI) {
           await saveSelectedServer(normalized.id)
-          await connectDesktopServer(normalized.id)
+          await connectDesktopServer(normalized.id, options)
         } else {
           await saveActiveServer(normalized)
         }
@@ -315,9 +321,9 @@ export function ServerConnectionProvider({
   )
 
   const connectServer = useCallback(
-    (serverId: string) => {
+    (serverId: string, options?: ConnectServerOptions) => {
       if (window.electronAPI) {
-        void connectDesktopServer(serverId)
+        void connectDesktopServer(serverId, options)
       } else if (activeServer?.id === serverId) {
         setBrowserRetry((value) => value + 1)
       }
@@ -328,6 +334,18 @@ export function ServerConnectionProvider({
   const disconnectServer = useCallback((serverId: string) => {
     void disconnectDesktopServer(serverId)
   }, [])
+
+  const forgetServer = useCallback(
+    (serverId: string) => {
+      if (window.electronAPI) {
+        void forgetDesktopServer(serverId)
+      } else {
+        const server = servers.find((entry) => entry.id === serverId)
+        if (server) removeServer(server.url)
+      }
+    },
+    [servers, removeServer]
+  )
 
   return (
     <ServerConnectionContext.Provider
@@ -343,6 +361,7 @@ export function ServerConnectionProvider({
         updateServer,
         connectServer,
         disconnectServer,
+        forgetServer,
       }}
     >
       {children}

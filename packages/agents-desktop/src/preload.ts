@@ -46,6 +46,10 @@ type ServerConfig = {
   tenantId?: string
 }
 
+type ConnectServerOptions = {
+  localRuntimeEnabled?: boolean
+}
+
 type DesktopRuntimeStatus = `stopped` | `starting` | `running` | `error`
 type LocalRuntimeStatus =
   | `disabled`
@@ -289,10 +293,15 @@ const api = {
     ipcRenderer.invoke(`desktop:set-active-server`, server),
   setSelectedServer: (serverId: string | null): Promise<void> =>
     ipcRenderer.invoke(`desktop:set-selected-server`, serverId),
-  connectServer: (serverId: string): Promise<void> =>
-    ipcRenderer.invoke(`desktop:connect-server`, serverId),
+  connectServer: (
+    serverId: string,
+    options?: ConnectServerOptions
+  ): Promise<void> =>
+    ipcRenderer.invoke(`desktop:connect-server`, serverId, options),
   disconnectServer: (serverId: string): Promise<void> =>
     ipcRenderer.invoke(`desktop:disconnect-server`, serverId),
+  forgetServer: (serverId: string): Promise<void> =>
+    ipcRenderer.invoke(`desktop:forget-server`, serverId),
   restartRuntime: (): Promise<void> =>
     ipcRenderer.invoke(`desktop:restart-runtime`),
   restartServerRuntime: (serverId: string): Promise<void> =>
