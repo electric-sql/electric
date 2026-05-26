@@ -261,7 +261,7 @@ function ServerRow({
                 </Text>
               )}
             </Stack>
-            {item.url && !item.isCloud && item.url !== item.description && (
+            {item.url && item.url !== item.description && (
               <Text size={1} tone="muted" family="mono">
                 {item.url}
               </Text>

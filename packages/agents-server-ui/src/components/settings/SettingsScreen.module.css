@@ -191,7 +191,7 @@
 .rowText {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   flex: 1;
   min-width: 0;
 }
@@ -209,6 +209,7 @@
 
 .rowControl {
   flex-shrink: 0;
+  align-self: flex-start;
   display: inline-flex;
   align-items: center;
   gap: 6px;
