@@ -14,6 +14,16 @@ The mobile app is an Expo app. We should lean on Expo tooling for native builds,
 
 `@electric-ax/agents-mobile` is already a workspace package and Expo SDK 54 app. It uses Expo Router, React Native, and Expo DOM Components to embed selected `agents-server-ui` surfaces.
 
+Draft PR: https://github.com/electric-sql/electric/pull/4408
+
+Implemented so far:
+
+- Android PR preview builds via EAS internal distribution.
+- Android canary builds from `main` via EAS internal distribution.
+- Android stable release builds from Changesets via EAS production profile and Google Play Submit.
+- Manual iOS simulator builds via EAS, before Apple Developer signing is available.
+- Expo project, GitHub `EXPO_TOKEN`, Google Play app, and `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` are configured.
+
 Useful checks from the current app:
 
 - `pnpm --filter @electric-ax/agents-mobile run ci:check` passes when run with the repo's configured Node version.
@@ -26,10 +36,10 @@ Useful checks from the current app:
   - project id: `11a024df-c681-4374-867a-5c5905be9133`
   - Android package / iOS bundle id: `com.electricsql.agents.mobile`
 
-Known gaps:
+Implemented package/config changes:
 
 - `packages/agents-mobile/app.config.ts` now owns release metadata; the stale static `app.json` has been removed.
-- `packages/agents-mobile/eas.json` now defines development, preview, canary, canary-store, and production profiles.
+- `packages/agents-mobile/eas.json` now defines development, preview, preview-ios-simulator, canary, canary-store, and production profiles.
 - React, WebView, and TypeScript versions have been aligned across the mobile/server-ui/runtime graph so Expo doctor and mobile typecheck pass.
 - Authenticated EAS builds will not run on untrusted fork PRs because GitHub does not expose repository secrets to those jobs. Forks should still get local checks; EAS builds should run for same-repository PRs, trusted labeled PRs, or manual dispatch.
 
@@ -47,7 +57,7 @@ Recommendation:
 
 - Use Expo Go for local/manual development where possible.
 - Use EAS internal distribution builds for PR validation where repository secrets are available.
-- Use Google Play internal-track builds for canary validation once Play submission is configured.
+- Use EAS internal distribution for canary validation until we deliberately enable Google Play internal-track submission.
 - Use EAS Submit for Google Play and, later, App Store Connect/TestFlight.
 
 ## Desired Release Channels
@@ -78,12 +88,13 @@ Purpose: continuously publish the latest `main` mobile build to internal testers
 Initial scope:
 
 - Android build from `main`.
-- Publish both an EAS internal distribution build and, when Google Play credentials are ready, submit to the Google Play internal track.
+- Publish an EAS internal distribution build.
 - Use an EAS `canary` profile.
 - Trigger only when mobile-impacting files change.
 
 Later:
 
+- Optionally add a second `canary-store` submission job to publish to the Google Play internal track.
 - Add iOS TestFlight once the Apple Developer account is available.
 
 ### Stable Release
@@ -141,7 +152,7 @@ Needed:
 - Done: Google Play service account JSON is stored as the GitHub Actions repository secret `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`.
 - Still possible: initial manual upload may be required if Google blocks API-based submission until the first AAB is uploaded through Play Console.
 - Track decision:
-  - Canary: EAS internal distribution first; Google Play internal track can now be wired once we enable submit in CI.
+  - Canary: EAS internal distribution first; Google Play internal track is possible via `canary-store` but not yet enabled in CI.
   - Stable: production track, or staged rollout if preferred.
   - Google Play app/store setup questionnaires may still need finishing before production release.
 
@@ -162,15 +173,15 @@ Needed later:
 
 ### App Config
 
-Replace or augment `app.json` with `app.config.ts` so build metadata can be derived from CI environment variables and `package.json`.
+`packages/agents-mobile/app.config.ts` owns build metadata derived from CI environment variables and `package.json`.
 
-The config should include:
+The config includes:
 
 - `name`: `Electric Agents`
 - `slug`: `agents-mobile`
 - `scheme`: `electric-agents`
 - `version`: from `packages/agents-mobile/package.json`
-- `runtimeVersion`: a policy chosen after confirming whether we use EAS Update; if no OTA updates are planned initially, keep this conservative and aligned with native build versions
+- `runtimeVersion`: from `packages/agents-mobile/package.json`, matching the native app version because we are not using EAS Update initially
 - `extra.eas.projectId`: `11a024df-c681-4374-867a-5c5905be9133`
 - `owner`: `electric-ax`
 - `android.package`: `com.electricsql.agents.mobile`
@@ -181,15 +192,16 @@ The config should include:
 
 ### EAS Config
 
-Add `packages/agents-mobile/eas.json` with at least:
+`packages/agents-mobile/eas.json` includes:
 
 - `development`: for local development builds if needed.
 - `preview`: internal distribution, Android APK.
 - `preview-ios-simulator`: unsigned iOS simulator build.
-- `canary`: internal distribution or store-submittable Android build.
+- `canary`: internal distribution Android APK.
+- `canary-store`: store-submittable Android build targeting the Play internal track.
 - `production`: store-submittable Android App Bundle.
 
-Example shape:
+Current shape:
 
 ```json
 {
@@ -219,19 +231,25 @@ Example shape:
         "buildType": "apk"
       }
     },
+    "canary-store": {
+      "node": "24.11.1",
+      "distribution": "store"
+    },
     "production": {
       "node": "24.11.1",
       "distribution": "store"
     }
   },
   "submit": {
-    "canary": {
+    "canary-store": {
       "android": {
+        "serviceAccountKeyPath": "./google-service-account.json",
         "track": "internal"
       }
     },
     "production": {
       "android": {
+        "serviceAccountKeyPath": "./google-service-account.json",
         "track": "production"
       }
     }
@@ -239,15 +257,13 @@ Example shape:
 }
 ```
 
-Exact values should be finalized after the Expo project is linked and the Google Play app exists.
-
 Start with local app versioning because changesets already owns package versions. If we later want EAS remote versioning for `versionCode` / `buildNumber`, switch deliberately after confirming it does not fight the changesets release flow.
 
 ### Scripts
 
-Add or adjust scripts in `packages/agents-mobile/package.json`:
+Scripts in `packages/agents-mobile/package.json`:
 
-- `doctor`: either install `expo-doctor` as a dev dependency or run it through `pnpm dlx`.
+- `doctor`: runs `expo-doctor`.
 - `export:android`: `expo export --platform android --output-dir dist/android`
 - `export:ios`: `expo export --platform ios --output-dir dist/ios`
 - `ci:check`: typecheck, doctor, and Android export.
@@ -310,11 +326,11 @@ This should naturally catch changes in:
 
 Reusable workflow with inputs:
 
-- `channel`: `pr`, `canary`, or `stable`
+- `channel`: `pr`, `canary`, `stable`, or `ios-simulator`
 - `version`
 - `git_ref`
-- `platform`: initially `android`
-- `profile`: `preview`, `canary`, or `production`
+- `platform`: `android`, `ios`, or `all`
+- `profile`: `preview`, `preview-ios-simulator`, `canary`, `canary-store`, or `production`
 - `submit`: boolean
 - `release_tag`: optional
 - `release_name`: optional
@@ -324,12 +340,14 @@ Steps:
 1. Checkout `git_ref`.
 2. Setup pnpm and Node from `.tool-versions`.
 3. Install mobile dependency closure.
-4. Run `pnpm --filter @electric-ax/agents-mobile run ci:check`.
-5. Run iOS export when the requested platform is `ios` or `all`.
-6. Setup EAS via `expo/expo-github-action`.
-7. Run `eas build --platform <platform> --profile <profile> --non-interactive --wait --json`.
-8. If `submit` is true, run EAS Submit via `--auto-submit`.
-9. For PRs, update a sticky PR comment with build status and EAS build URL.
+4. Build the mobile dependency closure so clean runners can resolve workspace exports.
+5. Run `pnpm --filter @electric-ax/agents-mobile run ci:check`.
+6. Run iOS export when the requested platform is `ios` or `all`.
+7. Setup EAS via `expo/expo-github-action`.
+8. If `submit` is true for Android, write `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` to `packages/agents-mobile/google-service-account.json`.
+9. Run `eas build --platform <platform> --profile <profile> --non-interactive --wait --json`.
+10. If `submit` is true, run EAS Submit via `--auto-submit`.
+11. For PRs, update a sticky PR comment with build status and EAS build URL.
 
 ### `agents_mobile_pr.yml`
 
@@ -375,7 +393,7 @@ Behavior:
 Publishing target:
 
 - EAS internal distribution first.
-- Google Play internal track later via `canary-store` profile once Play credentials are configured.
+- Google Play internal track later via the `canary-store` profile if we choose to enable canary store submission.
 
 ### `changesets_release.yml`
 
@@ -457,8 +475,8 @@ Avoid tying Android `versionCode` directly to semver components unless we are co
 
 - Done: added `agents_mobile_canary.yml`.
 - Done: build Android from `main` using the EAS `canary` internal distribution profile.
-- Ready to wire: submit to Google Play internal track using `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`.
-- Keep iOS skipped with a clear condition/comment.
+- Not enabled yet: submit canary builds to Google Play internal track using the `canary-store` profile and `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`.
+- iOS canaries remain blocked until Apple Developer/TestFlight setup is available.
 
 ### Phase 4: Add Stable Release Publishing
 
@@ -494,17 +512,20 @@ After the Apple Developer account is ready:
 - Whether stable Android releases go directly to production or use staged rollout.
 - Whether PR EAS builds should run on every impacted PR or require a label to control build volume/cost.
 - Whether to keep `private: true` on `@electric-ax/agents-mobile`. Changesets can version/tag private packages in this repo, so this does not block release orchestration.
+- Whether to enable Google Play internal-track canary submission now or keep canaries on EAS internal distribution until after the first stable submission proves the Play path.
 
-## Recommended First PR
+## Next Steps
 
-Start with a non-publishing PR:
+Immediate:
 
-- Add `app.config.ts`.
-- Add `eas.json`.
-- Fix mobile package scripts.
-- Resolve `expo-doctor` failures.
-- Add `mobile-affected.mjs`.
-- Add PR workflow local checks for all impacted PRs.
-- Add Android preview EAS builds for same-repository/trusted PRs only.
+- Finish the remaining Google Play setup questionnaires/listing requirements so the first production submission is not blocked by Play Console metadata.
+- Decide whether Android stable releases should submit directly to production or use a staged rollout/internal track first.
+- Decide whether to enable `canary-store` submissions to the Play internal track.
+- Land PR #4408 so the manual iOS simulator workflow exists on the default branch and can be dispatched from GitHub.
 
-This gives us a working binary build path without needing to finalize Google Play submission in the same change.
+After Apple Developer access:
+
+- Create the Bundle ID and App Store Connect app for `com.electricsql.agents.mobile`.
+- Configure EAS-managed iOS signing credentials.
+- Add signed iOS preview/canary/TestFlight profiles.
+- Extend Changesets release publishing for iOS/TestFlight/App Store.
