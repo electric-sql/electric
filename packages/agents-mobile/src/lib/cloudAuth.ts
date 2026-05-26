@@ -51,6 +51,11 @@ type StoredAuth = {
   provider: CloudAuthProvider
 }
 
+type PendingAuth = {
+  state: string
+  provider: CloudAuthProvider
+}
+
 type WhoamiUserResponse = {
   type: `user`
   userId: string
@@ -60,6 +65,7 @@ type WhoamiUserResponse = {
 }
 
 const STORAGE_KEY = `electric-agents-mobile.cloud-auth`
+const PENDING_STORAGE_KEY = `electric-agents-mobile.cloud-auth.pending`
 
 /**
  * Native-app redirect scheme registered on the admin-API allowlist.
@@ -286,6 +292,7 @@ export class CloudAuth {
 
     const cliState = generateState()
     const authorizeUrl = buildAuthorizeUrl(provider, cliState)
+    await this.storePending({ state: cliState, provider })
 
     let result: WebBrowser.WebBrowserAuthSessionResult
     try {
@@ -301,6 +308,7 @@ export class CloudAuth {
         }
       )
     } catch (err) {
+      await this.clearPending()
       this.setState({
         ...previous,
         status: `error`,
@@ -310,6 +318,7 @@ export class CloudAuth {
     }
 
     if (result.type !== `success` || !result.url) {
+      if (this.state.status === `signed-in`) return
       // `cancel`, `dismiss`, `locked`, or no URL — return to prior state.
       this.setState({
         ...previous,
@@ -319,22 +328,46 @@ export class CloudAuth {
       return
     }
 
-    const parsed = parseCallbackUrl(result.url, provider)
+    await this.completeCallbackUrl(result.url, previous)
+  }
+
+  /**
+   * Complete a native deep-link callback. Usually `openAuthSessionAsync`
+   * returns the URL directly, but on Android the app can be relaunched
+   * through Expo Router first; the `/oauth/callback` route calls this
+   * method to consume the same callback contract.
+   */
+  async completeCallbackUrl(
+    url: string,
+    previous: CloudAuthState = this.state
+  ): Promise<boolean> {
+    const pending = await this.loadPending()
+    if (!pending) {
+      if (this.state.status === `signed-in`) return true
+      this.setState({
+        ...previous,
+        status: `error`,
+        error: `No sign-in request was in progress.`,
+      })
+      return false
+    }
+
+    const parsed = parseCallbackUrl(url, pending.provider)
     if (!parsed) {
       this.setState({
         ...previous,
         status: `error`,
         error: `Sign-in callback was missing required fields.`,
       })
-      return
+      return false
     }
-    if (parsed.state !== cliState) {
+    if (parsed.state !== pending.state) {
       this.setState({
         ...previous,
         status: `error`,
         error: `Sign-in state mismatch — please try again.`,
       })
-      return
+      return false
     }
 
     const stored: StoredAuth = {
@@ -344,6 +377,7 @@ export class CloudAuth {
       provider: parsed.provider,
     }
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(stored))
+    await this.clearPending()
     this.setState({
       status: `signed-in`,
       email: parsed.email,
@@ -353,10 +387,12 @@ export class CloudAuth {
       error: null,
     })
     void this.refreshWhoami(parsed.token)
+    return true
   }
 
   async signOut(): Promise<void> {
     await AsyncStorage.removeItem(STORAGE_KEY)
+    await this.clearPending()
     this.agentsTokens.clear()
     this.setState({
       status: `signed-out`,
@@ -501,6 +537,34 @@ export class CloudAuth {
         token: parsed.token,
         email: parsed.email,
         expiresAt: parsed.expiresAt,
+        provider: parsed.provider,
+      }
+    } catch {
+      return null
+    }
+  }
+
+  private async storePending(pending: PendingAuth): Promise<void> {
+    await AsyncStorage.setItem(PENDING_STORAGE_KEY, JSON.stringify(pending))
+  }
+
+  private async clearPending(): Promise<void> {
+    await AsyncStorage.removeItem(PENDING_STORAGE_KEY)
+  }
+
+  private async loadPending(): Promise<PendingAuth | null> {
+    const raw = await AsyncStorage.getItem(PENDING_STORAGE_KEY)
+    if (!raw) return null
+    try {
+      const parsed = JSON.parse(raw) as Partial<PendingAuth>
+      if (
+        typeof parsed.state !== `string` ||
+        (parsed.provider !== `github` && parsed.provider !== `google`)
+      ) {
+        return null
+      }
+      return {
+        state: parsed.state,
         provider: parsed.provider,
       }
     } catch {
