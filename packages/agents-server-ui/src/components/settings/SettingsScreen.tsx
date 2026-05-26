@@ -1,6 +1,14 @@
 import type { ReactNode } from 'react'
 import { PanelLeft } from 'lucide-react'
-import { Icon, IconButton, ScrollArea, Stack, Tooltip } from '../../ui'
+import {
+  Badge,
+  Icon,
+  IconButton,
+  ScrollArea,
+  Stack,
+  Tooltip,
+  type BadgeTone,
+} from '../../ui'
 import { useSidebarCollapsed } from '../../hooks/useSidebarCollapsed'
 import { useNarrowViewport } from '../../hooks/useNarrowViewport'
 import { modKeyLabel } from '../../lib/keyLabels'
@@ -144,6 +152,25 @@ export function SettingsInset({
   children: ReactNode
 }): React.ReactElement {
   return <div className={styles.inset}>{children}</div>
+}
+
+export type SettingsStatusTone = Extract<
+  BadgeTone,
+  `neutral` | `success` | `warning` | `danger` | `info`
+>
+
+export function SettingsStatusBadge({
+  children,
+  tone,
+}: {
+  children: ReactNode
+  tone: SettingsStatusTone
+}): React.ReactElement {
+  return (
+    <Badge size={1} tone={tone} className={styles.statusBadge}>
+      {children}
+    </Badge>
+  )
 }
 
 /**

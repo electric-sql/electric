@@ -17,18 +17,20 @@ import {
   type ElectricRunnerRuntimeDiagnostics,
 } from '../../../lib/ElectricAgentsProvider'
 import { formatRelativeTime } from '../../../lib/formatTime'
-import { Badge, Button, Icon, Select, Stack, Text } from '../../../ui'
+import { Button, Icon, Select, Stack, Text } from '../../../ui'
 import {
   SettingsPanel,
   SettingsRow,
   SettingsScreen,
   SettingsSection,
+  SettingsStatusBadge,
+  type SettingsStatusTone,
 } from '../SettingsScreen'
 import type { ServerConfig } from '../../../lib/types'
 
 const STATUS_TONES: Record<
   LocalRuntimeStatus,
-  { label: string; tone: `success` | `warning` | `danger` | `info` | `neutral` }
+  { label: string; tone: SettingsStatusTone }
 > = {
   running: { label: `Running`, tone: `success` },
   starting: { label: `Starting`, tone: `info` },
@@ -39,7 +41,7 @@ const STATUS_TONES: Record<
 
 const RUNNER_HEALTH_TONES: Record<
   `healthy` | `degraded` | `unhealthy` | `unknown`,
-  { label: string; tone: `success` | `warning` | `danger` | `neutral` }
+  { label: string; tone: SettingsStatusTone }
 > = {
   healthy: { label: `Healthy`, tone: `success` },
   degraded: { label: `Degraded`, tone: `warning` },
@@ -309,7 +311,11 @@ export function LocalRuntimePage(): React.ReactElement {
         <SettingsRow
           label="Runtime"
           description={`The bundled Horton runtime is currently ${statusInfo.label.toLowerCase()}.`}
-          control={<Badge tone={statusInfo.tone}>{statusInfo.label}</Badge>}
+          control={
+            <SettingsStatusBadge tone={statusInfo.tone}>
+              {statusInfo.label}
+            </SettingsStatusBadge>
+          }
         />
         <SettingsRow
           label="Connection"
@@ -350,7 +356,11 @@ export function LocalRuntimePage(): React.ReactElement {
           description={
             health.issues.length > 0 ? health.issues.join(`, `) : `No issues`
           }
-          control={<Badge tone={healthTone.tone}>{healthTone.label}</Badge>}
+          control={
+            <SettingsStatusBadge tone={healthTone.tone}>
+              {healthTone.label}
+            </SettingsStatusBadge>
+          }
         />
         <SettingsRow
           label="Health endpoint"
@@ -367,7 +377,7 @@ export function LocalRuntimePage(): React.ReactElement {
           label="Stream"
           description={`Offset ${runnerTelemetry?.wake_stream_offset ?? runner?.wake_stream_offset ?? `-`}`}
           control={
-            <Badge
+            <SettingsStatusBadge
               tone={
                 diagnostics?.stream_connected === false
                   ? `warning`
@@ -381,7 +391,7 @@ export function LocalRuntimePage(): React.ReactElement {
                 : diagnostics?.stream_connected === true
                   ? `Connected`
                   : `Unknown`}
-            </Badge>
+            </SettingsStatusBadge>
           }
         />
         <SettingsRow
@@ -406,9 +416,11 @@ export function LocalRuntimePage(): React.ReactElement {
           label="Claims"
           description={`Succeeded ${countLabel(diagnostics?.claims_succeeded)} · skipped ${countLabel(diagnostics?.claims_skipped)} · failed ${countLabel(diagnostics?.claims_failed)}`}
           control={
-            <Badge tone={diagnostics?.claims_failed ? `danger` : `neutral`}>
+            <SettingsStatusBadge
+              tone={diagnostics?.claims_failed ? `danger` : `neutral`}
+            >
               {diagnostics?.last_claim_result ?? `none`}
-            </Badge>
+            </SettingsStatusBadge>
           }
         />
         {diagnostics?.last_error && (

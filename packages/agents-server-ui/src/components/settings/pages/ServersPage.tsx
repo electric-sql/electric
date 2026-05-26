@@ -36,6 +36,8 @@ import {
   SettingsRow,
   SettingsScreen,
   SettingsSection,
+  SettingsStatusBadge,
+  type SettingsStatusTone,
 } from '../SettingsScreen'
 import {
   cloudOpenCreateAgentsServer,
@@ -49,7 +51,7 @@ import type { ServerConfig } from '../../../lib/types'
 
 const STATUS_TONES: Record<
   ServerConnectionStatus,
-  { label: string; tone: `success` | `warning` | `danger` | `info` | `neutral` }
+  { label: string; tone: SettingsStatusTone }
 > = {
   connected: { label: `Connected`, tone: `success` },
   connecting: { label: `Connecting`, tone: `info` },
@@ -287,7 +289,11 @@ function ServerRow({
             )}
           </Stack>
         }
-        control={<Badge tone={statusInfo.tone}>{statusInfo.label}</Badge>}
+        control={
+          <SettingsStatusBadge tone={statusInfo.tone}>
+            {statusInfo.label}
+          </SettingsStatusBadge>
+        }
       />
       {(item.url ||
         canUseLocalRuntime ||

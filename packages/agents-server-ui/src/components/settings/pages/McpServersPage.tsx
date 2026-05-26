@@ -5,7 +5,7 @@ import {
   type UseMcpServersIpcResult,
 } from '../../../hooks/useMcpServersIpc'
 import type { McpServerRow, McpStatus } from '../../../hooks/mcpServerTypes'
-import { Badge, Button, Text } from '../../../ui'
+import { Button, Text } from '../../../ui'
 import {
   SettingsActions,
   SettingsInset,
@@ -13,11 +13,13 @@ import {
   SettingsRow,
   SettingsScreen,
   SettingsSection,
+  SettingsStatusBadge,
+  type SettingsStatusTone,
 } from '../SettingsScreen'
 
 const STATUS_TONES: Record<
   McpStatus,
-  { label: string; tone: `success` | `warning` | `danger` | `info` | `neutral` }
+  { label: string; tone: SettingsStatusTone }
 > = {
   ready: { label: `Ready`, tone: `success` },
   connecting: { label: `Connecting`, tone: `info` },
@@ -135,7 +137,11 @@ function ServerEntry({
             </Text>
           </span>
         }
-        control={<Badge tone={statusInfo.tone}>{statusInfo.label}</Badge>}
+        control={
+          <SettingsStatusBadge tone={statusInfo.tone}>
+            {statusInfo.label}
+          </SettingsStatusBadge>
+        }
       />
 
       {/* Status-line slot — always rendered so row height stays stable. */}

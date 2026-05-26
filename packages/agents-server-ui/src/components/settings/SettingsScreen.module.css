@@ -199,6 +199,10 @@
   padding: 0 16px 12px;
 }
 
+.statusBadge {
+  justify-content: center;
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;

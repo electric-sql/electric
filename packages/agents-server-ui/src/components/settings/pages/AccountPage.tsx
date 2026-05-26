@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { ExternalLink, Github, LogOut } from 'lucide-react'
-import { Badge, Button, Icon, Stack, Text } from '../../../ui'
+import { Button, Icon, Stack, Text } from '../../../ui'
 import {
   SettingsActions,
   SettingsPanel,
   SettingsRow,
   SettingsScreen,
   SettingsSection,
+  SettingsStatusBadge,
 } from '../SettingsScreen'
 import {
   cloudOpenDashboard,
@@ -91,9 +92,9 @@ export function AccountPage(): React.ReactElement {
                   : (state?.name ?? state?.email ?? `Signed in`)
               }
               control={
-                <Badge tone="success" size={1}>
+                <SettingsStatusBadge tone="success">
                   Signed in
-                </Badge>
+                </SettingsStatusBadge>
               }
             />
             <SettingsRow
