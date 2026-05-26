@@ -227,3 +227,5 @@ See the:
 We have an [open community Discord](https://discord.electric-sql.com). Come and say hello and let us know if you have any questions or need any help getting things running.
 
 It's also super helpful if you leave the project a star here at the [top of the page☝️](#start-of-content)
+
+<!-- pr-shepherd smoke test -->
