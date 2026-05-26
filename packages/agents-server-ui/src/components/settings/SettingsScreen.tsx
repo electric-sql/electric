@@ -116,14 +116,16 @@ export function SettingsRow({
   description,
   control,
   wrapControlValue,
+  splitLayout,
 }: {
   label: ReactNode
   description?: ReactNode
   control: ReactNode
   wrapControlValue?: boolean
+  splitLayout?: boolean
 }): React.ReactElement {
   return (
-    <div className={styles.row}>
+    <div className={styles.row} data-layout={splitLayout ? `split` : undefined}>
       <div className={styles.rowText}>
         <span className={styles.rowLabel}>{label}</span>
         {description && (

@@ -351,6 +351,7 @@ export function LocalRuntimePage(): React.ReactElement {
           label="Health endpoint"
           description="GET endpoint on the selected agents-server for runner diagnostics."
           wrapControlValue
+          splitLayout
           control={
             <Text size={1} family="mono" tone="muted">
               {healthEndpoint ?? `-`}

@@ -204,9 +204,14 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+  flex: 1;
+  min-width: 0;
+  align-self: flex-start;
+}
+
+.row[data-layout='split'] .rowText {
   flex: 0 1 44%;
   min-width: 44%;
-  align-self: flex-start;
 }
 
 .rowLabel {
@@ -222,13 +227,17 @@
 
 .rowControl {
   min-width: 0;
-  flex: 1 1 56%;
+  flex-shrink: 0;
   align-self: flex-start;
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
   gap: 6px;
   text-align: right;
+}
+
+.row[data-layout='split'] .rowControl {
+  flex: 1 1 56%;
 }
 
 .rowControl > * {
