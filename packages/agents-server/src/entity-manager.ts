@@ -884,7 +884,36 @@ export class EntityManager {
     const writeStreamLocks = new Set<string>()
 
     try {
-      const sourceTree = await this.waitForIdleSubtree(rootUrl, opts, workLocks)
+      // For pointer-forks we read the source root HISTORICALLY at a
+      // frozen offset, so concurrent activity on the root past the
+      // pointer can't tear our snapshot — we don't need to wait for
+      // the root to be idle (which would block the "click fork right
+      // after the response landed" case, since the runtime keeps the
+      // worker warm for `idleTimeout`). We still wait+lock any kept
+      // descendants below (after `computeEffectiveSubtree` runs),
+      // since per Q3 those are HEAD-cloned and need a stable snapshot.
+      // For HEAD-forks the old all-idle requirement still applies.
+      let sourceTree: Array<ElectricAgentsEntity>
+      if (opts.forkPointer) {
+        const rootEntity = await this.registry.getEntity(rootUrl)
+        if (!rootEntity) {
+          throw new ElectricAgentsError(
+            ErrCodeNotFound,
+            `Entity not found`,
+            404
+          )
+        }
+        if (isTerminalEntityStatus(rootEntity.status)) {
+          throw new ElectricAgentsError(
+            ErrCodeNotRunning,
+            `Cannot fork terminal entity "${rootEntity.url}"`,
+            409
+          )
+        }
+        sourceTree = await this.listEntitySubtree(rootEntity)
+      } else {
+        sourceTree = await this.waitForIdleSubtree(rootUrl, opts, workLocks)
+      }
       const sourceRoot = sourceTree[0]!
       if (sourceRoot.parent) {
         throw new ElectricAgentsError(
@@ -953,6 +982,19 @@ export class EntityManager {
             preFilteredRoot.manifests
           )
         : sourceTree
+
+      // For pointer-forks, kept descendants (everything in the effective
+      // subtree except the root) are HEAD-cloned, so they must be idle
+      // before we read their snapshots. Wait+lock only those — the root
+      // was skipped above.
+      if (opts.forkPointer) {
+        const descendants = effectiveSubtree.filter(
+          (entity) => entity.url !== sourceRoot.url
+        )
+        if (descendants.length > 0) {
+          await this.waitForGivenEntitiesIdle(descendants, opts, workLocks)
+        }
+      }
 
       const snapshot = await this.readForkStateSnapshot(
         // Skip the root when we've already pre-filtered it — avoid both a
@@ -1181,6 +1223,73 @@ export class EntityManager {
       }
     }
     held.clear()
+  }
+
+  /**
+   * Variant of {@link waitForIdleSubtree} that takes an explicit entity
+   * list instead of walking the registry from `rootUrl`. Used by the
+   * pointer-fork path to wait+lock only the kept descendants (Q3), since
+   * the root is being forked from history and doesn't need to be idle.
+   */
+  private async waitForGivenEntitiesIdle(
+    entities: ReadonlyArray<ElectricAgentsEntity>,
+    opts: ForkSubtreeOptions,
+    workLocks: Set<string>
+  ): Promise<void> {
+    if (entities.length === 0) return
+
+    const timeoutMs = opts.waitTimeoutMs ?? DEFAULT_FORK_WAIT_TIMEOUT_MS
+    const pollMs = opts.waitPollMs ?? DEFAULT_FORK_WAIT_POLL_MS
+
+    const refresh = async (): Promise<Array<ElectricAgentsEntity>> => {
+      const refreshed = await Promise.all(
+        entities.map((entity) => this.registry.getEntity(entity.url))
+      )
+      return refreshed.filter(
+        (entity): entity is ElectricAgentsEntity => !!entity
+      )
+    }
+
+    const deadline = Date.now() + timeoutMs
+    while (true) {
+      const present = await refresh()
+      const stopped = present.find((entity) =>
+        isTerminalEntityStatus(entity.status)
+      )
+      if (stopped) {
+        throw new ElectricAgentsError(
+          ErrCodeNotRunning,
+          `Cannot fork terminal entity "${stopped.url}"`,
+          409
+        )
+      }
+      let active = present.filter(
+        (entity) => entity.status !== `idle` && entity.status !== `paused`
+      )
+      if (active.length === 0) {
+        this.addForkLocks(
+          this.forkWorkLockedEntities,
+          present.map((entity) => entity.url),
+          workLocks
+        )
+        const reChecked = await refresh()
+        const reActive = reChecked.filter(
+          (entity) => entity.status !== `idle` && entity.status !== `paused`
+        )
+        if (reActive.length === 0) return
+        this.releaseForkLocks(this.forkWorkLockedEntities, workLocks)
+        active = reActive
+      }
+      if (Date.now() >= deadline) {
+        throw new ElectricAgentsError(
+          ErrCodeForkWaitTimeout,
+          `Timed out waiting for descendants to become idle`,
+          409,
+          { active: active.map((entity) => entity.url) }
+        )
+      }
+      await sleep(Math.min(pollMs, Math.max(0, deadline - Date.now())))
+    }
   }
 
   private async waitForIdleSubtree(
