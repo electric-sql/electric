@@ -194,6 +194,12 @@ The SubqueryProgressMonitor can be implemented as an ETS table ordered by subque
 
 The SubqueryProgressMonitor must know about every shape that reads a subquery, so that if it hasn't yet seen an ack from one of them it knows the minimum in-flight time is still 0. It must also be notified when a shape or a subquery is removed, so that the corresponding entries are cleaned up and stale entries don't hold the minimum back indefinitely.
 
+##### Registration
+
+A consumer is added to the SubqueryProgressMonitor as part of the existing materializer subscribe call. That call captures `current_time` and adds the consumer to the materializer's subscribers list in a single `handle_call`; the monitor registration must happen inside that same `handle_call` (a synchronous call from the materializer to the monitor) before it returns, with `required_time = current_time`.
+
+This sequencing matters. If the monitor were registered in a separate call after subscribing, another consumer could ack and move the minimum past `current_time` before the monitor knew the new consumer existed, allowing MTV to compact away time `current_time` while the new consumer still needs it. Equally, if subscribing and capturing `current_time` were split across two materializer calls, the materializer could commit between them and the new consumer's first observed `materializer_changes` would have `from_time > current_time`, breaking the invariant that `MTV(consumer.time)` reflects what the consumer has processed.
+
 #### Consumer EventProcessors
 
 These should be updated so that rather than holding views of the subquery, they just hold the logical time. So the before and after views should instead just be the before and after logical times.
