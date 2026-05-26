@@ -292,7 +292,7 @@ Every operation the design needs to support, with cost and where it runs relativ
 | `add_shape` creating a new child, MTV ready              | O(values_in_subquery + participants_for_shape) — seed runs synchronously before child is exposed  | blocked SLC                              |
 | `add_shape` creating a new child, MTV not ready          | O(1) to attach to fallback; seeding runs when MTV becomes ready                                   | SLC, then async seed                     |
 | `add_shape` for a previously-unseen subquery             | dependency materializer startup + initial population (not O(1)), then as above                    | async setup, blocked SLC for the seed    |
-| Consumer registration (consumer setup, before `add_shape`)| O(1) inside the materializer's subscribe `handle_call`                                           | async to SLC (consumer process blocked)  |
+| Consumer registration (consumer setup, before `add_shape`)| O(1) inside the materializer's subscribe `handle_call`                                           | doesn't involve SLC                      |
 | `remove_shape`, other shapes remain on the child         | O(participants_for_shape)                                                                         | SLC                                      |
 | `remove_shape`, last shape on the child                  | O(values_in_subquery + child_metadata)                                                            | SLC                                      |
 
