@@ -306,6 +306,8 @@ const api = {
     ipcRenderer.invoke(`desktop:get-api-keys-status`),
   saveApiKeys: (keys: ApiKeys): Promise<void> =>
     ipcRenderer.invoke(`desktop:save-api-keys`, keys),
+  clearAllLocalData: (): Promise<void> =>
+    ipcRenderer.invoke(`desktop:clear-all-local-data`),
   getOnboardingState: (): Promise<OnboardingState> =>
     ipcRenderer.invoke(`desktop:get-onboarding-state`),
   setOnboardingDismissed: (dismissed: boolean): Promise<void> =>

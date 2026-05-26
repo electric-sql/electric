@@ -267,6 +267,7 @@ declare global {
       rescanServers?: () => Promise<Array<DiscoveredServer>>
       getApiKeysStatus?: () => Promise<ApiKeysStatus>
       saveApiKeys?: (keys: ApiKeys) => Promise<void>
+      clearAllLocalData?: () => Promise<void>
       getOnboardingState?: () => Promise<OnboardingState>
       setOnboardingDismissed?: (dismissed: boolean) => Promise<void>
       getWorkingDirectory?: () => Promise<string | null>
@@ -461,6 +462,10 @@ export async function loadApiKeysStatus(): Promise<ApiKeysStatus | null> {
 
 export async function saveApiKeys(keys: ApiKeys): Promise<void> {
   await window.electronAPI?.saveApiKeys?.(keys)
+}
+
+export async function clearAllLocalData(): Promise<void> {
+  await window.electronAPI?.clearAllLocalData?.()
 }
 
 export async function loadOnboardingState(): Promise<OnboardingState | null> {

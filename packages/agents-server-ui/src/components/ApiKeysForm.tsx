@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
-import { Sparkles } from 'lucide-react'
-import { Button, Field, Icon, Input, Stack, Text } from '../ui'
+import { Eye, EyeOff, Sparkles } from 'lucide-react'
+import { Button, Field, Icon, IconButton, Input, Stack, Text } from '../ui'
 import styles from './ApiKeysForm.module.css'
 
 export type ApiKeysFormValues = {
@@ -9,6 +9,8 @@ export type ApiKeysFormValues = {
   deepseek: string
   brave: string
 }
+
+type ApiKeyFieldId = keyof ApiKeysFormValues
 
 interface ApiKeysFormProps {
   initial: ApiKeysFormValues
@@ -58,6 +60,14 @@ export function ApiKeysForm({
   const [openai, setOpenai] = useState(initial.openai)
   const [deepseek, setDeepseek] = useState(initial.deepseek)
   const [brave, setBrave] = useState(initial.brave)
+  const [visibleKeys, setVisibleKeys] = useState<
+    Record<ApiKeyFieldId, boolean>
+  >({
+    anthropic: false,
+    openai: false,
+    deepseek: false,
+    brave: false,
+  })
   const [saving, setSaving] = useState(false)
   const canSave =
     anthropic.trim().length > 0 ||
@@ -79,6 +89,10 @@ export function ApiKeysForm({
     [anthropic, openai, deepseek, brave, canSave, saving, onSave]
   )
 
+  const toggleVisible = useCallback((field: ApiKeyFieldId) => {
+    setVisibleKeys((current) => ({ ...current, [field]: !current[field] }))
+  }, [])
+
   return (
     <form onSubmit={handleSubmit} className={styles.form}>
       {showSuggestionHint && (
@@ -94,12 +108,13 @@ export function ApiKeysForm({
           label="Anthropic API key"
           description="Used for Claude models. Looks like sk-ant-…"
         >
-          <Input
-            type="password"
+          <ApiKeyInput
+            field="anthropic"
             placeholder="sk-ant-…"
             value={anthropic}
-            onChange={(e) => setAnthropic(e.target.value)}
-            size={2}
+            visible={visibleKeys.anthropic}
+            onChange={setAnthropic}
+            onToggleVisible={toggleVisible}
             autoFocus={autoFocus}
           />
         </Field>
@@ -107,36 +122,39 @@ export function ApiKeysForm({
           label="OpenAI API key"
           description="Used for GPT models. Looks like sk-…"
         >
-          <Input
-            type="password"
+          <ApiKeyInput
+            field="openai"
             placeholder="sk-…"
             value={openai}
-            onChange={(e) => setOpenai(e.target.value)}
-            size={2}
+            visible={visibleKeys.openai}
+            onChange={setOpenai}
+            onToggleVisible={toggleVisible}
           />
         </Field>
         <Field
           label="DeepSeek API key (optional)"
           description="Used for DeepSeek models. Looks like sk-…"
         >
-          <Input
-            type="password"
+          <ApiKeyInput
+            field="deepseek"
             placeholder="sk-…"
             value={deepseek}
-            onChange={(e) => setDeepseek(e.target.value)}
-            size={2}
+            visible={visibleKeys.deepseek}
+            onChange={setDeepseek}
+            onToggleVisible={toggleVisible}
           />
         </Field>
         <Field
           label="Brave Search API key (optional)"
           description="Powers the web-search tool. Without it, search falls back to Anthropic's built-in search."
         >
-          <Input
-            type="password"
+          <ApiKeyInput
+            field="brave"
             placeholder="BSA…"
             value={brave}
-            onChange={(e) => setBrave(e.target.value)}
-            size={2}
+            visible={visibleKeys.brave}
+            onChange={setBrave}
+            onToggleVisible={toggleVisible}
           />
         </Field>
       </Stack>
@@ -157,5 +175,52 @@ export function ApiKeysForm({
         </Button>
       </Stack>
     </form>
+  )
+}
+
+function ApiKeyInput({
+  field,
+  placeholder,
+  value,
+  visible,
+  onChange,
+  onToggleVisible,
+  autoFocus = false,
+}: {
+  field: ApiKeyFieldId
+  placeholder: string
+  value: string
+  visible: boolean
+  onChange: (value: string) => void
+  onToggleVisible: (field: ApiKeyFieldId) => void
+  autoFocus?: boolean
+}): React.ReactElement {
+  const label = visible ? `Hide API key` : `Show API key`
+
+  return (
+    <div className={styles.secretInput}>
+      <Input
+        type={visible ? `text` : `password`}
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        size={2}
+        autoFocus={autoFocus}
+        mono
+        className={styles.secretInputControl}
+      />
+      <IconButton
+        type="button"
+        variant="ghost"
+        tone="neutral"
+        size={1}
+        aria-label={label}
+        title={label}
+        className={styles.secretInputToggle}
+        onClick={() => onToggleVisible(field)}
+      >
+        <Icon icon={visible ? EyeOff : Eye} size={2} />
+      </IconButton>
+    </div>
   )
 }

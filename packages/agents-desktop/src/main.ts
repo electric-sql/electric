@@ -28,7 +28,7 @@ import {
   shell,
 } from 'electron'
 import fixPath from 'fix-path'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { readFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import path from 'node:path'
@@ -2362,6 +2362,20 @@ async function quitApp(): Promise<void> {
   app.quit()
 }
 
+async function clearAllLocalDataAndRelaunch(): Promise<void> {
+  await getCloudAuth().signOut()
+  await getCloudAgentServers().stop()
+  await Promise.all([
+    session.defaultSession.clearStorageData(),
+    session.defaultSession.clearCache(),
+    rm(settingsPath(), { force: true }),
+    rm(secretsPath(), { force: true }),
+  ])
+  secretStore = null
+  app.relaunch()
+  await quitApp()
+}
+
 /**
  * Localhost ports we probe for running `agents-server` instances.
  *
@@ -2562,6 +2576,9 @@ function registerIpcHandlers(): void {
   ipcMain.handle(`desktop:get-api-keys-status`, () => getApiKeysStatus())
   ipcMain.handle(`desktop:save-api-keys`, async (_event, keys: ApiKeys) => {
     await setApiKeys(keys)
+  })
+  ipcMain.handle(`desktop:clear-all-local-data`, async () => {
+    await clearAllLocalDataAndRelaunch()
   })
   ipcMain.handle(`desktop:get-onboarding-state`, () => getOnboardingState())
   ipcMain.handle(
