@@ -236,6 +236,20 @@ Per subquery within `[a, b]`, sequences of moves compact into a single `(move_in
 
 Each subquery is compacted independently — moves for subquery A do not affect the contiguous window for subquery B.
 
+##### Splice plan ordering
+
+When the consumer applies a batch, the effects must be emitted in this order:
+
+1. `pre_ops` — buffered transactions from the `[a, b]` window, evaluated at `MTV(a)`
+2. move-out broadcast for outer move-out values (may be empty)
+3. move-in broadcast for outer move-in values (may be empty)
+4. snapshot rows from the move-in query
+5. `post_ops` — buffered transactions after the snapshot, evaluated at `MTV(b)`
+
+The reason `pre_ops` must come before the move-out broadcast is that a buffered transaction may reference a value that is about to be moved out. Evaluated at `MTV(a)` the row is still a member, so the buffered txn surfaces to the client as an `UPDATE`; the subsequent move-out broadcast then emits the `DELETE`. The client sees `UPDATE then DELETE`. If the order were reversed, the client would see `DELETE then UPDATE` — an update for a row it no longer has.
+
+For a pure move-out batch (no move-in values, so no PG query is needed) the consumer can skip the snapshot step and broadcast the move-out inline before advancing to `b`.
+
 ### Concurrency model
 
 Reads and writes to the MultiTimeView and SubqueryIndex ETS tables will mostly not be concurrent:
