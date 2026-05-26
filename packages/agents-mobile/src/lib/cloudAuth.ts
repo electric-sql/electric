@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import * as Linking from 'expo-linking'
 import * as WebBrowser from 'expo-web-browser'
 
 /**
@@ -68,6 +69,16 @@ const STORAGE_KEY = `electric-agents-mobile.cloud-auth`
 const PENDING_STORAGE_KEY = `electric-agents-mobile.cloud-auth.pending`
 
 /**
+ * How long `signIn` waits for the OAuth deep link to arrive via
+ * `expo-linking` after `openAuthSessionAsync` returns a non-success
+ * result. Needs to be long enough to absorb a full Android cold-start
+ * (process killed by the OS while the Custom Tab was open, then
+ * relaunched via the redirect intent), but short enough that a real
+ * user-cancel doesn't leave the welcome screen stuck on the spinner.
+ */
+const DISMISS_GRACE_MS = 6000
+
+/**
  * Native-app redirect scheme registered on the admin-API allowlist.
  * Must match the `scheme` declared in `app.json` so the OS routes the
  * dashboard's redirect back to this app. The admin-API rejects any
@@ -104,23 +115,60 @@ type CloudAuthCallbackResult = {
   provider: CloudAuthProvider
 }
 
+/**
+ * Pull the callback fields out of a redirect URL.
+ *
+ * Uses `Linking.parse` rather than `new URL()` because the WHATWG URL
+ * parser in Hermes (and the various RN polyfills) is not reliable for
+ * custom schemes in release builds — sometimes `searchParams.get()`
+ * silently returns `null` even for query params that are present.
+ * `expo-linking`'s parser is purpose-built for app deep links and
+ * handles non-HTTP schemes consistently across iOS, Android, and the
+ * emulator.
+ */
 function parseCallbackUrl(
   url: string,
   provider: CloudAuthProvider
 ): CloudAuthCallbackResult | null {
-  if (!url.startsWith(CLOUD_AUTH_REDIRECT_URI)) return null
-  let parsed: URL
+  if (!isCallbackUrl(url)) return null
+  let parsed: ReturnType<typeof Linking.parse>
   try {
-    parsed = new URL(url)
+    parsed = Linking.parse(url)
   } catch {
     return null
   }
-  const token = parsed.searchParams.get(`token`)
-  const state = parsed.searchParams.get(`state`)
-  const email = parsed.searchParams.get(`email`)
-  const expiresAt = parsed.searchParams.get(`expiresAt`)
+  const queryParams = parsed.queryParams ?? {}
+  const token = pickString(queryParams.token)
+  const state = pickString(queryParams.state)
+  const email = pickString(queryParams.email)
+  const expiresAt = pickString(queryParams.expiresAt)
   if (!token || !state || !email || !expiresAt) return null
   return { token, state, email, expiresAt, provider }
+}
+
+/**
+ * Loose match for "is this our OAuth redirect deep link?"
+ *
+ * Accepts both `electric-agents://oauth/callback` and the (rare but
+ * possible) Android-formatted `electric-agents:/oauth/callback` —
+ * different code paths in the OS occasionally collapse the double
+ * slash, and we want to handle the URL either way before throwing it
+ * at the parser.
+ */
+export function isCallbackUrl(url: string): boolean {
+  if (typeof url !== `string`) return false
+  const prefix = `${CLOUD_AUTH_REDIRECT_SCHEME}:`
+  if (!url.startsWith(prefix)) return false
+  const rest = url.slice(prefix.length)
+  const path = rest.replace(/^\/+/, ``)
+  return path.startsWith(`oauth/callback`)
+}
+
+function pickString(
+  value: string | Array<string> | null | undefined
+): string | null {
+  if (Array.isArray(value)) return value[0] ?? null
+  return typeof value === `string` ? value : null
 }
 
 function parseWhoamiUserResponse(body: unknown): WhoamiUserResponse | null {
@@ -233,6 +281,11 @@ export class CloudAuth {
   // memory only — on restart they'll be re-fetched from the dashboard
   // when the active server is restored. Cleared on sign-out.
   private agentsTokens = new Map<string, string>()
+  // Set to the URL currently being processed by `completeCallbackUrl`,
+  // so concurrent callers handling the same redirect (Linking listener
+  // + `/oauth/callback` route + `openAuthSessionAsync`) don't trample
+  // each other.
+  private completingUrl: string | null = null
 
   getState(): CloudAuthState {
     return this.state
@@ -305,6 +358,16 @@ export class CloudAuth {
           // on means a user already signed into GitHub or Google in
           // their phone's browser skips the password prompt.
           preferEphemeralSession: false,
+          // Android-specific: opening the Custom Tab in a separate task
+          // (the default) lets Android 13+ aggressively kill our task
+          // when the OAuth page is showing, which breaks the redirect
+          // back to the app (returns `dismiss`, no Linking events).
+          // Forcing the browser into our own task and keeping us in
+          // recents stops the OS from doing that.
+          // See: https://github.com/expo/expo/issues/44284,
+          // https://github.com/expo/expo/issues/8072
+          createTask: false,
+          showInRecents: true,
         }
       )
     } catch (err) {
@@ -317,18 +380,81 @@ export class CloudAuth {
       return
     }
 
-    if (result.type !== `success` || !result.url) {
-      if (this.state.status === `signed-in`) return
-      // `cancel`, `dismiss`, `locked`, or no URL — return to prior state.
-      this.setState({
-        ...previous,
-        status: previous.email ? `signed-in` : `signed-out`,
-        error: null,
-      })
+    if (result.type === `success` && result.url) {
+      await this.completeCallbackUrl(result.url, previous)
       return
     }
 
-    await this.completeCallbackUrl(result.url, previous)
+    // Non-success result. On Android — especially Android 13+ release
+    // builds — `openAuthSessionAsync` frequently returns `dismiss`
+    // even when the OAuth flow actually succeeded, because the OS
+    // killed the JS context while the user was in the Custom Tab.
+    // Two paths still rescue the sign-in:
+    //   1. The redirect intent reaches the app on relaunch and the
+    //      global Linking listener (registered in `CloudAuthContext`)
+    //      calls `completeCallbackUrl` with the URL.
+    //   2. The user cold-starts via `/oauth/callback` (Expo Router),
+    //      which also calls `completeCallbackUrl`.
+    //
+    // We give either path a short grace period before declaring the
+    // user signed-out, so the UI doesn't flash back to the welcome
+    // screen seconds before sign-in actually completes.
+    if (this.state.status === `signed-in`) return
+    await this.waitForDeepLinkCallback(previous, provider)
+  }
+
+  /**
+   * Race against the deep-link path: if a callback URL arrives via
+   * `Linking.addEventListener` / `getInitialURL` within
+   * `DISMISS_GRACE_MS`, we hand off to `completeCallbackUrl`. Otherwise
+   * we fall back to whatever state the user was in before signing in.
+   */
+  private async waitForDeepLinkCallback(
+    previous: CloudAuthState,
+    provider: CloudAuthProvider
+  ): Promise<void> {
+    let subscription: { remove: () => void } | null = null
+    const winner = await new Promise<string | null>((resolve) => {
+      const timer = setTimeout(() => resolve(null), DISMISS_GRACE_MS)
+      subscription = Linking.addEventListener(`url`, ({ url }) => {
+        if (isCallbackUrl(url)) {
+          clearTimeout(timer)
+          resolve(url)
+        }
+      })
+      // Also check whether the OS already delivered the redirect as
+      // an initial URL (which happens when Android cold-restarted us).
+      void Linking.getInitialURL()
+        .then((url) => {
+          if (url && isCallbackUrl(url)) {
+            clearTimeout(timer)
+            resolve(url)
+          }
+        })
+        .catch(() => {
+          // ignored — the timer/listener path will still fire.
+        })
+    })
+    if (subscription) (subscription as { remove: () => void }).remove()
+
+    if (winner) {
+      await this.completeCallbackUrl(winner, previous)
+      return
+    }
+
+    // Still nothing — accept the user cancelled / the OAuth flow
+    // failed silently, and roll back to the previous logged state.
+    if (this.state.status === `signed-in`) return
+    await this.clearPending()
+    this.setState({
+      ...previous,
+      status: previous.email ? `signed-in` : `signed-out`,
+      error: null,
+    })
+    // `provider` retained in signature so future telemetry can record
+    // which provider's deep link never arrived; intentionally unused
+    // for now.
+    void provider
   }
 
   /**
@@ -341,14 +467,31 @@ export class CloudAuth {
     url: string,
     previous: CloudAuthState = this.state
   ): Promise<boolean> {
+    // Guard against re-entry. Multiple paths can call this with the
+    // same URL (Linking listener + `/oauth/callback` route +
+    // `openAuthSessionAsync` resolution), and once one of them has
+    // consumed the pending request the rest should no-op rather than
+    // flashing an "error" state.
+    if (!isCallbackUrl(url)) return false
+    if (this.completingUrl === url) return this.state.status === `signed-in`
+    this.completingUrl = url
+    try {
+      return await this.consumeCallbackUrl(url, previous)
+    } finally {
+      this.completingUrl = null
+    }
+  }
+
+  private async consumeCallbackUrl(
+    url: string,
+    previous: CloudAuthState
+  ): Promise<boolean> {
     const pending = await this.loadPending()
     if (!pending) {
+      // Already-signed-in (race against another in-flight handler) or
+      // user navigated to the deep link manually with no sign-in
+      // started — neither should be shown as an error.
       if (this.state.status === `signed-in`) return true
-      this.setState({
-        ...previous,
-        status: `error`,
-        error: `No sign-in request was in progress.`,
-      })
       return false
     }
 
@@ -359,6 +502,7 @@ export class CloudAuth {
         status: `error`,
         error: `Sign-in callback was missing required fields.`,
       })
+      await this.clearPending()
       return false
     }
     if (parsed.state !== pending.state) {
@@ -367,6 +511,7 @@ export class CloudAuth {
         status: `error`,
         error: `Sign-in state mismatch — please try again.`,
       })
+      await this.clearPending()
       return false
     }
 
@@ -388,6 +533,17 @@ export class CloudAuth {
     })
     void this.refreshWhoami(parsed.token)
     return true
+  }
+
+  /**
+   * Public entry point for the global `Linking` listener mounted in
+   * `CloudAuthContext`. Discards anything that isn't one of our OAuth
+   * redirect URLs and returns whether the URL was consumed so callers
+   * can stop bubbling.
+   */
+  async handleDeepLink(url: string): Promise<boolean> {
+    if (!isCallbackUrl(url)) return false
+    return this.completeCallbackUrl(url)
   }
 
   async signOut(): Promise<void> {
