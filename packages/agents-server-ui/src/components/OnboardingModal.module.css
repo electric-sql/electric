@@ -1,42 +1,426 @@
 /*
- * Two-step onboarding wizard styling. The popup is wider than the
- * default Dialog (520px instead of 480px) so the step indicator and
- * the API-keys form share the same comfortable column width.
- *
- * The footer is wired to render below whichever step is active —
- * it carries the "Don't show again" link so the user can opt out
- * from either screen without scrolling.
+ * Onboarding wizard styling. The wrapper visually matches the
+ * Settings shell — section headings ("API Keys", "Electric Cloud")
+ * sit above bordered card bodies (1px border, radius-3, faintly
+ * tinted surface) with rows separated by 1px borders. Row padding
+ * (12px 16px) + the leading 32px icon column come from the
+ * SettingsScreen / ServerPicker conventions so the same icon column
+ * aligns vertically across server rows, API key rows, and the
+ * "signed in" cloud row.
  */
 
-.providerButtons {
+.content {
   display: flex;
   flex-direction: column;
+  gap: var(--ds-space-4);
+  padding: var(--ds-space-4);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-4);
+}
+
+/* ── Step indicator ──────────────────────────────────────────── */
+.steps {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--ds-space-5);
+  padding-bottom: var(--ds-space-3);
+  border-bottom: 1px solid var(--ds-border-1);
+}
+
+.step {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--ds-text-3);
+  font-size: var(--ds-text-sm);
+}
+
+.stepActive {
+  color: var(--ds-text-1);
+}
+
+.stepComplete {
+  color: var(--ds-text-2);
+}
+
+.stepNumber {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 1px solid var(--ds-border-2);
+  background: transparent;
+  font-size: 11px;
+  font-weight: 600;
+  flex-shrink: 0;
+  color: inherit;
+}
+
+.stepActive .stepNumber {
+  background: var(--ds-text-1);
+  border-color: var(--ds-text-1);
+  color: var(--ds-bg);
+}
+
+.stepComplete .stepNumber {
+  border-color: var(--ds-green-9);
+  color: var(--ds-green-11);
+  background: var(--ds-green-a3);
+}
+
+.stepLabel {
+  white-space: nowrap;
+}
+
+/* ── Step header ─────────────────────────────────────────────── */
+.stepHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.stepHeader > h2,
+.stepHeader > p {
+  margin: 0;
+}
+
+/* ── Section header (no card body — title + optional action) ── */
+.sectionHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--ds-space-3);
+}
+
+.sectionHeaderText {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sectionHeaderTitle {
+  margin: 0;
+  font-size: var(--ds-text-base);
+  font-weight: 500; /* matches Settings .sectionTitle */
+  color: var(--ds-text-1);
+}
+
+.sectionHeaderAction {
+  flex-shrink: 0;
+}
+
+/* ── Card surface (mirrors SettingsScreen .sectionBody) ─────── */
+.section {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--ds-border-1);
+  border-radius: var(--ds-radius-3);
+  background: color-mix(in oklab, var(--ds-surface-raised) 35%, var(--ds-bg));
+  overflow: hidden;
+}
+
+.sectionRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--ds-border-1);
+}
+
+.sectionRow:first-child {
+  border-top: 0;
+}
+
+/* ── Shared row layout ───────────────────────────────────────── */
+.iconCircle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: var(--ds-bg-subtle);
+  color: var(--ds-text-2);
+  flex-shrink: 0;
+}
+
+.iconCircle[data-tone='success'] {
+  background: var(--ds-green-a3);
+  color: var(--ds-green-11);
+}
+
+.rowText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+
+.rowTitle {
+  font-size: var(--ds-text-sm);
+  color: var(--ds-text-1);
+}
+
+.accordionTrigger .rowTitle {
+  font-weight: 500;
+}
+
+.accordionTrigger .rowText,
+.accordionTrigger .rowText p,
+.accordionTrigger .rowAside {
+  font-weight: 400;
+}
+
+.rowTitleLine {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rowMeta {
+  word-break: break-all;
+}
+
+.rowAside {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  color: var(--ds-text-3);
+}
+
+.kindTag {
+  font-size: 10px;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--ds-bg-subtle);
+  color: var(--ds-text-3);
+}
+
+.kindTag[data-kind='model'] {
+  background: var(--ds-accent-a3);
+  color: var(--ds-accent-11);
+}
+
+/* ── Cloud step ──────────────────────────────────────────────── */
+.cloudSignIn {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.signedIn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.providerButtons {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--ds-space-2);
 }
 
-.providerActions {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: var(--ds-space-3);
-}
-
-.signedInBanner {
+.hint {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
   border-radius: var(--ds-radius-2);
-  background: var(--ds-bg-subtle);
-  border: 1px solid var(--ds-border-1);
+  background: var(--ds-accent-a2);
   color: var(--ds-text-2);
 }
 
+/* ── Status pills inside rows ────────────────────────────────── */
+.statusConfigured {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--ds-text-xs);
+  color: var(--ds-green-11);
+}
+
+.statusSuggested {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--ds-text-xs);
+  color: var(--ds-accent-11);
+}
+
+.statusEmpty {
+  font-size: var(--ds-text-xs);
+  color: var(--ds-text-3);
+}
+
+/* ── API keys: Accordion (uses .section as its surface) ──────── */
+.accordionItem {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--ds-border-1);
+}
+
+.accordionItem:first-child {
+  border-top: 0;
+}
+
+.accordionHeader {
+  margin: 0;
+}
+
+.accordionTrigger {
+  all: unset;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 16px;
+  box-sizing: border-box;
+}
+
+.accordionTrigger:hover {
+  background: var(--ds-bg-hover);
+}
+
+.accordionTrigger:focus-visible {
+  outline: 2px solid var(--ds-accent-a8);
+  outline-offset: -2px;
+  border-radius: var(--ds-radius-2);
+}
+
+.chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  transition: transform 180ms ease;
+  color: var(--ds-text-3);
+}
+
+.accordionTrigger[data-panel-open] .chevron {
+  transform: rotate(180deg);
+  color: var(--ds-text-2);
+}
+
+.accordionPanel {
+  overflow: hidden;
+  height: var(--accordion-panel-height);
+  transition: height 200ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.accordionPanel[data-starting-style],
+.accordionPanel[data-ending-style] {
+  height: 0;
+}
+
+.accordionPanelInner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 16px 14px; /* top breathing room so the input's focus
+                             outline isn't clipped by the panel's
+                             overflow:hidden height transition */
+  box-sizing: border-box;
+}
+
+.secretInput {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.secretInputControl {
+  width: 100%;
+  padding-right: 34px;
+}
+
+.secretInputToggle {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+}
+
+/* ── Server step rows ────────────────────────────────────────── */
+.serverRow {
+  all: unset;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--ds-border-1);
+  box-sizing: border-box;
+}
+
+.serverRow:first-child {
+  border-top: 0;
+}
+
+.serverRow:hover {
+  background: var(--ds-bg-hover);
+}
+
+.serverRow:focus-visible {
+  outline: 2px solid var(--ds-accent-a8);
+  outline-offset: -2px;
+  border-radius: var(--ds-radius-2);
+}
+
+.serverRow:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+.serverChevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ds-text-3);
+  transition: transform 120ms ease;
+}
+
+.serverRow:hover .serverChevron {
+  color: var(--ds-text-1);
+  transform: translateX(2px);
+}
+
+/* ── Footer ──────────────────────────────────────────────────── */
 .footer {
   display: flex;
-  justify-content: center;
-  margin-top: var(--ds-space-4);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ds-space-3);
   padding-top: var(--ds-space-3);
   border-top: 1px solid var(--ds-border-1);
+}
+
+.footerLeading,
+.footerTrailing {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+  min-width: 0;
+}
+
+.footerLeading {
+  flex: 1;
+  min-width: 0;
 }
 
 .footerLink {
@@ -46,7 +430,6 @@
   cursor: pointer;
   color: var(--ds-text-3);
   font-size: var(--ds-text-xs);
-  line-height: var(--ds-text-xs-lh);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
@@ -55,26 +438,11 @@
   color: var(--ds-text-2);
 }
 
-.steps {
-  display: flex;
-  align-items: center;
-  gap: var(--ds-space-2);
-  margin-bottom: var(--ds-space-3);
-}
-
-.stepDot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--ds-border-2);
-}
-
-.stepDotActive {
-  background: var(--ds-text-1);
-}
-
-.stepBar {
-  flex: 0 1 24px;
-  height: 1px;
-  background: var(--ds-border-1);
+@media (max-width: 640px) {
+  .providerButtons {
+    grid-template-columns: 1fr;
+  }
+  .steps {
+    gap: var(--ds-space-3);
+  }
 }
