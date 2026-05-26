@@ -17,7 +17,16 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   orientation: `portrait`,
   userInterfaceStyle: `automatic`,
   newArchEnabled: true,
-  plugins: [`expo-router`, `expo-web-browser`],
+  plugins: [
+    `expo-router`,
+    `expo-web-browser`,
+    // Android-only: forward new intents in MainActivity.kt so
+    // OAuth redirect deep links delivered after the Chrome
+    // Custom Tab dismisses actually reach expo-linking /
+    // expo-web-browser. See `plugins/with-android-on-new-intent.js`
+    // for the underlying Expo issue.
+    `./plugins/with-android-on-new-intent.js`,
+  ],
   ios: {
     ...config.ios,
     bundleIdentifier: applicationId,
