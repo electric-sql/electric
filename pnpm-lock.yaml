@@ -1824,9 +1824,6 @@ importers:
       turndown-plugin-gfm:
         specifier: ^1.0.2
         version: 1.0.2
-      undici:
-        specifier: 6.25.0
-        version: 6.25.0
       zod:
         specifier: ^4.3.6
         version: 4.3.6
