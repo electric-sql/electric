@@ -1,6 +1,14 @@
 import { openAuthorizeWindow } from './oauth-window'
 import { SecretStore } from './secret-store'
 import {
+  applyApiKeysToEnv,
+  captureEnvApiKeys,
+  EMPTY_API_KEYS,
+  loadApiKeysFromSecret,
+  normalizeApiKeys,
+  saveApiKeysToSecret,
+} from './credentials/api-keys'
+import {
   checkAgentsServerHealth,
   formatStartupNetworkError,
 } from './runtime/health'
@@ -9,6 +17,14 @@ import {
   normalizeServers,
   serverInList,
 } from './settings/servers'
+import {
+  DEFAULT_SETTINGS,
+  GLOBAL_API_KEYS_REF,
+  normalizeCodexSettings,
+  normalizeMcp,
+  serializeSettings,
+  SETTINGS_VERSION,
+} from './settings/store'
 import {
   hasHeader,
   headersToRecord,
@@ -24,7 +40,6 @@ import type {
   ApiKeysStatus,
   CodexAuthSource,
   CodexDetectedSource,
-  CodexSettings,
   CodexStatus,
   ConnectServerOptions,
   DesktopRuntimeStatus,
@@ -41,7 +56,6 @@ import type {
   DesktopState,
   DiscoveredServer,
   LocalRuntimeStatus,
-  McpServerConfig,
   OnboardingState,
   RegistrySnapshot,
   RuntimeEntry,
@@ -112,8 +126,6 @@ const APP_ICON_FILE =
 const APP_ICON_PATH = path.join(RESOURCE_DIR, `assets`, APP_ICON_FILE)
 const APP_DISPLAY_NAME = `Electric Agents`
 const IGNORE_CONNECTION_LIMIT_DOMAINS = `localhost,127.0.0.1`
-const SETTINGS_VERSION = 2
-const GLOBAL_API_KEYS_REF = `api-keys:global`
 const CODEX_AUTH_REF = `codex-auth:desktop`
 const CODEX_OAUTH_CLIENT_ID = `app_EMoamEEZ73f0CkXaXp7hrann`
 const CODEX_OAUTH_ISSUER = `https://auth.openai.com`
@@ -194,14 +206,6 @@ const EXPLICIT_DEV_PRINCIPAL = ((): string | null => {
 
 const EXTERNAL_LINK_PROTOCOLS = new Set([`http:`, `https:`, `mailto:`])
 
-const DEFAULT_SETTINGS: DesktopSettings = {
-  servers: [],
-  defaultServerId: null,
-  workingDirectory: null,
-  apiKeysRef: GLOBAL_API_KEYS_REF,
-  codex: { enabled: false, source: null },
-}
-
 /**
  * Snapshot of provider API keys as they were when the app launched.
  * Captured before `applyApiKeys()` overwrites the live env so
@@ -214,19 +218,11 @@ const DEFAULT_SETTINGS: DesktopSettings = {
  * to the saved value.
  */
 const ENV_API_KEYS_SNAPSHOT: ApiKeys = {
-  anthropic: process.env.ANTHROPIC_API_KEY?.trim() || null,
-  openai: process.env.OPENAI_API_KEY?.trim() || null,
-  deepseek: process.env.DEEPSEEK_API_KEY?.trim() || null,
-  brave: process.env.BRAVE_SEARCH_API_KEY?.trim() || null,
+  ...captureEnvApiKeys(process.env),
 }
 
 let settings: DesktopSettings = { ...DEFAULT_SETTINGS }
-let apiKeys: ApiKeys = {
-  anthropic: null,
-  openai: null,
-  deepseek: null,
-  brave: null,
-}
+let apiKeys: ApiKeys = { ...EMPTY_API_KEYS }
 let state: DesktopState = {
   servers: [],
   selectedServerId: null,
@@ -669,64 +665,6 @@ function defaultSelectedServerId(): string | null {
     return settings.defaultServerId
   }
   return settings.servers[0]?.id ?? null
-}
-
-function normalizeApiKeys(value: unknown): ApiKeys {
-  if (!value || typeof value !== `object`) {
-    return { anthropic: null, openai: null, deepseek: null, brave: null }
-  }
-  const maybe = value as Partial<Record<keyof ApiKeys, unknown>>
-  const pick = (raw: unknown): string | null => {
-    if (typeof raw !== `string`) return null
-    const trimmed = raw.trim()
-    return trimmed.length > 0 ? trimmed : null
-  }
-  return {
-    anthropic: pick(maybe.anthropic),
-    openai: pick(maybe.openai),
-    deepseek: pick(maybe.deepseek),
-    brave: pick(maybe.brave),
-  }
-}
-
-function normalizeCodexSettings(value: unknown): CodexSettings {
-  if (!value || typeof value !== `object`) {
-    return { enabled: false, source: null }
-  }
-  const maybe = value as Partial<Record<keyof CodexSettings, unknown>>
-  const source =
-    maybe.source === `desktop-oauth` ||
-    maybe.source === `codex-cli` ||
-    maybe.source === `opencode`
-      ? maybe.source
-      : null
-  return {
-    enabled: maybe.enabled === true && source !== null,
-    source,
-  }
-}
-
-function hasAnyApiKey(keys: ApiKeys): boolean {
-  return Boolean(keys.anthropic || keys.openai || keys.deepseek || keys.brave)
-}
-
-async function loadApiKeysFromSecret(ref: string): Promise<ApiKeys> {
-  const raw = await getSecretStore().get(ref)
-  if (!raw)
-    return { anthropic: null, openai: null, deepseek: null, brave: null }
-  try {
-    return normalizeApiKeys(JSON.parse(raw))
-  } catch {
-    return { anthropic: null, openai: null, deepseek: null, brave: null }
-  }
-}
-
-async function saveApiKeysToSecret(ref: string, keys: ApiKeys): Promise<void> {
-  if (hasAnyApiKey(keys)) {
-    await getSecretStore().set(ref, JSON.stringify(keys))
-  } else {
-    await getSecretStore().delete(ref)
-  }
 }
 
 function codexEmptyStatus(error: string | null = null): CodexStatus {
@@ -1390,90 +1328,8 @@ async function signInCodex(): Promise<CodexStatus | null> {
 // silently dropping the field. Schema-level validation (transport /
 // auth.mode / forbidden refs) still happens inside the registry's
 // `applyConfig`.
-function normalizeMcp(
-  value: unknown
-): { servers: Array<McpServerConfig> } | undefined {
-  if (value === undefined || value === null) return undefined
-  if (typeof value !== `object`) {
-    console.warn(
-      `[agents-desktop] settings.json: 'mcp' must be an object, got ${typeof value}; ignoring`
-    )
-    return undefined
-  }
-  const maybeServers = (value as { servers?: unknown }).servers
-  if (maybeServers === undefined) return undefined
-  if (
-    typeof maybeServers !== `object` ||
-    maybeServers === null ||
-    Array.isArray(maybeServers)
-  ) {
-    console.warn(
-      `[agents-desktop] settings.json: 'mcp.servers' must be an object keyed by server name; ignoring`
-    )
-    return undefined
-  }
-  const servers: McpServerConfig[] = []
-  for (const [name, entry] of Object.entries(
-    maybeServers as Record<string, unknown>
-  )) {
-    if (!entry || typeof entry !== `object`) {
-      console.warn(
-        `[agents-desktop] settings.json: 'mcp.servers.${name}' is not an object; skipping`
-      )
-      continue
-    }
-    if (`name` in entry && (entry as { name: unknown }).name !== name) {
-      console.warn(
-        `[agents-desktop] settings.json: 'mcp.servers.${name}' has a conflicting 'name' field; the keyed name wins`
-      )
-    }
-    servers.push({ ...(entry as object), name } as McpServerConfig)
-  }
-  return servers.length > 0 ? { servers } : undefined
-}
-
-/**
- * Mirror persisted API keys into `process.env` so the bundled
- * `BuiltinAgentsServer` (Horton) — which reads them via
- * `process.env.ANTHROPIC_API_KEY` / `OPENAI_API_KEY` directly inside
- * `createBuiltinAgentHandler` — sees them on its next start. Saved
- * values take precedence; for slots the user hasn't saved yet we fall
- * back to whatever was in the launch environment so external `.env` /
- * shell setups keep working until the user opts in via the dialog.
- */
 function applyApiKeys(): void {
-  const resolveSlot = (
-    saved: string | null,
-    env: string | null,
-    name:
-      | `ANTHROPIC_API_KEY`
-      | `OPENAI_API_KEY`
-      | `DEEPSEEK_API_KEY`
-      | `BRAVE_SEARCH_API_KEY`
-  ): void => {
-    const value = saved ?? env
-    if (value) {
-      process.env[name] = value
-    } else {
-      delete process.env[name]
-    }
-  }
-  resolveSlot(
-    apiKeys.anthropic,
-    ENV_API_KEYS_SNAPSHOT.anthropic,
-    `ANTHROPIC_API_KEY`
-  )
-  resolveSlot(apiKeys.openai, ENV_API_KEYS_SNAPSHOT.openai, `OPENAI_API_KEY`)
-  resolveSlot(
-    apiKeys.deepseek,
-    ENV_API_KEYS_SNAPSHOT.deepseek,
-    `DEEPSEEK_API_KEY`
-  )
-  resolveSlot(
-    apiKeys.brave,
-    ENV_API_KEYS_SNAPSHOT.brave,
-    `BRAVE_SEARCH_API_KEY`
-  )
+  applyApiKeysToEnv(apiKeys, ENV_API_KEYS_SNAPSHOT, process.env)
 }
 
 function initialServerFromEnv(): ServerConfig | null {
@@ -1568,10 +1424,10 @@ async function loadSettings(): Promise<void> {
     }
     if (parsed.apiKeys !== undefined) {
       apiKeys = normalizeApiKeys(parsed.apiKeys)
-      await saveApiKeysToSecret(apiKeysRef, apiKeys)
+      await saveApiKeysToSecret(getSecretStore(), apiKeysRef, apiKeys)
       shouldSave = true
     } else {
-      apiKeys = await loadApiKeysFromSecret(apiKeysRef)
+      apiKeys = await loadApiKeysFromSecret(getSecretStore(), apiKeysRef)
     }
     shouldSave =
       shouldSave ||
@@ -1582,7 +1438,7 @@ async function loadSettings(): Promise<void> {
   } catch (err) {
     console.error(`[agents-desktop] Failed to load settings:`, err)
     settings = { ...DEFAULT_SETTINGS, pullWakeRunnerId: randomUUID() }
-    apiKeys = await loadApiKeysFromSecret(settings.apiKeysRef)
+    apiKeys = await loadApiKeysFromSecret(getSecretStore(), settings.apiKeysRef)
     shouldSave = true
   }
 
@@ -1609,22 +1465,10 @@ async function loadSettings(): Promise<void> {
 
 async function saveSettings(): Promise<void> {
   await mkdir(path.dirname(settingsPath()), { recursive: true })
-  await writeFile(settingsPath(), JSON.stringify(serializeSettings(), null, 2))
-}
-
-// Memory holds `mcp.servers` as the array `BuiltinAgentsServer.extraMcpServers`
-// expects. On disk we mirror `mcp.json`'s keyed-by-name shape so users can
-// copy entries between the two files. This re-keys the array before write.
-function serializeSettings(): Record<string, unknown> {
-  const { mcp, ...rest } = settings
-  const base = { version: SETTINGS_VERSION, ...rest }
-  if (!mcp || mcp.servers.length === 0) return base
-  const servers: Record<string, Record<string, unknown>> = {}
-  for (const s of mcp.servers) {
-    const { name, ...entry } = s as McpServerConfig & Record<string, unknown>
-    servers[name] = entry
-  }
-  return { ...base, mcp: { servers } }
+  await writeFile(
+    settingsPath(),
+    JSON.stringify(serializeSettings(settings), null, 2)
+  )
 }
 
 function createConnectionState(entry: RuntimeEntry): ServerConnectionState {
@@ -2581,7 +2425,7 @@ async function setApiKeys(next: ApiKeys): Promise<void> {
     normalized.deepseek !== apiKeys.deepseek ||
     normalized.brave !== apiKeys.brave
   apiKeys = normalized
-  await saveApiKeysToSecret(settings.apiKeysRef, apiKeys)
+  await saveApiKeysToSecret(getSecretStore(), settings.apiKeysRef, apiKeys)
   applyApiKeys()
   await saveSettings()
   if (changed) markCredentialsDirty()
