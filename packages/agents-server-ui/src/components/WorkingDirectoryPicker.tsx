@@ -58,7 +58,7 @@ export function WorkingDirectoryPicker({
   )
 
   const triggerLabel = useMemo(
-    () => (value ? tildifyPath(value, homeDir) : `None`),
+    () => (value ? tildifyPath(value, homeDir) : `No working directory`),
     [value, homeDir]
   )
 
@@ -123,7 +123,7 @@ export function WorkingDirectoryPicker({
             aria-label={
               value ? `Working directory: ${value}` : `Set working directory`
             }
-            title={value ?? `Use the server's default working directory`}
+            title={value ?? `Don’t work in a directory`}
           >
             <Icon icon={Folder} size={1} className={styles.triggerIcon} />
             <span className={styles.triggerLabel}>{triggerLabel}</span>
@@ -148,7 +148,9 @@ export function WorkingDirectoryPicker({
           <Combobox.Item value={NONE_VALUE} className={styles.pathItem}>
             <span className={styles.menuRow}>
               <Icon icon={Home} size={2} className={styles.menuRowIcon} />
-              <span className={styles.menuRowLabel}>None</span>
+              <span className={styles.menuRowLabel}>
+                Don’t work in a directory
+              </span>
               <span className={styles.trailing}>
                 {value === null && (
                   <span className={styles.trailingCheck}>
