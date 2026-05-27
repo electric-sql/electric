@@ -1,4 +1,5 @@
 import { SecretStore } from './secret-store'
+import { createDesktopAppContext } from './app/context'
 import {
   buildSavedServerHeaders,
   installCloudAuthHeaderInjection as installCloudAuthHeaderInjectionForDeps,
@@ -30,6 +31,11 @@ import {
   EMPTY_MCP_SNAPSHOT,
   handleAuthorizeUrl as handleAuthorizeMcpUrl,
 } from './runtime/mcp'
+import {
+  createDesktopTray,
+  createTrayIcon,
+  updateTray as updateTrayForDeps,
+} from './ui/tray'
 import {
   normalizeServer,
   normalizeServers,
@@ -67,12 +73,10 @@ import type {
   DesktopSettings,
   DesktopState,
   DiscoveredServer,
-  LocalRuntimeStatus,
   OnboardingState,
   RegistrySnapshot,
   RuntimeEntry,
   ServerConfig,
-  ServerConnectionStatus,
 } from './shared/types'
 import {
   CloudAuth,
@@ -86,7 +90,6 @@ import {
 import {
   BrowserWindow,
   Menu,
-  Tray,
   app,
   clipboard,
   dialog,
@@ -246,16 +249,11 @@ let state: DesktopState = {
   credentialsRestartPending: false,
 }
 let credentialsRestartPending = false
-let tray: Tray | null = null
-let aboutWindow: BrowserWindow | null = null
-let isQuitting = false
-const windows = new Set<BrowserWindow>()
-const windowSelections = new Map<number, string | null>()
-const runtimeEntries = new Map<string, RuntimeEntry>()
-const lastMcpSnapshots = new Map<string, RegistrySnapshot>()
-let secretStore: SecretStore | null = null
-let cloudAuth: CloudAuth | null = null
-let cloudAgentServers: CloudAgentServers | null = null
+const desktopContext = createDesktopAppContext()
+const windows = desktopContext.windows
+const windowSelections = desktopContext.windowSelections
+const runtimeEntries = desktopContext.runtimeEntries
+const lastMcpSnapshots = desktopContext.lastMcpSnapshots
 
 function configureRuntimeEnvironment(): void {
   // Packaged macOS apps can launch with cwd `/`, which makes the agents
@@ -279,14 +277,16 @@ function secretsPath(): string {
 }
 
 function getSecretStore(): SecretStore {
-  if (!secretStore) secretStore = new SecretStore(secretsPath())
-  return secretStore
+  if (!desktopContext.services.secretStore) {
+    desktopContext.services.secretStore = new SecretStore(secretsPath())
+  }
+  return desktopContext.services.secretStore
 }
 
 function getCloudAuth(): CloudAuth {
-  if (!cloudAuth) {
-    cloudAuth = new CloudAuth(getSecretStore())
-    cloudAuth.subscribe((next) => {
+  if (!desktopContext.services.cloudAuth) {
+    desktopContext.services.cloudAuth = new CloudAuth(getSecretStore())
+    desktopContext.services.cloudAuth.subscribe((next) => {
       broadcastCloudAuthState(next)
       // Drive cloud-agent-servers from auth state transitions: start the
       // shape streams when we have a token, tear them down on sign-out.
@@ -297,15 +297,20 @@ function getCloudAuth(): CloudAuth {
       }
     })
   }
-  return cloudAuth
+  return desktopContext.services.cloudAuth
 }
 
 function getCloudAgentServers(): CloudAgentServers {
-  if (!cloudAgentServers) {
-    cloudAgentServers = new CloudAgentServers(getCloudAuth(), getSecretStore())
-    cloudAgentServers.subscribe((next) => broadcastCloudAgentServersState(next))
+  if (!desktopContext.services.cloudAgentServers) {
+    desktopContext.services.cloudAgentServers = new CloudAgentServers(
+      getCloudAuth(),
+      getSecretStore()
+    )
+    desktopContext.services.cloudAgentServers.subscribe((next) =>
+      broadcastCloudAgentServersState(next)
+    )
   }
-  return cloudAgentServers
+  return desktopContext.services.cloudAgentServers
 }
 
 function broadcastCloudAuthState(next: CloudAuthState): void {
@@ -326,8 +331,9 @@ function broadcastCloudAgentServersState(next: CloudAgentServersState): void {
 
 const cloudAuthHeaderInjectionDeps: CloudAuthHeaderInjectionDeps = {
   getServers: () => settings.servers,
-  getAgentsToken: (tenantId) => cloudAgentServers?.getAgentsToken(tenantId),
-  getCloudAuthState: () => cloudAuth?.getState(),
+  getAgentsToken: (tenantId) =>
+    desktopContext.services.cloudAgentServers?.getAgentsToken(tenantId),
+  getCloudAuthState: () => desktopContext.services.cloudAuth?.getState(),
   injectDevPrincipalHeaders,
 }
 
@@ -1173,38 +1179,6 @@ function selectedServerIdForWindow(win: BrowserWindow | null): string | null {
   return defaultSelectedServerId()
 }
 
-function connectionStatusLabel(status: ServerConnectionStatus): string {
-  switch (status) {
-    case `connected`:
-      return `Connected`
-    case `connecting`:
-      return `Connecting`
-    case `reconnecting`:
-      return `Reconnecting`
-    case `offline`:
-      return `Offline`
-    case `error`:
-      return `Error`
-    case `disconnected`:
-      return `Disconnected`
-  }
-}
-
-function localRuntimeStatusLabel(status: LocalRuntimeStatus): string {
-  switch (status) {
-    case `disabled`:
-      return `Disabled`
-    case `stopped`:
-      return `Stopped`
-    case `starting`:
-      return `Starting`
-    case `running`:
-      return `Running`
-    case `error`:
-      return `Error`
-  }
-}
-
 function injectDevPrincipalHeaders(server: ServerConfig): ServerConfig {
   return injectDevPrincipalHeadersForServer(server, {
     explicitDevPrincipal: EXPLICIT_DEV_PRINCIPAL,
@@ -1244,152 +1218,22 @@ function sendCommand(command: DesktopCommand): void {
   target?.webContents.send(`desktop:command`, command)
 }
 
-function createTrayIcon(): Electron.NativeImage {
-  // Electric brand mark rasterised to 26×22 (1×) and 51×44 (2×)
-  // black-on-transparent PNGs in `assets/`. We add the @2x variant as
-  // a representation so retina menu bars stay crisp; macOS template
-  // mode then auto-recolors for light/dark menu bars.
-  const icon = nativeImage.createFromPath(TRAY_ICON_PATH)
-  try {
-    icon.addRepresentation({
-      scaleFactor: 2,
-      buffer: nativeImage.createFromPath(TRAY_ICON_2X_PATH).toPNG(),
-    })
-  } catch {
-    // @2x asset missing — fall back to single-resolution.
-  }
-  if (process.platform === `darwin`) {
-    icon.setTemplateImage(true)
-  }
-  return icon
-}
-
 function updateTray(): void {
-  if (!tray) return
-
-  const connectedCount = [...runtimeEntries.values()].filter(
-    (entry) => entry.status === `connected`
-  ).length
-  const connectingCount = [...runtimeEntries.values()].filter(
-    (entry) => entry.status === `connecting` || entry.status === `reconnecting`
-  ).length
-  const runtimeLabel =
-    connectedCount > 0
-      ? `${connectedCount} connected`
-      : connectingCount > 0
-        ? `${connectingCount} connecting`
-        : `No connected servers`
-  tray.setToolTip(`Electric Agents: ${runtimeLabel}`)
-
-  const menu = Menu.buildFromTemplate([
-    {
-      label: `Open Agents`,
-      click: () => createWindow(),
-    },
-    {
-      label: `New Window`,
-      click: () => createWindow(),
-    },
-    { type: `separator` },
-    {
-      label: `Servers: ${runtimeLabel}`,
-      enabled: false,
-    },
-    ...settings.servers.map((server): Electron.MenuItemConstructorOptions => {
-      const entry = ensureRuntimeEntry(server)
-      return {
-        label: `${server.name}: ${connectionStatusLabel(entry.status)}`,
-        submenu: [
-          {
-            label: `Connection: ${connectionStatusLabel(entry.status)}`,
-            enabled: false,
-          },
-          {
-            label: `Local runtime: ${localRuntimeStatusLabel(entry.localRuntimeStatus)}`,
-            enabled: false,
-          },
-          ...(entry.runtimeUrl
-            ? ([
-                {
-                  label: entry.runtimeUrl,
-                  enabled: false,
-                },
-              ] as Electron.MenuItemConstructorOptions[])
-            : []),
-          ...(entry.runtimeError
-            ? ([
-                {
-                  label: `Runtime error: ${entry.runtimeError}`,
-                  enabled: false,
-                },
-              ] as Electron.MenuItemConstructorOptions[])
-            : []),
-          ...(entry.lastError
-            ? ([
-                {
-                  label: `Connection error: ${entry.lastError}`,
-                  enabled: false,
-                },
-              ] as Electron.MenuItemConstructorOptions[])
-            : []),
-          { type: `separator` },
-          {
-            label: `Server Settings…`,
-            click: () => sendCommand(`open-servers-settings`),
-          },
-          { type: `separator` },
-          {
-            label:
-              entry.desiredState === `connected` ? `Disconnect` : `Connect`,
-            click: () => {
-              if (entry.desiredState === `connected`) {
-                void disconnectServer(server.id)
-              } else {
-                void connectServer(server.id)
-              }
-            },
-          },
-          {
-            label: server.localRuntimeEnabled
-              ? `Disable Local Runtime`
-              : `Enable Local Runtime`,
-            click: () => {
-              server.localRuntimeEnabled = !server.localRuntimeEnabled
-              void saveSettings().then(async () => {
-                const nextEntry = ensureRuntimeEntry(server)
-                if (!server.localRuntimeEnabled && nextEntry.runtime) {
-                  await stopRuntimeEntry(nextEntry)
-                } else if (
-                  server.localRuntimeEnabled &&
-                  server.desiredState === `connected`
-                ) {
-                  await restartRuntime(server.id)
-                }
-                refreshDesktopState()
-              })
-            },
-          },
-          {
-            label: `Restart Local Runtime`,
-            enabled:
-              entry.desiredState === `connected` && server.localRuntimeEnabled,
-            click: () => {
-              void restartRuntime(server.id)
-            },
-          },
-        ],
-      }
-    }),
-    { type: `separator` },
-    {
-      label: `Quit`,
-      click: () => {
-        void quitApp()
-      },
-    },
-  ])
-
-  tray.setContextMenu(menu)
+  updateTrayForDeps({
+    tray: desktopContext.shell.tray,
+    servers: settings.servers,
+    runtimeEntries,
+    ensureRuntimeEntry,
+    createWindow,
+    sendCommand,
+    connectServer,
+    disconnectServer,
+    saveSettings,
+    stopRuntimeEntry,
+    restartRuntime,
+    refreshDesktopState,
+    quitApp,
+  })
 }
 
 function broadcastState(): void {
@@ -1821,7 +1665,7 @@ async function startRuntime(serverId: string): Promise<void> {
   // fallback used for unauthenticated local servers.
   const cloudAuthUserId =
     activeServer.source === `electric-cloud`
-      ? (cloudAuth?.getState().userId ?? null)
+      ? (desktopContext.services.cloudAuth?.getState().userId ?? null)
       : null
   const runnerOwnerPrincipal =
     runnerOwnerPrincipalFromUserId(cloudAuthUserId) ??
@@ -2049,7 +1893,7 @@ async function setApiKeys(next: ApiKeys): Promise<void> {
 }
 
 function getOnboardingState(): OnboardingState {
-  const cloudStatus = cloudAuth?.getState().status
+  const cloudStatus = desktopContext.services.cloudAuth?.getState().status
   return {
     dismissed: settings.onboardingDismissed === true,
     hasAnyKey: Boolean(
@@ -2095,8 +1939,8 @@ async function setActiveServer(
 }
 
 async function quitApp(): Promise<void> {
-  if (isQuitting) return
-  isQuitting = true
+  if (desktopContext.shell.isQuitting) return
+  desktopContext.shell.isQuitting = true
   stopDiscoveryLoop()
   await stopExistingRuntime().catch(() => {})
   app.quit()
@@ -2111,7 +1955,7 @@ async function clearAllLocalDataAndRelaunch(): Promise<void> {
     rm(settingsPath(), { force: true }),
     rm(secretsPath(), { force: true }),
   ])
-  secretStore = null
+  desktopContext.services.secretStore = null
   app.relaunch()
   await quitApp()
 }
@@ -2574,8 +2418,11 @@ function windowDisplayLabel(win: BrowserWindow): string {
  * brand copy on every platform.
  */
 function showAboutDialog(): void {
-  if (aboutWindow && !aboutWindow.isDestroyed()) {
-    aboutWindow.focus()
+  if (
+    desktopContext.shell.aboutWindow &&
+    !desktopContext.shell.aboutWindow.isDestroyed()
+  ) {
+    desktopContext.shell.aboutWindow.focus()
     return
   }
 
@@ -2681,10 +2528,12 @@ function showAboutDialog(): void {
       sandbox: true,
     },
   })
-  aboutWindow = win
+  desktopContext.shell.aboutWindow = win
   win.setMenuBarVisibility(false)
   win.on(`closed`, () => {
-    if (aboutWindow === win) aboutWindow = null
+    if (desktopContext.shell.aboutWindow === win) {
+      desktopContext.shell.aboutWindow = null
+    }
   })
   win.once(`ready-to-show`, () => win.show())
   // Open external links (electric.ax/agents) in the user's browser
@@ -3011,7 +2860,7 @@ async function main(): Promise<void> {
   app.on(`browser-window-blur`, () => buildApplicationMenu())
 
   app.on(`before-quit`, (event) => {
-    if (isQuitting) return
+    if (desktopContext.shell.isQuitting) return
     event.preventDefault()
     void quitApp()
   })
@@ -3062,15 +2911,19 @@ async function main(): Promise<void> {
     }
   }
 
-  const trayIcon = createTrayIcon()
+  const trayIcon = createTrayIcon({
+    iconPath: TRAY_ICON_PATH,
+    icon2xPath: TRAY_ICON_2X_PATH,
+  })
   if (trayIcon.isEmpty()) {
     console.error(
       `[agents-desktop] Tray icon failed to load from ${TRAY_ICON_PATH}; ` +
         `the menu bar item may be invisible.`
     )
   }
-  tray = new Tray(trayIcon)
-  tray.on(`click`, () => showOrCreateWindow())
+  desktopContext.shell.tray = createDesktopTray(trayIcon, () =>
+    showOrCreateWindow()
+  )
   updateTray()
 
   buildApplicationMenu()
