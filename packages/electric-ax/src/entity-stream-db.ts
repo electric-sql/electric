@@ -33,10 +33,6 @@ export async function createEntityStreamDB(opts: {
 }): Promise<{ db: EntityStreamDB; close: () => void }> {
   const { baseUrl, entityUrl, initialOffset, headers: serverHeaders } = opts
 
-  console.log(
-    `[createEntityStreamDB] Creating entity stream DB for ${appendPathToUrl(baseUrl, entityUrl)}`
-  )
-
   const requestHeaders = {
     'content-type': `application/json`,
     ...serverHeaders,

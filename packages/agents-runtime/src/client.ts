@@ -2,6 +2,7 @@ export { createEntityStreamDB } from './entity-stream-db'
 export { createAgentsClient } from './agents-client'
 export {
   compareTimelineOrders,
+  buildEntityTimelineData,
   createPendingTimelineOrder,
   createEntityErrorsQuery,
   createEntityIncludesQuery,

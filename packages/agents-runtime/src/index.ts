@@ -119,6 +119,7 @@ export {
   createEntityIncludesQuery,
   createEntityTimelineQuery,
   createEntityErrorsQuery,
+  buildEntityTimelineData,
   createPendingTimelineOrder,
   getEntityState,
   normalizeEntityTimelineData,
