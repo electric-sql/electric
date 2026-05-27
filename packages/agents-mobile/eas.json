@@ -1,0 +1,56 @@
+{
+  "cli": {
+    "version": ">= 15.0.0",
+    "appVersionSource": "local"
+  },
+  "build": {
+    "development": {
+      "node": "24.11.1",
+      "developmentClient": true,
+      "distribution": "internal"
+    },
+    "preview": {
+      "node": "24.11.1",
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "preview-ios-simulator": {
+      "node": "24.11.1",
+      "distribution": "internal",
+      "ios": {
+        "simulator": true
+      }
+    },
+    "canary": {
+      "node": "24.11.1",
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "canary-store": {
+      "node": "24.11.1",
+      "distribution": "store"
+    },
+    "production": {
+      "node": "24.11.1",
+      "distribution": "store"
+    }
+  },
+  "submit": {
+    "canary-store": {
+      "android": {
+        "serviceAccountKeyPath": "./google-service-account.json",
+        "track": "internal"
+      }
+    },
+    "production": {
+      "android": {
+        "serviceAccountKeyPath": "./google-service-account.json",
+        "track": "production"
+      }
+    }
+  }
+}
