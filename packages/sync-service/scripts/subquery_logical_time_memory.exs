@@ -174,18 +174,20 @@ defmodule MemBench do
     Map.put(state, :active_moves, active_moves)
   end
 
-  def ets_bytes(filter) do
-    case :ets.info(filter.subquery_index.table, :memory) do
+  defp ets_info_bytes(table) do
+    case :ets.info(table, :memory) do
       words when is_integer(words) -> words * @wordsize
       _ -> 0
     end
   end
 
+  def ets_bytes(filter) do
+    ets_info_bytes(filter.subquery_index.table) +
+      ets_info_bytes(filter.subquery_index.counters)
+  end
+
   def mtv_bytes(filter) do
-    case :ets.info(filter.subquery_index.multi_time_view, :memory) do
-      words when is_integer(words) -> words * @wordsize
-      _ -> 0
-    end
+    ets_info_bytes(filter.subquery_index.multi_time_view)
   end
 
   def consumer_bytes(state) do
