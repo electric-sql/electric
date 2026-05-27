@@ -248,39 +248,15 @@ defmodule Electric.Shapes.Consumer.Effects do
       ) do
     alias Electric.Shapes.Filter.Indexes.SubqueryIndex.MultiTimeView
 
-    mtv = MultiTimeView.for_stack(consumer_state.stack_id)
-    subquery_refs = consumer_state.event_handler.subquery_refs
-
-    # `values_for.(ref, :before | :after)` reads `MultiTimeView` lazily at
-    # SQL build time — for the trigger ref `:before` uses `request.from_time`
-    # and `:after` uses `request.to_time`; other refs read at the consumer's
-    # currently-pinned time so the move-in query sees a consistent view
-    # across all dependencies.
-    values_for = fn ref, when_ ->
-      %{subquery_id: id, time: pinned_time} = Map.fetch!(subquery_refs, ref)
-
-      time =
-        cond do
-          ref != request.subquery_ref -> pinned_time
-          when_ == :before -> request.from_time
-          when_ == :after -> request.to_time
-        end
-
-      MultiTimeView.values(mtv, id, time)
-    end
-
-    {where, params} =
-      Querying.move_in_where_clause(
-        request.dnf_plan,
-        request.trigger_dep_index,
-        values_for,
-        consumer_state.shape.where.used_refs
-      )
-
-    pool = Manager.pool_name(consumer_state.stack_id, :snapshot)
+    # Extract the specific fields the task needs so the closure doesn't
+    # capture the whole consumer_state.
     stack_id = consumer_state.stack_id
     shape = consumer_state.shape
     shape_handle = consumer_state.shape_handle
+    storage = consumer_state.storage
+    subquery_refs = consumer_state.event_handler.subquery_refs
+    used_refs = consumer_state.shape.where.used_refs
+    pool = Manager.pool_name(stack_id, :snapshot)
 
     :telemetry.execute([:electric, :subqueries, :move_in_triggered], %{count: 1}, %{
       stack_id: stack_id
@@ -293,6 +269,37 @@ defmodule Electric.Shapes.Consumer.Effects do
 
     Task.Supervisor.start_child(supervisor, fn ->
       OpenTelemetry.set_current_context(trace_context)
+
+      # Build the move-in SQL inside the task so the materialised value
+      # arrays from `MultiTimeView.values/3` live on the task heap and die
+      # with it, not on the long-lived consumer process.
+      #
+      # `values_for.(ref, :before | :after)` — for the trigger ref `:before`
+      # uses `request.from_time` and `:after` uses `request.to_time`; other
+      # refs read at the consumer's currently-pinned time so the move-in
+      # query sees a consistent view across all dependencies.
+      mtv = MultiTimeView.for_stack(stack_id)
+
+      values_for = fn ref, when_ ->
+        %{subquery_id: id, time: pinned_time} = Map.fetch!(subquery_refs, ref)
+
+        time =
+          cond do
+            ref != request.subquery_ref -> pinned_time
+            when_ == :before -> request.from_time
+            when_ == :after -> request.to_time
+          end
+
+        MultiTimeView.values(mtv, id, time)
+      end
+
+      {where, params} =
+        Querying.move_in_where_clause(
+          request.dnf_plan,
+          request.trigger_dep_index,
+          values_for,
+          used_refs
+        )
 
       snapshot_name = Electric.Utils.uuid4()
 
@@ -319,7 +326,7 @@ defmodule Electric.Shapes.Consumer.Effects do
                 send(task_pid, {:move_in_snapshot_stats, row_count, row_bytes})
               end
             )
-            |> Storage.write_move_in_snapshot!(snapshot_name, consumer_state.storage)
+            |> Storage.write_move_in_snapshot!(snapshot_name, storage)
 
             {row_count, row_bytes} =
               receive do
