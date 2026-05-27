@@ -9,6 +9,10 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === `object` && value !== null && !Array.isArray(value)
 }
 
+function getPgSyncManifestStreamPath(sourceRef: string): string {
+  return `/_electric/pg-sync/${sourceRef}`
+}
+
 export function extractManifestSourceUrl(
   manifest: Record<string, unknown> | undefined
 ): string | undefined {
@@ -53,6 +57,12 @@ export function extractManifestSourceUrl(
     if (manifest.sourceType === `db`) {
       return typeof manifest.sourceRef === `string`
         ? getSharedStateStreamPath(manifest.sourceRef)
+        : undefined
+    }
+
+    if (manifest.sourceType === `pgSync`) {
+      return typeof manifest.sourceRef === `string`
+        ? getPgSyncManifestStreamPath(manifest.sourceRef)
         : undefined
     }
 

@@ -1,3 +1,4 @@
+import type { PgSyncOptions } from './observation-sources'
 import type { EntityTags, TagOperation } from './tags'
 import { appendPathToUrl } from './url'
 import type { ClaimTokenHeader, HeadersProvider } from './types'
@@ -97,6 +98,10 @@ export interface RuntimeServerClient {
   registerWake: (options: RegisterWakeOptions) => Promise<void>
   registerCronSource: (expression: string, timezone?: string) => Promise<string>
   registerEntitiesSource: (tags: EntityTags) => Promise<{
+    streamUrl: string
+    sourceRef: string
+  }>
+  registerPgSyncSource: (options: PgSyncOptions) => Promise<{
     streamUrl: string
     sourceRef: string
   }>
@@ -437,6 +442,22 @@ export function createRuntimeServerClient(
     return (await response.json()) as { streamUrl: string; sourceRef: string }
   }
 
+  const registerPgSyncSource = async (
+    options: PgSyncOptions
+  ): Promise<{ streamUrl: string; sourceRef: string }> => {
+    const response = await request(`/_electric/pg-sync/register`, {
+      method: `POST`,
+      headers: { 'content-type': `application/json` },
+      body: JSON.stringify({ options }),
+    })
+    if (!response.ok) {
+      throw new Error(
+        `registerPgSyncSource failed (${response.status}): ${await readErrorText(response)}`
+      )
+    }
+    return (await response.json()) as { streamUrl: string; sourceRef: string }
+  }
+
   const upsertCronSchedule = async (options: {
     entityUrl: string
     id: string
@@ -583,6 +604,7 @@ export function createRuntimeServerClient(
     registerWake,
     registerCronSource,
     registerEntitiesSource,
+    registerPgSyncSource,
     upsertCronSchedule,
     upsertFutureSendSchedule,
     deleteSchedule,

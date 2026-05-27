@@ -14,7 +14,9 @@ import { isPermanentElectricAgentsError } from './scheduler.js'
 import { StreamClient } from './stream-client.js'
 import { DEFAULT_TENANT_ID } from './tenant.js'
 import type { DrizzleDB } from './db/index.js'
+import { PgSyncBridgeManager } from './pg-sync-bridge-manager.js'
 import type { EntityBridgeCoordinator } from './entity-bridge-manager.js'
+import type { PgSyncBridgeCoordinator } from './pg-sync-bridge-manager.js'
 import type { DurableStreamsBearerProvider } from './stream-client.js'
 import type {
   CronTickPayload,
@@ -40,6 +42,7 @@ export interface ElectricAgentsTenantRuntimeOptions {
   wakeRegistry: WakeRegistry
   scheduler: SchedulerClient
   entityBridgeManager: EntityBridgeCoordinator
+  pgSyncBridgeManager?: PgSyncBridgeCoordinator
   claimWriteTokens?: ClaimWriteTokenStore
   stopWakeRegistryOnShutdown?: boolean
 }
@@ -53,6 +56,7 @@ export class ElectricAgentsTenantRuntime {
   readonly wakeRegistry: WakeRegistry
   readonly scheduler: SchedulerClient
   readonly entityBridgeManager: EntityBridgeCoordinator
+  readonly pgSyncBridgeManager: PgSyncBridgeCoordinator
   readonly claimWriteTokens: ClaimWriteTokenStore
   readonly manager: EntityManager
 
@@ -92,10 +96,20 @@ export class ElectricAgentsTenantRuntime {
         ),
       stopWakeRegistryOnShutdown: options.stopWakeRegistryOnShutdown ?? false,
     })
+    this.pgSyncBridgeManager =
+      options.pgSyncBridgeManager ??
+      new PgSyncBridgeManager(
+        this.streamClient,
+        (sourceUrl, event) => this.manager.evaluateWakes(sourceUrl, event),
+        this.registry
+      )
   }
 
   async stop(): Promise<void> {
-    await this.manager.shutdown()
+    await Promise.all([
+      this.manager.shutdown(),
+      this.pgSyncBridgeManager.stop(),
+    ])
   }
 
   async rehydrateCronSchedules(): Promise<void> {

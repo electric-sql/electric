@@ -6,6 +6,7 @@ import { serverLog } from '../log'
 import { createHortonDocsSupport } from '../docs/knowledge-base'
 import { createSkillTools } from '@electric-ax/agents-runtime'
 import { createSpawnWorkerTool } from '../tools/spawn-worker'
+import { createObservePgSyncTool } from '../tools/observe-pg-sync'
 import {
   modelChoiceValues,
   REASONING_EFFORT_VALUES,
@@ -238,6 +239,7 @@ When a user opens with a greeting ("hi", "hello", "hey", etc.) or a broad statem
 - fetch_url: fetch and convert a URL to markdown
 - spawn_worker: dispatch a subagent for an isolated task
 - send: send a message to an Electric Agent/entity by entity URL
+- observe_pg_sync: observe an Electric Postgres sync stream and wake on matching changes
 ${docsTools}${skillsTools}
 
 # Working with files
@@ -301,6 +303,7 @@ export function createHortonTools(
       : [fetchUrlTool]),
     createSpawnWorkerTool(ctx, opts.modelConfig),
     createSendTool(ctx.send),
+    createObservePgSyncTool(ctx),
     ...(opts.docsSearchTool ? [opts.docsSearchTool] : []),
   ]
 }

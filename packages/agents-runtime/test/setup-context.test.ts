@@ -2331,6 +2331,57 @@ describe(`entity patterns`, () => {
     })
   })
 
+  it(`custom source with streamUrl passes an absolute URL to wiring`, async () => {
+    const source: ObservationSource = {
+      sourceType: `webhook`,
+      sourceRef: `stripe`,
+      streamUrl: `/webhooks/stripe/events`,
+      schema: {
+        events: { type: `webhook_event`, primaryKey: `key` },
+      },
+      toManifestEntry() {
+        return {
+          key: `source:webhook:stripe`,
+          kind: `source` as const,
+          sourceType: `webhook`,
+          sourceRef: `stripe`,
+          config: {},
+        }
+      },
+    }
+    const { db, writes } = makeCtx()
+    const createSourceDb = vi.fn(async () => ({
+      close: vi.fn(),
+      preload: vi.fn(),
+    }))
+    const ctx = createSetupContext({
+      entityUrl: `test-entity-1`,
+      entityType: `test-agent`,
+      args: Object.freeze({}),
+      db,
+      events: [],
+      writeEvent: (e: ChangeEvent) => writes.push(e),
+      serverBaseUrl: `http://localhost:3000/base`,
+      effectScope: { register: vi.fn() },
+      customStateNames: [],
+      wiring: {
+        createSourceDb: createSourceDb as never,
+        createChildDb: vi.fn() as never,
+        createOrGetChild: vi.fn() as never,
+        createSharedStateDb: vi.fn() as never,
+      },
+    })
+
+    await ctx.observe(source)
+
+    expect(createSourceDb).toHaveBeenCalledWith(
+      `http://localhost:3000/base/webhooks/stripe/events`,
+      source.schema,
+      expect.any(Function),
+      { preload: true }
+    )
+  })
+
   it(`custom source with streamUrl registers wireDb on source handle`, async () => {
     const webhookSource: ObservationSource = {
       sourceType: `webhook`,

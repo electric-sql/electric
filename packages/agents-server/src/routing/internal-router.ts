@@ -31,6 +31,7 @@ import { resolveDurableStreamsRoutingAdapter } from './durable-streams-routing-a
 import { electricProxyRouter } from './electric-proxy-router.js'
 import { entitiesRouter } from './entities-router.js'
 import { entityTypesRouter } from './entity-types-router.js'
+import { pgSyncRouter } from './pg-sync-router.js'
 import { getRequestSpan } from './hooks.js'
 import { runnersRouter } from './runners-router.js'
 import { routeBody, validateOptionalJsonBody, withSchema } from './schema.js'
@@ -128,6 +129,7 @@ internalRouter.all(`/runners`, runnersRouter.fetch)
 internalRouter.all(`/runners/*`, runnersRouter.fetch)
 internalRouter.all(`/entities/*`, entitiesRouter.fetch)
 internalRouter.all(`/entity-types/*`, entityTypesRouter.fetch)
+internalRouter.all(`/pg-sync/*`, pgSyncRouter.fetch)
 internalRouter.all(`/cron/*`, cronRouter.fetch)
 internalRouter.get(`/electric/*`, electricProxyRouter.fetch)
 internalRouter.all(`*`, () => status(404))

@@ -208,7 +208,17 @@ export {
   manifestSourceKey,
 } from './manifest-helpers'
 
-export { entity, cron, entities, tagged, db } from './observation-sources'
+export {
+  entity,
+  cron,
+  entities,
+  tagged,
+  db,
+  getPgSyncStreamPath,
+  pgSync,
+  pgSyncObservationCollections,
+  sourceRefForPgSync,
+} from './observation-sources'
 export type {
   EntityObservationSource,
   CronObservationSource,
@@ -216,6 +226,8 @@ export type {
   TaggedObservationSource,
   DbObservationSource,
   EntitiesQuery,
+  PgSyncObservationSource,
+  PgSyncOptions,
   TaggedQuery,
 } from './observation-sources'
 

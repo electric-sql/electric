@@ -10,7 +10,16 @@ export {
   normalizeEntityTimelineData,
   normalizeTimelineEntities,
 } from './entity-timeline'
-export { db, entities, entity, tagged } from './observation-sources'
+export {
+  db,
+  entities,
+  entity,
+  getPgSyncStreamPath,
+  pgSync,
+  pgSyncObservationCollections,
+  sourceRefForPgSync,
+  tagged,
+} from './observation-sources'
 export { appendPathToUrl } from './url'
 export { buildSections, buildTimelineEntries } from './use-chat'
 
@@ -26,6 +35,8 @@ export type {
   EntitiesObservationSource,
   EntityObservationSource,
   EntitiesQuery,
+  PgSyncObservationSource,
+  PgSyncOptions,
   TaggedObservationSource,
   TaggedQuery,
 } from './observation-sources'

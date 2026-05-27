@@ -3,7 +3,7 @@ import { createTransaction } from '@durable-streams/state'
 import { createAssistantMessageEventStream } from '@mariozechner/pi-ai'
 import { getCronSourceRef } from '../src/cron-utils'
 import { manifestSourceKey } from '../src/manifest-helpers'
-import { db } from '../src/observation-sources'
+import { db, pgSync } from '../src/observation-sources'
 import { processWake } from '../src/process-wake'
 import { clearRegistry, defineEntity } from '../src/define-entity'
 import { entityStateSchema, passthrough } from '../src/entity-schema'
@@ -33,6 +33,10 @@ const {
   mockStreamHead,
   mockStreamJson,
   mockDurableStreamStream,
+  mockSourceDbPreload,
+  mockSourceDbClose,
+  mockCreateStreamDB,
+  mockActualCreateStreamDB,
   mockEntityOnEvent,
   mockEntityOnBatch,
 } = vi.hoisted(() => ({
@@ -55,6 +59,12 @@ const {
   }),
   mockStreamJson: vi.fn().mockResolvedValue([]),
   mockDurableStreamStream: vi.fn(),
+  mockSourceDbPreload: vi.fn().mockResolvedValue(undefined),
+  mockSourceDbClose: vi.fn(),
+  mockCreateStreamDB: vi.fn(),
+  mockActualCreateStreamDB: {
+    current: null as ((options: Record<string, unknown>) => unknown) | null,
+  },
   mockEntityOnEvent: { current: null as ((event: unknown) => void) | null },
   mockEntityOnBatch: {
     current: null as
@@ -96,6 +106,15 @@ vi.mock(`@durable-streams/client`, async (importOriginal) => {
     ...actual,
     DurableStream: MockDurableStream,
     IdempotentProducer: MockIdempotentProducer,
+  }
+})
+
+vi.mock(`@durable-streams/state`, async (importOriginal) => {
+  const actual = await importOriginal<any>()
+  mockActualCreateStreamDB.current = actual.createStreamDB
+  return {
+    ...actual,
+    createStreamDB: mockCreateStreamDB,
   }
 })
 
@@ -362,6 +381,15 @@ describe(`processWake`, () => {
     clearRegistry()
     mockConstructedProducers.length = 0
     mockDbPreload.mockResolvedValue(undefined)
+    mockSourceDbPreload.mockResolvedValue(undefined)
+    mockCreateStreamDB.mockImplementation((options) => {
+      if (!mockActualCreateStreamDB.current) {
+        throw new Error(`createStreamDB mock was not initialized`)
+      }
+      return mockActualCreateStreamDB.current(
+        options as Record<string, unknown>
+      )
+    })
     mockStreamOffset.value = `10_100`
     mockDbOffset.value = `10_100`
     mockEntityOnEvent.current = null
@@ -1498,6 +1526,55 @@ describe(`processWake`, () => {
     await expect(
       processWake(makeNotification(), BASE_CONFIG)
     ).resolves.not.toBeNull()
+  })
+
+  it(`pgSync observe registers pgSync source before source DB preload`, async () => {
+    const source = pgSync({
+      table: `todos`,
+      where: `priority = $1`,
+      params: [`high`],
+      replica: `full`,
+    })
+
+    defineEntity(`test-agent`, {
+      async handler(ctx) {
+        await ctx.observe(source)
+      },
+    })
+    mockCreateStreamDB.mockReturnValueOnce({
+      preload: mockSourceDbPreload,
+      close: mockSourceDbClose,
+    })
+
+    await processWake(makeNotification(), BASE_CONFIG)
+
+    expect(mockCreateStreamDB).toHaveBeenCalledWith(
+      expect.objectContaining({
+        streamOptions: expect.objectContaining({
+          url: source.streamUrl,
+          contentType: `application/json`,
+        }),
+        state: expect.objectContaining({
+          changes: expect.objectContaining({
+            type: `pg_sync_change`,
+            primaryKey: `key`,
+          }),
+        }),
+      })
+    )
+    expect(mockSourceDbPreload).toHaveBeenCalledOnce()
+
+    const pgSyncCallIndex = fetchMock.mock.calls.findIndex(([url]) =>
+      String(url).includes(`/_electric/pg-sync/register`)
+    )
+    expect(pgSyncCallIndex).toBeGreaterThanOrEqual(0)
+    const pgSyncBody = JSON.parse(
+      fetchMock.mock.calls[pgSyncCallIndex]![1]!.body as string
+    ) as Record<string, unknown>
+    expect(pgSyncBody).toEqual({ options: source.options })
+    expect(fetchMock.mock.invocationCallOrder[pgSyncCallIndex]).toBeLessThan(
+      mockSourceDbPreload.mock.invocationCallOrder[0]
+    )
   })
 
   it(`heartbeat is registered with configured interval`, async () => {

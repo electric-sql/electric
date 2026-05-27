@@ -5,6 +5,7 @@ import {
   queryOnce,
 } from '@durable-streams/state'
 import { createWakeSession } from './wake-session'
+import { appendPathToUrl } from './url'
 import {
   manifestChildKey,
   manifestEffectKey,
@@ -927,7 +928,7 @@ export function createSetupContext(
 
     if (source.streamUrl && source.schema && wiring) {
       sourceDb = await wiring.createSourceDb(
-        source.streamUrl,
+        appendPathToUrl(config.serverBaseUrl, source.streamUrl),
         source.schema,
         (event: ChangeEvent) => {
           events.push(event)

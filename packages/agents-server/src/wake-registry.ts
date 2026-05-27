@@ -41,6 +41,8 @@ export interface WakeEvalResult {
       collection: string
       kind: `insert` | `update` | `delete`
       key: string
+      value?: unknown
+      oldValue?: unknown
     }>
   }
   runFinishedStatus?: `completed` | `failed`
@@ -889,6 +891,8 @@ export class WakeRegistry {
       collection: string
       kind: `insert` | `update` | `delete`
       key: string
+      value?: unknown
+      oldValue?: unknown
     }
     runFinishedStatus?: `completed` | `failed`
   } | null {
@@ -935,12 +939,26 @@ export class WakeRegistry {
       return null
     }
 
-    return {
-      change: {
-        collection: eventType,
-        kind,
-        key: (event.key as string) || ``,
-      },
+    const value = event.value as Record<string, unknown> | undefined
+    const change: {
+      collection: string
+      kind: `insert` | `update` | `delete`
+      key: string
+      value?: unknown
+      oldValue?: unknown
+    } = {
+      collection: eventType,
+      kind,
+      key: (event.key as string) || ``,
     }
+
+    if (value && `value` in value) {
+      change.value = value.value
+    }
+    if (value && `oldValue` in value) {
+      change.oldValue = value.oldValue
+    }
+
+    return { change }
   }
 }

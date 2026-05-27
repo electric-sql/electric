@@ -427,6 +427,31 @@ export const scheduledTasks = pgTable(
   ]
 )
 
+export const pgSyncBridges = pgTable(
+  `pg_sync_bridges`,
+  {
+    tenantId: text(`tenant_id`).notNull().default(`default`),
+    sourceRef: text(`source_ref`).notNull(),
+    options: jsonb(`options`).notNull(),
+    streamUrl: text(`stream_url`).notNull(),
+    shapeHandle: text(`shape_handle`),
+    shapeOffset: text(`shape_offset`),
+    lastTouchedAt: timestamp(`last_touched_at`, { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    createdAt: timestamp(`created_at`, { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp(`updated_at`, { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.tenantId, table.sourceRef] }),
+    unique(`uq_pg_sync_bridges_stream_url`).on(table.tenantId, table.streamUrl),
+  ]
+)
+
 export const entityBridges = pgTable(
   `entity_bridges`,
   {

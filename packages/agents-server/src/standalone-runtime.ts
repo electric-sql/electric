@@ -11,6 +11,7 @@ import { WakeRegistry } from './wake-registry.js'
 import type { DrizzleDB, PgClient } from './db/index.js'
 import type { EntityManager } from './entity-manager.js'
 import type { EntityBridgeCoordinator } from './entity-bridge-manager.js'
+import type { PgSyncBridgeCoordinator } from './pg-sync-bridge-manager.js'
 import type { CronTickPayload, DelayedSendPayload } from './scheduler.js'
 import type { DurableStreamsBearerProvider } from './stream-client.js'
 
@@ -30,8 +31,10 @@ export interface StandaloneAgentsRuntimeOptions {
   startScheduler?: boolean
   startTagStreamOutboxDrainer?: boolean
   startEntityBridgeManager?: boolean
+  startPgSyncBridgeManager?: boolean
   rehydrateOnStart?: boolean
   entityBridgeManager?: EntityBridgeCoordinator
+  pgSyncBridgeManager?: PgSyncBridgeCoordinator
 }
 
 export interface StartedStandaloneAgentsRuntime {
@@ -46,6 +49,7 @@ export interface StartedStandaloneAgentsRuntime {
   manager: EntityManager
   scheduler: Scheduler
   entityBridgeManager: EntityBridgeCoordinator
+  pgSyncBridgeManager: PgSyncBridgeCoordinator
   tagStreamOutboxDrainer: TagStreamOutboxDrainer
   stop: () => Promise<void>
 }
@@ -104,6 +108,7 @@ export async function startStandaloneAgentsRuntime(
     wakeRegistry,
     scheduler,
     entityBridgeManager,
+    pgSyncBridgeManager: options.pgSyncBridgeManager,
     stopWakeRegistryOnShutdown: options.wakeRegistry ? false : true,
   })
 
@@ -112,6 +117,7 @@ export async function startStandaloneAgentsRuntime(
   const startTagStreamOutboxDrainer =
     options.startTagStreamOutboxDrainer ?? true
   const startEntityBridgeManager = options.startEntityBridgeManager ?? true
+  const startPgSyncBridgeManager = options.startPgSyncBridgeManager ?? true
   const rehydrateOnStart = options.rehydrateOnStart ?? true
   let entityBridgeManagerStarted = false
   let tagStreamOutboxDrainerStarted = false
@@ -153,6 +159,10 @@ export async function startStandaloneAgentsRuntime(
       await entityBridgeManager.start()
       entityBridgeManagerStarted = true
     }
+    if (startPgSyncBridgeManager) {
+      serverLog.info(`[agent-server] starting pg-sync bridge manager...`)
+      await runtime.pgSyncBridgeManager.start?.()
+    }
     if (startTagStreamOutboxDrainer) {
       serverLog.info(`[agent-server] starting tag stream outbox drainer...`)
       tagStreamOutboxDrainer.start()
@@ -181,6 +191,7 @@ export async function startStandaloneAgentsRuntime(
     manager: runtime.manager,
     scheduler,
     entityBridgeManager,
+    pgSyncBridgeManager: runtime.pgSyncBridgeManager,
     tagStreamOutboxDrainer,
     stop,
   }

@@ -441,6 +441,7 @@ export class ElectricAgentsServer {
       streamClient: this.streamClient,
       runtime: this.standaloneRuntime.runtime,
       entityBridgeManager: this.entityBridgeManager,
+      pgSyncBridgeManager: this.standaloneRuntime.runtime.pgSyncBridgeManager,
       isShuttingDown: () => this.shuttingDown,
       mockAgent: this.mockAgentBootstrap
         ? { runtime: this.mockAgentBootstrap.runtime }

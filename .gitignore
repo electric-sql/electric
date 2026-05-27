@@ -39,6 +39,7 @@ _artifacts
 .opentrace-index.log
 .dev-logs/
 .streams-data/
+.desktop-data/
 
 # npm local cache/logs
 .npm/

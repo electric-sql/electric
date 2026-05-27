@@ -7,6 +7,7 @@ import type { EntitySignal } from './runtime-server-client'
 import type {
   EntitiesObservationSource,
   EntityObservationSource,
+  PgSyncObservationSource,
 } from './observation-sources'
 import type {
   EntityStreamDB,
@@ -65,6 +66,12 @@ export function createAgentsClient(config: AgentsClientConfig): AgentsClient {
       if (source.sourceType === `entities`) {
         await serverClient.registerEntitiesSource(
           (source as EntitiesObservationSource).tags
+        )
+      }
+
+      if (source.sourceType === `pgSync`) {
+        await serverClient.registerPgSyncSource(
+          (source as PgSyncObservationSource).options
         )
       }
 
