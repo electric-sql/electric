@@ -8,4 +8,4 @@
 "electric-ax": patch
 ---
 
-Treat Electric Agents server URLs as opaque tenant-scoped base URLs rooted at `/t/<tenant-id>/v1`, move observation stream ensure endpoints under `/_electric/observations/*/ensure-stream`, and rename the pre-alpha entity/cron/schema/tag/docs APIs to their Electric Agents names.
+Treat Electric Agents server URLs as opaque tenant-scoped base URLs rooted at `/t/<tenant-id>/v1`, move observation stream ensure endpoints under `/_electric/observations/*/ensure-stream`, rename the pre-alpha entity/cron/schema/tag/docs APIs to their Electric Agents names, and make Horton title extraction work with lightweight desktop inbox collection facades.

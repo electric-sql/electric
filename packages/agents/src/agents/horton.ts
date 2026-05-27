@@ -1,6 +1,5 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { eq, not, queryOnce } from '@durable-streams/state'
 import { z } from 'zod'
 import { serverLog } from '../log'
 import { createHortonDocsSupport } from '../docs/knowledge-base'
@@ -30,7 +29,6 @@ import {
   createSendTool,
 } from '@electric-ax/agents-runtime/tools'
 import { completeWithLowCostModel } from '@electric-ax/agents-runtime'
-import type { MessageReceived } from '@electric-ax/agents-runtime'
 import { mcp } from '@electric-ax/agents-mcp'
 import type { SkillsRegistry } from '@electric-ax/agents-runtime'
 
@@ -328,16 +326,21 @@ function payloadToTitleText(payload: unknown): string {
 export async function extractFirstUserMessage(
   ctx: HandlerContext
 ): Promise<string | null> {
-  const firstMessage = await queryOnce((q) =>
-    q
-      .from({ inbox: ctx.db.collections.inbox })
-      .where(({ inbox }) => not(eq(inbox.from, `system`)))
-      .orderBy(({ inbox }) => inbox._seq, `asc`)
-      .findOne()
-  )
+  const firstMessage = ctx.db.collections.inbox.toArray
+    .map((message, index) => ({ message, index }))
+    .filter(({ message }) => message.from !== `system`)
+    .sort((left, right) => {
+      const leftSeq =
+        typeof left.message._seq === `number` ? left.message._seq : left.index
+      const rightSeq =
+        typeof right.message._seq === `number`
+          ? right.message._seq
+          : right.index
+      return leftSeq - rightSeq
+    })[0]?.message
 
   if (!firstMessage) return null
-  const text = payloadToTitleText((firstMessage as MessageReceived).payload)
+  const text = payloadToTitleText(firstMessage.payload)
   return text.length > 0 ? text : null
 }
 
