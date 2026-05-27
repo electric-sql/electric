@@ -34,7 +34,7 @@ import {
   type AvailableServer,
 } from '../hooks/useAvailableServers'
 import { useServerConnection } from '../hooks/useServerConnection'
-import { Button, Dialog, Icon, IconButton, Input, Text } from '../ui'
+import { Button, Dialog, Icon, IconButton, Input, Link, Text } from '../ui'
 import styles from './OnboardingModal.module.css'
 
 type Step = `cloud` | `keys` | `server`
@@ -221,8 +221,8 @@ function CloudStep({
   return (
     <>
       <StepHeader
-        title="Sign in to Electric Cloud"
-        description="Connect this app to your Electric Cloud workspaces to discover hosted agents servers and provision new ones — or skip ahead to use a local or self-hosted server."
+        title="Electric Cloud"
+        description="The data platform for multi-agent systems. Sign in to discover hosted agents servers, provision new ones, and connect this desktop app to your Electric Cloud workspaces."
       />
       {cloudSignedIn ? (
         <div className={styles.signedIn}>
@@ -267,10 +267,35 @@ function CloudStep({
               Sign in with Google
             </Button>
           </div>
-          <Text size={1} tone="muted">
-            Opens dashboard.electric-sql.cloud in a sign-in window. It closes
-            automatically once you've authorized.
-          </Text>
+          <div className={styles.cloudFinePrintStack}>
+            <Text size={1} tone="muted" className={styles.cloudFinePrint}>
+              Opens dashboard.electric-sql.cloud in a sign-in window. It closes
+              automatically once you've authorized.
+            </Text>
+            <Text size={1} tone="muted" className={styles.cloudFinePrint}>
+              By signing in, you agree to our{` `}
+              <Link
+                size={1}
+                href="https://electric.ax/about/legal/terms"
+                target="_blank"
+                rel="noreferrer"
+                className={styles.finePrintLink}
+              >
+                terms of service
+              </Link>
+              {` `}and{` `}
+              <Link
+                size={1}
+                href="https://electric.ax/about/legal/privacy"
+                target="_blank"
+                rel="noreferrer"
+                className={styles.finePrintLink}
+              >
+                privacy policy
+              </Link>
+              .
+            </Text>
+          </div>
           {cloudState?.error && (
             <Text size={2} tone="danger">
               {cloudState.error}
