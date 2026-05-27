@@ -24,29 +24,46 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   alias Electric.Shapes.Filter.Indexes.SubqueryIndex.MultiTimeView
   alias Electric.Shapes.Filter.WhereCondition
 
-  defstruct [:table, :multi_time_view]
+  defstruct [:table, :counters, :multi_time_view]
 
-  @type t :: %SubqueryIndex{table: :ets.tid() | atom(), multi_time_view: MultiTimeView.t() | nil}
+  @type t :: %SubqueryIndex{
+          table: :ets.tid() | atom(),
+          counters: :ets.tid() | atom(),
+          multi_time_view: MultiTimeView.t() | nil
+        }
 
   defp table_name(stack_id) when is_stack_id(stack_id), do: :"subquery_index:#{stack_id}"
 
+  defp counters_table_name(stack_id) when is_stack_id(stack_id),
+    do: :"subquery_index_counters:#{stack_id}"
+
   @spec new(keyword()) :: t()
   def new(opts \\ []) do
-    table =
+    {table, counters} =
       case Keyword.get(opts, :stack_id) do
         nil ->
-          :ets.new(:subquery_index, [:bag, :public])
+          {
+            :ets.new(:subquery_index, [:bag, :public]),
+            :ets.new(:subquery_index_counters, [:set, :public])
+          }
 
         stack_id ->
-          try do
-            :ets.new(table_name(stack_id), [:bag, :public, :named_table])
-          rescue
-            ArgumentError -> table_name(stack_id)
-          end
+          {
+            try do
+              :ets.new(table_name(stack_id), [:bag, :public, :named_table])
+            rescue
+              ArgumentError -> table_name(stack_id)
+            end,
+            try do
+              :ets.new(counters_table_name(stack_id), [:set, :public, :named_table])
+            rescue
+              ArgumentError -> counters_table_name(stack_id)
+            end
+          }
       end
 
     multi_time_view = MultiTimeView.new(Keyword.take(opts, [:stack_id]))
-    %SubqueryIndex{table: table, multi_time_view: multi_time_view}
+    %SubqueryIndex{table: table, counters: counters, multi_time_view: multi_time_view}
   end
 
   @spec for_stack(String.t()) :: t() | nil
@@ -58,6 +75,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
       _tid ->
         %SubqueryIndex{
           table: table_name(stack_id),
+          counters: counters_table_name(stack_id),
           multi_time_view: MultiTimeView.for_stack(stack_id)
         }
     end
@@ -102,7 +120,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   """
   @spec add_shape(Filter.t(), reference(), term(), map(), [atom()]) :: :ok
   def add_shape(
-        %Filter{subquery_index: %SubqueryIndex{table: table} = index} = filter,
+        %Filter{subquery_index: %SubqueryIndex{table: table, counters: counters} = index} = filter,
         condition_id,
         shape_handle,
         optimisation,
@@ -111,7 +129,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
     ensure_node_meta(table, condition_id, optimisation.field, optimisation.testexpr)
 
     group_id =
-      ensure_group(table, condition_id, optimisation.field, optimisation.polarity)
+      ensure_group(table, counters, condition_id, optimisation.field, optimisation.polarity)
 
     subquery_id = lookup_dep_handle!(table, shape_handle, optimisation.dep_index)
 
@@ -154,7 +172,9 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   """
   @spec remove_shape(Filter.t(), reference(), term(), map(), [atom()]) :: :deleted | :ok
   def remove_shape(
-        %Filter{subquery_index: %SubqueryIndex{table: table, multi_time_view: mtv}} = filter,
+        %Filter{
+          subquery_index: %SubqueryIndex{table: table, counters: counters, multi_time_view: mtv}
+        } = filter,
         condition_id,
         shape_handle,
         optimisation,
@@ -169,7 +189,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
            branch_key
          ) do
       nil ->
-        node_status(table, condition_id, optimisation.field)
+        node_status(counters, condition_id, optimisation.field)
 
       {child_node_id, next_condition_id} ->
         _ =
@@ -190,10 +210,10 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
         )
 
         if child_empty?(table, child_node_id) do
-          delete_child(table, mtv, child_node_id)
+          delete_child(table, counters, mtv, child_node_id)
         end
 
-        node_status(table, condition_id, optimisation.field)
+        node_status(counters, condition_id, optimisation.field)
     end
   end
 
@@ -264,10 +284,13 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   also cleared so values for the subquery are gone everywhere.
   """
   @spec remove_subquery(t(), term()) :: :ok
-  def remove_subquery(%SubqueryIndex{table: table, multi_time_view: mtv}, subquery_id) do
+  def remove_subquery(
+        %SubqueryIndex{table: table, counters: counters, multi_time_view: mtv},
+        subquery_id
+      ) do
     for child_node_id <- children_for_subquery(table, subquery_id) do
       cleanup_child_shapes(table, child_node_id)
-      delete_child(table, mtv, child_node_id)
+      delete_child(table, counters, mtv, child_node_id)
     end
 
     if mtv, do: MultiTimeView.remove_subquery(mtv, subquery_id)
@@ -335,7 +358,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
     end
   end
 
-  defp ensure_group(table, condition_id, field_key, polarity) do
+  defp ensure_group(table, counters, condition_id, field_key, polarity) do
     key = {:group, condition_id, field_key, polarity}
 
     case :ets.lookup(table, key) do
@@ -345,12 +368,20 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
       [] ->
         group_id = make_ref()
         :ets.insert(table, {key, group_id})
+
+        :ets.update_counter(
+          counters,
+          {:node_groups, condition_id, field_key},
+          1,
+          {{:node_groups, condition_id, field_key}, 0}
+        )
+
         group_id
     end
   end
 
   defp ensure_child(filter, index, group_id, subquery_id, polarity, condition_id, field_key) do
-    %SubqueryIndex{table: table, multi_time_view: mtv} = index
+    %SubqueryIndex{table: table, counters: counters, multi_time_view: mtv} = index
 
     case :ets.lookup(table, {:child, group_id, subquery_id}) do
       [{_, child_node_id}] ->
@@ -375,6 +406,13 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
         :ets.insert(table, {{:child, group_id, subquery_id}, child_node_id})
         :ets.insert(table, {{:child_meta, child_node_id}, meta})
         :ets.insert(table, {{:subquery_child, subquery_id}, child_node_id})
+
+        :ets.update_counter(
+          counters,
+          {:group_children, group_id},
+          1,
+          {{:group_children, group_id}, 0}
+        )
 
         seed_child_routing(table, mtv, child_node_id, meta)
         {child_node_id, next_condition_id}
@@ -452,7 +490,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
     not :ets.member(table, {:child_shape, child_node_id})
   end
 
-  defp delete_child(table, mtv, child_node_id) do
+  defp delete_child(table, counters, mtv, child_node_id) do
     case :ets.lookup(table, {:child_meta, child_node_id}) do
       [] ->
         :ok
@@ -475,15 +513,30 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
         :ets.delete_object(table, {{:subquery_child, meta.subquery_id}, child_node_id})
         :ets.delete(table, {:child_meta, child_node_id})
 
-        if group_empty?(table, meta.group_id) do
-          :ets.delete(
-            table,
-            {:group, meta.condition_id, meta.field_key, meta.polarity}
-          )
+        case :ets.update_counter(counters, {:group_children, meta.group_id}, -1) do
+          0 ->
+            :ets.delete(counters, {:group_children, meta.group_id})
 
-          if node_empty?(table, meta.condition_id, meta.field_key) do
-            :ets.delete(table, {:node_testexpr, meta.condition_id, meta.field_key})
-          end
+            :ets.delete(
+              table,
+              {:group, meta.condition_id, meta.field_key, meta.polarity}
+            )
+
+            case :ets.update_counter(
+                   counters,
+                   {:node_groups, meta.condition_id, meta.field_key},
+                   -1
+                 ) do
+              0 ->
+                :ets.delete(counters, {:node_groups, meta.condition_id, meta.field_key})
+                :ets.delete(table, {:node_testexpr, meta.condition_id, meta.field_key})
+
+              _ ->
+                :ok
+            end
+
+          _ ->
+            :ok
         end
 
         :ok
@@ -497,12 +550,11 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
     end
   end
 
-  defp group_empty?(table, group_id) do
-    :ets.match(table, {{:child, group_id, :_}, :_}) == []
-  end
-
-  defp node_empty?(table, condition_id, field_key) do
-    :ets.match(table, {{:group, condition_id, field_key, :_}, :_}) == []
+  defp node_empty?(counters, condition_id, field_key) do
+    case :ets.lookup(counters, {:node_groups, condition_id, field_key}) do
+      [{_, c}] when c > 0 -> false
+      _ -> true
+    end
   end
 
   defp positive_children(table, condition_id, field_key, value) do
@@ -559,8 +611,8 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
     |> MapSet.new()
   end
 
-  defp node_status(table, condition_id, field_key) do
-    if node_empty?(table, condition_id, field_key), do: :deleted, else: :ok
+  defp node_status(counters, condition_id, field_key) do
+    if node_empty?(counters, condition_id, field_key), do: :deleted, else: :ok
   end
 
   defp evaluate_node_lhs(table, condition_id, field_key, record) do
