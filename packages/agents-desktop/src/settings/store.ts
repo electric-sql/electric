@@ -1,8 +1,26 @@
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import path from 'node:path'
+import { randomUUID } from 'node:crypto'
+import type { SecretStore } from '../secret-store'
 import type { McpServerConfig } from '../shared/types'
-import type { CodexSettings, DesktopSettings } from '../shared/types'
+import type {
+  ApiKeys,
+  CodexSettings,
+  DesktopSettings,
+  ServerConfig,
+} from '../shared/types'
+import { settingsPath } from '../shared/paths'
+import {
+  GLOBAL_API_KEYS_REF,
+  loadApiKeysFromSecret,
+  normalizeApiKeys,
+  saveApiKeysToSecret,
+} from '../credentials/api-keys'
+import { normalizeServer, normalizeServers } from './servers'
+
+export { settingsPath } from '../shared/paths'
 
 export const SETTINGS_VERSION = 2
-export const GLOBAL_API_KEYS_REF = `api-keys:global`
 
 export const DEFAULT_SETTINGS: DesktopSettings = {
   servers: [],
@@ -85,4 +103,116 @@ export function serializeSettings(
     servers[name] = entry
   }
   return { ...base, mcp: { servers } }
+}
+
+export type LoadDesktopSettingsDeps = {
+  settings: DesktopSettings
+  apiKeys: ApiKeys
+  getSecretStore: () => SecretStore
+  ensureRuntimeEntry: (server: ServerConfig) => unknown
+  pullWakeRunnerId: string | null
+}
+
+export async function loadDesktopSettings(
+  deps: LoadDesktopSettingsDeps
+): Promise<boolean> {
+  let shouldSave = false
+  try {
+    const raw = await readFile(settingsPath(), `utf8`)
+    const parsed = JSON.parse(raw) as Partial<DesktopSettings> & {
+      activeServer?: unknown
+      apiKeys?: unknown
+      version?: unknown
+    }
+    const legacyActiveServer = normalizeServer(parsed.activeServer)
+    const servers = normalizeServers(parsed.servers, legacyActiveServer?.url)
+    const parsedPullWakeRunnerId =
+      typeof parsed.pullWakeRunnerId === `string`
+        ? parsed.pullWakeRunnerId.trim()
+        : null
+    const pullWakeRunnerId = parsedPullWakeRunnerId || randomUUID()
+    if (!parsedPullWakeRunnerId) {
+      shouldSave = true
+    }
+    const defaultServerId =
+      typeof parsed.defaultServerId === `string` &&
+      servers.some((server) => server.id === parsed.defaultServerId)
+        ? parsed.defaultServerId
+        : (servers.find((server) => server.url === legacyActiveServer?.url)
+            ?.id ??
+          servers.find((server) => server.desiredState === `connected`)?.id ??
+          servers[0]?.id ??
+          null)
+    const apiKeysRef =
+      typeof parsed.apiKeysRef === `string` && parsed.apiKeysRef.trim()
+        ? parsed.apiKeysRef.trim()
+        : GLOBAL_API_KEYS_REF
+    Object.assign(deps.settings, {
+      servers,
+      defaultServerId,
+      workingDirectory:
+        typeof parsed.workingDirectory === `string`
+          ? parsed.workingDirectory
+          : null,
+      apiKeysRef,
+      onboardingDismissed: parsed.onboardingDismissed === true,
+      codex: normalizeCodexSettings(parsed.codex),
+      mcp: normalizeMcp(parsed.mcp),
+      pullWakeRunnerId,
+    })
+    if (parsed.apiKeys !== undefined) {
+      Object.assign(deps.apiKeys, normalizeApiKeys(parsed.apiKeys))
+      await saveApiKeysToSecret(deps.getSecretStore(), apiKeysRef, deps.apiKeys)
+      shouldSave = true
+    } else {
+      Object.assign(
+        deps.apiKeys,
+        await loadApiKeysFromSecret(deps.getSecretStore(), apiKeysRef)
+      )
+    }
+    shouldSave =
+      shouldSave ||
+      parsed.version !== SETTINGS_VERSION ||
+      parsed.activeServer !== undefined ||
+      parsed.apiKeys !== undefined ||
+      servers.some((server) => !(`id` in (server as object)))
+  } catch (err) {
+    console.error(`[agents-desktop] Failed to load settings:`, err)
+    Object.assign(deps.settings, {
+      ...DEFAULT_SETTINGS,
+      pullWakeRunnerId: randomUUID(),
+    })
+    Object.assign(
+      deps.apiKeys,
+      await loadApiKeysFromSecret(
+        deps.getSecretStore(),
+        deps.settings.apiKeysRef
+      )
+    )
+    shouldSave = true
+  }
+
+  if (
+    deps.pullWakeRunnerId &&
+    deps.settings.pullWakeRunnerId !== deps.pullWakeRunnerId
+  ) {
+    deps.settings.pullWakeRunnerId = deps.pullWakeRunnerId
+    shouldSave = true
+  }
+
+  for (const server of deps.settings.servers) {
+    deps.ensureRuntimeEntry(server)
+  }
+
+  return shouldSave
+}
+
+export async function saveDesktopSettings(
+  settings: DesktopSettings
+): Promise<void> {
+  await mkdir(path.dirname(settingsPath()), { recursive: true })
+  await writeFile(
+    settingsPath(),
+    JSON.stringify(serializeSettings(settings), null, 2)
+  )
 }

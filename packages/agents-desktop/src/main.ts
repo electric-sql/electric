@@ -10,23 +10,43 @@ import {
 } from './cloud/server-fetch'
 import {
   applyApiKeysToEnv,
-  loadApiKeysFromSecret,
-  normalizeApiKeys,
-  saveApiKeysToSecret,
+  getApiKeysStatus as getApiKeysStatusForDeps,
+  setApiKeys as setApiKeysForDeps,
 } from './credentials/api-keys'
 import {
-  checkAgentsServerHealth,
-  formatStartupNetworkError,
-} from './runtime/health'
+  disableCodex as disableCodexForDeps,
+  enableCodexSource as enableCodexSourceForDeps,
+  getCodexStatus as getCodexStatusForDeps,
+  signInCodex as signInCodexForDeps,
+  syncCodexEnvironment as syncCodexEnvironmentForDeps,
+  type CodexAuthDeps,
+} from './credentials/codex-auth'
+import { checkAgentsServerHealth } from './runtime/health'
 import {
   createConnectionState,
   ensureRuntimeEntry as ensureRuntimeEntryInStore,
   runtimeStatusForConnection,
 } from './runtime/entries'
 import {
+  connectServer as connectServerForDeps,
+  disconnectServer as disconnectServerForDeps,
+  forgetServer as forgetServerForDeps,
+  hasConnectedLocalRuntime as hasConnectedLocalRuntimeForDeps,
+  restartConnectedRuntimes as restartConnectedRuntimesForDeps,
+  restartRuntime as restartRuntimeForDeps,
+  stopExistingRuntime as stopExistingRuntimeForDeps,
+  stopRuntime as stopRuntimeForDeps,
+  stopRuntimeEntry as stopRuntimeEntryForDeps,
+  type RuntimeLifecycleDeps,
+} from './runtime/lifecycle'
+import {
+  authorizeMcpServer,
   broadcastMcpSnapshot as broadcastMcpSnapshotForDeps,
-  EMPTY_MCP_SNAPSHOT,
+  disableMcpServer,
+  enableMcpServer,
+  getMcpSnapshot,
   handleAuthorizeUrl as handleAuthorizeMcpUrl,
+  reconnectMcpServer,
 } from './runtime/mcp'
 import {
   createDesktopTray,
@@ -40,26 +60,13 @@ import {
   serverInList,
 } from './settings/servers'
 import {
-  DEFAULT_SETTINGS,
-  GLOBAL_API_KEYS_REF,
-  normalizeCodexSettings,
-  normalizeMcp,
-  serializeSettings,
-  SETTINGS_VERSION,
+  loadDesktopSettings,
+  saveDesktopSettings,
+  settingsPath,
 } from './settings/store'
-import {
-  hasHeader,
-  injectDevPrincipalHeaders as injectDevPrincipalHeadersForServer,
-  mergeHeaders,
-  runnerOwnerPrincipalFromHeaders,
-  runnerOwnerPrincipalFromUserId,
-} from './shared/headers'
+import { injectDevPrincipalHeaders as injectDevPrincipalHeadersForServer } from './shared/headers'
 import {
   APP_DISPLAY_NAME,
-  CODEX_AUTH_REF,
-  CODEX_OAUTH_CLIENT_ID,
-  CODEX_OAUTH_ISSUER,
-  CODEX_OAUTH_PORT,
   DEFAULT_LOCAL_DEV_PRINCIPAL,
   DESKTOP_USER_DATA_DIR,
   DEV_SERVER_URL,
@@ -71,19 +78,13 @@ import {
   IGNORE_CONNECTION_LIMIT_DOMAINS,
   INITIAL_SERVER_URL,
   MCP_OAUTH_REDIRECT_BASE,
-  PULL_WAKE_OWNER_PRINCIPAL,
-  PULL_WAKE_REGISTER_RUNNER,
   PULL_WAKE_RUNNER_ID,
-  RECONNECT_BASE_MS,
-  RECONNECT_MAX_MS,
 } from './shared/constants'
 import {
-  AGENT_SKILLS_DIR,
   APP_ICON_PATH,
   PRELOAD_PATH,
   RENDERER_INDEX,
   secretsPath,
-  settingsPath,
   TRAY_ICON_2X_PATH,
   TRAY_ICON_PATH,
 } from './shared/paths'
@@ -91,7 +92,6 @@ import type {
   ApiKeys,
   ApiKeysStatus,
   CodexAuthSource,
-  CodexDetectedSource,
   CodexStatus,
   ConnectServerOptions,
   DesktopAppearance,
@@ -101,7 +101,6 @@ import type {
   DesktopMenuSection,
   DesktopMenuState,
   DesktopNavigationState,
-  DesktopSettings,
   DesktopState,
   DiscoveredServer,
   OnboardingState,
@@ -124,20 +123,9 @@ import {
   shell,
 } from 'electron'
 import fixPath from 'fix-path'
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { rm } from 'node:fs/promises'
 import { readFileSync } from 'node:fs'
-import { createHash, randomBytes, randomUUID } from 'node:crypto'
-import { createServer, type Server as HttpServer } from 'node:http'
 import path from 'node:path'
-
-type StoredCodexAuth = {
-  source: CodexAuthSource
-  access: string | null
-  refresh: string | null
-  expiresAt: number | null
-  accountId: string | null
-  email: string | null
-}
 
 // GUI-launched desktop apps don't inherit the user's shell PATH — restore it
 // so child processes can find CLI tools like `gh`.
@@ -238,323 +226,23 @@ function defaultSelectedServerId(): string | null {
   return settings.servers[0]?.id ?? null
 }
 
-function codexEmptyStatus(error: string | null = null): CodexStatus {
-  const codex = settings.codex ?? { enabled: false, source: null }
-  return {
-    enabled: codex.enabled,
-    source: codex.source,
-    availableSources: [],
-    accountId: null,
-    email: null,
-    expiresAt: null,
-    error,
-  }
+const codexAuthDeps: CodexAuthDeps = {
+  settings,
+  getSecretStore: desktopContext.getSecretStore,
+  saveSettings,
+  markCredentialsDirty,
 }
 
-async function readJson(pathName: string): Promise<unknown> {
-  return JSON.parse(await readFile(pathName, `utf8`)) as unknown
+function syncCodexEnvironment(): Promise<void> {
+  return syncCodexEnvironmentForDeps(codexAuthDeps)
 }
 
-function pickString(value: unknown): string | null {
-  return typeof value === `string` && value.trim().length > 0
-    ? value.trim()
-    : null
-}
-
-function parseJwtClaims(token: string | null): Record<string, unknown> | null {
-  if (!token) return null
-  const parts = token.split(`.`)
-  if (parts.length !== 3) return null
-  try {
-    return JSON.parse(Buffer.from(parts[1]!, `base64url`).toString()) as Record<
-      string,
-      unknown
-    >
-  } catch {
-    return null
-  }
-}
-
-function codexAccountIdFromClaims(
-  claims: Record<string, unknown> | null
-): string | null {
-  if (!claims) return null
-  const nested =
-    claims[`https://api.openai.com/auth`] &&
-    typeof claims[`https://api.openai.com/auth`] === `object`
-      ? (claims[`https://api.openai.com/auth`] as Record<string, unknown>)
-      : null
-  const organizations = Array.isArray(claims.organizations)
-    ? claims.organizations
-    : []
-  const organization = organizations.find((entry): entry is { id: string } =>
-    Boolean(
-      entry &&
-        typeof entry === `object` &&
-        typeof (entry as { id?: unknown }).id === `string`
-    )
-  )
-  return (
-    pickString(claims.chatgpt_account_id) ??
-    pickString(nested?.chatgpt_account_id) ??
-    organization?.id ??
-    null
-  )
-}
-
-function codexAuthFromTokenResponse(
-  source: CodexAuthSource,
-  tokens: {
-    access_token?: unknown
-    refresh_token?: unknown
-    expires_in?: unknown
-    id_token?: unknown
-  },
-  fallback?: Partial<StoredCodexAuth>
-): StoredCodexAuth | null {
-  const access = pickString(tokens.access_token) ?? fallback?.access ?? null
-  const refresh = pickString(tokens.refresh_token) ?? fallback?.refresh ?? null
-  if (!access && !refresh) return null
-  const idClaims = parseJwtClaims(pickString(tokens.id_token))
-  const accessClaims = parseJwtClaims(access)
-  const email = pickString(idClaims?.email) ?? fallback?.email ?? null
-  const accountId =
-    codexAccountIdFromClaims(idClaims) ??
-    codexAccountIdFromClaims(accessClaims) ??
-    fallback?.accountId ??
-    null
-  const expiresIn =
-    typeof tokens.expires_in === `number`
-      ? tokens.expires_in
-      : Number(tokens.expires_in)
-  return {
-    source,
-    access,
-    refresh,
-    expiresAt:
-      Number.isFinite(expiresIn) && expiresIn > 0
-        ? Date.now() + expiresIn * 1000
-        : (fallback?.expiresAt ?? null),
-    accountId,
-    email,
-  }
-}
-
-function codexCliAuthPath(): string {
-  return (
-    process.env.CODEX_AUTH_PATH?.trim() ||
-    path.join(app.getPath(`home`), `.codex`, `auth.json`)
-  )
-}
-
-function opencodeAuthPaths(): Array<string> {
-  const home = app.getPath(`home`)
-  const paths = [path.join(home, `.local`, `share`, `opencode`, `auth.json`)]
-  if (process.platform === `darwin`) {
-    paths.push(
-      path.join(home, `Library`, `Application Support`, `opencode`, `auth.json`)
-    )
-  }
-  return paths
-}
-
-function parseCodexCliAuth(value: unknown): StoredCodexAuth | null {
-  if (!value || typeof value !== `object`) return null
-  const data = value as Record<string, unknown>
-  if (data.auth_mode !== `chatgpt`) return null
-  const tokens =
-    data.tokens && typeof data.tokens === `object`
-      ? (data.tokens as Record<string, unknown>)
-      : {}
-  return codexAuthFromTokenResponse(`codex-cli`, {
-    access_token: tokens.access_token,
-    refresh_token: tokens.refresh_token,
-    id_token: tokens.id_token,
-    expires_in: tokens.expires_in,
-  })
-}
-
-function parseOpencodeAuth(value: unknown): StoredCodexAuth | null {
-  if (!value || typeof value !== `object`) return null
-  const openai = (value as Record<string, unknown>).openai
-  if (!openai || typeof openai !== `object`) return null
-  const data = openai as Record<string, unknown>
-  if (data.type !== `oauth`) return null
-  const access = pickString(data.access)
-  const refresh = pickString(data.refresh)
-  if (!access && !refresh) return null
-  return {
-    source: `opencode`,
-    access,
-    refresh,
-    expiresAt:
-      typeof data.expires === `number` && Number.isFinite(data.expires)
-        ? data.expires
-        : null,
-    accountId: pickString(data.accountId),
-    email: null,
-  }
-}
-
-async function loadDetectedCodexAuth(
-  source: CodexAuthSource
-): Promise<StoredCodexAuth | null> {
-  if (source === `desktop-oauth`) return loadStoredCodexAuth()
-  if (source === `codex-cli`) {
-    try {
-      return parseCodexCliAuth(await readJson(codexCliAuthPath()))
-    } catch {
-      return null
-    }
-  }
-  for (const candidate of opencodeAuthPaths()) {
-    try {
-      const auth = parseOpencodeAuth(await readJson(candidate))
-      if (auth) return auth
-    } catch {
-      // Try the next platform path.
-    }
-  }
-  return null
-}
-
-async function loadStoredCodexAuth(): Promise<StoredCodexAuth | null> {
-  const raw = await desktopContext.getSecretStore().get(CODEX_AUTH_REF)
-  if (!raw) return null
-  try {
-    const parsed = JSON.parse(raw) as Partial<StoredCodexAuth>
-    const source = normalizeCodexSettings({
-      enabled: true,
-      source: parsed.source,
-    }).source
-    if (!source) return null
-    return {
-      source,
-      access: pickString(parsed.access),
-      refresh: pickString(parsed.refresh),
-      expiresAt:
-        typeof parsed.expiresAt === `number` &&
-        Number.isFinite(parsed.expiresAt)
-          ? parsed.expiresAt
-          : null,
-      accountId: pickString(parsed.accountId),
-      email: pickString(parsed.email),
-    }
-  } catch {
-    return null
-  }
-}
-
-async function saveStoredCodexAuth(auth: StoredCodexAuth): Promise<void> {
-  await desktopContext
-    .getSecretStore()
-    .set(CODEX_AUTH_REF, JSON.stringify(auth))
-}
-
-async function refreshCodexAuthIfNeeded(
-  auth: StoredCodexAuth
-): Promise<StoredCodexAuth | null> {
-  if (!auth.refresh) return auth.access ? auth : null
-  if (auth.access && auth.expiresAt && auth.expiresAt > Date.now() + 60_000) {
-    return auth
-  }
-  const res = await fetch(`${CODEX_OAUTH_ISSUER}/oauth/token`, {
-    method: `POST`,
-    headers: { 'Content-Type': `application/x-www-form-urlencoded` },
-    body: new URLSearchParams({
-      grant_type: `refresh_token`,
-      refresh_token: auth.refresh,
-      client_id: CODEX_OAUTH_CLIENT_ID,
-    }).toString(),
-  })
-  if (!res.ok) return null
-  const next = codexAuthFromTokenResponse(
-    auth.source,
-    (await res.json()) as Record<string, unknown>,
-    auth
-  )
-  if (next) await saveStoredCodexAuth(next)
-  return next
-}
-
-async function syncCodexEnvironment(): Promise<void> {
-  process.env.ELECTRIC_CODEX_REQUIRE_OPT_IN = `1`
-  delete process.env.ELECTRIC_CODEX_ACCESS_TOKEN
-  const codex = settings.codex ?? { enabled: false, source: null }
-  if (!codex.enabled || !codex.source) return
-  const stored = await loadStoredCodexAuth()
-  if (!stored) return
-  const refreshed = await refreshCodexAuthIfNeeded(stored)
-  if (refreshed?.access) {
-    process.env.ELECTRIC_CODEX_ACCESS_TOKEN = refreshed.access
-  }
-}
-
-async function detectCodexSources(): Promise<Array<CodexDetectedSource>> {
-  const sources: Array<CodexDetectedSource> = []
-  const stored = await loadStoredCodexAuth()
-  if (stored?.access || stored?.refresh) {
-    sources.push({
-      source: `desktop-oauth`,
-      label: `Electric Agents ChatGPT / Codex sign-in`,
-      accountId: stored.accountId,
-      email: stored.email,
-      expiresAt: stored.expiresAt,
-    })
-  }
-  const cli = await loadDetectedCodexAuth(`codex-cli`)
-  if (cli?.access || cli?.refresh) {
-    sources.push({
-      source: `codex-cli`,
-      label: `ChatGPT / Codex CLI login`,
-      accountId: cli.accountId,
-      email: cli.email,
-      expiresAt: cli.expiresAt,
-    })
-  }
-  const opencode = await loadDetectedCodexAuth(`opencode`)
-  if (opencode?.access || opencode?.refresh) {
-    sources.push({
-      source: `opencode`,
-      label: `OpenCode ChatGPT / Codex login`,
-      accountId: opencode.accountId,
-      email: opencode.email,
-      expiresAt: opencode.expiresAt,
-    })
-  }
-  return sources
-}
-
-async function getCodexStatus(): Promise<CodexStatus> {
-  try {
-    const availableSources = await detectCodexSources()
-    const stored = await loadStoredCodexAuth()
-    const codex = settings.codex ?? { enabled: false, source: null }
-    return {
-      enabled: codex.enabled && Boolean(stored),
-      source: codex.enabled && stored ? codex.source : null,
-      availableSources,
-      accountId: stored?.accountId ?? null,
-      email: stored?.email ?? null,
-      expiresAt: stored?.expiresAt ?? null,
-      error: null,
-    }
-  } catch (error) {
-    return codexEmptyStatus(
-      error instanceof Error ? error.message : String(error)
-    )
-  }
+function getCodexStatus(): Promise<CodexStatus> {
+  return getCodexStatusForDeps(codexAuthDeps)
 }
 
 async function restartConnectedRuntimes(): Promise<void> {
-  await Promise.all(
-    settings.servers
-      .filter((server) => server.desiredState === `connected`)
-      .map((server) => restartRuntime(server.id))
-  )
-  // Any in-flight credential change has now been applied to the
-  // freshly-started runtime processes — clear the banner.
-  setCredentialsRestartPending(false)
+  await restartConnectedRuntimesForDeps(runtimeLifecycleDeps)
 }
 
 /**
@@ -567,10 +255,7 @@ async function restartConnectedRuntimes(): Promise<void> {
  * connected runtime whose env-var snapshot could now be stale.
  */
 function hasConnectedLocalRuntime(): boolean {
-  return settings.servers.some(
-    (server) =>
-      server.localRuntimeEnabled && server.desiredState === `connected`
-  )
+  return hasConnectedLocalRuntimeForDeps(runtimeLifecycleDeps)
 }
 
 /**
@@ -591,316 +276,18 @@ function setCredentialsRestartPending(value: boolean): void {
   refreshDesktopState()
 }
 
-async function enableCodexSource(
-  source: CodexAuthSource
-): Promise<CodexStatus> {
-  const auth = await loadDetectedCodexAuth(source)
-  if (!auth) {
-    throw new Error(`No ${source} Codex login was found.`)
-  }
-  const refreshed = await refreshCodexAuthIfNeeded(auth)
-  await saveStoredCodexAuth(refreshed ?? auth)
-  settings.codex = { enabled: true, source }
-  await saveSettings()
-  await syncCodexEnvironment()
-  markCredentialsDirty()
-  return getCodexStatus()
+function enableCodexSource(source: CodexAuthSource): Promise<CodexStatus> {
+  return enableCodexSourceForDeps(codexAuthDeps, source)
 }
 
-async function disableCodex(): Promise<CodexStatus> {
-  settings.codex = { enabled: false, source: null }
-  await desktopContext.getSecretStore().delete(CODEX_AUTH_REF)
-  await saveSettings()
-  await syncCodexEnvironment()
-  markCredentialsDirty()
-  return getCodexStatus()
+function disableCodex(): Promise<CodexStatus> {
+  return disableCodexForDeps(codexAuthDeps)
 }
 
-function base64Url(bytes: Buffer): string {
-  return bytes
-    .toString(`base64`)
-    .replace(/\+/g, `-`)
-    .replace(/\//g, `_`)
-    .replace(/=+$/, ``)
+function signInCodex(): Promise<CodexStatus | null> {
+  return signInCodexForDeps(codexAuthDeps)
 }
 
-/**
- * HTML for the small Electron window we show *while* the user
- * completes the Codex OAuth flow in their default browser. Spinner +
- * one-line explanation + a Cancel button (which just calls
- * `window.close()` — the BrowserWindow's `closed` listener does the
- * actual cancellation work).
- *
- * Inlined as a `data:` URL so we don't need a separate asset file or
- * a preload script — the page only needs `window.close()`, which
- * Electron allows for windows it created.
- */
-function codexSignInWaitingHtml(): string {
-  return `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<title>Sign in to ChatGPT / Codex</title>
-<style>
-  :root { color-scheme: light dark; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-    background: Canvas;
-    color: CanvasText;
-    margin: 0;
-    padding: 28px 32px;
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-    min-height: 100vh;
-    box-sizing: border-box;
-    -webkit-user-select: none;
-  }
-  h1 { font-size: 15px; font-weight: 600; margin: 0; }
-  p { margin: 0; line-height: 1.5; color: GrayText; font-size: 13px; }
-  .spinner {
-    width: 24px; height: 24px;
-    border-radius: 50%;
-    border: 3px solid color-mix(in oklab, CanvasText 12%, Canvas);
-    border-top-color: color-mix(in oklab, CanvasText 70%, Canvas);
-    animation: spin 0.8s linear infinite;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  .actions { margin-top: auto; display: flex; justify-content: flex-end; }
-  button {
-    font: inherit; font-weight: 500;
-    padding: 6px 14px; border-radius: 6px;
-    border: 1px solid color-mix(in oklab, CanvasText 18%, Canvas);
-    background: Canvas; color: CanvasText;
-    cursor: pointer;
-  }
-  button:hover { background: color-mix(in oklab, CanvasText 6%, Canvas); }
-</style>
-</head>
-<body>
-  <div class="spinner" aria-hidden="true"></div>
-  <h1>Waiting for sign-in…</h1>
-  <p>We've opened the OpenAI sign-in page in your default browser. After you finish there, this window will close automatically.</p>
-  <div class="actions">
-    <button type="button" onclick="window.close()">Cancel</button>
-  </div>
-</body>
-</html>`
-}
-
-/**
- * HTML page returned to the user's default browser by our loopback
- * OAuth listener after a successful sign-in. The user is *in their
- * real browser*, not Electron, so we can't reliably auto-close the
- * tab — we just show a friendly "you can close this" message and
- * trust the Electron app to take focus on its own once the auth
- * window closes.
- */
-function codexSignInSuccessHtml(): string {
-  return `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<title>Signed in to ChatGPT / Codex</title>
-<style>
-  :root { color-scheme: light dark; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-    background: Canvas;
-    color: CanvasText;
-    margin: 0;
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 32px;
-    box-sizing: border-box;
-  }
-  .card {
-    max-width: 420px;
-    text-align: center;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-  h1 { font-size: 18px; font-weight: 600; margin: 0; }
-  p { margin: 0; line-height: 1.5; color: GrayText; font-size: 14px; }
-</style>
-</head>
-<body>
-  <div class="card">
-    <h1>You're signed in</h1>
-    <p>You can close this tab and return to Electric Agents.</p>
-  </div>
-</body>
-</html>`
-}
-
-async function signInCodex(): Promise<CodexStatus | null> {
-  const verifier = base64Url(randomBytes(32))
-  const challenge = base64Url(createHash(`sha256`).update(verifier).digest())
-  const state = base64Url(randomBytes(32))
-  const redirectUri = `http://localhost:${CODEX_OAUTH_PORT}/auth/callback`
-  const authorizeUrl = `${CODEX_OAUTH_ISSUER}/oauth/authorize?${new URLSearchParams(
-    {
-      response_type: `code`,
-      client_id: CODEX_OAUTH_CLIENT_ID,
-      redirect_uri: redirectUri,
-      scope: `openid profile email offline_access`,
-      code_challenge: challenge,
-      code_challenge_method: `S256`,
-      id_token_add_organizations: `true`,
-      codex_cli_simplified_flow: `true`,
-      state,
-      originator: `electric-agents`,
-    }
-  ).toString()}`
-
-  const serverRef: { current: HttpServer | null } = { current: null }
-  const winRef: { current: BrowserWindow | null } = { current: null }
-  // Outcomes:
-  //   `string` — authorization code returned by the OAuth callback.
-  //   `null`   — user cancelled (closed the OAuth window).
-  // Anything else (timeout, server error, OAuth error response) still
-  // throws so the renderer can surface a real failure.
-  try {
-    const code = await new Promise<string | null>((resolve, reject) => {
-      let done = false
-      const timeout = setTimeout(() => {
-        reject(new Error(`Codex sign-in timed out.`))
-      }, 5 * 60_000)
-      const settle = (fn: () => void) => {
-        if (done) return
-        done = true
-        clearTimeout(timeout)
-        fn()
-      }
-      serverRef.current = createServer((req, res) => {
-        const url = new URL(req.url ?? `/`, redirectUri)
-        if (url.pathname !== `/auth/callback`) {
-          res.writeHead(404)
-          res.end(`Not found`)
-          return
-        }
-        const error =
-          url.searchParams.get(`error_description`) ??
-          url.searchParams.get(`error`)
-        const returnedState = url.searchParams.get(`state`)
-        const returnedCode = url.searchParams.get(`code`)
-        if (error || returnedState !== state || !returnedCode) {
-          res.writeHead(400, { 'Content-Type': `text/html` })
-          res.end(`<html><body>Codex authorization failed.</body></html>`)
-          settle(() =>
-            reject(new Error(error ?? `Invalid Codex OAuth callback.`))
-          )
-          return
-        }
-        res.writeHead(200, { 'Content-Type': `text/html; charset=utf-8` })
-        res.end(codexSignInSuccessHtml())
-        settle(() => resolve(returnedCode))
-      })
-      serverRef.current.listen(CODEX_OAUTH_PORT, `localhost`, () => {
-        // Embedding `auth.openai.com` inside an Electron BrowserWindow
-        // trips Cloudflare's bot fingerprinting (UA, JA3, navigator
-        // quirks) and the user gets stuck in a "Verify you are human"
-        // loop that never resolves. Hand the OAuth flow off to the
-        // user's *default* browser instead — that browser passes
-        // Cloudflare normally, and our loopback HTTP listener still
-        // captures the redirect because the redirect URI is
-        // `http://localhost:CODEX_OAUTH_PORT/auth/callback`.
-        //
-        // The Electron window is now just a small "Sign-in opened in
-        // your browser…" affordance with a spinner + Cancel button so
-        // the user has visible feedback that something is happening
-        // and a way to bail out without waiting for the timeout.
-        winRef.current = new BrowserWindow({
-          title: `Sign in to ChatGPT / Codex`,
-          width: 460,
-          height: 280,
-          resizable: false,
-          minimizable: false,
-          maximizable: false,
-          autoHideMenuBar: true,
-          webPreferences: {
-            contextIsolation: true,
-            nodeIntegration: false,
-            sandbox: true,
-          },
-        })
-        winRef.current.on(`closed`, () => {
-          winRef.current = null
-          // User dismissed the waiting window — treat as a quiet
-          // cancel so the renderer doesn't surface a scary error
-          // message. (If the OAuth callback already fired, `settle`
-          // is a no-op here.)
-          settle(() => resolve(null))
-        })
-        void winRef.current.loadURL(
-          `data:text/html;charset=utf-8,${encodeURIComponent(
-            codexSignInWaitingHtml()
-          )}`
-        )
-        void shell.openExternal(authorizeUrl).catch((err) => {
-          settle(() =>
-            reject(
-              err instanceof Error
-                ? err
-                : new Error(`Could not open browser for Codex sign-in.`)
-            )
-          )
-        })
-      })
-      serverRef.current.on(`error`, (error) => {
-        settle(() => reject(error))
-      })
-    })
-
-    if (code === null) return null
-
-    const res = await fetch(`${CODEX_OAUTH_ISSUER}/oauth/token`, {
-      method: `POST`,
-      headers: { 'Content-Type': `application/x-www-form-urlencoded` },
-      body: new URLSearchParams({
-        grant_type: `authorization_code`,
-        code,
-        redirect_uri: redirectUri,
-        client_id: CODEX_OAUTH_CLIENT_ID,
-        code_verifier: verifier,
-      }).toString(),
-    })
-    if (!res.ok) throw new Error(`Codex token exchange failed: ${res.status}`)
-    const auth = codexAuthFromTokenResponse(
-      `desktop-oauth`,
-      (await res.json()) as Record<string, unknown>
-    )
-    if (!auth) throw new Error(`Codex sign-in did not return usable tokens.`)
-    await saveStoredCodexAuth(auth)
-    settings.codex = { enabled: true, source: `desktop-oauth` }
-    await saveSettings()
-    await syncCodexEnvironment()
-    markCredentialsDirty()
-    return getCodexStatus()
-  } finally {
-    const currentWin = winRef.current
-    const currentServer = serverRef.current
-    if (currentWin && !currentWin.isDestroyed()) currentWin.close()
-    if (currentServer) {
-      try {
-        currentServer.close()
-      } catch {
-        // The server may have failed before it started listening.
-      }
-    }
-  }
-}
-
-// settings.json's `mcp.servers` mirrors the shape of `mcp.json`: an
-// object keyed by server name, with the entry itself omitting `name`.
-// We rewrite into the array form `BuiltinAgentsServer.extraMcpServers`
-// expects and surface friendly warnings on shape errors instead of
-// silently dropping the field. Schema-level validation (transport /
-// auth.mode / forbidden refs) still happens inside the registry's
-// `applyConfig`.
 function applyApiKeys(): void {
   applyApiKeysToEnv(apiKeys, desktopContext.envApiKeysSnapshot, process.env)
 }
@@ -951,98 +338,13 @@ async function applyInitialServerFromEnv(): Promise<void> {
 }
 
 async function loadSettings(): Promise<void> {
-  let shouldSave = false
-  try {
-    const raw = await readFile(settingsPath(), `utf8`)
-    const parsed = JSON.parse(raw) as Partial<DesktopSettings> & {
-      activeServer?: unknown
-      apiKeys?: unknown
-      version?: unknown
-    }
-    const legacyActiveServer = normalizeServer(parsed.activeServer)
-    const servers = normalizeServers(parsed.servers, legacyActiveServer?.url)
-    const parsedPullWakeRunnerId =
-      typeof parsed.pullWakeRunnerId === `string`
-        ? parsed.pullWakeRunnerId.trim()
-        : null
-    const pullWakeRunnerId = parsedPullWakeRunnerId || randomUUID()
-    if (!parsedPullWakeRunnerId) {
-      shouldSave = true
-    }
-    const defaultServerId =
-      typeof parsed.defaultServerId === `string` &&
-      servers.some((server) => server.id === parsed.defaultServerId)
-        ? parsed.defaultServerId
-        : (servers.find((server) => server.url === legacyActiveServer?.url)
-            ?.id ??
-          servers.find((server) => server.desiredState === `connected`)?.id ??
-          servers[0]?.id ??
-          null)
-    const apiKeysRef =
-      typeof parsed.apiKeysRef === `string` && parsed.apiKeysRef.trim()
-        ? parsed.apiKeysRef.trim()
-        : GLOBAL_API_KEYS_REF
-    Object.assign(settings, {
-      servers,
-      defaultServerId,
-      workingDirectory:
-        typeof parsed.workingDirectory === `string`
-          ? parsed.workingDirectory
-          : null,
-      apiKeysRef,
-      onboardingDismissed: parsed.onboardingDismissed === true,
-      codex: normalizeCodexSettings(parsed.codex),
-      mcp: normalizeMcp(parsed.mcp),
-      pullWakeRunnerId,
-    })
-    if (parsed.apiKeys !== undefined) {
-      Object.assign(apiKeys, normalizeApiKeys(parsed.apiKeys))
-      await saveApiKeysToSecret(
-        desktopContext.getSecretStore(),
-        apiKeysRef,
-        apiKeys
-      )
-      shouldSave = true
-    } else {
-      Object.assign(
-        apiKeys,
-        await loadApiKeysFromSecret(desktopContext.getSecretStore(), apiKeysRef)
-      )
-    }
-    shouldSave =
-      shouldSave ||
-      parsed.version !== SETTINGS_VERSION ||
-      parsed.activeServer !== undefined ||
-      parsed.apiKeys !== undefined ||
-      servers.some((server) => !(`id` in (server as object)))
-  } catch (err) {
-    console.error(`[agents-desktop] Failed to load settings:`, err)
-    Object.assign(settings, {
-      ...DEFAULT_SETTINGS,
-      pullWakeRunnerId: randomUUID(),
-    })
-    Object.assign(
-      apiKeys,
-      await loadApiKeysFromSecret(
-        desktopContext.getSecretStore(),
-        settings.apiKeysRef
-      )
-    )
-    shouldSave = true
-  }
-
-  if (
-    PULL_WAKE_RUNNER_ID &&
-    settings.pullWakeRunnerId !== PULL_WAKE_RUNNER_ID
-  ) {
-    settings.pullWakeRunnerId = PULL_WAKE_RUNNER_ID
-    shouldSave = true
-  }
-
-  for (const server of settings.servers) {
-    ensureRuntimeEntry(server)
-  }
-
+  const shouldSave = await loadDesktopSettings({
+    settings,
+    apiKeys,
+    getSecretStore: desktopContext.getSecretStore,
+    ensureRuntimeEntry,
+    pullWakeRunnerId: PULL_WAKE_RUNNER_ID,
+  })
   Object.assign(state, desktopStateForWindow(null))
   await applyInitialServerFromEnv()
   applyApiKeys()
@@ -1053,11 +355,7 @@ async function loadSettings(): Promise<void> {
 }
 
 async function saveSettings(): Promise<void> {
-  await mkdir(path.dirname(settingsPath()), { recursive: true })
-  await writeFile(
-    settingsPath(),
-    JSON.stringify(serializeSettings(settings), null, 2)
-  )
+  await saveDesktopSettings(settings)
 }
 
 function ensureRuntimeEntry(server: ServerConfig): RuntimeEntry {
@@ -1394,13 +692,7 @@ function showOrCreateWindow(): void {
 }
 
 async function stopExistingRuntime(): Promise<void> {
-  await Promise.all(
-    [...runtimeEntries.values()].map(async (entry) => {
-      await stopRuntimeEntry(entry)
-      entry.status =
-        entry.desiredState === `connected` ? `offline` : `disconnected`
-    })
-  )
+  await stopExistingRuntimeForDeps(runtimeLifecycleDeps)
 }
 
 function broadcastMcpSnapshot(
@@ -1428,371 +720,84 @@ async function handleAuthorizeUrl(
   })
 }
 
-function reconnectDelayMs(attempt: number): number {
-  const base = Math.min(
-    RECONNECT_MAX_MS,
-    RECONNECT_BASE_MS * Math.max(1, 2 ** Math.min(attempt, 5))
-  )
-  return Math.round(base * (0.8 + Math.random() * 0.4))
-}
-
-function scheduleReconnect(serverId: string): void {
-  const server = findServer(serverId)
-  const entry = server ? ensureRuntimeEntry(server) : null
-  if (!server || !entry || entry.desiredState !== `connected`) return
-  if (entry.reconnectTimer) clearTimeout(entry.reconnectTimer)
-  const delay = reconnectDelayMs(entry.reconnectAttempt)
-  entry.reconnectTimer = setTimeout(() => {
-    entry.reconnectTimer = null
-    void startRuntime(serverId)
-  }, delay)
-  refreshDesktopState()
+const runtimeLifecycleDeps: RuntimeLifecycleDeps = {
+  settings,
+  runtimeEntries,
+  windowSelections,
+  findServer,
+  ensureRuntimeEntry,
+  saveSettings,
+  refreshDesktopState,
+  setState,
+  setCredentialsRestartPending,
+  injectDevPrincipalHeaders,
+  configureRuntimeEnvironment,
+  applyApiKeys,
+  syncCodexEnvironment,
+  broadcastMcpSnapshot,
+  handleAuthorizeUrl,
+  getCloudAgentServers: desktopContext.getCloudAgentServers,
+  getCloudAuthState: () => desktopContext.services.cloudAuth?.getState(),
 }
 
 async function stopRuntimeEntry(entry: RuntimeEntry): Promise<void> {
-  entry.generation += 1
-  if (entry.reconnectTimer) {
-    clearTimeout(entry.reconnectTimer)
-    entry.reconnectTimer = null
-  }
-  if (entry.mcpUnsubscribe) {
-    entry.mcpUnsubscribe()
-    entry.mcpUnsubscribe = null
-  }
-  lastMcpSnapshots.delete(entry.serverId)
-  broadcastMcpSnapshot(entry.serverId, EMPTY_MCP_SNAPSHOT)
-  const current = entry.runtime
-  entry.runtime = null
-  entry.runtimeUrl = null
-  entry.runtimeError = null
-  entry.localRuntimeStatus = findServer(entry.serverId)?.localRuntimeEnabled
-    ? `stopped`
-    : `disabled`
-  if (current) {
-    await current.stop()
-  }
-}
-
-async function startRuntime(serverId: string): Promise<void> {
-  const activeServer = findServer(serverId)
-  if (!activeServer) return
-  const entry = ensureRuntimeEntry(activeServer)
-  if (entry.desiredState !== `connected`) return
-
-  await stopRuntimeEntry(entry)
-  if (entry.desiredState !== `connected`) return
-  const generation = ++entry.generation
-
-  entry.status = entry.reconnectAttempt > 0 ? `reconnecting` : `connecting`
-  entry.lastError = null
-  refreshDesktopState()
-
-  if (activeServer.source === `electric-cloud`) {
-    if (!activeServer.tenantId) {
-      entry.status = `error`
-      entry.lastError = `Cloud server ${activeServer.name} is missing a tenant id.`
-      refreshDesktopState()
-      return
-    }
-    try {
-      const prepared = await desktopContext
-        .getCloudAgentServers()
-        .prepareConnection(activeServer.tenantId)
-      if (prepared.url !== activeServer.url) {
-        activeServer.url = prepared.url
-        await saveSettings()
-      }
-    } catch (err) {
-      const cachedToken = desktopContext
-        .getCloudAgentServers()
-        .getAgentsToken(activeServer.tenantId)
-      if (!cachedToken) {
-        entry.status = `error`
-        entry.lastError = `Could not prepare cloud agents token for ${activeServer.name}: ${
-          err instanceof Error ? err.message : String(err)
-        }`
-        refreshDesktopState()
-        return
-      }
-      console.warn(`[agents-desktop] cloud agents token refresh failed:`, err)
-    }
-  }
-
-  const serverHealth = await checkAgentsServerHealth(activeServer.url, 4_000)
-  if (!serverHealth.ok) {
-    entry.status = `offline`
-    entry.lastError = `Could not reach agents-server at ${activeServer.url}: ${serverHealth.reason}.`
-    entry.reconnectAttempt += 1
-    scheduleReconnect(serverId)
-    return
-  }
-
-  if (!activeServer.localRuntimeEnabled) {
-    entry.status = `connected`
-    entry.localRuntimeStatus = `disabled`
-    entry.runtimeUrl = null
-    entry.runtimeError = null
-    entry.lastError = null
-    entry.reconnectAttempt = 0
-    entry.lastConnectedAt = Date.now()
-    refreshDesktopState()
-    return
-  }
-
-  const runnerId = PULL_WAKE_RUNNER_ID ?? settings.pullWakeRunnerId
-  if (!runnerId) {
-    throw new Error(`Desktop built-in agents require a pull-wake runner id`)
-  }
-  if (!settings.pullWakeRunnerId) {
-    settings.pullWakeRunnerId = runnerId
-    await saveSettings()
-  }
-  setState({ pullWakeRunnerId: runnerId })
-
-  const serverWithPrincipal = injectDevPrincipalHeaders(activeServer)
-  const runtimeHeaders = mergeHeaders(serverWithPrincipal.headers)
-  // For `electric-cloud` source servers, the cloud-agents-server
-  // authenticates each request via `x-electric-asserted-user-id`
-  // headers (injected by the undici / webRequest hooks). Register the
-  // runner under that user principal instead of the dev-local
-  // fallback used for unauthenticated local servers.
-  const cloudAuthUserId =
-    activeServer.source === `electric-cloud`
-      ? (desktopContext.services.cloudAuth?.getState().userId ?? null)
-      : null
-  const runnerOwnerPrincipal =
-    runnerOwnerPrincipalFromUserId(cloudAuthUserId) ??
-    runnerOwnerPrincipalFromHeaders(runtimeHeaders, PULL_WAKE_OWNER_PRINCIPAL)
-  console.info(
-    `[agents-desktop] Starting built-in agents runtime for server ${activeServer.url}`
-  )
-  console.info(`[agents-desktop] Pull-wake runner id: ${runnerId}`)
-  if (PULL_WAKE_REGISTER_RUNNER) {
-    console.info(
-      `[agents-desktop] Pull-wake runner registration enabled; owner principal: ${runnerOwnerPrincipal ?? `(derived from auth)`}`
-    )
-  } else {
-    console.info(
-      `[agents-desktop] Pull-wake runner registration skipped; runner must already be registered with the agents server.`
-    )
-  }
-
-  configureRuntimeEnvironment()
-  applyApiKeys()
-  await syncCodexEnvironment()
-  const { BuiltinAgentsServer } = await import(`@electric-ax/agents`)
-  const nextRuntime = new BuiltinAgentsServer({
-    agentServerUrl: activeServer.url,
-    workingDirectory: settings.workingDirectory ?? app.getPath(`home`),
-    extraMcpServers: settings.mcp?.servers,
-    loadProjectMcpConfig: true,
-    mcpOAuthRedirectBase: MCP_OAUTH_REDIRECT_BASE,
-    baseSkillsDir: AGENT_SKILLS_DIR,
-    openAuthorizeUrl: (url, server) => {
-      void handleAuthorizeUrl(serverId, url, server)
-    },
-    pullWake: {
-      runnerId,
-      registerRunner: PULL_WAKE_REGISTER_RUNNER,
-      ownerPrincipal: PULL_WAKE_REGISTER_RUNNER
-        ? runnerOwnerPrincipal
-        : undefined,
-      label: `Electric Agents Desktop`,
-      headers: runtimeHeaders,
-      claimHeaders: runtimeHeaders,
-      // For `electric-cloud` source servers the global undici
-      // interceptor adds `Authorization: Bearer <agents token>` on
-      // every outbound request. If the pull-wake runner default-
-      // stuffed the claim token into that same `authorization`
-      // header, our interceptor would overwrite it and the cloud
-      // server would never see the claim token → wake claim races
-      // would silently drop the new input ("no fresh wake input in
-      // catch-up"). Route the claim token to a separate header so
-      // the two channels don't collide. Local + manual servers keep
-      // the previous behavior (claim token in `authorization` only
-      // when an explicit auth header is present).
-      claimTokenHeader:
-        activeServer.source === `electric-cloud` ||
-        hasHeader(runtimeHeaders, `authorization`)
-          ? `electric-claim-token`
-          : undefined,
-    },
-  })
-  entry.runtime = nextRuntime
-  entry.localRuntimeStatus = `starting`
-  entry.runtimeError = null
-  refreshDesktopState()
-
-  try {
-    const runtimeUrl = await nextRuntime.start()
-    if (generation !== entry.generation) {
-      await nextRuntime.stop()
-      return
-    }
-    entry.status = `connected`
-    entry.localRuntimeStatus = `running`
-    entry.runtimeUrl = runtimeUrl
-    entry.runtimeError = null
-    entry.lastError = null
-    entry.reconnectAttempt = 0
-    entry.lastConnectedAt = Date.now()
-    refreshDesktopState()
-    // Subscribe to MCP registry state changes and forward to renderers.
-    // The handler is invoked synchronously with the initial empty
-    // snapshot on subscribe, so renderers always see *something*.
-    const reg = nextRuntime.mcpRegistry
-    if (reg) {
-      entry.mcpUnsubscribe = reg.subscribe((snapshot: RegistrySnapshot) => {
-        broadcastMcpSnapshot(serverId, snapshot)
-      })
-    }
-  } catch (error) {
-    if (entry.runtime === nextRuntime) {
-      entry.runtime = null
-    }
-    const startupNetworkError = formatStartupNetworkError(
-      error,
-      activeServer.url
-    )
-    entry.status = `error`
-    entry.localRuntimeStatus = `error`
-    entry.runtimeUrl = null
-    entry.runtimeError =
-      startupNetworkError ??
-      (error instanceof Error ? error.message : String(error))
-    entry.lastError =
-      startupNetworkError ??
-      (error instanceof Error ? error.message : String(error))
-    entry.reconnectAttempt += 1
-    scheduleReconnect(serverId)
-  }
+  await stopRuntimeEntryForDeps(runtimeLifecycleDeps, entry)
 }
 
 async function connectServer(
   serverId: string,
   options: ConnectServerOptions = {}
 ): Promise<void> {
-  const server = findServer(serverId)
-  if (!server) return
-  if (typeof options.localRuntimeEnabled === `boolean`) {
-    server.localRuntimeEnabled = options.localRuntimeEnabled
-  }
-  server.desiredState = `connected`
-  const entry = ensureRuntimeEntry(server)
-  entry.desiredState = `connected`
-  entry.reconnectAttempt = 0
-  await saveSettings()
-  await startRuntime(serverId)
+  await connectServerForDeps(runtimeLifecycleDeps, serverId, options)
 }
 
 async function disconnectServer(serverId: string): Promise<void> {
-  const server = findServer(serverId)
-  if (!server) return
-  server.desiredState = `disconnected`
-  const entry = ensureRuntimeEntry(server)
-  entry.desiredState = `disconnected`
-  await stopRuntimeEntry(entry)
-  entry.status = `disconnected`
-  entry.lastError = null
-  entry.reconnectAttempt = 0
-  await saveSettings()
-  refreshDesktopState()
+  await disconnectServerForDeps(runtimeLifecycleDeps, serverId)
 }
 
 async function forgetServer(serverId: string): Promise<void> {
-  const server = findServer(serverId)
-  if (!server) return
-  await disconnectServer(serverId)
-  settings.servers = settings.servers.filter((entry) => entry.id !== serverId)
-  runtimeEntries.delete(serverId)
-  if (server.tenantId) {
-    await desktopContext
-      .getCloudAgentServers()
-      .forgetAgentsToken(server.tenantId)
-  }
-  if (settings.defaultServerId === serverId) {
-    settings.defaultServerId = settings.servers[0]?.id ?? null
-  }
-  for (const [windowId, selectedServerId] of windowSelections) {
-    if (selectedServerId === serverId) {
-      windowSelections.set(windowId, settings.defaultServerId)
-    }
-  }
-  await saveSettings()
-  refreshDesktopState()
+  await forgetServerForDeps(runtimeLifecycleDeps, serverId)
 }
 
 async function restartRuntime(serverId?: string | null): Promise<void> {
-  const id =
+  await restartRuntimeForDeps(
+    runtimeLifecycleDeps,
     serverId ??
-    selectedServerIdForWindow(BrowserWindow.getFocusedWindow()) ??
-    settings.defaultServerId
-  if (!id) return
-  const server = findServer(id)
-  if (!server) return
-  server.desiredState = `connected`
-  const entry = ensureRuntimeEntry(server)
-  entry.desiredState = `connected`
-  entry.reconnectAttempt = 0
-  await saveSettings()
-  await startRuntime(id)
-  // Once at least one local runtime has been (re)started, the
-  // current env-var snapshot is in sync with saved credentials.
-  // Clear globally rather than per-runtime — if the user has
-  // multiple local runtimes, restarting one is enough of an
-  // explicit intent that we drop the banner.
-  if (server.localRuntimeEnabled) setCredentialsRestartPending(false)
+      selectedServerIdForWindow(BrowserWindow.getFocusedWindow()) ??
+      settings.defaultServerId
+  )
 }
 
 async function stopRuntime(serverId?: string | null): Promise<void> {
-  const id =
+  await stopRuntimeForDeps(
+    runtimeLifecycleDeps,
     serverId ??
-    selectedServerIdForWindow(BrowserWindow.getFocusedWindow()) ??
-    settings.defaultServerId
-  if (!id) return
-  await disconnectServer(id)
+      selectedServerIdForWindow(BrowserWindow.getFocusedWindow()) ??
+      settings.defaultServerId
+  )
 }
 
 async function getApiKeysStatus(): Promise<ApiKeysStatus> {
-  const saved = apiKeys
-  // Brave is optional (falls back to Anthropic built-in search), so
-  // it doesn't count toward "the app is configured" — the dialog
-  // only auto-opens when the user has no LLM provider key at all.
-  const hasAnyKey = Boolean(saved.anthropic || saved.openai || saved.deepseek)
-  // Only suggest env values for slots the user hasn't already saved
-  // — once they've persisted a key for a provider, the dialog should
-  // show their saved value rather than the (potentially different)
-  // environment value.
-  const suggested: ApiKeys = {
-    anthropic: saved.anthropic
-      ? null
-      : desktopContext.envApiKeysSnapshot.anthropic,
-    openai: saved.openai ? null : desktopContext.envApiKeysSnapshot.openai,
-    deepseek: saved.deepseek
-      ? null
-      : desktopContext.envApiKeysSnapshot.deepseek,
-    brave: saved.brave ? null : desktopContext.envApiKeysSnapshot.brave,
-  }
-  const codex = await getCodexStatus()
-  return { hasAnyKey: hasAnyKey || codex.enabled, saved, suggested, codex }
+  return getApiKeysStatusForDeps({
+    apiKeys,
+    launchEnv: desktopContext.envApiKeysSnapshot,
+    getCodexStatus,
+  })
 }
 
 async function setApiKeys(next: ApiKeys): Promise<void> {
-  const normalized = normalizeApiKeys(next)
-  const changed =
-    normalized.anthropic !== apiKeys.anthropic ||
-    normalized.openai !== apiKeys.openai ||
-    normalized.deepseek !== apiKeys.deepseek ||
-    normalized.brave !== apiKeys.brave
-  Object.assign(apiKeys, normalized)
-  await saveApiKeysToSecret(
-    desktopContext.getSecretStore(),
-    settings.apiKeysRef,
-    apiKeys
+  await setApiKeysForDeps(
+    {
+      apiKeys,
+      apiKeysRef: () => settings.apiKeysRef,
+      secretStore: desktopContext.getSecretStore(),
+      launchEnv: desktopContext.envApiKeysSnapshot,
+      saveSettings,
+      markCredentialsDirty,
+      env: process.env,
+    },
+    next
   )
-  applyApiKeys()
-  await saveSettings()
-  if (changed) markCredentialsDirty()
 }
 
 function getOnboardingState(): OnboardingState {
@@ -2187,7 +1192,7 @@ function registerIpcHandlers(): void {
     const win = BrowserWindow.fromWebContents(event.sender)
     const id =
       typeof serverId === `string` ? serverId : selectedServerIdForWindow(win)
-    return (id ? lastMcpSnapshots.get(id) : null) ?? EMPTY_MCP_SNAPSHOT
+    return getMcpSnapshot(lastMcpSnapshots, id)
   })
   // Mutation handlers — translate IPC calls into registry methods.
   // No-op gracefully when no runtime is running; renderer should not
@@ -2198,13 +1203,7 @@ function registerIpcHandlers(): void {
       const win = BrowserWindow.fromWebContents(event.sender)
       const id =
         typeof serverId === `string` ? serverId : selectedServerIdForWindow(win)
-      const reg = id ? runtimeEntries.get(id)?.runtime?.mcpRegistry : null
-      // Forces a fresh OAuth flow. The registry mutates the entry in
-      // place rather than deleting + re-adding, so the renderer's
-      // snapshot keeps showing the row throughout — no flicker.
-      await reg?.reauthorize(name).catch((err: unknown) => {
-        console.warn(`[agents-desktop] mcp-authorize ${name}:`, err)
-      })
+      await authorizeMcpServer(runtimeEntries, id, name)
     }
   )
   ipcMain.handle(
@@ -2213,12 +1212,7 @@ function registerIpcHandlers(): void {
       const win = BrowserWindow.fromWebContents(event.sender)
       const id =
         typeof serverId === `string` ? serverId : selectedServerIdForWindow(win)
-      const reg = id ? runtimeEntries.get(id)?.runtime?.mcpRegistry : null
-      const entry = reg?.get(name)
-      if (!reg || !entry) return
-      await reg.addServer(entry.config).catch((err: unknown) => {
-        console.warn(`[agents-desktop] mcp-reconnect ${name}:`, err)
-      })
+      await reconnectMcpServer(runtimeEntries, id, name)
     }
   )
   ipcMain.handle(
@@ -2227,12 +1221,7 @@ function registerIpcHandlers(): void {
       const win = BrowserWindow.fromWebContents(event.sender)
       const id =
         typeof serverId === `string` ? serverId : selectedServerIdForWindow(win)
-      await runtimeEntries
-        .get(id ?? ``)
-        ?.runtime?.mcpRegistry?.disable(name)
-        .catch((err: unknown) => {
-          console.warn(`[agents-desktop] mcp-disable ${name}:`, err)
-        })
+      await disableMcpServer(runtimeEntries, id, name)
     }
   )
   ipcMain.handle(
@@ -2241,12 +1230,7 @@ function registerIpcHandlers(): void {
       const win = BrowserWindow.fromWebContents(event.sender)
       const id =
         typeof serverId === `string` ? serverId : selectedServerIdForWindow(win)
-      await runtimeEntries
-        .get(id ?? ``)
-        ?.runtime?.mcpRegistry?.enable(name)
-        .catch((err: unknown) => {
-          console.warn(`[agents-desktop] mcp-enable ${name}:`, err)
-        })
+      await enableMcpServer(runtimeEntries, id, name)
     }
   )
 }

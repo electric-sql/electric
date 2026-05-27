@@ -1,5 +1,5 @@
 import type { SecretStore } from '../secret-store'
-import type { ApiKeys } from '../shared/types'
+import type { ApiKeys, ApiKeysStatus, CodexStatus } from '../shared/types'
 
 export const EMPTY_API_KEYS: ApiKeys = {
   anthropic: null,
@@ -7,6 +7,8 @@ export const EMPTY_API_KEYS: ApiKeys = {
   deepseek: null,
   brave: null,
 }
+
+export const GLOBAL_API_KEYS_REF = `api-keys:global`
 
 export function captureEnvApiKeys(env: NodeJS.ProcessEnv): ApiKeys {
   return {
@@ -92,4 +94,54 @@ export function applyApiKeysToEnv(
   resolveSlot(saved.openai, launchEnv.openai, `OPENAI_API_KEY`)
   resolveSlot(saved.deepseek, launchEnv.deepseek, `DEEPSEEK_API_KEY`)
   resolveSlot(saved.brave, launchEnv.brave, `BRAVE_SEARCH_API_KEY`)
+}
+
+export type ApiKeyStatusDeps = {
+  apiKeys: ApiKeys
+  launchEnv: ApiKeys
+  getCodexStatus: () => Promise<CodexStatus>
+}
+
+export async function getApiKeysStatus(
+  deps: ApiKeyStatusDeps
+): Promise<ApiKeysStatus> {
+  const saved = deps.apiKeys
+  // Brave is optional (falls back to Anthropic built-in search), so it doesn't
+  // count toward "the app is configured".
+  const hasAnyKey = Boolean(saved.anthropic || saved.openai || saved.deepseek)
+  const suggested: ApiKeys = {
+    anthropic: saved.anthropic ? null : deps.launchEnv.anthropic,
+    openai: saved.openai ? null : deps.launchEnv.openai,
+    deepseek: saved.deepseek ? null : deps.launchEnv.deepseek,
+    brave: saved.brave ? null : deps.launchEnv.brave,
+  }
+  const codex = await deps.getCodexStatus()
+  return { hasAnyKey: hasAnyKey || codex.enabled, saved, suggested, codex }
+}
+
+export type SetApiKeysDeps = {
+  apiKeys: ApiKeys
+  apiKeysRef: () => string
+  secretStore: SecretStore
+  launchEnv: ApiKeys
+  saveSettings: () => Promise<void>
+  markCredentialsDirty: () => void
+  env: NodeJS.ProcessEnv
+}
+
+export async function setApiKeys(
+  deps: SetApiKeysDeps,
+  next: ApiKeys
+): Promise<void> {
+  const normalized = normalizeApiKeys(next)
+  const changed =
+    normalized.anthropic !== deps.apiKeys.anthropic ||
+    normalized.openai !== deps.apiKeys.openai ||
+    normalized.deepseek !== deps.apiKeys.deepseek ||
+    normalized.brave !== deps.apiKeys.brave
+  Object.assign(deps.apiKeys, normalized)
+  await saveApiKeysToSecret(deps.secretStore, deps.apiKeysRef(), deps.apiKeys)
+  applyApiKeysToEnv(deps.apiKeys, deps.launchEnv, deps.env)
+  await deps.saveSettings()
+  if (changed) deps.markCredentialsDirty()
 }
