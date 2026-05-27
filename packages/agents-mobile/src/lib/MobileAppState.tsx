@@ -1,7 +1,8 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import * as Linking from 'expo-linking'
 import type { ReactNode } from 'react'
-import { cloudAuth } from './cloudAuth'
+import { cloudAuth, debugCloudAuth } from './cloudAuth'
 import { prepareServerHeaders } from './serverHeaders'
 
 const SERVER_URL_KEY = `electric-agents-mobile.server-url`
@@ -11,6 +12,7 @@ type MobileAppState = {
   loading: boolean
   serverUrl: string | null
   saveServerUrl: (next: string) => Promise<void>
+  launchUrl: string | null
   /**
    * Whether the user has finished or explicitly opted out of the
    * first-launch onboarding wizard (cloud sign-in + server URL).
@@ -30,20 +32,28 @@ export function MobileAppStateProvider({
 }): React.ReactElement {
   const [loading, setLoading] = useState(true)
   const [serverUrl, setServerUrl] = useState<string | null>(null)
+  const [launchUrl, setLaunchUrl] = useState<string | null>(null)
   const [onboardingDismissed, setOnboardingDismissedState] = useState(false)
 
   useEffect(() => {
     void (async () => {
-      const [storedUrl, storedOnboarding] = await Promise.all([
+      const [storedUrl, storedOnboarding, initialUrl] = await Promise.all([
         AsyncStorage.getItem(SERVER_URL_KEY),
         AsyncStorage.getItem(ONBOARDING_DISMISSED_KEY),
+        Linking.getInitialURL().catch(() => null),
       ])
       // Inject server headers BEFORE flipping `loading` to false so any
       // screen that mounts on the next render already has auth-fetch
       // headers registered. Otherwise a race window lets early fetches
       // go out unauthenticated and 401 against Cloud servers.
       await prepareServerHeaders(storedUrl)
+      debugCloudAuth(`mobileAppState:initialize`, {
+        storedUrl,
+        storedOnboarding,
+        initialUrl,
+      })
       setServerUrl(storedUrl)
+      setLaunchUrl(initialUrl)
       setOnboardingDismissedState(storedOnboarding === `true`)
       setLoading(false)
     })()
@@ -66,6 +76,7 @@ export function MobileAppStateProvider({
     () => ({
       loading,
       serverUrl,
+      launchUrl,
       saveServerUrl: async (next: string) => {
         await AsyncStorage.setItem(SERVER_URL_KEY, next)
         setServerUrl(next)
@@ -80,7 +91,7 @@ export function MobileAppStateProvider({
         setOnboardingDismissedState(next)
       },
     }),
-    [loading, serverUrl, onboardingDismissed]
+    [loading, serverUrl, launchUrl, onboardingDismissed]
   )
 
   return (

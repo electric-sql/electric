@@ -3,7 +3,7 @@ import { createCollection } from '@tanstack/react-db'
 import { electricCollectionOptions } from '@tanstack/electric-db-collection'
 import { useLiveQuery } from '@tanstack/react-db'
 import { z } from 'zod'
-import { cloudAuth, getCloudBaseUrl } from './cloudAuth'
+import { cloudAuth, debugCloudAuth, getCloudBaseUrl } from './cloudAuth'
 import type { CloudAuthState } from './cloudAuth'
 
 /**
@@ -91,6 +91,21 @@ const SHAPE_PATHS = {
   workspaces: `/api/internal/v1/workspaces`,
 } as const
 
+function shapePathLabel(input: RequestInfo | URL): string {
+  const raw =
+    typeof input === `string`
+      ? input
+      : input instanceof URL
+        ? input.toString()
+        : input.url
+  try {
+    const url = new URL(raw)
+    return `${url.pathname}${url.search}`
+  } catch {
+    return raw
+  }
+}
+
 /**
  * Inject the user's Cloud bearer token on every shape request. Resolves
  * the token from `cloudAuth.getToken()` on each call so token rotation
@@ -103,7 +118,28 @@ async function cloudFetch(
   const token = await cloudAuth.getToken()
   const headers = new Headers(init?.headers)
   if (token) headers.set(`Authorization`, `Bearer ${token}`)
-  return fetch(input, { ...init, headers })
+  const label = shapePathLabel(input)
+  debugCloudAuth(`cloudAgentServers:fetch:start`, {
+    label,
+    hasToken: !!token,
+    method: init?.method ?? `GET`,
+  })
+  let response: Response
+  try {
+    response = await fetch(input, { ...init, headers })
+  } catch (error) {
+    debugCloudAuth(`cloudAgentServers:fetch:error`, {
+      label,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    throw error
+  }
+  debugCloudAuth(`cloudAgentServers:fetch:response`, {
+    label,
+    status: response.status,
+    ok: response.ok,
+  })
+  return response
 }
 
 function createAgentServersCollection(dashboardUrl: string) {
@@ -217,10 +253,25 @@ export function useCloudAgentServers(): CloudAgentServersResult {
   const [authStatus, setAuthStatus] = useState<CloudAuthState[`status`]>(
     () => cloudAuth.getState().status
   )
+  const [sawUnauthorized, setSawUnauthorized] = useState(false)
   useEffect(() => {
     setAuthStatus(cloudAuth.getState().status)
     return cloudAuth.subscribe((s) => setAuthStatus(s.status))
   }, [])
+
+  useEffect(() => {
+    if (authStatus !== `signed-in`) {
+      setSawUnauthorized(false)
+      return
+    }
+    void cloudAuth.getToken().then((token) => {
+      debugCloudAuth(`cloudAgentServers:authToken`, {
+        authStatus,
+        hasToken: !!token,
+      })
+      if (!token) setSawUnauthorized(true)
+    })
+  }, [authStatus])
 
   const collections = useMemo(() => {
     if (authStatus !== `signed-in`) return null
@@ -257,9 +308,38 @@ export function useCloudAgentServers(): CloudAgentServersResult {
     [collections]
   )
 
+  useEffect(() => {
+    debugCloudAuth(`cloudAgentServers:hookState`, {
+      authStatus,
+      hasCollections: !!collections,
+      agentServersStatus,
+      counts: {
+        agentServers: agentServerRows.length,
+        environments: environmentRows.length,
+        projects: projectRows.length,
+        workspaces: workspaceRows.length,
+      },
+    })
+  }, [
+    authStatus,
+    collections,
+    agentServersStatus,
+    agentServerRows.length,
+    environmentRows.length,
+    projectRows.length,
+    workspaceRows.length,
+  ])
+
   return useMemo<CloudAgentServersResult>(() => {
     if (!collections) {
       return { status: `idle`, servers: [], error: null }
+    }
+    if (sawUnauthorized) {
+      return {
+        status: `unauthorized`,
+        servers: [],
+        error: `Cloud session unavailable for server discovery.`,
+      }
     }
     const environments = new Map(environmentRows.map((r) => [r.id, r]))
     const projects = new Map(projectRows.map((r) => [r.id, r]))
@@ -295,6 +375,11 @@ export function useCloudAgentServers(): CloudAgentServersResult {
       if (ea !== 0) return ea
       return a.name.localeCompare(b.name)
     })
+    debugCloudAuth(`cloudAgentServers:joinedServers`, {
+      status: agentServersStatus,
+      serverIds: servers.map((server) => server.id),
+      serverNames: servers.map((server) => server.name),
+    })
     const status: CloudAgentServerStatus =
       agentServersStatus === `loading` ? `loading` : `ready`
     return { status, servers, error: null }
@@ -305,5 +390,6 @@ export function useCloudAgentServers(): CloudAgentServersResult {
     projectRows,
     workspaceRows,
     agentServersStatus,
+    sawUnauthorized,
   ])
 }
