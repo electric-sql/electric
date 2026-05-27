@@ -217,10 +217,21 @@ export function useCloudAgentServers(): CloudAgentServersResult {
   const [authStatus, setAuthStatus] = useState<CloudAuthState[`status`]>(
     () => cloudAuth.getState().status
   )
+  const [sawUnauthorized, setSawUnauthorized] = useState(false)
   useEffect(() => {
     setAuthStatus(cloudAuth.getState().status)
     return cloudAuth.subscribe((s) => setAuthStatus(s.status))
   }, [])
+
+  useEffect(() => {
+    if (authStatus !== `signed-in`) {
+      setSawUnauthorized(false)
+      return
+    }
+    void cloudAuth.getToken().then((token) => {
+      if (!token) setSawUnauthorized(true)
+    })
+  }, [authStatus])
 
   const collections = useMemo(() => {
     if (authStatus !== `signed-in`) return null
@@ -260,6 +271,13 @@ export function useCloudAgentServers(): CloudAgentServersResult {
   return useMemo<CloudAgentServersResult>(() => {
     if (!collections) {
       return { status: `idle`, servers: [], error: null }
+    }
+    if (sawUnauthorized) {
+      return {
+        status: `unauthorized`,
+        servers: [],
+        error: `Cloud session unavailable for server discovery.`,
+      }
     }
     const environments = new Map(environmentRows.map((r) => [r.id, r]))
     const projects = new Map(projectRows.map((r) => [r.id, r]))
@@ -305,5 +323,6 @@ export function useCloudAgentServers(): CloudAgentServersResult {
     projectRows,
     workspaceRows,
     agentServersStatus,
+    sawUnauthorized,
   ])
 }
