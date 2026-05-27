@@ -1,4 +1,3 @@
-import { openAuthorizeWindow } from './oauth-window'
 import { SecretStore } from './secret-store'
 import {
   buildSavedServerHeaders,
@@ -21,6 +20,16 @@ import {
   checkAgentsServerHealth,
   formatStartupNetworkError,
 } from './runtime/health'
+import {
+  createConnectionState,
+  ensureRuntimeEntry as ensureRuntimeEntryInStore,
+  runtimeStatusForConnection,
+} from './runtime/entries'
+import {
+  broadcastMcpSnapshot as broadcastMcpSnapshotForDeps,
+  EMPTY_MCP_SNAPSHOT,
+  handleAuthorizeUrl as handleAuthorizeMcpUrl,
+} from './runtime/mcp'
 import {
   normalizeServer,
   normalizeServers,
@@ -48,7 +57,6 @@ import type {
   CodexDetectedSource,
   CodexStatus,
   ConnectServerOptions,
-  DesktopRuntimeStatus,
   DesktopAppearance,
   DesktopCommand,
   DesktopContextMenuRequest,
@@ -64,7 +72,6 @@ import type {
   RegistrySnapshot,
   RuntimeEntry,
   ServerConfig,
-  ServerConnectionState,
   ServerConnectionStatus,
 } from './shared/types'
 import {
@@ -1154,53 +1161,8 @@ async function saveSettings(): Promise<void> {
   )
 }
 
-function createConnectionState(entry: RuntimeEntry): ServerConnectionState {
-  return {
-    serverId: entry.serverId,
-    status: entry.status,
-    localRuntimeStatus: entry.localRuntimeStatus,
-    runtimeUrl: entry.runtimeUrl,
-    runtimeError: entry.runtimeError,
-    lastError: entry.lastError,
-    reconnectAttempt: entry.reconnectAttempt,
-    lastConnectedAt: entry.lastConnectedAt,
-  }
-}
-
 function ensureRuntimeEntry(server: ServerConfig): RuntimeEntry {
-  const existing = runtimeEntries.get(server.id)
-  if (existing) {
-    existing.desiredState = server.desiredState
-    if (!server.localRuntimeEnabled && !existing.runtime) {
-      existing.localRuntimeStatus = `disabled`
-    } else if (
-      server.localRuntimeEnabled &&
-      existing.localRuntimeStatus === `disabled`
-    ) {
-      existing.localRuntimeStatus = `stopped`
-    }
-    if (server.desiredState === `disconnected` && !existing.runtime) {
-      existing.status = `disconnected`
-    }
-    return existing
-  }
-  const entry: RuntimeEntry = {
-    serverId: server.id,
-    desiredState: server.desiredState,
-    status: server.desiredState === `connected` ? `offline` : `disconnected`,
-    localRuntimeStatus: server.localRuntimeEnabled ? `stopped` : `disabled`,
-    runtime: null,
-    runtimeUrl: null,
-    runtimeError: null,
-    reconnectTimer: null,
-    reconnectAttempt: 0,
-    generation: 0,
-    lastError: null,
-    lastConnectedAt: null,
-    mcpUnsubscribe: null,
-  }
-  runtimeEntries.set(server.id, entry)
-  return entry
+  return ensureRuntimeEntryInStore(runtimeEntries, server)
 }
 
 function selectedServerIdForWindow(win: BrowserWindow | null): string | null {
@@ -1209,23 +1171,6 @@ function selectedServerIdForWindow(win: BrowserWindow | null): string | null {
     if (existing && findServer(existing)) return existing
   }
   return defaultSelectedServerId()
-}
-
-function runtimeStatusForConnection(
-  entry: RuntimeEntry | null
-): DesktopRuntimeStatus {
-  if (!entry) return `stopped`
-  switch (entry.localRuntimeStatus) {
-    case `running`:
-      return `running`
-    case `starting`:
-      return `starting`
-    case `error`:
-      return `error`
-    case `disabled`:
-    case `stopped`:
-      return `stopped`
-  }
 }
 
 function connectionStatusLabel(status: ServerConnectionStatus): string {
@@ -1725,12 +1670,11 @@ function broadcastMcpSnapshot(
   serverId: string,
   snapshot: RegistrySnapshot
 ): void {
-  lastMcpSnapshots.set(serverId, snapshot)
-  for (const win of windows) {
-    if (!win.isDestroyed()) {
-      win.webContents.send(`desktop:mcp-state`, { serverId, snapshot })
-    }
-  }
+  broadcastMcpSnapshotForDeps(
+    { snapshots: lastMcpSnapshots, windows },
+    serverId,
+    snapshot
+  )
 }
 
 async function handleAuthorizeUrl(
@@ -1738,23 +1682,13 @@ async function handleAuthorizeUrl(
   url: string,
   server: string
 ): Promise<void> {
-  const reg = runtimeEntries.get(serverId)?.runtime?.mcpRegistry
-  if (!reg) return
-  const redirectUriPrefix = `${MCP_OAUTH_REDIRECT_BASE}/oauth/callback/${server}`
-  try {
-    const focused = BrowserWindow.getFocusedWindow() ?? undefined
-    const result = await openAuthorizeWindow({
-      server,
-      authorizeUrl: url,
-      redirectUriPrefix,
-      parent: focused ?? undefined,
-    })
-    await reg.finishAuth(result.server, result.code, result.state)
-  } catch (err) {
-    // Cancelled / closed without completing. The registry stays in
-    // `authenticating`; the user can click Authorize again to retry.
-    console.warn(`[agents-desktop] OAuth flow for ${server}:`, err)
-  }
+  await handleAuthorizeMcpUrl({
+    runtimeEntries,
+    redirectBase: MCP_OAUTH_REDIRECT_BASE,
+    serverId,
+    url,
+    server,
+  })
 }
 
 function reconnectDelayMs(attempt: number): number {
@@ -1789,7 +1723,7 @@ async function stopRuntimeEntry(entry: RuntimeEntry): Promise<void> {
     entry.mcpUnsubscribe = null
   }
   lastMcpSnapshots.delete(entry.serverId)
-  broadcastMcpSnapshot(entry.serverId, { seq: 0, servers: [] })
+  broadcastMcpSnapshot(entry.serverId, EMPTY_MCP_SNAPSHOT)
   const current = entry.runtime
   entry.runtime = null
   entry.runtimeUrl = null
@@ -2553,7 +2487,7 @@ function registerIpcHandlers(): void {
     const win = BrowserWindow.fromWebContents(event.sender)
     const id =
       typeof serverId === `string` ? serverId : selectedServerIdForWindow(win)
-    return (id ? lastMcpSnapshots.get(id) : null) ?? { seq: 0, servers: [] }
+    return (id ? lastMcpSnapshots.get(id) : null) ?? EMPTY_MCP_SNAPSHOT
   })
   // Mutation handlers — translate IPC calls into registry methods.
   // No-op gracefully when no runtime is running; renderer should not
