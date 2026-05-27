@@ -10,4 +10,4 @@
 
 Treat Electric Agents server URLs as opaque tenant-scoped base URLs rooted at `/t/<tenant-id>/v1`, move observation stream ensure endpoints under `/_electric/observations/*/ensure-stream`, rename the pre-alpha entity/cron/schema/tag/docs APIs to their Electric Agents names, add a non-interactive `electric agents view` transcript command, and make Horton title extraction work with lightweight desktop inbox collection facades.
 
-Resume pull-wake runners from their persisted wake-stream checkpoints and send the done callback for completed wake checkpoints during graceful shutdown, preventing desktop reloads from re-claiming already completed work.
+Send the done callback for completed wake checkpoints during graceful shutdown, preventing desktop reloads from leaving already completed DS subscription claims pending.

@@ -141,33 +141,6 @@ describe(`runner routes`, () => {
     )
   })
 
-  it(`returns the persisted wake stream offset when registering a runner`, async () => {
-    const ctx = buildContext()
-    vi.mocked(
-      ctx.entityManager.registry.getRunnerDiagnostics
-    ).mockResolvedValue({
-      runner_id: `runner-1`,
-      owner_principal: `/principal/user%3Aowner%40example.com`,
-      wake_stream_offset: `42`,
-      last_seen_at: new Date(0).toISOString(),
-      liveness_lease_expires_at: new Date(60_000).toISOString(),
-      updated_at: new Date(0).toISOString(),
-    })
-
-    const response = await globalRouter.fetch(
-      request(`POST`, `/_electric/runners`, {
-        id: `runner-1`,
-        owner_principal: `/principal/user%3Aowner%40example.com`,
-        label: `Local runner`,
-      }),
-      ctx
-    )
-
-    expect(response.status).toBe(201)
-    const body = (await response.json()) as Record<string, unknown>
-    expect(body.wake_stream_offset).toBe(`42`)
-  })
-
   it(`canonicalizes legacy owner_principal URLs on registration`, async () => {
     const ctx = buildContext()
 

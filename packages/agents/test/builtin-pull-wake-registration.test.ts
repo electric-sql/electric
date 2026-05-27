@@ -1,5 +1,4 @@
 import { createServer, type IncomingMessage, type Server } from 'node:http'
-import { createPullWakeRunner } from '@electric-ax/agents-runtime'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { BuiltinAgentsServer } from '../src/server'
 
@@ -31,11 +30,7 @@ async function readBody(req: IncomingMessage): Promise<string> {
   return Buffer.concat(chunks).toString(`utf8`)
 }
 
-async function startRecordingAgentsServer(
-  options: {
-    runnerResponse?: Record<string, unknown>
-  } = {}
-): Promise<{
+async function startRecordingAgentsServer(): Promise<{
   url: string
   entityTypeBodies: Array<Record<string, unknown>>
   requestUrls: Array<string>
@@ -51,7 +46,7 @@ async function startRecordingAgentsServer(
     }
     if (req.method === `POST` && req.url?.endsWith(`/_electric/runners`)) {
       res.writeHead(201, { 'content-type': `application/json` })
-      res.end(JSON.stringify(options.runnerResponse ?? {}))
+      res.end(`{}`)
       return
     }
 
@@ -89,7 +84,6 @@ describe(`BuiltinAgentsServer pull-wake registration`, () => {
     builtinServer = null
     await agentsServer?.stop().catch(() => {})
     agentsServer = null
-    vi.mocked(createPullWakeRunner).mockClear()
   })
 
   it(`does not store the local pull-wake runner as a type default`, async () => {
@@ -125,23 +119,6 @@ describe(`BuiltinAgentsServer pull-wake registration`, () => {
     )
     expect(agentsServer.requestUrls).toContain(
       `/t/svc-agent-1/v1/_electric/runners`
-    )
-  })
-
-  it(`starts pull-wake from the offset returned by runner registration`, async () => {
-    agentsServer = await startRecordingAgentsServer({
-      runnerResponse: { wake_stream_offset: `77` },
-    })
-    builtinServer = new BuiltinAgentsServer({
-      agentServerUrl: agentsServer.url,
-      mockStreamFn,
-      pullWake: { runnerId: `test-runner`, registerRunner: true },
-    })
-
-    await builtinServer.start()
-
-    expect(createPullWakeRunner).toHaveBeenCalledWith(
-      expect.objectContaining({ offset: `77` })
     )
   })
 })
