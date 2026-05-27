@@ -1,6 +1,7 @@
 import { BrowserWindow } from 'electron'
 import type { DesktopAppContext } from './context'
 import * as AppLifecycle from './lifecycle'
+import * as LoginItems from './login-items'
 import * as CloudAuthInjection from '../cloud/auth-injection'
 import * as ServerFetch from '../cloud/server-fetch'
 import { createCredentialsController } from '../credentials/controller'
@@ -274,6 +275,21 @@ export function createDesktopMainController(ctx: DesktopAppContext) {
       quitApp,
     })
 
+  const getLaunchAtLoginStatus = () => LoginItems.getLaunchAtLoginStatus()
+
+  const setLaunchAtLogin = async (enabled: boolean) => {
+    const status = await LoginItems.setLaunchAtLogin(enabled)
+    if (!status.supported) return status
+
+    settings.launchAtLogin = enabled
+    await saveSettings()
+    return status
+  }
+
+  const syncLaunchAtLoginSetting = async (): Promise<void> => {
+    await LoginItems.setLaunchAtLogin(settings.launchAtLogin === true)
+  }
+
   const applyNativeAppearance = (appearance: DesktopAppearance): void => {
     AppLifecycle.applyNativeAppearance(ctx, appearance)
   }
@@ -359,6 +375,8 @@ export function createDesktopMainController(ctx: DesktopAppContext) {
     lastMcpSnapshots,
     getCloudAuth: ctx.getCloudAuth,
     getCloudAgentServers: ctx.getCloudAgentServers,
+    getLaunchAtLoginStatus,
+    setLaunchAtLogin,
   }
 
   const loadSettings = (): Promise<void> =>
@@ -434,6 +452,7 @@ export function createDesktopMainController(ctx: DesktopAppContext) {
     buildApplicationMenu,
     createWindow,
     showOrCreateWindow,
+    syncLaunchAtLoginSetting,
     connectConfiguredServers,
     startDiscoveryLoop: localDiscovery.startDiscoveryLoop,
     quitApp,

@@ -159,6 +159,12 @@ export interface OnboardingState {
   signedIn: boolean
 }
 
+export interface LaunchAtLoginStatus {
+  supported: boolean
+  enabled: boolean
+  reason: string | null
+}
+
 /**
  * Commands fired from the Electron application menu / tray over the
  * `desktop:command` IPC channel. The renderer's command handler (see
@@ -308,6 +314,8 @@ declare global {
       codexDisable?: () => Promise<CodexStatus>
       restartLocalRuntimes?: () => Promise<void>
       clearAllLocalData?: () => Promise<void>
+      getLaunchAtLoginStatus?: () => Promise<LaunchAtLoginStatus>
+      setLaunchAtLogin?: (enabled: boolean) => Promise<LaunchAtLoginStatus>
       getOnboardingState?: () => Promise<OnboardingState>
       setOnboardingDismissed?: (dismissed: boolean) => Promise<void>
       getWorkingDirectory?: () => Promise<string | null>
@@ -532,6 +540,16 @@ export async function restartLocalRuntimes(): Promise<void> {
 
 export async function clearAllLocalData(): Promise<void> {
   await window.electronAPI?.clearAllLocalData?.()
+}
+
+export async function loadLaunchAtLoginStatus(): Promise<LaunchAtLoginStatus | null> {
+  return (await window.electronAPI?.getLaunchAtLoginStatus?.()) ?? null
+}
+
+export async function setLaunchAtLogin(
+  enabled: boolean
+): Promise<LaunchAtLoginStatus | null> {
+  return (await window.electronAPI?.setLaunchAtLogin?.(enabled)) ?? null
 }
 
 export async function loadOnboardingState(): Promise<OnboardingState | null> {

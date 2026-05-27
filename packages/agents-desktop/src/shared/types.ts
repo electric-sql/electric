@@ -111,10 +111,17 @@ export type DesktopSettings = {
   defaultServerId: string | null
   workingDirectory: string | null
   apiKeysRef: string
+  launchAtLogin?: boolean
   codex?: CodexSettings
   onboardingDismissed?: boolean
   mcp?: { servers: Array<McpServerConfig> }
   pullWakeRunnerId?: string
+}
+
+export type LaunchAtLoginStatus = {
+  supported: boolean
+  enabled: boolean
+  reason: string | null
 }
 
 export type RuntimeEntry = {

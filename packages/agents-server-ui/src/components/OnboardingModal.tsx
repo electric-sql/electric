@@ -10,6 +10,7 @@ import {
   EyeOff,
   Github,
   Laptop,
+  LogIn,
   Plug,
   Server,
   Sparkles,
@@ -22,11 +23,13 @@ import {
   loadApiKeysStatus,
   loadCloudAuthState,
   loadDesktopState,
+  loadLaunchAtLoginStatus,
   loadOnboardingState,
   onCloudAuthStateChanged,
   prepareCloudAgentServerConnection,
   restartLocalRuntimes,
   saveApiKeys as persistApiKeys,
+  setLaunchAtLogin,
   setOnboardingDismissed,
   type ApiKeys,
   type ApiKeysStatus,
@@ -34,20 +37,31 @@ import {
   type ConnectServerOptions,
   type CodexAuthSource,
   type CodexStatus,
+  type LaunchAtLoginStatus,
 } from '../lib/server-connection'
 import {
   useAvailableServers,
   type AvailableServer,
 } from '../hooks/useAvailableServers'
 import { useServerConnection } from '../hooks/useServerConnection'
-import { Button, Dialog, Icon, IconButton, Input, Link, Text } from '../ui'
+import {
+  Button,
+  Dialog,
+  Icon,
+  IconButton,
+  Input,
+  Link,
+  Switch,
+  Text,
+} from '../ui'
 import styles from './OnboardingModal.module.css'
 
-type Step = `cloud` | `keys` | `server`
+type Step = `cloud` | `keys` | `config` | `server`
 
-const STEPS: ReadonlyArray<{ id: Step; label: string }> = [
+const BASE_STEPS: ReadonlyArray<{ id: Step; label: string }> = [
   { id: `cloud`, label: `Cloud` },
   { id: `keys`, label: `Models` },
+  { id: `config`, label: `Config` },
   { id: `server`, label: `Server` },
 ]
 
@@ -122,28 +136,44 @@ export function OnboardingModal(): React.ReactElement | null {
   const [step, setStep] = useState<Step>(`cloud`)
   const [cloudState, setCloudState] = useState<CloudAuthState | null>(null)
   const [keysStatus, setKeysStatus] = useState<ApiKeysStatus | null>(null)
+  const [launchAtLoginStatus, setLaunchAtLoginStatus] =
+    useState<LaunchAtLoginStatus | null>(null)
+  const [launchAtLoginEnabled, setLaunchAtLoginEnabled] = useState(false)
   const [bootstrapped, setBootstrapped] = useState(false)
+  const configAvailable = launchAtLoginStatus?.supported === true
+  const steps = useMemo(
+    () =>
+      configAvailable
+        ? BASE_STEPS
+        : BASE_STEPS.filter((candidate) => candidate.id !== `config`),
+    [configAvailable]
+  )
 
   useEffect(() => {
     if (!isDesktop) return
     let cancelled = false
 
     void (async () => {
-      const [onboarding, cloud, keys] = await Promise.all([
+      const [onboarding, cloud, keys, launchAtLogin] = await Promise.all([
         loadOnboardingState(),
         loadCloudAuthState(),
         loadApiKeysStatus(),
+        loadLaunchAtLoginStatus(),
       ])
       if (cancelled) return
       setCloudState(cloud)
       setKeysStatus(keys)
+      setLaunchAtLoginStatus(launchAtLogin)
+      setLaunchAtLoginEnabled(launchAtLogin?.enabled ?? false)
       setBootstrapped(true)
 
       if (!onboarding || onboarding.dismissed) return
       setStep(
         onboarding.signedIn
           ? onboarding.hasAnyKey
-            ? `server`
+            ? launchAtLogin?.supported
+              ? `config`
+              : `server`
             : `keys`
           : `cloud`
       )
@@ -216,7 +246,7 @@ export function OnboardingModal(): React.ReactElement | null {
       }}
     >
       <Dialog.Content maxWidth={640} className={styles.content}>
-        <StepIndicator step={step} />
+        <StepIndicator step={step} steps={steps} />
         <div className={styles.body}>
           {step === `cloud` && (
             <CloudStep
@@ -230,13 +260,23 @@ export function OnboardingModal(): React.ReactElement | null {
               keysStatus={keysStatus}
               onKeysStatusChange={setKeysStatus}
               onBack={() => setStep(`cloud`)}
+              onContinue={() => setStep(configAvailable ? `config` : `server`)}
+            />
+          )}
+          {step === `config` && configAvailable && (
+            <ConfigStep
+              launchAtLoginEnabled={launchAtLoginEnabled}
+              onLaunchAtLoginEnabledChange={setLaunchAtLoginEnabled}
+              onBack={() => setStep(`keys`)}
               onContinue={() => setStep(`server`)}
             />
           )}
           {step === `server` && (
             <ServerStep
               cloudState={cloudState}
-              onBack={() => setStep(`keys`)}
+              onBack={() => setStep(configAvailable ? `config` : `keys`)}
+              applyLaunchAtLogin={configAvailable}
+              launchAtLoginEnabled={launchAtLoginEnabled}
               onFinish={() => {
                 void closeModal()
               }}
@@ -245,6 +285,73 @@ export function OnboardingModal(): React.ReactElement | null {
         </div>
       </Dialog.Content>
     </Dialog.Root>
+  )
+}
+
+function ConfigStep({
+  launchAtLoginEnabled,
+  onLaunchAtLoginEnabledChange,
+  onBack,
+  onContinue,
+}: {
+  launchAtLoginEnabled: boolean
+  onLaunchAtLoginEnabledChange: (enabled: boolean) => void
+  onBack: () => void
+  onContinue: () => void
+}): React.ReactElement {
+  return (
+    <>
+      <StepHeader
+        title="Config"
+        description="Choose how Electric Agents should run on this machine."
+      />
+      <Section>
+        <SectionRow>
+          <span className={styles.iconCircle}>
+            <Icon icon={LogIn} size={2} />
+          </span>
+          <label className={styles.rowText} style={{ cursor: `pointer` }}>
+            <span className={styles.rowTitle}>Open at login</span>
+            <Text size={1} tone="muted">
+              Start Electric Agents when you sign in and keep it available from
+              the system tray.
+            </Text>
+          </label>
+          <span className={styles.rowAside}>
+            <Switch
+              checked={launchAtLoginEnabled}
+              onCheckedChange={onLaunchAtLoginEnabledChange}
+              ariaLabel="Open Electric Agents at login"
+            />
+          </span>
+        </SectionRow>
+      </Section>
+      <Footer
+        leading={
+          <Button
+            type="button"
+            variant="ghost"
+            tone="neutral"
+            size={2}
+            onClick={onBack}
+          >
+            Back
+          </Button>
+        }
+        trailing={
+          <Button
+            type="button"
+            variant="solid"
+            tone="accent"
+            size={2}
+            onClick={onContinue}
+          >
+            Continue
+            <Icon icon={ArrowRight} size={2} />
+          </Button>
+        }
+      />
+    </>
   )
 }
 
@@ -736,17 +843,42 @@ function ProviderItem({
 function ServerStep({
   cloudState,
   onBack,
+  applyLaunchAtLogin,
+  launchAtLoginEnabled,
   onFinish,
 }: {
   cloudState: CloudAuthState | null
   onBack: () => void
-  onFinish: () => void
+  applyLaunchAtLogin: boolean
+  launchAtLoginEnabled: boolean
+  onFinish: () => void | Promise<void>
 }): React.ReactElement {
   const { servers } = useAvailableServers()
   const { addServer, connectServer, setActiveServer } = useServerConnection()
   const [serverError, setServerError] = useState<string | null>(null)
   const [connectingKey, setConnectingKey] = useState<string | null>(null)
   const cloudSignedIn = cloudState?.status === `signed-in`
+
+  const finish = async (): Promise<void> => {
+    setServerError(null)
+    if (applyLaunchAtLogin) {
+      try {
+        const status = await setLaunchAtLogin(launchAtLoginEnabled)
+        if (status && !status.supported) {
+          setServerError(status.reason ?? `Open at login is not supported.`)
+          return
+        }
+      } catch (error) {
+        setServerError(
+          error instanceof Error
+            ? error.message
+            : `Could not enable open at login.`
+        )
+        return
+      }
+    }
+    await onFinish()
+  }
 
   const connectAvailableServer = async (item: AvailableServer) => {
     setServerError(null)
@@ -756,7 +888,7 @@ function ServerStep({
       if (item.server) {
         setActiveServer(item.server)
         connectServer(item.server.id, options)
-        onFinish()
+        await finish()
         return
       }
 
@@ -776,7 +908,7 @@ function ServerStep({
           },
           options
         )
-        onFinish()
+        await finish()
         return
       }
 
@@ -791,7 +923,7 @@ function ServerStep({
           },
           options
         )
-        onFinish()
+        await finish()
       }
     } catch (error) {
       setServerError(
@@ -882,7 +1014,9 @@ function ServerStep({
             variant="ghost"
             tone="neutral"
             size={2}
-            onClick={onFinish}
+            onClick={() => {
+              void finish()
+            }}
           >
             Skip for now
           </Button>
@@ -1008,12 +1142,18 @@ function Footer({
   )
 }
 
-function StepIndicator({ step }: { step: Step }): React.ReactElement {
-  const activeIndex = STEPS.findIndex((candidate) => candidate.id === step)
+function StepIndicator({
+  step,
+  steps,
+}: {
+  step: Step
+  steps: ReadonlyArray<{ id: Step; label: string }>
+}): React.ReactElement {
+  const activeIndex = steps.findIndex((candidate) => candidate.id === step)
 
   return (
     <div className={styles.steps} aria-label="Onboarding progress">
-      {STEPS.map((candidate, index) => {
+      {steps.map((candidate, index) => {
         const active = candidate.id === step
         const complete = index < activeIndex
         return (

@@ -16,6 +16,7 @@ import type {
   DesktopServerFetchResponse,
   DesktopState,
   DiscoveredServer,
+  LaunchAtLoginStatus,
   OnboardingState,
   ServerConfig,
 } from './shared/types'
@@ -166,6 +167,10 @@ const api = {
     ipcRenderer.invoke(`desktop:restart-local-runtimes`),
   clearAllLocalData: (): Promise<void> =>
     ipcRenderer.invoke(`desktop:clear-all-local-data`),
+  getLaunchAtLoginStatus: (): Promise<LaunchAtLoginStatus> =>
+    ipcRenderer.invoke(`desktop:get-launch-at-login`),
+  setLaunchAtLogin: (enabled: boolean): Promise<LaunchAtLoginStatus> =>
+    ipcRenderer.invoke(`desktop:set-launch-at-login`, enabled),
   getOnboardingState: (): Promise<OnboardingState> =>
     ipcRenderer.invoke(`desktop:get-onboarding-state`),
   setOnboardingDismissed: (dismissed: boolean): Promise<void> =>
