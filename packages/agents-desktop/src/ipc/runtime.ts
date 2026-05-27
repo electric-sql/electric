@@ -1,8 +1,21 @@
 import { BrowserWindow, ipcMain } from 'electron'
-import type { ConnectServerOptions } from '../shared/types'
-import type { DesktopIpcDeps } from './types'
+import type { ConnectServerOptions, DesktopState } from '../shared/types'
 
-export function registerRuntimeIpcHandlers(deps: DesktopIpcDeps): void {
+export type RuntimeIpcDeps = {
+  state: DesktopState
+  selectedServerIdForWindow: (win: BrowserWindow | null) => string | null
+  connectServer: (
+    serverId: string,
+    options?: ConnectServerOptions
+  ) => Promise<void>
+  disconnectServer: (serverId: string) => Promise<void>
+  forgetServer: (serverId: string) => Promise<void>
+  restartRuntime: (serverId?: string | null) => Promise<void>
+  stopRuntime: (serverId?: string | null) => Promise<void>
+  runDiscovery: () => Promise<void>
+}
+
+export function registerRuntimeIpcHandlers(deps: RuntimeIpcDeps): void {
   ipcMain.handle(
     `desktop:connect-server`,
     async (_event, serverId, options?: ConnectServerOptions) => {

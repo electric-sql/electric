@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
-import type { SecretStore } from '../secret-store'
+import type { SecretStore } from '../services/secret-store'
 import type { McpServerConfig } from '../shared/types'
 import type {
   ApiKeys,

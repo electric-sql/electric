@@ -2,6 +2,7 @@ import {
   DISCOVERY_INTERVAL_MS,
   DISCOVERY_PORTS,
   DISCOVERY_TIMEOUT_MS,
+  localDiscoveryUrl,
 } from '../shared/constants'
 import { checkAgentsServerHealth } from '../runtime/health'
 import type {
@@ -53,7 +54,7 @@ export function createLocalDiscoveryLoop(
       const results = await Promise.all(
         DISCOVERY_PORTS.map(async (port) => {
           if (skipPorts.has(String(port))) return null
-          const url = `http://127.0.0.1:${port}`
+          const url = localDiscoveryUrl(port)
           const ok = await probeAgentsServer(url)
           return ok ? { url, port, lastSeen: Date.now() } : null
         })

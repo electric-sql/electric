@@ -1,8 +1,29 @@
 import { dialog, ipcMain } from 'electron'
-import type { ApiKeys, CodexAuthSource } from '../shared/types'
-import type { DesktopIpcDeps } from './types'
+import type {
+  ApiKeys,
+  CodexAuthSource,
+  OnboardingState,
+  ServerConfig,
+} from '../shared/types'
 
-export function registerCredentialsIpcHandlers(deps: DesktopIpcDeps): void {
+export type CredentialsIpcDeps = {
+  settings: {
+    servers: Array<ServerConfig>
+    workingDirectory?: string | null
+  }
+  getApiKeysStatus: () => Promise<unknown>
+  setApiKeys: (keys: ApiKeys) => Promise<void>
+  signInCodex: () => Promise<unknown>
+  enableCodexSource: (source: CodexAuthSource) => Promise<unknown>
+  disableCodex: () => Promise<unknown>
+  restartConnectedRuntimes: () => Promise<void>
+  clearAllLocalDataAndRelaunch: () => Promise<void>
+  getOnboardingState: () => OnboardingState
+  setOnboardingDismissed: (dismissed: boolean) => Promise<void>
+  chooseWorkingDirectory: () => Promise<string | null | undefined>
+}
+
+export function registerCredentialsIpcHandlers(deps: CredentialsIpcDeps): void {
   ipcMain.handle(`desktop:get-api-keys-status`, () => deps.getApiKeysStatus())
   ipcMain.handle(`desktop:save-api-keys`, async (_event, keys: ApiKeys) => {
     await deps.setApiKeys(keys)

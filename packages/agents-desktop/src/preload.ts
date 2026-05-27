@@ -19,8 +19,8 @@ import type {
   OnboardingState,
   ServerConfig,
 } from './shared/types'
-import type { CloudAuthProvider, CloudAuthState } from './cloud-auth'
-import type { CloudAgentServersState } from './cloud-agent-servers'
+import type { CloudAgentServersState } from './cloud/cloud-agent-servers'
+import type { CloudAuthProvider, CloudAuthState } from './cloud/cloud-auth'
 
 // The Vite desktop build already stamps `<html data-electric-desktop="true">`
 // into the index, so CSS that targets desktop broadly matches from the first

@@ -1,4 +1,5 @@
 import { BrowserWindow, ipcMain } from 'electron'
+import { getNavigationState, navigateHistory } from '../windows/navigation'
 import type {
   DesktopAppearance,
   DesktopContextMenuRequest,
@@ -7,9 +8,23 @@ import type {
   DesktopMenuState,
   DesktopNavigationState,
 } from '../shared/types'
-import type { DesktopIpcDeps } from './types'
 
-export function registerChromeIpcHandlers(deps: DesktopIpcDeps): void {
+export type ChromeIpcDeps = {
+  applyNativeAppearance: (appearance: DesktopAppearance) => void
+  showSelectionContextMenu: (
+    win: BrowserWindow,
+    request: DesktopContextMenuRequest
+  ) => void
+  popupApplicationMenuSection: (
+    win: BrowserWindow,
+    section: DesktopMenuSection,
+    bounds: DesktopMenuPopupBounds,
+    state: DesktopMenuState
+  ) => void
+  popupAppIconMenu: (win: BrowserWindow, bounds: DesktopMenuPopupBounds) => void
+}
+
+export function registerChromeIpcHandlers(deps: ChromeIpcDeps): void {
   ipcMain.handle(
     `desktop:set-native-appearance`,
     (_event, appearance: DesktopAppearance) => {
@@ -55,14 +70,14 @@ export function registerChromeIpcHandlers(deps: DesktopIpcDeps): void {
         canGoForward: false,
       } satisfies DesktopNavigationState
     }
-    return deps.getNavigationState(win)
+    return getNavigationState(win)
   })
   ipcMain.handle(
     `desktop:navigate-history`,
     (event, direction: `back` | `forward`) => {
       const win = BrowserWindow.fromWebContents(event.sender)
       if (!win || win.isDestroyed()) return
-      deps.navigateHistory(win, direction)
+      navigateHistory(win, direction)
     }
   )
 }

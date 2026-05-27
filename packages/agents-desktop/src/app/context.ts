@@ -2,9 +2,9 @@ import type { BrowserWindow, Tray } from 'electron'
 import {
   CloudAgentServers,
   type CloudAgentServersState,
-} from '../cloud-agent-servers'
-import { CloudAuth, type CloudAuthState } from '../cloud-auth'
-import { SecretStore } from '../secret-store'
+} from '../cloud/cloud-agent-servers'
+import { CloudAuth, type CloudAuthState } from '../cloud/cloud-auth'
+import { SecretStore } from '../services/secret-store'
 import { captureEnvApiKeys, EMPTY_API_KEYS } from '../credentials/api-keys'
 import { DEFAULT_SETTINGS } from '../settings/store'
 import type {

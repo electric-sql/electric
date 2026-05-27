@@ -1,3 +1,5 @@
+import { URL_PATH_PARSE_BASE } from '../shared/constants'
+
 export type AgentsServerHealthResult =
   | { ok: true }
   | { ok: false; reason: string }
@@ -16,7 +18,7 @@ export function appendPathToServerUrl(
   pathName: string
 ): string {
   const base = new URL(baseUrl)
-  const pathUrl = new URL(pathName, `http://electric-agents.local`)
+  const pathUrl = new URL(pathName, URL_PATH_PARSE_BASE)
   const basePath =
     base.pathname === `/` ? `` : base.pathname.replace(/\/+$/, ``)
   const suffix = pathUrl.pathname.startsWith(`/`)

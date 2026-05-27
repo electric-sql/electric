@@ -1,4 +1,4 @@
-import type { SecretStore } from '../secret-store'
+import type { SecretStore } from '../services/secret-store'
 import type { ApiKeys, ApiKeysStatus, CodexStatus } from '../shared/types'
 
 export const EMPTY_API_KEYS: ApiKeys = {

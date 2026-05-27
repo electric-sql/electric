@@ -1,3 +1,4 @@
+import { LOCALHOST_HOST, LOOPBACK_IPV4_HOST } from './constants'
 import type { ServerConfig } from './types'
 
 export const ELECTRIC_PRINCIPAL_HEADER = `electric-principal`
@@ -87,8 +88,8 @@ export function headersToRecord(headers: Headers): Record<string, string> {
 export function isLocalLoopbackHostname(hostname: string): boolean {
   const normalized = hostname.toLowerCase()
   return (
-    normalized === `localhost` ||
-    normalized === `127.0.0.1` ||
+    normalized === LOCALHOST_HOST ||
+    normalized === LOOPBACK_IPV4_HOST ||
     normalized === `0.0.0.0` ||
     normalized === `[::1]` ||
     normalized === `::1`

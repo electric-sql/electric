@@ -1,5 +1,10 @@
 import { BrowserWindow, Menu, shell } from 'electron'
-import { APP_DISPLAY_NAME } from '../shared/constants'
+import {
+  APP_DISPLAY_NAME,
+  ELECTRIC_AGENTS_DOCS_URL,
+  ELECTRIC_GITHUB_NEW_ISSUE_URL,
+  ELECTRIC_GITHUB_URL,
+} from '../shared/constants'
 import type {
   DesktopCommand,
   DesktopMenuPopupBounds,
@@ -212,22 +217,20 @@ export function buildApplicationMenuTemplate(
         {
           label: `Electric Documentation`,
           click: () => {
-            void shell.openExternal(`https://electric-sql.com/docs/agents`)
+            void shell.openExternal(ELECTRIC_AGENTS_DOCS_URL)
           },
         },
         {
           label: `Electric on GitHub`,
           click: () => {
-            void shell.openExternal(`https://github.com/electric-sql/electric`)
+            void shell.openExternal(ELECTRIC_GITHUB_URL)
           },
         },
         { type: `separator` },
         {
           label: `Report an Issue`,
           click: () => {
-            void shell.openExternal(
-              `https://github.com/electric-sql/electric/issues/new`
-            )
+            void shell.openExternal(ELECTRIC_GITHUB_NEW_ISSUE_URL)
           },
         },
       ],

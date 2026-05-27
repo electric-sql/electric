@@ -1,14 +1,27 @@
 import { BrowserWindow, ipcMain } from 'electron'
-import type { DesktopIpcDeps } from './types'
+import {
+  authorizeMcpServer,
+  disableMcpServer,
+  enableMcpServer,
+  getMcpSnapshot,
+  reconnectMcpServer,
+} from '../runtime/mcp'
+import type { RegistrySnapshot, RuntimeEntry } from '../shared/types'
 
-export function registerMcpIpcHandlers(deps: DesktopIpcDeps): void {
+export type McpIpcDeps = {
+  runtimeEntries: Map<string, RuntimeEntry>
+  lastMcpSnapshots: Map<string, RegistrySnapshot>
+  selectedServerIdForWindow: (win: BrowserWindow | null) => string | null
+}
+
+export function registerMcpIpcHandlers(deps: McpIpcDeps): void {
   ipcMain.handle(`desktop:mcp-snapshot`, (event, serverId?: string) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     const id =
       typeof serverId === `string`
         ? serverId
         : deps.selectedServerIdForWindow(win)
-    return deps.getMcpSnapshot(id)
+    return getMcpSnapshot(deps.lastMcpSnapshots, id)
   })
   ipcMain.handle(
     `desktop:mcp-authorize`,
@@ -18,7 +31,7 @@ export function registerMcpIpcHandlers(deps: DesktopIpcDeps): void {
         typeof serverId === `string`
           ? serverId
           : deps.selectedServerIdForWindow(win)
-      await deps.authorizeMcpServer(id, name)
+      await authorizeMcpServer(deps.runtimeEntries, id, name)
     }
   )
   ipcMain.handle(
@@ -29,7 +42,7 @@ export function registerMcpIpcHandlers(deps: DesktopIpcDeps): void {
         typeof serverId === `string`
           ? serverId
           : deps.selectedServerIdForWindow(win)
-      await deps.reconnectMcpServer(id, name)
+      await reconnectMcpServer(deps.runtimeEntries, id, name)
     }
   )
   ipcMain.handle(
@@ -40,7 +53,7 @@ export function registerMcpIpcHandlers(deps: DesktopIpcDeps): void {
         typeof serverId === `string`
           ? serverId
           : deps.selectedServerIdForWindow(win)
-      await deps.disableMcpServer(id, name)
+      await disableMcpServer(deps.runtimeEntries, id, name)
     }
   )
   ipcMain.handle(
@@ -51,7 +64,7 @@ export function registerMcpIpcHandlers(deps: DesktopIpcDeps): void {
         typeof serverId === `string`
           ? serverId
           : deps.selectedServerIdForWindow(win)
-      await deps.enableMcpServer(id, name)
+      await enableMcpServer(deps.runtimeEntries, id, name)
     }
   )
 }

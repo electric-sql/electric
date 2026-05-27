@@ -1,7 +1,7 @@
 import { ShapeStream, type Message, type Row } from '@electric-sql/client'
 import type { CloudAuth } from './cloud-auth'
 import { getCloudAgentsBaseUrl, getCloudBaseUrl } from './cloud-auth'
-import type { SecretStore } from './secret-store'
+import type { SecretStore } from '../services/secret-store'
 import { Buffer } from 'node:buffer'
 
 /**

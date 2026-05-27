@@ -1,7 +1,7 @@
 import { session } from 'electron'
 import * as undici from 'undici'
 import type { Dispatcher } from 'undici'
-import type { CloudAuthState } from '../cloud-auth'
+import type { CloudAuthState } from './cloud-auth'
 import { mergeHeaders } from '../shared/headers'
 import type { ServerConfig } from '../shared/types'
 import { findCloudServerForUrl, findSavedServerForUrl } from './server-matching'

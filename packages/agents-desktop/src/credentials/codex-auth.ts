@@ -4,13 +4,15 @@ import { readFile } from 'node:fs/promises'
 import { createServer, type Server as HttpServer } from 'node:http'
 import path from 'node:path'
 import {
+  CODEX_AUTH_CLAIMS_URL,
   CODEX_AUTH_REF,
   CODEX_OAUTH_CLIENT_ID,
   CODEX_OAUTH_ISSUER,
   CODEX_OAUTH_PORT,
+  CODEX_OAUTH_REDIRECT_URI,
 } from '../shared/constants'
 import { normalizeCodexSettings } from '../settings/store'
-import type { SecretStore } from '../secret-store'
+import type { SecretStore } from '../services/secret-store'
 import type {
   CodexAuthSource,
   CodexDetectedSource,
@@ -79,9 +81,9 @@ function codexAccountIdFromClaims(
 ): string | null {
   if (!claims) return null
   const nested =
-    claims[`https://api.openai.com/auth`] &&
-    typeof claims[`https://api.openai.com/auth`] === `object`
-      ? (claims[`https://api.openai.com/auth`] as Record<string, unknown>)
+    claims[CODEX_AUTH_CLAIMS_URL] &&
+    typeof claims[CODEX_AUTH_CLAIMS_URL] === `object`
+      ? (claims[CODEX_AUTH_CLAIMS_URL] as Record<string, unknown>)
       : null
   const organizations = Array.isArray(claims.organizations)
     ? claims.organizations
@@ -490,7 +492,7 @@ export async function signInCodex(
   const verifier = base64Url(randomBytes(32))
   const challenge = base64Url(createHash(`sha256`).update(verifier).digest())
   const state = base64Url(randomBytes(32))
-  const redirectUri = `http://localhost:${CODEX_OAUTH_PORT}/auth/callback`
+  const redirectUri = CODEX_OAUTH_REDIRECT_URI
   const authorizeUrl = `${CODEX_OAUTH_ISSUER}/oauth/authorize?${new URLSearchParams(
     {
       response_type: `code`,
@@ -544,40 +546,44 @@ export async function signInCodex(
         res.end(codexSignInSuccessHtml())
         settle(() => resolve(returnedCode))
       })
-      serverRef.current.listen(CODEX_OAUTH_PORT, `localhost`, () => {
-        winRef.current = new BrowserWindow({
-          title: `Sign in to ChatGPT / Codex`,
-          width: 460,
-          height: 280,
-          resizable: false,
-          minimizable: false,
-          maximizable: false,
-          autoHideMenuBar: true,
-          webPreferences: {
-            contextIsolation: true,
-            nodeIntegration: false,
-            sandbox: true,
-          },
-        })
-        winRef.current.on(`closed`, () => {
-          winRef.current = null
-          settle(() => resolve(null))
-        })
-        void winRef.current.loadURL(
-          `data:text/html;charset=utf-8,${encodeURIComponent(
-            codexSignInWaitingHtml()
-          )}`
-        )
-        void shell.openExternal(authorizeUrl).catch((err) => {
-          settle(() =>
-            reject(
-              err instanceof Error
-                ? err
-                : new Error(`Could not open browser for Codex sign-in.`)
-            )
+      serverRef.current.listen(
+        CODEX_OAUTH_PORT,
+        new URL(redirectUri).hostname,
+        () => {
+          winRef.current = new BrowserWindow({
+            title: `Sign in to ChatGPT / Codex`,
+            width: 460,
+            height: 280,
+            resizable: false,
+            minimizable: false,
+            maximizable: false,
+            autoHideMenuBar: true,
+            webPreferences: {
+              contextIsolation: true,
+              nodeIntegration: false,
+              sandbox: true,
+            },
+          })
+          winRef.current.on(`closed`, () => {
+            winRef.current = null
+            settle(() => resolve(null))
+          })
+          void winRef.current.loadURL(
+            `data:text/html;charset=utf-8,${encodeURIComponent(
+              codexSignInWaitingHtml()
+            )}`
           )
-        })
-      })
+          void shell.openExternal(authorizeUrl).catch((err) => {
+            settle(() =>
+              reject(
+                err instanceof Error
+                  ? err
+                  : new Error(`Could not open browser for Codex sign-in.`)
+              )
+            )
+          })
+        }
+      )
       serverRef.current.on(`error`, (error) => {
         settle(() => reject(error))
       })

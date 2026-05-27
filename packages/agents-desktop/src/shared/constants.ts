@@ -1,15 +1,36 @@
 export const APP_DISPLAY_NAME = `Electric Agents`
-export const IGNORE_CONNECTION_LIMIT_DOMAINS = `localhost,127.0.0.1`
+export const APP_WEBSITE_URL = `https://electric.ax/agents`
+export const ELECTRIC_AGENTS_DOCS_URL = `https://electric-sql.com/docs/agents`
+export const ELECTRIC_GITHUB_URL = `https://github.com/electric-sql/electric`
+export const ELECTRIC_GITHUB_NEW_ISSUE_URL = `${ELECTRIC_GITHUB_URL}/issues/new`
+export const LOCALHOST_HOST = `localhost`
+export const LOOPBACK_IPV4_HOST = `127.0.0.1`
+export const IGNORE_CONNECTION_LIMIT_DOMAINS = `${LOCALHOST_HOST},${LOOPBACK_IPV4_HOST}`
 
 export const CODEX_AUTH_REF = `codex-auth:desktop`
+export const CODEX_AUTH_CLAIMS_URL = `https://api.openai.com/auth`
 export const CODEX_OAUTH_CLIENT_ID = `app_EMoamEEZ73f0CkXaXp7hrann`
+export const CODEX_OAUTH_HOST = LOCALHOST_HOST
 export const CODEX_OAUTH_ISSUER = `https://auth.openai.com`
 export const CODEX_OAUTH_PORT = 1455
+export const CODEX_OAUTH_REDIRECT_URI = `http://${CODEX_OAUTH_HOST}:${CODEX_OAUTH_PORT}/auth/callback`
+
+export const ELECTRIC_CLOUD_DASHBOARD_URL = `https://dashboard.electric-sql.cloud`
+export const ELECTRIC_CLOUD_AGENTS_URL = `https://agents.electric-sql.cloud`
+export const ELECTRIC_CLOUD_AUTH_LOOPBACK_HOST = LOOPBACK_IPV4_HOST
+export const ELECTRIC_CLOUD_AUTH_LOOPBACK_PORT = 53118
+export const ELECTRIC_CLOUD_AUTH_CALLBACK_URL = `http://${ELECTRIC_CLOUD_AUTH_LOOPBACK_HOST}:${ELECTRIC_CLOUD_AUTH_LOOPBACK_PORT}/callback`
 
 export const RECONNECT_BASE_MS = 1_000
 export const RECONNECT_MAX_MS = 30_000
 
 export const MCP_OAUTH_REDIRECT_BASE = `http://127.0.0.1:53117`
+export const LOCAL_DISCOVERY_HOST = LOOPBACK_IPV4_HOST
+export const URL_PATH_PARSE_BASE = `http://electric-agents.local`
+
+export function localDiscoveryUrl(port: number): string {
+  return `http://${LOCAL_DISCOVERY_HOST}:${port}`
+}
 
 export const DESKTOP_USER_DATA_DIR =
   process.env.ELECTRIC_DESKTOP_USER_DATA_DIR?.trim() || null

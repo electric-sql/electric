@@ -14,8 +14,8 @@ import {
   runnerOwnerPrincipalFromHeaders,
   runnerOwnerPrincipalFromUserId,
 } from '../shared/headers'
-import type { CloudAgentServers } from '../cloud-agent-servers'
-import type { CloudAuthState } from '../cloud-auth'
+import type { CloudAgentServers } from '../cloud/cloud-agent-servers'
+import type { CloudAuthState } from '../cloud/cloud-auth'
 import { checkAgentsServerHealth, formatStartupNetworkError } from './health'
 import type {
   ConnectServerOptions,

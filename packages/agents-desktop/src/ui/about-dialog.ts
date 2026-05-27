@@ -1,6 +1,6 @@
 import { BrowserWindow, app, shell } from 'electron'
 import { readFileSync } from 'node:fs'
-import { APP_DISPLAY_NAME } from '../shared/constants'
+import { APP_DISPLAY_NAME, APP_WEBSITE_URL } from '../shared/constants'
 import { APP_ICON_PATH } from '../shared/paths'
 
 export type AboutDialogDeps = {
@@ -91,7 +91,7 @@ export function showAboutDialog(deps: AboutDialogDeps): void {
       serverless agents to the infrastructure you already run.
     </p>
     <div class="meta">
-      <a href="https://electric.ax/agents/" target="_blank" rel="noreferrer">electric.ax/agents</a>
+      <a href="${APP_WEBSITE_URL}/" target="_blank" rel="noreferrer">electric.ax/agents</a>
       <span>© ${new Date().getFullYear()} Electric DB Limited</span>
     </div>
   </main>

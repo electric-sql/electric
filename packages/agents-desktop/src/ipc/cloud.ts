@@ -1,6 +1,6 @@
 import { BrowserWindow, ipcMain } from 'electron'
-import type { CloudAgentServers } from '../cloud-agent-servers'
-import type { CloudAuth, CloudAuthProvider } from '../cloud-auth'
+import type { CloudAgentServers } from '../cloud/cloud-agent-servers'
+import type { CloudAuth, CloudAuthProvider } from '../cloud/cloud-auth'
 
 export type CloudIpcDeps = {
   getCloudAuth: () => CloudAuth

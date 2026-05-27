@@ -7,14 +7,14 @@ import {
 import type {
   DesktopServerFetchRequest,
   DesktopServerFetchResponse,
-  ServerConfig,
 } from '../shared/types'
+import {
+  buildSavedServerHeaders,
+  type CloudAuthHeaderInjectionDeps,
+} from './auth-injection'
 import { findSavedServerForUrl } from './server-matching'
 
-export type DesktopServerFetchDeps = {
-  getServers: () => Array<ServerConfig>
-  buildSavedServerHeaders: (url: string) => Record<string, string> | null
-}
+export type DesktopServerFetchDeps = CloudAuthHeaderInjectionDeps
 
 function assertDesktopServerFetchAllowed(
   deps: DesktopServerFetchDeps,
@@ -75,7 +75,7 @@ export async function desktopServerFetch(
 ): Promise<DesktopServerFetchResponse> {
   const checked = assertDesktopServerFetchAllowed(deps, request)
   const headers = mergeHeaders(
-    deps.buildSavedServerHeaders(checked.url) ?? undefined,
+    buildSavedServerHeaders(deps, checked.url) ?? undefined,
     checked.headers
   )
   const response = await fetch(checked.url, {

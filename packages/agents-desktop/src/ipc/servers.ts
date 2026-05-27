@@ -1,9 +1,32 @@
 import { BrowserWindow, ipcMain } from 'electron'
 import { normalizeServers } from '../settings/servers'
-import type { ServerConfig } from '../shared/types'
-import type { DesktopIpcDeps } from './types'
+import type { DesktopState, RuntimeEntry, ServerConfig } from '../shared/types'
 
-export function registerServerIpcHandlers(deps: DesktopIpcDeps): void {
+export type ServerIpcDeps = {
+  settings: {
+    servers: Array<ServerConfig>
+    defaultServerId: string | null
+  }
+  runtimeEntries: Map<string, RuntimeEntry>
+  findServer: (serverId: string | null | undefined) => ServerConfig | null
+  ensureRuntimeEntry: (server: ServerConfig) => RuntimeEntry
+  saveSettings: () => Promise<void>
+  refreshDesktopState: () => void
+  desktopStateForWindow: (win: BrowserWindow | null) => DesktopState
+  desktopServerFetch: (request: unknown) => Promise<unknown>
+  setActiveServer: (
+    win: BrowserWindow | null,
+    server: ServerConfig | null
+  ) => Promise<void>
+  setSelectedServerForWindow: (
+    win: BrowserWindow | null,
+    serverId: string | null
+  ) => Promise<void>
+  stopRuntimeEntry: (entry: RuntimeEntry) => Promise<void>
+  restartRuntime: (serverId?: string | null) => Promise<void>
+}
+
+export function registerServerIpcHandlers(deps: ServerIpcDeps): void {
   ipcMain.handle(`desktop:get-servers`, () => deps.settings.servers)
   ipcMain.handle(
     `desktop:save-servers`,
