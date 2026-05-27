@@ -266,6 +266,13 @@ export function getCloudServiceIdFromServerUrl(
  * it so any component can subscribe via `useCloudAuth()` without
  * re-instantiating storage / network on every render.
  */
+const DEBUG_CLOUD_AUTH = process.env.EXPO_PUBLIC_DEBUG_CLOUD_AUTH === `1`
+
+export function debugCloudAuth(...args: Array<unknown>): void {
+  if (!DEBUG_CLOUD_AUTH) return
+  console.log(`[agents-mobile] cloud-auth:`, ...args)
+}
+
 export class CloudAuth {
   private state: CloudAuthState = {
     status: `signed-out`,
@@ -337,6 +344,10 @@ export class CloudAuth {
    */
   async signIn(provider: CloudAuthProvider): Promise<void> {
     const previous = this.state
+    debugCloudAuth(`signIn:start`, {
+      provider,
+      previousStatus: previous.status,
+    })
     this.setState({
       ...previous,
       status: `signing-in`,
@@ -345,6 +356,12 @@ export class CloudAuth {
 
     const cliState = generateState()
     const authorizeUrl = buildAuthorizeUrl(provider, cliState)
+    debugCloudAuth(`signIn:authorize`, {
+      provider,
+      authorizeUrl,
+      redirectUri: CLOUD_AUTH_REDIRECT_URI,
+      cliState,
+    })
     await this.storePending({ state: cliState, provider })
 
     let result: WebBrowser.WebBrowserAuthSessionResult
@@ -361,6 +378,7 @@ export class CloudAuth {
         }
       )
     } catch (err) {
+      debugCloudAuth(`signIn:openAuthSession:error`, err)
       await this.clearPending()
       this.setState({
         ...previous,
@@ -370,6 +388,7 @@ export class CloudAuth {
       return
     }
 
+    debugCloudAuth(`signIn:openAuthSession:result`, result)
     if (result.type === `success` && result.url) {
       await this.completeCallbackUrl(result.url, previous)
       return
@@ -403,10 +422,15 @@ export class CloudAuth {
     previous: CloudAuthState,
     provider: CloudAuthProvider
   ): Promise<void> {
+    debugCloudAuth(`signIn:waitForDeepLink:start`, {
+      provider,
+      graceMs: DISMISS_GRACE_MS,
+    })
     let subscription: { remove: () => void } | null = null
     const winner = await new Promise<string | null>((resolve) => {
       const timer = setTimeout(() => resolve(null), DISMISS_GRACE_MS)
       subscription = Linking.addEventListener(`url`, ({ url }) => {
+        debugCloudAuth(`signIn:waitForDeepLink:event`, { url })
         if (isCallbackUrl(url)) {
           clearTimeout(timer)
           resolve(url)
@@ -416,6 +440,7 @@ export class CloudAuth {
       // an initial URL (which happens when Android cold-restarted us).
       void Linking.getInitialURL()
         .then((url) => {
+          debugCloudAuth(`signIn:waitForDeepLink:initialUrl`, { url })
           if (url && isCallbackUrl(url)) {
             clearTimeout(timer)
             resolve(url)
@@ -427,6 +452,7 @@ export class CloudAuth {
     })
     if (subscription) (subscription as { remove: () => void }).remove()
 
+    debugCloudAuth(`signIn:waitForDeepLink:winner`, { winner })
     if (winner) {
       await this.completeCallbackUrl(winner, previous)
       return
@@ -457,6 +483,11 @@ export class CloudAuth {
     url: string,
     previous: CloudAuthState = this.state
   ): Promise<boolean> {
+    debugCloudAuth(`completeCallbackUrl:start`, {
+      url,
+      previousStatus: previous.status,
+      currentStatus: this.state.status,
+    })
     // Guard against re-entry. Multiple paths can call this with the
     // same URL (Linking listener + `/oauth/callback` route +
     // `openAuthSessionAsync` resolution), and once one of them has
@@ -477,6 +508,7 @@ export class CloudAuth {
     previous: CloudAuthState
   ): Promise<boolean> {
     const pending = await this.loadPending()
+    debugCloudAuth(`completeCallbackUrl:pending`, { pending })
     if (!pending) {
       // Already-signed-in (race against another in-flight handler) or
       // user navigated to the deep link manually with no sign-in
@@ -486,6 +518,7 @@ export class CloudAuth {
     }
 
     const parsed = parseCallbackUrl(url, pending.provider)
+    debugCloudAuth(`completeCallbackUrl:parsed`, { parsed })
     if (!parsed) {
       this.setState({
         ...previous,
@@ -511,6 +544,11 @@ export class CloudAuth {
       expiresAt: parsed.expiresAt,
       provider: parsed.provider,
     }
+    debugCloudAuth(`completeCallbackUrl:storing`, {
+      email: parsed.email,
+      expiresAt: parsed.expiresAt,
+      provider: parsed.provider,
+    })
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(stored))
     await this.clearPending()
     this.setState({
@@ -532,6 +570,7 @@ export class CloudAuth {
    * can stop bubbling.
    */
   async handleDeepLink(url: string): Promise<boolean> {
+    debugCloudAuth(`handleDeepLink`, { url })
     if (!isCallbackUrl(url)) return false
     return this.completeCallbackUrl(url)
   }

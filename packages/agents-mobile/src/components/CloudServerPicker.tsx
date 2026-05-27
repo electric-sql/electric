@@ -1,10 +1,11 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import {
   cloudAgentServerUrl,
   useCloudAgentServers,
   type CloudAgentServer,
 } from '../lib/cloudAgentServers'
+import { debugCloudAuth } from '../lib/cloudAuth'
 import { useTokens } from '../lib/ThemeProvider'
 import { fontSize, lineHeight, radii, spacing } from '../lib/theme'
 import type { Tokens } from '../lib/theme'
@@ -29,6 +30,15 @@ export function CloudServerPicker({
   const tokens = useTokens()
   const styles = useMemo(() => createStyles(tokens), [tokens])
   const { status, servers, error } = useCloudAgentServers()
+
+  useEffect(() => {
+    debugCloudAuth(`cloudServerPicker:renderState`, {
+      status,
+      error,
+      serverIds: servers.map((server) => server.id),
+      serverNames: servers.map((server) => server.name),
+    })
+  }, [status, error, servers])
 
   if (status === `idle`) return null
 

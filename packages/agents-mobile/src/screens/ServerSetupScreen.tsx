@@ -11,6 +11,7 @@ import {
 import { CloudServerPicker } from '../components/CloudServerPicker'
 import { PrimaryButton } from '../components/PrimaryButton'
 import { Screen } from '../components/Screen'
+import { useCloudAuth } from '../lib/CloudAuthContext'
 import { useTokens } from '../lib/ThemeProvider'
 import { fontSize, lineHeight, radii, rowHeight, spacing } from '../lib/theme'
 import { checkServerHealth, normalizeServerUrl } from '../lib/agentsClient'
@@ -28,9 +29,12 @@ export function ServerSetupScreen({
 }): React.ReactElement {
   const tokens = useTokens()
   const styles = useMemo(() => createStyles(tokens), [tokens])
+  const { state: cloudState, signIn, signOut } = useCloudAuth()
   const [value, setValue] = useState(initialUrl ?? ``)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const isSignedInToCloud = cloudState.status === `signed-in`
+  const isSigningInToCloud = cloudState.status === `signing-in`
 
   const submit = async () => {
     const normalized = normalizeServerUrl(value)
@@ -71,6 +75,18 @@ export function ServerSetupScreen({
               Mobile connects to a running server. It does not bundle a local
               Horton runtime.
             </Text>
+            {isSignedInToCloud ? (
+              <Text style={styles.hint}>
+                Signed in to Electric Cloud as{' '}
+                {cloudState.email ?? `this account`}. Want to try a different
+                Google account? Sign out below, then sign in again.
+              </Text>
+            ) : (
+              <Text style={styles.hint}>
+                Not signed in to Electric Cloud. Sign in below to discover your
+                cloud-hosted agent servers automatically.
+              </Text>
+            )}
           </View>
 
           <CloudServerPicker
@@ -106,14 +122,51 @@ export function ServerSetupScreen({
                 title="Cancel"
                 variant="ghost"
                 onPress={onCancel}
-                disabled={loading}
+                disabled={loading || isSigningInToCloud}
               />
+            )}
+            {isSignedInToCloud ? (
+              <PrimaryButton
+                title="Sign out"
+                variant="ghost"
+                onPress={() => {
+                  void signOut()
+                }}
+                disabled={loading || isSigningInToCloud}
+              />
+            ) : (
+              <>
+                <PrimaryButton
+                  title={
+                    isSigningInToCloud
+                      ? `Opening browser…`
+                      : `Sign in with GitHub`
+                  }
+                  variant="ghost"
+                  onPress={() => {
+                    void signIn(`github`)
+                  }}
+                  disabled={loading || isSigningInToCloud}
+                />
+                <PrimaryButton
+                  title={
+                    isSigningInToCloud
+                      ? `Opening browser…`
+                      : `Sign in with Google`
+                  }
+                  variant="ghost"
+                  onPress={() => {
+                    void signIn(`google`)
+                  }}
+                  disabled={loading || isSigningInToCloud}
+                />
+              </>
             )}
             <PrimaryButton
               title="Connect"
               loading={loading}
               onPress={submit}
-              disabled={loading}
+              disabled={loading || isSigningInToCloud}
             />
           </View>
         </ScrollView>
@@ -156,6 +209,11 @@ function createStyles(tokens: Tokens) {
     },
     field: {
       gap: spacing.xs,
+    },
+    hint: {
+      color: tokens.text3,
+      fontSize: fontSize.xs,
+      lineHeight: lineHeight.xs,
     },
     label: {
       color: tokens.text2,
