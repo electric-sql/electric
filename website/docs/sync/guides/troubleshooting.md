@@ -200,6 +200,20 @@ Live long-poll connections are lightweight Erlang processes, so most hardware ca
 
 **Reduce the number of concurrent shape subscriptions** by lazy-loading shapes only when needed (e.g. per screen) rather than subscribing to all shapes on app boot.
 
+### Bun fetch concurrency cap &mdash; why is my proxy slow under load?
+
+If you run your auth/caching proxy on the [Bun runtime](https://bun.com), Bun caps simultaneous `fetch()` calls at **256 per process** by default. When inbound traffic exceeds that, additional upstream calls to Electric queue silently &mdash; the proxy keeps accepting connections and CPU/memory look fine, but shape requests stall and surface as latency, not errors. Node and Deno have no equivalent cap.
+
+##### Solution &mdash; raise `BUN_CONFIG_MAX_HTTP_REQUESTS`
+
+Set the env var to match your expected concurrent shape requests (max 65,336):
+
+```sh
+BUN_CONFIG_MAX_HTTP_REQUESTS=4096 bun run proxy.ts
+```
+
+See [Bun's fetch docs](https://bun.com/docs/runtime/networking/fetch) for details.
+
 ### WAL growth &mdash; why is my Postgres database storage filling up?
 
 Electric creates a logical replication slot in Postgres to stream changes. This slot tracks a position in the Write-Ahead Log (WAL) and prevents Postgres from removing WAL segments that Electric hasn't yet processed. If the slot doesn't advance, WAL accumulates and consumes disk space.

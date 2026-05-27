@@ -1,5 +1,32 @@
 # @electric-ax/agents-server-ui
 
+## 0.4.9
+
+### Patch Changes
+
+- Updated dependencies [833a1cb]
+- Updated dependencies [833a1cb]
+  - @electric-ax/agents-runtime@0.3.4
+
+## 0.4.8
+
+### Patch Changes
+
+- b39f581: Fix Agent UI message submission on mobile browsers. The Send button now keeps the textarea focused on tap so the on-screen keyboard does not dismiss and reflow the viewport mid-click, and the composer recognises the soft-keyboard return key via `enterKeyHint="send"` plus a `beforeinput` fallback (Android Chrome / GBoard route it as `insertLineBreak` without a matching `keydown`). The Enter handler now also ignores IME composition (`keyCode === 229`).
+- a70567e: Add DeepSeek as a supported LLM provider.
+  - `agents-runtime`: `detectAvailableProviders()` now detects `DEEPSEEK_API_KEY`; `deepseek` added to `AvailableProvider` type, `PREFERRED_IDS_BY_PROVIDER`, and `envCatalog()`
+  - `agents`: model catalog probes `https://api.deepseek.com/v1/models` to surface available DeepSeek models (`deepseek-v4-flash`, `deepseek-v4-pro`); `deepseek-v4-flash` is the default fallback choice
+  - `agents-desktop`: `ApiKeys` gains a `deepseek` field persisted in the keychain and mirrored to `DEEPSEEK_API_KEY` in the runtime environment
+  - `agents-server-ui`: `ApiKeysForm` gains a DeepSeek API key input; `OnboardingModal` and `CredentialsPage` pass and persist the new field
+
+- d7506a2: Add mobile agent signal controls. The mobile chat composer now shows a stop control while a run is active, the session menu exposes all entity signal types in a child menu, and the embedded chat timeline accounts for the native composer/drawer inset with aligned message widths and bottom fade masking.
+- 86e69d5: Add defensive null guards for timeline run items and an error boundary around each timeline row to prevent a single malformed row from crashing the entire view.
+- Updated dependencies [9c2c3ae]
+- Updated dependencies [a70567e]
+- Updated dependencies [b3d4f02]
+- Updated dependencies [dffbf62]
+  - @electric-ax/agents-runtime@0.3.3
+
 ## 0.4.7
 
 ### Patch Changes

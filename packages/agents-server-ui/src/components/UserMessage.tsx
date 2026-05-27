@@ -24,7 +24,11 @@ export const UserMessage = memo(function UserMessage({
   const sender = formatSender(section.from)
 
   return (
-    <Stack direction="column" gap={1} className={styles.root}>
+    <Stack
+      direction="column"
+      gap={1}
+      className={`${styles.root} mobile-user-message-root`}
+    >
       <Stack
         p={3}
         className={[styles.bubble, showStop ? styles.withStop : null]

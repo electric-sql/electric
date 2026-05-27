@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 1.6.8
+
+### Patch Changes
+
+- 8803b36: Reject malformed shape offsets with negative parts as invalid requests instead of raising `FunctionClauseError`.
+
 ## 1.6.7
 
 ### Patch Changes

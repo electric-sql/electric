@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createAgentsClient } from '../src/agents-client'
-import { cron, entities, pgSync } from '../src/observation-sources'
+import { cron, entities, pgSync, webhook } from '../src/observation-sources'
 import type * as StateModule from '@durable-streams/state'
 
 const { mockState } = vi.hoisted(() => ({
@@ -9,6 +9,7 @@ const { mockState } = vi.hoisted(() => ({
     registerCronSource: vi.fn(),
     registerPgSyncSource: vi.fn(),
     signalEntity: vi.fn(),
+    ensureStream: vi.fn(),
     createStreamDB: vi.fn(),
     preload: vi.fn(),
     observedDb: {
@@ -26,6 +27,7 @@ vi.mock(`../src/runtime-server-client`, () => ({
     registerCronSource: mockState.registerCronSource,
     registerPgSyncSource: mockState.registerPgSyncSource,
     signalEntity: mockState.signalEntity,
+    ensureStream: mockState.ensureStream,
   }),
 }))
 
@@ -50,6 +52,7 @@ describe(`createAgentsClient`, () => {
       sourceRef: `pg-source-1`,
       streamUrl: `/_electric/pg-sync/pg-source-1`,
     })
+    mockState.ensureStream = vi.fn().mockResolvedValue(`/_webhooks/repo`)
     mockState.createStreamDB = vi.fn()
     mockState.signalEntity = vi.fn().mockResolvedValue({ txid: 123 })
     mockState.observedDb = {
@@ -186,5 +189,32 @@ describe(`createAgentsClient`, () => {
       signal: `SIGKILL`,
       reason: `cleanup`,
     })
+  })
+
+  it(`observe(webhook(...)) ensures the exact stream before preloading it`, async () => {
+    const client = createAgentsClient({
+      baseUrl: `http://electric-agents.test?service=tenant-a&secret=shared-secret`,
+    })
+
+    const source = webhook(`repo`, { bucket: `prs/123` })
+
+    const db = await client.observe(source)
+
+    expect(mockState.ensureStream).toHaveBeenCalledWith(
+      `/_webhooks/repo/prs/123`,
+      `application/json`
+    )
+    expect(mockState.createStreamDB).toHaveBeenCalledWith({
+      streamOptions: {
+        url: `http://electric-agents.test/_webhooks/repo/prs/123?service=tenant-a&secret=shared-secret`,
+        contentType: `application/json`,
+      },
+      state: source.schema,
+    })
+    expect(mockState.ensureStream.mock.invocationCallOrder[0]).toBeLessThan(
+      mockState.createStreamDB.mock.invocationCallOrder[0]!
+    )
+    expect(mockState.observedDb.preload).toHaveBeenCalledOnce()
+    expect(db).toBe(mockState.observedDb)
   })
 })

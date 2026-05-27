@@ -1,5 +1,27 @@
 # @electric-ax/agents-server
 
+## 0.4.9
+
+### Patch Changes
+
+- 833a1cb: Add agent event source contracts and dynamic event source subscription tools. Agents can list active, agent-visible webhook-backed event sources, subscribe entities to resolved bucket streams with explicit lifetimes, and persist those subscriptions as manifest-backed wake registrations. Bucket params are validated against the advertised `paramsSchema` before a subscription is accepted. Horton now receives these tools through the built-in agents runtime by default. Runtime-managed event source wakes now hydrate matching webhook rows into the agent trigger message so tool-created subscriptions include the event payload that caused the wake.
+- Updated dependencies [833a1cb]
+- Updated dependencies [1349a55]
+- Updated dependencies [833a1cb]
+  - @electric-ax/agents-runtime@0.3.4
+  - @electric-sql/client@1.5.19
+
+## 0.4.8
+
+### Patch Changes
+
+- dffbf62: fix: no more duplicated runFinished wakes
+- Updated dependencies [9c2c3ae]
+- Updated dependencies [a70567e]
+- Updated dependencies [b3d4f02]
+- Updated dependencies [dffbf62]
+  - @electric-ax/agents-runtime@0.3.3
+
 ## 0.4.7
 
 ### Patch Changes

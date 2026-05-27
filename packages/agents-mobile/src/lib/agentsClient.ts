@@ -4,13 +4,31 @@ import { appendPathToUrl } from '@electric-ax/agents-runtime/client'
 import { serverFetch } from '@electric-ax/agents-server-ui/src/lib/auth-fetch'
 import { z } from 'zod'
 
-export type EntityStatus = `spawning` | `running` | `idle` | `stopped`
+export type EntityStatus =
+  | `spawning`
+  | `running`
+  | `idle`
+  | `paused`
+  | `stopping`
+  | `stopped`
+  | `killed`
+export type EntitySignal =
+  | `SIGINT`
+  | `SIGHUP`
+  | `SIGTERM`
+  | `SIGKILL`
+  | `SIGSTOP`
+  | `SIGCONT`
+  | `SIGUSR`
 
 const ENTITY_STATUSES: [EntityStatus, ...Array<EntityStatus>] = [
   `spawning`,
   `running`,
   `idle`,
+  `paused`,
+  `stopping`,
   `stopped`,
+  `killed`,
 ]
 
 export const entitySchema = z.object({
@@ -202,6 +220,39 @@ export async function spawnEntity({
   }
 
   return entityUrl
+}
+
+export async function signalEntity({
+  baseUrl,
+  entityUrl,
+  signal,
+  reason,
+  payload,
+}: {
+  baseUrl: string
+  entityUrl: string
+  signal: EntitySignal
+  reason?: string
+  payload?: unknown
+}): Promise<void> {
+  const body: Record<string, unknown> = { signal }
+  if (reason !== undefined) body.reason = reason
+  if (payload !== undefined) body.payload = payload
+
+  const res = await serverFetch(
+    appendPathToUrl(
+      baseUrl,
+      `/_electric/entities${entityUrl.startsWith(`/`) ? entityUrl : `/${entityUrl}`}/signal`
+    ),
+    {
+      method: `POST`,
+      headers: { 'content-type': `application/json` },
+      body: JSON.stringify(body),
+    }
+  )
+  if (!res.ok) {
+    throw new Error(await responseMessage(res, `Signal failed`))
+  }
 }
 
 export function getEntityDisplayTitle(entity: ElectricEntity): string {

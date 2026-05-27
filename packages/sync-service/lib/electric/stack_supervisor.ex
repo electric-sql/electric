@@ -141,13 +141,12 @@ defmodule Electric.StackSupervisor do
                        default: Electric.Config.default(:snapshot_timeout_to_first_data)
                      ],
                      conn_max_requests: [
-                       type: :pos_integer,
+                       # allow 0 as a setting which means max_requests=infinity
+                       type: :non_neg_integer,
                        default: Electric.Config.default(:conn_max_requests)
                      ],
                      handler_fullsweep_after: [
-                       # :pos_integer excludes 0 intentionally. fullsweep_after=0 means
-                       # fullsweep on every minor GC which would be too aggressive.
-                       type: {:or, [:pos_integer, nil]},
+                       type: {:or, [:non_neg_integer, nil]},
                        default: nil
                      ],
                      process_spawn_opts: [type: :map, default: %{}],

@@ -53,10 +53,18 @@ export type {
   SignalResponse,
   TypedSpawnRequest,
 } from './electric-agents-types.js'
+export type {
+  EventSourceBucket,
+  EventSourceContract,
+  EventSourceFilter,
+  EventSourceSubscription,
+  EventSourceSubscriptionInput,
+  SubscriptionLifetime,
+} from '@electric-ax/agents-runtime'
 export type { Principal, PrincipalKind } from './principal.js'
 export { globalRouter } from './routing/global-router.js'
 export type { GlobalRoutes } from './routing/global-router.js'
-export type { TenantContext } from './routing/context.js'
+export type { EventSourceCatalog, TenantContext } from './routing/context.js'
 export {
   streamRootDurableStreamsRoutingAdapter,
   pathPrefixedSingleTenantDurableStreamsRoutingAdapter,

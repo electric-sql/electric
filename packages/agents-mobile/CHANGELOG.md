@@ -1,5 +1,29 @@
 # @electric-ax/agents-mobile
 
+## 0.0.4
+
+### Patch Changes
+
+- Updated dependencies [833a1cb]
+- Updated dependencies [833a1cb]
+  - @electric-ax/agents-runtime@0.3.4
+  - @electric-ax/agents-server-ui@0.4.9
+
+## 0.0.3
+
+### Patch Changes
+
+- d7506a2: Add mobile agent signal controls. The mobile chat composer now shows a stop control while a run is active, the session menu exposes all entity signal types in a child menu, and the embedded chat timeline accounts for the native composer/drawer inset with aligned message widths and bottom fade masking.
+- Updated dependencies [b39f581]
+- Updated dependencies [9c2c3ae]
+- Updated dependencies [a70567e]
+- Updated dependencies [b3d4f02]
+- Updated dependencies [d7506a2]
+- Updated dependencies [dffbf62]
+- Updated dependencies [86e69d5]
+  - @electric-ax/agents-server-ui@0.4.8
+  - @electric-ax/agents-runtime@0.3.3
+
 ## 0.0.2
 
 ### Patch Changes

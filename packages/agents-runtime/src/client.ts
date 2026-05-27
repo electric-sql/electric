@@ -19,6 +19,10 @@ export {
   pgSyncObservationCollections,
   sourceRefForPgSync,
   tagged,
+  webhook,
+  getWebhookStreamPath,
+  webhookObservationCollections,
+  webhookEventRowSchema,
 } from './observation-sources'
 export { appendPathToUrl } from './url'
 export { buildSections, buildTimelineEntries } from './use-chat'
@@ -34,6 +38,8 @@ export type {
   DbObservationSource,
   EntitiesObservationSource,
   EntityObservationSource,
+  WebhookObservationSource,
+  WebhookEventRow,
   EntitiesQuery,
   PgSyncObservationSource,
   PgSyncOptions,

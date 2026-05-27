@@ -6296,6 +6296,41 @@ describe(`N: wake primitives verification`, () => {
     expect(childUrls.has(finishedUrl)).toBe(true)
   }, 30_000)
 
+  it(`N3b: spawn wake and child manifest share one runFinished registration`, async () => {
+    const childId = `idle-test-child-dedupe-${Date.now()}`
+    const parent = await t.spawn(
+      TYPES.n3IdleWakeParent,
+      `idle-test-dedupe-${Date.now()}`
+    )
+    await parent.send(`spawn ${childId}`)
+    await parent.waitForRun()
+
+    const child = t.entity(`/${TYPES.n3IdleWakeChild}/${childId}`)
+    await child.send(`do work`)
+    await child.waitForRun()
+    await parent.waitFor((history) => history.some(`wake`), 10_000)
+    await t.waitForSettled(10_000)
+
+    const events = await t.readStream(parent.entityUrl)
+    const childUrl = `/${TYPES.n3IdleWakeChild}/${childId}`
+    const runFinishedWakes = events.filter((event) => {
+      if (event.type !== `wake`) return false
+      const value = event.value as Record<string, unknown> | undefined
+      const finishedChild = value?.finished_child as
+        | Record<string, unknown>
+        | undefined
+      return finishedChild?.url === childUrl
+    })
+
+    expect(runFinishedWakes.length).toBeGreaterThan(0)
+    const runKeys = runFinishedWakes.map((event) => {
+      const value = event.value as Record<string, unknown>
+      const changes = value.changes as Array<Record<string, unknown>>
+      return changes[0]?.key
+    })
+    expect(new Set(runKeys).size).toBe(runKeys.length)
+  }, 30_000)
+
   it(`N3: wake events are delivered as wake when the parent is re-woken`, async () => {
     // The parent records wake.type on every wake.
     //

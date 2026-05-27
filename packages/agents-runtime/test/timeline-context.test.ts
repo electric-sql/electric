@@ -294,6 +294,67 @@ describe(`timeline context`, () => {
     ])
   })
 
+  it(`places an interrupted run before the SIGINT that raced ahead of it`, () => {
+    expect(
+      buildTimelineMessages({
+        inbox: [
+          {
+            key: `msg-1`,
+            order: order(1),
+            from: `user`,
+            payload: `start`,
+            timestamp: `2026-03-28T00:00:00.000Z`,
+          },
+          {
+            key: `msg-2`,
+            order: order(4),
+            from: `user`,
+            payload: `continue`,
+            timestamp: `2026-03-28T00:00:03.000Z`,
+          },
+        ],
+        signals: [
+          {
+            key: `sig-1`,
+            order: order(2),
+            signal: `SIGINT`,
+            status: `handled`,
+            timestamp: `2026-03-28T00:00:02.000Z`,
+            outcome: `aborted`,
+          },
+        ],
+        runs: [
+          {
+            key: `run-1`,
+            order: order(3),
+            status: `completed`,
+            finish_reason: `aborted`,
+            texts: [
+              {
+                key: `text-1`,
+                run_id: `run-1`,
+                order: order(5),
+                status: `completed`,
+                text: `partial response`,
+              },
+            ],
+            toolCalls: [],
+            steps: [],
+            errors: [],
+          },
+        ],
+      })
+    ).toEqual([
+      { role: `user`, content: `start` },
+      { role: `assistant`, content: `partial response` },
+      {
+        role: `user`,
+        content: `<agent_signal signal="SIGINT" status="handled" timestamp="2026-03-28T00:00:02.000Z" outcome="aborted">The active handler invocation was interrupted.</agent_signal>`,
+      },
+      { role: `user`, content: `continue` },
+    ])
+  })
+
   it(`timelineToMessages reads the shared entity timeline shape from the db`, () => {
     const db = {
       collections: {

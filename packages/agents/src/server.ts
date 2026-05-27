@@ -25,12 +25,10 @@ import {
   unregisterToolProvider,
 } from '@electric-ax/agents-runtime'
 import type {
-  AgentTool,
-  EntityStreamDBWithActions,
+  ProcessWakeConfig,
   PullWakeRunner,
   PullWakeRunnerConfig,
 } from '@electric-ax/agents-runtime'
-import type { ChangeEvent } from '@durable-streams/state'
 import type { StreamFn } from '@mariozechner/pi-agent-core'
 
 export interface BuiltinAgentsServerOptions {
@@ -76,30 +74,7 @@ export interface BuiltinAgentsServerOptions {
   loadProjectMcpConfig?: boolean
   /** Override for the built-in skills directory; required when embedders bundle this package. */
   baseSkillsDir?: string
-  createElectricTools?: (context: {
-    entityUrl: string
-    entityType: string
-    args: Readonly<Record<string, unknown>>
-    db: EntityStreamDBWithActions
-    events: Array<ChangeEvent>
-    upsertCronSchedule: (opts: {
-      id: string
-      expression: string
-      timezone?: string
-      payload?: unknown
-      debounceMs?: number
-      timeoutMs?: number
-    }) => Promise<{ txid: string }>
-    upsertFutureSendSchedule: (opts: {
-      id: string
-      payload: unknown
-      targetUrl?: string
-      fireAt: string
-      from?: string
-      messageType?: string
-    }) => Promise<{ txid: string }>
-    deleteSchedule: (opts: { id: string }) => Promise<{ txid: string }>
-  }) => Array<AgentTool> | Promise<Array<AgentTool>>
+  createElectricTools?: NonNullable<ProcessWakeConfig[`createElectricTools`]>
 }
 
 export class BuiltinAgentsServer {

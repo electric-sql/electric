@@ -1,12 +1,14 @@
 export {
   DEFAULT_BUILTIN_AGENT_HANDLER_PATH,
   createBuiltinAgentHandler,
+  createBuiltinElectricTools,
   createAgentHandler,
   registerBuiltinAgentTypes,
   registerAgentTypes,
 } from './bootstrap.js'
 export type {
   AgentHandlerResult,
+  BuiltinElectricToolsFactory,
   BuiltinAgentHandlerOptions,
 } from './bootstrap.js'
 

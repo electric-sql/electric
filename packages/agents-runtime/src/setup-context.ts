@@ -79,6 +79,8 @@ export interface WiringConfig {
     onEvent?: (event: ChangeEvent) => void,
     opts?: { preload?: boolean }
   ) => Promise<ObservationStreamDB>
+  /** Ensure a generic observation stream exists before creating a StreamDB. */
+  ensureSourceStream?: (streamUrl: string, contentType: string) => Promise<void>
   /** Create a shared state StreamDB (optionally creating the stream on the server first). */
   createSharedStateDb: (
     ssId: string,
@@ -927,8 +929,17 @@ export function createSetupContext(
     let sourceDb: ObservationStreamDB | undefined
 
     if (source.streamUrl && source.schema && wiring) {
+      if (source.ensureStream && wiring.ensureSourceStream) {
+        await wiring.ensureSourceStream(
+          source.streamUrl,
+          source.ensureStream.contentType
+        )
+      }
+      const sourceStreamUrl = source.streamUrl.startsWith(`/`)
+        ? appendPathToUrl(config.serverBaseUrl, source.streamUrl)
+        : source.streamUrl
       sourceDb = await wiring.createSourceDb(
-        appendPathToUrl(config.serverBaseUrl, source.streamUrl),
+        sourceStreamUrl,
         source.schema,
         (event: ChangeEvent) => {
           events.push(event)

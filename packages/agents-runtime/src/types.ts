@@ -49,6 +49,11 @@ import type {
   Signal as EntitySignalEntry,
   WakeEntry,
 } from './entity-schema'
+import type {
+  EventSourceContract,
+  EventSourceSubscription,
+  EventSourceSubscriptionInput,
+} from './event-sources'
 import type { EntityTags, TagOperation } from './tags'
 
 export type EntityStreamDB = RuntimeEntityStreamDB
@@ -325,6 +330,7 @@ export type TimelineItem =
   | {
       kind: `run`
       at: number
+      finishReason?: string
       items: Array<
         | { kind: `text`; text: string; status: `streaming` | `completed` }
         | {
@@ -536,6 +542,9 @@ export interface ObservationSource {
   readonly sourceRef: string
   readonly streamUrl?: string
   readonly schema?: Record<string, CollectionDefinition>
+  readonly ensureStream?: {
+    contentType: string
+  }
 
   wake?: () => SourceWakeConfig
   toManifestEntry: () => ManifestSourceEntry
@@ -659,6 +668,13 @@ export interface ProcessWakeConfig {
       messageType?: string
     }) => Promise<{ txid: string }>
     deleteSchedule: (opts: { id: string }) => Promise<{ txid: string }>
+    listEventSources: () => Promise<Array<EventSourceContract>>
+    subscribeToEventSource: (
+      opts: EventSourceSubscriptionInput
+    ) => Promise<{ txid: string; subscription: EventSourceSubscription }>
+    unsubscribeFromEventSource: (opts: {
+      id: string
+    }) => Promise<{ txid: string }>
   }) => Array<AgentTool> | Promise<Array<AgentTool>>
   /** Optional shutdown signal to end idle waits during host teardown. */
   shutdownSignal?: AbortSignal

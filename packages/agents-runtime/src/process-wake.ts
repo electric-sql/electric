@@ -10,11 +10,19 @@ import { createSetupContext } from './setup-context'
 import { createEntityLogPrefix, runtimeLog } from './log'
 import { createRuntimeServerClient } from './runtime-server-client'
 import { appendPathToUrl } from './url'
+import { manifestChildKey } from './manifest-helpers'
+import {
+  buildHydratedEventSourceWake,
+  eventSourceWakeInfoFromManifests,
+} from './event-sources'
+import { webhookObservationCollections } from './observation-sources'
+import type { HydratedEventSourceWake } from './event-sources'
 import type {
   CronObservationSource,
   EntitiesObservationSource,
   EntityObservationSource,
   PgSyncObservationSource,
+  WebhookEventRow,
 } from './observation-sources'
 import type {
   CollectionDefinition,
@@ -1199,6 +1207,7 @@ export async function processWake(
                 typeof opts.wake === `object` && opts.wake.on === `runFinished`
                   ? opts.wake.includeResponse
                   : undefined,
+              manifestKey: manifestChildKey(childType, childId),
             }
           : undefined
         return serverClient.spawnEntity({
@@ -1264,6 +1273,13 @@ export async function processWake(
           await sourceDb.preload()
         }
         return sourceDb
+      },
+
+      ensureSourceStream: async (
+        sourceStreamUrl: string,
+        contentType: string
+      ): Promise<void> => {
+        await serverClient.ensureStream(sourceStreamUrl, contentType)
       },
 
       createSharedStateDb: async (
@@ -1450,6 +1466,35 @@ export async function processWake(
       executeSend,
     })
     setupCtx.restorePersistedSharedStateHandles()
+
+    const hydrateCurrentEventSourceWake =
+      async (): Promise<HydratedEventSourceWake | null> => {
+        const info = eventSourceWakeInfoFromManifests({
+          wakeEvent: currentWakeEvent,
+          manifests: db.collections.manifests.toArray,
+        })
+        if (!info) return null
+
+        try {
+          const sourceStreamUrl = info.sourceUrl.startsWith(`/`)
+            ? appendPathToUrl(baseUrl, info.sourceUrl)
+            : info.sourceUrl
+          const sourceDb = await wiringConfig.createSourceDb(
+            sourceStreamUrl,
+            webhookObservationCollections,
+            undefined,
+            { preload: true }
+          )
+          const rows = (sourceDb.collections.events?.toArray ??
+            []) as unknown as Array<WebhookEventRow>
+          return buildHydratedEventSourceWake(info, rows)
+        } catch (error) {
+          log.warn(
+            `failed to hydrate event source wake source=${info.sourceUrl}: ${error instanceof Error ? error.message : String(error)}`
+          )
+          return null
+        }
+      }
 
     const doObserve = async (
       source: ObservationSource,
@@ -1818,6 +1863,17 @@ export async function processWake(
                 entityUrl,
                 ...opts,
               }),
+            listEventSources: () => serverClient.listEventSources(),
+            subscribeToEventSource: (opts) =>
+              serverClient.subscribeToEventSource({
+                entityUrl,
+                ...opts,
+              }),
+            unsubscribeFromEventSource: (opts) =>
+              serverClient.unsubscribeFromEventSource({
+                entityUrl,
+                ...opts,
+              }),
           })
         : []
 
@@ -1854,6 +1910,7 @@ export async function processWake(
         registerSignalHandler: (handler) => {
           activeSignalHandler = handler
         },
+        hydratedEventSourceWake: await hydrateCurrentEventSourceWake(),
         doObserve,
         doSpawn,
         doMkdb,

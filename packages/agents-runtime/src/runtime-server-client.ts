@@ -1,8 +1,14 @@
 import type { PgSyncOptions } from './observation-sources'
 import type { EntityTags, TagOperation } from './tags'
 import { appendPathToUrl } from './url'
+import { buildEventSourceSubscriptionId } from './event-sources'
 import type { ClaimTokenHeader, HeadersProvider } from './types'
 import type { EntitySignal } from './entity-schema'
+import type {
+  EventSourceContract,
+  EventSourceSubscription,
+  EventSourceSubscriptionInput,
+} from './event-sources'
 export type { EntitySignal } from './entity-schema'
 
 const ELECTRIC_PRINCIPAL_HEADER = `electric-principal`
@@ -52,6 +58,7 @@ export interface SpawnEntityOptions {
     debounceMs?: number
     timeoutMs?: number
     includeResponse?: boolean
+    manifestKey?: string
   }
 }
 
@@ -93,6 +100,7 @@ export interface RuntimeServerClient {
   getEntityInfo: (entityUrl: string) => Promise<RuntimeEntityInfo>
   ensureSharedStateStream: (sharedStateId: string) => Promise<string>
   signalEntity: (options: SignalEntityOptions) => Promise<{ txid: number }>
+  ensureStream: (streamPath: string, contentType?: string) => Promise<string>
   deleteEntity: (entityUrl: string) => Promise<void>
   getSharedStateStreamPath: (sharedStateId: string) => string
   registerWake: (options: RegisterWakeOptions) => Promise<void>
@@ -105,6 +113,14 @@ export interface RuntimeServerClient {
     streamUrl: string
     sourceRef: string
   }>
+  listEventSources: () => Promise<Array<EventSourceContract>>
+  subscribeToEventSource: (
+    options: EventSourceSubscriptionInput & { entityUrl: string }
+  ) => Promise<{ txid: string; subscription: EventSourceSubscription }>
+  unsubscribeFromEventSource: (options: {
+    entityUrl: string
+    id: string
+  }) => Promise<{ txid: string }>
   upsertCronSchedule: (options: {
     entityUrl: string
     id: string
@@ -343,14 +359,21 @@ export function createRuntimeServerClient(
     sharedStateId: string
   ): Promise<string> => {
     const streamPath = getSharedStateStreamPath(sharedStateId)
+    return await ensureStream(streamPath, `application/json`)
+  }
+
+  const ensureStream = async (
+    streamPath: string,
+    contentType = `application/json`
+  ): Promise<string> => {
     const response = await request(streamPath, {
       method: `PUT`,
-      headers: { 'content-type': `application/json` },
+      headers: { 'content-type': contentType },
     })
 
     if (!response.ok && response.status !== 409) {
       throw new Error(
-        `failed to create shared state ${sharedStateId} (${response.status}): ${await readErrorText(response)}`
+        `failed to create stream ${streamPath} (${response.status}): ${await readErrorText(response)}`
       )
     }
 
@@ -456,6 +479,74 @@ export function createRuntimeServerClient(
       )
     }
     return (await response.json()) as { streamUrl: string; sourceRef: string }
+  }
+
+  const listEventSources = async (): Promise<Array<EventSourceContract>> => {
+    const response = await request(`/_electric/event-sources`, {
+      method: `GET`,
+    })
+    if (!response.ok) {
+      throw new Error(
+        `listEventSources failed (${response.status}): ${await readErrorText(response)}`
+      )
+    }
+    const data = (await response.json()) as {
+      eventSources?: Array<EventSourceContract>
+    }
+    return data.eventSources ?? []
+  }
+
+  const subscribeToEventSource = async (
+    options: EventSourceSubscriptionInput & { entityUrl: string }
+  ): Promise<{ txid: string; subscription: EventSourceSubscription }> => {
+    const id =
+      options.id ??
+      buildEventSourceSubscriptionId({
+        sourceKey: options.sourceKey,
+        bucketKey: options.bucketKey,
+        params: options.params,
+        filterKey: options.filterKey,
+      })
+    const response = await request(
+      `${entityRpcPath(options.entityUrl)}/event-source-subscriptions/${encodeURIComponent(id)}`,
+      {
+        method: `PUT`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({
+          sourceKey: options.sourceKey,
+          bucketKey: options.bucketKey,
+          params: options.params,
+          filterKey: options.filterKey,
+          lifetime: options.lifetime,
+          reason: options.reason,
+        }),
+      }
+    )
+    if (!response.ok) {
+      throw new Error(
+        `subscribeToEventSource failed (${response.status}): ${await readErrorText(response)}`
+      )
+    }
+    return (await response.json()) as {
+      txid: string
+      subscription: EventSourceSubscription
+    }
+  }
+
+  const unsubscribeFromEventSource = async (options: {
+    entityUrl: string
+    id: string
+  }): Promise<{ txid: string }> => {
+    const response = await request(
+      `${entityRpcPath(options.entityUrl)}/event-source-subscriptions/${encodeURIComponent(options.id)}`,
+      { method: `DELETE` }
+    )
+    if (!response.ok) {
+      throw new Error(
+        `unsubscribeFromEventSource failed (${response.status}): ${await readErrorText(response)}`
+      )
+    }
+    return (await response.json()) as { txid: string }
   }
 
   const upsertCronSchedule = async (options: {
@@ -599,12 +690,16 @@ export function createRuntimeServerClient(
     getEntityInfo,
     ensureSharedStateStream,
     signalEntity,
+    ensureStream,
     deleteEntity,
     getSharedStateStreamPath,
     registerWake,
     registerCronSource,
     registerEntitiesSource,
     registerPgSyncSource,
+    listEventSources,
+    subscribeToEventSource,
+    unsubscribeFromEventSource,
     upsertCronSchedule,
     upsertFutureSendSchedule,
     deleteSchedule,

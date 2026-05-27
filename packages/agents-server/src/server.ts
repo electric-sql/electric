@@ -34,6 +34,7 @@ import type { Principal } from './principal.js'
 import type { EntityBridgeCoordinator } from './entity-bridge-manager.js'
 import type { DurableStreamsRoutingAdapter } from './routing/durable-streams-routing-adapter.js'
 import type { OssServerContext } from './routing/oss-server-router.js'
+import type { EventSourceCatalog } from './routing/context.js'
 import type { StartedStandaloneAgentsRuntime } from './standalone-runtime.js'
 import type { DurableStreamsBearerProvider } from './stream-client.js'
 import type {
@@ -67,6 +68,8 @@ export interface ElectricAgentsServerOptions {
     request: Request
   ) => Promise<Principal | null> | Principal | null
   allowDevPrincipalFallback?: boolean
+  eventSources?: EventSourceCatalog
+  ensureEventSourceWakeSource?: (sourceUrl: string) => Promise<void> | void
   /**
    * Disabled by default. When set to a positive interval, periodically
    * recovers expired dispatch claims and stale outstanding wakes.
@@ -442,6 +445,15 @@ export class ElectricAgentsServer {
       runtime: this.standaloneRuntime.runtime,
       entityBridgeManager: this.entityBridgeManager,
       pgSyncBridgeManager: this.standaloneRuntime.runtime.pgSyncBridgeManager,
+      ...(this.options.eventSources
+        ? { eventSources: this.options.eventSources }
+        : {}),
+      ...(this.options.ensureEventSourceWakeSource
+        ? {
+            ensureEventSourceWakeSource:
+              this.options.ensureEventSourceWakeSource,
+          }
+        : {}),
       isShuttingDown: () => this.shuttingDown,
       mockAgent: this.mockAgentBootstrap
         ? { runtime: this.mockAgentBootstrap.runtime }

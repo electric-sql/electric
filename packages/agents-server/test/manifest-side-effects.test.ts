@@ -130,4 +130,70 @@ describe(`manifest side effects`, () => {
       manifestKey: undefined,
     })
   })
+
+  it(`builds webhook manifest wakes from the configured stream URL`, () => {
+    const registration = buildManifestWakeRegistration(
+      `/webhook-smoke/demo`,
+      {
+        kind: `source`,
+        sourceType: `webhook`,
+        sourceRef: `my-testing-endpoint`,
+        config: {
+          endpointKey: `my-testing-endpoint`,
+          streamUrl: `/_webhooks/my-testing-endpoint`,
+        },
+        wake: {
+          on: `change`,
+          collections: [`webhook_event`],
+          ops: [`insert`],
+        },
+      },
+      `source:webhook:my-testing-endpoint`
+    )
+
+    expect(registration).toMatchObject({
+      subscriberUrl: `/webhook-smoke/demo`,
+      sourceUrl: `/_webhooks/my-testing-endpoint`,
+      condition: {
+        on: `change`,
+        collections: [`webhook_event`],
+        ops: [`insert`],
+      },
+      oneShot: false,
+      manifestKey: `source:webhook:my-testing-endpoint`,
+    })
+  })
+
+  it(`derives bucketed webhook manifest wake URLs when stream URL is absent`, () => {
+    const registration = buildManifestWakeRegistration(
+      `/webhook-smoke/demo`,
+      {
+        kind: `source`,
+        sourceType: `webhook`,
+        sourceRef: `repo/prs/123`,
+        config: {
+          endpointKey: `repo`,
+          bucket: `prs/123`,
+        },
+        wake: {
+          on: `change`,
+          collections: [`webhook_event`],
+          ops: [`insert`],
+        },
+      },
+      `source:webhook:repo/prs/123`
+    )
+
+    expect(registration).toMatchObject({
+      subscriberUrl: `/webhook-smoke/demo`,
+      sourceUrl: `/_webhooks/repo/prs/123`,
+      condition: {
+        on: `change`,
+        collections: [`webhook_event`],
+        ops: [`insert`],
+      },
+      oneShot: false,
+      manifestKey: `source:webhook:repo/prs/123`,
+    })
+  })
 })

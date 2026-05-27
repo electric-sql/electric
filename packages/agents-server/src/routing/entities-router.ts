@@ -3,6 +3,10 @@
  */
 
 import { Type, type Static } from '@sinclair/typebox'
+import {
+  buildEventSourceManifestEntry,
+  resolveEventSourceSubscription,
+} from '@electric-ax/agents-runtime'
 import { Router, json, status } from 'itty-router'
 import { apiError } from '../electric-agents-http.js'
 import { parsePrincipalKey, principalUrl } from '../principal.js'
@@ -26,6 +30,7 @@ import type { ElectricAgentsEntity } from '../electric-agents-types.js'
 import type { JsonRouteRequest } from './schema.js'
 import type { RouterType } from 'itty-router'
 import type { TenantContext } from './context.js'
+import type { EventSourceSubscriptionInput } from '@electric-ax/agents-runtime'
 
 interface AgentsRouteRequest extends JsonRouteRequest {
   entityRoute?: ExistingEntityRoute
@@ -84,6 +89,7 @@ const spawnBodySchema = Type.Object({
       debounceMs: Type.Optional(Type.Number()),
       timeoutMs: Type.Optional(Type.Number()),
       includeResponse: Type.Optional(Type.Boolean()),
+      manifestKey: Type.Optional(Type.String()),
     })
   ),
 })
@@ -169,6 +175,24 @@ const scheduleBodySchema = Type.Union([
   }),
 ])
 
+const subscriptionLifetimeSchema = Type.Union([
+  Type.Object({ kind: Type.Literal(`until_entity_stopped`) }),
+  Type.Object({
+    kind: Type.Literal(`expires_at`),
+    at: Type.String(),
+  }),
+  Type.Object({ kind: Type.Literal(`manual`) }),
+])
+
+const eventSourceSubscriptionBodySchema = Type.Object({
+  sourceKey: Type.String(),
+  bucketKey: Type.Optional(Type.String()),
+  params: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
+  filterKey: Type.Optional(Type.String()),
+  lifetime: Type.Optional(subscriptionLifetimeSchema),
+  reason: Type.Optional(Type.String()),
+})
+
 const entitiesRegisterBodySchema = Type.Object({
   tags: Type.Optional(stringRecordSchema),
 })
@@ -180,6 +204,9 @@ type ForkBody = Static<typeof forkBodySchema>
 type SetTagBody = Static<typeof setTagBodySchema>
 type SignalBody = Static<typeof signalBodySchema>
 type ScheduleBody = Static<typeof scheduleBodySchema>
+type EventSourceSubscriptionBody = Static<
+  typeof eventSourceSubscriptionBodySchema
+>
 type EntitiesRegisterBody = Static<typeof entitiesRegisterBodySchema>
 
 export const entitiesRouter: EntitiesRoutes = Router<
@@ -255,6 +282,17 @@ entitiesRouter.delete(
   `/:type/:instanceId/schedules/:scheduleId`,
   withExistingEntity,
   deleteSchedule
+)
+entitiesRouter.put(
+  `/:type/:instanceId/event-source-subscriptions/:subscriptionId`,
+  withExistingEntity,
+  withSchema(eventSourceSubscriptionBodySchema),
+  upsertEventSourceSubscription
+)
+entitiesRouter.delete(
+  `/:type/:instanceId/event-source-subscriptions/:subscriptionId`,
+  withExistingEntity,
+  deleteEventSourceSubscription
 )
 
 function entityUrlFromSegments(
@@ -464,6 +502,98 @@ async function deleteSchedule(
   const result = await ctx.entityManager.deleteSchedule(entityUrl, {
     id: decodeURIComponent(request.params.scheduleId),
   })
+  return json(result)
+}
+
+async function upsertEventSourceSubscription(
+  request: AgentsRouteRequest,
+  ctx: TenantContext
+): Promise<Response> {
+  const principalMutationError = rejectPrincipalEntityMutation(
+    request,
+    `subscribed to event sources`
+  )
+  if (principalMutationError) return principalMutationError
+
+  const catalog = ctx.eventSources
+  if (!catalog) {
+    return apiError(
+      404,
+      ErrCodeNotFound,
+      `No event source catalog is configured`
+    )
+  }
+
+  const { entityUrl } = requireExistingEntityRoute(request)
+  const parsed = routeBody<EventSourceSubscriptionBody>(request)
+  const source = await catalog.getEventSource(parsed.sourceKey)
+  if (!source) {
+    return apiError(
+      404,
+      ErrCodeNotFound,
+      `Event source "${parsed.sourceKey}" not found`
+    )
+  }
+
+  if (parsed.lifetime?.kind === `expires_at`) {
+    const expiresAt = new Date(parsed.lifetime.at)
+    if (Number.isNaN(expiresAt.getTime())) {
+      return apiError(
+        400,
+        ErrCodeInvalidRequest,
+        `Invalid expires_at lifetime timestamp`
+      )
+    }
+  }
+
+  let resolved: ReturnType<typeof resolveEventSourceSubscription>
+  try {
+    resolved = resolveEventSourceSubscription({
+      contract: source,
+      entityUrl,
+      request: {
+        ...(parsed as EventSourceSubscriptionInput),
+        id: decodeURIComponent(request.params.subscriptionId),
+      },
+      createdBy: `tool`,
+    })
+  } catch (error) {
+    return apiError(
+      400,
+      ErrCodeInvalidRequest,
+      error instanceof Error ? error.message : String(error)
+    )
+  }
+
+  await ctx.ensureEventSourceWakeSource?.(resolved.subscription.sourceUrl)
+
+  const result = await ctx.entityManager.upsertEventSourceSubscription(
+    entityUrl,
+    {
+      subscription: resolved.subscription,
+      manifest: buildEventSourceManifestEntry(resolved),
+    }
+  )
+  return json(result)
+}
+
+async function deleteEventSourceSubscription(
+  request: AgentsRouteRequest,
+  ctx: TenantContext
+): Promise<Response> {
+  const principalMutationError = rejectPrincipalEntityMutation(
+    request,
+    `unsubscribed from event sources`
+  )
+  if (principalMutationError) return principalMutationError
+
+  const { entityUrl } = requireExistingEntityRoute(request)
+  const result = await ctx.entityManager.deleteEventSourceSubscription(
+    entityUrl,
+    {
+      id: decodeURIComponent(request.params.subscriptionId),
+    }
+  )
   return json(result)
 }
 

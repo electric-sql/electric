@@ -6,6 +6,7 @@ import {
   getCronStreamPath,
   getSharedStateStreamPath,
   getNextCronFireAt,
+  eventSourceSubscriptionManifestKey,
   manifestChildKey,
   manifestSharedStateKey,
   manifestSourceKey,
@@ -50,6 +51,7 @@ import type { queueAsPromised } from 'fastq'
 import type { SchedulerClient } from './scheduler.js'
 import type { WakeEvalResult, WakeRegistry } from './wake-registry.js'
 import type { WakeMessage } from '@electric-ax/agents-runtime'
+import type { EventSourceSubscription } from '@electric-ax/agents-runtime'
 import type { PostgresRegistry } from './entity-registry.js'
 import type { SchemaValidator } from './electric-agents/schema-validator.js'
 import type { StreamClient } from './stream-client.js'
@@ -554,6 +556,7 @@ export class EntityManager {
         timeoutMs: req.wake.timeoutMs,
         oneShot: false,
         includeResponse: req.wake.includeResponse,
+        manifestKey: req.wake.manifestKey,
       })
     }
 
@@ -2158,6 +2161,67 @@ export class EntityManager {
     await this.writeManifestEntry(entityUrl, manifestKey, `delete`, undefined, {
       txid,
     })
+
+    return { txid }
+  }
+
+  async upsertEventSourceSubscription(
+    entityUrl: string,
+    req: {
+      subscription: EventSourceSubscription
+      manifest: Record<string, unknown>
+    }
+  ): Promise<{ txid: string; subscription: EventSourceSubscription }> {
+    const manifestKey = req.subscription.manifestKey
+    const txid = randomUUID()
+    await this.writeManifestEntry(
+      entityUrl,
+      manifestKey,
+      `upsert`,
+      req.manifest,
+      {
+        txid,
+      }
+    )
+
+    // The manifest is the durable source of truth. Register side effects after
+    // it is appended so failures can be repaired by manifest replay.
+    await this.wakeRegistry.unregisterByManifestKey(
+      entityUrl,
+      manifestKey,
+      this.tenantId
+    )
+    await this.wakeRegistry.register({
+      tenantId: this.tenantId,
+      subscriberUrl: entityUrl,
+      sourceUrl: req.subscription.sourceUrl,
+      condition: {
+        on: `change`,
+        collections: [`webhook_event`],
+        ops: [`insert`],
+      },
+      oneShot: false,
+      manifestKey,
+    })
+
+    return { txid, subscription: req.subscription }
+  }
+
+  async deleteEventSourceSubscription(
+    entityUrl: string,
+    req: { id: string }
+  ): Promise<{ txid: string }> {
+    const manifestKey = eventSourceSubscriptionManifestKey(req.id)
+    const txid = randomUUID()
+    await this.writeManifestEntry(entityUrl, manifestKey, `delete`, undefined, {
+      txid,
+    })
+
+    await this.wakeRegistry.unregisterByManifestKey(
+      entityUrl,
+      manifestKey,
+      this.tenantId
+    )
 
     return { txid }
   }
