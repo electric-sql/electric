@@ -1,6 +1,15 @@
 import { openAuthorizeWindow } from './oauth-window'
 import { SecretStore } from './secret-store'
 import {
+  buildSavedServerHeaders,
+  installCloudAuthHeaderInjection as installCloudAuthHeaderInjectionForDeps,
+  type CloudAuthHeaderInjectionDeps,
+} from './cloud/auth-injection'
+import {
+  desktopServerFetch as desktopServerFetchForDeps,
+  type DesktopServerFetchDeps,
+} from './cloud/server-fetch'
+import {
   applyApiKeysToEnv,
   captureEnvApiKeys,
   EMPTY_API_KEYS,
@@ -27,11 +36,8 @@ import {
 } from './settings/store'
 import {
   hasHeader,
-  headersToRecord,
   injectDevPrincipalHeaders as injectDevPrincipalHeadersForServer,
-  isLocalLoopbackHostname,
   mergeHeaders,
-  normalizeHeaderRecord,
   runnerOwnerPrincipalFromHeaders,
   runnerOwnerPrincipalFromUserId,
 } from './shared/headers'
@@ -50,8 +56,6 @@ import type {
   DesktopMenuSection,
   DesktopMenuState,
   DesktopNavigationState,
-  DesktopServerFetchRequest,
-  DesktopServerFetchResponse,
   DesktopSettings,
   DesktopState,
   DiscoveredServer,
@@ -92,8 +96,6 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { createServer, type Server as HttpServer } from 'node:http'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import * as undici from 'undici'
-import type { Dispatcher } from 'undici'
 
 type StoredCodexAuth = {
   source: CodexAuthSource
@@ -315,344 +317,25 @@ function broadcastCloudAgentServersState(next: CloudAgentServersState): void {
   }
 }
 
-/**
- * Match a request URL against the user's saved `electric-cloud`
- * servers by host + base path + `service` query marker. Cloud URLs
- * carry `?service=<tenantId>` so a single cloud-agents-server host can
- * serve multiple tenants without us attaching tenant A's token to
- * tenant B's request.
- *
- * Legacy settings may still have a host-only Cloud URL. We allow a
- * request without a `service` query marker only when it is the sole
- * possible match for the origin + base path; otherwise we fail closed
- * until `prepareConnection` rewrites the saved URL to include the
- * service marker.
- */
-function findCloudServerForUrl(requestUrl: string): ServerConfig | null {
-  let parsed: URL
-  try {
-    parsed = new URL(requestUrl)
-  } catch {
-    return null
-  }
-  const fallbackMatches: Array<ServerConfig> = []
-  const requestedService = parsed.searchParams.get(`service`)
-  for (const server of settings.servers) {
-    if (server.source !== `electric-cloud`) continue
-    if (!server.tenantId) continue
-    let base: URL
-    try {
-      base = new URL(server.url)
-    } catch {
-      continue
-    }
-    if (base.origin !== parsed.origin) continue
-    const basePath = base.pathname.replace(/\/+$/, ``)
-    if (
-      basePath !== `` &&
-      parsed.pathname !== basePath &&
-      !parsed.pathname.startsWith(`${basePath}/`)
-    ) {
-      continue
-    }
-    if (requestedService) {
-      if (requestedService === server.tenantId) return server
-      continue
-    }
-    fallbackMatches.push(server)
-  }
-  return fallbackMatches.length === 1 ? fallbackMatches[0]! : null
+const cloudAuthHeaderInjectionDeps: CloudAuthHeaderInjectionDeps = {
+  getServers: () => settings.servers,
+  getAgentsToken: (tenantId) => cloudAgentServers?.getAgentsToken(tenantId),
+  getCloudAuthState: () => cloudAuth?.getState(),
+  injectDevPrincipalHeaders,
 }
 
-function findSavedServerForUrl(requestUrl: string): ServerConfig | null {
-  let parsed: URL
-  try {
-    parsed = new URL(requestUrl)
-  } catch {
-    return null
-  }
-
-  for (const server of settings.servers) {
-    let base: URL
-    try {
-      base = new URL(server.url)
-    } catch {
-      continue
-    }
-    if (base.origin !== parsed.origin) continue
-    const basePath = base.pathname.replace(/\/+$/, ``)
-    if (
-      basePath === `` ||
-      parsed.pathname === basePath ||
-      parsed.pathname.startsWith(`${basePath}/`)
-    ) {
-      return server
-    }
-  }
-  return null
+const desktopServerFetchDeps: DesktopServerFetchDeps = {
+  getServers: () => settings.servers,
+  buildSavedServerHeaders: (url) =>
+    buildSavedServerHeaders(cloudAuthHeaderInjectionDeps, url),
 }
 
-/**
- * Decorate outgoing requests bound for saved agent servers with the
- * configured server headers. Cloud agent servers also receive
- * `Authorization: Bearer <agents token>` and `x-electric-service:
- * <tenantId>` headers. Two injection points, both reading from the
- * same in-memory agents-token map (`SecretStore`-backed):
- *
- *  1. Renderer fetches — Electron's
- *     `session.webRequest.onBeforeSendHeaders` hook catches anything
- *     coming out of `webContents.fetch` / shape streams / etc.
- *  2. Main-process fetches — installed as a global undici dispatcher
- *     interceptor so `BuiltinAgentsServer`'s outbound calls (entity-
- *     type registration, runtime → agents-server traffic) and our
- *     own `checkAgentsServerHealth` all pick up the same auth
- *     without each call-site needing to know.
- *
- * The agents bearer token lives only in the encrypted `SecretStore` + the
- * in-memory agents-token map — neither the renderer nor
- * `settings.json` ever sees it.
- *
- * Installed once at app launch. Requests not matching a saved cloud
- * server pass through unchanged.
- */
 function installCloudAuthHeaderInjection(): void {
-  session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
-    const extra = mergeHeaders(
-      buildSavedServerHeaders(details.url) ?? undefined,
-      buildCloudAuthHeaders(details.url) ?? undefined
-    )
-    if (!extra) {
-      callback({ requestHeaders: details.requestHeaders })
-      return
-    }
-    callback({
-      requestHeaders: { ...details.requestHeaders, ...extra },
-    })
-  })
-
-  installCloudAuthUndiciInterceptor()
+  installCloudAuthHeaderInjectionForDeps(cloudAuthHeaderInjectionDeps)
 }
 
-function buildSavedServerHeaders(url: string): Record<string, string> | null {
-  const server = findSavedServerForUrl(url)
-  if (!server) return null
-  return mergeHeaders(injectDevPrincipalHeaders(server).headers) ?? null
-}
-
-function assertDesktopServerFetchAllowed(
-  request: unknown
-): DesktopServerFetchRequest {
-  if (!request || typeof request !== `object`) {
-    throw new Error(`Invalid desktop server fetch request`)
-  }
-  const raw = request as Partial<DesktopServerFetchRequest>
-  if (typeof raw.url !== `string` || raw.url.trim().length === 0) {
-    throw new Error(`Invalid desktop server fetch URL`)
-  }
-  if (typeof raw.method !== `string` || raw.method.trim().length === 0) {
-    throw new Error(`Invalid desktop server fetch method`)
-  }
-  if (!raw.headers || typeof raw.headers !== `object`) {
-    throw new Error(`Invalid desktop server fetch headers`)
-  }
-  if (raw.body !== null && typeof raw.body !== `string`) {
-    throw new Error(`Invalid desktop server fetch body`)
-  }
-
-  const url = raw.url.trim()
-  const method = raw.method.trim().toUpperCase()
-  if (![`POST`, `PUT`, `PATCH`, `DELETE`].includes(method)) {
-    throw new Error(`Desktop server fetch only supports mutating requests`)
-  }
-  const server = findSavedServerForUrl(url)
-  if (!server || server.source === `electric-cloud`) {
-    throw new Error(
-      `Desktop server fetch is only available for saved local servers`
-    )
-  }
-  let parsed: URL
-  try {
-    parsed = new URL(url)
-  } catch {
-    throw new Error(`Invalid desktop server fetch URL`)
-  }
-  if (
-    parsed.protocol !== `http:` ||
-    !isLocalLoopbackHostname(parsed.hostname)
-  ) {
-    throw new Error(`Desktop server fetch only supports local HTTP servers`)
-  }
-
-  return {
-    url,
-    method,
-    headers: normalizeHeaderRecord(raw.headers) ?? {},
-    body: raw.body,
-  }
-}
-
-async function desktopServerFetch(
-  request: unknown
-): Promise<DesktopServerFetchResponse> {
-  const checked = assertDesktopServerFetchAllowed(request)
-  const headers = mergeHeaders(
-    buildSavedServerHeaders(checked.url) ?? undefined,
-    checked.headers
-  )
-  const response = await fetch(checked.url, {
-    method: checked.method,
-    headers,
-    body: checked.body,
-  })
-  return {
-    url: response.url,
-    status: response.status,
-    statusText: response.statusText,
-    headers: headersToRecord(response.headers),
-    body: await response.text(),
-  }
-}
-
-/**
- * Build the cloud-auth headers to inject on a request to `url`, or
- * `null` if the URL doesn't target a saved cloud agent server (or we
- * don't have a stored agents token for it).
- *
- * Headers emitted (only when we have the data):
- *  - `Authorization: Bearer <agents token>` — proves the request is
- *    authorized for the tenant.
- *  - `x-electric-service: <tenantId>` — routes to the right tenant.
- *  - `x-electric-asserted-user-id` / `-email` / `-name` — the cloud
- *    agents server requires these for runner-targeted dispatch (see
- *    `assertDispatchPolicyAllowed`). We assert the currently signed-in
- *    Electric Cloud user. The cloud-agents-server only trusts these
- *    when `trustAssertedUserHeaders` is enabled in its config, so
- *    they're harmless to include unconditionally.
- */
-function buildCloudAuthHeaders(url: string): Record<string, string> | null {
-  const server = findCloudServerForUrl(url)
-  if (!server || !server.tenantId) return null
-  const token = cloudAgentServers?.getAgentsToken(server.tenantId)
-  if (!token) {
-    // Tenant is known but the user has no stored token yet (uncommon —
-    // a manual edit of `settings.json` or a `SecretStore` corruption).
-    // Skip rather than send a half-authenticated request.
-    return null
-  }
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${token}`,
-    'x-electric-service': server.tenantId,
-  }
-  const cloudAuthState = cloudAuth?.getState()
-  if (cloudAuthState?.userId) {
-    headers[`x-electric-asserted-user-id`] = cloudAuthState.userId
-  }
-  if (cloudAuthState?.email) {
-    headers[`x-electric-asserted-email`] = cloudAuthState.email
-  }
-  if (cloudAuthState?.name) {
-    headers[`x-electric-asserted-name`] = cloudAuthState.name
-  }
-  return headers
-}
-
-/**
- * Global undici dispatcher interceptor for the main process.
- *
- * Electron's `session.webRequest` catches renderer-side fetches but
- * not Node-side ones. The local agent runtime (`BuiltinAgentsServer`
- * from `@electric-ax/agents`) makes Node fetches to the connected
- * agent-server URL when it registers entity types and proxies
- * runtime traffic. For cloud servers those calls would 401 without
- * the agents token, so we install a global undici interceptor that
- * mirrors the renderer hook above and adds the same two headers.
- *
- * Matches by full request URL via `findCloudServerForUrl` — same
- * `service` query marker as the renderer hook, so a single cloud-
- * agents-server host serving many tenants can't accidentally see
- * tenant A's token on tenant B's request.
- */
-function installCloudAuthUndiciInterceptor(): void {
-  const base = undici.getGlobalDispatcher()
-  const composed = base.compose(
-    (dispatch): Dispatcher[`dispatch`] =>
-      (opts, handler) => {
-        const fullUrl = composeRequestUrl(opts.origin, opts.path)
-        const extra = fullUrl ? buildCloudAuthHeaders(fullUrl) : null
-        if (!extra) return dispatch(opts, handler)
-        // undici treats `Authorization` (capitalized) and `authorization`
-        // as the same header but our `mergeUndiciHeaders` keys is
-        // case-sensitive — lower-case the keys we add so a previously
-        // set lower-case `authorization` from the caller gets replaced.
-        const lowered: Record<string, string> = {}
-        for (const [key, value] of Object.entries(extra)) {
-          lowered[key.toLowerCase()] = value
-        }
-        return dispatch(
-          { ...opts, headers: mergeUndiciHeaders(opts.headers, lowered) },
-          handler
-        )
-      }
-  )
-  undici.setGlobalDispatcher(composed)
-}
-
-/**
- * Best-effort reconstruction of the URL undici is about to request.
- * `origin` is the parsed `https://host:port` of the dispatch target;
- * `path` is the request path-and-query. Either can be a string or a
- * `URL` depending on caller, so we normalize both.
- */
-function composeRequestUrl(
-  origin: string | URL | null | undefined,
-  path: string | undefined
-): string | null {
-  if (!origin) return null
-  const originStr = typeof origin === `string` ? origin : origin.origin
-  if (!originStr) return null
-  return `${originStr}${path ?? ``}`
-}
-
-/**
- * Merge a set of header overrides into whatever shape undici handed
- * us. Undici accepts headers as an object map, an `IncomingHttpHeaders`-
- * style record, or a flat `[name, value, name, value, …]` array. We
- * preserve the original shape where possible — overrides win on
- * case-insensitive name conflicts.
- */
-function mergeUndiciHeaders(
-  existing: Dispatcher.DispatchOptions[`headers`],
-  overrides: Record<string, string>
-): Record<string, string> {
-  const overrideKeysLower = new Set(
-    Object.keys(overrides).map((key) => key.toLowerCase())
-  )
-  const out: Record<string, string> = {}
-  const pushPair = (name: string, value: string | undefined): void => {
-    if (value === undefined) return
-    if (overrideKeysLower.has(name.toLowerCase())) return
-    out[name] = value
-  }
-  if (Array.isArray(existing)) {
-    for (let i = 0; i + 1 < existing.length; i += 2) {
-      const name = existing[i]
-      const value = existing[i + 1]
-      if (typeof name === `string` && typeof value === `string`) {
-        pushPair(name, value)
-      }
-    }
-  } else if (existing && typeof existing === `object`) {
-    for (const [name, value] of Object.entries(
-      existing as Record<string, string | Array<string> | undefined>
-    )) {
-      if (typeof value === `string`) pushPair(name, value)
-      else if (Array.isArray(value)) pushPair(name, value.join(`, `))
-    }
-  }
-  for (const [name, value] of Object.entries(overrides)) {
-    out[name] = value
-  }
-  return out
+async function desktopServerFetch(request: unknown) {
+  return desktopServerFetchForDeps(desktopServerFetchDeps, request)
 }
 
 function findServer(serverId: string | null | undefined): ServerConfig | null {
