@@ -623,7 +623,7 @@ describe(`processWake`, () => {
     expect(body.done).toBe(true)
   })
 
-  it(`skips done callback when shutdown is requested`, async () => {
+  it(`sends done callback when shutdown is requested after checkpoint`, async () => {
     const shutdownController = new AbortController()
 
     defineEntity(`test-agent`, {
@@ -645,7 +645,13 @@ describe(`processWake`, () => {
         (opts?.body as string | undefined)?.includes(`"done":true`)
     )
 
-    expect(doneCalls).toHaveLength(0)
+    expect(doneCalls).toHaveLength(1)
+    const body = JSON.parse(doneCalls[0]![1]!.body as string) as {
+      acks: Array<{ path: string; offset: string }>
+    }
+    expect(body.acks).toEqual([
+      { path: `/streams/entity:agent-1`, offset: `10_100` },
+    ])
   })
 
   it(`closes immediately for SIGSTOP when there is no handler pass to checkpoint`, async () => {

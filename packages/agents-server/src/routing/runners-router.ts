@@ -238,7 +238,18 @@ async function registerRunner(
   await ctx.streamClient.ensure(runner.wake_stream, {
     contentType: `application/json`,
   })
-  return json(runner, { status: 201 })
+  const runtimeDiagnostics =
+    await ctx.entityManager.registry.getRunnerDiagnostics(runner.id)
+  return json(
+    runtimeDiagnostics?.owner_principal === runner.owner_principal &&
+      runtimeDiagnostics.wake_stream_offset !== undefined
+      ? {
+          ...runner,
+          wake_stream_offset: runtimeDiagnostics.wake_stream_offset,
+        }
+      : runner,
+    { status: 201 }
+  )
 }
 
 async function listRunners(

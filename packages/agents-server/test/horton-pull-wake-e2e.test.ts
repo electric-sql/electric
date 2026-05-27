@@ -283,11 +283,8 @@ describe(`pull-wake Horton e2e with mocked LLM`, () => {
   }, 60_000)
 
   afterAll(async () => {
-    await Promise.allSettled([
-      builtinAgentsServer?.stop(),
-      electricAgentsServer?.stop(),
-      dsServer?.stop(),
-    ])
+    await builtinAgentsServer?.stop().catch(() => {})
+    await Promise.allSettled([electricAgentsServer?.stop(), dsServer?.stop()])
   }, 60_000)
 
   it(`dispatches explicit runner-policy wakes and Horton writes mocked responses`, async () => {
