@@ -1,4 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import {
   __resetPersistentRegistryForTests,
   dockerSandbox,
@@ -220,6 +223,35 @@ d(`dockerSandbox`, () => {
         ],
       })
     ).rejects.toBeInstanceOf(SandboxError)
+  }, 20_000)
+
+  it(`refuses a symlink that resolves to the Docker socket`, async () => {
+    // The literal hostPath doesn't contain "docker.sock", but it symlinks to a
+    // file that does — the regex-only check would let it through. realpath must
+    // resolve it first. Uses a self-controlled target named docker.sock so the
+    // test doesn't depend on the host's real socket path.
+    const dir = await mkdtemp(join(tmpdir(), `dockersock-`))
+    const target = join(dir, `docker.sock`)
+    const link = join(dir, `innocent`)
+    await writeFile(target, ``)
+    await symlink(target, link)
+    try {
+      await expect(
+        dockerSandbox({
+          image: TEST_IMAGE,
+          labels: { [TEST_LABEL]: `1` },
+          extraMounts: [
+            {
+              hostPath: link,
+              containerPath: `/var/run/docker.sock`,
+              readOnly: true,
+            },
+          ],
+        })
+      ).rejects.toMatchObject({ kind: `policy` })
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
   }, 20_000)
 
   it(`an ephemeral container lingers for the idle grace, then is removed`, async () => {

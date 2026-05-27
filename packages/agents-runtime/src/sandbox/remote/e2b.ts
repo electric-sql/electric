@@ -178,6 +178,8 @@ export async function createE2BClient(opts: {
   keepAliveMs?: number
   /** Egress policy applied to the VM at creation. Default: deny everything. */
   initialNetworkPolicy?: NetworkPolicy
+  /** Optional sink for diagnostics (e.g. swallowed keep-alive failures). */
+  log?: (message: string) => void
 }): Promise<RemoteSandboxClient> {
   let mod: { Sandbox: E2BSandboxClass }
   try {
@@ -207,7 +209,7 @@ export async function createE2BClient(opts: {
   await sbx.files.makeDir(opts.workingDirectory).catch(() => {
     /* ignore — may already exist */
   })
-  return adaptE2B(sbx, opts.workingDirectory, { keepAliveMs })
+  return adaptE2B(sbx, opts.workingDirectory, { keepAliveMs, log: opts.log })
 }
 
 /**
@@ -319,6 +321,7 @@ export function adaptE2B(
   opts?: {
     keepAliveMs?: number
     heartbeatIntervalMs?: number
+    log?: (message: string) => void
   }
 ): RemoteSandboxClient {
   // Refresh the absolute timeout while this wake holds the VM so a long-running
@@ -333,8 +336,15 @@ export function adaptE2B(
     opts?.heartbeatIntervalMs ?? heartbeatIntervalFor(keepAliveMs)
   let heartbeat: ReturnType<typeof setInterval> | undefined = setInterval(
     () => {
-      void sbx.setTimeout(keepAliveMs).catch(() => {
-        /* VM may have been killed/paused elsewhere — nothing to keep alive */
+      void sbx.setTimeout(keepAliveMs).catch((err: unknown) => {
+        // Usually benign: the VM was killed/paused elsewhere, so there's
+        // nothing to keep alive. But this also swallows SDK/network/auth
+        // failures, so leave a debug trail for an operator chasing a stuck
+        // reattach. Intentionally non-fatal — a failed keep-alive only means
+        // the VM may reap sooner, which the lifecycle already tolerates.
+        opts?.log?.(
+          `e2b keep-alive refresh failed: ${err instanceof Error ? err.message : String(err)}`
+        )
       })
     },
     interval

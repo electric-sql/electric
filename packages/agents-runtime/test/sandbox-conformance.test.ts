@@ -313,6 +313,20 @@ describe(`sandbox conformance`, () => {
         await expect(sandbox.dispose()).resolves.toBeUndefined()
       })
 
+      it(`operations after dispose are rejected with a runtime SandboxError`, async () => {
+        const sandbox = await provider.create(cwd)
+        await sandbox.dispose()
+        await expect(
+          sandbox.exec({ command: `echo hi` })
+        ).rejects.toMatchObject({ kind: `runtime` })
+        await expect(
+          sandbox.readFile(join(sandbox.workingDirectory, `x.txt`))
+        ).rejects.toMatchObject({ kind: `runtime` })
+        await expect(
+          sandbox.writeFile(join(sandbox.workingDirectory, `x.txt`), `nope`)
+        ).rejects.toMatchObject({ kind: `runtime` })
+      })
+
       it(`exposes name and workingDirectory`, async () => {
         const sandbox = await provider.create(cwd)
         try {

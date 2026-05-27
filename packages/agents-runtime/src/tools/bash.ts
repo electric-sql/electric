@@ -9,7 +9,7 @@ export function createBashTool(sandbox: Sandbox): AgentTool {
   return {
     name: `bash`,
     label: `Bash`,
-    description: `Execute a shell command and return its output. Commands run with a 30-second timeout and a 50KB output cap.`,
+    description: `Execute a shell command and return its output. Commands run with a 30-second timeout and a 50KB output cap. The host process environment is not forwarded, so host secrets (e.g. API keys) are not available as environment variables.`,
     parameters: Type.Object({
       command: Type.String({ description: `The shell command to execute` }),
     }),

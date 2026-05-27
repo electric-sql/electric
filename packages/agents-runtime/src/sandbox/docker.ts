@@ -1,5 +1,6 @@
 import { PassThrough } from 'node:stream'
 import { posix } from 'node:path'
+import { realpathSync } from 'node:fs'
 import { createHash, randomUUID } from 'node:crypto'
 import { fetchInSandbox } from './exec-fetch'
 import {
@@ -689,11 +690,32 @@ function makeBinds(
   mounts: DockerSandboxOpts[`extraMounts`]
 ): ReadonlyArray<string> {
   if (!mounts || mounts.length === 0) return []
+  const isDockerSock = (p: string): boolean => /docker\.sock(?:[/]|$)/.test(p)
   return mounts.map((m) => {
-    if (/docker\.sock(?:[/]|$)/.test(m.hostPath)) {
+    // Check the literal path *and* its realpath: a symlink like
+    // `/tmp/innocent -> /var/run/docker.sock` passes the string match but
+    // resolves to the socket, handing the container an instant escape
+    // primitive. realpath throws ENOENT for a not-yet-created mount path —
+    // which can't be a symlink right now, so the literal check below stands.
+    //
+    // This is best-effort defense-in-depth: `extraMounts` is operator-supplied
+    // config (not agent-controlled), and the resolved path isn't pinned — we
+    // hand docker the literal `hostPath`, which the daemon re-resolves at mount
+    // time. So if the path is materialized as a symlink to the socket in the
+    // window between here and createContainer, safety rests on docker's own
+    // resolution, not on this check. Negligible in practice: the spec is built
+    // and consumed synchronously, and exploiting it needs host write access.
+    let resolved = m.hostPath
+    try {
+      resolved = realpathSync(m.hostPath)
+    } catch {
+      // Path doesn't exist yet; docker would create it as an empty dir.
+    }
+    if (isDockerSock(m.hostPath) || isDockerSock(resolved)) {
+      const via = resolved !== m.hostPath ? ` (resolves to "${resolved}")` : ``
       throw new SandboxError(
         `policy`,
-        `dockerSandbox: refusing to mount Docker socket "${m.hostPath}" — that would let sandboxed code create new containers and escape.`
+        `dockerSandbox: refusing to mount Docker socket "${m.hostPath}"${via} — that would let sandboxed code create new containers and escape.`
       )
     }
     const readOnly = m.readOnly !== false

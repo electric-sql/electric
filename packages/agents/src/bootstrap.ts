@@ -274,7 +274,7 @@ async function buildBuiltinSandboxProfiles(
       profiles.push({
         name: `docker`,
         label: `Docker`,
-        description: `Runs in a hardened Docker container. Network, CPU, memory, and processes are constrained.`,
+        description: `Runs in a hardened Docker container: dropped capabilities, no privilege escalation, and CPU/memory/process limits. The chosen working directory is mounted read-write and, by default, network egress is unrestricted (allow-all).`,
         factory: ({
           args,
           sandboxKey,
@@ -285,6 +285,11 @@ async function buildBuiltinSandboxProfiles(
         }) => {
           const cwd = readWorkingDirectoryArg(args)
           return dockerSandbox({
+            // Default to open egress for local development. Network policy is a
+            // capability of this profile, not a separate profile: like the
+            // working directory above, it can be made a per-spawn arg later so a
+            // single `docker` profile spans permissive → fully-isolated rather
+            // than splitting into `docker-permissive` / `docker-isolated`.
             initialNetworkPolicy: { mode: `allow-all` },
             extraMounts: cwd
               ? [{ hostPath: cwd, containerPath: `/work`, readOnly: false }]

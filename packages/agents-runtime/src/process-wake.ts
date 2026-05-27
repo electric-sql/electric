@@ -1174,9 +1174,15 @@ export async function processWake(
     if (requestedProfileName) {
       const profile = config.sandboxProfiles?.get(requestedProfileName)
       if (!profile) {
+        // Validated against the runner's advertisement at spawn time, so this
+        // is normally a transient mismatch — the runner re-registered (dropping
+        // the profile) between spawn and this wake. The wake is rejected before
+        // it's acked, so the server reclaims it on timeout and redrives onto a
+        // runner that still advertises the profile; failure is isolated to this
+        // one wake (see dispatchWake) and does not take the runner down.
         throw new SandboxError(
           `unavailable`,
-          `[agent-runtime] sandbox profile "${requestedProfileName}" requested for entity "${entityUrl}" is not registered on this runtime. Available profiles: ${[...(config.sandboxProfiles?.keys() ?? [])].join(`, `) || `(none)`}.`
+          `[agent-runtime] sandbox profile "${requestedProfileName}" requested for entity "${entityUrl}" is not currently registered on this runtime (likely a transient runner re-registration race; the wake will be redriven). Available profiles: ${[...(config.sandboxProfiles?.keys() ?? [])].join(`, `) || `(none)`}.`
         )
       }
       // Resolve identity (explicit / per-entity / per-wake key), durability

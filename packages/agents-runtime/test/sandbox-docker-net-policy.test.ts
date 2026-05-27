@@ -76,4 +76,38 @@ describe(`isPrivateOrLinkLocal (SSRF guard)`, () => {
   ])(`flags encoded literal %s as private/link-local`, (host) => {
     expect(isPrivateOrLinkLocal(host)).toBe(true)
   })
+
+  // inet_aton shorthand: libc's resolver (used by getaddrinfo on Linux/macOS)
+  // accepts 1–4 dot-separated parts, each decimal/octal/hex, packing the final
+  // part into the low-order bytes. A dotted-quad-only guard misses these, yet
+  // they resolve to private space via the OS resolver — so they're a real SSRF
+  // bypass for fetch_url under the default (allow-all) docker profile.
+  it.each([
+    `127.1`, // 2-part: 127.0.0.1
+    `127.0.1`, // 3-part: 127.0.0.1
+    `0177.0.0.1`, // octal first octet: 127.0.0.1
+    `0x7f.0.0.1`, // hex first octet: 127.0.0.1
+    `0x7f.1`, // hex + 2-part: 127.0.0.1
+    `017700000001`, // octal whole-integer: 127.0.0.1
+    `0xa9fea9fe`, // 169.254.169.254 in hex (metadata)
+    `169.254.43518`, // 3-part metadata: 169.254.169.254
+    `10.1`, // 2-part RFC1918: 10.0.0.1
+    `0xa.0.0.1`, // hex first octet RFC1918: 10.0.0.1
+  ])(`flags inet_aton shorthand %s as private/link-local`, (host) => {
+    expect(isPrivateOrLinkLocal(host)).toBe(true)
+  })
+
+  // The loose parser must not over-claim: numeric-looking public addresses and
+  // anything that isn't a valid IPv4 literal (real hostnames, >4 parts,
+  // out-of-range octets) stay public so legitimate fetches aren't blocked.
+  it.each([
+    `8.8`, // 2-part: 8.0.0.8 (public)
+    `93.184.216.34`, // dotted-quad public
+    `172.32.0.1`, // just outside RFC1918
+    `1.2.3.4.5`, // 5 parts — not an IPv4 literal, treat as hostname
+    `08.0.0.1`, // invalid octal (8 not an octal digit) — not an IP
+    `0x7g.0.0.1`, // invalid hex — not an IP
+  ])(`treats %s as public`, (host) => {
+    expect(isPrivateOrLinkLocal(host)).toBe(false)
+  })
 })

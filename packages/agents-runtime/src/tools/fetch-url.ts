@@ -4,6 +4,7 @@ import { Readability } from '@mozilla/readability'
 import { JSDOM, VirtualConsole } from 'jsdom'
 import TurndownService from 'turndown'
 import { completeWithLowCostModel } from '../model-runner'
+import { SandboxError } from '../sandbox/types'
 import type { Sandbox } from '../sandbox/types'
 import type { AgentTool } from '@mariozechner/pi-agent-core'
 import type { LowCostModelCatalog, LowCostModelConfig } from '../model-runner'
@@ -108,6 +109,20 @@ export function createFetchUrlTool(
           details: { charCount: extracted.length, usedLLM: true },
         }
       } catch (err) {
+        // Surface a network-policy denial (allowlist miss / SSRF guard) as a
+        // distinct, actionable signal — mirrors the FS tools' policy handling —
+        // so the model knows the URL was blocked rather than transiently failing.
+        if (err instanceof SandboxError && err.kind === `policy`) {
+          return {
+            content: [
+              {
+                type: `text` as const,
+                text: `Error: URL "${url}" was blocked by the sandbox network policy (it targets a disallowed or private/link-local address).`,
+              },
+            ],
+            details: { charCount: 0, usedLLM: false },
+          }
+        }
         return {
           content: [
             {

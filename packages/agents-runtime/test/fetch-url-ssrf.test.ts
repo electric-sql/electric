@@ -4,6 +4,8 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createFetchUrlTool } from '../src/tools/fetch-url'
 import { unrestrictedSandbox } from '../src/sandbox/unrestricted'
+import { SandboxError } from '../src/sandbox/types'
+import type { Sandbox } from '../src/sandbox/types'
 
 // Characterization: createFetchUrlTool routed through unrestrictedSandbox
 // has no host policy — no allowlist, no private-IP denylist, no
@@ -74,5 +76,27 @@ describe(`fetch_url — current SSRF surface (unrestricted sandbox)`, () => {
     } finally {
       await sandbox.dispose()
     }
+  })
+
+  it(`surfaces a network-policy denial distinctly from a generic fetch error`, async () => {
+    // Providers with an egress policy (docker/remote) reject blocked hosts with
+    // SandboxError('policy'). The tool must turn that into an actionable
+    // "blocked by policy" message rather than collapsing it into the generic
+    // "Error fetching URL" used for transient failures.
+    const policySandbox = {
+      fetch: async () => {
+        throw new SandboxError(`policy`, `host denied`)
+      },
+    } as unknown as Sandbox
+    const tool = createFetchUrlTool(policySandbox, {
+      extractWithLLM: async (t: string) => t,
+    })
+    const result = await tool.execute(`call`, {
+      url: `http://169.254.169.254/`,
+      prompt: `extract`,
+    })
+    const text = (result.content[0] as { text: string }).text
+    expect(text).toContain(`network policy`)
+    expect(text).not.toContain(`Error fetching URL`)
   })
 })

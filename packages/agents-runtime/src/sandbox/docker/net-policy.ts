@@ -37,32 +37,73 @@ export function matchesHost(host: string, pattern: string): boolean {
   return false
 }
 
+const toQuad = (n: number): string =>
+  [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255].join(`.`)
+
+/**
+ * Parse the loose IPv4 forms libc's `inet_aton` (and therefore `getaddrinfo`
+ * on Linux/macOS) accepts, returning the canonical dotted quad — or `null` if
+ * `h` isn't a valid loose-IPv4 literal (a real hostname, >4 parts, an
+ * out-of-range or malformed part). Accepts 1–4 dot-separated parts, each
+ * decimal, octal (`0`-prefixed) or hex (`0x`-prefixed); a final part shorter
+ * than the address absorbs the remaining low-order bytes, so `127.1`,
+ * `127.0.1`, `0177.0.0.1` and `2130706433` all fold to `127.0.0.1`. These
+ * forms resolve to private space via the OS resolver but slip past a
+ * dotted-quad-only check, so they must be canonicalized before classification.
+ */
+function parseLooseIPv4(h: string): string | null {
+  const parts = h.split(`.`)
+  if (parts.length < 1 || parts.length > 4) return null
+  const nums: Array<number> = []
+  for (const part of parts) {
+    let n: number
+    if (/^0x[0-9a-f]+$/.test(part)) n = parseInt(part.slice(2), 16)
+    else if (/^0[0-7]+$/.test(part)) n = parseInt(part, 8)
+    else if (/^(?:0|[1-9]\d*)$/.test(part)) n = parseInt(part, 10)
+    else return null // non-numeric label, or malformed (e.g. `08`, `0x`)
+    if (!Number.isSafeInteger(n) || n < 0) return null
+    nums.push(n)
+  }
+  // inet_aton packing: every part but the last is a single byte; the last
+  // part fills all remaining low-order bytes (so its width grows as parts shrink).
+  let addr = 0
+  for (let i = 0; i < nums.length - 1; i++) {
+    if (nums[i]! > 255) return null
+    addr += nums[i]! * 256 ** (3 - i)
+  }
+  const last = nums[nums.length - 1]!
+  if (last >= 256 ** (4 - (nums.length - 1))) return null
+  addr += last
+  if (addr > 0xffffffff) return null
+  return toQuad(addr >>> 0)
+}
+
 /**
  * Canonicalize a URL hostname for IP classification. Handles the encoded
  * literal forms an SSRF attempt reaches for: strips IPv6 brackets (Node's
  * `URL.hostname` keeps them, e.g. `[::1]`), unwraps `::ffff:`-mapped IPv4, and
- * converts whole-integer / hex IPv4 (`2130706433`, `0x7f000001`) to a dotted
- * quad so they can't slip past the dotted-quad checks below.
+ * folds every `inet_aton`-accepted IPv4 form (dotted-quad, shorthand,
+ * whole-integer, octal, hex) to a dotted quad so none can slip past the
+ * dotted-quad checks below.
  */
 function canonicalizeHost(host: string): string {
   let h = host.trim().toLowerCase()
   if (h.startsWith(`[`) && h.endsWith(`]`)) h = h.slice(1, -1)
-  const toQuad = (n: number): string =>
-    [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255].join(`.`)
-  // IPv4-mapped IPv6: ::ffff:a.b.c.d or ::ffff:aabb:ccdd
+  // IPv4-mapped IPv6: ::ffff:a.b.c.d (or shorthand) or ::ffff:aabb:ccdd
   const mapped = /^::ffff:(.+)$/.exec(h)
   if (mapped) {
-    const tail = mapped[1]
-    if (/^\d{1,3}(\.\d{1,3}){3}$/.test(tail)) return tail
+    const tail = mapped[1]!
+    const quad = parseLooseIPv4(tail)
+    if (quad) return quad
     const hex = /^([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(tail)
     if (hex)
-      return toQuad(((parseInt(hex[1], 16) << 16) | parseInt(hex[2], 16)) >>> 0)
+      return toQuad(
+        ((parseInt(hex[1]!, 16) << 16) | parseInt(hex[2]!, 16)) >>> 0
+      )
   }
-  // Whole-integer or hex IPv4 (no dots)
-  if (/^\d+$/.test(h) || /^0x[0-9a-f]+$/.test(h)) {
-    const n = h.startsWith(`0x`) ? parseInt(h, 16) : Number(h)
-    if (Number.isInteger(n) && n >= 0 && n <= 0xffffffff) return toQuad(n)
-  }
+  // Any inet_aton-accepted IPv4 literal (dotted, shorthand, integer, octal, hex).
+  const quad = parseLooseIPv4(h)
+  if (quad) return quad
   return h
 }
 

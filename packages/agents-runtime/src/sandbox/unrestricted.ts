@@ -30,10 +30,12 @@ export function unrestrictedSandbox(
 
 class UnrestrictedSandbox implements Sandbox {
   readonly name = `unrestricted`
+  private disposed = false
 
   constructor(readonly workingDirectory: string) {}
 
-  exec(opts: SandboxExecOpts): Promise<SandboxExecResult> {
+  async exec(opts: SandboxExecOpts): Promise<SandboxExecResult> {
+    this.assertLive()
     const cwd = opts.cwd ?? this.workingDirectory
     const env: NodeJS.ProcessEnv = {
       PATH: process.env.PATH,
@@ -164,6 +166,7 @@ class UnrestrictedSandbox implements Sandbox {
   }
 
   async readFile(path: string): Promise<Buffer> {
+    this.assertLive()
     const target = await this.resolveWithin(path)
     try {
       return await readFile(target)
@@ -173,6 +176,7 @@ class UnrestrictedSandbox implements Sandbox {
   }
 
   async writeFile(path: string, content: Buffer | string): Promise<void> {
+    this.assertLive()
     const target = await this.resolveWithin(path)
     try {
       await writeFile(target, content)
@@ -182,6 +186,7 @@ class UnrestrictedSandbox implements Sandbox {
   }
 
   async mkdir(path: string, opts?: { recursive?: boolean }): Promise<void> {
+    this.assertLive()
     const target = await this.resolveWithin(path)
     try {
       await mkdir(target, { recursive: opts?.recursive ?? false })
@@ -191,6 +196,7 @@ class UnrestrictedSandbox implements Sandbox {
   }
 
   async readdir(path: string): Promise<ReadonlyArray<DirEntry>> {
+    this.assertLive()
     const target = await this.resolveWithin(path)
     try {
       const entries = await readdir(target, { withFileTypes: true })
@@ -201,6 +207,7 @@ class UnrestrictedSandbox implements Sandbox {
   }
 
   async exists(path: string): Promise<boolean> {
+    this.assertLive()
     let target: string
     try {
       target = await this.resolveWithin(path)
@@ -221,6 +228,7 @@ class UnrestrictedSandbox implements Sandbox {
   }
 
   async remove(path: string, opts?: { recursive?: boolean }): Promise<void> {
+    this.assertLive()
     const target = await this.resolveWithin(path)
     try {
       await rm(target, { recursive: opts?.recursive ?? false, force: false })
@@ -230,6 +238,7 @@ class UnrestrictedSandbox implements Sandbox {
   }
 
   async stat(path: string): Promise<FileStat> {
+    this.assertLive()
     const target = await this.resolveWithin(path)
     try {
       const s = await stat(target)
@@ -273,6 +282,14 @@ class UnrestrictedSandbox implements Sandbox {
         const real = await realpath(probe)
         const rel = relative(cwdReal, real)
         if (rel.startsWith(`..`) || rel === `..`) throw this.denied(userPath)
+        // TODO(multi-tenant): when `suffix` is non-empty the returned target
+        // includes not-yet-existing components, leaving a narrow TOCTOU window
+        // — a concurrent writer could materialize an intermediate symlink that
+        // escapes the workspace between this check and the caller's FS op. Safe
+        // for this provider's single-tenant trusted-code contract (see the
+        // class docstring); a multi-tenant use would need to re-validate the
+        // final resolved target *after* the FS call (e.g. via O_NOFOLLOW or a
+        // post-op realpath containment recheck).
         return suffix.length === 0 ? real : resolve(real, suffix)
       } catch (err) {
         if (err instanceof SandboxError) throw err
@@ -297,11 +314,25 @@ class UnrestrictedSandbox implements Sandbox {
   }
 
   async fetch(input: string | URL, init?: RequestInit): Promise<Response> {
+    this.assertLive()
     return globalThis.fetch(input as RequestInfo, init)
   }
 
   async dispose(): Promise<void> {
-    // No-op.
+    // No teardown to do (this provider shares the host process), but flip the
+    // flag so post-dispose use throws — mirrors docker/remote and keeps the
+    // cross-provider conformance invariant honest, guarding against a future
+    // change that makes dispose meaningful (e.g. cancelling in-flight execs).
+    this.disposed = true
+  }
+
+  private assertLive(): void {
+    if (this.disposed) {
+      throw new SandboxError(
+        `runtime`,
+        `unrestrictedSandbox: operation called after dispose().`
+      )
+    }
   }
 }
 
