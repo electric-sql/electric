@@ -1,10 +1,37 @@
-import type {
-  BuiltinAgentsServer,
-  McpServerConfig,
-  RegistrySnapshot,
-} from '@electric-ax/agents'
 import { openAuthorizeWindow } from './oauth-window'
 import { SecretStore } from './secret-store'
+import type {
+  ApiKeys,
+  ApiKeysStatus,
+  CodexAuthSource,
+  CodexDetectedSource,
+  CodexSettings,
+  CodexStatus,
+  ConnectServerOptions,
+  DesktopRuntimeStatus,
+  DesktopAppearance,
+  DesktopCommand,
+  DesktopContextMenuRequest,
+  DesktopMenuPopupBounds,
+  DesktopMenuSection,
+  DesktopMenuState,
+  DesktopNavigationState,
+  DesktopServerFetchRequest,
+  DesktopServerFetchResponse,
+  DesktopSettings,
+  DesktopState,
+  DiscoveredServer,
+  LocalRuntimeStatus,
+  McpServerConfig,
+  OnboardingState,
+  RegistrySnapshot,
+  RuntimeEntry,
+  ServerConfig,
+  ServerConnectionState,
+  ServerConnectionStatus,
+  ServerDesiredState,
+  ServerSource,
+} from './shared/types'
 import {
   CloudAuth,
   type CloudAuthProvider,
@@ -36,215 +63,6 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import * as undici from 'undici'
 import type { Dispatcher } from 'undici'
-
-type ServerSource = `manual` | `local-discovery` | `electric-cloud`
-type ServerDesiredState = `connected` | `disconnected`
-type ConnectServerOptions = {
-  localRuntimeEnabled?: boolean
-}
-
-type ServerConfig = {
-  id: string
-  name: string
-  url: string
-  source: ServerSource
-  desiredState: ServerDesiredState
-  localRuntimeEnabled: boolean
-  headers?: Record<string, string>
-  /**
-   * For `source: 'electric-cloud'` only — the `stream_services.id`
-   * the cloud-agents-server uses to identify this tenant. The
-   * matching agents bearer token lives in `SecretStore` keyed by tenant id
-   * (`cloud-agents-token:<tenantId>`), not in `settings.json`.
-   * The webRequest hook reads both fields to inject auth headers
-   * on outgoing requests targeting this server's URL.
-   */
-  tenantId?: string
-}
-
-type ServerConnectionStatus =
-  | `disconnected`
-  | `connecting`
-  | `connected`
-  | `reconnecting`
-  | `offline`
-  | `error`
-
-type DesktopRuntimeStatus = `stopped` | `starting` | `running` | `error`
-type LocalRuntimeStatus =
-  | `disabled`
-  | `stopped`
-  | `starting`
-  | `running`
-  | `error`
-
-type DiscoveredServer = {
-  url: string
-  port: number
-  /** Epoch ms — when we last saw a healthy `/_electric/health` response. */
-  lastSeen: number
-}
-
-type DesktopState = {
-  servers: Array<ServerConfig>
-  selectedServerId: string | null
-  connections: Array<ServerConnectionState>
-  runtimeStatus: DesktopRuntimeStatus
-  runtimeUrl: string | null
-  activeServer: ServerConfig | null
-  workingDirectory: string | null
-  error: string | null
-  /**
-   * Agents-server instances detected on this machine via the periodic
-   * localhost scan in `runDiscovery()`. Renderers (e.g. `ServerPicker`)
-   * surface these as one-click "add" suggestions.
-   */
-  discoveredServers: Array<DiscoveredServer>
-  pullWakeRunnerId: string | null
-  /**
-   * `true` when credentials (API keys, Codex sign-in) have been
-   * mutated since the local runtime was last started. The renderer
-   * surfaces this as a "Restart local runtime to apply changes" banner
-   * on the Credentials settings screen — the runtime captures env vars
-   * at start time, so changes only take effect on the next launch.
-   * Cleared whenever any local runtime is restarted.
-   */
-  credentialsRestartPending: boolean
-}
-
-type DesktopServerFetchRequest = {
-  url: string
-  method: string
-  headers: Record<string, string>
-  body: string | null
-}
-
-type DesktopServerFetchResponse = {
-  url: string
-  status: number
-  statusText: string
-  headers: Record<string, string>
-  body: string
-}
-
-type ServerConnectionState = {
-  serverId: string
-  status: ServerConnectionStatus
-  localRuntimeStatus: LocalRuntimeStatus
-  runtimeUrl: string | null
-  runtimeError: string | null
-  lastError: string | null
-  reconnectAttempt: number
-  lastConnectedAt: number | null
-}
-
-type ApiKeys = {
-  anthropic: string | null
-  openai: string | null
-  /**
-   * Optional. Mirrored to `DEEPSEEK_API_KEY` so Horton's local
-   * runtime can use DeepSeek models. Treated as a peer LLM provider:
-   * setting it alone is sufficient to satisfy the "has any LLM key"
-   * check and dismiss the first-launch dialog.
-   */
-  deepseek: string | null
-  /**
-   * Optional. Mirrored to `BRAVE_SEARCH_API_KEY` so Horton's
-   * `brave_search` tool can call the Brave API directly. When unset
-   * Horton falls back to Anthropic's built-in web search (which uses
-   * the Anthropic key). Because it's optional, missing brave never
-   * triggers the first-launch dialog on its own.
-   */
-  brave: string | null
-}
-
-type CodexAuthSource = `desktop-oauth` | `codex-cli` | `opencode`
-
-type CodexSettings = {
-  enabled: boolean
-  source: CodexAuthSource | null
-}
-
-type DesktopSettings = {
-  servers: Array<ServerConfig>
-  defaultServerId: string | null
-  workingDirectory: string | null
-  apiKeysRef: string
-  codex?: CodexSettings
-  /**
-   * Onboarding wizard ("Sign in to Electric Cloud" → API keys) gets
-   * surfaced on launch until the user finishes it or explicitly
-   * clicks "Don't show again". Once set, the modal stays hidden even
-   * if the user later signs out / clears keys. Settings → General and
-   * Settings → Account are the recovery paths after that.
-   */
-  onboardingDismissed?: boolean
-  /**
-   * MCP servers shipped by the desktop app's settings — global to all
-   * workspaces, edited via the Settings UI (or by hand in
-   * `settings.json` for now). On disk this mirrors `mcp.json`'s
-   * keyed-by-name shape (`{ servers: { foo: { ... } } }`); the array
-   * here is the in-memory rewrite that `BuiltinAgentsServer.
-   * extraMcpServers` consumes. `loadSettings` and `saveSettings`
-   * handle the conversion in both directions. Layered with the
-   * per-workspace `mcp.json` at runtime: non-conflicting servers from
-   * both files load together; on name collision, the workspace
-   * `mcp.json` wins. Static shape only — secrets and persistence
-   * callbacks are wired by the runtime (keychain auto-applied to
-   * `authorizationCode` servers).
-   */
-  mcp?: { servers: Array<McpServerConfig> }
-  pullWakeRunnerId?: string
-}
-
-type RuntimeEntry = {
-  serverId: string
-  desiredState: ServerDesiredState
-  status: ServerConnectionStatus
-  localRuntimeStatus: LocalRuntimeStatus
-  runtime: BuiltinAgentsServer | null
-  runtimeUrl: string | null
-  runtimeError: string | null
-  reconnectTimer: NodeJS.Timeout | null
-  reconnectAttempt: number
-  generation: number
-  lastError: string | null
-  lastConnectedAt: number | null
-  mcpUnsubscribe: (() => void) | null
-}
-
-/**
- * Payload returned by `desktop:get-api-keys-status`. The renderer
- * uses `saved` to seed the first-launch dialog (or skip showing it
- * when keys already exist) and `suggested` to pre-fill empty fields
- * with whatever was found in `process.env` at startup — making it a
- * one-click confirmation flow for users who already export their
- * keys from a shell rc file.
- */
-type ApiKeysStatus = {
-  hasAnyKey: boolean
-  saved: ApiKeys
-  suggested: ApiKeys
-  codex: CodexStatus
-}
-
-type CodexDetectedSource = {
-  source: CodexAuthSource
-  label: string
-  accountId: string | null
-  email: string | null
-  expiresAt: number | null
-}
-
-type CodexStatus = {
-  enabled: boolean
-  source: CodexAuthSource | null
-  availableSources: Array<CodexDetectedSource>
-  accountId: string | null
-  email: string | null
-  expiresAt: number | null
-  error: string | null
-}
 
 type StoredCodexAuth = {
   source: CodexAuthSource
@@ -404,58 +222,6 @@ function runnerOwnerPrincipalFromUserId(
       ? trimmed
       : `user:${trimmed}`
   return `/principal/${encodeURIComponent(principalKey)}`
-}
-
-/**
- * Commands sent from the menu / tray (main process) to the focused
- * renderer over the `desktop:command` IPC channel. The renderer
- * subscribes via `window.electronAPI.onDesktopCommand` and dispatches
- * to the matching app action (sidebar toggle, search palette, new
- * chat, close active tile…). Keeping the menu definitions in main and
- * the action implementations in the renderer means the same actions
- * stay reachable from in-app buttons / hotkeys when running in a
- * regular browser.
- */
-type DesktopCommand =
-  | `new-chat`
-  | `close-tile`
-  | `toggle-sidebar`
-  | `open-settings`
-  | `open-servers-settings`
-  | `open-search`
-  | `open-find`
-  | `find-next`
-  | `find-previous`
-  | `split-right`
-  | `split-down`
-  | `cycle-tile`
-
-type DesktopMenuSection = `File` | `Edit` | `View` | `Window` | `Help`
-
-type DesktopMenuPopupBounds = {
-  x: number
-  y: number
-  width: number
-  height: number
-}
-
-type DesktopMenuState = {
-  hasActiveTile: boolean
-  canCloseTile: boolean
-  canSplitTile: boolean
-  canCycleTile: boolean
-}
-
-type DesktopNavigationState = {
-  canGoBack: boolean
-  canGoForward: boolean
-}
-
-type DesktopAppearance = `light` | `dark` | `system`
-
-type DesktopContextMenuRequest = {
-  kind: `selection`
-  selectionText: string
 }
 
 const EXTERNAL_LINK_PROTOCOLS = new Set([`http:`, `https:`, `mailto:`])
@@ -3071,20 +2837,6 @@ async function setApiKeys(next: ApiKeys): Promise<void> {
   applyApiKeys()
   await saveSettings()
   if (changed) markCredentialsDirty()
-}
-
-/**
- * Snapshot consumed by the renderer's onboarding wizard. `dismissed`
- * is the persisted "Don't show again" flag; `hasAnyKey` lets the
- * wizard skip the API-keys step when keys already exist; `signedIn`
- * lets it skip the Electric Cloud step when a session is already
- * restored. The renderer decides whether to render the modal based on
- * those three bits — the main process doesn't make the policy call.
- */
-type OnboardingState = {
-  dismissed: boolean
-  hasAnyKey: boolean
-  signedIn: boolean
 }
 
 function getOnboardingState(): OnboardingState {
