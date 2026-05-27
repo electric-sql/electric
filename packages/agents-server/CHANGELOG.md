@@ -1,5 +1,7 @@
 # @electric-ax/agents-server
 
+## 0.4.10
+
 ## 0.4.9
 
 ### Patch Changes
