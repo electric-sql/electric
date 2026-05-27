@@ -4,10 +4,22 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex.ProgressMonitor do
   still need to read. The minimum across live consumers is the compaction
   lower bound for `MultiTimeView`.
 
-  One GenServer + one ETS table per stack. The GenServer serialises writes
-  and owns the process monitors that release pinned times when consumers die.
-  `min_required_time/2` reads the ETS row directly so the routing path does
-  not have to call the GenServer.
+  One GenServer + two ETS tables per stack:
+
+  - A `:set` "positions" table holding one row per registered consumer
+    (`{:consumer, subquery_id, shape_handle} -> {time, monitor_ref}`) plus a
+    denormalised `{:min_required_time, subquery_id} -> time` row for
+    lock-free external reads from the routing/compactor path.
+  - An `:ordered_set` "times" table keyed by
+    `{subquery_id, time, shape_handle}`. The min for a subquery is the
+    first entry whose key starts with that `subquery_id`, found in
+    `O(log N)` via `:ets.next/2` against a sentinel key.
+
+  Together they keep register/notify/unregister/DOWN at `O(log N)` instead
+  of `O(total_consumers)`.
+
+  `min_required_time/2` and `registered?/3` read the positions table
+  directly without touching the GenServer.
 
   See `docs/rfcs/subquery-index.md`, section *Processed-Up-To Time*.
   """
@@ -26,6 +38,9 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex.ProgressMonitor do
 
   defp table_name(stack_id) when is_stack_id(stack_id),
     do: :"subquery_progress_monitor_table:#{stack_id}"
+
+  defp times_table_name(stack_id) when is_stack_id(stack_id),
+    do: :"subquery_progress_monitor_times:#{stack_id}"
 
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) do
@@ -111,7 +126,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex.ProgressMonitor do
   def init(opts) do
     stack_id = Keyword.fetch!(opts, :stack_id)
 
-    table =
+    positions =
       :ets.new(table_name(stack_id), [
         :set,
         :public,
@@ -119,7 +134,14 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex.ProgressMonitor do
         read_concurrency: true
       ])
 
-    {:ok, %{stack_id: stack_id, table: table, monitors: %{}}}
+    times =
+      :ets.new(times_table_name(stack_id), [
+        :ordered_set,
+        :public,
+        :named_table
+      ])
+
+    {:ok, %{stack_id: stack_id, positions: positions, times: times, monitors: %{}}}
   end
 
   @impl true
@@ -129,29 +151,33 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex.ProgressMonitor do
     monitor_ref = Process.monitor(pid)
 
     :ets.insert(
-      state.table,
+      state.positions,
       {{:consumer, subquery_id, shape_handle}, time, monitor_ref}
     )
 
+    :ets.insert(state.times, {{subquery_id, time, shape_handle}})
+
     state = put_in(state.monitors[monitor_ref], {subquery_id, shape_handle})
-    recompute_min(state.table, subquery_id)
+    update_min(state.positions, state.times, subquery_id)
     {:reply, :ok, state}
   end
 
   def handle_call({:unregister, subquery_id, shape_handle}, _from, state) do
     state = remove_registration(state, subquery_id, shape_handle)
-    recompute_min(state.table, subquery_id)
+    update_min(state.positions, state.times, subquery_id)
     {:reply, :ok, state}
   end
 
   def handle_call({:notify, time, subquery_id, shape_handle}, _from, state) do
-    case :ets.lookup(state.table, {:consumer, subquery_id, shape_handle}) do
+    case :ets.lookup(state.positions, {:consumer, subquery_id, shape_handle}) do
       [{key, current, monitor_ref}] ->
         new_required = max(current, time + 1)
 
         if new_required != current do
-          :ets.insert(state.table, {key, new_required, monitor_ref})
-          recompute_min(state.table, subquery_id)
+          :ets.delete(state.times, {subquery_id, current, shape_handle})
+          :ets.insert(state.times, {{subquery_id, new_required, shape_handle}})
+          :ets.insert(state.positions, {key, new_required, monitor_ref})
+          update_min(state.positions, state.times, subquery_id)
         end
 
         {:reply, :ok, state}
@@ -168,17 +194,26 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex.ProgressMonitor do
         {:noreply, state}
 
       {{subquery_id, shape_handle}, monitors} ->
-        :ets.delete(state.table, {:consumer, subquery_id, shape_handle})
-        recompute_min(state.table, subquery_id)
+        case :ets.lookup(state.positions, {:consumer, subquery_id, shape_handle}) do
+          [{_key, time, _ref}] ->
+            :ets.delete(state.positions, {:consumer, subquery_id, shape_handle})
+            :ets.delete(state.times, {subquery_id, time, shape_handle})
+
+          [] ->
+            :ok
+        end
+
+        update_min(state.positions, state.times, subquery_id)
         {:noreply, %{state | monitors: monitors}}
     end
   end
 
   defp remove_registration(state, subquery_id, shape_handle) do
-    case :ets.lookup(state.table, {:consumer, subquery_id, shape_handle}) do
-      [{key, _time, monitor_ref}] ->
+    case :ets.lookup(state.positions, {:consumer, subquery_id, shape_handle}) do
+      [{key, time, monitor_ref}] ->
         Process.demonitor(monitor_ref, [:flush])
-        :ets.delete(state.table, key)
+        :ets.delete(state.positions, key)
+        :ets.delete(state.times, {subquery_id, time, shape_handle})
         %{state | monitors: Map.delete(state.monitors, monitor_ref)}
 
       [] ->
@@ -186,14 +221,16 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex.ProgressMonitor do
     end
   end
 
-  defp recompute_min(table, subquery_id) do
-    case :ets.match(table, {{:consumer, subquery_id, :_}, :"$1", :_}) do
-      [] ->
-        :ets.delete(table, {:min_required_time, subquery_id})
+  # The min for `subquery_id` is the smallest entry in the ordered_set
+  # whose key starts with `{subquery_id, ...}`. `:ets.next/2` against a
+  # sentinel below any real time gives that entry in O(log N).
+  defp update_min(positions, times, subquery_id) do
+    case :ets.next(times, {subquery_id, -1, nil}) do
+      {^subquery_id, time, _shape_handle} ->
+        :ets.insert(positions, {{:min_required_time, subquery_id}, time})
 
-      times ->
-        min = times |> Enum.map(fn [t] -> t end) |> Enum.min()
-        :ets.insert(table, {{:min_required_time, subquery_id}, min})
+      _ ->
+        :ets.delete(positions, {:min_required_time, subquery_id})
     end
   end
 end
