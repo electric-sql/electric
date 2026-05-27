@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { resolveSandboxIdentity } from '../src/sandbox/identity'
+import {
+  resolveSandboxIdentity,
+  sandboxWipesOnDispose,
+} from '../src/sandbox/identity'
 
 const WAKE = { entityUrl: `/horton/abc/main`, wakeId: `wake-123` }
 
@@ -110,5 +113,20 @@ describe(`resolveSandboxIdentity`, () => {
       expect(r.owner).toBe(false)
       expect(r.sandboxKey).toBe(`/w/x/main#k9`)
     })
+  })
+})
+
+describe(`sandboxWipesOnDispose`, () => {
+  it(`wipes when reclaimed (entity went terminal), even if persistent`, () => {
+    expect(sandboxWipesOnDispose(true, true)).toBe(true)
+    expect(sandboxWipesOnDispose(true, false)).toBe(true)
+  })
+
+  it(`wipes an ephemeral sandbox that was not reclaimed`, () => {
+    expect(sandboxWipesOnDispose(false, false)).toBe(true)
+  })
+
+  it(`preserves a persistent sandbox that was not reclaimed`, () => {
+    expect(sandboxWipesOnDispose(false, true)).toBe(false)
   })
 })

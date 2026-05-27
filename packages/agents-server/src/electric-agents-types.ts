@@ -329,6 +329,27 @@ export interface EntitySandboxSelection {
   owner?: boolean
 }
 
+/**
+ * Spawn-time sandbox CHOICE — the request input, before resolution. Resolved
+ * into an {@link EntitySandboxSelection} by the spawn path. The wire schema for
+ * this shape lives in `sandbox-choice-schema.ts` (mirrors how `DispatchPolicy`
+ * pairs with `dispatch-policy-schema.ts`).
+ */
+export interface SandboxChoice {
+  /** Profile name advertised by the target runner. */
+  profile?: string
+  /** Explicit cross-entity key to join (or start) a shared sandbox. */
+  key?: string
+  /** Identity scope when no explicit `key`: per-entity (default) or per-wake. */
+  scope?: `entity` | `wake`
+  /** Idle-teardown durability; defaults by scope when unset. */
+  persistent?: boolean
+  /** Whether this entity owns the sandbox (default) or only attaches to one. */
+  owner?: boolean
+  /** Reuse the parent entity's resolved sandbox (attach-only). */
+  inherit?: boolean
+}
+
 export interface ElectricAgentsEntity {
   url: string
   type: string
@@ -435,14 +456,7 @@ export interface TypedSpawnRequest {
    * `persistent`), `key` to join (or start) an explicit shared one, or
    * `inherit: true` to reuse the parent's resolved sandbox.
    */
-  sandbox?: {
-    profile?: string
-    key?: string
-    scope?: `entity` | `wake`
-    persistent?: boolean
-    owner?: boolean
-    inherit?: boolean
-  }
+  sandbox?: SandboxChoice
   initialMessage?: unknown
   created_by?: string
   wake?: {

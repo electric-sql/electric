@@ -1,4 +1,3 @@
-import { relative, resolve } from 'node:path'
 import {
   SandboxError,
   type DirEntry,
@@ -10,6 +9,8 @@ import {
 } from './types'
 import { createE2BClient } from './remote/e2b'
 import { fetchInSandbox } from './exec-fetch'
+import { sandboxWipesOnDispose } from './identity'
+import { absoluteSandboxPath, isPathWithinSandbox } from './path-containment'
 import type { RemoteSandboxClient } from './remote/types'
 
 export type RemoteProvider = `e2b`
@@ -245,7 +246,9 @@ class RemoteSandbox implements Sandbox {
     // state preserved for reattach), and a non-owner attacher merely stops its
     // own heartbeat without ever killing the owner's VM. A client without
     // suspend() falls back to kill().
-    const wipe = this.owner && (opts?.reclaim === true || !this.persistent)
+    const wipe =
+      this.owner &&
+      sandboxWipesOnDispose(opts?.reclaim === true, this.persistent)
     if (!wipe && this.client.suspend) {
       await this.client.suspend()
     } else {
@@ -254,7 +257,7 @@ class RemoteSandbox implements Sandbox {
   }
 
   private absolute(path: string): string {
-    return path.startsWith(`/`) ? path : resolve(this.workingDirectory, path)
+    return absoluteSandboxPath(this.workingDirectory, path)
   }
 
   private assertReadable(path: string): void {
@@ -265,9 +268,7 @@ class RemoteSandbox implements Sandbox {
   }
 
   private assertWritable(path: string): void {
-    const absolute = this.absolute(path)
-    const rel = relative(this.workingDirectory, absolute)
-    if (rel.startsWith(`..`) || rel === `..`) {
+    if (!isPathWithinSandbox(this.workingDirectory, path)) {
       throw new SandboxError(
         `policy`,
         `remoteSandbox: write access to "${path}" is denied (outside working directory ${this.workingDirectory})`

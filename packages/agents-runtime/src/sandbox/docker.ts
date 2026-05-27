@@ -1,5 +1,4 @@
 import { PassThrough } from 'node:stream'
-import { posix } from 'node:path'
 import { realpathSync } from 'node:fs'
 import { createHash, randomUUID } from 'node:crypto'
 import { fetchInSandbox } from './exec-fetch'
@@ -27,6 +26,8 @@ import {
   statPath,
 } from './docker/fs'
 import { hostAllowedByPolicy, isPrivateOrLinkLocal } from './docker/net-policy'
+import { sandboxWipesOnDispose } from './identity'
+import { absoluteSandboxPath, isPathWithinSandbox } from './path-containment'
 
 export interface DockerSandboxOpts {
   /** Absolute path inside the container (NOT a host path). Default `/work`. */
@@ -1134,23 +1135,25 @@ class DockerSandbox implements Sandbox {
     if (entry.refs > 0) return
     if (entry.idleTimer) clearTimeout(entry.idleTimer)
     // Reclaim removes immediately (grace 0, still lock-serialized); otherwise
-    // the owner's persistent intent picks stop (preserve) vs remove (wipe).
-    const action: `stop` | `remove` =
-      entry.reclaim || !entry.persistent ? `remove` : `stop`
+    // the owner's persistent intent picks stop (preserve) vs remove (wipe). The
+    // owner gate is already folded into `entry.reclaim`, and an ephemeral
+    // container wipes on last-lease-drain regardless of the last holder.
+    const action: `stop` | `remove` = sandboxWipesOnDispose(
+      entry.reclaim ?? false,
+      entry.persistent
+    )
+      ? `remove`
+      : `stop`
     const grace = entry.reclaim ? 0 : entry.idleGraceMs
     entry.idleTimer = scheduleIdleTeardown(this.containerName, grace, action)
   }
 
   private absolute(path: string): string {
-    return path.startsWith(`/`)
-      ? path
-      : posix.resolve(this.workingDirectory, path)
+    return absoluteSandboxPath(this.workingDirectory, path)
   }
 
   private isReadable(path: string): boolean {
-    const abs = this.absolute(path)
-    const rel = posix.relative(this.workingDirectory, abs)
-    return !rel.startsWith(`..`) && rel !== `..`
+    return isPathWithinSandbox(this.workingDirectory, path)
   }
 
   private assertReadable(path: string): void {
@@ -1163,9 +1166,7 @@ class DockerSandbox implements Sandbox {
   }
 
   private assertWritable(path: string): void {
-    const abs = this.absolute(path)
-    const rel = posix.relative(this.workingDirectory, abs)
-    if (rel.startsWith(`..`) || rel === `..`) {
+    if (!isPathWithinSandbox(this.workingDirectory, path)) {
       throw new SandboxError(
         `policy`,
         `dockerSandbox: write access to "${path}" is denied (outside working directory ${this.workingDirectory}).`

@@ -11,6 +11,7 @@ import { Router, json, status } from 'itty-router'
 import { apiError } from '../electric-agents-http.js'
 import { parsePrincipalKey, principalUrl } from '../principal.js'
 import { dispatchPolicySchema } from '../dispatch-policy-schema.js'
+import { sandboxChoiceSchema } from '../sandbox-choice-schema.js'
 import {
   ErrCodeNotFound,
   ErrCodeUnknownEntityType,
@@ -76,22 +77,6 @@ const wakeConditionSchema = Type.Union([
     ),
   }),
 ])
-
-const sandboxChoiceSchema = Type.Object({
-  profile: Type.Optional(Type.String()),
-  // Explicit cross-entity identity — entities with the same key collaborate on
-  // one workspace. `inherit` reuses the parent entity's resolved sandbox.
-  key: Type.Optional(Type.String()),
-  // Identity scope when no explicit `key`: per-entity (default) or per-wake.
-  scope: Type.Optional(
-    Type.Union([Type.Literal(`entity`), Type.Literal(`wake`)])
-  ),
-  // Idle-teardown durability; defaults by scope when unset.
-  persistent: Type.Optional(Type.Boolean()),
-  // Whether this entity owns the sandbox (default) or only attaches to one.
-  owner: Type.Optional(Type.Boolean()),
-  inherit: Type.Optional(Type.Boolean()),
-})
 
 const spawnBodySchema = Type.Object({
   args: Type.Optional(Type.Record(Type.String(), Type.Unknown())),

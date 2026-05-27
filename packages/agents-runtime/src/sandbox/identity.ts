@@ -76,3 +76,24 @@ export function resolveSandboxIdentity(
   const owner = config.owner ?? true
   return { sandboxKey, persistent, owner }
 }
+
+/**
+ * The teardown ACTION decision shared by the providers: a sandbox is WIPED
+ * (docker `remove` / remote `kill`) when its owning entity reclaimed it (went
+ * terminal) or it was ephemeral; otherwise it is PRESERVED (docker `stop` /
+ * remote `suspend`) for a later wake or collaborator to reattach.
+ *
+ * This is only the un-gated core. Owner-gating is applied by each provider
+ * AROUND this call, where it genuinely differs and must stay local:
+ *   - remote gates the whole decision on ownership (`owner && wipes(...)`) so a
+ *     non-owner attacher only suspends, never kills the owner's VM;
+ *   - docker folds the owner gate into `reclaim` upstream and lets an ephemeral
+ *     container wipe once the last lease drains regardless of the last holder
+ *     (the refcounted registry guarantees teardown runs once).
+ */
+export function sandboxWipesOnDispose(
+  reclaim: boolean,
+  persistent: boolean
+): boolean {
+  return reclaim || !persistent
+}

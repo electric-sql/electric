@@ -32,6 +32,7 @@ import {
 } from './electric-agents-types.js'
 import { parseDispatchPolicy } from './dispatch-policy-schema.js'
 import { applyTypeDefaultSubscriptionScope } from './routing/dispatch-policy.js'
+import { resolveSandboxForSpawn } from './routing/sandbox.js'
 import {
   isBuiltInSystemPrincipalUrl,
   principalFromCreatedBy,
@@ -58,7 +59,6 @@ import type { StreamClient } from './stream-client.js'
 import type {
   DispatchPolicy,
   ElectricAgentsEntity,
-  EntitySandboxSelection,
   ElectricAgentsEntityType,
   EntitySignal,
   RegisterEntityTypeRequest,
@@ -651,7 +651,8 @@ export class EntityManager {
           )
         : entityType.default_dispatch_policy
 
-    const sandbox = await this.resolveSandboxForSpawn(
+    const sandbox = await resolveSandboxForSpawn(
+      this.registry,
       dispatchPolicy,
       req.sandbox,
       parentEntity
@@ -3259,140 +3260,6 @@ export class EntityManager {
         400
       )
     }
-  }
-
-  /**
-   * Resolve and validate the sandbox profile choice for a spawn.
-   * Profiles are a per-runner concern: each runner advertises what it
-   * supports. When the spawn pins a runner via dispatch_policy, the
-   * chosen profile must be in that runner's advertised set; otherwise
-   * we'd persist an unserviceable choice that fails late at first
-   * wake. For unpinned dispatch (webhook / parent-inherited) we can't
-   * pick a target ahead of time, so we fall back to a tenant-wide
-   * "some runner offers this" check — better than nothing.
-   */
-  private async resolveSandboxForSpawn(
-    dispatchPolicy: DispatchPolicy | undefined,
-    requested:
-      | {
-          profile?: string
-          key?: string
-          scope?: `entity` | `wake`
-          persistent?: boolean
-          owner?: boolean
-          inherit?: boolean
-        }
-      | undefined,
-    parentEntity: ElectricAgentsEntity | null
-  ): Promise<EntitySandboxSelection | undefined> {
-    if (!requested) return undefined
-
-    // `inherit` reuses the parent's keyed sandbox as a non-owner (attach-only).
-    // It's graceful: if the parent has no shareable (keyed) sandbox the child
-    // simply gets none, so `spawn_worker` can always request inheritance
-    // without breaking unkeyed parents. (A running parent wake resolves inherit
-    // to its live explicit key in the runtime instead — this server-side path
-    // covers direct API callers, where only the parent's *stored* explicit key
-    // is available.)
-    let chosenName = requested.profile
-    let key = requested.key
-    let scope = requested.scope
-    let persistent = requested.persistent
-    // Ownership: an explicit `owner: false` (or `inherit`) makes the entity an
-    // attacher; otherwise it owns its sandbox.
-    let owner = requested.owner
-    if (requested.inherit) {
-      const parentKey = parentEntity?.sandbox?.key
-      if (!parentKey) return undefined
-      chosenName = parentEntity!.sandbox!.profile
-      key = parentKey
-      // Adopt the parent's durability; an explicit key has no scope. The child
-      // attaches to (never owns) the parent's sandbox.
-      persistent = parentEntity!.sandbox!.persistent
-      scope = undefined
-      owner = false
-    }
-
-    if (!chosenName) {
-      throw new ElectricAgentsError(
-        ErrCodeInvalidRequest,
-        `sandbox requires a "profile" (or "inherit": true with a parent that has a shared sandbox).`,
-        400
-      )
-    }
-
-    const runnerIds: Array<string> = []
-    for (const target of dispatchPolicy?.targets ?? []) {
-      if (target.type === `runner`) runnerIds.push(target.runnerId)
-    }
-
-    // Whether the chosen profile is a remote (off-host) sandbox, reachable
-    // from any runner. Determined from the same advertisements we validate
-    // against; defaults to host-local (co-location required) unless every
-    // relevant advertisement marks it remote.
-    let chosenIsRemote: boolean
-    if (runnerIds.length > 0) {
-      let allRemote = true
-      for (const runnerId of runnerIds) {
-        const runner = await this.registry.getRunner(runnerId)
-        const advertised = runner?.sandbox_profiles ?? []
-        const match = advertised.find((p) => p.name === chosenName)
-        if (!match) {
-          throw new ElectricAgentsError(
-            ErrCodeInvalidRequest,
-            `sandbox profile "${chosenName}" is not advertised by runner "${runnerId}" (advertised: ${advertised.map((p) => p.name).join(`, `) || `(none)`}).`,
-            400
-          )
-        }
-        if (match.remote !== true) allRemote = false
-      }
-      chosenIsRemote = allRemote
-    } else {
-      const available = await this.registry.listSandboxProfiles()
-      const matches = available.filter((p) => p.name === chosenName)
-      if (matches.length === 0) {
-        throw new ElectricAgentsError(
-          ErrCodeInvalidRequest,
-          `sandbox profile "${chosenName}" is not offered by any registered runner (available: ${[...new Set(available.map((p) => p.name))].join(`, `) || `(none)`}).`,
-          400
-        )
-      }
-      // Only skip the co-location guard when every advertiser of this name is
-      // remote — a same-named host-local profile on another runner could
-      // otherwise land a collaborator on the wrong host.
-      chosenIsRemote = matches.every((p) => p.remote === true)
-    }
-
-    // Co-location: a shared *local* sandbox lives on one host, so every
-    // collaborator must be pinned to the same single runner. Subagents inherit
-    // the parent's dispatch policy, so this holds once the root is pinned. A
-    // shared *remote* sandbox is reachable from any runner, so the guard does
-    // not apply.
-    if (key !== undefined && !chosenIsRemote) {
-      const targets = dispatchPolicy?.targets ?? []
-      const pinnedToSingleRunner =
-        targets.length === 1 && targets[0]?.type === `runner`
-      if (!pinnedToSingleRunner) {
-        throw new ElectricAgentsError(
-          ErrCodeInvalidRequest,
-          `a shared sandbox (sandbox.key / sandbox.inherit) requires the entity to be pinned to a single runner via dispatch_policy, so all collaborators share one host.`,
-          400
-        )
-      }
-    }
-
-    // Persist the selection. Only an explicit/inherited `key` is stored (it's
-    // cross-entity, so the guard above applies); a `scope` is kept so the wake
-    // can derive the key, but no `key` is stored for it — leaving the
-    // co-location guard correctly keyed on genuine cross-entity sharing.
-    const selection: EntitySandboxSelection = { profile: chosenName }
-    if (key !== undefined) selection.key = key
-    else if (scope !== undefined) selection.scope = scope
-    if (persistent !== undefined) selection.persistent = persistent
-    // Store ownership only when this entity is an attacher; owner is the
-    // default, so it's left implicit (the wake resolver defaults to owner).
-    if (owner === false) selection.owner = false
-    return selection
   }
 
   private async validateSendRequest(
