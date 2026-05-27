@@ -11,6 +11,7 @@ export {
   normalizeTimelineEntities,
 } from './entity-timeline'
 export {
+  canonicalPgSyncOptions,
   db,
   entities,
   entity,
@@ -41,6 +42,7 @@ export type {
   WebhookObservationSource,
   WebhookEventRow,
   EntitiesQuery,
+  CanonicalPgSyncConfig,
   PgSyncObservationSource,
   PgSyncOptions,
   TaggedObservationSource,

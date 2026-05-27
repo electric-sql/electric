@@ -1,8 +1,10 @@
 import { randomUUID } from 'node:crypto'
 import { DurableStream, IdempotentProducer } from '@durable-streams/client'
 import {
+  canonicalPgSyncOptions,
   getPgSyncStreamPath,
   sourceRefForPgSync,
+  type CanonicalPgSyncConfig,
   type PgSyncOptions,
 } from '@electric-ax/agents-runtime'
 import {
@@ -26,11 +28,18 @@ type WakeEvaluator = (
 ) => Promise<void> | void
 
 type PgSyncChangeMessage = {
-  headers: Record<string, unknown> & { operation?: unknown }
+  headers: Record<string, unknown> & {
+    operation?: PgSyncOperation | string
+    offset?: unknown
+    key?: unknown
+    rowKey?: unknown
+  }
   value?: Record<string, unknown>
-  key?: unknown
-  old_value?: unknown
+  key?: string
+  old_value?: Record<string, unknown>
 }
+
+type PgSyncCursor = { handle: string; offset: string }
 
 export interface PgSyncBridgeCoordinator {
   start?(): Promise<void>
@@ -83,27 +92,6 @@ function stableJson(value: unknown): string {
     .join(`,`)}}`
 }
 
-export function canonicalPgSyncOptions(options: PgSyncOptions): PgSyncOptions {
-  return {
-    table: options.table,
-    ...(options.columns !== undefined ? { columns: [...options.columns] } : {}),
-    ...(options.where !== undefined ? { where: options.where } : {}),
-    ...(options.params !== undefined
-      ? {
-          params: Array.isArray(options.params)
-            ? [...options.params]
-            : Object.keys(options.params)
-                .sort()
-                .reduce<Record<string, string>>((acc, key) => {
-                  acc[key] = (options.params as Record<string, string>)[key]!
-                  return acc
-                }, {}),
-        }
-      : {}),
-    replica: options.replica ?? `default`,
-  }
-}
-
 function parseElectricOffset(offset: string): Offset | null {
   if (offset === `-1`) return offset
   return /^\d+_\d+$/.test(offset) ? (offset as Offset) : null
@@ -116,10 +104,8 @@ function rowKeyForMessage(message: PgSyncChangeMessage): string | undefined {
     headers.rowKey ??
     message.value?.id ??
     message.value?.key ??
-    (message as unknown as { old_value?: Record<string, unknown> }).old_value
-      ?.id ??
-    (message as unknown as { old_value?: Record<string, unknown> }).old_value
-      ?.key
+    message.old_value?.id ??
+    message.old_value?.key
   return candidate === undefined ? undefined : stableJson(candidate)
 }
 
@@ -145,21 +131,19 @@ export function pgSyncMessageToDurableEvent(
       ? optionsOrSourceRef
       : sourceRefForPgSync(optionsOrSourceRef)
   const rowKey = rowKeyForMessage(message)
-  const offset = (message.headers as Record<string, unknown>).offset
-  const explicitMessageKey = (message as unknown as { key?: unknown }).key
-  const messageKeyPart =
-    offset !== undefined
-      ? typeof offset === `string`
-        ? offset
-        : stableJson(offset)
-      : explicitMessageKey !== undefined
-        ? typeof explicitMessageKey === `string`
-          ? explicitMessageKey
-          : stableJson(explicitMessageKey)
-        : randomUUID()
+  const offset = message.headers.offset
+  const explicitMessageKey = message.key
+  let messageKeyPart: string
+  if (offset !== undefined) {
+    messageKeyPart = typeof offset === `string` ? offset : stableJson(offset)
+  } else if (explicitMessageKey !== undefined) {
+    messageKeyPart = explicitMessageKey
+  } else {
+    messageKeyPart = randomUUID()
+  }
   const messageKey = `${sourceRef}:${operation}:${messageKeyPart}`
   const timestamp = new Date().toISOString()
-  const oldValue = (message as unknown as { old_value?: unknown }).old_value
+  const oldValue = message.old_value
   const safeValue = jsonSafe(message.value)
   const safeOldValue = jsonSafe(oldValue)
   const safeHeaders = jsonSafe(message.headers)
@@ -185,6 +169,14 @@ export function pgSyncMessageToDurableEvent(
   }
 }
 
+function cursorFromRow(
+  row: Pick<PgSyncBridgeRow, `shapeHandle` | `shapeOffset`> | undefined
+): PgSyncCursor | undefined {
+  return row?.shapeHandle && row.shapeOffset
+    ? { handle: row.shapeHandle, offset: row.shapeOffset }
+    : undefined
+}
+
 class PgSyncBridge {
   private producer: IdempotentProducer | null = null
   private unsubscribe: (() => void) | null = null
@@ -195,12 +187,11 @@ class PgSyncBridge {
   constructor(
     readonly sourceRef: string,
     readonly streamUrl: string,
-    private options: PgSyncOptions,
+    private options: CanonicalPgSyncConfig,
     private streamClient: StreamClient,
     private registry?: PostgresRegistry,
     private evaluateWakes?: WakeEvaluator,
-    private initialShapeHandle?: string,
-    private initialShapeOffset?: string
+    private initialCursor?: PgSyncCursor
   ) {}
 
   async start(): Promise<void> {
@@ -213,10 +204,10 @@ class PgSyncBridge {
         `pg-sync-bridge-${this.sourceRef}`
       )
     }
-    if (this.initialShapeHandle && this.initialShapeOffset) {
-      const offset = parseElectricOffset(this.initialShapeOffset)
+    if (this.initialCursor) {
+      const offset = parseElectricOffset(this.initialCursor.offset)
       if (offset) {
-        this.startStream(offset, this.initialShapeHandle, false)
+        this.startStream(offset, this.initialCursor.handle, false)
         return
       }
     }
@@ -376,7 +367,6 @@ export class PgSyncBridgeManager implements PgSyncBridgeCoordinator {
       options: canonicalOptions,
       streamUrl,
     })
-    await this.registry?.touchPgSyncBridge(sourceRef)
     await this.streamClient.ensure(streamUrl, {
       contentType: `application/json`,
     })
@@ -391,8 +381,7 @@ export class PgSyncBridgeManager implements PgSyncBridgeCoordinator {
             this.streamClient,
             this.registry,
             this.evaluateWakes,
-            row?.shapeHandle,
-            row?.shapeOffset
+            cursorFromRow(row)
           )
           await bridge.start()
           this.bridges.set(sourceRef, bridge)
@@ -415,12 +404,11 @@ export class PgSyncBridgeManager implements PgSyncBridgeCoordinator {
         const bridge = new PgSyncBridge(
           row.sourceRef,
           row.streamUrl,
-          row.options,
+          canonicalPgSyncOptions(row.options),
           this.streamClient,
           this.registry,
           this.evaluateWakes,
-          row.shapeHandle,
-          row.shapeOffset
+          cursorFromRow(row)
         )
         await bridge.start()
         this.bridges.set(row.sourceRef, bridge)

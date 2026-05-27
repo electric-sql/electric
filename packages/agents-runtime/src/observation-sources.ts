@@ -47,7 +47,7 @@ export function getPgSyncStreamPath(sourceRef: string): string {
   return `/_electric/pg-sync/${sourceRef}`
 }
 
-type CanonicalPgSyncConfig = {
+export type CanonicalPgSyncConfig = {
   table: string
   columns?: string[]
   where?: string
@@ -68,7 +68,9 @@ function normalizePgSyncParams(
     }, {})
 }
 
-function canonicalPgSyncConfig(options: PgSyncOptions): CanonicalPgSyncConfig {
+export function canonicalPgSyncOptions(
+  options: PgSyncOptions
+): CanonicalPgSyncConfig {
   return {
     table: options.table,
     ...(options.columns !== undefined ? { columns: [...options.columns] } : {}),
@@ -81,7 +83,7 @@ function canonicalPgSyncConfig(options: PgSyncOptions): CanonicalPgSyncConfig {
 }
 
 export function sourceRefForPgSync(options: PgSyncOptions): string {
-  return hashString(JSON.stringify(canonicalPgSyncConfig(options)))
+  return hashString(JSON.stringify(canonicalPgSyncOptions(options)))
 }
 
 export interface EntityObservationSource extends ObservationSource {
@@ -339,7 +341,7 @@ export function db<const TSchema extends SharedStateSchemaMap>(
 }
 
 export function pgSync(options: PgSyncOptions): PgSyncObservationSource {
-  const config = canonicalPgSyncConfig(options)
+  const config = canonicalPgSyncOptions(options)
   const sourceRef = sourceRefForPgSync(config)
   const streamUrl = getPgSyncStreamPath(sourceRef)
   return {

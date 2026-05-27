@@ -29,6 +29,7 @@ export function createObservePgSyncTool(ctx: HandlerContext): AgentTool {
     parameters: Type.Object({
       table: Type.String({
         minLength: 1,
+        pattern: `\\S`,
         description: `Postgres table name to observe.`,
       }),
       columns: Type.Optional(
