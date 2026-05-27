@@ -53,14 +53,14 @@ defmodule Electric.Shapes.Consumer.EventHandler.Subqueries.Steady do
     dep_index = subquery_ref |> List.last() |> String.to_integer()
     mtv = MultiTimeView.for_stack(state.shape_info.stack_id)
     %{subquery_id: subquery_id, time: pinned_time} = Map.fetch!(state.subquery_refs, subquery_ref)
-    dep_view = mtv |> MultiTimeView.values(subquery_id, pinned_time) |> MapSet.new()
+    member? = fn value -> MultiTimeView.member?(mtv, subquery_id, value, pinned_time) end
 
     payload_with_default_from_time = Map.put_new(Map.new(payload), :from_time, pinned_time)
 
     next_state = %{
       state
       | queue:
-          MoveQueue.enqueue(state.queue, dep_index, payload_with_default_from_time, dep_view)
+          MoveQueue.enqueue(state.queue, dep_index, payload_with_default_from_time, member?)
     }
 
     with {:ok, next_state, effects} <- drain_queue(next_state, EffectList.new()) do

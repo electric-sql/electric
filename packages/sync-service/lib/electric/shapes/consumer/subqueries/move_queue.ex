@@ -55,18 +55,22 @@ defmodule Electric.Shapes.Consumer.Subqueries.MoveQueue do
   @doc """
   Enqueue a materializer payload for a specific dependency.
 
-  `dep_view` is the materializer view at the consumer's pinned time for
-  this dep (or the view-after-active-move for the trigger ref during
-  Buffering). It's used by `reduce/2` to drop redundant ops.
+  `member?` is a callback `(value) -> boolean()` that answers "is `value`
+  currently a member of the dep view at the consumer's pinned time for
+  this dep (or, during Buffering, the view-after-active-move for the
+  trigger ref)?". It's used by `reduce/2` to drop redundant ops. A
+  callback rather than a `MapSet` lets the caller skip materialising the
+  full dependency view on the consumer's heap — production passes a
+  closure that consults `MultiTimeView.member?/4` per value.
 
   The payload may include `:from_time`, `:to_time`, and `:txids` keys.
   The first enqueue for a dep records `from_time` (subsequent payloads
   leave it untouched). `to_time` is updated to `max(current, new)`. Txids
   accumulate.
   """
-  @spec enqueue(t(), non_neg_integer(), map() | keyword(), MapSet.t()) :: t()
-  def enqueue(%__MODULE__{} = queue, dep_index, payload, %MapSet{} = dep_view)
-      when is_map(payload) or is_list(payload) do
+  @spec enqueue(t(), non_neg_integer(), map() | keyword(), (term() -> boolean())) :: t()
+  def enqueue(%__MODULE__{} = queue, dep_index, payload, member?)
+      when (is_map(payload) or is_list(payload)) and is_function(member?, 1) do
     payload = Map.new(payload)
     new_txids = payload |> Map.get(:txids, []) |> MapSet.new()
 
@@ -78,7 +82,7 @@ defmodule Electric.Shapes.Consumer.Subqueries.MoveQueue do
         Enum.map(existing_ins, &{:move_in, &1}) ++
         payload_to_ops(payload)
 
-    {new_outs, new_ins} = reduce(ops, dep_view)
+    {new_outs, new_ins} = reduce(ops, member?)
 
     from_times =
       case Map.get(payload, :from_time) do
@@ -159,7 +163,7 @@ defmodule Electric.Shapes.Consumer.Subqueries.MoveQueue do
       Enum.map(Map.get(payload, :move_in, []), &{:move_in, &1})
   end
 
-  defp reduce(ops, base_view) do
+  defp reduce(ops, member?) do
     terminal_ops =
       ops
       |> Enum.with_index()
@@ -167,7 +171,7 @@ defmodule Electric.Shapes.Consumer.Subqueries.MoveQueue do
         Map.put(acc, elem(move_value, 0), %{kind: kind, move_value: move_value, index: index})
       end)
       |> Map.values()
-      |> Enum.reject(&redundant?(&1, base_view))
+      |> Enum.reject(&redundant?(&1, member?))
       |> Enum.sort_by(& &1.index)
 
     {
@@ -176,12 +180,12 @@ defmodule Electric.Shapes.Consumer.Subqueries.MoveQueue do
     }
   end
 
-  defp redundant?(%{kind: :move_in, move_value: {value, _}}, base_view) do
-    MapSet.member?(base_view, value)
+  defp redundant?(%{kind: :move_in, move_value: {value, _}}, member?) do
+    member?.(value)
   end
 
-  defp redundant?(%{kind: :move_out, move_value: {value, _}}, base_view) do
-    not MapSet.member?(base_view, value)
+  defp redundant?(%{kind: :move_out, move_value: {value, _}}, member?) do
+    not member?.(value)
   end
 
   defp put_or_delete(map, key, [], _txids), do: Map.delete(map, key)

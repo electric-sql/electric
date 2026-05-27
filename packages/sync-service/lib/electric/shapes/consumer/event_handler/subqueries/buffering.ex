@@ -110,9 +110,9 @@ defmodule Electric.Shapes.Consumer.EventHandler.Subqueries.Buffering do
     subquery_ref = RefResolver.ref_from_dep_handle!(state.shape_info.ref_resolver, dep_handle)
     dep_index = subquery_ref |> List.last() |> String.to_integer()
     mtv = MultiTimeView.for_stack(state.shape_info.stack_id)
-    dep_view = view_after_active_move(mtv, state.active_move, state.subquery_refs, subquery_ref)
+    member? = member_after_active_move(mtv, state.active_move, state.subquery_refs, subquery_ref)
 
-    {:ok, %{state | queue: MoveQueue.enqueue(state.queue, dep_index, payload, dep_view)}, []}
+    {:ok, %{state | queue: MoveQueue.enqueue(state.queue, dep_index, payload, member?)}, []}
   end
 
   def handle_event(%__MODULE__{} = state, {:pg_snapshot_known, snapshot}) do
@@ -233,8 +233,10 @@ defmodule Electric.Shapes.Consumer.EventHandler.Subqueries.Buffering do
   # The base view for reducing buffered move queue entries is the consumer's
   # view *as if* the in-flight active move had already spliced. For the
   # trigger ref that means MTV at `active_move.to_time`; for every other ref
-  # the consumer is still pinned at its currently-tracked time.
-  defp view_after_active_move(mtv, active_move, subquery_refs, subquery_ref) do
+  # the consumer is still pinned at its currently-tracked time. Returns a
+  # `(value) -> boolean()` callback so MoveQueue can ask membership per
+  # value without materialising the whole view.
+  defp member_after_active_move(mtv, active_move, subquery_refs, subquery_ref) do
     %{subquery_id: subquery_id} = Map.fetch!(subquery_refs, subquery_ref)
 
     time =
@@ -244,6 +246,6 @@ defmodule Electric.Shapes.Consumer.EventHandler.Subqueries.Buffering do
         subquery_refs[subquery_ref].time
       end
 
-    mtv |> MultiTimeView.values(subquery_id, time) |> MapSet.new()
+    fn value -> MultiTimeView.member?(mtv, subquery_id, value, time) end
   end
 end
