@@ -1411,7 +1411,7 @@ describe(`processWake`, () => {
     expect((body.payload as Record<string, unknown>).action).toBe(`later`)
   })
 
-  it(`cron observe registers wake and cron source with server`, async () => {
+  it(`cron observe registers wake and ensures cron stream with server`, async () => {
     const { cron } = await import(`../src/observation-sources`)
 
     defineEntity(`test-agent`, {
@@ -1422,9 +1422,9 @@ describe(`processWake`, () => {
 
     await processWake(makeNotification(), BASE_CONFIG)
 
-    // Should have registered the cron source
+    // Should have ensured the cron stream
     const cronCalls = fetchMock.mock.calls.filter(([url]) =>
-      String(url).includes(`/_electric/cron/register`)
+      String(url).includes(`/_electric/observations/cron/ensure-stream`)
     )
     expect(cronCalls.length).toBe(1)
     const cronBody = JSON.parse(cronCalls[0]![1]!.body as string) as Record<

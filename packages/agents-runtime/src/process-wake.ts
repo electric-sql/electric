@@ -1532,14 +1532,14 @@ export async function processWake(
       const effectiveWake = wake ?? sourceWakeConfig?.condition
 
       if (source.sourceType === `cron`) {
-        await serverClient.registerCronSource(
+        await serverClient.ensureCronStream(
           (source as CronObservationSource).expression,
           (source as CronObservationSource).timezone
         )
       }
 
       if (source.sourceType === `entities`) {
-        await serverClient.registerEntitiesSource(
+        await serverClient.ensureEntitiesMembershipStream(
           (source as EntitiesObservationSource).tags
         )
       }
@@ -1912,7 +1912,7 @@ export async function processWake(
         doSetTag: (key, value) =>
           serverClient.setTag(entityUrl, key, value, writeToken),
         doRemoveTag: (key) =>
-          serverClient.removeTag(entityUrl, key, writeToken),
+          serverClient.deleteTag(entityUrl, key, writeToken),
       })
 
       let sleepRequested = false

@@ -8,14 +8,14 @@ describe(`appendPathToUrl`, () => {
     )
   })
 
-  it(`canonicalizes tenant routing query params into path prefixes`, () => {
+  it(`preserves base query params without interpreting tenant routing`, () => {
     expect(
       appendPathToUrl(
-        `https://agents.test?service=tenant-a&secret=shared-secret`,
+        `https://agents.test?tenant=tenant-a&secret=shared-secret`,
         `/_electric/entity-types`
       )
     ).toBe(
-      `https://agents.test/t/tenant-a/v1/_electric/entity-types?secret=shared-secret`
+      `https://agents.test/_electric/entity-types?tenant=tenant-a&secret=shared-secret`
     )
   })
 
@@ -30,14 +30,14 @@ describe(`appendPathToUrl`, () => {
     )
   })
 
-  it(`does not duplicate an existing tenant path prefix`, () => {
+  it(`appends under an existing base path without rewriting it`, () => {
     expect(
       appendPathToUrl(
         `https://agents.test/base/t/tenant-a/v1?tenant=tenant-a&foo=bar`,
         `/_electric/entity-types`
       )
     ).toBe(
-      `https://agents.test/base/t/tenant-a/v1/_electric/entity-types?foo=bar`
+      `https://agents.test/base/t/tenant-a/v1/_electric/entity-types?tenant=tenant-a&foo=bar`
     )
   })
 })

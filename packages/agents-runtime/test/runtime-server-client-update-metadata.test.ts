@@ -228,7 +228,7 @@ describe(`runtime-server-client event sources`, () => {
 })
 
 describe(`createHandlerContext: tags + tag mutations`, () => {
-  it(`exposes tags snapshot and forwards setTag/removeTag`, async () => {
+  it(`exposes tags snapshot and forwards setTag/deleteTag`, async () => {
     const calls: Array<Record<string, unknown>> = []
     const { ctx } = createHandlerContext({
       entityUrl: `/horton/x`,
@@ -259,7 +259,7 @@ describe(`createHandlerContext: tags + tag mutations`, () => {
     })
     expect(ctx.tags).toEqual({ title: `existing` })
     await ctx.setTag(`title`, `new`)
-    await ctx.removeTag(`title`)
+    await ctx.deleteTag(`title`)
     expect(calls).toEqual([
       { key: `title`, value: `new` },
       { key: `title`, removed: true },

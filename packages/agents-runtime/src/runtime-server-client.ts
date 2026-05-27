@@ -96,15 +96,15 @@ export interface SignalEntityOptions {
 export interface RuntimeServerClient {
   sendEntityMessage: (options: SendEntityMessageOptions) => Promise<void>
   spawnEntity: (options: SpawnEntityOptions) => Promise<RuntimeEntityInfo>
-  getEntityInfo: (entityUrl: string) => Promise<RuntimeEntityInfo>
+  getEntity: (entityUrl: string) => Promise<RuntimeEntityInfo>
   ensureSharedStateStream: (sharedStateId: string) => Promise<string>
   signalEntity: (options: SignalEntityOptions) => Promise<{ txid: number }>
   ensureStream: (streamPath: string, contentType?: string) => Promise<string>
   deleteEntity: (entityUrl: string) => Promise<void>
   getSharedStateStreamPath: (sharedStateId: string) => string
   registerWake: (options: RegisterWakeOptions) => Promise<void>
-  registerCronSource: (expression: string, timezone?: string) => Promise<string>
-  registerEntitiesSource: (tags: EntityTags) => Promise<{
+  ensureCronStream: (expression: string, timezone?: string) => Promise<string>
+  ensureEntitiesMembershipStream: (tags: EntityTags) => Promise<{
     streamUrl: string
     sourceRef: string
   }>
@@ -143,7 +143,7 @@ export interface RuntimeServerClient {
     value: string,
     writeToken: string
   ) => Promise<void>
-  removeTag: (
+  deleteTag: (
     entityUrl: string,
     key: string,
     writeToken: string
@@ -280,9 +280,7 @@ export function createRuntimeServerClient(
     }
   }
 
-  const getEntityInfo = async (
-    entityUrl: string
-  ): Promise<RuntimeEntityInfo> => {
+  const getEntity = async (entityUrl: string): Promise<RuntimeEntityInfo> => {
     const response = await request(entityRpcPath(entityUrl), { method: `GET` })
     if (!response.ok) {
       throw new Error(
@@ -340,7 +338,7 @@ export function createRuntimeServerClient(
             conflictEntity,
             `spawn ${type}/${id} conflict response invalid`
           )
-        : await getEntityInfo(`/${type}/${id}`)
+        : await getEntity(`/${type}/${id}`)
     } else {
       throw new Error(
         `spawn ${type}/${id} failed (${response.status}): ${await readErrorText(response)}`
@@ -426,35 +424,41 @@ export function createRuntimeServerClient(
     }
   }
 
-  const registerCronSource = async (
+  const ensureCronStream = async (
     expression: string,
     timezone?: string
   ): Promise<string> => {
-    const response = await request(`/_electric/cron/register`, {
-      method: `POST`,
-      headers: { 'content-type': `application/json` },
-      body: JSON.stringify({ expression, timezone }),
-    })
+    const response = await request(
+      `/_electric/observations/cron/ensure-stream`,
+      {
+        method: `POST`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({ expression, timezone }),
+      }
+    )
     if (!response.ok) {
       throw new Error(
-        `registerCronSource failed (${response.status}): ${await readErrorText(response)}`
+        `ensureCronStream failed (${response.status}): ${await readErrorText(response)}`
       )
     }
     const data = (await response.json()) as { streamUrl: string }
     return data.streamUrl
   }
 
-  const registerEntitiesSource = async (
+  const ensureEntitiesMembershipStream = async (
     tags: EntityTags
   ): Promise<{ streamUrl: string; sourceRef: string }> => {
-    const response = await request(`/_electric/entities/register`, {
-      method: `POST`,
-      headers: { 'content-type': `application/json` },
-      body: JSON.stringify({ tags }),
-    })
+    const response = await request(
+      `/_electric/observations/entities/ensure-stream`,
+      {
+        method: `POST`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({ tags }),
+      }
+    )
     if (!response.ok) {
       throw new Error(
-        `registerEntitiesSource failed (${response.status}): ${await readErrorText(response)}`
+        `ensureEntitiesMembershipStream failed (${response.status}): ${await readErrorText(response)}`
       )
     }
     return (await response.json()) as { streamUrl: string; sourceRef: string }
@@ -644,7 +648,7 @@ export function createRuntimeServerClient(
     }
   }
 
-  const removeTag = async (
+  const deleteTag = async (
     entityUrl: string,
     key: string,
     writeToken: string
@@ -658,7 +662,7 @@ export function createRuntimeServerClient(
     )
     if (!response.ok) {
       throw new Error(
-        `removeTag ${entityUrl} failed (${response.status}): ${await readErrorText(response)}`
+        `deleteTag ${entityUrl} failed (${response.status}): ${await readErrorText(response)}`
       )
     }
   }
@@ -666,15 +670,15 @@ export function createRuntimeServerClient(
   return {
     sendEntityMessage,
     spawnEntity,
-    getEntityInfo,
+    getEntity,
     ensureSharedStateStream,
     signalEntity,
     ensureStream,
     deleteEntity,
     getSharedStateStreamPath,
     registerWake,
-    registerCronSource,
-    registerEntitiesSource,
+    ensureCronStream,
+    ensureEntitiesMembershipStream,
     listEventSources,
     subscribeToEventSource,
     unsubscribeFromEventSource,
@@ -682,6 +686,6 @@ export function createRuntimeServerClient(
     upsertFutureSendSchedule,
     deleteSchedule,
     setTag,
-    removeTag,
+    deleteTag,
   }
 }

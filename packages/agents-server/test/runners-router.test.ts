@@ -482,7 +482,7 @@ describe(`runner routes`, () => {
       epoch: 7,
       wakeId: `wake-1`,
       streamPath: `/chat/one/main`,
-      callback: `http://server/_electric/callback-forward/wake-1`,
+      callback: `http://server/_electric/wake-callbacks/wake-1`,
       claimToken: `claim-token`,
     })
     expect(body.streams).toEqual([{ path: `/chat/one/main`, offset: `12` }])

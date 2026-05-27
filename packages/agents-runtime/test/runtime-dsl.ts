@@ -681,7 +681,7 @@ export function runtimeTest(): RuntimeTestBuilder {
     const getInfo = () => {
       if (!infoPromise) {
         infoPromise = ensureClient().then((client) =>
-          client.getEntityInfo(entityUrl)
+          client.getEntity(entityUrl)
         )
       }
       return infoPromise

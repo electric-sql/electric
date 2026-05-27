@@ -82,14 +82,6 @@ function subscriptionUrl(
   subscriptionId: string
 ): string {
   const url = new URL(streamBaseUrl)
-  const match = /^(.*)\/v1\/stream\/([^/]+)\/?$/.exec(url.pathname)
-  if (match) {
-    const [, prefix = ``, serviceId] = match
-    url.pathname = `${prefix}/v1/stream/__ds/subscriptions/${encodeURIComponent(subscriptionId)}`
-    url.searchParams.set(`service`, decodeURIComponent(serviceId!))
-    return url.toString()
-  }
-
   url.pathname = `${url.pathname.replace(/\/+$/, ``)}/__ds/subscriptions/${encodeURIComponent(subscriptionId)}`
   return url.toString()
 }

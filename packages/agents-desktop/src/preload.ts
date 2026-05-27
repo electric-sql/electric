@@ -485,11 +485,11 @@ const api = {
         )
     },
     prepareConnection: (
-      serviceId: string
+      tenantId: string
     ): Promise<{ url: string; tenantId: string }> =>
       ipcRenderer.invoke(
         `desktop:cloud-agent-server-prepare-connection`,
-        serviceId
+        tenantId
       ),
   },
 }

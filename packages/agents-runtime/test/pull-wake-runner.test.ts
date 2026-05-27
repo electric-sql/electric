@@ -32,7 +32,7 @@ function notification(id: string): WakeNotification {
     wakeId: `wake-${id}`,
     streamPath: `/chat/${id}/main`,
     streams: [{ path: `/chat/${id}/main`, offset: `12` }],
-    callback: `http://server/_electric/callback-forward/wake-${id}`,
+    callback: `http://server/_electric/wake-callbacks/wake-${id}`,
     claimToken: `claim-token-${id}`,
     entity: {
       type: `chat`,

@@ -5,8 +5,8 @@ import type * as StateModule from '@durable-streams/state'
 
 const { mockState } = vi.hoisted(() => ({
   mockState: {
-    registerEntitiesSource: vi.fn(),
-    registerCronSource: vi.fn(),
+    ensureEntitiesMembershipStream: vi.fn(),
+    ensureCronStream: vi.fn(),
     signalEntity: vi.fn(),
     ensureStream: vi.fn(),
     createStreamDB: vi.fn(),
@@ -22,8 +22,8 @@ const { mockState } = vi.hoisted(() => ({
 
 vi.mock(`../src/runtime-server-client`, () => ({
   createRuntimeServerClient: () => ({
-    registerEntitiesSource: mockState.registerEntitiesSource,
-    registerCronSource: mockState.registerCronSource,
+    ensureEntitiesMembershipStream: mockState.ensureEntitiesMembershipStream,
+    ensureCronStream: mockState.ensureCronStream,
     signalEntity: mockState.signalEntity,
     ensureStream: mockState.ensureStream,
   }),
@@ -42,7 +42,7 @@ vi.mock(`@durable-streams/state`, async (importOriginal) => {
 
 describe(`createAgentsClient`, () => {
   beforeEach(() => {
-    mockState.registerEntitiesSource = vi.fn().mockResolvedValue({
+    mockState.ensureEntitiesMembershipStream = vi.fn().mockResolvedValue({
       sourceRef: `source-1`,
       streamUrl: `/_entities/source-1`,
     })
@@ -58,7 +58,7 @@ describe(`createAgentsClient`, () => {
   })
 
   it(`observe(cron(...)) throws a clear error (not the generic guard)`, async () => {
-    mockState.registerCronSource = vi.fn().mockResolvedValue(`/_cron/abc123`)
+    mockState.ensureCronStream = vi.fn().mockResolvedValue(`/_cron/abc123`)
 
     const client = createAgentsClient({
       baseUrl: `http://agents.test`,
@@ -73,7 +73,7 @@ describe(`createAgentsClient`, () => {
     )
   })
 
-  it(`registers entities sources and returns a preloaded StreamDB`, async () => {
+  it(`ensures entities membership streams and returns a preloaded StreamDB`, async () => {
     const client = createAgentsClient({
       baseUrl: `http://electric-agents.test`,
     })
@@ -87,7 +87,7 @@ describe(`createAgentsClient`, () => {
 
     const db = await client.observe(source)
 
-    expect(mockState.registerEntitiesSource).toHaveBeenCalledWith({
+    expect(mockState.ensureEntitiesMembershipStream).toHaveBeenCalledWith({
       demo_id: `X`,
       role: `reviewer`,
     })

@@ -644,7 +644,7 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
     setTag(key: string, value: string): Promise<void> {
       return config.doSetTag(key, value)
     },
-    removeTag(key: string): Promise<void> {
+    deleteTag(key: string): Promise<void> {
       return config.doRemoveTag(key)
     },
   }

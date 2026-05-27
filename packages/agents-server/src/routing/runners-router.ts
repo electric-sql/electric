@@ -628,7 +628,7 @@ async function notificationFromClaim(
     streams,
     callback: appendPathToUrl(
       ctx.publicUrl,
-      `/_electric/callback-forward/${encodeURIComponent(input.claim.wake_id)}`
+      `/_electric/wake-callbacks/${encodeURIComponent(input.claim.wake_id)}`
     ),
     claimToken: input.claim.token,
     triggerEvent: `message_received`,

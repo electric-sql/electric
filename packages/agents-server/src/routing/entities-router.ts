@@ -193,10 +193,6 @@ const eventSourceSubscriptionBodySchema = Type.Object({
   reason: Type.Optional(Type.String()),
 })
 
-const entitiesRegisterBodySchema = Type.Object({
-  tags: Type.Optional(stringRecordSchema),
-})
-
 type SpawnBody = Static<typeof spawnBodySchema>
 type SendBody = Static<typeof sendBodySchema>
 type InboxMessageBody = Static<typeof inboxMessageBodySchema>
@@ -207,7 +203,6 @@ type ScheduleBody = Static<typeof scheduleBodySchema>
 type EventSourceSubscriptionBody = Static<
   typeof eventSourceSubscriptionBodySchema
 >
-type EntitiesRegisterBody = Static<typeof entitiesRegisterBodySchema>
 
 export const entitiesRouter: EntitiesRoutes = Router<
   AgentsRouteRequest,
@@ -218,11 +213,6 @@ export const entitiesRouter: EntitiesRoutes = Router<
 })
 
 entitiesRouter.get(`/`, listEntities)
-entitiesRouter.post(
-  `/register`,
-  withSchema(entitiesRegisterBodySchema),
-  registerEntitiesSource
-)
 entitiesRouter.put(
   `/:type/:instanceId`,
   withSpawnableEntityType,
@@ -270,7 +260,7 @@ entitiesRouter.post(
 entitiesRouter.delete(
   `/:type/:instanceId/tags/:tagKey`,
   withExistingEntity,
-  removeTag
+  deleteTag
 )
 entitiesRouter.put(
   `/:type/:instanceId/schedules/:scheduleId`,
@@ -427,17 +417,6 @@ async function listEntities(
     created_by: firstQueryValue(query.created_by),
   })
   return json(entities.map((entity) => toPublicEntity(entity)))
-}
-
-async function registerEntitiesSource(
-  request: AgentsRouteRequest,
-  ctx: TenantContext
-): Promise<Response> {
-  const parsed = routeBody<EntitiesRegisterBody>(request)
-  const result = await ctx.entityManager.registerEntitiesSource(
-    parsed.tags ?? {}
-  )
-  return json(result)
 }
 
 async function upsertSchedule(
@@ -603,7 +582,7 @@ async function setTag(
 ): Promise<Response> {
   const principalMutationError = rejectPrincipalEntityMutation(
     request,
-    `tagged`
+    `tag updated`
   )
   if (principalMutationError) return principalMutationError
 
@@ -619,19 +598,19 @@ async function setTag(
   return json(toPublicEntity(updated))
 }
 
-async function removeTag(
+async function deleteTag(
   request: AgentsRouteRequest,
   ctx: TenantContext
 ): Promise<Response> {
   const principalMutationError = rejectPrincipalEntityMutation(
     request,
-    `untagged`
+    `tag deleted`
   )
   if (principalMutationError) return principalMutationError
 
   const { entityUrl } = requireExistingEntityRoute(request)
   const token = writeTokenFromRequest(request)
-  const updated = await ctx.entityManager.removeTag(
+  const updated = await ctx.entityManager.deleteTag(
     entityUrl,
     decodeURIComponent(request.params.tagKey),
     token

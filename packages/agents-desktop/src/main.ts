@@ -587,16 +587,13 @@ function broadcastCloudAgentServersState(next: CloudAgentServersState): void {
 
 /**
  * Match a request URL against the user's saved `electric-cloud`
- * servers by host + base path + `service` query marker. Cloud URLs
- * carry `?service=<tenantId>` so a single cloud-agents-server host can
- * serve multiple tenants without us attaching tenant A's token to
- * tenant B's request.
+ * servers by host + base path. Cloud URLs include `/t/<tenantId>/v1`
+ * so a single cloud-agents-server host can serve multiple tenants
+ * without us attaching tenant A's token to tenant B's request.
  *
  * Legacy settings may still have a host-only Cloud URL. We allow a
- * request without a `service` query marker only when it is the sole
- * possible match for the origin + base path; otherwise we fail closed
- * until `prepareConnection` rewrites the saved URL to include the
- * service marker.
+ * host-only request match only when it is the sole possible fallback;
+ * otherwise tenant-scoped base paths win.
  */
 function findCloudServerForUrl(requestUrl: string): ServerConfig | null {
   let parsed: URL
@@ -605,8 +602,8 @@ function findCloudServerForUrl(requestUrl: string): ServerConfig | null {
   } catch {
     return null
   }
-  const fallbackMatches: Array<ServerConfig> = []
-  const requestedService = parsed.searchParams.get(`service`)
+  let bestPathMatch: { server: ServerConfig; pathLength: number } | null = null
+  const hostOnlyMatches: Array<ServerConfig> = []
   for (const server of settings.servers) {
     if (server.source !== `electric-cloud`) continue
     if (!server.tenantId) continue
@@ -618,20 +615,21 @@ function findCloudServerForUrl(requestUrl: string): ServerConfig | null {
     }
     if (base.origin !== parsed.origin) continue
     const basePath = base.pathname.replace(/\/+$/, ``)
+    if (basePath === ``) {
+      hostOnlyMatches.push(server)
+      continue
+    }
     if (
-      basePath !== `` &&
-      parsed.pathname !== basePath &&
-      !parsed.pathname.startsWith(`${basePath}/`)
+      parsed.pathname === basePath ||
+      parsed.pathname.startsWith(`${basePath}/`)
     ) {
-      continue
+      if (!bestPathMatch || basePath.length > bestPathMatch.pathLength) {
+        bestPathMatch = { server, pathLength: basePath.length }
+      }
     }
-    if (requestedService) {
-      if (requestedService === server.tenantId) return server
-      continue
-    }
-    fallbackMatches.push(server)
   }
-  return fallbackMatches.length === 1 ? fallbackMatches[0]! : null
+  if (bestPathMatch) return bestPathMatch.server
+  return hostOnlyMatches.length === 1 ? hostOnlyMatches[0]! : null
 }
 
 function findSavedServerForUrl(requestUrl: string): ServerConfig | null {
@@ -665,9 +663,8 @@ function findSavedServerForUrl(requestUrl: string): ServerConfig | null {
 /**
  * Decorate outgoing requests bound for saved agent servers with the
  * configured server headers. Cloud agent servers also receive
- * `Authorization: Bearer <agents token>` and `x-electric-service:
- * <tenantId>` headers. Two injection points, both reading from the
- * same in-memory agents-token map (`SecretStore`-backed):
+ * `Authorization: Bearer <agents token>`. Two injection points, both
+ * reading from the same in-memory agents-token map (`SecretStore`-backed):
  *
  *  1. Renderer fetches — Electron's
  *     `session.webRequest.onBeforeSendHeaders` hook catches anything
@@ -791,7 +788,6 @@ async function desktopServerFetch(
  * Headers emitted (only when we have the data):
  *  - `Authorization: Bearer <agents token>` — proves the request is
  *    authorized for the tenant.
- *  - `x-electric-service: <tenantId>` — routes to the right tenant.
  *  - `x-electric-asserted-user-id` / `-email` / `-name` — the cloud
  *    agents server requires these for runner-targeted dispatch (see
  *    `assertDispatchPolicyAllowed`). We assert the currently signed-in
@@ -811,7 +807,6 @@ function buildCloudAuthHeaders(url: string): Record<string, string> | null {
   }
   const headers: Record<string, string> = {
     Authorization: `Bearer ${token}`,
-    'x-electric-service': server.tenantId,
   }
   const cloudAuthState = cloudAuth?.getState()
   if (cloudAuthState?.userId) {
@@ -835,12 +830,12 @@ function buildCloudAuthHeaders(url: string): Record<string, string> | null {
  * agent-server URL when it registers entity types and proxies
  * runtime traffic. For cloud servers those calls would 401 without
  * the agents token, so we install a global undici interceptor that
- * mirrors the renderer hook above and adds the same two headers.
+ * mirrors the renderer hook above and adds the same cloud auth headers.
  *
- * Matches by full request URL via `findCloudServerForUrl` — same
- * `service` query marker as the renderer hook, so a single cloud-
- * agents-server host serving many tenants can't accidentally see
- * tenant A's token on tenant B's request.
+ * Matches by full request URL via `findCloudServerForUrl`, including
+ * the tenant-scoped base path, so a single cloud-agents-server host
+ * serving many tenants can't accidentally see tenant A's token on
+ * tenant B's request.
  */
 function installCloudAuthUndiciInterceptor(): void {
   const base = undici.getGlobalDispatcher()
@@ -3513,8 +3508,8 @@ function registerIpcHandlers(): void {
   // user's cloud-auth bearer or the agents token.
   ipcMain.handle(
     `desktop:cloud-agent-server-prepare-connection`,
-    async (_event, serviceId: string) => {
-      return await getCloudAgentServers().prepareConnection(serviceId)
+    async (_event, tenantId: string) => {
+      return await getCloudAgentServers().prepareConnection(tenantId)
     }
   )
 

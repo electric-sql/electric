@@ -35,8 +35,6 @@ export type ElectricAgentsEntityTypeRoutes = RouterType<
 >
 
 type PublicEntityTypeResponse = ElectricAgentsEntityType & {
-  input_schemas?: Record<string, Record<string, unknown>>
-  output_schemas?: Record<string, Record<string, unknown>>
   revision: number
 }
 
@@ -49,15 +47,11 @@ const registerEntityTypeBodySchema = Type.Object({
   creation_schema: Type.Optional(jsonObjectSchema),
   inbox_schemas: Type.Optional(schemaMapSchema),
   state_schemas: Type.Optional(schemaMapSchema),
-  input_schemas: Type.Optional(schemaMapSchema),
-  output_schemas: Type.Optional(schemaMapSchema),
   serve_endpoint: Type.Optional(Type.String()),
   default_dispatch_policy: Type.Optional(dispatchPolicySchema),
 })
 
 const amendEntityTypeSchemasBodySchema = Type.Object({
-  input_schemas: Type.Optional(schemaMapSchema),
-  output_schemas: Type.Optional(schemaMapSchema),
   inbox_schemas: Type.Optional(schemaMapSchema),
   state_schemas: Type.Optional(schemaMapSchema),
 })
@@ -181,8 +175,8 @@ async function amendSchemas(
   const parsed = routeBody<AmendEntityTypeSchemasBody>(request)
 
   const updated = await ctx.entityManager.amendSchemas(request.params.name, {
-    inbox_schemas: parsed.inbox_schemas ?? parsed.input_schemas,
-    state_schemas: parsed.state_schemas ?? parsed.output_schemas,
+    inbox_schemas: parsed.inbox_schemas,
+    state_schemas: parsed.state_schemas,
   })
   return json(toPublicEntityType(updated))
 }
@@ -199,13 +193,12 @@ function normalizeEntityTypeRequest(
   parsed: RegisterEntityTypeBody | RegisterEntityTypeRequest
 ): RegisterEntityTypeRequest {
   const serveEndpoint = rewriteLoopbackWebhookUrl(parsed.serve_endpoint)
-  const compatibilityFields = parsed as RegisterEntityTypeBody
   return {
     name: parsed.name ?? ``,
     description: parsed.description ?? ``,
     creation_schema: parsed.creation_schema,
-    inbox_schemas: parsed.inbox_schemas ?? compatibilityFields.input_schemas,
-    state_schemas: parsed.state_schemas ?? compatibilityFields.output_schemas,
+    inbox_schemas: parsed.inbox_schemas,
+    state_schemas: parsed.state_schemas,
     serve_endpoint: serveEndpoint,
     default_dispatch_policy:
       parsed.default_dispatch_policy ??
@@ -222,8 +215,6 @@ function toPublicEntityType(
 ): PublicEntityTypeResponse {
   return {
     ...entityType,
-    input_schemas: entityType.inbox_schemas,
-    output_schemas: entityType.state_schemas,
     revision: entityType.revision,
   }
 }

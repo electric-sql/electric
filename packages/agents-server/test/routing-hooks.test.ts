@@ -66,10 +66,10 @@ describe(`routing/hooks`, () => {
     expect((await response.json()).error.code).toBe(`INTERNAL_SERVER_ERROR`)
   })
 
-  it(`rejectIfShuttingDown only blocks webhook-forward paths`, () => {
+  it(`rejectIfShuttingDown only blocks subscription-webhook paths`, () => {
     const ctx = buildCtx({ isShuttingDown: () => true })
     const blocked = rejectIfShuttingDown(
-      new Request(`http://x/_electric/webhook-forward/abc`) as IRequest,
+      new Request(`http://x/_electric/subscription-webhooks/abc`) as IRequest,
       ctx
     )
     expect(blocked?.status).toBe(503)
@@ -81,7 +81,7 @@ describe(`routing/hooks`, () => {
     expect(ignored).toBeUndefined()
 
     const notShuttingDown = rejectIfShuttingDown(
-      new Request(`http://x/_electric/webhook-forward/abc`) as IRequest,
+      new Request(`http://x/_electric/subscription-webhooks/abc`) as IRequest,
       buildCtx()
     )
     expect(notShuttingDown).toBeUndefined()

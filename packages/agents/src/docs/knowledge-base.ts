@@ -928,9 +928,9 @@ export function createHortonDocsSupport(
     },
     createSearchTool(): AgentTool {
       return {
-        name: `search_durable_agents_docs`,
-        label: `Search Durable Agents Docs`,
-        description: `Run a hybrid BM25 plus vector search over the local Durable Agents documentation index.`,
+        name: `search_electric_agents_docs`,
+        label: `Search Electric Agents Docs`,
+        description: `Run a hybrid BM25 plus vector search over the local Electric Agents documentation index.`,
         parameters: Type.Object({
           query: Type.String({
             description: `The docs question or search query to run.`,

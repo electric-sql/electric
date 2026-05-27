@@ -162,8 +162,6 @@ export interface EntityTypeRegistration {
   name: string
   description: string
   creation_schema?: Record<string, unknown>
-  input_schemas?: Record<string, Record<string, unknown>>
-  output_schemas?: Record<string, Record<string, unknown>>
   inbox_schemas?: Record<string, Record<string, unknown>>
   state_schemas?: Record<string, Record<string, unknown>>
   metadata_schema?: Record<string, unknown>
@@ -237,14 +235,11 @@ function toServerEntityTypeRegistration(
     }),
   }
 
-  const inboxSchemas = registration.inbox_schemas ?? registration.input_schemas
-  const stateSchemas = registration.state_schemas ?? registration.output_schemas
-
-  if (inboxSchemas) {
-    body.inbox_schemas = inboxSchemas
+  if (registration.inbox_schemas) {
+    body.inbox_schemas = registration.inbox_schemas
   }
-  if (stateSchemas) {
-    body.state_schemas = stateSchemas
+  if (registration.state_schemas) {
+    body.state_schemas = registration.state_schemas
   }
 
   return body
@@ -553,8 +548,8 @@ type Step =
   | {
       kind: `amendSchemas`
       name: string
-      input_schemas?: Record<string, Record<string, unknown>>
-      output_schemas?: Record<string, Record<string, unknown>>
+      inbox_schemas?: Record<string, Record<string, unknown>>
+      state_schemas?: Record<string, Record<string, unknown>>
     }
   | { kind: `listTypes` }
   | { kind: `registerTypeViaServe`; registration: EntityTypeRegistration }
@@ -845,15 +840,15 @@ export class ElectricAgentsScenario {
   amendSchemas(
     name: string,
     schemas: {
-      input_schemas?: Record<string, Record<string, unknown>>
-      output_schemas?: Record<string, Record<string, unknown>>
+      inbox_schemas?: Record<string, Record<string, unknown>>
+      state_schemas?: Record<string, Record<string, unknown>>
     }
   ): this {
     this.steps.push({
       kind: `amendSchemas`,
       name,
-      input_schemas: schemas.input_schemas,
-      output_schemas: schemas.output_schemas,
+      inbox_schemas: schemas.inbox_schemas,
+      state_schemas: schemas.state_schemas,
     })
     return this
   }
@@ -928,7 +923,7 @@ export class ElectricAgentsScenario {
       typeName,
       instanceId,
       args: opts?.args,
-      code: `SCHEMA_VALIDATION_ERROR`,
+      code: `SCHEMA_VALIDATION_FAILED`,
       status: 422,
     })
     return this
@@ -942,7 +937,7 @@ export class ElectricAgentsScenario {
       kind: `expectSendSchemaError`,
       payload,
       messageType: opts?.type ?? `default`,
-      code: `SCHEMA_VALIDATION_ERROR`,
+      code: `SCHEMA_VALIDATION_FAILED`,
       status: 422,
     })
     return this
@@ -953,7 +948,7 @@ export class ElectricAgentsScenario {
       kind: `expectWriteSchemaError`,
       payload,
       eventType: opts?.type ?? `default`,
-      code: `SCHEMA_VALIDATION_ERROR`,
+      code: `SCHEMA_VALIDATION_FAILED`,
       status: 422,
     })
     return this
@@ -1480,8 +1475,8 @@ async function executeStep(ctx: RunContext, step: Step): Promise<void> {
 
     case `amendSchemas`: {
       const body: Record<string, unknown> = {}
-      if (step.input_schemas) body.inbox_schemas = step.input_schemas
-      if (step.output_schemas) body.state_schemas = step.output_schemas
+      if (step.inbox_schemas) body.inbox_schemas = step.inbox_schemas
+      if (step.state_schemas) body.state_schemas = step.state_schemas
 
       const res = await electricAgentsFetch(
         ctx.baseUrl,
@@ -2241,8 +2236,8 @@ export type ElectricAgentsAction =
 export interface EntityTypeModel {
   name: string
   hasCreationSchema: boolean
-  hasInputSchemas: boolean
-  hasOutputSchemas: boolean
+  hasInboxSchemas: boolean
+  hasStateSchemas: boolean
 }
 
 /**
@@ -2333,8 +2328,8 @@ export function applyElectricAgentsAction(
           {
             name: opts?.typeName ?? `prop-type-${typeNum}`,
             hasCreationSchema: false,
-            hasInputSchemas: false,
-            hasOutputSchemas: false,
+            hasInboxSchemas: false,
+            hasStateSchemas: false,
           },
         ],
       }

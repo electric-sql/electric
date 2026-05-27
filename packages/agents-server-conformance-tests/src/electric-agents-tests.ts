@@ -527,14 +527,14 @@ export function runElectricAgentsConformanceTests(
             type: `object`,
             properties: { name: { type: `string` } },
           },
-          input_schemas: {
+          inbox_schemas: {
             query: {
               type: `object`,
               properties: { text: { type: `string` } },
               required: [`text`],
             },
           },
-          output_schemas: {
+          state_schemas: {
             result: {
               type: `object`,
               properties: { answer: { type: `string` } },
@@ -586,7 +586,7 @@ export function runElectricAgentsConformanceTests(
             type: `object`,
             properties: { x: { type: `number` } },
           },
-          input_schemas: {
+          inbox_schemas: {
             ping: {
               type: `object`,
               properties: { msg: { type: `string` } },
@@ -911,15 +911,15 @@ export function runElectricAgentsConformanceTests(
   describe(`Electric Agents Schema Validation Gates`, () => {
     // --- Send Schema Validation ---
 
-    test(`send validates input_schemas (C11)`, () => {
+    test(`send validates inbox_schemas (C11)`, () => {
       const typeName = `send-schema-valid-${Date.now()}`
       return electricAgents(config.baseUrl)
         .subscription(`/${typeName}/**`, `send-schema-sub`)
         .registerType({
           name: typeName,
-          description: `Type with input schemas`,
+          description: `Type with inbox schemas`,
           creation_schema: { type: `object` },
-          input_schemas: {
+          inbox_schemas: {
             query: {
               type: `object`,
               properties: { text: { type: `string` } },
@@ -940,9 +940,9 @@ export function runElectricAgentsConformanceTests(
         .subscription(`/${typeName}/**`, `send-schema-inv-sub`)
         .registerType({
           name: typeName,
-          description: `Type with strict input schemas`,
+          description: `Type with strict inbox schemas`,
           creation_schema: { type: `object` },
-          input_schemas: {
+          inbox_schemas: {
             query: {
               type: `object`,
               properties: { text: { type: `string` } },
@@ -961,9 +961,9 @@ export function runElectricAgentsConformanceTests(
         .subscription(`/${typeName}/**`, `send-unknown-sub`)
         .registerType({
           name: typeName,
-          description: `Type with defined input schemas`,
+          description: `Type with defined inbox schemas`,
           creation_schema: { type: `object` },
-          input_schemas: {
+          inbox_schemas: {
             query: {
               type: `object`,
               properties: { text: { type: `string` } },
@@ -976,13 +976,13 @@ export function runElectricAgentsConformanceTests(
         .run()
     })
 
-    test(`send without type when no input_schemas accepts any`, () => {
+    test(`send without type when no inbox_schemas accepts any`, () => {
       const typeName = `send-no-schemas-${Date.now()}`
       return electricAgents(config.baseUrl)
         .subscription(`/${typeName}/**`, `send-noschema-sub`)
         .registerType({
           name: typeName,
-          description: `Type without input schemas`,
+          description: `Type without inbox schemas`,
           creation_schema: { type: `object` },
         })
         .spawn(typeName, `entity-1`)
@@ -992,15 +992,15 @@ export function runElectricAgentsConformanceTests(
         .run()
     })
 
-    test(`send with empty input_schemas rejects all`, () => {
+    test(`send with empty inbox_schemas rejects all`, () => {
       const typeName = `send-empty-schemas-${Date.now()}`
       return electricAgents(config.baseUrl)
         .subscription(`/${typeName}/**`, `send-empty-sub`)
         .registerType({
           name: typeName,
-          description: `Type with empty input schemas`,
+          description: `Type with empty inbox schemas`,
           creation_schema: { type: `object` },
-          input_schemas: {},
+          inbox_schemas: {},
         })
         .spawn(typeName, `entity-1`)
         .expectSendUnknownType({ text: `anything` }, { type: `some_type` })
@@ -1017,7 +1017,7 @@ export function runElectricAgentsConformanceTests(
           name: typeName,
           description: `Type for write test`,
           creation_schema: { type: `object` },
-          output_schemas: {
+          state_schemas: {
             research_result: {
               type: `object`,
               properties: {
@@ -1036,15 +1036,15 @@ export function runElectricAgentsConformanceTests(
         .run()
     })
 
-    test.skip(`write validates output_schemas (C12)`, () => {
+    test.skip(`write validates state_schemas (C12)`, () => {
       const typeName = `write-schema-inv-${Date.now()}`
       return electricAgents(config.baseUrl)
         .subscription(`/${typeName}/**`, `write-schema-sub`)
         .registerType({
           name: typeName,
-          description: `Type with strict output schemas`,
+          description: `Type with strict state schemas`,
           creation_schema: { type: `object` },
-          output_schemas: {
+          state_schemas: {
             result: {
               type: `object`,
               properties: { value: { type: `number` } },
@@ -1063,9 +1063,9 @@ export function runElectricAgentsConformanceTests(
         .subscription(`/${typeName}/**`, `write-unknown-sub`)
         .registerType({
           name: typeName,
-          description: `Type with defined output schemas`,
+          description: `Type with defined state schemas`,
           creation_schema: { type: `object` },
-          output_schemas: {
+          state_schemas: {
             result: {
               type: `object`,
               properties: { value: { type: `number` } },
@@ -1077,13 +1077,13 @@ export function runElectricAgentsConformanceTests(
         .run()
     })
 
-    test.skip(`write without type when no output_schemas accepts any`, () => {
+    test.skip(`write without type when no state_schemas accepts any`, () => {
       const typeName = `write-no-schemas-${Date.now()}`
       return electricAgents(config.baseUrl)
         .subscription(`/${typeName}/**`, `write-noschema-sub`)
         .registerType({
           name: typeName,
-          description: `Type without output schemas`,
+          description: `Type without state schemas`,
           creation_schema: { type: `object` },
         })
         .spawn(typeName, `entity-1`)
@@ -1268,7 +1268,7 @@ export function runElectricAgentsConformanceTests(
           name: typeName,
           description: `Type for schema amendment`,
           creation_schema: { type: `object` },
-          input_schemas: {
+          inbox_schemas: {
             query: {
               type: `object`,
               properties: { text: { type: `string` } },
@@ -1277,7 +1277,7 @@ export function runElectricAgentsConformanceTests(
           },
         })
         .amendSchemas(typeName, {
-          input_schemas: {
+          inbox_schemas: {
             command: {
               type: `object`,
               properties: { action: { type: `string` } },
@@ -1300,7 +1300,7 @@ export function runElectricAgentsConformanceTests(
           name: typeName,
           description: `Type for schema conflict test`,
           creation_schema: { type: `object` },
-          input_schemas: {
+          inbox_schemas: {
             query: {
               type: `object`,
               properties: { text: { type: `string` } },
@@ -1341,7 +1341,7 @@ export function runElectricAgentsConformanceTests(
           name: typeName,
           description: `Type for revision pinning test`,
           creation_schema: { type: `object` },
-          input_schemas: {
+          inbox_schemas: {
             query: {
               type: `object`,
               properties: { text: { type: `string` } },
@@ -2270,7 +2270,7 @@ export function runElectricAgentsConformanceTests(
           name: `rev-multi-agent-${id}`,
           description: `Test multi-revision pinning`,
           creation_schema: { type: `object` },
-          input_schemas: {
+          inbox_schemas: {
             greet: {
               type: `object`,
               properties: { name: { type: `string` } },
@@ -2350,7 +2350,7 @@ export function runElectricAgentsConformanceTests(
             {
               method: `PATCH`,
               body: JSON.stringify({
-                input_schemas: {
+                inbox_schemas: {
                   msg: { type: `object` },
                 },
               }),

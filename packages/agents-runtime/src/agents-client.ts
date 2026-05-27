@@ -46,7 +46,7 @@ export function createAgentsClient(config: AgentsClientConfig): AgentsClient {
       }),
     async observe(source) {
       if (source.sourceType === `entity`) {
-        const info = await serverClient.getEntityInfo(
+        const info = await serverClient.getEntity(
           (source as EntityObservationSource).entityUrl
         )
         const db = createEntityStreamDB(
@@ -63,7 +63,7 @@ export function createAgentsClient(config: AgentsClientConfig): AgentsClient {
       }
 
       if (source.sourceType === `entities`) {
-        await serverClient.registerEntitiesSource(
+        await serverClient.ensureEntitiesMembershipStream(
           (source as EntitiesObservationSource).tags
         )
       }

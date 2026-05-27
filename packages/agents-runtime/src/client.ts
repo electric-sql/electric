@@ -14,7 +14,6 @@ export {
   db,
   entities,
   entity,
-  tagged,
   webhook,
   getWebhookStreamPath,
   webhookObservationCollections,
@@ -37,8 +36,6 @@ export type {
   WebhookObservationSource,
   WebhookEventRow,
   EntitiesQuery,
-  TaggedObservationSource,
-  TaggedQuery,
 } from './observation-sources'
 export type {
   EntityTimelineContentItem,
