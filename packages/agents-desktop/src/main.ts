@@ -12,7 +12,6 @@ import {
 import {
   applyApiKeysToEnv,
   captureEnvApiKeys,
-  EMPTY_API_KEYS,
   loadApiKeysFromSecret,
   normalizeApiKeys,
   saveApiKeysToSecret,
@@ -57,6 +56,39 @@ import {
   runnerOwnerPrincipalFromHeaders,
   runnerOwnerPrincipalFromUserId,
 } from './shared/headers'
+import {
+  APP_DISPLAY_NAME,
+  CODEX_AUTH_REF,
+  CODEX_OAUTH_CLIENT_ID,
+  CODEX_OAUTH_ISSUER,
+  CODEX_OAUTH_PORT,
+  DEFAULT_LOCAL_DEV_PRINCIPAL,
+  DESKTOP_USER_DATA_DIR,
+  DEV_SERVER_URL,
+  DISCOVERY_INTERVAL_MS,
+  DISCOVERY_PORTS,
+  DISCOVERY_TIMEOUT_MS,
+  EXTERNAL_LINK_PROTOCOLS,
+  explicitDevPrincipalFromEnv,
+  IGNORE_CONNECTION_LIMIT_DOMAINS,
+  INITIAL_SERVER_URL,
+  MCP_OAUTH_REDIRECT_BASE,
+  PULL_WAKE_OWNER_PRINCIPAL,
+  PULL_WAKE_REGISTER_RUNNER,
+  PULL_WAKE_RUNNER_ID,
+  RECONNECT_BASE_MS,
+  RECONNECT_MAX_MS,
+} from './shared/constants'
+import {
+  AGENT_SKILLS_DIR,
+  APP_ICON_PATH,
+  PRELOAD_PATH,
+  RENDERER_INDEX,
+  secretsPath,
+  settingsPath,
+  TRAY_ICON_2X_PATH,
+  TRAY_ICON_PATH,
+} from './shared/paths'
 import type {
   ApiKeys,
   ApiKeysStatus,
@@ -102,7 +134,6 @@ import { readFileSync } from 'node:fs'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { createServer, type Server as HttpServer } from 'node:http'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 
 type StoredCodexAuth = {
   source: CodexAuthSource
@@ -113,41 +144,6 @@ type StoredCodexAuth = {
   email: string | null
 }
 
-const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url))
-const PACKAGE_DIR = path.resolve(MODULE_DIR, `..`)
-const RESOURCE_DIR = app.isPackaged ? process.resourcesPath : PACKAGE_DIR
-const RENDERER_INDEX = app.isPackaged
-  ? path.join(RESOURCE_DIR, `renderer`, `index.html`)
-  : path.resolve(PACKAGE_DIR, `../agents-server-ui/dist-desktop/index.html`)
-// Bundled `@electric-ax/agents` can't resolve its own skills dir; supply it explicitly.
-const AGENT_SKILLS_DIR = app.isPackaged
-  ? path.join(RESOURCE_DIR, `agent-skills`)
-  : path.resolve(PACKAGE_DIR, `../agents/skills`)
-const PRELOAD_PATH = path.resolve(MODULE_DIR, `preload.cjs`)
-const TRAY_ICON_PATH = path.join(RESOURCE_DIR, `assets`, `trayTemplate.png`)
-const TRAY_ICON_2X_PATH = path.join(
-  RESOURCE_DIR,
-  `assets`,
-  `trayTemplate@2x.png`
-)
-const APP_ICON_FILE =
-  process.platform === `darwin` ? `icon-mac.png` : `icon.png`
-const APP_ICON_PATH = path.join(RESOURCE_DIR, `assets`, APP_ICON_FILE)
-const APP_DISPLAY_NAME = `Electric Agents`
-const IGNORE_CONNECTION_LIMIT_DOMAINS = `localhost,127.0.0.1`
-const CODEX_AUTH_REF = `codex-auth:desktop`
-const CODEX_OAUTH_CLIENT_ID = `app_EMoamEEZ73f0CkXaXp7hrann`
-const CODEX_OAUTH_ISSUER = `https://auth.openai.com`
-const CODEX_OAUTH_PORT = 1455
-const RECONNECT_BASE_MS = 1_000
-const RECONNECT_MAX_MS = 30_000
-const DESKTOP_USER_DATA_DIR =
-  process.env.ELECTRIC_DESKTOP_USER_DATA_DIR?.trim() || null
-const INITIAL_SERVER_URL =
-  process.env.ELECTRIC_DESKTOP_SERVER_URL?.trim() ||
-  process.env.ELECTRIC_AGENTS_SERVER_URL?.trim() ||
-  null
-
 // GUI-launched desktop apps don't inherit the user's shell PATH — restore it
 // so child processes can find CLI tools like `gh`.
 fixPath()
@@ -155,14 +151,6 @@ fixPath()
 if (DESKTOP_USER_DATA_DIR) {
   app.setPath(`userData`, path.resolve(DESKTOP_USER_DATA_DIR))
 }
-
-// Stable OAuth redirect base for MCP DCR (RFC 7591). The runtime
-// listens on an ephemeral port but the redirect URI must be constant
-// across restarts so the cached DCR client info stays valid. Loopback
-// literal form per RFC 8252 §7.3; nothing listens at this port — our
-// BrowserWindow intercepts the redirect by prefix before anything
-// reaches the network.
-const MCP_OAUTH_REDIRECT_BASE = `http://127.0.0.1:53117`
 
 // Electric streams can hold many long-polling HTTP requests open to the same
 // local agents server. Electron supports bypassing Chromium's connection cap
@@ -177,43 +165,7 @@ console.info(
   )}`
 )
 
-/**
- * When set, the renderer is loaded from this dev-server URL instead
- * of the prebuilt `dist-desktop/index.html` file. Wired up by the
- * `dev` script in `package.json`, which boots Vite on port 5174 and
- * exports `ELECTRIC_DESKTOP_DEV_SERVER_URL=http://localhost:5174`
- * so the renderer gets full HMR. Unset in `start` / packaged builds,
- * so production keeps loading the static bundle from disk.
- */
-const DEV_SERVER_URL = process.env.ELECTRIC_DESKTOP_DEV_SERVER_URL ?? null
-const PULL_WAKE_RUNNER_ID =
-  process.env.ELECTRIC_DESKTOP_PULL_WAKE_RUNNER_ID?.trim() || null
-const PULL_WAKE_REGISTER_RUNNER =
-  process.env.ELECTRIC_DESKTOP_PULL_WAKE_REGISTER_RUNNER === undefined
-    ? true
-    : [`1`, `true`].includes(
-        process.env.ELECTRIC_DESKTOP_PULL_WAKE_REGISTER_RUNNER.trim().toLowerCase()
-      )
-const PULL_WAKE_OWNER_PRINCIPAL =
-  process.env.ELECTRIC_DESKTOP_PULL_WAKE_OWNER_PRINCIPAL?.trim() ||
-  `/principal/system%3Adev-local`
-const DEFAULT_LOCAL_DEV_PRINCIPAL = `system:dev-local`
-const EXPLICIT_DEV_PRINCIPAL = ((): string | null => {
-  const raw = process.env.ELECTRIC_DESKTOP_PRINCIPAL?.trim() || null
-  if (!raw) return null
-  const colon = raw.indexOf(`:`)
-  if (colon <= 0) {
-    console.error(
-      `[agents-desktop] ELECTRIC_DESKTOP_PRINCIPAL="${raw}" is invalid. ` +
-        `Expected format: "kind:id" (e.g. "system:dev-local"). Ignoring.`
-    )
-    return null
-  }
-  console.info(`[agents-desktop] Using dev principal: ${raw}`)
-  return raw
-})()
-
-const EXTERNAL_LINK_PROTOCOLS = new Set([`http:`, `https:`, `mailto:`])
+const EXPLICIT_DEV_PRINCIPAL = explicitDevPrincipalFromEnv()
 
 /**
  * Snapshot of provider API keys as they were when the app launched.
@@ -230,23 +182,10 @@ const ENV_API_KEYS_SNAPSHOT: ApiKeys = {
   ...captureEnvApiKeys(process.env),
 }
 
-let settings: DesktopSettings = { ...DEFAULT_SETTINGS }
-let apiKeys: ApiKeys = { ...EMPTY_API_KEYS }
-let state: DesktopState = {
-  servers: [],
-  selectedServerId: null,
-  connections: [],
-  runtimeStatus: `stopped`,
-  runtimeUrl: null,
-  activeServer: null,
-  workingDirectory: null,
-  error: null,
-  discoveredServers: [],
-  pullWakeRunnerId: null,
-  credentialsRestartPending: false,
-}
-let credentialsRestartPending = false
 const desktopContext = createDesktopAppContext()
+const settings = desktopContext.settings
+const apiKeys = desktopContext.apiKeys
+const state = desktopContext.state
 const windows = desktopContext.windows
 const windowSelections = desktopContext.windowSelections
 const runtimeEntries = desktopContext.runtimeEntries
@@ -264,14 +203,6 @@ function configureRuntimeEnvironment(): void {
   process.env.ELECTRIC_CODEX_REQUIRE_OPT_IN = `1`
 }
 configureRuntimeEnvironment()
-
-function settingsPath(): string {
-  return path.join(app.getPath(`userData`), `settings.json`)
-}
-
-function secretsPath(): string {
-  return path.join(app.getPath(`userData`), `secrets.json`)
-}
 
 function getSecretStore(): SecretStore {
   if (!desktopContext.services.secretStore) {
@@ -706,8 +637,8 @@ function markCredentialsDirty(): void {
 }
 
 function setCredentialsRestartPending(value: boolean): void {
-  if (credentialsRestartPending === value) return
-  credentialsRestartPending = value
+  if (desktopContext.credentialsRestartPending === value) return
+  desktopContext.credentialsRestartPending = value
   refreshDesktopState()
 }
 
@@ -1066,7 +997,7 @@ async function applyInitialServerFromEnv(): Promise<void> {
   if (!settings.defaultServerId) {
     settings.defaultServerId = next.id
   }
-  state = desktopStateForWindow(null)
+  Object.assign(state, desktopStateForWindow(null))
   await saveSettings()
 }
 
@@ -1102,7 +1033,7 @@ async function loadSettings(): Promise<void> {
       typeof parsed.apiKeysRef === `string` && parsed.apiKeysRef.trim()
         ? parsed.apiKeysRef.trim()
         : GLOBAL_API_KEYS_REF
-    settings = {
+    Object.assign(settings, {
       servers,
       defaultServerId,
       workingDirectory:
@@ -1114,13 +1045,16 @@ async function loadSettings(): Promise<void> {
       codex: normalizeCodexSettings(parsed.codex),
       mcp: normalizeMcp(parsed.mcp),
       pullWakeRunnerId,
-    }
+    })
     if (parsed.apiKeys !== undefined) {
-      apiKeys = normalizeApiKeys(parsed.apiKeys)
+      Object.assign(apiKeys, normalizeApiKeys(parsed.apiKeys))
       await saveApiKeysToSecret(getSecretStore(), apiKeysRef, apiKeys)
       shouldSave = true
     } else {
-      apiKeys = await loadApiKeysFromSecret(getSecretStore(), apiKeysRef)
+      Object.assign(
+        apiKeys,
+        await loadApiKeysFromSecret(getSecretStore(), apiKeysRef)
+      )
     }
     shouldSave =
       shouldSave ||
@@ -1130,8 +1064,14 @@ async function loadSettings(): Promise<void> {
       servers.some((server) => !(`id` in (server as object)))
   } catch (err) {
     console.error(`[agents-desktop] Failed to load settings:`, err)
-    settings = { ...DEFAULT_SETTINGS, pullWakeRunnerId: randomUUID() }
-    apiKeys = await loadApiKeysFromSecret(getSecretStore(), settings.apiKeysRef)
+    Object.assign(settings, {
+      ...DEFAULT_SETTINGS,
+      pullWakeRunnerId: randomUUID(),
+    })
+    Object.assign(
+      apiKeys,
+      await loadApiKeysFromSecret(getSecretStore(), settings.apiKeysRef)
+    )
     shouldSave = true
   }
 
@@ -1147,7 +1087,7 @@ async function loadSettings(): Promise<void> {
     ensureRuntimeEntry(server)
   }
 
-  state = desktopStateForWindow(null)
+  Object.assign(state, desktopStateForWindow(null))
   await applyInitialServerFromEnv()
   applyApiKeys()
   await syncCodexEnvironment()
@@ -1204,7 +1144,7 @@ function desktopStateForWindow(win: BrowserWindow | null): DesktopState {
     // local runtime to restart; otherwise the banner would prompt for
     // an action that wouldn't do anything.
     credentialsRestartPending:
-      credentialsRestartPending && hasConnectedLocalRuntime(),
+      desktopContext.credentialsRestartPending && hasConnectedLocalRuntime(),
   }
 }
 
@@ -1262,13 +1202,13 @@ function sendFullscreenState(win: BrowserWindow): void {
 }
 
 function setState(patch: Partial<DesktopState>): void {
-  state = { ...state, ...patch }
+  Object.assign(state, patch)
   updateTray()
   broadcastState()
 }
 
 function refreshDesktopState(): void {
-  state = desktopStateForWindow(null)
+  Object.assign(state, desktopStateForWindow(null))
   updateTray()
   broadcastState()
 }
@@ -1882,7 +1822,7 @@ async function setApiKeys(next: ApiKeys): Promise<void> {
     normalized.openai !== apiKeys.openai ||
     normalized.deepseek !== apiKeys.deepseek ||
     normalized.brave !== apiKeys.brave
-  apiKeys = normalized
+  Object.assign(apiKeys, normalized)
   await saveApiKeysToSecret(getSecretStore(), settings.apiKeysRef, apiKeys)
   applyApiKeys()
   await saveSettings()
@@ -1968,12 +1908,6 @@ async function clearAllLocalDataAndRelaunch(): Promise<void> {
  * `{ status: "ok" }` (see `ElectricAgentsServer.handleRequestInner`),
  * so collisions with unrelated services on these ports are filtered out.
  */
-const DISCOVERY_PORTS: ReadonlyArray<number> = [
-  4437, 4438, 4439, 3000, 4000, 8080,
-]
-const DISCOVERY_TIMEOUT_MS = 1500
-const DISCOVERY_INTERVAL_MS = 30_000
-
 let discoveryTimer: NodeJS.Timeout | null = null
 let discoveryInFlight: Promise<void> | null = null
 
