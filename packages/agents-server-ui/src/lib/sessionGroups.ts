@@ -1,6 +1,6 @@
 import type { ElectricEntity } from './ElectricAgentsProvider'
 import { abbreviatePath, detectHomeDir, tildifyPath } from './pathDisplay'
-import { getEntityRunnerId } from './entityRuntime'
+import { getEntityRunnerId, shortenId } from './entityRuntime'
 
 /**
  * Session list grouping by recency.
@@ -227,9 +227,7 @@ export function groupByRunner(
     }
     let group = buckets.get(runnerId)
     if (!group) {
-      const label =
-        runnerLabelById.get(runnerId) ??
-        (runnerId.length > 12 ? `${runnerId.slice(0, 8)}…` : runnerId)
+      const label = runnerLabelById.get(runnerId) ?? shortenId(runnerId)
       group = new Group(`runner:${runnerId}`, `older`, label, runnerId)
       buckets.set(runnerId, group)
     }

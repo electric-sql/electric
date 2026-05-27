@@ -36,7 +36,6 @@ function normalizeProfile(spec: ProfileSpec): {
 function buildManager({ runners, entities = {} }: BuildManagerOpts) {
   const createEntity = vi.fn().mockResolvedValue(1)
   const allProfiles = Object.values(runners).flat().map(normalizeProfile)
-  const allProfileNames = [...new Set(allProfiles.map((p) => p.name))]
   return {
     createEntity,
     manager: new EntityManager({
@@ -65,7 +64,6 @@ function buildManager({ runners, entities = {} }: BuildManagerOpts) {
               }
             : null
         }),
-        listSandboxProfileNames: vi.fn().mockResolvedValue(allProfileNames),
         listSandboxProfiles: vi.fn().mockResolvedValue(allProfiles),
         createEntity,
         deleteEntity: vi.fn().mockResolvedValue(undefined),

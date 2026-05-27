@@ -16,7 +16,9 @@ import type {
  */
 
 /** The pinned runner id from the entity's dispatch policy, if any. */
-export function getEntityRunnerId(entity: ElectricEntity): string | null {
+export function getEntityRunnerId(
+  entity: Pick<ElectricEntity, `dispatch_policy`>
+): string | null {
   const targets = entity.dispatch_policy?.targets
   if (!targets) return null
   for (const t of targets) {

@@ -74,13 +74,6 @@ export interface TagStreamOutboxRow {
   createdAt: Date
 }
 
-export interface SandboxProfileInput {
-  name: string
-  label: string
-  description?: string
-  remote?: boolean
-}
-
 export interface RegisterRunnerInput {
   id: string
   ownerPrincipal: string
@@ -94,7 +87,7 @@ export interface RegisterRunnerInput {
    * removed and the supplied set is inserted in one transaction.
    * Omit (or pass undefined) to leave the existing set untouched.
    */
-  sandboxProfiles?: ReadonlyArray<SandboxProfileInput>
+  sandboxProfiles?: ReadonlyArray<SandboxProfileAdvertisement>
 }
 
 export interface HeartbeatRunnerInput {
@@ -210,30 +203,6 @@ export class PostgresRegistry {
       throw new Error(`Failed to read back runner "${input.id}"`)
     }
     return runner
-  }
-
-  /**
-   * Returns the distinct sandbox profile names currently advertised by
-   * at least one runner in this tenant. Used by spawn validation to
-   * assert the chosen profile is actually serviceable.
-   */
-  async listSandboxProfileNames(): Promise<Array<string>> {
-    const rows = await this.db
-      .select({ sandboxProfiles: runners.sandboxProfiles })
-      .from(runners)
-      .where(eq(runners.tenantId, this.tenantId))
-    const names = new Set<string>()
-    for (const row of rows) {
-      const list = row.sandboxProfiles as
-        | Array<{ name?: unknown }>
-        | null
-        | undefined
-      if (!Array.isArray(list)) continue
-      for (const entry of list) {
-        if (entry && typeof entry.name === `string`) names.add(entry.name)
-      }
-    }
-    return [...names]
   }
 
   /**

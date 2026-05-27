@@ -36,6 +36,10 @@ import {
   attachmentDownloadUrl,
   isAttachmentManifest,
 } from '../lib/attachments'
+import {
+  resolveSandboxProfile,
+  sandboxDisplayLabel,
+} from '../lib/entityRuntime'
 import { warmMarkdownRenderCache } from '../lib/markdownRenderCache'
 import { Icon, IconButton, ScrollArea, Stack, Text, Tooltip } from '../ui'
 import { UserMessage } from './UserMessage'
@@ -898,7 +902,7 @@ export function EntityTimeline({
   stopPending?: boolean
   onStopGeneration?: () => void
 }): React.ReactElement {
-  const { entitiesCollection } = useElectricAgents()
+  const { entitiesCollection, runnersCollection } = useElectricAgents()
   const referencedEntityUrlKey = useMemo(
     () => stableEntityUrlKey(entities.map((entity) => entity.url)),
     [entities]
@@ -937,6 +941,21 @@ export function EntityTimeline({
     [entitiesCollection, entityUrl]
   )
   const sandboxProfileName = focusedEntity[0]?.sandbox?.profile ?? null
+  // Resolve the profile's advertised label (e.g. "Docker") rather than the raw
+  // profile name, matching how the header/sidebar badges render it.
+  const { data: runners = [] } = useLiveQuery(
+    (q) => {
+      if (!runnersCollection) return undefined
+      return q.from({ r: runnersCollection })
+    },
+    [runnersCollection]
+  )
+  const sandboxLabel = sandboxProfileName
+    ? (sandboxDisplayLabel(
+        resolveSandboxProfile(runners, sandboxProfileName),
+        sandboxProfileName
+      ) ?? sandboxProfileName)
+    : null
   const entityStatusByUrl = useMemo(() => {
     const statusByUrl = new Map<string, EntityStatus>()
     for (const entity of entities) {
@@ -1501,11 +1520,11 @@ export function EntityTimeline({
                 </Text>
               </span>
             )}
-            {sandboxProfileName && (
-              <Tooltip content={`Sandbox: ${sandboxProfileName}`}>
+            {sandboxLabel && (
+              <Tooltip content={`Sandbox: ${sandboxLabel}`}>
                 <span className={styles.statusPill}>
                   <Text size={1} tone="muted" className={styles.statusText}>
-                    sandbox · {sandboxProfileName}
+                    sandbox · {sandboxLabel}
                   </Text>
                 </span>
               </Tooltip>

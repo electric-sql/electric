@@ -261,7 +261,7 @@ d(`dockerSandbox`, () => {
     const sandbox = await dockerSandbox({
       image: TEST_IMAGE,
       labels: { [TEST_LABEL]: `1` },
-      reuseKey: `ephemeral-${Date.now()}`,
+      sandboxKey: `ephemeral-${Date.now()}`,
       sharedIdleGraceMs: 1_000,
     })
     const Docker = await loadDockerode()
@@ -361,7 +361,7 @@ d(`dockerSandbox`, () => {
     const sandbox = await dockerSandbox({
       image: TEST_IMAGE,
       labels: { [TEST_LABEL]: `1` },
-      reuseKey: `/worker/job-42/main`,
+      sandboxKey: `/worker/job-42/main`,
       entityType: `worker`,
       entityUrl: `/worker/job-42/main`,
     })
@@ -444,7 +444,7 @@ d(`dockerSandbox keyed lifecycle`, () => {
   }, 30_000)
 
   const make = (
-    reuseKey: string,
+    sandboxKey: string,
     sharedIdleGraceMs?: number,
     persistent = true
   ) =>
@@ -452,21 +452,21 @@ d(`dockerSandbox keyed lifecycle`, () => {
       image: TEST_IMAGE,
       labels: { [TEST_LABEL]: `1` },
       persistent,
-      reuseKey,
+      sandboxKey,
       sharedIdleGraceMs,
     })
 
   // Inspect a shared container by its key label (set on every persistent
-  // container as `com.electric.sandbox.key=<reuseKey>`), avoiding any coupling
+  // container as `com.electric.sandbox.key=<sandboxKey>`), avoiding any coupling
   // to the deterministic-name hash.
   const keyState = async (
-    reuseKey: string
+    sandboxKey: string
   ): Promise<`absent` | `running` | `stopped`> => {
     const Docker = await loadDockerode()
     const docker = new Docker()
     const list = await docker.listContainers({
       all: true,
-      filters: { label: [`com.electric.sandbox.key=${reuseKey}`] },
+      filters: { label: [`com.electric.sandbox.key=${sandboxKey}`] },
     })
     if (list.length === 0) return `absent`
     const info = await docker.getContainer(list[0].Id).inspect()
@@ -474,15 +474,15 @@ d(`dockerSandbox keyed lifecycle`, () => {
   }
 
   const waitForKeyState = async (
-    reuseKey: string,
+    sandboxKey: string,
     want: `absent` | `running` | `stopped`,
     timeoutMs: number
   ): Promise<void> => {
     const start = Date.now()
     for (;;) {
-      if ((await keyState(reuseKey)) === want) return
+      if ((await keyState(sandboxKey)) === want) return
       if (Date.now() - start > timeoutMs) {
-        throw new Error(`timed out waiting for ${reuseKey} to be ${want}`)
+        throw new Error(`timed out waiting for ${sandboxKey} to be ${want}`)
       }
       await new Promise((r) => setTimeout(r, 50))
     }
@@ -509,7 +509,7 @@ d(`dockerSandbox keyed lifecycle`, () => {
       image: TEST_IMAGE,
       labels: { [TEST_LABEL]: `1` },
       persistent: true,
-      reuseKey: key,
+      sandboxKey: key,
       entityType: `horton`,
       entityUrl: `/horton/abc123/main`,
     })
@@ -617,20 +617,20 @@ d(`dockerSandbox keyed lifecycle`, () => {
 
   // --- ownership: owner creates + governs teardown; attacher only attaches ---
 
-  const makeOwned = (reuseKey: string, sharedIdleGraceMs?: number) =>
+  const makeOwned = (sandboxKey: string, sharedIdleGraceMs?: number) =>
     dockerSandbox({
       image: TEST_IMAGE,
       labels: { [TEST_LABEL]: `1` },
-      reuseKey,
+      sandboxKey,
       persistent: true,
       sharedIdleGraceMs,
     })
 
-  const makeAttacher = (reuseKey: string) =>
+  const makeAttacher = (sandboxKey: string) =>
     dockerSandbox({
       image: TEST_IMAGE,
       labels: { [TEST_LABEL]: `1` },
-      reuseKey,
+      sandboxKey,
       owner: false,
     })
 
@@ -721,12 +721,12 @@ d(`dockerSandbox keyed lifecycle`, () => {
 
   // Stop a container out-of-band (by key label) to simulate a process that
   // left a non-running leftover behind.
-  const stopByKey = async (reuseKey: string): Promise<void> => {
+  const stopByKey = async (sandboxKey: string): Promise<void> => {
     const Docker = await loadDockerode()
     const docker = new Docker()
     const list = await docker.listContainers({
       all: true,
-      filters: { label: [`com.electric.sandbox.key=${reuseKey}`] },
+      filters: { label: [`com.electric.sandbox.key=${sandboxKey}`] },
     })
     await docker.getContainer(list[0].Id).stop({ t: 0 })
   }

@@ -297,7 +297,7 @@ async function buildBuiltinSandboxProfiles(
             // The container is always named-by-key and reattachable; `persistent`
             // chooses idle teardown (stop vs remove) and `owner` gates creation
             // (an attacher reattaches only). All resolved upstream from config.
-            reuseKey: sandboxKey,
+            sandboxKey,
             persistent,
             owner,
             // Observability: tag the container/labels with who spawned it.

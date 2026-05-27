@@ -76,7 +76,7 @@ export interface DockerSandboxOpts {
    * When omitted (direct/test callers) a random key is synthesized so a
    * one-off still flows through the single registry path.
    */
-  readonly reuseKey?: string
+  readonly sandboxKey?: string
   /**
    * Idle-teardown durability. `true` ⇒ STOP the container when idle (its
    * writable layer survives, so a later acquire restarts it with the
@@ -90,7 +90,7 @@ export interface DockerSandboxOpts {
    * container if it's absent, and this lease's teardown governs the container's
    * lifecycle (idle ⇒ stop/remove per `persistent`; `dispose({reclaim})` ⇒
    * wipe). `false` ⇒ ATTACHER: reattach to an already-live container with this
-   * `reuseKey` and reject with `SandboxError('unavailable')` if none exists (it
+   * `sandboxKey` and reject with `SandboxError('unavailable')` if none exists (it
    * never creates a fresh, empty one); disposing only releases the lease and
    * never tears the owner's container down.
    */
@@ -113,7 +113,7 @@ export interface DockerSandboxOpts {
   /**
    * Observability only. The entity URL this wake belongs to; recorded as a
    * label so `docker ps` shows what it belongs to. The container *name* is
-   * always derived from `reuseKey` (so callers that resolve to the same key
+   * always derived from `sandboxKey` (so callers that resolve to the same key
    * converge on one container), not from this — collaborators may differ.
    */
   readonly entityUrl?: string
@@ -141,7 +141,7 @@ const DEFAULT_IMAGE = `node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50
 
 /** Marks every container this module creates. */
 const SANDBOX_LABEL = `com.electric.sandbox`
-/** The container's resolved identity key (always set; see `reuseKey`). */
+/** The container's resolved identity key (always set; see `sandboxKey`). */
 const SANDBOX_KEY_LABEL = `com.electric.sandbox.key`
 /** Entity type that spawned the sandbox (observability). */
 const SANDBOX_ENTITY_TYPE_LABEL = `com.electric.sandbox.entity-type`
@@ -225,9 +225,12 @@ function slugify(s: string): string {
  * `docker ps` legibility; the trailing hash guarantees uniqueness when two keys
  * slugify alike.
  */
-function containerNameForKey(reuseKey: string): string {
-  const hash = createHash(`sha256`).update(reuseKey).digest(`hex`).slice(0, 12)
-  return `${NAME_PREFIX}-${slugify(reuseKey)}-${hash}`
+function containerNameForKey(sandboxKey: string): string {
+  const hash = createHash(`sha256`)
+    .update(sandboxKey)
+    .digest(`hex`)
+    .slice(0, 12)
+  return `${NAME_PREFIX}-${slugify(sandboxKey)}-${hash}`
 }
 
 /**
@@ -297,13 +300,13 @@ export async function dockerSandbox(
   // Single lifecycle path: every container is named-by-key, registered, and
   // refcount + debounce managed. `persistent` only selects the idle-teardown
   // action (stop vs remove); `owner` gates creation. A direct caller that omits
-  // `reuseKey` gets a synthesized one so a one-off still flows through the path.
-  const reuseKey = opts.reuseKey ?? randomUUID()
+  // `sandboxKey` gets a synthesized one so a one-off still flows through the path.
+  const sandboxKey = opts.sandboxKey ?? randomUUID()
   const persistent = opts.persistent === true
   const owner = opts.owner !== false
   // Named deterministically from the resolved key so callers that resolve to
   // the same key converge on one container; the entity is recorded in labels.
-  const containerName = containerNameForKey(reuseKey)
+  const containerName = containerNameForKey(sandboxKey)
   const idleGraceMs = opts.sharedIdleGraceMs ?? DEFAULT_IDLE_GRACE_MS
 
   const containerCwd = opts.workingDirectory ?? `/work`
@@ -413,7 +416,7 @@ export async function dockerSandbox(
 
   const labels: Record<string, string> = {
     [SANDBOX_LABEL]: `1`,
-    [SANDBOX_KEY_LABEL]: reuseKey,
+    [SANDBOX_KEY_LABEL]: sandboxKey,
     [SANDBOX_PERSISTENT_LABEL]: persistent ? `true` : `false`,
     ...(opts.entityType
       ? { [SANDBOX_ENTITY_TYPE_LABEL]: opts.entityType }

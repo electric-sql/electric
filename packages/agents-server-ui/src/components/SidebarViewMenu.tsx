@@ -14,7 +14,7 @@ import {
 import { eq, not, useLiveQuery } from '@tanstack/react-db'
 import { Icon, IconButton, Menu, Text } from '../ui'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
-import { getEntityRunnerId } from '../lib/entityRuntime'
+import { getEntityRunnerId, shortenId } from '../lib/entityRuntime'
 import {
   RUNNER_NONE,
   SIDEBAR_GROUP_BY_LABELS,
@@ -107,16 +107,14 @@ export function SidebarViewMenu(): React.ReactElement {
     const ids = new Set<string>()
     let none = false
     for (const e of entities) {
-      const id = getEntityRunnerId(e as never)
+      const id = getEntityRunnerId(e)
       if (id === null) none = true
       else ids.add(id)
     }
     const list = Array.from(ids)
       .map((id) => ({
         id,
-        label:
-          runnerLabelById.get(id) ??
-          (id.length > 12 ? `${id.slice(0, 8)}…` : id),
+        label: runnerLabelById.get(id) ?? shortenId(id),
       }))
       .sort((a, b) => a.label.localeCompare(b.label))
     return { distinctRunners: list, hasNoneRunner: none }
