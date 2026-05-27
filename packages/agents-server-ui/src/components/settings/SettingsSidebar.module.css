@@ -122,8 +122,19 @@
 }
 
 .list {
-  padding: 4px 8px 8px;
-  gap: 1px;
+  padding: 4px 8px 12px;
+  gap: 14px;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.groupLabel {
+  padding: 0 8px 2px;
+  text-transform: none;
 }
 
 /* Category rows — match the geometry of `<SidebarRow>` so the column

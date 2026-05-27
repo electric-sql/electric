@@ -45,6 +45,7 @@ export { Textarea } from './Textarea'
 export { Field } from './Field'
 
 export { Dialog } from './Dialog'
+export { ConfirmDialog } from './ConfirmDialog'
 
 export { Popover } from './Popover'
 export { HoverCard } from './HoverCard'

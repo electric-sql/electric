@@ -114,12 +114,24 @@
   padding: 8px 32px 64px;
 }
 
-.pageTitle {
+.pageTitleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ds-space-3);
   margin: 16px 0 24px;
+}
+
+.pageTitle {
+  margin: 0;
   font-size: var(--ds-text-2xl);
   line-height: 1.2;
   font-weight: 600;
   color: var(--ds-text-1);
+}
+
+.pageAction {
+  flex-shrink: 0;
 }
 
 .sections {
@@ -137,6 +149,14 @@
 
 .sectionHeader {
   display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--ds-space-3);
+}
+
+.sectionHeaderText {
+  min-width: 0;
+  display: flex;
   flex-direction: column;
   gap: 4px;
 }
@@ -146,6 +166,15 @@
   font-size: var(--ds-text-base);
   font-weight: 500;
   color: var(--ds-text-1);
+}
+
+.sectionAction {
+  flex-shrink: 0;
+}
+
+.sectionAction[data-align='description'] {
+  margin-left: 12px;
+  padding-top: 24px;
 }
 
 .sectionDescription {
@@ -160,6 +189,37 @@
   border-radius: var(--ds-radius-3);
   background: color-mix(in oklab, var(--ds-surface-raised) 35%, var(--ds-bg));
   overflow: hidden;
+}
+
+.panel {
+  padding: 12px 16px;
+}
+
+.inset {
+  padding: 0 16px 12px;
+}
+
+.statusBadge {
+  justify-content: center;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--ds-space-2);
+  padding: 0 16px 16px;
+}
+
+.actions[data-separator='true'] {
+  padding-top: 12px;
+  border-top: 1px solid var(--ds-border-1);
+}
+
+.actions:first-child,
+.actions[data-separator='true']:first-child {
+  padding-top: 12px;
+  border-top: 0;
 }
 
 /* Stacked rows inside a section — labelled left, control on the
@@ -179,9 +239,25 @@
 .rowText {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   flex: 1;
   min-width: 0;
+  align-self: flex-start;
+}
+
+.row[data-layout='split'] .rowText {
+  flex: 0 1 44%;
+  min-width: 44%;
+}
+
+.row[data-layout='stacked'] {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.row[data-layout='stacked'] .rowText {
+  width: 100%;
 }
 
 .rowLabel {
@@ -196,8 +272,32 @@
 }
 
 .rowControl {
+  min-width: 0;
   flex-shrink: 0;
+  align-self: flex-start;
   display: inline-flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 6px;
+  text-align: right;
+}
+
+.row[data-layout='split'] .rowControl {
+  flex: 1 1 56%;
+}
+
+.row[data-layout='stacked'] .rowControl {
+  width: 100%;
+  justify-content: stretch;
+  text-align: left;
+}
+
+.rowControl > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.wrapControlValue > * {
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }

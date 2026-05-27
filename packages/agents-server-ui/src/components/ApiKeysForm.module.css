@@ -8,6 +8,10 @@
   gap: var(--ds-space-4);
 }
 
+.settingsForm {
+  display: contents;
+}
+
 .hint {
   display: flex;
   align-items: center;
@@ -17,6 +21,25 @@
   background: var(--ds-bg-subtle);
   border: 1px solid var(--ds-border-1);
   color: var(--ds-text-2);
+}
+
+.secretInput {
+  position: relative;
+}
+
+.settingsForm .secretInput {
+  width: 100%;
+}
+
+.secretInputControl {
+  padding-right: 34px;
+}
+
+.secretInputToggle {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
 }
 
 .actions {

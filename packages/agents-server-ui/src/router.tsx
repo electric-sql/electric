@@ -466,6 +466,10 @@ const workspaceSearchSchema = z.object({
   layout: z.string().optional(),
 })
 
+const settingsSearchSchema = z.object({
+  serverId: z.string().optional(),
+})
+
 /**
  * Thin route component — all the rendering work happens inside
  * `<Workspace>`, which reads the route params (entity splat + ?view)
@@ -534,6 +538,7 @@ const settingsIndexRoute = createRoute({
 const settingsCategoryRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: `/settings/$category`,
+  validateSearch: settingsSearchSchema,
   component: SettingsCategoryPage,
 })
 

@@ -41,6 +41,10 @@ export interface DesktopState {
   pullWakeRunnerId: string | null
 }
 
+export interface ConnectServerOptions {
+  localRuntimeEnabled?: boolean
+}
+
 export interface DesktopServerFetchRequest {
   url: string
   method: string
@@ -258,8 +262,12 @@ declare global {
       setNativeAppearance?: (appearance: DesktopAppearance) => Promise<void>
       setActiveServer?: (server: ServerConfig | null) => Promise<void>
       setSelectedServer?: (serverId: string | null) => Promise<void>
-      connectServer?: (serverId: string) => Promise<void>
+      connectServer?: (
+        serverId: string,
+        options?: ConnectServerOptions
+      ) => Promise<void>
       disconnectServer?: (serverId: string) => Promise<void>
+      forgetServer?: (serverId: string) => Promise<void>
       restartRuntime?: () => Promise<void>
       restartServerRuntime?: (serverId: string) => Promise<void>
       stopRuntime?: () => Promise<void>
@@ -267,6 +275,7 @@ declare global {
       rescanServers?: () => Promise<Array<DiscoveredServer>>
       getApiKeysStatus?: () => Promise<ApiKeysStatus>
       saveApiKeys?: (keys: ApiKeys) => Promise<void>
+      clearAllLocalData?: () => Promise<void>
       getOnboardingState?: () => Promise<OnboardingState>
       setOnboardingDismissed?: (dismissed: boolean) => Promise<void>
       getWorkingDirectory?: () => Promise<string | null>
@@ -340,6 +349,7 @@ declare global {
         signIn: (provider: CloudAuthProvider) => Promise<void>
         signOut: () => Promise<void>
         openDashboard: () => Promise<void>
+        openCreateAgentsServer: () => Promise<void>
         onStateChanged: (
           callback: (state: CloudAuthState) => void
         ) => () => void
@@ -429,12 +439,19 @@ export async function saveSelectedServer(
   await window.electronAPI?.setSelectedServer?.(serverId)
 }
 
-export async function connectServer(serverId: string): Promise<void> {
-  await window.electronAPI?.connectServer?.(serverId)
+export async function connectServer(
+  serverId: string,
+  options?: ConnectServerOptions
+): Promise<void> {
+  await window.electronAPI?.connectServer?.(serverId, options)
 }
 
 export async function disconnectServer(serverId: string): Promise<void> {
   await window.electronAPI?.disconnectServer?.(serverId)
+}
+
+export async function forgetServer(serverId: string): Promise<void> {
+  await window.electronAPI?.forgetServer?.(serverId)
 }
 
 export function onDesktopStateChanged(
@@ -463,6 +480,10 @@ export async function saveApiKeys(keys: ApiKeys): Promise<void> {
   await window.electronAPI?.saveApiKeys?.(keys)
 }
 
+export async function clearAllLocalData(): Promise<void> {
+  await window.electronAPI?.clearAllLocalData?.()
+}
+
 export async function loadOnboardingState(): Promise<OnboardingState | null> {
   return (await window.electronAPI?.getOnboardingState?.()) ?? null
 }
@@ -487,6 +508,10 @@ export async function cloudSignOut(): Promise<void> {
 
 export async function cloudOpenDashboard(): Promise<void> {
   await window.electronAPI?.cloudAuth?.openDashboard?.()
+}
+
+export async function cloudOpenCreateAgentsServer(): Promise<void> {
+  await window.electronAPI?.cloudAuth?.openCreateAgentsServer?.()
 }
 
 export function onCloudAuthStateChanged(

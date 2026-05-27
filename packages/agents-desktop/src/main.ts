@@ -28,7 +28,7 @@ import {
   shell,
 } from 'electron'
 import fixPath from 'fix-path'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { readFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import path from 'node:path'
@@ -38,6 +38,9 @@ import type { Dispatcher } from 'undici'
 
 type ServerSource = `manual` | `local-discovery` | `electric-cloud`
 type ServerDesiredState = `connected` | `disconnected`
+type ConnectServerOptions = {
+  localRuntimeEnabled?: boolean
+}
 
 type ServerConfig = {
   id: string
@@ -2218,9 +2221,15 @@ async function startRuntime(serverId: string): Promise<void> {
   }
 }
 
-async function connectServer(serverId: string): Promise<void> {
+async function connectServer(
+  serverId: string,
+  options: ConnectServerOptions = {}
+): Promise<void> {
   const server = findServer(serverId)
   if (!server) return
+  if (typeof options.localRuntimeEnabled === `boolean`) {
+    server.localRuntimeEnabled = options.localRuntimeEnabled
+  }
   server.desiredState = `connected`
   const entry = ensureRuntimeEntry(server)
   entry.desiredState = `connected`
@@ -2239,6 +2248,27 @@ async function disconnectServer(serverId: string): Promise<void> {
   entry.status = `disconnected`
   entry.lastError = null
   entry.reconnectAttempt = 0
+  await saveSettings()
+  refreshDesktopState()
+}
+
+async function forgetServer(serverId: string): Promise<void> {
+  const server = findServer(serverId)
+  if (!server) return
+  await disconnectServer(serverId)
+  settings.servers = settings.servers.filter((entry) => entry.id !== serverId)
+  runtimeEntries.delete(serverId)
+  if (server.tenantId) {
+    await getCloudAgentServers().forgetAgentsToken(server.tenantId)
+  }
+  if (settings.defaultServerId === serverId) {
+    settings.defaultServerId = settings.servers[0]?.id ?? null
+  }
+  for (const [windowId, selectedServerId] of windowSelections) {
+    if (selectedServerId === serverId) {
+      windowSelections.set(windowId, settings.defaultServerId)
+    }
+  }
   await saveSettings()
   refreshDesktopState()
 }
@@ -2360,6 +2390,20 @@ async function quitApp(): Promise<void> {
   stopDiscoveryLoop()
   await stopExistingRuntime().catch(() => {})
   app.quit()
+}
+
+async function clearAllLocalDataAndRelaunch(): Promise<void> {
+  await getCloudAuth().signOut()
+  await getCloudAgentServers().stop()
+  await Promise.all([
+    session.defaultSession.clearStorageData(),
+    session.defaultSession.clearCache(),
+    rm(settingsPath(), { force: true }),
+    rm(secretsPath(), { force: true }),
+  ])
+  secretStore = null
+  app.relaunch()
+  await quitApp()
 }
 
 /**
@@ -2534,11 +2578,17 @@ function registerIpcHandlers(): void {
       typeof serverId === `string` ? serverId : null
     )
   })
-  ipcMain.handle(`desktop:connect-server`, async (_event, serverId) => {
-    if (typeof serverId === `string`) await connectServer(serverId)
-  })
+  ipcMain.handle(
+    `desktop:connect-server`,
+    async (_event, serverId, options?: ConnectServerOptions) => {
+      if (typeof serverId === `string`) await connectServer(serverId, options)
+    }
+  )
   ipcMain.handle(`desktop:disconnect-server`, async (_event, serverId) => {
     if (typeof serverId === `string`) await disconnectServer(serverId)
+  })
+  ipcMain.handle(`desktop:forget-server`, async (_event, serverId) => {
+    if (typeof serverId === `string`) await forgetServer(serverId)
   })
   ipcMain.handle(
     `desktop:restart-runtime`,
@@ -2562,6 +2612,9 @@ function registerIpcHandlers(): void {
   ipcMain.handle(`desktop:get-api-keys-status`, () => getApiKeysStatus())
   ipcMain.handle(`desktop:save-api-keys`, async (_event, keys: ApiKeys) => {
     await setApiKeys(keys)
+  })
+  ipcMain.handle(`desktop:clear-all-local-data`, async () => {
+    await clearAllLocalDataAndRelaunch()
   })
   ipcMain.handle(`desktop:get-onboarding-state`, () => getOnboardingState())
   ipcMain.handle(
@@ -2680,6 +2733,9 @@ function registerIpcHandlers(): void {
   })
   ipcMain.handle(`desktop:cloud-auth-open-dashboard`, () => {
     getCloudAuth().openDashboard()
+  })
+  ipcMain.handle(`desktop:cloud-auth-open-create-agents-server`, () => {
+    getCloudAuth().openCreateAgentsServer()
   })
 
   // ── Cloud agent servers ─────────────────────────────────────────

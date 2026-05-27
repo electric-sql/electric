@@ -46,6 +46,10 @@ type ServerConfig = {
   tenantId?: string
 }
 
+type ConnectServerOptions = {
+  localRuntimeEnabled?: boolean
+}
+
 type DesktopRuntimeStatus = `stopped` | `starting` | `running` | `error`
 type LocalRuntimeStatus =
   | `disabled`
@@ -289,10 +293,15 @@ const api = {
     ipcRenderer.invoke(`desktop:set-active-server`, server),
   setSelectedServer: (serverId: string | null): Promise<void> =>
     ipcRenderer.invoke(`desktop:set-selected-server`, serverId),
-  connectServer: (serverId: string): Promise<void> =>
-    ipcRenderer.invoke(`desktop:connect-server`, serverId),
+  connectServer: (
+    serverId: string,
+    options?: ConnectServerOptions
+  ): Promise<void> =>
+    ipcRenderer.invoke(`desktop:connect-server`, serverId, options),
   disconnectServer: (serverId: string): Promise<void> =>
     ipcRenderer.invoke(`desktop:disconnect-server`, serverId),
+  forgetServer: (serverId: string): Promise<void> =>
+    ipcRenderer.invoke(`desktop:forget-server`, serverId),
   restartRuntime: (): Promise<void> =>
     ipcRenderer.invoke(`desktop:restart-runtime`),
   restartServerRuntime: (serverId: string): Promise<void> =>
@@ -306,6 +315,8 @@ const api = {
     ipcRenderer.invoke(`desktop:get-api-keys-status`),
   saveApiKeys: (keys: ApiKeys): Promise<void> =>
     ipcRenderer.invoke(`desktop:save-api-keys`, keys),
+  clearAllLocalData: (): Promise<void> =>
+    ipcRenderer.invoke(`desktop:clear-all-local-data`),
   getOnboardingState: (): Promise<OnboardingState> =>
     ipcRenderer.invoke(`desktop:get-onboarding-state`),
   setOnboardingDismissed: (dismissed: boolean): Promise<void> =>
@@ -411,6 +422,8 @@ const api = {
       ipcRenderer.invoke(`desktop:cloud-auth-sign-out`),
     openDashboard: (): Promise<void> =>
       ipcRenderer.invoke(`desktop:cloud-auth-open-dashboard`),
+    openCreateAgentsServer: (): Promise<void> =>
+      ipcRenderer.invoke(`desktop:cloud-auth-open-create-agents-server`),
     onStateChanged: (
       callback: (state: CloudAuthState) => void
     ): (() => void) => {
