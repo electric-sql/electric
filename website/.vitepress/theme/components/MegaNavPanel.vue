@@ -68,6 +68,15 @@ defineEmits(['navigate'])
               <span class="mega-nav-panel-label">Quickstart</span>
               <span class="mega-nav-panel-sublabel">Get up and running fast</span>
             </a>
+            <a v-if="product.id == 'agents'"
+              class="mega-nav-panel-item"
+              :href="`${product.docsBase}/walkthrough`"
+              role="menuitem"
+              @click="$emit('navigate')"
+            >
+              <span class="mega-nav-panel-label">Walkthrough</span>
+              <span class="mega-nav-panel-sublabel">Step-by-step guide</span>
+            </a>
             <a
               class="mega-nav-panel-item"
               :href="product.docsBase"

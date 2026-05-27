@@ -87,7 +87,7 @@ Managed agents don't belong in sandboxes. They belong in functions, with statele
 That's the architecture &mdash; [serverless agents](#principles-of-serverless-agents) &mdash; to wire agents into the workforce.
 
 > [!Warning] <span style="font-weight: 700; font-size: 110%; color: var(--vp-c-warning-1)">λ</span>&nbsp; Serverless agents with Electric
-> Build and run serverless agents with [Electric&nbsp;Agents](/agents/). See the [introductory blog&nbsp;post](/blog/2026/04/29/introducing-electric-agents) and dive into the [Quickstart](/docs/agents/quickstart) and [Walkthrough](/docs/agents/walkthrough)&nbsp;guides&nbsp;now.
+> Build and run serverless agents with [Electric&nbsp;Agents](/blog/2026/04/29/introducing-electric-agents) now. See the [Walkthrough](/docs/agents/walkthrough)&nbsp;guide.
 
 <div class="embed-container">
   <YoutubeEmbed video-id="..." title="Serverless agents -- agents in functions, not sandboxes" />
