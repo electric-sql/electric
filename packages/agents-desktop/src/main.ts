@@ -1,87 +1,29 @@
 import { createDesktopAppContext } from './app/context'
-import {
-  buildSavedServerHeaders,
-  installCloudAuthHeaderInjection as installCloudAuthHeaderInjectionForDeps,
-  type CloudAuthHeaderInjectionDeps,
-} from './cloud/auth-injection'
-import {
-  desktopServerFetch as desktopServerFetchForDeps,
-  type DesktopServerFetchDeps,
-} from './cloud/server-fetch'
-import {
-  applyApiKeysToEnv,
-  getApiKeysStatus as getApiKeysStatusForDeps,
-  setApiKeys as setApiKeysForDeps,
-} from './credentials/api-keys'
-import {
-  disableCodex as disableCodexForDeps,
-  enableCodexSource as enableCodexSourceForDeps,
-  getCodexStatus as getCodexStatusForDeps,
-  signInCodex as signInCodexForDeps,
-  syncCodexEnvironment as syncCodexEnvironmentForDeps,
-  type CodexAuthDeps,
-} from './credentials/codex-auth'
+import * as CloudAuthInjection from './cloud/auth-injection'
+import * as ServerFetch from './cloud/server-fetch'
+import * as ApiKeyCredentials from './credentials/api-keys'
+import * as CodexAuth from './credentials/codex-auth'
 import { ensureRuntimeEntry as ensureRuntimeEntryInStore } from './runtime/entries'
 import { createLocalDiscoveryLoop } from './discovery/local-discovery'
-import {
-  connectServer as connectServerForDeps,
-  disconnectServer as disconnectServerForDeps,
-  forgetServer as forgetServerForDeps,
-  hasConnectedLocalRuntime as hasConnectedLocalRuntimeForDeps,
-  restartConnectedRuntimes as restartConnectedRuntimesForDeps,
-  restartRuntime as restartRuntimeForDeps,
-  stopExistingRuntime as stopExistingRuntimeForDeps,
-  stopRuntime as stopRuntimeForDeps,
-  stopRuntimeEntry as stopRuntimeEntryForDeps,
-  type RuntimeLifecycleDeps,
-} from './runtime/lifecycle'
-import {
-  authorizeMcpServer,
-  broadcastMcpSnapshot as broadcastMcpSnapshotForDeps,
-  disableMcpServer,
-  enableMcpServer,
-  getMcpSnapshot,
-  handleAuthorizeUrl as handleAuthorizeMcpUrl,
-  reconnectMcpServer,
-} from './runtime/mcp'
-import {
-  createDesktopTray,
-  createTrayIcon,
-  updateTray as updateTrayForDeps,
-} from './ui/tray'
-import { showAboutDialog as showAboutDialogForDeps } from './ui/about-dialog'
-import {
-  buildApplicationMenu as buildApplicationMenuForDeps,
-  popupAppIconMenu as popupAppIconMenuForDeps,
-  popupApplicationMenuSection as popupApplicationMenuSectionForDeps,
-  type ApplicationMenuDeps,
-} from './ui/application-menu'
-import {
-  desktopStateForWindow as desktopStateForDeps,
-  refreshDesktopState as refreshDesktopStateForDeps,
-  setState as setStateForDeps,
-  type DesktopStateDeps,
-} from './state/desktop-state'
+import * as RuntimeLifecycle from './runtime/lifecycle'
+import * as McpRuntime from './runtime/mcp'
+import * as Tray from './ui/tray'
+import * as AboutDialog from './ui/about-dialog'
+import * as ApplicationMenu from './ui/application-menu'
+import * as DesktopStateModel from './state/desktop-state'
 import {
   getNavigationState,
   installNavigationStateBridge,
   navigateHistory,
   sendFullscreenState,
 } from './windows/navigation'
-import {
-  createWindow as createWindowForDeps,
-  showOrCreateWindow as showOrCreateWindowForDeps,
-  type WindowManagerDeps,
-} from './windows/manager'
+import * as WindowManager from './windows/manager'
 import {
   installEditableContextMenu,
   installExternalLinkHandler,
   showSelectionContextMenu,
 } from './windows/context-menu'
-import {
-  registerIpcHandlers as registerIpcHandlersForDeps,
-  type RegisterDesktopIpcDeps,
-} from './ipc/register'
+import * as DesktopIpc from './ipc/register'
 import { normalizeServer, serverInList } from './settings/servers'
 import {
   loadDesktopSettings,
@@ -202,26 +144,32 @@ function broadcastCloudAgentServersState(next: CloudAgentServersState): void {
   }
 }
 
-const cloudAuthHeaderInjectionDeps: CloudAuthHeaderInjectionDeps = {
-  getServers: () => settings.servers,
-  getAgentsToken: (tenantId) =>
-    desktopContext.services.cloudAgentServers?.getAgentsToken(tenantId),
-  getCloudAuthState: () => desktopContext.services.cloudAuth?.getState(),
-  injectDevPrincipalHeaders,
-}
+const cloudAuthHeaderInjectionDeps: CloudAuthInjection.CloudAuthHeaderInjectionDeps =
+  {
+    getServers: () => settings.servers,
+    getAgentsToken: (tenantId) =>
+      desktopContext.services.cloudAgentServers?.getAgentsToken(tenantId),
+    getCloudAuthState: () => desktopContext.services.cloudAuth?.getState(),
+    injectDevPrincipalHeaders,
+  }
 
-const desktopServerFetchDeps: DesktopServerFetchDeps = {
+const desktopServerFetchDeps: ServerFetch.DesktopServerFetchDeps = {
   getServers: () => settings.servers,
   buildSavedServerHeaders: (url) =>
-    buildSavedServerHeaders(cloudAuthHeaderInjectionDeps, url),
+    CloudAuthInjection.buildSavedServerHeaders(
+      cloudAuthHeaderInjectionDeps,
+      url
+    ),
 }
 
 function installCloudAuthHeaderInjection(): void {
-  installCloudAuthHeaderInjectionForDeps(cloudAuthHeaderInjectionDeps)
+  CloudAuthInjection.installCloudAuthHeaderInjection(
+    cloudAuthHeaderInjectionDeps
+  )
 }
 
 async function desktopServerFetch(request: unknown) {
-  return desktopServerFetchForDeps(desktopServerFetchDeps, request)
+  return ServerFetch.desktopServerFetch(desktopServerFetchDeps, request)
 }
 
 function findServer(serverId: string | null | undefined): ServerConfig | null {
@@ -236,7 +184,7 @@ function defaultSelectedServerId(): string | null {
   return settings.servers[0]?.id ?? null
 }
 
-const codexAuthDeps: CodexAuthDeps = {
+const codexAuthDeps: CodexAuth.CodexAuthDeps = {
   settings,
   getSecretStore: desktopContext.getSecretStore,
   saveSettings,
@@ -244,15 +192,15 @@ const codexAuthDeps: CodexAuthDeps = {
 }
 
 function syncCodexEnvironment(): Promise<void> {
-  return syncCodexEnvironmentForDeps(codexAuthDeps)
+  return CodexAuth.syncCodexEnvironment(codexAuthDeps)
 }
 
 function getCodexStatus(): Promise<CodexStatus> {
-  return getCodexStatusForDeps(codexAuthDeps)
+  return CodexAuth.getCodexStatus(codexAuthDeps)
 }
 
 async function restartConnectedRuntimes(): Promise<void> {
-  await restartConnectedRuntimesForDeps(runtimeLifecycleDeps)
+  await RuntimeLifecycle.restartConnectedRuntimes(runtimeLifecycleDeps)
 }
 
 /**
@@ -265,7 +213,7 @@ async function restartConnectedRuntimes(): Promise<void> {
  * connected runtime whose env-var snapshot could now be stale.
  */
 function hasConnectedLocalRuntime(): boolean {
-  return hasConnectedLocalRuntimeForDeps(runtimeLifecycleDeps)
+  return RuntimeLifecycle.hasConnectedLocalRuntime(runtimeLifecycleDeps)
 }
 
 /**
@@ -287,19 +235,23 @@ function setCredentialsRestartPending(value: boolean): void {
 }
 
 function enableCodexSource(source: CodexAuthSource): Promise<CodexStatus> {
-  return enableCodexSourceForDeps(codexAuthDeps, source)
+  return CodexAuth.enableCodexSource(codexAuthDeps, source)
 }
 
 function disableCodex(): Promise<CodexStatus> {
-  return disableCodexForDeps(codexAuthDeps)
+  return CodexAuth.disableCodex(codexAuthDeps)
 }
 
 function signInCodex(): Promise<CodexStatus | null> {
-  return signInCodexForDeps(codexAuthDeps)
+  return CodexAuth.signInCodex(codexAuthDeps)
 }
 
 function applyApiKeys(): void {
-  applyApiKeysToEnv(apiKeys, desktopContext.envApiKeysSnapshot, process.env)
+  ApiKeyCredentials.applyApiKeysToEnv(
+    apiKeys,
+    desktopContext.envApiKeysSnapshot,
+    process.env
+  )
 }
 
 function initialServerFromEnv(): ServerConfig | null {
@@ -387,7 +339,7 @@ function injectDevPrincipalHeaders(server: ServerConfig): ServerConfig {
   })
 }
 
-const desktopStateDeps: DesktopStateDeps = {
+const desktopStateDeps: DesktopStateModel.DesktopStateDeps = {
   windows,
   settings,
   state,
@@ -402,7 +354,7 @@ const desktopStateDeps: DesktopStateDeps = {
 }
 
 function desktopStateForWindow(win: BrowserWindow | null): DesktopState {
-  return desktopStateForDeps(desktopStateDeps, win)
+  return DesktopStateModel.desktopStateForWindow(desktopStateDeps, win)
 }
 
 function sendCommand(command: DesktopCommand): void {
@@ -413,7 +365,7 @@ function sendCommand(command: DesktopCommand): void {
 }
 
 function updateTray(): void {
-  updateTrayForDeps({
+  Tray.updateTray({
     tray: desktopContext.shell.tray,
     servers: settings.servers,
     runtimeEntries,
@@ -431,14 +383,14 @@ function updateTray(): void {
 }
 
 function setState(patch: Partial<DesktopState>): void {
-  setStateForDeps(desktopStateDeps, patch)
+  DesktopStateModel.setState(desktopStateDeps, patch)
 }
 
 function refreshDesktopState(): void {
-  refreshDesktopStateForDeps(desktopStateDeps)
+  DesktopStateModel.refreshDesktopState(desktopStateDeps)
 }
 
-const windowManagerDeps: WindowManagerDeps = {
+const windowManagerDeps: WindowManager.WindowManagerDeps = {
   windows,
   windowSelections,
   defaultSelectedServerId,
@@ -452,22 +404,22 @@ const windowManagerDeps: WindowManagerDeps = {
 }
 
 function createWindow(): BrowserWindow {
-  return createWindowForDeps(windowManagerDeps)
+  return WindowManager.createWindow(windowManagerDeps)
 }
 
 function showOrCreateWindow(): void {
-  showOrCreateWindowForDeps(windows, createWindow)
+  WindowManager.showOrCreateWindow(windows, createWindow)
 }
 
 async function stopExistingRuntime(): Promise<void> {
-  await stopExistingRuntimeForDeps(runtimeLifecycleDeps)
+  await RuntimeLifecycle.stopExistingRuntime(runtimeLifecycleDeps)
 }
 
 function broadcastMcpSnapshot(
   serverId: string,
   snapshot: RegistrySnapshot
 ): void {
-  broadcastMcpSnapshotForDeps(
+  McpRuntime.broadcastMcpSnapshot(
     { snapshots: lastMcpSnapshots, windows },
     serverId,
     snapshot
@@ -479,7 +431,7 @@ async function handleAuthorizeUrl(
   url: string,
   server: string
 ): Promise<void> {
-  await handleAuthorizeMcpUrl({
+  await McpRuntime.handleAuthorizeUrl({
     runtimeEntries,
     redirectBase: MCP_OAUTH_REDIRECT_BASE,
     serverId,
@@ -488,7 +440,7 @@ async function handleAuthorizeUrl(
   })
 }
 
-const runtimeLifecycleDeps: RuntimeLifecycleDeps = {
+const runtimeLifecycleDeps: RuntimeLifecycle.RuntimeLifecycleDeps = {
   settings,
   runtimeEntries,
   windowSelections,
@@ -509,26 +461,26 @@ const runtimeLifecycleDeps: RuntimeLifecycleDeps = {
 }
 
 async function stopRuntimeEntry(entry: RuntimeEntry): Promise<void> {
-  await stopRuntimeEntryForDeps(runtimeLifecycleDeps, entry)
+  await RuntimeLifecycle.stopRuntimeEntry(runtimeLifecycleDeps, entry)
 }
 
 async function connectServer(
   serverId: string,
   options: ConnectServerOptions = {}
 ): Promise<void> {
-  await connectServerForDeps(runtimeLifecycleDeps, serverId, options)
+  await RuntimeLifecycle.connectServer(runtimeLifecycleDeps, serverId, options)
 }
 
 async function disconnectServer(serverId: string): Promise<void> {
-  await disconnectServerForDeps(runtimeLifecycleDeps, serverId)
+  await RuntimeLifecycle.disconnectServer(runtimeLifecycleDeps, serverId)
 }
 
 async function forgetServer(serverId: string): Promise<void> {
-  await forgetServerForDeps(runtimeLifecycleDeps, serverId)
+  await RuntimeLifecycle.forgetServer(runtimeLifecycleDeps, serverId)
 }
 
 async function restartRuntime(serverId?: string | null): Promise<void> {
-  await restartRuntimeForDeps(
+  await RuntimeLifecycle.restartRuntime(
     runtimeLifecycleDeps,
     serverId ??
       selectedServerIdForWindow(BrowserWindow.getFocusedWindow()) ??
@@ -537,7 +489,7 @@ async function restartRuntime(serverId?: string | null): Promise<void> {
 }
 
 async function stopRuntime(serverId?: string | null): Promise<void> {
-  await stopRuntimeForDeps(
+  await RuntimeLifecycle.stopRuntime(
     runtimeLifecycleDeps,
     serverId ??
       selectedServerIdForWindow(BrowserWindow.getFocusedWindow()) ??
@@ -546,7 +498,7 @@ async function stopRuntime(serverId?: string | null): Promise<void> {
 }
 
 async function getApiKeysStatus(): Promise<ApiKeysStatus> {
-  return getApiKeysStatusForDeps({
+  return ApiKeyCredentials.getApiKeysStatus({
     apiKeys,
     launchEnv: desktopContext.envApiKeysSnapshot,
     getCodexStatus,
@@ -554,7 +506,7 @@ async function getApiKeysStatus(): Promise<ApiKeysStatus> {
 }
 
 async function setApiKeys(next: ApiKeys): Promise<void> {
-  await setApiKeysForDeps(
+  await ApiKeyCredentials.setApiKeys(
     {
       apiKeys,
       apiKeysRef: () => settings.apiKeysRef,
@@ -697,7 +649,7 @@ function applyNativeAppearance(appearance: DesktopAppearance): void {
   refreshNativeTitleBars()
 }
 
-const desktopIpcDeps: RegisterDesktopIpcDeps = {
+const desktopIpcDeps: DesktopIpc.RegisterDesktopIpcDeps = {
   settings,
   state,
   runtimeEntries,
@@ -735,24 +687,25 @@ const desktopIpcDeps: RegisterDesktopIpcDeps = {
   popupAppIconMenu,
   getNavigationState,
   navigateHistory,
-  getMcpSnapshot: (serverId) => getMcpSnapshot(lastMcpSnapshots, serverId),
+  getMcpSnapshot: (serverId) =>
+    McpRuntime.getMcpSnapshot(lastMcpSnapshots, serverId),
   authorizeMcpServer: (serverId, name) =>
-    authorizeMcpServer(runtimeEntries, serverId, name),
+    McpRuntime.authorizeMcpServer(runtimeEntries, serverId, name),
   reconnectMcpServer: (serverId, name) =>
-    reconnectMcpServer(runtimeEntries, serverId, name),
+    McpRuntime.reconnectMcpServer(runtimeEntries, serverId, name),
   disableMcpServer: (serverId, name) =>
-    disableMcpServer(runtimeEntries, serverId, name),
+    McpRuntime.disableMcpServer(runtimeEntries, serverId, name),
   enableMcpServer: (serverId, name) =>
-    enableMcpServer(runtimeEntries, serverId, name),
+    McpRuntime.enableMcpServer(runtimeEntries, serverId, name),
   getCloudAuth: desktopContext.getCloudAuth,
   getCloudAgentServers: desktopContext.getCloudAgentServers,
 }
 
 function registerIpcHandlers(): void {
-  registerIpcHandlersForDeps(desktopIpcDeps)
+  DesktopIpc.registerIpcHandlers(desktopIpcDeps)
 }
 
-const applicationMenuDeps: ApplicationMenuDeps = {
+const applicationMenuDeps: ApplicationMenu.ApplicationMenuDeps = {
   windows,
   createWindow,
   sendCommand,
@@ -761,7 +714,7 @@ const applicationMenuDeps: ApplicationMenuDeps = {
 }
 
 function showAboutDialog(): void {
-  showAboutDialogForDeps({
+  AboutDialog.showAboutDialog({
     getAboutWindow: () => desktopContext.shell.aboutWindow,
     setAboutWindow: (win) => {
       desktopContext.shell.aboutWindow = win
@@ -770,7 +723,7 @@ function showAboutDialog(): void {
 }
 
 function buildApplicationMenu(): void {
-  buildApplicationMenuForDeps(applicationMenuDeps)
+  ApplicationMenu.buildApplicationMenu(applicationMenuDeps)
 }
 
 function popupApplicationMenuSection(
@@ -779,7 +732,7 @@ function popupApplicationMenuSection(
   bounds: DesktopMenuPopupBounds,
   state: DesktopMenuState
 ): void {
-  popupApplicationMenuSectionForDeps(
+  ApplicationMenu.popupApplicationMenuSection(
     applicationMenuDeps,
     win,
     section,
@@ -792,7 +745,7 @@ function popupAppIconMenu(
   win: BrowserWindow,
   bounds: DesktopMenuPopupBounds
 ): void {
-  popupAppIconMenuForDeps({ showAboutDialog }, win, bounds)
+  ApplicationMenu.popupAppIconMenu({ showAboutDialog }, win, bounds)
 }
 
 async function main(): Promise<void> {
@@ -874,7 +827,7 @@ async function main(): Promise<void> {
     }
   }
 
-  const trayIcon = createTrayIcon({
+  const trayIcon = Tray.createTrayIcon({
     iconPath: TRAY_ICON_PATH,
     icon2xPath: TRAY_ICON_2X_PATH,
   })
@@ -884,7 +837,7 @@ async function main(): Promise<void> {
         `the menu bar item may be invisible.`
     )
   }
-  desktopContext.shell.tray = createDesktopTray(trayIcon, () =>
+  desktopContext.shell.tray = Tray.createDesktopTray(trayIcon, () =>
     showOrCreateWindow()
   )
   updateTray()
