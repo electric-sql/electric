@@ -342,7 +342,7 @@ export class PgSyncBridgeManager implements PgSyncBridgeCoordinator {
   ) {}
 
   async start(): Promise<void> {
-    const rows = await this.registry?.listPgSyncBridges()
+    const rows = await this.registry?.listPgSyncBridges?.()
     if (!rows) return
     await Promise.all(
       rows.map((row) =>
