@@ -15,19 +15,25 @@ import {
   Sparkles,
 } from 'lucide-react'
 import {
+  codexEnableSource,
+  codexSignIn,
   cloudOpenCreateAgentsServer,
   cloudSignIn,
   loadApiKeysStatus,
   loadCloudAuthState,
+  loadDesktopState,
   loadOnboardingState,
   onCloudAuthStateChanged,
   prepareCloudAgentServerConnection,
+  restartLocalRuntimes,
   saveApiKeys as persistApiKeys,
   setOnboardingDismissed,
   type ApiKeys,
   type ApiKeysStatus,
   type CloudAuthState,
   type ConnectServerOptions,
+  type CodexAuthSource,
+  type CodexStatus,
 } from '../lib/server-connection'
 import {
   useAvailableServers,
@@ -41,7 +47,7 @@ type Step = `cloud` | `keys` | `server`
 
 const STEPS: ReadonlyArray<{ id: Step; label: string }> = [
   { id: `cloud`, label: `Cloud` },
-  { id: `keys`, label: `API Keys` },
+  { id: `keys`, label: `Models` },
   { id: `server`, label: `Server` },
 ]
 
@@ -55,7 +61,7 @@ const MODEL_PROVIDER_IDS: ReadonlyArray<ProviderId> = [
   `deepseek`,
 ]
 
-const PROVIDERS: ReadonlyArray<{
+const MODEL_PROVIDERS: ReadonlyArray<{
   id: ProviderId
   name: string
   description: string
@@ -64,28 +70,37 @@ const PROVIDERS: ReadonlyArray<{
 }> = [
   {
     id: `anthropic`,
-    name: `Anthropic`,
+    name: `Anthropic API`,
     description: `Claude models — the default for the local runtime.`,
     placeholder: `sk-ant-…`,
     kind: `model`,
   },
   {
     id: `openai`,
-    name: `OpenAI`,
+    name: `OpenAI API`,
     description: `GPT models, including the GPT-5 family.`,
     placeholder: `sk-…`,
     kind: `model`,
   },
   {
     id: `deepseek`,
-    name: `DeepSeek`,
+    name: `DeepSeek API`,
     description: `DeepSeek's hosted reasoning models.`,
     placeholder: `sk-…`,
     kind: `model`,
   },
+]
+
+const TOOL_PROVIDERS: ReadonlyArray<{
+  id: ProviderId
+  name: string
+  description: string
+  placeholder: string
+  kind: ProviderKind
+}> = [
   {
     id: `brave`,
-    name: `Brave Search`,
+    name: `Brave Search API`,
     description: `Adds the brave_search tool. Without it, agents fall back to Anthropic's built-in search.`,
     placeholder: `BSA…`,
     kind: `tool`,
@@ -150,6 +165,24 @@ export function OnboardingModal(): React.ReactElement | null {
     if (cloudState?.status === `signed-in`) setStep(`keys`)
   }, [open, step, cloudState?.status])
 
+  // Credential changes made inside onboarding (API keys, Codex sign-in,
+  // detected-source approval) defer the runtime restart to a single
+  // explicit step at completion — same model as the Credentials
+  // settings page banner. We restart only when there's something to
+  // restart, so first-launch (where no runtime is running yet) stays
+  // a no-op and the Server step's `connectServer` starts the runtime
+  // with the right env on its first launch. Wired into the dialog's
+  // `onOpenChange` so escape / backdrop dismissals also flush.
+  const applyPendingRestart = useMemo(
+    () => async () => {
+      const desktopState = await loadDesktopState()
+      if (desktopState?.credentialsRestartPending) {
+        await restartLocalRuntimes()
+      }
+    },
+    []
+  )
+
   const closeModal = useMemo(
     () => async () => {
       await setOnboardingDismissed(true)
@@ -171,7 +204,17 @@ export function OnboardingModal(): React.ReactElement | null {
   if (!keysStatus) return null
 
   return (
-    <Dialog.Root open={open} onOpenChange={setOpen}>
+    <Dialog.Root
+      open={open}
+      onOpenChange={(next) => {
+        // Any close path (escape, backdrop click, programmatic) should
+        // also flush a pending credential restart so the user never
+        // ends up with a running runtime that's out of sync with their
+        // saved keys.
+        if (!next) void applyPendingRestart()
+        setOpen(next)
+      }}
+    >
       <Dialog.Content maxWidth={640} className={styles.content}>
         <StepIndicator step={step} />
         <div className={styles.body}>
@@ -341,12 +384,12 @@ function KeysStep({
   onBack: () => void
   onContinue: () => void
 }): React.ReactElement {
-  const hasAnySuggestion = PROVIDERS.some((provider) =>
-    Boolean(keysStatus.suggested[provider.id])
+  const hasAnySuggestion = [...MODEL_PROVIDERS, ...TOOL_PROVIDERS].some(
+    (provider) => Boolean(keysStatus.suggested[provider.id])
   )
-  const hasAnyModelKey = MODEL_PROVIDER_IDS.some((id) =>
-    Boolean(keysStatus.saved[id])
-  )
+  const hasAnyModelKey =
+    MODEL_PROVIDER_IDS.some((id) => Boolean(keysStatus.saved[id])) ||
+    keysStatus.codex.enabled
 
   const refreshStatus = async () => {
     const next = await loadApiKeysStatus()
@@ -356,8 +399,8 @@ function KeysStep({
   return (
     <>
       <StepHeader
-        title="Add provider API keys"
-        description="All keys are optional — but to run agents in the bundled local runtime you'll need at least one model provider key (Anthropic, OpenAI, or DeepSeek). Keys are stored on this machine and can be changed anytime in Settings."
+        title="Add model providers"
+        description="All providers are optional — but to run agents in the bundled local runtime you'll need at least one model provider, such as an API key or ChatGPT / Codex sign-in. Credentials and consent are stored on this machine and can be changed anytime in Settings."
       />
       {hasAnySuggestion && !hasAnyModelKey && (
         <div className={styles.hint}>
@@ -369,7 +412,22 @@ function KeysStep({
         </div>
       )}
       <Accordion.Root className={styles.section} multiple>
-        {PROVIDERS.map((provider) => (
+        <CodexProviderItem codex={keysStatus.codex} onSaved={refreshStatus} />
+        {MODEL_PROVIDERS.map((provider) => (
+          <ProviderItem
+            key={provider.id}
+            provider={provider}
+            keysStatus={keysStatus}
+            onSaved={refreshStatus}
+          />
+        ))}
+      </Accordion.Root>
+      <SectionHeader
+        title="Optional tools"
+        description="Tools extend local agents but do not count as model providers."
+      />
+      <Accordion.Root className={styles.section} multiple>
+        {TOOL_PROVIDERS.map((provider) => (
           <ProviderItem
             key={provider.id}
             provider={provider}
@@ -407,12 +465,147 @@ function KeysStep({
   )
 }
 
+function CodexProviderItem({
+  codex,
+  onSaved,
+}: {
+  codex: CodexStatus
+  onSaved: () => Promise<void>
+}): React.ReactElement {
+  const [busy, setBusy] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const available = codex.availableSources.filter(
+    (source) => source.source !== `desktop-oauth` || !codex.enabled
+  )
+
+  const useSource = async (source: CodexAuthSource) => {
+    setBusy(source)
+    setError(null)
+    try {
+      await codexEnableSource(source)
+      await onSaved()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const signIn = async () => {
+    setBusy(`sign-in`)
+    setError(null)
+    try {
+      await codexSignIn()
+      await onSaved()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <Accordion.Item value="codex" className={styles.accordionItem}>
+      <Accordion.Header className={styles.accordionHeader}>
+        <Accordion.Trigger className={styles.accordionTrigger}>
+          <span className={styles.rowText}>
+            <span className={styles.rowTitleLine}>
+              <span className={styles.rowTitle}>ChatGPT / Codex</span>
+              <span className={styles.kindTag} data-kind="model" aria-hidden>
+                Model
+              </span>
+            </span>
+            <Text size={1} tone="muted">
+              Use ChatGPT / Codex models after explicit approval or sign-in.
+            </Text>
+          </span>
+          <span className={styles.rowAside}>
+            {codex.enabled ? (
+              <span className={styles.statusConfigured}>
+                <Icon icon={CheckCircle2} size={1} />
+                Enabled
+              </span>
+            ) : available.length > 0 ? (
+              <span className={styles.statusSuggested}>
+                <Icon icon={Sparkles} size={1} />
+                Login found
+              </span>
+            ) : (
+              <span className={styles.statusEmpty}>Not set</span>
+            )}
+            <span className={styles.chevron} aria-hidden>
+              <Icon icon={ChevronDown} size={2} />
+            </span>
+          </span>
+        </Accordion.Trigger>
+      </Accordion.Header>
+      <Accordion.Panel className={styles.accordionPanel}>
+        <div className={styles.accordionPanelInner}>
+          <div className={styles.codexActions}>
+            {codex.enabled ? (
+              <Text size={2} tone="muted">
+                ChatGPT / Codex is enabled for this desktop runtime.
+              </Text>
+            ) : available.length > 0 ? (
+              <>
+                <Text size={2} tone="muted">
+                  We found a local ChatGPT / Codex login. Electric Agents will
+                  only use it if you approve it.
+                </Text>
+                {available.map((source) => (
+                  <Button
+                    key={source.source}
+                    type="button"
+                    variant="soft"
+                    tone="neutral"
+                    size={2}
+                    disabled={busy !== null}
+                    onClick={() => {
+                      void useSource(source.source)
+                    }}
+                  >
+                    {busy === source.source
+                      ? `Enabling…`
+                      : `Use ${source.label}`}
+                  </Button>
+                ))}
+              </>
+            ) : (
+              <Text size={2} tone="muted">
+                No local ChatGPT / Codex login was found. Sign in with OpenAI to
+                enable Codex models.
+              </Text>
+            )}
+            <Button
+              type="button"
+              size={2}
+              disabled={busy !== null}
+              onClick={() => {
+                void signIn()
+              }}
+            >
+              {busy === `sign-in`
+                ? `Signing in…`
+                : `Sign in to ChatGPT / Codex`}
+            </Button>
+            {error && (
+              <Text size={2} tone="danger">
+                {error}
+              </Text>
+            )}
+          </div>
+        </div>
+      </Accordion.Panel>
+    </Accordion.Item>
+  )
+}
+
 function ProviderItem({
   provider,
   keysStatus,
   onSaved,
 }: {
-  provider: (typeof PROVIDERS)[number]
+  provider: (typeof MODEL_PROVIDERS | typeof TOOL_PROVIDERS)[number]
   keysStatus: ApiKeysStatus
   onSaved: () => Promise<void>
 }): React.ReactElement {

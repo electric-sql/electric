@@ -82,6 +82,7 @@ type DesktopState = {
   error: string | null
   discoveredServers: Array<DiscoveredServer>
   pullWakeRunnerId: string | null
+  credentialsRestartPending: boolean
 }
 
 type DesktopServerFetchRequest = {
@@ -117,10 +118,31 @@ type ApiKeys = {
   brave: string | null
 }
 
+type CodexAuthSource = `desktop-oauth` | `codex-cli` | `opencode`
+
+type CodexDetectedSource = {
+  source: CodexAuthSource
+  label: string
+  accountId: string | null
+  email: string | null
+  expiresAt: number | null
+}
+
+type CodexStatus = {
+  enabled: boolean
+  source: CodexAuthSource | null
+  availableSources: Array<CodexDetectedSource>
+  accountId: string | null
+  email: string | null
+  expiresAt: number | null
+  error: string | null
+}
+
 type ApiKeysStatus = {
   hasAnyKey: boolean
   saved: ApiKeys
   suggested: ApiKeys
+  codex: CodexStatus
 }
 
 type OnboardingState = {
@@ -315,6 +337,14 @@ const api = {
     ipcRenderer.invoke(`desktop:get-api-keys-status`),
   saveApiKeys: (keys: ApiKeys): Promise<void> =>
     ipcRenderer.invoke(`desktop:save-api-keys`, keys),
+  codexSignIn: (): Promise<CodexStatus> =>
+    ipcRenderer.invoke(`desktop:codex-sign-in`),
+  codexEnableSource: (source: CodexAuthSource): Promise<CodexStatus> =>
+    ipcRenderer.invoke(`desktop:codex-enable-source`, source),
+  codexDisable: (): Promise<CodexStatus> =>
+    ipcRenderer.invoke(`desktop:codex-disable`),
+  restartLocalRuntimes: (): Promise<void> =>
+    ipcRenderer.invoke(`desktop:restart-local-runtimes`),
   clearAllLocalData: (): Promise<void> =>
     ipcRenderer.invoke(`desktop:clear-all-local-data`),
   getOnboardingState: (): Promise<OnboardingState> =>

@@ -37,6 +37,9 @@ function codexAuthPath(): string {
 }
 
 export function readCodexAccessToken(): string | undefined {
+  const explicit = process.env.ELECTRIC_CODEX_ACCESS_TOKEN?.trim()
+  if (explicit) return explicit
+  if (process.env.ELECTRIC_CODEX_REQUIRE_OPT_IN === `1`) return undefined
   try {
     const raw = readFileSync(codexAuthPath(), `utf-8`)
     const data = JSON.parse(raw) as {

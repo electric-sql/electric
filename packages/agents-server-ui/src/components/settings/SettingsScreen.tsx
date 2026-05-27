@@ -129,6 +129,27 @@ export function SettingsPanel({
   return <div className={styles.panel}>{children}</div>
 }
 
+/**
+ * Advisory banner rendered above sections at the top of a settings
+ * page. Uses the same card chrome as section bodies but with a
+ * tinted background, so it reads as a callout without breaking the
+ * card-stack rhythm of the page.
+ */
+export function SettingsBanner({
+  children,
+  action,
+}: {
+  children: ReactNode
+  action?: ReactNode
+}): React.ReactElement {
+  return (
+    <div className={styles.banner}>
+      <span className={styles.bannerText}>{children}</span>
+      {action}
+    </div>
+  )
+}
+
 export function SettingsActions({
   children,
   separator = false,

@@ -39,6 +39,13 @@ export interface DesktopState {
   error: string | null
   discoveredServers: Array<DiscoveredServer>
   pullWakeRunnerId: string | null
+  /**
+   * `true` when API keys or Codex credentials have changed since the
+   * local runtime was last started — the renderer surfaces this as a
+   * "Restart local runtime to apply changes" banner on the Credentials
+   * settings page. Clears once any local runtime is restarted.
+   */
+  credentialsRestartPending: boolean
 }
 
 export interface ConnectServerOptions {
@@ -101,6 +108,26 @@ export interface ApiKeys {
   brave: string | null
 }
 
+export type CodexAuthSource = `desktop-oauth` | `codex-cli` | `opencode`
+
+export type CodexDetectedSource = {
+  source: CodexAuthSource
+  label: string
+  accountId: string | null
+  email: string | null
+  expiresAt: number | null
+}
+
+export type CodexStatus = {
+  enabled: boolean
+  source: CodexAuthSource | null
+  availableSources: Array<CodexDetectedSource>
+  accountId: string | null
+  email: string | null
+  expiresAt: number | null
+  error: string | null
+}
+
 export interface ApiKeysStatus {
   /** `true` when at least one provider key is already saved. */
   hasAnyKey: boolean
@@ -112,6 +139,7 @@ export interface ApiKeysStatus {
    * overwriting the user's saved choice.
    */
   suggested: ApiKeys
+  codex: CodexStatus
 }
 
 /**
@@ -275,6 +303,10 @@ declare global {
       rescanServers?: () => Promise<Array<DiscoveredServer>>
       getApiKeysStatus?: () => Promise<ApiKeysStatus>
       saveApiKeys?: (keys: ApiKeys) => Promise<void>
+      codexSignIn?: () => Promise<CodexStatus>
+      codexEnableSource?: (source: CodexAuthSource) => Promise<CodexStatus>
+      codexDisable?: () => Promise<CodexStatus>
+      restartLocalRuntimes?: () => Promise<void>
       clearAllLocalData?: () => Promise<void>
       getOnboardingState?: () => Promise<OnboardingState>
       setOnboardingDismissed?: (dismissed: boolean) => Promise<void>
@@ -478,6 +510,24 @@ export async function loadApiKeysStatus(): Promise<ApiKeysStatus | null> {
 
 export async function saveApiKeys(keys: ApiKeys): Promise<void> {
   await window.electronAPI?.saveApiKeys?.(keys)
+}
+
+export async function codexSignIn(): Promise<CodexStatus | null> {
+  return (await window.electronAPI?.codexSignIn?.()) ?? null
+}
+
+export async function codexEnableSource(
+  source: CodexAuthSource
+): Promise<CodexStatus | null> {
+  return (await window.electronAPI?.codexEnableSource?.(source)) ?? null
+}
+
+export async function codexDisable(): Promise<CodexStatus | null> {
+  return (await window.electronAPI?.codexDisable?.()) ?? null
+}
+
+export async function restartLocalRuntimes(): Promise<void> {
+  await window.electronAPI?.restartLocalRuntimes?.()
 }
 
 export async function clearAllLocalData(): Promise<void> {

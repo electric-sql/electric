@@ -383,6 +383,40 @@
   background: var(--ds-accent-10);
 }
 
+/* Detected local-Codex-login opt-in prompt ----------------------- *
+ *
+ * Sits under the composer with the same outdent so its content lines
+ * up with the textarea text column above. Subtle accent tint so it
+ * reads as a soft suggestion rather than an alert. */
+.codexPrompt {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+  flex-wrap: wrap;
+  margin: 0 calc(-1 * var(--ds-space-4));
+  padding: var(--ds-space-2) var(--ds-space-3);
+  border: 1px solid var(--ds-border-1);
+  border-radius: var(--ds-radius-3);
+  background: var(--ds-accent-a2);
+  color: var(--ds-text-2);
+  font-size: var(--ds-text-sm);
+}
+.codexPromptText {
+  flex: 1;
+  min-width: 0;
+}
+.codexPromptActions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+  flex-shrink: 0;
+}
+.codexPromptError {
+  flex-basis: 100%;
+  font-size: var(--ds-text-xs);
+  color: var(--ds-red-11);
+}
+
 /* Other-agents section under the composer ----------------------- */
 
 .otherAgents {

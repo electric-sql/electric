@@ -8,10 +8,6 @@
   gap: var(--ds-space-4);
 }
 
-.settingsForm {
-  display: contents;
-}
-
 .hint {
   display: flex;
   align-items: center;
@@ -25,9 +21,6 @@
 
 .secretInput {
   position: relative;
-}
-
-.settingsForm .secretInput {
   width: 100%;
 }
 

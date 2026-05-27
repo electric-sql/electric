@@ -76,7 +76,7 @@ export function GeneralPage(): React.ReactElement {
           <SettingsLinkRow
             icon={KeyRound}
             label="Credentials"
-            description="Configure model provider keys for local agents."
+            description="Configure model providers for local agents."
             category="credentials"
             onNavigate={(category) =>
               navigate({ to: `/settings/$category`, params: { category } })
