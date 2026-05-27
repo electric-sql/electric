@@ -36,6 +36,7 @@ import {
   createTrayIcon,
   updateTray as updateTrayForDeps,
 } from './ui/tray'
+import { registerCloudIpcHandlers } from './ipc/cloud'
 import {
   normalizeServer,
   normalizeServers,
@@ -78,11 +79,7 @@ import type {
   RuntimeEntry,
   ServerConfig,
 } from './shared/types'
-import {
-  CloudAuth,
-  type CloudAuthProvider,
-  type CloudAuthState,
-} from './cloud-auth'
+import { CloudAuth, type CloudAuthState } from './cloud-auth'
 import {
   CloudAgentServers,
   type CloudAgentServersState,
@@ -2277,51 +2274,7 @@ function registerIpcHandlers(): void {
     }
   )
 
-  // ── Electric Cloud auth IPC ─────────────────────────────────────
-  // OAuth via dashboard.electric-sql.cloud's CLI flow: we open a child
-  // BrowserWindow, the user signs in with GitHub/Google, the admin-API
-  // 302s to the loopback `cli_port` redirect URI, and `CloudAuth`
-  // intercepts that redirect to capture the JWT. State pushes come
-  // through `desktop:cloud-auth-state-changed` (see broadcaster).
-  ipcMain.handle(`desktop:cloud-auth-state`, () => getCloudAuth().getState())
-  ipcMain.handle(
-    `desktop:cloud-auth-sign-in`,
-    async (event, provider: CloudAuthProvider) => {
-      const parent = BrowserWindow.fromWebContents(event.sender) ?? undefined
-      await getCloudAuth().signIn(provider, parent)
-    }
-  )
-  ipcMain.handle(`desktop:cloud-auth-sign-out`, async () => {
-    await getCloudAuth().signOut()
-  })
-  ipcMain.handle(`desktop:cloud-auth-open-dashboard`, () => {
-    getCloudAuth().openDashboard()
-  })
-  ipcMain.handle(`desktop:cloud-auth-open-create-agents-server`, () => {
-    getCloudAuth().openCreateAgentsServer()
-  })
-
-  // ── Cloud agent servers ─────────────────────────────────────────
-  // The user-scoped shape stream of agent stream services
-  // (`/api/internal/v1/agent-servers`) joined client-side against the
-  // workspaces / projects / environments shapes so the UI can label
-  // each agent server with the workspace → project → environment it
-  // belongs to. Lifecycle is driven from cloud-auth: streams start
-  // when a JWT is available, stop on sign-out.
-  ipcMain.handle(`desktop:cloud-agent-servers-state`, () =>
-    getCloudAgentServers().getState()
-  )
-  // Prepare a URL the renderer can hand to the normal `addServer`
-  // flow: hits the admin-API to mint a per-service agents bearer
-  // token, stores that token in SecretStore, and returns only the
-  // cloud agents base URL + tenant id. The renderer never sees the
-  // user's cloud-auth bearer or the agents token.
-  ipcMain.handle(
-    `desktop:cloud-agent-server-prepare-connection`,
-    async (_event, serviceId: string) => {
-      return await getCloudAgentServers().prepareConnection(serviceId)
-    }
-  )
+  registerCloudIpcHandlers({ getCloudAuth, getCloudAgentServers })
 
   // ── MCP registry IPC ─────────────────────────────────────────────
   // Renderers subscribe to `desktop:mcp-state` push events; this handler
