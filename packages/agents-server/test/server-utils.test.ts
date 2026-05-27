@@ -25,6 +25,18 @@ describe(`server utils`, () => {
     )
   })
 
+  it(`exposes the entity sandbox + dispatch_policy columns to the client`, () => {
+    // The sandbox profile (Local / Docker / E2B) and pinned runner are read
+    // from the synced entity row by the UI badges; if these columns are
+    // dropped from the proxy allowlist the UI silently can't tell them apart.
+    const target = shapeTarget(`table=entities`)
+
+    const columns = target.searchParams.get(`columns`)
+    expect(columns).toContain(`"sandbox"`)
+    expect(columns).toContain(`"dispatch_policy"`)
+    expect(target.searchParams.get(`where`)).toBe(`tenant_id = 'tenant-test'`)
+  })
+
   it(`combines runner owner scoping with Electric protocol where clauses`, () => {
     const target = shapeTarget(
       `table=runners&where=${encodeURIComponent(`kind = 'local'`)}`
