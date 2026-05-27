@@ -151,12 +151,18 @@ jobs:
 
           chmod 600 packages/agents-mobile/google-service-account.json
 
+      - name: Write build info
+        working-directory: packages/agents-mobile
+        run: |
+          set -euo pipefail
+          version_code=$(date -u +%s)
+          printf '{"versionCode": %s}\n' "$version_code" > .build-info.json
+          echo "Generated .build-info.json with versionCode=$version_code"
+
       - name: Run EAS build
         id: eas-build
         continue-on-error: true
         working-directory: packages/agents-mobile
-        env:
-          ELECTRIC_AGENTS_MOBILE_BUILD_NUMBER: ${{ github.run_number }}
         run: |
           set -euo pipefail
 

@@ -67,3 +67,16 @@ jobs:
       platform: android
       profile: canary
       submit: false
+
+  submit-play-internal:
+    needs: detect
+    if: ${{ needs.detect.outputs.should_build == 'true' }}
+    uses: ./.github/workflows/agents_mobile_build.yml
+    secrets: inherit
+    with:
+      channel: canary
+      version: canary-store-${{ github.run_number }}-${{ github.sha }}
+      git_ref: ${{ github.sha }}
+      platform: android
+      profile: canary-store
+      submit: true

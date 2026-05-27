@@ -4,7 +4,7 @@ const packageJson = require(`./package.json`) as { version: string }
 
 const projectId = `11a024df-c681-4374-867a-5c5905be9133`
 const applicationId = `com.electricsql.agents.mobile`
-const buildNumber = process.env.ELECTRIC_AGENTS_MOBILE_BUILD_NUMBER ?? `1`
+const versionCode = resolveVersionCode()
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
@@ -21,7 +21,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ios: {
     ...config.ios,
     bundleIdentifier: applicationId,
-    buildNumber,
+    buildNumber: String(versionCode),
     infoPlist: {
       ...config.ios?.infoPlist,
       ITSAppUsesNonExemptEncryption: false,
@@ -31,7 +31,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   android: {
     ...config.android,
     package: applicationId,
-    versionCode: parseBuildNumber(buildNumber),
+    versionCode,
     edgeToEdgeEnabled: true,
   },
   extra: {
@@ -44,7 +44,25 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
 })
 
-function parseBuildNumber(value: string): number {
-  const parsed = Number.parseInt(value, 10)
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1
+// versionCode / buildNumber must be monotonically increasing across every
+// upload to Google Play and App Store Connect, including across separate
+// CI workflows (canary, production). CI writes `.build-info.json` before
+// invoking `eas build` so the value is consistent whether `app.config.ts`
+// is evaluated on the GitHub runner or on the EAS Build server (the file
+// is part of the project tarball uploaded to EAS).
+function resolveVersionCode(): number {
+  const fromEnv = process.env.ELECTRIC_AGENTS_MOBILE_VERSION_CODE
+  if (fromEnv) {
+    const parsed = Number.parseInt(fromEnv, 10)
+    if (Number.isFinite(parsed) && parsed > 0) return parsed
+  }
+  try {
+    const info = require(`./.build-info.json`) as { versionCode?: number }
+    if (typeof info.versionCode === `number` && info.versionCode > 0) {
+      return info.versionCode
+    }
+  } catch {
+    // No build-info file — fall through to dev fallback.
+  }
+  return Math.floor(Date.now() / 1000)
 }
