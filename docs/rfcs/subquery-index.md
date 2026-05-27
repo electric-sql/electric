@@ -252,20 +252,33 @@ For a pure move-out batch (no move-in values, so no PG query is needed) the cons
 
 ### Concurrency model
 
-Reads and writes to the MultiTimeView and SubqueryIndex ETS tables are either serialized through the ShapeLogCollector (SLC) or async with a clear safety argument:
+Accesses to the MultiTimeView and SubqueryIndex ETS tables are either serialized through the ShapeLogCollector (SLC) or async with a clear safety argument.
 
-- `add_shape` and `remove_shape` run on the SLC process — the filter mutations themselves happen there. The consumer calls into SLC synchronously, so the consumer is blocked.
-- First-child seeding from MTV happens on SLC when `add_shape` creates a new child node. SLC reads `values(subquery_id, current_time)` from the MTV ETS table directly. The child must not be exposed to routing until the seed completes, so no concurrent reader can observe a partial state.
-- `add_value` and `remove_value` happen while SLC is blocked (SLC → Consumer → Materializer → SubqueryIndex, all synchronous), so they act as if on SLC.
-- Initial Materializer population of a new subquery runs async to SLC. It is safe because `ready?(subquery_id)` is false throughout and nothing routes through the subquery until `mark_ready` runs.
-- First-child seeding when MTV is not yet ready: the child stays in fallback routing until MTV becomes ready and the materializer triggers the deferred seed. Safe for the same reason as initial population — nothing routes through the child until the seed completes.
-- `mark_ready(subquery_id)` is a single atomic ETS write that flips the ready flag.
-- Reads of MultiTimeView from consumers (`member?`, `values`) happen async to SLC but are always at a specific logical time. Concurrent writes by the materializer can only affect newer times (logical time is monotonically increasing), and compaction can only affect times below `min_required_time` which no consumer can read.
-- The SubqueryProgressMonitor sets `min_required_time` on MTV async, but this is a single-integer update per subquery.
-- Periodic compaction runs async. It only removes transitions at or before `min_required_time`, so by construction it cannot change membership at any time a consumer can still read.
-- Opportunistic compaction runs on whichever process is doing the read or write. The same `min_required_time` bound applies, so it is safe for the same reason as periodic compaction.
-- `remove_subquery` runs async, driven by the dependency shape lifecycle. It is safe because dependent consumers and their child nodes are removed first; once routing through that subquery is gone, no other process reads the rows it deletes.
-- Consumer death releases pinned times via process monitor, async. The released time can only raise `min_required_time`; concurrent compaction sees the new minimum the next time it runs.
+#### MultiTimeView
+
+The MTV is written by the dependency Materializer and read by SLC (for first-child seeding) and by consumers (for exact membership checks).
+
+- Initial Materializer population of a new subquery: written by the Materializer, async to SLC. Safe because `ready?(subquery_id)` is false throughout and nothing reads the subquery until `mark_ready` runs.
+- `mark_ready(subquery_id)`: a single atomic ETS write flipping the ready flag.
+- Steady-state writes from `add_value` / `remove_value`: happen while SLC is blocked in the SLC → Consumer → Materializer chain, so they act as if on SLC.
+- Reads from SLC (`values(subquery_id, current_time)` during first-child seeding): happen on SLC.
+- Reads from consumers (`member?`, `values`): async to SLC but always at a specific logical time. Concurrent writes from the Materializer can only affect newer times (logical time is monotonically increasing), and compaction can only affect times at or below `min_required_time` which no consumer can read.
+- `set_min_required_time` from the SubqueryProgressMonitor: single-integer write per subquery, async.
+- Periodic compaction: runs async, only removes transitions at or below `min_required_time`, so it cannot change membership at any time a consumer can still read.
+- Opportunistic compaction at read/write: runs on whichever process is doing the read or write, bounded by the same `min_required_time` guarantee.
+- `remove_subquery` deleting MTV rows: runs async (dependency shape lifecycle). Safe because dependent consumers and child nodes are removed first; once nothing reads the subquery, no concurrent reader can observe the deletes.
+- Consumer death releasing pinned times: handled async by the process monitor. The released time can only raise `min_required_time`; concurrent compaction sees the new minimum on its next run.
+
+#### SubqueryIndex
+
+The SubqueryIndex stores routing topology (groups, children, participants, positive value routes, negated group routes). It is written and read on SLC, with two exceptions for deferred seeding and async teardown.
+
+- `add_shape` and `remove_shape`: filter mutations run on SLC. The consumer calls into SLC synchronously.
+- First-child seeding when MTV is ready: routing rows for the new child are populated on SLC by reading `values(subquery_id, current_time)` from MTV. The child must not be exposed to routing until the seed completes, so no concurrent reader can observe a partial state.
+- First-child seeding when MTV is not yet ready: the child stays in fallback routing; the deferred seed runs async when the Materializer marks the subquery ready, then the child is exposed. Safe for the same reason — nothing routes through the child until the seed completes.
+- Routing-row updates from `add_value` / `remove_value`: happen while SLC is blocked in the SLC → Consumer → Materializer → SubqueryIndex chain, so they act as if on SLC.
+- Routing-row deletion during compaction (positive route for a value that has compacted away): runs on whichever process triggered the compaction, bounded by the same `min_required_time` guarantee that protects MTV reads.
+- `remove_subquery` deleting child metadata and routing rows: runs async, driven by the dependency shape lifecycle. Safe because dependent participants are removed first; once routing through that subquery is gone, no other process reads the rows it deletes.
 
 ## Operations
 
