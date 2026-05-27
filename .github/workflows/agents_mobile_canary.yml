@@ -27,6 +27,12 @@ concurrency:
 permissions:
   actions: read
   contents: read
+  # Declared (but unused in canary mode) so the reusable
+  # `agents_mobile_build.yml` job, which requests these to write PR
+  # comments in `channel == 'pr'`, can load. GitHub refuses to start a
+  # reusable workflow whose declared permissions exceed the caller's.
+  issues: write
+  pull-requests: write
 
 jobs:
   detect:
