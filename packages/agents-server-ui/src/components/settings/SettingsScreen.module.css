@@ -195,6 +195,29 @@
   padding: 12px 16px;
 }
 
+/* Top-of-page advisory card. Rendered like a section body (border +
+   radius) so it visually anchors next to the section cards below,
+   with a tinted accent background to distinguish it from a regular
+   section. Used by the Credentials page to prompt a runtime restart
+   after credential changes. */
+.banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--ds-border-1);
+  border-radius: var(--ds-radius-3);
+  background: var(--ds-accent-a3);
+}
+
+.bannerText {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 .inset {
   padding: 0 16px 12px;
 }

@@ -6,17 +6,22 @@ import {
   useRef,
   useState,
 } from 'react'
-import { ArrowUp } from 'lucide-react'
+import { ArrowUp, Sparkles } from 'lucide-react'
 import { eq, not, useLiveQuery } from '@tanstack/react-db'
 import { nanoid } from 'nanoid'
 import { useElectricAgents } from '../../lib/ElectricAgentsProvider'
 import { useWorkspace } from '../../hooks/useWorkspace'
 import { useRecentWorkingDirectories } from '../../hooks/useRecentWorkingDirectories'
 import {
+  codexEnableSource,
+  loadApiKeysStatus,
   loadDesktopState,
   onDesktopStateChanged,
+  restartLocalRuntimes,
+  type ApiKeysStatus,
+  type CodexAuthSource,
 } from '../../lib/server-connection'
-import { Icon, Select, Stack, Text } from '../../ui'
+import { Button, Icon, Select, Stack, Text } from '../../ui'
 import { SchemaForm, hasSchemaProperties, isObjectSchema } from '../SchemaForm'
 import { WorkingDirectoryPicker } from '../WorkingDirectoryPicker'
 import styles from '../NewSessionPage.module.css'
@@ -71,6 +76,37 @@ function persistLastPickedModel(value: string): void {
     window.localStorage.setItem(LAST_PICKED_MODEL_STORAGE_KEY, value)
   } catch {
     // Quota / private mode — silent. This is only a picker convenience.
+  }
+}
+
+// Per-source dismissal of the local-Codex-detected prompt. Stored as a
+// flat array of source identifiers in localStorage so the prompt
+// doesn't reappear on every reload after the user explicitly waved it
+// off, but is still re-shown if a different login source becomes
+// available later.
+const CODEX_PROMPT_DISMISSED_KEY = `electric-agents-ui.codex-prompt.dismissed-sources`
+
+function readCodexPromptDismissed(): Array<CodexAuthSource> {
+  if (typeof window === `undefined`) return []
+  try {
+    const raw = window.localStorage.getItem(CODEX_PROMPT_DISMISSED_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? (parsed as Array<CodexAuthSource>) : []
+  } catch {
+    return []
+  }
+}
+
+function persistCodexPromptDismissed(value: Array<CodexAuthSource>): void {
+  if (typeof window === `undefined`) return
+  try {
+    window.localStorage.setItem(
+      CODEX_PROMPT_DISMISSED_KEY,
+      JSON.stringify(value)
+    )
+  } catch {
+    // Quota / private mode — silent.
   }
 }
 
@@ -376,6 +412,8 @@ function Picker({
         />
       )}
 
+      <CodexDetectedPrompt />
+
       {otherAgents.length > 0 && (
         <div className={styles.otherAgents}>
           {defaultAgent && (
@@ -411,6 +449,135 @@ function Picker({
         </div>
       )}
     </Stack>
+  )
+}
+
+/**
+ * Inline opt-in prompt rendered under the default-agent composer. When
+ * the desktop main process detects an existing local Codex login (Codex
+ * CLI or OpenCode) but the user hasn't approved it yet, surface a small
+ * "Use this login?" banner here so the user can opt in without leaving
+ * the new-session flow. Each source can be dismissed independently —
+ * that decision is persisted in localStorage so the prompt doesn't
+ * keep reappearing after an explicit wave-off, but does come back if a
+ * different source is added later.
+ *
+ * Hidden in the web build (no `window.electronAPI`) and once the user
+ * has any Codex source enabled (the Credentials settings screen takes
+ * over from there).
+ */
+function CodexDetectedPrompt(): React.ReactElement | null {
+  const isDesktop = typeof window !== `undefined` && Boolean(window.electronAPI)
+  const [status, setStatus] = useState<ApiKeysStatus | null>(null)
+  const [dismissed, setDismissed] = useState<Array<CodexAuthSource>>(() =>
+    readCodexPromptDismissed()
+  )
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!isDesktop) return
+    let cancelled = false
+    void loadApiKeysStatus().then((next) => {
+      if (cancelled) return
+      setStatus(next)
+    })
+    // Refresh codex status when the desktop state changes — covers
+    // the case where the user enables/disables Codex elsewhere (e.g.
+    // the Credentials settings page) while the new-session view is
+    // still mounted, so the prompt stays in sync.
+    const off = onDesktopStateChanged(() => {
+      void loadApiKeysStatus().then((next) => {
+        if (cancelled) return
+        setStatus(next)
+      })
+    })
+    return () => {
+      cancelled = true
+      off?.()
+    }
+  }, [isDesktop])
+
+  if (!isDesktop || !status) return null
+  if (status.codex.enabled) return null
+
+  const candidates = status.codex.availableSources.filter(
+    (source) =>
+      source.source !== `desktop-oauth` && !dismissed.includes(source.source)
+  )
+  if (candidates.length === 0) return null
+
+  const primary = candidates[0]!
+  const shortName =
+    primary.source === `codex-cli`
+      ? `Codex CLI`
+      : primary.source === `opencode`
+        ? `OpenCode`
+        : `Codex`
+
+  const handleApprove = async (): Promise<void> => {
+    setBusy(true)
+    setError(null)
+    try {
+      await codexEnableSource(primary.source)
+      // Approving from here is a "yes, use this now" gesture — bounce
+      // any connected local runtime so the new credential takes effect
+      // immediately for the session the user is about to spawn,
+      // instead of leaving a "Restart local runtime" banner sitting in
+      // the Credentials settings page that the user would have to find
+      // and click. No-op when no local runtime is connected.
+      await restartLocalRuntimes()
+      const next = await loadApiKeysStatus()
+      if (next) setStatus(next)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleDismiss = (): void => {
+    const next = [...dismissed, primary.source]
+    setDismissed(next)
+    persistCodexPromptDismissed(next)
+  }
+
+  return (
+    <div className={styles.codexPrompt}>
+      <Icon icon={Sparkles} size={2} />
+      <span className={styles.codexPromptText}>
+        Found a local {shortName} sign-in. Use it for ChatGPT / Codex models?
+      </span>
+      <span className={styles.codexPromptActions}>
+        <Button
+          type="button"
+          size={1}
+          variant="ghost"
+          tone="neutral"
+          onClick={handleDismiss}
+          disabled={busy}
+        >
+          Dismiss
+        </Button>
+        <Button
+          type="button"
+          size={1}
+          variant="soft"
+          tone="neutral"
+          onClick={() => {
+            void handleApprove()
+          }}
+          disabled={busy}
+        >
+          {busy ? `Connecting…` : `Use this login`}
+        </Button>
+      </span>
+      {error && (
+        <span className={styles.codexPromptError} role="alert">
+          {error}
+        </span>
+      )}
+    </div>
   )
 }
 
