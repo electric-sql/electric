@@ -85,7 +85,9 @@ export function createObservePgSyncTool(ctx: HandlerContext): AgentTool {
       const wake = {
         on: `change` as const,
         ...(args.wake?.ops ? { ops: args.wake.ops } : {}),
-        ...(args.wake?.debounceMs ? { debounceMs: args.wake.debounceMs } : {}),
+        ...(args.wake?.debounceMs !== undefined
+          ? { debounceMs: args.wake.debounceMs }
+          : {}),
       }
 
       await ctx.observe(source, { wake })

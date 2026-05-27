@@ -190,6 +190,7 @@ class PgSyncBridge {
   private unsubscribe: (() => void) | null = null
   private abortController: AbortController | null = null
   private skipChangesUntilUpToDate = false
+  private recovering = false
 
   constructor(
     readonly sourceRef: string,
@@ -228,9 +229,12 @@ class PgSyncBridge {
     this.abortController?.abort()
     this.unsubscribe = null
     this.abortController = null
-    await this.producer?.flush().catch(() => undefined)
-    await this.producer?.detach()
-    this.producer = null
+    try {
+      await this.producer?.flush()
+    } finally {
+      await this.producer?.detach()
+      this.producer = null
+    }
   }
 
   private startStream(
@@ -252,39 +256,74 @@ class PgSyncBridge {
       })
     this.unsubscribe = stream.subscribe(
       async (messages) => {
-        for (const message of messages) {
-          if (isControlMessage(message)) {
-            if (message.headers.control === `must-refetch`) {
-              await this.registry?.clearPgSyncBridgeCursor(this.sourceRef)
-              this.startStream(`-1`, undefined, true)
-              return
+        try {
+          for (const message of messages) {
+            if (isControlMessage(message)) {
+              if (message.headers.control === `must-refetch`) {
+                await this.registry?.clearPgSyncBridgeCursor(this.sourceRef)
+                this.startStream(`-1`, undefined, true)
+                return
+              }
+              if (message.headers.control === `up-to-date`) {
+                this.skipChangesUntilUpToDate = false
+              }
+              await this.persistCursor(stream)
+              continue
             }
-            if (message.headers.control === `up-to-date`) {
-              this.skipChangesUntilUpToDate = false
+            if (!isChangeMessage(message)) continue
+            if (!this.skipChangesUntilUpToDate) {
+              const event = pgSyncMessageToDurableEvent(message, this.options)
+              if (event) {
+                if (!this.producer)
+                  throw new Error(`pg-sync producer is not started`)
+                await this.producer.append(JSON.stringify(event))
+                await this.producer.flush?.()
+                await this.evaluateWakes?.(this.streamUrl, event)
+              }
             }
             await this.persistCursor(stream)
-            continue
           }
-          if (!isChangeMessage(message)) continue
-          if (!this.skipChangesUntilUpToDate) {
-            const event = pgSyncMessageToDurableEvent(message, this.options)
-            if (event) {
-              if (!this.producer)
-                throw new Error(`pg-sync producer is not started`)
-              await Promise.resolve(this.producer.append(JSON.stringify(event)))
-              await this.producer.flush?.()
-              await this.evaluateWakes?.(this.streamUrl, event)
-            }
-          }
-          await this.persistCursor(stream)
+        } catch (error) {
+          serverLog.warn(
+            `[pg-sync-bridge] subscription callback failed for ${this.sourceRef}:`,
+            error
+          )
+          await this.recoverStream(stream)
         }
       },
-      (error) =>
+      (error) => {
+        if (this.abortController?.signal.aborted) return
         serverLog.warn(
           `[pg-sync-bridge] subscription failed for ${this.sourceRef}:`,
           error
         )
+        void this.recoverStream(stream)
+      }
     )
+  }
+
+  private async recoverStream(
+    stream: ShapeStreamInterface<Record<string, unknown>>
+  ): Promise<void> {
+    if (this.recovering) return
+    this.recovering = true
+    try {
+      const offset = stream.lastOffset
+        ? parseElectricOffset(stream.lastOffset)
+        : null
+      if (offset && stream.shapeHandle) {
+        this.startStream(
+          offset,
+          stream.shapeHandle,
+          this.skipChangesUntilUpToDate
+        )
+      } else {
+        await this.registry?.clearPgSyncBridgeCursor(this.sourceRef)
+        this.startStream(`-1`, undefined, true)
+      }
+    } finally {
+      this.recovering = false
+    }
   }
 
   private async persistCursor(
@@ -392,6 +431,7 @@ export class PgSyncBridgeManager implements PgSyncBridgeCoordinator {
   }
 
   async stop(): Promise<void> {
+    await Promise.allSettled(this.starting.values())
     await Promise.all([...this.bridges.values()].map((bridge) => bridge.stop()))
     this.bridges.clear()
   }

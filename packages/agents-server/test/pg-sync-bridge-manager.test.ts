@@ -302,13 +302,12 @@ describe(`PgSyncBridgeManager`, () => {
     await mockState.callbacks[0]!([{ headers: { control: `up-to-date` } }])
     registry.updatePgSyncBridgeCursor.mockClear()
     mockState.appendError = new Error(`append failed`)
-    await expect(
-      mockState.callbacks[0]!([
-        { headers: { operation: `insert`, offset: `7_0` }, value: { id: 1 } },
-      ])
-    ).rejects.toThrow(`append failed`)
+    await mockState.callbacks[0]!([
+      { headers: { operation: `insert`, offset: `7_0` }, value: { id: 1 } },
+    ])
 
     expect(registry.updatePgSyncBridgeCursor).not.toHaveBeenCalled()
+    expect(mockState.constructedOptions).toHaveLength(2)
   })
 
   it(`startup resumes existing pgSync bridges from stored cursor`, async () => {

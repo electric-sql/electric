@@ -75,9 +75,17 @@ async function registerPgSync(
     )
   }
 
-  const result = await ctx.pgSyncBridgeManager.register(
-    options as PgSyncOptions
-  )
+  try {
+    const result = await ctx.pgSyncBridgeManager.register(
+      options as PgSyncOptions
+    )
 
-  return json(result)
+    return json(result)
+  } catch (error) {
+    return apiError(
+      500,
+      ErrCodeInvalidRequest,
+      `pgSync registration failed: ${error instanceof Error ? error.message : String(error)}`
+    )
+  }
 }

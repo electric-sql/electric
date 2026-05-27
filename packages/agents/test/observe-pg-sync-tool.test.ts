@@ -73,6 +73,20 @@ describe(`observe_pg_sync tool`, () => {
     })
   })
 
+  it(`preserves debounceMs: 0`, async () => {
+    const observe = vi.fn(async () => {})
+    const tool = createObservePgSyncTool({ observe } as any)
+
+    const result = textResult(
+      await tool.execute(`call`, { table: `todos`, wake: { debounceMs: 0 } })
+    )
+
+    expect(observe).toHaveBeenCalledWith(expect.anything(), {
+      wake: { on: `change`, debounceMs: 0 },
+    })
+    expect(result.wake).toEqual({ on: `change`, debounceMs: 0 })
+  })
+
   it(`returns sourceRef, streamUrl, and wake`, async () => {
     const observe = vi.fn(async () => {})
     const tool = createObservePgSyncTool({ observe } as any)
