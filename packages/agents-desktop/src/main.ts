@@ -1,4 +1,3 @@
-import { SecretStore } from './secret-store'
 import { createDesktopAppContext } from './app/context'
 import {
   buildSavedServerHeaders,
@@ -11,7 +10,6 @@ import {
 } from './cloud/server-fetch'
 import {
   applyApiKeysToEnv,
-  captureEnvApiKeys,
   loadApiKeysFromSecret,
   normalizeApiKeys,
   saveApiKeysToSecret,
@@ -111,11 +109,8 @@ import type {
   RuntimeEntry,
   ServerConfig,
 } from './shared/types'
-import { CloudAuth, type CloudAuthState } from './cloud-auth'
-import {
-  CloudAgentServers,
-  type CloudAgentServersState,
-} from './cloud-agent-servers'
+import type { CloudAuthState } from './cloud-auth'
+import type { CloudAgentServersState } from './cloud-agent-servers'
 import {
   BrowserWindow,
   Menu,
@@ -167,22 +162,11 @@ console.info(
 
 const EXPLICIT_DEV_PRINCIPAL = explicitDevPrincipalFromEnv()
 
-/**
- * Snapshot of provider API keys as they were when the app launched.
- * Captured before `applyApiKeys()` overwrites the live env so
- * `desktop:get-api-keys-status` can offer them as one-click
- * suggestions when the user hasn't saved any keys yet.
- *
- * Recapturing on every status query would defeat the purpose: by
- * then `applyApiKeys()` has already mirrored the saved values into
- * `process.env`, which would loop back as a "suggestion" identical
- * to the saved value.
- */
-const ENV_API_KEYS_SNAPSHOT: ApiKeys = {
-  ...captureEnvApiKeys(process.env),
-}
-
-const desktopContext = createDesktopAppContext()
+const desktopContext = createDesktopAppContext({
+  secretsPath,
+  onCloudAuthState: broadcastCloudAuthState,
+  onCloudAgentServersState: broadcastCloudAgentServersState,
+})
 const settings = desktopContext.settings
 const apiKeys = desktopContext.apiKeys
 const state = desktopContext.state
@@ -203,43 +187,6 @@ function configureRuntimeEnvironment(): void {
   process.env.ELECTRIC_CODEX_REQUIRE_OPT_IN = `1`
 }
 configureRuntimeEnvironment()
-
-function getSecretStore(): SecretStore {
-  if (!desktopContext.services.secretStore) {
-    desktopContext.services.secretStore = new SecretStore(secretsPath())
-  }
-  return desktopContext.services.secretStore
-}
-
-function getCloudAuth(): CloudAuth {
-  if (!desktopContext.services.cloudAuth) {
-    desktopContext.services.cloudAuth = new CloudAuth(getSecretStore())
-    desktopContext.services.cloudAuth.subscribe((next) => {
-      broadcastCloudAuthState(next)
-      // Drive cloud-agent-servers from auth state transitions: start the
-      // shape streams when we have a token, tear them down on sign-out.
-      if (next.status === `signed-in`) {
-        void getCloudAgentServers().start()
-      } else {
-        void getCloudAgentServers().stop()
-      }
-    })
-  }
-  return desktopContext.services.cloudAuth
-}
-
-function getCloudAgentServers(): CloudAgentServers {
-  if (!desktopContext.services.cloudAgentServers) {
-    desktopContext.services.cloudAgentServers = new CloudAgentServers(
-      getCloudAuth(),
-      getSecretStore()
-    )
-    desktopContext.services.cloudAgentServers.subscribe((next) =>
-      broadcastCloudAgentServersState(next)
-    )
-  }
-  return desktopContext.services.cloudAgentServers
-}
 
 function broadcastCloudAuthState(next: CloudAuthState): void {
   for (const win of windows) {
@@ -472,7 +419,7 @@ async function loadDetectedCodexAuth(
 }
 
 async function loadStoredCodexAuth(): Promise<StoredCodexAuth | null> {
-  const raw = await getSecretStore().get(CODEX_AUTH_REF)
+  const raw = await desktopContext.getSecretStore().get(CODEX_AUTH_REF)
   if (!raw) return null
   try {
     const parsed = JSON.parse(raw) as Partial<StoredCodexAuth>
@@ -499,7 +446,9 @@ async function loadStoredCodexAuth(): Promise<StoredCodexAuth | null> {
 }
 
 async function saveStoredCodexAuth(auth: StoredCodexAuth): Promise<void> {
-  await getSecretStore().set(CODEX_AUTH_REF, JSON.stringify(auth))
+  await desktopContext
+    .getSecretStore()
+    .set(CODEX_AUTH_REF, JSON.stringify(auth))
 }
 
 async function refreshCodexAuthIfNeeded(
@@ -660,7 +609,7 @@ async function enableCodexSource(
 
 async function disableCodex(): Promise<CodexStatus> {
   settings.codex = { enabled: false, source: null }
-  await getSecretStore().delete(CODEX_AUTH_REF)
+  await desktopContext.getSecretStore().delete(CODEX_AUTH_REF)
   await saveSettings()
   await syncCodexEnvironment()
   markCredentialsDirty()
@@ -953,7 +902,7 @@ async function signInCodex(): Promise<CodexStatus | null> {
 // auth.mode / forbidden refs) still happens inside the registry's
 // `applyConfig`.
 function applyApiKeys(): void {
-  applyApiKeysToEnv(apiKeys, ENV_API_KEYS_SNAPSHOT, process.env)
+  applyApiKeysToEnv(apiKeys, desktopContext.envApiKeysSnapshot, process.env)
 }
 
 function initialServerFromEnv(): ServerConfig | null {
@@ -1048,12 +997,16 @@ async function loadSettings(): Promise<void> {
     })
     if (parsed.apiKeys !== undefined) {
       Object.assign(apiKeys, normalizeApiKeys(parsed.apiKeys))
-      await saveApiKeysToSecret(getSecretStore(), apiKeysRef, apiKeys)
+      await saveApiKeysToSecret(
+        desktopContext.getSecretStore(),
+        apiKeysRef,
+        apiKeys
+      )
       shouldSave = true
     } else {
       Object.assign(
         apiKeys,
-        await loadApiKeysFromSecret(getSecretStore(), apiKeysRef)
+        await loadApiKeysFromSecret(desktopContext.getSecretStore(), apiKeysRef)
       )
     }
     shouldSave =
@@ -1070,7 +1023,10 @@ async function loadSettings(): Promise<void> {
     })
     Object.assign(
       apiKeys,
-      await loadApiKeysFromSecret(getSecretStore(), settings.apiKeysRef)
+      await loadApiKeysFromSecret(
+        desktopContext.getSecretStore(),
+        settings.apiKeysRef
+      )
     )
     shouldSave = true
   }
@@ -1539,17 +1495,17 @@ async function startRuntime(serverId: string): Promise<void> {
       return
     }
     try {
-      const prepared = await getCloudAgentServers().prepareConnection(
-        activeServer.tenantId
-      )
+      const prepared = await desktopContext
+        .getCloudAgentServers()
+        .prepareConnection(activeServer.tenantId)
       if (prepared.url !== activeServer.url) {
         activeServer.url = prepared.url
         await saveSettings()
       }
     } catch (err) {
-      const cachedToken = getCloudAgentServers().getAgentsToken(
-        activeServer.tenantId
-      )
+      const cachedToken = desktopContext
+        .getCloudAgentServers()
+        .getAgentsToken(activeServer.tenantId)
       if (!cachedToken) {
         entry.status = `error`
         entry.lastError = `Could not prepare cloud agents token for ${activeServer.name}: ${
@@ -1750,7 +1706,9 @@ async function forgetServer(serverId: string): Promise<void> {
   settings.servers = settings.servers.filter((entry) => entry.id !== serverId)
   runtimeEntries.delete(serverId)
   if (server.tenantId) {
-    await getCloudAgentServers().forgetAgentsToken(server.tenantId)
+    await desktopContext
+      .getCloudAgentServers()
+      .forgetAgentsToken(server.tenantId)
   }
   if (settings.defaultServerId === serverId) {
     settings.defaultServerId = settings.servers[0]?.id ?? null
@@ -1806,10 +1764,14 @@ async function getApiKeysStatus(): Promise<ApiKeysStatus> {
   // show their saved value rather than the (potentially different)
   // environment value.
   const suggested: ApiKeys = {
-    anthropic: saved.anthropic ? null : ENV_API_KEYS_SNAPSHOT.anthropic,
-    openai: saved.openai ? null : ENV_API_KEYS_SNAPSHOT.openai,
-    deepseek: saved.deepseek ? null : ENV_API_KEYS_SNAPSHOT.deepseek,
-    brave: saved.brave ? null : ENV_API_KEYS_SNAPSHOT.brave,
+    anthropic: saved.anthropic
+      ? null
+      : desktopContext.envApiKeysSnapshot.anthropic,
+    openai: saved.openai ? null : desktopContext.envApiKeysSnapshot.openai,
+    deepseek: saved.deepseek
+      ? null
+      : desktopContext.envApiKeysSnapshot.deepseek,
+    brave: saved.brave ? null : desktopContext.envApiKeysSnapshot.brave,
   }
   const codex = await getCodexStatus()
   return { hasAnyKey: hasAnyKey || codex.enabled, saved, suggested, codex }
@@ -1823,7 +1785,11 @@ async function setApiKeys(next: ApiKeys): Promise<void> {
     normalized.deepseek !== apiKeys.deepseek ||
     normalized.brave !== apiKeys.brave
   Object.assign(apiKeys, normalized)
-  await saveApiKeysToSecret(getSecretStore(), settings.apiKeysRef, apiKeys)
+  await saveApiKeysToSecret(
+    desktopContext.getSecretStore(),
+    settings.apiKeysRef,
+    apiKeys
+  )
   applyApiKeys()
   await saveSettings()
   if (changed) markCredentialsDirty()
@@ -1884,8 +1850,8 @@ async function quitApp(): Promise<void> {
 }
 
 async function clearAllLocalDataAndRelaunch(): Promise<void> {
-  await getCloudAuth().signOut()
-  await getCloudAgentServers().stop()
+  await desktopContext.getCloudAuth().signOut()
+  await desktopContext.getCloudAgentServers().stop()
   await Promise.all([
     session.defaultSession.clearStorageData(),
     session.defaultSession.clearCache(),
@@ -2208,7 +2174,10 @@ function registerIpcHandlers(): void {
     }
   )
 
-  registerCloudIpcHandlers({ getCloudAuth, getCloudAgentServers })
+  registerCloudIpcHandlers({
+    getCloudAuth: desktopContext.getCloudAuth,
+    getCloudAgentServers: desktopContext.getCloudAgentServers,
+  })
 
   // ── MCP registry IPC ─────────────────────────────────────────────
   // Renderers subscribe to `desktop:mcp-state` push events; this handler
@@ -2756,19 +2725,19 @@ async function main(): Promise<void> {
   configureRuntimeEnvironment()
   await loadSettings()
   registerIpcHandlers()
-  await getCloudAuth().initialize()
+  await desktopContext.getCloudAuth().initialize()
   // Hydrate the per-tenant agents-token cache from `SecretStore`
   // BEFORE we install the webRequest hook so a window opening
   // straight onto a saved cloud server gets the auth headers added.
   const cloudTenantIds = settings.servers
     .filter((s) => s.source === `electric-cloud` && s.tenantId)
     .map((s) => s.tenantId as string)
-  await getCloudAgentServers().hydrateTokens(cloudTenantIds)
+  await desktopContext.getCloudAgentServers().hydrateTokens(cloudTenantIds)
   installCloudAuthHeaderInjection()
   // Eagerly kick the cloud-agent-servers streams once on boot — the
   // CloudAuth subscriber handles subsequent sign-in/sign-out edges.
   // Safe to call when signed-out: `start()` no-ops without a token.
-  void getCloudAgentServers().start()
+  void desktopContext.getCloudAgentServers().start()
   nativeTheme.on(`updated`, refreshNativeTitleBars)
 
   app.setAboutPanelOptions({

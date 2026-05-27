@@ -1,8 +1,11 @@
 import type { BrowserWindow, Tray } from 'electron'
-import type { CloudAgentServers } from '../cloud-agent-servers'
-import type { CloudAuth } from '../cloud-auth'
-import type { SecretStore } from '../secret-store'
-import { EMPTY_API_KEYS } from '../credentials/api-keys'
+import {
+  CloudAgentServers,
+  type CloudAgentServersState,
+} from '../cloud-agent-servers'
+import { CloudAuth, type CloudAuthState } from '../cloud-auth'
+import { SecretStore } from '../secret-store'
+import { captureEnvApiKeys, EMPTY_API_KEYS } from '../credentials/api-keys'
 import { DEFAULT_SETTINGS } from '../settings/store'
 import type {
   ApiKeys,
@@ -12,9 +15,16 @@ import type {
   RuntimeEntry,
 } from '../shared/types'
 
+export type DesktopAppContextOptions = {
+  secretsPath: () => string
+  onCloudAuthState: (state: CloudAuthState) => void
+  onCloudAgentServersState: (state: CloudAgentServersState) => void
+}
+
 export type DesktopAppContext = {
   settings: DesktopSettings
   apiKeys: ApiKeys
+  envApiKeysSnapshot: ApiKeys
   state: DesktopState
   credentialsRestartPending: boolean
   windows: Set<BrowserWindow>
@@ -31,12 +41,18 @@ export type DesktopAppContext = {
     cloudAuth: CloudAuth | null
     cloudAgentServers: CloudAgentServers | null
   }
+  getSecretStore: () => SecretStore
+  getCloudAuth: () => CloudAuth
+  getCloudAgentServers: () => CloudAgentServers
 }
 
-export function createDesktopAppContext(): DesktopAppContext {
-  return {
+export function createDesktopAppContext(
+  options: DesktopAppContextOptions
+): DesktopAppContext {
+  const ctx: DesktopAppContext = {
     settings: { ...DEFAULT_SETTINGS },
     apiKeys: { ...EMPTY_API_KEYS },
+    envApiKeysSnapshot: captureEnvApiKeys(process.env),
     state: {
       servers: [],
       selectedServerId: null,
@@ -65,5 +81,38 @@ export function createDesktopAppContext(): DesktopAppContext {
       cloudAuth: null,
       cloudAgentServers: null,
     },
+    getSecretStore() {
+      if (!ctx.services.secretStore) {
+        ctx.services.secretStore = new SecretStore(options.secretsPath())
+      }
+      return ctx.services.secretStore
+    },
+    getCloudAuth() {
+      if (!ctx.services.cloudAuth) {
+        ctx.services.cloudAuth = new CloudAuth(ctx.getSecretStore())
+        ctx.services.cloudAuth.subscribe((next) => {
+          options.onCloudAuthState(next)
+          if (next.status === `signed-in`) {
+            void ctx.getCloudAgentServers().start()
+          } else {
+            void ctx.getCloudAgentServers().stop()
+          }
+        })
+      }
+      return ctx.services.cloudAuth
+    },
+    getCloudAgentServers() {
+      if (!ctx.services.cloudAgentServers) {
+        ctx.services.cloudAgentServers = new CloudAgentServers(
+          ctx.getCloudAuth(),
+          ctx.getSecretStore()
+        )
+        ctx.services.cloudAgentServers.subscribe(
+          options.onCloudAgentServersState
+        )
+      }
+      return ctx.services.cloudAgentServers
+    },
   }
+  return ctx
 }
