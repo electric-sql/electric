@@ -8,7 +8,6 @@ defmodule Electric.Shapes.Consumer.Subqueries.ActiveMove do
 
   alias Electric.Postgres.Lsn
   alias Electric.Replication.Changes.Transaction
-  alias Electric.Shapes.Filter.Indexes.SubqueryIndex.MultiTimeView
 
   @type move_value() :: {term(), term()}
 
@@ -107,23 +106,6 @@ defmodule Electric.Shapes.Consumer.Subqueries.ActiveMove do
   @spec has_move_out?(t()) :: boolean()
   def has_move_out?(%__MODULE__{move_out_values: []}), do: false
   def has_move_out?(%__MODULE__{move_out_values: _}), do: true
-
-  @doc """
-  Materialise the dependency view as a `MapSet` at the active move's
-  `from_time`. The result is intended for transient use at the SplicePlan /
-  TransactionConverter boundary; do not retain it.
-  """
-  @spec view_before_move(t(), MultiTimeView.t()) :: MapSet.t()
-  def view_before_move(%__MODULE__{subquery_id: id, from_time: t}, mtv),
-    do: mtv |> MultiTimeView.values(id, t) |> MapSet.new()
-
-  @doc """
-  Materialise the dependency view as a `MapSet` at the active move's
-  `to_time`.
-  """
-  @spec view_after_move(t(), MultiTimeView.t()) :: MapSet.t()
-  def view_after_move(%__MODULE__{subquery_id: id, to_time: t}, mtv),
-    do: mtv |> MultiTimeView.values(id, t) |> MapSet.new()
 
   @spec buffer_txn(t(), Transaction.t()) :: t()
   def buffer_txn(%__MODULE__{} = active_move, %Transaction{} = txn) do
