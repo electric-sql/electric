@@ -3,7 +3,7 @@ import { createCollection } from '@tanstack/react-db'
 import { electricCollectionOptions } from '@tanstack/electric-db-collection'
 import { useLiveQuery } from '@tanstack/react-db'
 import { z } from 'zod'
-import { cloudAuth, debugCloudAuth, getCloudBaseUrl } from './cloudAuth'
+import { cloudAuth, getCloudBaseUrl } from './cloudAuth'
 import type { CloudAuthState } from './cloudAuth'
 
 /**
@@ -91,21 +91,6 @@ const SHAPE_PATHS = {
   workspaces: `/api/internal/v1/workspaces`,
 } as const
 
-function shapePathLabel(input: RequestInfo | URL): string {
-  const raw =
-    typeof input === `string`
-      ? input
-      : input instanceof URL
-        ? input.toString()
-        : input.url
-  try {
-    const url = new URL(raw)
-    return `${url.pathname}${url.search}`
-  } catch {
-    return raw
-  }
-}
-
 /**
  * Inject the user's Cloud bearer token on every shape request. Resolves
  * the token from `cloudAuth.getToken()` on each call so token rotation
@@ -118,28 +103,7 @@ async function cloudFetch(
   const token = await cloudAuth.getToken()
   const headers = new Headers(init?.headers)
   if (token) headers.set(`Authorization`, `Bearer ${token}`)
-  const label = shapePathLabel(input)
-  debugCloudAuth(`cloudAgentServers:fetch:start`, {
-    label,
-    hasToken: !!token,
-    method: init?.method ?? `GET`,
-  })
-  let response: Response
-  try {
-    response = await fetch(input, { ...init, headers })
-  } catch (error) {
-    debugCloudAuth(`cloudAgentServers:fetch:error`, {
-      label,
-      error: error instanceof Error ? error.message : String(error),
-    })
-    throw error
-  }
-  debugCloudAuth(`cloudAgentServers:fetch:response`, {
-    label,
-    status: response.status,
-    ok: response.ok,
-  })
-  return response
+  return fetch(input, { ...init, headers })
 }
 
 function createAgentServersCollection(dashboardUrl: string) {
@@ -265,10 +229,6 @@ export function useCloudAgentServers(): CloudAgentServersResult {
       return
     }
     void cloudAuth.getToken().then((token) => {
-      debugCloudAuth(`cloudAgentServers:authToken`, {
-        authStatus,
-        hasToken: !!token,
-      })
       if (!token) setSawUnauthorized(true)
     })
   }, [authStatus])
@@ -307,28 +267,6 @@ export function useCloudAgentServers(): CloudAgentServersResult {
     },
     [collections]
   )
-
-  useEffect(() => {
-    debugCloudAuth(`cloudAgentServers:hookState`, {
-      authStatus,
-      hasCollections: !!collections,
-      agentServersStatus,
-      counts: {
-        agentServers: agentServerRows.length,
-        environments: environmentRows.length,
-        projects: projectRows.length,
-        workspaces: workspaceRows.length,
-      },
-    })
-  }, [
-    authStatus,
-    collections,
-    agentServersStatus,
-    agentServerRows.length,
-    environmentRows.length,
-    projectRows.length,
-    workspaceRows.length,
-  ])
 
   return useMemo<CloudAgentServersResult>(() => {
     if (!collections) {
@@ -374,11 +312,6 @@ export function useCloudAgentServers(): CloudAgentServersResult {
       )
       if (ea !== 0) return ea
       return a.name.localeCompare(b.name)
-    })
-    debugCloudAuth(`cloudAgentServers:joinedServers`, {
-      status: agentServersStatus,
-      serverIds: servers.map((server) => server.id),
-      serverNames: servers.map((server) => server.name),
     })
     const status: CloudAgentServerStatus =
       agentServersStatus === `loading` ? `loading` : `ready`

@@ -4,7 +4,6 @@ import { Redirect, useLocalSearchParams } from 'expo-router'
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
 import {
   cloudAuth,
-  debugCloudAuth,
   isCallbackUrl,
   type CloudAuthState,
 } from '../../src/lib/cloudAuth'
@@ -55,12 +54,6 @@ export default function OAuthCallbackRoute(): React.ReactElement {
   const styles = useMemo(() => createStyles(tokens), [tokens])
   const { serverUrl, onboardingDismissed } = useMobileAppState()
 
-  debugCloudAuth(`oauthCallbackRoute:render`, {
-    params,
-    serverUrl,
-    onboardingDismissed,
-  })
-
   const token = pickParam(params.token)
   const stateParam = pickParam(params.state)
   const email = pickParam(params.email)
@@ -71,17 +64,12 @@ export default function OAuthCallbackRoute(): React.ReactElement {
   )
 
   useEffect(() => {
-    debugCloudAuth(`oauthCallbackRoute:mount`, {
-      params,
-      initialCloudAuthState: cloudAuth.getState(),
-    })
     // Sync once on mount in case the state changed between the
     // `useState` initializer and this effect attaching (very narrow
     // window but happens in practice when `signIn`'s success path
     // resolves synchronously after Expo Router navigated us here).
     setStatus(deriveStatus(cloudAuth.getState()))
     const unsubscribe = cloudAuth.subscribe((next) => {
-      debugCloudAuth(`oauthCallbackRoute:cloudAuthSubscribe`, { next })
       setStatus(deriveStatus(next))
     })
     return unsubscribe
@@ -93,13 +81,6 @@ export default function OAuthCallbackRoute(): React.ReactElement {
   useEffect(() => {
     if (dispatchedRef.current) return
     const callbackUrl = buildCallbackUrl(token, stateParam, email, expiresAt)
-    debugCloudAuth(`oauthCallbackRoute:paramsCallbackUrl`, {
-      token,
-      stateParam,
-      email,
-      expiresAt,
-      callbackUrl,
-    })
     if (callbackUrl) {
       dispatchedRef.current = true
       void cloudAuth.handleDeepLink(callbackUrl)
@@ -112,18 +93,14 @@ export default function OAuthCallbackRoute(): React.ReactElement {
     // mounted.
     void Linking.getInitialURL()
       .then((url) => {
-        debugCloudAuth(`oauthCallbackRoute:getInitialURL`, { url })
         if (url && isCallbackUrl(url)) {
           void cloudAuth.handleDeepLink(url)
         }
       })
-      .catch((error) => {
-        debugCloudAuth(`oauthCallbackRoute:getInitialURL:error`, {
-          error: error instanceof Error ? error.message : String(error),
-        })
+      .catch(() => {
+        // ignored — the listener / global handler still get a shot.
       })
     const subscription = Linking.addEventListener(`url`, ({ url }) => {
-      debugCloudAuth(`oauthCallbackRoute:linkingEvent`, { url })
       if (isCallbackUrl(url)) {
         void cloudAuth.handleDeepLink(url)
       }
@@ -165,7 +142,6 @@ export default function OAuthCallbackRoute(): React.ReactElement {
 }
 
 function deriveStatus(state: CloudAuthState): RouteStatus {
-  debugCloudAuth(`oauthCallbackRoute:deriveStatus`, { state })
   if (state.status === `signed-in`) return { kind: `signed-in` }
   if (state.status === `error`) {
     return {

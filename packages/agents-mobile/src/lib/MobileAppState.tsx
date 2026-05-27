@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as Linking from 'expo-linking'
 import type { ReactNode } from 'react'
-import { cloudAuth, debugCloudAuth } from './cloudAuth'
+import { cloudAuth } from './cloudAuth'
 import { prepareServerHeaders } from './serverHeaders'
 
 const SERVER_URL_KEY = `electric-agents-mobile.server-url`
@@ -47,11 +47,6 @@ export function MobileAppStateProvider({
       // headers registered. Otherwise a race window lets early fetches
       // go out unauthenticated and 401 against Cloud servers.
       await prepareServerHeaders(storedUrl)
-      debugCloudAuth(`mobileAppState:initialize`, {
-        storedUrl,
-        storedOnboarding,
-        initialUrl,
-      })
       setServerUrl(storedUrl)
       setLaunchUrl(initialUrl)
       setOnboardingDismissedState(storedOnboarding === `true`)

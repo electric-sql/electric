@@ -58,13 +58,11 @@ export function CloudAuthProvider({
     // We wire up both and let `cloudAuth` deduplicate via
     // `completingUrl`.
     const subscription = Linking.addEventListener(`url`, ({ url }) => {
-      console.log(`[agents-mobile] cloud-auth listener:url`, { url })
       if (!isCallbackUrl(url)) return
       void cloudAuth.handleDeepLink(url)
     })
     void Linking.getInitialURL()
       .then((url) => {
-        console.log(`[agents-mobile] cloud-auth listener:initialUrl`, { url })
         if (url && isCallbackUrl(url)) {
           void cloudAuth.handleDeepLink(url)
         }
