@@ -56,6 +56,10 @@
   opacity: 1;
 }
 
+:global(html[data-electric-mobile-dom='true']) .forkButton {
+  opacity: 1;
+}
+
 .forkButton:hover {
   background: var(--ds-gray-a4);
 }

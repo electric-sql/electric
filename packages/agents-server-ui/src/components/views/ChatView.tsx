@@ -59,8 +59,9 @@ export function ChatLogView({
   inlineQueuedMessages?: Array<OptimisticInboxMessage>
 }): React.ReactElement {
   const connectUrl = isSpawning ? null : entityUrl
-  const { timelineRows, pendingInbox, entities, loading, error } =
+  const { timelineRows, pendingInbox, entities, db, loading, error } =
     useEntityTimeline(baseUrl || null, connectUrl)
+  const { forkEntity } = useElectricAgents()
   const navigate = useNavigate()
   const processedInboxKeys = useMemo(
     () =>
@@ -103,6 +104,34 @@ export function ChatLogView({
     }
   }, [error, navigate, isSpawning])
 
+  const forkFromHereByInboxKey = useMemo(() => {
+    if (!forkEntity || !connectUrl || !db) return undefined
+    const runOffsets = db.collections.runs.__electricRowOffsets
+    if (!runOffsets) return undefined
+    const map = new Map<string, () => void>()
+    let anchor: EventPointer | null = null
+    for (const row of visibleRows) {
+      if (row.run && row.run.status === `completed`) {
+        const pointer = runOffsets.get(row.run.key)
+        if (pointer) anchor = pointer
+      }
+      if (row.inbox && anchor) {
+        const capturedAnchor = anchor
+        map.set(row.$key, () => {
+          void forkEntity(connectUrl, { pointer: capturedAnchor })
+            .then((res) =>
+              navigate({
+                to: `/entity/$`,
+                params: { _splat: res.url.replace(/^\//, ``) },
+              })
+            )
+            .catch(() => {})
+        })
+      }
+    }
+    return map
+  }, [visibleRows, db, forkEntity, connectUrl, navigate])
+
   return (
     <EntityTimeline
       rows={visibleRows}
@@ -115,6 +144,7 @@ export function ChatLogView({
       entityUrl={connectUrl}
       entities={entities}
       scrollToBottomSignal={scrollToBottomSignal}
+      forkFromHereByInboxKey={forkFromHereByInboxKey}
     />
   )
 }
