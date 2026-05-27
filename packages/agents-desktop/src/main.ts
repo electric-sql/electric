@@ -1,5 +1,24 @@
 import { openAuthorizeWindow } from './oauth-window'
 import { SecretStore } from './secret-store'
+import {
+  checkAgentsServerHealth,
+  formatStartupNetworkError,
+} from './runtime/health'
+import {
+  normalizeServer,
+  normalizeServers,
+  serverInList,
+} from './settings/servers'
+import {
+  hasHeader,
+  headersToRecord,
+  injectDevPrincipalHeaders as injectDevPrincipalHeadersForServer,
+  isLocalLoopbackHostname,
+  mergeHeaders,
+  normalizeHeaderRecord,
+  runnerOwnerPrincipalFromHeaders,
+  runnerOwnerPrincipalFromUserId,
+} from './shared/headers'
 import type {
   ApiKeys,
   ApiKeysStatus,
@@ -29,8 +48,6 @@ import type {
   ServerConfig,
   ServerConnectionState,
   ServerConnectionStatus,
-  ServerDesiredState,
-  ServerSource,
 } from './shared/types'
 import {
   CloudAuth,
@@ -174,55 +191,6 @@ const EXPLICIT_DEV_PRINCIPAL = ((): string | null => {
   console.info(`[agents-desktop] Using dev principal: ${raw}`)
   return raw
 })()
-const ELECTRIC_PRINCIPAL_HEADER = `electric-principal`
-const PRINCIPAL_KEY_PREFIXES = new Set([`user`, `agent`, `service`, `system`])
-
-function mergeHeaders(
-  ...sources: Array<Record<string, string> | undefined>
-): Record<string, string> | undefined {
-  const headers = new Headers()
-  for (const source of sources) {
-    if (!source) continue
-    new Headers(source).forEach((value, key) => headers.set(key, value))
-  }
-  const merged = headersToRecord(headers)
-  return Object.keys(merged).length > 0 ? merged : undefined
-}
-
-function hasHeader(
-  headers: Record<string, string> | undefined,
-  name: string
-): boolean {
-  return headers ? new Headers(headers).has(name) : false
-}
-
-function runnerOwnerPrincipalFromHeaders(
-  headers: Record<string, string> | undefined
-): string | undefined {
-  const normalized = new Headers(headers)
-  const principalKey = normalized.get(ELECTRIC_PRINCIPAL_HEADER)?.trim()
-  if (principalKey) {
-    return principalKey.startsWith(`/principal/`)
-      ? principalKey
-      : `/principal/${encodeURIComponent(principalKey)}`
-  }
-  if (normalized.has(`authorization`)) return undefined
-  return PULL_WAKE_OWNER_PRINCIPAL
-}
-
-function runnerOwnerPrincipalFromUserId(
-  userId: string | null | undefined
-): string | undefined {
-  const trimmed = userId?.trim()
-  if (!trimmed) return undefined
-  if (trimmed.startsWith(`/principal/`)) return trimmed
-  const colon = trimmed.indexOf(`:`)
-  const principalKey =
-    colon > 0 && PRINCIPAL_KEY_PREFIXES.has(trimmed.slice(0, colon))
-      ? trimmed
-      : `user:${trimmed}`
-  return `/principal/${encodeURIComponent(principalKey)}`
-}
 
 const EXTERNAL_LINK_PROTOCOLS = new Set([`http:`, `https:`, `mailto:`])
 
@@ -689,126 +657,6 @@ function mergeUndiciHeaders(
     out[name] = value
   }
   return out
-}
-
-function normalizeServer(
-  value: unknown,
-  opts: {
-    activeUrl?: string | null
-    defaultDesiredState?: ServerDesiredState
-  } = {}
-): ServerConfig | null {
-  if (!value || typeof value !== `object`) return null
-  const maybe = value as Partial<ServerConfig>
-  if (typeof maybe.name !== `string` || typeof maybe.url !== `string`) {
-    return null
-  }
-  const name = maybe.name.trim()
-  const url = maybe.url.trim()
-  if (!name || !url) return null
-  try {
-    new URL(url)
-  } catch {
-    return null
-  }
-  const id =
-    typeof maybe.id === `string` && maybe.id.trim()
-      ? maybe.id.trim()
-      : randomUUID()
-  const source: ServerSource =
-    maybe.source === `local-discovery` || maybe.source === `electric-cloud`
-      ? maybe.source
-      : `manual`
-  const desiredState: ServerDesiredState =
-    maybe.desiredState === `connected` || maybe.desiredState === `disconnected`
-      ? maybe.desiredState
-      : url === opts.activeUrl
-        ? `connected`
-        : (opts.defaultDesiredState ?? `disconnected`)
-  const localRuntimeEnabled = maybe.localRuntimeEnabled !== false
-  const headers = normalizeHeaderRecord(maybe.headers)
-  const tenantId =
-    source === `electric-cloud` &&
-    typeof maybe.tenantId === `string` &&
-    maybe.tenantId.trim().length > 0
-      ? maybe.tenantId.trim()
-      : undefined
-  return {
-    id,
-    name,
-    url,
-    source,
-    desiredState,
-    localRuntimeEnabled,
-    ...(headers ? { headers } : {}),
-    ...(tenantId ? { tenantId } : {}),
-  }
-}
-
-function normalizeHeaderRecord(value: unknown): Record<string, string> | null {
-  if (!value || typeof value !== `object` || Array.isArray(value)) return null
-  const headers = new Headers()
-  for (const [rawName, rawValue] of Object.entries(
-    value as Record<string, unknown>
-  )) {
-    if (typeof rawValue !== `string`) continue
-    const name = rawName.trim()
-    const headerValue = rawValue.trim()
-    if (!name || !headerValue) continue
-    try {
-      headers.set(name, headerValue)
-    } catch {
-      console.warn(
-        `[agents-desktop] settings.json: invalid server header '${rawName}' ignored`
-      )
-    }
-  }
-  const normalized = headersToRecord(headers)
-  return Object.keys(normalized).length > 0 ? normalized : null
-}
-
-function headersToRecord(headers: Headers): Record<string, string> {
-  const record: Record<string, string> = {}
-  headers.forEach((value, key) => {
-    record[key] = value
-  })
-  return record
-}
-
-function isLocalLoopbackHostname(hostname: string): boolean {
-  const normalized = hostname.toLowerCase()
-  return (
-    normalized === `localhost` ||
-    normalized === `127.0.0.1` ||
-    normalized === `0.0.0.0` ||
-    normalized === `[::1]` ||
-    normalized === `::1`
-  )
-}
-
-function normalizeServers(
-  value: unknown,
-  activeUrl?: string | null
-): Array<ServerConfig> {
-  if (!Array.isArray(value)) return []
-  const byUrl = new Map<string, ServerConfig>()
-  for (const entry of value) {
-    const server = normalizeServer(entry, { activeUrl })
-    if (server) byUrl.set(server.url, server)
-  }
-  return [...byUrl.values()]
-}
-
-function serverInList(
-  server: ServerConfig | null,
-  servers: Array<ServerConfig>
-): boolean {
-  return Boolean(
-    server &&
-      servers.some(
-        (entry) => entry.id === server.id || entry.url === server.url
-      )
-  )
 }
 
 function findServer(serverId: string | null | undefined): ServerConfig | null {
@@ -1886,18 +1734,10 @@ function localRuntimeStatusLabel(status: LocalRuntimeStatus): string {
 }
 
 function injectDevPrincipalHeaders(server: ServerConfig): ServerConfig {
-  if (server.source === `electric-cloud`) return server
-  const principal =
-    EXPLICIT_DEV_PRINCIPAL ??
-    (hasHeader(server.headers, ELECTRIC_PRINCIPAL_HEADER) ||
-    hasHeader(server.headers, `authorization`)
-      ? null
-      : DEFAULT_LOCAL_DEV_PRINCIPAL)
-  if (!principal) return server
-  return {
-    ...server,
-    headers: { ...server.headers, [ELECTRIC_PRINCIPAL_HEADER]: principal },
-  }
+  return injectDevPrincipalHeadersForServer(server, {
+    explicitDevPrincipal: EXPLICIT_DEV_PRINCIPAL,
+    defaultLocalDevPrincipal: DEFAULT_LOCAL_DEV_PRINCIPAL,
+  })
 }
 
 function desktopStateForWindow(win: BrowserWindow | null): DesktopState {
@@ -2354,98 +2194,6 @@ async function stopExistingRuntime(): Promise<void> {
   )
 }
 
-type AgentsServerHealthResult = { ok: true } | { ok: false; reason: string }
-
-function buildAgentsServerHealthUrl(baseUrl: string): string {
-  try {
-    return appendPathToServerUrl(baseUrl, `/_electric/health`)
-  } catch {
-    const trimmed = baseUrl.replace(/\/+$/, ``)
-    return `${trimmed}/_electric/health`
-  }
-}
-
-function appendPathToServerUrl(baseUrl: string, pathName: string): string {
-  const base = new URL(baseUrl)
-  const pathUrl = new URL(pathName, `http://electric-agents.local`)
-  const basePath =
-    base.pathname === `/` ? `` : base.pathname.replace(/\/+$/, ``)
-  const suffix = pathUrl.pathname.startsWith(`/`)
-    ? pathUrl.pathname
-    : `/${pathUrl.pathname}`
-  const target = new URL(base)
-  target.pathname = `${basePath}${suffix}`
-  target.search = ``
-  target.hash = pathUrl.hash
-  base.searchParams.forEach((value, key) => {
-    target.searchParams.append(key, value)
-  })
-  pathUrl.searchParams.forEach((value, key) => {
-    target.searchParams.append(key, value)
-  })
-  return target.toString()
-}
-
-function formatStartupNetworkError(
-  error: unknown,
-  activeServerUrl: string
-): string | null {
-  if (!(error instanceof Error)) return null
-  if (!/fetch failed/i.test(error.message)) return null
-  const cause = (error as Error & { cause?: unknown }).cause
-  const details =
-    cause && typeof cause === `object` && `code` in cause
-      ? String((cause as { code?: unknown }).code ?? ``).trim()
-      : ``
-  const suffix = details ? ` (${details})` : ``
-  return [
-    `Could not connect to agents-server at ${activeServerUrl}.`,
-    `Make sure it is running, then retry.${suffix}`,
-  ].join(` `)
-}
-
-async function checkAgentsServerHealth(
-  baseUrl: string,
-  timeoutMs: number
-): Promise<AgentsServerHealthResult> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), timeoutMs)
-  const healthUrl = buildAgentsServerHealthUrl(baseUrl)
-  // Auth for cloud-server health checks is added by the global
-  // undici interceptor installed in `installCloudAuthHeaderInjection`
-  // — no per-call-site plumbing needed.
-  try {
-    const res = await fetch(healthUrl, {
-      signal: controller.signal,
-      headers: { accept: `application/json` },
-    })
-    if (!res.ok) {
-      return {
-        ok: false,
-        reason: `health check returned ${res.status}`,
-      }
-    }
-    const json = (await res.json()) as { status?: unknown }
-    if (json?.status !== `ok`) {
-      return {
-        ok: false,
-        reason: `health check returned an unexpected response`,
-      }
-    }
-    return { ok: true }
-  } catch (error) {
-    const reason =
-      error instanceof Error && error.name === `AbortError`
-        ? `health check timed out after ${timeoutMs}ms`
-        : error instanceof Error
-          ? error.message
-          : String(error)
-    return { ok: false, reason }
-  } finally {
-    clearTimeout(timer)
-  }
-}
-
 function broadcastMcpSnapshot(
   serverId: string,
   snapshot: RegistrySnapshot
@@ -2616,7 +2364,7 @@ async function startRuntime(serverId: string): Promise<void> {
       : null
   const runnerOwnerPrincipal =
     runnerOwnerPrincipalFromUserId(cloudAuthUserId) ??
-    runnerOwnerPrincipalFromHeaders(runtimeHeaders)
+    runnerOwnerPrincipalFromHeaders(runtimeHeaders, PULL_WAKE_OWNER_PRINCIPAL)
   console.info(
     `[agents-desktop] Starting built-in agents runtime for server ${activeServer.url}`
   )
