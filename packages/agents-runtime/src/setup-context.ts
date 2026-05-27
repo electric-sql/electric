@@ -5,6 +5,7 @@ import {
   queryOnce,
 } from '@durable-streams/state'
 import { createWakeSession } from './wake-session'
+import { appendPathToUrl } from './url'
 import {
   manifestChildKey,
   manifestEffectKey,
@@ -934,8 +935,12 @@ export function createSetupContext(
           source.ensureStream.contentType
         )
       }
+      const sourceStreamUrl =
+        source.sourceType === `pgSync` || !source.streamUrl.startsWith(`/`)
+          ? source.streamUrl
+          : appendPathToUrl(config.serverBaseUrl, source.streamUrl)
       sourceDb = await wiring.createSourceDb(
-        source.streamUrl,
+        sourceStreamUrl,
         source.schema,
         (event: ChangeEvent) => {
           events.push(event)
