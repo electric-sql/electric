@@ -1761,6 +1761,17 @@ describe(`processWake`, () => {
         },
       },
     ]
+    mockCreateStreamDB.mockReturnValueOnce({
+      collections: {
+        events: {
+          get toArray() {
+            return mockSourceEvents.current
+          },
+        },
+      },
+      close: mockSourceDbClose,
+      preload: mockSourceDbPreload,
+    })
     let receivedMessage = ``
 
     defineEntity(`test-agent`, {
