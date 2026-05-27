@@ -90,13 +90,33 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   """
   @spec register_shape(t(), term(), DnfPlan.t(), [term()]) :: :ok
   def register_shape(%SubqueryIndex{table: table}, shape_handle, %DnfPlan{} = plan, dep_handles) do
-    for dep_index <- Map.keys(plan.dependency_polarities) do
+    for {dep_index, polarity} <- plan.dependency_polarities do
       dep_handle = Enum.at(dep_handles, dep_index) || {shape_handle, dep_index}
-      :ets.insert(table, {{:dep_handle, shape_handle, dep_index}, dep_handle})
+      :ets.insert(table, {{:dep_handle, shape_handle, dep_index}, {dep_handle, polarity}})
     end
 
     :ets.insert(table, {{:fallback, shape_handle}, true})
     :ok
+  end
+
+  @doc """
+  Look up `{dep_handle, polarity}` for `{shape_handle, dep_index}`.
+
+  Used by the filter's residual-`and_where` evaluator to ask
+  `MultiTimeView` a polarity-aware conservative membership question per
+  sublink. Raises `ArgumentError` if no dep was registered.
+  """
+  @spec lookup_dep!(t(), term(), non_neg_integer()) :: {term(), :positive | :negated}
+  def lookup_dep!(%SubqueryIndex{table: table}, shape_handle, dep_index) do
+    case :ets.lookup(table, {:dep_handle, shape_handle, dep_index}) do
+      [{_, {dep_handle, polarity}}] ->
+        {dep_handle, polarity}
+
+      [] ->
+        raise ArgumentError,
+              "no dep_handle registered for shape #{inspect(shape_handle)} dep_index " <>
+                inspect(dep_index)
+    end
   end
 
   @doc "Remove all metadata for `shape_handle`."
@@ -453,7 +473,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
 
   defp lookup_dep_handle!(table, shape_handle, dep_index) do
     case :ets.lookup(table, {:dep_handle, shape_handle, dep_index}) do
-      [{_, dep_handle}] ->
+      [{_, {dep_handle, _polarity}}] ->
         dep_handle
 
       [] ->

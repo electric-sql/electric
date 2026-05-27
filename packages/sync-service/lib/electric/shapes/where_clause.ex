@@ -1,6 +1,7 @@
 defmodule Electric.Shapes.WhereClause do
   alias PgInterop.Sublink
   alias Electric.Replication.Eval.Runner
+  alias Electric.Shapes.Filter.Indexes.SubqueryIndex
   alias Electric.Shapes.Filter.Indexes.SubqueryIndex.MultiTimeView
 
   @spec includes_record_result(
@@ -45,23 +46,57 @@ defmodule Electric.Shapes.WhereClause do
   end
 
   @doc """
-  Build a subquery_member? callback that signals "unknown" by raising.
+  Build a `subquery_member?` callback the filter can use while evaluating
+  a residual `and_where` for one outer shape, answering each sublink with
+  the conservative MTV-based test the routing path uses (see RFC
+  §Routing).
 
-  The filter cannot answer subquery membership correctly: a consumer that is
-  mid-move on a subquery is effectively reading at two logical times at once,
-  which a single per-shape pin cannot represent. So whenever the filter is
-  evaluating a residual `and_where` that contains a sublink, this callback
-  raises. The runner catches the raise and throws `:could_not_compute`,
-  which propagates as `:error` from `includes_record_result/3` — the caller
-  treats that as "over-route, let the consumer do the exact check in
-  `Shape.convert_change`".
+  - Positive sublink: returns `true` iff the value is a member at *some*
+    retained logical time (`MultiTimeView.member_at_some_time?/3`).
+    Surrounding `IN` evaluates `true` ⇒ include. Records whose value is
+    provably absent at every retained time get excluded here instead of
+    over-routing to every consumer for the exact check.
+  - Negated sublink: returns `true` iff the value is a member at *every*
+    retained logical time (`MultiTimeView.member_at_all_times?/3`).
+    Surrounding `NOT IN` evaluates `false` ⇒ exclude. Records whose value
+    is provably a member at every retained time get excluded.
+  - Anything in between (member at some retained times, not others) yields
+    a conservative-include in both polarities; the consumer's exact check
+    in `Shape.convert_change` refines further.
+
+  The shape's polarity per `dep_index` is read from the SubqueryIndex's
+  `{:dep_handle, …}` rows, which `SubqueryIndex.register_shape/4` populates
+  with `{dep_handle, polarity}` at filter-add time.
+
+  Raises if `shape_handle` has no row for the referenced `dep_index` or if
+  `subquery_ref` doesn't parse. The runner catches the raise and the
+  caller (`other_shape_matches?`) treats it as "include" — matching the
+  pre-existing failure mode for unknown sublinks.
   """
-  @spec subquery_member_unknown() :: ([String.t()], term() -> boolean())
-  def subquery_member_unknown do
-    fn _subquery_ref, _typed_value ->
-      raise "subquery membership cannot be evaluated at the filter; consumer must check"
+  @spec subquery_member_conservative_from_index(SubqueryIndex.t(), term()) ::
+          ([String.t()], term() -> boolean())
+  def subquery_member_conservative_from_index(%SubqueryIndex{} = index, shape_handle) do
+    mtv = index.multi_time_view
+
+    fn subquery_ref, typed_value ->
+      {:ok, dep_index} = dep_index_from_ref(subquery_ref)
+      {dep_handle, polarity} = SubqueryIndex.lookup_dep!(index, shape_handle, dep_index)
+
+      case polarity do
+        :positive -> MultiTimeView.member_at_some_time?(mtv, dep_handle, typed_value)
+        :negated -> MultiTimeView.member_at_all_times?(mtv, dep_handle, typed_value)
+      end
     end
   end
+
+  defp dep_index_from_ref([_prefix, idx]) when is_binary(idx) do
+    case Integer.parse(idx) do
+      {n, ""} -> {:ok, n}
+      _ -> :error
+    end
+  end
+
+  defp dep_index_from_ref(_), do: :error
 
   @doc """
   Build a subquery_member? callback that reads `MultiTimeView` at the

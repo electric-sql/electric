@@ -930,7 +930,7 @@ defmodule Electric.Shapes.FilterTest do
       index = Filter.subquery_index(filter)
       mtv = index.multi_time_view
       dep_index = subquery_ref |> List.last() |> String.to_integer()
-      [{_, subquery_id}] = :ets.lookup(index.table, {:dep_handle, shape_id, dep_index})
+      {subquery_id, _polarity} = SubqueryIndex.lookup_dep!(index, shape_id, dep_index)
 
       MultiTimeView.init_subquery(mtv, subquery_id, values)
       MultiTimeView.mark_ready(mtv, subquery_id)
@@ -1174,15 +1174,17 @@ defmodule Electric.Shapes.FilterTest do
            "CREATE TABLE IF NOT EXISTS or_parent (id INT PRIMARY KEY)",
            "CREATE TABLE IF NOT EXISTS or_child (id INT PRIMARY KEY, par_id INT REFERENCES or_parent(id), value TEXT NOT NULL)"
          ]
-    test "mixed OR+subquery shape over-routes through other_shapes", %{
-      inspector: inspector
-    } do
+    test "mixed OR+subquery shape filters through other_shapes via the MTV conservative callback",
+         %{
+           inspector: inspector
+         } do
       # A mixed OR shape lands in the catch-all `other_shapes` path because
       # neither side of the OR is individually optimisable. The filter
-      # cannot evaluate the sublink (it would need a consumer's logical
-      # time, which it intentionally doesn't track), so any record reaches
-      # the shape and the consumer's `Shape.convert_change` makes the final
-      # decision.
+      # evaluates the residual using
+      # `WhereClause.subquery_member_conservative_from_index/2`, which
+      # consults MTV with `member_at_some_time?` for the positive sublink
+      # — so values provably outside the retained window are pruned here
+      # instead of over-routing.
       {:ok, shape} =
         Shape.new("or_child",
           inspector: inspector,
@@ -1220,10 +1222,9 @@ defmodule Electric.Shapes.FilterTest do
         record: %{"id" => "50", "par_id" => "99", "value" => "other"}
       }
 
-      # Over-routed: the filter cannot resolve the sublink at the OR's left
-      # branch without a per-consumer logical time, so it includes shape1
-      # and lets the consumer drop the record.
-      assert Filter.affected_shapes(filter, insert_no_match) == MapSet.new(["shape1"])
+      # Conservatively pruned: par_id=99 is absent from MTV at every
+      # retained time and the LIKE branch doesn't match.
+      assert Filter.affected_shapes(filter, insert_no_match) == MapSet.new([])
     end
 
     @tag with_sql: [
@@ -1623,6 +1624,98 @@ defmodule Electric.Shapes.FilterTest do
       }
 
       assert Filter.affected_shapes(filter, insert_other) == MapSet.new([])
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE IF NOT EXISTS neg_res_parent (id INT PRIMARY KEY)",
+           "CREATE TABLE IF NOT EXISTS neg_res_child (id INT PRIMARY KEY, name TEXT NOT NULL, par_id INT REFERENCES neg_res_parent(id))"
+         ]
+    test "residual NOT IN sublink prunes via member_at_all_times? when value is always a member",
+         %{inspector: inspector} do
+      # `LIKE … OR NOT IN (…)` is unoptimisable (LIKE isn't indexable), so
+      # the shape lands in the `other_shapes` path with a negated sublink in
+      # the residual. The conservative callback uses
+      # `MultiTimeView.member_at_all_times?/3` so values provably present
+      # at every retained time get excluded here (NOT IN is false at every
+      # consumer time) instead of over-routing.
+      {:ok, shape} =
+        Shape.new("neg_res_child",
+          inspector: inspector,
+          where: "name LIKE 'never%' OR par_id NOT IN (SELECT id FROM neg_res_parent)"
+        )
+
+      filter = Filter.new() |> Filter.add_shape("shape1", shape)
+      index = Filter.subquery_index(filter)
+      subquery_ref = ["$sublink", "0"]
+
+      # Seed MTV with values that are always-members (empty history).
+      seed_membership(filter, "shape1", shape, subquery_ref, MapSet.new([1, 2]))
+      SubqueryIndex.mark_ready(index, "shape1")
+
+      # par_id=1 is in MTV at every retained time → NOT IN is false → exclude.
+      insert_always_member = %NewRecord{
+        relation: {"public", "neg_res_child"},
+        record: %{"id" => "10", "par_id" => "1", "name" => "x"}
+      }
+
+      assert Filter.affected_shapes(filter, insert_always_member) == MapSet.new([])
+
+      # par_id=99 is unknown to MTV → conservatively-not-a-member → NOT IN is
+      # true → include.
+      insert_unknown = %NewRecord{
+        relation: {"public", "neg_res_child"},
+        record: %{"id" => "11", "par_id" => "99", "name" => "x"}
+      }
+
+      assert Filter.affected_shapes(filter, insert_unknown) == MapSet.new(["shape1"])
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE IF NOT EXISTS amb_parent (id INT PRIMARY KEY)",
+           "CREATE TABLE IF NOT EXISTS amb_child (id INT PRIMARY KEY, name TEXT NOT NULL, par_id INT REFERENCES amb_parent(id))"
+         ]
+    test "ambiguous value (in at some retained times, out at others) routes conservatively in both polarities",
+         %{inspector: inspector} do
+      # A value with a non-empty MTV history sits between always-in and
+      # always-out — `member_at_some_time?` is true *and*
+      # `member_at_all_times?` is false. Both polarities of conservative
+      # callback should err on the side of include.
+      {:ok, pos_shape} =
+        Shape.new("amb_child",
+          inspector: inspector,
+          where: "name LIKE 'never%' OR par_id IN (SELECT id FROM amb_parent)"
+        )
+
+      {:ok, neg_shape} =
+        Shape.new("amb_child",
+          inspector: inspector,
+          where: "name LIKE 'never%' OR par_id NOT IN (SELECT id FROM amb_parent)"
+        )
+
+      filter =
+        Filter.new()
+        |> Filter.add_shape("pos", pos_shape)
+        |> Filter.add_shape("neg", neg_shape)
+
+      index = Filter.subquery_index(filter)
+      mtv = index.multi_time_view
+
+      # Build an ambiguous history for value 1: in at time 0, out from time 1.
+      {dep_handle, :positive} = SubqueryIndex.lookup_dep!(index, "pos", 0)
+      MultiTimeView.init_subquery(mtv, dep_handle, [1])
+      MultiTimeView.mark_out(mtv, dep_handle, 1, 1)
+      MultiTimeView.mark_ready(mtv, dep_handle)
+
+      SubqueryIndex.mark_ready(index, "pos")
+      SubqueryIndex.mark_ready(index, "neg")
+
+      # par_id=1 ambiguous → conservative include for both polarities.
+      insert_ambiguous = %NewRecord{
+        relation: {"public", "amb_child"},
+        record: %{"id" => "10", "par_id" => "1", "name" => "x"}
+      }
+
+      assert Filter.affected_shapes(filter, insert_ambiguous) == MapSet.new(["pos", "neg"])
     end
   end
 end
