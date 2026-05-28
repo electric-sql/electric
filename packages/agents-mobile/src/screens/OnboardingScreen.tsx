@@ -2,7 +2,6 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import {
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -38,12 +37,10 @@ export function OnboardingScreen({
   initialServerUrl,
   startStep = `cloud`,
   onComplete,
-  onDismissForever,
 }: {
   initialServerUrl?: string | null
   startStep?: Step
   onComplete: (params: { serverUrl: string }) => Promise<void>
-  onDismissForever: () => Promise<void>
 }): React.ReactElement {
   const tokens = useTokens()
   const insets = useSafeAreaInsets()
@@ -167,21 +164,13 @@ export function OnboardingScreen({
         >
           {step === `cloud` ? (
             <CloudFooter
-              styles={styles}
               isSignedIn={isSignedIn}
               onContinue={() => setStep(`server`)}
-              onDismissForever={() => {
-                void onDismissForever()
-              }}
             />
           ) : (
             <ServerFooter
-              styles={styles}
               submitting={submitting}
               onBack={() => setStep(`cloud`)}
-              onSkip={() => {
-                void onDismissForever()
-              }}
             />
           )}
         </View>
@@ -193,64 +182,36 @@ export function OnboardingScreen({
 /* ── Footers (pinned to bottom of the viewport) ───────────── */
 
 function CloudFooter({
-  styles,
   isSignedIn,
   onContinue,
-  onDismissForever,
 }: {
-  styles: ReturnType<typeof createStyles>
   isSignedIn: boolean
   onContinue: () => void
-  onDismissForever: () => void
 }): React.ReactElement {
   return (
-    <>
-      <PrimaryButton
-        title={isSignedIn ? `Continue` : `Continue without Cloud`}
-        variant="soft"
-        trailingIcon="chevron-right"
-        onPress={onContinue}
-      />
-      <Pressable
-        onPress={onDismissForever}
-        hitSlop={spacing.sm}
-        style={({ pressed }) => [
-          styles.dismissLink,
-          pressed ? styles.dismissLinkPressed : null,
-        ]}
-      >
-        <Text style={styles.dismissLinkText}>Don&apos;t show this again</Text>
-      </Pressable>
-    </>
+    <PrimaryButton
+      title={isSignedIn ? `Continue` : `Continue without Cloud`}
+      variant="soft"
+      trailingIcon="chevron-right"
+      onPress={onContinue}
+    />
   )
 }
 
 function ServerFooter({
-  styles,
   submitting,
   onBack,
-  onSkip,
 }: {
-  styles: ReturnType<typeof createStyles>
   submitting: boolean
   onBack: () => void
-  onSkip: () => void
 }): React.ReactElement {
   return (
-    <View style={styles.footerRow}>
-      <PrimaryButton
-        title="Back"
-        variant="ghost"
-        onPress={onBack}
-        disabled={submitting}
-      />
-      <PrimaryButton
-        title="Skip for now"
-        variant="ghost"
-        onPress={onSkip}
-        disabled={submitting}
-      />
-    </View>
+    <PrimaryButton
+      title="Back"
+      variant="ghost"
+      onPress={onBack}
+      disabled={submitting}
+    />
   )
 }
 
@@ -781,25 +742,6 @@ function createStyles(tokens: Tokens) {
       borderTopColor: tokens.border1,
       backgroundColor: tokens.bg,
       gap: spacing.sm,
-    },
-    footerRow: {
-      flexDirection: `row`,
-      alignItems: `center`,
-      justifyContent: `space-between`,
-      gap: spacing.sm,
-    },
-    dismissLink: {
-      alignSelf: `center`,
-      paddingVertical: spacing.xs,
-      paddingHorizontal: spacing.md,
-    },
-    dismissLinkPressed: {
-      opacity: 0.6,
-    },
-    dismissLinkText: {
-      color: tokens.text3,
-      fontSize: fontSize.sm,
-      textDecorationLine: `underline`,
     },
   })
 }
