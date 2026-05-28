@@ -159,6 +159,14 @@ jobs:
     needs: changesets
     if: ${{ needs.changesets.outputs.published == 'true' && needs.changesets.outputs.mobile_release_tag != '' }}
     uses: ./.github/workflows/agents_mobile_build.yml
+    # The reusable workflow declares PR-comment permissions even when the stable
+    # release channel skips those steps. GitHub validates declared permissions
+    # before evaluating those conditions.
+    permissions:
+      actions: read
+      contents: read
+      issues: write
+      pull-requests: write
     secrets: inherit
     with:
       channel: stable
