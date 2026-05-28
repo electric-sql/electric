@@ -1,6 +1,12 @@
 import { BrowserWindow, shell } from 'electron'
 import { randomUUID } from 'node:crypto'
-import type { SecretStore } from './secret-store'
+import {
+  ELECTRIC_CLOUD_AGENTS_URL,
+  ELECTRIC_CLOUD_AUTH_CALLBACK_URL,
+  ELECTRIC_CLOUD_AUTH_LOOPBACK_PORT,
+  ELECTRIC_CLOUD_DASHBOARD_URL,
+} from '../shared/constants'
+import type { SecretStore } from '../services/secret-store'
 
 /**
  * Electric Cloud sign-in flow.
@@ -13,7 +19,7 @@ import type { SecretStore } from './secret-store'
  *      sandboxed `BrowserWindow`. The user signs in with GitHub or
  *      Google there.
  *   3. The admin-API callback issues a JWT and 302s the BrowserWindow to
- *      `http://127.0.0.1:{cli_port}/callback?token=...&state=...&email=...&expiresAt=...`.
+ *      the configured cloud-auth callback URL with token/state/email params.
  *   4. We intercept that redirect via `webContents.on('will-redirect')`
  *      *before* it leaves the renderer — nothing actually listens on
  *      `cli_port`, the URL is just a CSRF-validated message channel.
@@ -69,14 +75,6 @@ type WhoamiUserResponse = {
 
 const SECRET_REF = `cloud-auth:default`
 
-// Stable loopback "port" threaded through the OAuth flow as `cli_port`.
-// Nothing listens here — the BrowserWindow intercepts the redirect by
-// URL prefix before any HTTP request goes out. Picked from the IANA
-// dynamic/private range and distinct from the MCP DCR port (53117).
-const CLI_PORT = 53118
-
-const PROD_DASHBOARD_URL = `https://dashboard.electric-sql.cloud`
-
 /**
  * Resolve the Electric Cloud dashboard / admin-API base URL.
  *
@@ -88,10 +86,8 @@ const PROD_DASHBOARD_URL = `https://dashboard.electric-sql.cloud`
  */
 export function getCloudBaseUrl(): string {
   const fromEnv = process.env.ELECTRIC_DASHBOARD_URL?.trim()
-  return fromEnv && fromEnv.length > 0 ? fromEnv : PROD_DASHBOARD_URL
+  return fromEnv && fromEnv.length > 0 ? fromEnv : ELECTRIC_CLOUD_DASHBOARD_URL
 }
-
-const PROD_AGENTS_URL = `https://agents.electric-sql.cloud`
 
 /**
  * Resolve the Electric Cloud agents server base URL.
@@ -119,16 +115,16 @@ export function getCloudAgentsBaseUrl(): string {
   } catch {
     // Fall through to prod default.
   }
-  return PROD_AGENTS_URL
+  return ELECTRIC_CLOUD_AGENTS_URL
 }
 
 function loopbackPrefix(): string {
-  return `http://127.0.0.1:${CLI_PORT}/callback`
+  return ELECTRIC_CLOUD_AUTH_CALLBACK_URL
 }
 
 function authorizeUrl(provider: CloudAuthProvider, state: string): string {
   const url = new URL(`/api/public/auth/${provider}/login`, getCloudBaseUrl())
-  url.searchParams.set(`cli_port`, String(CLI_PORT))
+  url.searchParams.set(`cli_port`, String(ELECTRIC_CLOUD_AUTH_LOOPBACK_PORT))
   url.searchParams.set(`cli_state`, state)
   return url.toString()
 }
