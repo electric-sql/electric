@@ -109,6 +109,8 @@ export function OnboardingScreen({
     setCustomUrlOpen((open) => !open)
   }
 
+  const bottomInset = Math.max(insets.bottom, spacing.md)
+
   return (
     <Screen>
       <KeyboardAvoidingView
@@ -156,62 +158,28 @@ export function OnboardingScreen({
           )}
         </ScrollView>
 
-        <View
-          style={[
-            styles.footerArea,
-            { paddingBottom: Math.max(insets.bottom, spacing.md) },
-          ]}
-        >
+        <View style={[styles.footerArea, { paddingBottom: bottomInset }]}>
           {step === `cloud` ? (
-            <CloudFooter
-              isSignedIn={isSignedIn}
-              onContinue={() => setStep(`server`)}
+            <PrimaryButton
+              title={isSignedIn ? `Continue` : `Continue without Cloud`}
+              variant="soft"
+              trailingIcon="chevron-right"
+              onPress={() => setStep(`server`)}
             />
           ) : (
-            <ServerFooter
-              submitting={submitting}
-              onBack={() => setStep(`cloud`)}
-            />
+            <View style={styles.footerLeft}>
+              <PrimaryButton
+                title="Back"
+                leadingIcon="back"
+                variant="ghost"
+                onPress={() => setStep(`cloud`)}
+                disabled={submitting}
+              />
+            </View>
           )}
         </View>
       </KeyboardAvoidingView>
     </Screen>
-  )
-}
-
-/* ── Footers (pinned to bottom of the viewport) ───────────── */
-
-function CloudFooter({
-  isSignedIn,
-  onContinue,
-}: {
-  isSignedIn: boolean
-  onContinue: () => void
-}): React.ReactElement {
-  return (
-    <PrimaryButton
-      title={isSignedIn ? `Continue` : `Continue without Cloud`}
-      variant="soft"
-      trailingIcon="chevron-right"
-      onPress={onContinue}
-    />
-  )
-}
-
-function ServerFooter({
-  submitting,
-  onBack,
-}: {
-  submitting: boolean
-  onBack: () => void
-}): React.ReactElement {
-  return (
-    <PrimaryButton
-      title="Back"
-      variant="ghost"
-      onPress={onBack}
-      disabled={submitting}
-    />
   )
 }
 
@@ -742,6 +710,10 @@ function createStyles(tokens: Tokens) {
       borderTopColor: tokens.border1,
       backgroundColor: tokens.bg,
       gap: spacing.sm,
+    },
+    footerLeft: {
+      flexDirection: `row`,
+      justifyContent: `flex-start`,
     },
   })
 }
