@@ -60,8 +60,10 @@ export function OnboardingScreen({
   const isSignedIn = cloudStatus === `signed-in`
 
   // Auto-advance from cloud → server on the sign-in transition only —
-  // never on a manual `Back` while already signed in.
-  const hasAutoAdvancedRef = useRef(false)
+  // never on a manual `Back` while already signed in. When the wizard
+  // opens straight on `server` (warm restart with a restored session),
+  // treat the advance as already spent so Back stays on `cloud`.
+  const hasAutoAdvancedRef = useRef(startStep === `server`)
   useEffect(() => {
     if (!isSignedIn) {
       hasAutoAdvancedRef.current = false
@@ -463,18 +465,15 @@ function StepIndicator({
 
 function StepHeader({
   styles,
-  eyebrow,
   title,
   description,
 }: {
   styles: ReturnType<typeof createStyles>
-  eyebrow?: string
   title: string
   description: string
 }): React.ReactElement {
   return (
     <View style={styles.stepHeader}>
-      {eyebrow && <Text style={styles.eyebrow}>{eyebrow}</Text>}
       <Text style={styles.title}>{title}</Text>
       <Text style={styles.description}>{description}</Text>
     </View>
@@ -576,10 +575,6 @@ function createStyles(tokens: Tokens) {
     },
     stepHeader: {
       gap: spacing.xs,
-    },
-    eyebrow: {
-      color: tokens.text3,
-      fontSize: fontSize.sm,
     },
     title: {
       color: tokens.text1,

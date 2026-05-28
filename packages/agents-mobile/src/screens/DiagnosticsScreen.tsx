@@ -77,26 +77,26 @@ export function DiagnosticsScreen({
   const clearAllLocalData = useCallback(() => {
     Alert.alert(
       `Clear all local data?`,
-      `Deletes saved settings, server connection, and sign-in state. The app will reload into onboarding.`,
+      `Deletes saved settings, server connections, and sign-in state. The app will restart and return to the onboarding flow.`,
       [
         { text: `Cancel`, style: `cancel` },
         {
-          text: `Clear & reload`,
+          text: `Clear data and restart`,
           style: `destructive`,
           onPress: () => {
             void (async () => {
               setClearing(true)
-              try {
-                // Independent local ops — sign out clears in-memory
-                // auth state, AsyncStorage.clear() wipes persisted state
-                // (including the token signOut also touches).
-                await Promise.allSettled([
-                  cloudAuth.signOut(),
-                  AsyncStorage.clear(),
-                ])
-              } finally {
-                DevSettings.reload()
-              }
+              // Independent local ops — sign out clears in-memory
+              // auth state, AsyncStorage.clear() wipes persisted state
+              // (including the token signOut also touches).
+              await Promise.allSettled([
+                cloudAuth.signOut(),
+                AsyncStorage.clear(),
+              ])
+              // Drop the spinner before reload so the button doesn't
+              // hang at "Reloading…" if DevSettings.reload() ever no-ops.
+              setClearing(false)
+              DevSettings.reload()
             })()
           },
         },
@@ -169,12 +169,12 @@ export function DiagnosticsScreen({
           <Section label="Developer" tokens={tokens}>
             <Field
               label="Clear all local data"
-              value="Deletes saved settings, server connection, and sign-in state. The app reloads into onboarding."
+              value="Deletes saved settings, server connections, and sign-in state. The app will restart into onboarding."
               tokens={tokens}
             />
             <View style={styles.actionRow}>
               <PrimaryButton
-                title={clearing ? `Reloading…` : `Clear all local data`}
+                title={clearing ? `Restarting…` : `Clear all local data`}
                 variant="soft"
                 loading={clearing}
                 disabled={clearing}
