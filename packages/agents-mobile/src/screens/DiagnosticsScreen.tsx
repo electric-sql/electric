@@ -94,7 +94,7 @@ export function DiagnosticsScreen({
                 AsyncStorage.clear(),
               ])
               // Drop the spinner before reload so the button doesn't
-              // hang at "Reloading…" if DevSettings.reload() ever no-ops.
+              // hang at "Restarting…" if DevSettings.reload() ever no-ops.
               setClearing(false)
               DevSettings.reload()
             })()
