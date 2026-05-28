@@ -1911,7 +1911,7 @@ export async function processWake(
         executeSend: (send) => executeSend(send),
         doSetTag: (key, value) =>
           serverClient.setTag(entityUrl, key, value, writeToken),
-        doRemoveTag: (key) =>
+        doDeleteTag: (key) =>
           serverClient.deleteTag(entityUrl, key, writeToken),
       })
 

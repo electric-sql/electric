@@ -253,7 +253,7 @@ describe(`createHandlerContext: tags + tag mutations`, () => {
       doSetTag: async (key, value) => {
         calls.push({ key, value })
       },
-      doRemoveTag: async (key) => {
+      doDeleteTag: async (key) => {
         calls.push({ key, removed: true })
       },
     })

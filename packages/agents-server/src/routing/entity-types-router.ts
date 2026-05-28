@@ -41,20 +41,26 @@ type PublicEntityTypeResponse = ElectricAgentsEntityType & {
 const jsonObjectSchema = Type.Record(Type.String(), Type.Unknown())
 const schemaMapSchema = Type.Record(Type.String(), jsonObjectSchema)
 
-const registerEntityTypeBodySchema = Type.Object({
-  name: Type.Optional(Type.String()),
-  description: Type.Optional(Type.String()),
-  creation_schema: Type.Optional(jsonObjectSchema),
-  inbox_schemas: Type.Optional(schemaMapSchema),
-  state_schemas: Type.Optional(schemaMapSchema),
-  serve_endpoint: Type.Optional(Type.String()),
-  default_dispatch_policy: Type.Optional(dispatchPolicySchema),
-})
+const registerEntityTypeBodySchema = Type.Object(
+  {
+    name: Type.Optional(Type.String()),
+    description: Type.Optional(Type.String()),
+    creation_schema: Type.Optional(jsonObjectSchema),
+    inbox_schemas: Type.Optional(schemaMapSchema),
+    state_schemas: Type.Optional(schemaMapSchema),
+    serve_endpoint: Type.Optional(Type.String()),
+    default_dispatch_policy: Type.Optional(dispatchPolicySchema),
+  },
+  { additionalProperties: false }
+)
 
-const amendEntityTypeSchemasBodySchema = Type.Object({
-  inbox_schemas: Type.Optional(schemaMapSchema),
-  state_schemas: Type.Optional(schemaMapSchema),
-})
+const amendEntityTypeSchemasBodySchema = Type.Object(
+  {
+    inbox_schemas: Type.Optional(schemaMapSchema),
+    state_schemas: Type.Optional(schemaMapSchema),
+  },
+  { additionalProperties: false }
+)
 
 type RegisterEntityTypeBody = Static<typeof registerEntityTypeBodySchema>
 type AmendEntityTypeSchemasBody = Static<

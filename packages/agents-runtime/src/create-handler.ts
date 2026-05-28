@@ -197,8 +197,6 @@ export function createRuntimeRouter(
     createElectricTools,
     registrationConcurrency,
     defaultDispatchPolicyForType,
-    publicUrl,
-    name: runtimeName,
     serverHeaders,
     webhookSignature,
   } = normalized
@@ -495,11 +493,6 @@ export function createRuntimeRouter(
           ],
         }
       }
-
-      if (publicUrl !== undefined) {
-        body.public_url = publicUrl
-      }
-      body.runtime_name = runtimeName ?? `default`
 
       const typeRes = await fetch(
         appendPathToUrl(baseUrl, `/_electric/entity-types`),

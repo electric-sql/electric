@@ -327,21 +327,16 @@ export async function extractFirstUserMessage(
   ctx: HandlerContext
 ): Promise<string | null> {
   const firstMessage = ctx.db.collections.inbox.toArray
-    .map((message, index) => ({ message, index }))
-    .filter(({ message }) => message.from !== `system`)
-    .sort((left, right) => {
-      const leftSeq =
-        typeof left.message._seq === `number` ? left.message._seq : left.index
-      const rightSeq =
-        typeof right.message._seq === `number`
-          ? right.message._seq
-          : right.index
-      return leftSeq - rightSeq
-    })[0]?.message
+    .filter((message) => message.from !== `system`)
+    .sort((left, right) => messageSeq(left) - messageSeq(right))[0]
 
   if (!firstMessage) return null
   const text = payloadToTitleText(firstMessage.payload)
   return text.length > 0 ? text : null
+}
+
+function messageSeq(message: { _seq?: unknown }): number {
+  return typeof message._seq === `number` ? message._seq : -1
 }
 
 type HortonDocsSupport = NonNullable<ReturnType<typeof createHortonDocsSupport>>
