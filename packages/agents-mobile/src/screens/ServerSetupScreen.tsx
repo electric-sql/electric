@@ -36,26 +36,29 @@ export function ServerSetupScreen({
   const isSignedInToCloud = cloudState.status === `signed-in`
   const isSigningInToCloud = cloudState.status === `signing-in`
 
+  const commit = async (url: string): Promise<void> => {
+    setLoading(true)
+    setError(null)
+    try {
+      // Cloud agent servers reject unauthenticated requests with 401,
+      // so headers must be registered before the health probe.
+      await prepareServerHeaders(url)
+      await checkServerHealth(url)
+      await onSave(url)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const submit = async () => {
     const normalized = normalizeServerUrl(value)
     if (!normalized) {
       setError(`Enter an agents server URL.`)
       return
     }
-    setLoading(true)
-    setError(null)
-    try {
-      // Inject Cloud auth headers (if applicable) before the health
-      // check probes the server — Cloud agent servers reject
-      // unauthenticated requests with 401.
-      await prepareServerHeaders(normalized)
-      await checkServerHealth(normalized)
-      await onSave(normalized)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setLoading(false)
-    }
+    await commit(normalized)
   }
 
   return (
@@ -77,7 +80,7 @@ export function ServerSetupScreen({
             </Text>
             {isSignedInToCloud ? (
               <Text style={styles.hint}>
-                Signed in to Electric Cloud as{' '}
+                Signed in to Electric Cloud as{` `}
                 {cloudState.email ?? `this account`}. Want to try a different
                 Google account? Sign out below, then sign in again.
               </Text>
@@ -89,10 +92,7 @@ export function ServerSetupScreen({
             )}
           </View>
 
-          <CloudServerPicker
-            onPick={(picked) => setValue(picked)}
-            disabled={loading}
-          />
+          <CloudServerPicker onConnect={commit} disabled={loading} />
 
           <View style={styles.field}>
             <Text style={styles.label}>Server URL</Text>
