@@ -15,6 +15,11 @@ concurrency:
 permissions:
   actions: read
   contents: read
+  # Declared so the reusable `agents_mobile_build.yml` job can load. Its
+  # PR-commenting steps are skipped for this channel, but GitHub validates the
+  # reusable job's declared permissions before evaluating those conditions.
+  issues: write
+  pull-requests: write
 
 jobs:
   build:
