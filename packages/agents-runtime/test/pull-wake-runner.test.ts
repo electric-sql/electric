@@ -32,7 +32,7 @@ function notification(id: string): WakeNotification {
     wakeId: `wake-${id}`,
     streamPath: `/chat/${id}/main`,
     streams: [{ path: `/chat/${id}/main`, offset: `12` }],
-    callback: `http://server/_electric/callback-forward/wake-${id}`,
+    callback: `http://server/_electric/wake-callbacks/wake-${id}`,
     claimToken: `claim-token-${id}`,
     entity: {
       type: `chat`,
@@ -264,7 +264,7 @@ describe(`createPullWakeRunner`, () => {
     expect(runner.getHealth().running).toBe(false)
   })
 
-  it(`preserves base URL query parameters on stream, claim, and heartbeat requests`, async () => {
+  it(`preserves tenant path prefixes on stream, claim, and heartbeat requests`, async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
       if (url.includes(`/heartbeat`)) return Response.json({})
@@ -280,7 +280,7 @@ describe(`createPullWakeRunner`, () => {
     }))
 
     const runner = createPullWakeRunner({
-      baseUrl: `http://server/root?secret=s1`,
+      baseUrl: `http://server/t/tenant-a/v1`,
       runnerId: `runner-1`,
       runtime: runtime(),
       heartbeatIntervalMs: 5,
@@ -291,15 +291,15 @@ describe(`createPullWakeRunner`, () => {
     await waitFor(() => {
       expect(streamFactory).toHaveBeenCalledWith(
         expect.objectContaining({
-          url: `http://server/root/runners/runner-1/wake?secret=s1`,
+          url: `http://server/t/tenant-a/v1/runners/runner-1/wake`,
         })
       )
       expect(fetchMock).toHaveBeenCalledWith(
-        `http://server/root/_electric/runners/runner-1/heartbeat?secret=s1`,
+        `http://server/t/tenant-a/v1/_electric/runners/runner-1/heartbeat`,
         expect.any(Object)
       )
       expect(fetchMock).toHaveBeenCalledWith(
-        `http://server/root/_electric/runners/runner-1/claim?secret=s1`,
+        `http://server/t/tenant-a/v1/_electric/runners/runner-1/claim`,
         expect.objectContaining({ method: `POST` })
       )
     })

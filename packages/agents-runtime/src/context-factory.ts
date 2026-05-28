@@ -104,7 +104,7 @@ export interface HandlerContextConfig<TState extends StateProxy = StateProxy> {
     afterMs?: number
   }) => Promise<SendResult>
   doSetTag: (key: string, value: string) => Promise<void>
-  doRemoveTag: (key: string) => Promise<void>
+  doDeleteTag: (key: string) => Promise<void>
 }
 
 export interface HandlerContextResult<TState extends StateProxy = StateProxy> {
@@ -644,8 +644,8 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
     setTag(key: string, value: string): Promise<void> {
       return config.doSetTag(key, value)
     },
-    removeTag(key: string): Promise<void> {
-      return config.doRemoveTag(key)
+    deleteTag(key: string): Promise<void> {
+      return config.doDeleteTag(key)
     },
   }
 

@@ -6,7 +6,7 @@
 import { zodToJsonSchema } from 'zod-to-json-schema'
 import { processWake } from './process-wake'
 import { getEntityType, listEntityTypes } from './define-entity'
-import { DEFAULT_OUTPUT_SCHEMAS } from './default-output-schemas'
+import { DEFAULT_STATE_SCHEMAS } from './default-state-schemas'
 import { passthrough } from './entity-schema'
 import { runtimeLog } from './log'
 import { appendPathToUrl } from './url'
@@ -197,8 +197,6 @@ export function createRuntimeRouter(
     createElectricTools,
     registrationConcurrency,
     defaultDispatchPolicyForType,
-    publicUrl,
-    name: runtimeName,
     serverHeaders,
     webhookSignature,
   } = normalized
@@ -465,13 +463,13 @@ export function createRuntimeRouter(
           creation_schema: toJsonSchema(definition.creationSchema),
         }),
         ...(definition.inboxSchemas && {
-          input_schemas: mapSchemas(definition.inboxSchemas),
+          inbox_schemas: mapSchemas(definition.inboxSchemas),
         }),
-        output_schemas: {
-          ...DEFAULT_OUTPUT_SCHEMAS,
+        state_schemas: {
+          ...DEFAULT_STATE_SCHEMAS,
           ...stateSchemas,
-          ...(definition.outputSchemas
-            ? mapSchemas(definition.outputSchemas)
+          ...(definition.stateSchemas
+            ? mapSchemas(definition.stateSchemas)
             : {}),
         },
       }
@@ -495,11 +493,6 @@ export function createRuntimeRouter(
           ],
         }
       }
-
-      if (publicUrl !== undefined) {
-        body.public_url = publicUrl
-      }
-      body.runtime_name = runtimeName ?? `default`
 
       const typeRes = await fetch(
         appendPathToUrl(baseUrl, `/_electric/entity-types`),

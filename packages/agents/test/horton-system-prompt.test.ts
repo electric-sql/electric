@@ -44,7 +44,7 @@ describe(`buildHortonSystemPrompt`, () => {
       hasDocsSupport: true,
       docsUrl: `https://example.com/docs/agents`,
     })
-    expect(prompt).toContain(`search_durable_agents_docs`)
+    expect(prompt).toContain(`search_electric_agents_docs`)
     expect(prompt).toContain(`https://example.com/docs/agents`)
   })
 

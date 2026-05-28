@@ -78,8 +78,8 @@ type EmbedState = {
   bottomInset?: number
   // Forwarded across the Expo-DOM boundary so the embed's auth-fetch
   // module instance (separate from the native side) can inject the
-  // Cloud `Authorization` + `x-electric-service` headers on every
-  // outbound request. `null` means no headers required (local server).
+  // Cloud auth headers on every outbound request. `null` means no
+  // headers required (local server).
   serverHeaders?: {
     url: string
     headers: Record<string, string>

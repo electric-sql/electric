@@ -82,14 +82,6 @@ function subscriptionUrl(
   subscriptionId: string
 ): string {
   const url = new URL(streamBaseUrl)
-  const match = /^(.*)\/v1\/stream\/([^/]+)\/?$/.exec(url.pathname)
-  if (match) {
-    const [, prefix = ``, serviceId] = match
-    url.pathname = `${prefix}/v1/stream/__ds/subscriptions/${encodeURIComponent(subscriptionId)}`
-    url.searchParams.set(`service`, decodeURIComponent(serviceId!))
-    return url.toString()
-  }
-
   url.pathname = `${url.pathname.replace(/\/+$/, ``)}/__ds/subscriptions/${encodeURIComponent(subscriptionId)}`
   return url.toString()
 }
@@ -291,11 +283,8 @@ describe(`pull-wake Horton e2e with mocked LLM`, () => {
   }, 60_000)
 
   afterAll(async () => {
-    await Promise.allSettled([
-      builtinAgentsServer?.stop(),
-      electricAgentsServer?.stop(),
-      dsServer?.stop(),
-    ])
+    await builtinAgentsServer?.stop().catch(() => {})
+    await Promise.allSettled([electricAgentsServer?.stop(), dsServer?.stop()])
   }, 60_000)
 
   it(`dispatches explicit runner-policy wakes and Horton writes mocked responses`, async () => {

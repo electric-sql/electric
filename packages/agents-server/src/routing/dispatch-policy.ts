@@ -326,7 +326,7 @@ async function linkStreamToTargetSubscription(
   }
   const forwardUrl = appendPathToUrl(
     ctx.publicUrl,
-    `/_electric/webhook-forward/${encodeURIComponent(subscriptionId)}`
+    `/_electric/subscription-webhooks/${encodeURIComponent(subscriptionId)}`
   )
   await ensureSubscriptionIncludesStream(
     ctx,

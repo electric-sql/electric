@@ -942,7 +942,7 @@ export interface HandlerContext<
   recordRun: () => RunHandle
   sleep: () => void
   setTag: (key: string, value: string) => Promise<void>
-  removeTag: (key: string) => Promise<void>
+  deleteTag: (key: string) => Promise<void>
 }
 
 export type EntityActionsFactory<
@@ -962,7 +962,7 @@ export interface EntityDefinition<
   actions?: EntityActionsFactory<TState, TActions>
   creationSchema?: TCreationSchema
   inboxSchemas?: Record<string, StandardJSONSchemaV1>
-  outputSchemas?: Record<string, StandardJSONSchemaV1>
+  stateSchemas?: Record<string, StandardJSONSchemaV1>
 
   handler: (
     ctx: HandlerContext<

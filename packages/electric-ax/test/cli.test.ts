@@ -69,6 +69,9 @@ function createHandlers() {
     observe: vi
       .fn<(url: string, options: { from?: string }) => Promise<void>>()
       .mockResolvedValue(undefined),
+    view: vi
+      .fn<(url: string, options: { from?: string }) => Promise<void>>()
+      .mockResolvedValue(undefined),
     inspect: vi
       .fn<(url: string) => Promise<void>>()
       .mockResolvedValue(undefined),
@@ -302,6 +305,23 @@ describe(`createElectricProgram`, () => {
     ])
 
     expect(handlers.observe).toHaveBeenCalledWith(
+      `/chat/test`,
+      expect.objectContaining({
+        from: `42`,
+      })
+    )
+  })
+
+  it(`passes view offsets through commander options`, async () => {
+    const handlers = await parse([
+      `agents`,
+      `view`,
+      `/chat/test`,
+      `--from`,
+      `42`,
+    ])
+
+    expect(handlers.view).toHaveBeenCalledWith(
       `/chat/test`,
       expect.objectContaining({
         from: `42`,

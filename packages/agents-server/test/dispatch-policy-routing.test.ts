@@ -178,7 +178,7 @@ describe(`dispatch policy routing`, () => {
         streams: [`/chat/one/main`],
         webhook: {
           url: expect.stringMatching(
-            /^http:\/\/server\/_electric\/webhook-forward\/webhook%3A/
+            /^http:\/\/server\/_electric\/subscription-webhooks\/webhook%3A/
           ),
         },
       })

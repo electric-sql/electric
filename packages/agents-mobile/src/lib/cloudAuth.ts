@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as Linking from 'expo-linking'
 import * as WebBrowser from 'expo-web-browser'
+export { getCloudServiceIdFromServerUrl } from './cloudAgentUrls'
 
 /**
  * Electric Cloud sign-in for the mobile app.
@@ -241,22 +242,6 @@ function extractAgentsToken(body: unknown): string | null {
     }
   }
   return null
-}
-
-/**
- * Detect a Cloud agent-server URL and return the service-id embedded in
- * its `?service=` query param. Returns `null` for local URLs (which
- * don't need a service-scoped agents token).
- */
-export function getCloudServiceIdFromServerUrl(
-  serverUrl: string
-): string | null {
-  try {
-    const parsed = new URL(serverUrl)
-    return parsed.searchParams.get(`service`)
-  } catch {
-    return null
-  }
 }
 
 /**

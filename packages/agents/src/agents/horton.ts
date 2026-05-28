@@ -1,6 +1,5 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { eq, not, queryOnce } from '@durable-streams/state'
 import { z } from 'zod'
 import { serverLog } from '../log'
 import { createHortonDocsSupport } from '../docs/knowledge-base'
@@ -30,7 +29,6 @@ import {
   createSendTool,
 } from '@electric-ax/agents-runtime/tools'
 import { completeWithLowCostModel } from '@electric-ax/agents-runtime'
-import type { MessageReceived } from '@electric-ax/agents-runtime'
 import { mcp } from '@electric-ax/agents-mcp'
 import type { SkillsRegistry } from '@electric-ax/agents-runtime'
 
@@ -172,7 +170,7 @@ export function buildHortonSystemPrompt(
   } = {}
 ): string {
   const docsTools = opts.hasDocsSupport
-    ? `\n- search_durable_agents_docs: hybrid search over the built-in Durable Agents docs index`
+    ? `\n- search_electric_agents_docs: hybrid search over the built-in Electric Agents docs index`
     : ``
   const eventSourceTools = opts.hasEventSourceTools
     ? `\n- list_event_sources: list external webhook/event feeds you can subscribe to, including available buckets and parameters\n- subscribe_event_source: subscribe yourself to one of those feeds or buckets so matching future events wake you\n- list_event_source_subscriptions: list your active event source subscriptions\n- unsubscribe_event_source: remove one of your event source subscriptions by id`
@@ -181,7 +179,7 @@ export function buildHortonSystemPrompt(
     ? `\n- use_skill: load a skill (knowledge, instructions, or a tutorial) into your context to help with the user's request\n- remove_skill: unload a skill from context when you're done with it`
     : ``
   const docsGuidance = opts.hasDocsSupport
-    ? `\n- For ANY question about Electric Agents, Durable Agents, or this framework, ALWAYS use search_durable_agents_docs FIRST. Do not use web_search or fetch_url for Electric Agents topics unless the docs search returns no useful results.\n- The search tool returns chunk content directly — you do not need to read the source files.\n- Use repo read/bash tools only for non-doc files or when you need to inspect exact implementation code in the workspace.`
+    ? `\n- For ANY question about Electric Agents or this framework, ALWAYS use search_electric_agents_docs FIRST. Do not use web_search or fetch_url for Electric Agents topics unless the docs search returns no useful results.\n- The search tool returns chunk content directly — you do not need to read the source files.\n- Use repo read/bash tools only for non-doc files or when you need to inspect exact implementation code in the workspace.`
     : ``
   const skillsGuidance = opts.hasSkills
     ? `\n# Skills\nYou have access to skills — specialized knowledge and guided workflows you can load on demand. Your context includes a skills catalog listing what's available. When the user's request matches a skill's description or keywords, load it with use_skill.
@@ -203,7 +201,7 @@ Do NOT load a skill and then ignore its instructions. The skill is there because
 When a user is new or asks how to get started with Electric Agents, **don't assume a single path**. Present the options and let them choose:
 
 - **Learn the concepts first** → Explain what Electric Agents is, answer questions, point to docs.
-  Use search_durable_agents_docs to look up answers. Only load the quickstart skill if the user explicitly asks for a hands-on guided tutorial.
+  Use search_electric_agents_docs to look up answers. Only load the quickstart skill if the user explicitly asks for a hands-on guided tutorial.
 
 - **Hands-on guided tutorial** → Load the quickstart skill (or tell them to type \`/quickstart\`).
   This is a step-by-step build that takes them from zero to a running app.
@@ -213,12 +211,12 @@ When a user is new or asks how to get started with Electric Agents, **don't assu
   This sets up project structure and orients them in the codebase.
 
 - **Have a specific question?** → Answer it directly.
-  Use search_durable_agents_docs first, then fall back to fetch_url or general knowledge if needed.
+  Use search_electric_agents_docs first, then fall back to fetch_url or general knowledge if needed.
 
 Don't force onboarding. If someone just wants to chat or code, let them. When in doubt, ask what they'd like to do rather than picking a path for them.`
   const docsUrlGuidance = opts.docsUrl
     ? `\n# Electric Agents documentation
-- ${opts.hasDocsSupport ? `If search_durable_agents_docs is available, use it first (faster, hybrid search).` : `Use fetch_url to look up documentation pages.`}
+- ${opts.hasDocsSupport ? `If search_electric_agents_docs is available, use it first (faster, hybrid search).` : `Use fetch_url to look up documentation pages.`}
 - The Electric Agents docs site is at ${opts.docsUrl}
 - The docs site covers: Usage (entity definition, handlers, tools, state, spawning, coordination, waking, shared state, client integration, app setup), Reference (handler context, entity definitions, configurations, tools, state proxies, wake events, registries), Entities (Horton, Worker), and Patterns (Manager-Worker, Pipeline, Map-Reduce, Dispatcher, Blackboard, Reactive Observers).
 - For general coding questions unrelated to Electric Agents, use web_search or your own knowledge.`
@@ -328,17 +326,17 @@ function payloadToTitleText(payload: unknown): string {
 export async function extractFirstUserMessage(
   ctx: HandlerContext
 ): Promise<string | null> {
-  const firstMessage = await queryOnce((q) =>
-    q
-      .from({ inbox: ctx.db.collections.inbox })
-      .where(({ inbox }) => not(eq(inbox.from, `system`)))
-      .orderBy(({ inbox }) => inbox._seq, `asc`)
-      .findOne()
-  )
+  const firstMessage = ctx.db.collections.inbox.toArray
+    .filter((message) => message.from !== `system`)
+    .sort((left, right) => messageSeq(left) - messageSeq(right))[0]
 
   if (!firstMessage) return null
-  const text = payloadToTitleText((firstMessage as MessageReceived).payload)
+  const text = payloadToTitleText(firstMessage.payload)
   return text.length > 0 ? text : null
+}
+
+function messageSeq(message: { _seq?: unknown }): number {
+  return typeof message._seq === `number` ? message._seq : -1
 }
 
 type HortonDocsSupport = NonNullable<ReturnType<typeof createHortonDocsSupport>>
@@ -630,14 +628,5 @@ export function registerHorton(
     handler: assistantHandler,
   })
 
-  const typeNames = [`horton`]
-  if (streamFn) {
-    registry.define(`chat`, {
-      description: `Compatibility alias for the built-in assistant type.`,
-      handler: assistantHandler,
-    })
-    typeNames.push(`chat`)
-  }
-
-  return typeNames
+  return [`horton`]
 }

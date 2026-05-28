@@ -1,5 +1,74 @@
 # @electric-ax/agents-mobile
 
+## 0.0.6
+
+### Patch Changes
+
+- 3a7cafd: Fix Android Electric Cloud sign-in flow getting stuck after Google / GitHub auth.
+
+  The Chrome Custom Tab redirect (`electric-agents://oauth/callback?...`)
+  was being lost on real Android devices (especially Android 13+ release
+  builds), so the sign-in never completed and the user was bounced back
+  to the welcome screen. Multiple layers had to be hardened:
+  - **Config plugin** that injects an `onNewIntent` override into the
+    generated `MainActivity.kt` so new intents (delivered when Android
+    kills our process while the browser is open and then relaunches
+    via the redirect) are forwarded to `getIntent()` for
+    `expo-linking` / `expo-web-browser` to pick up. Mitigates
+    [expo/expo#44284](https://github.com/expo/expo/issues/44284). The
+    plugin imports `expo/config-plugins` (not `@expo/config-plugins`)
+    because pnpm doesn't hoist the latter into the package's
+    `node_modules`, which broke `expo cli config --json` inside EAS
+    Build.
+  - The OAuth deep link is consumed by a **global listener mounted in
+    `CloudAuthProvider`** (in addition to the `/oauth/callback`
+    route), so cold-start redirects are completed even before Expo
+    Router has had a chance to navigate to the route.
+  - `parseCallbackUrl` uses `expo-linking`'s `Linking.parse` rather
+    than `new URL()`, which is unreliable for custom schemes in
+    Hermes release builds.
+  - `signIn` waits a few seconds for the deep link to arrive when the
+    browser session returns `dismiss`, instead of immediately
+    rolling state back to `signed-out`.
+  - `completeCallbackUrl` is idempotent so the three concurrent
+    handlers (browser-session result, global Linking listener,
+    `/oauth/callback` route) can't trample each other.
+  - The `/oauth/callback` route subscribes to cloud-auth state and
+    navigates with `<Redirect>` (rendered during the render phase)
+    instead of `router.replace` inside an effect — the effect-based
+    version raced with Expo Router's own intent handling in dev
+    builds, leaving the route stuck on the spinner even though
+    sign-in had succeeded. The redirect destination also takes the
+    user's onboarding / server state into account so a first-time
+    signer-in goes back to `/onboarding` to finish the wizard
+    instead of being bounced through `/` (where `SessionListScreen`
+    would crash on `useAgents` because `AgentsProvider` isn't
+    mounted yet).
+  - Routes that call `useAgents()` (`/`, `/session`, `/new-session`,
+    `/diagnostics`) now go through a `useAgentsRouteGuard` helper
+    that emits a `<Redirect>` to `/onboarding` / `/server-setup` when
+    the user hasn't finished setup yet, so transient mounts during
+    redirect chains can't render those screens before the root
+    layout's own redirects catch up.
+
+- d344c32: Treat Electric Agents server URLs as opaque tenant-scoped base URLs rooted at `/t/<tenant-id>/v1`, migrate desktop and mobile Cloud clients to that URL shape, move observation stream ensure endpoints under `/_electric/observations/*/ensure-stream`, rename the pre-alpha entity/cron/schema/tag/docs APIs to their Electric Agents names, add a non-interactive `electric agents view` transcript command, and make Horton title extraction work with lightweight desktop inbox collection facades.
+
+  Send the done callback for completed wake checkpoints during graceful shutdown, preventing desktop reloads from leaving already completed DS subscription claims pending.
+
+- c1834f3: Prepare the mobile app for Expo EAS builds and CI. Adds dynamic Expo config, EAS build profiles, mobile CI/export scripts, and aligns shared React/TypeScript dependency resolution so the Expo DOM embed typechecks and passes `expo-doctor`.
+- Updated dependencies [d344c32]
+- Updated dependencies [c1834f3]
+- Updated dependencies [319e405]
+  - @electric-ax/agents-runtime@0.3.5
+  - @electric-ax/agents-server-ui@0.4.11
+
+## 0.0.5
+
+### Patch Changes
+
+- Updated dependencies [ac21b9a]
+  - @electric-ax/agents-server-ui@0.4.10
+
 ## 0.0.4
 
 ### Patch Changes

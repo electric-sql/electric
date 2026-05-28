@@ -2,6 +2,7 @@ export { createEntityStreamDB } from './entity-stream-db'
 export { createAgentsClient } from './agents-client'
 export {
   compareTimelineOrders,
+  buildEntityTimelineData,
   createPendingTimelineOrder,
   createEntityErrorsQuery,
   createEntityIncludesQuery,
@@ -14,7 +15,6 @@ export {
   db,
   entities,
   entity,
-  tagged,
   webhook,
   getWebhookStreamPath,
   webhookObservationCollections,
@@ -37,8 +37,6 @@ export type {
   WebhookObservationSource,
   WebhookEventRow,
   EntitiesQuery,
-  TaggedObservationSource,
-  TaggedQuery,
 } from './observation-sources'
 export type {
   EntityTimelineContentItem,

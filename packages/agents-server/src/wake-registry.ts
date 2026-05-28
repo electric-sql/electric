@@ -229,7 +229,7 @@ export class WakeRegistry {
               await this.applyShapeMessage(message)
               if (
                 !settled &&
-                `control` in message.headers &&
+                isControlMessage(message) &&
                 message.headers.control === `up-to-date`
               ) {
                 settled = true

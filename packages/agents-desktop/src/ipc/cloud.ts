@@ -33,8 +33,8 @@ export function registerCloudIpcHandlers(deps: CloudIpcDeps): void {
   )
   ipcMain.handle(
     `desktop:cloud-agent-server-prepare-connection`,
-    async (_event, serviceId: string) => {
-      return await deps.getCloudAgentServers().prepareConnection(serviceId)
+    async (_event, tenantId: string) => {
+      return await deps.getCloudAgentServers().prepareConnection(tenantId)
     }
   )
 }

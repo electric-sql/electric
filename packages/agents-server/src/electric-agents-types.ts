@@ -457,4 +457,4 @@ export const ErrCodeForkWaitTimeout = `FORK_WAIT_TIMEOUT`
 export const ErrCodeEntityPersistFailed = `ENTITY_PERSIST_FAILED`
 export const ErrCodeAgentUiNotFound = `AGENT_UI_NOT_FOUND`
 export const ErrCodeSubscriptionNotFound = `SUBSCRIPTION_NOT_FOUND`
-export const ErrCodeCallbackNotFound = `CALLBACK_NOT_FOUND`
+export const ErrCodeWakeCallbackNotFound = `WAKE_CALLBACK_NOT_FOUND`

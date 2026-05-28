@@ -34,6 +34,44 @@ describe(`entity lifecycle`, () => {
     await Promise.allSettled([electricAgentsServer?.stop(), dsServer?.stop()])
   }, 120_000)
 
+  it(`rejects legacy entity type schema keys`, async () => {
+    const createResponse = await fetch(`${baseUrl}/_electric/entity-types`, {
+      method: `POST`,
+      headers: { 'content-type': `application/json` },
+      body: JSON.stringify({
+        name: `strict-task`,
+        description: `Strict task entity`,
+        input_schemas: { message: { type: `object` } },
+      }),
+    })
+    expect(createResponse.status).toBe(400)
+
+    const validCreateResponse = await fetch(
+      `${baseUrl}/_electric/entity-types`,
+      {
+        method: `POST`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({
+          name: `strict-task`,
+          description: `Strict task entity`,
+        }),
+      }
+    )
+    expect(validCreateResponse.status).toBe(201)
+
+    const amendResponse = await fetch(
+      `${baseUrl}/_electric/entity-types/strict-task/schemas`,
+      {
+        method: `PATCH`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({
+          output_schemas: { state: { type: `object` } },
+        }),
+      }
+    )
+    expect(amendResponse.status).toBe(400)
+  })
+
   it(`killed entities remain readable with killed status`, async () => {
     const createTypeResponse = await fetch(
       `${baseUrl}/_electric/entity-types`,

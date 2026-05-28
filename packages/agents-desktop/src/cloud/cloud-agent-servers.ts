@@ -237,45 +237,41 @@ export class CloudAgentServers {
   /**
    * Prepare a connection for a cloud agent server.
    *
-   * Fetches a per-service principal token via `getTokenForAgents` on the
+   * Fetches a per-tenant principal token via `getTokenForAgents` on the
    * admin-API (authenticated with the user's cloud-auth bearer),
    * stores it in `SecretStore` and the in-memory cache, and returns
-   * an agents URL carrying `?service=<tenantId>` + tenant id to the
+   * a tenant-scoped agents URL rooted at `/t/<tenantId>/v1` to the
    * renderer. The token itself is never sent over IPC and never lands
-   * in `settings.json`
-   * — `main.ts`'s `webRequest.onBeforeSendHeaders` hook reads it
-   * from `agentsTokens` to add `Authorization: Bearer <token>` and
-   * `x-electric-service: <tenantId>` headers on outbound requests
-   * to this server's URL. The URL includes `?service=<tenantId>` so
-   * multiple Cloud agent servers on the same host still match the
-   * correct tenant when the Electron request hooks inspect URLs.
+   * in `settings.json` — `main.ts`'s `webRequest.onBeforeSendHeaders`
+   * hook reads it from `agentsTokens` to add `Authorization: Bearer
+   * <token>` on outbound requests to this server's URL.
    *
    * Throws on auth failure so the caller can surface a sensible
    * error in the UI.
    */
   async prepareConnection(
-    serviceId: string
+    tenantId: string
   ): Promise<{ url: string; tenantId: string }> {
-    const url = cloudAgentServerUrl(serviceId)
-    const cached = this.getAgentsToken(serviceId)
-    if (cached) return { url, tenantId: serviceId }
+    const url = cloudAgentServerUrl(tenantId)
+    const cached = this.getAgentsToken(tenantId)
+    if (cached) return { url, tenantId }
 
     const token = await this.cloudAuth.getToken()
     if (!token) {
       throw new Error(`Not signed in to Electric Cloud`)
     }
-    const agentsToken = await this.fetchAgentsToken(serviceId, token)
-    this.agentsTokens.set(serviceId, agentsToken)
-    await this.secretStore.set(`${TOKEN_REF_PREFIX}${serviceId}`, agentsToken)
-    return { url, tenantId: serviceId }
+    const agentsToken = await this.fetchAgentsToken(tenantId, token)
+    this.agentsTokens.set(tenantId, agentsToken)
+    await this.secretStore.set(`${TOKEN_REF_PREFIX}${tenantId}`, agentsToken)
+    return { url, tenantId }
   }
 
   private async fetchAgentsToken(
-    serviceId: string,
+    tenantId: string,
     bearerToken: string
   ): Promise<string> {
     const url = new URL(
-      `/api/v1/services/streams/${encodeURIComponent(serviceId)}/getTokenForAgents`,
+      `/api/v1/services/streams/${encodeURIComponent(tenantId)}/getTokenForAgents`,
       getCloudBaseUrl()
     ).toString()
     const res = await fetch(url, {
@@ -454,9 +450,11 @@ export class CloudAgentServers {
   }
 }
 
-function cloudAgentServerUrl(serviceId: string): string {
+function cloudAgentServerUrl(tenantId: string): string {
   const base = new URL(getCloudAgentsBaseUrl())
-  base.searchParams.set(`service`, serviceId)
+  const prefix = base.pathname.replace(/\/+$/, ``)
+  base.pathname = `${prefix}/t/${encodeURIComponent(tenantId)}/v1`
+  base.search = ``
   base.hash = ``
   return base.toString()
 }

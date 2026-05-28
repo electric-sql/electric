@@ -2,9 +2,13 @@ import type { ServerConfig } from '../shared/types'
 
 /**
  * Match a request URL against the user's saved `electric-cloud` servers by
- * host + base path + `service` query marker. Cloud URLs carry
- * `?service=<tenantId>` so a single cloud-agents-server host can serve
- * multiple tenants without us attaching tenant A's token to tenant B's request.
+ * host + base path. Cloud URLs include `/t/<tenantId>/v1` so a single
+ * cloud-agents-server host can serve multiple tenants without us attaching
+ * tenant A's token to tenant B's request.
+ *
+ * Legacy settings may still have a host-only Cloud URL. We allow a host-only
+ * request match only when it is the sole possible fallback; otherwise
+ * tenant-scoped base paths win.
  */
 export function findCloudServerForUrl(
   servers: Array<ServerConfig>,
@@ -16,8 +20,8 @@ export function findCloudServerForUrl(
   } catch {
     return null
   }
-  const fallbackMatches: Array<ServerConfig> = []
-  const requestedService = parsed.searchParams.get(`service`)
+  let bestPathMatch: { server: ServerConfig; pathLength: number } | null = null
+  const hostOnlyMatches: Array<ServerConfig> = []
   for (const server of servers) {
     if (server.source !== `electric-cloud`) continue
     if (!server.tenantId) continue
@@ -29,20 +33,21 @@ export function findCloudServerForUrl(
     }
     if (base.origin !== parsed.origin) continue
     const basePath = base.pathname.replace(/\/+$/, ``)
+    if (basePath === ``) {
+      hostOnlyMatches.push(server)
+      continue
+    }
     if (
-      basePath !== `` &&
-      parsed.pathname !== basePath &&
-      !parsed.pathname.startsWith(`${basePath}/`)
+      parsed.pathname === basePath ||
+      parsed.pathname.startsWith(`${basePath}/`)
     ) {
-      continue
+      if (!bestPathMatch || basePath.length > bestPathMatch.pathLength) {
+        bestPathMatch = { server, pathLength: basePath.length }
+      }
     }
-    if (requestedService) {
-      if (requestedService === server.tenantId) return server
-      continue
-    }
-    fallbackMatches.push(server)
   }
-  return fallbackMatches.length === 1 ? fallbackMatches[0]! : null
+  if (bestPathMatch) return bestPathMatch.server
+  return hostOnlyMatches.length === 1 ? hostOnlyMatches[0]! : null
 }
 
 export function findSavedServerForUrl(

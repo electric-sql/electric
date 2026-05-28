@@ -1532,14 +1532,14 @@ export async function processWake(
       const effectiveWake = wake ?? sourceWakeConfig?.condition
 
       if (source.sourceType === `cron`) {
-        await serverClient.registerCronSource(
+        await serverClient.ensureCronStream(
           (source as CronObservationSource).expression,
           (source as CronObservationSource).timezone
         )
       }
 
       if (source.sourceType === `entities`) {
-        await serverClient.registerEntitiesSource(
+        await serverClient.ensureEntitiesMembershipStream(
           (source as EntitiesObservationSource).tags
         )
       }
@@ -1911,8 +1911,8 @@ export async function processWake(
         executeSend: (send) => executeSend(send),
         doSetTag: (key, value) =>
           serverClient.setTag(entityUrl, key, value, writeToken),
-        doRemoveTag: (key) =>
-          serverClient.removeTag(entityUrl, key, writeToken),
+        doDeleteTag: (key) =>
+          serverClient.deleteTag(entityUrl, key, writeToken),
       })
 
       let sleepRequested = false
@@ -2147,20 +2147,19 @@ export async function processWake(
           : `done acking ${streamPath} at ${doneOffset}`
       )
       if (shutdownRequested) {
-        log.info(`shutdown requested, skipping done callback`)
-      } else {
-        try {
-          await sendDone(
-            callback,
-            activeClaimToken,
-            claimHeaderConfig,
-            epoch,
-            streamPath,
-            doneOffset === `-1` ? null : doneOffset
-          )
-        } catch (err) {
-          cleanupErrors.push(toError(err))
-        }
+        log.info(`shutdown requested, sending done callback at checkpoint`)
+      }
+      try {
+        await sendDone(
+          callback,
+          activeClaimToken,
+          claimHeaderConfig,
+          epoch,
+          streamPath,
+          doneOffset === `-1` ? null : doneOffset
+        )
+      } catch (err) {
+        cleanupErrors.push(toError(err))
       }
     }
     if (primaryError != null || cleanupErrors.length > 0) {

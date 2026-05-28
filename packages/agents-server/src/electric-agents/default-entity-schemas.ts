@@ -1,1 +1,1 @@
-export { DEFAULT_OUTPUT_SCHEMAS } from '@electric-ax/agents-runtime'
+export { DEFAULT_STATE_SCHEMAS } from '@electric-ax/agents-runtime'

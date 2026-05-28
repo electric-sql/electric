@@ -245,8 +245,8 @@ describe(`ElectricAgentsRoutes schedule endpoints`, () => {
   })
 })
 
-describe(`ElectricAgentsRoutes cron registration endpoint`, () => {
-  it(`rejects cron registrations without an expression in the schema layer`, async () => {
+describe(`ElectricAgentsRoutes cron stream ensure endpoint`, () => {
+  it(`rejects cron ensure requests without an expression in the schema layer`, async () => {
     const manager = {
       getOrCreateCronStream: vi.fn(),
     } as any
@@ -254,7 +254,7 @@ describe(`ElectricAgentsRoutes cron registration endpoint`, () => {
     const response = await routeResponse(
       manager,
       `POST`,
-      `/_electric/cron/register`,
+      `/_electric/observations/cron/ensure-stream`,
       {}
     )
 
@@ -494,7 +494,7 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
         }),
         {
           service: `tenant-a`,
-          publicUrl: `http://agents.local`,
+          publicUrl: `http://agents.local/t/tenant-a/v1`,
           durableStreamsUrl: `http://durable.local/v1/stream/tenant-a`,
           pgDb: db.db,
           isShuttingDown: () => false,
@@ -510,7 +510,7 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
         type: `webhook`,
         pattern: `horton/**`,
         webhook: {
-          url: `http://agents.local/_electric/webhook-forward/horton-handler`,
+          url: `http://agents.local/t/tenant-a/v1/_electric/subscription-webhooks/horton-handler`,
         },
       })
       expect(db.values).toHaveBeenCalledWith({
@@ -531,7 +531,7 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
           subscription_id: `horton-handler`,
           type: `webhook`,
           webhook: {
-            url: `http://agents.local/_electric/webhook-forward/horton-handler`,
+            url: `http://agents.local/_electric/subscription-webhooks/horton-handler`,
             signing: {
               alg: `ed25519`,
               kid: `ds_durable`,
@@ -557,7 +557,7 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
         }),
         {
           service: `tenant-a`,
-          publicUrl: `http://agents.local`,
+          publicUrl: `http://agents.local/t/tenant-a/v1`,
           durableStreamsUrl: `http://durable.local/v1/stream/tenant-a`,
           webhookSigner,
           pgDb: db.db,
@@ -571,7 +571,7 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
           signing: {
             alg: `ed25519`,
             kid: `ds_test`,
-            jwks_url: `http://agents.local/__ds/jwks.json`,
+            jwks_url: `http://agents.local/t/tenant-a/v1/__ds/jwks.json`,
           },
         },
       })

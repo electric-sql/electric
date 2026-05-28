@@ -16,7 +16,7 @@ export type CloudAuthHeaderInjectionDeps = {
 /**
  * Decorate outgoing requests bound for saved agent servers with configured
  * server headers. Cloud agent servers also receive `Authorization:
- * Bearer <agents token>` and `x-electric-service: <tenantId>` headers.
+ * Bearer <agents token>`.
  */
 export function installCloudAuthHeaderInjection(
   deps: CloudAuthHeaderInjectionDeps
@@ -61,7 +61,6 @@ export function buildCloudAuthHeaders(
   if (!token) return null
   const headers: Record<string, string> = {
     Authorization: `Bearer ${token}`,
-    'x-electric-service': server.tenantId,
   }
   const cloudAuthState = deps.getCloudAuthState()
   if (cloudAuthState?.userId) {

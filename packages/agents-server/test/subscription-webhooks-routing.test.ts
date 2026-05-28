@@ -160,8 +160,8 @@ function buildContext(overrides: Partial<TenantContext> = {}): TenantContext {
   }
 }
 
-describe(`webhook forwarding for Durable Streams subscriptions`, () => {
-  it(`validates upstream Durable Streams webhook signatures before forwarding`, async () => {
+describe(`subscription webhooks for Durable Streams subscriptions`, () => {
+  it(`validates upstream Durable Streams webhook signatures before dispatching`, async () => {
     const select = selectDb([
       { webhookUrl: `http://runtime.local/_electric/builtin-agent-handler` },
     ])
@@ -191,7 +191,7 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
     try {
       const response = await globalRouter.fetch(
         await signedWebhookRequest(
-          `/_electric/webhook-forward/horton-handler`,
+          `/_electric/subscription-webhooks/horton-handler`,
           {
             subscription_id: `horton-handler`,
             wake_id: `wake-signed`,
@@ -229,7 +229,7 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
     }
   })
 
-  it(`rejects webhook-forward requests with invalid upstream DS signatures`, async () => {
+  it(`rejects subscription-webhook requests with invalid upstream DS signatures`, async () => {
     const select = selectDb([
       { webhookUrl: `http://runtime.local/_electric/builtin-agent-handler` },
     ])
@@ -247,7 +247,7 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
     try {
       const response = await globalRouter.fetch(
         await signedWebhookRequest(
-          `/_electric/webhook-forward/horton-handler`,
+          `/_electric/subscription-webhooks/horton-handler`,
           {
             subscription_id: `horton-handler`,
             wake_id: `wake-invalid`,
@@ -305,7 +305,7 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
 
     try {
       const response = await globalRouter.fetch(
-        request(`POST`, `/_electric/webhook-forward/horton-handler`, {
+        request(`POST`, `/_electric/subscription-webhooks/horton-handler`, {
           subscription_id: `horton-handler`,
           wake_id: `wake-1`,
           generation: 7,
@@ -321,6 +321,7 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
           callback_token: `callback-token`,
         }),
         buildContext({
+          publicUrl: `http://agents.local/t/tenant-a/v1`,
           pgDb: { select: select.select, insert: insert.insert } as any,
           webhookSigner,
         })
@@ -337,7 +338,7 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
         wakeId: `wake-1`,
         streamPath: `/horton/demo/main`,
         streams: [{ path: `/horton/demo/main`, offset: `1` }],
-        callback: `http://agents.local/_electric/callback-forward/wake-1`,
+        callback: `http://agents.local/t/tenant-a/v1/_electric/wake-callbacks/wake-1`,
         claimToken: `callback-token`,
         entity: {
           type: `horton`,
@@ -387,7 +388,7 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
 
     try {
       const response = await globalRouter.fetch(
-        request(`POST`, `/_electric/webhook-forward/horton-handler`, {
+        request(`POST`, `/_electric/subscription-webhooks/horton-handler`, {
           subscription_id: `horton-handler`,
           wake_id: `wake-2`,
           generation: 8,
@@ -453,7 +454,7 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
     }
   })
 
-  it(`keeps root-relative DS wake stream paths before forwarding to the runtime`, async () => {
+  it(`keeps root-relative DS wake stream paths before dispatching to the runtime`, async () => {
     const select = selectDb([
       { webhookUrl: `http://runtime.local/_electric/builtin-agent-handler` },
     ])
@@ -478,7 +479,7 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
 
     try {
       const response = await globalRouter.fetch(
-        request(`POST`, `/_electric/webhook-forward/horton-handler`, {
+        request(`POST`, `/_electric/subscription-webhooks/horton-handler`, {
           subscription_id: `horton-handler`,
           wake_id: `wake-prefixed`,
           generation: 9,
@@ -553,7 +554,7 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
 
     try {
       const response = await globalRouter.fetch(
-        request(`POST`, `/_electric/callback-forward/wake-1`, {
+        request(`POST`, `/_electric/wake-callbacks/wake-1`, {
           wakeId: `wake-1`,
           epoch: 7,
         }),
@@ -596,7 +597,7 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
 
     try {
       const response = await globalRouter.fetch(
-        request(`POST`, `/_electric/webhook-forward/horton-handler`, {
+        request(`POST`, `/_electric/subscription-webhooks/horton-handler`, {
           subscription_id: `horton-handler`,
           wake_id: `wake-stopped`,
           generation: 8,
@@ -655,7 +656,7 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
 
     try {
       const response = await globalRouter.fetch(
-        new Request(`http://agents.local/_electric/callback-forward/wake-1`, {
+        new Request(`http://agents.local/_electric/wake-callbacks/wake-1`, {
           method: `POST`,
           headers: {
             'content-type': `application/json`,
@@ -721,7 +722,7 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
 
     try {
       const response = await globalRouter.fetch(
-        new Request(`http://agents.local/_electric/callback-forward/wake-1`, {
+        new Request(`http://agents.local/_electric/wake-callbacks/wake-1`, {
           method: `POST`,
           headers: {
             'content-type': `application/json`,
@@ -752,7 +753,7 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
     }
   })
 
-  describe(`callback-forward done releases the durable claim independently of the in-memory write token`, () => {
+  describe(`wake-callback done releases the durable claim independently of the in-memory write token`, () => {
     const upstreamOk = (): void => {
       vi.spyOn(globalThis, `fetch`).mockResolvedValue(
         new Response(JSON.stringify({ ok: true, next_wake: false }), {
@@ -764,7 +765,7 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
     it(`releases the consumer_claims row and marks the entity idle when the consumer holds the in-memory write token`, async () => {
       const select = selectDb([
         {
-          callbackUrl: `http://durable.local/v1/stream-meta/subscriptions/horton-handler/callback?service=tenant-a`,
+          callbackUrl: `http://durable.local/v1/stream-meta/subscriptions/horton-handler/callback?opaque=tenant-a`,
           primaryStream: `/horton/demo/main`,
         },
       ])
@@ -780,7 +781,7 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
 
       try {
         const response = await globalRouter.fetch(
-          new Request(`http://agents.local/_electric/callback-forward/wake-1`, {
+          new Request(`http://agents.local/_electric/wake-callbacks/wake-1`, {
             method: `POST`,
             headers: {
               'content-type': `application/json`,
@@ -817,7 +818,7 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
     it(`releases the consumer_claims row and marks the entity idle when no in-memory write token is present for the consumer`, async () => {
       const select = selectDb([
         {
-          callbackUrl: `http://durable.local/v1/stream-meta/subscriptions/horton-handler/callback?service=tenant-a`,
+          callbackUrl: `http://durable.local/v1/stream-meta/subscriptions/horton-handler/callback?opaque=tenant-a`,
           primaryStream: `/horton/demo/main`,
         },
       ])
@@ -828,7 +829,7 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
 
       try {
         const response = await globalRouter.fetch(
-          new Request(`http://agents.local/_electric/callback-forward/wake-1`, {
+          new Request(`http://agents.local/_electric/wake-callbacks/wake-1`, {
             method: `POST`,
             headers: {
               'content-type': `application/json`,
@@ -864,7 +865,7 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
     it(`releases the consumer_claims row for the old consumer when a newer consumer has taken over the in-memory token, without disturbing the newer consumer's token or the entity status`, async () => {
       const select = selectDb([
         {
-          callbackUrl: `http://durable.local/v1/stream-meta/subscriptions/horton-handler/callback?service=tenant-a`,
+          callbackUrl: `http://durable.local/v1/stream-meta/subscriptions/horton-handler/callback?opaque=tenant-a`,
           primaryStream: `/horton/demo/main`,
         },
       ])
@@ -891,7 +892,7 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
 
       try {
         await globalRouter.fetch(
-          new Request(`http://agents.local/_electric/callback-forward/wake-1`, {
+          new Request(`http://agents.local/_electric/wake-callbacks/wake-1`, {
             method: `POST`,
             headers: {
               'content-type': `application/json`,

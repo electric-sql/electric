@@ -16,4 +16,10 @@ describe(`entity API helpers`, () => {
       `http://server/_electric/entities/horton/demo/fork`
     )
   })
+
+  it(`builds entity API URLs below tenant path prefixes`, () => {
+    expect(
+      entityApiUrl(`http://server/t/svc-123/v1`, `/horton/demo`, `/fork`)
+    ).toBe(`http://server/t/svc-123/v1/_electric/entities/horton/demo/fork`)
+  })
 })
