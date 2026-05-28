@@ -1,6 +1,7 @@
 import { Select as BaseSelect } from '@base-ui/react/select'
 import { Check, ChevronDown } from 'lucide-react'
 import type { CSSProperties, ReactNode } from 'react'
+import type { LucideIcon } from 'lucide-react'
 import { Icon } from './Icon'
 import popoverStyles from './Popover.module.css'
 import styles from './Select.module.css'
@@ -37,6 +38,13 @@ interface TriggerProps {
   [`aria-label`]?: string
   /** Tooltip-style hint shown on hover. */
   title?: string
+  /**
+   * Optional leading icon rendered before the value. Slots in as a
+   * sibling flex child of `<Select.Value>` so it gets the trigger's
+   * own gap/alignment, and inherits the trigger's muted icon color
+   * via the shared `.icon` class.
+   */
+  icon?: LucideIcon
   /**
    * Custom renderer for the displayed value. Use when the option's
    * value is an opaque key (e.g. an entity id) and the user-facing
@@ -93,6 +101,7 @@ function Trigger({
   autoFocus,
   [`aria-label`]: ariaLabel,
   title,
+  icon,
   renderValue,
 }: TriggerProps): React.ReactElement {
   const cls = [size === `pill` ? styles.triggerPill : styles.trigger, className]
@@ -107,6 +116,11 @@ function Trigger({
       aria-label={ariaLabel}
       title={title}
     >
+      {icon && (
+        <span className={styles.leadingIcon}>
+          <Icon icon={icon} size={iconSize} />
+        </span>
+      )}
       <BaseSelect.Value placeholder={placeholder}>
         {renderValue
           ? (value) => renderValue(value as string | null)

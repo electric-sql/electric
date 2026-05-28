@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import { ArrowUp, Sparkles } from 'lucide-react'
+import { ArrowUp, Cpu, Sparkles } from 'lucide-react'
 import { eq, not, useLiveQuery } from '@tanstack/react-db'
 import { nanoid } from 'nanoid'
 import { useElectricAgents } from '../../lib/ElectricAgentsProvider'
@@ -712,85 +712,94 @@ function DefaultAgentComposer({
 
   return (
     <div
-      className={[styles.composer, disabled ? styles.composerDisabled : null]
+      className={[
+        styles.composerWrap,
+        disabled ? styles.composerDisabled : null,
+      ]
         .filter(Boolean)
         .join(` `)}
     >
-      <textarea
-        ref={textareaRef}
-        autoFocus
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === `Enter` && !e.shiftKey) {
-            e.preventDefault()
-            submit()
-          }
-        }}
-        placeholder={placeholder}
-        disabled={disabled || submitting}
-        rows={1}
-        className={styles.composerTextarea}
-      />
-      <div className={styles.composerFooter}>
-        <div className={styles.composerControls}>
-          {inlineProps.map(({ key, prop }) =>
-            prop.enum ? (
-              <PillSelect
-                key={key}
-                label={prop.title ?? key}
-                value={String(args[key] ?? ``)}
-                options={prop.enum.map((v) => String(v))}
-                onChange={(next) => {
-                  const original = prop.enum!.find((v) => String(v) === next)
-                  if (isModelProperty(key)) persistLastPickedModel(next)
-                  setArgs((prev) => ({ ...prev, [key]: original ?? next }))
-                }}
-                disabled={submitting || disabled}
-              />
-            ) : prop.type === `boolean` ? (
-              <PillToggle
-                key={key}
-                label={prop.title ?? key}
-                checked={Boolean(args[key])}
-                onChange={(checked) =>
-                  setArgs((prev) => ({ ...prev, [key]: checked }))
-                }
-                disabled={submitting || disabled}
-              />
-            ) : null
-          )}
-          <WorkingDirectoryPicker
-            value={workingDirectory}
-            onChange={onChangeWorkingDirectory}
+      <div className={styles.composer}>
+        <textarea
+          ref={textareaRef}
+          autoFocus
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === `Enter` && !e.shiftKey) {
+              e.preventDefault()
+              submit()
+            }
+          }}
+          placeholder={placeholder}
+          disabled={disabled || submitting}
+          rows={1}
+          className={styles.composerTextarea}
+        />
+        <div className={styles.composerFooter}>
+          <div className={styles.composerControls}>
+            {inlineProps.map(({ key, prop }) =>
+              prop.enum ? (
+                <PillSelect
+                  key={key}
+                  label={prop.title ?? key}
+                  value={String(args[key] ?? ``)}
+                  options={prop.enum.map((v) => String(v))}
+                  onChange={(next) => {
+                    const original = prop.enum!.find((v) => String(v) === next)
+                    if (isModelProperty(key)) persistLastPickedModel(next)
+                    setArgs((prev) => ({ ...prev, [key]: original ?? next }))
+                  }}
+                  disabled={submitting || disabled}
+                />
+              ) : prop.type === `boolean` ? (
+                <PillToggle
+                  key={key}
+                  label={prop.title ?? key}
+                  checked={Boolean(args[key])}
+                  onChange={(checked) =>
+                    setArgs((prev) => ({ ...prev, [key]: checked }))
+                  }
+                  disabled={submitting || disabled}
+                />
+              ) : null
+            )}
+          </div>
+          <div className={styles.composerSendCluster}>
+            {submitting && (
+              <span className={styles.composerHint}>Starting…</span>
+            )}
+            <button
+              type="button"
+              aria-label={`Start ${agent.name} session`}
+              onClick={submit}
+              disabled={!isActive}
+              className={[
+                styles.composerSend,
+                isActive ? styles.composerSendActive : null,
+              ]
+                .filter(Boolean)
+                .join(` `)}
+            >
+              <Icon icon={ArrowUp} size={3} />
+            </button>
+          </div>
+        </div>
+      </div>
+      <div className={styles.composerMeta}>
+        <WorkingDirectoryPicker
+          value={workingDirectory}
+          onChange={onChangeWorkingDirectory}
+          disabled={submitting || disabled}
+        />
+        {runners.length > 0 && (
+          <RunnerPickerPill
+            runners={runners}
+            value={selectedRunnerId}
+            onChange={onChangeSelectedRunner}
             disabled={submitting || disabled}
           />
-          {runners.length > 0 && (
-            <RunnerPickerPill
-              runners={runners}
-              value={selectedRunnerId}
-              onChange={onChangeSelectedRunner}
-              disabled={submitting || disabled}
-            />
-          )}
-        </div>
-        <div className={styles.composerSendCluster}>
-          {submitting && <span className={styles.composerHint}>Starting…</span>}
-          <button
-            type="button"
-            aria-label={`Start ${agent.name} session`}
-            onClick={submit}
-            disabled={!isActive}
-            className={[
-              styles.composerSend,
-              isActive ? styles.composerSendActive : null,
-            ]
-              .filter(Boolean)
-              .join(` `)}
-          >
-            <Icon icon={ArrowUp} size={3} />
-          </button>
-        </div>
+        )}
       </div>
     </div>
   )
@@ -829,6 +838,7 @@ function RunnerPickerPill({
         aria-label="Runner"
         title="Pull-wake runner that will handle this session"
         placeholder="Pick runner"
+        icon={Cpu}
         renderValue={renderValue}
       />
       <Select.Content>
