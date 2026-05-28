@@ -1,5 +1,11 @@
 # @electric-ax/agents-desktop
 
+## 0.1.10
+
+### Patch Changes
+
+- 226cf15: Refactor the desktop main process into focused modules so Electron bootstrap, app state, credentials, runtime lifecycle, IPC, cloud auth, and UI shell responsibilities are easier to maintain.
+
 ## 0.1.9
 
 ### Patch Changes
