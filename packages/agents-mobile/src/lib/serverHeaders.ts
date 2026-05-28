@@ -1,14 +1,15 @@
 import { registerActiveServerHeaders } from '@electric-ax/agents-server-ui/src/lib/auth-fetch'
 import { registerActiveBaseUrl } from '@electric-ax/agents-server-ui/src/lib/entity-connection'
-import { cloudAuth, getCloudServiceIdFromServerUrl } from './cloudAuth'
+import { getCloudServiceIdFromServerUrl } from './cloudAgentUrls'
+import { cloudAuth } from './cloudAuth'
 
 /**
  * Bind the agents-server-ui auth-fetch / entity-connection modules to
  * the mobile app's currently-active server URL. For Cloud agent servers
- * (URL carries `?service=<id>`), we trade the user's dashboard JWT for
- * a per-service agents token via `cloudAuth.getAgentsToken` and inject
- * `Authorization: Bearer …` + `x-electric-service: <id>` on outbound
- * requests. For local servers we just register the base URL.
+ * (URL is rooted at `/t/<service-id>/v1`), we trade the user's dashboard
+ * JWT for a per-service agents token via `cloudAuth.getAgentsToken` and
+ * inject `Authorization: Bearer …` on outbound requests. For local servers
+ * we just register the base URL.
  *
  * Pass `null` to clear (e.g. on sign-out or server reset).
  *
@@ -35,7 +36,6 @@ export async function prepareServerHeaders(
   if (token) {
     const headers: Record<string, string> = {
       authorization: `Bearer ${token}`,
-      'x-electric-service': serviceId,
     }
     // Inform agents-server-ui's `resolveSenderPrincipalUrl` who the
     // current user is. Without this, `sendMessage` falls back to
