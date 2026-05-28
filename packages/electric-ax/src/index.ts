@@ -7,7 +7,9 @@ import { fileURLToPath } from 'node:url'
 import { Command } from 'commander'
 import { installCompletions, setupCompletions } from './completions.js'
 import { entityApiPath } from './entity-api.js'
+import { createEntityStreamDB } from './entity-stream-db.js'
 import { ensureAnthropicApiKey } from './prompt-api-key.js'
+import { formatEntityConversationViewFromDB } from './view.js'
 import { appendPathToUrl } from '@electric-ax/agents-runtime'
 import { mergeElectricPrincipalHeader } from '@electric-ax/agents/server-headers'
 import type {
@@ -95,6 +97,7 @@ export interface ElectricCliHandlers {
     options: SendCommandOptions
   ) => Promise<void>
   observe: (url: string, options: ObserveCommandOptions) => Promise<void>
+  view: (url: string, options: ObserveCommandOptions) => Promise<void>
   inspect: (url: string) => Promise<void>
   ps: (options: PsCommandOptions) => Promise<void>
   signal: (
@@ -606,6 +609,24 @@ async function observeEntity(
   })
 }
 
+async function viewEntity(
+  env: ElectricCliEnv,
+  url: string,
+  options: ObserveCommandOptions
+): Promise<void> {
+  const { db, close } = await createEntityStreamDB({
+    entityUrl: url,
+    baseUrl: env.electricAgentsUrl,
+    headers: env.electricAgentsHeaders,
+    initialOffset: options.from,
+  })
+  try {
+    console.log(formatEntityConversationViewFromDB(db, { entityUrl: url }))
+  } finally {
+    close()
+  }
+}
+
 async function inspectEntity(env: ElectricCliEnv, url: string): Promise<void> {
   const res = await electricAgentsFetch(env, entityApiPath(url))
   const data = await parseJsonResponse(res)
@@ -738,6 +759,7 @@ export function createElectricCliHandlers(
     spawn: (urlPath, options) => spawnEntity(env, urlPath, options),
     send: (url, message, options) => sendMessage(env, url, message, options),
     observe: (url, options) => observeEntity(env, url, options),
+    view: (url, options) => viewEntity(env, url, options),
     inspect: (url) => inspectEntity(env, url),
     ps: (options) => listEntities(env, options),
     signal: (url, signal, options) => signalEntity(env, url, signal, options),
@@ -894,6 +916,16 @@ export function createElectricProgram({
       const url = actionArgs[0] as string
       const command = getCommandActionArg(actionArgs)
       await handlers.observe(url, command.opts<ObserveCommandOptions>())
+    })
+
+  agentsCommand
+    .command(`view <url>`)
+    .description(`Print an entity conversation once`)
+    .option(`--from <offset>`, `Initial offset`)
+    .action(async (...actionArgs: Array<unknown>) => {
+      const url = actionArgs[0] as string
+      const command = getCommandActionArg(actionArgs)
+      await handlers.view(url, command.opts<ObserveCommandOptions>())
     })
 
   agentsCommand

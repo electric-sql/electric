@@ -332,7 +332,7 @@ async function rewriteSubscriptionRequestBody(
     targetWebhookUrl = rewriteLoopbackWebhookUrl(payload.webhook.url) ?? null
     payload.webhook.url = appendPathToUrl(
       ctx.publicUrl,
-      `/_electric/webhook-forward/${encodeURIComponent(subscriptionId)}`
+      `/_electric/subscription-webhooks/${encodeURIComponent(subscriptionId)}`
     )
   }
 

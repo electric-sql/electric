@@ -4,6 +4,7 @@ import { electricCollectionOptions } from '@tanstack/electric-db-collection'
 import { useLiveQuery } from '@tanstack/react-db'
 import { z } from 'zod'
 import { cloudAuth, getCloudBaseUrl } from './cloudAuth'
+import { cloudAgentServerUrlFromDashboard } from './cloudAgentUrls'
 import type { CloudAuthState } from './cloudAuth'
 
 /**
@@ -35,7 +36,7 @@ export type CloudAgentServerStatus =
   | `error`
 
 export type CloudAgentServer = {
-  /** `stream_services.id` — also the tenant identifier in the agents URL's `?service=`. */
+  /** `stream_services.id` — also the tenant identifier in the cloud agents server URL. */
   id: string
   name: string
   workspaceId: string | null
@@ -188,24 +189,12 @@ function getOrCreateCollections(dashboardUrl: string): CollectionSet {
 
 /**
  * Resolve the Cloud agents server base URL for a service id. Same shape
- * the desktop produces — host swap `dashboard` → `agents`, service id
- * carried in the `?service=` query param so multiple Cloud servers on
- * the same host stay routable.
+ * the desktop produces: host swap `dashboard` → `agents`, then route the
+ * tenant through `/t/<service-id>/v1` so multiple Cloud servers on the same
+ * host stay routable.
  */
 export function cloudAgentServerUrl(serviceId: string): string {
-  const dashboardUrl = new URL(getCloudBaseUrl())
-  const agentsUrl = new URL(dashboardUrl.toString())
-  if (/^dashboard([.-]|$)/.test(dashboardUrl.hostname)) {
-    agentsUrl.hostname = dashboardUrl.hostname.replace(
-      /^dashboard(?=[.-]|$)/,
-      `agents`
-    )
-  }
-  agentsUrl.pathname = `/`
-  agentsUrl.search = ``
-  agentsUrl.hash = ``
-  agentsUrl.searchParams.set(`service`, serviceId)
-  return agentsUrl.toString()
+  return cloudAgentServerUrlFromDashboard(getCloudBaseUrl(), serviceId)
 }
 
 /**

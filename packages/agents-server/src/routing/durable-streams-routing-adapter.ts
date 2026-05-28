@@ -13,9 +13,7 @@ export interface DurableStreamsRoutingAdapter {
 
 function appendSearch(target: URL, source: URL): URL {
   source.searchParams.forEach((value, key) => {
-    if (key !== `service`) {
-      target.searchParams.append(key, value)
-    }
+    target.searchParams.append(key, value)
   })
   return target
 }

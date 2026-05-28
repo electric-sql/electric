@@ -119,6 +119,7 @@ export {
   createEntityIncludesQuery,
   createEntityTimelineQuery,
   createEntityErrorsQuery,
+  buildEntityTimelineData,
   createPendingTimelineOrder,
   getEntityState,
   normalizeEntityTimelineData,
@@ -238,7 +239,6 @@ export {
   entity,
   cron,
   entities,
-  tagged,
   db,
   webhook,
   getWebhookStreamPath,
@@ -249,12 +249,10 @@ export type {
   EntityObservationSource,
   CronObservationSource,
   EntitiesObservationSource,
-  TaggedObservationSource,
   DbObservationSource,
   WebhookObservationSource,
   WebhookEventRow,
   EntitiesQuery,
-  TaggedQuery,
 } from './observation-sources'
 
 export { processWake } from './process-wake'
@@ -268,7 +266,7 @@ export { createSkillsRegistry } from './skills/registry'
 export { createSkillTools } from './skills/tools'
 export type { SkillsRegistry, SkillMeta } from './skills/types'
 
-export { DEFAULT_OUTPUT_SCHEMAS } from './default-output-schemas'
+export { DEFAULT_STATE_SCHEMAS } from './default-state-schemas'
 export { createContextEntriesApi } from './context-entries'
 export { assembleContext } from './context-assembly'
 export { approxTokens, sliceChars } from './token-budget'

@@ -100,7 +100,7 @@ IMPORTANT: Never write files until the user explicitly confirms. "Ask to write" 
 
 - **Continue building** — add an HTTP API route and a React frontend to this app so users can interact with the analyzer from the browser.
 - **Start a new app** — use the `agents-chat-starter` template for a full multi-agent chat app with rooms, agent spawning, and a Slack-style UI. Load the init skill or tell them to type `/init`.
-- **Explore the docs** — read about other coordination patterns (blackboard, pipeline, map-reduce), dive into the API reference, or learn about shared state, context assembly, and other advanced features. Use `search_durable_agents_docs` to look things up.
+- **Explore the docs** — read about other coordination patterns (blackboard, pipeline, map-reduce), dive into the API reference, or learn about shared state, context assembly, and other advanced features. Use `search_electric_agents_docs` to look things up.
 
 Wait for the user to choose. Only proceed to Step 4 if they want to continue building.
 
@@ -116,7 +116,7 @@ Wait for the user to choose. Only proceed to Step 4 if they want to continue bui
 - `server.ts` is at the working directory root. Entity files go in `entities/`.
 - Worker spawn args MUST include `tools` array (at least one tool, e.g. `tools: ["bash"]`).
 - Use `edit` tool for small changes (like updating server.ts). Use `write` for full entity file updates.
-- If the user asks a question about Electric Agents concepts, APIs, or patterns between steps, use the `search_durable_agents_docs` tool to look up the answer in the built-in documentation before guessing or searching the web.
+- If the user asks a question about Electric Agents concepts, APIs, or patterns between steps, use the `search_electric_agents_docs` tool to look up the answer in the built-in documentation before guessing or searching the web.
 
 ---
 

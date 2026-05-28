@@ -412,10 +412,11 @@ function ObserveView({
 
   const typedRuns = timelineData.runs
   const typedInbox = timelineData.inbox
+  const typedWakes = timelineData.wakes
 
   const timeline = useMemo(
-    () => buildSections(typedRuns, typedInbox),
-    [typedRuns, typedInbox]
+    () => buildSections(typedRuns, typedInbox, typedWakes),
+    [typedRuns, typedInbox, typedWakes]
   )
 
   const { data: stopped = [] } = useLiveQuery(

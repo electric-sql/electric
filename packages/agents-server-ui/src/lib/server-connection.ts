@@ -392,7 +392,7 @@ declare global {
           callback: (state: CloudAgentServersState) => void
         ) => () => void
         prepareConnection: (
-          serviceId: string
+          tenantId: string
         ) => Promise<{ url: string; tenantId: string }>
       }
     }
@@ -583,11 +583,11 @@ export function onCloudAgentServersStateChanged(
 }
 
 export async function prepareCloudAgentServerConnection(
-  serviceId: string
+  tenantId: string
 ): Promise<{ url: string; tenantId: string } | null> {
   return (
     (await window.electronAPI?.cloudAgentServers?.prepareConnection?.(
-      serviceId
+      tenantId
     )) ?? null
   )
 }

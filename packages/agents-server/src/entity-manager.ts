@@ -1675,7 +1675,7 @@ export class EntityManager {
   // ==========================================================================
 
   /**
-   * Deliver a message to an entity's main stream, with optional input schema
+   * Deliver a message to an entity's main stream, with optional inbox schema
    * validation.
    */
   async send(
@@ -1888,7 +1888,7 @@ export class EntityManager {
     return updated
   }
 
-  async removeTag(
+  async deleteTag(
     entityUrl: string,
     key: string,
     token: string
@@ -1930,7 +1930,7 @@ export class EntityManager {
     return updated
   }
 
-  async registerEntitiesSource(tags: Record<string, string>): Promise<{
+  async ensureEntitiesMembershipStream(tags: Record<string, string>): Promise<{
     sourceRef: string
     streamUrl: string
   }> {
@@ -2742,7 +2742,7 @@ export class EntityManager {
   // ==========================================================================
 
   /**
-   * Add new input/output schema keys to an entity type directly in Postgres.
+   * Add new inbox/state schema keys to an entity type directly in Postgres.
    */
   async amendSchemas(
     typeName: string,
@@ -2831,7 +2831,7 @@ export class EntityManager {
 
   /**
    * Enrich webhook payload with entity context.
-   * Called by ElectricAgentsServer during webhook forwarding to inject entity context.
+   * Called by ElectricAgentsServer during subscription webhook dispatch to inject entity context.
    */
   async enrichPayload(
     payload: Record<string, unknown>,

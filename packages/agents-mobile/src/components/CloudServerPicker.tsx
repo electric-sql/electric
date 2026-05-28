@@ -13,8 +13,8 @@ import type { Tokens } from '../lib/theme'
  * Lists the Electric Cloud agent servers the signed-in user can see.
  * Subscribes to the four admin-API shapes via `useCloudAgentServers`
  * and renders each as a tappable card; tapping derives the agent-server
- * URL (host swap + `?service=`) and calls `onPick` so the parent screen
- * can drop it into its input / save flow.
+ * tenant URL and calls `onPick` so the parent screen can drop it into its
+ * input / save flow.
  *
  * Renders nothing when the user isn't signed in to Cloud — the manual
  * URL entry on the parent screen remains the entry point in that case.

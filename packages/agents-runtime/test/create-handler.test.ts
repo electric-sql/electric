@@ -588,7 +588,7 @@ describe(`createRuntimeHandler`, () => {
   it(`registers entity types with a webhook default dispatch policy`, async () => {
     defineEntity(`schema-agent`, {
       description: `Schema agent`,
-      outputSchemas: { custom: makeStandardSchema({ type: `object` }) },
+      stateSchemas: { custom: makeStandardSchema({ type: `object` }) },
       handler: async () => {},
     })
 
@@ -628,7 +628,7 @@ describe(`createRuntimeHandler`, () => {
           },
         ],
       },
-      output_schemas: expect.objectContaining({
+      state_schemas: expect.objectContaining({
         custom: { type: `object` },
         run: expect.any(Object),
         manifest: expect.any(Object),
@@ -694,7 +694,7 @@ describe(`createRuntimeHandler`, () => {
     )
   })
 
-  it(`preserves base URL query params when registering types`, async () => {
+  it(`preserves tenant path prefixes when registering types`, async () => {
     defineEntity(`schema-agent`, { handler: async () => {} })
 
     const fetchMock = vi.spyOn(globalThis, `fetch`).mockResolvedValue(
@@ -705,14 +705,14 @@ describe(`createRuntimeHandler`, () => {
     )
 
     const handler = createRuntimeHandler({
-      baseUrl: `http://localhost:3000?service=tenant-a&secret=shared-secret`,
+      baseUrl: `http://localhost:3000/t/tenant-a/v1`,
       handlerUrl: `http://localhost:4000/electric-agents`,
     })
 
     await handler.registerTypes()
 
     expect(fetchMock).toHaveBeenCalledWith(
-      `http://localhost:3000/_electric/entity-types?service=tenant-a&secret=shared-secret`,
+      `http://localhost:3000/t/tenant-a/v1/_electric/entity-types`,
       expect.objectContaining({
         method: `POST`,
       })
@@ -747,7 +747,7 @@ describe(`createRuntimeHandler`, () => {
     expect(headers.get(`content-type`)).toBe(`application/json`)
   })
 
-  it(`registers custom state collections as output schemas`, async () => {
+  it(`registers custom state collections as state schemas`, async () => {
     defineEntity(`stateful-agent`, {
       state: {
         status: {
@@ -781,7 +781,7 @@ describe(`createRuntimeHandler`, () => {
 
     const [, options] = fetchMock.mock.calls[0]!
     const body = JSON.parse(options?.body as string) as Record<string, unknown>
-    expect(body.output_schemas).toEqual(
+    expect(body.state_schemas).toEqual(
       expect.objectContaining({
         'state:status': {
           type: `object`,
@@ -829,7 +829,7 @@ describe(`createRuntimeHandler`, () => {
 
     const [, options] = fetchMock.mock.calls[0]!
     const body = JSON.parse(options?.body as string) as Record<string, unknown>
-    expect(body.output_schemas).toEqual(
+    expect(body.state_schemas).toEqual(
       expect.objectContaining({
         'state:status': {
           type: `object`,
@@ -900,7 +900,7 @@ describe(`createRuntimeHandler`, () => {
     })
   })
 
-  it(`sends input_schemas when inboxSchemas is defined`, async () => {
+  it(`sends inbox_schemas when inboxSchemas is defined`, async () => {
     defineEntity(`inbox-agent`, {
       description: `Inbox agent`,
       inboxSchemas: {
@@ -928,12 +928,12 @@ describe(`createRuntimeHandler`, () => {
 
     const [, options] = fetchMock.mock.calls[0]!
     const body = JSON.parse(options?.body as string) as Record<string, unknown>
-    expect(body.input_schemas).toEqual({
+    expect(body.inbox_schemas).toEqual({
       greet: { type: `object`, properties: { name: { type: `string` } } },
     })
   })
 
-  it(`omits creation_schema and input_schemas when neither is defined`, async () => {
+  it(`omits creation_schema and inbox_schemas when neither is defined`, async () => {
     defineEntity(`plain-agent`, {
       description: `Plain agent`,
       handler: async () => {},
@@ -956,7 +956,7 @@ describe(`createRuntimeHandler`, () => {
     const [, options] = fetchMock.mock.calls[0]!
     const body = JSON.parse(options?.body as string) as Record<string, unknown>
     expect(body).not.toHaveProperty(`creation_schema`)
-    expect(body).not.toHaveProperty(`input_schemas`)
-    expect(body).toHaveProperty(`output_schemas`)
+    expect(body).not.toHaveProperty(`inbox_schemas`)
+    expect(body).toHaveProperty(`state_schemas`)
   })
 })

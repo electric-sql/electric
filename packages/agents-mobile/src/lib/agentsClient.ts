@@ -104,8 +104,8 @@ export function createEntitiesCollection(baseUrl: string) {
       schema: entitySchema,
       shapeOptions: {
         url: appendPathToUrl(baseUrl, `/_electric/electric/v1/shape`),
-        // Inject Authorization / x-electric-service from the active
-        // server's registered headers on every shape fetch.
+        // Inject Authorization from the active server's registered headers on
+        // every shape fetch.
         fetchClient: serverFetch,
         params: {
           table: `entities`,

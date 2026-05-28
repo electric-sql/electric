@@ -51,15 +51,6 @@ export interface WebhookObservationSource extends ObservationSource {
   readonly schema: typeof webhookObservationCollections
 }
 
-/** @deprecated Use `EntitiesQuery`. */
-export interface TaggedQuery {
-  match: Record<string, string>
-  select?: Array<string>
-}
-
-/** @deprecated Use `EntitiesObservationSource`. */
-export type TaggedObservationSource = EntitiesObservationSource
-
 export function manifestSourceKey(
   sourceType: string,
   sourceRef: string
@@ -272,13 +263,6 @@ export function db<const TSchema extends SharedStateSchemaMap>(
       }
     },
   }
-}
-
-export function tagged(query: TaggedQuery): TaggedObservationSource {
-  return entities({
-    tags: query.match,
-    select: query.select,
-  })
 }
 
 function assertWebhookEndpointKey(endpointKey: string): void {

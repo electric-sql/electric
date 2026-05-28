@@ -99,7 +99,7 @@ describe(`createHandlerContext`, () => {
       executeSend: vi.fn(),
       tags: {},
       doSetTag: vi.fn().mockResolvedValue(undefined),
-      doRemoveTag: vi.fn().mockResolvedValue(undefined),
+      doDeleteTag: vi.fn().mockResolvedValue(undefined),
     })
 
     ctx.useAgent({
@@ -224,7 +224,7 @@ describe(`createHandlerContext`, () => {
       executeSend: vi.fn(),
       tags: {},
       doSetTag: vi.fn().mockResolvedValue(undefined),
-      doRemoveTag: vi.fn().mockResolvedValue(undefined),
+      doDeleteTag: vi.fn().mockResolvedValue(undefined),
     })
 
     ctx.useAgent({

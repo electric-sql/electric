@@ -311,7 +311,7 @@ export function createTestHandlerContext(
     doMkdb: vi.fn(),
     executeSend: vi.fn(),
     doSetTag: vi.fn(async () => undefined),
-    doRemoveTag: vi.fn(async () => undefined),
+    doDeleteTag: vi.fn(async () => undefined),
   })
 }
 

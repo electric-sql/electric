@@ -5,8 +5,8 @@ import type * as StateModule from '@durable-streams/state'
 
 const { mockState } = vi.hoisted(() => ({
   mockState: {
-    registerEntitiesSource: vi.fn(),
-    registerCronSource: vi.fn(),
+    ensureEntitiesMembershipStream: vi.fn(),
+    ensureCronStream: vi.fn(),
     signalEntity: vi.fn(),
     ensureStream: vi.fn(),
     createStreamDB: vi.fn(),
@@ -22,8 +22,8 @@ const { mockState } = vi.hoisted(() => ({
 
 vi.mock(`../src/runtime-server-client`, () => ({
   createRuntimeServerClient: () => ({
-    registerEntitiesSource: mockState.registerEntitiesSource,
-    registerCronSource: mockState.registerCronSource,
+    ensureEntitiesMembershipStream: mockState.ensureEntitiesMembershipStream,
+    ensureCronStream: mockState.ensureCronStream,
     signalEntity: mockState.signalEntity,
     ensureStream: mockState.ensureStream,
   }),
@@ -42,7 +42,7 @@ vi.mock(`@durable-streams/state`, async (importOriginal) => {
 
 describe(`createAgentsClient`, () => {
   beforeEach(() => {
-    mockState.registerEntitiesSource = vi.fn().mockResolvedValue({
+    mockState.ensureEntitiesMembershipStream = vi.fn().mockResolvedValue({
       sourceRef: `source-1`,
       streamUrl: `/_entities/source-1`,
     })
@@ -58,7 +58,7 @@ describe(`createAgentsClient`, () => {
   })
 
   it(`observe(cron(...)) throws a clear error (not the generic guard)`, async () => {
-    mockState.registerCronSource = vi.fn().mockResolvedValue(`/_cron/abc123`)
+    mockState.ensureCronStream = vi.fn().mockResolvedValue(`/_cron/abc123`)
 
     const client = createAgentsClient({
       baseUrl: `http://agents.test`,
@@ -73,7 +73,7 @@ describe(`createAgentsClient`, () => {
     )
   })
 
-  it(`registers entities sources and returns a preloaded StreamDB`, async () => {
+  it(`ensures entities membership streams and returns a preloaded StreamDB`, async () => {
     const client = createAgentsClient({
       baseUrl: `http://electric-agents.test`,
     })
@@ -87,7 +87,7 @@ describe(`createAgentsClient`, () => {
 
     const db = await client.observe(source)
 
-    expect(mockState.registerEntitiesSource).toHaveBeenCalledWith({
+    expect(mockState.ensureEntitiesMembershipStream).toHaveBeenCalledWith({
       demo_id: `X`,
       role: `reviewer`,
     })
@@ -102,9 +102,9 @@ describe(`createAgentsClient`, () => {
     expect(db).toBe(mockState.observedDb)
   })
 
-  it(`preserves base URL query params on observed stream URLs`, async () => {
+  it(`preserves tenant path prefixes on observed stream URLs`, async () => {
     const client = createAgentsClient({
-      baseUrl: `http://electric-agents.test?service=tenant-a&secret=shared-secret`,
+      baseUrl: `http://electric-agents.test/t/tenant-a/v1`,
     })
 
     const source = entities({
@@ -117,7 +117,7 @@ describe(`createAgentsClient`, () => {
 
     expect(mockState.createStreamDB).toHaveBeenCalledWith({
       streamOptions: {
-        url: `http://electric-agents.test${source.streamUrl}?service=tenant-a&secret=shared-secret`,
+        url: `http://electric-agents.test/t/tenant-a/v1${source.streamUrl}`,
         contentType: `application/json`,
       },
       state: source.schema,
@@ -153,7 +153,7 @@ describe(`createAgentsClient`, () => {
 
   it(`observe(webhook(...)) ensures the exact stream before preloading it`, async () => {
     const client = createAgentsClient({
-      baseUrl: `http://electric-agents.test?service=tenant-a&secret=shared-secret`,
+      baseUrl: `http://electric-agents.test/t/tenant-a/v1`,
     })
 
     const source = webhook(`repo`, { bucket: `prs/123` })
@@ -166,7 +166,7 @@ describe(`createAgentsClient`, () => {
     )
     expect(mockState.createStreamDB).toHaveBeenCalledWith({
       streamOptions: {
-        url: `http://electric-agents.test/_webhooks/repo/prs/123?service=tenant-a&secret=shared-secret`,
+        url: `http://electric-agents.test/t/tenant-a/v1/_webhooks/repo/prs/123`,
         contentType: `application/json`,
       },
       state: source.schema,
