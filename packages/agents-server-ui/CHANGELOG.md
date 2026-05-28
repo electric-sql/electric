@@ -1,5 +1,11 @@
 # @electric-ax/agents-server-ui
 
+## 0.4.10
+
+### Patch Changes
+
+- ac21b9a: Refine desktop agents onboarding and settings server management.
+
 ## 0.4.9
 
 ### Patch Changes
