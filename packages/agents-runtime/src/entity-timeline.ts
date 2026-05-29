@@ -39,6 +39,7 @@ export type EntityTimelineContentItem =
       args: Record<string, unknown>
       status: `started` | `args_complete` | `executing` | `completed` | `failed`
       result?: string
+      error?: string
       isError: boolean
     }
 
