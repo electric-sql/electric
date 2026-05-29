@@ -1524,7 +1524,13 @@ export function EntityTimeline({
               <Tooltip content={`Sandbox: ${sandboxLabel}`}>
                 <span className={styles.statusPill}>
                   <Text size={1} tone="muted" className={styles.statusText}>
-                    sandbox · {sandboxLabel}
+                    sandbox
+                  </Text>
+                  <Text size={1} tone="muted" className={styles.statusText}>
+                    ·
+                  </Text>
+                  <Text size={1} tone="muted" className={styles.statusText}>
+                    {sandboxLabel}
                   </Text>
                 </span>
               </Tooltip>

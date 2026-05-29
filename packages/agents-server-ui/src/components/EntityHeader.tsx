@@ -173,7 +173,9 @@ function EntityActions({
         {entity.status}
       </InlineStatusBadge>
 
-      <EntityRuntimeBadges entity={entity} />
+      <span className={styles.runtimeBadges}>
+        <EntityRuntimeBadges entity={entity} />
+      </span>
 
       {showViewStrip &&
         availableViews.map((view) => {

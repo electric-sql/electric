@@ -82,6 +82,12 @@
   margin-right: 4px;
 }
 
+.runtimeBadges {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 4px;
+}
+
 /* Toggled-on state for icon-only buttons (e.g. state-explorer
    toggle). Neutral grey so it reads as "active" without colouring
    the icon — matches the rest of the chrome. */
