@@ -361,7 +361,13 @@ export interface AttachmentsApi {
 }
 
 export type TimelineItem =
-  | { kind: `inbox`; at: number; key: string; payload: unknown }
+  | {
+      kind: `inbox`
+      at: number
+      key: string
+      payload: unknown
+      messageType?: string
+    }
   | { kind: `wake`; at: number; payload: unknown }
   | { kind: `signal`; at: number; signal: EntitySignalEntry }
   | {

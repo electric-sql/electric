@@ -16,6 +16,7 @@ import type { AgentTool, StreamFn } from '@mariozechner/pi-agent-core'
 import type {
   EntityRegistry,
   HandlerContext,
+  SlashCommandDefinition,
   WakeEvent,
 } from '@electric-ax/agents-runtime'
 import {
@@ -37,6 +38,8 @@ export const HORTON_MODEL = `claude-sonnet-4-6`
 const TITLE_SYSTEM_PROMPT =
   `You generate concise chat session titles in 3-5 words. ` +
   `Respond with only the title, no quotes, no punctuation, no preamble.`
+const SLASH_COMMAND_NAME_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/
+const SLASH_COMMAND_ARGUMENT_NAME_PATTERN = /^[a-z][a-zA-Z0-9_]*$/
 
 const TITLE_USER_PROMPT = (userMessage: string): string =>
   `User request:\n${userMessage}`
@@ -122,6 +125,39 @@ function buildFallbackTitle(userMessage: string): string {
   const selected =
     informativeWords.length >= 2 ? informativeWords.slice(0, 5) : backupWords
   return selected.join(` `).slice(0, 80).trim() || `Untitled Chat`
+}
+
+export function buildHortonSlashCommands(
+  skillsRegistry: SkillsRegistry | null | undefined
+): Array<SlashCommandDefinition> {
+  if (!skillsRegistry) {
+    return []
+  }
+
+  return Array.from(skillsRegistry.catalog.values())
+    .filter(
+      (skill) =>
+        skill.userInvocable && SLASH_COMMAND_NAME_PATTERN.test(skill.name)
+    )
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((skill) => ({
+      name: skill.name,
+      description: skill.description,
+      ...(skill.arguments && skill.arguments.length > 0
+        ? {
+            arguments: skill.arguments
+              .filter((name) => SLASH_COMMAND_ARGUMENT_NAME_PATTERN.test(name))
+              .map((name) => ({
+                name,
+                type: `string` as const,
+                required: false,
+                ...(skill.argumentHint
+                  ? { description: skill.argumentHint }
+                  : {}),
+              })),
+          }
+        : {}),
+    }))
 }
 
 function createConfiguredTitleCall(
@@ -744,6 +780,7 @@ export function registerHorton(
         permission: `spawn`,
       },
     ],
+    slashCommands: buildHortonSlashCommands(skillsRegistry),
     handler: assistantHandler,
   })
 

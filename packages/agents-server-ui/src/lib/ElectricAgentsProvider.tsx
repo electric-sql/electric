@@ -478,7 +478,8 @@ function createSpawnAction(
         throw new Error(message)
       }
       const data = (await res.json()) as { txid: number }
-      return { txid: data.txid }
+      await entitiesCollection.utils.awaitTxId(data.txid, 10_000)
+      return data
     },
   })
 }

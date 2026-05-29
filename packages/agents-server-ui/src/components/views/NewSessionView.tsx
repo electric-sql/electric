@@ -204,6 +204,19 @@ export function NewSessionView({
     userSelectedRunnerRef.current = true
     setSelectedRunnerId(id)
   }, [])
+  const selectedRunnerStillExists =
+    selectedRunnerId !== null &&
+    enabledRunners.some((r) => r.id === selectedRunnerId)
+  const desktopRunnerStillExists =
+    desktopRunnerId !== null &&
+    enabledRunners.some((r) => r.id === desktopRunnerId)
+  const effectiveRunnerId =
+    !userSelectedRunnerRef.current && desktopRunnerStillExists
+      ? desktopRunnerId
+      : selectedRunnerStillExists
+        ? selectedRunnerId
+        : (enabledRunners[0]?.id ?? null)
+
   // Re-evaluate the default whenever the list of runners or the desktop's
   // runner id changes. An explicit user choice (tracked via
   // `userSelectedRunnerRef`) wins while it still exists; otherwise prefer the
@@ -215,16 +228,9 @@ export function NewSessionView({
       return
     }
 
-    const selectedRunnerStillExists =
-      selectedRunnerId !== null &&
-      enabledRunners.some((r) => r.id === selectedRunnerId)
     if (!selectedRunnerStillExists) {
       userSelectedRunnerRef.current = false
     }
-
-    const desktopRunnerStillExists =
-      desktopRunnerId !== null &&
-      enabledRunners.some((r) => r.id === desktopRunnerId)
 
     const preferredRunnerId =
       !userSelectedRunnerRef.current && desktopRunnerStillExists
@@ -236,14 +242,20 @@ export function NewSessionView({
     if (selectedRunnerId !== preferredRunnerId) {
       setSelectedRunnerId(preferredRunnerId)
     }
-  }, [enabledRunners, desktopRunnerId, selectedRunnerId])
+  }, [
+    desktopRunnerId,
+    desktopRunnerStillExists,
+    enabledRunners,
+    selectedRunnerId,
+    selectedRunnerStillExists,
+  ])
 
   // Sandbox profiles ride alongside the runner row. Read the advertised
   // list off whichever runner the spawn will dispatch to, preserving the
   // runtime's advertised order (default profile first).
   const allSandboxProfiles = useMemo<Array<ElectricSandboxProfile>>(() => {
-    if (!selectedRunnerId) return []
-    const runner = enabledRunners.find((r) => r.id === selectedRunnerId)
+    if (!effectiveRunnerId) return []
+    const runner = enabledRunners.find((r) => r.id === effectiveRunnerId)
     if (!runner) return []
     // A runner row may sync before its sandbox_profiles are populated (or
     // predate the column), so guard against a missing/non-array value.
@@ -255,7 +267,7 @@ export function NewSessionView({
     // label put "Docker" ahead of "Local", defaulting new sessions to Docker
     // wherever the daemon is reachable.
     return [...(runner.sandbox_profiles ?? [])]
-  }, [selectedRunnerId, enabledRunners])
+  }, [effectiveRunnerId, enabledRunners])
 
   const defaultAgent = useMemo(
     () => entityTypes.find((t) => t.name === DEFAULT_AGENT_NAME) ?? null,
@@ -298,11 +310,11 @@ export function NewSessionView({
         type: typeName,
         name,
         args,
-        ...(selectedRunnerId
+        ...(effectiveRunnerId
           ? {
               dispatch_policy: {
                 targets: [
-                  { type: `runner` as const, runnerId: selectedRunnerId },
+                  { type: `runner` as const, runnerId: effectiveRunnerId },
                 ],
               },
             }
@@ -345,7 +357,7 @@ export function NewSessionView({
         return false
       }
     },
-    [baseUrl, helpers, selectedRunnerId, spawnEntity, tileId]
+    [baseUrl, effectiveRunnerId, helpers, spawnEntity, tileId]
   )
 
   const handleSelectType = useCallback(
@@ -460,7 +472,7 @@ export function NewSessionView({
             workingDirectory={workingDirectory}
             onChangeWorkingDirectory={setWorkingDirectory}
             runners={enabledRunners}
-            selectedRunnerId={selectedRunnerId}
+            selectedRunnerId={effectiveRunnerId}
             onChangeSelectedRunner={handleChangeSelectedRunner}
           />
         )}

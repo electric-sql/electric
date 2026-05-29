@@ -211,20 +211,36 @@
   color: var(--ds-text-3);
 }
 
+.slashCommandPill {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 0 5px;
+  border-radius: var(--ds-radius-3);
+  background: var(--ds-accent-a3);
+  color: var(--ds-accent-11);
+  font-size: 0.95em;
+  line-height: 1.35;
+  white-space: nowrap;
+  vertical-align: baseline;
+}
+
+.slashCommandPill:global(.ProseMirror-selectednode) {
+  outline: 2px solid var(--ds-accent-a6);
+  outline-offset: 1px;
+}
+
 .slashPopover {
-  position: absolute;
-  left: 0;
-  bottom: calc(100% + 8px);
   z-index: 5;
   min-width: 240px;
   max-width: 360px;
   padding: 4px;
-  border: 1px solid var(--ds-border-1);
-  border-radius: var(--ds-radius-4);
-  background: var(--ds-surface-raised);
-  box-shadow:
-    0 12px 28px rgba(15, 15, 30, 0.12),
-    0 2px 8px rgba(15, 15, 30, 0.08);
+}
+
+.slashList {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }
 
 .slashOption {
@@ -233,6 +249,7 @@
   display: flex;
   flex-direction: column;
   gap: 1px;
+  align-items: flex-start;
   width: 100%;
   padding: 6px 8px;
   border-radius: var(--ds-radius-3);

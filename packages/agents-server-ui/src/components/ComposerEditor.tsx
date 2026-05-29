@@ -2,8 +2,8 @@ import {
   ProseMirror,
   ProseMirrorDoc,
   reactKeys,
+  useEditorEffect,
   useEditorEventCallback,
-  useEditorEventListener,
 } from '@handlewithcare/react-prosemirror'
 import type {
   ComposerInputPayload,
@@ -23,6 +23,7 @@ import { Decoration, DecorationSet } from 'prosemirror-view'
 import 'prosemirror-view/style/prosemirror.css'
 
 import styles from './MessageInput.module.css'
+import { Popover } from '../ui'
 
 const classNames = (
   ...classes: Array<string | false | null | undefined>
@@ -45,6 +46,38 @@ const composerSchema = new Schema({
       parseDOM: [{ tag: `br` }],
       toDOM: () => [`br`],
     },
+    slash_command: {
+      inline: true,
+      group: `inline`,
+      atom: true,
+      selectable: true,
+      attrs: {
+        name: {},
+      },
+      parseDOM: [
+        {
+          tag: `span[data-composer-node="slash_command"]`,
+          getAttrs: (node) => {
+            if (!(node instanceof HTMLElement)) return false
+            const name = node.getAttribute(`data-name`)
+            return name ? { name } : false
+          },
+        },
+      ],
+      toDOM: (node) => {
+        const name = String(node.attrs.name)
+        return [
+          `span`,
+          {
+            class: styles.slashCommandPill,
+            'data-composer-node': `slash_command`,
+            'data-name': name,
+            contenteditable: `false`,
+          },
+          `/${name}`,
+        ]
+      },
+    },
   },
   marks: {},
 })
@@ -64,6 +97,8 @@ interface SlashQuery {
   to: number
   query: string
 }
+
+interface DismissedSlashQuery extends SlashQuery {}
 
 const normalizeCommandName = (name: string): string =>
   name.startsWith(`/`) ? name.slice(1) : name
@@ -91,6 +126,8 @@ const sourceFromDoc = (doc: ProseMirrorNode): string => {
         parts.push(node.text ?? ``)
       } else if (node.type.name === `hard_break`) {
         parts.push(`\n`)
+      } else if (node.type.name === `slash_command`) {
+        parts.push(`/${String(node.attrs.name)}`)
       }
     })
   })
@@ -126,6 +163,60 @@ export const serializeComposerInput = (
   }
 
   return nodes.length > 0 ? { source, nodes } : { source }
+}
+
+const serializeComposerInputFromDoc = (
+  doc: ProseMirrorNode,
+  slashCommands: Array<SlashCommandRow> = []
+): ComposerInputPayload => {
+  const sourceParts: Array<string> = []
+  const nodes: ComposerInputPayload[`nodes`] = []
+
+  doc.forEach((paragraph, _offset, paragraphIndex) => {
+    if (paragraphIndex > 0) sourceParts.push(`\n`)
+
+    paragraph.forEach((node) => {
+      if (node.isText) {
+        sourceParts.push(node.text ?? ``)
+        return
+      }
+
+      if (node.type.name === `hard_break`) {
+        sourceParts.push(`\n`)
+        return
+      }
+
+      if (node.type.name === `slash_command`) {
+        const name = normalizeCommandName(String(node.attrs.name))
+        const raw = `/${name}`
+        const start = sourceParts.join(``).length
+        sourceParts.push(raw)
+        nodes.push({
+          kind: `slash_command`,
+          start,
+          end: start + raw.length,
+          raw,
+          name,
+        })
+      }
+    })
+  })
+
+  const source = sourceParts.join(``)
+  const regexPayload = serializeComposerInput(source, slashCommands)
+  const mergedNodes = [...nodes, ...(regexPayload.nodes ?? [])]
+    .filter(
+      (node, index, allNodes) =>
+        allNodes.findIndex(
+          (candidate) =>
+            candidate.kind === node.kind &&
+            candidate.start === node.start &&
+            candidate.end === node.end
+        ) === index
+    )
+    .sort((left, right) => left.start - right.start)
+
+  return mergedNodes.length > 0 ? { source, nodes: mergedNodes } : { source }
 }
 
 const createDecorationPlugin = (
@@ -199,7 +290,8 @@ const createEditorState = (
 function ComposerEditorEvents({
   autocompleteOpen,
   disabled,
-  selectedIndex,
+  dismissAutocomplete,
+  selectedCommand,
   setSelectedIndex,
   slashCommands,
   slashQuery,
@@ -207,28 +299,80 @@ function ComposerEditorEvents({
 }: {
   autocompleteOpen: boolean
   disabled: boolean
-  selectedIndex: number
+  dismissAutocomplete: (query: SlashQuery) => void
+  selectedCommand: SlashCommandRow | undefined
   setSelectedIndex: Dispatch<SetStateAction<number>>
   slashCommands: Array<SlashCommandRow>
   slashQuery: SlashQuery | null
-  submit: (source?: string) => void
+  submit: (doc?: ProseMirrorNode) => void
 }) {
+  const keyboardStateRef = useRef({
+    autocompleteOpen,
+    disabled,
+    dismissAutocomplete,
+    selectedCommand,
+    slashCommands,
+    slashQuery,
+  })
+
+  useEffect(() => {
+    keyboardStateRef.current = {
+      autocompleteOpen,
+      disabled,
+      dismissAutocomplete,
+      selectedCommand,
+      slashCommands,
+      slashQuery,
+    }
+  }, [
+    autocompleteOpen,
+    disabled,
+    dismissAutocomplete,
+    selectedCommand,
+    slashCommands,
+    slashQuery,
+  ])
+
+  const deleteSlashCommandBeforeCursor = useEditorEventCallback((view) => {
+    if (!view) return false
+    const { selection, doc } = view.state
+    if (!selection.empty) return false
+
+    const cursor = selection.from
+    const beforeCursor = doc.resolve(cursor)
+    const maybeSpace = beforeCursor.nodeBefore
+    const hasTrailingSpace =
+      maybeSpace?.isText && maybeSpace.text === ` ` && cursor > 1
+    const atomCursor = hasTrailingSpace ? cursor - 1 : cursor
+    const atomBefore = doc.resolve(atomCursor).nodeBefore
+
+    if (atomBefore?.type.name !== `slash_command`) {
+      return false
+    }
+
+    const from = atomCursor - atomBefore.nodeSize
+    const to = hasTrailingSpace ? cursor : atomCursor
+    view.dispatch(view.state.tr.delete(from, to).scrollIntoView())
+    return true
+  })
+
   const insertSlashCommand = useEditorEventCallback(
     (view, command: SlashCommandRow) => {
-      if (!view || !slashQuery) return
+      const currentSlashQuery = keyboardStateRef.current.slashQuery
+      if (!view || !currentSlashQuery) return
 
       const name = normalizeCommandName(command.name)
-      const replacement = `/${name} `
+      const commandNode = view.state.schema.nodes.slash_command?.create({
+        name,
+      })
+      if (!commandNode) return
       const transaction = view.state.tr.replaceWith(
-        slashQuery.from,
-        slashQuery.to,
-        view.state.schema.text(replacement)
+        currentSlashQuery.from,
+        currentSlashQuery.to,
+        [commandNode, view.state.schema.text(` `)]
       )
       transaction.setSelection(
-        TextSelection.create(
-          transaction.doc,
-          slashQuery.from + replacement.length
-        )
+        TextSelection.create(transaction.doc, currentSlashQuery.from + 2)
       )
 
       view.dispatch(transaction)
@@ -236,58 +380,100 @@ function ComposerEditorEvents({
     }
   )
 
-  useEditorEventListener(`keydown`, (view, event) => {
-    if (disabled) {
-      event.preventDefault()
-      return true
-    }
+  useEditorEffect((view) => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const current = keyboardStateRef.current
 
-    if (autocompleteOpen && slashQuery) {
-      if (event.key === `ArrowDown`) {
+      if (current.disabled) {
         event.preventDefault()
-        setSelectedIndex((selectedIndex + 1) % slashCommands.length)
-        return true
+        return
       }
 
-      if (event.key === `ArrowUp`) {
+      if (current.autocompleteOpen && current.slashQuery) {
+        if (event.key === `ArrowDown`) {
+          event.preventDefault()
+          event.stopPropagation()
+          setSelectedIndex(
+            (index) => (index + 1) % current.slashCommands.length
+          )
+          return
+        }
+
+        if (event.key === `ArrowUp`) {
+          event.preventDefault()
+          event.stopPropagation()
+          setSelectedIndex(
+            (index) =>
+              (index - 1 + current.slashCommands.length) %
+              current.slashCommands.length
+          )
+          return
+        }
+
+        if (event.key === `Enter`) {
+          event.preventDefault()
+          event.stopPropagation()
+          const command = current.selectedCommand
+          const selectedName = command
+            ? normalizeCommandName(command.name)
+            : null
+          if (selectedName === current.slashQuery.query) {
+            submit(view.state.doc)
+          } else if (command) {
+            insertSlashCommand(command)
+          }
+          return
+        }
+
+        if (event.key === `Tab`) {
+          event.preventDefault()
+          event.stopPropagation()
+          const command = current.selectedCommand
+          if (command) insertSlashCommand(command)
+          return
+        }
+
+        if (event.key === `Escape`) {
+          event.preventDefault()
+          event.stopPropagation()
+          current.dismissAutocomplete(current.slashQuery)
+          setSelectedIndex(0)
+          view.focus()
+          return
+        }
+      }
+
+      if (event.key === `Backspace` && deleteSlashCommandBeforeCursor()) {
         event.preventDefault()
-        setSelectedIndex(
-          (selectedIndex - 1 + slashCommands.length) % slashCommands.length
+        event.stopPropagation()
+        return
+      }
+
+      if (event.key === `Enter` && !event.shiftKey) {
+        event.preventDefault()
+        event.stopPropagation()
+        submit(view.state.doc)
+        return
+      }
+
+      if (event.key === `Enter` && event.shiftKey) {
+        event.preventDefault()
+        event.stopPropagation()
+        const { hard_break: hardBreak } = view.state.schema.nodes
+        if (!hardBreak) return
+        const transaction = view.state.tr.replaceSelectionWith(
+          hardBreak.create()
         )
-        return true
-      }
-
-      if (event.key === `Enter` || event.key === `Tab`) {
-        event.preventDefault()
-        const command = slashCommands[selectedIndex]
-        if (command) insertSlashCommand(command)
-        return true
-      }
-
-      if (event.key === `Escape`) {
-        event.preventDefault()
-        setSelectedIndex(0)
-        return true
+        view.dispatch(transaction.scrollIntoView())
+        return
       }
     }
 
-    if (event.key === `Enter` && !event.shiftKey) {
-      event.preventDefault()
-      submit(sourceFromDoc(view.state.doc))
-      return true
+    view.dom.addEventListener(`keydown`, handleKeyDown, { capture: true })
+    return () => {
+      view.dom.removeEventListener(`keydown`, handleKeyDown, { capture: true })
     }
-
-    if (event.key === `Enter` && event.shiftKey) {
-      event.preventDefault()
-      const { hard_break: hardBreak } = view.state.schema.nodes
-      if (!hardBreak) return true
-      const transaction = view.state.tr.replaceSelectionWith(hardBreak.create())
-      view.dispatch(transaction.scrollIntoView())
-      return true
-    }
-
-    return false
-  })
+  }, [])
 
   return null
 }
@@ -308,56 +494,109 @@ function SlashCommandPopover({
       if (!view || !slashQuery) return
 
       const name = normalizeCommandName(command.name)
-      const replacement = `/${name} `
+      const commandNode = view.state.schema.nodes.slash_command?.create({
+        name,
+      })
+      if (!commandNode) return
       const transaction = view.state.tr.replaceWith(
         slashQuery.from,
         slashQuery.to,
-        view.state.schema.text(replacement)
+        [commandNode, view.state.schema.text(` `)]
       )
       transaction.setSelection(
-        TextSelection.create(
-          transaction.doc,
-          slashQuery.from + replacement.length
-        )
+        TextSelection.create(transaction.doc, slashQuery.from + 2)
       )
 
       view.dispatch(transaction)
       view.focus()
     }
   )
+  const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null)
 
-  if (commands.length === 0) return null
+  useEditorEffect(
+    (view) => {
+      if (commands.length === 0 || !slashQuery) {
+        setAnchorRect(null)
+        return
+      }
+
+      const fromRect = view.coordsAtPos(slashQuery.from)
+      const toRect = view.coordsAtPos(slashQuery.to)
+      setAnchorRect(
+        new DOMRect(
+          fromRect.left,
+          fromRect.top,
+          Math.max(1, toRect.right - fromRect.left),
+          Math.max(1, fromRect.bottom - fromRect.top)
+        )
+      )
+    },
+    [commands.length, slashQuery?.from, slashQuery?.to]
+  )
+
+  if (commands.length === 0 || !anchorRect) return null
+
+  const anchor = {
+    getBoundingClientRect: () => anchorRect,
+  }
 
   return (
-    <div className={styles.slashPopover} role="listbox">
-      {commands.map((command, index) => {
-        const name = normalizeCommandName(command.name)
-        return (
-          <button
-            key={command.key ?? `${command.source}:${name}`}
-            type="button"
-            className={classNames(
-              styles.slashOption,
-              index === selectedIndex && styles.slashOptionActive
-            )}
-            onMouseDown={(event) => {
-              event.preventDefault()
-              setSelectedIndex(index)
-              insertSlashCommand(command)
-            }}
-          >
-            <span className={styles.slashOptionName}>/{name}</span>
-            {command.description ? (
-              <span className={styles.slashOptionDescription}>
-                {command.description}
-              </span>
-            ) : null}
-          </button>
-        )
-      })}
-    </div>
+    <Popover.Root open modal={false}>
+      <Popover.Content
+        side="top"
+        align="start"
+        sideOffset={8}
+        anchor={anchor}
+        className={styles.slashPopover}
+        padded={false}
+        initialFocus={false}
+        finalFocus={false}
+      >
+        <div className={styles.slashList} role="listbox">
+          {commands.map((command, index) => {
+            const name = normalizeCommandName(command.name)
+            return (
+              <div
+                key={command.key ?? `${command.source}:${name}`}
+                role="option"
+                aria-selected={index === selectedIndex}
+                id={`slash-command-${name}`}
+                className={classNames(
+                  styles.slashOption,
+                  index === selectedIndex && styles.slashOptionActive
+                )}
+                onMouseDown={(event) => {
+                  event.preventDefault()
+                  setSelectedIndex(index)
+                  insertSlashCommand(command)
+                }}
+              >
+                <span className={styles.slashOptionName}>/{name}</span>
+                {command.description ? (
+                  <span className={styles.slashOptionDescription}>
+                    {command.description}
+                  </span>
+                ) : null}
+              </div>
+            )
+          })}
+        </div>
+      </Popover.Content>
+    </Popover.Root>
   )
 }
+
+const sameSlashQuery = (
+  left: SlashQuery | null,
+  right: DismissedSlashQuery | null
+): boolean =>
+  Boolean(
+    left &&
+      right &&
+      left.from === right.from &&
+      left.to === right.to &&
+      left.query === right.query
+  )
 
 export function ComposerEditor({
   value,
@@ -372,10 +611,15 @@ export function ComposerEditor({
     createEditorState(value, slashCommands)
   )
   const [selectedIndex, setSelectedIndex] = useState(0)
+  const [dismissedSlashQuery, setDismissedSlashQuery] =
+    useState<DismissedSlashQuery | null>(null)
   const lastSyncedValueRef = useRef(value)
   const lastNotifiedValueRef = useRef(value)
 
-  const slashQuery = useMemo(() => getSlashQuery(editorState), [editorState])
+  const rawSlashQuery = useMemo(() => getSlashQuery(editorState), [editorState])
+  const slashQuery = sameSlashQuery(rawSlashQuery, dismissedSlashQuery)
+    ? null
+    : rawSlashQuery
   const matchingCommands = useMemo(() => {
     if (!slashQuery) return []
     const query = slashQuery.query.toLowerCase()
@@ -385,6 +629,7 @@ export function ComposerEditor({
       )
       .slice(0, 8)
   }, [slashCommands, slashQuery])
+  const selectedCommand = matchingCommands[selectedIndex]
 
   const autocompleteOpen = matchingCommands.length > 0
   const source = useMemo(() => sourceFromDoc(editorState.doc), [editorState])
@@ -402,16 +647,30 @@ export function ComposerEditor({
   }, [slashQuery?.query])
 
   useEffect(() => {
+    if (!rawSlashQuery || rawSlashQuery.query !== dismissedSlashQuery?.query) {
+      setDismissedSlashQuery(null)
+    }
+  }, [dismissedSlashQuery?.query, rawSlashQuery])
+
+  useEffect(() => {
+    if (selectedIndex >= matchingCommands.length) {
+      setSelectedIndex(0)
+    }
+  }, [matchingCommands.length, selectedIndex])
+
+  useEffect(() => {
     if (source === lastNotifiedValueRef.current) return
     lastSyncedValueRef.current = source
     lastNotifiedValueRef.current = source
     onChange(source)
   }, [onChange, source])
 
-  const submit = (nextSource = source) => {
+  const submit = (nextDoc = editorState.doc) => {
+    const payload = serializeComposerInputFromDoc(nextDoc, slashCommands)
+    const nextSource = payload.source
     const trimmed = nextSource.trim()
     if (!trimmed || disabled) return
-    onSubmit?.(serializeComposerInput(nextSource, slashCommands))
+    onSubmit?.(payload)
   }
 
   return (
@@ -439,7 +698,8 @@ export function ComposerEditor({
         <ComposerEditorEvents
           autocompleteOpen={autocompleteOpen}
           disabled={disabled}
-          selectedIndex={selectedIndex}
+          dismissAutocomplete={setDismissedSlashQuery}
+          selectedCommand={selectedCommand}
           setSelectedIndex={setSelectedIndex}
           slashCommands={matchingCommands}
           slashQuery={slashQuery}

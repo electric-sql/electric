@@ -31,6 +31,7 @@ export function MessageInput({
   baseUrl,
   entityUrl,
   disabled,
+  fallbackSlashCommands = [],
   generationActive = false,
   stopPending = false,
   imageAttachmentsEnabled = true,
@@ -45,6 +46,7 @@ export function MessageInput({
   baseUrl: string
   entityUrl: string
   disabled: boolean
+  fallbackSlashCommands?: Array<SlashCommandRow>
   generationActive?: boolean
   stopPending?: boolean
   imageAttachmentsEnabled?: boolean
@@ -107,6 +109,10 @@ export function MessageInput({
         : undefined,
     [db]
   )
+  const effectiveSlashCommands =
+    slashCommands.length > 0
+      ? (slashCommands as Array<SlashCommandRow>)
+      : fallbackSlashCommands
 
   const sendAction = useMemo(() => {
     if (!db) return null
@@ -184,10 +190,7 @@ export function MessageInput({
         : sendComposerAction?.({
             payload:
               composerPayload ??
-              serializeComposerInput(
-                text,
-                slashCommands as Array<SlashCommandRow>
-              ),
+              serializeComposerInput(text, effectiveSlashCommands),
             mode: `queued`,
           })
       if (!tx) return
@@ -215,7 +218,7 @@ export function MessageInput({
       updateAction,
       editingMessage,
       onSend,
-      slashCommands,
+      effectiveSlashCommands,
     ]
   )
 
@@ -359,7 +362,7 @@ export function MessageInput({
             value={value}
             onChange={setValue}
             onSubmit={handleSubmit}
-            slashCommands={slashCommands as Array<SlashCommandRow>}
+            slashCommands={effectiveSlashCommands}
             placeholder={disabled ? `Entity stopped` : `Send a message...`}
             disabled={disabled}
           />
