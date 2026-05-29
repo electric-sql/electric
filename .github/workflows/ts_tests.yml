@@ -114,14 +114,11 @@ jobs:
         run: |
           docker compose -f docker-compose.yml -f docker-compose-electric.yml up --wait postgres electric nginx
 
-      - name: Run tests with coverage
-        run: pnpm run coverage --run
-
-      - name: Upload coverage reports to CodeCov
-        uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          flags: typescript,unit-tests,${{ matrix.package_dir }}
+      - name: Run integration tests
+        # These packages run against a real sync-service. Keep this job focused
+        # on integration correctness; coverage finalization for the TypeScript
+        # client exhausts CI memory after the tests themselves pass.
+        run: pnpm run test --run
 
       - name: Upload test results to CodeCov
         uses: codecov/test-results-action@f2dba722c67b86c6caa034178c6e4d35335f6706
