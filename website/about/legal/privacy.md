@@ -60,7 +60,7 @@ We may share your personal information with:
 - **Information.** You may have the right to obtain information about how we collect, use, and share your personal information. We provide this information within this Privacy Policy.
 - **Access** to a copy of the personal information that we have collected about you. Where applicable, we will provide the information in a portable, machine-readable, readily usable format.
 - **Correction** of personal information that is inaccurate, incomplete or otherwise out of date.
-- **Deletion** of personal information that we no longer need to provide the Services or for other lawful purposes.
+- **Deletion** of personal information that we no longer need to provide the Services or for other lawful purposes. See [Delete your account](/about/legal/delete-account) for how to request deletion of your Electric account.
 - **Restrict** our handling of your personal information.
 - **Object** to how we are using your personal information.
 - **Withdraw your consent** to us handling your personal information, where we are relying on your consent to process such personal information.

@@ -103,6 +103,7 @@ const resourcesSidebar = [
     items: [
       { text: 'Terms', link: '/about/legal/terms' },
       { text: 'Privacy', link: '/about/legal/privacy' },
+      { text: 'Delete your account', link: '/about/legal/delete-account' },
     ],
     collapsed: false,
   },
