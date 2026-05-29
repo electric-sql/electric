@@ -1,7 +1,17 @@
-import { memo } from 'react'
-import { Square } from 'lucide-react'
+import { memo, useState } from 'react'
+import {
+  Download,
+  File as FileIcon,
+  Image as ImageIcon,
+  Square,
+} from 'lucide-react'
 import type { EntityTimelineSection } from '@electric-ax/agents-runtime/client'
 import { Icon, Stack, Text } from '../ui'
+import { formatAttachmentSize } from '../lib/attachments'
+import {
+  AttachmentImagePreviewDialog,
+  useAttachmentObjectUrl,
+} from './AttachmentImagePreviewDialog'
 import { TimeText } from './TimeText'
 import styles from './UserMessage.module.css'
 
@@ -10,13 +20,24 @@ type UserMessageSection = Extract<
   { kind: `user_message` }
 >
 
+export type UserMessageAttachment = {
+  id: string
+  name: string
+  mimeType: string
+  byteLength?: number
+  status?: string
+  url: string
+}
+
 export const UserMessage = memo(function UserMessage({
   section,
+  attachments = [],
   showStop = false,
   stopPending = false,
   onStop,
 }: {
   section: UserMessageSection
+  attachments?: Array<UserMessageAttachment>
   showStop?: boolean
   stopPending?: boolean
   onStop?: () => void
@@ -30,6 +51,8 @@ export const UserMessage = memo(function UserMessage({
       className={`${styles.root} mobile-user-message-root`}
     >
       <Stack
+        direction="column"
+        gap={2}
         p={3}
         className={[styles.bubble, showStop ? styles.withStop : null]
           .filter(Boolean)
@@ -52,9 +75,18 @@ export const UserMessage = memo(function UserMessage({
             <Icon icon={Square} size={2} fill="currentColor" strokeWidth={0} />
           </button>
         )}
-        <Text size={2} className={styles.body}>
-          {section.text}
-        </Text>
+        {attachments.length > 0 && (
+          <div className={styles.attachments}>
+            {attachments.map((attachment) => (
+              <AttachmentPreview key={attachment.id} attachment={attachment} />
+            ))}
+          </div>
+        )}
+        {section.text ? (
+          <Text size={2} className={styles.body}>
+            {section.text}
+          </Text>
+        ) : null}
       </Stack>
       <Stack gap={2} align="center" className={styles.meta}>
         <Text size={1} tone="muted" title={sender.title}>
@@ -72,6 +104,60 @@ export const UserMessage = memo(function UserMessage({
     </Stack>
   )
 })
+
+function AttachmentPreview({
+  attachment,
+}: {
+  attachment: UserMessageAttachment
+}): React.ReactElement {
+  const isImage =
+    attachment.status === `complete` && attachment.mimeType.startsWith(`image/`)
+  const label = `${attachment.name} · ${formatAttachmentSize(attachment.byteLength)}`
+  const objectUrl = useAttachmentObjectUrl(attachment.url, isImage)
+  const [previewOpen, setPreviewOpen] = useState(false)
+
+  if (isImage) {
+    return (
+      <>
+        <button
+          type="button"
+          className={styles.imageAttachment}
+          title={label}
+          onClick={() => setPreviewOpen(true)}
+        >
+          {objectUrl ? (
+            <img src={objectUrl} alt={attachment.name} loading="lazy" />
+          ) : (
+            <div className={styles.imageLoading}>
+              <Icon icon={ImageIcon} size={2} />
+            </div>
+          )}
+          <span>
+            <Icon icon={ImageIcon} size={1} />
+            {attachment.name}
+          </span>
+        </button>
+        <AttachmentImagePreviewDialog
+          attachment={attachment}
+          objectUrl={objectUrl}
+          open={previewOpen}
+          onOpenChange={setPreviewOpen}
+        />
+      </>
+    )
+  }
+
+  return (
+    <a className={styles.fileAttachment} href={attachment.url} title={label}>
+      <Icon icon={FileIcon} size={2} />
+      <span>
+        <strong>{attachment.name}</strong>
+        <small>{formatAttachmentSize(attachment.byteLength)}</small>
+      </span>
+      <Icon icon={Download} size={1} />
+    </a>
+  )
+}
 
 function formatSender(from: string | null | undefined): {
   label: string

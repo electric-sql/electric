@@ -608,8 +608,11 @@ async function proxyPassThrough(
   request: IRequest,
   ctx: TenantContext
 ): Promise<Response> {
-  const upstream = await forwardToDurableStreams(ctx, request)
   const streamPath = new URL(request.url).pathname
+  if (ctx.entityManager.isAttachmentStreamPath(streamPath)) {
+    return new Response(null, { status: 404 })
+  }
+  const upstream = await forwardToDurableStreams(ctx, request)
   const method = request.method.toUpperCase()
   const endTrackedRead =
     method === `GET`

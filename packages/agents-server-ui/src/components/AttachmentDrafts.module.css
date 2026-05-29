@@ -1,0 +1,120 @@
+.fileInput {
+  display: none;
+}
+
+.addMenuTrigger {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--ds-radius-full);
+  color: var(--ds-text-3);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+
+.addMenuTrigger:hover,
+.addMenuTrigger[data-popup-open] {
+  background: var(--ds-gray-a3);
+  color: var(--ds-text-1);
+}
+
+.addMenuTrigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.addMenuTrigger:focus-visible {
+  outline: 2px solid var(--ds-accent-a6);
+  outline-offset: 2px;
+}
+
+.previewTray {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 8px;
+}
+
+.previewTile {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  overflow: hidden;
+  border: 1px solid var(--ds-gray-a4);
+  border-radius: var(--ds-radius-4);
+  background: var(--ds-surface-1);
+  color: var(--ds-text-2);
+  box-sizing: border-box;
+}
+
+.previewImage {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  background: var(--ds-gray-a2);
+}
+
+.previewFile {
+  display: grid;
+  place-items: center;
+  gap: 3px;
+  width: 100%;
+  height: 100%;
+  padding-bottom: 14px;
+  box-sizing: border-box;
+  color: var(--ds-text-3);
+  font-size: 10px;
+  line-height: 12px;
+  text-transform: uppercase;
+}
+
+.previewName {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  min-width: 0;
+  padding: 3px 5px 4px;
+  background: color-mix(in oklab, var(--ds-surface-raised) 88%, transparent);
+  color: var(--ds-text-2);
+  font-size: 10px;
+  line-height: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-sizing: border-box;
+}
+
+.previewRemove {
+  all: unset;
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--ds-radius-full);
+  background: color-mix(in oklab, var(--ds-surface-raised) 86%, transparent);
+  color: var(--ds-text-2);
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(15, 15, 30, 0.12);
+}
+
+.previewRemove:hover {
+  background: var(--ds-gray-a4);
+  color: var(--ds-text-1);
+}
+
+.previewRemove:focus-visible {
+  outline: 2px solid var(--ds-accent-a6);
+  outline-offset: 1px;
+}

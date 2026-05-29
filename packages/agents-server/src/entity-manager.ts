@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import fastq from 'fastq'
 import {
   assertTags,
@@ -110,6 +110,48 @@ type ServerSignalEvent = {
     txid: string
   }
 }
+type AttachmentSubjectType = `inbox` | `run` | `text` | `tool_call` | `context`
+type AttachmentRole = `input` | `output`
+
+export interface CreateAttachmentRequest {
+  id?: string
+  bytes: Uint8Array
+  mimeType: string
+  filename?: string
+  subject: {
+    type: AttachmentSubjectType
+    key: string
+  }
+  role?: AttachmentRole
+  createdBy?: string
+  meta?: Record<string, unknown>
+}
+
+export interface ReadAttachmentResult {
+  attachment: ManifestAttachmentEntry
+  bytes: Uint8Array
+}
+
+type ManifestAttachmentEntry = {
+  key: string
+  kind: `attachment`
+  id: string
+  streamPath: string
+  status: `pending` | `complete` | `failed`
+  subject: {
+    type: AttachmentSubjectType
+    key: string
+  }
+  role: AttachmentRole
+  mimeType: string
+  filename?: string
+  byteLength?: number
+  sha256?: string
+  createdAt: string
+  createdBy?: string
+  error?: string
+  meta?: Record<string, unknown>
+}
 
 function createInitialQueuePosition(date: Date): string {
   return `${String(date.getTime()).padStart(16, `0`)}:a0`
@@ -142,9 +184,74 @@ const DEFAULT_FORK_WAIT_TIMEOUT_MS = 120_000
 const DEFAULT_FORK_WAIT_POLL_MS = 250
 
 const SERVER_SIGNAL_SENDER = `/_electric/server`
+const DEFAULT_MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function maxAttachmentBytes(): number {
+  const configured = Number(process.env.ELECTRIC_AGENTS_MAX_ATTACHMENT_BYTES)
+  return Number.isFinite(configured) && configured > 0
+    ? Math.floor(configured)
+    : DEFAULT_MAX_ATTACHMENT_BYTES
+}
+
+function manifestAttachmentKey(id: string): string {
+  return `attachment:${id}`
+}
+
+function getEntityAttachmentStreamPath(
+  entityUrl: string,
+  attachmentId: string
+): string {
+  return `${entityUrl.replace(/\/+$/, ``)}/attachments/${attachmentId}`
+}
+
+function validateAttachmentId(id: string): void {
+  if (!id || id.includes(`/`) || id.startsWith(`.`)) {
+    throw new ElectricAgentsError(
+      ErrCodeInvalidRequest,
+      `attachment id must not be empty, start with ".", or contain forward slashes`,
+      400
+    )
+  }
+}
+
+function validateAttachmentSubject(
+  subject: CreateAttachmentRequest[`subject`]
+): void {
+  if (!subject.key) {
+    throw new ElectricAgentsError(
+      ErrCodeInvalidRequest,
+      `attachment subject key is required`,
+      400
+    )
+  }
+  if (
+    subject.type !== `inbox` &&
+    subject.type !== `run` &&
+    subject.type !== `text` &&
+    subject.type !== `tool_call` &&
+    subject.type !== `context`
+  ) {
+    throw new ElectricAgentsError(
+      ErrCodeInvalidRequest,
+      `invalid attachment subject type`,
+      400
+    )
+  }
+}
+
+function concatByteMessages(messages: Array<{ data: Uint8Array }>): Uint8Array {
+  const total = messages.reduce((sum, message) => sum + message.data.length, 0)
+  const bytes = new Uint8Array(total)
+  let offset = 0
+  for (const message of messages) {
+    bytes.set(message.data, offset)
+    offset += message.data.length
+  }
+  return bytes
 }
 
 function omitUndefined<T extends Record<string, unknown>>(value: T): T {
@@ -812,6 +919,26 @@ export class EntityManager {
         }
 
         for (const plan of entityPlans) {
+          const manifests =
+            snapshot.manifestsByEntity.get(plan.source.url) ?? new Map()
+          for (const manifest of manifests.values()) {
+            if (
+              manifest.kind !== `attachment` ||
+              typeof manifest.streamPath !== `string` ||
+              typeof manifest.id !== `string`
+            ) {
+              continue
+            }
+            const forkPath = getEntityAttachmentStreamPath(
+              plan.fork.url,
+              manifest.id
+            )
+            await this.streamClient.fork(forkPath, manifest.streamPath)
+            createdStreams.push(forkPath)
+          }
+        }
+
+        for (const plan of entityPlans) {
           const reconciliation = this.buildForkReconciliation(
             plan,
             snapshot,
@@ -1474,6 +1601,21 @@ export class EntityManager {
       return { key: String(next.key), value: next, changed: true }
     }
 
+    if (
+      next.kind === `attachment` &&
+      typeof next.streamPath === `string` &&
+      typeof next.id === `string`
+    ) {
+      for (const [sourceUrl, forkUrl] of entityUrlMap) {
+        const prefix = `${sourceUrl}/attachments/`
+        if (!next.streamPath.startsWith(prefix)) {
+          continue
+        }
+        next.streamPath = getEntityAttachmentStreamPath(forkUrl, next.id)
+        return { key, value: next, changed: true }
+      }
+    }
+
     if (next.kind === `schedule` && next.scheduleType === `future_send`) {
       let changed = false
       if (typeof next.targetUrl === `string`) {
@@ -1831,6 +1973,164 @@ export class EntityManager {
       entity.streams.main,
       this.encodeChangeEvent(envelope as Record<string, unknown>)
     )
+  }
+
+  // ==========================================================================
+  // Attachments
+  // ==========================================================================
+
+  isAttachmentStreamPath(path: string): boolean {
+    return /^\/[^/]+\/[^/]+\/attachments\/[^/]+$/.test(path)
+  }
+
+  async createAttachment(
+    entityUrl: string,
+    req: CreateAttachmentRequest
+  ): Promise<{ txid: string; attachment: ManifestAttachmentEntry }> {
+    const entity = await this.registry.getEntity(entityUrl)
+    if (!entity) {
+      throw new ElectricAgentsError(ErrCodeNotFound, `Entity not found`, 404)
+    }
+    if (rejectsNormalWrites(entity.status)) {
+      throw new ElectricAgentsError(
+        ErrCodeNotRunning,
+        `Entity is not accepting writes`,
+        409
+      )
+    }
+    if (this.isForkWorkLockedEntity(entityUrl)) {
+      this.assertEntityNotForkWorkLocked(entityUrl)
+    }
+
+    const id = req.id ?? randomUUID()
+    validateAttachmentId(id)
+    validateAttachmentSubject(req.subject)
+
+    const limit = maxAttachmentBytes()
+    if (req.bytes.length > limit) {
+      throw new ElectricAgentsError(
+        ErrCodeInvalidRequest,
+        `Attachment exceeds maximum size of ${limit} bytes`,
+        413
+      )
+    }
+
+    const mimeType = req.mimeType.trim() || `application/octet-stream`
+    const streamPath = getEntityAttachmentStreamPath(entityUrl, id)
+    const manifestKey = manifestAttachmentKey(id)
+    const txid = randomUUID()
+    const now = new Date().toISOString()
+    const sha256 = createHash(`sha256`).update(req.bytes).digest(`hex`)
+    const attachment: ManifestAttachmentEntry = {
+      key: manifestKey,
+      kind: `attachment`,
+      id,
+      streamPath,
+      status: `complete`,
+      subject: req.subject,
+      role: req.role ?? `input`,
+      mimeType,
+      ...(req.filename ? { filename: req.filename } : {}),
+      byteLength: req.bytes.length,
+      sha256,
+      createdAt: now,
+      ...(req.createdBy ? { createdBy: req.createdBy } : {}),
+      ...(req.meta
+        ? { meta: req.meta as ManifestAttachmentEntry[`meta`] }
+        : {}),
+    }
+
+    try {
+      await this.streamClient.create(streamPath, {
+        contentType: mimeType,
+        body: req.bytes,
+        closed: true,
+      })
+      await this.writeManifestEntry(
+        entityUrl,
+        manifestKey,
+        `upsert`,
+        attachment as unknown as Record<string, unknown>,
+        { txid }
+      )
+    } catch (error) {
+      await this.streamClient.delete(streamPath).catch(() => undefined)
+      throw error
+    }
+
+    return { txid, attachment }
+  }
+
+  async getAttachment(
+    entityUrl: string,
+    id: string
+  ): Promise<ManifestAttachmentEntry | null> {
+    validateAttachmentId(id)
+    const entity = await this.registry.getEntity(entityUrl)
+    if (!entity) {
+      throw new ElectricAgentsError(ErrCodeNotFound, `Entity not found`, 404)
+    }
+    const events = await this.streamClient.readJson<Record<string, unknown>>(
+      entity.streams.main
+    )
+    const manifest = this.reduceStateRows(events, `manifest`).get(
+      manifestAttachmentKey(id)
+    )
+    if (!manifest || manifest.kind !== `attachment`) {
+      return null
+    }
+    return manifest as unknown as ManifestAttachmentEntry
+  }
+
+  async readAttachment(
+    entityUrl: string,
+    id: string
+  ): Promise<ReadAttachmentResult> {
+    const attachment = await this.getAttachment(entityUrl, id)
+    if (!attachment) {
+      throw new ElectricAgentsError(
+        ErrCodeNotFound,
+        `Attachment not found`,
+        404
+      )
+    }
+    if (attachment.status !== `complete`) {
+      throw new ElectricAgentsError(
+        ErrCodeInvalidRequest,
+        `Attachment is not complete`,
+        409
+      )
+    }
+
+    const result = await this.streamClient.read(attachment.streamPath)
+    return {
+      attachment,
+      bytes: concatByteMessages(result.messages),
+    }
+  }
+
+  async deleteAttachment(
+    entityUrl: string,
+    id: string
+  ): Promise<{ txid: string }> {
+    const attachment = await this.getAttachment(entityUrl, id)
+    if (!attachment) {
+      throw new ElectricAgentsError(
+        ErrCodeNotFound,
+        `Attachment not found`,
+        404
+      )
+    }
+    const txid = randomUUID()
+    await this.writeManifestEntry(
+      entityUrl,
+      manifestAttachmentKey(id),
+      `delete`,
+      undefined,
+      { txid }
+    )
+    await this.streamClient.delete(attachment.streamPath).catch(() => undefined)
+    return { txid }
   }
 
   // ==========================================================================

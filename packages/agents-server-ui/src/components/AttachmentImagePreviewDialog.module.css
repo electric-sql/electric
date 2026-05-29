@@ -1,0 +1,75 @@
+.imagePreviewDialog {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+  width: calc(100vw - 160px);
+  height: calc(100vh - 160px);
+  max-width: none !important;
+  padding: 12px;
+  overflow: hidden;
+  background: color-mix(in oklab, var(--ds-surface-raised) 88%, transparent);
+}
+
+.imagePreviewToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.imagePreviewTitle {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.imagePreviewTitle span,
+.imagePreviewTitle small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.imagePreviewTitle span {
+  color: var(--ds-text-1);
+  font-size: var(--ds-text-sm);
+  font-weight: 500;
+  line-height: var(--ds-text-sm-lh);
+}
+
+.imagePreviewTitle small {
+  color: var(--ds-text-3);
+  font-size: var(--ds-text-xs);
+  line-height: var(--ds-text-xs-lh);
+}
+
+.imagePreviewStage {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: var(--ds-radius-3);
+  background: var(--ds-gray-a2);
+}
+
+.imagePreviewStage img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.imagePreviewLoading {
+  display: grid;
+  place-items: center;
+  color: var(--ds-text-3);
+}
+
+@media (max-width: 640px) {
+  .imagePreviewDialog {
+    width: calc(100vw - 32px);
+    height: calc(100vh - 32px);
+  }
+}

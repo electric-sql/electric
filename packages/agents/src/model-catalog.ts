@@ -13,6 +13,9 @@ import type {
 } from '@electric-ax/agents-runtime'
 
 export type BuiltinModelProvider = AvailableProvider
+export type BuiltinModelInput = `text` | `image`
+
+export const MODEL_INPUTS_SCHEMA_DEF = `electricModelInputs`
 
 export interface BuiltinModelChoice {
   provider: BuiltinModelProvider
@@ -20,6 +23,7 @@ export interface BuiltinModelChoice {
   label: string
   value: string
   reasoning: boolean
+  input: Array<BuiltinModelInput>
 }
 
 export interface BuiltinModelCatalog {
@@ -79,12 +83,13 @@ function configuredProviders(): Array<BuiltinModelProvider> {
 }
 
 function mockFallbackCatalog(): BuiltinModelCatalog {
-  const fallback = {
+  const fallback: BuiltinModelChoice = {
     provider: `anthropic` as const,
     id: DEFAULT_ANTHROPIC_MODEL,
     label: `Anthropic ${DEFAULT_ANTHROPIC_MODEL}`,
     value: modelValue(`anthropic`, DEFAULT_ANTHROPIC_MODEL),
     reasoning: true,
+    input: [`text`, `image`],
   }
   return { choices: [fallback], defaultChoice: fallback }
 }
@@ -157,6 +162,7 @@ function choiceForKnownModel(
     label: `${builtinModelProviderLabel(provider)} ${model.name}`,
     value: modelValue(provider, model.id),
     reasoning: model.reasoning,
+    input: model.input,
   }
 }
 
@@ -341,4 +347,24 @@ export function modelChoiceValues(
     string,
     ...Array<string>,
   ]
+}
+
+export function modelInputSchemaDefs(
+  catalog: BuiltinModelCatalog
+): Record<string, unknown> {
+  return {
+    [MODEL_INPUTS_SCHEMA_DEF]: {
+      type: `object`,
+      properties: Object.fromEntries(
+        catalog.choices.map((choice) => [
+          choice.value,
+          {
+            type: `array`,
+            items: { enum: [`text`, `image`] },
+            default: choice.input,
+          },
+        ])
+      ),
+    },
+  }
 }

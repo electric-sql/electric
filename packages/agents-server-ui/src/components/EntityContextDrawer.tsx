@@ -3,6 +3,7 @@ import {
   ArrowUp,
   ChevronDown,
   ChevronRight,
+  ExternalLink,
   GripVertical,
   Pencil,
   SplitSquareHorizontal,
@@ -14,8 +15,17 @@ import { useElectricAgents } from '../lib/ElectricAgentsProvider'
 import { Icon, IconButton, Text, Tooltip } from '../ui'
 import { StatusDot } from './StatusDot'
 import { JsonInspectDialog } from './JsonInspectDialog'
+import {
+  AttachmentImagePreviewDialog,
+  type AttachmentImagePreviewItem,
+} from './AttachmentImagePreviewDialog'
 import { getEntityDisplayTitle } from '../lib/entityDisplay'
 import { createQueuePositionBetween, readTextPayload } from '../lib/sendMessage'
+import {
+  attachmentDisplayName,
+  attachmentDownloadUrl,
+  isAttachmentManifest,
+} from '../lib/attachments'
 import styles from './EntityContextDrawer.module.css'
 import type {
   EntityStreamDBWithActions,
@@ -96,6 +106,7 @@ function entityUrlsFromKey(key: string): Array<string> {
 export function EntityContextDrawer({
   entity,
   db,
+  baseUrl,
   tileId,
   pendingMessages = [],
   pendingEditingKey = null,
@@ -106,6 +117,7 @@ export function EntityContextDrawer({
 }: {
   entity: ElectricEntity
   db: EntityStreamDBWithActions | null
+  baseUrl: string
   tileId: string
   pendingMessages?: EntityTimelineData[`inbox`]
   pendingEditingKey?: string | null
@@ -117,6 +129,8 @@ export function EntityContextDrawer({
   const { entitiesCollection } = useElectricAgents()
   const { helpers } = useWorkspace()
   const [inspectTarget, setInspectTarget] = useState<InspectTarget | null>(null)
+  const [previewAttachment, setPreviewAttachment] =
+    useState<AttachmentImagePreviewItem | null>(null)
 
   const parentUrl = entity.parent
 
@@ -237,11 +251,23 @@ export function EntityContextDrawer({
           <ManifestSection
             key={group.key}
             group={group}
+            baseUrl={baseUrl}
+            entityUrl={entity.url}
             onSelect={handleEntry}
             onOpenSide={handleSide}
+            onPreviewAttachment={setPreviewAttachment}
           />
         ))}
       </div>
+      {previewAttachment && (
+        <AttachmentImagePreviewDialog
+          attachment={previewAttachment}
+          open={previewAttachment !== null}
+          onOpenChange={(open) => {
+            if (!open) setPreviewAttachment(null)
+          }}
+        />
+      )}
       <JsonInspectDialog
         open={inspectTarget !== null}
         onOpenChange={(open) => {
@@ -525,6 +551,8 @@ function manifestKindLabel(manifest: Manifest): string {
       return `Shared state`
     case `effect`:
       return `Effect`
+    case `attachment`:
+      return `Attachment`
     case `context`:
       return `Context`
     case `schedule`:
@@ -630,6 +658,18 @@ function createManifestEntry(
         entity: null,
       }
 
+    case `attachment`:
+      return {
+        key: manifest.key,
+        groupKey: `attachment`,
+        groupLabel: `Attachments`,
+        title: attachmentDisplayName(manifest),
+        meta: `${manifest.mimeType} · ${manifest.status}`,
+        manifest,
+        action: { kind: `inspect` },
+        entity: null,
+      }
+
     case `context`:
       return {
         key: manifest.key,
@@ -695,12 +735,18 @@ function titleCase(value: string): string {
 
 function ManifestSection({
   group,
+  baseUrl,
+  entityUrl,
   onSelect,
   onOpenSide,
+  onPreviewAttachment,
 }: {
   group: DrawerGroup
+  baseUrl: string
+  entityUrl: string
   onSelect: (entry: DrawerEntry) => void
   onOpenSide: (entry: DrawerEntry) => void
+  onPreviewAttachment: (attachment: AttachmentImagePreviewItem) => void
 }): React.ReactElement {
   const [expanded, setExpanded] = useState(false)
   const Chevron = expanded ? ChevronDown : ChevronRight
@@ -728,9 +774,12 @@ function ManifestSection({
           <ManifestRow
             key={entry.key}
             entry={entry}
+            baseUrl={baseUrl}
+            entityUrl={entityUrl}
             canOpenSide={canOpenSide && entry.action.kind !== `inspect`}
             onSelect={onSelect}
             onOpenSide={onOpenSide}
+            onPreviewAttachment={onPreviewAttachment}
           />
         ))}
     </div>
@@ -739,15 +788,27 @@ function ManifestSection({
 
 function ManifestRow({
   entry,
+  baseUrl,
+  entityUrl,
   canOpenSide,
   onSelect,
   onOpenSide,
+  onPreviewAttachment,
 }: {
   entry: DrawerEntry
+  baseUrl: string
+  entityUrl: string
   canOpenSide: boolean
   onSelect: (entry: DrawerEntry) => void
   onOpenSide: (entry: DrawerEntry) => void
+  onPreviewAttachment: (attachment: AttachmentImagePreviewItem) => void
 }): React.ReactElement {
+  const previewAttachment = createAttachmentPreviewItem(
+    entry,
+    baseUrl,
+    entityUrl
+  )
+
   return (
     <div className={styles.rowShell}>
       <button
@@ -786,6 +847,45 @@ function ManifestRow({
           </IconButton>
         </Tooltip>
       )}
+      {previewAttachment && (
+        <Tooltip content="Preview attachment">
+          <IconButton
+            type="button"
+            size={1}
+            variant="ghost"
+            tone="neutral"
+            className={styles.sideButton}
+            aria-label={`Preview ${entry.title}`}
+            onClick={(e) => {
+              e.stopPropagation()
+              onPreviewAttachment(previewAttachment)
+            }}
+          >
+            <Icon icon={ExternalLink} size={1} />
+          </IconButton>
+        </Tooltip>
+      )}
     </div>
   )
+}
+
+function createAttachmentPreviewItem(
+  entry: DrawerEntry,
+  baseUrl: string,
+  entityUrl: string
+): AttachmentImagePreviewItem | null {
+  if (!entry.manifest || !isAttachmentManifest(entry.manifest)) return null
+  const attachment = entry.manifest
+  if (
+    attachment.status !== `complete` ||
+    !attachment.mimeType.startsWith(`image/`)
+  ) {
+    return null
+  }
+  return {
+    name: attachmentDisplayName(attachment),
+    mimeType: attachment.mimeType,
+    byteLength: attachment.byteLength,
+    url: attachmentDownloadUrl(baseUrl, entityUrl, attachment.id),
+  }
 }

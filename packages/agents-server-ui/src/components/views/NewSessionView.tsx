@@ -21,9 +21,20 @@ import {
   type ApiKeysStatus,
   type CodexAuthSource,
 } from '../../lib/server-connection'
+import { sendEntityMessage } from '../../lib/sendMessage'
 import { Button, Icon, Select, Stack, Text } from '../../ui'
 import { SchemaForm, hasSchemaProperties, isObjectSchema } from '../SchemaForm'
 import { WorkingDirectoryPicker } from '../WorkingDirectoryPicker'
+import {
+  AttachmentActionMenu,
+  AttachmentPreviewTray,
+  imageAttachmentDraftPolicy,
+  useAttachmentDrafts,
+} from '../AttachmentDrafts'
+import {
+  isModelProperty,
+  schemaModelSupportsImageInput,
+} from '../../lib/modelCapabilities'
 import styles from '../NewSessionPage.module.css'
 import type {
   ElectricEntityType,
@@ -50,15 +61,6 @@ const HERO_TITLES = [
 ] as const
 
 const LAST_PICKED_MODEL_STORAGE_KEY = `electric-agents-ui.new-session.last-picked-model`
-
-function isModelProperty(key: string): boolean {
-  const normalized = key.toLowerCase()
-  return (
-    normalized === `model` ||
-    normalized === `modelid` ||
-    normalized === `model_id`
-  )
-}
 
 function readLastPickedModel(options: Array<string>): string | null {
   if (typeof window === `undefined`) return null
@@ -131,6 +133,7 @@ interface SchemaProperty {
  * `<Workspace />`.
  */
 export function NewSessionView({
+  baseUrl,
   tileId,
   setToolbarTitle,
 }: StandaloneViewProps): React.ReactElement {
@@ -237,11 +240,15 @@ export function NewSessionView({
     async (
       typeName: string,
       args?: Record<string, unknown>,
-      initialUserText?: string
+      initialUserText?: string,
+      initialAttachments?: Array<File>
     ) => {
       if (!spawnEntity) return
       setError(null)
       const name = nanoid(10)
+      const hasInitialAttachments =
+        initialAttachments !== undefined && initialAttachments.length > 0
+      const initialText = initialUserText?.trim() ?? ``
       const tx = spawnEntity({
         type: typeName,
         name,
@@ -255,11 +262,22 @@ export function NewSessionView({
               },
             }
           : {}),
-        ...(initialUserText ? { initialMessage: initialUserText } : {}),
+        ...(initialText && !hasInitialAttachments
+          ? { initialMessage: initialText }
+          : {}),
       })
       const entityUrl = `/${typeName}/${name}`
       try {
         await tx.isPersisted.promise
+        if (hasInitialAttachments) {
+          await sendEntityMessage({
+            baseUrl,
+            entityUrl,
+            text: initialText,
+            mode: `immediate`,
+            attachments: initialAttachments,
+          })
+        }
         helpers.openEntity(entityUrl, {
           target: { tileId, position: `replace` },
         })
@@ -269,7 +287,7 @@ export function NewSessionView({
         )
       }
     },
-    [helpers, selectedRunnerId, spawnEntity, tileId]
+    [baseUrl, helpers, selectedRunnerId, spawnEntity, tileId]
   )
 
   const handleSelectType = useCallback(
@@ -309,7 +327,7 @@ export function NewSessionView({
   }, [handleCancelSelected, selected, setToolbarTitle])
 
   const handleStartDefault = useCallback(
-    (text: string, args: Record<string, unknown>) => {
+    (text: string, args: Record<string, unknown>, attachments: Array<File>) => {
       if (!defaultAgent) return
       // Inject the picker's choice into the spawn args for the
       // composer flow only — non-default agents have their own
@@ -319,7 +337,7 @@ export function NewSessionView({
       const augmented =
         workingDirectory !== null ? { ...args, workingDirectory } : args
       if (workingDirectory !== null) addRecentDir(workingDirectory)
-      void doSpawn(defaultAgent.name, augmented, text)
+      void doSpawn(defaultAgent.name, augmented, text, attachments)
     },
     [defaultAgent, doSpawn, workingDirectory, addRecentDir]
   )
@@ -370,7 +388,11 @@ function Picker({
   defaultAgent: ElectricEntityType | null
   otherAgents: Array<ElectricEntityType>
   onSelectType: (t: ElectricEntityType) => void
-  onStartDefault: (text: string, args: Record<string, unknown>) => void
+  onStartDefault: (
+    text: string,
+    args: Record<string, unknown>,
+    attachments: Array<File>
+  ) => void
   spawnReady: boolean
   error: string | null
   workingDirectory: string | null
@@ -651,7 +673,11 @@ function DefaultAgentComposer({
   onChangeSelectedRunner,
 }: {
   agent: ElectricEntityType
-  onSubmit: (text: string, args: Record<string, unknown>) => void
+  onSubmit: (
+    text: string,
+    args: Record<string, unknown>,
+    attachments: Array<File>
+  ) => void
   disabled?: boolean
   workingDirectory: string | null
   onChangeWorkingDirectory: (path: string | null) => void
@@ -662,13 +688,6 @@ function DefaultAgentComposer({
   const [value, setValue] = useState(``)
   const [submitting, setSubmitting] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-
-  useLayoutEffect(() => {
-    const el = textareaRef.current
-    if (!el) return
-    el.style.height = `auto`
-    el.style.height = `${el.scrollHeight}px`
-  }, [value])
   const inlineProps = useMemo(
     () => inlineSchemaProperties(agent.creation_schema),
     [agent.creation_schema]
@@ -695,19 +714,65 @@ function DefaultAgentComposer({
     }
     return init
   })
+  const imageAttachmentsEnabled = schemaModelSupportsImageInput(
+    agent.creation_schema,
+    args
+  )
+  const {
+    attachments,
+    clearAttachments,
+    dropActive,
+    dropZoneProps,
+    fileInputRef,
+    addAttachments,
+    openAttachmentPicker,
+    handlePaste,
+    removeAttachment,
+  } = useAttachmentDrafts({
+    policy: imageAttachmentDraftPolicy,
+    disabled: disabled || submitting || !imageAttachmentsEnabled,
+    focusRef: textareaRef,
+  })
+
+  useEffect(() => {
+    if (!imageAttachmentsEnabled) clearAttachments()
+  }, [imageAttachmentsEnabled, clearAttachments])
+
+  useLayoutEffect(() => {
+    const el = textareaRef.current
+    if (!el) return
+    el.style.height = `auto`
+    el.style.height = `${el.scrollHeight}px`
+  }, [value])
 
   const submit = useCallback(() => {
     const trimmed = value.trim()
-    if (!trimmed || disabled || submitting) return
+    const files = imageAttachmentsEnabled ? attachments : []
+    if ((!trimmed && files.length === 0) || disabled || submitting) {
+      return
+    }
     setSubmitting(true)
     const cleaned: Record<string, unknown> = {}
     for (const [k, v] of Object.entries(args)) {
       if (v !== undefined && v !== ``) cleaned[k] = v
     }
-    onSubmit(trimmed, cleaned)
-  }, [args, disabled, onSubmit, submitting, value])
+    onSubmit(trimmed, cleaned, files)
+    clearAttachments()
+  }, [
+    args,
+    attachments,
+    imageAttachmentsEnabled,
+    clearAttachments,
+    disabled,
+    onSubmit,
+    submitting,
+    value,
+  ])
 
-  const isActive = Boolean(value.trim() && !disabled && !submitting)
+  const attachmentCount = imageAttachmentsEnabled ? attachments.length : 0
+  const isActive = Boolean(
+    (value.trim() || attachmentCount > 0) && !disabled && !submitting
+  )
   const placeholder = disabled ? `Connecting…` : `Ask ${agent.name} anything…`
 
   return (
@@ -719,12 +784,27 @@ function DefaultAgentComposer({
         .filter(Boolean)
         .join(` `)}
     >
-      <div className={styles.composer}>
+      <div
+        className={[
+          styles.composer,
+          dropActive ? styles.composerDropActive : null,
+        ]
+          .filter(Boolean)
+          .join(` `)}
+        {...dropZoneProps}
+      >
+        {imageAttachmentsEnabled && (
+          <AttachmentPreviewTray
+            attachments={attachments}
+            onRemove={removeAttachment}
+          />
+        )}
         <textarea
           ref={textareaRef}
           autoFocus
           value={value}
           onChange={(e) => setValue(e.target.value)}
+          onPaste={handlePaste}
           onKeyDown={(e) => {
             if (e.key === `Enter` && !e.shiftKey) {
               e.preventDefault()
@@ -738,6 +818,15 @@ function DefaultAgentComposer({
         />
         <div className={styles.composerFooter}>
           <div className={styles.composerControls}>
+            {imageAttachmentsEnabled && (
+              <AttachmentActionMenu
+                disabled={disabled || submitting}
+                accept={imageAttachmentDraftPolicy.accept}
+                fileInputRef={fileInputRef}
+                onFilesSelected={addAttachments}
+                onAttach={openAttachmentPicker}
+              />
+            )}
             {inlineProps.map(({ key, prop }) =>
               prop.enum ? (
                 <PillSelect

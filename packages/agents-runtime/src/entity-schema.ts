@@ -245,6 +245,35 @@ type ManifestEffectEntryValue = {
   function_ref: string
   config: unknown
 }
+type AttachmentStatusValue = `pending` | `complete` | `failed`
+type AttachmentSubjectTypeValue =
+  | `inbox`
+  | `run`
+  | `text`
+  | `tool_call`
+  | `context`
+type AttachmentRoleValue = `input` | `output`
+type AttachmentSubjectValue = {
+  type: AttachmentSubjectTypeValue
+  key: string
+}
+type ManifestAttachmentEntryValue = {
+  key?: string
+  kind: `attachment`
+  id: string
+  streamPath: string
+  status: AttachmentStatusValue
+  subject: AttachmentSubjectValue
+  role: AttachmentRoleValue
+  mimeType: string
+  filename?: string
+  byteLength?: number
+  sha256?: string
+  createdAt: string
+  createdBy?: string
+  error?: string
+  meta?: Record<string, JsonValue>
+}
 type ContextEntryAttrsValue = Record<string, string | number | boolean>
 type ManifestContextEntryValue = {
   key?: string
@@ -555,6 +584,19 @@ function createTagEntrySchema(): Schema<TagEntryValue> {
     value: z.string(),
   })
 }
+
+function createAttachmentSubjectSchema(): Schema<AttachmentSubjectValue> {
+  return z.object({
+    type: z.enum([`inbox`, `run`, `text`, `tool_call`, `context`]),
+    key: z.string(),
+  })
+}
+
+function createAttachmentMetaSchema(): Schema<Record<string, JsonValue>> {
+  return z.object({}).catchall(z.unknown()) as unknown as Schema<
+    Record<string, JsonValue>
+  >
+}
 function createContextInsertedSchema(): Schema<ContextInsertedValue> {
   return z.object({
     key: z.string().optional(),
@@ -581,6 +623,7 @@ function createManifestSchema(): Schema<
   | ManifestSourceEntryValue
   | ManifestSharedStateEntryValue
   | ManifestEffectEntryValue
+  | ManifestAttachmentEntryValue
   | ManifestContextEntryValue
   | ManifestCronScheduleEntryValue
   | ManifestFutureSendScheduleEntryValue
@@ -631,6 +674,24 @@ function createManifestSchema(): Schema<
     z.object({
       key: z.string().optional(),
       ...timelineOrderField,
+      kind: z.literal(`attachment`),
+      id: z.string(),
+      streamPath: z.string(),
+      status: z.enum([`pending`, `complete`, `failed`]),
+      subject: createAttachmentSubjectSchema(),
+      role: z.enum([`input`, `output`]),
+      mimeType: z.string(),
+      filename: z.string().optional(),
+      byteLength: z.number().int().nonnegative().optional(),
+      sha256: z.string().optional(),
+      createdAt: z.string(),
+      createdBy: z.string().optional(),
+      error: z.string().optional(),
+      meta: createAttachmentMetaSchema().optional(),
+    }),
+    z.object({
+      key: z.string().optional(),
+      ...timelineOrderField,
       kind: z.literal(`context`),
       id: z.string(),
       name: z.string(),
@@ -673,6 +734,7 @@ function createManifestSchema(): Schema<
     | ManifestSourceEntryValue
     | ManifestSharedStateEntryValue
     | ManifestEffectEntryValue
+    | ManifestAttachmentEntryValue
     | ManifestContextEntryValue
     | ManifestCronScheduleEntryValue
     | ManifestFutureSendScheduleEntryValue
@@ -716,6 +778,12 @@ export type ManifestSharedStateEntry =
   SequencedPersistedRow<ManifestSharedStateEntryValue>
 export type ManifestEffectEntry =
   SequencedPersistedRow<ManifestEffectEntryValue>
+export type AttachmentStatus = AttachmentStatusValue
+export type AttachmentSubjectType = AttachmentSubjectTypeValue
+export type AttachmentRole = AttachmentRoleValue
+export type AttachmentSubject = AttachmentSubjectValue
+export type ManifestAttachmentEntry =
+  SequencedPersistedRow<ManifestAttachmentEntryValue>
 export type ManifestContextEntry =
   SequencedPersistedRow<ManifestContextEntryValue>
 export type ManifestCronScheduleEntry =
@@ -727,6 +795,7 @@ type ManifestUnion =
   | ManifestSourceEntry
   | ManifestSharedStateEntry
   | ManifestEffectEntry
+  | ManifestAttachmentEntry
   | ManifestContextEntry
   | ManifestCronScheduleEntry
   | ManifestFutureSendScheduleEntry
@@ -739,6 +808,17 @@ export type Manifest = ManifestUnion & {
   sourceType?: string
   sourceRef?: string
   config?: unknown
+  streamPath?: string
+  subject?: AttachmentSubject
+  role?: AttachmentRoleValue
+  mimeType?: string
+  filename?: string
+  byteLength?: number
+  sha256?: string
+  createdAt?: string
+  createdBy?: string
+  error?: string
+  meta?: Record<string, JsonValue>
   name?: string
   attrs?: ContextEntryAttrs
   content?: string
@@ -750,7 +830,7 @@ export type Manifest = ManifestUnion & {
   targetUrl?: string
   producerId?: string
   messageType?: string
-  status?: FutureSendScheduleStatus
+  status?: FutureSendScheduleStatus | AttachmentStatusValue
   sentAt?: string
   failedAt?: string
   lastError?: string
