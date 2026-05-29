@@ -417,6 +417,23 @@ describe(`toAgentHistory`, () => {
     expect(second?.role).toBe(`assistant`)
   })
 
+  it(`merges adjacent assistant text messages into one text block`, () => {
+    const messages: Array<LLMMessage> = [
+      { role: `user`, content: `Question` },
+      { role: `assistant`, content: `First chunk.` },
+      { role: `assistant`, content: ` Second chunk.` },
+    ]
+
+    const history = toAgentHistory(messages)
+
+    expect(history).toHaveLength(2)
+    const assistant = history[1] as AssistantMessage
+    expect(assistant.role).toBe(`assistant`)
+    expect(assistant.content).toEqual([
+      { type: `text`, text: `First chunk. Second chunk.` },
+    ])
+  })
+
   it(`merges assistant text and tool_call into a single assistant message`, () => {
     const messages: Array<LLMMessage> = [
       { role: `user`, content: `Help me` },

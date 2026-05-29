@@ -107,11 +107,13 @@ export function toAgentHistory(
 
       case `assistant`: {
         const prev = lastAssistant()
-        if (prev) {
-          ;(prev.content as Array<unknown>).push({
-            type: `text`,
-            text: message.content,
-          })
+        const prevContent = prev?.content as
+          | Array<{ type: string; text?: string }>
+          | undefined
+        const lastBlock = prevContent?.[prevContent.length - 1]
+
+        if (lastBlock?.type === `text`) {
+          lastBlock.text = `${lastBlock.text ?? ``}${message.content}`
         } else {
           history.push({
             role: `assistant`,
