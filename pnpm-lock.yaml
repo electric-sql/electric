@@ -1612,6 +1612,9 @@ importers:
       concurrently:
         specifier: ^8.2.2
         version: 8.2.2
+      electric-ax:
+        specifier: workspace:*
+        version: link:../electric-ax
       electron:
         specifier: ^41.5.0
         version: 41.5.0
