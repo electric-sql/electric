@@ -69,8 +69,8 @@
 
 .agent-ui-markdown p,
 .agent-ui-markdown li {
-  font-size: var(--ds-text-sm);
-  line-height: var(--ds-text-sm-lh);
+  font-size: var(--ds-chat-text);
+  line-height: var(--ds-chat-text-lh);
   font-family: var(--ds-font-body);
   color: var(--ds-text-1);
 }
@@ -114,7 +114,7 @@
   margin-top: 18px;
 }
 .agent-ui-markdown h3 {
-  font-size: var(--ds-text-sm); /* 13px */
+  font-size: var(--ds-chat-text);
   line-height: 1.45;
   font-weight: 600;
   margin-top: 14px;
@@ -122,7 +122,7 @@
 .agent-ui-markdown h4,
 .agent-ui-markdown h5,
 .agent-ui-markdown h6 {
-  font-size: var(--ds-text-sm);
+  font-size: var(--ds-chat-text);
   line-height: 1.45;
   font-weight: 600;
   color: var(--ds-text-2);
@@ -293,8 +293,8 @@
   gap: 6px;
   padding: 2px 4px;
   margin-left: -4px;
-  font-size: var(--ds-text-sm);
-  line-height: var(--ds-text-sm-lh);
+  font-size: var(--ds-chat-text);
+  line-height: var(--ds-chat-text-lh);
   font-family: var(--ds-font-body);
   color: var(--ds-text-1);
   font-weight: 500;
@@ -412,6 +412,15 @@
   flex-shrink: 0;
 }
 
+.agent-ui-markdown [data-md-code-block-actions] button {
+  color: var(--ds-text-4);
+  opacity: 0.7;
+}
+
+.agent-ui-markdown [data-md-code-block-actions] button:hover {
+  opacity: 1;
+}
+
 /* The code area itself — the only part that carries chrome.
    `--ds-surface-raised` matches the marketing site's
    `--vp-code-bg = --vp-c-bg-elv` so code wells sit at the same
@@ -420,7 +429,7 @@
    and the table wrapper so all three feel like variants of the
    same surface. */
 .agent-ui-markdown [data-md-code-block-body] {
-  background: var(--ds-surface-raised);
+  background: color-mix(in oklab, var(--ds-bg) 72%, var(--ds-surface));
   border: 1px solid var(--ds-gray-a4);
   border-radius: var(--ds-radius-3);
   padding: 9px 11px;
@@ -645,8 +654,8 @@
 .agent-ui-markdown [data-streamdown='table'] {
   width: 100%;
   border-collapse: collapse;
-  font-size: var(--ds-text-sm);
-  line-height: var(--ds-text-sm-lh);
+  font-size: var(--ds-chat-text);
+  line-height: var(--ds-chat-text-lh);
   font-family: var(--ds-font-body);
 }
 

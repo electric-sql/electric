@@ -43,7 +43,7 @@ services:
     environment:
       COLLECTOR_OTLP_ENABLED: 'true'
     healthcheck:
-      test: ['CMD', 'wget', '-q', '-O-', 'http://localhost:16686/']
+      test: ['CMD', 'wget', '-Y', 'off', '-q', '-O-', 'http://127.0.0.1:14269/']
       interval: 2s
       timeout: 5s
       retries: 15

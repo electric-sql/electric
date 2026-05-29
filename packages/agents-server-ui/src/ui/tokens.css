@@ -41,12 +41,12 @@
   /* ---- Type scale (flat — no Capsize trim) --------------------------- *
    * One font-size + one line-height per step. Vertical rhythm is
    * controlled by the parent container's `gap`, not per-element trim.
-   * Sizes intentionally keep close to Radix's font-size-1..6 mapping
-   * so existing `size="1"`..`size="6"` migrations are visually 1:1.   */
+   * Chat typography has its own tokens below so global UI chrome can
+   * tighten without changing conversation readability. */
   --ds-text-2xs: 10px;
   --ds-text-xs: 11px;
   --ds-text-xs-lh: 1.45;
-  --ds-text-sm: 13px;
+  --ds-text-sm: 12px;
   --ds-text-sm-lh: 1.5;
   --ds-text-base: 14px;
   --ds-text-base-lh: 1.55;
@@ -58,6 +58,14 @@
   --ds-text-2xl-lh: 1.35;
   --ds-text-3xl: 28px;
   --ds-text-3xl-lh: 1.25;
+
+  --ds-chat-text: 13px;
+  --ds-chat-text-lh: 1.5;
+
+  --ds-icon-xs: 11px;
+  --ds-icon-sm: 13px;
+  --ds-icon-md: 15px;
+  --ds-icon-lg: 18px;
 
   /* ---- Font families ------------------------------------------------- *
    * Matches `--vp-font-family-base` / `--vp-font-family-mono` on the
@@ -91,6 +99,7 @@
    * in dark mode it's the website's `--vp-c-bg-elv` `#22252f`.          */
   --ds-bg: #f7f7f5;
   --ds-bg-subtle: #f0efed;
+  --ds-chrome-bg: var(--ds-bg-subtle);
   --ds-surface: #ffffff;
   --ds-surface-raised: #ffffff;
   --ds-input-bg: var(--ds-surface-raised);
@@ -308,6 +317,7 @@
 :root[data-theme='dark'] {
   --ds-bg: #111318;
   --ds-bg-subtle: #16181f;
+  --ds-chrome-bg: var(--ds-bg-subtle);
   --ds-surface: #1a1d27;
   --ds-surface-raised: #22252f;
   /* Solid raised fill — same value the marketing site uses for its

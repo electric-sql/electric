@@ -1,3 +1,4 @@
+import { createHash, generateKeyPairSync, sign } from 'node:crypto'
 import { Readable } from 'node:stream'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -6,18 +7,18 @@ import {
 } from '../src/create-handler'
 import { clearRegistry, defineEntity } from '../src/define-entity'
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import type { KeyObject } from 'node:crypto'
 import type {
   StandardJSONSchemaV1,
   StandardSchemaV1,
 } from '@standard-schema/spec'
 
-const { processWebhookWakeMock } = vi.hoisted(() => ({
-  processWebhookWakeMock: vi.fn(),
+const { processWakeMock } = vi.hoisted(() => ({
+  processWakeMock: vi.fn(),
 }))
 
 vi.mock(`../src/process-wake`, () => ({
-  processWebhookWake: processWebhookWakeMock,
-  processWake: processWebhookWakeMock,
+  processWake: processWakeMock,
 }))
 
 function makeStandardSchema(
@@ -63,10 +64,59 @@ function makeResponse() {
   }
 }
 
+function flushAsyncWork(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0))
+}
+
+function signedWebhookRequest(
+  url: string,
+  body: string,
+  opts: {
+    kid: string
+    privateKey: KeyObject
+  }
+): Request {
+  const timestamp = Math.floor(Date.now() / 1000)
+  const payload = Buffer.concat([
+    Buffer.from(`${timestamp}.`),
+    Buffer.from(body),
+  ])
+  const signature = sign(null, payload, opts.privateKey).toString(`base64url`)
+  return new Request(url, {
+    method: `POST`,
+    headers: {
+      'content-type': `application/json`,
+      'webhook-signature': `t=${timestamp},kid=${opts.kid},ed25519=${signature}`,
+    },
+    body,
+  })
+}
+
+function publicJwkForKey(publicKey: KeyObject): {
+  kty: `OKP`
+  crv: `Ed25519`
+  x: string
+  kid: string
+  use: `sig`
+  alg: `EdDSA`
+} {
+  const exported = publicKey.export({ format: `jwk` }) as {
+    kty: `OKP`
+    crv: `Ed25519`
+    x: string
+  }
+  const kid = `ds_${createHash(`sha256`)
+    .update(
+      JSON.stringify({ crv: exported.crv, kty: exported.kty, x: exported.x })
+    )
+    .digest(`base64url`)}`
+  return { ...exported, kid, use: `sig`, alg: `EdDSA` }
+}
+
 describe(`createRuntimeHandler`, () => {
   beforeEach(() => {
     clearRegistry()
-    processWebhookWakeMock.mockReset()
+    processWakeMock.mockReset()
   })
 
   afterEach(() => {
@@ -77,7 +127,7 @@ describe(`createRuntimeHandler`, () => {
     defineEntity(`test-agent`, { handler: async () => {} })
 
     let resolveWake!: () => void
-    processWebhookWakeMock.mockImplementation(
+    processWakeMock.mockImplementation(
       () =>
         new Promise<void>((resolve) => {
           resolveWake = resolve
@@ -108,6 +158,7 @@ describe(`createRuntimeHandler`, () => {
       handlerUrl: `http://localhost:4000/electric-agents`,
       heartbeatInterval: 15_000,
       idleTimeout: 60_000,
+      webhookSignature: false,
     })
     const req = makeRequest(JSON.stringify(notification))
     const res = makeResponse()
@@ -118,7 +169,7 @@ describe(`createRuntimeHandler`, () => {
       'content-type': `application/json`,
     })
     expect(res.end).toHaveBeenCalledWith(JSON.stringify({ ok: true }))
-    expect(processWebhookWakeMock).toHaveBeenCalledWith(
+    expect(processWakeMock).toHaveBeenCalledWith(
       notification,
       expect.objectContaining({
         baseUrl: `http://localhost:3000`,
@@ -135,7 +186,7 @@ describe(`createRuntimeHandler`, () => {
     defineEntity(`test-agent`, { handler: async () => {} })
 
     let resolveWake!: () => void
-    processWebhookWakeMock.mockImplementation(
+    processWakeMock.mockImplementation(
       () =>
         new Promise<void>((resolve) => {
           resolveWake = resolve
@@ -164,6 +215,7 @@ describe(`createRuntimeHandler`, () => {
     const handler = createRuntimeHandler({
       baseUrl: `http://localhost:3000`,
       handlerUrl: `http://localhost:4000/electric-agents`,
+      webhookSignature: false,
     })
 
     const response = await handler.handleWebhookRequest(
@@ -195,11 +247,12 @@ describe(`createRuntimeHandler`, () => {
 
   it(`records wake errors in debugState() until drained`, async () => {
     defineEntity(`test-agent`, { handler: async () => {} })
-    processWebhookWakeMock.mockRejectedValueOnce(new Error(`wake failed`))
+    processWakeMock.mockRejectedValueOnce(new Error(`wake failed`))
 
     const handler = createRuntimeHandler({
       baseUrl: `http://localhost:3000`,
       handlerUrl: `http://localhost:4000/electric-agents`,
+      webhookSignature: false,
     })
 
     const notification = {
@@ -230,8 +283,7 @@ describe(`createRuntimeHandler`, () => {
     )
 
     expect(response.status).toBe(200)
-    await Promise.resolve()
-    await Promise.resolve()
+    await flushAsyncWork()
 
     expect(handler.debugState()).toMatchObject({
       pendingWakeCount: 0,
@@ -254,13 +306,14 @@ describe(`createRuntimeHandler`, () => {
     const handler = createRuntimeHandler({
       baseUrl: `http://localhost:3000`,
       handlerUrl: `http://localhost:4000/electric-agents`,
+      webhookSignature: false,
     })
     const req = makeRequest(`{not-json`)
     const res = makeResponse()
 
     await handler.onEnter(req, res)
 
-    expect(processWebhookWakeMock).not.toHaveBeenCalled()
+    expect(processWakeMock).not.toHaveBeenCalled()
     expect(res.writeHead).toHaveBeenCalledWith(400, {
       'content-type': `application/json`,
     })
@@ -293,7 +346,7 @@ describe(`createRuntimeHandler`, () => {
 
     await handler.onEnter(req, res)
 
-    expect(processWebhookWakeMock).not.toHaveBeenCalled()
+    expect(processWakeMock).not.toHaveBeenCalled()
     expect(res.writeHead).toHaveBeenCalledWith(400, {
       'content-type': `application/json`,
     })
@@ -307,6 +360,7 @@ describe(`createRuntimeHandler`, () => {
     const router = createRuntimeRouter({
       baseUrl: `http://localhost:3000`,
       webhookPath: `/custom-runtime`,
+      webhookSignature: false,
     })
 
     const response = await router.handleRequest(
@@ -314,13 +368,14 @@ describe(`createRuntimeHandler`, () => {
     )
 
     expect(response).toBeNull()
-    expect(processWebhookWakeMock).not.toHaveBeenCalled()
+    expect(processWakeMock).not.toHaveBeenCalled()
   })
 
   it(`returns 503 for unknown entity types`, async () => {
     const router = createRuntimeRouter({
       baseUrl: `http://localhost:3000`,
       webhookPath: `/custom-runtime`,
+      webhookSignature: false,
     })
 
     const notification = {
@@ -354,7 +409,7 @@ describe(`createRuntimeHandler`, () => {
     await expect(response.json()).resolves.toMatchObject({
       error: expect.stringContaining(`nonexistent-agent`),
     })
-    expect(processWebhookWakeMock).not.toHaveBeenCalled()
+    expect(processWakeMock).not.toHaveBeenCalled()
   })
 
   it(`routes matching fetch requests through handleRequest`, async () => {
@@ -364,6 +419,7 @@ describe(`createRuntimeHandler`, () => {
       baseUrl: `http://localhost:3000`,
       webhookPath: `/custom-runtime`,
       serveEndpoint: `http://localhost:4000/custom-runtime`,
+      webhookSignature: false,
     })
 
     const notification = {
@@ -396,7 +452,7 @@ describe(`createRuntimeHandler`, () => {
     expect(response).toBeInstanceOf(Response)
     expect(response?.status).toBe(200)
     await expect(response?.json()).resolves.toEqual({ ok: true })
-    expect(processWebhookWakeMock).toHaveBeenCalledWith(
+    expect(processWakeMock).toHaveBeenCalledWith(
       notification,
       expect.objectContaining({
         baseUrl: `http://localhost:3000`,
@@ -407,20 +463,112 @@ describe(`createRuntimeHandler`, () => {
     )
   })
 
+  it(`rejects unsigned webhook requests by default`, async () => {
+    defineEntity(`test-agent`, { handler: async () => {} })
+
+    const router = createRuntimeRouter({
+      baseUrl: `http://localhost:3000`,
+      webhookPath: `/custom-runtime`,
+    })
+
+    const response = await router.handleWebhookRequest(
+      new Request(`http://localhost/custom-runtime`, {
+        method: `POST`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({
+          entity: {
+            type: `test-agent`,
+            url: `http://localhost:3000/test-agent/test-1`,
+          },
+        }),
+      })
+    )
+
+    expect(response.status).toBe(401)
+    await expect(response.json()).resolves.toMatchObject({
+      error: `Missing webhook signature`,
+    })
+    expect(processWakeMock).not.toHaveBeenCalled()
+  })
+
+  it(`verifies Ed25519 webhook signatures against the configured JWKS`, async () => {
+    defineEntity(`test-agent`, { handler: async () => {} })
+
+    const { privateKey, publicKey } = generateKeyPairSync(`ed25519`)
+    const jwk = publicJwkForKey(publicKey)
+    const jwksUrl = `http://localhost:3000/__ds/jwks.json?test=valid`
+    const fetchMock = vi.spyOn(globalThis, `fetch`).mockResolvedValue(
+      new Response(JSON.stringify({ keys: [jwk] }), {
+        headers: {
+          'content-type': `application/jwk-set+json`,
+          'cache-control': `public, max-age=300`,
+        },
+      })
+    )
+    const router = createRuntimeRouter({
+      baseUrl: `http://localhost:3000`,
+      webhookPath: `/custom-runtime`,
+      webhookSignature: { jwksUrl },
+    })
+
+    const notification = {
+      consumerId: `consumer-1`,
+      epoch: 1,
+      wakeId: `wake-1`,
+      streamPath: `/streams/entity:test-1`,
+      streams: [{ path: `/streams/entity:test-1`, offset: `0_0` }],
+      callback: `http://localhost:3000/_electric/wakes/wake-1`,
+      claimToken: `tok-1`,
+      entity: {
+        type: `test-agent`,
+        status: `active`,
+        url: `http://localhost:3000/test-agent/test-1`,
+        streams: {
+          main: `/streams/entity:test-1`,
+          error: `/streams/entity-error:test-1`,
+        },
+      },
+    }
+    const body = JSON.stringify(notification)
+
+    const response = await router.handleWebhookRequest(
+      signedWebhookRequest(`http://localhost/custom-runtime`, body, {
+        kid: jwk.kid,
+        privateKey,
+      })
+    )
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({ ok: true })
+    expect(fetchMock).toHaveBeenCalledWith(
+      jwksUrl,
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          accept: `application/jwk-set+json, application/json`,
+        }),
+      })
+    )
+    expect(processWakeMock).toHaveBeenCalledWith(
+      notification,
+      expect.objectContaining({ baseUrl: `http://localhost:3000` })
+    )
+  })
+
   it(`registerTypes throws on partial registration failure`, async () => {
     defineEntity(`good-agent`, { handler: async () => {} })
     defineEntity(`bad-agent`, { handler: async () => {} })
 
-    vi.spyOn(globalThis, `fetch`).mockImplementation((url) => {
-      if (String(url).includes(`/good-agent/**?subscription=`)) {
+    vi.spyOn(globalThis, `fetch`).mockImplementation((_url, init) => {
+      const body =
+        typeof init?.body === `string`
+          ? (JSON.parse(init.body) as { name?: string })
+          : {}
+      if (body.name === `good-agent`) {
         return Promise.resolve(new Response(`server error`, { status: 500 }))
       }
 
-      const body = JSON.stringify(
-        String(url).includes(`entity-types`) ? { ok: true } : {}
-      )
       return Promise.resolve(
-        new Response(body, {
+        new Response(JSON.stringify({ ok: true }), {
           status: 200,
           headers: { 'content-type': `application/json` },
         })
@@ -437,10 +585,10 @@ describe(`createRuntimeHandler`, () => {
     )
   })
 
-  it(`registers entity types and creates a serve-endpoint subscription`, async () => {
+  it(`registers entity types with a webhook default dispatch policy`, async () => {
     defineEntity(`schema-agent`, {
       description: `Schema agent`,
-      outputSchemas: { custom: makeStandardSchema({ type: `object` }) },
+      stateSchemas: { custom: makeStandardSchema({ type: `object` }) },
       handler: async () => {},
     })
 
@@ -458,17 +606,11 @@ describe(`createRuntimeHandler`, () => {
 
     await handler.registerTypes()
 
-    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(fetchMock).toHaveBeenCalledWith(
       `http://localhost:3000/_electric/entity-types`,
       expect.objectContaining({
         method: `POST`,
-      })
-    )
-    expect(fetchMock).toHaveBeenCalledWith(
-      `http://localhost:3000/schema-agent/**?subscription=schema-agent-handler`,
-      expect.objectContaining({
-        method: `PUT`,
       })
     )
 
@@ -477,7 +619,16 @@ describe(`createRuntimeHandler`, () => {
       name: `schema-agent`,
       description: `Schema agent`,
       serve_endpoint: `http://localhost:4000/electric-agents`,
-      output_schemas: expect.objectContaining({
+      default_dispatch_policy: {
+        targets: [
+          {
+            type: `webhook`,
+            url: `http://localhost:4000/electric-agents`,
+            subscription_id: `webhook:schema-agent`,
+          },
+        ],
+      },
+      state_schemas: expect.objectContaining({
         custom: { type: `object` },
         run: expect.any(Object),
         manifest: expect.any(Object),
@@ -486,7 +637,117 @@ describe(`createRuntimeHandler`, () => {
     })
   })
 
-  it(`registers custom state collections as output schemas`, async () => {
+  it(`registers entity types with an explicit default dispatch policy`, async () => {
+    defineEntity(`schema-agent`, {
+      description: `Schema agent`,
+      handler: async () => {},
+    })
+
+    const fetchMock = vi.spyOn(globalThis, `fetch`).mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'content-type': `application/json` },
+      })
+    )
+
+    const handler = createRuntimeHandler({
+      baseUrl: `http://localhost:3000`,
+      defaultDispatchPolicyForType: () => ({
+        targets: [{ type: `runner`, runnerId: `runner-1` }],
+      }),
+    })
+
+    await handler.registerTypes()
+
+    const [, options] = fetchMock.mock.calls[0]!
+    expect(JSON.parse(options?.body as string)).toMatchObject({
+      name: `schema-agent`,
+      default_dispatch_policy: {
+        targets: [{ type: `runner`, runnerId: `runner-1` }],
+      },
+    })
+  })
+
+  it(`does not create runtime-owned webhook subscriptions during registration`, async () => {
+    defineEntity(`schema-agent`, {
+      description: `Schema agent`,
+      handler: async () => {},
+    })
+
+    const fetchMock = vi.spyOn(globalThis, `fetch`).mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'content-type': `application/json` },
+      })
+    )
+
+    const handler = createRuntimeHandler({
+      baseUrl: `http://localhost:3000`,
+      handlerUrl: `http://localhost:4000/electric-agents`,
+    })
+
+    await handler.registerTypes()
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(String(fetchMock.mock.calls[0]![0])).toBe(
+      `http://localhost:3000/_electric/entity-types`
+    )
+  })
+
+  it(`preserves tenant path prefixes when registering types`, async () => {
+    defineEntity(`schema-agent`, { handler: async () => {} })
+
+    const fetchMock = vi.spyOn(globalThis, `fetch`).mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'content-type': `application/json` },
+      })
+    )
+
+    const handler = createRuntimeHandler({
+      baseUrl: `http://localhost:3000/t/tenant-a/v1`,
+      handlerUrl: `http://localhost:4000/electric-agents`,
+    })
+
+    await handler.registerTypes()
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `http://localhost:3000/t/tenant-a/v1/_electric/entity-types`,
+      expect.objectContaining({
+        method: `POST`,
+      })
+    )
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it(`sends configured server headers when registering types`, async () => {
+    defineEntity(`schema-agent`, { handler: async () => {} })
+
+    const fetchMock = vi.spyOn(globalThis, `fetch`).mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'content-type': `application/json` },
+      })
+    )
+
+    const handler = createRuntimeHandler({
+      baseUrl: `http://localhost:3000`,
+      serverHeaders: {
+        Authorization: `Bearer tenant-token`,
+        'X-Tenant': `tenant-a`,
+      },
+    })
+
+    await handler.registerTypes()
+
+    const [, options] = fetchMock.mock.calls[0]!
+    const headers = new Headers(options?.headers)
+    expect(headers.get(`authorization`)).toBe(`Bearer tenant-token`)
+    expect(headers.get(`x-tenant`)).toBe(`tenant-a`)
+    expect(headers.get(`content-type`)).toBe(`application/json`)
+  })
+
+  it(`registers custom state collections as state schemas`, async () => {
     defineEntity(`stateful-agent`, {
       state: {
         status: {
@@ -520,7 +781,7 @@ describe(`createRuntimeHandler`, () => {
 
     const [, options] = fetchMock.mock.calls[0]!
     const body = JSON.parse(options?.body as string) as Record<string, unknown>
-    expect(body.output_schemas).toEqual(
+    expect(body.state_schemas).toEqual(
       expect.objectContaining({
         'state:status': {
           type: `object`,
@@ -568,7 +829,7 @@ describe(`createRuntimeHandler`, () => {
 
     const [, options] = fetchMock.mock.calls[0]!
     const body = JSON.parse(options?.body as string) as Record<string, unknown>
-    expect(body.output_schemas).toEqual(
+    expect(body.state_schemas).toEqual(
       expect.objectContaining({
         'state:status': {
           type: `object`,
@@ -639,7 +900,7 @@ describe(`createRuntimeHandler`, () => {
     })
   })
 
-  it(`sends input_schemas when inboxSchemas is defined`, async () => {
+  it(`sends inbox_schemas when inboxSchemas is defined`, async () => {
     defineEntity(`inbox-agent`, {
       description: `Inbox agent`,
       inboxSchemas: {
@@ -667,12 +928,12 @@ describe(`createRuntimeHandler`, () => {
 
     const [, options] = fetchMock.mock.calls[0]!
     const body = JSON.parse(options?.body as string) as Record<string, unknown>
-    expect(body.input_schemas).toEqual({
+    expect(body.inbox_schemas).toEqual({
       greet: { type: `object`, properties: { name: { type: `string` } } },
     })
   })
 
-  it(`omits creation_schema and input_schemas when neither is defined`, async () => {
+  it(`omits creation_schema and inbox_schemas when neither is defined`, async () => {
     defineEntity(`plain-agent`, {
       description: `Plain agent`,
       handler: async () => {},
@@ -695,7 +956,7 @@ describe(`createRuntimeHandler`, () => {
     const [, options] = fetchMock.mock.calls[0]!
     const body = JSON.parse(options?.body as string) as Record<string, unknown>
     expect(body).not.toHaveProperty(`creation_schema`)
-    expect(body).not.toHaveProperty(`input_schemas`)
-    expect(body).toHaveProperty(`output_schemas`)
+    expect(body).not.toHaveProperty(`inbox_schemas`)
+    expect(body).toHaveProperty(`state_schemas`)
   })
 })

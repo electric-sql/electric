@@ -43,9 +43,34 @@ type SequencedPersistedRow<T extends { key?: string | undefined }> = Omit<
 > & {
   key: string
   _seq?: number
+  _timeline_order?: string
 }
 type Schema<T> = z.ZodType<T>
-type ChildEntityStatusValue = `spawning` | `running` | `idle` | `stopped`
+type ChildEntityStatusValue =
+  | `spawning`
+  | `running`
+  | `idle`
+  | `paused`
+  | `stopping`
+  | `stopped`
+  | `killed`
+export type EntitySignal =
+  | `SIGINT`
+  | `SIGHUP`
+  | `SIGTERM`
+  | `SIGKILL`
+  | `SIGSTOP`
+  | `SIGCONT`
+  | `SIGUSR`
+type SignalHandlingStatus = `unhandled` | `handled`
+type SignalOutcome =
+  | `transitioned`
+  | `ignored`
+  | `invalid_for_state`
+  | `delivered`
+  | `aborted`
+  | `shutdown_requested`
+  | `failed`
 type TagEntryValue = {
   key?: string
   value: string
@@ -131,10 +156,15 @@ type ErrorEventValue = {
 }
 type MessageReceivedValue = {
   key?: string
-  from: string
+  from?: string
   payload?: unknown
-  timestamp: string
+  timestamp?: string
   message_type?: string
+  mode?: `immediate` | `queued` | `paused` | `steer`
+  status?: `pending` | `processed` | `cancelled`
+  position?: string
+  processed_at?: string
+  cancelled_at?: string
 }
 type WakeEntryValue = {
   key?: string
@@ -156,6 +186,20 @@ type EntityStoppedValue = {
   key?: string
   timestamp: string
   reason?: string
+}
+type SignalValue = {
+  key?: string
+  signal: EntitySignal
+  status: SignalHandlingStatus
+  sender?: string
+  reason?: string
+  payload?: unknown
+  timestamp: string
+  handled_at?: string
+  handled_by?: string
+  outcome?: SignalOutcome
+  previous_state?: ChildEntityStatusValue
+  new_state?: ChildEntityStatusValue
 }
 type ChildStatusEntryValue = {
   key?: string
@@ -231,7 +275,6 @@ type ManifestFutureSendScheduleEntryValue = {
   targetUrl: string
   payload: unknown
   producerId: string
-  from?: string
   messageType?: string
   status?: FutureSendScheduleStatus
   sentAt?: string
@@ -265,8 +308,32 @@ function createJsonObjectSchema(): Schema<Record<string, JsonValue>> {
   >
 }
 
+const timelineOrderField = {
+  _timeline_order: z.string().optional(),
+}
+
 function createChildEntityStatusSchema(): Schema<ChildEntityStatusValue> {
-  return z.enum([`spawning`, `running`, `idle`, `stopped`])
+  return z.enum([
+    `spawning`,
+    `running`,
+    `idle`,
+    `paused`,
+    `stopping`,
+    `stopped`,
+    `killed`,
+  ])
+}
+
+function createEntitySignalSchema(): Schema<EntitySignal> {
+  return z.enum([
+    `SIGINT`,
+    `SIGHUP`,
+    `SIGTERM`,
+    `SIGKILL`,
+    `SIGSTOP`,
+    `SIGCONT`,
+    `SIGUSR`,
+  ])
 }
 
 function createWakeChangeSchema(): Schema<WakeChangeEntryValue> {
@@ -315,6 +382,7 @@ function createWakeConfigSchema(): Schema<WakeConfigValue> {
 function createRunSchema(): Schema<RunValue> {
   return z.object({
     key: z.string().optional(),
+    ...timelineOrderField,
     status: z.enum([`started`, `completed`, `failed`]),
     finish_reason: z.string().optional(),
   })
@@ -323,6 +391,7 @@ function createRunSchema(): Schema<RunValue> {
 function createStepSchema(): Schema<StepValue> {
   return z.object({
     key: z.string().optional(),
+    ...timelineOrderField,
     run_id: z.string().optional(),
     step_number: z.number().int(),
     status: z.enum([`started`, `completed`]),
@@ -336,6 +405,7 @@ function createStepSchema(): Schema<StepValue> {
 function createTextSchema(): Schema<TextValue> {
   return z.object({
     key: z.string().optional(),
+    ...timelineOrderField,
     run_id: z.string().optional(),
     status: z.enum([`streaming`, `completed`]),
   })
@@ -344,6 +414,7 @@ function createTextSchema(): Schema<TextValue> {
 function createTextDeltaSchema(): Schema<TextDeltaValue> {
   return z.object({
     key: z.string().optional(),
+    ...timelineOrderField,
     text_id: z.string(),
     run_id: z.string(),
     delta: z.string(),
@@ -353,6 +424,7 @@ function createTextDeltaSchema(): Schema<TextDeltaValue> {
 function createToolCallSchema(): Schema<ToolCallValue> {
   return z.object({
     key: z.string().optional(),
+    ...timelineOrderField,
     run_id: z.string().optional(),
     tool_call_id: z.string().optional(),
     tool_name: z.string(),
@@ -373,6 +445,7 @@ function createToolCallSchema(): Schema<ToolCallValue> {
 function createReasoningSchema(): Schema<ReasoningValue> {
   return z.object({
     key: z.string().optional(),
+    ...timelineOrderField,
     status: z.enum([`streaming`, `completed`]),
   })
 }
@@ -380,6 +453,7 @@ function createReasoningSchema(): Schema<ReasoningValue> {
 function createErrorEventSchema(): Schema<ErrorEventValue> {
   return z.object({
     key: z.string().optional(),
+    ...timelineOrderField,
     error_code: z.string(),
     message: z.string(),
     run_id: z.string().optional(),
@@ -391,16 +465,23 @@ function createErrorEventSchema(): Schema<ErrorEventValue> {
 function createMessageReceivedSchema(): Schema<MessageReceivedValue> {
   return z.object({
     key: z.string().optional(),
-    from: z.string(),
+    ...timelineOrderField,
+    from: z.string().optional(),
     payload: z.unknown().optional(),
-    timestamp: z.string(),
+    timestamp: z.string().optional(),
     message_type: z.string().optional(),
+    mode: z.enum([`immediate`, `queued`, `paused`, `steer`]).optional(),
+    status: z.enum([`pending`, `processed`, `cancelled`]).optional(),
+    position: z.string().optional(),
+    processed_at: z.string().optional(),
+    cancelled_at: z.string().optional(),
   })
 }
 
 function createWakeSchema(): Schema<WakeEntryValue> {
   return z.object({
     key: z.string().optional(),
+    ...timelineOrderField,
     timestamp: z.string(),
     source: z.string(),
     timeout: z.boolean(),
@@ -413,6 +494,7 @@ function createWakeSchema(): Schema<WakeEntryValue> {
 function createEntityCreatedSchema(): Schema<EntityCreatedValue> {
   return z.object({
     key: z.string().optional(),
+    ...timelineOrderField,
     entity_type: z.string(),
     timestamp: z.string(),
     args: createJsonObjectSchema(),
@@ -423,14 +505,43 @@ function createEntityCreatedSchema(): Schema<EntityCreatedValue> {
 function createEntityStoppedSchema(): Schema<EntityStoppedValue> {
   return z.object({
     key: z.string().optional(),
+    ...timelineOrderField,
     timestamp: z.string(),
     reason: z.string().optional(),
+  })
+}
+
+function createSignalSchema(): Schema<SignalValue> {
+  return z.object({
+    key: z.string().optional(),
+    signal: createEntitySignalSchema(),
+    status: z.enum([`unhandled`, `handled`]),
+    sender: z.string().optional(),
+    reason: z.string().optional(),
+    payload: z.unknown().optional(),
+    timestamp: z.string(),
+    handled_at: z.string().optional(),
+    handled_by: z.string().optional(),
+    outcome: z
+      .enum([
+        `transitioned`,
+        `ignored`,
+        `invalid_for_state`,
+        `delivered`,
+        `aborted`,
+        `shutdown_requested`,
+        `failed`,
+      ])
+      .optional(),
+    previous_state: createChildEntityStatusSchema().optional(),
+    new_state: createChildEntityStatusSchema().optional(),
   })
 }
 
 function createChildStatusSchema(): Schema<ChildStatusEntryValue> {
   return z.object({
     key: z.string().optional(),
+    ...timelineOrderField,
     entity_url: z.string(),
     entity_type: z.string(),
     status: createChildEntityStatusSchema(),
@@ -440,12 +551,14 @@ function createChildStatusSchema(): Schema<ChildStatusEntryValue> {
 function createTagEntrySchema(): Schema<TagEntryValue> {
   return z.object({
     key: z.string().optional(),
+    ...timelineOrderField,
     value: z.string(),
   })
 }
 function createContextInsertedSchema(): Schema<ContextInsertedValue> {
   return z.object({
     key: z.string().optional(),
+    ...timelineOrderField,
     id: z.string(),
     name: z.string(),
     attrs: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
@@ -457,6 +570,7 @@ function createContextInsertedSchema(): Schema<ContextInsertedValue> {
 function createContextRemovedSchema(): Schema<ContextRemovedValue> {
   return z.object({
     key: z.string().optional(),
+    ...timelineOrderField,
     id: z.string(),
     name: z.string(),
     timestamp: z.string(),
@@ -474,6 +588,7 @@ function createManifestSchema(): Schema<
   return z.union([
     z.object({
       key: z.string().optional(),
+      ...timelineOrderField,
       kind: z.literal(`child`),
       id: z.string(),
       entity_type: z.string(),
@@ -483,6 +598,7 @@ function createManifestSchema(): Schema<
     }),
     z.object({
       key: z.string().optional(),
+      ...timelineOrderField,
       kind: z.literal(`source`),
       sourceType: z.string(),
       sourceRef: z.string(),
@@ -491,6 +607,7 @@ function createManifestSchema(): Schema<
     }),
     z.object({
       key: z.string().optional(),
+      ...timelineOrderField,
       kind: z.literal(`shared-state`),
       id: z.string(),
       mode: z.enum([`create`, `connect`]),
@@ -505,6 +622,7 @@ function createManifestSchema(): Schema<
     }),
     z.object({
       key: z.string().optional(),
+      ...timelineOrderField,
       kind: z.literal(`effect`),
       id: z.string(),
       function_ref: z.string(),
@@ -512,6 +630,7 @@ function createManifestSchema(): Schema<
     }),
     z.object({
       key: z.string().optional(),
+      ...timelineOrderField,
       kind: z.literal(`context`),
       id: z.string(),
       name: z.string(),
@@ -524,6 +643,7 @@ function createManifestSchema(): Schema<
     }),
     z.object({
       key: z.string().optional(),
+      ...timelineOrderField,
       kind: z.literal(`schedule`),
       id: z.string(),
       scheduleType: z.literal(`cron`),
@@ -534,6 +654,7 @@ function createManifestSchema(): Schema<
     }),
     z.object({
       key: z.string().optional(),
+      ...timelineOrderField,
       kind: z.literal(`schedule`),
       id: z.string(),
       scheduleType: z.literal(`future_send`),
@@ -541,7 +662,6 @@ function createManifestSchema(): Schema<
       targetUrl: z.string(),
       payload: z.unknown(),
       producerId: z.string(),
-      from: z.string().optional(),
       messageType: z.string().optional(),
       status: z.enum([`pending`, `sent`, `failed`]).default(`pending`),
       sentAt: z.string().optional(),
@@ -583,6 +703,7 @@ export type MessageReceived = SequencedPersistedRow<MessageReceivedValue>
 export type WakeEntry = SequencedPersistedRow<WakeEntryValue>
 export type EntityCreated = SequencedPersistedRow<EntityCreatedValue>
 export type EntityStopped = SequencedPersistedRow<EntityStoppedValue>
+export type Signal = SequencedPersistedRow<SignalValue>
 export type ChildStatusEntry = SequencedPersistedRow<ChildStatusEntryValue>
 export type TagEntry = SequencedPersistedRow<TagEntryValue>
 export type ContextInserted = SequencedPersistedRow<ContextInsertedValue>
@@ -628,7 +749,6 @@ export type Manifest = ManifestUnion & {
   fireAt?: string
   targetUrl?: string
   producerId?: string
-  from?: string
   messageType?: string
   status?: FutureSendScheduleStatus
   sentAt?: string
@@ -653,6 +773,7 @@ export const ENTITY_COLLECTIONS = {
   wakes: `wakes`,
   entityCreated: `entityCreated`,
   entityStopped: `entityStopped`,
+  signals: `signals`,
   childStatus: `childStatus`,
   tags: `tags`,
   manifests: `manifests`,
@@ -671,13 +792,14 @@ export const BUILT_IN_EVENT_SCHEMAS = {
   reasoning:
     createReasoningSchema() as unknown as BuiltInEntitySchema<Reasoning>,
   error: createErrorEventSchema() as unknown as BuiltInEntitySchema<ErrorEvent>,
-  message_received:
+  inbox:
     createMessageReceivedSchema() as unknown as BuiltInEntitySchema<MessageReceived>,
   wake: createWakeSchema() as unknown as BuiltInEntitySchema<WakeEntry>,
   entity_created:
     createEntityCreatedSchema() as unknown as BuiltInEntitySchema<EntityCreated>,
   entity_stopped:
     createEntityStoppedSchema() as unknown as BuiltInEntitySchema<EntityStopped>,
+  signal: createSignalSchema() as unknown as BuiltInEntitySchema<Signal>,
   child_status:
     createChildStatusSchema() as unknown as BuiltInEntitySchema<ChildStatusEntry>,
   tags: createTagEntrySchema() as unknown as BuiltInEntitySchema<TagEntry>,
@@ -707,6 +829,7 @@ type EntityCollectionsDefinition = {
   wakes: CollectionDefinition<WakeEntry>
   entityCreated: CollectionDefinition<EntityCreated>
   entityStopped: CollectionDefinition<EntityStopped>
+  signals: CollectionDefinition<Signal>
   childStatus: CollectionDefinition<ChildStatusEntry>
   tags: CollectionDefinition<TagEntry>
   manifests: CollectionDefinition<Manifest>
@@ -758,9 +881,8 @@ export const builtInCollections: EntityCollectionsDefinition = {
     primaryKey: `key`,
   },
   inbox: {
-    schema:
-      BUILT_IN_EVENT_SCHEMAS.message_received as StandardSchemaV1<MessageReceived>,
-    type: `message_received`,
+    schema: BUILT_IN_EVENT_SCHEMAS.inbox as StandardSchemaV1<MessageReceived>,
+    type: `inbox`,
     primaryKey: `key`,
   },
   wakes: {
@@ -778,6 +900,11 @@ export const builtInCollections: EntityCollectionsDefinition = {
     schema:
       BUILT_IN_EVENT_SCHEMAS.entity_stopped as StandardSchemaV1<EntityStopped>,
     type: `entity_stopped`,
+    primaryKey: `key`,
+  },
+  signals: {
+    schema: BUILT_IN_EVENT_SCHEMAS.signal as StandardSchemaV1<Signal>,
+    type: `signal`,
     primaryKey: `key`,
   },
   childStatus: {
@@ -830,6 +957,7 @@ export const entityStateSchema: StateSchema<EntityCollectionsDefinition> =
 /** Event types that are management/bookkeeping rather than agent content. */
 const MANAGEMENT_TYPES = new Set<string>([
   `entity_created`,
+  `signal`,
   `manifest`,
   `replay_watermark`,
   `ack`,

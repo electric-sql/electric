@@ -11,12 +11,10 @@ import {
   isChangeMessage,
   isControlMessage,
 } from '@electric-sql/client'
-import { serverLog } from './log.js'
-import { electricUrlWithPath } from './electric-url.js'
-import type {
-  EntityBridgeRow,
-  PostgresRegistry,
-} from './electric-agents-registry.js'
+import { serverLog } from './utils/log.js'
+import { electricUrlWithPath } from './utils/electric-url.js'
+import { DEFAULT_TENANT_ID } from './tenant.js'
+import type { EntityBridgeRow, PostgresRegistry } from './entity-registry.js'
 import type { StreamClient } from './stream-client.js'
 import type {
   ChangeMessage,
@@ -29,7 +27,20 @@ import type {
   EntityTags,
 } from '@electric-ax/agents-runtime'
 
+export interface EntityBridgeCoordinator {
+  start(): Promise<void>
+  stop(): Promise<void>
+  register(tagsInput: unknown): Promise<{
+    sourceRef: string
+    streamUrl: string
+  }>
+  onEntityChanged(entityUrl: string): Promise<void>
+  touchByStreamPath(streamPath: string): Promise<void>
+  beginClientRead(streamPath: string): Promise<(() => Promise<void>) | null>
+}
+
 interface EntityShapeRow extends Row<unknown> {
+  tenant_id: string
   url: string
   type: string
   status: `spawning` | `running` | `idle` | `stopped`
@@ -44,6 +55,7 @@ interface EntityShapeRow extends Row<unknown> {
 }
 
 const ENTITY_SHAPE_COLUMNS = [
+  `tenant_id`,
   `url`,
   `type`,
   `status`,
@@ -58,7 +70,7 @@ const ENTITY_SHAPE_COLUMNS = [
 ] as const
 
 function parseElectricOffset(offset: string): Offset | null {
-  if (offset === `-1` || offset === `now`) {
+  if (offset === `-1`) {
     return offset
   }
   return /^\d+_\d+$/.test(offset) ? (offset as Offset) : null
@@ -97,6 +109,21 @@ function buildTagsWhereClause(tags: EntityTags): string {
   return `tags_index @> ARRAY[${encoded.join(`, `)}]::text[]`
 }
 
+function sqlStringLiteral(value: string): string {
+  return `'${value.replace(/'/g, `''`)}'`
+}
+
+function buildTenantTagsWhereClause(
+  tenantId: string,
+  tags: EntityTags
+): string {
+  return `tenant_id = ${sqlStringLiteral(tenantId)} AND (${buildTagsWhereClause(tags)})`
+}
+
+function shapeEntityKey(message: ChangeMessage<EntityShapeRow>): string {
+  return message.value.url
+}
+
 class EntityBridge {
   readonly sourceRef: string
   readonly tags: EntityTags
@@ -119,6 +146,7 @@ class EntityBridge {
     private registry: PostgresRegistry,
     private streamClient: StreamClient,
     private electricUrl: string,
+    private tenantId: string,
     private electricSecret?: string
   ) {
     this.sourceRef = row.sourceRef
@@ -288,7 +316,7 @@ class EntityBridge {
       url: electricUrlWithPath(this.electricUrl, `/v1/shape`).toString(),
       params: {
         table: `entities`,
-        where: buildTagsWhereClause(this.tags),
+        where: buildTenantTagsWhereClause(this.tenantId, this.tags),
         ...(this.electricSecret ? { secret: this.electricSecret } : {}),
         columns: [...ENTITY_SHAPE_COLUMNS],
         replica: `full`,
@@ -356,7 +384,7 @@ class EntityBridge {
             continue
           }
 
-          this.bootstrapState?.staleMembers.delete(message.key)
+          this.bootstrapState?.staleMembers.delete(shapeEntityKey(message))
           this.applyChange(message)
           shouldPersistCursor = true
         }
@@ -413,25 +441,26 @@ class EntityBridge {
 
   private applyChange(message: ChangeMessage<EntityShapeRow>): void {
     const next = toMemberRow(message.value)
-    const existing = this.currentMembers.get(message.key)
+    const key = shapeEntityKey(message)
+    const existing = this.currentMembers.get(key)
     const operation = message.headers.operation
 
     if (operation === `delete`) {
       if (!existing) return
       this.append(`delete`, existing)
-      this.currentMembers.delete(message.key)
+      this.currentMembers.delete(key)
       return
     }
 
     if (!existing) {
       this.append(`insert`, next)
-      this.currentMembers.set(message.key, next)
+      this.currentMembers.set(key, next)
       return
     }
 
     if (!sameMember(existing, next)) {
       this.append(`update`, next)
-      this.currentMembers.set(message.key, next)
+      this.currentMembers.set(key, next)
     }
   }
 
@@ -470,7 +499,7 @@ class EntityBridge {
   }
 }
 
-export class EntityBridgeManager {
+export class EntityBridgeManager implements EntityBridgeCoordinator {
   private bridges = new Map<string, EntityBridge>()
   private startingBridges = new Map<string, Promise<void>>()
   private activeReaders = new Map<string, number>()
@@ -480,7 +509,8 @@ export class EntityBridgeManager {
     private registry: PostgresRegistry,
     private streamClient: StreamClient,
     private electricUrl?: string,
-    private electricSecret?: string
+    private electricSecret?: string,
+    private tenantId: string = DEFAULT_TENANT_ID
   ) {}
 
   async start(): Promise<void> {
@@ -606,6 +636,7 @@ export class EntityBridgeManager {
         this.registry,
         this.streamClient,
         this.electricUrl!,
+        this.tenantId,
         this.electricSecret
       )
       await bridge.start()

@@ -10,14 +10,19 @@ import {
   useNavigate,
   useParams,
 } from '@tanstack/react-router'
+import { eq, useLiveQuery } from '@tanstack/react-db'
 import { z } from 'zod'
 import { getActiveBaseUrl, preloadEntityStream } from './lib/entity-connection'
+import {
+  preloadAppCollections,
+  useElectricAgents,
+  type EntitySignal,
+} from './lib/ElectricAgentsProvider'
 import { usePinnedEntities } from './hooks/usePinnedEntities'
 import {
   SidebarCollapsedProvider,
   useSidebarCollapsed,
 } from './hooks/useSidebarCollapsed'
-import { useNarrowViewport } from './hooks/useNarrowViewport'
 import { useHotkey } from './hooks/useHotkey'
 import {
   SearchPaletteProvider,
@@ -35,21 +40,78 @@ import { PaneFindProvider, usePaneFindCommands } from './hooks/usePaneFind'
 import { Sidebar } from './components/Sidebar'
 import { SearchPalette } from './components/SearchPalette'
 import { Workspace } from './components/workspace/Workspace'
-import { ApiKeysModal } from './components/ApiKeysModal'
+import { OnboardingModal } from './components/OnboardingModal'
+import { DesktopTitleBar } from './components/DesktopTitleBar'
+import { TitlebarControls } from './components/TitlebarControls'
 import {
   SettingsSidebar,
   type SettingsCategoryId,
 } from './components/settings/SettingsSidebar'
 import { GeneralPage } from './components/settings/pages/GeneralPage'
+import { AccountPage } from './components/settings/pages/AccountPage'
 import { AppearancePage } from './components/settings/pages/AppearancePage'
+import { CredentialsPage } from './components/settings/pages/CredentialsPage'
+import { ServersPage } from './components/settings/pages/ServersPage'
+import { McpServersPage } from './components/settings/pages/McpServersPage'
 import { LocalRuntimePage } from './components/settings/pages/LocalRuntimePage'
 import styles from './router.module.css'
 
 const SETTINGS_CATEGORY_IDS: ReadonlyArray<SettingsCategoryId> = [
   `general`,
+  `account`,
+  `servers`,
+  `credentials`,
   `appearance`,
   `local-runtime`,
+  `mcp-servers`,
 ]
+
+function targetElement(event: KeyboardEvent): HTMLElement | null {
+  return event.target instanceof HTMLElement ? event.target : null
+}
+
+function isEditableTarget(target: HTMLElement | null): boolean {
+  if (!target) return false
+  const tag = target.tagName
+  return (
+    tag === `INPUT` ||
+    tag === `TEXTAREA` ||
+    tag === `SELECT` ||
+    target.isContentEditable
+  )
+}
+
+function isChatInputTarget(target: HTMLElement | null): boolean {
+  return Boolean(target?.closest(`[data-agent-chat-input]`))
+}
+
+function hasLocalEscapeHandler(target: HTMLElement | null): boolean {
+  return Boolean(
+    target?.closest(
+      [
+        `[data-pane-find-bar]`,
+        `[role="dialog"]`,
+        `[role="menu"]`,
+        `[role="menuitem"]`,
+        `[role="listbox"]`,
+        `[role="combobox"]`,
+      ].join(`,`)
+    )
+  )
+}
+
+function shouldHandleAgentSignalShortcut(
+  event: KeyboardEvent,
+  shortcut: `escape` | `shift+escape`
+): boolean {
+  const target = targetElement(event)
+
+  if (shortcut === `escape` || shortcut === `shift+escape`) {
+    if (hasLocalEscapeHandler(target)) return false
+    return !isEditableTarget(target) || isChatInputTarget(target)
+  }
+  return false
+}
 
 function RootLayout(): React.ReactElement {
   return (
@@ -68,24 +130,50 @@ function RootLayout(): React.ReactElement {
 function RootShell(): React.ReactElement {
   const { pinnedUrls, togglePin } = usePinnedEntities()
   const navigate = useNavigate()
-  const { collapsed, toggle } = useSidebarCollapsed()
+  const {
+    collapsed,
+    animating: sidebarAnimating,
+    toggle,
+  } = useSidebarCollapsed()
   const search = useSearchPalette()
   const { workspace, helpers } = useWorkspace()
+  const { entitiesCollection, signalEntity } = useElectricAgents()
   const { openFindForTile, findNextInTile, findPreviousInTile } =
     usePaneFindCommands()
+  const nativeMenuHandlesAppHotkeys =
+    typeof window !== `undefined` && Boolean(window.electronAPI)
+  const activeEntityUrl = helpers.activeTile?.entityUrl ?? null
+  const { data: activeEntityMatches = [] } = useLiveQuery(
+    (q) => {
+      if (!entitiesCollection || !activeEntityUrl) return undefined
+      return q
+        .from({ entity: entitiesCollection })
+        .where(({ entity }) => eq(entity.url, activeEntityUrl))
+    },
+    [entitiesCollection, activeEntityUrl]
+  )
+  const activeEntity = activeEntityMatches.at(0)
+  const activeEntityCanReceiveSignal =
+    activeEntity !== undefined &&
+    activeEntity.status !== `stopped` &&
+    activeEntity.status !== `killed`
 
-  useHotkey(`mod+b`, toggle)
-  useHotkey(`mod+k`, (e) => {
-    e.preventDefault()
-    search.toggle()
-  })
+  useHotkey(`mod+b`, toggle, { disabled: nativeMenuHandlesAppHotkeys })
+  useHotkey(
+    `mod+k`,
+    (e) => {
+      e.preventDefault()
+      search.toggle()
+    },
+    { disabled: nativeMenuHandlesAppHotkeys }
+  )
   useHotkey(
     `mod+f`,
     (e) => {
       e.preventDefault()
       openFindForTile(helpers.activeTileId)
     },
-    { ignoreInputs: false }
+    { ignoreInputs: false, disabled: nativeMenuHandlesAppHotkeys }
   )
   useHotkey(
     `mod+g`,
@@ -93,7 +181,7 @@ function RootShell(): React.ReactElement {
       e.preventDefault()
       findNextInTile(helpers.activeTileId)
     },
-    { ignoreInputs: false }
+    { ignoreInputs: false, disabled: nativeMenuHandlesAppHotkeys }
   )
   useHotkey(
     `mod+shift+g`,
@@ -101,7 +189,7 @@ function RootShell(): React.ReactElement {
       e.preventDefault()
       findPreviousInTile(helpers.activeTileId)
     },
-    { ignoreInputs: false }
+    { ignoreInputs: false, disabled: nativeMenuHandlesAppHotkeys }
   )
   // New session: bind both ⌘N / Ctrl+N (works in Electron) and
   // ⌘⇧O / Ctrl+Shift+O (works in browsers — `⌘N` is reserved by
@@ -117,16 +205,71 @@ function RootShell(): React.ReactElement {
   const openNewSession = useCallback(() => {
     navigate({ to: `/` })
   }, [navigate])
-  useHotkey(`mod+n`, (e) => {
-    e.preventDefault()
-    openNewSession()
-  })
+  useHotkey(
+    `mod+n`,
+    (e) => {
+      e.preventDefault()
+      openNewSession()
+    },
+    { disabled: nativeMenuHandlesAppHotkeys }
+  )
   useHotkey(`mod+shift+o`, (e) => {
     e.preventDefault()
     openNewSession()
   })
 
-  useWorkspaceHotkeys()
+  const signalActiveTile = useCallback(
+    (signal: EntitySignal, reason: string) => {
+      if (!activeEntityCanReceiveSignal) return false
+      const entityUrl = activeEntityUrl
+      if (!entityUrl || !signalEntity) return false
+      const tx = signalEntity({ entityUrl, signal, reason })
+      tx.isPersisted.promise.catch(() => {})
+      return true
+    },
+    [activeEntityCanReceiveSignal, activeEntityUrl, signalEntity]
+  )
+  const stopActiveTile = useCallback(() => {
+    if (!activeEntityCanReceiveSignal) return false
+    const entityUrl = activeEntityUrl
+    if (!entityUrl || !signalEntity) return false
+    const stopTx = signalEntity({
+      entityUrl,
+      signal: `SIGSTOP`,
+      reason: `Stopped immediately from keyboard`,
+    })
+    stopTx.isPersisted.promise
+      .then(() => {
+        const interruptTx = signalEntity({
+          entityUrl,
+          signal: `SIGINT`,
+          reason: `Interrupted current run for immediate stop`,
+        })
+        interruptTx.isPersisted.promise.catch(() => {})
+      })
+      .catch(() => {})
+    return true
+  }, [activeEntityCanReceiveSignal, activeEntityUrl, signalEntity])
+  useHotkey(
+    `escape`,
+    (e) => {
+      if (!shouldHandleAgentSignalShortcut(e, `escape`)) return
+      if (!signalActiveTile(`SIGINT`, `Interrupted from keyboard`)) return
+      e.preventDefault()
+    },
+    { ignoreInputs: false }
+  )
+  useHotkey(
+    `shift+escape`,
+    (e) => {
+      if (!shouldHandleAgentSignalShortcut(e, `shift+escape`)) return
+      if (!stopActiveTile()) return
+      e.preventDefault()
+    },
+    { ignoreInputs: false }
+  )
+
+  useWorkspaceHotkeys({ disabled: nativeMenuHandlesAppHotkeys })
   useWorkspacePersistence()
   useDocumentTitle()
 
@@ -142,6 +285,18 @@ function RootShell(): React.ReactElement {
           break
         case `toggle-sidebar`:
           toggle()
+          break
+        case `open-settings`:
+          navigate({
+            to: `/settings/$category`,
+            params: { category: `general` },
+          })
+          break
+        case `open-servers-settings`:
+          navigate({
+            to: `/settings/$category`,
+            params: { category: `servers` },
+          })
           break
         case `open-search`:
           search.toggle()
@@ -187,6 +342,7 @@ function RootShell(): React.ReactElement {
     openNewSession,
     toggle,
     search,
+    navigate,
     helpers,
     workspace,
     openFindForTile,
@@ -239,21 +395,22 @@ function RootShell(): React.ReactElement {
   const inSettings = settingsCategory !== null
 
   // On narrow viewports the sidebar floats over content as an
-  // overlay (see Sidebar.tsx + useNarrowViewport). We keep the
-  // component mounted regardless of `collapsed` while in overlay
-  // mode so the exit transition (slide-out + backdrop fade) can
-  // run before unmount. In wide mode we keep the existing
-  // mount-on-demand behaviour — there's no animation, so unmounting
-  // immediately on collapse is the cheapest correct option.
-  const narrow = useNarrowViewport()
-  const showWorkspaceSidebar = narrow || !collapsed
+  // overlay (see Sidebar.tsx + useNarrowViewport). In wide mode we
+  // keep it mounted too so collapse/expand can animate the width
+  // instead of snapping the sidebar out of the flex row.
+  const sidebarState = inSettings || !collapsed ? `open` : `closed`
 
   return (
-    <div className={styles.appShell}>
-      {inSettings ? (
-        <SettingsSidebar activeCategory={settingsCategory} />
-      ) : (
-        showWorkspaceSidebar && (
+    <div className={styles.rootShell}>
+      <DesktopTitleBar />
+      <div
+        className={styles.appShell}
+        data-sidebar-state={sidebarState}
+        data-sidebar-animation={sidebarAnimating ? `true` : undefined}
+      >
+        {inSettings ? (
+          <SettingsSidebar activeCategory={settingsCategory} />
+        ) : (
           <Sidebar
             selectedEntityUrl={selectedEntityUrl}
             onSelectEntity={navigateToEntity}
@@ -261,11 +418,12 @@ function RootShell(): React.ReactElement {
             pinnedUrls={pinnedUrls}
             onTogglePin={togglePin}
           />
-        )
-      )}
-      <Outlet />
-      <SearchPalette />
-      <ApiKeysModal />
+        )}
+        <Outlet />
+        <SearchPalette />
+        <OnboardingModal />
+      </div>
+      {!inSettings && <TitlebarControls />}
     </div>
   )
 }
@@ -291,6 +449,8 @@ function parseSettingsCategory(pathname: string): SettingsCategoryId | null {
  * - `view`   optional view id (e.g. `state-explorer`). Omitted from
  *            the URL when it matches the default view (`chat`) so
  *            `/entity/foo` stays clean for the common case.
+ * - `source` optional State Explorer source id. Only meaningful with
+ *            `view=state-explorer`; ignored by other views.
  * - `layout` optional shareable layout payload. When present we
  *            hydrate the workspace from it and *strip the param*
  *            (see `<Workspace>`'s ?layout effect) so the address bar
@@ -302,7 +462,12 @@ function parseSettingsCategory(pathname: string): SettingsCategoryId | null {
  */
 const workspaceSearchSchema = z.object({
   view: z.string().optional(),
+  source: z.string().optional(),
   layout: z.string().optional(),
+})
+
+const settingsSearchSchema = z.object({
+  serverId: z.string().optional(),
 })
 
 /**
@@ -323,6 +488,11 @@ const rootRoute = createRootRoute({ component: RootLayout })
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: `/`,
+  loader: async (): Promise<null> => {
+    const baseUrl = getActiveBaseUrl()
+    if (baseUrl) await preloadAppCollections(baseUrl)
+    return null
+  },
   component: WorkspacePage,
   validateSearch: workspaceSearchSchema,
 })
@@ -333,11 +503,14 @@ const entityRoute = createRoute({
   loader: async ({ abortController, params }): Promise<null> => {
     const baseUrl = getActiveBaseUrl()
     if (!baseUrl) return null
-    await preloadEntityStream({
-      baseUrl,
-      entityUrl: `/${params._splat}`,
-      signal: abortController.signal,
-    })
+    await Promise.all([
+      preloadAppCollections(baseUrl),
+      preloadEntityStream({
+        baseUrl,
+        entityUrl: `/${params._splat}`,
+        signal: abortController.signal,
+      }),
+    ])
     return null
   },
   component: WorkspacePage,
@@ -365,6 +538,7 @@ const settingsIndexRoute = createRoute({
 const settingsCategoryRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: `/settings/$category`,
+  validateSearch: settingsSearchSchema,
   component: SettingsCategoryPage,
 })
 
@@ -376,8 +550,16 @@ function SettingsCategoryPage(): React.ReactElement {
   switch (params.category as SettingsCategoryId | undefined) {
     case `appearance`:
       return <AppearancePage />
+    case `account`:
+      return <AccountPage />
+    case `servers`:
+      return <ServersPage />
+    case `credentials`:
+      return <CredentialsPage />
     case `local-runtime`:
       return <LocalRuntimePage />
+    case `mcp-servers`:
+      return <McpServersPage />
     case `general`:
     default:
       return <GeneralPage />

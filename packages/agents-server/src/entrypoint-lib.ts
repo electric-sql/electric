@@ -74,6 +74,24 @@ function validateUrl(name: string, value: string): string {
   }
 }
 
+function readOptionalPositiveInteger(
+  env: EnvSource,
+  names: Array<string>,
+  description: string
+): number | undefined {
+  const raw = readEnv(env, names)
+  if (!raw) return undefined
+
+  const value = Number(raw)
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(
+      `Invalid ${description} "${raw}". Expected a positive integer.`
+    )
+  }
+
+  return value
+}
+
 function readOptionalPort(
   env: EnvSource,
   names: Array<string>,
@@ -103,6 +121,10 @@ export function resolveElectricAgentsEntrypointOptions(
     `DURABLE_STREAMS_URL`,
     `STREAMS_URL`,
   ])
+  const durableStreamsBearer = readEnv(env, [
+    `ELECTRIC_AGENTS_DURABLE_STREAMS_BEARER`,
+    `DURABLE_STREAMS_BEARER`,
+  ])
   const postgresUrl = validateUrl(
     `Postgres URL`,
     readRequiredEnv(
@@ -117,18 +139,25 @@ export function resolveElectricAgentsEntrypointOptions(
     `ELECTRIC_URL`,
   ])
   const electricSecret = readEnv(env, [`ELECTRIC_AGENTS_ELECTRIC_SECRET`])
+  const webhookSigningKey = readEnv(env, [
+    `ELECTRIC_AGENTS_WEBHOOK_SIGNING_PRIVATE_KEY`,
+    `WEBHOOK_SIGNING_PRIVATE_KEY`,
+  ])
   const baseUrl = readEnv(env, [`ELECTRIC_AGENTS_BASE_URL`, `BASE_URL`])
-
   return {
+    service: readEnv(env, [`ELECTRIC_AGENTS_SERVICE`, `SERVICE`]),
+    tenantId: readEnv(env, [`ELECTRIC_AGENTS_TENANT_ID`, `TENANT_ID`]),
     baseUrl: baseUrl ? validateUrl(`base URL`, baseUrl) : undefined,
     durableStreamsUrl: durableStreamsUrl
       ? validateUrl(`durable streams URL`, durableStreamsUrl)
       : undefined,
+    ...(durableStreamsBearer ? { durableStreamsBearer } : {}),
     postgresUrl,
     electricUrl: electricUrl
       ? validateUrl(`Electric URL`, electricUrl)
       : undefined,
     electricSecret,
+    webhookSigningKey,
     host: readEnv(env, [`ELECTRIC_AGENTS_HOST`, `HOST`]) ?? DEFAULT_HOST,
     port: readPort(env),
     workingDirectory:
@@ -136,6 +165,16 @@ export function resolveElectricAgentsEntrypointOptions(
         `ELECTRIC_AGENTS_WORKING_DIRECTORY`,
         `WORKING_DIRECTORY`,
       ]) ?? cwd,
+    dispatchRecoveryIntervalMs: readOptionalPositiveInteger(
+      env,
+      [`ELECTRIC_AGENTS_DISPATCH_RECOVERY_INTERVAL_MS`],
+      `dispatch recovery interval`
+    ),
+    staleOutstandingWakeAfterMs: readOptionalPositiveInteger(
+      env,
+      [`ELECTRIC_AGENTS_STALE_OUTSTANDING_WAKE_AFTER_MS`],
+      `stale outstanding wake age`
+    ),
   }
 }
 

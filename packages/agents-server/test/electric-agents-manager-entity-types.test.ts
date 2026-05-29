@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { ElectricAgentsManager } from '../src/electric-agents-manager'
+import { EntityManager } from '../src/entity-manager'
 
 function createManager() {
   const registry = {
@@ -21,7 +21,7 @@ function createManager() {
     setDebounceCallback: vi.fn(),
   }
 
-  const manager = new ElectricAgentsManager({
+  const manager = new EntityManager({
     registry: registry as any,
     streamClient: streamClient as any,
     validator: validator as any,
@@ -67,6 +67,25 @@ describe(`ElectricAgentsManager entity type persistence`, () => {
       revision: 1,
       serve_endpoint: `http://runtime.test/webhook`,
     })
+  })
+
+  it(`rejects built-in principal entity type registration and amendment`, async () => {
+    const { manager, registry } = createManager()
+
+    await expect(
+      manager.registerEntityType({
+        name: `principal`,
+        description: `custom principal`,
+      })
+    ).rejects.toMatchObject({ status: 400 })
+    await expect(
+      manager.amendSchemas(`principal`, {
+        inbox_schemas: { custom: { type: `object` } },
+      })
+    ).rejects.toMatchObject({ status: 400 })
+
+    expect(registry.createEntityType).not.toHaveBeenCalled()
+    expect(registry.updateEntityTypeInPlace).not.toHaveBeenCalled()
   })
 
   it(`amendSchemas updates the registry in place without the materializer`, async () => {

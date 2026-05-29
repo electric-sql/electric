@@ -1,8 +1,9 @@
-import { useState } from 'react'
-import { ChevronDown, ChevronRight } from 'lucide-react'
-import type { EntityTimelineContentItem } from '@electric-ax/agents-runtime'
-import { Badge, Box, Stack, Text } from '../ui'
+import { Wrench } from 'lucide-react'
+import type { EntityTimelineContentItem } from '@electric-ax/agents-runtime/client'
+import { Badge, Stack, Text } from '../ui'
 import type { BadgeTone } from '../ui'
+import { InlineEventCard } from './InlineEventCard'
+import { InlineStatusBadge } from './InlineStatusBadge'
 import toolBlock from './toolBlock.module.css'
 import styles from './ToolCallView.module.css'
 
@@ -243,62 +244,47 @@ export function ToolCallView({
     const badge = statusBadge(item)
 
     return (
-      <Stack direction="column" className={toolBlock.card}>
-        <Stack align="center" gap={2} className={toolBlock.header}>
-          <span className={toolBlock.toolName}>send_message</span>
-          {badge && (
-            <Badge
-              tone={badge.tone}
-              variant="soft"
-              className={toolBlock.statusBadge}
-            >
+      <InlineEventCard
+        icon={Wrench}
+        title="send_message"
+        titleFont="mono"
+        collapsible={false}
+        badge={
+          badge ? (
+            <InlineStatusBadge tone={badge.tone}>
               {badge.label}
-            </Badge>
-          )}
-        </Stack>
-        <Box className={styles.sentMessage}>
+            </InlineStatusBadge>
+          ) : null
+        }
+      >
+        <div className={styles.sentMessage}>
           <Text size={2} className={styles.sentMessageBody}>
             {item.args.text}
           </Text>
-        </Box>
-      </Stack>
+        </div>
+      </InlineEventCard>
     )
   }
 
   const shouldDefaultExpand =
     item.toolName === `edit` || item.toolName === `write`
-  const [expanded, setExpanded] = useState(shouldDefaultExpand)
   const summary = getSummary(item.toolName, item.args)
   const badge = statusBadge(item)
 
   return (
-    <Stack direction="column" className={toolBlock.card}>
-      <button
-        type="button"
-        onClick={() => setExpanded((v) => !v)}
-        aria-expanded={expanded}
-        className={`${toolBlock.header} ${toolBlock.headerToggle}`}
-      >
-        <span className={toolBlock.toggleArrow} aria-hidden="true">
-          {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-        </span>
-        <span className={toolBlock.toolName}>{item.toolName}</span>
-        {summary && <span className={toolBlock.summary}>{summary}</span>}
-        {badge && (
-          <Badge
-            tone={badge.tone}
-            variant="soft"
-            className={toolBlock.statusBadge}
-          >
-            {badge.label}
-          </Badge>
-        )}
-      </button>
-      {expanded && (
-        <Box className={toolBlock.body}>
-          <ToolBody item={item} />
-        </Box>
-      )}
-    </Stack>
+    <InlineEventCard
+      icon={Wrench}
+      title={item.toolName}
+      titleFont="mono"
+      summary={summary}
+      defaultExpanded={shouldDefaultExpand}
+      badge={
+        badge ? (
+          <InlineStatusBadge tone={badge.tone}>{badge.label}</InlineStatusBadge>
+        ) : null
+      }
+    >
+      <ToolBody item={item} />
+    </InlineEventCard>
   )
 }

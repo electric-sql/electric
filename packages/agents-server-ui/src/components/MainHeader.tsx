@@ -1,63 +1,35 @@
 import type { ReactNode } from 'react'
-import { PanelLeft, Search } from 'lucide-react'
-import { IconButton, Tooltip } from '../ui'
-import { useSidebarCollapsed } from '../hooks/useSidebarCollapsed'
-import { useSearchPalette } from '../hooks/useSearchPalette'
-import { modKeyLabel } from '../lib/keyLabels'
 import styles from './MainHeader.module.css'
 
 type MainHeaderProps = {
+  leading?: ReactNode
   title?: ReactNode
   actions?: ReactNode
+  chromeInsetTarget?: boolean
 }
 
 /**
  * Header strip at the top of the main content column.
  *
- * When the sidebar is collapsed it grows the chrome buttons (sidebar
- * toggle + search) on the left so the user can still toggle the
- * sidebar / open the search palette without a global top bar. When the
- * sidebar is open those affordances live inside `<SidebarHeader>` and
- * the strip starts directly with the title.
+ * The global sidebar/search controls live in the fixed titlebar controls layer
+ * so they stay stationary during sidebar animations. This strip only owns the
+ * tile title, optional leading affordance, and right-side actions.
  *
  * No border / divider — the strip shares a background with the column
  * body so the header reads as part of the same surface.
  */
 export function MainHeader({
+  leading,
   title,
   actions,
+  chromeInsetTarget = false,
 }: MainHeaderProps): React.ReactElement {
-  const { collapsed, toggle: toggleSidebar } = useSidebarCollapsed()
-  const search = useSearchPalette()
-
   return (
-    <header className={styles.header}>
-      {collapsed && (
-        <span className={styles.chrome}>
-          <Tooltip content="Show sidebar" shortcut={modKeyLabel(`b`)}>
-            <IconButton
-              variant="ghost"
-              tone="neutral"
-              size={1}
-              onClick={toggleSidebar}
-              aria-label="Show sidebar"
-            >
-              <PanelLeft size={16} />
-            </IconButton>
-          </Tooltip>
-          <Tooltip content="Search sessions" shortcut={modKeyLabel(`k`)}>
-            <IconButton
-              variant="ghost"
-              tone="neutral"
-              size={1}
-              onClick={search.open}
-              aria-label="Search sessions"
-            >
-              <Search size={16} />
-            </IconButton>
-          </Tooltip>
-        </span>
-      )}
+    <header
+      className={styles.header}
+      data-chrome-inset-target={chromeInsetTarget ? `true` : undefined}
+    >
+      {leading}
       <div className={styles.title}>{title}</div>
       {actions !== undefined && <div className={styles.actions}>{actions}</div>}
     </header>

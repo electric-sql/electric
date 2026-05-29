@@ -707,7 +707,8 @@ defmodule Electric.Shapes.Api do
            since: offset,
            up_to: chunk_end_offset,
            live_sse: in_sse?,
-           read_only?: request.read_only?
+           read_only?: request.read_only?,
+           snapshot_status: request.snapshot_status
          ) do
       {:ok, log} ->
         if live? && Enum.take(log, 1) == [] do
@@ -1150,7 +1151,15 @@ defmodule Electric.Shapes.Api do
   end
 
   defp with_span(%Request{} = request, name, attributes \\ [], fun) do
-    OpenTelemetry.with_span(name, attributes, stack_id(request), fun)
+    OpenTelemetry.with_span(name, attributes, stack_id(request), fn ->
+      OpenTelemetry.add_process_memory_attributes(:start)
+
+      try do
+        fun.()
+      after
+        OpenTelemetry.add_process_memory_attributes(:end)
+      end
+    end)
   end
 
   @spec stack_id(Api.t() | Request.t() | Response.t()) :: String.t()

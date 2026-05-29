@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { DurableStreamTestServer } from '@durable-streams/server'
 
 import { StreamClient } from '../src/stream-client'
+import { durableStreamTestServerUrl } from './test-utils'
 
 describe(`StreamClient.fork`, () => {
   let dsServer: DurableStreamTestServer | null = null
@@ -14,7 +15,7 @@ describe(`StreamClient.fork`, () => {
       webhooks: true,
     })
     const baseUrl = await dsServer.start()
-    client = new StreamClient(baseUrl)
+    client = new StreamClient(durableStreamTestServerUrl(baseUrl))
   })
 
   afterAll(async () => {
@@ -36,7 +37,7 @@ describe(`StreamClient.fork`, () => {
 
   it(`preserves source history when reading the fork`, async () => {
     const sourceEvent = {
-      type: `message_received`,
+      type: `inbox`,
       key: `msg-in-original`,
       headers: { operation: `insert` },
       value: { payload: { text: `original message` } },

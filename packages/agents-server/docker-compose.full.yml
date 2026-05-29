@@ -37,7 +37,8 @@ services:
       ELECTRIC_INSECURE: 'true'
 
   electric-agents:
-    image: electricax/agents-server:latest
+    image: electricax/agents-server:${ELECTRIC_AGENTS_SERVER_IMAGE_TAG:-latest}
+    pull_policy: ${ELECTRIC_AGENTS_SERVER_PULL_POLICY:-missing}
     restart: unless-stopped
     extra_hosts:
       - 'host.docker.internal:host-gateway'

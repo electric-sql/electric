@@ -20,6 +20,7 @@
 import { execFile } from 'node:child_process'
 import { createServer } from 'node:http'
 import { expect } from 'vitest'
+import { appendPathToUrl } from './url'
 
 // ============================================================================
 // Types
@@ -53,6 +54,17 @@ export interface CliHistory {
   stdout: string
   stderr: string
   exitCode: number
+}
+
+function subscriptionEndpoint(baseUrl: string, id: string): string {
+  return appendPathToUrl(
+    baseUrl,
+    `/__ds/subscriptions/${encodeURIComponent(id)}`
+  )
+}
+
+function subscriptionPattern(pattern: string): string {
+  return pattern.replace(/^\/+/, ``)
 }
 
 // ============================================================================
@@ -179,22 +191,29 @@ export class CliScenario {
       for (const step of this.steps) {
         switch (step.kind) {
           case `setupType`: {
-            const res = await fetch(`${this.baseUrl}/_electric/entity-types`, {
-              method: `POST`,
-              headers: { 'content-type': `application/json` },
-              body: JSON.stringify(step.registration),
-            })
+            const res = await fetch(
+              appendPathToUrl(this.baseUrl, `/_electric/entity-types`),
+              {
+                method: `POST`,
+                headers: { 'content-type': `application/json` },
+                body: JSON.stringify(step.registration),
+              }
+            )
             expect(res.ok, `setupType failed: ${res.status}`).toBe(true)
             break
           }
 
           case `setupSubscription`: {
             const res = await fetch(
-              `${this.baseUrl}${step.pattern}?subscription=${step.id}`,
+              subscriptionEndpoint(this.baseUrl, step.id),
               {
                 method: `PUT`,
                 headers: { 'content-type': `application/json` },
-                body: JSON.stringify({ webhook: receiver.url }),
+                body: JSON.stringify({
+                  type: `webhook`,
+                  pattern: subscriptionPattern(step.pattern),
+                  webhook: { url: receiver.url },
+                }),
               }
             )
             expect(

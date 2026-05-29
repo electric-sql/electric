@@ -1,4 +1,5 @@
 import { createMathPlugin } from '@streamdown/math'
+import type { Components } from 'streamdown'
 import { createCodePlugin } from './codeHighlighter'
 import { MarkdownAnchor } from '../components/MarkdownAnchor'
 import { MarkdownCodeBlock } from '../components/MarkdownCodeBlock'
@@ -61,9 +62,14 @@ export const streamdownControls = { code: false, table: false } as const
  *     (e.g. footnote backrefs) and calls `scrollIntoView` directly,
  *     bypassing the hash router.
  */
-export const streamdownComponents = {
+const components = {
   code: MarkdownCodeBlock,
   table: MarkdownTable,
   img: MarkdownImage,
   a: MarkdownAnchor,
 } as const
+
+// Streamdown's published declarations carry their own React type import.
+// Keep the compatibility cast at this package boundary instead of weakening
+// the individual markdown renderers' DOM-specific prop types.
+export const streamdownComponents = components as unknown as Components

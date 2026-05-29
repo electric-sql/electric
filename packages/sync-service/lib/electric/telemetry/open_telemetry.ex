@@ -155,6 +155,65 @@ defmodule Electric.Telemetry.OpenTelemetry do
   end
 
   @doc """
+  Build a map of current-process memory-footprint attributes suitable for use
+  as span attributes.
+
+  Captures two values via `Process.info/2`:
+    * `process_bytes` — total memory occupied by the process (heap, stack,
+      message queue, GC overhead, etc.)
+    * `binary_bytes` — sum of the sizes of refc binaries referenced by the
+      process; this is what tends to dominate memory in shape requests that
+      buffer large response bodies.
+
+  The `phase` argument determines the attribute key prefix: `:start` produces
+  `memory.start.process_bytes` and `memory.start.binary_bytes`, `:end` produces
+  `memory.end.process_bytes` and `memory.end.binary_bytes`.
+
+  Caveat: `Process.info(self(), :binary)` lists one entry per reference, so a
+  refc binary that the process references multiple times is counted multiple
+  times in `binary_bytes`. This is the conventional approximation (Recon's
+  `recon:bin_leak/1` does the same) and is fine for tracking growth across a
+  span — but it should not be used as a tight per-process memory budget.
+  `:erlang.memory(:binary)` gives a deduplicated VM-wide figure if you need
+  one.
+  """
+  @spec process_memory_attributes(:start | :end) :: %{String.t() => non_neg_integer()}
+  def process_memory_attributes(phase) when phase in [:start, :end] do
+    [memory: process_bytes, binary: binaries] = Process.info(self(), [:memory, :binary])
+    binary_bytes = Enum.reduce(binaries, 0, fn {_ref, size, _count}, acc -> acc + size end)
+
+    case phase do
+      :start ->
+        %{
+          "memory.start.process_bytes" => process_bytes,
+          "memory.start.binary_bytes" => binary_bytes
+        }
+
+      :end ->
+        %{
+          "memory.end.process_bytes" => process_bytes,
+          "memory.end.binary_bytes" => binary_bytes
+        }
+    end
+  end
+
+  @doc """
+  Add current-process memory-footprint attributes (see
+  `process_memory_attributes/1`) to the current span.
+
+  No-op when called outside a span context, avoiding the `Process.info/2` cost
+  on unsampled requests.
+  """
+  @spec add_process_memory_attributes(:start | :end) :: boolean()
+  def add_process_memory_attributes(phase) when phase in [:start, :end] do
+    if in_span_context?() do
+      add_span_attributes(process_memory_attributes(phase))
+    else
+      false
+    end
+  end
+
+  @doc """
   Store the telemetry span attributes in the persistent term for this stack.
   """
   @spec set_stack_span_attrs(String.t(), span_attrs()) :: :ok

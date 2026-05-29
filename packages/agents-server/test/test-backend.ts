@@ -125,12 +125,14 @@ async function ensureExpectedSchema(postgresUrl: string): Promise<void> {
       hasEntitiesTagsIndex,
       hasOutboxDeadLetteredAt,
       hasEntityManifestSources,
+      hasEntitiesCreatedBy,
       hasLegacyEntitiesMetadata,
     ] = await Promise.all([
       hasColumn(postgresUrl, `entities`, `tags`),
       hasColumn(postgresUrl, `entities`, `tags_index`),
       hasColumn(postgresUrl, `tag_stream_outbox`, `dead_lettered_at`),
       hasTable(postgresUrl, `entity_manifest_sources`),
+      hasColumn(postgresUrl, `entities`, `created_by`),
       hasColumn(postgresUrl, `entities`, `metadata`),
     ])
 
@@ -139,6 +141,7 @@ async function ensureExpectedSchema(postgresUrl: string): Promise<void> {
       hasEntitiesTagsIndex &&
       hasOutboxDeadLetteredAt &&
       hasEntityManifestSources &&
+      hasEntitiesCreatedBy &&
       !hasLegacyEntitiesMetadata
     )
   }
@@ -159,7 +162,7 @@ async function ensureExpectedSchema(postgresUrl: string): Promise<void> {
 
   const composeProject = getElectricAgentsComposeProject()
   throw new Error(
-    `ElectricAgents test backend schema is stale: expected current tags/manifest/outbox schema and no legacy entities.metadata column. Reset the matching backend with "docker compose -p ${composeProject} -f ${ELECTRIC_AGENTS_COMPOSE_FILE} down -v" and rerun the relevant Vitest project.`
+    `ElectricAgents test backend schema is stale: expected current tags/manifest/outbox/principals schema and no legacy entities.metadata column. Reset the matching backend with "docker compose -p ${composeProject} -f ${ELECTRIC_AGENTS_COMPOSE_FILE} down -v" and rerun the relevant Vitest project.`
   )
 }
 export async function ensureElectricAgentsTestBackend(): Promise<void> {

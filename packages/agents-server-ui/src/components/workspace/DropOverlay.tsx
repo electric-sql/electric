@@ -3,21 +3,24 @@ import { useWorkspace } from '../../hooks/useWorkspace'
 import {
   isWorkspaceDrag,
   readDragPayload,
+  WORKSPACE_DRAG_START_EVENT,
 } from '../../lib/workspace/dragPayload'
 import type { DropPosition } from '../../lib/workspace/types'
+import type { WorkspaceDragStartDetail } from '../../lib/workspace/dragPayload'
 import styles from './DropOverlay.module.css'
 
 /**
  * Visualises and resolves the 4-edge drop target on top of a Tile.
  *
- * Wraps a containing relative element. When a workspace drag starts
- * anywhere in the document we "arm" — pointer-events flip on so this
- * element can intercept `dragover`/`drop` events. While armed, we
- * compute which of the 4 edges the cursor is closest to and highlight
- * that zone. On `drop` we either:
+ * Wraps a containing relative element. When a workspace drag moves
+ * over the window we "arm" eligible target tiles — pointer-events flip
+ * on so this element can intercept `dragover`/`drop` events. While
+ * armed, we compute which of the 4 edges the cursor is closest to and
+ * highlight that zone. On `drop` we either:
  *
- * - move an existing tile (`tile` payload) to that side of this tile, or
- * - open a sidebar entity (`sidebar-entity` payload) as a new split.
+ * - move an existing tile (`tile` payload) to that side of this tile,
+ * - open a sidebar entity (`sidebar-entity` payload) as a new split, or
+ * - create a fresh standalone new-session tile (`sidebar-new-session`).
  *
  * There is intentionally no centre zone: drops always create a new
  * split. To swap the contents of an existing tile in place, switch the
@@ -34,29 +37,52 @@ export function DropOverlay({
   const [armed, setArmed] = useState(false)
   const [hoverZone, setHoverZone] = useState<Zone | null>(null)
   const overlayRef = useRef<HTMLDivElement>(null)
+  const draggedTileIdRef = useRef<string | null>(null)
 
-  // Arm whenever a workspace drag starts anywhere in the window. Use
-  // window-level listeners (rather than wiring `dragstart` on every
-  // draggable source) so adding a new draggable source doesn't need
-  // changes here.
+  // Track workspace drags at window level so all draggable sources use
+  // the same drop targeting. Pointer-events are only enabled after the
+  // browser has entered dragover, otherwise covering the source tile can
+  // cancel native header-handle drags before the drag ghost appears.
   useEffect(() => {
+    const onWorkspaceStart = (e: Event) => {
+      const detail =
+        e instanceof CustomEvent
+          ? (e.detail as WorkspaceDragStartDetail)
+          : undefined
+      draggedTileIdRef.current = detail?.tileId ?? null
+    }
     const onStart = (e: DragEvent) => {
-      if (!isWorkspaceDrag(e)) return
-      setArmed(true)
+      const payload = readDragPayload(e)
+      draggedTileIdRef.current =
+        payload?.kind === `tile` ? payload.tileId : null
     }
     const onEnd = () => {
+      draggedTileIdRef.current = null
       setArmed(false)
       setHoverZone(null)
     }
+    const onWindowDragOver = (e: DragEvent) => {
+      if (!isWorkspaceDrag(e)) return
+      if (draggedTileIdRef.current === tileId) {
+        setArmed(false)
+        setHoverZone(null)
+        return
+      }
+      setArmed(true)
+    }
+    window.addEventListener(WORKSPACE_DRAG_START_EVENT, onWorkspaceStart)
     window.addEventListener(`dragstart`, onStart)
+    window.addEventListener(`dragover`, onWindowDragOver, true)
     window.addEventListener(`dragend`, onEnd)
     window.addEventListener(`drop`, onEnd)
     return () => {
+      window.removeEventListener(WORKSPACE_DRAG_START_EVENT, onWorkspaceStart)
       window.removeEventListener(`dragstart`, onStart)
+      window.removeEventListener(`dragover`, onWindowDragOver, true)
       window.removeEventListener(`dragend`, onEnd)
       window.removeEventListener(`drop`, onEnd)
     }
-  }, [])
+  }, [tileId])
 
   const computeZone = useCallback(
     (e: React.DragEvent): Zone | null => {
@@ -82,12 +108,13 @@ export function DropOverlay({
   const onDragOver = useCallback(
     (e: React.DragEvent) => {
       if (!isWorkspaceDrag(e)) return
+      if (draggedTileIdRef.current === tileId) return
       e.preventDefault()
       e.dataTransfer.dropEffect = `move`
       const z = computeZone(e)
       setHoverZone(z)
     },
-    [computeZone]
+    [computeZone, tileId]
   )
 
   const onDragLeave = useCallback((e: React.DragEvent) => {
@@ -105,13 +132,11 @@ export function DropOverlay({
       setHoverZone(null)
       setArmed(false)
       if (!z || !payload) return
+      if (payload.kind === `tile` && payload.tileId === tileId) return
       e.preventDefault()
       const position = ZONE_TO_POSITION[z]
 
       if (payload.kind === `tile`) {
-        // Drop-on-self: no-op (the reducer also guards this, but a
-        // local check saves a dispatch + render).
-        if (payload.tileId === tileId) return
         helpers.moveTile(payload.tileId, { tileId, position })
       } else if (payload.kind === `sidebar-new-session`) {
         // Always create a *fresh* standalone tile — the click flow on
@@ -141,6 +166,7 @@ export function DropOverlay({
       onDragLeave={onDragLeave}
       onDrop={onDrop}
       data-tile-id={tileId}
+      data-drop-overlay-tile-id={tileId}
     >
       {([`north`, `east`, `south`, `west`] as const).map((z) => (
         <div

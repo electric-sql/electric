@@ -13,6 +13,8 @@ import { runtimeLog } from './log'
 import { sliceChars } from './token-budget'
 import { createContextTools } from './tools/context-tools'
 import { CACHE_TIERS } from './types'
+import { composeToolsWithProviders } from './tool-providers'
+import type { HydratedEventSourceWake } from './event-sources'
 import type { ChangeEvent } from '@durable-streams/state'
 import type {
   AgentConfig,
@@ -20,6 +22,7 @@ import type {
   AgentModel,
   AgentRunResult,
   AgentTool,
+  EntitySignal,
   EntityHandle,
   EntityStreamDBWithActions,
   HandlerContext,
@@ -27,6 +30,7 @@ import type {
   ObservationHandle,
   ObservationSource,
   RunHandle,
+  SendResult,
   SharedStateHandle,
   SharedStateSchemaMap,
   StateProxy,
@@ -54,6 +58,7 @@ export interface HandlerContextConfig<TState extends StateProxy = StateProxy> {
   wakeOffset: string
   firstWake: boolean
   tags: Readonly<Record<string, string>>
+  principal?: HandlerContext[`principal`]
   args: Readonly<Record<string, unknown>>
   db: EntityStreamDBWithActions
   state: TState
@@ -63,6 +68,15 @@ export interface HandlerContextConfig<TState extends StateProxy = StateProxy> {
   writeEvent: (event: ChangeEvent) => void
   wakeSession: WakeSession
   wakeEvent: WakeEvent
+  runSignal?: AbortSignal
+  registerSignalHandler?: (
+    handler: (signal: {
+      signal: EntitySignal
+      reason?: string
+      payload?: unknown
+    }) => void | Promise<void>
+  ) => void
+  hydratedEventSourceWake?: HydratedEventSourceWake | null
   doObserve: (
     source: ObservationSource,
     wake?: Wake
@@ -88,9 +102,9 @@ export interface HandlerContextConfig<TState extends StateProxy = StateProxy> {
     payload: unknown
     type?: string
     afterMs?: number
-  }) => void
+  }) => Promise<SendResult>
   doSetTag: (key: string, value: string) => Promise<void>
-  doRemoveTag: (key: string) => Promise<void>
+  doDeleteTag: (key: string) => Promise<void>
 }
 
 export interface HandlerContextResult<TState extends StateProxy = StateProxy> {
@@ -148,18 +162,27 @@ function getTriggerMessageText(
   db: Pick<EntityStreamDBWithActions, `collections`>,
   wakeEvent: WakeEvent,
   events: Array<ChangeEvent>,
-  wakeOffset: string
+  wakeOffset: string,
+  hydratedEventSourceWake?: HydratedEventSourceWake | null
 ): string {
-  if (wakeEvent.type === `message_received`) {
+  if (wakeEvent.type === `inbox`) {
     let latestPayload: unknown = wakeEvent.payload
     for (let index = events.length - 1; index >= 0; index--) {
       const event = events[index]!
-      if (event.type !== `message_received`) {
+      if (event.type !== `inbox`) {
         continue
       }
 
-      const payload = (event.value as { payload?: unknown } | undefined)
-        ?.payload
+      const value = event.value as
+        | {
+            payload?: unknown
+            status?: `pending` | `processed` | `cancelled`
+          }
+        | undefined
+      if (value?.status === `cancelled`) {
+        continue
+      }
+      const payload = value?.payload
       if (latestPayload === undefined) {
         latestPayload = payload
       }
@@ -174,6 +197,10 @@ function getTriggerMessageText(
   }
 
   if (wakeEvent.type === `wake` && typeof wakeEvent.source === `string`) {
+    if (hydratedEventSourceWake) {
+      return asMessageText(hydratedEventSourceWake)
+    }
+
     const cronPayload = getCronScheduleTriggerPayload(db, wakeEvent.source)
     if (cronPayload !== undefined) {
       return asMessageText(cronPayload)
@@ -317,7 +344,8 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         config.db,
         config.wakeEvent,
         config.events,
-        config.wakeOffset
+        config.wakeOffset,
+        config.hydratedEventSourceWake
       )
       const effectiveInput = input ?? messageText
 
@@ -325,13 +353,16 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         messages: Array<LLMMessage>,
         extraTools: Array<AgentTool> = []
       ): Promise<AgentRunResult> {
+        const composedTools = (await composeToolsWithProviders(
+          activeAgentConfig.tools
+        )) as Array<AgentTool>
         const adapterFactory = createPiAgentAdapter({
           systemPrompt: activeAgentConfig.systemPrompt,
           model: activeAgentConfig.model,
 
           provider: activeAgentConfig.provider,
 
-          tools: [...activeAgentConfig.tools, ...extraTools] as Array<never>,
+          tools: [...composedTools, ...extraTools] as Array<never>,
 
           streamFn: activeAgentConfig.streamFn,
 
@@ -349,7 +380,9 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
 
         const latestMessageRole = messages.at(-1)?.role
         const runInput =
-          input !== undefined || latestMessageRole !== `user`
+          input !== undefined ||
+          config.hydratedEventSourceWake != null ||
+          latestMessageRole !== `user`
             ? effectiveInput
             : undefined
 
@@ -362,7 +395,7 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
             `wakeType=${config.wakeEvent.type} wakeOffset=${config.wakeOffset} ` +
             `triggerMessageLen=${messageText.length} ` +
             `runInputLen=${runInput?.length ?? 0} ` +
-            `tools=${activeAgentConfig.tools.length + extraTools.length}`
+            `tools=${composedTools.length + extraTools.length}`
         )
         if (messages.length > 0) {
           const tail = messages.slice(-3)
@@ -383,7 +416,7 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
           )
         }
 
-        await handle.run(runInput)
+        await handle.run(runInput, config.runSignal)
         runtimeLog.info(logPrefix, `agent.run completed`)
 
         return {
@@ -493,6 +526,7 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
   const ctx: DebugHandlerContext<TState> = {
     firstWake: config.firstWake,
     tags: config.tags,
+    principal: config.principal,
     entityUrl: config.entityUrl,
     entityType: config.entityType,
     args: config.args,
@@ -501,6 +535,7 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
     state: config.state,
     actions: config.actions,
     electricTools: config.electricTools,
+    signal: config.runSignal ?? new AbortController().signal,
     useAgent(cfg) {
       agentConfig = cfg
       return agent
@@ -553,13 +588,16 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
       entityUrl: string,
       payload: unknown,
       opts?: { type?: string; afterMs?: number }
-    ): void {
-      config.executeSend({
+    ): Promise<SendResult> {
+      return config.executeSend({
         targetUrl: entityUrl,
         payload,
         type: opts?.type,
         afterMs: opts?.afterMs,
       })
+    },
+    onSignal(handler): void {
+      config.registerSignalHandler?.(handler)
     },
     recordRun(): RunHandle {
       const key = nextRunKey()
@@ -606,8 +644,8 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
     setTag(key: string, value: string): Promise<void> {
       return config.doSetTag(key, value)
     },
-    removeTag(key: string): Promise<void> {
-      return config.doRemoveTag(key)
+    deleteTag(key: string): Promise<void> {
+      return config.doDeleteTag(key)
     },
   }
 

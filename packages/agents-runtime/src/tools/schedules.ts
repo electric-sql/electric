@@ -15,7 +15,6 @@ type ScheduleManifest = {
   targetUrl?: string
   payload?: unknown
   producerId?: string
-  from?: string
   messageType?: string
   status?: `pending` | `sent` | `failed`
   sentAt?: string
@@ -140,7 +139,6 @@ function getScheduleEntries(
         typeof schedule.producerId === `string`
           ? schedule.producerId
           : undefined,
-      from: typeof schedule.from === `string` ? schedule.from : undefined,
       messageType:
         typeof schedule.messageType === `string`
           ? schedule.messageType
@@ -207,7 +205,6 @@ export function createScheduleTools(opts: {
     payload: unknown
     targetUrl?: string
     fireAt: string
-    from?: string
     messageType?: string
   }) => Promise<{ txid: string }>
   deleteSchedule: (opts: { id: string }) => Promise<{ txid: string }>
@@ -238,7 +235,6 @@ export function createScheduleTools(opts: {
           fireAt: entry.fireAt,
           targetUrl: entry.targetUrl,
           payload: entry.payload,
-          from: entry.from,
           messageType: entry.messageType,
           status: entry.status,
           sentAt: entry.sentAt,
@@ -339,9 +335,6 @@ export function createScheduleTools(opts: {
           description: `Relative delay in milliseconds from now`,
         })
       ),
-      from: Type.Optional(
-        Type.String({ description: `Optional message sender identity` })
-      ),
       messageType: Type.Optional(
         Type.String({ description: `Optional message type` })
       ),
@@ -350,14 +343,13 @@ export function createScheduleTools(opts: {
       entityUrl,
       `upsert_future_send`,
       async (_toolCallId, params) => {
-        const { afterMs, fireAt, from, id, messageType, payload, targetUrl } =
+        const { afterMs, fireAt, id, messageType, payload, targetUrl } =
           params as {
             id: string
             payload: unknown
             targetUrl?: string
             fireAt?: string
             afterMs?: number
-            from?: string
             messageType?: string
           }
 
@@ -380,7 +372,6 @@ export function createScheduleTools(opts: {
           targetUrl: targetUrl ?? entityUrl,
           payload,
           producerId,
-          ...(from ? { from } : {}),
           ...(messageType ? { messageType } : {}),
           status: `pending` as const,
         }
@@ -390,7 +381,6 @@ export function createScheduleTools(opts: {
           payload,
           targetUrl: targetUrl ?? entityUrl,
           fireAt: resolvedFireAt,
-          from,
           messageType,
         })
         await db.utils.awaitTxId(txid, 10_000)

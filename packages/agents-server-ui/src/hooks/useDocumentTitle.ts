@@ -38,6 +38,11 @@ export function useDocumentTitle(): void {
       return q
         .from({ e: entitiesCollection })
         .where(({ e }) => eq(e.url, activeEntityUrl))
+        .select(({ e }) => ({
+          url: e.url,
+          tags: e.tags,
+          spawn_args: e.spawn_args,
+        }))
     },
     [entitiesCollection, activeEntityUrl]
   )

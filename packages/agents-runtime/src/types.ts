@@ -37,6 +37,7 @@ import type {
   ContextEntryAttrs as EntityContextEntryAttrs,
   ContextInserted as EntityContextInserted,
   ContextRemoved as EntityContextRemoved,
+  EntitySignal,
   Manifest as EntityManifest,
   ManifestChildEntry as EntityManifestChildEntry,
   ManifestContextEntry as EntityManifestContextEntry,
@@ -45,8 +46,14 @@ import type {
   ManifestFutureSendScheduleEntry as EntityManifestFutureSendScheduleEntry,
   ManifestSharedStateEntry as EntityManifestSharedStateEntry,
   ManifestSourceEntry as EntityManifestSourceEntry,
+  Signal as EntitySignalEntry,
   WakeEntry,
 } from './entity-schema'
+import type {
+  EventSourceContract,
+  EventSourceSubscription,
+  EventSourceSubscriptionInput,
+} from './event-sources'
 import type { EntityTags, TagOperation } from './tags'
 
 export type EntityStreamDB = RuntimeEntityStreamDB
@@ -61,6 +68,7 @@ export type EntityStreamDBWithActions<
   actions: GeneratedStateActions<TState> & HandlerActions<TActions>
 }
 export type ChildStatus = ChildStatusEntry
+export type { EntitySignal }
 export type ObservationCollectionMap = Record<string, StateCollectionDefinition>
 export type ObservationStreamDB = BaseStreamDB<ObservationCollectionMap>
 export type EntitiesObservationHandle = ObservationHandle & {
@@ -318,9 +326,11 @@ export interface ContextEntry extends ContextEntryInput {
 export type TimelineItem =
   | { kind: `inbox`; at: number; payload: unknown }
   | { kind: `wake`; at: number; payload: unknown }
+  | { kind: `signal`; at: number; signal: EntitySignalEntry }
   | {
       kind: `run`
       at: number
+      finishReason?: string
       items: Array<
         | { kind: `text`; text: string; status: `streaming` | `completed` }
         | {
@@ -377,6 +387,10 @@ export interface PendingSend {
   /** Delay delivery by this many milliseconds. */
   afterMs?: number
 }
+
+export type SendResult =
+  | { sent: true; targetUrl: string }
+  | { queued: true; targetUrl: string }
 
 export type EffectConfig<
   TRow extends object = Record<string, unknown>,
@@ -454,6 +468,13 @@ export type SharedStateHandle<
   >
 }
 
+export interface RuntimePrincipal {
+  url: string
+  key?: string | null
+  kind?: string
+  id?: string
+}
+
 export interface RuntimeContext {
   entityUrl: string
   entityType: string
@@ -491,13 +512,16 @@ export interface RuntimeContext {
     entityUrl: string,
     payload: unknown,
     opts?: { type?: string; afterMs?: number }
-  ) => void
+  ) => Promise<SendResult>
   createEffect: (functionRef: string, key: string, config: JsonValue) => boolean
 }
 
 export interface SelfHandle {
   entityUrl: string
-  send: (payload: unknown, opts?: { type?: string }) => void
+  send: (
+    payload: unknown,
+    opts?: { type?: string; afterMs?: number }
+  ) => Promise<SendResult>
 }
 
 export interface EntityHandle extends ObservationHandle {
@@ -507,7 +531,7 @@ export interface EntityHandle extends ObservationHandle {
   events: Array<ChangeEvent>
   run: Promise<void>
   text: () => Promise<Array<string>>
-  send: (msg: unknown) => void
+  send: (msg: unknown) => Promise<SendResult>
   status: () => ChildStatus | undefined
 }
 
@@ -518,6 +542,9 @@ export interface ObservationSource {
   readonly sourceRef: string
   readonly streamUrl?: string
   readonly schema?: Record<string, CollectionDefinition>
+  readonly ensureStream?: {
+    contentType: string
+  }
 
   wake?: () => SourceWakeConfig
   toManifestEntry: () => ManifestSourceEntry
@@ -582,7 +609,6 @@ export interface WebhookNotification {
   triggeredBy?: Array<string>
   callback: string
   claimToken: string
-  writeToken?: string
   triggerEvent?: string
   wakeEvent?: WakeEvent
   entity?: {
@@ -592,15 +618,33 @@ export interface WebhookNotification {
     streams: { main: string; error: string }
     tags?: Record<string, string>
     spawnArgs?: Record<string, unknown>
-    writeToken?: string
+    createdBy?: string
   }
+  principal?: RuntimePrincipal
 }
+
+export type WakeNotification = WebhookNotification
+
+export type ClaimTokenHeader = `authorization` | `electric-claim-token` | `both`
+
+export type HeadersProvider =
+  | HeadersInit
+  | (() => HeadersInit | Promise<HeadersInit>)
 
 export interface ProcessWakeConfig {
   /** Base URL of the durable streams server */
   baseUrl: string
   /** Entity registry used by this runtime instance */
   registry?: EntityRegistry
+  /**
+   * Additional headers sent to claim callback requests.
+   */
+  claimHeaders?: HeadersProvider
+  /**
+   * Header transport for the Durable Streams claim token. Defaults to
+   * Authorization for webhook compatibility.
+   */
+  claimTokenHeader?: ClaimTokenHeader
   /** Optional tool factory invoked per wake context. */
   createElectricTools?: (context: {
     entityUrl: string
@@ -621,16 +665,22 @@ export interface ProcessWakeConfig {
       payload: unknown
       targetUrl?: string
       fireAt: string
-      from?: string
       messageType?: string
     }) => Promise<{ txid: string }>
     deleteSchedule: (opts: { id: string }) => Promise<{ txid: string }>
+    listEventSources: () => Promise<Array<EventSourceContract>>
+    subscribeToEventSource: (
+      opts: EventSourceSubscriptionInput
+    ) => Promise<{ txid: string; subscription: EventSourceSubscription }>
+    unsubscribeFromEventSource: (opts: {
+      id: string
+    }) => Promise<{ txid: string }>
   }) => Array<AgentTool> | Promise<Array<AgentTool>>
   /** Optional shutdown signal to end idle waits during host teardown. */
   shutdownSignal?: AbortSignal
   /** Idle timeout in ms before closing the wake (default: 20_000) */
   idleTimeout?: number
-  /** Heartbeat interval in ms (default: 30_000) */
+  /** Heartbeat interval in ms (default: 10_000) */
   heartbeatInterval?: number
 }
 
@@ -807,6 +857,7 @@ export interface HandlerContext<
 > {
   firstWake: boolean
   tags: Readonly<EntityTags>
+  principal?: RuntimePrincipal
   entityUrl: string
   entityType: string
   args: TArgs
@@ -815,6 +866,12 @@ export interface HandlerContext<
   events: Array<ChangeEvent>
   actions: TActions
   electricTools: Array<AgentTool>
+  /**
+   * Aborted when the current handler invocation should stop early, e.g. after
+   * SIGINT or terminal shutdown. Non-agent handlers should pass this to
+   * cancellable work such as fetches or subprocesses.
+   */
+  signal: AbortSignal
   useAgent: (config: AgentConfig) => AgentHandle
   useContext: (config: UseContextConfig) => void
   timelineMessages: (opts?: TimelineProjectionOpts) => Array<TimestampedMessage>
@@ -860,6 +917,20 @@ export interface HandlerContext<
     entityUrl: string,
     payload: unknown,
     opts?: { type?: string; afterMs?: number }
+  ) => Promise<SendResult>
+  /**
+   * Register a handler for lifecycle signals delivered while this wake is active.
+   * Runtime/server-controlled signals are not delivered here: SIGINT aborts the
+   * active handler invocation, SIGSTOP/SIGCONT control pause/resume, and SIGKILL
+   * is terminal. The runtime currently delivers SIGHUP, SIGTERM, and SIGUSR to
+   * this handler.
+   */
+  onSignal: (
+    handler: (signal: {
+      signal: EntitySignal
+      reason?: string
+      payload?: unknown
+    }) => void | Promise<void>
   ) => void
   /**
    * Record a non-LLM run on the entity's built-in `runs` collection.
@@ -871,7 +942,7 @@ export interface HandlerContext<
   recordRun: () => RunHandle
   sleep: () => void
   setTag: (key: string, value: string) => Promise<void>
-  removeTag: (key: string) => Promise<void>
+  deleteTag: (key: string) => Promise<void>
 }
 
 export type EntityActionsFactory<
@@ -891,7 +962,7 @@ export interface EntityDefinition<
   actions?: EntityActionsFactory<TState, TActions>
   creationSchema?: TCreationSchema
   inboxSchemas?: Record<string, StandardJSONSchemaV1>
-  outputSchemas?: Record<string, StandardJSONSchemaV1>
+  stateSchemas?: Record<string, StandardJSONSchemaV1>
 
   handler: (
     ctx: HandlerContext<

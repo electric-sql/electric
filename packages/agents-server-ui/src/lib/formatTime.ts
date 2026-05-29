@@ -82,3 +82,44 @@ export function formatShortTime(ts: number): string {
     minute: `2-digit`,
   })
 }
+
+/**
+ * Chat metadata timestamp:
+ *   - today: time only
+ *   - earlier this week: weekday + time
+ *   - older: date + time
+ */
+export function formatChatTimestamp(
+  ts: number,
+  now: number = Date.now()
+): string {
+  const d = new Date(toMillis(ts))
+  const today = new Date(now)
+  const isToday =
+    d.getFullYear() === today.getFullYear() &&
+    d.getMonth() === today.getMonth() &&
+    d.getDate() === today.getDate()
+
+  if (isToday) return formatShortTime(ts)
+
+  const startOfWeek = new Date(today)
+  startOfWeek.setHours(0, 0, 0, 0)
+  const day = startOfWeek.getDay()
+  const mondayOffset = day === 0 ? -6 : 1 - day
+  startOfWeek.setDate(startOfWeek.getDate() + mondayOffset)
+
+  if (d < startOfWeek) {
+    return d.toLocaleString([], {
+      day: `numeric`,
+      month: `short`,
+      hour: `2-digit`,
+      minute: `2-digit`,
+    })
+  }
+
+  return d.toLocaleString([], {
+    weekday: `short`,
+    hour: `2-digit`,
+    minute: `2-digit`,
+  })
+}

@@ -6,7 +6,12 @@ import { basename, resolve as resolvePath } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Command } from 'commander'
 import { installCompletions, setupCompletions } from './completions.js'
+import { entityApiPath } from './entity-api.js'
+import { createEntityStreamDB } from './entity-stream-db.js'
 import { ensureAnthropicApiKey } from './prompt-api-key.js'
+import { formatEntityConversationViewFromDB } from './view.js'
+import { appendPathToUrl } from '@electric-ax/agents-runtime'
+import { mergeElectricPrincipalHeader } from '@electric-ax/agents/server-headers'
 import type {
   ElectricAgentsEntityRow,
   ElectricAgentsEntityType,
@@ -25,6 +30,7 @@ import type {
 export interface ElectricCliEnv {
   electricAgentsUrl: string
   electricAgentsIdentity: string
+  electricAgentsHeaders?: Record<string, string>
 }
 
 export interface SpawnCommandOptions {
@@ -34,6 +40,30 @@ export interface SpawnCommandOptions {
 export interface SendCommandOptions {
   type?: string
   json?: boolean
+}
+
+export type EntitySignal =
+  | `SIGINT`
+  | `SIGHUP`
+  | `SIGTERM`
+  | `SIGKILL`
+  | `SIGSTOP`
+  | `SIGCONT`
+  | `SIGUSR`
+
+const ENTITY_SIGNALS: ReadonlyArray<EntitySignal> = [
+  `SIGINT`,
+  `SIGHUP`,
+  `SIGTERM`,
+  `SIGKILL`,
+  `SIGSTOP`,
+  `SIGCONT`,
+  `SIGUSR`,
+]
+
+export interface SignalCommandOptions {
+  reason?: string
+  payload?: string
 }
 
 export interface ObserveCommandOptions {
@@ -67,8 +97,14 @@ export interface ElectricCliHandlers {
     options: SendCommandOptions
   ) => Promise<void>
   observe: (url: string, options: ObserveCommandOptions) => Promise<void>
+  view: (url: string, options: ObserveCommandOptions) => Promise<void>
   inspect: (url: string) => Promise<void>
   ps: (options: PsCommandOptions) => Promise<void>
+  signal: (
+    url: string,
+    signal: string,
+    options: SignalCommandOptions
+  ) => Promise<void>
   kill: (url: string) => Promise<void>
   start: (options: StartCommandOptions) => Promise<StartedDevEnvironment>
   startBuiltin: (
@@ -97,22 +133,61 @@ function getDefaultElectricAgentsIdentity(): string {
   return `${userInfo().username}@${hostname()}`
 }
 
+function parseElectricAgentsHeaders(
+  raw: string | undefined
+): Record<string, string> | undefined {
+  const trimmed = raw?.trim()
+  if (!trimmed) return undefined
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(trimmed)
+  } catch {
+    fail(`Invalid ELECTRIC_AGENTS_SERVER_HEADERS: expected JSON`)
+  }
+  if (!parsed || typeof parsed !== `object` || Array.isArray(parsed)) {
+    fail(`Invalid ELECTRIC_AGENTS_SERVER_HEADERS: expected a JSON object`)
+  }
+  const headers = new Headers()
+  for (const [name, value] of Object.entries(
+    parsed as Record<string, unknown>
+  )) {
+    if (typeof value !== `string`) {
+      fail(
+        `Invalid ELECTRIC_AGENTS_SERVER_HEADERS: header "${name}" must be a string`
+      )
+    }
+    headers.set(name, value)
+  }
+  const normalized = Object.fromEntries(headers.entries())
+  return Object.keys(normalized).length > 0 ? normalized : undefined
+}
+
 export function getElectricCliEnv(
   env: NodeJS.ProcessEnv = process.env
 ): ElectricCliEnv {
+  const explicitIdentity = env.ELECTRIC_AGENTS_IDENTITY?.trim()
+  const headers = parseElectricAgentsHeaders(env.ELECTRIC_AGENTS_SERVER_HEADERS)
   return {
     electricAgentsUrl: env.ELECTRIC_AGENTS_URL || DEFAULT_ELECTRIC_AGENTS_URL,
     electricAgentsIdentity:
-      env.ELECTRIC_AGENTS_IDENTITY || getDefaultElectricAgentsIdentity(),
+      explicitIdentity || getDefaultElectricAgentsIdentity(),
+    electricAgentsHeaders: mergeElectricPrincipalHeader(
+      headers,
+      env.ELECTRIC_AGENTS_PRINCIPAL
+    ),
   }
 }
 
 function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
+  if (error instanceof Error) {
+    return error.message || error.name || `Unknown error`
+  }
+  const message = String(error)
+  return message || `Unknown error`
 }
 
 function fail(message: string): never {
-  throw new CliError(message)
+  throw new CliError(message || `Unknown error`)
 }
 
 function relativeTime(epochMs: number): string {
@@ -136,6 +211,23 @@ function parsePayload(input: string, json: boolean): unknown {
     }
   }
   return { text: input }
+}
+
+function parseJsonOption(name: string, input: string): unknown {
+  try {
+    return JSON.parse(input)
+  } catch (error) {
+    fail(`${name} must be valid JSON: ${getErrorMessage(error)}`)
+  }
+}
+
+function assertEntitySignal(signal: string): EntitySignal {
+  if ((ENTITY_SIGNALS as ReadonlyArray<string>).includes(signal)) {
+    return signal as EntitySignal
+  }
+  fail(
+    `Invalid signal "${signal}". Expected one of: ${ENTITY_SIGNALS.join(`, `)}`
+  )
 }
 
 function normalizeVariadicArg(
@@ -292,10 +384,11 @@ async function electricAgentsFetch(
   opts: RequestInit = {}
 ): Promise<Response> {
   try {
-    return await fetch(`${env.electricAgentsUrl}${path}`, {
+    return await fetch(appendPathToUrl(env.electricAgentsUrl, path), {
       ...opts,
       headers: {
         'content-type': `application/json`,
+        ...env.electricAgentsHeaders,
         ...opts.headers,
       },
     })
@@ -308,37 +401,60 @@ async function electricAgentsFetch(
   }
 }
 
-async function parseJsonResponse(
-  res: Response
-): Promise<Record<string, unknown>> {
+async function parseJsonResponse(res: Response): Promise<unknown> {
   const text = await res.text()
   try {
-    return JSON.parse(text) as Record<string, unknown>
+    return JSON.parse(text) as unknown
   } catch (error) {
     if (!(error instanceof SyntaxError)) throw error
-    return { error: { message: text || res.statusText } }
+    return { error: { message: text || fallbackResponseMessage(res) } }
   }
 }
 
-function failFromResponse(data: Record<string, unknown>, res: Response): never {
-  const err = data.error as Record<string, unknown> | undefined
-  fail(String(err?.message ?? res.statusText))
+function fallbackResponseMessage(res: Response): string {
+  const status = res.status ? `HTTP ${res.status}` : `HTTP error`
+  return res.statusText ? `${status}: ${res.statusText}` : status
+}
+
+function stringMessage(value: unknown): string | undefined {
+  if (typeof value !== `string`) return undefined
+  const trimmed = value.trim()
+  if (trimmed.length === 0) return undefined
+  return trimmed
+}
+
+function errorMessageFromValue(value: unknown): string | undefined {
+  const direct = stringMessage(value)
+  if (direct) return direct
+
+  if (!value || typeof value !== `object` || Array.isArray(value)) {
+    return undefined
+  }
+
+  const record = value as Record<string, unknown>
+  return (
+    errorMessageFromValue(record.message) ??
+    errorMessageFromValue(record.error) ??
+    errorMessageFromValue(record.reason) ??
+    errorMessageFromValue(record.detail)
+  )
+}
+
+function responseErrorMessage(data: unknown, res: Response): string {
+  return errorMessageFromValue(data) ?? fallbackResponseMessage(res)
+}
+
+function failFromResponse(data: unknown, res: Response): never {
+  fail(responseErrorMessage(data, res))
 }
 
 async function fetchEntityTypes(
   env: ElectricCliEnv
 ): Promise<Array<ElectricAgentsEntityType>> {
   const res = await electricAgentsFetch(env, `/_electric/entity-types`)
-  const data = await res.json()
+  const data = await parseJsonResponse(res)
   if (!res.ok) {
-    fail(
-      typeof data === `object` && data !== null
-        ? String(
-            (data as { error?: { message?: string } }).error?.message ??
-              res.statusText
-          )
-        : res.statusText
-    )
+    failFromResponse(data, res)
   }
   if (!Array.isArray(data)) {
     fail(`Unexpected response from server when listing entity types`)
@@ -374,16 +490,9 @@ async function fetchEntities(
   if (options.parent) searchParams.set(`parent`, options.parent)
   const suffix = searchParams.size > 0 ? `?${searchParams.toString()}` : ``
   const res = await electricAgentsFetch(env, `/_electric/entities${suffix}`)
-  const data = await res.json()
+  const data = await parseJsonResponse(res)
   if (!res.ok) {
-    fail(
-      typeof data === `object` && data !== null
-        ? String(
-            (data as { error?: { message?: string } }).error?.message ??
-              res.statusText
-          )
-        : res.statusText
-    )
+    failFromResponse(data, res)
   }
   if (!Array.isArray(data)) {
     fail(`Unexpected response from server when listing entities`)
@@ -432,7 +541,7 @@ async function spawnEntity(
     }
   }
 
-  const res = await electricAgentsFetch(env, urlPath, {
+  const res = await electricAgentsFetch(env, entityApiPath(urlPath), {
     method: `PUT`,
     body: JSON.stringify({ args: spawnArgs }),
   })
@@ -468,7 +577,7 @@ async function sendMessage(
     body.type = options.type
   }
 
-  const res = await electricAgentsFetch(env, `${url}/send`, {
+  const res = await electricAgentsFetch(env, entityApiPath(url, `/send`), {
     method: `POST`,
     body: JSON.stringify(body),
   })
@@ -495,12 +604,31 @@ async function observeEntity(
     entityUrl: url,
     baseUrl: env.electricAgentsUrl,
     identity: env.electricAgentsIdentity,
+    headers: env.electricAgentsHeaders,
     initialOffset: options.from,
   })
 }
 
+async function viewEntity(
+  env: ElectricCliEnv,
+  url: string,
+  options: ObserveCommandOptions
+): Promise<void> {
+  const { db, close } = await createEntityStreamDB({
+    entityUrl: url,
+    baseUrl: env.electricAgentsUrl,
+    headers: env.electricAgentsHeaders,
+    initialOffset: options.from,
+  })
+  try {
+    console.log(formatEntityConversationViewFromDB(db, { entityUrl: url }))
+  } finally {
+    close()
+  }
+}
+
 async function inspectEntity(env: ElectricCliEnv, url: string): Promise<void> {
-  const res = await electricAgentsFetch(env, url)
+  const res = await electricAgentsFetch(env, entityApiPath(url))
   const data = await parseJsonResponse(res)
   if (!res.ok) {
     failFromResponse(data, res)
@@ -548,8 +676,12 @@ async function listEntities(
 }
 
 async function killEntity(env: ElectricCliEnv, url: string): Promise<void> {
-  const res = await electricAgentsFetch(env, url, {
-    method: `DELETE`,
+  const res = await electricAgentsFetch(env, entityApiPath(url, `/signal`), {
+    method: `POST`,
+    body: JSON.stringify({
+      signal: `SIGKILL`,
+      reason: `Killed from CLI`,
+    }),
   })
 
   if (!res.ok) {
@@ -558,6 +690,32 @@ async function killEntity(env: ElectricCliEnv, url: string): Promise<void> {
   }
 
   console.log(`Killed ${url}`)
+}
+
+async function signalEntity(
+  env: ElectricCliEnv,
+  url: string,
+  rawSignal: string,
+  options: SignalCommandOptions
+): Promise<void> {
+  const signal = assertEntitySignal(rawSignal)
+  const body: Record<string, unknown> = { signal }
+  if (options.reason !== undefined) body.reason = options.reason
+  if (options.payload !== undefined) {
+    body.payload = parseJsonOption(`--payload`, options.payload)
+  }
+
+  const res = await electricAgentsFetch(env, entityApiPath(url, `/signal`), {
+    method: `POST`,
+    body: JSON.stringify(body),
+  })
+
+  if (!res.ok) {
+    const data = await parseJsonResponse(res)
+    failFromResponse(data, res)
+  }
+
+  console.log(`Sent ${signal} to ${url}`)
 }
 
 function printStartedEnvironment(env: StartedDevEnvironment): void {
@@ -601,8 +759,10 @@ export function createElectricCliHandlers(
     spawn: (urlPath, options) => spawnEntity(env, urlPath, options),
     send: (url, message, options) => sendMessage(env, url, message, options),
     observe: (url, options) => observeEntity(env, url, options),
+    view: (url, options) => viewEntity(env, url, options),
     inspect: (url) => inspectEntity(env, url),
     ps: (options) => listEntities(env, options),
+    signal: (url, signal, options) => signalEntity(env, url, signal, options),
     kill: (url) => killEntity(env, url),
     start: async (options) => {
       const { startElectricAgentsDevEnvironment } = await loadStartModule()
@@ -664,12 +824,15 @@ function getHelpText(commandName: string): string {
 Environment:
   ELECTRIC_AGENTS_URL        Base URL of the server (default: ${DEFAULT_ELECTRIC_AGENTS_URL})
   ELECTRIC_AGENTS_IDENTITY   Sender identity for messages (default: ${getDefaultElectricAgentsIdentity()})
+  ELECTRIC_AGENTS_PRINCIPAL  Optional principal key sent as the Electric-Principal header
+  ELECTRIC_AGENTS_SERVER_HEADERS  Optional JSON object of additional server headers
   ANTHROPIC_API_KEY          Required for '${agentsCommand} start-builtin' and '${agentsCommand} quickstart'
 
 Examples:
   $ ${agentsCommand} types
   $ ${agentsCommand} spawn /horton/onboarding
   $ ${agentsCommand} send /horton/onboarding "Help me onboard to Electric Agents"
+  $ ${agentsCommand} signal /horton/onboarding SIGINT --reason "stop current run"
   $ ${agentsCommand} observe /horton/onboarding
   $ ${agentsCommand} start
   $ ${agentsCommand} start-builtin --anthropic-api-key sk-ant-...
@@ -756,6 +919,28 @@ export function createElectricProgram({
     })
 
   agentsCommand
+    .command(`view <url>`)
+    .description(`Print an entity conversation once`)
+    .option(`--from <offset>`, `Initial offset`)
+    .action(async (...actionArgs: Array<unknown>) => {
+      const url = actionArgs[0] as string
+      const command = getCommandActionArg(actionArgs)
+      await handlers.view(url, command.opts<ObserveCommandOptions>())
+    })
+
+  agentsCommand
+    .command(`signal <url> <signal>`)
+    .description(`Send a lifecycle signal to an entity`)
+    .option(`--reason <text>`, `Human-readable signal reason`)
+    .option(`--payload <json>`, `JSON payload to attach to the signal`)
+    .action(async (...actionArgs: Array<unknown>) => {
+      const url = actionArgs[0] as string
+      const signal = actionArgs[1] as string
+      const command = getCommandActionArg(actionArgs)
+      await handlers.signal(url, signal, command.opts<SignalCommandOptions>())
+    })
+
+  agentsCommand
     .command(`inspect <url>`)
     .description(`Show entity details`)
     .action(async (url: string) => {
@@ -775,7 +960,7 @@ export function createElectricProgram({
 
   agentsCommand
     .command(`kill <url>`)
-    .description(`Delete an entity`)
+    .description(`Send SIGKILL to an entity`)
     .action(async (url: string) => {
       await handlers.kill(url)
     })

@@ -6,6 +6,7 @@ import {
   TEST_POSTGRES_URL,
   resetElectricAgentsTestBackend,
 } from './test-backend'
+import { durableStreamTestServerUrl } from './test-utils'
 
 describe(`entity lifecycle`, () => {
   let dsServer: DurableStreamTestServer | null = null
@@ -21,7 +22,7 @@ describe(`entity lifecycle`, () => {
     await Promise.all([resetElectricAgentsTestBackend(), dsServer.start()])
 
     electricAgentsServer = new ElectricAgentsServer({
-      durableStreamsUrl: dsServer.url,
+      durableStreamsUrl: durableStreamTestServerUrl(dsServer.url),
       port: 0,
       postgresUrl: TEST_POSTGRES_URL,
       electricUrl: TEST_ELECTRIC_URL,
@@ -33,7 +34,45 @@ describe(`entity lifecycle`, () => {
     await Promise.allSettled([electricAgentsServer?.stop(), dsServer?.stop()])
   }, 120_000)
 
-  it(`killed entities remain readable with stopped status`, async () => {
+  it(`rejects legacy entity type schema keys`, async () => {
+    const createResponse = await fetch(`${baseUrl}/_electric/entity-types`, {
+      method: `POST`,
+      headers: { 'content-type': `application/json` },
+      body: JSON.stringify({
+        name: `strict-task`,
+        description: `Strict task entity`,
+        input_schemas: { message: { type: `object` } },
+      }),
+    })
+    expect(createResponse.status).toBe(400)
+
+    const validCreateResponse = await fetch(
+      `${baseUrl}/_electric/entity-types`,
+      {
+        method: `POST`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({
+          name: `strict-task`,
+          description: `Strict task entity`,
+        }),
+      }
+    )
+    expect(validCreateResponse.status).toBe(201)
+
+    const amendResponse = await fetch(
+      `${baseUrl}/_electric/entity-types/strict-task/schemas`,
+      {
+        method: `PATCH`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({
+          output_schemas: { state: { type: `object` } },
+        }),
+      }
+    )
+    expect(amendResponse.status).toBe(400)
+  })
+
+  it(`killed entities remain readable with killed status`, async () => {
     const createTypeResponse = await fetch(
       `${baseUrl}/_electric/entity-types`,
       {
@@ -47,29 +86,69 @@ describe(`entity lifecycle`, () => {
     )
     expect(createTypeResponse.ok).toBe(true)
 
-    const spawnResponse = await fetch(`${baseUrl}/task/demo-1`, {
-      method: `PUT`,
-      headers: { 'content-type': `application/json` },
-      body: JSON.stringify({}),
-    })
+    const spawnResponse = await fetch(
+      `${baseUrl}/_electric/entities/task/demo-1`,
+      {
+        method: `PUT`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({}),
+      }
+    )
     expect(spawnResponse.status).toBe(201)
 
-    const killResponse = await fetch(`${baseUrl}/task/demo-1`, {
-      method: `DELETE`,
-    })
+    const killResponse = await fetch(
+      `${baseUrl}/_electric/entities/task/demo-1/signal`,
+      {
+        method: `POST`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({ signal: `SIGKILL`, reason: `test cleanup` }),
+      }
+    )
     expect(killResponse.status).toBe(200)
 
-    const getResponse = await fetch(`${baseUrl}/task/demo-1`)
+    const getResponse = await fetch(`${baseUrl}/_electric/entities/task/demo-1`)
     expect(getResponse.status).toBe(200)
     await expect(getResponse.json()).resolves.toMatchObject({
       url: `/task/demo-1`,
       type: `task`,
-      status: `stopped`,
+      status: `killed`,
     })
 
-    const headResponse = await fetch(`${baseUrl}/task/demo-1`, {
-      method: `HEAD`,
-    })
+    const headResponse = await fetch(
+      `${baseUrl}/_electric/entities/task/demo-1`,
+      {
+        method: `HEAD`,
+      }
+    )
     expect(headResponse.status).toBe(200)
+  })
+
+  it(`keeps lifecycle DELETE as a legacy kill alias`, async () => {
+    await fetch(`${baseUrl}/_electric/entity-types`, {
+      method: `POST`,
+      headers: { 'content-type': `application/json` },
+      body: JSON.stringify({
+        name: `task`,
+        description: `Task entity`,
+      }),
+    })
+
+    const spawnResponse = await fetch(
+      `${baseUrl}/_electric/entities/task/demo-delete-rejected`,
+      {
+        method: `PUT`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({}),
+      }
+    )
+    expect(spawnResponse.status).toBe(201)
+
+    const deleteResponse = await fetch(
+      `${baseUrl}/_electric/entities/task/demo-delete-rejected`,
+      {
+        method: `DELETE`,
+      }
+    )
+    expect(deleteResponse.status).toBe(200)
   })
 })

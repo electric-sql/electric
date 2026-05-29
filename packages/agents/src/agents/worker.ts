@@ -7,6 +7,7 @@ import {
   fetchUrlTool,
   createReadFileTool,
   createWriteTool,
+  createSendTool,
 } from '@electric-ax/agents-runtime/tools'
 import { WORKER_TOOL_NAMES, createSpawnWorkerTool } from '../tools/spawn-worker'
 import {
@@ -140,6 +141,9 @@ function buildToolsForWorker(
         break
       case `spawn_worker`:
         out.push(createSpawnWorkerTool(ctx))
+        break
+      case `send`:
+        out.push(createSendTool(ctx.send, { selfEntityUrl: ctx.entityUrl }))
         break
     }
   }

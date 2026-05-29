@@ -40,6 +40,10 @@ export type {
   Wake,
   WakeMessage,
   WakeEvent,
+  WakeNotification,
+  WebhookNotification,
+  ClaimTokenHeader,
+  HeadersProvider,
   HandlerContext,
   AgentRunResult,
   AgentHandle,
@@ -86,6 +90,8 @@ export type {
   WakeEntry,
   EntityCreated,
   EntityStopped,
+  EntitySignal,
+  Signal,
   ChildStatusEntry,
   TagEntry,
   ContextInserted as ContextInsertedEvent,
@@ -111,7 +117,10 @@ export {
 export type { EntityMembershipRow, EntityTags, TagOperation } from './tags'
 export {
   createEntityIncludesQuery,
+  createEntityTimelineQuery,
   createEntityErrorsQuery,
+  buildEntityTimelineData,
+  createPendingTimelineOrder,
   getEntityState,
   normalizeEntityTimelineData,
   normalizeTimelineEntities,
@@ -120,7 +129,17 @@ export {
 export type {
   EntityTimelineData,
   EntityTimelineContentItem,
+  EntityTimelineInboxMode,
+  EntityTimelineQueryOptions,
+  EntityTimelineQueryRow,
+  EntityTimelineRunRow,
+  EntityTimelineRunItem,
+  EntityTimelineTextChunk,
+  EntityTimelineTextItem,
+  EntityTimelineToolCallItem,
+  EntityTimelineSignalRow,
   IncludesEntity,
+  IncludesSignal,
   EntityTimelineSection,
   EntityTimelineState,
   IncludesRun,
@@ -128,6 +147,7 @@ export type {
 } from './entity-timeline'
 export { buildSections, buildTimelineEntries } from './use-chat'
 export type { EntityTimelineEntry } from './use-chat'
+export { appendPathToUrl } from './url'
 
 export {
   defaultProjection,
@@ -173,10 +193,37 @@ export {
 } from './runtime-server-client'
 export type {
   RuntimeServerClientConfig,
+  RuntimeServerClient,
   RuntimeEntityInfo,
+  DispatchPolicy,
   SpawnEntityOptions,
   SendEntityMessageOptions,
 } from './runtime-server-client'
+export {
+  buildEventSourceManifestEntry,
+  buildHydratedEventSourceWake,
+  buildEventSourceSubscriptionId,
+  defaultEventSourceSubscriptionLifetime,
+  eventSourceWakeInfoFromManifests,
+  eventSourceSubscriptionManifestKey,
+  renderEventSourceBucketPath,
+  resolveEventSourceSubscription,
+} from './event-sources'
+export type {
+  EventSourceBucket,
+  EventSourceContract,
+  EventSourceFilter,
+  EventSourceFilterCondition,
+  EventSourceStatus,
+  EventSourceSubscription,
+  EventSourceSubscriptionInput,
+  EventSourceType,
+  EventSourceWakeChange,
+  EventSourceWakeInfo,
+  HydratedEventSourceWake,
+  ResolvedEventSourceSubscription,
+  SubscriptionLifetime,
+} from './event-sources'
 export { createAgentsClient } from './agents-client'
 export type { AgentsClient, AgentsClientConfig } from './agents-client'
 
@@ -188,27 +235,58 @@ export {
   manifestSourceKey,
 } from './manifest-helpers'
 
-export { entity, cron, entities, tagged, db } from './observation-sources'
+export {
+  entity,
+  cron,
+  entities,
+  db,
+  webhook,
+  getWebhookStreamPath,
+  webhookObservationCollections,
+  webhookEventRowSchema,
+} from './observation-sources'
 export type {
   EntityObservationSource,
   CronObservationSource,
   EntitiesObservationSource,
-  TaggedObservationSource,
   DbObservationSource,
+  WebhookObservationSource,
+  WebhookEventRow,
   EntitiesQuery,
-  TaggedQuery,
 } from './observation-sources'
 
-export { processWake, processWebhookWake } from './process-wake'
-export type { WebhookNotification, ProcessWakeConfig } from './types'
+export { processWake } from './process-wake'
+export type { ProcessWakeConfig } from './types'
 
-export { DEFAULT_OUTPUT_SCHEMAS } from './default-output-schemas'
+// Skills loader + tools. Markdown skill packs with frontmatter for
+// triggers / when-to-use / keywords. createSkillTools mounts
+// use_skill / remove_skill on an entity so the agent loads a skill
+// body (and any sibling reference docs) on demand.
+export { createSkillsRegistry } from './skills/registry'
+export { createSkillTools } from './skills/tools'
+export type { SkillsRegistry, SkillMeta } from './skills/types'
+
+export { DEFAULT_STATE_SCHEMAS } from './default-state-schemas'
 export { createContextEntriesApi } from './context-entries'
 export { assembleContext } from './context-assembly'
 export { approxTokens, sliceChars } from './token-budget'
 export { createContextTools } from './tools/context-tools'
+export {
+  completeWithLowCostModel,
+  detectAvailableProviders,
+  readCodexAccessToken,
+  selectLowCostModelChoice,
+} from './model-runner'
+export type {
+  AvailableProvider,
+  LowCostModelCatalog,
+  LowCostModelChoice,
+  LowCostModelConfig,
+} from './model-runner'
 
 export { createRuntimeHandler, createRuntimeRouter } from './create-handler'
+export { verifyWebhookSignature } from './webhook-signature'
+export { createPullWakeRunner } from './pull-wake-runner'
 export type {
   RuntimeRouter,
   RuntimeRouterConfig,
@@ -216,3 +294,20 @@ export type {
   RuntimeHandlerConfig,
   RuntimeHandlerResult,
 } from './create-handler'
+export type {
+  WebhookJwks,
+  WebhookPublicJwk,
+  WebhookSignatureVerificationResult,
+  WebhookSignatureVerifierConfig,
+} from './webhook-signature'
+export type {
+  PullWakeEvent,
+  PullWakeRunner,
+  PullWakeRunnerConfig,
+  PullWakeRunnerHealth,
+  PullWakeRunnerStatus,
+  PullWakeStreamResponse,
+} from './pull-wake-runner'
+
+export { registerToolProvider, unregisterToolProvider } from './tool-providers'
+export type { ToolProviderEntry } from './tool-providers'

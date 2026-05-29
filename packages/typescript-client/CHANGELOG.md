@@ -1,5 +1,23 @@
 # @electric-sql/client
 
+## 1.5.19
+
+### Patch Changes
+
+- 1349a55: Document Bun's default 256 concurrent `fetch()` cap in the proxy-auth and deployment skills. Auth/caching proxies running on Bun bottleneck under load unless `BUN_CONFIG_MAX_HTTP_REQUESTS` is raised; Node and Deno are unaffected.
+
+## 1.5.18
+
+### Patch Changes
+
+- a15c7b6: Add exponential backoff with jitter to `ShapeStream` retries requested by `onError`, preventing tight retry loops for persistent non-429 4xx errors while keeping the consecutive retry guard as a final safety net.
+
+## 1.5.17
+
+### Patch Changes
+
+- 92a332e: Add console warning when using HTTP URLs in browser environments. HTTP limits browsers to 6 concurrent connections per host (HTTP/1.1), which can cause slow streams and app freezes. The warning can be disabled with `warnOnHttp: false`.
+
 ## 1.5.16
 
 ### Patch Changes

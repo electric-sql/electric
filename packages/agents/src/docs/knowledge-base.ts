@@ -884,10 +884,10 @@ export function createHortonDocsSupport(
     events: Array<Pick<ChangeEvent, `type` | `value`>>,
     inbox: Array<{ payload?: unknown }>
   ): string {
-    if (wake.type === `message_received`) {
+    if (wake.type === `inbox`) {
       const eventQuestion = findLatestQuestion(
         events
-          .filter((event) => event.type === `message_received`)
+          .filter((event) => event.type === `inbox`)
           .map((event) => event.value as { payload?: unknown } | undefined)
       )
       if (eventQuestion) {
@@ -928,9 +928,9 @@ export function createHortonDocsSupport(
     },
     createSearchTool(): AgentTool {
       return {
-        name: `search_durable_agents_docs`,
-        label: `Search Durable Agents Docs`,
-        description: `Run a hybrid BM25 plus vector search over the local Durable Agents documentation index.`,
+        name: `search_electric_agents_docs`,
+        label: `Search Electric Agents Docs`,
+        description: `Run a hybrid BM25 plus vector search over the local Electric Agents documentation index.`,
         parameters: Type.Object({
           query: Type.String({
             description: `The docs question or search query to run.`,

@@ -2,14 +2,16 @@
 
 ## Package overview
 
-The agents subsystem lives in five packages under `packages/`:
+The agents subsystem lives in seven packages under `packages/`:
 
 | Package                           | Description                                                                           |
 | --------------------------------- | ------------------------------------------------------------------------------------- |
 | `agents-runtime`                  | Core runtime — entity definitions, context, handler lifecycle                         |
+| `agents-mcp`                      | MCP (Model Context Protocol) bridge library used by built-in agents                   |
 | `agents-server`                   | Orchestration server — wake registry, scheduling, Electric + Postgres integration     |
 | `agents`                          | Built-in agents (Horton & Worker) with tools (bash, read, write, edit, fetch, search) |
 | `agents-server-ui`                | React dashboard for agent monitoring and interaction                                  |
+| `agents-desktop`                  | Electron wrapper around `agents-server-ui` for a native desktop experience            |
 | `agents-server-conformance-tests` | Conformance test suite for agents-server                                              |
 
 ## Prerequisites
@@ -18,17 +20,46 @@ The agents subsystem lives in five packages under `packages/`:
 - **Node.js** and **pnpm** (see `.tool-versions` for exact versions)
 - **`.env` file** at the project root with at least `ANTHROPIC_API_KEY` (needed by built-in agents). Both entrypoints call `process.loadEnvFile()` on startup, loading from the current working directory — so always run entrypoints from the project root.
 
+## Quick start: `./scripts/dev.sh`
+
+For day-to-day development, use the bundled dev script:
+
+```sh
+./scripts/dev.sh build       # one-shot install + build of all required packages
+./scripts/dev.sh start       # docker + 5 dev processes; Ctrl-C to stop
+./scripts/dev.sh start --detach        # same, but exits after spawning (logs to .dev-logs/)
+./scripts/dev.sh start --with-agents   # also spawn built-in agents (Horton + Worker)
+./scripts/dev.sh desktop     # run the Electron desktop app in this terminal
+./scripts/dev.sh stop        # stop processes + docker compose down
+./scripts/dev.sh teardown    # stop + remove Postgres volume + .streams-data/
+./scripts/dev.sh status      # show which services are running
+```
+
+`desktop` is a separate command because the Electron app is interactive — it opens a window. Run it in its own terminal after `start` has the rest of the stack up; Ctrl-C in that terminal closes the app without touching the backing services.
+
+`build` covers `typescript-client`, `agents-runtime`, `agents-mcp`, `agents-server`, and `agents`. Re-run it after any dep change before restarting — entrypoints do not auto-restart on `dist/` rebuilds.
+
+**Built-in agents (`packages/agents`)** register against `agents-server` at startup and will fail with `Stream not found` if they race ahead of it. Pass `--with-agents` to `start` to spawn them after `agents-server` binds `:4437`. Without the flag, run them manually in a separate terminal once `start` reports the server is up — Ctrl-C in that terminal stops only the built-in agents:
+
+```sh
+ELECTRIC_AGENTS_SERVER_URL=http://localhost:4437 \
+  node packages/agents/dist/entrypoint.js
+```
+
+The rest of this document describes the manual flow that the script automates.
+
 ## Starting the dev environment
 
 All commands below assume you are in the project root. All `pnpm dev` commands use `tsdown --watch` (or Vite for the UI) — they do an initial build then watch for changes. The build order matters because packages import from each other's `dist/`.
 
 ### Step 1 — Install dependencies and build workspace prerequisites
 
-In a fresh checkout or worktree, workspace packages have no `dist/` directories. Agent packages depend on `@electric-sql/client` (the typescript-client) at runtime, so it must be built before starting any agent server.
+In a fresh checkout or worktree, workspace packages have no `dist/` directories. The full dependency chain is `typescript-client` → `agents-mcp` → `agents-runtime` → (`agents-server`, `agents`), so the first two must be built before anything else.
 
 ```sh
 pnpm install
 pnpm -C packages/typescript-client build
+pnpm -C packages/agents-mcp build
 ```
 
 ### Step 2 — Start backing services (Postgres + Electric + Jaeger)
@@ -45,7 +76,7 @@ Services will be available at:
 
 ### Step 3 — Build agents-runtime
 
-`agents-server` and `agents` both depend on `agents-runtime`, so it must be built first.
+`agents-runtime` depends on `agents-mcp` (built in Step 1), and both `agents-server` and `agents` depend on `agents-runtime`, so it must be built next.
 
 ```sh
 pnpm -C packages/agents-runtime dev
@@ -165,6 +196,89 @@ It requires the agents-server backing services (Postgres + Electric) to be runni
 - **Durable streams** — in-memory by default in dev. Data resets on server restart. Set `ELECTRIC_AGENTS_STREAMS_DATA_DIR` to persist streams to disk (uses lmdb + log files).
 
 To clear all state: stop the servers and run `docker compose down -v` to remove the Postgres volume.
+
+## Running a second instance (e.g. testing a PR branch)
+
+If you already have one copy of the stack running (e.g. off `main`) and want a
+parallel instance from a different branch, you need to isolate four things:
+**Compose project name**, **backing-service ports**, **agents-server port**, and
+**Electron app data**.
+
+**Important:** You must use `-p <project-name>` with `docker compose` to give the
+test instance a separate Compose project. Without it, Docker Compose identifies
+the project by the directory name and will **replace** your main instance's
+containers instead of creating new ones.
+
+### 1 — Backing services on different ports
+
+```sh
+PG_HOST_PORT=5433 ELECTRIC_HOST_PORT=3061 \
+  JAEGER_UI_PORT=16687 JAEGER_OTLP_HTTP_PORT=4319 JAEGER_OTLP_GRPC_PORT=4316 \
+  docker compose -p agents-test -f packages/agents-server/docker-compose.dev.yml up -d
+```
+
+This gives you Postgres on `:5433`, Electric on `:3061`, and Jaeger on offset
+ports — leaving the existing instance's `:5432` / `:3060` / `:4317-4318`
+untouched. The `-p agents-test` flag ensures Docker treats this as a separate
+project with its own containers, networks, and volumes.
+
+### 2 — agents-server on a different port
+
+```sh
+DATABASE_URL=postgresql://electric_agents:electric_agents@localhost:5433/electric_agents \
+  ELECTRIC_AGENTS_ELECTRIC_URL=http://localhost:3061 \
+  ELECTRIC_AGENTS_PORT=4438 \
+  ELECTRIC_INSECURE=true \
+  node packages/agents-server/dist/entrypoint.js
+```
+
+### 3 — Built-in agents pointed at the new server
+
+```sh
+ELECTRIC_AGENTS_SERVER_URL=http://localhost:4438 \
+  ELECTRIC_AGENTS_BUILTIN_PORT=4449 \
+  node packages/agents/dist/entrypoint.js
+```
+
+### 4 — Electron desktop app with isolated data
+
+```sh
+ELECTRIC_DESKTOP_USER_DATA_DIR=/tmp/electric-agents-test \
+  ELECTRIC_DESKTOP_SERVER_URL=http://localhost:4438 \
+  ELECTRIC_DESKTOP_PRINCIPAL=system:dev-local \
+  ELECTRIC_DESKTOP_UI_PORT=5184 \
+  ELECTRIC_DESKTOP_DEV_SERVER_URL=http://localhost:5184 \
+  pnpm -C packages/agents-desktop dev
+```
+
+`ELECTRIC_DESKTOP_USER_DATA_DIR` gives the second Electron instance its own
+settings, secrets, and SQLite database. `ELECTRIC_DESKTOP_SERVER_URL` sets the
+initial server URL so it connects to the test instance instead of discovering
+the main one. `ELECTRIC_DESKTOP_PRINCIPAL=system:dev-local` is required when
+the agents-server runs with `ELECTRIC_INSECURE=true` — without it, the server
+auto-assigns principal `system:dev-local` but the desktop sends `owner_user_id`
+as `local-desktop`, causing a 403 on pull-wake runner registration.
+`ELECTRIC_DESKTOP_UI_PORT` changes the Vite dev server port (default `:5183`)
+and `ELECTRIC_DESKTOP_DEV_SERVER_URL` tells the Electron main process where to
+load the UI from.
+
+### Port summary
+
+| Component       | Main instance | Test instance               |
+| --------------- | ------------- | --------------------------- |
+| Postgres        | `:5432`       | `:5433`                     |
+| Electric        | `:3060`       | `:3061`                     |
+| Jaeger OTLP     | `:4317-4318`  | `:4316,4319`                |
+| Jaeger UI       | `:16686`      | `:16687`                    |
+| agents-server   | `:4437`       | `:4438`                     |
+| built-in agents | `:4448`       | `:4449`                     |
+| Electron data   | default       | `/tmp/electric-agents-test` |
+
+### Teardown
+
+```sh
+docker compose -p agents-test -f packages/agents-server/docker-compose.dev.yml down -v
+```
 
 ## Teardown
 

@@ -16,7 +16,7 @@
   background: var(--ds-chip-bg);
   font-family: var(--ds-font-body);
   font-size: var(--ds-text-xs);
-  line-height: 1;
+  line-height: 1.35;
   color: var(--ds-text-2);
   cursor: pointer;
   outline: none;
@@ -51,6 +51,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
+  line-height: 1.35;
 }
 
 /* Popup needs a touch more breathing room than the default 180px
@@ -59,6 +60,11 @@
 .popup {
   min-width: 280px;
   max-width: min(calc(100vw - 16px), 420px);
+}
+
+.pathItem {
+  padding-top: 2px;
+  padding-bottom: 2px;
 }
 
 /* Inner row wrapper — copied verbatim from

@@ -1,19 +1,220 @@
 import { describe, expect, it, vi } from 'vitest'
-import { ElectricAgentsManager } from '../src/electric-agents-manager'
-import { assertEntityStatus } from '../src/electric-agents-types'
+import { EntityManager } from '../src/entity-manager'
+import {
+  assertEntityStatus,
+  rejectsNormalWrites,
+} from '../src/electric-agents-types'
 
 describe(`assertEntityStatus`, () => {
   it(`returns valid statuses unchanged`, () => {
     expect(assertEntityStatus(`spawning`)).toBe(`spawning`)
     expect(assertEntityStatus(`running`)).toBe(`running`)
     expect(assertEntityStatus(`idle`)).toBe(`idle`)
+    expect(assertEntityStatus(`paused`)).toBe(`paused`)
+    expect(assertEntityStatus(`stopping`)).toBe(`stopping`)
     expect(assertEntityStatus(`stopped`)).toBe(`stopped`)
+    expect(assertEntityStatus(`killed`)).toBe(`killed`)
   })
 
   it(`throws on invalid status strings`, () => {
     expect(() => assertEntityStatus(`active`)).toThrow(`Invalid entity status`)
-    expect(() => assertEntityStatus(`paused`)).toThrow(`Invalid entity status`)
     expect(() => assertEntityStatus(``)).toThrow(`Invalid entity status`)
+  })
+})
+
+describe(`signal-aware status write guards`, () => {
+  it(`allows paused writes but rejects stopping, stopped, or killed`, () => {
+    expect(rejectsNormalWrites(`spawning`)).toBe(false)
+    expect(rejectsNormalWrites(`running`)).toBe(false)
+    expect(rejectsNormalWrites(`idle`)).toBe(false)
+    expect(rejectsNormalWrites(`paused`)).toBe(false)
+    expect(rejectsNormalWrites(`stopping`)).toBe(true)
+    expect(rejectsNormalWrites(`stopped`)).toBe(true)
+    expect(rejectsNormalWrites(`killed`)).toBe(true)
+  })
+})
+
+describe(`ElectricAgentsManager.signal semantics`, () => {
+  function decodeAppendBody(body: unknown): string {
+    return body instanceof Uint8Array
+      ? new TextDecoder().decode(body)
+      : String(body)
+  }
+
+  function createSignalManager(status: `running` | `idle` | `paused`) {
+    const entity = {
+      url: `/chat/demo`,
+      type: `chat`,
+      status,
+      streams: {
+        main: `/chat/demo/main`,
+        error: `/chat/demo/error`,
+      },
+      subscription_id: `chat-handler`,
+      write_token: `token`,
+      tags: {},
+      spawn_args: {},
+      created_at: Date.now(),
+      updated_at: Date.now(),
+    }
+    const registry = {
+      tenantId: `default`,
+      getEntity: vi.fn().mockResolvedValue(entity),
+      touchEntityWithTxid: vi.fn().mockResolvedValue(101),
+      updateStatusWithTxid: vi.fn().mockResolvedValue(202),
+      updateStatus: vi.fn().mockResolvedValue(undefined),
+    }
+    const append = vi.fn().mockResolvedValue({ offset: `1` })
+    const unregisterBySubscriber = vi.fn().mockResolvedValue(undefined)
+    const unregisterBySource = vi.fn().mockResolvedValue(undefined)
+    const manager = new EntityManager({
+      registry: registry as any,
+      streamClient: {
+        append,
+      } as any,
+      validator: {} as any,
+      wakeRegistry: {
+        evaluate: vi.fn(() => []),
+        unregisterBySubscriber,
+        unregisterBySource,
+        setTimeoutCallback: vi.fn(),
+        setDebounceCallback: vi.fn(),
+      } as any,
+    })
+    return {
+      manager,
+      registry,
+      append,
+      unregisterBySubscriber,
+      unregisterBySource,
+    }
+  }
+
+  it(`keeps SIGINT as a run-local abort without changing entity status`, async () => {
+    const { manager, registry } = createSignalManager(`running`)
+
+    await expect(
+      manager.signal(`/chat/demo`, { signal: `SIGINT` })
+    ).resolves.toMatchObject({
+      previous_state: `running`,
+      new_state: `running`,
+      txid: 101,
+    })
+
+    expect(registry.touchEntityWithTxid).toHaveBeenCalledWith(`/chat/demo`)
+    expect(registry.updateStatusWithTxid).not.toHaveBeenCalled()
+  })
+
+  it(`moves SIGSTOP to paused so existing pending work is skipped`, async () => {
+    const { manager, registry } = createSignalManager(`running`)
+
+    await expect(
+      manager.signal(`/chat/demo`, { signal: `SIGSTOP` })
+    ).resolves.toMatchObject({
+      previous_state: `running`,
+      new_state: `paused`,
+      txid: 202,
+    })
+
+    expect(registry.updateStatusWithTxid).toHaveBeenCalledWith(
+      `/chat/demo`,
+      `paused`
+    )
+  })
+
+  it(`moves running SIGTERM to stopping until runtime cleanup marks stopped`, async () => {
+    const { manager, registry } = createSignalManager(`running`)
+
+    await expect(
+      manager.signal(`/chat/demo`, { signal: `SIGTERM` })
+    ).resolves.toMatchObject({
+      previous_state: `running`,
+      new_state: `stopping`,
+      txid: 202,
+    })
+
+    expect(registry.updateStatusWithTxid).toHaveBeenCalledWith(
+      `/chat/demo`,
+      `stopping`
+    )
+  })
+
+  it(`marks non-resume paused signals as ignored so they do not wait for a runner`, async () => {
+    const { manager, registry, append } = createSignalManager(`paused`)
+
+    await expect(
+      manager.signal(`/chat/demo`, { signal: `SIGINT` })
+    ).resolves.toMatchObject({
+      previous_state: `paused`,
+      new_state: `paused`,
+      txid: 101,
+    })
+
+    expect(registry.touchEntityWithTxid).toHaveBeenCalledWith(`/chat/demo`)
+    expect(registry.updateStatusWithTxid).not.toHaveBeenCalled()
+    const body = decodeAppendBody(append.mock.calls[0]?.[1])
+    expect(body).toContain(`"status":"handled"`)
+    expect(body).toContain(`"outcome":"ignored"`)
+  })
+
+  it(`keeps paused SIGCONT unhandled after moving to idle so the runtime can resume queued work`, async () => {
+    const { manager, registry, append } = createSignalManager(`paused`)
+
+    await expect(
+      manager.signal(`/chat/demo`, { signal: `SIGCONT` })
+    ).resolves.toMatchObject({
+      previous_state: `paused`,
+      new_state: `idle`,
+      txid: 202,
+    })
+
+    expect(registry.updateStatusWithTxid).toHaveBeenCalledWith(
+      `/chat/demo`,
+      `idle`
+    )
+    expect(decodeAppendBody(append.mock.calls[0]?.[1])).toContain(
+      `"status":"unhandled"`
+    )
+  })
+
+  it(`rejects signal updates when the guarded status write loses a terminal race`, async () => {
+    const { manager, registry, append } = createSignalManager(`idle`)
+    registry.updateStatusWithTxid.mockResolvedValueOnce(null)
+
+    await expect(
+      manager.signal(`/chat/demo`, { signal: `SIGKILL` })
+    ).rejects.toMatchObject({
+      code: `INVALID_SIGNAL`,
+      status: 409,
+    })
+
+    expect(append).not.toHaveBeenCalled()
+  })
+
+  it(`rejects no-op signal updates when touch loses a terminal race`, async () => {
+    const { manager, registry, append } = createSignalManager(`idle`)
+    registry.touchEntityWithTxid.mockResolvedValueOnce(null)
+
+    await expect(
+      manager.signal(`/chat/demo`, { signal: `SIGINT` })
+    ).rejects.toMatchObject({
+      code: `INVALID_SIGNAL`,
+      status: 409,
+    })
+
+    expect(append).not.toHaveBeenCalled()
+  })
+
+  it(`wakes a paused entity by moving it to idle on a new message`, async () => {
+    const { manager, registry } = createSignalManager(`paused`)
+
+    await manager.send(`/chat/demo`, {
+      from: `user`,
+      payload: { text: `wake up` },
+    })
+
+    expect(registry.updateStatusWithTxid).not.toHaveBeenCalled()
+    expect(registry.updateStatus).toHaveBeenCalledWith(`/chat/demo`, `idle`)
   })
 })
 
@@ -31,7 +232,7 @@ describe(`ElectricAgentsManager.spawn wake cleanup on failure`, () => {
       .fn()
       .mockRejectedValue(new Error(`stream create failed`))
 
-    const manager = new ElectricAgentsManager({
+    const manager = new EntityManager({
       registry: {
         getEntityType: vi.fn().mockResolvedValue({
           name: `chat`,
@@ -71,7 +272,8 @@ describe(`ElectricAgentsManager.spawn wake cleanup on failure`, () => {
     // After failure, the wake should be cleaned up
     expect(unregisterBySubscriberAndSource).toHaveBeenCalledWith(
       `/other/entity`,
-      `/chat/test-1`
+      `/chat/test-1`,
+      `default`
     )
   })
 
@@ -82,7 +284,7 @@ describe(`ElectricAgentsManager.spawn wake cleanup on failure`, () => {
       .fn()
       .mockRejectedValue(new Error(`registry create failed`))
 
-    const manager = new ElectricAgentsManager({
+    const manager = new EntityManager({
       registry: {
         getEntityType: vi.fn().mockResolvedValue({
           name: `chat`,
@@ -120,7 +322,7 @@ describe(`ElectricAgentsManager.spawn wake cleanup on failure`, () => {
 
   it(`rejects duplicate entity URLs before touching stream creation`, async () => {
     const createStream = vi.fn()
-    const manager = new ElectricAgentsManager({
+    const manager = new EntityManager({
       registry: {
         getEntityType: vi.fn().mockResolvedValue({
           name: `chat`,
@@ -260,7 +462,7 @@ describe(`ElectricAgentsManager.forkSubtree`, () => {
       delete: vi.fn(),
     }
 
-    const manager = new ElectricAgentsManager({
+    const manager = new EntityManager({
       registry: registry as any,
       streamClient: streamClient as any,
       validator: {} as any,
@@ -326,7 +528,7 @@ describe(`ElectricAgentsManager.forkSubtree`, () => {
       ...makeEntity(`/manager/busy`),
       status: `running`,
     }
-    const manager = new ElectricAgentsManager({
+    const manager = new EntityManager({
       registry: {
         getEntity: vi.fn().mockResolvedValue(root),
         listEntities: vi.fn().mockResolvedValue({ entities: [], total: 0 }),
@@ -382,7 +584,7 @@ describe(`ElectricAgentsManager.forkSubtree`, () => {
       delete: vi.fn(),
     }
 
-    const manager = new ElectricAgentsManager({
+    const manager = new EntityManager({
       registry: {
         getEntity: vi.fn(async (url: string) => entitiesByUrl.get(url) ?? null),
         listEntities: vi.fn(async ({ parent }: { parent?: string }) => ({
@@ -446,7 +648,7 @@ describe(`ElectricAgentsManager.forkSubtree`, () => {
       delete: vi.fn(),
     }
 
-    const manager = new ElectricAgentsManager({
+    const manager = new EntityManager({
       registry: {
         getEntity: vi.fn(async (url: string) => entitiesByUrl.get(url) ?? null),
         listEntities: vi.fn().mockResolvedValue({ entities: [], total: 0 }),

@@ -1,6 +1,8 @@
 import { Select as BaseSelect } from '@base-ui/react/select'
 import { Check, ChevronDown } from 'lucide-react'
 import type { CSSProperties, ReactNode } from 'react'
+import type { LucideIcon } from 'lucide-react'
+import { Icon } from './Icon'
 import popoverStyles from './Popover.module.css'
 import styles from './Select.module.css'
 
@@ -36,6 +38,20 @@ interface TriggerProps {
   [`aria-label`]?: string
   /** Tooltip-style hint shown on hover. */
   title?: string
+  /**
+   * Optional leading icon rendered before the value. Slots in as a
+   * sibling flex child of `<Select.Value>` so it gets the trigger's
+   * own gap/alignment, and inherits the trigger's muted icon color
+   * via the shared `.icon` class.
+   */
+  icon?: LucideIcon
+  /**
+   * Custom renderer for the displayed value. Use when the option's
+   * value is an opaque key (e.g. an entity id) and the user-facing
+   * label lives elsewhere. Without this, base-ui's `Select.Value`
+   * falls back to rendering the value as text.
+   */
+  renderValue?: (value: string | null) => ReactNode
 }
 
 interface ContentProps {
@@ -85,11 +101,13 @@ function Trigger({
   autoFocus,
   [`aria-label`]: ariaLabel,
   title,
+  icon,
+  renderValue,
 }: TriggerProps): React.ReactElement {
   const cls = [size === `pill` ? styles.triggerPill : styles.trigger, className]
     .filter(Boolean)
     .join(` `)
-  const iconSize = size === `pill` ? 12 : 14
+  const iconSize = size === `pill` ? 1 : 2
   return (
     <BaseSelect.Trigger
       className={cls}
@@ -98,9 +116,18 @@ function Trigger({
       aria-label={ariaLabel}
       title={title}
     >
-      <BaseSelect.Value placeholder={placeholder} />
+      {icon && (
+        <span className={styles.leadingIcon}>
+          <Icon icon={icon} size={iconSize} />
+        </span>
+      )}
+      <BaseSelect.Value placeholder={placeholder}>
+        {renderValue
+          ? (value) => renderValue(value as string | null)
+          : undefined}
+      </BaseSelect.Value>
       <BaseSelect.Icon className={styles.icon}>
-        <ChevronDown size={iconSize} />
+        <Icon icon={ChevronDown} size={iconSize} />
       </BaseSelect.Icon>
     </BaseSelect.Trigger>
   )
@@ -136,7 +163,7 @@ function Item<V extends string>({
     <BaseSelect.Item value={value} className={cls} {...rest}>
       <BaseSelect.ItemText>{children}</BaseSelect.ItemText>
       <BaseSelect.ItemIndicator className={styles.indicator}>
-        <Check size={14} />
+        <Icon icon={Check} size={2} />
       </BaseSelect.ItemIndicator>
     </BaseSelect.Item>
   )

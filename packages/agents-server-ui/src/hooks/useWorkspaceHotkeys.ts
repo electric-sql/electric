@@ -16,33 +16,53 @@ import { useWorkspace, listTiles } from './useWorkspace'
  * Hotkeys are skipped when focus is in a text input (handled by
  * `useHotkey`'s default `ignoreInputs: true` behaviour).
  */
-export function useWorkspaceHotkeys(): void {
+export function useWorkspaceHotkeys({
+  disabled = false,
+}: {
+  disabled?: boolean
+} = {}): void {
   const { workspace, helpers } = useWorkspace()
 
-  useHotkey(`mod+d`, (e) => {
-    if (!helpers.activeTile) return
-    e.preventDefault()
-    helpers.splitTile(helpers.activeTile.id, `right`)
-  })
+  useHotkey(
+    `mod+d`,
+    (e) => {
+      if (!helpers.activeTile) return
+      e.preventDefault()
+      helpers.splitTile(helpers.activeTile.id, `right`)
+    },
+    { disabled }
+  )
 
-  useHotkey(`mod+shift+d`, (e) => {
-    if (!helpers.activeTile) return
-    e.preventDefault()
-    helpers.splitTile(helpers.activeTile.id, `down`)
-  })
+  useHotkey(
+    `mod+shift+d`,
+    (e) => {
+      if (!helpers.activeTile) return
+      e.preventDefault()
+      helpers.splitTile(helpers.activeTile.id, `down`)
+    },
+    { disabled }
+  )
 
-  useHotkey(`mod+w`, (e) => {
-    if (!helpers.activeTile) return
-    e.preventDefault()
-    helpers.closeTile(helpers.activeTile.id)
-  })
+  useHotkey(
+    `mod+w`,
+    (e) => {
+      if (!helpers.activeTile) return
+      e.preventDefault()
+      helpers.closeTile(helpers.activeTile.id)
+    },
+    { disabled }
+  )
 
-  useHotkey(`mod+\\`, (e) => {
-    e.preventDefault()
-    const tiles = listTiles(workspace.root)
-    if (tiles.length < 2) return
-    const currentIdx = tiles.findIndex((t) => t.id === workspace.activeTileId)
-    const next = tiles[(currentIdx + 1) % tiles.length]
-    helpers.setActiveTile(next.id)
-  })
+  useHotkey(
+    `mod+\\`,
+    (e) => {
+      e.preventDefault()
+      const tiles = listTiles(workspace.root)
+      if (tiles.length < 2) return
+      const currentIdx = tiles.findIndex((t) => t.id === workspace.activeTileId)
+      const next = tiles[(currentIdx + 1) % tiles.length]
+      helpers.setActiveTile(next.id)
+    },
+    { disabled }
+  )
 }

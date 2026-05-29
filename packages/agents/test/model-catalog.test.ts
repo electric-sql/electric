@@ -106,4 +106,66 @@ describe(`model catalog`, () => {
 
     expect(catalog).toBeNull()
   })
+
+  it(`lists DeepSeek models when DEEPSEEK_API_KEY is set`, async () => {
+    delete process.env.OPENAI_API_KEY
+    process.env.DEEPSEEK_API_KEY = `test-deepseek-key`
+    vi.stubGlobal(
+      `fetch`,
+      vi.fn(async (url: string) => {
+        if (String(url).includes(`deepseek.com`)) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              data: [{ id: `deepseek-v4-flash` }, { id: `deepseek-v4-pro` }],
+            }),
+          }
+        }
+        return { ok: false, status: 401, json: async () => ({}) }
+      })
+    )
+
+    const catalog = await createBuiltinModelCatalog()
+
+    expect(catalog).not.toBeNull()
+    expect(catalog!.choices.map((c) => c.provider)).toContain(`deepseek`)
+    expect(catalog!.choices.map((c) => c.value)).toContain(
+      `deepseek:deepseek-v4-flash`
+    )
+    expect(catalog!.choices.map((c) => c.value)).toContain(
+      `deepseek:deepseek-v4-pro`
+    )
+  })
+
+  it(`resolves deepseek model config correctly`, async () => {
+    delete process.env.OPENAI_API_KEY
+    process.env.DEEPSEEK_API_KEY = `test-deepseek-key`
+    vi.stubGlobal(
+      `fetch`,
+      vi.fn(async (url: string) => {
+        if (String(url).includes(`deepseek.com`)) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              data: [{ id: `deepseek-v4-flash` }, { id: `deepseek-v4-pro` }],
+            }),
+          }
+        }
+        return { ok: false, status: 401, json: async () => ({}) }
+      })
+    )
+
+    const catalog = await createBuiltinModelCatalog()
+
+    expect(
+      resolveBuiltinModelConfig(catalog!, {
+        model: `deepseek:deepseek-v4-flash`,
+      })
+    ).toEqual({
+      provider: `deepseek`,
+      model: `deepseek-v4-flash`,
+    })
+  })
 })

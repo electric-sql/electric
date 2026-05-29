@@ -1,5 +1,68 @@
 # @core/sync-service
 
+## 1.6.9
+
+### Patch Changes
+
+- 2d1615d: Allow for 0 values in Bandit memory tweak settings `fullsweep_after` and `max_requests`
+
+## 1.6.8
+
+### Patch Changes
+
+- 8803b36: Reject malformed shape offsets with negative parts as invalid requests instead of raising `FunctionClauseError`.
+
+## 1.6.7
+
+### Patch Changes
+
+- dbe8483: Cheap admission control for shape requests. `:check_admission` now runs at the front of the request pipeline and classifies requests using a single `:ets.member/2` lookup on `?handle=`, removing the SQLite-backed `:resolve_existing_shape` step that previously ran before admission and saturated the read pool under thundering herd (bottleneck 1 of #4266).
+
+## 1.6.6
+
+### Patch Changes
+
+- 8a94d7f: Fix `@>` (and other array operators) returning 400 when the right-hand side uses a non-foldable `ARRAY[...]::T[]` outer cast, e.g. `"organization_ids" @> ARRAY[$1]::uuid[]` with a column or parameter inside the constructor. The where-clause parser was assigning the element type (`:uuid`) instead of the array type (`{:array, :uuid}`) to array-cast and array-implicit-cast functions, which made the `@>` operator overload lookup fail with `Could not select an operator overload`.
+- 4590862: Remove the single-function PartialMode module by moving its query_subset() function into SnapshotQuery, so that its implementation could sit close to SnapshotQuery.execute_for_shape().
+- eac6dea: Wrap telemetry-poller MFAs in `ElectricTelemetry.Poller.safe_invoke/3` so that transient collector failures (`:noproc`, `:timeout`, `:shutdown`/`:normal` exits, `ArgumentError` from not-yet-created ETS tables) no longer cause `:telemetry_poller` to permanently remove the measurement from its polling list. Unexpected errors are now logged as warnings with the offending MFA and the collector keeps being polled on subsequent ticks. Strips now-redundant defensive `try/catch` / `with`-fallthrough code from individual collectors.
+
+  Note: user-supplied periodic measurement functions no longer have exceptions propagated up to `:telemetry_poller`'s own error logger — they are caught and logged via `ElectricTelemetry.Poller` instead.
+
+## 1.6.5
+
+### Patch Changes
+
+- 473543f: Add process and binary memory-footprint attributes to the spans under `Plug_shape_get` (`shape_get.api.load_shape_info`, `shape_get.plug.serve_subset_response`, `shape_get.plug.serve_shape_log`, `shape_get.plug.stream_chunk`, and the root span itself). Long-lived shape requests now expose `memory.start.{process,binary}_bytes` / `memory.end.{process,binary}_bytes` (and per-chunk `memory.{process,binary}_bytes` on stream-chunk spans), making memory growth across a request queryable in the span viewer.
+- ed48bba: Add per-shape `electric.shape.response_size.bytes` telemetry distribution, tagged by `root_table`, `is_live`, and `stack_id`. Operators can now attribute response payload volume to individual shapes and tell initial snapshots apart from live long-poll responses.
+
+## 1.6.4
+
+### Patch Changes
+
+- c38e519: Fix a 2-cycle infinite refetch loop on `live=true&live_sse=true` shape requests caused by a non-monotonic `electric-cursor` header.
+
+  `Electric.Plug.Utils.get_next_interval_timestamp/2` could return a cursor smaller than the `prev_interval` the client sent: when the client polled with a previously-jittered value (`bucket + delta`, `delta ∈ 1..3_600`) and the wall clock had not yet crossed that value, the function fell through to the plain bucket value and returned a cursor below the client's. Combined with `Cache-Control: public, max-age=<sse_timeout - 1>` on live SSE responses (added intentionally to enable CDN request collapsing), two cached entries could end up pointing at each other: `?cursor=A` → `electric-cursor: B`, and `?cursor=B` → `electric-cursor: A`. Once both entries were warm, the client would bounce between them at line rate (>600 req/s) until the cache window expired, all within the original `max-age` window.
+
+  `get_next_interval_timestamp/2` now guarantees that the returned cursor is strictly greater than `prev_interval` — when bucket math would return a value `<= prev`, the function jitters strictly forward from `prev` instead.
+
+  This is a server-side-only fix; clients on any current version recover automatically once existing CDN-cached cycle entries age out (≤ `sse_timeout`).
+
+## 1.6.3
+
+### Patch Changes
+
+- 5fcf002: Emit `number_to_expire` and `max_shapes` as Logger metadata (instead of interpolating them into the message body) for the "Expiring shapes as the number of shapes has exceeded the limit" notice. This keeps the message text static so log aggregators can group these events and so Honeycomb can filter by `shape.expiry.*` attributes.
+- f460584: Add CONCAT(variadic text) support
+- 7cfa58d: Add `txids` to `move-in`/`move-out` control messages, mirroring the per-row `headers.txids` already emitted on insert/update/delete log entries. The list contains the upstream Postgres xid(s) whose commit caused the dependency boundary to flip.
+- 686ebdb: Propagate OpenTelemetry context so that child spans in ShapeStatus and SnapshotQuery are linked to originating traces:
+  - `Effects.query_move_in_async`: propagate context into spawned task
+  - `ShapeCache.handle_call({:create_or_wait_shape_handle, ...})`: set context before calling ShapeStatus functions
+  - `ShapeCache.handle_call({:start_consumer_for_handle, ...})`: accept and set context from ConsumerRegistry
+
+- 093449a: Demote the log entry about expiring shapes to level info so that it's excluded from logs in Honeycomb.
+- 5a8d70d: Replace literal shape handles in log output with metadata. Makes it easier to search through and group log entries in observability tools.
+- 4c52d76: Update Elixir deps to latest available versions
+
 ## 1.6.2
 
 ### Patch Changes

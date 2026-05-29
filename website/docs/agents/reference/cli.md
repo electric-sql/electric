@@ -20,6 +20,8 @@ npm install -g electric-ax
 | -------------------------------- | ----------------------- | -------------------------------------------- |
 | `ELECTRIC_AGENTS_URL`            | `http://localhost:4437` | Server URL for entity commands and built-ins |
 | `ELECTRIC_AGENTS_IDENTITY`       | `user@hostname`         | Sender identity for messages                 |
+| `ELECTRIC_AGENTS_PRINCIPAL`      | -                       | Optional principal key sent as `Electric-Principal` |
+| `ELECTRIC_AGENTS_SERVER_HEADERS` | -                       | Optional JSON object of additional server headers |
 | `ELECTRIC_AGENTS_PORT`           | `4437`                  | Port used by `start` / `quickstart`          |
 | `ELECTRIC_AGENTS_BUILTIN_PORT`   | `4448`                  | Webhook port for `start-builtin`             |
 | `ELECTRIC_AGENTS_COMPOSE_PROJECT` | `electric-agents`       | Docker Compose project name                  |

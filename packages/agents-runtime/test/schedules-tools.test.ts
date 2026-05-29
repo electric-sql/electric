@@ -11,7 +11,7 @@ function createManifestDb(manifests: Array<unknown>) {
       },
     },
     utils: {
-      awaitTxId: vi.fn<(txid: string, timeout?: number) => Promise<void>>(),
+      awaitTxId: vi.fn(async (_txid: string, _timeout?: number) => {}),
     },
   } as any
 }
@@ -54,18 +54,16 @@ describe(`schedule tools`, () => {
   it(`upsert_cron_schedule infers timezone from args when omitted`, async () => {
     const manifests: Array<Record<string, unknown>> = []
     const db = createManifestDb(manifests)
-    const upsertCronSchedule = vi
-      .fn<
-        (opts: {
-          id: string
-          expression: string
-          timezone?: string
-          payload?: unknown
-          debounceMs?: number
-          timeoutMs?: number
-        }) => Promise<{ txid: string }>
-      >()
-      .mockResolvedValue({ txid: `tx-cron-1` })
+    const upsertCronSchedule = vi.fn(
+      async (_opts: {
+        id: string
+        expression: string
+        timezone?: string
+        payload?: unknown
+        debounceMs?: number
+        timeoutMs?: number
+      }) => ({ txid: `tx-cron-1` })
+    )
 
     db.utils.awaitTxId.mockImplementation(async (txid: string) => {
       expect(txid).toBe(`tx-cron-1`)
@@ -122,18 +120,15 @@ describe(`schedule tools`, () => {
   it(`upsert_future_send waits for txid and returns synced manifest state`, async () => {
     const manifests: Array<Record<string, unknown>> = []
     const db = createManifestDb(manifests)
-    const upsertFutureSendSchedule = vi
-      .fn<
-        (opts: {
-          id: string
-          payload: unknown
-          targetUrl?: string
-          fireAt: string
-          from?: string
-          messageType?: string
-        }) => Promise<{ txid: string }>
-      >()
-      .mockResolvedValue({ txid: `tx-future-1` })
+    const upsertFutureSendSchedule = vi.fn(
+      async (_opts: {
+        id: string
+        payload: unknown
+        targetUrl?: string
+        fireAt: string
+        messageType?: string
+      }) => ({ txid: `tx-future-1` })
+    )
 
     db.utils.awaitTxId.mockImplementation(async (txid: string) => {
       expect(txid).toBe(`tx-future-1`)
@@ -192,9 +187,9 @@ describe(`schedule tools`, () => {
       },
     ]
     const db = createManifestDb(manifests)
-    const deleteSchedule = vi
-      .fn<(opts: { id: string }) => Promise<{ txid: string }>>()
-      .mockResolvedValue({ txid: `tx-delete-1` })
+    const deleteSchedule = vi.fn(async (_opts: { id: string }) => ({
+      txid: `tx-delete-1`,
+    }))
 
     db.utils.awaitTxId.mockImplementation(async (txid: string) => {
       expect(txid).toBe(`tx-delete-1`)

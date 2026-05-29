@@ -2,6 +2,12 @@ import { stream } from '@durable-streams/client'
 
 const debugTestTiming = process.env.ELECTRIC_AGENTS_DEBUG_TEST_TIMING === `1`
 
+export function durableStreamTestServerUrl(origin: string): string {
+  const url = new URL(origin)
+  url.pathname = `${url.pathname.replace(/\/+$/, ``)}/v1/stream`
+  return url.toString().replace(/\/+$/, ``)
+}
+
 export async function timeStep<T>(
   label: string,
   fn: () => Promise<T>

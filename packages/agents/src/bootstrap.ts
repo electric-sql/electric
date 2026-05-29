@@ -8,21 +8,23 @@ import {
   createEntityRegistry,
   createRuntimeHandler,
 } from '@electric-ax/agents-runtime'
+import { createEventSourceTools } from '@electric-ax/agents-runtime/tools'
 import { serverLog } from './log'
 import { registerHorton } from './agents/horton'
 import { registerWorker } from './agents/worker'
 import { createBuiltinModelCatalog } from './model-catalog'
-import { createSkillsRegistry } from './skills/registry'
+import { createSkillsRegistry } from '@electric-ax/agents-runtime'
 import type {
   AgentTool,
+  DispatchPolicy,
   EntityRegistry,
-  EntityStreamDBWithActions,
+  HeadersProvider,
+  ProcessWakeConfig,
   RuntimeHandler,
 } from '@electric-ax/agents-runtime'
-import type { ChangeEvent } from '@durable-streams/state'
 import type { StreamFn } from '@mariozechner/pi-agent-core'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import type { SkillsRegistry } from './skills/types'
+import type { SkillsRegistry } from '@electric-ax/agents-runtime'
 
 export const DEFAULT_BUILTIN_AGENT_HANDLER_PATH = `/_electric/builtin-agent-handler`
 
@@ -34,35 +36,52 @@ export interface AgentHandlerResult {
   skillsRegistry: SkillsRegistry | null
 }
 
+export type BuiltinElectricToolsFactory = NonNullable<
+  ProcessWakeConfig[`createElectricTools`]
+>
+
 export interface BuiltinAgentHandlerOptions {
   agentServerUrl: string
   serveEndpoint?: string
   workingDirectory?: string
   streamFn?: StreamFn
-  createElectricTools?: (context: {
-    entityUrl: string
-    entityType: string
-    args: Readonly<Record<string, unknown>>
-    db: EntityStreamDBWithActions
-    events: Array<ChangeEvent>
-    upsertCronSchedule: (opts: {
-      id: string
-      expression: string
-      timezone?: string
-      payload?: unknown
-      debounceMs?: number
-      timeoutMs?: number
-    }) => Promise<{ txid: string }>
-    upsertFutureSendSchedule: (opts: {
-      id: string
-      payload: unknown
-      targetUrl?: string
-      fireAt: string
-      from?: string
-      messageType?: string
-    }) => Promise<{ txid: string }>
-    deleteSchedule: (opts: { id: string }) => Promise<{ txid: string }>
-  }) => Array<AgentTool> | Promise<Array<AgentTool>>
+  publicUrl?: string
+  runtimeName?: string
+  /** Override for the built-in skills directory; required when embedders bundle this package. */
+  baseSkillsDir?: string
+  serverHeaders?: HeadersProvider
+  defaultDispatchPolicyForType?: (
+    typeName: string
+  ) => DispatchPolicy | undefined
+  createElectricTools?: BuiltinElectricToolsFactory
+}
+
+function toolName(tool: AgentTool): string | null {
+  return typeof tool.name === `string` ? tool.name : null
+}
+
+function dedupeToolsByName(tools: Array<AgentTool>): Array<AgentTool> {
+  const seen = new Set<string>()
+  const deduped: Array<AgentTool> = []
+
+  for (const tool of tools) {
+    const name = toolName(tool)
+    if (name && seen.has(name)) continue
+    if (name) seen.add(name)
+    deduped.push(tool)
+  }
+
+  return deduped
+}
+
+export function createBuiltinElectricTools(
+  custom?: BuiltinElectricToolsFactory
+): BuiltinElectricToolsFactory {
+  return async (context) => {
+    const builtinTools = createEventSourceTools(context)
+    const customTools = custom ? await custom(context) : []
+    return dedupeToolsByName([...builtinTools, ...customTools])
+  }
 }
 
 export async function createBuiltinAgentHandler(
@@ -70,10 +89,15 @@ export async function createBuiltinAgentHandler(
 ): Promise<AgentHandlerResult | null> {
   const {
     agentServerUrl,
-    serveEndpoint = `${agentServerUrl}${DEFAULT_BUILTIN_AGENT_HANDLER_PATH}`,
+    serveEndpoint,
     workingDirectory,
     streamFn,
     createElectricTools,
+    publicUrl,
+    runtimeName,
+    baseSkillsDir: baseSkillsDirOverride,
+    serverHeaders,
+    defaultDispatchPolicyForType,
   } = options
 
   const modelCatalog = await createBuiltinModelCatalog({
@@ -90,7 +114,7 @@ export async function createBuiltinAgentHandler(
   const cwd = workingDirectory ?? process.cwd()
 
   const here = path.dirname(fileURLToPath(import.meta.url))
-  const baseSkillsDir = path.resolve(here, `../skills`)
+  const baseSkillsDir = baseSkillsDirOverride ?? path.resolve(here, `../skills`)
 
   let skillsRegistry: SkillsRegistry | null = null
   try {
@@ -126,8 +150,12 @@ export async function createBuiltinAgentHandler(
     serveEndpoint,
     registry,
     subscriptionPathForType: (name) => `/${name}/*/main`,
-    idleTimeout: 5_000,
-    createElectricTools,
+    defaultDispatchPolicyForType,
+    serverHeaders,
+    idleTimeout: 5 * 60_000,
+    createElectricTools: createBuiltinElectricTools(createElectricTools),
+    publicUrl,
+    name: runtimeName ?? `builtin-agents`,
   })
 
   return {

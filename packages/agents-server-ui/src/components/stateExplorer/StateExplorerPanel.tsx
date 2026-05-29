@@ -6,12 +6,17 @@ import {
 } from '@durable-streams/state'
 import { stream as createStream } from '@durable-streams/client'
 import { Badge, Select, Stack, Text } from '../../ui'
+import {
+  STATE_EXPLORER_SOURCE_REQUEST_EVENT,
+  consumeStateExplorerSourceRequest,
+} from '../../lib/stateExplorerSelection'
 import { Splitter } from '../workspace/Splitter'
 import { TypeList } from './TypeList'
 import { StateTable } from './StateTable'
 import { EventSidebar } from './EventSidebar'
 import styles from './StateExplorerPanel.module.css'
 import type { ChangeEvent, StateEvent } from '@durable-streams/state'
+import type { StateExplorerSourceRequest } from '../../lib/stateExplorerSelection'
 
 type StreamLoadState = {
   events: Array<StateEvent>
@@ -195,14 +200,21 @@ function useStateStream(
 export function StateExplorerPanel({
   baseUrl,
   entityUrl,
+  selectedSourceId,
+  onSelectedSourceIdChange,
 }: {
   baseUrl: string
   entityUrl: string
+  selectedSourceId?: string
+  onSelectedSourceIdChange?: (sourceId: string | undefined) => void
 }) {
   const liveTail = true
   const [cursorIndex, setCursorIndex] = useState<number | null>(null)
   const [selectedType, setSelectedType] = useState<string | null>(null)
   const [selectedSourceKey, setSelectedSourceKey] = useState(`runtime`)
+  const [requestedSourceId, setRequestedSourceId] = useState<string | null>(
+    null
+  )
   const [focusedRow, setFocusedRow] = useState<{
     type: string
     key: string
@@ -235,6 +247,53 @@ export function StateExplorerPanel({
     selectedStream.error ??
     (selectedSourceKey === `runtime` ? runtimeStream.error : null)
   const sourceOptionsCount = 1 + sharedSources.length
+
+  useEffect(() => {
+    if (!selectedSourceId) {
+      setSelectedSourceKey(`runtime`)
+      setRequestedSourceId(null)
+      return
+    }
+
+    const requestedKey = `shared:${selectedSourceId}`
+    if (sharedSources.some((source) => source.key === requestedKey)) {
+      setSelectedSourceKey(requestedKey)
+      setRequestedSourceId(null)
+    } else {
+      setRequestedSourceId(selectedSourceId)
+    }
+  }, [selectedSourceId, sharedSources])
+
+  useEffect(() => {
+    const consumePendingRequest = () => {
+      setRequestedSourceId(consumeStateExplorerSourceRequest(entityUrl))
+    }
+    consumePendingRequest()
+
+    const handleRequest = (event: Event) => {
+      const detail = (event as CustomEvent<StateExplorerSourceRequest>).detail
+      if (detail.entityUrl === entityUrl) {
+        setRequestedSourceId(detail.sourceId)
+      }
+    }
+
+    window.addEventListener(STATE_EXPLORER_SOURCE_REQUEST_EVENT, handleRequest)
+    return () => {
+      window.removeEventListener(
+        STATE_EXPLORER_SOURCE_REQUEST_EVENT,
+        handleRequest
+      )
+    }
+  }, [entityUrl])
+
+  useEffect(() => {
+    if (!requestedSourceId) return
+    const requestedKey = `shared:${requestedSourceId}`
+    if (sharedSources.some((source) => source.key === requestedKey)) {
+      setSelectedSourceKey(requestedKey)
+      setRequestedSourceId(null)
+    }
+  }, [requestedSourceId, sharedSources])
 
   useEffect(() => {
     if (
@@ -310,6 +369,16 @@ export function StateExplorerPanel({
     setCursorIndex(null)
   }, [])
 
+  const handleSelectSource = useCallback(
+    (key: string) => {
+      setSelectedSourceKey(key)
+      onSelectedSourceIdChange?.(
+        key === `runtime` ? undefined : key.replace(/^shared:/, ``)
+      )
+    },
+    [onSelectedSourceIdChange]
+  )
+
   if (error) {
     return (
       <Stack direction="column" className={styles.root}>
@@ -317,7 +386,7 @@ export function StateExplorerPanel({
           selectedSourceKey={selectedSourceKey}
           sourceOptionsCount={sourceOptionsCount}
           sharedSources={sharedSources}
-          onSelectSource={setSelectedSourceKey}
+          onSelectSource={handleSelectSource}
         />
         <Stack align="center" justify="center" className={styles.empty}>
           <Text size={1} tone="danger">
@@ -335,7 +404,7 @@ export function StateExplorerPanel({
           selectedSourceKey={selectedSourceKey}
           sourceOptionsCount={sourceOptionsCount}
           sharedSources={sharedSources}
-          onSelectSource={setSelectedSourceKey}
+          onSelectSource={handleSelectSource}
         />
         <Stack align="center" justify="center" className={styles.empty}>
           <Text size={1} tone="danger">
@@ -353,7 +422,7 @@ export function StateExplorerPanel({
           selectedSourceKey={selectedSourceKey}
           sourceOptionsCount={sourceOptionsCount}
           sharedSources={sharedSources}
-          onSelectSource={setSelectedSourceKey}
+          onSelectSource={handleSelectSource}
         />
         <Stack justify="center" align="center" className={styles.empty}>
           <Text size={1} tone="muted">
@@ -371,7 +440,7 @@ export function StateExplorerPanel({
           selectedSourceKey={selectedSourceKey}
           sourceOptionsCount={sourceOptionsCount}
           sharedSources={sharedSources}
-          onSelectSource={setSelectedSourceKey}
+          onSelectSource={handleSelectSource}
         />
         <Stack align="center" justify="center" className={styles.empty}>
           <Text size={1} tone="muted">
@@ -388,7 +457,7 @@ export function StateExplorerPanel({
         selectedSourceKey={selectedSourceKey}
         sourceOptionsCount={sourceOptionsCount}
         sharedSources={sharedSources}
-        onSelectSource={setSelectedSourceKey}
+        onSelectSource={handleSelectSource}
       />
 
       <Stack className={styles.row} style={{ flex: `${splitRatio} 1 0%` }}>

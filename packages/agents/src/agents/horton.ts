@@ -1,12 +1,9 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import Anthropic from '@anthropic-ai/sdk'
-import { completeSimple, getModel } from '@mariozechner/pi-ai'
-import { eq, not, queryOnce } from '@durable-streams/state'
 import { z } from 'zod'
 import { serverLog } from '../log'
 import { createHortonDocsSupport } from '../docs/knowledge-base'
-import { createSkillTools } from '../skills/tools'
+import { createSkillTools } from '@electric-ax/agents-runtime'
 import { createSpawnWorkerTool } from '../tools/spawn-worker'
 import {
   modelChoiceValues,
@@ -14,7 +11,6 @@ import {
   resolveBuiltinModelConfig,
   type BuiltinAgentModelConfig,
   type BuiltinModelCatalog,
-  type BuiltinModelChoice,
 } from '../model-catalog'
 import type { AgentTool, StreamFn } from '@mariozechner/pi-agent-core'
 import type {
@@ -28,22 +24,15 @@ import {
   createReadFileTool,
   createWriteTool,
   braveSearchTool,
+  createFetchUrlTool,
   fetchUrlTool,
+  createSendTool,
 } from '@electric-ax/agents-runtime/tools'
-import type { MessageReceived } from '@electric-ax/agents-runtime'
-import type { SkillsRegistry } from '../skills/types'
-
-const TITLE_MODEL = `claude-haiku-4-5-20251001`
+import { completeWithLowCostModel } from '@electric-ax/agents-runtime'
+import { mcp } from '@electric-ax/agents-mcp'
+import type { SkillsRegistry } from '@electric-ax/agents-runtime'
 
 export const HORTON_MODEL = `claude-sonnet-4-6`
-
-let anthropic: Anthropic | null = null
-function getClient(): Anthropic {
-  if (!anthropic) {
-    anthropic = new Anthropic()
-  }
-  return anthropic
-}
 
 const TITLE_SYSTEM_PROMPT =
   `You generate concise chat session titles in 3-5 words. ` +
@@ -51,18 +40,6 @@ const TITLE_SYSTEM_PROMPT =
 
 const TITLE_USER_PROMPT = (userMessage: string): string =>
   `User request:\n${userMessage}`
-
-async function defaultHaikuCall(userPrompt: string): Promise<string> {
-  const client = getClient()
-  const res = await client.messages.create({
-    model: TITLE_MODEL,
-    max_tokens: 64,
-    system: TITLE_SYSTEM_PROMPT,
-    messages: [{ role: `user`, content: userPrompt }],
-  })
-  const block = res.content[0]
-  return block?.type === `text` ? block.text : ``
-}
 
 const TITLE_STOP_WORDS = new Set([
   `a`,
@@ -146,94 +123,27 @@ function buildFallbackTitle(userMessage: string): string {
   return selected.join(` `).slice(0, 80).trim() || `Untitled Chat`
 }
 
-function selectTitleModelChoice(
-  catalog: BuiltinModelCatalog,
-  modelConfig: BuiltinAgentModelConfig
-): BuiltinModelChoice {
-  const configuredProvider = modelConfig.provider ?? `anthropic`
-  const preferredIdsByProvider: Record<string, Array<string>> = {
-    anthropic: [`claude-3-5-haiku-latest`, `claude-3-5-haiku-20241022`],
-    openai: [`gpt-4.1-nano`, `gpt-4o-mini`, `gpt-4.1-mini`],
-    'openai-codex': [`gpt-5.4-mini`, `gpt-5.1-codex-mini`],
-  }
-
-  for (const provider of [configuredProvider, `openai`, `anthropic`]) {
-    for (const id of preferredIdsByProvider[provider] ?? []) {
-      const choice = catalog.choices.find(
-        (candidate) => candidate.provider === provider && candidate.id === id
-      )
-      if (choice) return choice
-    }
-
-    const nonReasoningChoice = catalog.choices.find(
-      (candidate) =>
-        candidate.provider === provider && candidate.reasoning === false
-    )
-    if (nonReasoningChoice) return nonReasoningChoice
-  }
-
-  return (
-    catalog.choices.find(
-      (candidate) =>
-        candidate.provider === configuredProvider &&
-        candidate.id === String(modelConfig.model)
-    ) ?? catalog.defaultChoice
-  )
-}
-
 function createConfiguredTitleCall(
   catalog: BuiltinModelCatalog,
   modelConfig: BuiltinAgentModelConfig,
   logPrefix: string
 ): (prompt: string) => Promise<string> {
-  const choice = selectTitleModelChoice(catalog, modelConfig)
-
-  return async (prompt: string) => {
-    const model = getModel(
-      choice.provider,
-      choice.id as Parameters<typeof getModel>[1]
-    )
-    if (!model) {
-      throw new Error(
-        `unknown title model "${choice.id}" for provider "${choice.provider}"`
-      )
-    }
-
-    serverLog.info(
-      `${logPrefix} title generation using ${choice.provider}:${choice.id}`
-    )
-
-    const apiKey =
-      choice.provider === modelConfig.provider && modelConfig.getApiKey
-        ? await modelConfig.getApiKey(choice.provider)
-        : undefined
-    const res = await completeSimple(
-      model,
-      {
-        systemPrompt: TITLE_SYSTEM_PROMPT,
-        messages: [{ role: `user`, content: prompt, timestamp: Date.now() }],
-      },
-      {
-        maxTokens: choice.reasoning ? 1024 : 64,
-        ...(choice.reasoning && { reasoning: `low` as const }),
-        ...(apiKey && { apiKey }),
-      }
-    )
-    const text = res.content.find((block) => block.type === `text`)?.text
-    if (!text || text.trim().length === 0) {
-      const contentTypes =
-        res.content.map((block) => block.type).join(`,`) || `none`
-      throw new Error(
-        `empty LLM title response from ${choice.provider}:${choice.id} stopReason=${res.stopReason} errorMessage=${res.errorMessage ?? `none`} contentTypes=${contentTypes}`
-      )
-    }
-    return text
-  }
+  return (prompt: string) =>
+    completeWithLowCostModel({
+      catalog,
+      modelConfig,
+      log: (message) => serverLog.info(message),
+      logPrefix,
+      purpose: `title generation`,
+      systemPrompt: TITLE_SYSTEM_PROMPT,
+      prompt,
+      maxTokens: 64,
+    })
 }
 
 export async function generateTitle(
   userMessage: string,
-  llmCall: (prompt: string) => Promise<string> = defaultHaikuCall,
+  llmCall: (prompt: string) => Promise<string>,
   onFallback?: (reason: string) => void
 ): Promise<string> {
   try {
@@ -252,6 +162,7 @@ export function buildHortonSystemPrompt(
   workingDirectory: string,
   opts: {
     hasDocsSupport?: boolean
+    hasEventSourceTools?: boolean
     hasSkills?: boolean
     docsUrl?: string
     modelProvider?: string
@@ -259,13 +170,16 @@ export function buildHortonSystemPrompt(
   } = {}
 ): string {
   const docsTools = opts.hasDocsSupport
-    ? `\n- search_durable_agents_docs: hybrid search over the built-in Durable Agents docs index`
+    ? `\n- search_electric_agents_docs: hybrid search over the built-in Electric Agents docs index`
+    : ``
+  const eventSourceTools = opts.hasEventSourceTools
+    ? `\n- list_event_sources: list external webhook/event feeds you can subscribe to, including available buckets and parameters\n- subscribe_event_source: subscribe yourself to one of those feeds or buckets so matching future events wake you\n- list_event_source_subscriptions: list your active event source subscriptions\n- unsubscribe_event_source: remove one of your event source subscriptions by id`
     : ``
   const skillsTools = opts.hasSkills
     ? `\n- use_skill: load a skill (knowledge, instructions, or a tutorial) into your context to help with the user's request\n- remove_skill: unload a skill from context when you're done with it`
     : ``
   const docsGuidance = opts.hasDocsSupport
-    ? `\n- For ANY question about Electric Agents, Durable Agents, or this framework, ALWAYS use search_durable_agents_docs FIRST. Do not use web_search or fetch_url for Electric Agents topics unless the docs search returns no useful results.\n- The search tool returns chunk content directly — you do not need to read the source files.\n- Use repo read/bash tools only for non-doc files or when you need to inspect exact implementation code in the workspace.`
+    ? `\n- For ANY question about Electric Agents or this framework, ALWAYS use search_electric_agents_docs FIRST. Do not use web_search or fetch_url for Electric Agents topics unless the docs search returns no useful results.\n- The search tool returns chunk content directly — you do not need to read the source files.\n- Use repo read/bash tools only for non-doc files or when you need to inspect exact implementation code in the workspace.`
     : ``
   const skillsGuidance = opts.hasSkills
     ? `\n# Skills\nYou have access to skills — specialized knowledge and guided workflows you can load on demand. Your context includes a skills catalog listing what's available. When the user's request matches a skill's description or keywords, load it with use_skill.
@@ -287,7 +201,7 @@ Do NOT load a skill and then ignore its instructions. The skill is there because
 When a user is new or asks how to get started with Electric Agents, **don't assume a single path**. Present the options and let them choose:
 
 - **Learn the concepts first** → Explain what Electric Agents is, answer questions, point to docs.
-  Use search_durable_agents_docs to look up answers. Only load the quickstart skill if the user explicitly asks for a hands-on guided tutorial.
+  Use search_electric_agents_docs to look up answers. Only load the quickstart skill if the user explicitly asks for a hands-on guided tutorial.
 
 - **Hands-on guided tutorial** → Load the quickstart skill (or tell them to type \`/quickstart\`).
   This is a step-by-step build that takes them from zero to a running app.
@@ -297,12 +211,12 @@ When a user is new or asks how to get started with Electric Agents, **don't assu
   This sets up project structure and orients them in the codebase.
 
 - **Have a specific question?** → Answer it directly.
-  Use search_durable_agents_docs first, then fall back to fetch_url or general knowledge if needed.
+  Use search_electric_agents_docs first, then fall back to fetch_url or general knowledge if needed.
 
 Don't force onboarding. If someone just wants to chat or code, let them. When in doubt, ask what they'd like to do rather than picking a path for them.`
   const docsUrlGuidance = opts.docsUrl
     ? `\n# Electric Agents documentation
-- ${opts.hasDocsSupport ? `If search_durable_agents_docs is available, use it first (faster, hybrid search).` : `Use fetch_url to look up documentation pages.`}
+- ${opts.hasDocsSupport ? `If search_electric_agents_docs is available, use it first (faster, hybrid search).` : `Use fetch_url to look up documentation pages.`}
 - The Electric Agents docs site is at ${opts.docsUrl}
 - The docs site covers: Usage (entity definition, handlers, tools, state, spawning, coordination, waking, shared state, client integration, app setup), Reference (handler context, entity definitions, configurations, tools, state proxies, wake events, registries), Entities (Horton, Worker), and Patterns (Manager-Worker, Pipeline, Map-Reduce, Dispatcher, Blackboard, Reactive Observers).
 - For general coding questions unrelated to Electric Agents, use web_search or your own knowledge.`
@@ -325,7 +239,8 @@ When a user opens with a greeting ("hi", "hello", "hey", etc.) or a broad statem
 - web_search: search the web
 - fetch_url: fetch and convert a URL to markdown
 - spawn_worker: dispatch a subagent for an isolated task
-${docsTools}${skillsTools}
+- send: send a message to an Electric Agent/entity. To schedule future work for yourself, call send with self: true and afterMs.
+${eventSourceTools}${docsTools}${skillsTools}
 
 # Working with files
 - Prefer edit over write when modifying existing files.
@@ -359,6 +274,12 @@ Working directory: ${workingDirectory}
 The current year is ${new Date().getFullYear()}.`
 }
 
+function getToolName(tool: unknown): string | null {
+  if (typeof tool !== `object` || tool === null) return null
+  const name = (tool as { name?: unknown }).name
+  return typeof name === `string` ? name : null
+}
+
 export function createHortonTools(
   workingDirectory: string,
   ctx: HandlerContext,
@@ -366,6 +287,8 @@ export function createHortonTools(
   opts: {
     docsSearchTool?: AgentTool
     modelConfig?: ReturnType<typeof resolveBuiltinModelConfig>
+    modelCatalog?: BuiltinModelCatalog
+    logPrefix?: string
   } = {}
 ): Array<AgentTool> {
   return [
@@ -374,8 +297,18 @@ export function createHortonTools(
     createWriteTool(workingDirectory, readSet),
     createEditTool(workingDirectory, readSet),
     braveSearchTool,
-    fetchUrlTool,
+    ...(opts.modelCatalog && opts.modelConfig
+      ? [
+          createFetchUrlTool({
+            catalog: opts.modelCatalog,
+            modelConfig: opts.modelConfig,
+            log: (message) => serverLog.info(message),
+            logPrefix: opts.logPrefix ?? `[horton]`,
+          }),
+        ]
+      : [fetchUrlTool]),
     createSpawnWorkerTool(ctx, opts.modelConfig),
+    createSendTool(ctx.send, { selfEntityUrl: ctx.entityUrl }),
     ...(opts.docsSearchTool ? [opts.docsSearchTool] : []),
   ]
 }
@@ -393,17 +326,17 @@ function payloadToTitleText(payload: unknown): string {
 export async function extractFirstUserMessage(
   ctx: HandlerContext
 ): Promise<string | null> {
-  const firstMessage = await queryOnce((q) =>
-    q
-      .from({ inbox: ctx.db.collections.inbox })
-      .where(({ inbox }) => not(eq(inbox.from, `system`)))
-      .orderBy(({ inbox }) => inbox._seq, `asc`)
-      .findOne()
-  )
+  const firstMessage = ctx.db.collections.inbox.toArray
+    .filter((message) => message.from !== `system`)
+    .sort((left, right) => messageSeq(left) - messageSeq(right))[0]
 
   if (!firstMessage) return null
-  const text = payloadToTitleText((firstMessage as MessageReceived).payload)
+  const text = payloadToTitleText(firstMessage.payload)
   return text.length > 0 ? text : null
+}
+
+function messageSeq(message: { _seq?: unknown }): number {
+  return typeof message._seq === `number` ? message._seq : -1
 }
 
 type HortonDocsSupport = NonNullable<ReturnType<typeof createHortonDocsSupport>>
@@ -465,11 +398,17 @@ function createAssistantHandler(options: {
       ...createHortonTools(effectiveCwd, ctx, readSet, {
         docsSearchTool,
         modelConfig,
+        modelCatalog,
+        logPrefix: `[horton ${ctx.entityUrl}]`,
       }),
       ...(skillsRegistry && skillsRegistry.catalog.size > 0
         ? createSkillTools(skillsRegistry, ctx)
         : []),
+      ...mcp.tools(),
     ]
+    const hasEventSourceTools = tools.some(
+      (tool) => getToolName(tool) === `list_event_sources`
+    )
 
     const titlePromise =
       ctx.firstWake && !ctx.tags.title
@@ -602,9 +541,13 @@ function createAssistantHandler(options: {
         docsUrl,
         modelProvider: modelConfig.provider,
         modelId: String(modelConfig.model),
+        hasEventSourceTools,
       }),
       ...modelConfig,
-      tools,
+      // mcp.tools() inserts sentinel objects that the runtime's
+      // composeToolsWithProviders resolves at wake time. The static type of
+      // useAgent doesn't model this, so cast at the boundary.
+      tools: tools as AgentTool[],
       ...(streamFn && { streamFn }),
     })
     await ctx.agent.run()
@@ -632,9 +575,13 @@ export function registerHorton(
 
   if (process.env.BRAVE_SEARCH_API_KEY) {
     serverLog.info(`[horton] Web search: using Brave Search API`)
+  } else if (process.env.ANTHROPIC_API_KEY) {
+    serverLog.warn(
+      `[horton] BRAVE_SEARCH_API_KEY not set — web search will fall back to Anthropic built-in search`
+    )
   } else {
     serverLog.warn(
-      `[horton] BRAVE_SEARCH_API_KEY not set — web search will fall back to Anthropic built-in search (uses your ANTHROPIC_API_KEY)`
+      `[horton] BRAVE_SEARCH_API_KEY and ANTHROPIC_API_KEY not set — web search tool will be unavailable`
     )
   }
 
@@ -681,14 +628,5 @@ export function registerHorton(
     handler: assistantHandler,
   })
 
-  const typeNames = [`horton`]
-  if (streamFn) {
-    registry.define(`chat`, {
-      description: `Compatibility alias for the built-in assistant type.`,
-      handler: assistantHandler,
-    })
-    typeNames.push(`chat`)
-  }
-
-  return typeNames
+  return [`horton`]
 }

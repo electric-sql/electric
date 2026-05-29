@@ -3,6 +3,46 @@ import { createRuntimeServerClient } from '../src/runtime-server-client'
 import { createHandlerContext } from '../src/context-factory'
 
 describe(`runtime-server-client.setTag`, () => {
+  it(`ensureStream creates an exact stream path with the requested content type`, async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = []
+    const fakeFetch = vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push({ url, init })
+      return new Response(null, { status: 201 })
+    }) as unknown as typeof fetch
+
+    const client = createRuntimeServerClient({
+      baseUrl: `http://test.example/t/tenant-a/v1`,
+      fetch: fakeFetch,
+    })
+
+    await expect(
+      client.ensureStream(`/_webhooks/repo/prs/123`, `application/json`)
+    ).resolves.toBe(`/_webhooks/repo/prs/123`)
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0]!.url).toBe(
+      `http://test.example/t/tenant-a/v1/_webhooks/repo/prs/123`
+    )
+    expect(calls[0]!.init?.method).toBe(`PUT`)
+    expect(new Headers(calls[0]!.init?.headers).get(`content-type`)).toBe(
+      `application/json`
+    )
+  })
+
+  it(`ensureStream treats existing streams as success`, async () => {
+    const fakeFetch = vi.fn(
+      async () => new Response(`already exists`, { status: 409 })
+    ) as unknown as typeof fetch
+    const client = createRuntimeServerClient({
+      baseUrl: `http://test.example`,
+      fetch: fakeFetch,
+    })
+
+    await expect(client.ensureStream(`/_webhooks/repo`)).resolves.toBe(
+      `/_webhooks/repo`
+    )
+  })
+
   it(`sends POST with bearer token and tag body`, async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = []
     const fakeFetch = vi.fn(async (url: string, init?: RequestInit) => {
@@ -21,18 +61,43 @@ describe(`runtime-server-client.setTag`, () => {
     await client.setTag(`/horton/abc`, `title`, `Refactor auth`, `wt-1234`)
 
     expect(calls).toHaveLength(1)
-    expect(calls[0]!.url).toBe(`http://test.example/horton/abc/tags/title`)
+    expect(calls[0]!.url).toBe(
+      `http://test.example/_electric/entities/horton/abc/tags/title`
+    )
     expect(calls[0]!.init?.method).toBe(`POST`)
-    const headers = calls[0]!.init?.headers as Record<string, string>
-    expect(headers[`authorization`] ?? headers[`Authorization`]).toBe(
-      `Bearer wt-1234`
-    )
-    expect(headers[`content-type`] ?? headers[`Content-Type`]).toBe(
-      `application/json`
-    )
+    const headers = new Headers(calls[0]!.init?.headers)
+    expect(headers.get(`authorization`)).toBe(`Bearer wt-1234`)
+    expect(headers.get(`content-type`)).toBe(`application/json`)
     expect(JSON.parse(calls[0]!.init!.body as string)).toEqual({
       value: `Refactor auth`,
     })
+  })
+
+  it(`can keep server authorization while sending write token separately`, async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = []
+    const fakeFetch = vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push({ url, init })
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'content-type': `application/json` },
+      })
+    }) as unknown as typeof fetch
+
+    const client = createRuntimeServerClient({
+      baseUrl: `http://test.example/t/tenant-a/v1`,
+      fetch: fakeFetch,
+      headers: { authorization: `Bearer tenant-token` },
+      writeTokenHeader: `electric-claim-token`,
+    })
+
+    await client.setTag(`/horton/abc`, `title`, `Refactor auth`, `wt-1234`)
+
+    expect(calls[0]!.url).toBe(
+      `http://test.example/t/tenant-a/v1/_electric/entities/horton/abc/tags/title`
+    )
+    const headers = new Headers(calls[0]!.init?.headers)
+    expect(headers.get(`authorization`)).toBe(`Bearer tenant-token`)
+    expect(headers.get(`electric-claim-token`)).toBe(`wt-1234`)
   })
 
   it(`throws when the server returns a non-2xx response`, async () => {
@@ -50,8 +115,120 @@ describe(`runtime-server-client.setTag`, () => {
   })
 })
 
+describe(`runtime-server-client event sources`, () => {
+  it(`lists event sources from the runtime server`, async () => {
+    const fakeFetch = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            eventSources: [
+              {
+                sourceKey: `github-repo`,
+                sourceType: `webhook`,
+                endpointKey: `github-repo`,
+                status: `active`,
+                label: `GitHub repository`,
+                agentVisible: true,
+                buckets: [],
+                revision: 1,
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: { 'content-type': `application/json` },
+          }
+        )
+    ) as unknown as typeof fetch
+    const client = createRuntimeServerClient({
+      baseUrl: `http://test.example/t/tenant-a/v1`,
+      fetch: fakeFetch,
+    })
+
+    await expect(client.listEventSources()).resolves.toMatchObject([
+      { sourceKey: `github-repo` },
+    ])
+    expect(fakeFetch).toHaveBeenCalledWith(
+      `http://test.example/t/tenant-a/v1/_electric/event-sources`,
+      expect.objectContaining({ method: `GET` })
+    )
+  })
+
+  it(`subscribes to event sources with a deterministic id and JSON body`, async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = []
+    const subscription = {
+      id: `github-repo-pull-request-1kwxl2f`,
+      entityUrl: `/coder/session-1`,
+      sourceKey: `github-repo`,
+      bucketKey: `pull_request`,
+      params: { number: 123 },
+      filterApplied: false,
+      contractRevision: 1,
+      sourceUrl: `/_webhooks/github-repo/prs/123`,
+      sourceType: `webhook`,
+      manifestKey: `event-source:github-repo-pull-request-1kwxl2f`,
+      lifetime: { kind: `until_entity_stopped` },
+      createdBy: `tool`,
+      createdAt: `2026-05-23T00:00:00.000Z`,
+    }
+    const fakeFetch = vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push({ url, init })
+      return new Response(JSON.stringify({ txid: `tx-1`, subscription }), {
+        status: 200,
+        headers: { 'content-type': `application/json` },
+      })
+    }) as unknown as typeof fetch
+    const client = createRuntimeServerClient({
+      baseUrl: `http://test.example`,
+      fetch: fakeFetch,
+    })
+
+    await expect(
+      client.subscribeToEventSource({
+        entityUrl: `/coder/session-1`,
+        sourceKey: `github-repo`,
+        bucketKey: `pull_request`,
+        params: { number: 123 },
+        reason: `Watch PR feedback`,
+      })
+    ).resolves.toEqual({ txid: `tx-1`, subscription })
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0]!.url).toMatch(
+      /^http:\/\/test\.example\/_electric\/entities\/coder\/session-1\/event-source-subscriptions\/github-repo-pull_request-/
+    )
+    expect(calls[0]!.init?.method).toBe(`PUT`)
+    expect(JSON.parse(calls[0]!.init!.body as string)).toEqual({
+      sourceKey: `github-repo`,
+      bucketKey: `pull_request`,
+      params: { number: 123 },
+      reason: `Watch PR feedback`,
+    })
+  })
+
+  it(`surfaces event source subscription failures`, async () => {
+    const fakeFetch = vi.fn(
+      async () =>
+        new Response(`invalid params`, {
+          status: 400,
+        })
+    ) as unknown as typeof fetch
+    const client = createRuntimeServerClient({
+      baseUrl: `http://test.example`,
+      fetch: fakeFetch,
+    })
+
+    await expect(
+      client.subscribeToEventSource({
+        entityUrl: `/coder/session-1`,
+        sourceKey: `github-repo`,
+      })
+    ).rejects.toThrow(/subscribeToEventSource failed \(400\): invalid params/)
+  })
+})
+
 describe(`createHandlerContext: tags + tag mutations`, () => {
-  it(`exposes tags snapshot and forwards setTag/removeTag`, async () => {
+  it(`exposes tags snapshot and forwards setTag/deleteTag`, async () => {
     const calls: Array<Record<string, unknown>> = []
     const { ctx } = createHandlerContext({
       entityUrl: `/horton/x`,
@@ -68,21 +245,21 @@ describe(`createHandlerContext: tags + tag mutations`, () => {
       events: [],
       writeEvent: () => {},
       wakeSession: {} as any,
-      wakeEvent: { type: `message_received`, payload: `hi` } as any,
+      wakeEvent: { type: `inbox`, payload: `hi` } as any,
       doObserve: () => Promise.resolve({} as any),
       doSpawn: () => Promise.resolve({} as any),
       doMkdb: () => ({}) as any,
-      executeSend: () => {},
+      executeSend: async () => ({ sent: true, targetUrl: `/horton/x` }),
       doSetTag: async (key, value) => {
         calls.push({ key, value })
       },
-      doRemoveTag: async (key) => {
+      doDeleteTag: async (key) => {
         calls.push({ key, removed: true })
       },
     })
     expect(ctx.tags).toEqual({ title: `existing` })
     await ctx.setTag(`title`, `new`)
-    await ctx.removeTag(`title`)
+    await ctx.deleteTag(`title`)
     expect(calls).toEqual([
       { key: `title`, value: `new` },
       { key: `title`, removed: true },

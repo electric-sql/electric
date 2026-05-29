@@ -1,13 +1,21 @@
-import { useCallback, useState } from 'react'
-import { Sparkles } from 'lucide-react'
-import { Button, Field, Input, Stack, Text } from '../ui'
+import { useCallback, useRef, useState } from 'react'
+import { Eye, EyeOff, Sparkles } from 'lucide-react'
+import { Button, Field, Icon, IconButton, Input, Stack, Text } from '../ui'
+import {
+  SettingsActions,
+  SettingsPanel,
+  SettingsRow,
+} from './settings/SettingsScreen'
 import styles from './ApiKeysForm.module.css'
 
 export type ApiKeysFormValues = {
   anthropic: string
   openai: string
+  deepseek: string
   brave: string
 }
+
+type ApiKeyFieldId = keyof ApiKeysFormValues
 
 interface ApiKeysFormProps {
   initial: ApiKeysFormValues
@@ -28,13 +36,25 @@ interface ApiKeysFormProps {
   savingLabel?: string
   /** Auto-focus the Anthropic field on mount. Defaults to `false`. */
   autoFocus?: boolean
+  /** Use Settings rows instead of the compact onboarding form layout. */
+  layout?: `form` | `settings`
+  showModelKeys?: boolean
+  showBrave?: boolean
+  /**
+   * When `true`, persist on field blur (after the user has typed)
+   * instead of waiting for a Save click. Hides the explicit
+   * Save/Saving button row. Designed for the Credentials settings
+   * screen, where saves are cheap and a separate banner prompts the
+   * user to restart the local runtime to apply the changes. The
+   * onboarding wizard leaves this `false` so saves remain explicit.
+   */
+  autoSave?: boolean
 }
 
 /**
  * Shared API-keys form for the local Horton runtime. Used by:
  *
- *  - `ApiKeysModal` — the first-launch dialog that fires when no
- *    keys are saved yet.
+ *  - `OnboardingModal` — the first-launch wizard's API-keys step.
  *  - `GeneralPage` (Settings → General) — the always-on editor for
  *    revising keys after initial setup.
  *
@@ -53,78 +73,300 @@ export function ApiKeysForm({
   saveLabel = `Save`,
   savingLabel = `Saving…`,
   autoFocus = false,
+  layout = `form`,
+  showModelKeys = true,
+  showBrave = true,
+  autoSave = false,
 }: ApiKeysFormProps): React.ReactElement {
   const [anthropic, setAnthropic] = useState(initial.anthropic)
   const [openai, setOpenai] = useState(initial.openai)
+  const [deepseek, setDeepseek] = useState(initial.deepseek)
   const [brave, setBrave] = useState(initial.brave)
+  const [visibleKeys, setVisibleKeys] = useState<
+    Record<ApiKeyFieldId, boolean>
+  >({
+    anthropic: false,
+    openai: false,
+    deepseek: false,
+    brave: false,
+  })
   const [saving, setSaving] = useState(false)
+  // Tracks the last set of values we've actually persisted, so an
+  // auto-save fires only when the user has changed a field's value.
+  // We keep this in a ref to avoid re-renders on every save and to
+  // guarantee the latest snapshot is visible inside callback closures.
+  const persistedRef = useRef(initial)
+  // Set per-field to `true` on `onChange` so blur of a field the user
+  // never typed in (e.g. they tabbed past a pre-filled suggestion)
+  // does not silently persist values they never approved.
+  const editedRef = useRef<Record<ApiKeyFieldId, boolean>>({
+    anthropic: false,
+    openai: false,
+    deepseek: false,
+    brave: false,
+  })
+
   const canSave =
-    anthropic.trim().length > 0 ||
-    openai.trim().length > 0 ||
-    brave.trim().length > 0
+    (showModelKeys &&
+      (anthropic.trim().length > 0 ||
+        openai.trim().length > 0 ||
+        deepseek.trim().length > 0)) ||
+    (showBrave && brave.trim().length > 0)
+
+  const handleSave = useCallback(async (): Promise<void> => {
+    if (!canSave || saving) return
+    setSaving(true)
+    try {
+      await onSave({ anthropic, openai, deepseek, brave })
+      persistedRef.current = { anthropic, openai, deepseek, brave }
+    } finally {
+      setSaving(false)
+    }
+  }, [anthropic, openai, deepseek, brave, canSave, saving, onSave])
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault()
-      if (!canSave || saving) return
+      await handleSave()
+    },
+    [handleSave]
+  )
+
+  const persistIfDirty = useCallback(
+    async (field: ApiKeyFieldId, values: ApiKeysFormValues): Promise<void> => {
+      if (!editedRef.current[field]) return
+      if (values[field] === persistedRef.current[field]) {
+        editedRef.current[field] = false
+        return
+      }
       setSaving(true)
       try {
-        await onSave({ anthropic, openai, brave })
+        await onSave(values)
+        persistedRef.current = values
+        editedRef.current[field] = false
       } finally {
         setSaving(false)
       }
     },
-    [anthropic, openai, brave, canSave, saving, onSave]
+    [onSave]
   )
+
+  const handleAutoSaveBlur = useCallback(
+    (field: ApiKeyFieldId) => {
+      if (!autoSave) return
+      void persistIfDirty(field, { anthropic, openai, deepseek, brave })
+    },
+    [autoSave, anthropic, openai, deepseek, brave, persistIfDirty]
+  )
+
+  const wrapOnChange = useCallback(
+    (field: ApiKeyFieldId, setter: (value: string) => void) =>
+      (value: string) => {
+        if (autoSave) editedRef.current[field] = true
+        setter(value)
+      },
+    [autoSave]
+  )
+
+  const toggleVisible = useCallback((field: ApiKeyFieldId) => {
+    setVisibleKeys((current) => ({ ...current, [field]: !current[field] }))
+  }, [])
+
+  if (layout === `settings`) {
+    const showActions = !autoSave || Boolean(onSecondary && secondaryLabel)
+    // We deliberately render a fragment (rather than a `<form>` wrapper)
+    // so rows in the API-keys block are direct DOM children of the
+    // surrounding `<SettingsSection>`'s card. Wrapping them in a form
+    // — even with `display: contents` — would make `.row:first-child`
+    // match the wrapper's first row instead of the section's first
+    // row, breaking the dividers between rows from different
+    // components stacked in the same section (e.g. the Codex row and
+    // the Anthropic row below it).
+    return (
+      <>
+        {showSuggestionHint && (
+          <SettingsPanel>
+            <div className={styles.hint}>
+              <Icon icon={Sparkles} size={2} />
+              <Text size={1} tone="muted">
+                {autoSave
+                  ? `Pre-filled from your environment. Edit a field to save it.`
+                  : `Pre-filled from your environment. Click save to persist them.`}
+              </Text>
+            </div>
+          </SettingsPanel>
+        )}
+        {showModelKeys && (
+          <>
+            <SettingsRow
+              label="Anthropic API"
+              description="Used for Claude models. Looks like sk-ant-…"
+              splitLayout
+              control={
+                <ApiKeyInput
+                  field="anthropic"
+                  placeholder="sk-ant-…"
+                  value={anthropic}
+                  visible={visibleKeys.anthropic}
+                  onChange={wrapOnChange(`anthropic`, setAnthropic)}
+                  onBlur={() => handleAutoSaveBlur(`anthropic`)}
+                  onToggleVisible={toggleVisible}
+                  autoFocus={autoFocus}
+                />
+              }
+            />
+            <SettingsRow
+              label="OpenAI API"
+              description="Used for GPT models. Looks like sk-…"
+              splitLayout
+              control={
+                <ApiKeyInput
+                  field="openai"
+                  placeholder="sk-…"
+                  value={openai}
+                  visible={visibleKeys.openai}
+                  onChange={wrapOnChange(`openai`, setOpenai)}
+                  onBlur={() => handleAutoSaveBlur(`openai`)}
+                  onToggleVisible={toggleVisible}
+                />
+              }
+            />
+            <SettingsRow
+              label="DeepSeek API"
+              description="Used for DeepSeek models. Looks like sk-…"
+              splitLayout
+              control={
+                <ApiKeyInput
+                  field="deepseek"
+                  placeholder="sk-…"
+                  value={deepseek}
+                  visible={visibleKeys.deepseek}
+                  onChange={wrapOnChange(`deepseek`, setDeepseek)}
+                  onBlur={() => handleAutoSaveBlur(`deepseek`)}
+                  onToggleVisible={toggleVisible}
+                />
+              }
+            />
+          </>
+        )}
+        {showBrave && (
+          <SettingsRow
+            label="Brave Search API"
+            description="Powers the web-search tool. Without it, search falls back to Anthropic's built-in search."
+            splitLayout
+            control={
+              <ApiKeyInput
+                field="brave"
+                placeholder="BSA…"
+                value={brave}
+                visible={visibleKeys.brave}
+                onChange={wrapOnChange(`brave`, setBrave)}
+                onBlur={() => handleAutoSaveBlur(`brave`)}
+                onToggleVisible={toggleVisible}
+              />
+            }
+          />
+        )}
+        {showActions && (
+          <SettingsActions separator>
+            {onSecondary && secondaryLabel && (
+              <Button
+                type="button"
+                variant="soft"
+                tone="neutral"
+                onClick={onSecondary}
+                disabled={saving}
+              >
+                {secondaryLabel}
+              </Button>
+            )}
+            {!autoSave && (
+              <Button
+                type="button"
+                disabled={!canSave || saving}
+                onClick={() => {
+                  void handleSave()
+                }}
+              >
+                {saving ? savingLabel : saveLabel}
+              </Button>
+            )}
+          </SettingsActions>
+        )}
+      </>
+    )
+  }
 
   return (
     <form onSubmit={handleSubmit} className={styles.form}>
       {showSuggestionHint && (
         <div className={styles.hint}>
-          <Sparkles size={14} />
+          <Icon icon={Sparkles} size={2} />
           <Text size={1} tone="muted">
             Pre-filled from your environment. Click save to persist them.
           </Text>
         </div>
       )}
       <Stack direction="column" gap={3}>
-        <Field
-          label="Anthropic API key"
-          description="Used for Claude models. Looks like sk-ant-…"
-        >
-          <Input
-            type="password"
-            placeholder="sk-ant-…"
-            value={anthropic}
-            onChange={(e) => setAnthropic(e.target.value)}
-            size={2}
-            autoFocus={autoFocus}
-          />
-        </Field>
-        <Field
-          label="OpenAI API key"
-          description="Used for GPT models. Looks like sk-…"
-        >
-          <Input
-            type="password"
-            placeholder="sk-…"
-            value={openai}
-            onChange={(e) => setOpenai(e.target.value)}
-            size={2}
-          />
-        </Field>
-        <Field
-          label="Brave Search API key (optional)"
-          description="Powers the web-search tool. Without it, search falls back to Anthropic's built-in search."
-        >
-          <Input
-            type="password"
-            placeholder="BSA…"
-            value={brave}
-            onChange={(e) => setBrave(e.target.value)}
-            size={2}
-          />
-        </Field>
+        {showModelKeys && (
+          <>
+            <Field
+              label="Anthropic API"
+              description="Used for Claude models. Looks like sk-ant-…"
+            >
+              <ApiKeyInput
+                field="anthropic"
+                placeholder="sk-ant-…"
+                value={anthropic}
+                visible={visibleKeys.anthropic}
+                onChange={setAnthropic}
+                onToggleVisible={toggleVisible}
+                autoFocus={autoFocus}
+              />
+            </Field>
+            <Field
+              label="OpenAI API"
+              description="Used for GPT models. Looks like sk-…"
+            >
+              <ApiKeyInput
+                field="openai"
+                placeholder="sk-…"
+                value={openai}
+                visible={visibleKeys.openai}
+                onChange={setOpenai}
+                onToggleVisible={toggleVisible}
+              />
+            </Field>
+            <Field
+              label="DeepSeek API (optional)"
+              description="Used for DeepSeek models. Looks like sk-…"
+            >
+              <ApiKeyInput
+                field="deepseek"
+                placeholder="sk-…"
+                value={deepseek}
+                visible={visibleKeys.deepseek}
+                onChange={setDeepseek}
+                onToggleVisible={toggleVisible}
+              />
+            </Field>
+          </>
+        )}
+        {showBrave && (
+          <Field
+            label="Brave Search API (optional)"
+            description="Powers the web-search tool. Without it, search falls back to Anthropic's built-in search."
+          >
+            <ApiKeyInput
+              field="brave"
+              placeholder="BSA…"
+              value={brave}
+              visible={visibleKeys.brave}
+              onChange={setBrave}
+              onToggleVisible={toggleVisible}
+            />
+          </Field>
+        )}
       </Stack>
       <Stack gap={2} justify="end" className={styles.actions}>
         {onSecondary && secondaryLabel && (
@@ -143,5 +385,55 @@ export function ApiKeysForm({
         </Button>
       </Stack>
     </form>
+  )
+}
+
+function ApiKeyInput({
+  field,
+  placeholder,
+  value,
+  visible,
+  onChange,
+  onBlur,
+  onToggleVisible,
+  autoFocus = false,
+}: {
+  field: ApiKeyFieldId
+  placeholder: string
+  value: string
+  visible: boolean
+  onChange: (value: string) => void
+  onBlur?: () => void
+  onToggleVisible: (field: ApiKeyFieldId) => void
+  autoFocus?: boolean
+}): React.ReactElement {
+  const label = visible ? `Hide API key` : `Show API key`
+
+  return (
+    <div className={styles.secretInput}>
+      <Input
+        type={visible ? `text` : `password`}
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={onBlur}
+        size={2}
+        autoFocus={autoFocus}
+        mono
+        className={styles.secretInputControl}
+      />
+      <IconButton
+        type="button"
+        variant="ghost"
+        tone="neutral"
+        size={1}
+        aria-label={label}
+        title={label}
+        className={styles.secretInputToggle}
+        onClick={() => onToggleVisible(field)}
+      >
+        <Icon icon={visible ? EyeOff : Eye} size={2} />
+      </IconButton>
+    </div>
   )
 }

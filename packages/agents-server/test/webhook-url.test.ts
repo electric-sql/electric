@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { rewriteLoopbackWebhookUrl } from '../src/webhook-url'
+import { rewriteLoopbackWebhookUrl } from '../src/utils/webhook-url'
 
 describe(`rewriteLoopbackWebhookUrl`, () => {
   afterEach(() => {

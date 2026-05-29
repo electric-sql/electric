@@ -26,3 +26,35 @@ body {
   height: 100%;
   min-height: 100vh;
 }
+
+/* Desktop builds should feel like native app chrome: labels, buttons,
+ * sidebars, and headers are not text-selectable unless a component
+ * explicitly opts back into text selection. The static browser build
+ * deliberately keeps normal web selection behaviour. */
+html[data-electric-desktop='true'],
+html[data-electric-desktop='true'] body {
+  background: transparent;
+}
+
+html[data-electric-desktop='true'] body {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+html[data-electric-desktop='true'][data-theme='light'] {
+  --ds-chrome-bg: color-mix(in oklab, var(--ds-bg-subtle) 72%, transparent);
+}
+
+html[data-electric-desktop='true'][data-theme='dark'] {
+  --ds-chrome-bg: color-mix(in oklab, var(--ds-bg-subtle) 78%, transparent);
+}
+
+html[data-electric-desktop='true'] input,
+html[data-electric-desktop='true'] textarea,
+html[data-electric-desktop='true'] select,
+html[data-electric-desktop='true']
+  [contenteditable]:not([contenteditable='false']),
+html[data-electric-desktop='true'] [data-desktop-selection-context] {
+  user-select: text;
+  -webkit-user-select: text;
+}

@@ -6,6 +6,7 @@ import {
   createElectricCliHandlers,
   createElectricProgram,
   formatQuickstartBackendStartedMessage,
+  getElectricCliEnv,
   resolveCommandPrefix,
   run,
 } from '../src/index'
@@ -29,9 +30,8 @@ const STARTED_ENV: StartedDevEnvironment = {
 }
 
 const STARTED_BUILTIN_ENV: StartedBuiltinAgentsEnvironment = {
-  port: 4448,
-  url: `http://localhost:4448`,
-  registeredBaseUrl: `http://localhost:4448`,
+  runnerId: `builtin-agents`,
+  url: `pull-wake:builtin-agents`,
   agentServerUrl: `http://localhost:4437`,
 }
 
@@ -69,6 +69,9 @@ function createHandlers() {
     observe: vi
       .fn<(url: string, options: { from?: string }) => Promise<void>>()
       .mockResolvedValue(undefined),
+    view: vi
+      .fn<(url: string, options: { from?: string }) => Promise<void>>()
+      .mockResolvedValue(undefined),
     inspect: vi
       .fn<(url: string) => Promise<void>>()
       .mockResolvedValue(undefined),
@@ -79,6 +82,15 @@ function createHandlers() {
           status?: string
           parent?: string
         }) => Promise<void>
+      >()
+      .mockResolvedValue(undefined),
+    signal: vi
+      .fn<
+        (
+          url: string,
+          signal: string,
+          options: { reason?: string; payload?: string }
+        ) => Promise<void>
       >()
       .mockResolvedValue(undefined),
     kill: vi.fn<(url: string) => Promise<void>>().mockResolvedValue(undefined),
@@ -120,6 +132,22 @@ async function parse(argv: Array<string>, handlers = createHandlers()) {
 }
 
 describe(`createElectricProgram`, () => {
+  it(`adds an optional principal header from the environment`, () => {
+    const env = getElectricCliEnv({
+      ELECTRIC_AGENTS_URL: `https://agents.example.test`,
+      ELECTRIC_AGENTS_IDENTITY: `tester@example.com`,
+      ELECTRIC_AGENTS_PRINCIPAL: `service:svc-test`,
+      ELECTRIC_AGENTS_SERVER_HEADERS: JSON.stringify({
+        Authorization: `Bearer token`,
+      }),
+    })
+
+    expect(env.electricAgentsHeaders).toEqual({
+      authorization: `Bearer token`,
+      'electric-principal': `service:svc-test`,
+    })
+  })
+
   it(`formats the quickstart backend message in an ASCII box`, () => {
     const message = formatQuickstartBackendStartedMessage({
       commandPrefix: `electric agents`,
@@ -236,6 +264,37 @@ describe(`createElectricProgram`, () => {
     )
   })
 
+  it(`surfaces string error responses from entity listing`, async () => {
+    const fetchMock = vi.spyOn(globalThis, `fetch`).mockResolvedValue(
+      new Response(JSON.stringify({ error: `Missing electric-principal` }), {
+        status: 401,
+        headers: { 'content-type': `application/json` },
+      })
+    )
+
+    try {
+      await expect(createElectricCliHandlers(TEST_ENV).ps({})).rejects.toThrow(
+        `Missing electric-principal`
+      )
+    } finally {
+      fetchMock.mockRestore()
+    }
+  })
+
+  it(`falls back to HTTP status when an error response has no message`, async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, `fetch`)
+      .mockResolvedValue(new Response(``, { status: 503 }))
+
+    try {
+      await expect(createElectricCliHandlers(TEST_ENV).ps({})).rejects.toThrow(
+        `HTTP 503`
+      )
+    } finally {
+      fetchMock.mockRestore()
+    }
+  })
+
   it(`passes observe offsets through commander options`, async () => {
     const handlers = await parse([
       `agents`,
@@ -251,6 +310,74 @@ describe(`createElectricProgram`, () => {
         from: `42`,
       })
     )
+  })
+
+  it(`passes view offsets through commander options`, async () => {
+    const handlers = await parse([
+      `agents`,
+      `view`,
+      `/chat/test`,
+      `--from`,
+      `42`,
+    ])
+
+    expect(handlers.view).toHaveBeenCalledWith(
+      `/chat/test`,
+      expect.objectContaining({
+        from: `42`,
+      })
+    )
+  })
+
+  it(`passes signal arguments and options through commander`, async () => {
+    const handlers = await parse([
+      `agents`,
+      `signal`,
+      `/chat/test`,
+      `SIGINT`,
+      `--reason`,
+      `stop current run`,
+      `--payload`,
+      `{"source":"test"}`,
+    ])
+
+    expect(handlers.signal).toHaveBeenCalledWith(
+      `/chat/test`,
+      `SIGINT`,
+      expect.objectContaining({
+        reason: `stop current run`,
+        payload: `{"source":"test"}`,
+      })
+    )
+  })
+
+  it(`sends signal requests to the entity signal endpoint`, async () => {
+    const fetchMock = vi.spyOn(globalThis, `fetch`).mockResolvedValue(
+      new Response(JSON.stringify({ txid: 123 }), {
+        status: 200,
+        headers: { 'content-type': `application/json` },
+      })
+    )
+
+    try {
+      await createElectricCliHandlers(TEST_ENV).signal(`/chat/test`, `SIGUSR`, {
+        reason: `custom`,
+        payload: `{"ok":true}`,
+      })
+      expect(fetchMock).toHaveBeenCalledWith(
+        `http://localhost:4437/_electric/entities/chat/test/signal`,
+        expect.objectContaining({
+          method: `POST`,
+          body: JSON.stringify({
+            signal: `SIGUSR`,
+            reason: `custom`,
+            payload: { ok: true },
+          }),
+        })
+      )
+    } finally {
+      fetchMock.mockRestore()
+    }
   })
 
   it(`dispatches start without anthropic options`, async () => {

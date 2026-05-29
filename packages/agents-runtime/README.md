@@ -115,7 +115,7 @@ defineEntity(`pr-reviewer`, {
       })
     }
 
-    if (wake.type === `message_received`) {
+    if (wake.type === `inbox`) {
       ctx.useAgent({
         systemPrompt: `Review pull requests carefully and concisely.`,
         model: `claude-sonnet-4-5-20250929`,
@@ -248,6 +248,32 @@ Main methods:
 - `runtime.onEnter(req, res)` — Node HTTP adapter for webhook delivery
 - `runtime.handleRequest(request)` — fetch-native handler
 - `runtime.drainWakes()` — wait for in-flight wakes to settle
+
+## Entity Signals
+
+Agents can be controlled through the server lifecycle endpoint:
+
+```http
+POST /_electric/entities/:type/:instanceId/signal
+```
+
+The JSON body is `{ "signal": "SIGINT", "reason": "...", "payload": ... }`.
+The same API is exposed by the CLI:
+
+```bash
+electric agents signal /horton/onboarding SIGINT --reason "stop current run"
+electric agents kill /horton/onboarding
+```
+
+Signal behavior:
+
+- `SIGINT` aborts the active handler invocation and leaves the entity state unchanged.
+- Non-agent handlers can observe this cancellation through `ctx.signal` and pass it to cancellable work such as `fetch` or subprocesses.
+- `SIGSTOP` pauses the entity. New messages wake it again, but already pending work is not processed while paused.
+- `SIGCONT` resumes a paused entity.
+- `SIGHUP`, `SIGTERM`, and `SIGUSR` are delivered to `ctx.onSignal(...)` while the current wake is active.
+- `SIGTERM` transitions idle or paused entities to `stopped`; running entities move to `stopping` until runtime cleanup finishes.
+- `SIGKILL` immediately moves the entity to `killed`, unregisters wakes, and closes the entity streams.
 
 ## Built-in agents
 

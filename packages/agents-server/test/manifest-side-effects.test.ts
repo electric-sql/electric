@@ -1,0 +1,113 @@
+import { describe, expect, it } from 'vitest'
+import { buildManifestWakeRegistration } from '../src/manifest-side-effects'
+
+describe(`manifest side effects`, () => {
+  it(`uses sourceRef for entity manifest wakes when config has no entityUrl`, () => {
+    const registration = buildManifestWakeRegistration(
+      `/parent/p1`,
+      {
+        kind: `source`,
+        sourceType: `entity`,
+        sourceRef: `/worker/w1`,
+        wake: `runFinished`,
+      },
+      `source:entity:/worker/w1`
+    )
+
+    expect(registration).toMatchObject({
+      subscriberUrl: `/parent/p1`,
+      sourceUrl: `/worker/w1`,
+      condition: `runFinished`,
+      oneShot: false,
+      manifestKey: `source:entity:/worker/w1`,
+    })
+  })
+
+  it(`accepts object-form runFinished manifest wakes`, () => {
+    const registration = buildManifestWakeRegistration(
+      `/parent/p1`,
+      {
+        kind: `source`,
+        sourceType: `entity`,
+        sourceRef: `/worker/w1`,
+        wake: { on: `runFinished`, includeResponse: false },
+      },
+      `source:entity:/worker/w1`
+    )
+
+    expect(registration).toMatchObject({
+      subscriberUrl: `/parent/p1`,
+      sourceUrl: `/worker/w1`,
+      condition: `runFinished`,
+      oneShot: false,
+      includeResponse: false,
+      manifestKey: `source:entity:/worker/w1`,
+    })
+  })
+
+  it(`builds webhook manifest wakes from the configured stream URL`, () => {
+    const registration = buildManifestWakeRegistration(
+      `/webhook-smoke/demo`,
+      {
+        kind: `source`,
+        sourceType: `webhook`,
+        sourceRef: `my-testing-endpoint`,
+        config: {
+          endpointKey: `my-testing-endpoint`,
+          streamUrl: `/_webhooks/my-testing-endpoint`,
+        },
+        wake: {
+          on: `change`,
+          collections: [`webhook_event`],
+          ops: [`insert`],
+        },
+      },
+      `source:webhook:my-testing-endpoint`
+    )
+
+    expect(registration).toMatchObject({
+      subscriberUrl: `/webhook-smoke/demo`,
+      sourceUrl: `/_webhooks/my-testing-endpoint`,
+      condition: {
+        on: `change`,
+        collections: [`webhook_event`],
+        ops: [`insert`],
+      },
+      oneShot: false,
+      manifestKey: `source:webhook:my-testing-endpoint`,
+    })
+  })
+
+  it(`derives bucketed webhook manifest wake URLs when stream URL is absent`, () => {
+    const registration = buildManifestWakeRegistration(
+      `/webhook-smoke/demo`,
+      {
+        kind: `source`,
+        sourceType: `webhook`,
+        sourceRef: `repo/prs/123`,
+        config: {
+          endpointKey: `repo`,
+          bucket: `prs/123`,
+        },
+        wake: {
+          on: `change`,
+          collections: [`webhook_event`],
+          ops: [`insert`],
+        },
+      },
+      `source:webhook:repo/prs/123`
+    )
+
+    expect(registration).toMatchObject({
+      subscriberUrl: `/webhook-smoke/demo`,
+      sourceUrl: `/_webhooks/repo/prs/123`,
+      condition: {
+        on: `change`,
+        collections: [`webhook_event`],
+        ops: [`insert`],
+      },
+      oneShot: false,
+      manifestKey: `source:webhook:repo/prs/123`,
+    })
+  })
+})

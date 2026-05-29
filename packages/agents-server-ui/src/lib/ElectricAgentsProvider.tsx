@@ -1,11 +1,29 @@
-import { createContext, useContext, useEffect, useRef, useState } from 'react'
-import { createCollection } from '@tanstack/react-db'
+import { createContext, useContext, useEffect, useMemo, useRef } from 'react'
+import { createCollection, createOptimisticAction } from '@tanstack/react-db'
 import { electricCollectionOptions } from '@tanstack/electric-db-collection'
-import { createOptimisticAction } from '@tanstack/db'
 import { z } from 'zod'
+import { appendPathToUrl } from '@electric-ax/agents-runtime/client'
 import type { ReactNode } from 'react'
+import { serverFetch } from './auth-fetch'
+import { entityApiUrl, entitySpawnApiUrl } from './entity-api'
 
-type EntityStatus = `spawning` | `running` | `idle` | `stopped`
+type EntityStatus =
+  | `spawning`
+  | `running`
+  | `idle`
+  | `paused`
+  | `stopping`
+  | `stopped`
+  | `killed`
+
+export type EntitySignal =
+  | `SIGINT`
+  | `SIGHUP`
+  | `SIGTERM`
+  | `SIGKILL`
+  | `SIGSTOP`
+  | `SIGCONT`
+  | `SIGUSR`
 
 // --- Schemas ---
 
@@ -13,7 +31,10 @@ const ENTITY_STATUSES: [EntityStatus, ...Array<EntityStatus>] = [
   `spawning`,
   `running`,
   `idle`,
+  `paused`,
+  `stopping`,
   `stopped`,
+  `killed`,
 ]
 
 const entitySchema = z.object({
@@ -41,8 +62,58 @@ const entityTypeSchema = z.object({
   updated_at: z.string(),
 })
 
+const runnerDiagnosticsSchema = z.object({
+  started_at: z.string().nullable().optional(),
+  stream_connected: z.boolean().optional(),
+  stream_connected_since: z.string().nullable().optional(),
+  reconnect_count: z.number().optional(),
+  last_error: z.string().nullable().optional(),
+  last_error_at: z.string().nullable().optional(),
+  last_heartbeat_at: z.string().nullable().optional(),
+  last_heartbeat_ok: z.boolean().optional(),
+  last_claim_at: z.string().nullable().optional(),
+  last_claim_result: z
+    .enum([`claimed`, `no_work`, `error`])
+    .nullable()
+    .optional(),
+  last_dispatch_at: z.string().nullable().optional(),
+  events_received: z.number().optional(),
+  claims_succeeded: z.number().optional(),
+  claims_skipped: z.number().optional(),
+  claims_failed: z.number().optional(),
+})
+
+const runnerSchema = z.object({
+  id: z.string(),
+  owner_principal: z.string(),
+  label: z.string(),
+  kind: z.string(),
+  admin_status: z.enum([`enabled`, `disabled`]),
+  wake_stream: z.string(),
+  wake_stream_offset: z.string().nullable().optional(),
+  last_seen_at: z.string().nullable().optional(),
+  liveness_lease_expires_at: z.string().nullable().optional(),
+  diagnostics: runnerDiagnosticsSchema.nullable().optional(),
+  created_at: z.string(),
+  updated_at: z.string(),
+})
+
+const runnerRuntimeDiagnosticsSchema = z.object({
+  runner_id: z.string(),
+  owner_principal: z.string(),
+  wake_stream_offset: z.string().nullable().optional(),
+  last_seen_at: z.string(),
+  liveness_lease_expires_at: z.string(),
+  diagnostics: runnerDiagnosticsSchema.nullable().optional(),
+  updated_at: z.string(),
+})
+
 export type ElectricEntity = z.infer<typeof entitySchema>
 export type ElectricEntityType = z.infer<typeof entityTypeSchema>
+export type ElectricRunner = z.infer<typeof runnerSchema>
+export type ElectricRunnerRuntimeDiagnostics = z.infer<
+  typeof runnerRuntimeDiagnosticsSchema
+>
 
 // --- Collection factories ---
 
@@ -52,7 +123,7 @@ function createEntitiesCollection(baseUrl: string) {
       id: `entities`,
       schema: entitySchema,
       shapeOptions: {
-        url: `${baseUrl}/_electric/electric/v1/shape`,
+        url: appendPathToUrl(baseUrl, `/_electric/electric/v1/shape`),
         params: {
           table: `entities`,
           columns: [
@@ -69,6 +140,7 @@ function createEntitiesCollection(baseUrl: string) {
             `updated_at`,
           ],
         },
+        fetchClient: serverFetch,
         parser: {
           int8: (v: string) => Number(v),
         },
@@ -84,18 +156,108 @@ function createEntityTypesCollection(baseUrl: string) {
       id: `entity-types`,
       schema: entityTypeSchema,
       shapeOptions: {
-        url: `${baseUrl}/_electric/electric/v1/shape`,
+        url: appendPathToUrl(baseUrl, `/_electric/electric/v1/shape`),
         params: { table: `entity_types` },
+        fetchClient: serverFetch,
       },
       getKey: (item) => item.name,
     })
   )
 }
 
+export function createRunnersCollection(baseUrl: string) {
+  return createCollection(
+    electricCollectionOptions({
+      id: `runners`,
+      schema: runnerSchema,
+      shapeOptions: {
+        url: appendPathToUrl(baseUrl, `/_electric/electric/v1/shape`),
+        params: { table: `runners` },
+        fetchClient: serverFetch,
+      },
+      getKey: (item) => item.id,
+    })
+  )
+}
+
+export function createRunnerRuntimeDiagnosticsCollection(
+  baseUrl: string,
+  runnerId: string
+) {
+  return createCollection(
+    electricCollectionOptions({
+      id: `runner-runtime-diagnostics:${baseUrl}:${runnerId}`,
+      schema: runnerRuntimeDiagnosticsSchema,
+      shapeOptions: {
+        url: appendPathToUrl(baseUrl, `/_electric/electric/v1/shape`),
+        params: {
+          table: `runner_runtime_diagnostics`,
+          where: `runner_id = $1`,
+          params: { '1': runnerId },
+        },
+        fetchClient: serverFetch,
+      },
+      getKey: (item) => item.runner_id,
+    })
+  )
+}
+
 type EntitiesCollection = ReturnType<typeof createEntitiesCollection>
 type EntityTypesCollection = ReturnType<typeof createEntityTypesCollection>
+type RunnersCollection = ReturnType<typeof createRunnersCollection>
+
+type AppCollections = {
+  entities: EntitiesCollection
+  entityTypes: EntityTypesCollection
+  runners: RunnersCollection
+}
+
+const appCollectionsCache = new Map<string, AppCollections>()
+
+function getOrCreateAppCollections(baseUrl: string): AppCollections {
+  const cached = appCollectionsCache.get(baseUrl)
+  if (cached) return cached
+  const collections = {
+    entities: createEntitiesCollection(baseUrl),
+    entityTypes: createEntityTypesCollection(baseUrl),
+    runners: createRunnersCollection(baseUrl),
+  }
+  appCollectionsCache.set(baseUrl, collections)
+  return collections
+}
+
+function cleanupAppCollections(baseUrl: string): void {
+  const collections = appCollectionsCache.get(baseUrl)
+  if (!collections) return
+  collections.entities.cleanup()
+  collections.entityTypes.cleanup()
+  collections.runners.cleanup()
+  appCollectionsCache.delete(baseUrl)
+}
+
+function cleanupAppCollectionsExcept(activeBaseUrl: string | null): void {
+  for (const baseUrl of appCollectionsCache.keys()) {
+    if (baseUrl !== activeBaseUrl) cleanupAppCollections(baseUrl)
+  }
+}
+
+export async function preloadAppCollections(
+  baseUrl: string
+): Promise<AppCollections> {
+  const collections = getOrCreateAppCollections(baseUrl)
+  await Promise.all([
+    collections.entities.preload(),
+    collections.entityTypes.preload(),
+    collections.runners.preload(),
+  ])
+  return collections
+}
 
 // --- Actions ---
+
+type RunnerDispatchPolicy = {
+  targets: Array<{ type: `runner`; runnerId: string }>
+}
 
 interface SpawnInput {
   type: string
@@ -104,6 +266,14 @@ interface SpawnInput {
   tags?: Record<string, string>
   parent?: string
   initialMessage?: unknown
+  dispatch_policy?: RunnerDispatchPolicy
+}
+
+export interface SignalInput {
+  entityUrl: string
+  signal: EntitySignal
+  reason?: string
+  payload?: unknown
 }
 
 function createSpawnAction(
@@ -123,14 +293,23 @@ function createSpawnAction(
         updated_at: Date.now(),
       })
     },
-    mutationFn: async ({ type, name, args, tags, parent, initialMessage }) => {
+    mutationFn: async ({
+      type,
+      name,
+      args,
+      tags,
+      parent,
+      initialMessage,
+      dispatch_policy,
+    }) => {
       const body: Record<string, unknown> = {}
       if (args) body.args = args
       if (tags) body.tags = tags
       if (parent) body.parent = parent
       if (initialMessage) body.initialMessage = initialMessage
+      if (dispatch_policy) body.dispatch_policy = dispatch_policy
 
-      const res = await fetch(`${baseUrl}/${type}/${name}`, {
+      const res = await serverFetch(entitySpawnApiUrl(baseUrl, type, name), {
         method: `PUT`,
         headers: { 'content-type': `application/json` },
         body: JSON.stringify(body),
@@ -140,7 +319,15 @@ function createSpawnAction(
         let message = `Spawn failed (${res.status})`
         try {
           const data = JSON.parse(text) as Record<string, unknown>
-          if (data.message) message = String(data.message)
+          if (data.message) {
+            message = String(data.message)
+          } else if (
+            typeof data.error === `object` &&
+            data.error !== null &&
+            `message` in data.error
+          ) {
+            message = String(data.error.message)
+          }
         } catch {
           if (text) message = text
         }
@@ -159,13 +346,21 @@ function createKillAction(
   return createOptimisticAction<string>({
     onMutate: (entityUrl) => {
       entitiesCollection.update(entityUrl, (draft) => {
-        draft.status = `stopped`
+        draft.status = `killed`
       })
     },
     mutationFn: async (entityUrl) => {
-      const res = await fetch(`${baseUrl}${entityUrl}`, {
-        method: `DELETE`,
-      })
+      const res = await serverFetch(
+        entityApiUrl(baseUrl, entityUrl, `/signal`),
+        {
+          method: `POST`,
+          headers: { 'content-type': `application/json` },
+          body: JSON.stringify({
+            signal: `SIGKILL`,
+            reason: `Killed from agents UI`,
+          }),
+        }
+      )
       if (!res.ok) {
         const text = await res.text().catch(() => ``)
         throw new Error(text || `Kill failed (${res.status})`)
@@ -176,9 +371,69 @@ function createKillAction(
   })
 }
 
+function optimisticStatusForSignal(
+  status: EntityStatus,
+  signal: EntitySignal
+): EntityStatus | null {
+  switch (signal) {
+    case `SIGKILL`:
+      return `killed`
+    case `SIGINT`:
+      return null
+    case `SIGTERM`:
+      if (status === `idle` || status === `paused`) return `stopped`
+      if (status === `running`) return `stopping`
+      return null
+    case `SIGSTOP`:
+      return status === `idle` || status === `running` ? `paused` : null
+    case `SIGCONT`:
+      return status === `paused` ? `idle` : null
+    case `SIGHUP`:
+    case `SIGUSR`:
+      return null
+  }
+}
+
+function createSignalAction(
+  baseUrl: string,
+  entitiesCollection: EntitiesCollection
+) {
+  return createOptimisticAction<SignalInput>({
+    onMutate: ({ entityUrl, signal }) => {
+      entitiesCollection.update(entityUrl, (draft) => {
+        const optimisticStatus = optimisticStatusForSignal(draft.status, signal)
+        if (optimisticStatus) {
+          draft.status = optimisticStatus
+        }
+        draft.updated_at = Date.now()
+      })
+    },
+    mutationFn: async ({ entityUrl, signal, reason, payload }) => {
+      const body: Record<string, unknown> = { signal }
+      if (reason !== undefined) body.reason = reason
+      if (payload !== undefined) body.payload = payload
+
+      const res = await serverFetch(
+        entityApiUrl(baseUrl, entityUrl, `/signal`),
+        {
+          method: `POST`,
+          headers: { 'content-type': `application/json` },
+          body: JSON.stringify(body),
+        }
+      )
+      if (!res.ok) {
+        const text = await res.text().catch(() => ``)
+        throw new Error(text || `Signal failed (${res.status})`)
+      }
+      const data = (await res.json()) as { txid: number }
+      return { txid: data.txid }
+    },
+  })
+}
+
 function createForkEntity(baseUrl: string) {
   return async (entityUrl: string): Promise<{ url: string }> => {
-    const res = await fetch(`${baseUrl}${entityUrl}/fork`, {
+    const res = await serverFetch(entityApiUrl(baseUrl, entityUrl, `/fork`), {
       method: `POST`,
       headers: { 'content-type': `application/json` },
       body: JSON.stringify({}),
@@ -210,7 +465,9 @@ function createForkEntity(baseUrl: string) {
 interface ElectricAgentsState {
   entitiesCollection: EntitiesCollection | null
   entityTypesCollection: EntityTypesCollection | null
+  runnersCollection: RunnersCollection | null
   spawnEntity: ReturnType<typeof createSpawnAction> | null
+  signalEntity: ReturnType<typeof createSignalAction> | null
   killEntity: ReturnType<typeof createKillAction> | null
   forkEntity: ReturnType<typeof createForkEntity> | null
 }
@@ -218,7 +475,9 @@ interface ElectricAgentsState {
 const ElectricAgentsContext = createContext<ElectricAgentsState>({
   entitiesCollection: null,
   entityTypesCollection: null,
+  runnersCollection: null,
   spawnEntity: null,
+  signalEntity: null,
   killEntity: null,
   forkEntity: null,
 })
@@ -230,55 +489,40 @@ export function ElectricAgentsProvider({
   baseUrl: string | null
   children: ReactNode
 }): React.ReactElement {
-  const [state, setState] = useState<ElectricAgentsState>({
-    entitiesCollection: null,
-    entityTypesCollection: null,
-    spawnEntity: null,
-    killEntity: null,
-    forkEntity: null,
-  })
-  const prevUrlRef = useRef<string | null>(null)
-  const collectionsRef = useRef<{
-    entities: EntitiesCollection | null
-    entityTypes: EntityTypesCollection | null
-  }>({ entities: null, entityTypes: null })
+  const previousBaseUrlRef = useRef<string | null>(null)
 
   useEffect(() => {
-    if (baseUrl === prevUrlRef.current) return
-    prevUrlRef.current = baseUrl
+    const previousBaseUrl = previousBaseUrlRef.current
+    previousBaseUrlRef.current = baseUrl
+    if (previousBaseUrl && previousBaseUrl !== baseUrl) {
+      cleanupAppCollections(previousBaseUrl)
+    }
+    if (!baseUrl) cleanupAppCollectionsExcept(null)
+  }, [baseUrl])
 
-    // Clean up old collections to stop SSE streams
-    collectionsRef.current.entities?.cleanup()
-    collectionsRef.current.entityTypes?.cleanup()
-    collectionsRef.current = { entities: null, entityTypes: null }
-
+  const state = useMemo<ElectricAgentsState>(() => {
     if (!baseUrl) {
-      setState({
+      return {
         entitiesCollection: null,
         entityTypesCollection: null,
+        runnersCollection: null,
         spawnEntity: null,
+        signalEntity: null,
         killEntity: null,
         forkEntity: null,
-      })
-      return
+      }
     }
 
-    const entities = createEntitiesCollection(baseUrl)
-    const entityTypes = createEntityTypesCollection(baseUrl)
-
-    collectionsRef.current = { entities, entityTypes }
-
-    setState({
+    const { entities, entityTypes, runners } =
+      getOrCreateAppCollections(baseUrl)
+    return {
       entitiesCollection: entities,
       entityTypesCollection: entityTypes,
+      runnersCollection: runners,
       spawnEntity: createSpawnAction(baseUrl, entities),
+      signalEntity: createSignalAction(baseUrl, entities),
       killEntity: createKillAction(baseUrl, entities),
       forkEntity: createForkEntity(baseUrl),
-    })
-
-    return () => {
-      collectionsRef.current.entities?.cleanup()
-      collectionsRef.current.entityTypes?.cleanup()
     }
   }, [baseUrl])
 

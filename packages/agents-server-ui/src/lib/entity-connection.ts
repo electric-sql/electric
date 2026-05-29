@@ -1,5 +1,12 @@
-import { createEntityStreamDB } from '@electric-ax/agents-runtime'
-import type { EntityStreamDBWithActions } from '@electric-ax/agents-runtime'
+import { serverFetch } from './auth-fetch'
+import { entityApiUrl } from './entity-api'
+import { DurableStream } from '@durable-streams/client'
+import type { StreamOptions } from '@durable-streams/client'
+import {
+  appendPathToUrl,
+  createEntityStreamDB,
+  type EntityStreamDBWithActions,
+} from '@electric-ax/agents-runtime/client'
 
 function getMainStreamPath(entityUrl: string): string {
   return `${entityUrl}/main`
@@ -15,6 +22,24 @@ export type UICustomState = Record<string, { type: string; primaryKey: string }>
 
 let activeBaseUrl: string | null = null
 
+const ENTITY_METADATA_RETRY_DELAYS_MS = [250, 500, 1000, 2000]
+
+function delay(ms: number, signal?: AbortSignal): Promise<void> {
+  if (!signal) return new Promise((resolve) => setTimeout(resolve, ms))
+  throwIfAborted(signal)
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      signal.removeEventListener(`abort`, onAbort)
+      resolve()
+    }, ms)
+    const onAbort = () => {
+      clearTimeout(timeout)
+      reject(abortError())
+    }
+    signal.addEventListener(`abort`, onAbort, { once: true })
+  })
+}
+
 export function registerActiveBaseUrl(url: string | null): void {
   activeBaseUrl = url
 }
@@ -29,7 +54,20 @@ type CachedConnection = {
   evictionTimer: ReturnType<typeof setTimeout> | null
 }
 
+type EntityStreamOptions = NonNullable<
+  Parameters<typeof createEntityStreamDB>[3]
+>
+type EntityStreamHandle = NonNullable<EntityStreamOptions[`stream`]>
+
 const connectionCache = new Map<string, CachedConnection>()
+
+export function __clearEntityConnectionCacheForTests(): void {
+  for (const entry of connectionCache.values()) {
+    clearEvictionTimer(entry)
+    entry.promise.then(({ close }) => close()).catch(() => {})
+  }
+  connectionCache.clear()
+}
 
 function cacheKey(baseUrl: string, entityUrl: string): string {
   return `${baseUrl}${entityUrl}`
@@ -57,6 +95,24 @@ function scheduleEviction(key: string, entry: CachedConnection): void {
 
 function abortError(): DOMException {
   return new DOMException(`Entity stream preload was aborted`, `AbortError`)
+}
+
+function isReactNativeRuntime(): boolean {
+  return typeof navigator !== `undefined` && navigator.product === `ReactNative`
+}
+
+function createReactNativeStream(streamUrl: string): EntityStreamHandle {
+  const stream = new DurableStream({
+    url: streamUrl,
+    contentType: `application/json`,
+    fetch: serverFetch,
+  })
+
+  return {
+    url: stream.url,
+    stream: (options?: Omit<StreamOptions, `url`>) =>
+      stream.stream({ ...options, live: `long-poll` }),
+  } as EntityStreamHandle
 }
 
 function throwIfAborted(signal?: AbortSignal): void {
@@ -159,6 +215,31 @@ export async function connectEntityStream(opts: {
   }
 }
 
+async function fetchEntityMetadataWithSpawnRaceRetry(opts: {
+  baseUrl: string
+  entityUrl: string
+  signal?: AbortSignal
+}): Promise<Response> {
+  const { baseUrl, entityUrl, signal } = opts
+  for (let attempt = 0; ; attempt += 1) {
+    throwIfAborted(signal)
+    const res = await serverFetch(entityApiUrl(baseUrl, entityUrl), {
+      headers: { accept: `application/json` },
+      signal,
+    })
+    if (res.ok) return res
+
+    await res.body?.cancel()
+    const retryDelay = ENTITY_METADATA_RETRY_DELAYS_MS[attempt]
+    if (res.status !== 404 || retryDelay === undefined) {
+      throw new Error(
+        `Failed to fetch entity at ${entityUrl}: ${res.statusText || res.status}`
+      )
+    }
+    await delay(retryDelay, signal)
+  }
+}
+
 async function connectEntityStreamFresh(opts: {
   baseUrl: string
   entityUrl: string
@@ -167,19 +248,26 @@ async function connectEntityStreamFresh(opts: {
 }): Promise<{ db: EntityStreamDBWithActions; close: () => void }> {
   const { baseUrl, entityUrl, customState, signal } = opts
   throwIfAborted(signal)
-  const res = await fetch(`${baseUrl}${entityUrl}`, {
-    headers: { accept: `application/json` },
+  const res = await fetchEntityMetadataWithSpawnRaceRetry({
+    baseUrl,
+    entityUrl,
     signal,
   })
-  if (!res.ok) {
-    throw new Error(`Failed to fetch entity at ${entityUrl}: ${res.statusText}`)
-  }
   await res.body?.cancel()
   throwIfAborted(signal)
-  const streamUrl = `${baseUrl}${getMainStreamPath(entityUrl)}`
+  const streamUrl = appendPathToUrl(baseUrl, getMainStreamPath(entityUrl))
+  const stream: EntityStreamHandle = isReactNativeRuntime()
+    ? createReactNativeStream(streamUrl)
+    : (new DurableStream({
+        url: streamUrl,
+        contentType: `application/json`,
+        fetch: serverFetch,
+      }) as unknown as EntityStreamHandle)
   const db = createEntityStreamDB(
     streamUrl,
-    customState as unknown as Parameters<typeof createEntityStreamDB>[1]
+    customState as unknown as Parameters<typeof createEntityStreamDB>[1],
+    undefined,
+    { stream }
   )
   try {
     await preloadWithAbort(db, signal)

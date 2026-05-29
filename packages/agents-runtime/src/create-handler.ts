@@ -4,20 +4,31 @@
  */
 
 import { zodToJsonSchema } from 'zod-to-json-schema'
-import { processWebhookWake } from './process-wake'
+import { processWake } from './process-wake'
 import { getEntityType, listEntityTypes } from './define-entity'
-import { DEFAULT_OUTPUT_SCHEMAS } from './default-output-schemas'
+import { DEFAULT_STATE_SCHEMAS } from './default-state-schemas'
 import { passthrough } from './entity-schema'
 import { runtimeLog } from './log'
+import { appendPathToUrl } from './url'
+import { verifyWebhookSignature } from './webhook-signature'
 import type { EntityRegistry } from './define-entity'
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import type { WebhookSignatureVerifierConfig } from './webhook-signature'
 import type {
   AgentTool,
   EntityStreamDBWithActions,
+  HeadersProvider,
   ProcessWakeConfig,
+  WakeNotification,
   WebhookNotification,
 } from './types'
 import type { ChangeEvent } from '@durable-streams/state'
+import type { DispatchPolicy } from './runtime-server-client'
+import type {
+  EventSourceContract,
+  EventSourceSubscription,
+  EventSourceSubscriptionInput,
+} from './event-sources'
 
 export interface RuntimeRouterConfig {
   /** Base URL of the durable streams server (e.g. http://localhost:4200) */
@@ -41,9 +52,20 @@ export interface RuntimeRouterConfig {
   registry?: EntityRegistry
   /** Override the webhook subscription path used per entity type registration. */
   subscriptionPathForType?: (typeName: string) => string
+  /** Optional default dispatch policy used when registering each entity type. */
+  defaultDispatchPolicyForType?: (
+    typeName: string
+  ) => DispatchPolicy | undefined
+  /** Additional headers sent to agents-server control-plane requests. */
+  serverHeaders?: HeadersProvider
+  /**
+   * Webhook signature verification. Enabled by default against
+   * `${baseUrl}/__ds/jwks.json`; set to false only for trusted in-process tests.
+   */
+  webhookSignature?: false | Partial<WebhookSignatureVerifierConfig>
   /** Idle timeout in ms before closing the wake (default: 20_000) */
   idleTimeout?: number
-  /** Heartbeat interval in ms (default: 30_000) */
+  /** Heartbeat interval in ms (default: 10_000) */
   heartbeatInterval?: number
   /** Optional tool factory invoked for each wake context before handler execution. */
   createElectricTools?: (context: {
@@ -65,10 +87,16 @@ export interface RuntimeRouterConfig {
       payload: unknown
       targetUrl?: string
       fireAt: string
-      from?: string
       messageType?: string
     }) => Promise<{ txid: string }>
     deleteSchedule: (opts: { id: string }) => Promise<{ txid: string }>
+    listEventSources: () => Promise<Array<EventSourceContract>>
+    subscribeToEventSource: (
+      opts: EventSourceSubscriptionInput
+    ) => Promise<{ txid: string; subscription: EventSourceSubscription }>
+    unsubscribeFromEventSource: (opts: {
+      id: string
+    }) => Promise<{ txid: string }>
   }) => Array<AgentTool> | Promise<Array<AgentTool>>
   /**
    * Optional observer for background wake failures. Return true to mark the
@@ -77,6 +105,17 @@ export interface RuntimeRouterConfig {
   onWakeError?: (error: Error) => boolean | void
   /** Max number of concurrent entity-type registrations (default: 8). */
   registrationConcurrency?: number
+  /**
+   * Public URL of this runtime, forwarded to the agents-server so it can be
+   * included in GET /api/runtimes. If omitted the runtime is registered but
+   * excluded from the public runtimes list.
+   */
+  publicUrl?: string
+  /**
+   * Human-readable name for this runtime instance. Defaults to "default".
+   * Used as the key for /api/runtimes de-duplication (last-write-wins).
+   */
+  name?: string
 }
 
 export interface RuntimeRouter {
@@ -91,12 +130,18 @@ export interface RuntimeRouter {
   handleWebhookRequest: (request: Request) => Promise<Response>
 
   /**
-   * Dispatch an already-parsed webhook wake notification.
+   * Dispatch an already-parsed wake notification from any transport.
    */
+  dispatchWake: (
+    notification: WakeNotification,
+    options?: Pick<ProcessWakeConfig, `claimHeaders` | `claimTokenHeader`>
+  ) => void
+
+  /** Dispatch an already-parsed webhook wake notification. */
   dispatchWebhookWake: (notification: WebhookNotification) => void
 
   /**
-   * Wait for all in-flight webhook wake handlers to settle.
+   * Wait for all in-flight wake handlers to settle.
    * Throws any wake errors instead of hiding them behind logs.
    */
   drainWakes: () => Promise<void>
@@ -147,11 +192,13 @@ export function createRuntimeRouter(
     serveEndpoint,
     webhookPath,
     registry,
-    subscriptionPathForType,
     idleTimeout,
     heartbeatInterval,
     createElectricTools,
     registrationConcurrency,
+    defaultDispatchPolicyForType,
+    serverHeaders,
+    webhookSignature,
   } = normalized
 
   const wakeConfig: ProcessWakeConfig = {
@@ -173,6 +220,16 @@ export function createRuntimeRouter(
   const wakeErrors: Array<Error> = []
   const debugCleanup = process.env.ELECTRIC_AGENTS_DEBUG_CLEANUP === `1`
 
+  const registrationHeaders = async (): Promise<Headers> => {
+    const init =
+      typeof serverHeaders === `function`
+        ? await serverHeaders()
+        : serverHeaders
+    const headers = new Headers(init)
+    headers.set(`content-type`, `application/json`)
+    return headers
+  }
+
   const forEachWithConcurrency = async <T>(
     items: Array<T>,
     concurrency: number,
@@ -192,12 +249,16 @@ export function createRuntimeRouter(
     await Promise.all(Array.from({ length: workerCount }, () => worker()))
   }
 
-  const dispatchWebhookWake = (notification: WebhookNotification): void => {
+  const dispatchWake: RuntimeRouter[`dispatchWake`] = (
+    notification,
+    options
+  ): void => {
     const wakeLabel = notification.entity?.url ?? notification.streamPath
     const controller = new AbortController()
     const wake: Promise<void> = Promise.resolve(
-      processWebhookWake(notification, {
+      processWake(notification, {
         ...wakeConfig,
+        ...options,
         shutdownSignal: controller.signal,
       })
     )
@@ -223,6 +284,8 @@ export function createRuntimeRouter(
     pendingWakeLabels.set(wake, wakeLabel)
     pendingWakeControllers.set(wake, controller)
   }
+
+  const dispatchWebhookWake: RuntimeRouter[`dispatchWebhookWake`] = dispatchWake
 
   const abortWakes = (): void => {
     for (const controller of pendingWakeControllers.values()) {
@@ -266,9 +329,23 @@ export function createRuntimeRouter(
       return json({ error: `Method not allowed` }, 405)
     }
 
+    const body = new Uint8Array(await request.arrayBuffer())
+    if (webhookSignature) {
+      const verification = await verifyWebhookSignature(
+        body,
+        request.headers.get(`webhook-signature`),
+        webhookSignature
+      )
+      if (!verification.ok) {
+        return json({ error: verification.error }, verification.status)
+      }
+    }
+
     let notification: WebhookNotification
     try {
-      notification = (await request.json()) as WebhookNotification
+      notification = JSON.parse(
+        new TextDecoder().decode(body)
+      ) as WebhookNotification
     } catch (err) {
       return json(
         {
@@ -386,26 +463,45 @@ export function createRuntimeRouter(
           creation_schema: toJsonSchema(definition.creationSchema),
         }),
         ...(definition.inboxSchemas && {
-          input_schemas: mapSchemas(definition.inboxSchemas),
+          inbox_schemas: mapSchemas(definition.inboxSchemas),
         }),
-        output_schemas: {
-          ...DEFAULT_OUTPUT_SCHEMAS,
+        state_schemas: {
+          ...DEFAULT_STATE_SCHEMAS,
           ...stateSchemas,
-          ...(definition.outputSchemas
-            ? mapSchemas(definition.outputSchemas)
+          ...(definition.stateSchemas
+            ? mapSchemas(definition.stateSchemas)
             : {}),
         },
       }
+
+      const defaultDispatchPolicy = defaultDispatchPolicyForType?.(name)
 
       if (serveEndpoint) {
         body.serve_endpoint = serveEndpoint
       }
 
-      const typeRes = await fetch(`${baseUrl}/_electric/entity-types`, {
-        method: `POST`,
-        headers: { 'content-type': `application/json` },
-        body: JSON.stringify(body),
-      })
+      if (defaultDispatchPolicy) {
+        body.default_dispatch_policy = defaultDispatchPolicy
+      } else if (serveEndpoint) {
+        body.default_dispatch_policy = {
+          targets: [
+            {
+              type: `webhook`,
+              url: serveEndpoint,
+              subscription_id: runtimeWebhookSubscriptionId(name),
+            },
+          ],
+        }
+      }
+
+      const typeRes = await fetch(
+        appendPathToUrl(baseUrl, `/_electric/entity-types`),
+        {
+          method: `POST`,
+          headers: await registrationHeaders(),
+          body: JSON.stringify(body),
+        }
+      )
 
       if (!typeRes.ok) {
         const err = await typeRes.text()
@@ -415,32 +511,6 @@ export function createRuntimeRouter(
         )
         failed.push(name)
         return
-      }
-
-      if (serveEndpoint) {
-        const subPath = subscriptionPathForType
-          ? subscriptionPathForType(name)
-          : `/${name}/**`
-        const subRes = await fetch(
-          `${baseUrl}${subPath}?subscription=${name}-handler`,
-          {
-            method: `PUT`,
-            headers: { 'content-type': `application/json` },
-            body: JSON.stringify({
-              webhook: serveEndpoint,
-            }),
-          }
-        )
-
-        if (!subRes.ok) {
-          const err = await subRes.text()
-          runtimeLog.error(
-            `[agent-runtime]`,
-            `Failed to create subscription for "${name}": ${err}`
-          )
-          failed.push(name)
-          return
-        }
       }
 
       registered.push(name)
@@ -474,6 +544,7 @@ export function createRuntimeRouter(
   return {
     handleRequest,
     handleWebhookRequest,
+    dispatchWake,
     dispatchWebhookWake,
     drainWakes,
     waitForSettled,
@@ -520,6 +591,7 @@ export function createRuntimeHandler(
     onEnter,
     handleRequest: router.handleRequest,
     handleWebhookRequest: router.handleWebhookRequest,
+    dispatchWake: router.dispatchWake,
     dispatchWebhookWake: router.dispatchWebhookWake,
     drainWakes: router.drainWakes,
     waitForSettled: router.waitForSettled,
@@ -538,14 +610,30 @@ function normalizeConfig(config: RuntimeRouterConfig): {
   webhookPath: string
   registry?: EntityRegistry
   subscriptionPathForType?: (typeName: string) => string
+  defaultDispatchPolicyForType?: RuntimeRouterConfig[`defaultDispatchPolicyForType`]
+  serverHeaders?: RuntimeRouterConfig[`serverHeaders`]
   idleTimeout?: number
   heartbeatInterval?: number
   createElectricTools?: RuntimeRouterConfig[`createElectricTools`]
   registrationConcurrency?: number
+  publicUrl?: string
+  name?: string
+  webhookSignature: false | WebhookSignatureVerifierConfig
 } {
   const serveEndpoint = config.serveEndpoint ?? config.handlerUrl
   const webhookPath =
     config.webhookPath ?? getPathname(serveEndpoint) ?? `/electric-agents`
+  const webhookSignature =
+    config.webhookSignature === false
+      ? false
+      : {
+          jwksUrl:
+            config.webhookSignature?.jwksUrl ??
+            appendPathToUrl(config.baseUrl, `/__ds/jwks.json`),
+          toleranceSeconds: config.webhookSignature?.toleranceSeconds,
+          cacheTtlMs: config.webhookSignature?.cacheTtlMs,
+          fetchClient: config.webhookSignature?.fetchClient,
+        }
 
   return {
     baseUrl: config.baseUrl,
@@ -553,11 +641,21 @@ function normalizeConfig(config: RuntimeRouterConfig): {
     webhookPath,
     registry: config.registry,
     subscriptionPathForType: config.subscriptionPathForType,
+    defaultDispatchPolicyForType: config.defaultDispatchPolicyForType,
+    serverHeaders: config.serverHeaders,
     idleTimeout: config.idleTimeout,
     heartbeatInterval: config.heartbeatInterval,
     createElectricTools: config.createElectricTools,
     registrationConcurrency: config.registrationConcurrency,
+    publicUrl: config.publicUrl,
+    name: config.name,
+    webhookSignature,
   }
+}
+
+function runtimeWebhookSubscriptionId(typeName: string): string {
+  const safeTypeName = typeName.replace(/[^A-Za-z0-9_.-]/g, `_`)
+  return `webhook:${safeTypeName || `runtime`}`
 }
 
 function getPathname(url: string | undefined): string | undefined {

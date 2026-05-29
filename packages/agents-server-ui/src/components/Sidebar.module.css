@@ -1,8 +1,99 @@
 .root {
   flex-shrink: 0;
-  background: var(--ds-bg-subtle);
+  background: var(--ds-chrome-bg);
   position: relative;
-  border-right: 1px solid var(--ds-border-1);
+  overflow: visible;
+  transition:
+    margin-right 180ms cubic-bezier(0.32, 0.72, 0, 1),
+    visibility 0s linear 0s;
+  will-change: margin-right;
+}
+.root::after {
+  display: none;
+}
+
+.root[data-resizing='true'] {
+  transition: none;
+}
+
+.root[data-state='closed']:not(.overlay) {
+  margin-right: calc(var(--sidebar-expanded-width, 240px) * -1);
+  pointer-events: none;
+  visibility: hidden;
+  transition:
+    margin-right 180ms cubic-bezier(0.32, 0.72, 0, 1),
+    visibility 0s linear 180ms;
+}
+
+/* Narrow-viewport overlay mode — see `useNarrowViewport`. The
+   sidebar pops out of flex flow and floats over the main column
+   (with a backdrop sibling, `.backdrop` below) so it can stay open
+   without compressing the chat area on small screens. The shadow
+   provides the elevation cue, and the higher z-index ensures we
+   sit above the main content but below modals/toasts (which use
+   `--ds-z-modal` / `--ds-z-popover`).
+
+   The slide-in/out transition is driven by `data-state` toggled in
+   Sidebar.tsx (`open` ↔ `closed`). The parent keeps us mounted in
+   overlay mode regardless of `collapsed` so the exit transition
+   has time to run before unmount. `will-change` keeps the GPU
+   layer warm so the first frame of either direction doesn't jank. */
+.overlay {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: var(--ds-z-overlay);
+  box-shadow: var(--ds-overlay-shadow);
+  transition:
+    transform 220ms cubic-bezier(0.32, 0.72, 0, 1),
+    box-shadow 220ms ease;
+  will-change: transform;
+}
+.overlay[data-state='closed'] {
+  /* Translate by 100% of the sidebar's own width — slides exactly
+     off the left edge regardless of the user's saved width or the
+     viewport cap. Drop the shadow simultaneously so it doesn't
+     bleed into the dimmed backdrop. */
+  transform: translateX(-100%);
+  box-shadow: none;
+  pointer-events: none;
+}
+.overlay[data-state='open'] {
+  transform: translateX(0);
+}
+
+/* Backdrop sibling rendered next to `.overlay` (see Sidebar.tsx).
+   Sits above the main content but below the sidebar so a click
+   anywhere outside the sidebar dismisses it. Uses the same
+   `--ds-overlay` scrim token as Dialog so the dimming reads
+   consistently with other modal-style overlays. */
+.backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: calc(var(--ds-z-overlay) - 1);
+  background: var(--ds-overlay);
+  cursor: pointer;
+  transition: opacity 220ms ease;
+}
+.backdrop[data-state='closed'] {
+  opacity: 0;
+  pointer-events: none;
+}
+.backdrop[data-state='open'] {
+  opacity: 1;
+}
+
+/* Respect the OS-level "reduce motion" preference — snap the
+   sidebar in/out instead of sliding. The sidebar still hides
+   correctly because the `transform` and `opacity` rules above
+   still apply, just without the animated interpolation. */
+@media (prefers-reduced-motion: reduce) {
+  .root,
+  .overlay,
+  .backdrop {
+    transition: none;
+  }
 }
 
 /* Narrow-viewport overlay mode — see `useNarrowViewport`. The
@@ -91,11 +182,49 @@
   background: var(--ds-accent-a6);
 }
 
+:global(
+    html[data-electric-desktop='true']:not([data-electric-platform='darwin'])
+  )
+  .resizeHandle {
+  top: var(--ds-radius-5);
+}
+
+.topDivider {
+  position: relative;
+  height: 0;
+  flex-shrink: 0;
+  z-index: 1;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.topDivider::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--ds-divider);
+}
+.topDivider[data-visible='true'] {
+  opacity: 1;
+}
+
 /* Inner column wrapping the new-session row + session list.
    Each child handles its own left padding (4px) so all icons
    line up at a single column inside the sidebar. */
 .treeRow {
   padding: 0 8px 8px;
+}
+
+/* When the sidebar header controls move into the Windows/Linux titlebar
+   there is no row above "New session", so keep the same 8px breathing
+   room at the top that the sidebar already has on the left. */
+:global(
+    html[data-electric-desktop='true']:not([data-electric-platform='darwin'])
+  )
+  .treeRow {
+  padding-top: 9px;
 }
 
 /* New session row — sized to match SidebarRow geometry exactly so
@@ -112,20 +241,30 @@
    concentric-halo rule as `.row` in SidebarRow.module.css, so the
    New session row rounds identically to the entity rows below it. */
 .newSessionRow {
-  all: unset;
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   height: var(--ds-row-height-md);
   padding-left: 3px;
   padding-right: 3px;
   border-radius: var(--ds-radius-item);
   cursor: pointer;
   color: var(--ds-text-1);
+  background: transparent;
   transition: background 0.08s ease;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.newSessionRow > * {
+  pointer-events: none;
 }
 .newSessionRow:hover {
   background: var(--ds-bg-hover);
+}
+.newSessionRowSelected,
+.newSessionRowSelected:hover {
+  background: var(--ds-accent-a3);
 }
 /* Same 22px slot, same 16px glyph and the SAME `--ds-text-1` colour
    as the sidebar/search IconButtons in SidebarHeader so the three
@@ -192,20 +331,59 @@
   padding-top: 20px;
 }
 
-/* Section label ("Pinned", "Today", "Last 7 days", …) — text
-   aligns with the icon column above so the column reads cleanly
-   from top to bottom. Sentence-case (no `text-transform`) so
-   working-dir labels like `~/Code/electric` render naturally;
-   font-weight is the prominence cue instead of uppercase letterforms.
-   Single-line ellipsis is a safety net for the working-dir grouping
-   mode where a label can be a long abbreviated path. */
+.sectionGroup {
+  min-width: 0;
+}
+
+/* Section header ("Pinned", "Today", "Last 7 days", …) — text
+   aligns with the old label position while the chevron stays quiet
+   until hover/focus. Sentence-case (no `text-transform`) so working-dir
+   labels like `~/Code/electric` render naturally. */
+.sectionHeader {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 14px 4px 4px 8px;
+  border-radius: var(--ds-radius-item);
+  color: var(--ds-text-3);
+  cursor: pointer;
+}
+.sectionHeader:hover,
+.sectionHeader:focus-visible {
+  color: var(--ds-text-2);
+}
+
 .sectionLabel {
-  display: block;
+  flex: 1;
+  min-width: 0;
   font-size: 11px;
   font-weight: 500;
-  padding: 14px 4px 4px 8px;
-  color: var(--ds-text-3);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.sectionChevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  opacity: 0;
+  color: var(--ds-text-3);
+  transform: rotate(90deg);
+  transition:
+    opacity 100ms ease,
+    transform 100ms ease;
+}
+.sectionChevron[data-collapsed='true'] {
+  transform: rotate(0deg);
+}
+.sectionHeader:hover .sectionChevron,
+.sectionHeader:focus-visible .sectionChevron {
+  opacity: 0.75;
 }

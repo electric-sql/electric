@@ -1,15 +1,17 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import {
+  ChevronRight,
   Copy,
   Eye,
   GitFork,
   Link2,
   MoreHorizontal,
+  OctagonX,
   Pin,
   PinOff,
+  Radio,
   SplitSquareHorizontal,
   SplitSquareVertical,
-  Trash2,
   X,
 } from 'lucide-react'
 import { useNavigate } from '@tanstack/react-router'
@@ -17,14 +19,103 @@ import { useWorkspace, listTiles } from '../../hooks/useWorkspace'
 import { useElectricAgents } from '../../lib/ElectricAgentsProvider'
 import { usePinnedEntities } from '../../hooks/usePinnedEntities'
 import { listViews } from '../../lib/workspace/viewRegistry'
+import { JsonInspectDialog } from '../JsonInspectDialog'
 import type { EntityViewDefinition } from '../../lib/workspace/viewRegistry'
 import { encodeLayout } from '../../lib/workspace/layoutCodec'
-import { Button, Dialog, IconButton, Menu, Stack, Text } from '../../ui'
+import {
+  Button,
+  Dialog,
+  Icon as UiIcon,
+  IconButton,
+  Menu,
+  Stack,
+  Text,
+} from '../../ui'
 import { modKeyLabel } from '../../lib/keyLabels'
 import { getEntityDisplayTitle } from '../../lib/entityDisplay'
-import type { ElectricEntity } from '../../lib/ElectricAgentsProvider'
+import type {
+  ElectricEntity,
+  EntitySignal,
+} from '../../lib/ElectricAgentsProvider'
 import type { Tile } from '../../lib/workspace/types'
 import styles from './SplitMenu.module.css'
+
+const SIGNAL_OPTION_GROUPS: ReadonlyArray<
+  ReadonlyArray<{
+    id: string
+    shortName: string
+    description: string
+    signal?: EntitySignal
+    composite?: `stop-immediately`
+    shortcut?: string
+    code: string
+  }>
+> = [
+  [
+    {
+      id: `interrupt`,
+      signal: `SIGINT`,
+      shortName: `Interrupt`,
+      description: `Abort active run and continue`,
+      shortcut: `Esc`,
+      code: `SIGINT`,
+    },
+    {
+      id: `stop-immediately`,
+      composite: `stop-immediately`,
+      shortName: `Stop immediately`,
+      description: `Abort active run and pause`,
+      shortcut: `Shift+Esc`,
+      code: `SIGSTOP+SIGINT`,
+    },
+  ],
+  [
+    {
+      id: `stop`,
+      signal: `SIGSTOP`,
+      shortName: `Stop`,
+      description: `Pause after current run`,
+      code: `SIGSTOP`,
+    },
+    {
+      id: `reload`,
+      signal: `SIGHUP`,
+      shortName: `Reload`,
+      description: `Reload after current run`,
+      code: `SIGHUP`,
+    },
+    {
+      id: `resume`,
+      signal: `SIGCONT`,
+      shortName: `Resume`,
+      description: `Resume paused work`,
+      code: `SIGCONT`,
+    },
+    {
+      id: `custom`,
+      signal: `SIGUSR`,
+      shortName: `Custom`,
+      description: `Deliver to signal handler`,
+      code: `SIGUSR`,
+    },
+  ],
+  [
+    {
+      id: `terminate`,
+      signal: `SIGTERM`,
+      shortName: `Terminate`,
+      description: `Gracefully stop permanently`,
+      code: `SIGTERM`,
+    },
+    {
+      id: `kill`,
+      signal: `SIGKILL`,
+      shortName: `Kill`,
+      description: `Immediately kill permanently`,
+      code: `SIGKILL`,
+    },
+  ],
+]
 
 /**
  * Per-tile workspace menu. Shown in the tile header (the `…` button)
@@ -62,11 +153,13 @@ export function SplitMenu({
   entity: ElectricEntity | null
 }): React.ReactElement {
   const { workspace, helpers } = useWorkspace()
-  const { forkEntity, killEntity } = useElectricAgents()
+  const { forkEntity, killEntity, signalEntity } = useElectricAgents()
   const { pinnedUrls, togglePin } = usePinnedEntities()
   const navigate = useNavigate()
   const hasEntity = entity !== null && tile.entityUrl !== null
   const entityUrl = tile.entityUrl
+  const entityTerminal =
+    entity?.status === `stopped` || entity?.status === `killed`
   const pinned = entityUrl !== null && pinnedUrls.includes(entityUrl)
   // Hide "Close tile" when this is the only tile in the workspace —
   // closing it would leave the workspace empty (which the URL ↔
@@ -109,6 +202,47 @@ export function SplitMenu({
     tx.isPersisted.promise.catch(() => {})
   }
 
+  const handleStopImmediately = () => {
+    if (!signalEntity || entityUrl === null) return
+    const stopTx = signalEntity({
+      entityUrl,
+      signal: `SIGSTOP`,
+      reason: `Stopped immediately from tile menu`,
+    })
+    stopTx.isPersisted.promise
+      .then(() => {
+        const interruptTx = signalEntity({
+          entityUrl,
+          signal: `SIGINT`,
+          reason: `Interrupted current run for immediate stop`,
+        })
+        interruptTx.isPersisted.promise.catch(() => {})
+      })
+      .catch(() => {})
+  }
+
+  const handleSignal = (signal: EntitySignal) => {
+    if (!signalEntity || entityUrl === null) return
+    const tx = signalEntity({
+      entityUrl,
+      signal,
+      reason: `Sent from tile menu`,
+    })
+    tx.isPersisted.promise.catch(() => {})
+  }
+
+  const handleSignalOption = (
+    option: (typeof SIGNAL_OPTION_GROUPS)[number][number]
+  ) => {
+    if (option.composite === `stop-immediately`) {
+      handleStopImmediately()
+      return
+    }
+    if (option.signal) {
+      handleSignal(option.signal)
+    }
+  }
+
   const handleCopyLayoutLink = () => {
     // Encode the workspace into the DSL and append it as `?layout=…`
     // to the current URL. The receiving window's <Workspace> picks it
@@ -142,7 +276,7 @@ export function SplitMenu({
               aria-label="Tile actions"
               title="Tile actions"
             >
-              <MoreHorizontal size={16} />
+              <UiIcon icon={MoreHorizontal} size={3} />
             </IconButton>
           }
         />
@@ -150,7 +284,7 @@ export function SplitMenu({
           {hasEntity && (
             <>
               <Menu.Item onSelect={() => setShowInspect(true)}>
-                <Eye size={14} />
+                <UiIcon icon={Eye} size={2} />
                 <Text size={2}>Inspect</Text>
               </Menu.Item>
 
@@ -183,12 +317,12 @@ export function SplitMenu({
           )}
 
           <Menu.Item onSelect={() => helpers.splitTile(tile.id, `right`)}>
-            <SplitSquareHorizontal size={14} />
+            <UiIcon icon={SplitSquareHorizontal} size={2} />
             <Text size={2}>Split right</Text>
             <span className={styles.shortcut}>{modKeyLabel(`d`)}</span>
           </Menu.Item>
           <Menu.Item onSelect={() => helpers.splitTile(tile.id, `down`)}>
-            <SplitSquareVertical size={14} />
+            <UiIcon icon={SplitSquareVertical} size={2} />
             <Text size={2}>Split down</Text>
             <span className={styles.shortcut}>
               {modKeyLabel({ letter: `d`, shift: true })}
@@ -204,50 +338,91 @@ export function SplitMenu({
                   void navigator.clipboard.writeText(entityUrl)
                 }}
               >
-                <Copy size={14} />
+                <UiIcon icon={Copy} size={2} />
                 <Text size={2}>Copy URL</Text>
               </Menu.Item>
             </>
           )}
           <Menu.Item onSelect={handleCopyLayoutLink}>
-            <Link2 size={14} />
+            <UiIcon icon={Link2} size={2} />
             <Text size={2}>Copy layout link</Text>
           </Menu.Item>
           {hasEntity && entityUrl !== null && (
             <Menu.Item onSelect={() => togglePin(entityUrl)}>
-              {pinned ? <PinOff size={14} /> : <Pin size={14} />}
+              {pinned ? (
+                <UiIcon icon={PinOff} size={2} />
+              ) : (
+                <UiIcon icon={Pin} size={2} />
+              )}
               <Text size={2}>{pinned ? `Unpin` : `Pin`}</Text>
             </Menu.Item>
           )}
           {hasEntity && entity && forkEntity && !entity.parent && (
-            <Menu.Item
-              onSelect={handleFork}
-              disabled={entity.status === `stopped`}
-            >
-              <GitFork size={14} />
+            <Menu.Item onSelect={handleFork} disabled={entityTerminal}>
+              <UiIcon icon={GitFork} size={2} />
               <Text size={2}>Fork subtree</Text>
             </Menu.Item>
+          )}
+          {hasEntity && entity && !entityTerminal && signalEntity && (
+            <Menu.SubmenuRoot>
+              <Menu.SubmenuTrigger className={styles.submenuTrigger}>
+                <UiIcon icon={Radio} size={2} />
+                <Text size={2}>Send signal</Text>
+                <UiIcon
+                  icon={ChevronRight}
+                  size={2}
+                  className={styles.submenuChevron}
+                />
+              </Menu.SubmenuTrigger>
+              <Menu.Content side="left" align="start">
+                {SIGNAL_OPTION_GROUPS.map((group, groupIndex) => (
+                  <Fragment key={groupIndex}>
+                    {groupIndex > 0 && <Menu.Separator />}
+                    {group.map((option) => (
+                      <Menu.Item
+                        key={option.id}
+                        onSelect={() => handleSignalOption(option)}
+                      >
+                        <span className={styles.signalRow}>
+                          <span className={styles.signalName}>
+                            {option.shortName}
+                          </span>
+                          {option.shortcut && (
+                            <span className={styles.signalShortcut}>
+                              {option.shortcut}
+                            </span>
+                          )}
+                          <span className={styles.signalDescription}>
+                            {option.description}
+                          </span>
+                          <span className={styles.signalCode}>
+                            {option.code}
+                          </span>
+                        </span>
+                      </Menu.Item>
+                    ))}
+                  </Fragment>
+                ))}
+              </Menu.Content>
+            </Menu.SubmenuRoot>
           )}
 
           {!isOnlyTile && (
             <>
               <Menu.Separator />
               <Menu.Item onSelect={() => helpers.closeTile(tile.id)}>
-                <X size={14} />
+                <UiIcon icon={X} size={2} />
                 <Text size={2}>Close tile</Text>
                 <span className={styles.shortcut}>{modKeyLabel(`w`)}</span>
               </Menu.Item>
             </>
           )}
 
-          {hasEntity && entity && entity.status !== `stopped` && killEntity && (
+          {hasEntity && entity && !entityTerminal && killEntity && (
             <>
               <Menu.Separator />
-              <Menu.Item
-                onSelect={() => setShowKillConfirm(true)}
-                tone="danger"
-              >
-                <Trash2 size={14} />
+              <Menu.Item onSelect={() => setShowKillConfirm(true)}>
+                <UiIcon icon={OctagonX} size={2} />
                 <Text size={2}>Kill entity</Text>
               </Menu.Item>
             </>
@@ -256,23 +431,12 @@ export function SplitMenu({
       </Menu.Root>
 
       {hasEntity && entity && (
-        <Dialog.Root open={showInspect} onOpenChange={setShowInspect}>
-          <Dialog.Content maxWidth={600}>
-            <Dialog.Title>Entity details</Dialog.Title>
-            <pre className={styles.inspectPre}>
-              {JSON.stringify(entity, null, 2)}
-            </pre>
-            <Stack justify="end" className={styles.dialogActions}>
-              <Dialog.Close
-                render={
-                  <Button variant="soft" tone="neutral">
-                    Close
-                  </Button>
-                }
-              />
-            </Stack>
-          </Dialog.Content>
-        </Dialog.Root>
+        <JsonInspectDialog
+          open={showInspect}
+          onOpenChange={setShowInspect}
+          title="Entity details"
+          value={entity}
+        />
       )}
 
       {hasEntity && entity && (
@@ -358,7 +522,7 @@ function ViewRow({
           : `Switch this tile to ${view.label}`
       }
     >
-      <Icon size={14} />
+      <UiIcon icon={Icon} size={2} />
       <Text size={2}>{view.label}</Text>
       {isActive && (
         <span className={styles.viewActiveTick} aria-label="active view">
@@ -376,7 +540,7 @@ function ViewRow({
         title={`Open ${view.label} to the side`}
         aria-label={`Open ${view.label} to the side`}
       >
-        <SplitSquareHorizontal size={12} />
+        <UiIcon icon={SplitSquareHorizontal} size={1} />
       </button>
       <button
         type="button"
@@ -386,7 +550,7 @@ function ViewRow({
         title={`Open ${view.label} below`}
         aria-label={`Open ${view.label} below`}
       >
-        <SplitSquareVertical size={12} />
+        <UiIcon icon={SplitSquareVertical} size={1} />
       </button>
     </Menu.Item>
   )

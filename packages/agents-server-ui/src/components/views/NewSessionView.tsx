@@ -1,17 +1,34 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { ArrowUp } from 'lucide-react'
-import { useLiveQuery } from '@tanstack/react-db'
-import { eq, not } from '@tanstack/db'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
+import { ArrowUp, Cpu, Sparkles } from 'lucide-react'
+import { eq, not, useLiveQuery } from '@tanstack/react-db'
 import { nanoid } from 'nanoid'
 import { useElectricAgents } from '../../lib/ElectricAgentsProvider'
-import { useServerConnection } from '../../hooks/useServerConnection'
 import { useWorkspace } from '../../hooks/useWorkspace'
 import { useRecentWorkingDirectories } from '../../hooks/useRecentWorkingDirectories'
-import { Select, Stack, Text } from '../../ui'
+import {
+  codexEnableSource,
+  loadApiKeysStatus,
+  loadDesktopState,
+  onDesktopStateChanged,
+  restartLocalRuntimes,
+  type ApiKeysStatus,
+  type CodexAuthSource,
+} from '../../lib/server-connection'
+import { Button, Icon, Select, Stack, Text } from '../../ui'
 import { SchemaForm, hasSchemaProperties, isObjectSchema } from '../SchemaForm'
 import { WorkingDirectoryPicker } from '../WorkingDirectoryPicker'
 import styles from '../NewSessionPage.module.css'
-import type { ElectricEntityType } from '../../lib/ElectricAgentsProvider'
+import type {
+  ElectricEntityType,
+  ElectricRunner,
+} from '../../lib/ElectricAgentsProvider'
 import type { StandaloneViewProps } from '../../lib/workspace/viewRegistry'
 
 /**
@@ -62,6 +79,37 @@ function persistLastPickedModel(value: string): void {
   }
 }
 
+// Per-source dismissal of the local-Codex-detected prompt. Stored as a
+// flat array of source identifiers in localStorage so the prompt
+// doesn't reappear on every reload after the user explicitly waved it
+// off, but is still re-shown if a different login source becomes
+// available later.
+const CODEX_PROMPT_DISMISSED_KEY = `electric-agents-ui.codex-prompt.dismissed-sources`
+
+function readCodexPromptDismissed(): Array<CodexAuthSource> {
+  if (typeof window === `undefined`) return []
+  try {
+    const raw = window.localStorage.getItem(CODEX_PROMPT_DISMISSED_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? (parsed as Array<CodexAuthSource>) : []
+  } catch {
+    return []
+  }
+}
+
+function persistCodexPromptDismissed(value: Array<CodexAuthSource>): void {
+  if (typeof window === `undefined`) return
+  try {
+    window.localStorage.setItem(
+      CODEX_PROMPT_DISMISSED_KEY,
+      JSON.stringify(value)
+    )
+  } catch {
+    // Quota / private mode — silent.
+  }
+}
+
 interface SchemaProperty {
   type?: string
   enum?: Array<unknown>
@@ -84,9 +132,10 @@ interface SchemaProperty {
  */
 export function NewSessionView({
   tileId,
+  setToolbarTitle,
 }: StandaloneViewProps): React.ReactElement {
-  const { entityTypesCollection, spawnEntity } = useElectricAgents()
-  const { activeServer } = useServerConnection()
+  const { entityTypesCollection, runnersCollection, spawnEntity } =
+    useElectricAgents()
   const { helpers } = useWorkspace()
   const [selected, setSelected] = useState<ElectricEntityType | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -107,10 +156,68 @@ export function NewSessionView({
       return query
         .from({ t: entityTypesCollection })
         .where(({ t }) => not(eq(t.name, `worker`)))
+        .where(({ t }) => not(eq(t.name, `principal`)))
         .orderBy(({ t }) => t.name, `asc`)
     },
     [entityTypesCollection]
   )
+
+  const { data: enabledRunners = [] } = useLiveQuery(
+    (query) => {
+      if (!runnersCollection) return undefined
+      return query
+        .from({ r: runnersCollection })
+        .where(({ r }) => eq(r.admin_status, `enabled`))
+        .orderBy(({ r }) => r.label, `asc`)
+    },
+    [runnersCollection]
+  )
+
+  // The Electron shell registers its own pull-wake runner. When that
+  // runner is one of the available choices we prefer it as the default
+  // selection (preserves the old desktop behaviour of routing wakes to
+  // the bundled local runtime). `null` outside Electron / before the
+  // first state fetch.
+  const [desktopRunnerId, setDesktopRunnerId] = useState<string | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    void loadDesktopState().then((s) => {
+      if (cancelled) return
+      setDesktopRunnerId(s?.pullWakeRunnerId?.trim() || null)
+    })
+    const off = onDesktopStateChanged((s) =>
+      setDesktopRunnerId(s?.pullWakeRunnerId?.trim() || null)
+    )
+    return () => {
+      cancelled = true
+      off?.()
+    }
+  }, [])
+
+  const [selectedRunnerId, setSelectedRunnerId] = useState<string | null>(null)
+  // Re-evaluate the default whenever the list of runners or the
+  // desktop's runner id changes. Prefer the desktop's own runner if
+  // it's enabled, else fall back to the first runner.
+  useEffect(() => {
+    if (
+      selectedRunnerId &&
+      enabledRunners.some((r) => r.id === selectedRunnerId)
+    ) {
+      return
+    }
+    if (enabledRunners.length === 0) {
+      if (selectedRunnerId !== null) setSelectedRunnerId(null)
+      return
+    }
+    if (
+      desktopRunnerId &&
+      enabledRunners.some((r) => r.id === desktopRunnerId)
+    ) {
+      setSelectedRunnerId(desktopRunnerId)
+      return
+    }
+    setSelectedRunnerId(enabledRunners[0]!.id)
+  }, [enabledRunners, desktopRunnerId, selectedRunnerId])
 
   const defaultAgent = useMemo(
     () => entityTypes.find((t) => t.name === DEFAULT_AGENT_NAME) ?? null,
@@ -121,18 +228,10 @@ export function NewSessionView({
     [entityTypes]
   )
 
-  const baseUrl = activeServer?.url ?? null
-
   /**
-   * Spawn an entity, optionally followed by a `/send` of an initial
-   * user message. We prefer this two-step over `initialMessage` on
-   * spawn so the message goes through the same path as the regular
-   * MessageInput (which is the proven path that wakes horton).
-   *
-   * On success we *replace this tile* with the freshly-created entity.
-   * That keeps the workspace layout intact (other tiles around us
-   * stay in place) and feels like opening a file in VS Code's
-   * "untitled" tab — the placeholder turns into the new content.
+   * Spawn an entity and let the server enqueue any initial user message.
+   * The server links dispatch before writing that message, avoiding a
+   * client-side stream preload on the critical path to the first wake.
    */
   const doSpawn = useCallback(
     async (
@@ -143,34 +242,34 @@ export function NewSessionView({
       if (!spawnEntity) return
       setError(null)
       const name = nanoid(10)
-      const tx = spawnEntity({ type: typeName, name, args })
-      const entityUrl = `/${typeName}/${name}`
-      helpers.openEntity(entityUrl, {
-        target: { tileId, position: `replace` },
+      const tx = spawnEntity({
+        type: typeName,
+        name,
+        args,
+        ...(selectedRunnerId
+          ? {
+              dispatch_policy: {
+                targets: [
+                  { type: `runner` as const, runnerId: selectedRunnerId },
+                ],
+              },
+            }
+          : {}),
+        ...(initialUserText ? { initialMessage: initialUserText } : {}),
       })
+      const entityUrl = `/${typeName}/${name}`
       try {
         await tx.isPersisted.promise
-        if (initialUserText && baseUrl) {
-          const res = await fetch(`${baseUrl}/${typeName}/${name}/send`, {
-            method: `POST`,
-            headers: { 'content-type': `application/json` },
-            body: JSON.stringify({
-              from: `user`,
-              payload: { text: initialUserText },
-            }),
-          })
-          if (!res.ok) {
-            const body = await res.text().catch(() => ``)
-            throw new Error(body || `Send failed (${res.status})`)
-          }
-        }
+        helpers.openEntity(entityUrl, {
+          target: { tileId, position: `replace` },
+        })
       } catch (err) {
         setError(
-          `Could not start session: ${err instanceof Error ? err.message : String(err)}. The server may be missing ANTHROPIC_API_KEY.`
+          `Could not start session: ${err instanceof Error ? err.message : String(err)}.`
         )
       }
     },
-    [helpers, spawnEntity, baseUrl, tileId]
+    [helpers, selectedRunnerId, spawnEntity, tileId]
   )
 
   const handleSelectType = useCallback(
@@ -183,6 +282,31 @@ export function NewSessionView({
     },
     [doSpawn]
   )
+
+  const handleCancelSelected = useCallback(() => {
+    setSelected(null)
+  }, [])
+
+  useEffect(() => {
+    if (!setToolbarTitle) return
+
+    if (!selected) {
+      setToolbarTitle(null)
+      return
+    }
+
+    setToolbarTitle(
+      <button
+        type="button"
+        className={styles.toolbarBackLink}
+        onClick={handleCancelSelected}
+      >
+        ← Back to agents
+      </button>
+    )
+
+    return () => setToolbarTitle(null)
+  }, [handleCancelSelected, selected, setToolbarTitle])
 
   const handleStartDefault = useCallback(
     (text: string, args: Record<string, unknown>) => {
@@ -206,7 +330,7 @@ export function NewSessionView({
         {selected ? (
           <SelectedAgentForm
             entityType={selected}
-            onCancel={() => setSelected(null)}
+            onCancel={handleCancelSelected}
             onSubmit={(args) => void doSpawn(selected.name, args)}
             error={error}
           />
@@ -220,6 +344,9 @@ export function NewSessionView({
             error={error}
             workingDirectory={workingDirectory}
             onChangeWorkingDirectory={setWorkingDirectory}
+            runners={enabledRunners}
+            selectedRunnerId={selectedRunnerId}
+            onChangeSelectedRunner={setSelectedRunnerId}
           />
         )}
       </div>
@@ -236,6 +363,9 @@ function Picker({
   error,
   workingDirectory,
   onChangeWorkingDirectory,
+  runners,
+  selectedRunnerId,
+  onChangeSelectedRunner,
 }: {
   defaultAgent: ElectricEntityType | null
   otherAgents: Array<ElectricEntityType>
@@ -245,6 +375,9 @@ function Picker({
   error: string | null
   workingDirectory: string | null
   onChangeWorkingDirectory: (path: string | null) => void
+  runners: Array<ElectricRunner>
+  selectedRunnerId: string | null
+  onChangeSelectedRunner: (id: string | null) => void
 }): React.ReactElement {
   const hasAnyAgent = defaultAgent !== null || otherAgents.length > 0
   const [heroTitle] = useState(
@@ -252,16 +385,16 @@ function Picker({
   )
 
   return (
-    <Stack direction="column" gap={5}>
+    <Stack direction="column" gap={5} className={styles.pickerFlow}>
       <div className={styles.heading}>
         <Text size={7} as="h1" className={styles.headingTitle}>
           {heroTitle}
         </Text>
-        <span className={styles.headingSubtitle}>
-          {defaultAgent
-            ? `Type a message to start a new ${defaultAgent.name} chat, or pick another agent below.`
-            : `Pick the kind of agent you want to spawn.`}
-        </span>
+        {!defaultAgent && (
+          <span className={styles.headingSubtitle}>
+            Pick the kind of agent you want to spawn.
+          </span>
+        )}
       </div>
 
       {error && <div className={styles.error}>{error}</div>}
@@ -273,8 +406,13 @@ function Picker({
           disabled={!spawnReady}
           workingDirectory={workingDirectory}
           onChangeWorkingDirectory={onChangeWorkingDirectory}
+          runners={runners}
+          selectedRunnerId={selectedRunnerId}
+          onChangeSelectedRunner={onChangeSelectedRunner}
         />
       )}
+
+      <CodexDetectedPrompt />
 
       {otherAgents.length > 0 && (
         <div className={styles.otherAgents}>
@@ -314,6 +452,135 @@ function Picker({
   )
 }
 
+/**
+ * Inline opt-in prompt rendered under the default-agent composer. When
+ * the desktop main process detects an existing local Codex login (Codex
+ * CLI or OpenCode) but the user hasn't approved it yet, surface a small
+ * "Use this login?" banner here so the user can opt in without leaving
+ * the new-session flow. Each source can be dismissed independently —
+ * that decision is persisted in localStorage so the prompt doesn't
+ * keep reappearing after an explicit wave-off, but does come back if a
+ * different source is added later.
+ *
+ * Hidden in the web build (no `window.electronAPI`) and once the user
+ * has any Codex source enabled (the Credentials settings screen takes
+ * over from there).
+ */
+function CodexDetectedPrompt(): React.ReactElement | null {
+  const isDesktop = typeof window !== `undefined` && Boolean(window.electronAPI)
+  const [status, setStatus] = useState<ApiKeysStatus | null>(null)
+  const [dismissed, setDismissed] = useState<Array<CodexAuthSource>>(() =>
+    readCodexPromptDismissed()
+  )
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!isDesktop) return
+    let cancelled = false
+    void loadApiKeysStatus().then((next) => {
+      if (cancelled) return
+      setStatus(next)
+    })
+    // Refresh codex status when the desktop state changes — covers
+    // the case where the user enables/disables Codex elsewhere (e.g.
+    // the Credentials settings page) while the new-session view is
+    // still mounted, so the prompt stays in sync.
+    const off = onDesktopStateChanged(() => {
+      void loadApiKeysStatus().then((next) => {
+        if (cancelled) return
+        setStatus(next)
+      })
+    })
+    return () => {
+      cancelled = true
+      off?.()
+    }
+  }, [isDesktop])
+
+  if (!isDesktop || !status) return null
+  if (status.codex.enabled) return null
+
+  const candidates = status.codex.availableSources.filter(
+    (source) =>
+      source.source !== `desktop-oauth` && !dismissed.includes(source.source)
+  )
+  if (candidates.length === 0) return null
+
+  const primary = candidates[0]!
+  const shortName =
+    primary.source === `codex-cli`
+      ? `Codex CLI`
+      : primary.source === `opencode`
+        ? `OpenCode`
+        : `Codex`
+
+  const handleApprove = async (): Promise<void> => {
+    setBusy(true)
+    setError(null)
+    try {
+      await codexEnableSource(primary.source)
+      // Approving from here is a "yes, use this now" gesture — bounce
+      // any connected local runtime so the new credential takes effect
+      // immediately for the session the user is about to spawn,
+      // instead of leaving a "Restart local runtime" banner sitting in
+      // the Credentials settings page that the user would have to find
+      // and click. No-op when no local runtime is connected.
+      await restartLocalRuntimes()
+      const next = await loadApiKeysStatus()
+      if (next) setStatus(next)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleDismiss = (): void => {
+    const next = [...dismissed, primary.source]
+    setDismissed(next)
+    persistCodexPromptDismissed(next)
+  }
+
+  return (
+    <div className={styles.codexPrompt}>
+      <Icon icon={Sparkles} size={2} />
+      <span className={styles.codexPromptText}>
+        Found a local {shortName} sign-in. Use it for ChatGPT / Codex models?
+      </span>
+      <span className={styles.codexPromptActions}>
+        <Button
+          type="button"
+          size={1}
+          variant="ghost"
+          tone="neutral"
+          onClick={handleDismiss}
+          disabled={busy}
+        >
+          Dismiss
+        </Button>
+        <Button
+          type="button"
+          size={1}
+          variant="soft"
+          tone="neutral"
+          onClick={() => {
+            void handleApprove()
+          }}
+          disabled={busy}
+        >
+          {busy ? `Connecting…` : `Use this login`}
+        </Button>
+      </span>
+      {error && (
+        <span className={styles.codexPromptError} role="alert">
+          {error}
+        </span>
+      )}
+    </div>
+  )
+}
+
 function SelectedAgentForm({
   entityType,
   onCancel,
@@ -326,7 +593,7 @@ function SelectedAgentForm({
   error: string | null
 }): React.ReactElement {
   return (
-    <Stack direction="column" gap={4}>
+    <Stack direction="column" gap={4} className={styles.selectedFlow}>
       <div className={styles.heading}>
         <Text size={5} as="h1" className={styles.headingTitle}>
           Start a new {entityType.name} session
@@ -345,9 +612,6 @@ function SelectedAgentForm({
           <div className={styles.formHeaderText}>
             <Text size={3}>{entityType.name}</Text>
           </div>
-          <button type="button" className={styles.backLink} onClick={onCancel}>
-            ← Back
-          </button>
         </div>
         <SchemaForm
           schema={entityType.creation_schema}
@@ -382,12 +646,18 @@ function DefaultAgentComposer({
   disabled,
   workingDirectory,
   onChangeWorkingDirectory,
+  runners,
+  selectedRunnerId,
+  onChangeSelectedRunner,
 }: {
   agent: ElectricEntityType
   onSubmit: (text: string, args: Record<string, unknown>) => void
   disabled?: boolean
   workingDirectory: string | null
   onChangeWorkingDirectory: (path: string | null) => void
+  runners: Array<ElectricRunner>
+  selectedRunnerId: string | null
+  onChangeSelectedRunner: (id: string | null) => void
 }): React.ReactElement {
   const [value, setValue] = useState(``)
   const [submitting, setSubmitting] = useState(false)
@@ -442,79 +712,143 @@ function DefaultAgentComposer({
 
   return (
     <div
-      className={[styles.composer, disabled ? styles.composerDisabled : null]
+      className={[
+        styles.composerWrap,
+        disabled ? styles.composerDisabled : null,
+      ]
         .filter(Boolean)
         .join(` `)}
     >
-      <textarea
-        ref={textareaRef}
-        autoFocus
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === `Enter` && !e.shiftKey) {
-            e.preventDefault()
-            submit()
-          }
-        }}
-        placeholder={placeholder}
-        disabled={disabled || submitting}
-        rows={1}
-        className={styles.composerTextarea}
-      />
-      <div className={styles.composerFooter}>
-        <div className={styles.composerControls}>
-          {inlineProps.map(({ key, prop }) =>
-            prop.enum ? (
-              <PillSelect
-                key={key}
-                label={prop.title ?? key}
-                value={String(args[key] ?? ``)}
-                options={prop.enum.map((v) => String(v))}
-                onChange={(next) => {
-                  const original = prop.enum!.find((v) => String(v) === next)
-                  if (isModelProperty(key)) persistLastPickedModel(next)
-                  setArgs((prev) => ({ ...prev, [key]: original ?? next }))
-                }}
-                disabled={submitting || disabled}
-              />
-            ) : prop.type === `boolean` ? (
-              <PillToggle
-                key={key}
-                label={prop.title ?? key}
-                checked={Boolean(args[key])}
-                onChange={(checked) =>
-                  setArgs((prev) => ({ ...prev, [key]: checked }))
-                }
-                disabled={submitting || disabled}
-              />
-            ) : null
-          )}
-          <WorkingDirectoryPicker
-            value={workingDirectory}
-            onChange={onChangeWorkingDirectory}
-            disabled={submitting || disabled}
-          />
-        </div>
-        <div className={styles.composerSendCluster}>
-          {submitting && <span className={styles.composerHint}>Starting…</span>}
-          <button
-            type="button"
-            aria-label={`Start ${agent.name} session`}
-            onClick={submit}
-            disabled={!isActive}
-            className={[
-              styles.composerSend,
-              isActive ? styles.composerSendActive : null,
-            ]
-              .filter(Boolean)
-              .join(` `)}
-          >
-            <ArrowUp size={16} />
-          </button>
+      <div className={styles.composer}>
+        <textarea
+          ref={textareaRef}
+          autoFocus
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === `Enter` && !e.shiftKey) {
+              e.preventDefault()
+              submit()
+            }
+          }}
+          placeholder={placeholder}
+          disabled={disabled || submitting}
+          rows={1}
+          className={styles.composerTextarea}
+        />
+        <div className={styles.composerFooter}>
+          <div className={styles.composerControls}>
+            {inlineProps.map(({ key, prop }) =>
+              prop.enum ? (
+                <PillSelect
+                  key={key}
+                  label={prop.title ?? key}
+                  value={String(args[key] ?? ``)}
+                  options={prop.enum.map((v) => String(v))}
+                  onChange={(next) => {
+                    const original = prop.enum!.find((v) => String(v) === next)
+                    if (isModelProperty(key)) persistLastPickedModel(next)
+                    setArgs((prev) => ({ ...prev, [key]: original ?? next }))
+                  }}
+                  disabled={submitting || disabled}
+                />
+              ) : prop.type === `boolean` ? (
+                <PillToggle
+                  key={key}
+                  label={prop.title ?? key}
+                  checked={Boolean(args[key])}
+                  onChange={(checked) =>
+                    setArgs((prev) => ({ ...prev, [key]: checked }))
+                  }
+                  disabled={submitting || disabled}
+                />
+              ) : null
+            )}
+          </div>
+          <div className={styles.composerSendCluster}>
+            {submitting && (
+              <span className={styles.composerHint}>Starting…</span>
+            )}
+            <button
+              type="button"
+              aria-label={`Start ${agent.name} session`}
+              onClick={submit}
+              disabled={!isActive}
+              className={[
+                styles.composerSend,
+                isActive ? styles.composerSendActive : null,
+              ]
+                .filter(Boolean)
+                .join(` `)}
+            >
+              <Icon icon={ArrowUp} size={3} />
+            </button>
+          </div>
         </div>
       </div>
+      <div className={styles.composerMeta}>
+        <WorkingDirectoryPicker
+          value={workingDirectory}
+          onChange={onChangeWorkingDirectory}
+          disabled={submitting || disabled}
+        />
+        {runners.length > 0 && (
+          <RunnerPickerPill
+            runners={runners}
+            value={selectedRunnerId}
+            onChange={onChangeSelectedRunner}
+            disabled={submitting || disabled}
+          />
+        )}
+      </div>
     </div>
+  )
+}
+
+function RunnerPickerPill({
+  runners,
+  value,
+  onChange,
+  disabled,
+}: {
+  runners: Array<ElectricRunner>
+  value: string | null
+  onChange: (id: string | null) => void
+  disabled?: boolean
+}): React.ReactElement | null {
+  if (runners.length === 0) return null
+  // The trigger needs to display the runner's *label*, not its id.
+  // base-ui's `Select.Value` falls back to rendering the raw value
+  // string when its `children` render function is omitted — which
+  // would show the runner UUID. Use `renderValue` to look the label
+  // up out of the current `runners` list instead.
+  const renderValue = (id: string | null): React.ReactNode => {
+    if (!id) return `Pick runner`
+    const runner = runners.find((r) => r.id === id)
+    return runner ? runner.label || runner.id : id
+  }
+  return (
+    <Select.Root<string>
+      value={value}
+      onValueChange={(next) => onChange(next)}
+      disabled={disabled}
+    >
+      <Select.Trigger
+        size="pill"
+        aria-label="Runner"
+        title="Pull-wake runner that will handle this session"
+        placeholder="Pick runner"
+        icon={Cpu}
+        renderValue={renderValue}
+      />
+      <Select.Content>
+        {runners.map((runner) => (
+          <Select.Item key={runner.id} value={runner.id}>
+            {runner.label || runner.id}
+          </Select.Item>
+        ))}
+      </Select.Content>
+    </Select.Root>
   )
 }
 

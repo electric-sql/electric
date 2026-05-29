@@ -1,13 +1,21 @@
 import { describe, expect, it, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import {
   readDotEnvFile,
   resolveAnthropicApiKey,
-  resolveBuiltinAgentsHost,
-  resolveBuiltinAgentsPort,
   resolveComposeProjectName,
   resolveElectricAgentsPort,
+  resolvePullWakeOwnerPrincipal,
+  resolvePullWakeRunnerId,
   waitForElectricAgentsServer,
 } from '../src/start'
+
+const dockerComposeFull = readFileSync(
+  fileURLToPath(new URL(`../docker-compose.full.yml`, import.meta.url)),
+  `utf8`
+)
+const localAgentsServerPullPolicy = `\${ELECTRIC_AGENTS_SERVER_PULL_POLICY:-missing}`
 
 describe(`resolveAnthropicApiKey`, () => {
   it(`prefers the explicit CLI option`, () => {
@@ -65,45 +73,59 @@ describe(`resolveElectricAgentsPort`, () => {
   })
 })
 
-describe(`resolveBuiltinAgentsPort`, () => {
+describe(`resolvePullWakeRunnerId`, () => {
   it(`uses process env when present`, () => {
     expect(
-      resolveBuiltinAgentsPort({ ELECTRIC_AGENTS_BUILTIN_PORT: `5548` }, {})
-    ).toBe(5548)
+      resolvePullWakeRunnerId({ ELECTRIC_AGENTS_PULL_WAKE_RUNNER_ID: `r1` }, {})
+    ).toBe(`r1`)
   })
 
   it(`falls back to .env`, () => {
     expect(
-      resolveBuiltinAgentsPort({}, { ELECTRIC_AGENTS_BUILTIN_PORT: `6658` })
-    ).toBe(6658)
+      resolvePullWakeRunnerId({}, { ELECTRIC_AGENTS_PULL_WAKE_RUNNER_ID: `r2` })
+    ).toBe(`r2`)
   })
 
-  it(`defaults to 4448`, () => {
-    expect(resolveBuiltinAgentsPort({}, {})).toBe(4448)
+  it(`derives a stable local runner id from the agents identity`, () => {
+    expect(
+      resolvePullWakeRunnerId(
+        { ELECTRIC_AGENTS_IDENTITY: `Alice Smith@example.com` },
+        {}
+      )
+    ).toBe(`builtin-alice-smith-example.com`)
+  })
+
+  it(`defaults when no identity is available`, () => {
+    expect(resolvePullWakeRunnerId({}, {})).toBe(`builtin-agents`)
   })
 })
 
-describe(`resolveBuiltinAgentsHost`, () => {
-  it(`uses process env when present`, () => {
+describe(`resolvePullWakeOwnerPrincipal`, () => {
+  it(`prefers the configured agents principal`, () => {
     expect(
-      resolveBuiltinAgentsHost(
-        { ELECTRIC_AGENTS_BUILTIN_HOST: `127.0.0.1` },
+      resolvePullWakeOwnerPrincipal(
+        {
+          ELECTRIC_AGENTS_PRINCIPAL: `service:svc-test`,
+          ELECTRIC_AGENTS_IDENTITY: `a@example.com`,
+        },
         {}
       )
-    ).toBe(`127.0.0.1`)
+    ).toBe(`/principal/service%3Asvc-test`)
   })
 
-  it(`falls back to .env`, () => {
+  it(`uses the agents identity when present`, () => {
     expect(
-      resolveBuiltinAgentsHost(
-        {},
-        { ELECTRIC_AGENTS_BUILTIN_HOST: `localhost` }
+      resolvePullWakeOwnerPrincipal(
+        { ELECTRIC_AGENTS_IDENTITY: `user:a@example.com` },
+        {}
       )
-    ).toBe(`localhost`)
+    ).toBe(`/principal/user%3Aa%40example.com`)
   })
 
-  it(`defaults to all interfaces so Docker can reach the host runtime`, () => {
-    expect(resolveBuiltinAgentsHost({}, {})).toBe(`0.0.0.0`)
+  it(`falls back to the local builtin owner`, () => {
+    expect(resolvePullWakeOwnerPrincipal({}, {})).toBe(
+      `/principal/system%3Abuiltin-agents`
+    )
   })
 })
 
@@ -131,6 +153,14 @@ describe(`readDotEnvFile`, () => {
   })
 })
 
+describe(`docker compose full stack config`, () => {
+  it(`does not force-pull over a locally built agents-server image`, () => {
+    expect(dockerComposeFull).toContain(
+      `pull_policy: ${localAgentsServerPullPolicy}`
+    )
+  })
+})
+
 describe(`waitForElectricAgentsServer`, () => {
   it(`retries until the health endpoint responds`, async () => {
     const fetchImpl = vi
@@ -150,6 +180,23 @@ describe(`waitForElectricAgentsServer`, () => {
       expect.objectContaining({
         signal: expect.any(AbortSignal),
       })
+    )
+  })
+
+  it(`checks health below tenant path prefixes`, async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(null, { status: 200 }))
+
+    await waitForElectricAgentsServer(`http://agents.test/t/svc-123/v1`, {
+      fetchImpl,
+      timeoutMs: 100,
+      intervalMs: 0,
+    })
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      `http://agents.test/t/svc-123/v1/_electric/health`,
+      expect.any(Object)
     )
   })
 })

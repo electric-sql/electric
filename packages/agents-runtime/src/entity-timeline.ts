@@ -1,17 +1,24 @@
 import {
+  and,
   coalesce,
   concat,
   createCollection,
   createLiveQueryCollection,
   eq,
   isNull,
+  like,
   localOnlyCollectionOptions,
   or,
   toArray,
 } from '@durable-streams/state'
-import type { InitialQueryBuilder, QueryBuilder } from '@tanstack/db'
+import { caseWhen } from '@tanstack/db'
+import type {
+  Collection,
+  InitialQueryBuilder,
+  QueryBuilder,
+} from '@tanstack/db'
 import type { EntityStreamDB } from './entity-stream-db'
-import type { ChildStatusEntry } from './entity-schema'
+import type { ChildStatusEntry, MessageReceived, Signal } from './entity-schema'
 import type { ManifestEntry, Wake, WakeMessage } from './types'
 
 export type EntityTimelineState =
@@ -48,6 +55,11 @@ export type EntityTimelineSection =
       items: Array<EntityTimelineContentItem>
       done?: true
       error?: string
+    }
+  | {
+      kind: `wake`
+      payload: WakeMessage & { type: `wake` }
+      timestamp: number
     }
 
 export interface IncludesRun {
@@ -98,18 +110,25 @@ export interface IncludesError {
   message: string
 }
 
-export interface IncludesInboxMessage {
-  key: string
+export type IncludesInboxMessage = Omit<
+  MessageReceived,
+  `_seq` | `from` | `timestamp` | `mode` | `status`
+> & {
   order: TimelineOrder
   from: string
-  payload: unknown
   timestamp: string
+  mode?: NonNullable<MessageReceived[`mode`]>
+  status?: NonNullable<MessageReceived[`status`]>
 }
 
 export interface IncludesWakeMessage {
   key: string
   order: TimelineOrder
   payload: WakeMessage & { type: `wake` }
+}
+
+export type IncludesSignal = Omit<Signal, `_seq`> & {
+  order: TimelineOrder
 }
 
 export interface IncludesContextInserted {
@@ -147,10 +166,130 @@ export interface EntityTimelineData {
   runs: Array<IncludesRun>
   inbox: Array<IncludesInboxMessage>
   wakes: Array<IncludesWakeMessage>
+  signals: Array<IncludesSignal>
   contextInserted: Array<IncludesContextInserted>
   contextRemoved: Array<IncludesContextRemoved>
   entities: Array<IncludesEntity>
 }
+
+export type EntityTimelineInboxMode = `processed` | `all`
+
+export interface EntityTimelineQueryOptions {
+  inboxMode?: EntityTimelineInboxMode
+}
+
+export interface EntityTimelineTextChunk {
+  key: string
+  text_id: string
+  run_id: string
+  order: TimelineOrder
+  delta: string
+}
+
+export interface EntityTimelineTextItem {
+  key: string
+  run_id?: string
+  order: TimelineOrder
+  status: `streaming` | `completed`
+  content: string
+}
+
+export interface EntityTimelineToolCallItem {
+  key: string
+  run_id?: string
+  order: TimelineOrder
+  tool_call_id?: string
+  tool_name: string
+  status: `started` | `args_complete` | `executing` | `completed` | `failed`
+  args?: unknown
+  result?: unknown
+  error?: string
+}
+
+export type EntityTimelineRunItem =
+  | {
+      $key: string
+      text: EntityTimelineTextItem
+      toolCall?: undefined
+    }
+  | {
+      $key: string
+      text?: undefined
+      toolCall: EntityTimelineToolCallItem
+    }
+
+export interface EntityTimelineStepItem {
+  key: string
+  run_id?: string
+  order: TimelineOrder
+  step_number: number
+  status: `started` | `completed`
+  model_id?: string
+  duration_ms?: number
+}
+
+export interface EntityTimelineErrorItem {
+  key: string
+  run_id?: string
+  error_code: string
+  message: string
+}
+
+export interface EntityTimelineRunRow {
+  key: string
+  order: TimelineOrder
+  status: `started` | `completed` | `failed`
+  finish_reason?: string
+  items: Collection<EntityTimelineRunItem>
+  steps: Collection<EntityTimelineStepItem>
+  errors: Collection<EntityTimelineErrorItem>
+}
+
+export type EntityTimelineInboxRow = IncludesInboxMessage
+export type EntityTimelineWakeRow = IncludesWakeMessage
+export type EntityTimelineSignalRow = IncludesSignal
+
+export type EntityTimelineQueryRow =
+  | {
+      $key: string
+      inbox: EntityTimelineInboxRow
+      run?: undefined
+      wake?: undefined
+      signal?: undefined
+      manifest?: undefined
+    }
+  | {
+      $key: string
+      inbox?: undefined
+      run: EntityTimelineRunRow
+      wake?: undefined
+      signal?: undefined
+      manifest?: undefined
+    }
+  | {
+      $key: string
+      inbox?: undefined
+      run?: undefined
+      wake: EntityTimelineWakeRow
+      signal?: undefined
+      manifest?: undefined
+    }
+  | {
+      $key: string
+      inbox?: undefined
+      run?: undefined
+      wake?: undefined
+      signal: EntityTimelineSignalRow
+      manifest?: undefined
+    }
+  | {
+      $key: string
+      inbox?: undefined
+      run?: undefined
+      wake?: undefined
+      signal?: undefined
+      manifest: ManifestEntry
+    }
 
 function normalizeTimelineRun(run: IncludesRun): IncludesRun {
   const texts = run.texts
@@ -263,6 +402,7 @@ export function normalizeEntityTimelineData(
     runs: data.runs.map(normalizeTimelineRun).sort(compareTimelineOrder),
     inbox: data.inbox,
     wakes: data.wakes,
+    signals: data.signals ?? [],
     contextInserted: data.contextInserted,
     contextRemoved: data.contextRemoved,
     entities: normalizeTimelineEntities(data.entities),
@@ -296,6 +436,9 @@ type InboxRow = OrderedValue<
 type WakeRow = OrderedValue<
   EntityStreamDB[`collections`][`wakes`][`toArray`][number]
 >
+type SignalRow = OrderedValue<
+  EntityStreamDB[`collections`][`signals`][`toArray`][number]
+>
 type ContextInsertedValueRow =
   EntityStreamDB[`collections`][`contextInserted`][`toArray`][number]
 type ContextRemovedValueRow =
@@ -309,6 +452,15 @@ type ChildStatusRow = MaybeOrderedValue<ChildStatusEntry>
 function readInlineSeq(row: object): number | undefined {
   const seq = Reflect.get(row, `_seq`)
   return typeof seq === `number` ? seq : undefined
+}
+
+function readTimelineOrder(row: object): string | undefined {
+  const order = Reflect.get(row, `_timeline_order`)
+  return typeof order === `string` ? order : undefined
+}
+
+export function createPendingTimelineOrder(index: number): string {
+  return `~pending:${index.toString().padStart(12, `0`)}`
 }
 
 function toSeqOrderToken(seq: number): string {
@@ -352,6 +504,11 @@ function readRequiredOrderToken<TRow extends { key: string | number }>(
   row: TRow,
   index: number
 ): string {
+  const timelineOrder = readTimelineOrder(row)
+  if (timelineOrder) {
+    return timelineOrder
+  }
+
   const offset = collection.__electricRowOffsets?.get(row.key)
   if (offset) {
     return `offset:${offset}`
@@ -372,6 +529,11 @@ function readOptionalOrderToken<TRow extends { key: string | number }>(
   },
   row: TRow
 ): string | undefined {
+  const timelineOrder = readTimelineOrder(row)
+  if (timelineOrder) {
+    return timelineOrder
+  }
+
   const offset = collection.__electricRowOffsets?.get(row.key)
   if (offset) {
     return `offset:${offset}`
@@ -649,9 +811,14 @@ function buildInboxMessages(
   return [...inbox].sort(compareTimelineOrder).map((message) => ({
     key: message.key,
     order: message.order,
-    from: message.from,
+    from: message.from ?? `unknown`,
     payload: message.payload,
-    timestamp: message.timestamp,
+    timestamp: message.timestamp ?? new Date(0).toISOString(),
+    mode: message.mode ?? `immediate`,
+    status: message.status ?? `processed`,
+    position: message.position,
+    processed_at: message.processed_at,
+    cancelled_at: message.cancelled_at,
   }))
 }
 
@@ -669,6 +836,16 @@ function buildWakeMessages(wakes: Array<WakeRow>): Array<IncludesWakeMessage> {
       ...(wake.other_children ? { other_children: wake.other_children } : {}),
     },
   }))
+}
+
+function buildSignalMessages(signals: Array<SignalRow>): Array<IncludesSignal> {
+  return [...signals].sort(compareTimelineOrder).map((signal) => {
+    const { _seq: _ignoredSeq, ...value } = signal
+    return {
+      ...value,
+      order: signal.order,
+    }
+  })
 }
 
 function buildContextInsertedMessages(
@@ -788,6 +965,7 @@ export function buildEntityTimelineData(
   const steps = withOrderToken(db.collections.steps)
   const inbox = withOrderToken(db.collections.inbox)
   const wakes = withOrderToken(db.collections.wakes)
+  const signals = withOrderToken(db.collections.signals)
   const contextInserted = withOrderToken(
     getOrderableCollection<ContextInsertedValueRow>(
       db.collections.contextInserted as
@@ -834,6 +1012,7 @@ export function buildEntityTimelineData(
     steps,
     inbox,
     wakes,
+    signals,
     contextInserted,
     contextRemoved,
     manifests.filter(hasOrderToken),
@@ -850,6 +1029,7 @@ export function buildEntityTimelineData(
     }),
     inbox: buildInboxMessages(withOrderFromOrderIndex(inbox, orderIndex)),
     wakes: buildWakeMessages(withOrderFromOrderIndex(wakes, orderIndex)),
+    signals: buildSignalMessages(withOrderFromOrderIndex(signals, orderIndex)),
     contextInserted: buildContextInsertedMessages(
       withOrderAndHistoryOffsetFromOrderIndex(contextInserted, orderIndex)
     ),
@@ -948,6 +1128,11 @@ const getEntityInboxCollection = cachedCollectionFactory((db: EntityStreamDB) =>
         from: inbox.from,
         payload: inbox.payload,
         timestamp: inbox.timestamp,
+        mode: coalesce(inbox.mode, `immediate`),
+        status: coalesce(inbox.status, `processed`),
+        position: inbox.position,
+        processed_at: inbox.processed_at,
+        cancelled_at: inbox.cancelled_at,
       })),
   })
 )
@@ -973,6 +1158,250 @@ const getEntityWakesCollection = cachedCollectionFactory((db: EntityStreamDB) =>
   })
 )
 
+const getEntitySignalsCollection = cachedCollectionFactory(
+  (db: EntityStreamDB) =>
+    createLiveQueryCollection({
+      id: `${String(db.collections.signals.id)}:signals-live`,
+      query: (q) =>
+        q.from({ signal: db.collections.signals }).select(({ signal }) => ({
+          timelineKey: TIMELINE_KEY,
+          key: signal.key,
+          order: coalesce(signal._seq, -1),
+          signal: signal.signal,
+          status: signal.status,
+          sender: signal.sender,
+          reason: signal.reason,
+          payload: signal.payload,
+          timestamp: signal.timestamp,
+          handled_at: signal.handled_at,
+          handled_by: signal.handled_by,
+          outcome: signal.outcome,
+          previous_state: signal.previous_state,
+          new_state: signal.new_state,
+        })),
+    })
+)
+
+type EntityTimelineQueryBuilder = (q: InitialQueryBuilder) => QueryBuilder<any>
+
+/**
+ * Builds a live timeline query for an entity stream.
+ *
+ * The returned query is a multi-source timeline ordered by each row's
+ * `_timeline_order`. Each result row has TanStack DB's virtual `$key` plus one
+ * populated source property:
+ *
+ * - `{ inbox }` for user inbox messages.
+ * - `{ run }` for agent runs.
+ * - `{ wake }` for wake events.
+ * - `{ signal }` for entity signals.
+ * - `{ manifest }` for manifest entries.
+ *
+ * Run rows include live child collections rather than materialized arrays:
+ * `run.items`, `run.steps`, and `run.errors`. Pass those child collections to
+ * `useLiveQuery` (or another live-query consumer) in child renderers to receive
+ * fine-grained updates while text chunks stream in. Text run items expose their
+ * concatenated streamed content as `item.text.content`.
+ */
+export function createEntityTimelineQuery(
+  db: EntityStreamDB,
+  opts: EntityTimelineQueryOptions = {}
+): EntityTimelineQueryBuilder {
+  return (q: InitialQueryBuilder) => buildEntityTimelineQuery(q, db, opts)
+}
+
+function buildEntityTimelineQuery(
+  q: InitialQueryBuilder,
+  db: EntityStreamDB,
+  opts: EntityTimelineQueryOptions
+): QueryBuilder<any> {
+  const inboxMode = opts.inboxMode ?? `processed`
+
+  let inbox = q.from({ inbox: db.collections.inbox })
+  if (inboxMode === `processed`) {
+    inbox = inbox.where(({ inbox }) =>
+      or(
+        eq(coalesce(inbox.status, `processed`), `processed`),
+        and(
+          eq(inbox.$synced, false),
+          eq(coalesce(inbox.status, `pending`), `pending`),
+          like(coalesce(inbox._timeline_order, ``), `~pending:%`)
+        )
+      )
+    )
+  }
+
+  const inboxSource = inbox.select(({ inbox }) => ({
+    order: coalesce(inbox._timeline_order, `~`),
+    key: inbox.key,
+    from: coalesce(inbox.from, `unknown`),
+    payload: inbox.payload,
+    timestamp: coalesce(inbox.timestamp, ``),
+    mode: coalesce(inbox.mode, `immediate`),
+    status: coalesce(inbox.status, `processed`),
+    position: inbox.position,
+    processed_at: inbox.processed_at,
+    cancelled_at: inbox.cancelled_at,
+  }))
+
+  const wakeSource = q
+    .from({ wake: db.collections.wakes })
+    .select(({ wake }) => ({
+      key: wake.key,
+      order: coalesce(wake._timeline_order, `~`),
+      payload: {
+        type: `wake` as const,
+        timestamp: wake.timestamp,
+        source: wake.source,
+        timeout: wake.timeout,
+        changes: wake.changes,
+        finished_child: wake.finished_child,
+        other_children: wake.other_children,
+      },
+    }))
+
+  const signalSource = q
+    .from({ signal: db.collections.signals })
+    .select(({ signal }) => ({
+      key: signal.key,
+      order: coalesce(signal._timeline_order, `~`),
+      signal: signal.signal,
+      status: signal.status,
+      sender: signal.sender,
+      reason: signal.reason,
+      payload: signal.payload,
+      timestamp: signal.timestamp,
+      handled_at: signal.handled_at,
+      handled_by: signal.handled_by,
+      outcome: signal.outcome,
+      previous_state: signal.previous_state,
+      new_state: signal.new_state,
+    }))
+
+  const runItemsSource = q
+    .unionAll({
+      text: db.collections.texts,
+      toolCall: db.collections.toolCalls,
+    })
+    .select(({ text, toolCall }) => ({
+      order: coalesce(text._timeline_order, toolCall._timeline_order, `~`),
+      run_id: coalesce(text.run_id, toolCall.run_id, ``),
+      text: caseWhen(text.key, {
+        key: text.key,
+        run_id: text.run_id,
+        order: coalesce(text._timeline_order, `~`),
+        status: text.status,
+      }),
+      textContent: concat(
+        toArray(
+          q
+            .from({ chunk: db.collections.textDeltas })
+            .where(({ chunk }) => eq(chunk.text_id, text.key))
+            .orderBy(({ chunk }) => coalesce(chunk._timeline_order, `~`))
+            .orderBy(({ chunk }) => chunk.key)
+            .select(({ chunk }) => chunk.delta)
+        )
+      ),
+      toolCall: caseWhen(toolCall.key, {
+        key: toolCall.key,
+        run_id: toolCall.run_id,
+        order: coalesce(toolCall._timeline_order, `~`),
+        tool_call_id: toolCall.tool_call_id,
+        tool_name: toolCall.tool_name,
+        status: toolCall.status,
+        args: toolCall.args,
+        result: toolCall.result,
+        error: toolCall.error,
+      }),
+    }))
+
+  const runSource = q.from({ run: db.collections.runs }).select(({ run }) => ({
+    key: run.key,
+    order: coalesce(run._timeline_order, `~`),
+    status: run.status,
+    finish_reason: run.finish_reason,
+    items: q
+      .from({ item: runItemsSource })
+      .where(({ item }) => eq(item.run_id, run.key))
+      .orderBy(({ item }) => item.order)
+      .orderBy(({ item }) =>
+        coalesce(
+          caseWhen(item.text.key, `text`),
+          caseWhen(item.toolCall.key, `toolCall`),
+          ``
+        )
+      )
+      .orderBy(({ item }) => coalesce(item.text.key, item.toolCall.key, ``))
+      .select(({ item }) => ({
+        text: caseWhen(item.text.key, {
+          key: item.text.key,
+          run_id: item.text.run_id,
+          order: item.text.order,
+          status: item.text.status,
+          content: item.textContent,
+        }),
+        toolCall: item.toolCall,
+      })),
+    steps: q
+      .from({ step: db.collections.steps })
+      .where(({ step }) => eq(step.run_id, run.key))
+      .orderBy(({ step }) => step.step_number)
+      .orderBy(({ step }) => coalesce(step._timeline_order, `~`))
+      .orderBy(({ step }) => step.key)
+      .select(({ step }) => ({
+        key: step.key,
+        run_id: step.run_id,
+        order: coalesce(step._timeline_order, `~`),
+        step_number: step.step_number,
+        status: step.status,
+        model_id: step.model_id,
+        duration_ms: step.duration_ms,
+      })),
+    errors: q
+      .from({ error: db.collections.errors })
+      .where(({ error }) => eq(error.run_id, run.key))
+      .orderBy(({ error }) => error.key)
+      .select(({ error }) => ({
+        key: error.key,
+        run_id: error.run_id,
+        error_code: error.error_code,
+        message: error.message,
+      })),
+  }))
+
+  return q
+    .unionAll({
+      inbox: inboxSource,
+      run: runSource,
+      wake: wakeSource,
+      signal: signalSource,
+      manifest: db.collections.manifests,
+    })
+    .orderBy(({ inbox, run, wake, signal, manifest }) =>
+      coalesce(
+        inbox.order,
+        run.order,
+        wake.order,
+        signal.order,
+        manifest._timeline_order,
+        `~`
+      )
+    )
+    .orderBy(({ inbox, run, wake, signal, manifest }) =>
+      coalesce(
+        caseWhen(inbox.key, `inbox`),
+        caseWhen(run.key, `run`),
+        caseWhen(wake.key, `wake`),
+        caseWhen(signal.key, `signal`),
+        caseWhen(manifest.key, `manifest`),
+        ``
+      )
+    )
+    .orderBy(({ inbox, run, wake, signal, manifest }) =>
+      coalesce(inbox.key, run.key, wake.key, signal.key, manifest.key, ``)
+    )
+}
+
 type EntityQueryBuilder = (q: InitialQueryBuilder) => QueryBuilder<any>
 
 export function createEntityIncludesQuery(
@@ -982,6 +1411,7 @@ export function createEntityIncludesQuery(
   const runsCollection = getEntityRunsCollection(db)
   const inboxCollection = getEntityInboxCollection(db)
   const wakesCollection = getEntityWakesCollection(db)
+  const signalsCollection = getEntitySignalsCollection(db)
   const entitiesCollection = getEntityEntitiesCollection(db)
 
   return (q: InitialQueryBuilder) =>
@@ -1082,6 +1512,11 @@ export function createEntityIncludesQuery(
             from: inbox.from,
             payload: inbox.payload,
             timestamp: inbox.timestamp,
+            mode: inbox.mode,
+            status: inbox.status,
+            position: inbox.position,
+            processed_at: inbox.processed_at,
+            cancelled_at: inbox.cancelled_at,
           }))
       ),
       wakes: toArray(
@@ -1093,6 +1528,27 @@ export function createEntityIncludesQuery(
             key: wake.key,
             order: wake.order,
             payload: wake.payload,
+          }))
+      ),
+      signals: toArray(
+        q
+          .from({ signal: signalsCollection })
+          .where(({ signal }) => eq(signal.timelineKey, timeline.key))
+          .orderBy(({ signal }) => signal.order)
+          .select(({ signal }) => ({
+            key: signal.key,
+            order: signal.order,
+            signal: signal.signal,
+            status: signal.status,
+            sender: signal.sender,
+            reason: signal.reason,
+            payload: signal.payload,
+            timestamp: signal.timestamp,
+            handled_at: signal.handled_at,
+            handled_by: signal.handled_by,
+            outcome: signal.outcome,
+            previous_state: signal.previous_state,
+            new_state: signal.new_state,
           }))
       ),
       entities: toArray(

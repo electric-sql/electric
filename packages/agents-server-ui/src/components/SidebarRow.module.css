@@ -22,7 +22,7 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   height: var(--ds-row-height-md);
   padding-right: 3px;
   border-radius: var(--ds-radius-item);

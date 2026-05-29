@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { SchemaValidator } from '../src/electric-agents-schema-validator'
+import { SchemaValidator } from '../src/electric-agents/schema-validator'
 
 describe(`SchemaValidator`, () => {
   it(`accepts nullable union keywords produced by runtime state schemas`, () => {

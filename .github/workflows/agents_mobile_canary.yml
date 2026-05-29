@@ -1,0 +1,88 @@
+name: Agents Mobile Canary
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'packages/agents-mobile/**'
+      - 'packages/agents-server-ui/**'
+      - 'packages/agents-runtime/**'
+      - '.github/workflows/agents_mobile_*.yml'
+      - 'scripts/ci/mobile-affected.mjs'
+      - '.npmrc'
+      - '.tool-versions'
+      - 'package.json'
+      - 'patches/**'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'tsconfig.base.json'
+      - 'tsconfig.build.json'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  actions: read
+  contents: read
+  # Declared (but unused in canary mode) so the reusable
+  # `agents_mobile_build.yml` job, which requests these to write PR
+  # comments in `channel == 'pr'`, can load. GitHub refuses to start a
+  # reusable workflow whose declared permissions exceed the caller's.
+  issues: write
+  pull-requests: write
+
+jobs:
+  detect:
+    name: Detect mobile impact
+    runs-on: ubuntu-latest
+    outputs:
+      should_build: ${{ steps.detect.outputs.should_build }}
+      reason: ${{ steps.detect.outputs.reason }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.tool-versions'
+
+      - name: Detect mobile impact
+        id: detect
+        env:
+          BASE_SHA: ${{ github.event.before }}
+        run: node scripts/ci/mobile-affected.mjs
+
+  build:
+    needs: detect
+    if: ${{ needs.detect.outputs.should_build == 'true' }}
+    uses: ./.github/workflows/agents_mobile_build.yml
+    secrets: inherit
+    with:
+      channel: canary
+      version: canary-${{ github.run_number }}-${{ github.sha }}
+      git_ref: ${{ github.sha }}
+      platform: android
+      profile: canary
+      submit: false
+
+  submit-play-internal:
+    needs: detect
+    if: ${{ needs.detect.outputs.should_build == 'true' }}
+    uses: ./.github/workflows/agents_mobile_build.yml
+    secrets: inherit
+    with:
+      channel: canary
+      version: canary-store-${{ github.run_number }}-${{ github.sha }}
+      git_ref: ${{ github.sha }}
+      platform: android
+      profile: canary-store
+      submit: true

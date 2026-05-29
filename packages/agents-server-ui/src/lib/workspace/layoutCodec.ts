@@ -70,9 +70,10 @@ function encodeSplit(split: Split): string {
 }
 
 function encodeTile(tile: Tile): string {
+  const params = encodeViewParams(tile.viewParams)
   // Standalone tile (e.g. new-session) → empty entityPath segment, so
   // the canonical form is `.new-session`.
-  if (tile.entityUrl === null) return `.${tile.viewId}`
+  if (tile.entityUrl === null) return `.${tile.viewId}${params}`
   // Strip the conventional leading `/` so the canonical form is
   // `horton%2Ffoo.chat` instead of `%2Fhorton%2Ffoo.chat`. Decoder
   // adds it back. If for some reason an entityUrl doesn't start with
@@ -81,7 +82,13 @@ function encodeTile(tile: Tile): string {
   const path = tile.entityUrl.startsWith(`/`)
     ? tile.entityUrl.slice(1)
     : tile.entityUrl
-  return `${encodeURIComponent(path)}.${tile.viewId}`
+  return `${encodeURIComponent(path)}.${tile.viewId}${params}`
+}
+
+function encodeViewParams(params: Tile[`viewParams`]): string {
+  if (!params || Object.keys(params).length === 0) return ``
+  const search = new URLSearchParams(params).toString()
+  return search ? `~${encodeURIComponent(search)}` : ``
 }
 
 // ---------------------------------------------------------------------------
@@ -218,10 +225,13 @@ class Parser {
       )
     }
     const rawPath = raw.slice(0, dot)
-    const viewId: ViewId = raw.slice(dot + 1)
+    const viewAndParams = raw.slice(dot + 1)
+    const [viewIdRaw, encodedParams] = viewAndParams.split(`~`, 2)
+    const viewId: ViewId = viewIdRaw
     if (!viewId) {
       throw new ParseError(`empty viewId in tile spec '${raw}'`, start)
     }
+    const viewParams = decodeViewParams(encodedParams)
     let entityUrl: string | null
     if (rawPath.length === 0) {
       // Standalone tile.
@@ -233,7 +243,7 @@ class Parser {
       // the wire form already includes one we don't double up.
       entityUrl = decoded.startsWith(`/`) ? decoded : `/${decoded}`
     }
-    return { kind: `tile`, id: makeTileId(), entityUrl, viewId }
+    return { kind: `tile`, id: makeTileId(), entityUrl, viewId, viewParams }
   }
 
   parseInt(): number {
@@ -259,6 +269,14 @@ class Parser {
       )
     }
   }
+}
+
+function decodeViewParams(encoded: string | undefined): Tile[`viewParams`] {
+  if (!encoded) return undefined
+  const params = Object.fromEntries(
+    new URLSearchParams(decodeURIComponent(encoded)).entries()
+  )
+  return Object.keys(params).length > 0 ? params : undefined
 }
 
 function isControlChar(c: string): boolean {

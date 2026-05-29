@@ -2,65 +2,45 @@
  * Shared HTTP utilities for Electric Agents route handlers.
  */
 
-import { ElectricAgentsError } from './electric-agents-manager'
-import type { IncomingMessage, ServerResponse } from 'node:http'
+import { json } from 'itty-router'
 
-export function sendJsonError(
-  res: ServerResponse,
+export function apiError(
   status: number,
   code: string,
-  message: string
-): void {
-  res.writeHead(status, { 'content-type': `application/json` })
-  res.end(JSON.stringify({ error: { code, message } }))
+  message: string,
+  details?: unknown
+): Response {
+  return json(
+    {
+      error: {
+        code,
+        message,
+        ...(details ? { details } : {}),
+      },
+    },
+    { status }
+  )
 }
 
-export function sendJson(
-  res: ServerResponse,
-  status: number,
-  data: unknown
-): void {
-  res.writeHead(status, { 'content-type': `application/json` })
-  res.end(JSON.stringify(data))
+export async function readRequestBody(request: Request): Promise<Uint8Array> {
+  return new Uint8Array(await request.arrayBuffer())
 }
 
-export function handleElectricAgentsError(
-  err: unknown,
-  res: ServerResponse
-): void {
-  if (err instanceof ElectricAgentsError) {
-    const errorBody: Record<string, unknown> = {
-      code: err.code,
-      message: err.message,
+export function responseHeaders(response: Response): Record<string, string> {
+  const headers: Record<string, string> = {}
+  response.headers.forEach((value, key) => {
+    if (
+      key === `content-encoding` ||
+      key === `content-length` ||
+      key === `transfer-encoding` ||
+      key === `connection` ||
+      key.startsWith(`access-control-`)
+    ) {
+      return
     }
-    if (err.details) {
-      errorBody.details = err.details
-    }
-    res.writeHead(err.status, { 'content-type': `application/json` })
-    res.end(JSON.stringify({ error: errorBody }))
-  } else {
-    throw err
-  }
-}
-
-export async function parseJsonBody<T>(
-  req: IncomingMessage,
-  res: ServerResponse
-): Promise<T | null> {
-  const body = await readBody(req)
-  try {
-    return JSON.parse(new TextDecoder().decode(body)) as T
-  } catch {
-    sendJsonError(res, 400, `INVALID_REQUEST`, `Invalid JSON body`)
-    return null
-  }
-}
-
-export function readBody(req: IncomingMessage): Promise<Uint8Array> {
-  return new Promise((resolve, reject) => {
-    const chunks: Array<Buffer> = []
-    req.on(`data`, (chunk: Buffer) => chunks.push(chunk))
-    req.on(`end`, () => resolve(new Uint8Array(Buffer.concat(chunks))))
-    req.on(`error`, reject)
+    headers[key] = value
   })
+  headers[`access-control-allow-origin`] = `*`
+  headers[`access-control-expose-headers`] = `*`
+  return headers
 }

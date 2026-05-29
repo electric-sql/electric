@@ -4,7 +4,7 @@ import {
   createEntityStreamDB,
   entities,
   db,
-} from '@electric-ax/agents-runtime'
+} from '@electric-ax/agents-runtime/client'
 import { createEffect, type Collection } from '@tanstack/db'
 import {
   swarmSharedSchema,

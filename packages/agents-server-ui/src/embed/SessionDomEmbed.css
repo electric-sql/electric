@@ -1,0 +1,89 @@
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+#root {
+  min-width: 0;
+}
+
+#root > * {
+  flex: 1 1 100%;
+  width: 100%;
+  min-width: 0;
+}
+
+body {
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
+}
+
+html[data-electric-mobile-dom='true'] {
+  /*
+   * Expo DOM Components cannot currently bundle relative font URLs in CSS.
+   * Use the native platform stack explicitly instead of importing fonts.css.
+   */
+  --ds-font-body:
+    -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui,
+    sans-serif;
+  --ds-font-heading: var(--ds-font-body);
+  --ds-font-mono:
+    'SF Mono', ui-monospace, Menlo, Monaco, Consolas, 'Liberation Mono',
+    'Courier New', monospace;
+}
+
+html[data-electric-mobile-dom='true'] .mobile-chat-content {
+  padding: var(--ds-space-4) var(--ds-space-2)
+    calc(var(--ds-space-4) + var(--mobile-chat-bottom-inset, 0px)) !important;
+  max-width: 100% !important;
+}
+
+html[data-electric-mobile-dom='true'] .mobile-chat-scroll-viewport {
+  mask-image: linear-gradient(
+    to bottom,
+    #000 0,
+    #000 calc(100% - var(--mobile-chat-bottom-inset, 20px)),
+    rgba(0, 0, 0, 0.35)
+      calc(100% - min(56px, var(--mobile-chat-bottom-inset, 20px))),
+    transparent 100%
+  ) !important;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    #000 0,
+    #000 calc(100% - var(--mobile-chat-bottom-inset, 20px)),
+    rgba(0, 0, 0, 0.35)
+      calc(100% - min(56px, var(--mobile-chat-bottom-inset, 20px))),
+    transparent 100%
+  ) !important;
+}
+
+html[data-electric-mobile-dom='true'] [class*='MessageInput'][class*='_root_'] {
+  padding-left: var(--ds-space-4) !important;
+  padding-right: var(--ds-space-4) !important;
+  padding-bottom: calc(
+    var(--ds-space-4) + env(safe-area-inset-bottom, 0px)
+  ) !important;
+  max-width: 100% !important;
+}
+
+html[data-electric-mobile-dom='true']
+  [class*='UserMessage'][class*='_bubble_'] {
+  padding: var(--ds-space-2) var(--ds-space-3) !important;
+}
+
+html[data-electric-mobile-dom='true'] .mobile-user-message-root {
+  width: max(0px, calc(100% - 24px)) !important;
+}
+
+html[data-electric-mobile-dom='true']
+  input:not([type='checkbox']):not([type='radio']),
+html[data-electric-mobile-dom='true'] textarea,
+html[data-electric-mobile-dom='true'] select {
+  font-size: 16px !important;
+}

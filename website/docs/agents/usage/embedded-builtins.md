@@ -49,19 +49,30 @@ interface BuiltinAgentsServerOptions {
   mockStreamFn?: StreamFn
   webhookPath?: string
   createElectricTools?: CreateElectricTools
+  // MCP integration
+  extraMcpServers?: ReadonlyArray<McpServerConfig>
+  loadProjectMcpConfig?: boolean
+  mcpOAuthRedirectBase?: string
+  openAuthorizeUrl?: (url: string, server: string) => void
+  onConfigError?: (error: unknown) => void
 }
 ```
 
-| Field                 | Description                                                                 |
-| --------------------- | --------------------------------------------------------------------------- |
-| `agentServerUrl`      | Electric Agents coordinator server URL.                                     |
-| `baseUrl`             | Public base URL used when registering the webhook. Defaults to local URL.   |
-| `port`                | Local webhook server port.                                                  |
-| `host`                | Bind host. Defaults to `127.0.0.1`.                                         |
-| `workingDirectory`    | Directory used by Horton and worker file tools. Defaults to `process.cwd()`. |
-| `mockStreamFn`        | Optional test stream function. Lets you run without `ANTHROPIC_API_KEY`.    |
-| `webhookPath`         | Webhook path. Defaults to `/_electric/builtin-agent-handler`.               |
-| `createElectricTools` | Optional factory for extra tools injected into built-in agent handlers.     |
+| Field                  | Description                                                                                                                                                                                                                                                                            |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `agentServerUrl`       | Electric Agents coordinator server URL.                                                                                                                                                                                                                                                |
+| `baseUrl`              | Public base URL used when registering the webhook. Defaults to local URL.                                                                                                                                                                                                              |
+| `port`                 | Local webhook server port.                                                                                                                                                                                                                                                             |
+| `host`                 | Bind host. Defaults to `127.0.0.1`.                                                                                                                                                                                                                                                    |
+| `workingDirectory`     | Directory used by Horton and worker file tools. Defaults to `process.cwd()`.                                                                                                                                                                                                           |
+| `mockStreamFn`         | Optional test stream function. Lets you run without `ANTHROPIC_API_KEY`.                                                                                                                                                                                                               |
+| `webhookPath`          | Webhook path. Defaults to `/_electric/builtin-agent-handler`.                                                                                                                                                                                                                          |
+| `createElectricTools`  | Optional factory for extra tools injected into built-in agent handlers.                                                                                                                                                                                                                |
+| `extraMcpServers`      | MCP servers contributed by the embedder. On name conflict with `mcp.json`, `mcp.json` wins. `authorizationCode` servers are auto-wired with `keychainPersistence`.                                                                                                                     |
+| `loadProjectMcpConfig` | Load `<workingDirectory>/mcp.json` (and watch it). Off by default — stdio MCP servers can spawn local commands, so the embedder must opt in. The Electron desktop and `electric-ax` CLI opt in.                                                                                        |
+| `mcpOAuthRedirectBase` | Base for OAuth redirect URIs (full URI is `<base>/oauth/callback/<server-name>`). MUST be stable across restarts so DCR client info stays valid; required when listening on `port: 0`. The runtime never listens at this URI — the embedder intercepts the redirect.                   |
+| `openAuthorizeUrl`     | Hook invoked when an `authorizationCode` MCP server first needs user consent. Receives the SDK-generated authorize URL. The desktop opens it in a sandboxed `BrowserWindow`; headless embedders can read the URL from the `authenticating` envelope of `addServer` and surface it themselves. |
+| `onConfigError`        | Invoked when applying an MCP config (initial boot or watcher reload) fails. Errors are always logged; this hook is for surfacing them programmatically.                                                                                                                                |
 
 Without `mockStreamFn`, `ANTHROPIC_API_KEY` must be present before the built-in handler starts.
 
@@ -157,6 +168,8 @@ Environment variables:
 | Variable                         | Description                                           |
 | -------------------------------- | ----------------------------------------------------- |
 | `ELECTRIC_AGENTS_SERVER_URL`     | Required coordinator server URL.                      |
+| `ELECTRIC_AGENTS_PRINCIPAL`      | Optional principal key sent as `Electric-Principal`.  |
+| `ELECTRIC_AGENTS_SERVER_HEADERS` | Optional JSON object of additional server headers.    |
 | `ELECTRIC_AGENTS_BUILTIN_BASE_URL` | Public webhook base URL for the built-in server.   |
 | `ELECTRIC_AGENTS_BUILTIN_HOST`   | Bind host.                                            |
 | `ELECTRIC_AGENTS_BUILTIN_PORT`   | Built-in server port. Defaults to `4448`.             |

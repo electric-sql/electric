@@ -10,8 +10,8 @@ import {
   ListFilter,
   Tag,
 } from 'lucide-react'
-import { useLiveQuery } from '@tanstack/react-db'
-import { IconButton, Menu, Text } from '../ui'
+import { eq, not, useLiveQuery } from '@tanstack/react-db'
+import { Icon, IconButton, Menu, Text } from '../ui'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
 import {
   SIDEBAR_GROUP_BY_LABELS,
@@ -32,10 +32,10 @@ import styles from './SidebarViewMenu.module.css'
 const STATUSES = [`spawning`, `running`, `idle`, `stopped`] as const
 
 const GROUP_BY_ICONS: Record<SidebarGroupBy, React.ReactElement> = {
-  date: <CalendarClock size={14} />,
-  type: <Tag size={14} />,
-  status: <Activity size={14} />,
-  workingDir: <Folder size={14} />,
+  date: <Icon icon={CalendarClock} size={2} />,
+  type: <Icon icon={Tag} size={2} />,
+  status: <Icon icon={Activity} size={2} />,
+  workingDir: <Icon icon={Folder} size={2} />,
 }
 
 /**
@@ -65,7 +65,13 @@ export function SidebarViewMenu(): React.ReactElement {
       if (!entitiesCollection) return undefined
       return q
         .from({ e: entitiesCollection })
+        .where(({ e }) => not(eq(e.type, `principal`)))
         .orderBy(({ e }) => e.updated_at, `desc`)
+        .select(({ e }) => ({
+          url: e.url,
+          type: e.type,
+          parent: e.parent,
+        }))
     },
     [entitiesCollection]
   )
@@ -80,9 +86,10 @@ export function SidebarViewMenu(): React.ReactElement {
   // purposes the cheap approximation of "every entity that is the
   // parent of at least one other entity" is good enough.
   const expandableUrls = useMemo(() => {
+    const entityUrls = new Set(entities.map((e) => e.url))
     const parents = new Set<string>()
     for (const e of entities) {
-      if (e.parent) parents.add(e.parent)
+      if (e.parent && entityUrls.has(e.parent)) parents.add(e.parent)
     }
     return Array.from(parents)
   }, [entities])
@@ -101,7 +108,7 @@ export function SidebarViewMenu(): React.ReactElement {
             aria-label="Filter & view options"
             title="Filter & view"
           >
-            <ListFilter size={14} />
+            <Icon icon={ListFilter} size={2} />
           </IconButton>
         }
       />
@@ -114,7 +121,9 @@ export function SidebarViewMenu(): React.ReactElement {
               <Menu.Item key={opt} onSelect={() => setSidebarGroupBy(opt)}>
                 {GROUP_BY_ICONS[opt]}
                 <Text size={2}>{SIDEBAR_GROUP_BY_LABELS[opt]}</Text>
-                {active && <Check size={14} className={styles.activeMark} />}
+                {active && (
+                  <Icon icon={Check} size={2} className={styles.activeMark} />
+                )}
               </Menu.Item>
             )
           })}
@@ -127,9 +136,13 @@ export function SidebarViewMenu(): React.ReactElement {
 
           <Menu.SubmenuRoot>
             <Menu.SubmenuTrigger className={styles.submenuTrigger}>
-              <Tag size={14} />
+              <Icon icon={Tag} size={2} />
               <Text size={2}>Type</Text>
-              <ChevronRight size={14} className={styles.submenuChevron} />
+              <Icon
+                icon={ChevronRight}
+                size={2}
+                className={styles.submenuChevron}
+              />
             </Menu.SubmenuTrigger>
             <Menu.Content side="left" align="start">
               {distinctTypes.length === 0 ? (
@@ -148,7 +161,11 @@ export function SidebarViewMenu(): React.ReactElement {
                     >
                       <Text size={2}>{formatLabel(t)}</Text>
                       {visible && (
-                        <Check size={14} className={styles.activeMark} />
+                        <Icon
+                          icon={Check}
+                          size={2}
+                          className={styles.activeMark}
+                        />
                       )}
                     </Menu.Item>
                   )
@@ -159,9 +176,13 @@ export function SidebarViewMenu(): React.ReactElement {
 
           <Menu.SubmenuRoot>
             <Menu.SubmenuTrigger className={styles.submenuTrigger}>
-              <Activity size={14} />
+              <Icon icon={Activity} size={2} />
               <Text size={2}>Status</Text>
-              <ChevronRight size={14} className={styles.submenuChevron} />
+              <Icon
+                icon={ChevronRight}
+                size={2}
+                className={styles.submenuChevron}
+              />
             </Menu.SubmenuTrigger>
             <Menu.Content side="left" align="start">
               {STATUSES.map((s) => {
@@ -173,7 +194,11 @@ export function SidebarViewMenu(): React.ReactElement {
                   >
                     <Text size={2}>{formatLabel(s)}</Text>
                     {visible && (
-                      <Check size={14} className={styles.activeMark} />
+                      <Icon
+                        icon={Check}
+                        size={2}
+                        className={styles.activeMark}
+                      />
                     )}
                   </Menu.Item>
                 )
@@ -188,11 +213,11 @@ export function SidebarViewMenu(): React.ReactElement {
           onSelect={() => expandAllUrls(expandableUrls)}
           disabled={expandableUrls.length === 0}
         >
-          <ChevronsUpDown size={14} />
+          <Icon icon={ChevronsUpDown} size={2} />
           <Text size={2}>Expand all</Text>
         </Menu.Item>
         <Menu.Item onSelect={() => collapseAllExpanded()}>
-          <ChevronsDownUp size={14} />
+          <Icon icon={ChevronsDownUp} size={2} />
           <Text size={2}>Collapse all</Text>
         </Menu.Item>
       </Menu.Content>

@@ -46,10 +46,10 @@ Load `references/patterns/<selected>.md`. If runtime details are needed, read th
 - `creationSchema` (if spawn args are expected) — field names + types
 - `state` collections — names, primary keys, row shape
 - `inboxSchemas` (if messages are typed)
-- `outputSchemas` (if the entity produces typed output events)
+- `stateSchemas` (if the entity produces typed state events)
 - Handler outline — `firstWake` init, wake-type branches, agent config, spawn/observe calls
-  - Key `ctx` properties: `ctx.db.actions.*` (insert/update/delete), `ctx.db.collections.*` (get/toArray), `ctx.tags` / `ctx.setTag(key, value)` / `ctx.removeTag(key)`, `ctx.events` (Array of ChangeEvent from observed sources)
-  - Observation sources: `entity(url)`, `cron(expression)`, `tagged({ match: ... })` — import from `@electric-ax/agents-runtime`
+  - Key `ctx` properties: `ctx.db.actions.*` (insert/update/delete), `ctx.db.collections.*` (get/toArray), `ctx.tags` / `ctx.setTag(key, value)` / `ctx.deleteTag(key)`, `ctx.events` (Array of ChangeEvent from observed sources)
+  - Observation sources: `entity(url)`, `cron(expression)`, `entities({ tags: ... })` — import from `@electric-ax/agents-runtime`
   - `ctx.send(url, payload, { type?, afterMs? })` — `afterMs` delays delivery
 - Built-in agents referenced (e.g. `worker`), if any
 - `registerXxx(registry)` factory wrapping it
@@ -124,7 +124,7 @@ Do not patch the developer's registry file automatically. Stop — skill is done
 
 Runtime API reference:
 
-- `/docs/reference/handler-context` — the `ctx` API (db, state, spawn, observe, send, agent, electricTools, firstWake, sleep, tags, setTag, removeTag, events).
+- `/docs/reference/handler-context` — the `ctx` API (db, state, spawn, observe, send, agent, electricTools, firstWake, sleep, tags, setTag, deleteTag, events).
 - `/docs/reference/wake-event` — wake event types and the `Wake` configuration object.
 - `/docs/reference/entity-definition` — full `EntityDefinition` interface.
 - `/docs/reference/built-in-collections` — the 17 built-in collections on `db.collections.*`.
@@ -137,7 +137,7 @@ Runtime API reference:
 Usage guides:
 
 - `/docs/usage/writing-handlers` — handler lifecycle and re-entrancy.
-- `/docs/usage/waking-entities` — how wakes are produced and consumed; authoritative mental model for `wake.type` (only `"message_received"` and `"wake"`).
+- `/docs/usage/waking-entities` — how wakes are produced and consumed; authoritative mental model for `wake.type` (only `"inbox"` and `"wake"`).
 - `/docs/usage/defining-entities` — registry and collection declaration patterns.
 
 Built-in agent types:

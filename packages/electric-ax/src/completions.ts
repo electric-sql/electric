@@ -14,8 +14,10 @@ const AGENTS_COMMANDS = [
   `spawn`,
   `send`,
   `observe`,
+  `view`,
   `inspect`,
   `ps`,
+  `signal`,
   `kill`,
   `start`,
   `start-builtin`,
@@ -31,6 +33,8 @@ const COMMAND_FLAGS: Record<string, Array<string>> = {
   spawn: [`--args`],
   send: [`--type`, `--json`],
   observe: [`--from`],
+  view: [`--from`],
+  signal: [`--reason`, `--payload`],
   ps: [`--type`, `--status`, `--parent`],
   'start-builtin': [`--anthropic-api-key`],
   stop: [`--remove-volumes`],
@@ -82,7 +86,23 @@ export function fetchEntityUrls(env: ElectricCliEnv): Promise<Array<string>> {
     .catch(() => [])
 }
 
-const ENTITY_URL_COMMANDS = new Set([`send`, `observe`, `inspect`, `kill`])
+const ENTITY_URL_COMMANDS = new Set([
+  `send`,
+  `observe`,
+  `view`,
+  `inspect`,
+  `signal`,
+  `kill`,
+])
+const ENTITY_SIGNALS = [
+  `SIGINT`,
+  `SIGHUP`,
+  `SIGTERM`,
+  `SIGKILL`,
+  `SIGSTOP`,
+  `SIGCONT`,
+  `SIGUSR`,
+]
 
 export function setupCompletions(
   env: ElectricCliEnv,
@@ -153,6 +173,11 @@ export function setupCompletions(
 
     if (command === `types`) {
       reply(fetchEntityTypeNames(env))
+      return
+    }
+
+    if (command === `signal`) {
+      reply(Promise.resolve(ENTITY_SIGNALS))
       return
     }
 

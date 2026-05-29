@@ -1,10 +1,14 @@
 import { getModels } from '@mariozechner/pi-ai'
-import type { AgentConfig } from '@electric-ax/agents-runtime'
-import { readFileSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { join } from 'node:path'
+import {
+  detectAvailableProviders,
+  readCodexAccessToken,
+} from '@electric-ax/agents-runtime'
+import type {
+  AgentConfig,
+  AvailableProvider,
+} from '@electric-ax/agents-runtime'
 
-export type BuiltinModelProvider = `anthropic` | `openai` | `openai-codex`
+export type BuiltinModelProvider = AvailableProvider
 
 export interface BuiltinModelChoice {
   provider: BuiltinModelProvider
@@ -44,32 +48,7 @@ type PersistedModelConfig = Pick<AgentConfig, `model` | `provider`> & {
 const DEFAULT_ANTHROPIC_MODEL = `claude-sonnet-4-6`
 const DEFAULT_OPENAI_MODEL = `gpt-4.1`
 const DEFAULT_CODEX_MODEL = `gpt-5.4`
-
-function hasEnv(name: string): boolean {
-  return (process.env[name]?.trim().length ?? 0) > 0
-}
-
-function codexAuthPath(): string {
-  return process.env.CODEX_AUTH_PATH ?? join(homedir(), `.codex`, `auth.json`)
-}
-
-function readCodexAccessToken(): string | undefined {
-  try {
-    const raw = readFileSync(codexAuthPath(), `utf-8`)
-    const data = JSON.parse(raw) as {
-      auth_mode?: string
-      tokens?: { access_token?: string }
-    }
-    if (data.auth_mode !== `chatgpt`) return undefined
-    return data.tokens?.access_token?.trim() || undefined
-  } catch {
-    return undefined
-  }
-}
-
-function hasCodexAuth(): boolean {
-  return readCodexAccessToken() !== undefined
-}
+const DEFAULT_DEEPSEEK_MODEL = `deepseek-v4-flash`
 
 function modelValue(provider: BuiltinModelProvider, id: string): string {
   return `${provider}:${id}`
@@ -78,15 +57,12 @@ function modelValue(provider: BuiltinModelProvider, id: string): string {
 function providerLabel(provider: BuiltinModelProvider): string {
   if (provider === `anthropic`) return `Anthropic`
   if (provider === `openai-codex`) return `OpenAI Codex`
+  if (provider === `deepseek`) return `DeepSeek`
   return `OpenAI`
 }
 
 function configuredProviders(): Array<BuiltinModelProvider> {
-  const providers: Array<BuiltinModelProvider> = []
-  if (hasEnv(`ANTHROPIC_API_KEY`)) providers.push(`anthropic`)
-  if (hasEnv(`OPENAI_API_KEY`)) providers.push(`openai`)
-  if (hasCodexAuth()) providers.push(`openai-codex`)
-  return providers
+  return detectAvailableProviders()
 }
 
 function mockFallbackCatalog(): BuiltinModelCatalog {
@@ -113,12 +89,19 @@ async function fetchAvailableModelIds(
             },
             signal: AbortSignal.timeout(3_000),
           })
-        : await fetch(`https://api.openai.com/v1/models`, {
-            headers: {
-              authorization: `Bearer ${process.env.OPENAI_API_KEY ?? ``}`,
-            },
-            signal: AbortSignal.timeout(3_000),
-          })
+        : provider === `deepseek`
+          ? await fetch(`https://api.deepseek.com/v1/models`, {
+              headers: {
+                authorization: `Bearer ${process.env.DEEPSEEK_API_KEY ?? ``}`,
+              },
+              signal: AbortSignal.timeout(3_000),
+            })
+          : await fetch(`https://api.openai.com/v1/models`, {
+              headers: {
+                authorization: `Bearer ${process.env.OPENAI_API_KEY ?? ``}`,
+              },
+              signal: AbortSignal.timeout(3_000),
+            })
 
     if (res.status === 401 || res.status === 403) return new Set()
     if (!res.ok) return null
@@ -244,6 +227,10 @@ export async function createBuiltinModelCatalog(
     choices.find(
       (choice) =>
         choice.provider === `openai-codex` && choice.id === DEFAULT_CODEX_MODEL
+    ) ??
+    choices.find(
+      (choice) =>
+        choice.provider === `deepseek` && choice.id === DEFAULT_DEEPSEEK_MODEL
     ) ??
     choices[0]!
 

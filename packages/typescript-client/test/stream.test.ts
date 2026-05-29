@@ -1166,6 +1166,87 @@ describe(`ShapeStream`, () => {
     warnSpy.mockRestore()
   })
 
+  it(`backs off before retrying when onError returns retry options`, async () => {
+    const randomSpy = vi.spyOn(Math, `random`).mockReturnValue(0.5)
+    const requestTimes: number[] = []
+
+    const fetchMock = vi.fn(async () => {
+      requestTimes.push(Date.now())
+      return new Response(`Bad Request`, {
+        status: 400,
+        statusText: `Bad Request`,
+      })
+    })
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `test` },
+      signal: aborter.signal,
+      fetchClient: fetchMock,
+      subscribe: true,
+      backoffOptions: {
+        initialDelay: 100,
+        maxDelay: 100,
+        multiplier: 1,
+        maxRetries: Infinity,
+      },
+      onError: () => ({}),
+    })
+
+    stream.subscribe(() => {})
+
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2), {
+      timeout: 500,
+    })
+    expect(requestTimes[1] - requestTimes[0]).toBeGreaterThanOrEqual(40)
+    expect(requestTimes[1] - requestTimes[0]).toBeLessThan(200)
+
+    aborter.abort()
+    randomSpy.mockRestore()
+  })
+
+  it(`tears down promptly when aborted during onError backoff`, async () => {
+    const randomSpy = vi.spyOn(Math, `random`).mockReturnValue(1)
+    let requestCount = 0
+
+    const fetchMock = vi.fn(async () => {
+      requestCount++
+      return new Response(`Bad Request`, {
+        status: 400,
+        statusText: `Bad Request`,
+      })
+    })
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `test` },
+      signal: aborter.signal,
+      fetchClient: fetchMock,
+      subscribe: true,
+      backoffOptions: {
+        initialDelay: 10_000,
+        maxDelay: 10_000,
+        multiplier: 1,
+        maxRetries: Infinity,
+      },
+      onError: () => ({}),
+    })
+
+    stream.subscribe(() => {})
+
+    await vi.waitFor(() => expect(requestCount).toBe(1), { timeout: 500 })
+
+    const abortTime = Date.now()
+    aborter.abort()
+
+    await vi.waitFor(() => expect(Date.now() - abortTime).toBeLessThan(500), {
+      timeout: 1000,
+    })
+    expect(requestCount).toBe(1)
+
+    randomSpy.mockRestore()
+  })
+
   it(`onError retry loop should be bounded for persistent errors`, async () => {
     // Regression: onError always returning retry for a persistent error
     // caused an unbounded retry loop. The consecutive error retry limit
@@ -1208,6 +1289,12 @@ describe(`ShapeStream`, () => {
       signal: aborter.signal,
       fetchClient: fetchMock,
       subscribe: true,
+      backoffOptions: {
+        initialDelay: 2,
+        maxDelay: 2,
+        multiplier: 1,
+        maxRetries: Infinity,
+      },
       onError: (error) => {
         lastError = error
         return {} // always retry — simulates TanStack DB's shouldRetryOnFailure
@@ -1314,6 +1401,12 @@ describe(`ShapeStream`, () => {
       signal: aborter.signal,
       fetchClient: fetchMock,
       subscribe: true,
+      backoffOptions: {
+        initialDelay: 2,
+        maxDelay: 2,
+        multiplier: 1,
+        maxRetries: Infinity,
+      },
       onError: () => ({}), // always retry
     })
 
@@ -1397,6 +1490,12 @@ describe(`ShapeStream`, () => {
       signal: aborter.signal,
       fetchClient: fetchMock,
       subscribe: true,
+      backoffOptions: {
+        initialDelay: 2,
+        maxDelay: 2,
+        multiplier: 1,
+        maxRetries: Infinity,
+      },
       onError: () => ({}),
     })
 
@@ -1474,6 +1573,12 @@ describe(`ShapeStream`, () => {
       signal: aborter.signal,
       fetchClient: fetchMock,
       subscribe: true,
+      backoffOptions: {
+        initialDelay: 2,
+        maxDelay: 2,
+        multiplier: 1,
+        maxRetries: Infinity,
+      },
       onError: () => ({}),
     })
 

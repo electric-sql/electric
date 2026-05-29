@@ -39,12 +39,14 @@ function getStablePort(
   seed: string,
   envName: string,
   base: number,
-  span: number
+  span: number,
+  options: { allowZero?: boolean } = {}
 ): number {
   const override = process.env[envName]?.trim()
   if (override) {
     const port = Number.parseInt(override, 10)
-    if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+    const minPort = options.allowZero ? 0 : 1
+    if (!Number.isInteger(port) || port < minPort || port > 65_535) {
       throw new Error(`Invalid ${envName} port: ${override}`)
     }
     return port
@@ -98,19 +100,22 @@ export function getElectricAgentsDevPorts(cwd: string = process.cwd()): {
       `${seed}:jaeger-ui`,
       `JAEGER_UI_PORT`,
       57100,
-      700
+      700,
+      { allowZero: true }
     ),
     jaegerOtlpHttpPort: getStablePort(
       `${seed}:jaeger-otlp-http`,
       `JAEGER_OTLP_HTTP_PORT`,
       57800,
-      700
+      700,
+      { allowZero: true }
     ),
     jaegerOtlpGrpcPort: getStablePort(
       `${seed}:jaeger-otlp-grpc`,
       `JAEGER_OTLP_GRPC_PORT`,
       58500,
-      700
+      700,
+      { allowZero: true }
     ),
   }
 }

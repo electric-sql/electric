@@ -20,6 +20,7 @@ import type {
   EntityTimelineData,
   IncludesInboxMessage,
   IncludesRun,
+  IncludesWakeMessage,
 } from '../src/entity-timeline'
 
 function order(index: number): string {
@@ -244,6 +245,7 @@ describe(`entity includes query`, () => {
           },
         ],
         wakes: [],
+        signals: [],
         contextInserted: [],
         contextRemoved: [],
         entities: [],
@@ -306,6 +308,7 @@ describe(`entity includes query`, () => {
           },
         ],
         wakes: [],
+        signals: [],
         contextInserted: [],
         contextRemoved: [],
         entities: [],
@@ -360,6 +363,73 @@ describe(`entity includes query`, () => {
         kind: `agent_response`,
         items: [{ kind: `text`, text: `hello world` }],
         done: true,
+      })
+    })
+
+    it(`interleaves wake events with inbox messages and runs by order`, () => {
+      const inbox: Array<IncludesInboxMessage> = [
+        {
+          key: `m-0`,
+          order: order(1),
+          from: `user`,
+          payload: `start`,
+          timestamp: `2026-03-17T20:00:00.000Z`,
+        },
+      ]
+      const wakes: Array<IncludesWakeMessage> = [
+        {
+          key: `wake-0`,
+          order: order(2),
+          payload: {
+            type: `wake`,
+            timestamp: `2026-03-17T20:00:10.000Z`,
+            source: `source:entity:/worker-1`,
+            timeout: false,
+            changes: [],
+            finished_child: {
+              url: `/worker-1`,
+              type: `worker`,
+              run_status: `completed`,
+            },
+          },
+        },
+      ]
+      const runs: Array<IncludesRun> = [
+        {
+          key: `run-0`,
+          order: order(3),
+          status: `completed`,
+          texts: [
+            {
+              key: `text-0`,
+              run_id: `run-0`,
+              order: order(3),
+              status: `completed`,
+              text: `done`,
+            },
+          ],
+          toolCalls: [],
+          steps: [],
+          errors: [],
+        },
+      ]
+
+      const entries = buildTimelineEntries(runs, inbox, wakes)
+
+      expect(entries.map((entry) => entry.key)).toEqual([
+        `inbox:m-0`,
+        `wake:wake-0`,
+        `run:run-0`,
+      ])
+      expect(entries[1]?.section).toMatchObject({
+        kind: `wake`,
+        timestamp: Date.parse(`2026-03-17T20:00:10.000Z`),
+        payload: {
+          source: `source:entity:/worker-1`,
+          finished_child: {
+            run_status: `completed`,
+          },
+        },
       })
     })
 
@@ -906,6 +976,7 @@ describe(`entity includes query`, () => {
         runs,
         inbox,
         wakes: [],
+        signals: [],
         contextInserted: [],
         contextRemoved: [],
         entities: [],
@@ -1517,6 +1588,7 @@ describe(`entity includes query`, () => {
       const errors = createSyncCollection(`test-errors`, takeOffset)
       const inbox = createSyncCollection(`test-inbox`, takeOffset)
       const wakes = createSyncCollection(`test-wakes`, takeOffset)
+      const signals = createSyncCollection(`test-signals`, takeOffset)
       const contextInserted = createSyncCollection(
         `test-context-inserted`,
         takeOffset
@@ -1537,6 +1609,7 @@ describe(`entity includes query`, () => {
           errors: errors.collection,
           inbox: inbox.collection,
           wakes: wakes.collection,
+          signals: signals.collection,
           contextInserted: contextInserted.collection,
           contextRemoved: contextRemoved.collection,
           manifests: manifests.collection,
@@ -1551,6 +1624,7 @@ describe(`entity includes query`, () => {
           errors: withSeqInjection(errors, takeSeq),
           inbox: withSeqInjection(inbox, takeSeq),
           wakes: withSeqInjection(wakes, takeSeq),
+          signals: withSeqInjection(signals, takeSeq),
           contextInserted: withSeqInjection(contextInserted, takeSeq),
           contextRemoved: withSeqInjection(contextRemoved, takeSeq),
           manifests: withSeqInjection(manifests, takeSeq),
@@ -1761,6 +1835,7 @@ describe(`entity includes query`, () => {
           errors: { toArray: [] },
           inbox: { toArray: [] },
           wakes: { toArray: [] },
+          signals: { toArray: [] },
           contextInserted: { toArray: [], __electricRowOffsets: new Map() },
           contextRemoved: { toArray: [], __electricRowOffsets: new Map() },
           manifests: {
@@ -1876,6 +1951,7 @@ describe(`entity includes query`, () => {
             ]),
           },
           wakes: { toArray: [], __electricRowOffsets: new Map() },
+          signals: { toArray: [], __electricRowOffsets: new Map() },
           contextInserted: { toArray: [], __electricRowOffsets: new Map() },
           contextRemoved: { toArray: [], __electricRowOffsets: new Map() },
           manifests: { toArray: [], __electricRowOffsets: new Map() },
@@ -1900,6 +1976,7 @@ describe(`entity includes query`, () => {
           errors: { toArray: [] },
           inbox: { toArray: [], __electricRowOffsets: new Map() },
           wakes: { toArray: [], __electricRowOffsets: new Map() },
+          signals: { toArray: [], __electricRowOffsets: new Map() },
           contextInserted: {
             toArray: [
               {
@@ -2016,6 +2093,7 @@ describe(`entity includes query`, () => {
           errors: { toArray: [] },
           inbox: { toArray: [] },
           wakes: { toArray: [] },
+          signals: { toArray: [] },
           contextInserted: { toArray: [], __electricRowOffsets: new Map() },
           contextRemoved: { toArray: [], __electricRowOffsets: new Map() },
           manifests: {
@@ -2124,6 +2202,7 @@ describe(`entity includes query`, () => {
           errors: { toArray: [] },
           inbox: { toArray: [] },
           wakes: { toArray: [] },
+          signals: { toArray: [] },
           contextInserted: { toArray: [], __electricRowOffsets: new Map() },
           contextRemoved: { toArray: [], __electricRowOffsets: new Map() },
           manifests: {

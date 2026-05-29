@@ -13,20 +13,20 @@
  * stacking-context fighting elsewhere. (Sibling document order would
  * already place us on top, but explicit > implicit.)
  *
- * Outer max-width / horizontal padding match `EntityTimeline .content`
- * so the composer sits directly under the user-bubble column above it.
+ * Width matches the user-message surface: fixed 16px outer gutters,
+ * capped at the normal chat surface width.
  */
 .root {
-  padding: 0 40px 16px;
-  max-width: calc(var(--chat-surface-width) + 80px);
+  padding: 0 0 16px;
   margin: -20px auto 0;
-  width: 100%;
+  width: min(var(--chat-surface-width), max(0px, calc(100% - 32px)));
   box-sizing: border-box;
   position: relative;
   z-index: 1;
 }
 
 .composer {
+  box-sizing: border-box;
   /* Solid raised-surface fill (also what `--ds-input-bg` resolves to,
      since both inherit from `--ds-surface-raised`). The composer
      docks at the bottom of a scrolling chat surface and chat content
@@ -74,13 +74,81 @@
   z-index: 1;
 }
 
+.inlineIconButton {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--ds-radius-3);
+  color: var(--ds-text-3);
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+
+.inlineIconButton:hover {
+  background: var(--ds-bg-hover);
+  color: var(--ds-text-1);
+}
+
+.inlineIconButton:focus-visible {
+  outline: 2px solid var(--ds-accent-a6);
+  outline-offset: -2px;
+}
+
+.editingBanner {
+  box-sizing: border-box;
+  width: calc(100% + 24px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: -12px -12px 8px;
+  padding: 5px 12px 5px 14px;
+  border-bottom: 1px solid var(--ds-gray-a4);
+  border-radius: var(--ds-radius-5) var(--ds-radius-5) 0 0;
+  background: var(--ds-gray-a2);
+}
+
+.editingCancel {
+  all: unset;
+  border-radius: var(--ds-radius-3);
+  color: var(--ds-text-2);
+  cursor: pointer;
+  font-family: var(--ds-font-body);
+  font-size: var(--ds-text-xs);
+  line-height: var(--ds-text-xs-lh);
+  padding: 0 2px;
+}
+
+.editingCancel:hover {
+  color: var(--ds-text-1);
+}
+
+.editingCancel:focus-visible {
+  outline: 2px solid var(--ds-accent-a6);
+  outline-offset: 2px;
+}
+
+.composerBody {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--ds-space-2);
+  min-width: 0;
+  width: 100%;
+}
+
 .textarea {
   flex: 1;
+  min-width: 0;
   border: none;
   outline: none;
   background: transparent;
-  font-size: var(--ds-text-sm);
-  line-height: 1.5;
+  font-size: var(--ds-chat-text);
+  line-height: var(--ds-chat-text-lh);
   color: var(--ds-text-1);
   font-family: var(--ds-font-body);
   /* Auto-grow is driven by inline `height = scrollHeight` from
@@ -124,4 +192,30 @@
 }
 .composerSend.active:hover {
   background: var(--ds-accent-10);
+}
+.composerSend.stop {
+  background: var(--ds-accent-9);
+  color: var(--ds-text-on-accent);
+}
+.composerSend.stop:hover {
+  background: var(--ds-accent-10);
+}
+.composerSend.stopPending {
+  cursor: progress;
+  opacity: 0.72;
+  animation: stopPendingPulse 1s ease-in-out infinite;
+}
+
+.composerSend.stopPending:hover {
+  background: var(--ds-accent-9);
+}
+
+@keyframes stopPendingPulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(0.92);
+  }
 }

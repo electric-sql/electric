@@ -65,6 +65,29 @@ function createMockDb(): any {
 }
 
 describe(`WakeRegistry Electric sync`, () => {
+  it(`ignores malformed shape messages without headers while waiting for up-to-date`, async () => {
+    const registry = new WakeRegistry(createMockDb())
+
+    const startPromise = registry.startSync(`http://electric.test`)
+
+    await expect(
+      shapeStreamState.latest!.emit([
+        {
+          key: `ignored-malformed-message`,
+        },
+        {
+          headers: {
+            control: `up-to-date`,
+          },
+        },
+      ])
+    ).resolves.toBeUndefined()
+
+    await expect(startPromise).resolves.toBeUndefined()
+
+    await registry.stopSync()
+  })
+
   it(`hydrates and updates the cache from shape changes`, async () => {
     const registry = new WakeRegistry(createMockDb())
 

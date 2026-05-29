@@ -2,9 +2,8 @@
  * 12px corner radius on each side, and centered so the composer's
  * flat edges visually run flush with the text column. */
 .root {
-  max-width: var(--chat-col-width);
   margin-inline: auto;
-  width: 100%;
+  width: max(0px, calc(100% - 24px));
 }
 
 .markdown {
@@ -17,6 +16,11 @@
 }
 
 .timeText {
+  color: var(--ds-text-4);
+  opacity: 0.7;
+}
+
+.metaSeparator {
   color: var(--ds-text-4);
   opacity: 0.7;
 }

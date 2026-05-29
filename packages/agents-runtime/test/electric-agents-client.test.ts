@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createAgentsClient } from '../src/agents-client'
-import { cron, entities } from '../src/observation-sources'
+import { cron, entities, webhook } from '../src/observation-sources'
 import type * as StateModule from '@durable-streams/state'
 
 const { mockState } = vi.hoisted(() => ({
   mockState: {
-    registerEntitiesSource: vi.fn(),
-    registerCronSource: vi.fn(),
+    ensureEntitiesMembershipStream: vi.fn(),
+    ensureCronStream: vi.fn(),
+    signalEntity: vi.fn(),
+    ensureStream: vi.fn(),
     createStreamDB: vi.fn(),
     preload: vi.fn(),
     observedDb: {
@@ -20,8 +22,10 @@ const { mockState } = vi.hoisted(() => ({
 
 vi.mock(`../src/runtime-server-client`, () => ({
   createRuntimeServerClient: () => ({
-    registerEntitiesSource: mockState.registerEntitiesSource,
-    registerCronSource: mockState.registerCronSource,
+    ensureEntitiesMembershipStream: mockState.ensureEntitiesMembershipStream,
+    ensureCronStream: mockState.ensureCronStream,
+    signalEntity: mockState.signalEntity,
+    ensureStream: mockState.ensureStream,
   }),
 }))
 
@@ -38,11 +42,13 @@ vi.mock(`@durable-streams/state`, async (importOriginal) => {
 
 describe(`createAgentsClient`, () => {
   beforeEach(() => {
-    mockState.registerEntitiesSource = vi.fn().mockResolvedValue({
+    mockState.ensureEntitiesMembershipStream = vi.fn().mockResolvedValue({
       sourceRef: `source-1`,
       streamUrl: `/_entities/source-1`,
     })
+    mockState.ensureStream = vi.fn().mockResolvedValue(`/_webhooks/repo`)
     mockState.createStreamDB = vi.fn()
+    mockState.signalEntity = vi.fn().mockResolvedValue({ txid: 123 })
     mockState.observedDb = {
       preload: vi.fn().mockResolvedValue(undefined),
       collections: {
@@ -52,7 +58,7 @@ describe(`createAgentsClient`, () => {
   })
 
   it(`observe(cron(...)) throws a clear error (not the generic guard)`, async () => {
-    mockState.registerCronSource = vi.fn().mockResolvedValue(`/_cron/abc123`)
+    mockState.ensureCronStream = vi.fn().mockResolvedValue(`/_cron/abc123`)
 
     const client = createAgentsClient({
       baseUrl: `http://agents.test`,
@@ -67,7 +73,7 @@ describe(`createAgentsClient`, () => {
     )
   })
 
-  it(`registers entities sources and returns a preloaded StreamDB`, async () => {
+  it(`ensures entities membership streams and returns a preloaded StreamDB`, async () => {
     const client = createAgentsClient({
       baseUrl: `http://electric-agents.test`,
     })
@@ -81,7 +87,7 @@ describe(`createAgentsClient`, () => {
 
     const db = await client.observe(source)
 
-    expect(mockState.registerEntitiesSource).toHaveBeenCalledWith({
+    expect(mockState.ensureEntitiesMembershipStream).toHaveBeenCalledWith({
       demo_id: `X`,
       role: `reviewer`,
     })
@@ -92,6 +98,82 @@ describe(`createAgentsClient`, () => {
       },
       state: source.schema,
     })
+    expect(mockState.observedDb.preload).toHaveBeenCalledOnce()
+    expect(db).toBe(mockState.observedDb)
+  })
+
+  it(`preserves tenant path prefixes on observed stream URLs`, async () => {
+    const client = createAgentsClient({
+      baseUrl: `http://electric-agents.test/t/tenant-a/v1`,
+    })
+
+    const source = entities({
+      tags: {
+        role: `reviewer`,
+      },
+    })
+
+    await client.observe(source)
+
+    expect(mockState.createStreamDB).toHaveBeenCalledWith({
+      streamOptions: {
+        url: `http://electric-agents.test/t/tenant-a/v1${source.streamUrl}`,
+        contentType: `application/json`,
+      },
+      state: source.schema,
+    })
+  })
+
+  it(`exposes signal and kill helpers through the server client`, async () => {
+    const client = createAgentsClient({
+      baseUrl: `http://electric-agents.test`,
+    })
+
+    await expect(
+      client.signal({
+        entityUrl: `/chat/demo`,
+        signal: `SIGINT`,
+        reason: `stop`,
+      })
+    ).resolves.toEqual({ txid: 123 })
+
+    await client.kill(`/chat/demo`, `cleanup`)
+
+    expect(mockState.signalEntity).toHaveBeenNthCalledWith(1, {
+      entityUrl: `/chat/demo`,
+      signal: `SIGINT`,
+      reason: `stop`,
+    })
+    expect(mockState.signalEntity).toHaveBeenNthCalledWith(2, {
+      entityUrl: `/chat/demo`,
+      signal: `SIGKILL`,
+      reason: `cleanup`,
+    })
+  })
+
+  it(`observe(webhook(...)) ensures the exact stream before preloading it`, async () => {
+    const client = createAgentsClient({
+      baseUrl: `http://electric-agents.test/t/tenant-a/v1`,
+    })
+
+    const source = webhook(`repo`, { bucket: `prs/123` })
+
+    const db = await client.observe(source)
+
+    expect(mockState.ensureStream).toHaveBeenCalledWith(
+      `/_webhooks/repo/prs/123`,
+      `application/json`
+    )
+    expect(mockState.createStreamDB).toHaveBeenCalledWith({
+      streamOptions: {
+        url: `http://electric-agents.test/t/tenant-a/v1/_webhooks/repo/prs/123`,
+        contentType: `application/json`,
+      },
+      state: source.schema,
+    })
+    expect(mockState.ensureStream.mock.invocationCallOrder[0]).toBeLessThan(
+      mockState.createStreamDB.mock.invocationCallOrder[0]!
+    )
     expect(mockState.observedDb.preload).toHaveBeenCalledOnce()
     expect(db).toBe(mockState.observedDb)
   })

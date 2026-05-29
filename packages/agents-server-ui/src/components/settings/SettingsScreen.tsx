@@ -1,6 +1,14 @@
 import type { ReactNode } from 'react'
 import { PanelLeft } from 'lucide-react'
-import { IconButton, ScrollArea, Stack, Text, Tooltip } from '../../ui'
+import {
+  Badge,
+  Icon,
+  IconButton,
+  ScrollArea,
+  Stack,
+  Tooltip,
+  type BadgeTone,
+} from '../../ui'
 import { useSidebarCollapsed } from '../../hooks/useSidebarCollapsed'
 import { useNarrowViewport } from '../../hooks/useNarrowViewport'
 import { modKeyLabel } from '../../lib/keyLabels'
@@ -23,9 +31,11 @@ import styles from './SettingsScreen.module.css'
  */
 export function SettingsScreen({
   title,
+  action,
   children,
 }: {
   title: string
+  action?: ReactNode
   children: ReactNode
 }): React.ReactElement {
   // On narrow viewports the SettingsSidebar floats over the
@@ -51,18 +61,18 @@ export function SettingsScreen({
                 onClick={toggleSidebar}
                 aria-label="Show sidebar"
               >
-                <PanelLeft size={16} />
+                <Icon icon={PanelLeft} size={3} />
               </IconButton>
             </Tooltip>
           </span>
         )}
-        <Text size={2} weight={`medium`} className={styles.headerTitle}>
-          {title}
-        </Text>
       </div>
       <ScrollArea className={styles.scroll}>
-        <div className={styles.body}>
-          <h1 className={styles.pageTitle}>{title}</h1>
+        <div className={styles.body} data-desktop-selection-context>
+          <div className={styles.pageTitleRow}>
+            <h1 className={styles.pageTitle}>{title}</h1>
+            {action && <div className={styles.pageAction}>{action}</div>}
+          </div>
           <Stack direction="column" gap={6} className={styles.sections}>
             {children}
           </Stack>
@@ -81,22 +91,106 @@ export function SettingsScreen({
 export function SettingsSection({
   title,
   description,
+  action,
+  actionAlign = `title`,
   children,
 }: {
   title: string
   description?: ReactNode
-  children: ReactNode
+  action?: ReactNode
+  actionAlign?: `title` | `description`
+  children?: ReactNode
 }): React.ReactElement {
   return (
     <section className={styles.section}>
       <header className={styles.sectionHeader}>
-        <h2 className={styles.sectionTitle}>{title}</h2>
-        {description && (
-          <p className={styles.sectionDescription}>{description}</p>
+        <div className={styles.sectionHeaderText}>
+          <h2 className={styles.sectionTitle}>{title}</h2>
+          {description && (
+            <p className={styles.sectionDescription}>{description}</p>
+          )}
+        </div>
+        {action && (
+          <div className={styles.sectionAction} data-align={actionAlign}>
+            {action}
+          </div>
         )}
       </header>
-      <div className={styles.sectionBody}>{children}</div>
+      {children && <div className={styles.sectionBody}>{children}</div>}
     </section>
+  )
+}
+
+export function SettingsPanel({
+  children,
+}: {
+  children: ReactNode
+}): React.ReactElement {
+  return <div className={styles.panel}>{children}</div>
+}
+
+/**
+ * Advisory banner rendered above sections at the top of a settings
+ * page. Uses the same card chrome as section bodies but with a
+ * tinted background, so it reads as a callout without breaking the
+ * card-stack rhythm of the page.
+ */
+export function SettingsBanner({
+  children,
+  action,
+}: {
+  children: ReactNode
+  action?: ReactNode
+}): React.ReactElement {
+  return (
+    <div className={styles.banner}>
+      <span className={styles.bannerText}>{children}</span>
+      {action}
+    </div>
+  )
+}
+
+export function SettingsActions({
+  children,
+  separator = false,
+}: {
+  children: ReactNode
+  separator?: boolean
+}): React.ReactElement {
+  return (
+    <div
+      className={styles.actions}
+      data-separator={separator ? `true` : undefined}
+    >
+      {children}
+    </div>
+  )
+}
+
+export function SettingsInset({
+  children,
+}: {
+  children: ReactNode
+}): React.ReactElement {
+  return <div className={styles.inset}>{children}</div>
+}
+
+export type SettingsStatusTone = Extract<
+  BadgeTone,
+  `neutral` | `success` | `warning` | `danger` | `info`
+>
+
+export function SettingsStatusBadge({
+  children,
+  tone,
+}: {
+  children: ReactNode
+  tone: SettingsStatusTone
+}): React.ReactElement {
+  return (
+    <Badge size={1} tone={tone} className={styles.statusBadge}>
+      {children}
+    </Badge>
   )
 }
 
@@ -108,20 +202,34 @@ export function SettingsRow({
   label,
   description,
   control,
+  wrapControlValue,
+  splitLayout,
+  stackedControl,
 }: {
   label: ReactNode
   description?: ReactNode
   control: ReactNode
+  wrapControlValue?: boolean
+  splitLayout?: boolean
+  stackedControl?: boolean
 }): React.ReactElement {
+  const layout = stackedControl ? `stacked` : splitLayout ? `split` : undefined
+
   return (
-    <div className={styles.row}>
+    <div className={styles.row} data-layout={layout}>
       <div className={styles.rowText}>
         <span className={styles.rowLabel}>{label}</span>
         {description && (
           <span className={styles.rowDescription}>{description}</span>
         )}
       </div>
-      <div className={styles.rowControl}>{control}</div>
+      <div
+        className={`${styles.rowControl} ${
+          wrapControlValue ? styles.wrapControlValue : ``
+        }`}
+      >
+        {control}
+      </div>
     </div>
   )
 }

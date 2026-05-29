@@ -75,7 +75,7 @@ defmodule Electric.Shapes.Consumer.EventHandler.Subqueries.Steady do
       nil ->
         {:ok, state, effects}
 
-      {{dep_move_kind, dep_index, values} = move, queue} ->
+      {{dep_move_kind, dep_index, values, txids} = move, queue} ->
         subquery_ref = RefResolver.ref_from_dep_index!(state.shape_info.ref_resolver, dep_index)
         subscription_active? = Keyword.get(opts, :subscription_active?, false)
         latest_seen_lsn = Keyword.get(opts, :latest_seen_lsn)
@@ -108,7 +108,7 @@ defmodule Electric.Shapes.Consumer.EventHandler.Subqueries.Steady do
             effects =
               effects
               |> EffectList.append(
-                MoveBroadcast.effect_for_move_out(dep_index, values, state.shape_info)
+                MoveBroadcast.effect_for_move_out(dep_index, values, txids, state.shape_info)
               )
               |> EffectList.append_all(index_effects)
 

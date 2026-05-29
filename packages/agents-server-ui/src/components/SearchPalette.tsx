@@ -8,7 +8,7 @@ import {
 } from 'react'
 import { Dialog as BaseDialog } from '@base-ui/react/dialog'
 import { useNavigate } from '@tanstack/react-router'
-import { useLiveQuery } from '@tanstack/react-db'
+import { eq, useLiveQuery } from '@tanstack/react-db'
 import {
   Copy,
   ExternalLink,
@@ -25,6 +25,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { StatusDot } from './StatusDot'
+import { Icon } from '../ui'
 import { useSearchPalette } from '../hooks/useSearchPalette'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
 import { usePinnedEntities } from '../hooks/usePinnedEntities'
@@ -36,6 +37,11 @@ import { encodeLayout } from '../lib/workspace/layoutCodec'
 import { listViews } from '../lib/workspace/viewRegistry'
 import styles from './SearchPalette.module.css'
 import type { ElectricEntity } from '../lib/ElectricAgentsProvider'
+
+type PaletteEntity = Pick<
+  ElectricEntity,
+  `url` | `type` | `status` | `tags` | `spawn_args` | `parent`
+>
 
 type PaletteItem =
   | {
@@ -53,7 +59,7 @@ type PaletteItem =
       id: string
       title: string
       subtitle: string
-      entity: ElectricEntity
+      entity: PaletteEntity
       run: () => void
     }
 
@@ -127,15 +133,30 @@ export function SearchPalette(): React.ReactElement | null {
       return q
         .from({ e: entitiesCollection })
         .orderBy(({ e }) => e.updated_at, `desc`)
+        .select(({ e }) => ({
+          url: e.url,
+          type: e.type,
+          status: e.status,
+          tags: e.tags,
+          spawn_args: e.spawn_args,
+          parent: e.parent,
+        }))
     },
     [entitiesCollection]
   )
 
   const tiles = useMemo(() => listTiles(workspace.root), [workspace.root])
   const activeTile = helpers.activeTile
-  const activeEntity = activeTile?.entityUrl
-    ? entities.find((entity) => entity.url === activeTile.entityUrl)
-    : undefined
+  const { data: activeEntityMatches = [] } = useLiveQuery(
+    (q) => {
+      if (!entitiesCollection || !activeTile?.entityUrl) return undefined
+      return q
+        .from({ e: entitiesCollection })
+        .where(({ e }) => eq(e.url, activeTile.entityUrl))
+    },
+    [entitiesCollection, activeTile?.entityUrl]
+  )
+  const activeEntity = activeEntityMatches.at(0) ?? undefined
   const activeEntityTitle = activeEntity
     ? getEntityDisplayTitle(activeEntity).title
     : undefined
@@ -298,7 +319,8 @@ export function SearchPalette(): React.ReactElement | null {
       if (
         forkEntity &&
         !activeEntity.parent &&
-        activeEntity.status !== `stopped`
+        activeEntity.status !== `stopped` &&
+        activeEntity.status !== `killed`
       ) {
         out.push({
           kind: `action`,
@@ -321,7 +343,11 @@ export function SearchPalette(): React.ReactElement | null {
         })
       }
 
-      if (killEntity && activeEntity.status !== `stopped`) {
+      if (
+        killEntity &&
+        activeEntity.status !== `stopped` &&
+        activeEntity.status !== `killed`
+      ) {
         out.push({
           kind: `action`,
           id: `kill-current-entity`,
@@ -476,7 +502,7 @@ export function SearchPalette(): React.ReactElement | null {
         <BaseDialog.Backdrop className={styles.backdrop} />
         <BaseDialog.Popup className={styles.popup}>
           <div className={styles.searchRow}>
-            <Search size={16} className={styles.searchIcon} />
+            <Icon icon={Search} size={3} className={styles.searchIcon} />
             <input
               ref={inputRef}
               type="search"
@@ -515,7 +541,11 @@ export function SearchPalette(): React.ReactElement | null {
                         {item.kind === `session` ? (
                           <StatusDot status={item.entity.status} />
                         ) : (
-                          <item.icon size={14} className={styles.rowIcon} />
+                          <Icon
+                            icon={item.icon}
+                            size={2}
+                            className={styles.rowIcon}
+                          />
                         )}
                       </span>
                       <span className={styles.rowTitle} title={item.title}>

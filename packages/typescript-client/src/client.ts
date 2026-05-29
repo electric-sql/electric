@@ -421,6 +421,10 @@ export interface ShapeStreamOptions<T = never> {
    * on network failures), you MUST return at least an empty object `{}`. Simply
    * logging the error and returning nothing will stop syncing.
    *
+   * Retries requested by `onError` use exponential backoff with full jitter,
+   * using the stream's `backoffOptions` timings, and are still bounded by a
+   * consecutive retry guard to prevent permanent retry loops.
+   *
    * Supports async functions that return `Promise<void | RetryOpts>`.
    *
    * @example
@@ -641,6 +645,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #pendingSelfHealCheck: { shapeKey: string; staleHandle: string } | null = null
   #consecutiveErrorRetries = 0
   #maxConsecutiveErrorRetries = 50
+  #onErrorBackoff: {
+    initialDelay: number
+    maxDelay: number
+    multiplier: number
+  }
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     this.options = { subscribe: true, ...options }
@@ -710,6 +719,12 @@ export class ShapeStream<T extends Row<unknown> = Row>
         options.backoffOptions?.onFailedAttempt?.()
       },
     }
+    this.#onErrorBackoff = {
+      initialDelay: backOffOpts.initialDelay,
+      maxDelay: backOffOpts.maxDelay,
+      multiplier: backOffOpts.multiplier,
+    }
+
     const fetchWithBackoffClient = createFetchWithBackoff(
       baseFetchClient,
       backOffOpts
@@ -806,6 +821,12 @@ export class ShapeStream<T extends Row<unknown> = Row>
           this.#fastLoopConsecutiveCount = 0
           this.#recentRequestEntries = []
 
+          await this.#backoffOnErrorRetry(this.#consecutiveErrorRetries)
+          if (this.options.signal?.aborted) {
+            this.#teardown()
+            return
+          }
+
           // Restart from current offset
           this.#started = false
           return this.#start()
@@ -835,6 +856,37 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#connected = false
     this.#tickPromiseRejecter?.()
     this.#unsubscribeFromWakeDetection?.()
+  }
+
+  async #backoffOnErrorRetry(retryAttempt: number): Promise<void> {
+    // Non-429 4xx errors intentionally bypass fetch-layer backoff so
+    // `onError` can repair auth/params; network failures that exhaust fetch
+    // backoff also reach this path. If the handler asks to retry we still
+    // need pacing to avoid tight retry loops on persistent failures.
+    // Uses the same full-jitter exponential backoff strategy as the fetch layer.
+    const { initialDelay, maxDelay, multiplier } = this.#onErrorBackoff
+    const cappedDelay = Math.min(
+      maxDelay,
+      initialDelay * Math.pow(multiplier, retryAttempt - 1) // 1-indexed: first retry uses multiplier^0
+    )
+    const delayMs = Math.floor(Math.random() * cappedDelay)
+
+    const signal = this.options.signal
+    if (delayMs <= 0 || signal?.aborted) return
+
+    await new Promise<void>((resolve) => {
+      let settled = false
+      const done = () => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        signal?.removeEventListener(`abort`, done)
+        resolve()
+      }
+      const timer = setTimeout(done, delayMs)
+      signal?.addEventListener(`abort`, done, { once: true })
+      if (signal?.aborted) done()
+    })
   }
 
   async #requestShape(requestShapeCacheBuster?: string): Promise<void> {

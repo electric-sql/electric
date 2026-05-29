@@ -1,4 +1,5 @@
 import {
+  Component,
   memo,
   useCallback,
   useEffect,
@@ -7,31 +8,164 @@ import {
   useRef,
   useState,
 } from 'react'
+import { useNavigate } from '@tanstack/react-router'
+import { useLiveQuery } from '@tanstack/react-db'
+import { inArray } from '@durable-streams/state'
 import {
   measureElement as defaultMeasureElement,
   useVirtualizer,
 } from '@tanstack/react-virtual'
-import { ArrowDown } from 'lucide-react'
+import {
+  ArrowDown,
+  CircleStop,
+  Database,
+  ExternalLink,
+  FileJson,
+  GitBranch,
+  Radio,
+} from 'lucide-react'
 import {
   loadTimelineRowHeights,
   persistTimelineRowHeights,
 } from '../lib/timelineRowHeights'
 import { usePaneFindAdapterRegistration } from '../hooks/usePaneFind'
+import { useOptionalWorkspace } from '../hooks/useWorkspace'
+import { useElectricAgents } from '../lib/ElectricAgentsProvider'
 import { warmMarkdownRenderCache } from '../lib/markdownRenderCache'
-import { ScrollArea, Stack, Text, Tooltip } from '../ui'
+import { Icon, IconButton, ScrollArea, Stack, Text, Tooltip } from '../ui'
 import { UserMessage } from './UserMessage'
-import { AgentResponse } from './AgentResponse'
+import { AgentResponseLive } from './AgentResponse'
+import { InlineEventCard } from './InlineEventCard'
+import { InlineStatusBadge } from './InlineStatusBadge'
 import {
   getCurrentMatchIndexInRoot,
   getTextMatchStarts,
 } from './workspace/PaneFindBar'
 import {
   formatAbsoluteDateTimeVerbose,
-  formatShortTime,
+  formatChatTimestamp,
 } from '../lib/formatTime'
 import styles from './EntityTimeline.module.css'
-import type { EntityTimelineEntry } from '@electric-ax/agents-runtime'
+import type {
+  EntityTimelineSection,
+  EntityTimelineQueryRow,
+  EntityTimelineRunItem,
+  EntityTimelineRunRow,
+  IncludesEntity,
+  Manifest,
+} from '@electric-ax/agents-runtime/client'
+import type { ErrorInfo, ReactNode } from 'react'
 import type { PaneFindAdapter, PaneFindMatch } from '../hooks/usePaneFind'
+
+type RenderTimelineRow = EntityTimelineQueryRow
+type WakeSection = Extract<EntityTimelineSection, { kind: `wake` }>
+
+function renderRowKey(row: RenderTimelineRow): string {
+  return row.$key
+}
+
+function readInboxText(payload: unknown): string {
+  if (payload && typeof payload === `object`) {
+    const text = (payload as { text?: unknown }).text
+    if (typeof text === `string`) return text
+  }
+  return typeof payload === `string` ? payload : ``
+}
+
+function stringifySearchPayload(value: unknown): string {
+  if (value == null) return ``
+  if (typeof value === `string`) return value
+  return JSON.stringify(value)
+}
+
+function runItemSearchText(item: EntityTimelineRunItem): string {
+  if (item.text) {
+    return typeof item.text.content === `string` ? item.text.content : ``
+  }
+  const toolCall = item.toolCall
+  if (!toolCall) {
+    console.error(`Run item has neither text nor toolCall`, { item })
+    return ``
+  }
+  return [
+    toolCall.tool_name,
+    stringifySearchPayload(toolCall.args),
+    stringifySearchPayload(toolCall.result),
+    stringifySearchPayload(toolCall.error),
+  ]
+    .filter((text) => text.length > 0)
+    .join(` `)
+}
+
+function runSearchTextFromSnapshot(run: EntityTimelineRunRow): string {
+  return run.items.toArray.map(runItemSearchText).join(` `)
+}
+
+interface TimelineRowErrorBoundaryProps {
+  rowKey: string
+  children: ReactNode
+}
+
+interface TimelineRowErrorBoundaryState {
+  rowKey: string
+  error: unknown
+}
+
+class TimelineRowErrorBoundary extends Component<
+  TimelineRowErrorBoundaryProps,
+  TimelineRowErrorBoundaryState
+> {
+  state: TimelineRowErrorBoundaryState = {
+    rowKey: this.props.rowKey,
+    error: null,
+  }
+
+  static getDerivedStateFromError(
+    error: unknown
+  ): Partial<TimelineRowErrorBoundaryState> {
+    return { error }
+  }
+
+  static getDerivedStateFromProps(
+    props: TimelineRowErrorBoundaryProps,
+    state: TimelineRowErrorBoundaryState
+  ): Partial<TimelineRowErrorBoundaryState> | null {
+    if (props.rowKey !== state.rowKey) {
+      return { rowKey: props.rowKey, error: null }
+    }
+    return null
+  }
+
+  componentDidCatch(error: unknown, info: ErrorInfo): void {
+    console.error(`Error rendering timeline row`, {
+      rowKey: this.props.rowKey,
+      error,
+      componentStack: info.componentStack,
+    })
+  }
+
+  render(): ReactNode {
+    if (!this.state.error) {
+      return this.props.children
+    }
+
+    const message =
+      this.state.error instanceof Error
+        ? this.state.error.message
+        : String(this.state.error)
+
+    return (
+      <Stack direction="column" gap={1}>
+        <Text tone="danger" size={2}>
+          Could not render this timeline row.
+        </Text>
+        <Text tone="muted" size={1}>
+          {message}
+        </Text>
+      </Stack>
+    )
+  }
+}
 
 /**
  * Width-aware row-height estimate used as the initial size hint for the
@@ -48,7 +182,7 @@ import type { PaneFindAdapter, PaneFindMatch } from '../hooks/usePaneFind'
  * width and multiply by the body line height.
  */
 function estimateRowHeight(
-  row: EntityTimelineEntry | undefined,
+  row: RenderTimelineRow | undefined,
   contentWidth: number
 ): number {
   if (!row) return 120
@@ -59,25 +193,29 @@ function estimateRowHeight(
   const charsPerLine = Math.max(40, Math.floor(usableWidth / 7))
   const lineHeight = 22 // 14px font * ~1.55 leading
 
-  if (row.section.kind === `user_message`) {
-    const lines = Math.max(1, Math.ceil(row.section.text.length / charsPerLine))
-    // bubble padding (24) + meta row (~24) + content
-    return Math.max(64, 48 + lines * lineHeight)
+  if (row.inbox) {
+    const lines = Math.max(
+      1,
+      Math.ceil(readInboxText(row.inbox.payload).length / charsPerLine)
+    )
+    return Math.max(64, 48 + lines * lineHeight) + timelineRowGap(row)
   }
-
-  const textLength = row.section.items.reduce((total: number, item) => {
-    if (item.kind === `text`) return total + item.text.length
-    // Tool calls render as a compact block; assume ~3 lines.
-    return total + charsPerLine * 3
-  }, 0)
-  const lines = Math.max(2, Math.ceil(textLength / charsPerLine))
-  // status row (~24) + content + a little breathing room
-  return Math.max(120, 32 + lines * lineHeight)
+  if (row.wake || row.signal || row.manifest) {
+    return 76 + timelineRowGap(row)
+  }
+  return 120 + timelineRowGap(row)
 }
 
-const SCROLL_THRESHOLD = 200
+const BOTTOM_PIN_THRESHOLD = 8
+const CHAT_SURFACE_GUTTER = 24
 const ROW_GAP = 24
+const MANIFEST_ROW_GAP = 10
 const ROW_SETTLE_MS = 500
+type EntityStatus = NonNullable<IncludesEntity[`status`]>
+
+function timelineRowGap(row: RenderTimelineRow): number {
+  return row.manifest || row.wake || row.signal ? MANIFEST_ROW_GAP : ROW_GAP
+}
 
 type TimelinePaneFindMatch = PaneFindMatch & {
   rowKey: string
@@ -85,26 +223,196 @@ type TimelinePaneFindMatch = PaneFindMatch & {
   rowOccurrence: number
 }
 
-function timelineRowSearchText(row: EntityTimelineEntry): string {
-  const { section } = row
-  if (section.kind === `user_message`) return section.text
-
-  return section.items
-    .map((item) => {
-      if (item.kind === `text`) return item.text
-      const parts = [
-        item.toolName,
-        JSON.stringify(item.args, null, 2),
-        item.result ?? ``,
-      ]
-      return parts.filter((part) => part.trim().length > 0).join(`\n`)
+function timelineRowSearchText(
+  row: RenderTimelineRow,
+  runSearchTextByKey: Map<string, string>
+): string {
+  if (row.inbox) return readInboxText(row.inbox.payload)
+  if (row.wake) {
+    return wakeSectionText({
+      kind: `wake`,
+      payload: row.wake.payload,
+      timestamp: Date.parse(row.wake.payload.timestamp),
     })
-    .filter((part) => part.trim().length > 0)
-    .join(`\n\n`)
+  }
+  if (row.signal) return signalSearchText(row.signal)
+  if (row.manifest) return manifestSearchText(row.manifest)
+  return runSearchTextByKey.get(row.$key) ?? runSearchTextFromSnapshot(row.run)
 }
 
-function timelineRowLabel(row: EntityTimelineEntry): string {
-  return row.section.kind === `user_message` ? `User message` : `Agent response`
+function timelineRowLabel(row: RenderTimelineRow): string {
+  if (row.inbox) return `User message`
+  if (row.wake) return `Wake`
+  if (row.signal) return `Signal`
+  if (row.manifest) return `Manifest item`
+  return `Agent response`
+}
+
+function wakeReason(section: WakeSection): string {
+  const { payload } = section
+  if (payload.timeout) return `timeout`
+  if (payload.finished_child) {
+    return `child ${payload.finished_child.run_status}`
+  }
+  if (payload.changes.length > 0) {
+    return `${payload.changes.length} ${payload.changes.length === 1 ? `change` : `changes`}`
+  }
+  if (payload.other_children && payload.other_children.length > 0) {
+    return `${payload.other_children.length} child ${payload.other_children.length === 1 ? `update` : `updates`}`
+  }
+  return payload.source
+}
+
+function wakeSectionText(section: WakeSection): string {
+  return [
+    `woke`,
+    wakeReason(section),
+    section.payload.source,
+    ...wakeDetails(section).map((detail) => `${detail.label} ${detail.value}`),
+  ].join(` `)
+}
+
+function WakeTimelineRow({
+  section,
+}: {
+  section: WakeSection
+}): React.ReactElement {
+  const reason = wakeReason(section)
+  const details = wakeDetails(section)
+  const childOutput = wakeChildOutput(section)
+  return (
+    <div className={styles.manifestRow}>
+      <InlineEventCard
+        icon={Radio}
+        title="woke"
+        summary={`${reason} · ${formatChatTimestamp(section.timestamp)}`}
+        defaultExpanded={false}
+        headerSurface
+      >
+        <div className={styles.manifestDetails}>
+          {details.map((detail) => (
+            <div key={detail.label} className={styles.manifestDetail}>
+              <span>{detail.label}</span>
+              <strong>{detail.value}</strong>
+            </div>
+          ))}
+        </div>
+        {childOutput ? (
+          <pre className={styles.manifestJson}>{childOutput.value}</pre>
+        ) : null}
+      </InlineEventCard>
+    </div>
+  )
+}
+
+function SignalTimelineRow({
+  signal,
+}: {
+  signal: NonNullable<RenderTimelineRow[`signal`]>
+}): React.ReactElement {
+  return (
+    <div className={styles.manifestRow}>
+      <InlineEventCard
+        icon={CircleStop}
+        title={`signal ${signal.signal}`}
+        summary={signalSummary(signal)}
+        headerSurface
+      />
+    </div>
+  )
+}
+
+function signalSearchText(
+  signal: NonNullable<RenderTimelineRow[`signal`]>
+): string {
+  return [
+    `signal`,
+    signal.signal,
+    signal.status,
+    signal.sender,
+    signal.reason,
+    signal.outcome,
+    signal.previous_state,
+    signal.new_state,
+  ]
+    .filter(Boolean)
+    .join(` `)
+}
+
+function signalSummary(
+  signal: NonNullable<RenderTimelineRow[`signal`]>
+): string {
+  const timestamp = Date.parse(signal.timestamp)
+  return [
+    signal.status,
+    signal.outcome,
+    signal.reason,
+    Number.isFinite(timestamp) ? formatChatTimestamp(timestamp) : null,
+  ]
+    .filter(Boolean)
+    .join(` · `)
+}
+
+function wakeDetails(
+  section: WakeSection
+): Array<{ label: string; value: string }> {
+  const { payload } = section
+  const details = [
+    { label: `Source`, value: payload.source },
+    { label: `Trigger`, value: wakeReason(section) },
+    { label: `Time`, value: formatAbsoluteDateTimeVerbose(section.timestamp) },
+  ]
+
+  if (payload.changes.length > 0) {
+    details.push({
+      label: `Changes`,
+      value: payload.changes
+        .map((change) => `${change.kind} ${change.collection}:${change.key}`)
+        .join(`, `),
+    })
+  }
+
+  if (payload.finished_child) {
+    const childOutput = wakeChildOutput(section)
+    details.push(
+      { label: `Child`, value: payload.finished_child.url },
+      { label: `Child type`, value: payload.finished_child.type },
+      { label: `Child status`, value: payload.finished_child.run_status }
+    )
+    if (childOutput) {
+      details.push({
+        label: childOutput.label,
+        value: `${childOutput.value.length} chars`,
+      })
+    }
+  }
+
+  if (payload.other_children && payload.other_children.length > 0) {
+    details.push({
+      label: `Other children`,
+      value: payload.other_children
+        .map((child) => `${child.status} ${child.url}`)
+        .join(`, `),
+    })
+  }
+
+  return details.map((detail) => ({
+    ...detail,
+    value:
+      detail.value.length > 120
+        ? `${detail.value.slice(0, 117)}...`
+        : detail.value,
+  }))
+}
+
+function wakeChildOutput(
+  section: WakeSection
+): { label: string; value: string } | null {
+  const child = section.payload.finished_child
+  if (!child) return null
+  if (child.error) return { label: `Child error`, value: child.error }
+  if (child.response) return { label: `Child response`, value: child.response }
+  return null
 }
 
 function excerptAround(
@@ -133,59 +441,471 @@ function isTimelineFindMatch(
   )
 }
 
-// `section` and `responseTimestamp` are pulled out of the parent
-// `EntityTimelineEntry` so React.memo's shallow compare can hit on
-// the *section* identity. `buildTimelineEntries` returns a fresh
-// `entries` array (and fresh entry objects) on every chunk during
-// streaming, but the runtime caches finished agent sections in a
-// WeakMap keyed by the underlying run row — so unchanged rows
-// receive the identical `section` reference each render. With the
-// previous `row` prop, that hit was masked by the always-new wrapper
-// object; splitting the props lets memo skip every settled row and
-// only re-render the streaming row + the row that just settled.
+function ManifestTimelineRow({
+  manifest,
+  entityUrl,
+  entityStatus,
+}: {
+  manifest: Manifest
+  entityUrl: string | null
+  tileId: string | null
+  entityStatus?: EntityStatus
+}): React.ReactElement {
+  const workspace = useOptionalWorkspace()
+  const navigate = useNavigate()
+  const entityTarget = getManifestEntityUrl(manifest)
+  const stateSourceId = getManifestStateSourceId(manifest)
+  const isEntity = entityTarget !== null
+  const title = manifestTitle(manifest)
+  const meta = manifestMeta(manifest)
+  const summary =
+    isEntity || stateSourceId
+      ? title
+      : [title, meta].filter(Boolean).join(` · `)
+
+  const openEntity = useCallback(() => {
+    if (!entityTarget) return
+    if (workspace) {
+      workspace.helpers.openEntity(entityTarget)
+      return
+    }
+    navigate({
+      to: `/entity/$`,
+      params: { _splat: entityTarget.replace(/^\//, ``) },
+    })
+  }, [entityTarget, navigate, workspace])
+
+  const openStateInspector = useCallback(() => {
+    if (!entityUrl || !stateSourceId || !workspace) return
+    workspace.helpers.openEntity(entityUrl, {
+      viewId: `state-explorer`,
+      viewParams: { source: stateSourceId },
+    })
+  }, [entityUrl, stateSourceId, workspace])
+
+  const statusBadge = entityStatus ? (
+    <InlineStatusBadge tone={statusTone(entityStatus)}>
+      {entityStatus}
+    </InlineStatusBadge>
+  ) : null
+
+  const openAction = stateSourceId ? (
+    <Tooltip content="Open State Explorer">
+      <IconButton
+        type="button"
+        size={1}
+        variant="ghost"
+        tone="neutral"
+        className={styles.manifestActionButton}
+        aria-label="Open State Explorer"
+        onClick={openStateInspector}
+        disabled={!entityUrl || !workspace}
+      >
+        <Icon icon={ExternalLink} size={1} />
+      </IconButton>
+    </Tooltip>
+  ) : entityTarget ? (
+    <Tooltip content="Open entity">
+      <IconButton
+        type="button"
+        size={1}
+        variant="ghost"
+        tone="neutral"
+        className={styles.manifestActionButton}
+        aria-label="Open entity"
+        onClick={openEntity}
+      >
+        <Icon icon={ExternalLink} size={1} />
+      </IconButton>
+    </Tooltip>
+  ) : null
+  const actions =
+    statusBadge || openAction ? (
+      <>
+        {statusBadge}
+        {openAction}
+      </>
+    ) : undefined
+
+  const details = <ManifestDetailGrid manifest={manifest} />
+
+  return (
+    <div className={styles.manifestRow}>
+      <InlineEventCard
+        icon={manifestIcon(manifest)}
+        title={manifestKindLabel(manifest)}
+        summary={summary}
+        actions={actions}
+        collapsible={!isEntity && !stateSourceId}
+        headerSurface
+      >
+        {isEntity || stateSourceId ? (
+          details
+        ) : (
+          <>
+            {details}
+            <pre className={styles.manifestJson}>
+              {JSON.stringify(manifest, null, 2)}
+            </pre>
+          </>
+        )}
+      </InlineEventCard>
+    </div>
+  )
+}
+
+function ManifestDetailGrid({
+  manifest,
+}: {
+  manifest: Manifest
+}): React.ReactElement | null {
+  const details = manifestDetails(manifest)
+  if (details.length === 0) return null
+  return (
+    <div className={styles.manifestDetails}>
+      {details.map((detail) => (
+        <div key={detail.label} className={styles.manifestDetail}>
+          <span>{detail.label}</span>
+          <strong>{detail.value}</strong>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function manifestSearchText(manifest: Manifest): string {
+  return [
+    manifestKindLabel(manifest),
+    manifestTitle(manifest),
+    manifestMeta(manifest),
+  ]
+    .filter(Boolean)
+    .join(` `)
+}
+
+function manifestKindLabel(manifest: Manifest): string {
+  switch (manifest.kind) {
+    case `child`:
+      return `Child entity`
+    case `source`:
+      return manifest.sourceType === `db`
+        ? `Database source`
+        : `${titleCase(manifest.sourceType)} source`
+    case `shared-state`:
+      return `Shared state`
+    case `effect`:
+      return `Effect`
+    case `context`:
+      return `Context`
+    case `schedule`:
+      return `Schedule`
+  }
+}
+
+function manifestTitle(manifest: Manifest): string {
+  switch (manifest.kind) {
+    case `child`:
+      return manifest.entity_url
+    case `source`:
+      return manifest.sourceRef
+    case `shared-state`:
+    case `effect`:
+    case `context`:
+    case `schedule`:
+      return manifest.id
+  }
+}
+
+function manifestMeta(manifest: Manifest): string {
+  switch (manifest.kind) {
+    case `child`:
+      return manifest.observed ? `child entity` : `child entity · unobserved`
+    case `source`:
+      return describeSourceConfig(manifest.config)
+    case `shared-state`:
+      return `${manifest.mode} · ${Object.keys(manifest.collections).join(`, `)}`
+    case `effect`:
+      return manifest.function_ref
+    case `context`:
+      return `${Object.keys(manifest.attrs).length} attrs`
+    case `schedule`:
+      return manifest.scheduleType === `cron`
+        ? `${manifest.expression}${manifest.timezone ? ` · ${manifest.timezone}` : ``}`
+        : `${manifest.fireAt} · ${manifest.status}`
+  }
+}
+
+function manifestDetails(
+  manifest: Manifest
+): Array<{ label: string; value: string }> {
+  switch (manifest.kind) {
+    case `child`:
+      return [
+        { label: `Path`, value: manifest.entity_url },
+        {
+          label: `Status`,
+          value: manifest.observed ? `observed` : `unobserved`,
+        },
+      ]
+    case `shared-state`:
+      return [
+        { label: `Mode`, value: manifest.mode },
+        {
+          label: `Collections`,
+          value: Object.keys(manifest.collections).join(`, `) || `none`,
+        },
+      ]
+    case `source`:
+      return [
+        { label: `Type`, value: manifest.sourceType },
+        { label: `Ref`, value: manifest.sourceRef },
+      ]
+    case `effect`:
+      return [
+        { label: `Function`, value: manifest.function_ref },
+        { label: `Config`, value: shortJson(manifest.config) },
+      ]
+    case `context`:
+      return [
+        { label: `Name`, value: manifest.name },
+        { label: `Content`, value: `${manifest.content.length} chars` },
+      ]
+    case `schedule`:
+      return manifest.scheduleType === `cron`
+        ? [
+            { label: `Cron`, value: manifest.expression },
+            { label: `Timezone`, value: manifest.timezone ?? `local` },
+          ]
+        : [
+            { label: `Fire at`, value: manifest.fireAt },
+            { label: `Target`, value: manifest.targetUrl },
+            { label: `Status`, value: manifest.status ?? `pending` },
+          ]
+  }
+}
+
+function manifestIcon(manifest: Manifest) {
+  if (getManifestStateSourceId(manifest)) return Database
+  if (getManifestEntityUrl(manifest)) return GitBranch
+  if (manifest.kind === `schedule`) return Radio
+  return FileJson
+}
+
+function getManifestEntityUrl(manifest: Manifest): string | null {
+  if (manifest.kind === `child`) return manifest.entity_url
+  if (manifest.kind === `source` && manifest.sourceType === `entity`) {
+    return manifest.sourceRef
+  }
+  return null
+}
+
+function getManifestStateSourceId(manifest: Manifest): string | null {
+  if (manifest.kind === `shared-state`) return manifest.id
+  if (manifest.kind === `source` && manifest.sourceType === `db`) {
+    return manifest.sourceRef
+  }
+  return null
+}
+
+function statusTone(status: EntityStatus) {
+  switch (status) {
+    case `idle`:
+      return `success`
+    case `spawning`:
+    case `paused`:
+    case `stopping`:
+      return `warning`
+    case `running`:
+      return `info`
+    case `stopped`:
+      return `neutral`
+    case `killed`:
+      return `danger`
+    default:
+      return `neutral`
+  }
+}
+
+function describeSourceConfig(config: Record<string, unknown>): string {
+  const cache = typeof config.cache === `string` ? config.cache : null
+  const keys = Object.keys(config).filter((key) => key !== `cache`)
+  return [cache, keys.length > 0 ? `${keys.length} config keys` : null]
+    .filter(Boolean)
+    .join(` · `)
+}
+
+function shortJson(value: unknown): string {
+  const json = JSON.stringify(value)
+  return json.length > 80 ? `${json.slice(0, 77)}...` : json
+}
+
+function titleCase(value: string): string {
+  return value
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(` `)
+}
+
+function stableEntityUrlKey(urls: Iterable<string>): string {
+  return Array.from(new Set(urls)).sort().join(`\0`)
+}
+
+function entityUrlsFromKey(key: string): Array<string> {
+  return key.length === 0 ? [] : key.split(`\0`)
+}
+
 const TimelineRow = memo(function TimelineRow({
-  section,
+  row,
   responseTimestamp,
+  isInitialUserMessage,
   entityStopped,
   isStreaming,
   renderWidth,
+  entityUrl,
+  tileId,
+  entityStatusByUrl,
+  stopUserMessageKey,
+  stopPending,
+  onStopGeneration,
+  onRunSearchTextChange,
 }: {
-  section: EntityTimelineEntry[`section`]
-  responseTimestamp: EntityTimelineEntry[`responseTimestamp`]
+  row: RenderTimelineRow
+  responseTimestamp: number | null
+  isInitialUserMessage: boolean
   entityStopped: boolean
   isStreaming: boolean
   renderWidth: number
+  entityUrl: string | null
+  tileId: string | null
+  entityStatusByUrl: Map<string, EntityStatus>
+  stopUserMessageKey: string | null
+  stopPending: boolean
+  onStopGeneration?: () => void
+  onRunSearchTextChange: (rowKey: string, text: string) => void
 }): React.ReactElement {
-  if (section.kind === `user_message`) {
-    return <UserMessage section={section} />
+  if (row.inbox) {
+    const timestamp = Date.parse(row.inbox.timestamp)
+    return (
+      <UserMessage
+        section={{
+          kind: `user_message`,
+          from: row.inbox.from,
+          text: readInboxText(row.inbox.payload),
+          timestamp: Number.isFinite(timestamp) ? timestamp : Date.now(),
+          isInitial: isInitialUserMessage,
+        }}
+        showStop={
+          stopUserMessageKey !== null && row.$key === stopUserMessageKey
+        }
+        stopPending={stopPending}
+        onStop={onStopGeneration}
+      />
+    )
+  }
+
+  if (row.wake) {
+    return (
+      <WakeTimelineRow
+        section={{
+          kind: `wake`,
+          payload: row.wake.payload,
+          timestamp: Date.parse(row.wake.payload.timestamp),
+        }}
+      />
+    )
+  }
+
+  if (row.signal) {
+    return <SignalTimelineRow signal={row.signal} />
+  }
+
+  if (row.manifest) {
+    return (
+      <ManifestTimelineRow
+        manifest={row.manifest}
+        entityUrl={entityUrl}
+        tileId={tileId}
+        entityStatus={
+          getManifestEntityUrl(row.manifest)
+            ? entityStatusByUrl.get(getManifestEntityUrl(row.manifest)!)
+            : undefined
+        }
+      />
+    )
   }
 
   return (
-    <AgentResponse
-      section={section}
+    <AgentResponseLive
+      rowKey={row.$key}
+      run={row.run}
       isStreaming={!entityStopped && isStreaming}
       timestamp={responseTimestamp}
       renderWidth={renderWidth}
+      onSearchTextChange={onRunSearchTextChange}
     />
   )
 })
 
 export function EntityTimeline({
-  entries,
+  rows,
   loading,
   error,
   entityStopped,
   cacheKey,
   tileId,
+  entityUrl = null,
+  entities = [],
+  scrollToBottomSignal = 0,
+  stopPending = false,
+  onStopGeneration,
 }: {
-  entries: Array<EntityTimelineEntry>
+  rows: Array<EntityTimelineQueryRow>
   loading: boolean
   error: string | null
   entityStopped: boolean
   cacheKey?: string | null
   tileId?: string | null
+  entityUrl?: string | null
+  entities?: Array<IncludesEntity>
+  scrollToBottomSignal?: number
+  stopPending?: boolean
+  onStopGeneration?: () => void
 }): React.ReactElement {
-  const rows = useMemo(() => entries, [entries])
+  const { entitiesCollection } = useElectricAgents()
+  const referencedEntityUrlKey = useMemo(
+    () => stableEntityUrlKey(entities.map((entity) => entity.url)),
+    [entities]
+  )
+  const referencedEntityUrls = useMemo(
+    () => entityUrlsFromKey(referencedEntityUrlKey),
+    [referencedEntityUrlKey]
+  )
+  const { data: entityStatuses = [] } = useLiveQuery(
+    (q) => {
+      if (!entitiesCollection || referencedEntityUrls.length === 0) {
+        return undefined
+      }
+      return q
+        .from({ e: entitiesCollection as any })
+        .where(({ e }: any) => inArray(e.url, referencedEntityUrls))
+        .select(({ e }: any) => ({
+          url: e.url,
+          status: e.status,
+        }))
+    },
+    [entitiesCollection, referencedEntityUrlKey]
+  )
+  const entityStatusByUrl = useMemo(() => {
+    const statusByUrl = new Map<string, EntityStatus>()
+    for (const entity of entities) {
+      if (entity.status) statusByUrl.set(entity.url, entity.status)
+    }
+    for (const entity of entityStatuses) {
+      statusByUrl.set(entity.url, entity.status)
+    }
+    return statusByUrl
+  }, [entities, entityStatuses])
   const [viewport, setViewport] = useState<HTMLDivElement | null>(null)
   const [contentElement, setContentElement] = useState<HTMLDivElement | null>(
     null
@@ -193,30 +913,85 @@ export function EntityTimeline({
   const [viewportWidth, setViewportWidth] = useState(0)
   const [contentWidth, setContentWidth] = useState(0)
   const isNearBottom = useRef(true)
+  const lastScrollTopRef = useRef(0)
+  const spawnMarkerRef = useRef<HTMLSpanElement | null>(null)
   const [showJumpToBottom, setShowJumpToBottom] = useState(false)
+  const [showTopDivider, setShowTopDivider] = useState(false)
+  const [runSearchTextByKey, setRunSearchTextByKey] = useState(
+    () => new Map<string, string>()
+  )
   const cachedSizeMapRef = useRef(new Map<string, number>())
   const lastMeasureAtRef = useRef(new Map<string, number>())
   const settledKeysRef = useRef(new Set<string>())
   const settleCheckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const handledScrollSignalRef = useRef(scrollToBottomSignal)
+  const previousStreamingAgentKeyRef = useRef<string | null>(null)
+  const textColumnWidth = Math.max(0, contentWidth - CHAT_SURFACE_GUTTER)
 
-  const firstMessage = rows.find(
-    (
-      row
-    ): row is EntityTimelineEntry & {
-      section: Extract<EntityTimelineEntry[`section`], { kind: `user_message` }>
-    } => row.section.kind === `user_message`
-  )
-  const spawnTime = firstMessage?.section.timestamp ?? null
+  const spawnTime = useMemo(() => {
+    for (const row of rows) {
+      if (!row.inbox) continue
+      const timestamp = Date.parse(row.inbox.timestamp)
+      return Number.isFinite(timestamp) ? timestamp : null
+    }
+    return null
+  }, [rows])
 
   const lastStreamingAgentKey = useMemo(() => {
     for (let index = rows.length - 1; index >= 0; index--) {
       const row = rows[index]
-      if (row.section.kind === `agent_response`) {
-        return row.section.done ? null : row.key
+      if (row.run) {
+        return row.run.status === `started` ? row.$key : null
       }
     }
     return null
   }, [rows])
+
+  const stopUserMessageKey = useMemo(() => {
+    if (!lastStreamingAgentKey) return null
+    const streamingIndex = rows.findIndex(
+      (row) => row.$key === lastStreamingAgentKey
+    )
+    if (streamingIndex < 0) return null
+    for (let index = streamingIndex - 1; index >= 0; index--) {
+      const row = rows[index]
+      if (row?.inbox) {
+        return row.$key
+      }
+    }
+    return null
+  }, [lastStreamingAgentKey, rows])
+  const firstInboxRowKey = useMemo(
+    () => rows.find((row) => row.inbox)?.$key ?? null,
+    [rows]
+  )
+  const responseTimestampByRowKey = useMemo(() => {
+    const timestampByRowKey = new Map<string, number | null>()
+    let lastUserTimestamp: number | null = null
+    for (const row of rows) {
+      if (row.inbox) {
+        const timestamp = Date.parse(row.inbox.timestamp)
+        lastUserTimestamp = Number.isFinite(timestamp) ? timestamp : null
+      } else if (row.run) {
+        timestampByRowKey.set(row.$key, lastUserTimestamp)
+      }
+    }
+    return timestampByRowKey
+  }, [rows])
+  const updateRunSearchText = useCallback((rowKey: string, text: string) => {
+    setRunSearchTextByKey((current) => {
+      if (text.length === 0) {
+        if (!current.has(rowKey)) return current
+        const next = new Map(current)
+        next.delete(rowKey)
+        return next
+      }
+      if (current.get(rowKey) === text) return current
+      const next = new Map(current)
+      next.set(rowKey, text)
+      return next
+    })
+  }, [])
 
   const persistSettledRows = useCallback(() => {
     if (!cacheKey || viewportWidth <= 0) return
@@ -287,10 +1062,11 @@ export function EntityTimeline({
     count: rows.length,
     getScrollElement: () => viewport,
     estimateSize: (index) =>
-      cachedSizeMapRef.current.get(rows[index]?.key ?? ``) ??
-      estimateRowHeight(rows[index], contentWidth),
-    getItemKey: (index) => rows[index]?.key ?? index,
-    gap: ROW_GAP,
+      cachedSizeMapRef.current.get(
+        rows[index] ? renderRowKey(rows[index]!) : ``
+      ) ?? estimateRowHeight(rows[index], textColumnWidth),
+    getItemKey: (index) => (rows[index] ? renderRowKey(rows[index]!) : index),
+    gap: 0,
     overscan: 6,
     measureElement: measureRowElement,
     enabled: rows.length > 0,
@@ -310,12 +1086,13 @@ export function EntityTimeline({
         if (!query.trim()) return matches
 
         rows.forEach((row, rowIndex) => {
-          const text = timelineRowSearchText(row)
+          const rowKey = renderRowKey(row)
+          const text = timelineRowSearchText(row, runSearchTextByKey)
           const starts = getTextMatchStarts(text, query)
           starts.forEach((start, rowOccurrence) => {
             matches.push({
-              id: `${row.key}:${rowOccurrence}`,
-              rowKey: row.key,
+              id: `${rowKey}:${rowOccurrence}`,
+              rowKey,
               rowIndex,
               rowOccurrence,
               label: timelineRowLabel(row),
@@ -341,13 +1118,29 @@ export function EntityTimeline({
         return getCurrentMatchIndexInRoot(root, query, match)
       },
     }
-  }, [contentElement, rowVirtualizer, rows])
+  }, [contentElement, rowVirtualizer, rows, runSearchTextByKey])
 
   usePaneFindAdapterRegistration(tileId ?? null, paneFindAdapter)
 
   useEffect(() => {
     rowVirtualizer.shouldAdjustScrollPositionOnItemSizeChange = () => false
   }, [rowVirtualizer])
+
+  const scrollToTimelineEnd = useCallback(
+    (opts?: { force?: boolean }) => {
+      if (!viewport || rows.length === 0) return
+      const force = opts?.force ?? false
+      rowVirtualizer.scrollToIndex(rows.length - 1, { align: `end` })
+
+      // The stopped/status footer sits outside the virtual list, so make sure the
+      // physical scroll container is also flush with its full content height.
+      requestAnimationFrame(() => {
+        if (!force && !isNearBottom.current) return
+        viewport.scrollTop = viewport.scrollHeight
+      })
+    },
+    [rowVirtualizer, rows.length, viewport]
+  )
 
   const scrollAreaRef = useCallback((node: HTMLDivElement | null) => {
     setViewport(node)
@@ -457,17 +1250,48 @@ export function EntityTimeline({
   useEffect(() => {
     if (!viewport) return
 
+    const detachFromBottom = () => {
+      isNearBottom.current = false
+      setShowJumpToBottom(true)
+    }
+
+    const handleWheel = (event: WheelEvent) => {
+      if (event.deltaY < 0 && viewport.scrollTop > 0) {
+        detachFromBottom()
+      }
+    }
+
     const handleScroll = () => {
-      const nearBottom =
-        viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <
-        SCROLL_THRESHOLD
-      isNearBottom.current = nearBottom
-      setShowJumpToBottom(!nearBottom)
+      const distanceFromBottom =
+        viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight
+      const scrollingUp = viewport.scrollTop < lastScrollTopRef.current - 1
+      const pinnedToBottom = distanceFromBottom <= BOTTOM_PIN_THRESHOLD
+
+      if (scrollingUp && !pinnedToBottom) {
+        detachFromBottom()
+      } else if (pinnedToBottom) {
+        isNearBottom.current = true
+      }
+
+      lastScrollTopRef.current = viewport.scrollTop
+      const spawnMarker = spawnMarkerRef.current
+      if (spawnMarker) {
+        const markerRect = spawnMarker.getBoundingClientRect()
+        const viewportRect = viewport.getBoundingClientRect()
+        setShowTopDivider(markerRect.top <= viewportRect.top)
+      } else {
+        setShowTopDivider(false)
+      }
+      setShowJumpToBottom(!isNearBottom.current)
     }
 
     handleScroll()
+    viewport.addEventListener(`wheel`, handleWheel, { passive: true })
     viewport.addEventListener(`scroll`, handleScroll, { passive: true })
-    return () => viewport.removeEventListener(`scroll`, handleScroll)
+    return () => {
+      viewport.removeEventListener(`wheel`, handleWheel)
+      viewport.removeEventListener(`scroll`, handleScroll)
+    }
   }, [viewport])
 
   useLayoutEffect(() => {
@@ -475,11 +1299,60 @@ export function EntityTimeline({
     if (!isNearBottom.current) return
 
     const frame = requestAnimationFrame(() => {
-      rowVirtualizer.scrollToIndex(rows.length - 1, { align: `end` })
+      scrollToTimelineEnd()
     })
 
     return () => cancelAnimationFrame(frame)
-  }, [rowVirtualizer, rows, viewport])
+  }, [rows, scrollToTimelineEnd, viewport])
+
+  useLayoutEffect(() => {
+    if (!contentElement || !viewport) return
+
+    let frame: ReturnType<typeof requestAnimationFrame> | null = null
+    const pinToBottom = () => {
+      if (!isNearBottom.current) return
+      if (frame !== null) cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => {
+        frame = null
+        scrollToTimelineEnd()
+      })
+    }
+
+    const observer = new ResizeObserver(pinToBottom)
+    observer.observe(contentElement)
+    return () => {
+      observer.disconnect()
+      if (frame !== null) cancelAnimationFrame(frame)
+    }
+  }, [contentElement, scrollToTimelineEnd, viewport])
+
+  useLayoutEffect(() => {
+    const previousStreamingAgentKey = previousStreamingAgentKeyRef.current
+    previousStreamingAgentKeyRef.current = lastStreamingAgentKey
+    if (!previousStreamingAgentKey || lastStreamingAgentKey) return
+    if (!isNearBottom.current) return
+
+    setShowJumpToBottom(false)
+    const frame = requestAnimationFrame(() => {
+      scrollToTimelineEnd()
+    })
+
+    return () => cancelAnimationFrame(frame)
+  }, [lastStreamingAgentKey, scrollToTimelineEnd])
+
+  useLayoutEffect(() => {
+    if (handledScrollSignalRef.current === scrollToBottomSignal) return
+    handledScrollSignalRef.current = scrollToBottomSignal
+    isNearBottom.current = true
+    setShowJumpToBottom(false)
+
+    if (!viewport || rows.length === 0) return
+    const frame = requestAnimationFrame(() => {
+      scrollToTimelineEnd({ force: true })
+    })
+
+    return () => cancelAnimationFrame(frame)
+  }, [rows.length, scrollToBottomSignal, scrollToTimelineEnd, viewport])
 
   useEffect(
     () => () => {
@@ -492,9 +1365,11 @@ export function EntityTimeline({
 
   const jumpToBottom = useCallback(() => {
     if (rows.length > 0) {
-      rowVirtualizer.scrollToIndex(rows.length - 1, { align: `end` })
+      isNearBottom.current = true
+      setShowJumpToBottom(false)
+      scrollToTimelineEnd({ force: true })
     }
-  }, [rowVirtualizer, rows.length])
+  }, [rows.length, scrollToTimelineEnd])
 
   if (loading) {
     return (
@@ -517,25 +1392,43 @@ export function EntityTimeline({
   }
 
   return (
-    <div className={styles.root}>
+    <div className={styles.root} data-desktop-selection-context="">
+      <div
+        className={styles.topDivider}
+        data-visible={showTopDivider ? `true` : undefined}
+        aria-hidden="true"
+      />
       <ScrollArea
         viewportRef={scrollAreaRef}
         className={styles.scroll}
-        viewportClassName={styles.scrollViewport}
+        viewportClassName={`${styles.scrollViewport} mobile-chat-scroll-viewport`}
         scrollbars="vertical"
       >
-        <div ref={contentRef} className={styles.content}>
+        <div
+          ref={contentRef}
+          className={`${styles.content} mobile-chat-content`}
+        >
           <Stack>
             {spawnTime ? (
               <Tooltip content={formatAbsoluteDateTimeVerbose(spawnTime)}>
-                <Text size={1} tone="muted" className={styles.statusPill}>
-                  {`spawned · ${formatShortTime(spawnTime)}`}
-                </Text>
+                <span ref={spawnMarkerRef} className={styles.statusPill}>
+                  <Text size={1} tone="muted" className={styles.statusText}>
+                    spawned
+                  </Text>
+                  <Text size={1} tone="muted" className={styles.statusText}>
+                    ·
+                  </Text>
+                  <Text size={1} tone="muted" className={styles.statusText}>
+                    {formatChatTimestamp(spawnTime)}
+                  </Text>
+                </span>
               </Tooltip>
             ) : (
-              <Text size={1} tone="muted" className={styles.statusPill}>
-                spawned
-              </Text>
+              <span ref={spawnMarkerRef} className={styles.statusPill}>
+                <Text size={1} tone="muted" className={styles.statusText}>
+                  spawned
+                </Text>
+              </span>
             )}
           </Stack>
 
@@ -555,6 +1448,7 @@ export function EntityTimeline({
             >
               {rowVirtualizer.getVirtualItems().map((virtualRow) => {
                 const row = rows[virtualRow.index]
+                const rowKey = renderRowKey(row)
 
                 // Stable row key. The previous implementation appended
                 // `:${contentWidth}` to force remount on every column-width
@@ -570,18 +1464,33 @@ export function EntityTimeline({
                     key={virtualRow.key}
                     ref={rowVirtualizer.measureElement}
                     data-index={virtualRow.index}
-                    data-item-key={row.key}
-                    data-pane-find-row-key={row.key}
+                    data-item-key={rowKey}
+                    data-pane-find-row-key={rowKey}
                     className={styles.virtualRow}
-                    style={{ transform: `translateY(${virtualRow.start}px)` }}
+                    style={{
+                      transform: `translateY(${virtualRow.start}px)`,
+                      paddingBottom: timelineRowGap(row),
+                    }}
                   >
-                    <TimelineRow
-                      section={row.section}
-                      responseTimestamp={row.responseTimestamp}
-                      entityStopped={entityStopped}
-                      isStreaming={row.key === lastStreamingAgentKey}
-                      renderWidth={contentWidth}
-                    />
+                    <TimelineRowErrorBoundary rowKey={rowKey}>
+                      <TimelineRow
+                        row={row}
+                        responseTimestamp={
+                          responseTimestampByRowKey.get(rowKey) ?? null
+                        }
+                        isInitialUserMessage={rowKey === firstInboxRowKey}
+                        entityStopped={entityStopped}
+                        isStreaming={rowKey === lastStreamingAgentKey}
+                        renderWidth={textColumnWidth}
+                        entityUrl={entityUrl}
+                        tileId={tileId ?? null}
+                        entityStatusByUrl={entityStatusByUrl}
+                        stopUserMessageKey={stopUserMessageKey}
+                        stopPending={stopPending}
+                        onStopGeneration={onStopGeneration}
+                        onRunSearchTextChange={updateRunSearchText}
+                      />
+                    </TimelineRowErrorBoundary>
                   </div>
                 )
               })}
@@ -607,7 +1516,7 @@ export function EntityTimeline({
         aria-hidden={!showJumpToBottom}
         tabIndex={showJumpToBottom ? 0 : -1}
       >
-        <ArrowDown size={16} />
+        <Icon icon={ArrowDown} size={3} />
       </button>
     </div>
   )

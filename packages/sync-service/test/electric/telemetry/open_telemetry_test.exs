@@ -118,4 +118,69 @@ defmodule Electric.Telemetry.OpenTelemetryTest do
       end)
     end
   end
+
+  describe "process_memory_attributes/1" do
+    test "returns process and binary memory for :start phase" do
+      attrs = OpenTelemetry.process_memory_attributes(:start)
+
+      assert %{
+               "memory.start.process_bytes" => process_bytes,
+               "memory.start.binary_bytes" => binary_bytes
+             } = attrs
+
+      assert is_integer(process_bytes) and process_bytes > 0
+      assert is_integer(binary_bytes) and binary_bytes >= 0
+    end
+
+    test "returns process and binary memory for :end phase" do
+      attrs = OpenTelemetry.process_memory_attributes(:end)
+
+      assert %{
+               "memory.end.process_bytes" => process_bytes,
+               "memory.end.binary_bytes" => binary_bytes
+             } = attrs
+
+      assert is_integer(process_bytes) and process_bytes > 0
+      assert is_integer(binary_bytes) and binary_bytes >= 0
+    end
+
+    test "rejects phase values other than :start or :end" do
+      assert_raise FunctionClauseError, fn ->
+        OpenTelemetry.process_memory_attributes(nil)
+      end
+
+      assert_raise FunctionClauseError, fn ->
+        OpenTelemetry.process_memory_attributes("start")
+      end
+    end
+  end
+
+  describe "add_process_memory_attributes/1" do
+    test "forwards memory attributes through set_attributes on the current span" do
+      test_pid = self()
+
+      Repatch.patch(:otel_span, :set_attributes, fn ctx, attrs ->
+        send(test_pid, {:set_attributes, attrs})
+        Repatch.real(:otel_span, :set_attributes, [ctx, attrs])
+      end)
+
+      OpenTelemetry.with_span("test_span", %{}, @stack_id, fn ->
+        OpenTelemetry.add_process_memory_attributes(:start)
+      end)
+
+      assert_received {:set_attributes,
+                       %{
+                         "memory.start.process_bytes" => process_bytes,
+                         "memory.start.binary_bytes" => binary_bytes
+                       }}
+
+      assert is_integer(process_bytes) and process_bytes > 0
+      assert is_integer(binary_bytes) and binary_bytes >= 0
+    end
+
+    test "is a no-op outside any span context" do
+      # No surrounding with_span — should short-circuit and skip Process.info
+      assert OpenTelemetry.add_process_memory_attributes(:start) == false
+    end
+  end
 end

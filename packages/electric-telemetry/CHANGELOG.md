@@ -1,5 +1,25 @@
 # @core/electric-telemetry
 
+## 0.2.7
+
+### Patch Changes
+
+- eac6dea: Wrap telemetry-poller MFAs in `ElectricTelemetry.Poller.safe_invoke/3` so that transient collector failures (`:noproc`, `:timeout`, `:shutdown`/`:normal` exits, `ArgumentError` from not-yet-created ETS tables) no longer cause `:telemetry_poller` to permanently remove the measurement from its polling list. Unexpected errors are now logged as warnings with the offending MFA and the collector keeps being polled on subsequent ticks. Strips now-redundant defensive `try/catch` / `with`-fallthrough code from individual collectors.
+
+  Note: user-supplied periodic measurement functions no longer have exceptions propagated up to `:telemetry_poller`'s own error logger — they are caught and logged via `ElectricTelemetry.Poller` instead.
+
+## 0.2.6
+
+### Patch Changes
+
+- ed48bba: Add per-shape `electric.shape.response_size.bytes` telemetry distribution, tagged by `root_table`, `is_live`, and `stack_id`. Operators can now attribute response payload volume to individual shapes and tell initial snapshots apart from live long-poll responses.
+
+## 0.2.5
+
+### Patch Changes
+
+- 4c52d76: Update Elixir deps to latest available versions
+
 ## 0.2.4
 
 ### Patch Changes

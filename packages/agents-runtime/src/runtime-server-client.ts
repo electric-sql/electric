@@ -1,9 +1,24 @@
 import type { EntityTags, TagOperation } from './tags'
+import { appendPathToUrl } from './url'
+import { buildEventSourceSubscriptionId } from './event-sources'
+import type { ClaimTokenHeader, HeadersProvider } from './types'
+import type { EntitySignal } from './entity-schema'
+import type {
+  EventSourceContract,
+  EventSourceSubscription,
+  EventSourceSubscriptionInput,
+} from './event-sources'
+export type { EntitySignal } from './entity-schema'
+
+const ELECTRIC_PRINCIPAL_HEADER = `electric-principal`
 
 export interface RuntimeServerClientConfig {
   baseUrl: string
   fetch?: typeof globalThis.fetch
+  headers?: HeadersProvider
+  writeTokenHeader?: ClaimTokenHeader
   track?: <T>(promise: Promise<T>) => Promise<T>
+  principalKey?: string
 }
 
 export interface RuntimeEntityInfo {
@@ -12,6 +27,16 @@ export interface RuntimeEntityInfo {
   streamPath: string
 }
 
+export type RunnerDispatchPolicy = {
+  targets: [{ type: `runner`; runnerId: string; subscription_id?: string }]
+}
+
+export type WebhookDispatchPolicy = {
+  targets: [{ type: `webhook`; url: string; subscription_id?: string }]
+}
+
+export type DispatchPolicy = RunnerDispatchPolicy | WebhookDispatchPolicy
+
 export interface SpawnEntityOptions {
   type: string
   id: string
@@ -19,6 +44,7 @@ export interface SpawnEntityOptions {
   parentUrl?: string
   initialMessage?: unknown
   tags?: Record<string, string>
+  dispatch_policy?: DispatchPolicy
   wake?: {
     subscriberUrl: string
     condition:
@@ -31,15 +57,17 @@ export interface SpawnEntityOptions {
     debounceMs?: number
     timeoutMs?: number
     includeResponse?: boolean
+    manifestKey?: string
   }
 }
 
 export interface SendEntityMessageOptions {
   targetUrl: string
   payload: unknown
-  from?: string
   type?: string
   afterMs?: number
+  mode?: `immediate` | `queued` | `paused` | `steer`
+  position?: string
 }
 
 export interface RegisterWakeOptions {
@@ -58,19 +86,36 @@ export interface RegisterWakeOptions {
   manifestKey?: string
 }
 
+export interface SignalEntityOptions {
+  entityUrl: string
+  signal: EntitySignal
+  reason?: string
+  payload?: unknown
+}
+
 export interface RuntimeServerClient {
   sendEntityMessage: (options: SendEntityMessageOptions) => Promise<void>
   spawnEntity: (options: SpawnEntityOptions) => Promise<RuntimeEntityInfo>
-  getEntityInfo: (entityUrl: string) => Promise<RuntimeEntityInfo>
+  getEntity: (entityUrl: string) => Promise<RuntimeEntityInfo>
   ensureSharedStateStream: (sharedStateId: string) => Promise<string>
+  signalEntity: (options: SignalEntityOptions) => Promise<{ txid: number }>
+  ensureStream: (streamPath: string, contentType?: string) => Promise<string>
   deleteEntity: (entityUrl: string) => Promise<void>
   getSharedStateStreamPath: (sharedStateId: string) => string
   registerWake: (options: RegisterWakeOptions) => Promise<void>
-  registerCronSource: (expression: string, timezone?: string) => Promise<string>
-  registerEntitiesSource: (tags: EntityTags) => Promise<{
+  ensureCronStream: (expression: string, timezone?: string) => Promise<string>
+  ensureEntitiesMembershipStream: (tags: EntityTags) => Promise<{
     streamUrl: string
     sourceRef: string
   }>
+  listEventSources: () => Promise<Array<EventSourceContract>>
+  subscribeToEventSource: (
+    options: EventSourceSubscriptionInput & { entityUrl: string }
+  ) => Promise<{ txid: string; subscription: EventSourceSubscription }>
+  unsubscribeFromEventSource: (options: {
+    entityUrl: string
+    id: string
+  }) => Promise<{ txid: string }>
   upsertCronSchedule: (options: {
     entityUrl: string
     id: string
@@ -86,7 +131,6 @@ export interface RuntimeServerClient {
     payload: unknown
     targetUrl?: string
     fireAt: string
-    from?: string
     messageType?: string
   }) => Promise<{ txid: string }>
   deleteSchedule: (options: {
@@ -99,7 +143,7 @@ export interface RuntimeServerClient {
     value: string,
     writeToken: string
   ) => Promise<void>
-  removeTag: (
+  deleteTag: (
     entityUrl: string,
     key: string,
     writeToken: string
@@ -126,17 +170,61 @@ export function getSharedStateStreamPath(sharedStateId: string): string {
   return `/_electric/shared-state/${sharedStateId}`
 }
 
+function entityRpcPath(entityUrl: string, suffix = ``): string {
+  return `/_electric/entities${entityUrl}${suffix}`
+}
+
 export function createRuntimeServerClient(
   config: RuntimeServerClientConfig
 ): RuntimeServerClient {
   const fetchImpl = config.fetch ?? globalThis.fetch
 
+  const resolveHeaders = async (
+    initHeaders?: HeadersInit
+  ): Promise<Headers> => {
+    const baseHeaders =
+      typeof config.headers === `function`
+        ? await config.headers()
+        : config.headers
+    const headers = new Headers(baseHeaders)
+    new Headers(initHeaders).forEach((value, key) => headers.set(key, value))
+    return headers
+  }
+
+  const applyTokenHeader = (
+    headers: Headers,
+    tokenHeader: ClaimTokenHeader,
+    token: string
+  ): void => {
+    if (
+      tokenHeader === `authorization` ||
+      (tokenHeader === `both` && !headers.has(`authorization`))
+    ) {
+      headers.set(`authorization`, `Bearer ${token}`)
+    }
+    if (tokenHeader === `electric-claim-token` || tokenHeader === `both`) {
+      headers.set(`electric-claim-token`, token)
+    }
+  }
+
   const track = <T>(promise: Promise<T>): Promise<T> => {
     return config.track ? config.track(promise) : promise
   }
 
-  const request = (path: string, init?: RequestInit): Promise<Response> => {
-    return track(fetchImpl(`${config.baseUrl}${path}`, init))
+  const request = async (
+    path: string,
+    init?: RequestInit
+  ): Promise<Response> => {
+    const headers = await resolveHeaders(init?.headers)
+    if (config.principalKey) {
+      headers.set(ELECTRIC_PRINCIPAL_HEADER, config.principalKey)
+    }
+    return track(
+      fetchImpl(appendPathToUrl(config.baseUrl, path), {
+        ...init,
+        headers,
+      })
+    )
   }
 
   const requireEntityInfo = (
@@ -168,16 +256,18 @@ export function createRuntimeServerClient(
   const sendEntityMessage = async ({
     targetUrl,
     payload,
-    from,
     type,
     afterMs,
+    mode,
+    position,
   }: SendEntityMessageOptions): Promise<void> => {
     const body: Record<string, unknown> = { payload }
-    if (from !== undefined) body.from = from
     if (type !== undefined) body.type = type
     if (afterMs !== undefined) body.afterMs = afterMs
+    if (mode !== undefined) body.mode = mode
+    if (position !== undefined) body.position = position
 
-    const response = await request(`${targetUrl}/send`, {
+    const response = await request(`${entityRpcPath(targetUrl)}/send`, {
       method: `POST`,
       headers: { 'content-type': `application/json` },
       body: JSON.stringify(body),
@@ -190,10 +280,8 @@ export function createRuntimeServerClient(
     }
   }
 
-  const getEntityInfo = async (
-    entityUrl: string
-  ): Promise<RuntimeEntityInfo> => {
-    const response = await request(entityUrl, { method: `GET` })
+  const getEntity = async (entityUrl: string): Promise<RuntimeEntityInfo> => {
+    const response = await request(entityRpcPath(entityUrl), { method: `GET` })
     if (!response.ok) {
       throw new Error(
         `failed to resolve entity ${entityUrl} (${response.status}): ${await readErrorText(response)}`
@@ -213,6 +301,7 @@ export function createRuntimeServerClient(
     parentUrl,
     initialMessage,
     tags,
+    dispatch_policy,
     wake,
   }: SpawnEntityOptions): Promise<RuntimeEntityInfo> => {
     const body: Record<string, unknown> = {}
@@ -220,9 +309,10 @@ export function createRuntimeServerClient(
     if (parentUrl !== undefined) body.parent = parentUrl
     if (initialMessage !== undefined) body.initialMessage = initialMessage
     if (tags && Object.keys(tags).length > 0) body.tags = tags
+    if (dispatch_policy !== undefined) body.dispatch_policy = dispatch_policy
     if (wake !== undefined) body.wake = wake
 
-    const response = await request(`/${type}/${id}`, {
+    const response = await request(`/_electric/entities/${type}/${id}`, {
       method: `PUT`,
       headers: { 'content-type': `application/json` },
       body: JSON.stringify(body),
@@ -248,7 +338,7 @@ export function createRuntimeServerClient(
             conflictEntity,
             `spawn ${type}/${id} conflict response invalid`
           )
-        : await getEntityInfo(`/${type}/${id}`)
+        : await getEntity(`/${type}/${id}`)
     } else {
       throw new Error(
         `spawn ${type}/${id} failed (${response.status}): ${await readErrorText(response)}`
@@ -262,26 +352,62 @@ export function createRuntimeServerClient(
     sharedStateId: string
   ): Promise<string> => {
     const streamPath = getSharedStateStreamPath(sharedStateId)
+    return await ensureStream(streamPath, `application/json`)
+  }
+
+  const ensureStream = async (
+    streamPath: string,
+    contentType = `application/json`
+  ): Promise<string> => {
     const response = await request(streamPath, {
       method: `PUT`,
-      headers: { 'content-type': `application/json` },
+      headers: { 'content-type': contentType },
     })
 
     if (!response.ok && response.status !== 409) {
       throw new Error(
-        `failed to create shared state ${sharedStateId} (${response.status}): ${await readErrorText(response)}`
+        `failed to create stream ${streamPath} (${response.status}): ${await readErrorText(response)}`
       )
     }
 
     return streamPath
   }
 
-  const deleteEntity = async (entityUrl: string): Promise<void> => {
-    const response = await request(entityUrl, { method: `DELETE` })
-    if (!response.ok && response.status !== 404) {
+  const signalEntity = async ({
+    entityUrl,
+    signal,
+    reason,
+    payload,
+  }: SignalEntityOptions): Promise<{ txid: number }> => {
+    const body: Record<string, unknown> = { signal }
+    if (reason !== undefined) body.reason = reason
+    if (payload !== undefined) body.payload = payload
+
+    const response = await request(entityRpcPath(entityUrl, `/signal`), {
+      method: `POST`,
+      headers: { 'content-type': `application/json` },
+      body: JSON.stringify(body),
+    })
+    if (!response.ok) {
       throw new Error(
-        `delete ${entityUrl} failed (${response.status}): ${await readErrorText(response)}`
+        `signal ${entityUrl} ${signal} failed (${response.status}): ${await readErrorText(response)}`
       )
+    }
+    return (await response.json()) as { txid: number }
+  }
+
+  const deleteEntity = async (entityUrl: string): Promise<void> => {
+    try {
+      await signalEntity({
+        entityUrl,
+        signal: `SIGKILL`,
+        reason: `Runtime child cleanup`,
+      })
+    } catch (err) {
+      if (err instanceof Error && /\(404\)/.test(err.message)) {
+        return
+      }
+      throw err
     }
   }
 
@@ -298,38 +424,112 @@ export function createRuntimeServerClient(
     }
   }
 
-  const registerCronSource = async (
+  const ensureCronStream = async (
     expression: string,
     timezone?: string
   ): Promise<string> => {
-    const response = await request(`/_electric/cron/register`, {
-      method: `POST`,
-      headers: { 'content-type': `application/json` },
-      body: JSON.stringify({ expression, timezone }),
-    })
+    const response = await request(
+      `/_electric/observations/cron/ensure-stream`,
+      {
+        method: `POST`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({ expression, timezone }),
+      }
+    )
     if (!response.ok) {
       throw new Error(
-        `registerCronSource failed (${response.status}): ${await readErrorText(response)}`
+        `ensureCronStream failed (${response.status}): ${await readErrorText(response)}`
       )
     }
     const data = (await response.json()) as { streamUrl: string }
     return data.streamUrl
   }
 
-  const registerEntitiesSource = async (
+  const ensureEntitiesMembershipStream = async (
     tags: EntityTags
   ): Promise<{ streamUrl: string; sourceRef: string }> => {
-    const response = await request(`/_electric/entities/register`, {
-      method: `POST`,
-      headers: { 'content-type': `application/json` },
-      body: JSON.stringify({ tags }),
-    })
+    const response = await request(
+      `/_electric/observations/entities/ensure-stream`,
+      {
+        method: `POST`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({ tags }),
+      }
+    )
     if (!response.ok) {
       throw new Error(
-        `registerEntitiesSource failed (${response.status}): ${await readErrorText(response)}`
+        `ensureEntitiesMembershipStream failed (${response.status}): ${await readErrorText(response)}`
       )
     }
     return (await response.json()) as { streamUrl: string; sourceRef: string }
+  }
+
+  const listEventSources = async (): Promise<Array<EventSourceContract>> => {
+    const response = await request(`/_electric/event-sources`, {
+      method: `GET`,
+    })
+    if (!response.ok) {
+      throw new Error(
+        `listEventSources failed (${response.status}): ${await readErrorText(response)}`
+      )
+    }
+    const data = (await response.json()) as {
+      eventSources?: Array<EventSourceContract>
+    }
+    return data.eventSources ?? []
+  }
+
+  const subscribeToEventSource = async (
+    options: EventSourceSubscriptionInput & { entityUrl: string }
+  ): Promise<{ txid: string; subscription: EventSourceSubscription }> => {
+    const id =
+      options.id ??
+      buildEventSourceSubscriptionId({
+        sourceKey: options.sourceKey,
+        bucketKey: options.bucketKey,
+        params: options.params,
+        filterKey: options.filterKey,
+      })
+    const response = await request(
+      `${entityRpcPath(options.entityUrl)}/event-source-subscriptions/${encodeURIComponent(id)}`,
+      {
+        method: `PUT`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({
+          sourceKey: options.sourceKey,
+          bucketKey: options.bucketKey,
+          params: options.params,
+          filterKey: options.filterKey,
+          lifetime: options.lifetime,
+          reason: options.reason,
+        }),
+      }
+    )
+    if (!response.ok) {
+      throw new Error(
+        `subscribeToEventSource failed (${response.status}): ${await readErrorText(response)}`
+      )
+    }
+    return (await response.json()) as {
+      txid: string
+      subscription: EventSourceSubscription
+    }
+  }
+
+  const unsubscribeFromEventSource = async (options: {
+    entityUrl: string
+    id: string
+  }): Promise<{ txid: string }> => {
+    const response = await request(
+      `${entityRpcPath(options.entityUrl)}/event-source-subscriptions/${encodeURIComponent(options.id)}`,
+      { method: `DELETE` }
+    )
+    if (!response.ok) {
+      throw new Error(
+        `unsubscribeFromEventSource failed (${response.status}): ${await readErrorText(response)}`
+      )
+    }
+    return (await response.json()) as { txid: string }
   }
 
   const upsertCronSchedule = async (options: {
@@ -342,7 +542,7 @@ export function createRuntimeServerClient(
     timeoutMs?: number
   }): Promise<{ txid: string }> => {
     const response = await request(
-      `${options.entityUrl}/schedules/${encodeURIComponent(options.id)}`,
+      `${entityRpcPath(options.entityUrl)}/schedules/${encodeURIComponent(options.id)}`,
       {
         method: `PUT`,
         headers: { 'content-type': `application/json` },
@@ -370,11 +570,10 @@ export function createRuntimeServerClient(
     payload: unknown
     targetUrl?: string
     fireAt: string
-    from?: string
     messageType?: string
   }): Promise<{ txid: string }> => {
     const response = await request(
-      `${options.entityUrl}/schedules/${encodeURIComponent(options.id)}`,
+      `${entityRpcPath(options.entityUrl)}/schedules/${encodeURIComponent(options.id)}`,
       {
         method: `PUT`,
         headers: { 'content-type': `application/json` },
@@ -383,7 +582,6 @@ export function createRuntimeServerClient(
           payload: options.payload,
           targetUrl: options.targetUrl,
           fireAt: options.fireAt,
-          from: options.from,
           messageType: options.messageType,
         }),
       }
@@ -401,7 +599,7 @@ export function createRuntimeServerClient(
     id: string
   }): Promise<{ txid: string }> => {
     const response = await request(
-      `${options.entityUrl}/schedules/${encodeURIComponent(options.id)}`,
+      `${entityRpcPath(options.entityUrl)}/schedules/${encodeURIComponent(options.id)}`,
       {
         method: `DELETE`,
       }
@@ -419,10 +617,12 @@ export function createRuntimeServerClient(
     init: RequestInit,
     writeToken: string
   ): Promise<Response> => {
-    const headers: Record<string, string> = {
-      ...(init.headers as Record<string, string> | undefined),
-      authorization: `Bearer ${writeToken}`,
-    }
+    const headers = new Headers(init.headers)
+    applyTokenHeader(
+      headers,
+      config.writeTokenHeader ?? `authorization`,
+      writeToken
+    )
     return request(path, { ...init, headers })
   }
 
@@ -433,7 +633,7 @@ export function createRuntimeServerClient(
     writeToken: string
   ): Promise<void> => {
     const response = await authedRequest(
-      `${entityUrl}/tags/${encodeURIComponent(key)}`,
+      `${entityRpcPath(entityUrl)}/tags/${encodeURIComponent(key)}`,
       {
         method: `POST`,
         headers: { 'content-type': `application/json` },
@@ -448,13 +648,13 @@ export function createRuntimeServerClient(
     }
   }
 
-  const removeTag = async (
+  const deleteTag = async (
     entityUrl: string,
     key: string,
     writeToken: string
   ): Promise<void> => {
     const response = await authedRequest(
-      `${entityUrl}/tags/${encodeURIComponent(key)}`,
+      `${entityRpcPath(entityUrl)}/tags/${encodeURIComponent(key)}`,
       {
         method: `DELETE`,
       },
@@ -462,7 +662,7 @@ export function createRuntimeServerClient(
     )
     if (!response.ok) {
       throw new Error(
-        `removeTag ${entityUrl} failed (${response.status}): ${await readErrorText(response)}`
+        `deleteTag ${entityUrl} failed (${response.status}): ${await readErrorText(response)}`
       )
     }
   }
@@ -470,17 +670,22 @@ export function createRuntimeServerClient(
   return {
     sendEntityMessage,
     spawnEntity,
-    getEntityInfo,
+    getEntity,
     ensureSharedStateStream,
+    signalEntity,
+    ensureStream,
     deleteEntity,
     getSharedStateStreamPath,
     registerWake,
-    registerCronSource,
-    registerEntitiesSource,
+    ensureCronStream,
+    ensureEntitiesMembershipStream,
+    listEventSources,
+    subscribeToEventSource,
+    unsubscribeFromEventSource,
     upsertCronSchedule,
     upsertFutureSendSchedule,
     deleteSchedule,
     setTag,
-    removeTag,
+    deleteTag,
   }
 }

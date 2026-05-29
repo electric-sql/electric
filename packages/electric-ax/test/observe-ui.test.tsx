@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { render } from 'ink-testing-library'
 import {
   AgentTextView,
+  ObserveExitHotkey,
   ToolCallView,
   ToolResultView,
   UserMessageView,
@@ -47,6 +48,18 @@ describe(`truncate`, () => {
 
   it(`handles very short max`, () => {
     expect(truncate(`hello`, 4)).toBe(`h...`)
+  })
+})
+
+describe(`ObserveExitHotkey`, () => {
+  it(`calls onExit when Escape is pressed`, async () => {
+    const onExit = vi.fn()
+    const { stdin } = render(<ObserveExitHotkey onExit={onExit} />)
+
+    stdin.write(`\x1B`)
+    await new Promise<void>((resolve) => setImmediate(resolve))
+
+    expect(onExit).toHaveBeenCalledOnce()
   })
 })
 

@@ -11,13 +11,14 @@
  *     .respondDone()
  *     .expectStatus('running')
  *     .kill()
- *     .expectStatus('stopped')
+ *     .expectStatus('killed')
  *     .run()
  */
 
 import { createServer as createHttpServer } from 'node:http'
 import { Shape, ShapeStream } from '@electric-sql/client'
 import { expect } from 'vitest'
+import { appendPathToUrl } from './url'
 import type { IncomingMessage, Server, ServerResponse } from 'node:http'
 import type { ElectricAgentsEntityRow } from '../../agents-server/src/electric-agents-types.js'
 
@@ -161,8 +162,6 @@ export interface EntityTypeRegistration {
   name: string
   description: string
   creation_schema?: Record<string, unknown>
-  input_schemas?: Record<string, Record<string, unknown>>
-  output_schemas?: Record<string, Record<string, unknown>>
   inbox_schemas?: Record<string, Record<string, unknown>>
   state_schemas?: Record<string, Record<string, unknown>>
   metadata_schema?: Record<string, unknown>
@@ -188,7 +187,7 @@ export async function fetchShapeRows<T = Record<string, unknown>>(
   table: string
 ): Promise<Array<T>> {
   const stream = new ShapeStream({
-    url: `${baseUrl}/_electric/electric/v1/shape`,
+    url: appendPathToUrl(baseUrl, `/_electric/electric/v1/shape`),
     params: { table },
     subscribe: false,
   })
@@ -236,14 +235,11 @@ function toServerEntityTypeRegistration(
     }),
   }
 
-  const inboxSchemas = registration.inbox_schemas ?? registration.input_schemas
-  const stateSchemas = registration.state_schemas ?? registration.output_schemas
-
-  if (inboxSchemas) {
-    body.inbox_schemas = inboxSchemas
+  if (registration.inbox_schemas) {
+    body.inbox_schemas = registration.inbox_schemas
   }
-  if (stateSchemas) {
-    body.state_schemas = stateSchemas
+  if (registration.state_schemas) {
+    body.state_schemas = registration.state_schemas
   }
 
   return body
@@ -469,13 +465,40 @@ async function electricAgentsFetch(
   path: string,
   opts: RequestInit = {}
 ): Promise<Response> {
-  return fetch(`${baseUrl}${path}`, {
+  return fetch(appendPathToUrl(baseUrl, routeControlPlanePath(path)), {
     ...opts,
     headers: {
       'content-type': `application/json`,
       ...opts.headers,
     },
   })
+}
+
+function routeControlPlanePath(path: string): string {
+  const pathname = path.split(`?`, 1)[0]!
+  if (pathname.startsWith(`/_electric/`) || isEntityStreamPath(pathname)) {
+    return path
+  }
+  return `/_electric/entities${path}`
+}
+
+function isEntityStreamPath(pathname: string): boolean {
+  const segments = pathname.split(`/`).filter(Boolean)
+  const lastSegment = segments.at(-1)
+  return (
+    segments.length >= 3 && (lastSegment === `main` || lastSegment === `error`)
+  )
+}
+
+function subscriptionEndpoint(baseUrl: string, id: string): string {
+  return appendPathToUrl(
+    baseUrl,
+    `/__ds/subscriptions/${encodeURIComponent(id)}`
+  )
+}
+
+function subscriptionPattern(pattern: string): string {
+  return pattern.replace(/^\/+/, ``)
 }
 
 // ============================================================================
@@ -490,8 +513,8 @@ type Step =
       type?: string
       tags?: Record<string, string>
     }
-  | { kind: `send`; payload: unknown; from: string; type?: string }
-  | { kind: `sendTo`; url: string; payload: unknown; from: string }
+  | { kind: `send`; payload: unknown; from?: string; type?: string }
+  | { kind: `sendTo`; url: string; payload: unknown; from?: string }
   | { kind: `expectWebhook`; opts?: ExpectWebhookOpts }
   | { kind: `respondDone` }
   | { kind: `expectEntityContext`; checks?: EntityContextChecks }
@@ -525,8 +548,8 @@ type Step =
   | {
       kind: `amendSchemas`
       name: string
-      input_schemas?: Record<string, Record<string, unknown>>
-      output_schemas?: Record<string, Record<string, unknown>>
+      inbox_schemas?: Record<string, Record<string, unknown>>
+      state_schemas?: Record<string, Record<string, unknown>>
     }
   | { kind: `listTypes` }
   | { kind: `registerTypeViaServe`; registration: EntityTypeRegistration }
@@ -707,13 +730,18 @@ export class ElectricAgentsScenario {
     return this
   }
 
-  send(payload: unknown, opts: { from: string; type?: string }): this {
-    this.steps.push({ kind: `send`, payload, from: opts.from, type: opts.type })
+  send(payload: unknown, opts?: { from?: string; type?: string }): this {
+    this.steps.push({
+      kind: `send`,
+      payload,
+      from: opts?.from,
+      type: opts?.type,
+    })
     return this
   }
 
-  sendTo(url: string, payload: unknown, opts: { from: string }): this {
-    this.steps.push({ kind: `sendTo`, url, payload, from: opts.from })
+  sendTo(url: string, payload: unknown, opts?: { from?: string }): this {
+    this.steps.push({ kind: `sendTo`, url, payload, from: opts?.from })
     return this
   }
 
@@ -812,15 +840,15 @@ export class ElectricAgentsScenario {
   amendSchemas(
     name: string,
     schemas: {
-      input_schemas?: Record<string, Record<string, unknown>>
-      output_schemas?: Record<string, Record<string, unknown>>
+      inbox_schemas?: Record<string, Record<string, unknown>>
+      state_schemas?: Record<string, Record<string, unknown>>
     }
   ): this {
     this.steps.push({
       kind: `amendSchemas`,
       name,
-      input_schemas: schemas.input_schemas,
-      output_schemas: schemas.output_schemas,
+      inbox_schemas: schemas.inbox_schemas,
+      state_schemas: schemas.state_schemas,
     })
     return this
   }
@@ -895,7 +923,7 @@ export class ElectricAgentsScenario {
       typeName,
       instanceId,
       args: opts?.args,
-      code: `SCHEMA_VALIDATION_ERROR`,
+      code: `SCHEMA_VALIDATION_FAILED`,
       status: 422,
     })
     return this
@@ -903,13 +931,13 @@ export class ElectricAgentsScenario {
 
   expectSendSchemaError(
     payload: unknown,
-    opts: { from: string; type?: string }
+    opts?: { from?: string; type?: string }
   ): this {
     this.steps.push({
       kind: `expectSendSchemaError`,
       payload,
-      messageType: opts.type ?? `default`,
-      code: `SCHEMA_VALIDATION_ERROR`,
+      messageType: opts?.type ?? `default`,
+      code: `SCHEMA_VALIDATION_FAILED`,
       status: 422,
     })
     return this
@@ -920,7 +948,7 @@ export class ElectricAgentsScenario {
       kind: `expectWriteSchemaError`,
       payload,
       eventType: opts?.type ?? `default`,
-      code: `SCHEMA_VALIDATION_ERROR`,
+      code: `SCHEMA_VALIDATION_FAILED`,
       status: 422,
     })
     return this
@@ -928,7 +956,7 @@ export class ElectricAgentsScenario {
 
   expectSendUnknownType(
     payload: unknown,
-    opts: { from: string; type: string }
+    opts: { from?: string; type: string }
   ): this {
     this.steps.push({
       kind: `expectSendUnknownType`,
@@ -1026,10 +1054,9 @@ export class ElectricAgentsScenario {
     } finally {
       for (const subscription of ctx.subscriptions) {
         try {
-          await fetch(
-            `${ctx.baseUrl}${subscription.pattern}?subscription=${subscription.id}`,
-            { method: `DELETE` }
-          )
+          await fetch(subscriptionEndpoint(ctx.baseUrl, subscription.id), {
+            method: `DELETE`,
+          })
         } catch {
           // best-effort cleanup
         }
@@ -1056,14 +1083,15 @@ export class ElectricAgentsScenario {
 async function executeStep(ctx: RunContext, step: Step): Promise<void> {
   switch (step.kind) {
     case `subscription`: {
-      const res = await fetch(
-        `${ctx.baseUrl}${step.pattern}?subscription=${step.id}`,
-        {
-          method: `PUT`,
-          headers: { 'content-type': `application/json` },
-          body: JSON.stringify({ webhook: ctx.receiver.url }),
-        }
-      )
+      const res = await fetch(subscriptionEndpoint(ctx.baseUrl, step.id), {
+        method: `PUT`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({
+          type: `webhook`,
+          pattern: subscriptionPattern(step.pattern),
+          webhook: { url: ctx.receiver.url },
+        }),
+      })
       expect(res.status).toBeLessThan(300)
       ctx.subscriptions.push({ pattern: step.pattern, id: step.id })
 
@@ -1201,9 +1229,17 @@ async function executeStep(ctx: RunContext, step: Step): Promise<void> {
       if (!entityUrl)
         throw new Error(`No current entity — did you spawn first?`)
 
-      const res = await electricAgentsFetch(ctx.baseUrl, entityUrl, {
-        method: `DELETE`,
-      })
+      const res = await electricAgentsFetch(
+        ctx.baseUrl,
+        `${entityUrl}/signal`,
+        {
+          method: `POST`,
+          body: JSON.stringify({
+            signal: `SIGKILL`,
+            reason: `Killed by conformance test`,
+          }),
+        }
+      )
       expect(res.status).toBe(200)
 
       ctx.history.push({
@@ -1222,7 +1258,10 @@ async function executeStep(ctx: RunContext, step: Step): Promise<void> {
           : ctx.currentEntityStreams.main
 
       const res = await fetch(
-        `${ctx.baseUrl}${streamPath}?offset=0000000000000000_0000000000000000`
+        appendPathToUrl(
+          ctx.baseUrl,
+          `${streamPath}?offset=0000000000000000_0000000000000000`
+        )
       )
 
       if (res.status === 200) {
@@ -1325,7 +1364,7 @@ async function executeStep(ctx: RunContext, step: Step): Promise<void> {
         `${ctx.currentEntityUrl}/send`,
         {
           method: `POST`,
-          body: JSON.stringify({ from: `test`, payload: { should: `fail` } }),
+          body: JSON.stringify({ payload: { should: `fail` } }),
         }
       )
       expect(res.status).toBe(step.status)
@@ -1436,8 +1475,8 @@ async function executeStep(ctx: RunContext, step: Step): Promise<void> {
 
     case `amendSchemas`: {
       const body: Record<string, unknown> = {}
-      if (step.input_schemas) body.inbox_schemas = step.input_schemas
-      if (step.output_schemas) body.state_schemas = step.output_schemas
+      if (step.inbox_schemas) body.inbox_schemas = step.inbox_schemas
+      if (step.state_schemas) body.state_schemas = step.state_schemas
 
       const res = await electricAgentsFetch(
         ctx.baseUrl,
@@ -1519,7 +1558,7 @@ async function executeStep(ctx: RunContext, step: Step): Promise<void> {
         main: string
         error: string
       }
-      ctx.currentWriteToken = res.headers.get(`x-write-token`) ?? null
+      ctx.currentWriteToken = null
 
       ctx.history.push({
         type: `entity_spawned`,
@@ -1999,8 +2038,8 @@ function checkStreamPathsMatchEntityUrl(history: Array<HistoryEvent>): void {
 /**
  * Spec S4 — Safety: entity status transitions must be valid.
  * spawning → running is valid (at spawn time)
- * running/idle → stopped is valid (at kill time)
- * stopped → running is NOT valid
+ * running/idle → killed is valid (at kill time)
+ * killed → running is NOT valid
  * Soundness: Sound | Completeness: Incomplete (only checks observed status reads)
  */
 function checkStatusTransitionsValid(history: Array<HistoryEvent>): void {
@@ -2012,11 +2051,11 @@ function checkStatusTransitionsValid(history: Array<HistoryEvent>): void {
     }
     if (event.type === `entity_status_checked`) {
       const prev = lastStatus.get(event.entityUrl)
-      if (prev === `stopped`) {
+      if (prev === `killed`) {
         expect(
           event.status,
-          `Safety: entity ${event.entityUrl} transitioned from stopped to ${event.status}`
-        ).toBe(`stopped`)
+          `Safety: entity ${event.entityUrl} transitioned from killed to ${event.status}`
+        ).toBe(`killed`)
       }
       lastStatus.set(event.entityUrl, event.status)
     }
@@ -2187,12 +2226,9 @@ export type ElectricAgentsAction =
   | `delete_type`
   | `spawn`
   | `send`
-  | `write`
   | `kill`
-  | `set_tag`
   | `check_status`
   | `list`
-  | `writeStateProtocol`
 
 /**
  * Model of a single entity type's state.
@@ -2200,8 +2236,8 @@ export type ElectricAgentsAction =
 export interface EntityTypeModel {
   name: string
   hasCreationSchema: boolean
-  hasInputSchemas: boolean
-  hasOutputSchemas: boolean
+  hasInboxSchemas: boolean
+  hasStateSchemas: boolean
 }
 
 /**
@@ -2211,7 +2247,7 @@ export interface EntityTypeModel {
 export interface EntityModel {
   url: string
   typeName: string
-  status: `running` | `stopped`
+  status: `running` | `killed`
   messageCount: number
 }
 
@@ -2232,9 +2268,7 @@ export interface ElectricAgentsWorldModel {
  * - delete_type: when entity types exist and no running entities use them
  * - spawn: when at least one entity type is registered (up to a cap)
  * - send: when at least one entity is running
- * - write: when at least one entity is running
  * - kill: when at least one entity is running
- * - set_tag: when at least one entity is running
  * - check_status: when at least one entity exists
  * - list: always
  */
@@ -2263,14 +2297,7 @@ export function enabledElectricAgentsActions(
 
   const hasRunning = model.entities.some((e) => e.status === `running`)
   if (hasRunning) {
-    enabled.push(
-      `send`,
-      `write`,
-      `kill`,
-      `set_tag`,
-      `check_status`,
-      `writeStateProtocol`
-    )
+    enabled.push(`send`, `kill`, `check_status`)
   }
 
   const hasAny = model.entities.length > 0
@@ -2288,7 +2315,8 @@ export function enabledElectricAgentsActions(
 export function applyElectricAgentsAction(
   model: ElectricAgentsWorldModel,
   action: ElectricAgentsAction,
-  targetIdx?: number
+  targetIdx?: number,
+  opts?: { typeName?: string }
 ): ElectricAgentsWorldModel {
   switch (action) {
     case `register_type`: {
@@ -2298,10 +2326,10 @@ export function applyElectricAgentsAction(
         entityTypes: [
           ...model.entityTypes,
           {
-            name: `prop-type-${typeNum}`,
+            name: opts?.typeName ?? `prop-type-${typeNum}`,
             hasCreationSchema: false,
-            hasInputSchemas: false,
-            hasOutputSchemas: false,
+            hasInboxSchemas: false,
+            hasStateSchemas: false,
           },
         ],
       }
@@ -2350,12 +2378,9 @@ export function applyElectricAgentsAction(
       if (targetIdx === undefined) return model
       const entities = [...model.entities]
       const e = entities[targetIdx]!
-      entities[targetIdx] = { ...e, status: `stopped` }
+      entities[targetIdx] = { ...e, status: `killed` }
       return { ...model, entities }
     }
-    case `write`:
-    case `writeStateProtocol`:
-    case `set_tag`:
     case `check_status`:
     case `list`:
       return model

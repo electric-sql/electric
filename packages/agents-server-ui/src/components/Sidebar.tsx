@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { SquarePen } from 'lucide-react'
-import { useLiveQuery } from '@tanstack/react-db'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { CSSProperties } from 'react'
+import { ChevronRight, SquarePen } from 'lucide-react'
+import { eq, not, useLiveQuery } from '@tanstack/react-db'
 import { useNavigate } from '@tanstack/react-router'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
 import {
@@ -12,9 +13,9 @@ import {
 import { useSidebarView } from '../hooks/useSidebarView'
 import { useSidebarCollapsed } from '../hooks/useSidebarCollapsed'
 import { useNarrowViewport } from '../hooks/useNarrowViewport'
-import { HoverCard, ScrollArea, Stack, Text } from '../ui'
+import { HoverCard, Icon, ScrollArea, Stack, Text } from '../ui'
 import { NewSessionKey } from '../lib/keyLabels'
-import { setDragPayload } from '../lib/workspace/dragPayload'
+import { setWorkspaceDrag } from '../lib/workspace/dragPayload'
 import { SidebarHeader } from './SidebarHeader'
 import { SidebarRowInfo } from './SidebarRow'
 import type { SidebarRowInfoPayload } from './SidebarRow'
@@ -28,6 +29,71 @@ const SIDEBAR_WIDTH_KEY = `electric-agents-ui.sidebar.width`
 const SIDEBAR_DEFAULT_WIDTH = 240
 const SIDEBAR_MIN_WIDTH = 200
 const SIDEBAR_MAX_WIDTH = 600
+
+function NewSessionSidebarRow({
+  onNewSession,
+  selected,
+}: {
+  onNewSession: () => void
+  selected: boolean
+}): React.ReactElement {
+  const draggingRef = useRef(false)
+
+  const handleClick = useCallback(() => {
+    if (draggingRef.current) {
+      draggingRef.current = false
+      return
+    }
+    onNewSession()
+  }, [onNewSession])
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (e.key !== `Enter` && e.key !== ` `) return
+      e.preventDefault()
+      handleClick()
+    },
+    [handleClick]
+  )
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={handleClick}
+      onKeyDown={handleKeyDown}
+      draggable={true}
+      onDragStart={(e) => {
+        draggingRef.current = true
+        setWorkspaceDrag(
+          e,
+          { kind: `sidebar-new-session` },
+          { dragImage: `sidebar-row` }
+        )
+      }}
+      onDragEnd={() => {
+        window.setTimeout(() => {
+          draggingRef.current = false
+        }, 0)
+      }}
+      className={[
+        styles.newSessionRow,
+        selected ? styles.newSessionRowSelected : null,
+      ]
+        .filter(Boolean)
+        .join(` `)}
+      title="New session"
+    >
+      <span className={styles.newSessionIconSlot}>
+        <Icon icon={SquarePen} size={3} />
+      </span>
+      <span className={styles.newSessionLabel}>New session</span>
+      <span className={styles.newSessionKbd} aria-hidden="true">
+        <NewSessionKey />
+      </span>
+    </div>
+  )
+}
 
 function useSidebarWidth(): readonly [number, (w: number) => void] {
   const [width, setWidth] = useState<number>(() => {
@@ -73,6 +139,11 @@ export function Sidebar({
   const [width, setWidth] = useSidebarWidth()
   const [resizeHandleHover, setResizeHandleHover] = useState(false)
   const [resizing, setResizing] = useState(false)
+  const [showTopDivider, setShowTopDivider] = useState(false)
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(
+    () => new Set()
+  )
+  const scrollViewportRef = useRef<HTMLDivElement>(null)
   // Narrow viewports flip the sidebar from a push-displace flex
   // column into an absolute-positioned overlay that floats above
   // the main content with a backdrop. Selecting any sidebar row
@@ -81,17 +152,9 @@ export function Sidebar({
   // content without an extra dismiss tap.
   const narrow = useNarrowViewport()
   const { collapsed, setCollapsed } = useSidebarCollapsed()
-  // `data-state` drives the slide/fade transitions in CSS.
-  // - In wide mode the sidebar is always visible (or unmounted by
-  //   the parent), so no transition state is needed.
-  // - In narrow mode the parent keeps us mounted regardless of
-  //   `collapsed` so the exit transition can run before unmount,
-  //   and we toggle between `open`/`closed` here.
-  const overlayState: `open` | `closed` | undefined = narrow
-    ? collapsed
-      ? `closed`
-      : `open`
-    : undefined
+  // `data-state` drives both the narrow overlay slide/fade and the
+  // wide-mode width collapse animation.
+  const sidebarState: `open` | `closed` = collapsed ? `closed` : `open`
   const closeIfOverlay = useCallback(() => {
     if (narrow) setCollapsed(true)
   }, [narrow, setCollapsed])
@@ -140,34 +203,31 @@ export function Sidebar({
     [width, setWidth]
   )
 
-  const { data: entities = [] } = useLiveQuery(
-    (query) => {
-      if (!entitiesCollection) return undefined
-      return query
-        .from({ e: entitiesCollection })
-        .orderBy(({ e }) => e.updated_at, `desc`)
-    },
-    [entitiesCollection]
-  )
-
   const view = useSidebarView()
 
-  // Apply Show > Type / Show > Status filters before building the
-  // tree so a hidden parent doesn't accidentally hide its (visible)
-  // children — instead, the children are reparented to the root level
-  // in the filtered view, which is the conventional behaviour for
-  // tree filtering.
-  const visibleEntities = useMemo(() => {
-    if (view.hiddenTypes.size === 0 && view.hiddenStatuses.size === 0) {
-      return entities
-    }
-    return entities.filter(
-      (e) => !view.hiddenTypes.has(e.type) && !view.hiddenStatuses.has(e.status)
-    )
-  }, [entities, view.hiddenTypes, view.hiddenStatuses])
+  const { data: visibleEntities = [] } = useLiveQuery(
+    (query) => {
+      if (!entitiesCollection) return undefined
+      let builder = query
+        .from({ e: entitiesCollection })
+        .where(({ e }) => not(eq(e.type, `principal`)))
+
+      for (const type of view.hiddenTypes) {
+        builder = builder.where(({ e }) => not(eq(e.type, type)))
+      }
+      for (const status of view.hiddenStatuses) {
+        builder = builder.where(({ e }) => not(eq(e.status, status)))
+      }
+
+      return builder.orderBy(({ e }) => e.updated_at, `desc`)
+    },
+    [entitiesCollection, view.hiddenTypes, view.hiddenStatuses]
+  )
 
   const pinnedSet = useMemo(() => new Set(pinnedUrls), [pinnedUrls])
   const pinnedEntities = visibleEntities.filter((e) => pinnedSet.has(e.url))
+  const filtersActive =
+    view.hiddenTypes.size > 0 || view.hiddenStatuses.size > 0
 
   const { roots, childrenByParent } = useMemo(
     () => buildEntityTree(visibleEntities),
@@ -198,6 +258,31 @@ export function Sidebar({
     closeIfOverlay()
   }, [navigate, closeIfOverlay])
 
+  const toggleSection = useCallback((id: string) => {
+    setCollapsedSections((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }, [])
+
+  useEffect(() => {
+    const viewport = scrollViewportRef.current
+    if (!viewport) return
+
+    const updateTopDivider = () => {
+      setShowTopDivider(viewport.scrollTop > 0)
+    }
+
+    updateTopDivider()
+    viewport.addEventListener(`scroll`, updateTopDivider, { passive: true })
+    return () => viewport.removeEventListener(`scroll`, updateTopDivider)
+  }, [])
+
   const treeProps = {
     childrenByParent,
     selectedEntityUrl,
@@ -213,14 +298,16 @@ export function Sidebar({
       {narrow && (
         <div
           className={styles.backdrop}
-          data-state={overlayState}
+          data-state={sidebarState}
           onClick={() => setCollapsed(true)}
           aria-hidden={collapsed ? `true` : undefined}
         />
       )}
       <Stack
         direction="column"
-        data-state={overlayState}
+        data-state={sidebarState}
+        data-resizing={resizing ? `true` : undefined}
+        aria-hidden={!narrow && collapsed ? `true` : undefined}
         className={`${styles.root} ${narrow ? styles.overlay : ``}`}
         style={
           narrow
@@ -235,13 +322,17 @@ export function Sidebar({
                 minWidth: 0,
                 maxWidth: `min(85vw, 320px)`,
               }
-            : { width, minWidth: SIDEBAR_MIN_WIDTH }
+            : ({
+                width,
+                minWidth: SIDEBAR_MIN_WIDTH,
+                [`--sidebar-expanded-width`]: `${width}px`,
+              } as CSSProperties)
         }
       >
         {/* Resize handle is push-mode-only — dragging an overlaid
             sidebar wider doesn't make sense when there's no flex
             sibling to take the displaced space. */}
-        {!narrow && (
+        {!narrow && !collapsed && (
           <div
             role="separator"
             aria-orientation="vertical"
@@ -255,72 +346,68 @@ export function Sidebar({
           />
         )}
         <SidebarHeader />
+        <div
+          className={styles.topDivider}
+          data-visible={showTopDivider ? `true` : undefined}
+        />
 
-        <ScrollArea className={styles.scrollFlex}>
+        <ScrollArea
+          className={styles.scrollFlex}
+          viewportRef={scrollViewportRef}
+        >
           <Stack direction="column" className={styles.treeRow}>
-            <button
-              type="button"
-              onClick={handleNewSession}
-              // Draggable so the user can drop a fresh new-session tile
-              // into any quadrant of an existing tile (creating a split)
-              // — gives them multiple new-session tiles at once. The
-              // browser only fires `dragstart` after the cursor moves,
-              // so a click that doesn't drag still triggers `onClick`.
-              draggable
-              onDragStart={(e) =>
-                setDragPayload(e, { kind: `sidebar-new-session` })
-              }
-              className={styles.newSessionRow}
-            >
-              <span className={styles.newSessionIconSlot}>
-                <SquarePen size={16} />
-              </span>
-              <span className={styles.newSessionLabel}>New session</span>
-              <span className={styles.newSessionKbd} aria-hidden="true">
-                <NewSessionKey />
-              </span>
-            </button>
+            <NewSessionSidebarRow
+              onNewSession={handleNewSession}
+              selected={selectedEntityUrl === null}
+            />
 
             {pinnedEntities.length > 0 && (
-              <>
-                <SectionLabel>Pinned</SectionLabel>
-                {pinnedEntities.map((entity) => (
-                  <SidebarTree
-                    key={`pinned:${entity.url}`}
-                    entity={entity}
-                    {...treeProps}
-                  />
-                ))}
-              </>
+              <div className={styles.sectionGroup}>
+                <SectionHeader
+                  id="pinned"
+                  title="Pinned"
+                  collapsed={collapsedSections.has(`pinned`)}
+                  onToggle={toggleSection}
+                />
+                {!collapsedSections.has(`pinned`) &&
+                  pinnedEntities.map((entity) => (
+                    <SidebarTree
+                      key={`pinned:${entity.url}`}
+                      entity={entity}
+                      {...treeProps}
+                    />
+                  ))}
+              </div>
             )}
 
             {ungroupedBuckets.map((group) => (
-              <div key={group.id}>
-                <SectionLabel title={group.title}>{group.label}</SectionLabel>
-                {group.items.map((root) => (
-                  <SidebarTree key={root.url} entity={root} {...treeProps} />
-                ))}
+              <div key={group.id} className={styles.sectionGroup}>
+                <SectionHeader
+                  id={`${view.groupBy}:${group.id}`}
+                  title={group.label}
+                  tooltip={group.title}
+                  collapsed={collapsedSections.has(
+                    `${view.groupBy}:${group.id}`
+                  )}
+                  onToggle={toggleSection}
+                />
+                {!collapsedSections.has(`${view.groupBy}:${group.id}`) &&
+                  group.items.map((root) => (
+                    <SidebarTree key={root.url} entity={root} {...treeProps} />
+                  ))}
               </div>
             ))}
 
-            {entities.length === 0 && (
+            {visibleEntities.length === 0 && (
               <Text
                 size={1}
                 tone="muted"
                 align="center"
                 className={styles.emptyTreeText}
               >
-                No sessions
-              </Text>
-            )}
-            {entities.length > 0 && visibleEntities.length === 0 && (
-              <Text
-                size={1}
-                tone="muted"
-                align="center"
-                className={styles.emptyTreeText}
-              >
-                No sessions match the current filters
+                {filtersActive
+                  ? `No sessions match the current filters`
+                  : `No sessions`}
               </Text>
             )}
           </Stack>
@@ -366,22 +453,37 @@ function buildEntityTree(entities: ReadonlyArray<ElectricEntity>): {
   return { roots, childrenByParent }
 }
 
-function SectionLabel({
-  children,
+function SectionHeader({
+  id,
   title,
+  tooltip,
+  collapsed,
+  onToggle,
 }: {
-  children: React.ReactNode
+  id: string
+  title: string
   /**
    * Optional longer-form text surfaced as a native tooltip on hover.
-   * Used by the working-directory grouping mode where `children` is
+   * Used by the working-directory grouping mode where `title` is
    * an abbreviated path (e.g. `…/projects/acme`) and the full path
    * is worth showing on hover.
    */
-  title?: string
+  tooltip?: string
+  collapsed: boolean
+  onToggle: (id: string) => void
 }): React.ReactElement {
   return (
-    <Text size={1} tone="muted" className={styles.sectionLabel} title={title}>
-      {children}
-    </Text>
+    <button
+      type="button"
+      className={styles.sectionHeader}
+      title={tooltip}
+      aria-expanded={!collapsed}
+      onClick={() => onToggle(id)}
+    >
+      <span className={styles.sectionLabel}>{title}</span>
+      <span className={styles.sectionChevron} data-collapsed={collapsed}>
+        <Icon icon={ChevronRight} size={1} />
+      </span>
+    </button>
   )
 }

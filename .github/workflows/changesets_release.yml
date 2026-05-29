@@ -21,6 +21,10 @@ jobs:
       published: ${{ steps.changesets.outputs.published }}
       sync_service_release_tag: ${{ steps.sync_service_release_tag.outputs.tag }}
       agent_server_release_tag: ${{ steps.agent_server_release_tag.outputs.tag }}
+      desktop_release_version: ${{ steps.desktop_release.outputs.version }}
+      desktop_release_tag: ${{ steps.desktop_release.outputs.tag }}
+      mobile_release_version: ${{ steps.mobile_release.outputs.version }}
+      mobile_release_tag: ${{ steps.mobile_release.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -63,6 +67,26 @@ jobs:
           PUBLISHED_PACKAGES='${{ steps.changesets.outputs.publishedPackages }}'
           TAGS=$(echo "$PUBLISHED_PACKAGES" | jq -r '.[] | select(.name == "@electric-ax/agents-server") | .name + "@" + .version')
           echo "tag=$TAGS" >> "$GITHUB_OUTPUT"
+      - name: Capture the new agents-desktop release as an output (if any)
+        id: desktop_release
+        if: steps.changesets.outputs.published == 'true'
+        run: |
+          PUBLISHED_PACKAGES='${{ steps.changesets.outputs.publishedPackages }}'
+          VERSION=$(echo "$PUBLISHED_PACKAGES" | jq -r '.[] | select(.name == "@electric-ax/agents-desktop") | .version' | head -n 1)
+          if [ -n "$VERSION" ]; then
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+            echo "tag=@electric-ax/agents-desktop@$VERSION" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Capture the new agents-mobile release as an output (if any)
+        id: mobile_release
+        if: steps.changesets.outputs.published == 'true'
+        run: |
+          PUBLISHED_PACKAGES='${{ steps.changesets.outputs.publishedPackages }}'
+          VERSION=$(echo "$PUBLISHED_PACKAGES" | jq -r '.[] | select(.name == "@electric-ax/agents-mobile") | .version' | head -n 1)
+          if [ -n "$VERSION" ]; then
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+            echo "tag=@electric-ax/agents-mobile@$VERSION" >> "$GITHUB_OUTPUT"
+          fi
       - name: Add latest tag to published packages
         if: steps.changesets.outputs.published == 'true'
         run: node scripts/tag-latest.mjs
@@ -88,6 +112,71 @@ jobs:
     secrets: inherit
     with:
       git_ref: ${{ needs.changesets.outputs.agent_server_release_tag }}
+
+  update-cloud-agents-server:
+    name: Update Agents Server version used by Cloud
+    runs-on: ubuntu-latest
+    needs: changesets
+    if: ${{ needs.changesets.outputs.published == 'true' && needs.changesets.outputs.agent_server_release_tag != '' }}
+    steps:
+      - name: Get Agents Server version
+        id: agents_server
+        run: |
+          RELEASE_TAG='${{ needs.changesets.outputs.agent_server_release_tag }}'
+          VERSION="${RELEASE_TAG##*@}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Trigger cloud agents server update
+        uses: peter-evans/repository-dispatch@v2
+        with:
+          token: ${{ secrets.CROSSREPO_PAT }}
+          repository: electric-sql/stratovolt
+          event-type: update-agents-server
+          client-payload: |
+            {
+              "electric_commit_sha": "${{ github.sha }}",
+              "agents_server_release_tag": "${{ needs.changesets.outputs.agent_server_release_tag }}",
+              "agents_server_version": "${{ steps.agents_server.outputs.version }}"
+            }
+
+  publish-agents-desktop:
+    needs: changesets
+    if: ${{ needs.changesets.outputs.published == 'true' && needs.changesets.outputs.desktop_release_tag != '' }}
+    uses: ./.github/workflows/agents_desktop_build.yml
+    permissions:
+      contents: write
+    secrets: inherit
+    with:
+      channel: stable
+      version: ${{ needs.changesets.outputs.desktop_release_version }}
+      git_ref: ${{ needs.changesets.outputs.desktop_release_tag }}
+      publish: true
+      sign: false
+      release_tag: ${{ needs.changesets.outputs.desktop_release_tag }}
+      release_name: Electric Agents Desktop v${{ needs.changesets.outputs.desktop_release_version }}
+
+  publish-agents-mobile:
+    needs: changesets
+    if: ${{ needs.changesets.outputs.published == 'true' && needs.changesets.outputs.mobile_release_tag != '' }}
+    uses: ./.github/workflows/agents_mobile_build.yml
+    # The reusable workflow declares PR-comment permissions even when the stable
+    # release channel skips those steps. GitHub validates declared permissions
+    # before evaluating those conditions.
+    permissions:
+      actions: read
+      contents: read
+      issues: write
+      pull-requests: write
+    secrets: inherit
+    with:
+      channel: stable
+      version: ${{ needs.changesets.outputs.mobile_release_version }}
+      git_ref: ${{ needs.changesets.outputs.mobile_release_tag }}
+      platform: android
+      profile: production
+      submit: true
+      release_tag: ${{ needs.changesets.outputs.mobile_release_tag }}
+      release_name: Electric Agents Mobile v${{ needs.changesets.outputs.mobile_release_version }}
 
   update-cloud:
     name: Update Electric version used by Cloud

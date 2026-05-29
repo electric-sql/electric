@@ -1,8 +1,6 @@
 import { BuiltinAgentsServer } from './server.js'
+import { mergeElectricPrincipalHeader } from './server-headers.js'
 import type { BuiltinAgentsServerOptions } from './server.js'
-
-const DEFAULT_HOST = `127.0.0.1`
-const DEFAULT_PORT = 4448
 
 type EnvSource = Record<string, string | undefined>
 
@@ -47,22 +45,6 @@ function readRequiredEnv(
   )
 }
 
-function readPort(env: EnvSource): number {
-  const raw = readEnv(env, [`ELECTRIC_AGENTS_BUILTIN_PORT`, `PORT`])
-  if (!raw) {
-    return DEFAULT_PORT
-  }
-
-  const port = Number(raw)
-  if (!Number.isInteger(port) || port < 1 || port > 65_535) {
-    throw new Error(
-      `Invalid builtin agents port "${raw}". Expected an integer between 1 and 65535.`
-    )
-  }
-
-  return port
-}
-
 function validateUrl(name: string, value: string): string {
   try {
     new URL(value)
@@ -70,6 +52,56 @@ function validateUrl(name: string, value: string): string {
   } catch {
     throw new Error(`Invalid ${name}: "${value}"`)
   }
+}
+
+function parseAdditionalServerHeaders(
+  env: EnvSource
+): Record<string, string> | undefined {
+  const raw = readEnv(env, [`ELECTRIC_AGENTS_SERVER_HEADERS`])
+  if (!raw) return undefined
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    throw new Error(`Invalid ELECTRIC_AGENTS_SERVER_HEADERS: expected JSON`)
+  }
+  if (!parsed || typeof parsed !== `object` || Array.isArray(parsed)) {
+    throw new Error(
+      `Invalid ELECTRIC_AGENTS_SERVER_HEADERS: expected a JSON object`
+    )
+  }
+  const headers = new Headers()
+  for (const [name, value] of Object.entries(
+    parsed as Record<string, unknown>
+  )) {
+    if (typeof value !== `string`) {
+      throw new Error(
+        `Invalid ELECTRIC_AGENTS_SERVER_HEADERS: header "${name}" must be a string`
+      )
+    }
+    headers.set(name, value)
+  }
+  const normalized = Object.fromEntries(headers.entries())
+  return Object.keys(normalized).length > 0 ? normalized : undefined
+}
+
+function mergeHeaders(
+  ...sources: Array<Record<string, string> | undefined>
+): Record<string, string> | undefined {
+  const headers = new Headers()
+  for (const source of sources) {
+    if (!source) continue
+    new Headers(source).forEach((value, key) => headers.set(key, value))
+  }
+  const merged = Object.fromEntries(headers.entries())
+  return Object.keys(merged).length > 0 ? merged : undefined
+}
+
+function hasHeader(
+  headers: Record<string, string> | undefined,
+  name: string
+): boolean {
+  return headers ? new Headers(headers).has(name) : false
 }
 
 export function resolveBuiltinAgentsEntrypointOptions(
@@ -84,24 +116,38 @@ export function resolveBuiltinAgentsEntrypointOptions(
       `agent server base URL`
     )
   )
-  const baseUrl = readEnv(env, [
-    `ELECTRIC_AGENTS_BUILTIN_BASE_URL`,
-    `BUILTIN_AGENTS_BASE_URL`,
-  ])
+  const runnerId = readRequiredEnv(
+    env,
+    [`ELECTRIC_AGENTS_PULL_WAKE_RUNNER_ID`, `PULL_WAKE_RUNNER_ID`],
+    `pull-wake runner id`
+  )
+
+  const serverHeaders = mergeHeaders(
+    mergeElectricPrincipalHeader(
+      parseAdditionalServerHeaders(env),
+      readEnv(env, [`ELECTRIC_AGENTS_PRINCIPAL`])
+    )
+  )
 
   return {
     agentServerUrl,
-    baseUrl: baseUrl
-      ? validateUrl(`builtin agents base URL`, baseUrl)
-      : undefined,
-    host:
-      readEnv(env, [`ELECTRIC_AGENTS_BUILTIN_HOST`, `HOST`]) ?? DEFAULT_HOST,
-    port: readPort(env),
     workingDirectory:
       readEnv(env, [
         `ELECTRIC_AGENTS_WORKING_DIRECTORY`,
         `WORKING_DIRECTORY`,
       ]) ?? cwd,
+    pullWake: {
+      runnerId,
+      registerRunner:
+        readEnv(env, [`ELECTRIC_AGENTS_REGISTER_PULL_WAKE_RUNNER`]) ===
+          `true` ||
+        readEnv(env, [`ELECTRIC_AGENTS_REGISTER_PULL_WAKE_RUNNER`]) === `1`,
+      headers: serverHeaders,
+      claimHeaders: serverHeaders,
+      claimTokenHeader: hasHeader(serverHeaders, `authorization`)
+        ? `electric-claim-token`
+        : undefined,
+    },
   }
 }
 
@@ -145,12 +191,9 @@ export async function main(): Promise<void> {
     const started = await runBuiltinAgentsEntrypoint()
     server = started.server
 
-    console.log(`Builtin agents server running at ${started.url}`)
+    console.log(`Builtin agents pull-wake runner started at ${started.url}`)
     console.log(`Registering against: ${started.options.agentServerUrl}`)
     console.log(`Working directory: ${started.options.workingDirectory}`)
-    if (started.options.baseUrl) {
-      console.log(`Public webhook base URL: ${started.options.baseUrl}`)
-    }
 
     process.on(`SIGINT`, () => {
       void stop(0)

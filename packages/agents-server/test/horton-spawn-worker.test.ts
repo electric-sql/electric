@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { DurableStreamTestServer } from '@durable-streams/server'
 import { BuiltinAgentsServer } from '../../agents/src/server'
 import { ElectricAgentsServer } from '../src/server'
-import { waitForStreamEvents } from './test-utils'
+import { durableStreamTestServerUrl, waitForStreamEvents } from './test-utils'
 import {
   TEST_ELECTRIC_URL,
   TEST_POSTGRES_URL,
@@ -25,7 +25,7 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY)(
       })
       await Promise.all([resetElectricAgentsTestBackend(), dsServer.start()])
       electricAgentsServer = new ElectricAgentsServer({
-        durableStreamsUrl: dsServer.url,
+        durableStreamsUrl: durableStreamTestServerUrl(dsServer.url),
         port: 0,
         postgresUrl: TEST_POSTGRES_URL,
         electricUrl: TEST_ELECTRIC_URL,
@@ -33,7 +33,11 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY)(
       baseUrl = await electricAgentsServer.start()
       builtinAgentsServer = new BuiltinAgentsServer({
         agentServerUrl: baseUrl,
-        port: 0,
+        pullWake: {
+          runnerId: `horton-spawn-worker-test`,
+          registerRunner: true,
+          ownerPrincipal: `/principal/system%3Atest-user`,
+        },
       })
       await builtinAgentsServer.start()
     }, 60_000)
@@ -75,7 +79,7 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY)(
       expect(sendRes.status).toBe(204)
 
       const events = await waitForStreamEvents(
-        dsServer.url,
+        durableStreamTestServerUrl(dsServer.url),
         horton.streams.main,
         (currentEvents) =>
           currentEvents.some((event) => {

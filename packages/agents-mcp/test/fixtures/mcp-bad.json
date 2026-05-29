@@ -1,0 +1,6 @@
+{
+  "servers": {
+    "x": { "transport": "http" },
+    "y": { "transport": "stdio", "command": "true", "auth": { "mode": "wat" } }
+  }
+}

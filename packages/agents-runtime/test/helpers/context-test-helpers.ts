@@ -11,8 +11,10 @@ import type {
   LLMMessage,
   TimestampedMessage,
   UseContextConfig,
+  WakeEvent,
   WakeSession,
 } from '../../src/types'
+import type { HydratedEventSourceWake } from '../../src/event-sources'
 
 type DebugContext = {
   __debug: {
@@ -25,8 +27,9 @@ type FixtureKind =
   | `text`
   | `text_delta`
   | `tool_call`
-  | `message_received`
+  | `inbox`
   | `wake`
+  | `signal`
   | `context_inserted`
   | `context_removed`
 
@@ -79,7 +82,7 @@ function rowForFixture(item: FixtureEvent): {
           ...item.value,
         },
       }
-    case `message_received`:
+    case `inbox`:
       return {
         collection: `inbox`,
         key,
@@ -101,6 +104,18 @@ function rowForFixture(item: FixtureEvent): {
           source: `/child/test`,
           timeout: false,
           changes: [],
+          ...item.value,
+        },
+      }
+    case `signal`:
+      return {
+        collection: `signals`,
+        key,
+        row: {
+          key,
+          signal: `SIGINT`,
+          status: `handled`,
+          timestamp: `2026-04-13T00:00:00.000Z`,
           ...item.value,
         },
       }
@@ -260,6 +275,8 @@ export function createTestHandlerContext(
   opts: {
     db?: ReturnType<typeof buildStreamFixture>
     writeEvent?: (event: ChangeEvent) => void
+    wakeEvent?: WakeEvent
+    hydratedEventSourceWake?: HydratedEventSourceWake | null
   } = {}
 ) {
   const db = opts.db ?? buildStreamFixture([])
@@ -280,20 +297,21 @@ export function createTestHandlerContext(
     events: [],
     writeEvent,
     wakeSession: createFakeWakeSession(db),
-    wakeEvent: {
-      type: `message_received`,
+    wakeEvent: opts.wakeEvent ?? {
+      type: `inbox`,
       source: `/test`,
       fromOffset: 0,
       toOffset: 0,
       eventCount: 1,
       payload: `hi`,
     },
+    hydratedEventSourceWake: opts.hydratedEventSourceWake,
     doObserve: vi.fn(),
     doSpawn: vi.fn(),
     doMkdb: vi.fn(),
     executeSend: vi.fn(),
     doSetTag: vi.fn(async () => undefined),
-    doRemoveTag: vi.fn(async () => undefined),
+    doDeleteTag: vi.fn(async () => undefined),
   })
 }
 

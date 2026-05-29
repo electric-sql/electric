@@ -6,13 +6,36 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
+  position: relative;
+  z-index: 1;
+  border-left: 1px solid var(--ds-border-1);
   background: var(--ds-bg);
+  box-shadow: -1px 0 2px color-mix(in oklab, var(--ds-gray-12) 5%, transparent);
+  overflow: hidden;
+  transition: border-top-left-radius 180ms cubic-bezier(0.32, 0.72, 0, 1);
 }
 
-/* Top strip mirrors `MainHeader` (44px tall, draggable on desktop)
-   so the settings shell carries the same titlebar height as the
-   workspace and the macOS hiddenInset traffic lights stay aligned
-   with the sidebar's "Back to app" row. */
+:global(html[data-theme='dark']) .root {
+  box-shadow: -1px 0 2px color-mix(in oklab, #000000 32%, transparent);
+}
+
+:global(
+    html[data-electric-desktop='true']:not([data-electric-platform='darwin'])
+  )
+  .root {
+  border-top: 1px solid var(--ds-border-1);
+}
+
+:global(
+    html[data-electric-desktop='true']:not([data-electric-platform='darwin'])
+  )
+  .root {
+  border-top-left-radius: var(--ds-radius-5);
+}
+
+/* Top strip mirrors `MainHeader` (44px tall). On macOS desktop, it
+   participates in the hiddenInset titlebar so the traffic lights stay
+   aligned with the sidebar's "Back to app" row. */
 .header {
   flex-shrink: 0;
   display: flex;
@@ -35,31 +58,46 @@
   flex-shrink: 0;
 }
 
-:global(html[data-electric-desktop='true']) .header {
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .header {
   -webkit-app-region: drag;
 }
 
-/* On Electron the SettingsScreen header is the only window-drag
+/* On macOS desktop the SettingsScreen header is the only window-drag
    region in the right column, so we need to push past the macOS
    traffic lights when the SettingsSidebar is collapsed (overlay
    on narrow viewports) — otherwise our header content would sit
    under the lights. We *also* shift the toggle past the lights
    when it's the leftmost element. Mirrors MainHeader's `:has`
    rule. */
-:global(html[data-electric-desktop='true']) .header:has(.chrome) {
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .header:has(.chrome) {
   padding-left: 84px;
 }
 
-:global(html[data-electric-desktop='true']) .header button,
-:global(html[data-electric-desktop='true']) .header a,
-:global(html[data-electric-desktop='true']) .header input,
-:global(html[data-electric-desktop='true']) .header [role='button'],
-:global(html[data-electric-desktop='true']) .header [data-no-drag] {
-  -webkit-app-region: no-drag;
+:global(
+    html[data-electric-desktop='true'][data-electric-platform='darwin'][data-electric-fullscreen='true']
+  )
+  .header:has(.chrome) {
+  padding-left: 10px;
 }
 
-.headerTitle {
-  color: var(--ds-text-2);
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .header
+  button,
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .header
+  a,
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .header
+  input,
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .header
+  [role='button'],
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .header
+  [data-no-drag] {
+  -webkit-app-region: no-drag;
 }
 
 .scroll {
@@ -76,12 +114,24 @@
   padding: 8px 32px 64px;
 }
 
-.pageTitle {
+.pageTitleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ds-space-3);
   margin: 16px 0 24px;
+}
+
+.pageTitle {
+  margin: 0;
   font-size: var(--ds-text-2xl);
   line-height: 1.2;
   font-weight: 600;
   color: var(--ds-text-1);
+}
+
+.pageAction {
+  flex-shrink: 0;
 }
 
 .sections {
@@ -99,6 +149,14 @@
 
 .sectionHeader {
   display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--ds-space-3);
+}
+
+.sectionHeaderText {
+  min-width: 0;
+  display: flex;
   flex-direction: column;
   gap: 4px;
 }
@@ -108,6 +166,15 @@
   font-size: var(--ds-text-base);
   font-weight: 500;
   color: var(--ds-text-1);
+}
+
+.sectionAction {
+  flex-shrink: 0;
+}
+
+.sectionAction[data-align='description'] {
+  margin-left: 12px;
+  padding-top: 24px;
 }
 
 .sectionDescription {
@@ -120,8 +187,62 @@
 .sectionBody {
   border: 1px solid var(--ds-border-1);
   border-radius: var(--ds-radius-3);
-  background: var(--ds-bg);
+  background: color-mix(in oklab, var(--ds-surface-raised) 35%, var(--ds-bg));
   overflow: hidden;
+}
+
+.panel {
+  padding: 12px 16px;
+}
+
+/* Top-of-page advisory card. Rendered like a section body (border +
+   radius) so it visually anchors next to the section cards below,
+   with a tinted accent background to distinguish it from a regular
+   section. Used by the Credentials page to prompt a runtime restart
+   after credential changes. */
+.banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--ds-border-1);
+  border-radius: var(--ds-radius-3);
+  background: var(--ds-accent-a3);
+}
+
+.bannerText {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.inset {
+  padding: 0 16px 12px;
+}
+
+.statusBadge {
+  justify-content: center;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--ds-space-2);
+  padding: 0 16px 16px;
+}
+
+.actions[data-separator='true'] {
+  padding-top: 12px;
+  border-top: 1px solid var(--ds-border-1);
+}
+
+.actions:first-child,
+.actions[data-separator='true']:first-child {
+  padding-top: 12px;
+  border-top: 0;
 }
 
 /* Stacked rows inside a section — labelled left, control on the
@@ -141,9 +262,25 @@
 .rowText {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   flex: 1;
   min-width: 0;
+  align-self: flex-start;
+}
+
+.row[data-layout='split'] .rowText {
+  flex: 0 1 44%;
+  min-width: 44%;
+}
+
+.row[data-layout='stacked'] {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.row[data-layout='stacked'] .rowText {
+  width: 100%;
 }
 
 .rowLabel {
@@ -158,8 +295,32 @@
 }
 
 .rowControl {
+  min-width: 0;
   flex-shrink: 0;
+  align-self: flex-start;
   display: inline-flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 6px;
+  text-align: right;
+}
+
+.row[data-layout='split'] .rowControl {
+  flex: 1 1 56%;
+}
+
+.row[data-layout='stacked'] .rowControl {
+  width: 100%;
+  justify-content: stretch;
+  text-align: left;
+}
+
+.rowControl > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.wrapControlValue > * {
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }

@@ -201,6 +201,7 @@ for (const exchanges of [50, 200, 1000]) {
     runs,
     inbox,
     wakes: [],
+    signals: [],
     contextInserted: [],
     contextRemoved: [],
     entities: [],

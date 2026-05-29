@@ -9,12 +9,14 @@ import type { WorkspaceNode } from '../../lib/workspace/types'
  */
 export function NodeRenderer({
   node,
+  chromeInsetTarget = false,
 }: {
   node: WorkspaceNode
+  chromeInsetTarget?: boolean
 }): React.ReactElement {
   return node.kind === `split` ? (
-    <SplitContainer split={node} />
+    <SplitContainer split={node} chromeInsetTarget={chromeInsetTarget} />
   ) : (
-    <TileContainer tile={node} />
+    <TileContainer tile={node} chromeInsetTarget={chromeInsetTarget} />
   )
 }

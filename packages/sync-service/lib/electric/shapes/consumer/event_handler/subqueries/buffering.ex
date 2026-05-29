@@ -37,7 +37,7 @@ defmodule Electric.Shapes.Consumer.EventHandler.Subqueries.Buffering do
         %ShapeInfo{} = shape_info,
         views,
         %MoveQueue{} = queue,
-        {dep_move_kind, dep_index, values} = move,
+        {dep_move_kind, dep_index, values, txids} = move,
         subquery_ref,
         opts \\ []
       )
@@ -47,7 +47,7 @@ defmodule Electric.Shapes.Consumer.EventHandler.Subqueries.Buffering do
       queue: queue,
       active_move:
         views
-        |> ActiveMove.start(dep_index, dep_move_kind, subquery_ref, values)
+        |> ActiveMove.start(dep_index, dep_move_kind, subquery_ref, values, txids)
         |> ActiveMove.carry_latest_seen_lsn(Keyword.get(opts, :latest_seen_lsn))
     }
 
@@ -129,7 +129,8 @@ defmodule Electric.Shapes.Consumer.EventHandler.Subqueries.Buffering do
       index_effects =
         IndexChanges.effects_for_complete(
           state.shape_info.dnf_plan,
-          {active_move.dep_move_kind, active_move.dep_index, active_move.values},
+          {active_move.dep_move_kind, active_move.dep_index, active_move.values,
+           active_move.txids},
           active_move.subquery_ref
         )
 

@@ -123,6 +123,9 @@
   background: var(--btn-soft-bg);
   color: var(--btn-soft-fg);
 }
+:global(:root[data-theme='light']) .tone-neutral.variant-soft {
+  --btn-border: var(--ds-border-1);
+}
 .variant-soft:hover:not(:disabled) {
   background: var(--btn-soft-bg-hover);
 }

@@ -1,4 +1,5 @@
 import { Shape, ShapeStream } from '@electric-sql/client'
+import { appendPathToUrl } from '@electric-ax/agents-runtime'
 
 /**
  * One-time fetch of all rows from an Electric shape.
@@ -11,7 +12,7 @@ export async function fetchShapeRows<T = Record<string, unknown>>(
   options?: { signal?: AbortSignal }
 ): Promise<Array<T>> {
   const stream = new ShapeStream({
-    url: `${baseUrl}/_electric/electric/v1/shape`,
+    url: appendPathToUrl(baseUrl, `/_electric/electric/v1/shape`),
     params: { table },
     subscribe: false,
     signal: options?.signal,

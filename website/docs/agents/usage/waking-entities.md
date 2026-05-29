@@ -31,13 +31,13 @@ There are five things that can wake an entity:
 
 ### 1. An incoming message
 
-Any external `/send` (via the CLI, HTTP, or another entity's `ctx.send()`) appends a `message_received` event to the entity's stream, which wakes the handler:
+Any external `/send` (via the CLI, HTTP, or another entity's `ctx.send()`) appends a `inbox` event to the entity's stream, which wakes the handler:
 
 ```ts
 ctx.send("/assistant/peer", { text: "hello" })
 ```
 
-The receiving handler sees `wake.type === "message_received"` and finds the payload on `wake.payload`.
+The receiving handler sees `wake.type === "inbox"` and finds the payload on `wake.payload`.
 
 ### 2. A spawned child
 
@@ -97,7 +97,7 @@ The minimum useful pattern is to branch on `wake.type`:
 
 ```ts
 async handler(ctx, wake) {
-  if (wake.type === "message_received") {
+  if (wake.type === "inbox") {
     // external input - reply, dispatch, etc.
     ctx.useAgent({ ... })
     await ctx.agent.run()
@@ -112,8 +112,8 @@ async handler(ctx, wake) {
 
 Two wake types reach handlers directly:
 
-- `"message_received"` — an external message was delivered to this entity's inbox.
-- `"wake"` — a synthesised wake for anything else (child finished, collection change, cron, timeout). The specifics are on `wake.payload`. A future-send schedule delivers a message, so it arrives as `"message_received"`.
+- `"inbox"` — an external message was delivered to this entity's inbox.
+- `"wake"` — a synthesised wake for anything else (child finished, collection change, cron, timeout). The specifics are on `wake.payload`. A future-send schedule delivers a message, so it arrives as `"inbox"`.
 
 For the full payload shape (`changes[]`, `finished_child`, `other_children`, `timeout`), see the [wake-type catalog](../reference/wake-event#wake-type-catalog) in the reference.
 

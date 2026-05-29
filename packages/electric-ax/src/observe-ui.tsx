@@ -7,6 +7,7 @@ import {
   createEntityIncludesQuery,
   normalizeEntityTimelineData,
 } from '@electric-ax/agents-runtime'
+import { entityApiUrl } from './entity-api.js'
 import { createEntityStreamDB } from './entity-stream-db'
 import type {
   EntityStopped,
@@ -177,12 +178,14 @@ export function MessageInput({
   baseUrl,
   entityUrl,
   identity,
+  headers,
   disabled,
 }: {
   db: EntityStreamDB
   baseUrl: string
   entityUrl: string
   identity: string
+  headers?: Record<string, string>
   disabled: boolean
 }): React.ReactElement {
   const [value, setValue] = useState(``)
@@ -200,9 +203,12 @@ export function MessageInput({
           } as any)
         },
         mutationFn: async ({ text }) => {
-          const res = await fetch(`${baseUrl}${entityUrl}/send`, {
+          const res = await fetch(entityApiUrl(baseUrl, entityUrl, `/send`), {
             method: `POST`,
-            headers: { 'content-type': `application/json` },
+            headers: {
+              'content-type': `application/json`,
+              ...headers,
+            },
             body: JSON.stringify({ from: identity, payload: { text } }),
           })
           if (!res.ok) {
@@ -228,7 +234,7 @@ export function MessageInput({
           }
         },
       }),
-    [db, baseUrl, entityUrl, identity]
+    [db, baseUrl, entityUrl, identity, headers]
   )
 
   useInput(
@@ -317,20 +323,72 @@ function AgentResponseView({
   )
 }
 
+function wakeReason(
+  section: Extract<EntityTimelineSection, { kind: `wake` }>
+): string {
+  const { payload } = section
+  if (payload.timeout) return `timeout`
+  if (payload.finished_child) {
+    return `child ${payload.finished_child.run_status}`
+  }
+  if (payload.changes.length > 0) {
+    return `${payload.changes.length} ${payload.changes.length === 1 ? `change` : `changes`}`
+  }
+  if (payload.other_children && payload.other_children.length > 0) {
+    return `${payload.other_children.length} child ${payload.other_children.length === 1 ? `update` : `updates`}`
+  }
+  return payload.source
+}
+
+function WakeView({
+  section,
+}: {
+  section: Extract<EntityTimelineSection, { kind: `wake` }>
+}): React.ReactElement {
+  return (
+    <Box flexDirection="column" marginTop={1}>
+      <Text>
+        <Text bold color="magenta">{`┌ wake`}</Text>
+        <Text dimColor>
+          {`  ${formatTime(new Date(section.timestamp).toISOString())}`}
+        </Text>
+      </Text>
+      <Text dimColor>
+        {`│ ${wakeReason(section)} from ${section.payload.source}`}
+      </Text>
+    </Box>
+  )
+}
+
 // ============================================================================
 // Main observe component — reads from StreamDB collections
 // ============================================================================
+
+export function ObserveExitHotkey({
+  onExit,
+}: {
+  onExit: () => void
+}): React.ReactElement | null {
+  useInput((_input, key) => {
+    if (key.escape) {
+      onExit()
+    }
+  })
+  return null
+}
 
 function ObserveView({
   db,
   entityUrl,
   baseUrl,
   identity,
+  headers,
 }: {
   db: EntityStreamDB
   entityUrl: string
   baseUrl: string
   identity: string
+  headers?: Record<string, string>
 }): React.ReactElement {
   const timelineQuery = useMemo(
     () => createEntityIncludesQuery(db as any),
@@ -345,16 +403,20 @@ function ObserveView({
       runs: [],
       inbox: [],
       wakes: [],
+      signals: [],
+      contextInserted: [],
+      contextRemoved: [],
       entities: [],
     }
   )
 
   const typedRuns = timelineData.runs
   const typedInbox = timelineData.inbox
+  const typedWakes = timelineData.wakes
 
   const timeline = useMemo(
-    () => buildSections(typedRuns, typedInbox),
-    [typedRuns, typedInbox]
+    () => buildSections(typedRuns, typedInbox, typedWakes),
+    [typedRuns, typedInbox, typedWakes]
   )
 
   const { data: stopped = [] } = useLiveQuery(
@@ -402,6 +464,10 @@ function ObserveView({
             )
           }
 
+          if (section.kind === `wake`) {
+            return <WakeView key={`wake-${i}`} section={section} />
+          }
+
           return (
             <AgentResponseView
               key={`agent-${i}`}
@@ -428,6 +494,7 @@ function ObserveView({
         baseUrl={baseUrl}
         entityUrl={entityUrl}
         identity={identity}
+        headers={headers}
         disabled={closed}
       />
     </Box>
@@ -438,12 +505,16 @@ function ObserveApp({
   entityUrl,
   baseUrl,
   identity,
+  headers,
   initialOffset,
+  onExit,
 }: {
   entityUrl: string
   baseUrl: string
   identity: string
+  headers?: Record<string, string>
   initialOffset?: string
+  onExit: () => void
 }): React.ReactElement {
   const [db, setDb] = useState<EntityStreamDB | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -452,7 +523,12 @@ function ObserveApp({
   useEffect(() => {
     let cancelled = false
 
-    createEntityStreamDB({ baseUrl, entityUrl, initialOffset })
+    createEntityStreamDB({
+      baseUrl,
+      entityUrl,
+      initialOffset,
+      headers,
+    })
       .then((result) => {
         if (cancelled) {
           result.close()
@@ -471,11 +547,12 @@ function ObserveApp({
       cancelled = true
       closeRef.current?.()
     }
-  }, [baseUrl, entityUrl, initialOffset])
+  }, [baseUrl, entityUrl, initialOffset, headers])
 
   if (error) {
     return (
       <Box flexDirection="column">
+        <ObserveExitHotkey onExit={onExit} />
         <Text color="red">{`Error: ${error}`}</Text>
       </Box>
     )
@@ -484,18 +561,23 @@ function ObserveApp({
   if (!db) {
     return (
       <Box>
+        <ObserveExitHotkey onExit={onExit} />
         <Text dimColor>{`Connecting to ${entityUrl}...`}</Text>
       </Box>
     )
   }
 
   return (
-    <ObserveView
-      db={db}
-      entityUrl={entityUrl}
-      baseUrl={baseUrl}
-      identity={identity}
-    />
+    <>
+      <ObserveExitHotkey onExit={onExit} />
+      <ObserveView
+        db={db}
+        entityUrl={entityUrl}
+        baseUrl={baseUrl}
+        identity={identity}
+        headers={headers}
+      />
+    </>
   )
 }
 
@@ -507,21 +589,27 @@ export function renderObserve(opts: {
   entityUrl: string
   baseUrl: string
   identity: string
+  headers?: Record<string, string>
   initialOffset?: string
 }): void {
-  const { entityUrl, baseUrl, identity, initialOffset } = opts
+  const { entityUrl, baseUrl, identity, headers, initialOffset } = opts
 
-  const app = render(
+  let app: ReturnType<typeof render>
+  const exit = (): void => {
+    app.unmount()
+    process.exit(0)
+  }
+
+  app = render(
     <ObserveApp
       entityUrl={entityUrl}
       baseUrl={baseUrl}
       identity={identity}
+      headers={headers}
       initialOffset={initialOffset}
+      onExit={exit}
     />
   )
 
-  process.on(`SIGINT`, () => {
-    app.unmount()
-    process.exit(0)
-  })
+  process.on(`SIGINT`, exit)
 }

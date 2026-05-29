@@ -315,6 +315,23 @@ defmodule Electric.Replication.Eval.SqlGeneratorTest do
       ast = %Func{name: "\"||\"", args: [%Ref{path: ["first"]}, %Ref{path: ["last"]}]}
       assert SqlGenerator.to_sql(ast) == ~s("first" || "last")
     end
+
+    test "concat variadic (parser Array wrapper)" do
+      ast = %Func{
+        name: "concat",
+        args: [
+          %Array{
+            elements: [
+              %Ref{path: ["first_name"]},
+              %Const{value: " "},
+              %Ref{path: ["last_name"]}
+            ]
+          }
+        ]
+      }
+
+      assert SqlGenerator.to_sql(ast) == ~s|concat("first_name", ' ', "last_name")|
+    end
   end
 
   describe "array operators" do
