@@ -205,6 +205,8 @@ describe(`ShapeStream`, () => {
   })
 
   it(`does not deliver a later SSE batch before subscriber callbacks for the earlier batch finish`, async () => {
+    const warnSpy = vi.spyOn(console, `warn`).mockImplementation(() => {})
+
     const batch1Row = {
       key: `stream-1`,
       value: { id: `1` },
@@ -328,9 +330,13 @@ describe(`ShapeStream`, () => {
 
     releaseFirstBatch()
 
-    await vi.waitFor(() => {
-      expect(events).toEqual([`batch1:start`, `batch1:end`, `batch2:start`])
-    })
+    try {
+      await vi.waitFor(() => {
+        expect(events).toEqual([`batch1:start`, `batch1:end`, `batch2:start`])
+      })
+    } finally {
+      warnSpy.mockRestore()
+    }
   })
 
   it(`reentrant requestSnapshot may re-enter bystander subscribers before their earlier callback completes`, async () => {
