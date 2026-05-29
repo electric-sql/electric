@@ -847,11 +847,13 @@ function DefaultAgentComposer({
 }): React.ReactElement {
   const [sandboxProfile, setSandboxProfile] =
     useSandboxProfileSelection(sandboxProfiles)
+  const selectedSandboxProfile =
+    sandboxProfile ?? pickDefaultSandboxProfile(sandboxProfiles)
   // A remote sandbox lives in the provider VM, so a host working directory
   // doesn't apply — hide the picker for those profiles.
   const selectedProfileIsRemote = useMemo(
-    () => isSandboxProfileRemote(sandboxProfiles, sandboxProfile),
-    [sandboxProfiles, sandboxProfile]
+    () => isSandboxProfileRemote(sandboxProfiles, selectedSandboxProfile),
+    [sandboxProfiles, selectedSandboxProfile]
   )
   const [value, setValue] = useState(``)
   const [submitting, setSubmitting] = useState(false)
@@ -924,7 +926,7 @@ function DefaultAgentComposer({
     for (const [k, v] of Object.entries(args)) {
       if (v !== undefined && v !== ``) cleaned[k] = v
     }
-    void onSubmit(trimmed, cleaned, files, sandboxProfile)
+    void onSubmit(trimmed, cleaned, files, selectedSandboxProfile)
       .then((ok) => {
         if (ok) clearAttachments()
       })
@@ -939,7 +941,7 @@ function DefaultAgentComposer({
     clearAttachments,
     disabled,
     onSubmit,
-    sandboxProfile,
+    selectedSandboxProfile,
     submitting,
     value,
   ])
@@ -1060,10 +1062,10 @@ function DefaultAgentComposer({
             disabled={submitting || disabled}
           />
         )}
-        {sandboxProfiles.length > 1 ? (
+        {sandboxProfiles.length > 0 ? (
           <PillSelect
             label="Sandbox"
-            value={sandboxProfile ?? ``}
+            value={selectedSandboxProfile ?? ``}
             options={sandboxProfiles.map((p) => p.name)}
             optionLabels={Object.fromEntries(
               sandboxProfiles.map((p) => [p.name, p.label])
@@ -1071,13 +1073,6 @@ function DefaultAgentComposer({
             onChange={(next) => setSandboxProfile(next)}
             disabled={submitting || disabled}
           />
-        ) : sandboxProfiles.length === 1 ? (
-          <span
-            className={styles.pill}
-            title={sandboxProfiles[0]!.description ?? undefined}
-          >
-            {sandboxProfiles[0]!.label}
-          </span>
         ) : null}
         {/* Working directory comes last: the chosen sandbox decides whether a
             host directory is even relevant. A remote sandbox runs in the
