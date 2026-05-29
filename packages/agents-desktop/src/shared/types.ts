@@ -112,6 +112,7 @@ export type DesktopSettings = {
   workingDirectory: string | null
   apiKeysRef: string
   launchAtLogin?: boolean
+  preventAppSuspension?: boolean
   codex?: CodexSettings
   onboardingDismissed?: boolean
   mcp?: { servers: Array<McpServerConfig> }
@@ -123,6 +124,8 @@ export type LaunchAtLoginStatus = {
   enabled: boolean
   reason: string | null
 }
+
+export type PreventAppSuspensionPreference = boolean
 
 export type ElectricCliInstallKind =
   | `not-installed`

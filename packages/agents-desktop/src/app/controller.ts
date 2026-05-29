@@ -286,6 +286,15 @@ export function createDesktopMainController(ctx: DesktopAppContext) {
     return status
   }
 
+  const getPreventAppSuspension = (): boolean =>
+    settings.preventAppSuspension !== false
+
+  const setPreventAppSuspension = async (enabled: boolean): Promise<void> => {
+    settings.preventAppSuspension = enabled
+    await saveSettings()
+    runtime.refreshPowerSaveBlocker()
+  }
+
   const syncLaunchAtLoginSetting = async (): Promise<void> => {
     await LoginItems.setLaunchAtLogin(settings.launchAtLogin === true)
   }
@@ -380,6 +389,8 @@ export function createDesktopMainController(ctx: DesktopAppContext) {
     getCloudAgentServers: ctx.getCloudAgentServers,
     getLaunchAtLoginStatus,
     setLaunchAtLogin,
+    getPreventAppSuspension,
+    setPreventAppSuspension,
   }
 
   const loadSettings = (): Promise<void> =>

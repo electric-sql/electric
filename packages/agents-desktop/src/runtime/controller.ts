@@ -89,6 +89,8 @@ export function createRuntimeController(deps: {
     lifecycleDeps,
     hasConnectedLocalRuntime: () =>
       RuntimeLifecycle.hasConnectedLocalRuntime(lifecycleDeps),
+    refreshPowerSaveBlocker: () =>
+      RuntimeLifecycle.refreshPowerSaveBlocker(lifecycleDeps),
     restartConnectedRuntimes: () =>
       RuntimeLifecycle.restartConnectedRuntimes(lifecycleDeps),
     stopExistingRuntime: () =>
