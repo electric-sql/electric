@@ -1,11 +1,21 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native'
+import {
+  Alert,
+  DevSettings,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import Constants from 'expo-constants'
 import { Header, HeaderBackButton } from '../components/Header'
 import { PrimaryButton } from '../components/PrimaryButton'
 import { Screen } from '../components/Screen'
 import { useAgents } from '../lib/AgentsProvider'
 import { checkServerHealth } from '../lib/agentsClient'
+import { cloudAuth } from '../lib/cloudAuth'
 import { useColorSchemeMode, useTokens } from '../lib/ThemeProvider'
 import { fontSize, lineHeight, radii, spacing } from '../lib/theme'
 import type { Tokens } from '../lib/theme'
@@ -37,6 +47,7 @@ export function DiagnosticsScreen({
   const tokens = useTokens()
   const scheme = useColorSchemeMode()
   const styles = useMemo(() => createStyles(tokens), [tokens])
+  const [clearing, setClearing] = useState(false)
 
   const [health, setHealth] = useState<HealthState>({ kind: `idle` })
 
@@ -62,6 +73,36 @@ export function DiagnosticsScreen({
   useEffect(() => {
     void probe()
   }, [probe])
+
+  const clearAllLocalData = useCallback(() => {
+    Alert.alert(
+      `Clear all local data?`,
+      `Deletes saved settings, server connections, and sign-in state. The app will restart and return to the onboarding flow.`,
+      [
+        { text: `Cancel`, style: `cancel` },
+        {
+          text: `Clear data and restart`,
+          style: `destructive`,
+          onPress: () => {
+            void (async () => {
+              setClearing(true)
+              // Independent local ops — sign out clears in-memory
+              // auth state, AsyncStorage.clear() wipes persisted state
+              // (including the token signOut also touches).
+              await Promise.allSettled([
+                cloudAuth.signOut(),
+                AsyncStorage.clear(),
+              ])
+              // Drop the spinner before reload so the button doesn't
+              // hang at "Restarting…" if DevSettings.reload() ever no-ops.
+              setClearing(false)
+              DevSettings.reload()
+            })()
+          },
+        },
+      ]
+    )
+  }, [])
 
   const appVersion = Constants.expoConfig?.version ?? `0.0.0`
   const sdkVersion = Constants.expoConfig?.sdkVersion ?? Constants.sdkVersion
@@ -123,6 +164,25 @@ export function DiagnosticsScreen({
           />
           <Field label="Theme" value={`${scheme} (resolved)`} tokens={tokens} />
         </Section>
+
+        {__DEV__ && (
+          <Section label="Developer" tokens={tokens}>
+            <Field
+              label="Clear all local data"
+              value="Deletes saved settings, server connections, and sign-in state. The app will restart into onboarding."
+              tokens={tokens}
+            />
+            <View style={styles.actionRow}>
+              <PrimaryButton
+                title={clearing ? `Restarting…` : `Clear all local data`}
+                variant="soft"
+                loading={clearing}
+                disabled={clearing}
+                onPress={clearAllLocalData}
+              />
+            </View>
+          </Section>
+        )}
       </ScrollView>
     </Screen>
   )

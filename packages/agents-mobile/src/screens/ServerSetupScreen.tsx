@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native'
 import { CloudServerPicker } from '../components/CloudServerPicker'
+import { Header, HeaderBackButton } from '../components/Header'
 import { PrimaryButton } from '../components/PrimaryButton'
 import { Screen } from '../components/Screen'
 import { useCloudAuth } from '../lib/CloudAuthContext'
@@ -18,6 +19,11 @@ import { checkServerHealth, normalizeServerUrl } from '../lib/agentsClient'
 import { prepareServerHeaders } from '../lib/serverHeaders'
 import type { Tokens } from '../lib/theme'
 
+/**
+ * Standalone "select or add an agents server" screen, reached from the
+ * Home menu (with `onCancel`) or as the `!serverUrl` fallback from the
+ * root layout. Mirrors the onboarding step-2 anatomy.
+ */
 export function ServerSetupScreen({
   initialUrl,
   onCancel,
@@ -29,33 +35,54 @@ export function ServerSetupScreen({
 }): React.ReactElement {
   const tokens = useTokens()
   const styles = useMemo(() => createStyles(tokens), [tokens])
-  const { state: cloudState, signIn, signOut } = useCloudAuth()
-  const [value, setValue] = useState(initialUrl ?? ``)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const isSignedInToCloud = cloudState.status === `signed-in`
+  const { state: cloudState, signIn } = useCloudAuth()
+  const [customUrlOpen, setCustomUrlOpen] = useState(false)
+  const [customUrlValue, setCustomUrlValue] = useState(initialUrl ?? ``)
+  const [submitting, setSubmitting] = useState(false)
+  const [cloudConnectError, setCloudConnectError] = useState<string | null>(
+    null
+  )
+  const [customUrlError, setCustomUrlError] = useState<string | null>(null)
+
+  const isCloudSignedIn = cloudState.status === `signed-in`
   const isSigningInToCloud = cloudState.status === `signing-in`
 
-  const submit = async () => {
-    const normalized = normalizeServerUrl(value)
+  const commit = async (url: string): Promise<string | null> => {
+    setSubmitting(true)
+    try {
+      // Cloud agent servers reject unauthenticated requests with 401,
+      // so headers must be registered before the health probe.
+      await prepareServerHeaders(url)
+      await checkServerHealth(url)
+      await onSave(url)
+      return null
+    } catch (err) {
+      return err instanceof Error ? err.message : String(err)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const connectCloudRow = async (url: string): Promise<void> => {
+    setCloudConnectError(null)
+    const err = await commit(url)
+    if (err) setCloudConnectError(err)
+  }
+
+  const submitCustom = async (): Promise<void> => {
+    const normalized = normalizeServerUrl(customUrlValue)
     if (!normalized) {
-      setError(`Enter an agents server URL.`)
+      setCustomUrlError(`Enter an agents server URL.`)
       return
     }
-    setLoading(true)
-    setError(null)
-    try {
-      // Inject Cloud auth headers (if applicable) before the health
-      // check probes the server — Cloud agent servers reject
-      // unauthenticated requests with 401.
-      await prepareServerHeaders(normalized)
-      await checkServerHealth(normalized)
-      await onSave(normalized)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setLoading(false)
-    }
+    setCustomUrlError(null)
+    const err = await commit(normalized)
+    if (err) setCustomUrlError(err)
+  }
+
+  const toggleCustomUrl = (): void => {
+    setCustomUrlError(null)
+    setCustomUrlOpen((open) => !open)
   }
 
   return (
@@ -64,111 +91,124 @@ export function ServerSetupScreen({
         behavior={Platform.OS === `ios` ? `padding` : undefined}
         style={styles.flex}
       >
+        {onCancel && (
+          <Header
+            align="center"
+            title="Server"
+            leading={<HeaderBackButton onPress={onCancel} />}
+          />
+        )}
+
         <ScrollView
+          style={styles.flex}
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
         >
-          <View style={styles.heading}>
-            <Text style={styles.eyebrow}>Electric Agents</Text>
-            <Text style={styles.title}>Connect to an agents server</Text>
-            <Text style={styles.copy}>
-              Mobile connects to a running server. It does not bundle a local
-              Horton runtime.
-            </Text>
-            {isSignedInToCloud ? (
-              <Text style={styles.hint}>
-                Signed in to Electric Cloud as{' '}
-                {cloudState.email ?? `this account`}. Want to try a different
-                Google account? Sign out below, then sign in again.
-              </Text>
-            ) : (
-              <Text style={styles.hint}>
-                Not signed in to Electric Cloud. Sign in below to discover your
-                cloud-hosted agent servers automatically.
-              </Text>
-            )}
-          </View>
+          {!onCancel && <Text style={styles.title}>Server</Text>}
+          <Text style={styles.description}>
+            Choose or add the agents server this app connects to.
+          </Text>
 
-          <CloudServerPicker
-            onPick={(picked) => setValue(picked)}
-            disabled={loading}
-          />
-
-          <View style={styles.field}>
-            <Text style={styles.label}>Server URL</Text>
-            <TextInput
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="url"
-              placeholder="https://agents.example.com"
-              placeholderTextColor={tokens.text3}
-              value={value}
-              onChangeText={setValue}
-              onSubmitEditing={submit}
-              returnKeyType="go"
-              style={styles.input}
-            />
-          </View>
-
-          {error && (
-            <View style={styles.errorRow}>
-              <Text style={styles.errorText}>{error}</Text>
+          {!isCloudSignedIn && (
+            <View style={styles.cloudSignIn}>
+              <View style={styles.sectionHeader}>
+                <View style={styles.sectionHeaderText}>
+                  <Text style={styles.sectionHeaderTitle}>Electric Cloud</Text>
+                  <Text style={styles.sectionHeaderDescription}>
+                    Sign in to discover hosted agents servers.
+                  </Text>
+                </View>
+              </View>
+              <PrimaryButton
+                title={
+                  isSigningInToCloud
+                    ? `Opening browser…`
+                    : `Sign in with GitHub`
+                }
+                leadingIcon="github"
+                disabled={isSigningInToCloud || submitting}
+                onPress={() => {
+                  void signIn(`github`)
+                }}
+              />
+              <PrimaryButton
+                title={
+                  isSigningInToCloud
+                    ? `Opening browser…`
+                    : `Sign in with Google`
+                }
+                variant="soft"
+                leadingIcon="google"
+                disabled={isSigningInToCloud || submitting}
+                onPress={() => {
+                  void signIn(`google`)
+                }}
+              />
             </View>
           )}
 
-          <View style={styles.actions}>
-            {onCancel && (
+          <CloudServerPicker
+            onConnect={connectCloudRow}
+            disabled={submitting}
+          />
+
+          {cloudConnectError && (
+            <View style={styles.errorRow}>
+              <Text style={styles.errorText}>{cloudConnectError}</Text>
+            </View>
+          )}
+
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionHeaderText}>
+              <Text style={styles.sectionHeaderTitle}>Custom server</Text>
+              <Text style={styles.sectionHeaderDescription}>
+                Connect to a self-hosted agents server.
+              </Text>
+            </View>
+            <View style={styles.sectionHeaderAction}>
               <PrimaryButton
-                title="Cancel"
+                title={customUrlOpen ? `Cancel` : `Add custom URL`}
                 variant="ghost"
-                onPress={onCancel}
-                disabled={loading || isSigningInToCloud}
+                onPress={toggleCustomUrl}
+                disabled={submitting}
               />
-            )}
-            {isSignedInToCloud ? (
-              <PrimaryButton
-                title="Sign out"
-                variant="ghost"
-                onPress={() => {
-                  void signOut()
-                }}
-                disabled={loading || isSigningInToCloud}
-              />
-            ) : (
-              <>
-                <PrimaryButton
-                  title={
-                    isSigningInToCloud
-                      ? `Opening browser…`
-                      : `Sign in with GitHub`
-                  }
-                  variant="ghost"
-                  onPress={() => {
-                    void signIn(`github`)
-                  }}
-                  disabled={loading || isSigningInToCloud}
-                />
-                <PrimaryButton
-                  title={
-                    isSigningInToCloud
-                      ? `Opening browser…`
-                      : `Sign in with Google`
-                  }
-                  variant="ghost"
-                  onPress={() => {
-                    void signIn(`google`)
-                  }}
-                  disabled={loading || isSigningInToCloud}
-                />
-              </>
-            )}
-            <PrimaryButton
-              title="Connect"
-              loading={loading}
-              onPress={submit}
-              disabled={loading || isSigningInToCloud}
-            />
+            </View>
           </View>
+
+          {customUrlOpen && (
+            <View style={styles.customUrlPanel}>
+              <View style={styles.field}>
+                <Text style={styles.label}>Server URL</Text>
+                <TextInput
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="url"
+                  placeholder="https://agents.example.com"
+                  placeholderTextColor={tokens.text3}
+                  value={customUrlValue}
+                  onChangeText={setCustomUrlValue}
+                  onSubmitEditing={() => {
+                    void submitCustom()
+                  }}
+                  returnKeyType="go"
+                  style={styles.input}
+                />
+              </View>
+              {customUrlError && (
+                <View style={styles.errorRow}>
+                  <Text style={styles.errorText}>{customUrlError}</Text>
+                </View>
+              )}
+              <PrimaryButton
+                title="Connect"
+                loading={submitting}
+                disabled={submitting}
+                onPress={() => {
+                  void submitCustom()
+                }}
+              />
+            </View>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </Screen>
@@ -181,20 +221,10 @@ function createStyles(tokens: Tokens) {
       flex: 1,
     },
     scroll: {
-      flexGrow: 1,
-      justifyContent: `center`,
       paddingHorizontal: spacing.xl,
-      paddingVertical: spacing.xxxl,
+      paddingTop: spacing.xl,
+      paddingBottom: spacing.xxxl,
       gap: spacing.lg,
-    },
-    heading: {
-      alignItems: `flex-start`,
-      gap: spacing.sm,
-      paddingBottom: spacing.md,
-    },
-    eyebrow: {
-      color: tokens.text3,
-      fontSize: fontSize.sm,
     },
     title: {
       color: tokens.text1,
@@ -202,18 +232,41 @@ function createStyles(tokens: Tokens) {
       fontWeight: `400`,
       lineHeight: lineHeight.xxxl,
     },
-    copy: {
+    description: {
       color: tokens.text2,
       fontSize: fontSize.base,
       lineHeight: lineHeight.base,
     },
+    cloudSignIn: {
+      gap: spacing.md,
+    },
+    sectionHeader: {
+      flexDirection: `row`,
+      alignItems: `center`,
+      gap: spacing.md,
+    },
+    sectionHeaderText: {
+      flex: 1,
+      gap: 2,
+    },
+    sectionHeaderTitle: {
+      color: tokens.text1,
+      fontSize: fontSize.base,
+      fontWeight: `500`,
+    },
+    sectionHeaderDescription: {
+      color: tokens.text2,
+      fontSize: fontSize.sm,
+      lineHeight: lineHeight.sm,
+    },
+    sectionHeaderAction: {
+      flexShrink: 0,
+    },
+    customUrlPanel: {
+      gap: spacing.sm,
+    },
     field: {
       gap: spacing.xs,
-    },
-    hint: {
-      color: tokens.text3,
-      fontSize: fontSize.xs,
-      lineHeight: lineHeight.xs,
     },
     label: {
       color: tokens.text2,
@@ -239,12 +292,6 @@ function createStyles(tokens: Tokens) {
     errorText: {
       color: tokens.red11,
       fontSize: fontSize.sm,
-    },
-    actions: {
-      flexDirection: `row`,
-      gap: spacing.sm,
-      justifyContent: `flex-end`,
-      paddingTop: spacing.sm,
     },
   })
 }

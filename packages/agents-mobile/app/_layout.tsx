@@ -59,9 +59,9 @@ function RootNavigator(): React.ReactElement {
   }
 
   // First-launch onboarding takes precedence over the server-setup
-  // redirect — the wizard subsumes the URL input as its step 2, and
-  // dismissing it falls back to `/server-setup` only if the user
-  // still hasn't configured a server.
+  // redirect — the wizard subsumes the URL input as its step 2 and
+  // runs until `onComplete` saves a URL. After that `/server-setup`
+  // is only reachable via menu navigation.
   if (
     !onboardingDismissed &&
     pathname !== `/onboarding` &&
