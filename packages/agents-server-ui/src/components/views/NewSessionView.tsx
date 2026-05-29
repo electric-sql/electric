@@ -199,28 +199,42 @@ export function NewSessionView({
   }, [])
 
   const [selectedRunnerId, setSelectedRunnerId] = useState<string | null>(null)
+  const userSelectedRunnerRef = useRef(false)
+  const handleChangeSelectedRunner = useCallback((id: string | null) => {
+    userSelectedRunnerRef.current = true
+    setSelectedRunnerId(id)
+  }, [])
   // Re-evaluate the default whenever the list of runners or the
   // desktop's runner id changes. Prefer the desktop's own runner if
   // it's enabled, else fall back to the first runner.
   useEffect(() => {
-    if (
-      selectedRunnerId &&
-      enabledRunners.some((r) => r.id === selectedRunnerId)
-    ) {
-      return
-    }
     if (enabledRunners.length === 0) {
       if (selectedRunnerId !== null) setSelectedRunnerId(null)
+      userSelectedRunnerRef.current = false
       return
     }
-    if (
-      desktopRunnerId &&
+
+    const selectedRunnerStillExists =
+      selectedRunnerId !== null &&
+      enabledRunners.some((r) => r.id === selectedRunnerId)
+    if (!selectedRunnerStillExists) {
+      userSelectedRunnerRef.current = false
+    }
+
+    const desktopRunnerStillExists =
+      desktopRunnerId !== null &&
       enabledRunners.some((r) => r.id === desktopRunnerId)
-    ) {
-      setSelectedRunnerId(desktopRunnerId)
-      return
+
+    const preferredRunnerId =
+      !userSelectedRunnerRef.current && desktopRunnerStillExists
+        ? desktopRunnerId
+        : selectedRunnerStillExists
+          ? selectedRunnerId
+          : enabledRunners[0]!.id
+
+    if (selectedRunnerId !== preferredRunnerId) {
+      setSelectedRunnerId(preferredRunnerId)
     }
-    setSelectedRunnerId(enabledRunners[0]!.id)
   }, [enabledRunners, desktopRunnerId, selectedRunnerId])
 
   // Sandbox profiles ride alongside the runner row. Read the advertised
@@ -423,7 +437,7 @@ export function NewSessionView({
             onChangeWorkingDirectory={setWorkingDirectory}
             runners={enabledRunners}
             selectedRunnerId={selectedRunnerId}
-            onChangeSelectedRunner={setSelectedRunnerId}
+            onChangeSelectedRunner={handleChangeSelectedRunner}
           />
         )}
       </div>
@@ -779,13 +793,14 @@ function SandboxProfileRow({
   value: string | null
   onChange: (next: string) => void
 }): React.ReactElement {
+  const selectedValue = value ?? pickDefaultSandboxProfile(profiles)
   return (
     <Stack direction="column" gap={1}>
       <Text size={1} tone="muted">
         Sandbox
       </Text>
       <Select.Root<string>
-        value={value ?? ``}
+        value={selectedValue}
         onValueChange={(v) => {
           if (v) onChange(v)
         }}
