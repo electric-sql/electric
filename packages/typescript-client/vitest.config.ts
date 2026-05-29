@@ -13,7 +13,7 @@ export default defineConfig({
     fileParallelism: false,
     testTimeout: 30000, // 30s default timeout to catch hanging tests
     coverage: {
-      provider: `istanbul`,
+      provider: `v8`,
       reporter: isCI ? [`text`, `lcov`] : [`text`, `json`, `html`, `lcov`],
       include: [`**/src/**`],
     },
