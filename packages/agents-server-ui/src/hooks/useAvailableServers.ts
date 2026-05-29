@@ -146,10 +146,14 @@ export function useAvailableServers(): AvailableServersState {
           : server.desiredState === `connected`
             ? `offline`
             : `disconnected`)
+      const isCloud = server.source === `electric-cloud`
+      const displayName = isCloud
+        ? (cloudServer?.name ?? server.name)
+        : server.name
       return {
         key: `saved:${server.id}`,
         kind: `saved`,
-        name: server.name,
+        name: displayName,
         description: cloudPath,
         url: server.url,
         tenantId: server.tenantId ?? null,
@@ -164,7 +168,7 @@ export function useAvailableServers(): AvailableServersState {
           (server.localRuntimeEnabled === false ? `disabled` : `stopped`),
         isSelected: server.id === activeServer?.id,
         isSaved: true,
-        isCloud: server.source === `electric-cloud`,
+        isCloud,
         isLocal: isLocalServerUrl(server.url),
       }
     })
