@@ -134,6 +134,7 @@ const spawnBodySchema = Type.Object({
   sandbox: Type.Optional(sandboxChoiceSchema),
   initialMessage: Type.Optional(Type.Unknown()),
   grants: Type.Optional(Type.Array(entityPermissionGrantInputSchema)),
+  initialMessageType: Type.Optional(Type.String()),
   wake: Type.Optional(
     Type.Object({
       subscriberUrl: Type.String(),
@@ -1252,6 +1253,7 @@ async function spawnEntity(
     dispatch_policy: dispatchPolicy,
     sandbox: parsed.sandbox,
     initialMessage: undefined,
+    initialMessageType: undefined,
     wake: parsed.wake,
     created_by: principal.url,
   })
@@ -1284,6 +1286,7 @@ async function spawnEntity(
     await ctx.entityManager.send(entity.url, {
       from: principal.url,
       payload: parsed.initialMessage,
+      type: parsed.initialMessageType,
     })
   }
   if (!linkBeforeInitialMessage) {

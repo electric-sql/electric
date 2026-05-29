@@ -359,6 +359,10 @@
   color: var(--ds-text-3);
 }
 
+.newSessionComposerEditor {
+  min-height: 72px;
+}
+
 .composerFooter {
   display: flex;
   align-items: center;

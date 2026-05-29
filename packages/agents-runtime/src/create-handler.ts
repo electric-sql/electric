@@ -503,6 +503,9 @@ export function createRuntimeRouter(
         ...(definition.inboxSchemas && {
           inbox_schemas: mapSchemas(definition.inboxSchemas),
         }),
+        ...(definition.slashCommands && {
+          slash_commands: definition.slashCommands,
+        }),
         state_schemas: {
           ...DEFAULT_STATE_SCHEMAS,
           ...stateSchemas,

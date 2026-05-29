@@ -158,9 +158,28 @@
   width: 100%;
 }
 
-.textarea {
+.proseMirrorWrap {
   flex: 1;
   min-width: 0;
+  position: relative;
+}
+
+.proseMirrorWrap[data-empty='true']::before {
+  content: attr(data-placeholder);
+  position: absolute;
+  top: 0;
+  left: 0;
+  color: var(--ds-text-3);
+  pointer-events: none;
+  font-size: var(--ds-chat-text);
+  line-height: var(--ds-chat-text-lh);
+  font-family: var(--ds-font-body);
+}
+
+.proseMirrorEditor {
+  min-height: 40px;
+  max-height: 200px;
+  overflow: auto;
   border: none;
   outline: none;
   background: transparent;
@@ -168,22 +187,73 @@
   line-height: var(--ds-chat-text-lh);
   color: var(--ds-text-1);
   font-family: var(--ds-font-body);
-  /* Auto-grow is driven by inline `height = scrollHeight` from
-     MessageInput.tsx. `min-height` floors the resting state at ~2
-     lines so the empty composer reads as a multi-line input rather
-     than a single-line field; `max-height` + `overflow: auto` make
-     it start scrolling internally once content passes ~10 lines.
-     The browser clamps the inline height against both bounds, so
-     the JS auto-resize stays a one-liner. `resize: none` hides the
-     native handle since the auto-resize already does the right
-     thing. */
-  resize: none;
-  overflow: auto;
-  min-height: 40px;
-  max-height: 200px;
 }
-.textarea::placeholder {
+
+.proseMirrorEditor p {
+  margin: 0;
+}
+
+.proseMirrorEditor p + p {
+  margin-top: 2px;
+}
+
+.slashToken {
+  color: var(--ds-text-2);
+}
+
+.slashTokenKnown {
+  color: var(--ds-accent-11);
+  background: var(--ds-accent-a3);
+  border-radius: var(--ds-radius-2);
+}
+
+.slashTokenUnknown {
   color: var(--ds-text-3);
+}
+
+.slashPopover {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  z-index: 5;
+  min-width: 240px;
+  max-width: 360px;
+  padding: 4px;
+  border: 1px solid var(--ds-border-1);
+  border-radius: var(--ds-radius-4);
+  background: var(--ds-surface-raised);
+  box-shadow:
+    0 12px 28px rgba(15, 15, 30, 0.12),
+    0 2px 8px rgba(15, 15, 30, 0.08);
+}
+
+.slashOption {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: var(--ds-radius-3);
+  cursor: pointer;
+}
+
+.slashOptionActive,
+.slashOption:hover {
+  background: var(--ds-bg-hover);
+}
+
+.slashOptionName {
+  color: var(--ds-text-1);
+  font-size: var(--ds-text-sm);
+  line-height: var(--ds-text-sm-lh);
+}
+
+.slashOptionDescription {
+  color: var(--ds-text-3);
+  font-size: var(--ds-text-xs);
+  line-height: var(--ds-text-xs-lh);
 }
 
 .composerSend {

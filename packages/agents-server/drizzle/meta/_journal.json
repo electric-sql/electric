@@ -85,6 +85,13 @@
       "when": 1779050000000,
       "tag": "0011_entity_permissions",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1780060000000,
+      "tag": "0012_entity_type_slash_commands",
+      "breakpoints": true
     }
   ]
 }

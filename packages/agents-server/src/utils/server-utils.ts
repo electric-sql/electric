@@ -135,7 +135,7 @@ export function buildElectricProxyTarget(options: {
   } else if (table === `entity_types`) {
     target.searchParams.set(
       `columns`,
-      `"tenant_id","name","description","creation_schema","inbox_schemas","state_schemas","serve_endpoint","default_dispatch_policy","revision","created_at","updated_at"`
+      `"tenant_id","name","description","creation_schema","inbox_schemas","state_schemas","slash_commands","serve_endpoint","default_dispatch_policy","revision","created_at","updated_at"`
     )
     applyShapeWhere(
       target,

@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import fastq from 'fastq'
 import {
+  COMPOSER_INPUT_MESSAGE_TYPE,
   assertTags,
   entityStateSchema,
   getCronStreamPath,
@@ -11,6 +12,8 @@ import {
   manifestSharedStateKey,
   manifestSourceKey,
   resolveCronScheduleSpec,
+  validateComposerInputPayload,
+  validateSlashCommandDefinitions,
 } from '@electric-ax/agents-runtime'
 import type { EventPointer } from '@electric-ax/agents-runtime'
 import {
@@ -431,6 +434,7 @@ export class EntityManager {
     this.validateSchema(req.creation_schema)
     this.validateSchemaMap(req.inbox_schemas)
     this.validateSchemaMap(req.state_schemas)
+    this.validateSlashCommands(req.slash_commands)
     const defaultDispatchPolicy = req.default_dispatch_policy
       ? this.validateDispatchPolicy(req.default_dispatch_policy, {
           label: `default_dispatch_policy`,
@@ -445,6 +449,7 @@ export class EntityManager {
       creation_schema: req.creation_schema,
       inbox_schemas: req.inbox_schemas,
       state_schemas: req.state_schemas,
+      slash_commands: req.slash_commands,
       serve_endpoint: req.serve_endpoint,
       default_dispatch_policy: defaultDispatchPolicy,
       revision: existing ? existing.revision + 1 : 1,
@@ -725,6 +730,19 @@ export class EntityManager {
       createdEvent as Record<string, unknown>,
     ]
 
+    const slashCommandTimestamp = new Date().toISOString()
+    for (const command of entityType.slash_commands ?? []) {
+      const slashCommandEvent = entityStateSchema.slashCommands.insert({
+        key: command.name,
+        value: {
+          ...command,
+          source: `static`,
+          updated_at: slashCommandTimestamp,
+        },
+      } as any)
+      initialEvents.push(slashCommandEvent as Record<string, unknown>)
+    }
+
     if (req.initialMessage !== undefined) {
       const msgNow = new Date().toISOString()
       const inboxEvent = entityStateSchema.inbox.insert({
@@ -732,6 +750,7 @@ export class EntityManager {
         value: {
           from: req.created_by ?? req.parent ?? `spawn`,
           payload: req.initialMessage,
+          message_type: req.initialMessageType,
           timestamp: msgNow,
         },
       } as any)
@@ -3522,7 +3541,9 @@ export class EntityManager {
       creation_schema: existing.creation_schema,
       inbox_schemas: mergedInbox,
       state_schemas: mergedState,
+      slash_commands: existing.slash_commands,
       serve_endpoint: existing.serve_endpoint,
+      default_dispatch_policy: existing.default_dispatch_policy,
       revision: nextRevision,
       created_at: existing.created_at,
       updated_at: now,
@@ -3611,6 +3632,20 @@ export class EntityManager {
     }
   }
 
+  private validateSlashCommands(input: unknown): void {
+    const validationError = validateSlashCommandDefinitions(input)
+    if (!validationError) {
+      return
+    }
+
+    throw new ElectricAgentsError(
+      ErrCodeSchemaValidationFailed,
+      validationError.message,
+      422,
+      validationError.details
+    )
+  }
+
   private async validateSendRequest(
     entityUrl: string,
     req: SendRequest
@@ -3627,7 +3662,17 @@ export class EntityManager {
       )
     }
 
-    if (req.type && entity.type) {
+    if (req.type === COMPOSER_INPUT_MESSAGE_TYPE) {
+      const valErr = validateComposerInputPayload(req.payload)
+      if (valErr) {
+        throw new ElectricAgentsError(
+          ErrCodeSchemaValidationFailed,
+          valErr.message,
+          422,
+          valErr.details
+        )
+      }
+    } else if (req.type && entity.type) {
       const { inboxSchemas } = await this.getEffectiveSchemas(entity)
       if (inboxSchemas) {
         const schema = inboxSchemas[req.type]

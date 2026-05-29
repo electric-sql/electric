@@ -15,9 +15,16 @@ import { sliceChars } from './token-budget'
 import { createContextTools } from './tools/context-tools'
 import { CACHE_TIERS } from './types'
 import { composeToolsWithProviders } from './tool-providers'
+import { validateSlashCommandDefinitions } from './composer-input'
 import type { HydratedEventSourceWake } from './event-sources'
 import type { ChangeEvent } from '@durable-streams/state'
 import type { Sandbox } from './sandbox/types'
+import type {
+  DynamicSlashCommandRegistration,
+  SlashCommandDefinition,
+  SlashCommandHelpers,
+  SlashCommandRow,
+} from './composer-input'
 import type {
   AgentConfig,
   AgentHandle,
@@ -31,6 +38,7 @@ import type {
   EntityStreamDBWithActions,
   HandlerContext,
   LLMContentBlock,
+  HandlerWake,
   LLMMessage,
   ManifestAttachmentEntry,
   ObservationHandle,
@@ -72,6 +80,7 @@ export interface HandlerContextConfig<TState extends StateProxy = StateProxy> {
   db: EntityStreamDBWithActions
   state: TState
   actions: Record<string, (...args: Array<unknown>) => unknown>
+  staticSlashCommands?: Array<SlashCommandDefinition>
   electricTools: Array<AgentTool>
   sandbox: Sandbox
   events: Array<ChangeEvent>
@@ -97,6 +106,7 @@ export interface HandlerContextConfig<TState extends StateProxy = StateProxy> {
     args?: Record<string, unknown>,
     opts?: {
       initialMessage?: unknown
+      initialMessageType?: string
       wake?: Wake
       tags?: Record<string, string>
       observe?: boolean
@@ -231,6 +241,148 @@ function getTriggerMessageText(
     toOffset: wakeEvent.toOffset,
     eventCount: wakeEvent.eventCount,
   })
+}
+
+function toHandlerWake(wakeEvent: WakeEvent): HandlerWake {
+  if (wakeEvent.type === `inbox`) {
+    return {
+      type: `inbox`,
+      source: wakeEvent.source,
+      raw: wakeEvent,
+      message: {
+        type: wakeEvent.summary ?? `message`,
+        payload: wakeEvent.payload,
+        from: wakeEvent.source,
+      },
+    }
+  }
+
+  return {
+    type: `other`,
+    wakeType: wakeEvent.type,
+    source: wakeEvent.source,
+    payload: wakeEvent.payload,
+    raw: wakeEvent,
+  }
+}
+
+function createSlashCommandHelpers(
+  config: Pick<
+    HandlerContextConfig,
+    `db` | `writeEvent` | `staticSlashCommands`
+  >
+): SlashCommandHelpers {
+  const staticCommands = new Map(
+    (config.staticSlashCommands ?? []).map((command) => [command.name, command])
+  )
+  const rows = new Map(
+    (config.db.collections.slashCommands.toArray as Array<SlashCommandRow>).map(
+      (row) => [row.name, row]
+    )
+  )
+
+  const listRows = (): Array<SlashCommandRow> => Array.from(rows.values())
+
+  const getRow = (name: string): SlashCommandRow | undefined => {
+    return rows.get(name)
+  }
+
+  const writeRow = (row: SlashCommandRow): void => {
+    const existing = getRow(row.name)
+    rows.set(row.name, row)
+    const helper = existing
+      ? entityStateSchema.slashCommands.update
+      : entityStateSchema.slashCommands.insert
+
+    config.writeEvent(
+      helper({
+        key: row.name,
+        value: row,
+      } as never) as ChangeEvent
+    )
+  }
+
+  const deleteRow = (name: string): void => {
+    rows.delete(name)
+    config.writeEvent(
+      entityStateSchema.slashCommands.delete({
+        key: name,
+      } as never) as ChangeEvent
+    )
+  }
+
+  const restoreStaticOrDelete = (name: string): void => {
+    const staticCommand = staticCommands.get(name)
+    if (!staticCommand) {
+      deleteRow(name)
+      return
+    }
+
+    writeRow({
+      ...staticCommand,
+      key: staticCommand.name,
+      source: `static`,
+      updated_at: new Date().toISOString(),
+    })
+  }
+
+  const assertValid = (commands: Array<SlashCommandDefinition>): void => {
+    const validation = validateSlashCommandDefinitions(commands)
+    if (validation) {
+      throw new Error(
+        `[agent-runtime] invalid slash command definition: ${validation.details
+          .map((issue) => `${issue.path} ${issue.message}`)
+          .join(`; `)}`
+      )
+    }
+  }
+
+  const register = (command: DynamicSlashCommandRegistration): void => {
+    assertValid([command])
+    const owner = command.owner ?? `handler`
+    writeRow({
+      ...command,
+      key: command.name,
+      owner,
+      source: `dynamic`,
+      updated_at: new Date().toISOString(),
+    })
+  }
+
+  return {
+    get: getRow,
+    list: listRows,
+    register,
+    unregister(name, opts): void {
+      const existing = getRow(name)
+      if (
+        existing?.source !== `dynamic` ||
+        (opts?.owner && existing.owner !== opts.owner)
+      ) {
+        return
+      }
+      restoreStaticOrDelete(name)
+    },
+    replaceOwned(owner, commands): void {
+      const ownedCommands = commands.map((command) => ({ ...command, owner }))
+      assertValid(ownedCommands)
+
+      const nextNames = new Set(ownedCommands.map((command) => command.name))
+      for (const row of listRows()) {
+        if (
+          row.source === `dynamic` &&
+          row.owner === owner &&
+          !nextNames.has(row.name)
+        ) {
+          restoreStaticOrDelete(row.name)
+        }
+      }
+
+      for (const command of ownedCommands) {
+        register(command)
+      }
+    },
+  }
 }
 
 export function createHandlerContext<TState extends StateProxy = StateProxy>(
@@ -704,6 +856,8 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
 
   const ctx: DebugHandlerContext<TState> = {
     firstWake: config.firstWake,
+    wake: toHandlerWake(config.wakeEvent),
+    slashCommands: createSlashCommandHelpers(config),
     tags: config.tags,
     principal: config.principal,
     entityUrl: config.entityUrl,

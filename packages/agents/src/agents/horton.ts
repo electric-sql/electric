@@ -40,6 +40,7 @@ const TITLE_SYSTEM_PROMPT =
 
 const TITLE_USER_PROMPT = (userMessage: string): string =>
   `User request:\n${userMessage}`
+const TITLE_GENERATION_TIMEOUT_MS = 8_000
 
 const TITLE_STOP_WORDS = new Set([
   `a`,
@@ -139,6 +140,23 @@ function createConfiguredTitleCall(
       prompt,
       maxTokens: 64,
     })
+}
+
+function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  description: string
+): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined
+  const timeoutPromise = new Promise<T>((_resolve, reject) => {
+    timeout = setTimeout(() => {
+      reject(new Error(`${description} timed out after ${ms}ms`))
+    }, ms)
+  })
+
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timeout) clearTimeout(timeout)
+  })
 }
 
 export async function generateTitle(
@@ -317,8 +335,12 @@ function payloadToTitleText(payload: unknown): string {
   if (typeof payload === `string`) return payload
   if (payload == null) return ``
   if (typeof payload === `object`) {
-    const text = (payload as Record<string, unknown>).text
-    return typeof text === `string` ? text : JSON.stringify(payload)
+    const record = payload as Record<string, unknown>
+    const text = record.text
+    if (typeof text === `string`) return text
+    const source = record.source
+    if (typeof source === `string`) return source
+    return JSON.stringify(payload)
   }
   return String(payload)
 }
@@ -497,11 +519,16 @@ function createAssistantHandler(options: {
           try {
             const result = await generateTitle(
               firstUserMessage,
-              createConfiguredTitleCall(
-                modelCatalog,
-                modelConfig,
-                `[horton ${ctx.entityUrl}]`
-              ),
+              (prompt) =>
+                withTimeout(
+                  createConfiguredTitleCall(
+                    modelCatalog,
+                    modelConfig,
+                    `[horton ${ctx.entityUrl}]`
+                  )(prompt),
+                  TITLE_GENERATION_TIMEOUT_MS,
+                  `title generation`
+                ),
               (reason) => {
                 serverLog.warn(
                   `[horton ${ctx.entityUrl}] title generation fell back to local title: ${reason}`
@@ -513,11 +540,16 @@ function createAssistantHandler(options: {
             serverLog.warn(
               `[horton ${ctx.entityUrl}] title generation failed: ${err instanceof Error ? err.message : String(err)}`
             )
+            title = buildFallbackTitle(firstUserMessage)
           }
 
           if (title !== null) {
             try {
-              await ctx.setTag(`title`, title)
+              await withTimeout(
+                ctx.setTag(`title`, title),
+                TITLE_GENERATION_TIMEOUT_MS,
+                `set title tag`
+              )
             } catch (err) {
               serverLog.warn(
                 `[horton ${ctx.entityUrl}] setTag failed: ${err instanceof Error ? err.message : String(err)}`

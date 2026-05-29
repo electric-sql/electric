@@ -48,6 +48,7 @@ export interface SpawnEntityOptions {
   args?: Record<string, unknown>
   parentUrl?: string
   initialMessage?: unknown
+  initialMessageType?: string
   tags?: Record<string, string>
   /**
    * Sandbox selection — a `profile` with optional `scope` / `persistent`, an
@@ -399,6 +400,7 @@ export function createRuntimeServerClient(
     args,
     parentUrl,
     initialMessage,
+    initialMessageType,
     tags,
     sandbox,
     dispatch_policy,
@@ -408,6 +410,8 @@ export function createRuntimeServerClient(
     if (args && Object.keys(args).length > 0) body.args = args
     if (parentUrl !== undefined) body.parent = parentUrl
     if (initialMessage !== undefined) body.initialMessage = initialMessage
+    if (initialMessageType !== undefined)
+      body.initialMessageType = initialMessageType
     if (tags && Object.keys(tags).length > 0) body.tags = tags
     if (sandbox !== undefined) body.sandbox = sandbox
     if (dispatch_policy !== undefined) body.dispatch_policy = dispatch_policy

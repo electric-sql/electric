@@ -1,13 +1,7 @@
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowUp, Cpu, Sparkles } from 'lucide-react'
 import { eq, not, useLiveQuery } from '@tanstack/react-db'
+import { COMPOSER_INPUT_MESSAGE_TYPE } from '@electric-ax/agents-runtime/client'
 import { nanoid } from 'nanoid'
 import { useElectricAgents } from '../../lib/ElectricAgentsProvider'
 import { useWorkspace } from '../../hooks/useWorkspace'
@@ -35,12 +29,17 @@ import {
   isModelProperty,
   schemaModelSupportsImageInput,
 } from '../../lib/modelCapabilities'
+import { ComposerEditor, serializeComposerInput } from '../ComposerEditor'
 import styles from '../NewSessionPage.module.css'
 import type {
   ElectricEntityType,
   ElectricRunner,
   ElectricSandboxProfile,
 } from '../../lib/ElectricAgentsProvider'
+import type {
+  ComposerInputPayload,
+  SlashCommandRow,
+} from '@electric-ax/agents-runtime/client'
 import type { StandaloneViewProps } from '../../lib/workspace/viewRegistry'
 
 /**
@@ -172,6 +171,7 @@ export function NewSessionView({
       return query
         .from({ r: runnersCollection })
         .where(({ r }) => eq(r.admin_status, `enabled`))
+        .orderBy(({ r }) => r.updated_at, `desc`)
         .orderBy(({ r }) => r.label, `asc`)
     },
     [runnersCollection]
@@ -275,7 +275,8 @@ export function NewSessionView({
     async (
       typeName: string,
       args?: Record<string, unknown>,
-      initialUserText?: string,
+      initialMessage?: unknown,
+      initialMessageType?: string,
       initialAttachments?: Array<File>,
       sandboxProfile?: string | null
     ): Promise<boolean> => {
@@ -284,7 +285,15 @@ export function NewSessionView({
       const name = nanoid(10)
       const hasInitialAttachments =
         initialAttachments !== undefined && initialAttachments.length > 0
-      const initialText = initialUserText?.trim() ?? ``
+      const initialText =
+        typeof initialMessage === `string`
+          ? initialMessage.trim()
+          : initialMessage &&
+              typeof initialMessage === `object` &&
+              typeof (initialMessage as { source?: unknown }).source ===
+                `string`
+            ? (initialMessage as { source: string }).source.trim()
+            : ``
       const tx = spawnEntity({
         type: typeName,
         name,
@@ -308,9 +317,10 @@ export function NewSessionView({
               },
             }
           : {}),
-        ...(initialText && !hasInitialAttachments
-          ? { initialMessage: initialText }
+        ...(initialMessage !== undefined && !hasInitialAttachments
+          ? { initialMessage }
           : {}),
+        ...(initialMessageType ? { initialMessageType } : {}),
       })
       const entityUrl = `/${typeName}/${name}`
       try {
@@ -376,7 +386,7 @@ export function NewSessionView({
 
   const handleStartDefault = useCallback(
     async (
-      text: string,
+      input: string | ComposerInputPayload,
       args: Record<string, unknown>,
       attachments: Array<File>,
       sandboxProfile: string | null
@@ -395,10 +405,22 @@ export function NewSessionView({
       const includeWorkingDir = workingDirectory !== null && !profileIsRemote
       const augmented = includeWorkingDir ? { ...args, workingDirectory } : args
       if (includeWorkingDir) addRecentDir(workingDirectory)
+      const hasAttachments = attachments.length > 0
+      const initialMessage =
+        typeof input === `string`
+          ? input
+          : hasAttachments
+            ? input.source
+            : input
+      const initialMessageType =
+        typeof input === `string` || hasAttachments
+          ? undefined
+          : COMPOSER_INPUT_MESSAGE_TYPE
       return await doSpawn(
         defaultAgent.name,
         augmented,
-        text,
+        initialMessage,
+        initialMessageType,
         attachments,
         sandboxProfile
       )
@@ -418,6 +440,7 @@ export function NewSessionView({
               void doSpawn(
                 selected.name,
                 args,
+                undefined,
                 undefined,
                 undefined,
                 sandboxProfile
@@ -465,7 +488,7 @@ function Picker({
   defaultAgentSandboxProfiles: Array<ElectricSandboxProfile>
   onSelectType: (t: ElectricEntityType) => void
   onStartDefault: (
-    text: string,
+    input: string | ComposerInputPayload,
     args: Record<string, unknown>,
     attachments: Array<File>,
     sandboxProfile: string | null
@@ -849,7 +872,7 @@ function DefaultAgentComposer({
   agent: ElectricEntityType
   sandboxProfiles: ReadonlyArray<ElectricSandboxProfile>
   onSubmit: (
-    text: string,
+    input: string | ComposerInputPayload,
     args: Record<string, unknown>,
     attachments: Array<File>,
     sandboxProfile: string | null
@@ -873,10 +896,20 @@ function DefaultAgentComposer({
   )
   const [value, setValue] = useState(``)
   const [submitting, setSubmitting] = useState(false)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const composerFocusRef = useRef<{ focus: () => void } | null>(null)
   const inlineProps = useMemo(
     () => inlineSchemaProperties(agent.creation_schema),
     [agent.creation_schema]
+  )
+  const slashCommands = useMemo<Array<SlashCommandRow>>(
+    () =>
+      (agent.slash_commands ?? []).map((command) => ({
+        ...command,
+        key: `static:${command.name}`,
+        source: `static`,
+        updated_at: agent.updated_at,
+      })),
+    [agent.slash_commands, agent.updated_at]
   )
   const [args, setArgs] = useState<Record<string, unknown>>(() => {
     const init: Record<string, unknown> = {}
@@ -917,50 +950,55 @@ function DefaultAgentComposer({
   } = useAttachmentDrafts({
     policy: imageAttachmentDraftPolicy,
     disabled: disabled || submitting || !imageAttachmentsEnabled,
-    focusRef: textareaRef,
+    focusRef: composerFocusRef,
   })
 
   useEffect(() => {
     if (!imageAttachmentsEnabled) clearAttachments()
   }, [imageAttachmentsEnabled, clearAttachments])
 
-  useLayoutEffect(() => {
-    const el = textareaRef.current
-    if (!el) return
-    el.style.height = `auto`
-    el.style.height = `${el.scrollHeight}px`
-  }, [value])
-
-  const submit = useCallback(() => {
-    const trimmed = value.trim()
-    const files = imageAttachmentsEnabled ? attachments : []
-    if ((!trimmed && files.length === 0) || disabled || submitting) {
-      return
-    }
-    setSubmitting(true)
-    const cleaned: Record<string, unknown> = {}
-    for (const [k, v] of Object.entries(args)) {
-      if (v !== undefined && v !== ``) cleaned[k] = v
-    }
-    void onSubmit(trimmed, cleaned, files, selectedSandboxProfile)
-      .then((ok) => {
-        if (ok) clearAttachments()
-      })
-      .catch(() => undefined)
-      .finally(() => {
-        setSubmitting(false)
-      })
-  }, [
-    args,
-    attachments,
-    imageAttachmentsEnabled,
-    clearAttachments,
-    disabled,
-    onSubmit,
-    selectedSandboxProfile,
-    submitting,
-    value,
-  ])
+  const submit = useCallback(
+    (payload?: ComposerInputPayload) => {
+      const files = imageAttachmentsEnabled ? attachments : []
+      const nextPayload =
+        payload ?? serializeComposerInput(value, slashCommands)
+      const trimmed = nextPayload.source.trim()
+      if ((!trimmed && files.length === 0) || disabled || submitting) return
+      setSubmitting(true)
+      const cleaned: Record<string, unknown> = {}
+      for (const [k, v] of Object.entries(args)) {
+        if (v !== undefined && v !== ``) cleaned[k] = v
+      }
+      void onSubmit(
+        files.length > 0 ? trimmed : nextPayload,
+        cleaned,
+        files,
+        selectedSandboxProfile
+      )
+        .then((ok) => {
+          if (ok) {
+            clearAttachments()
+            setValue(``)
+          }
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          setSubmitting(false)
+        })
+    },
+    [
+      args,
+      attachments,
+      imageAttachmentsEnabled,
+      clearAttachments,
+      disabled,
+      onSubmit,
+      selectedSandboxProfile,
+      slashCommands,
+      submitting,
+      value,
+    ]
+  )
 
   const attachmentCount = imageAttachmentsEnabled ? attachments.length : 0
   const isActive = Boolean(
@@ -984,6 +1022,7 @@ function DefaultAgentComposer({
         ]
           .filter(Boolean)
           .join(` `)}
+        onPaste={handlePaste}
         {...dropZoneProps}
       >
         {imageAttachmentsEnabled && (
@@ -992,22 +1031,14 @@ function DefaultAgentComposer({
             onRemove={removeAttachment}
           />
         )}
-        <textarea
-          ref={textareaRef}
-          autoFocus
+        <ComposerEditor
           value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onPaste={handlePaste}
-          onKeyDown={(e) => {
-            if (e.key === `Enter` && !e.shiftKey) {
-              e.preventDefault()
-              submit()
-            }
-          }}
+          onChange={setValue}
+          onSubmit={submit}
+          slashCommands={slashCommands}
           placeholder={placeholder}
           disabled={disabled || submitting}
-          rows={1}
-          className={styles.composerTextarea}
+          className={styles.newSessionComposerEditor}
         />
         <div className={styles.composerFooter}>
           <div className={styles.composerControls}>
@@ -1055,7 +1086,7 @@ function DefaultAgentComposer({
             <button
               type="button"
               aria-label={`Start ${agent.name} session`}
-              onClick={submit}
+              onClick={() => submit()}
               disabled={!isActive}
               className={[
                 styles.composerSend,

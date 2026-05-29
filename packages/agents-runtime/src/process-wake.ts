@@ -1264,6 +1264,7 @@ export async function processWake(
         parentUrl: string,
         opts?: {
           initialMessage?: unknown
+          initialMessageType?: string
           wake?: Wake
           tags?: Record<string, string>
           sandbox?: SpawnSandboxOption
@@ -1322,6 +1323,7 @@ export async function processWake(
           args: spawnArgs,
           parentUrl,
           initialMessage: opts?.initialMessage,
+          initialMessageType: opts?.initialMessageType,
           tags: opts?.tags,
           sandbox,
           wake: wakeOpt,
@@ -1741,6 +1743,7 @@ export async function processWake(
       spawnArgs?: Record<string, unknown>,
       opts?: {
         initialMessage?: unknown
+        initialMessageType?: string
         wake?: Wake
         tags?: Record<string, string>
         observe?: boolean
@@ -2024,6 +2027,7 @@ export async function processWake(
         state: setupCtx.state,
         events: currentWakeEvents,
         actions: setupCtx.actions,
+        staticSlashCommands: entry.definition.slashCommands,
         electricTools,
         // Non-null at this point: the sandbox was acquired earlier in
         // this try block (after entityArgs); TS narrowing doesn't survive

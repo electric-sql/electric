@@ -55,6 +55,7 @@ import {
   formatAbsoluteDateTimeVerbose,
   formatChatTimestamp,
 } from '../lib/formatTime'
+import { readTextPayload } from '../lib/sendMessage'
 import styles from './EntityTimeline.module.css'
 import type {
   EntityTimelineSection,
@@ -75,11 +76,7 @@ function renderRowKey(row: RenderTimelineRow): string {
 }
 
 function readInboxText(payload: unknown): string {
-  if (payload && typeof payload === `object`) {
-    const text = (payload as { text?: unknown }).text
-    if (typeof text === `string`) return text
-  }
-  return typeof payload === `string` ? payload : ``
+  return readTextPayload(payload)
 }
 
 function stringifySearchPayload(value: unknown): string {

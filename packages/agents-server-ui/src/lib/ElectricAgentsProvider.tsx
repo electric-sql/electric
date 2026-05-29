@@ -83,6 +83,25 @@ const entityTypeSchema = z.object({
   creation_schema: z.unknown().nullable(),
   inbox_schemas: z.record(z.unknown()).nullable(),
   state_schemas: z.record(z.unknown()).nullable(),
+  slash_commands: z
+    .array(
+      z.object({
+        name: z.string(),
+        description: z.string().optional(),
+        arguments: z
+          .array(
+            z.object({
+              name: z.string(),
+              type: z.enum([`string`, `number`, `boolean`]),
+              required: z.boolean().optional(),
+              description: z.string().optional(),
+            })
+          )
+          .optional(),
+      })
+    )
+    .nullable()
+    .optional(),
   serve_endpoint: z.string().nullable(),
   created_at: z.string(),
   updated_at: z.string(),
@@ -312,6 +331,7 @@ interface SpawnInput {
   tags?: Record<string, string>
   parent?: string
   initialMessage?: unknown
+  initialMessageType?: string
   dispatch_policy?: RunnerDispatchPolicy
   sandbox?: { profile: string; key?: string }
 }
@@ -420,6 +440,7 @@ function createSpawnAction(
       tags,
       parent,
       initialMessage,
+      initialMessageType,
       dispatch_policy,
       sandbox,
     }) => {
@@ -428,6 +449,7 @@ function createSpawnAction(
       if (tags) body.tags = tags
       if (parent) body.parent = parent
       if (initialMessage) body.initialMessage = initialMessage
+      if (initialMessageType) body.initialMessageType = initialMessageType
       if (dispatch_policy) body.dispatch_policy = dispatch_policy
       if (sandbox) body.sandbox = sandbox
 
