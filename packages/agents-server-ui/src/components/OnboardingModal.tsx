@@ -14,6 +14,7 @@ import {
   Plug,
   Server,
   Sparkles,
+  Terminal,
 } from 'lucide-react'
 import {
   codexEnableSource,
@@ -23,8 +24,10 @@ import {
   loadApiKeysStatus,
   loadCloudAuthState,
   loadDesktopState,
+  installCli,
   loadLaunchAtLoginStatus,
   loadOnboardingState,
+  loadCliStatus,
   onCloudAuthStateChanged,
   prepareCloudAgentServerConnection,
   restartLocalRuntimes,
@@ -37,6 +40,7 @@ import {
   type ConnectServerOptions,
   type CodexAuthSource,
   type CodexStatus,
+  type ElectricCliStatus,
   type LaunchAtLoginStatus,
 } from '../lib/server-connection'
 import {
@@ -138,6 +142,7 @@ export function OnboardingModal(): React.ReactElement | null {
   const [keysStatus, setKeysStatus] = useState<ApiKeysStatus | null>(null)
   const [launchAtLoginStatus, setLaunchAtLoginStatus] =
     useState<LaunchAtLoginStatus | null>(null)
+  const [cliStatus, setCliStatus] = useState<ElectricCliStatus | null>(null)
   const [launchAtLoginEnabled, setLaunchAtLoginEnabled] = useState(false)
   const [bootstrapped, setBootstrapped] = useState(false)
   const configAvailable = launchAtLoginStatus?.supported === true
@@ -154,16 +159,18 @@ export function OnboardingModal(): React.ReactElement | null {
     let cancelled = false
 
     void (async () => {
-      const [onboarding, cloud, keys, launchAtLogin] = await Promise.all([
+      const [onboarding, cloud, keys, launchAtLogin, cli] = await Promise.all([
         loadOnboardingState(),
         loadCloudAuthState(),
         loadApiKeysStatus(),
         loadLaunchAtLoginStatus(),
+        loadCliStatus(),
       ])
       if (cancelled) return
       setCloudState(cloud)
       setKeysStatus(keys)
       setLaunchAtLoginStatus(launchAtLogin)
+      setCliStatus(cli)
       setLaunchAtLoginEnabled(launchAtLogin?.enabled ?? false)
       setBootstrapped(true)
 
@@ -267,6 +274,8 @@ export function OnboardingModal(): React.ReactElement | null {
             <ConfigStep
               launchAtLoginEnabled={launchAtLoginEnabled}
               onLaunchAtLoginEnabledChange={setLaunchAtLoginEnabled}
+              cliStatus={cliStatus}
+              onCliStatusChange={setCliStatus}
               onBack={() => setStep(`keys`)}
               onContinue={() => setStep(`server`)}
             />
@@ -291,14 +300,48 @@ export function OnboardingModal(): React.ReactElement | null {
 function ConfigStep({
   launchAtLoginEnabled,
   onLaunchAtLoginEnabledChange,
+  cliStatus,
+  onCliStatusChange,
   onBack,
   onContinue,
 }: {
   launchAtLoginEnabled: boolean
   onLaunchAtLoginEnabledChange: (enabled: boolean) => void
+  cliStatus: ElectricCliStatus | null
+  onCliStatusChange: (status: ElectricCliStatus | null) => void
   onBack: () => void
   onContinue: () => void
 }): React.ReactElement {
+  const [cliBusy, setCliBusy] = useState(false)
+  const [cliError, setCliError] = useState<string | null>(null)
+  const installCommand = async () => {
+    setCliBusy(true)
+    setCliError(null)
+    try {
+      onCliStatusChange(await installCli())
+    } catch (error) {
+      setCliError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setCliBusy(false)
+    }
+  }
+  const cliInstalled =
+    cliStatus?.kind === `managed` ||
+    cliStatus?.kind === `manual` ||
+    cliStatus?.kind === `shadowed`
+  const cliDescription =
+    cliError ??
+    cliStatus?.error ??
+    (cliStatus?.kind === `manual`
+      ? `Found a self-managed electric command at ${cliStatus.path}.`
+      : cliStatus?.kind === `managed`
+        ? `The electric command is installed and managed by Electric Agents Desktop.`
+        : cliStatus?.kind === `shadowed`
+          ? `A desktop-managed command exists, but another electric command appears first on PATH.`
+          : cliStatus && !cliStatus.installDirOnPath
+            ? `${cliStatus.installDir} is not on PATH.`
+            : `Adds the electric command to your terminal using the CLI bundled with this app.`)
+
   return (
     <>
       <StepHeader
@@ -323,6 +366,43 @@ function ConfigStep({
               onCheckedChange={onLaunchAtLoginEnabledChange}
               ariaLabel="Open Electric Agents at login"
             />
+          </span>
+        </SectionRow>
+        <SectionRow>
+          <span className={styles.iconCircle}>
+            <Icon icon={Terminal} size={2} />
+          </span>
+          <div className={styles.rowText}>
+            <span className={styles.rowTitle}>Electric CLI</span>
+            <Text size={1} tone={cliError ? `danger` : `muted`}>
+              {cliDescription}
+            </Text>
+          </div>
+          <span className={styles.rowAside}>
+            <Button
+              type="button"
+              variant="soft"
+              tone="neutral"
+              size={2}
+              disabled={
+                cliBusy ||
+                !cliStatus ||
+                cliStatus.kind === `manual` ||
+                cliStatus.kind === `managed` ||
+                cliStatus.kind === `shadowed`
+              }
+              onClick={() => {
+                void installCommand()
+              }}
+            >
+              {cliBusy
+                ? `Installing…`
+                : cliInstalled
+                  ? `Installed`
+                  : cliStatus?.kind === `broken`
+                    ? `Repair`
+                    : `Install command`}
+            </Button>
           </span>
         </SectionRow>
       </Section>

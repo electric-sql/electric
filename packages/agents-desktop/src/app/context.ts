@@ -4,6 +4,7 @@ import {
   type CloudAgentServersState,
 } from '../cloud/cloud-agent-servers'
 import { CloudAuth, type CloudAuthState } from '../cloud/cloud-auth'
+import { createCliController, type CliController } from '../cli/controller'
 import { SecretStore } from '../services/secret-store'
 import { captureEnvApiKeys, EMPTY_API_KEYS } from '../credentials/api-keys'
 import { DEFAULT_SETTINGS } from '../settings/store'
@@ -40,10 +41,12 @@ export type DesktopAppContext = {
     secretStore: SecretStore | null
     cloudAuth: CloudAuth | null
     cloudAgentServers: CloudAgentServers | null
+    cli: CliController | null
   }
   getSecretStore: () => SecretStore
   getCloudAuth: () => CloudAuth
   getCloudAgentServers: () => CloudAgentServers
+  getCli: () => CliController
 }
 
 export function createDesktopAppContext(
@@ -80,6 +83,7 @@ export function createDesktopAppContext(
       secretStore: null,
       cloudAuth: null,
       cloudAgentServers: null,
+      cli: null,
     },
     getSecretStore() {
       if (!ctx.services.secretStore) {
@@ -112,6 +116,10 @@ export function createDesktopAppContext(
         )
       }
       return ctx.services.cloudAgentServers
+    },
+    getCli() {
+      ctx.services.cli ??= createCliController()
+      return ctx.services.cli
     },
   }
   return ctx

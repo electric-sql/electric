@@ -124,6 +124,25 @@ export type LaunchAtLoginStatus = {
   reason: string | null
 }
 
+export type ElectricCliInstallKind =
+  | `not-installed`
+  | `managed`
+  | `manual`
+  | `shadowed`
+  | `broken`
+
+export type ElectricCliStatus = {
+  kind: ElectricCliInstallKind
+  command: `electric`
+  path: string | null
+  version: string | null
+  bundledVersion: string
+  managedPath: string | null
+  installDir: string
+  installDirOnPath: boolean
+  error: string | null
+}
+
 export type RuntimeEntry = {
   serverId: string
   desiredState: ServerDesiredState

@@ -12,6 +12,9 @@ export const RENDERER_INDEX = app.isPackaged
 export const AGENT_SKILLS_DIR = app.isPackaged
   ? path.join(RESOURCE_DIR, `agent-skills`)
   : path.resolve(PACKAGE_DIR, `../agents/skills`)
+export const ELECTRIC_CLI_ENTRY_PATH = app.isPackaged
+  ? path.join(RESOURCE_DIR, `cli`, `electric-ax`, `dist`, `index.js`)
+  : path.resolve(PACKAGE_DIR, `../electric-ax/dist-desktop/index.js`)
 export const PRELOAD_PATH = path.resolve(MODULE_DIR, `preload.cjs`)
 export const TRAY_ICON_PATH = path.join(
   RESOURCE_DIR,
