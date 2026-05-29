@@ -102,6 +102,8 @@ export interface OnboardingState {
   signedIn: boolean
 }
 
+export type PreventAppSuspensionPreference = boolean
+
 /**
  * Commands fired from the Electron application menu / tray over the
  * `desktop:command` IPC channel. The renderer's command handler (see
@@ -241,6 +243,8 @@ declare global {
       saveApiKeys?: (keys: ApiKeys) => Promise<void>
       getOnboardingState?: () => Promise<OnboardingState>
       setOnboardingDismissed?: (dismissed: boolean) => Promise<void>
+      getPreventAppSuspension?: () => Promise<PreventAppSuspensionPreference>
+      setPreventAppSuspension?: (enabled: boolean) => Promise<void>
       getWorkingDirectory?: () => Promise<string | null>
       chooseWorkingDirectory?: () => Promise<string | null>
       /**
@@ -443,6 +447,16 @@ export async function setOnboardingDismissed(
   dismissed: boolean
 ): Promise<void> {
   await window.electronAPI?.setOnboardingDismissed?.(dismissed)
+}
+
+export async function loadPreventAppSuspensionPreference(): Promise<PreventAppSuspensionPreference | null> {
+  return (await window.electronAPI?.getPreventAppSuspension?.()) ?? null
+}
+
+export async function savePreventAppSuspensionPreference(
+  enabled: boolean
+): Promise<void> {
+  await window.electronAPI?.setPreventAppSuspension?.(enabled)
 }
 
 export async function loadCloudAuthState(): Promise<CloudAuthState | null> {

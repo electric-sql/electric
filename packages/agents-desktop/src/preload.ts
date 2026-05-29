@@ -109,6 +109,8 @@ type OnboardingState = {
   signedIn: boolean
 }
 
+type PreventAppSuspensionPreference = boolean
+
 // Mirror of `DesktopCommand` in main.ts. Kept as a string union here so
 // the preload bundle has zero runtime cost; main is the source of
 // truth for which commands actually fire.
@@ -290,6 +292,10 @@ const api = {
     ipcRenderer.invoke(`desktop:get-onboarding-state`),
   setOnboardingDismissed: (dismissed: boolean): Promise<void> =>
     ipcRenderer.invoke(`desktop:set-onboarding-dismissed`, dismissed),
+  getPreventAppSuspension: (): Promise<PreventAppSuspensionPreference> =>
+    ipcRenderer.invoke(`desktop:get-prevent-app-suspension`),
+  setPreventAppSuspension: (enabled: boolean): Promise<void> =>
+    ipcRenderer.invoke(`desktop:set-prevent-app-suspension`, enabled),
   getWorkingDirectory: (): Promise<string | null> =>
     ipcRenderer.invoke(`desktop:get-working-directory`),
   chooseWorkingDirectory: (): Promise<string | null> =>

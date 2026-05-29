@@ -24,6 +24,7 @@ import {
   ipcMain,
   nativeImage,
   nativeTheme,
+  powerSaveBlocker,
   session,
   shell,
 } from 'electron'
@@ -127,6 +128,7 @@ type DesktopSettings = {
   defaultServerId: string | null
   workingDirectory: string | null
   apiKeysRef: string
+  preventAppSuspension: boolean
   /**
    * Onboarding wizard ("Sign in to Electric Cloud" → API keys) gets
    * surfaced on launch until the user finishes it or explicitly
@@ -361,6 +363,7 @@ const DEFAULT_SETTINGS: DesktopSettings = {
   defaultServerId: null,
   workingDirectory: null,
   apiKeysRef: GLOBAL_API_KEYS_REF,
+  preventAppSuspension: true,
 }
 
 /**
@@ -397,6 +400,7 @@ let state: DesktopState = {
 let tray: Tray | null = null
 let aboutWindow: BrowserWindow | null = null
 let isQuitting = false
+let powerSaveBlockerId: number | null = null
 const windows = new Set<BrowserWindow>()
 const windowSelections = new Map<number, string | null>()
 const runtimeEntries = new Map<string, RuntimeEntry>()
@@ -1023,6 +1027,7 @@ async function loadSettings(): Promise<void> {
           ? parsed.workingDirectory
           : null,
       apiKeysRef,
+      preventAppSuspension: parsed.preventAppSuspension !== false,
       onboardingDismissed: parsed.onboardingDismissed === true,
       mcp: normalizeMcp(parsed.mcp),
       pullWakeRunnerId,
@@ -1039,6 +1044,7 @@ async function loadSettings(): Promise<void> {
       parsed.version !== SETTINGS_VERSION ||
       parsed.activeServer !== undefined ||
       parsed.apiKeys !== undefined ||
+      parsed.preventAppSuspension === undefined ||
       servers.some((server) => !(`id` in (server as object)))
   } catch (err) {
     console.error(`[agents-desktop] Failed to load settings:`, err)
@@ -1060,6 +1066,7 @@ async function loadSettings(): Promise<void> {
   }
 
   state = desktopStateForWindow(null)
+  refreshPowerSaveBlocker()
   await applyInitialServerFromEnv()
   applyApiKeys()
   if (shouldSave) {
@@ -1226,6 +1233,42 @@ function sendCommand(command: DesktopCommand): void {
   const target =
     focused ?? [...windows].find((win) => !win.isDestroyed()) ?? null
   target?.webContents.send(`desktop:command`, command)
+}
+
+function shouldPreventAppSuspension(): boolean {
+  if (!settings.preventAppSuspension) return false
+  return [...runtimeEntries.values()].some(
+    (entry) =>
+      entry.desiredState === `connected` &&
+      ([`starting`, `running`] as LocalRuntimeStatus[]).includes(
+        entry.localRuntimeStatus
+      )
+  )
+}
+
+function refreshPowerSaveBlocker(): void {
+  const shouldBlock = shouldPreventAppSuspension()
+  if (shouldBlock) {
+    if (
+      powerSaveBlockerId === null ||
+      !powerSaveBlocker.isStarted(powerSaveBlockerId)
+    ) {
+      powerSaveBlockerId = powerSaveBlocker.start(`prevent-app-suspension`)
+      console.info(
+        `[agents-desktop] Enabled power save blocker to keep the desktop runtime available while connected.`
+      )
+    }
+    return
+  }
+
+  if (
+    powerSaveBlockerId !== null &&
+    powerSaveBlocker.isStarted(powerSaveBlockerId)
+  ) {
+    powerSaveBlocker.stop(powerSaveBlockerId)
+    console.info(`[agents-desktop] Disabled power save blocker.`)
+  }
+  powerSaveBlockerId = null
 }
 
 function createTrayIcon(): Electron.NativeImage {
@@ -1412,6 +1455,7 @@ function setState(patch: Partial<DesktopState>): void {
 
 function refreshDesktopState(): void {
   state = desktopStateForWindow(null)
+  refreshPowerSaveBlocker()
   updateTray()
   broadcastState()
 }
@@ -2113,6 +2157,12 @@ async function setOnboardingDismissed(dismissed: boolean): Promise<void> {
   await saveSettings()
 }
 
+async function setPreventAppSuspension(enabled: boolean): Promise<void> {
+  settings.preventAppSuspension = enabled
+  await saveSettings()
+  refreshPowerSaveBlocker()
+}
+
 async function setSelectedServerForWindow(
   win: BrowserWindow | null,
   serverId: string | null
@@ -2144,6 +2194,13 @@ async function quitApp(): Promise<void> {
   if (isQuitting) return
   isQuitting = true
   stopDiscoveryLoop()
+  if (
+    powerSaveBlockerId !== null &&
+    powerSaveBlocker.isStarted(powerSaveBlockerId)
+  ) {
+    powerSaveBlocker.stop(powerSaveBlockerId)
+    powerSaveBlockerId = null
+  }
   await stopExistingRuntime().catch(() => {})
   app.quit()
 }
@@ -2351,6 +2408,16 @@ function registerIpcHandlers(): void {
     `desktop:set-onboarding-dismissed`,
     async (_event, dismissed: boolean) => {
       await setOnboardingDismissed(Boolean(dismissed))
+    }
+  )
+  ipcMain.handle(
+    `desktop:get-prevent-app-suspension`,
+    () => settings.preventAppSuspension
+  )
+  ipcMain.handle(
+    `desktop:set-prevent-app-suspension`,
+    async (_event, enabled: boolean) => {
+      await setPreventAppSuspension(Boolean(enabled))
     }
   )
   ipcMain.handle(
