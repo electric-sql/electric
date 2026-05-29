@@ -32,6 +32,7 @@
     "better-sqlite3": "^12.9.0",
     "dockerode": "^5.0.0",
     "e2b": ">=2.0.0",
+    "electron-updater": "^6.3.9",
     "fix-path": "^4.0.0",
     "jsdom": "^28.1.0",
     "pino": "^10.3.1",
