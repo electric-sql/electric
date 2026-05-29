@@ -956,8 +956,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
         if (!newShapeHandle) {
           console.warn(
             `[Electric] Received 409 response without a shape handle header. ` +
-              `This likely indicates a proxy or CDN stripping required headers.`,
-            new Error(`stack trace`)
+              `This likely indicates a proxy or CDN stripping required headers.`
           )
         }
         const nextRequestShapeCacheBuster = createCacheBuster()
@@ -2066,8 +2065,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
         } else {
           console.warn(
             `[Electric] Received 409 response without a shape handle header. ` +
-              `This likely indicates a proxy or CDN stripping required headers.`,
-            new Error(`stack trace`)
+              `This likely indicates a proxy or CDN stripping required headers.`
           )
         }
         const nextCacheBuster = createCacheBuster()
