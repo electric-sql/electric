@@ -193,6 +193,8 @@ function domOptions(
   embedSize: { width: number; height: number },
   backgroundColor: string
 ) {
+  const backgroundStyle = [styles.domEmbedWeb, embedSize, { backgroundColor }]
+
   return {
     useExpoDOMWebView: false,
     matchContents: false,
@@ -201,8 +203,13 @@ function domOptions(
     automaticallyAdjustContentInsets: false,
     automaticallyAdjustsScrollIndicatorInsets: false,
     contentInsetAdjustmentBehavior: `never`,
-    style: [styles.domEmbedWeb, embedSize, { backgroundColor }],
-    containerStyle: [styles.domEmbedWeb, embedSize, { backgroundColor }],
+    // The native WebView briefly paints its own default background while the
+    // DOM bundle boots. Keep every layer themed so route transitions to a
+    // stream don't flash white, especially in dark mode.
+    backgroundColor,
+    style: backgroundStyle,
+    containerStyle: backgroundStyle,
+    webViewStyle: backgroundStyle,
   }
 }
 
