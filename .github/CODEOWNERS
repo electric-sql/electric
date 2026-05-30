@@ -1,0 +1,3 @@
+# GitHub Actions workflows and composite actions are privileged CI/CD code.
+# Require an explicit review from a repository owner before they change.
+.github/ @kylemathews

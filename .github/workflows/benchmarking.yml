@@ -14,7 +14,7 @@ jobs:
       pull-requests: write
       contents: read
     name: Build image and run benchmarks on PR comment
-    if: ${{ github.event.issue.pull_request && (github.event.comment.author_association == 'MEMBER' || github.event.comment.author_association == 'OWNER' || github.event.comment.author_association == 'CONTRIBUTOR') && (startsWith(github.event.comment.body, 'benchmark this') || startsWith(github.event.comment.body, 'Benchmark this'))}}
+    if: ${{ github.event.issue.pull_request && (github.event.comment.author_association == 'MEMBER' || github.event.comment.author_association == 'OWNER') && (startsWith(github.event.comment.body, 'benchmark this') || startsWith(github.event.comment.body, 'Benchmark this'))}}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/github-script@v7
@@ -31,6 +31,13 @@ jobs:
             const result = await github.rest.pulls.get(request)
             core.info(`GOT ${JSON.stringify(result)}`)
             return result.data
+
+      - name: Ensure PR branch is trusted
+        run: |
+          if [ '${{ fromJSON(steps.get-pr.outputs.result).head.repo.full_name }}' != '${{ github.repository }}' ]; then
+            echo 'Refusing to benchmark a fork PR with privileged credentials.' >&2
+            exit 1
+          fi
 
       - uses: docker/setup-buildx-action@v3
       - uses: actions/checkout@v4
@@ -113,17 +120,7 @@ jobs:
                 },
                 "metadata": {
                   "pr": ${{ github.event.issue.number }},
-                  "short_version": "pr-${{ github.event.issue.number }}-${{ env.SHORT_SHA }}",
-                  "callback": {
-                    "method": "POST",
-                    "headers": [
-                      ["Accept","application/vnd.github+json"],
-                      ["Authorization","Bearer ${{ secrets.CROSSREPO_PAT }}"],
-                      ["X-GitHub-Api-Version","2022-11-28"]
-                    ],
-                    "url":"https://api.github.com/repos/electric-sql/electric/actions/workflows/leave_benchmark_comment.yml/dispatches",
-                    "body": "{\"ref\":\"main\",\"inputs\":{\"pr\":\"${{ github.event.issue.number }}\",\"benchmark_info\":#{benchmark_info},\"original_commit\":\"${{ env.SHORT_SHA }}\"}}"
-                  }
+                  "short_version": "pr-${{ github.event.issue.number }}-${{ env.SHORT_SHA }}"
                 }
               }
             }'
@@ -149,17 +146,7 @@ jobs:
                 },
                 "metadata": {
                   "pr": ${{ github.event.issue.number }},
-                  "short_version": "pr-${{ github.event.issue.number }}-${{ env.SHORT_SHA }}",
-                  "callback": {
-                    "method": "POST",
-                    "headers": [
-                      ["Accept","application/vnd.github+json"],
-                      ["Authorization","Bearer ${{ secrets.CROSSREPO_PAT }}"],
-                      ["X-GitHub-Api-Version","2022-11-28"]
-                    ],
-                    "url":"https://api.github.com/repos/electric-sql/electric/actions/workflows/leave_benchmark_comment.yml/dispatches",
-                    "body": "{\"ref\":\"main\",\"inputs\":{\"pr\":\"${{ github.event.issue.number }}\",\"benchmark_info\":#{benchmark_info},\"original_commit\":\"${{ env.SHORT_SHA }}\"}}"
-                  }
+                  "short_version": "pr-${{ github.event.issue.number }}-${{ env.SHORT_SHA }}"
                 }
               }
             }'
@@ -184,17 +171,7 @@ jobs:
                 },
                 "metadata": {
                   "pr": ${{ github.event.issue.number }},
-                  "short_version": "pr-${{ github.event.issue.number }}-${{ env.SHORT_SHA }}",
-                  "callback": {
-                    "method": "POST",
-                    "headers": [
-                      ["Accept","application/vnd.github+json"],
-                      ["Authorization","Bearer ${{ secrets.CROSSREPO_PAT }}"],
-                      ["X-GitHub-Api-Version","2022-11-28"]
-                    ],
-                    "url":"https://api.github.com/repos/electric-sql/electric/actions/workflows/leave_benchmark_comment.yml/dispatches",
-                    "body": "{\"ref\":\"main\",\"inputs\":{\"pr\":\"${{ github.event.issue.number }}\",\"benchmark_info\":#{benchmark_info},\"original_commit\":\"${{ env.SHORT_SHA }}\"}}"
-                  }
+                  "short_version": "pr-${{ github.event.issue.number }}-${{ env.SHORT_SHA }}"
                 }
               }
             }'
@@ -218,17 +195,7 @@ jobs:
                 },
                 "metadata": {
                   "pr": ${{ github.event.issue.number }},
-                  "short_version": "pr-${{ github.event.issue.number }}-${{ env.SHORT_SHA }}",
-                  "callback": {
-                    "method": "POST",
-                    "headers": [
-                      ["Accept","application/vnd.github+json"],
-                      ["Authorization","Bearer ${{ secrets.CROSSREPO_PAT }}"],
-                      ["X-GitHub-Api-Version","2022-11-28"]
-                    ],
-                    "url":"https://api.github.com/repos/electric-sql/electric/actions/workflows/leave_benchmark_comment.yml/dispatches",
-                    "body": "{\"ref\":\"main\",\"inputs\":{\"pr\":\"${{ github.event.issue.number }}\",\"benchmark_info\":#{benchmark_info},\"original_commit\":\"${{ env.SHORT_SHA }}\"}}"
-                  }
+                  "short_version": "pr-${{ github.event.issue.number }}-${{ env.SHORT_SHA }}"
                 }
               }
             }'
@@ -253,17 +220,7 @@ jobs:
                 },
                 "metadata": {
                   "pr": ${{ github.event.issue.number }},
-                  "short_version": "pr-${{ github.event.issue.number }}-${{ env.SHORT_SHA }}",
-                  "callback": {
-                    "method": "POST",
-                    "headers": [
-                      ["Accept","application/vnd.github+json"],
-                      ["Authorization","Bearer ${{ secrets.CROSSREPO_PAT }}"],
-                      ["X-GitHub-Api-Version","2022-11-28"]
-                    ],
-                    "url":"https://api.github.com/repos/electric-sql/electric/actions/workflows/leave_benchmark_comment.yml/dispatches",
-                    "body": "{\"ref\":\"main\",\"inputs\":{\"pr\":\"${{ github.event.issue.number }}\",\"benchmark_info\":#{benchmark_info},\"original_commit\":\"${{ env.SHORT_SHA }}\"}}"
-                  }
+                  "short_version": "pr-${{ github.event.issue.number }}-${{ env.SHORT_SHA }}"
                 }
               }
             }'
