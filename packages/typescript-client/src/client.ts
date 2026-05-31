@@ -890,6 +890,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }
 
   async #requestShape(requestShapeCacheBuster?: string): Promise<void> {
+    if (this.options.signal?.aborted) {
+      this.#teardown()
+      return
+    }
+
     // ErrorState should never reach the request loop — re-throw so
     // #start's catch block can route it through onError properly.
     if (this.#syncState instanceof ErrorState) {

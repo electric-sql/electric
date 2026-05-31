@@ -545,6 +545,51 @@ describe(`ShapeStream`, () => {
     )
   })
 
+  it(`stops a subscribed request loop after the external signal aborts`, async () => {
+    let requestCount = 0
+    const fetchWrapper = async () => {
+      await resolveInMacrotask(undefined)
+      requestCount++
+      return new Response(
+        JSON.stringify([{ headers: { control: `up-to-date` }, offset: `0_0` }]),
+        {
+          status: 200,
+          headers: {
+            'content-type': `application/json`,
+            'electric-handle': `handle-1`,
+            'electric-offset': `0_0`,
+            'electric-cursor': `${requestCount}`,
+            'electric-schema': `{"id":{"type":"text"}}`,
+          },
+        }
+      )
+    }
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `foo` },
+      signal: aborter.signal,
+      fetchClient: fetchWrapper,
+      subscribe: true,
+    })
+
+    stream.subscribe(() => {})
+
+    await vi.waitFor(() => {
+      expect(requestCount).toBeGreaterThan(0)
+    })
+
+    aborter.abort()
+    await resolveInMacrotask(undefined)
+    await resolveInMacrotask(undefined)
+
+    const requestsAfterAbortSettled = requestCount
+    await resolveInMacrotask(undefined)
+    await resolveInMacrotask(undefined)
+
+    expect(requestCount).toBe(requestsAfterAbortSettled)
+  })
+
   it(`should start requesting only after first subscription`, async () => {
     const eventTarget = new EventTarget()
     const fetchWrapper = (): Promise<Response> => {
