@@ -79,6 +79,10 @@ type WakeChangeEntryValue = {
   collection: string
   kind: `insert` | `update` | `delete`
   key: string
+  from?: string
+  payload?: unknown
+  timestamp?: string
+  message_type?: string
 }
 type WakeFinishedChildEntryValue = {
   url: string
@@ -370,6 +374,10 @@ function createWakeChangeSchema(): Schema<WakeChangeEntryValue> {
     collection: z.string(),
     kind: z.enum([`insert`, `update`, `delete`]),
     key: z.string(),
+    from: z.string().optional(),
+    payload: z.unknown().optional(),
+    timestamp: z.string().optional(),
+    message_type: z.string().optional(),
   })
 }
 

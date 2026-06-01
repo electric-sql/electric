@@ -41,6 +41,10 @@ export interface WakeEvalResult {
       collection: string
       kind: `insert` | `update` | `delete`
       key: string
+      from?: string
+      payload?: unknown
+      timestamp?: string
+      message_type?: string
     }>
   }
   runFinishedStatus?: `completed` | `failed`
@@ -885,11 +889,7 @@ export class WakeRegistry {
     reg: WakeRegistration,
     event: Record<string, unknown>
   ): {
-    change: {
-      collection: string
-      kind: `insert` | `update` | `delete`
-      key: string
-    }
+    change: WakeEvalResult[`wakeMessage`][`changes`][number]
     runFinishedStatus?: `completed` | `failed`
   } | null {
     if (reg.condition === `runFinished`) {
@@ -935,12 +935,23 @@ export class WakeRegistry {
       return null
     }
 
-    return {
-      change: {
-        collection: eventType,
-        kind,
-        key: (event.key as string) || ``,
-      },
+    const change: WakeEvalResult[`wakeMessage`][`changes`][number] = {
+      collection: eventType,
+      kind,
+      key: (event.key as string) || ``,
     }
+
+    if (eventType === `inbox`) {
+      const value = event.value as Record<string, unknown> | undefined
+      if (typeof value?.from === `string`) change.from = value.from
+      if (`payload` in (value ?? {})) change.payload = value?.payload
+      if (typeof value?.timestamp === `string`)
+        change.timestamp = value.timestamp
+      if (typeof value?.message_type === `string`) {
+        change.message_type = value.message_type
+      }
+    }
+
+    return { change }
   }
 }

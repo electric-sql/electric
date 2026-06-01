@@ -258,8 +258,40 @@ function timelineRowLabel(row: RenderTimelineRow): string {
   return `Agent response`
 }
 
-function wakeReason(section: WakeSection): string {
+function firstSelfSendWakeChange(
+  section: WakeSection,
+  entityUrl?: string | null
+): WakeSection[`payload`][`changes`][number] | null {
+  if (!entityUrl || section.payload.source !== entityUrl) return null
+  return (
+    section.payload.changes.find((change) => change.collection === `inbox`) ??
+    null
+  )
+}
+
+function isSelfSendWake(
+  section: WakeSection,
+  entityUrl?: string | null
+): boolean {
+  return firstSelfSendWakeChange(section, entityUrl) !== null
+}
+
+function wakeSelfSendMessage(
+  section: WakeSection,
+  entityUrl?: string | null
+): string | null {
+  const change = firstSelfSendWakeChange(section, entityUrl)
+  if (!change) return null
+  const payload = change.payload
+  if (payload == null) return ``
+  return typeof payload === `string`
+    ? payload
+    : JSON.stringify(payload, null, 2)
+}
+
+function wakeReason(section: WakeSection, entityUrl?: string | null): string {
   const { payload } = section
+  if (isSelfSendWake(section, entityUrl)) return `sent to itself`
   if (payload.timeout) return `timeout`
   if (payload.finished_child) {
     return `child ${payload.finished_child.run_status}`
@@ -273,10 +305,13 @@ function wakeReason(section: WakeSection): string {
   return payload.source
 }
 
-function wakeSectionText(section: WakeSection): string {
+function wakeSectionText(
+  section: WakeSection,
+  entityUrl?: string | null
+): string {
   return [
     `woke`,
-    wakeReason(section),
+    wakeReason(section, entityUrl),
     section.payload.source,
     ...wakeDetails(section).map((detail) => `${detail.label} ${detail.value}`),
   ].join(` `)
@@ -284,12 +319,15 @@ function wakeSectionText(section: WakeSection): string {
 
 function WakeTimelineRow({
   section,
+  entityUrl,
 }: {
   section: WakeSection
+  entityUrl?: string | null
 }): React.ReactElement {
-  const reason = wakeReason(section)
-  const details = wakeDetails(section)
+  const reason = wakeReason(section, entityUrl)
+  const details = wakeDetails(section, entityUrl)
   const childOutput = wakeChildOutput(section)
+  const selfSendMessage = wakeSelfSendMessage(section, entityUrl)
   return (
     <div className={styles.manifestRow}>
       <InlineEventCard
@@ -307,6 +345,9 @@ function WakeTimelineRow({
             </div>
           ))}
         </div>
+        {selfSendMessage ? (
+          <pre className={styles.manifestJson}>{selfSendMessage}</pre>
+        ) : null}
         {childOutput ? (
           <pre className={styles.manifestJson}>{childOutput.value}</pre>
         ) : null}
@@ -364,14 +405,27 @@ function signalSummary(
 }
 
 function wakeDetails(
-  section: WakeSection
+  section: WakeSection,
+  entityUrl?: string | null
 ): Array<{ label: string; value: string }> {
   const { payload } = section
+  const selfSendChange = firstSelfSendWakeChange(section, entityUrl)
   const details = [
     { label: `Source`, value: payload.source },
-    { label: `Trigger`, value: wakeReason(section) },
+    { label: `Trigger`, value: wakeReason(section, entityUrl) },
     { label: `Time`, value: formatAbsoluteDateTimeVerbose(section.timestamp) },
   ]
+
+  if (selfSendChange) {
+    details.push({
+      label: `From`,
+      value: selfSendChange.from ?? payload.source,
+    })
+    const message = wakeSelfSendMessage(section, entityUrl)
+    if (message) {
+      details.push({ label: `Message`, value: message })
+    }
+  }
 
   if (payload.changes.length > 0) {
     details.push({
@@ -845,6 +899,7 @@ const TimelineRow = memo(function TimelineRow({
           payload: row.wake.payload,
           timestamp: Date.parse(row.wake.payload.timestamp),
         }}
+        entityUrl={entityUrl}
       />
     )
   }
