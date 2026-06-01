@@ -1694,10 +1694,11 @@ describe.for(fetchAndSse)(
         limit: 100,
       })
 
-      // Wait until shape reflects the snapshot
-      await vi.waitFor(() => {
-        expect(shape.currentRows.length).toBe(data.length)
-      })
+      // requestSnapshot must not resolve until subscriber callbacks for the
+      // injected snapshot batch have completed. Callers such as TanStack DB's
+      // on-demand loadSubset rely on this to make immediate reads after await
+      // consistent.
+      expect(shape.currentRows.length).toBe(data.length)
 
       // Compare keys in stream vs returned snapshot data
       const returnedKeys = new Set(data.map((m) => m.key))
