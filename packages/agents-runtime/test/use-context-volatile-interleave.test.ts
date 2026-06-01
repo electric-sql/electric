@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { assembleContext } from '../src/context-assembly'
-import {
-  defaultProjection,
-  materializeTimeline,
-} from '../src/timeline-context'
+import { defaultProjection, materializeTimeline } from '../src/timeline-context'
 import type {
   IncludesInboxMessage,
   IncludesRun,
@@ -48,9 +45,7 @@ describe(`volatile interleave`, () => {
       sourceBudget: 10_000,
       sources: {
         alpha: {
-          content: () => [
-            { role: `user` as const, content: `A1`, at: 9 },
-          ],
+          content: () => [{ role: `user` as const, content: `A1`, at: 9 }],
           max: 1_000,
           cache: `volatile`,
         },
@@ -63,9 +58,7 @@ describe(`volatile interleave`, () => {
           cache: `volatile`,
         },
         gamma: {
-          content: () => [
-            { role: `user` as const, content: `C1`, at: 1 },
-          ],
+          content: () => [{ role: `user` as const, content: `C1`, at: 1 }],
           max: 1_000,
           cache: `volatile`,
         },
