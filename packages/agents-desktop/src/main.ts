@@ -1,4 +1,5 @@
 import * as AppLifecycle from './app/lifecycle'
+import * as LoginItems from './app/login-items'
 import {
   createDesktopMainController,
   type DesktopMainController,
@@ -66,8 +67,10 @@ async function main(): Promise<void> {
     return
   }
 
-  app.on(`second-instance`, () => {
-    desktopController?.showOrCreateWindow()
+  app.on(`second-instance`, (_event, argv) => {
+    if (LoginItems.shouldOpenWindowForSecondInstance(argv)) {
+      desktopController?.showOrCreateWindow()
+    }
   })
 
   app.on(`window-all-closed`, () => {
@@ -98,6 +101,9 @@ async function main(): Promise<void> {
   }
   AppLifecycle.configureRuntimeEnvironment()
   await controller.loadSettings()
+  await controller.syncLaunchAtLoginSetting().catch((error) => {
+    console.warn(`[agents-desktop] Failed to sync login item settings:`, error)
+  })
   controller.registerIpcHandlers()
   await desktopContext.getCloudAuth().initialize()
   // Hydrate the per-tenant agents-token cache from `SecretStore`
@@ -120,7 +126,9 @@ async function main(): Promise<void> {
 
   controller.createTray()
   controller.buildApplicationMenu()
-  controller.createWindow()
+  if (!LoginItems.isBackgroundLaunch()) {
+    controller.createWindow()
+  }
   controller.connectConfiguredServers()
   controller.startDiscoveryLoop()
 }

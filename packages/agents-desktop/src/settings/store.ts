@@ -27,6 +27,7 @@ export const DEFAULT_SETTINGS: DesktopSettings = {
   defaultServerId: null,
   workingDirectory: null,
   apiKeysRef: GLOBAL_API_KEYS_REF,
+  launchAtLogin: false,
   codex: { enabled: false, source: null },
 }
 
@@ -155,6 +156,7 @@ export async function loadDesktopSettings(
           ? parsed.workingDirectory
           : null,
       apiKeysRef,
+      launchAtLogin: parsed.launchAtLogin === true,
       onboardingDismissed: parsed.onboardingDismissed === true,
       codex: normalizeCodexSettings(parsed.codex),
       mcp: normalizeMcp(parsed.mcp),

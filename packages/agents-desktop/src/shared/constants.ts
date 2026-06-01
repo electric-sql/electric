@@ -40,6 +40,7 @@ export const INITIAL_SERVER_URL =
   null
 export const DEV_SERVER_URL =
   process.env.ELECTRIC_DESKTOP_DEV_SERVER_URL ?? null
+export const BACKGROUND_LAUNCH_ARG = `--electric-background-launch`
 
 export const PULL_WAKE_RUNNER_ID =
   process.env.ELECTRIC_DESKTOP_PULL_WAKE_RUNNER_ID?.trim() || null
