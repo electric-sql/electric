@@ -18,9 +18,8 @@ export function registerPreferencesIpcHandlers(deps: PreferencesIpcDeps): void {
   ipcMain.handle(`desktop:set-launch-at-login`, (_event, enabled: boolean) =>
     deps.setLaunchAtLogin(Boolean(enabled))
   )
-  ipcMain.handle(
-    `desktop:get-prevent-app-suspension`,
-    () => deps.getPreventAppSuspension()
+  ipcMain.handle(`desktop:get-prevent-app-suspension`, () =>
+    deps.getPreventAppSuspension()
   )
   ipcMain.handle(
     `desktop:set-prevent-app-suspension`,
