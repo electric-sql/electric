@@ -1,6 +1,15 @@
 /* Shared popup card style for Popover / HoverCard / Menu / Select.
    Keep selectors generic so each wrapper can add only the bits it needs. */
 
+.positioner {
+  z-index: var(--ds-z-popover);
+  /* Popups are portaled to <body>, but in the desktop shell they can
+     visually overlap a pane header marked as a draggable titlebar region.
+     Mark the positioned overlay subtree as no-drag so Electron doesn't
+     let that underlying header swallow clicks on menu items. */
+  -webkit-app-region: no-drag;
+}
+
 .popup {
   background: var(--ds-surface-raised);
   color: var(--ds-text-1);

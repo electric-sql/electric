@@ -151,7 +151,10 @@ function Content({
     .join(` `)
   return (
     <BaseSelect.Portal>
-      <BaseSelect.Positioner sideOffset={6}>
+      <BaseSelect.Positioner
+        className={popoverStyles.positioner}
+        sideOffset={6}
+      >
         <BaseSelect.Popup className={cls} style={style}>
           <BaseSelect.List className={styles.list}>{children}</BaseSelect.List>
         </BaseSelect.Popup>
