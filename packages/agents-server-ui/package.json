@@ -15,8 +15,8 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",
-    "@durable-streams/client": "https://pkg.pr.new/@durable-streams/client@347",
-    "@durable-streams/state": "https://pkg.pr.new/@durable-streams/state@347",
+    "@durable-streams/client": "^0.2.6",
+    "@durable-streams/state": "^0.2.9",
     "@electric-ax/agents-runtime": "workspace:*",
     "@streamdown/math": "^1.0.2",
     "@tanstack/db": "^0.6.6",

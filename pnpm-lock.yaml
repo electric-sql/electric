@@ -1506,8 +1506,8 @@ importers:
   packages/agents:
     dependencies:
       '@durable-streams/state':
-        specifier: https://pkg.pr.new/@durable-streams/state@347
-        version: https://pkg.pr.new/@durable-streams/state@347(typescript@5.9.3)
+        specifier: ^0.2.9
+        version: 0.2.9(typescript@5.9.3)
       '@electric-ax/agents-mcp':
         specifier: workspace:*
         version: link:../agents-mcp
@@ -1759,11 +1759,11 @@ importers:
         specifier: ^0.78.0
         version: 0.78.0(zod@4.3.6)
       '@durable-streams/client':
-        specifier: https://pkg.pr.new/@durable-streams/client@347
-        version: https://pkg.pr.new/@durable-streams/client@347
+        specifier: ^0.2.6
+        version: 0.2.6
       '@durable-streams/state':
-        specifier: https://pkg.pr.new/@durable-streams/state@347
-        version: https://pkg.pr.new/@durable-streams/state@347(typescript@5.9.3)
+        specifier: ^0.2.9
+        version: 0.2.9(typescript@5.9.3)
       '@electric-ax/agents-mcp':
         specifier: workspace:*
         version: link:../agents-mcp
@@ -1823,8 +1823,8 @@ importers:
         version: 3.25.2(zod@4.3.6)
     devDependencies:
       '@durable-streams/server':
-        specifier: https://pkg.pr.new/@durable-streams/server@347
-        version: https://pkg.pr.new/@durable-streams/server@347(typescript@5.9.3)
+        specifier: ^0.3.5
+        version: 0.3.5(typescript@5.9.3)
       '@types/jsdom':
         specifier: ^27.0.0
         version: 27.0.0
@@ -1853,14 +1853,14 @@ importers:
         specifier: ^0.78.0
         version: 0.78.0(zod@4.4.3)
       '@durable-streams/client':
-        specifier: https://pkg.pr.new/@durable-streams/client@347
-        version: https://pkg.pr.new/@durable-streams/client@347
+        specifier: ^0.2.6
+        version: 0.2.6
       '@durable-streams/server':
-        specifier: https://pkg.pr.new/@durable-streams/server@347
-        version: https://pkg.pr.new/@durable-streams/server@347(typescript@5.8.3)
+        specifier: ^0.3.5
+        version: 0.3.5(typescript@5.8.3)
       '@durable-streams/state':
-        specifier: https://pkg.pr.new/@durable-streams/state@347
-        version: https://pkg.pr.new/@durable-streams/state@347(typescript@5.8.3)
+        specifier: ^0.2.9
+        version: 0.2.9(typescript@5.8.3)
       '@electric-ax/agents-runtime':
         specifier: workspace:*
         version: link:../agents-runtime
@@ -1947,8 +1947,8 @@ importers:
   packages/agents-server-conformance-tests:
     dependencies:
       '@durable-streams/client':
-        specifier: https://pkg.pr.new/@durable-streams/client@347
-        version: https://pkg.pr.new/@durable-streams/client@347
+        specifier: ^0.2.6
+        version: 0.2.6
       '@electric-sql/client':
         specifier: ^1.5.20
         version: link:../typescript-client
@@ -1978,11 +1978,11 @@ importers:
         specifier: ^1.4.1
         version: 1.4.1(@types/react@19.2.14)(date-fns@4.1.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       '@durable-streams/client':
-        specifier: https://pkg.pr.new/@durable-streams/client@347
-        version: https://pkg.pr.new/@durable-streams/client@347
+        specifier: ^0.2.6
+        version: 0.2.6
       '@durable-streams/state':
-        specifier: https://pkg.pr.new/@durable-streams/state@347
-        version: https://pkg.pr.new/@durable-streams/state@347(typescript@5.9.3)
+        specifier: ^0.2.9
+        version: 0.2.9(typescript@5.9.3)
       '@electric-ax/agents-runtime':
         specifier: workspace:*
         version: link:../agents-runtime
@@ -2066,11 +2066,11 @@ importers:
   packages/electric-ax:
     dependencies:
       '@durable-streams/client':
-        specifier: https://pkg.pr.new/@durable-streams/client@347
-        version: https://pkg.pr.new/@durable-streams/client@347
+        specifier: ^0.2.6
+        version: 0.2.6
       '@durable-streams/state':
-        specifier: https://pkg.pr.new/@durable-streams/state@347
-        version: https://pkg.pr.new/@durable-streams/state@347(typescript@5.8.3)
+        specifier: ^0.2.9
+        version: 0.2.9(typescript@5.8.3)
       '@electric-ax/agents':
         specifier: workspace:*
         version: link:../agents
@@ -4274,37 +4274,12 @@ packages:
     engines: {node: '>=18.0.0'}
     hasBin: true
 
-  '@durable-streams/client@https://pkg.pr.new/@durable-streams/client@347':
-    resolution: {tarball: https://pkg.pr.new/@durable-streams/client@347}
-    version: 0.2.5
-    engines: {node: '>=18.0.0'}
-    hasBin: true
-
-  '@durable-streams/client@https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@cf43ddd':
-    resolution: {tarball: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@cf43ddd}
-    version: 0.2.5
-    engines: {node: '>=18.0.0'}
-    hasBin: true
-
-  '@durable-streams/server@https://pkg.pr.new/@durable-streams/server@347':
-    resolution: {tarball: https://pkg.pr.new/@durable-streams/server@347}
-    version: 0.3.4
+  '@durable-streams/server@0.3.5':
+    resolution: {integrity: sha512-vqz2v9GE++4fHPFW7zYiqsuWJ31/BaV36qP+OEJCJjfyc3gFLoXBAnWEm/6+FADtaLvt/Zl6/bNWqiG/jrezkw==}
     engines: {node: '>=18.0.0'}
 
   '@durable-streams/state@0.2.9':
     resolution: {integrity: sha512-PuT0HeSyXPzFi65ip7zYxf7BIiJy2mxMGRnFa8EEO+q0m6KdCvrcLTkM85a3u7HO8SqOPnt/s99dZpYHYzVKgw==}
-    engines: {node: '>=18.0.0'}
-    hasBin: true
-
-  '@durable-streams/state@https://pkg.pr.new/@durable-streams/state@347':
-    resolution: {tarball: https://pkg.pr.new/@durable-streams/state@347}
-    version: 0.2.8
-    engines: {node: '>=18.0.0'}
-    hasBin: true
-
-  '@durable-streams/state@https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@cf43ddd':
-    resolution: {tarball: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@cf43ddd}
-    version: 0.2.8
     engines: {node: '>=18.0.0'}
     hasBin: true
 
@@ -24087,29 +24062,19 @@ snapshots:
       '@microsoft/fetch-event-source': 2.0.1(patch_hash=46f4e76dd960e002a542732bb4323817a24fce1673cb71e2f458fe09776fa188)
       fastq: 1.20.1
 
-  '@durable-streams/client@https://pkg.pr.new/@durable-streams/client@347':
+  '@durable-streams/server@0.3.5(typescript@5.8.3)':
     dependencies:
-      '@microsoft/fetch-event-source': 2.0.1(patch_hash=46f4e76dd960e002a542732bb4323817a24fce1673cb71e2f458fe09776fa188)
-      fastq: 1.20.1
-
-  '@durable-streams/client@https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@cf43ddd':
-    dependencies:
-      '@microsoft/fetch-event-source': 2.0.1(patch_hash=46f4e76dd960e002a542732bb4323817a24fce1673cb71e2f458fe09776fa188)
-      fastq: 1.20.1
-
-  '@durable-streams/server@https://pkg.pr.new/@durable-streams/server@347(typescript@5.8.3)':
-    dependencies:
-      '@durable-streams/client': https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@cf43ddd
-      '@durable-streams/state': https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@cf43ddd(typescript@5.8.3)
+      '@durable-streams/client': 0.2.6
+      '@durable-streams/state': 0.2.9(typescript@5.8.3)
       '@neophi/sieve-cache': 1.5.0
       lmdb: 3.5.4
     transitivePeerDependencies:
       - typescript
 
-  '@durable-streams/server@https://pkg.pr.new/@durable-streams/server@347(typescript@5.9.3)':
+  '@durable-streams/server@0.3.5(typescript@5.9.3)':
     dependencies:
-      '@durable-streams/client': https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@cf43ddd
-      '@durable-streams/state': https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@cf43ddd(typescript@5.9.3)
+      '@durable-streams/client': 0.2.6
+      '@durable-streams/state': 0.2.9(typescript@5.9.3)
       '@neophi/sieve-cache': 1.5.0
       lmdb: 3.5.4
     transitivePeerDependencies:
@@ -24123,33 +24088,9 @@ snapshots:
     transitivePeerDependencies:
       - typescript
 
-  '@durable-streams/state@https://pkg.pr.new/@durable-streams/state@347(typescript@5.8.3)':
+  '@durable-streams/state@0.2.9(typescript@5.9.3)':
     dependencies:
-      '@durable-streams/client': https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@cf43ddd
-      '@standard-schema/spec': 1.1.0
-      '@tanstack/db': 0.6.7(typescript@5.8.3)
-    transitivePeerDependencies:
-      - typescript
-
-  '@durable-streams/state@https://pkg.pr.new/@durable-streams/state@347(typescript@5.9.3)':
-    dependencies:
-      '@durable-streams/client': https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@cf43ddd
-      '@standard-schema/spec': 1.1.0
-      '@tanstack/db': 0.6.7(typescript@5.9.3)
-    transitivePeerDependencies:
-      - typescript
-
-  '@durable-streams/state@https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@cf43ddd(typescript@5.8.3)':
-    dependencies:
-      '@durable-streams/client': https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@cf43ddd
-      '@standard-schema/spec': 1.1.0
-      '@tanstack/db': 0.6.7(typescript@5.8.3)
-    transitivePeerDependencies:
-      - typescript
-
-  '@durable-streams/state@https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@cf43ddd(typescript@5.9.3)':
-    dependencies:
-      '@durable-streams/client': https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@cf43ddd
+      '@durable-streams/client': 0.2.6
       '@standard-schema/spec': 1.1.0
       '@tanstack/db': 0.6.7(typescript@5.9.3)
     transitivePeerDependencies:
