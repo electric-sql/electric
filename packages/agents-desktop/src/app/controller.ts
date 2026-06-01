@@ -193,6 +193,8 @@ export function createDesktopMainController(ctx: DesktopAppContext) {
       connectServer,
       disconnectServer,
       saveSettings,
+      preventAppSuspension: getPreventAppSuspension(),
+      setPreventAppSuspension,
       stopRuntimeEntry,
       restartRuntime,
       refreshDesktopState,
