@@ -1,6 +1,6 @@
 {
   "name": "@electric-ax/agents-server",
-  "version": "0.4.13",
+  "version": "0.4.14",
   "description": "Electric Agents entity runtime server",
   "author": "Durable Stream contributors",
   "bin": {
@@ -49,7 +49,7 @@
     "@durable-streams/server": "^0.3.5",
     "@durable-streams/state": "^0.2.9",
     "@electric-ax/agents-runtime": "workspace:*",
-    "@electric-sql/client": "^1.5.19",
+    "@electric-sql/client": "^1.5.20",
     "@mariozechner/pi-agent-core": "^0.70.2",
     "@opentelemetry/api": "^1.9.1",
     "@sinclair/typebox": "^0.34.48",

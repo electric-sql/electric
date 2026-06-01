@@ -1,5 +1,13 @@
 # @electric-ax/agents-server-ui
 
+## 0.4.14
+
+### Patch Changes
+
+- 7d029a9: Keep Electric Agents Desktop awake while the local runtime is active, with controls in Settings, onboarding, and the tray menu.
+- Updated dependencies [9e01e58]
+  - @electric-ax/agents-runtime@0.3.7
+
 ## 0.4.13
 
 ### Patch Changes
