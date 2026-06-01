@@ -10,8 +10,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@durable-streams/state": "npm:@electric-ax/durable-streams-state-beta@^0.3.0",
-    "@electric-ax/agents-runtime": "^0.0.4",
+    "@durable-streams/state": "^0.2.9",
+    "@electric-ax/agents-runtime": "workspace:*",
     "@mariozechner/pi-agent-core": "^0.57.1",
     "@radix-ui/react-icons": "^1.3.0",
     "@radix-ui/themes": "^3.3.0",
