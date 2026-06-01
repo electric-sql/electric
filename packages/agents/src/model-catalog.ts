@@ -27,6 +27,11 @@ export interface BuiltinModelCatalog {
   defaultChoice: BuiltinModelChoice
 }
 
+export interface BuiltinModelCatalogOptions {
+  allowMockFallback?: boolean
+  enabledModelValues?: ReadonlyArray<string> | null
+}
+
 export const REASONING_EFFORT_VALUES = [
   `auto`,
   `minimal`,
@@ -59,7 +64,9 @@ function modelValue(provider: BuiltinModelProvider, id: string): string {
   return `${provider}:${id}`
 }
 
-function providerLabel(provider: BuiltinModelProvider): string {
+export function builtinModelProviderLabel(
+  provider: BuiltinModelProvider
+): string {
   if (provider === `anthropic`) return `Anthropic`
   if (provider === `openai-codex`) return `OpenAI Codex`
   if (provider === `deepseek`) return `DeepSeek`
@@ -132,39 +139,72 @@ async function fetchAvailableModelIds(
   }
 }
 
+function knownModelsForProvider(provider: BuiltinModelProvider) {
+  return provider === MOONSHOT_PROVIDER
+    ? getMoonshotModels()
+    : getModels(
+        provider as Exclude<BuiltinModelProvider, typeof MOONSHOT_PROVIDER>
+      )
+}
+
+function choiceForKnownModel(
+  provider: BuiltinModelProvider,
+  model: ReturnType<typeof knownModelsForProvider>[number]
+): BuiltinModelChoice {
+  return {
+    provider,
+    id: model.id,
+    label: `${builtinModelProviderLabel(provider)} ${model.name}`,
+    value: modelValue(provider, model.id),
+    reasoning: model.reasoning,
+  }
+}
+
+export function listBuiltinModelChoices(
+  providers: ReadonlyArray<BuiltinModelProvider>
+): Array<BuiltinModelChoice> {
+  return providers.flatMap((provider) =>
+    knownModelsForProvider(provider).map((model) =>
+      choiceForKnownModel(provider, model)
+    )
+  )
+}
+
 async function choicesForProvider(
   provider: BuiltinModelProvider
 ): Promise<Array<BuiltinModelChoice>> {
-  const knownModels =
-    provider === MOONSHOT_PROVIDER
-      ? getMoonshotModels()
-      : getModels(
-          provider as Exclude<BuiltinModelProvider, typeof MOONSHOT_PROVIDER>
-        )
+  const knownChoices = listBuiltinModelChoices([provider])
 
   if (provider === `openai-codex`) {
-    return knownModels.map((model) => ({
-      provider,
-      id: model.id,
-      label: `${providerLabel(provider)} ${model.name}`,
-      value: modelValue(provider, model.id),
-      reasoning: model.reasoning,
-    }))
+    return knownChoices
   }
 
   const availableIds = await fetchAvailableModelIds(provider)
-  const models =
-    availableIds === null
-      ? knownModels
-      : knownModels.filter((model) => availableIds.has(model.id))
+  return availableIds === null
+    ? knownChoices
+    : knownChoices.filter((choice) => availableIds.has(choice.id))
+}
 
-  return models.map((model) => ({
-    provider,
-    id: model.id,
-    label: `${providerLabel(provider)} ${model.name}`,
-    value: modelValue(provider, model.id),
-    reasoning: model.reasoning,
-  }))
+function enabledModelSet(
+  values: ReadonlyArray<string> | null | undefined
+): Set<string> | null {
+  if (!values) return null
+  const enabled = new Set<string>()
+  for (const value of values) {
+    const trimmed = value.trim()
+    if (trimmed) enabled.add(trimmed)
+  }
+  return enabled.size > 0 ? enabled : null
+}
+
+function filterChoicesByEnabledModels(
+  choices: Array<BuiltinModelChoice>,
+  values: ReadonlyArray<string> | null | undefined
+): Array<BuiltinModelChoice> {
+  const enabled = enabledModelSet(values)
+  if (!enabled) return choices
+  const filtered = choices.filter((choice) => enabled.has(choice.value))
+  return filtered.length > 0 ? filtered : choices
 }
 
 function withProviderPayloadDefaults(
@@ -215,9 +255,7 @@ function parseReasoningEffort(value: unknown): ExplicitReasoningEffort | null {
 }
 
 export async function createBuiltinModelCatalog(
-  options: {
-    allowMockFallback?: boolean
-  } = {}
+  options: BuiltinModelCatalogOptions = {}
 ): Promise<BuiltinModelCatalog | null> {
   const providers = configuredProviders()
 
@@ -225,9 +263,13 @@ export async function createBuiltinModelCatalog(
     return mockFallbackCatalog()
   }
 
-  const choices = (
+  const providerChoices = (
     await Promise.all(providers.map((provider) => choicesForProvider(provider)))
   ).flat()
+  const choices = filterChoicesByEnabledModels(
+    providerChoices,
+    options.enabledModelValues
+  )
 
   if (choices.length === 0) {
     return options.allowMockFallback ? mockFallbackCatalog() : null

@@ -53,6 +53,29 @@ describe(`model catalog`, () => {
     })
   })
 
+  it(`filters choices to enabled model values`, async () => {
+    const catalog = await createBuiltinModelCatalog({
+      enabledModelValues: [`openai:gpt-5`],
+    })
+
+    expect(catalog).not.toBeNull()
+    expect(catalog!.choices.map((choice) => choice.value)).toEqual([
+      `openai:gpt-5`,
+    ])
+    expect(catalog!.defaultChoice.value).toBe(`openai:gpt-5`)
+  })
+
+  it(`falls back to available choices when enabled model values are stale`, async () => {
+    const catalog = await createBuiltinModelCatalog({
+      enabledModelValues: [`deepseek:missing`],
+    })
+
+    expect(catalog).not.toBeNull()
+    expect(catalog!.choices.map((choice) => choice.value)).toContain(
+      `openai:gpt-4.1`
+    )
+  })
+
   it(`sets a valid reasoning effort for OpenAI reasoning models`, async () => {
     const catalog = await createBuiltinModelCatalog()
     const config = resolveBuiltinModelConfig(catalog!, {

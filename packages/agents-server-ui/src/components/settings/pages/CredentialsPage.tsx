@@ -1,5 +1,6 @@
+import { Collapsible } from '@base-ui/react/collapsible'
 import { useEffect, useState } from 'react'
-import { RefreshCw } from 'lucide-react'
+import { ChevronDown, RefreshCw } from 'lucide-react'
 import { ApiKeysForm } from '../../ApiKeysForm'
 import {
   codexDisable,
@@ -10,9 +11,12 @@ import {
   onDesktopStateChanged,
   restartLocalRuntimes,
   saveApiKeys as persistApiKeys,
+  saveEnabledModels as persistEnabledModels,
   type ApiKeysStatus,
   type CodexAuthSource,
   type CodexStatus,
+  type ModelPickerChoice,
+  type ModelPickerStatus,
 } from '../../../lib/server-connection'
 import { Button, Icon, Text } from '../../../ui'
 import {
@@ -23,6 +27,7 @@ import {
   SettingsSection,
   SettingsStatusBadge,
 } from '../SettingsScreen'
+import styles from './CredentialsPage.module.css'
 
 export function CredentialsPage(): React.ReactElement {
   const isDesktop = typeof window !== `undefined` && Boolean(window.electronAPI)
@@ -139,6 +144,16 @@ export function CredentialsPage(): React.ReactElement {
                   setCodexBusy(null)
                 }
               }}
+              modelControl={
+                <ProviderModelSettings
+                  status={status.modelPicker}
+                  provider="openai-codex"
+                  onSave={async (values) => {
+                    await persistEnabledModels(values)
+                    await refreshStatus()
+                  }}
+                />
+              }
             />
             <ApiKeysForm
               layout="settings"
@@ -172,6 +187,48 @@ export function CredentialsPage(): React.ReactElement {
                   brave: status.saved.brave ?? null,
                 })
                 await refreshStatus()
+              }}
+              modelControls={{
+                anthropic: (
+                  <ProviderModelSettings
+                    status={status.modelPicker}
+                    provider="anthropic"
+                    onSave={async (values) => {
+                      await persistEnabledModels(values)
+                      await refreshStatus()
+                    }}
+                  />
+                ),
+                openai: (
+                  <ProviderModelSettings
+                    status={status.modelPicker}
+                    provider="openai"
+                    onSave={async (values) => {
+                      await persistEnabledModels(values)
+                      await refreshStatus()
+                    }}
+                  />
+                ),
+                deepseek: (
+                  <ProviderModelSettings
+                    status={status.modelPicker}
+                    provider="deepseek"
+                    onSave={async (values) => {
+                      await persistEnabledModels(values)
+                      await refreshStatus()
+                    }}
+                  />
+                ),
+                moonshot: (
+                  <ProviderModelSettings
+                    status={status.modelPicker}
+                    provider="moonshot"
+                    onSave={async (values) => {
+                      await persistEnabledModels(values)
+                      await refreshStatus()
+                    }}
+                  />
+                ),
               }}
             />
           </>
@@ -213,6 +270,112 @@ export function CredentialsPage(): React.ReactElement {
   )
 }
 
+function modelDisplayName(choice: ModelPickerChoice): string {
+  const prefix = `${choice.providerLabel} `
+  return choice.label.startsWith(prefix)
+    ? choice.label.slice(prefix.length)
+    : choice.label
+}
+
+function ProviderModelSettings({
+  status,
+  provider,
+  onSave,
+}: {
+  status: ModelPickerStatus
+  provider: ModelPickerChoice[`provider`]
+  onSave: (values: Array<string>) => Promise<void>
+}): React.ReactElement | null {
+  const [enabled, setEnabled] = useState(status.enabled)
+  const [saving, setSaving] = useState(false)
+  const statusKey = `${status.choices.map((choice) => choice.value).join(`\n`)}|${status.enabled.join(`\n`)}`
+
+  useEffect(() => {
+    setEnabled(status.enabled)
+  }, [statusKey, status.enabled])
+
+  const choices = status.choices.filter(
+    (choice) => choice.provider === provider
+  )
+  if (choices.length === 0) return null
+
+  const enabledSet = new Set(enabled)
+  const enabledCount = choices.filter((choice) =>
+    enabledSet.has(choice.value)
+  ).length
+
+  const saveNext = async (next: Array<string>): Promise<void> => {
+    setEnabled(next)
+    setSaving(true)
+    try {
+      await onSave(next)
+    } catch (error) {
+      setEnabled(status.enabled)
+      console.error(`[credentials] failed to save enabled models`, error)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Collapsible.Root className={styles.modelPicker} aria-busy={saving}>
+      <Collapsible.Trigger
+        type="button"
+        className={styles.modelCollapseTrigger}
+      >
+        <span className={styles.modelCollapseSummary}>
+          {enabledCount} of {choices.length} models shown in the model picker.
+        </span>
+        {saving && <span className={styles.modelCollapseSaving}>Saving…</span>}
+        <Icon
+          icon={ChevronDown}
+          size={2}
+          className={styles.modelCollapseIcon}
+        />
+      </Collapsible.Trigger>
+      <Collapsible.Panel keepMounted className={styles.modelCollapsePanel}>
+        <div className={styles.modelGrid}>
+          {choices.map((choice) => {
+            const checked = enabledSet.has(choice.value)
+            const disabled = saving || (checked && enabledSet.size <= 1)
+            return (
+              <label
+                key={choice.value}
+                className={styles.modelOption}
+                data-disabled={disabled ? `true` : undefined}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  disabled={disabled}
+                  onChange={(event) => {
+                    const nextSet = new Set(enabledSet)
+                    if (event.target.checked) {
+                      nextSet.add(choice.value)
+                    } else {
+                      nextSet.delete(choice.value)
+                    }
+                    const next = status.choices
+                      .map((candidate) => candidate.value)
+                      .filter((value) => nextSet.has(value))
+                    void saveNext(next)
+                  }}
+                />
+                <span className={styles.modelOptionText}>
+                  <span className={styles.modelOptionName}>
+                    {modelDisplayName(choice)}
+                  </span>
+                  <span className={styles.modelOptionId}>{choice.id}</span>
+                </span>
+              </label>
+            )
+          })}
+        </div>
+      </Collapsible.Panel>
+    </Collapsible.Root>
+  )
+}
+
 function RestartBanner({
   onRestart,
   restarting,
@@ -250,6 +413,7 @@ function CodexSettings({
   onSignIn,
   onUseSource,
   onDisable,
+  modelControl,
 }: {
   status: CodexStatus
   busy: string | null
@@ -257,6 +421,7 @@ function CodexSettings({
   onSignIn: () => Promise<void>
   onUseSource: (source: CodexAuthSource) => Promise<void>
   onDisable: () => Promise<void>
+  modelControl?: React.ReactNode
 }): React.ReactElement {
   const detected = status.availableSources.filter(
     (source) => source.source !== `desktop-oauth`
@@ -301,6 +466,7 @@ function CodexSettings({
           )
         }
       />
+      {modelControl}
       {!status.enabled &&
         detected.map((source) => (
           <SettingsRow

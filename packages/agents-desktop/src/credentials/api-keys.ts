@@ -1,5 +1,6 @@
 import type { SecretStore } from '../services/secret-store'
 import type { ApiKeys, ApiKeysStatus, CodexStatus } from '../shared/types'
+import { createModelPickerStatus } from './model-picker'
 
 export const EMPTY_API_KEYS: ApiKeys = {
   anthropic: null,
@@ -111,6 +112,7 @@ export type ApiKeyStatusDeps = {
   apiKeys: ApiKeys
   launchEnv: ApiKeys
   getCodexStatus: () => Promise<CodexStatus>
+  enabledModelValues?: ReadonlyArray<string> | null
 }
 
 export async function getApiKeysStatus(
@@ -130,7 +132,19 @@ export async function getApiKeysStatus(
     brave: saved.brave ? null : deps.launchEnv.brave,
   }
   const codex = await deps.getCodexStatus()
-  return { hasAnyKey: hasAnyKey || codex.enabled, saved, suggested, codex }
+  const modelPicker = createModelPickerStatus({
+    saved,
+    suggested,
+    codex,
+    enabledModelValues: deps.enabledModelValues,
+  })
+  return {
+    hasAnyKey: hasAnyKey || codex.enabled,
+    saved,
+    suggested,
+    codex,
+    modelPicker,
+  }
 }
 
 export type SetApiKeysDeps = {

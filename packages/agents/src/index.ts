@@ -44,6 +44,15 @@ export {
   HORTON_MODEL,
   registerHorton,
 } from './agents/horton.js'
+export {
+  builtinModelProviderLabel,
+  listBuiltinModelChoices,
+} from './model-catalog.js'
+export type {
+  BuiltinModelCatalogOptions,
+  BuiltinModelChoice,
+  BuiltinModelProvider,
+} from './model-catalog.js'
 export { registerWorker } from './agents/worker.js'
 export {
   WORKER_TOOL_NAMES,

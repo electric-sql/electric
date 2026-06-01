@@ -1,6 +1,7 @@
 import { dialog } from 'electron'
 import * as ApiKeyCredentials from './api-keys'
 import * as CodexAuth from './codex-auth'
+import { normalizeEnabledModelValues } from './model-picker'
 import type { SecretStore } from '../services/secret-store'
 import type {
   ApiKeys,
@@ -60,6 +61,7 @@ export function createCredentialsController(deps: {
         apiKeys: deps.apiKeys,
         launchEnv: deps.launchEnv,
         getCodexStatus,
+        enabledModelValues: deps.settings.enabledModelValues,
       }),
     setApiKeys: (next: ApiKeys): Promise<void> =>
       ApiKeyCredentials.setApiKeys(
@@ -74,6 +76,17 @@ export function createCredentialsController(deps: {
         },
         next
       ),
+    setEnabledModels: async (values: Array<string>): Promise<void> => {
+      const normalized = normalizeEnabledModelValues(values)
+      const current = deps.settings.enabledModelValues ?? []
+      const changed =
+        normalized.length !== current.length ||
+        normalized.some((value, index) => value !== current[index])
+      deps.settings.enabledModelValues =
+        normalized.length > 0 ? normalized : undefined
+      await deps.saveSettings()
+      if (changed) markCredentialsDirty()
+    },
     getOnboardingState: (): OnboardingState => ({
       dismissed: deps.settings.onboardingDismissed === true,
       hasAnyKey: Boolean(

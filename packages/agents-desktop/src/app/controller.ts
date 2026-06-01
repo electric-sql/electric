@@ -360,6 +360,7 @@ export function createDesktopMainController(ctx: DesktopAppContext) {
     runDiscovery: localDiscovery.runDiscovery,
     getApiKeysStatus: credentials.getApiKeysStatus,
     setApiKeys: credentials.setApiKeys,
+    setEnabledModels: credentials.setEnabledModels,
     signInCodex: credentials.signInCodex,
     enableCodexSource: credentials.enableCodexSource,
     disableCodex: credentials.disableCodex,
