@@ -119,32 +119,35 @@ defmodule ElectricTelemetry.ProcessesTest do
     end
   end
 
-  describe "proc_subtype/1 and proc_type_and_subtype/1 for :supervisor" do
+  describe "proc_type_and_subtype/1 for :supervisor" do
     test "returns the registered name when the supervisor is named" do
       name = :"sup_named_#{System.unique_integer([:positive])}"
       {:ok, pid} = Supervisor.start_link([], strategy: :one_for_one, name: name)
-
-      assert {:supervisor, subtype} = proc_type_and_subtype(pid)
-      assert subtype == Atom.to_string(name)
-      assert proc_subtype(pid) == Atom.to_string(name)
-
-      Supervisor.stop(pid)
+      assert {:supervisor, name} == proc_type_and_subtype(pid)
     end
 
     test "falls back to $ancestors atom for an unnamed supervisor" do
-      parent_name = :"sup_parent_#{System.unique_integer([:positive])}"
-      Process.register(self(), parent_name)
+      parent_sup_name = :"sup_parent_#{System.unique_integer([:positive])}"
+      child_sup_name = :"sup_child_#{System.unique_integer([:positive])}"
 
-      {:ok, pid} = Supervisor.start_link([], strategy: :one_for_one)
+      child_sup = %{
+        id: Supervisor,
+        type: :supervisor,
+        start: {Supervisor, :start_link, [[], [strategy: :one_for_one, name: child_sup_name]]}
+      }
 
-      assert {:supervisor, subtype} = proc_type_and_subtype(pid)
-      assert subtype == Atom.to_string(parent_name)
+      {:ok, sup_pid} =
+        Supervisor.start_link([child_sup], strategy: :one_for_one, name: parent_sup_name)
 
-      Supervisor.stop(pid)
-      Process.unregister(parent_name)
+      [{_, child_pid, _, _}] = Supervisor.which_children(sup_pid)
+
+      assert {:supervisor, child_sup_name} == proc_type_and_subtype(child_pid)
+
+      true = Process.unregister(child_sup_name)
+      assert {:supervisor, parent_sup_name} == proc_type_and_subtype(child_pid)
     end
 
-    test "returns nil when neither registered name nor named ancestor is available" do
+    test "falls back to initial_call when neither registered name nor named ancestor is available" do
       # Run the supervisor from a spawned, unregistered process so the entire $ancestors
       # chain is pids rather than atoms.
       parent = self()
@@ -157,16 +160,15 @@ defmodule ElectricTelemetry.ProcessesTest do
 
       assert_receive {:sup, pid}, 200
 
-      assert {:supervisor, nil} = proc_type_and_subtype(pid)
+      assert {:supervisor, ":supervisor.\"Elixir.Supervisor.Default\"/1"} ==
+               proc_type_and_subtype(pid)
     end
   end
 
-  describe "proc_subtype/1 and proc_type_and_subtype/1 for :erlang" do
+  describe "proc_type_and_subtype/1 for :erlang" do
     test "falls back to initial_call MFA for an anonymous spawn_link" do
       pid = spawn_link(fn -> Process.sleep(:infinity) end)
-
-      assert {:erlang, ":erlang.apply/2"} = proc_type_and_subtype(pid)
-      assert proc_subtype(pid) == ":erlang.apply/2"
+      assert {:erlang, ":erlang.apply/2"} == proc_type_and_subtype(pid)
     end
 
     test "uses the registered name when an :erlang-typed process is named" do
@@ -174,12 +176,11 @@ defmodule ElectricTelemetry.ProcessesTest do
       pid = spawn_link(fn -> Process.sleep(:infinity) end)
       Process.register(pid, name)
 
-      assert {:erlang, subtype} = proc_type_and_subtype(pid)
-      assert subtype == Atom.to_string(name)
+      assert {:erlang, name} == proc_type_and_subtype(pid)
     end
   end
 
-  describe "proc_subtype/1 and proc_type_and_subtype/1 for :logger_olp" do
+  describe "proc_type_and_subtype/1 for :logger_olp" do
     test "uses the registered name as the handler id" do
       parent = self()
       name = :"logger_olp_test_#{System.unique_integer([:positive])}"
@@ -196,11 +197,10 @@ defmodule ElectricTelemetry.ProcessesTest do
 
       assert_receive :ready, 200
 
-      assert {:logger_olp, subtype} = proc_type_and_subtype(pid)
-      assert subtype == Atom.to_string(name)
+      assert {:logger_olp, name} == proc_type_and_subtype(pid)
     end
 
-    test "returns nil subtype for an unregistered :logger_olp-typed process" do
+    test "falls back to initial call for an unregistered :logger_olp-typed process" do
       parent = self()
 
       pid =
@@ -212,19 +212,19 @@ defmodule ElectricTelemetry.ProcessesTest do
 
       assert_receive :ready, 200
 
-      assert {:logger_olp, nil} = proc_type_and_subtype(pid)
+      assert {:logger_olp, ":logger_olp.init/1"} == proc_type_and_subtype(pid)
     end
   end
 
   describe "proc_type_and_subtype/1 for non-subtyped buckets" do
     test "returns nil subtype for a labelled (non-bucketed) process" do
       pid = spawn_with_label(:my_process)
-      assert {:my_process, nil} = proc_type_and_subtype(pid)
+      assert {:my_process, nil} == proc_type_and_subtype(pid)
     end
   end
 
-  describe "proc_type_and_subtype/1 and proc_subtype/1 for dead processes" do
-    test "returns {:dead, nil} / nil for a process that has exited" do
+  describe "proc_type_and_subtype/1 for dead processes" do
+    test "returns {:dead, nil} for a process that has exited" do
       pid =
         spawn_link(fn ->
           receive do
@@ -236,8 +236,7 @@ defmodule ElectricTelemetry.ProcessesTest do
       send(pid, :die)
       assert_receive {:DOWN, ^ref, :process, ^pid, :normal}
 
-      assert {:dead, nil} = proc_type_and_subtype(pid)
-      assert proc_subtype(pid) == nil
+      assert {:dead, nil} == proc_type_and_subtype(pid)
     end
   end
 

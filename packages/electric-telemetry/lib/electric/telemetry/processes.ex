@@ -11,7 +11,7 @@ defmodule ElectricTelemetry.Processes do
   # Coarse `process_type` values for which we additionally derive a `process_subtype`.
   # Membership here is matched against the value returned by `proc_type/2` (an atom
   # like `:supervisor`, `:erlang`, `:logger_olp`).
-  @subtyped_types [:supervisor, :erlang, :logger_olp]
+  @proc_types_with_subtype [:erlang, :logger_olp, :supervisor]
 
   defguardp is_valid_mem_percent(percent)
             when is_integer(percent) and percent >= 1 and percent <= 100
@@ -27,37 +27,16 @@ defmodule ElectricTelemetry.Processes do
   def proc_type(pid), do: proc_type(pid, info(pid))
 
   @doc """
-  Compute both the coarse `process_type` value and a finer-grained `process_subtype`
-  for a process in a single `Process.info/2` round-trip.
+  Compute both `process_type` and `process_subtype` using a single `Process.info/2` call.
 
   The subtype is a stable, low-cardinality string (or `nil`) intended to be emitted
-  as a companion attribute on telemetry events. See `proc_subtype/1` for the
-  per-bucket rules.
+  as a companion attribute on telemetry events.
   """
-  @spec proc_type_and_subtype(pid()) :: {atom() | binary(), binary() | nil}
+  @spec proc_type_and_subtype(pid()) :: {atom() | binary(), atom() | binary() | nil}
   def proc_type_and_subtype(pid) do
     info = info(pid)
     type = proc_type(pid, info)
     {type, proc_subtype(type, info)}
-  end
-
-  @doc """
-  Returns a low-cardinality string identifying the specific process behind a coarse
-  `process_type` bucket, or `nil` when no useful subtype can be derived.
-
-  Currently populated for the three coarse buckets that hide the most signal during
-  overload:
-
-    * `:supervisor` — registered name, falling back to first atom in `$ancestors`.
-    * `:erlang`     — registered name, falling back to `initial_call` MFA.
-    * `:logger_olp` — registered name (handler id).
-
-  All other `process_type` values return `nil`.
-  """
-  @spec proc_subtype(pid()) :: binary() | nil
-  def proc_subtype(pid) do
-    info = info(pid)
-    proc_subtype(proc_type(pid, info), info)
   end
 
   def top_memory_by_type, do: top_by(:proc_mem)
@@ -178,7 +157,8 @@ defmodule ElectricTelemetry.Processes do
     |> Map.put(:subtype, subtype)
   end
 
-  defp info(pid) do
+  @doc false
+  def info(pid) do
     Process.info(pid, [:dictionary, :initial_call, :label, :memory, :binary, :registered_name])
   end
 
@@ -188,34 +168,20 @@ defmodule ElectricTelemetry.Processes do
       if(Process.alive?(pid), do: :unknown, else: :dead)
   end
 
-  defp proc_subtype(type, info) when type in @subtyped_types do
-    case type do
-      :supervisor ->
-        registered_name_string(info) || ancestor_atom_string(info)
-
-      :erlang ->
-        registered_name_string(info) || initial_call_mfa_string(info)
-
-      :logger_olp ->
-        registered_name_string(info)
-    end
+  defp proc_subtype(proc_type, info) when proc_type in @proc_types_with_subtype do
+    registered_name(info) || ancestor_name(info) || initial_call_mfa_string(info)
   end
 
-  defp proc_subtype(_type, _info), do: nil
+  defp proc_subtype(_, _), do: nil
 
-  defp registered_name_string(info) do
-    # `Process.info/2` returns `[]` for unregistered processes and the atom name
-    # otherwise. Be explicit about excluding `nil` here so the clause order isn't
-    # load-bearing — `is_atom(nil)` is true and would otherwise yield `"nil"`.
-    case info[:registered_name] do
-      name when is_atom(name) and not is_nil(name) -> Atom.to_string(name)
-      _ -> nil
-    end
+  defp registered_name(info) do
+    # Process.info(pid, :registered_name) returns an empty list for unregistered processes
+    with [] <- info[:registered_name], do: nil
   end
 
-  defp ancestor_atom_string(info) do
+  defp ancestor_name(info) do
     case get_in(info, [:dictionary, :"$ancestors"]) do
-      [name | _] when is_atom(name) and not is_nil(name) -> Atom.to_string(name)
+      [name | _] when is_atom(name) and not is_nil(name) -> name
       _ -> nil
     end
   end
