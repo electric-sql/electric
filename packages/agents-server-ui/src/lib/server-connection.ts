@@ -116,6 +116,26 @@ export interface ApiKeys {
 
 export type CodexAuthSource = `desktop-oauth` | `codex-cli` | `opencode`
 
+export type ModelProvider =
+  | `anthropic`
+  | `openai`
+  | `openai-codex`
+  | `deepseek`
+  | `moonshot`
+
+export interface ModelPickerChoice {
+  provider: ModelProvider
+  providerLabel: string
+  id: string
+  label: string
+  value: string
+}
+
+export interface ModelPickerStatus {
+  choices: Array<ModelPickerChoice>
+  enabled: Array<string>
+}
+
 export type CodexDetectedSource = {
   source: CodexAuthSource
   label: string
@@ -147,6 +167,7 @@ export interface ApiKeysStatus {
    */
   suggested: ApiKeys
   codex: CodexStatus
+  modelPicker: ModelPickerStatus
 }
 
 /**
@@ -335,6 +356,7 @@ declare global {
       rescanServers?: () => Promise<Array<DiscoveredServer>>
       getApiKeysStatus?: () => Promise<ApiKeysStatus>
       saveApiKeys?: (keys: ApiKeys) => Promise<void>
+      saveEnabledModels?: (values: Array<string>) => Promise<void>
       codexSignIn?: () => Promise<CodexStatus>
       codexEnableSource?: (source: CodexAuthSource) => Promise<CodexStatus>
       codexDisable?: () => Promise<CodexStatus>
@@ -547,6 +569,10 @@ export async function loadApiKeysStatus(): Promise<ApiKeysStatus | null> {
 
 export async function saveApiKeys(keys: ApiKeys): Promise<void> {
   await window.electronAPI?.saveApiKeys?.(keys)
+}
+
+export async function saveEnabledModels(values: Array<string>): Promise<void> {
+  await window.electronAPI?.saveEnabledModels?.(values)
 }
 
 export async function codexSignIn(): Promise<CodexStatus | null> {

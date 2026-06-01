@@ -45,6 +45,7 @@ export interface BuiltinAgentHandlerOptions {
   serveEndpoint?: string
   workingDirectory?: string
   streamFn?: StreamFn
+  enabledModelValues?: ReadonlyArray<string> | null
   publicUrl?: string
   runtimeName?: string
   /** Override for the built-in skills directory; required when embedders bundle this package. */
@@ -92,6 +93,7 @@ export async function createBuiltinAgentHandler(
     serveEndpoint,
     workingDirectory,
     streamFn,
+    enabledModelValues,
     createElectricTools,
     publicUrl,
     runtimeName,
@@ -102,6 +104,7 @@ export async function createBuiltinAgentHandler(
 
   const modelCatalog = await createBuiltinModelCatalog({
     allowMockFallback: Boolean(streamFn),
+    enabledModelValues,
   })
 
   if (!modelCatalog) {

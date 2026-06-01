@@ -745,6 +745,7 @@ function DefaultAgentComposer({
                   label={prop.title ?? key}
                   value={String(args[key] ?? ``)}
                   options={prop.enum.map((v) => String(v))}
+                  groupByProvider={isModelProperty(key)}
                   onChange={(next) => {
                     const original = prop.enum!.find((v) => String(v) === next)
                     if (isModelProperty(key)) persistLastPickedModel(next)
@@ -852,19 +853,70 @@ function RunnerPickerPill({
   )
 }
 
+const MODEL_PROVIDER_LABELS: Record<string, string> = {
+  anthropic: `Anthropic`,
+  openai: `OpenAI`,
+  'openai-codex': `OpenAI Codex`,
+  deepseek: `DeepSeek`,
+  moonshot: `Kimi`,
+}
+
+function modelProviderKey(value: string): string {
+  const index = value.indexOf(`:`)
+  return index > 0 ? value.slice(0, index) : `other`
+}
+
+function modelProviderLabel(provider: string): string {
+  return MODEL_PROVIDER_LABELS[provider] ?? provider
+}
+
+function modelOptionLabel(value: string): string {
+  const index = value.indexOf(`:`)
+  return index > 0 ? value.slice(index + 1) : value
+}
+
+function groupedModelOptions(
+  options: Array<string>
+): Array<{ provider: string; label: string; options: Array<string> }> {
+  const groups: Array<{
+    provider: string
+    label: string
+    options: Array<string>
+  }> = []
+  const byProvider = new Map<string, (typeof groups)[number]>()
+  for (const option of options) {
+    const provider = modelProviderKey(option)
+    let group = byProvider.get(provider)
+    if (!group) {
+      group = {
+        provider,
+        label: modelProviderLabel(provider),
+        options: [],
+      }
+      byProvider.set(provider, group)
+      groups.push(group)
+    }
+    group.options.push(option)
+  }
+  return groups
+}
+
 function PillSelect({
   label,
   value,
   options,
+  groupByProvider = false,
   onChange,
   disabled,
 }: {
   label: string
   value: string
   options: Array<string>
+  groupByProvider?: boolean
   onChange: (value: string) => void
   disabled?: boolean
 }): React.ReactElement {
+  const groups = groupByProvider ? groupedModelOptions(options) : []
   return (
     <Select.Root<string>
       value={value}
@@ -873,13 +925,33 @@ function PillSelect({
       }}
       disabled={disabled}
     >
-      <Select.Trigger size="pill" aria-label={label} title={label} />
+      <Select.Trigger
+        size="pill"
+        aria-label={label}
+        title={label}
+        renderValue={
+          groupByProvider
+            ? (current) => (current ? modelOptionLabel(current) : label)
+            : undefined
+        }
+      />
       <Select.Content>
-        {options.map((opt) => (
-          <Select.Item key={opt} value={opt}>
-            {opt}
-          </Select.Item>
-        ))}
+        {groupByProvider
+          ? groups.map((group) => (
+              <Select.Group key={group.provider}>
+                <Select.GroupLabel>{group.label}</Select.GroupLabel>
+                {group.options.map((opt) => (
+                  <Select.Item key={opt} value={opt}>
+                    {modelOptionLabel(opt)}
+                  </Select.Item>
+                ))}
+              </Select.Group>
+            ))
+          : options.map((opt) => (
+              <Select.Item key={opt} value={opt}>
+                {opt}
+              </Select.Item>
+            ))}
       </Select.Content>
     </Select.Root>
   )

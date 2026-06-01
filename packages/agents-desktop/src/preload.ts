@@ -158,6 +158,8 @@ const api = {
     ipcRenderer.invoke(`desktop:get-api-keys-status`),
   saveApiKeys: (keys: ApiKeys): Promise<void> =>
     ipcRenderer.invoke(`desktop:save-api-keys`, keys),
+  saveEnabledModels: (values: Array<string>): Promise<void> =>
+    ipcRenderer.invoke(`desktop:save-enabled-models`, values),
   codexSignIn: (): Promise<CodexStatus> =>
     ipcRenderer.invoke(`desktop:codex-sign-in`),
   codexEnableSource: (source: CodexAuthSource): Promise<CodexStatus> =>

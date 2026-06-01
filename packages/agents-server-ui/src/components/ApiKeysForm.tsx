@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useRef, useState, type ReactNode } from 'react'
 import { Eye, EyeOff, Sparkles } from 'lucide-react'
 import { Button, Field, Icon, IconButton, Input, Stack, Text } from '../ui'
 import {
@@ -17,6 +17,7 @@ export type ApiKeysFormValues = {
 }
 
 type ApiKeyFieldId = keyof ApiKeysFormValues
+type ModelApiKeyFieldId = Exclude<ApiKeyFieldId, `brave`>
 
 interface ApiKeysFormProps {
   initial: ApiKeysFormValues
@@ -41,6 +42,7 @@ interface ApiKeysFormProps {
   layout?: `form` | `settings`
   showModelKeys?: boolean
   showBrave?: boolean
+  modelControls?: Partial<Record<ModelApiKeyFieldId, ReactNode>>
   /**
    * When `true`, persist on field blur (after the user has typed)
    * instead of waiting for a Save click. Hides the explicit
@@ -77,6 +79,7 @@ export function ApiKeysForm({
   layout = `form`,
   showModelKeys = true,
   showBrave = true,
+  modelControls,
   autoSave = false,
 }: ApiKeysFormProps): React.ReactElement {
   const [anthropic, setAnthropic] = useState(initial.anthropic)
@@ -226,6 +229,7 @@ export function ApiKeysForm({
                 />
               }
             />
+            {modelControls?.anthropic}
             <SettingsRow
               label="OpenAI API"
               description="Used for GPT models. Looks like sk-…"
@@ -242,6 +246,7 @@ export function ApiKeysForm({
                 />
               }
             />
+            {modelControls?.openai}
             <SettingsRow
               label="DeepSeek API"
               description="Used for DeepSeek models. Looks like sk-…"
@@ -258,6 +263,7 @@ export function ApiKeysForm({
                 />
               }
             />
+            {modelControls?.deepseek}
             <SettingsRow
               label="Kimi / Moonshot API"
               description="Used for Kimi and Moonshot models. Looks like sk-…"
@@ -274,6 +280,7 @@ export function ApiKeysForm({
                 />
               }
             />
+            {modelControls?.moonshot}
           </>
         )}
         {showBrave && (

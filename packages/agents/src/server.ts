@@ -74,6 +74,8 @@ export interface BuiltinAgentsServerOptions {
   loadProjectMcpConfig?: boolean
   /** Override for the built-in skills directory; required when embedders bundle this package. */
   baseSkillsDir?: string
+  /** Restrict the model values exposed by built-in agent creation schemas. */
+  enabledModelValues?: ReadonlyArray<string> | null
   createElectricTools?: NonNullable<ProcessWakeConfig[`createElectricTools`]>
 }
 
@@ -273,6 +275,7 @@ export class BuiltinAgentsServer {
         publicUrl,
         runtimeName: `builtin-agents`,
         baseSkillsDir: this.options.baseSkillsDir,
+        enabledModelValues: this.options.enabledModelValues,
         serverHeaders: pullWake.headers,
       })
       if (!this.bootstrap) {
