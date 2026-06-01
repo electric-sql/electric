@@ -23,11 +23,7 @@ import type {
   AgentTool as PiAgentTool,
   StreamFn,
 } from '@mariozechner/pi-agent-core'
-import type {
-  KnownProvider,
-  Model,
-  SimpleStreamOptions,
-} from '@mariozechner/pi-ai'
+import type { Model, Provider, SimpleStreamOptions } from '@mariozechner/pi-ai'
 import type {
   EntityStreamDB as RuntimeEntityStreamDB,
   EntityStreamDBWithActions as RuntimeEntityStreamDBWithActions,
@@ -778,7 +774,7 @@ export type AgentModel = string | Model<any>
 export interface AgentConfig {
   systemPrompt: string
   model: AgentModel
-  provider?: KnownProvider
+  provider?: Provider
   tools: Array<AgentTool>
   streamFn?: StreamFn
   getApiKey?: (

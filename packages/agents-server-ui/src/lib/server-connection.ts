@@ -85,9 +85,9 @@ export interface ServerConnectionState {
  * `null` means "not set". The renderer never reads these from
  * `process.env` directly — that only exists in main.
  *
- * - `anthropic` / `openai` / `deepseek`: LLM provider keys. At least
- *   one is required for the local Horton runtime to be useful; the
- *   first-launch dialog auto-opens until one is set.
+ * - `anthropic` / `openai` / `deepseek` / `moonshot`: LLM provider
+ *   keys. At least one is required for the local Horton runtime to be
+ *   useful; the first-launch dialog auto-opens until one is set.
  * - `brave`: optional search-tool auxiliary. Mirrored to
  *   `BRAVE_SEARCH_API_KEY` to enable Horton's `brave_search` tool;
  *   without it, web search falls back to Anthropic's built-in search.
@@ -105,6 +105,12 @@ export interface ApiKeys {
    * counts toward that check.
    */
   deepseek: string | null
+  /**
+   * Optional. Mirrored to `MOONSHOT_API_KEY` so the runtime can use
+   * Kimi / Moonshot models. Treated as a peer LLM provider alongside
+   * `anthropic`, `openai`, and `deepseek`.
+   */
+  moonshot: string | null
   brave: string | null
 }
 
@@ -135,8 +141,9 @@ export interface ApiKeysStatus {
   /**
    * Per-slot ENV-derived suggestions: a value is provided only for
    * slots that are NOT already saved, so the dialog can pre-fill
-   * empty inputs from `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` without
-   * overwriting the user's saved choice.
+   * empty inputs from `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` /
+   * `DEEPSEEK_API_KEY` / `MOONSHOT_API_KEY` without overwriting the
+   * user's saved choice.
    */
   suggested: ApiKeys
   codex: CodexStatus

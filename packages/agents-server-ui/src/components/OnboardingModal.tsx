@@ -59,6 +59,7 @@ const MODEL_PROVIDER_IDS: ReadonlyArray<ProviderId> = [
   `anthropic`,
   `openai`,
   `deepseek`,
+  `moonshot`,
 ]
 
 const MODEL_PROVIDERS: ReadonlyArray<{
@@ -86,6 +87,13 @@ const MODEL_PROVIDERS: ReadonlyArray<{
     id: `deepseek`,
     name: `DeepSeek API`,
     description: `DeepSeek's hosted reasoning models.`,
+    placeholder: `sk-…`,
+    kind: `model`,
+  },
+  {
+    id: `moonshot`,
+    name: `Kimi / Moonshot API`,
+    description: `Kimi models from Moonshot's OpenAI-compatible API.`,
     placeholder: `sk-…`,
     kind: `model`,
   },
@@ -637,6 +645,7 @@ function ProviderItem({
         anthropic: keysStatus.saved.anthropic ?? null,
         openai: keysStatus.saved.openai ?? null,
         deepseek: keysStatus.saved.deepseek ?? null,
+        moonshot: keysStatus.saved.moonshot ?? null,
         brave: keysStatus.saved.brave ?? null,
         [provider.id]: next,
       }

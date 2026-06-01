@@ -96,6 +96,7 @@ export type ApiKeys = {
   anthropic: string | null
   openai: string | null
   deepseek: string | null
+  moonshot: string | null
   brave: string | null
 }
 
