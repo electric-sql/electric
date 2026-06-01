@@ -43,7 +43,16 @@ defmodule Electric.Application do
     Logger.add_handlers(:electric)
 
     if Code.ensure_loaded?(Electric.Telemetry.Sentry) do
-      Electric.Telemetry.Sentry.add_logger_handler()
+      # Cap the Sentry transport sender backlog to shed load instead of letting
+      # queued Sentry events grow unbounded during error bursts. `sync_threshold:
+      # nil` disables the default sync-mode switch (which would block the logging
+      # process) so we rely solely on discard. Leading-edge protection only; see
+      # electric-sql/alco-agent-tasks#45 §3.
+      Electric.Telemetry.Sentry.add_logger_handler(
+        Electric.Telemetry.Sentry.default_handler_id(),
+        discard_threshold: 2000,
+        sync_threshold: nil
+      )
     end
 
     config = configuration()
