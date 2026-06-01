@@ -1,5 +1,5 @@
 ---
-"@electric-ax/agents-desktop": minor
+"@electric-ax/agents-desktop": patch
 ---
 
 Wire `electron-updater` so the desktop app can detect new releases. Phase
