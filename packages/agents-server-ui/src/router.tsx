@@ -41,7 +41,7 @@ import { Sidebar } from './components/Sidebar'
 import { SearchPalette } from './components/SearchPalette'
 import { Workspace } from './components/workspace/Workspace'
 import { OnboardingModal } from './components/OnboardingModal'
-import { ToastViewport } from './components/ToastViewport'
+import { ToastProvider } from './components/ToastViewport'
 import { DesktopTitleBar } from './components/DesktopTitleBar'
 import { TitlebarControls } from './components/TitlebarControls'
 import {
@@ -120,8 +120,9 @@ function RootLayout(): React.ReactElement {
       <SearchPaletteProvider>
         <WorkspaceProvider>
           <PaneFindProvider>
-            <RootShell />
-            <ToastViewport />
+            <ToastProvider>
+              <RootShell />
+            </ToastProvider>
           </PaneFindProvider>
         </WorkspaceProvider>
       </SearchPaletteProvider>
