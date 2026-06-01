@@ -15,7 +15,7 @@ on:
 
 permissions:
   contents: read
-  packages: write
+  packages: read
 
 jobs:
   detect_affected_workspaces:

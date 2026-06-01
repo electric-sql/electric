@@ -16,6 +16,7 @@ import {
 } from '../shared/headers'
 import type { CloudAgentServers } from '../cloud/cloud-agent-servers'
 import type { CloudAuthState } from '../cloud/cloud-auth'
+import { resolveEnabledModelValues } from '../credentials/model-picker'
 import { checkAgentsServerHealth, formatStartupNetworkError } from './health'
 import type {
   ConnectServerOptions,
@@ -33,6 +34,7 @@ export type RuntimeLifecycleDeps = {
     workingDirectory?: string | null
     mcp?: { servers: Array<McpServerConfig> }
     pullWakeRunnerId?: string | null
+    enabledModelValues?: Array<string>
   }
   runtimeEntries: Map<string, RuntimeEntry>
   windowSelections: Map<number, string | null>
@@ -247,6 +249,9 @@ export async function startRuntime(
     agentServerUrl: activeServer.url,
     workingDirectory: deps.settings.workingDirectory ?? app.getPath(`home`),
     extraMcpServers: deps.settings.mcp?.servers,
+    enabledModelValues: resolveEnabledModelValues(
+      deps.settings.enabledModelValues
+    ),
     loadProjectMcpConfig: true,
     mcpOAuthRedirectBase: MCP_OAUTH_REDIRECT_BASE,
     baseSkillsDir: AGENT_SKILLS_DIR,

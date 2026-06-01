@@ -41,6 +41,7 @@ import { Sidebar } from './components/Sidebar'
 import { SearchPalette } from './components/SearchPalette'
 import { Workspace } from './components/workspace/Workspace'
 import { OnboardingModal } from './components/OnboardingModal'
+import { ToastProvider } from './components/ToastViewport'
 import { DesktopTitleBar } from './components/DesktopTitleBar'
 import { TitlebarControls } from './components/TitlebarControls'
 import {
@@ -51,6 +52,7 @@ import { GeneralPage } from './components/settings/pages/GeneralPage'
 import { AccountPage } from './components/settings/pages/AccountPage'
 import { AppearancePage } from './components/settings/pages/AppearancePage'
 import { CredentialsPage } from './components/settings/pages/CredentialsPage'
+import { CommandLinePage } from './components/settings/pages/CommandLinePage'
 import { ServersPage } from './components/settings/pages/ServersPage'
 import { McpServersPage } from './components/settings/pages/McpServersPage'
 import { LocalRuntimePage } from './components/settings/pages/LocalRuntimePage'
@@ -61,6 +63,7 @@ const SETTINGS_CATEGORY_IDS: ReadonlyArray<SettingsCategoryId> = [
   `account`,
   `servers`,
   `credentials`,
+  `command-line`,
   `appearance`,
   `local-runtime`,
   `mcp-servers`,
@@ -119,7 +122,9 @@ function RootLayout(): React.ReactElement {
       <SearchPaletteProvider>
         <WorkspaceProvider>
           <PaneFindProvider>
-            <RootShell />
+            <ToastProvider>
+              <RootShell />
+            </ToastProvider>
           </PaneFindProvider>
         </WorkspaceProvider>
       </SearchPaletteProvider>
@@ -556,6 +561,8 @@ function SettingsCategoryPage(): React.ReactElement {
       return <ServersPage />
     case `credentials`:
       return <CredentialsPage />
+    case `command-line`:
+      return <CommandLinePage />
     case `local-runtime`:
       return <LocalRuntimePage />
     case `mcp-servers`:

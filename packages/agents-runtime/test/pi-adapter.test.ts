@@ -301,6 +301,18 @@ describe(`resolvePiModel`, () => {
     expect(model.id).toBe(`gpt-4o-mini`)
   })
 
+  it(`resolves Moonshot string model ids to OpenAI-compatible models`, () => {
+    const model = resolvePiModel({
+      provider: `moonshot`,
+      model: `kimi-k2.6`,
+    })
+
+    expect(model.provider).toBe(`moonshot`)
+    expect(model.id).toBe(`kimi-k2.6`)
+    expect(model.api).toBe(`openai-completions`)
+    expect(model.baseUrl).toBe(`https://api.moonshot.ai/v1`)
+  })
+
   it(`accepts custom Model objects directly`, () => {
     const customModel: Model<`openai-completions`> = {
       id: `deepseek-v4-flash`,

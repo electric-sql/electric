@@ -8,6 +8,7 @@ import {
   Plug,
   Server,
   Settings as SettingsIcon,
+  Terminal,
   UserCircle,
 } from 'lucide-react'
 import { Icon, ScrollArea, Stack, Text } from '../../ui'
@@ -20,6 +21,7 @@ export type SettingsCategoryId =
   | `account`
   | `servers`
   | `credentials`
+  | `command-line`
   | `appearance`
   | `local-runtime`
   | `mcp-servers`
@@ -102,6 +104,12 @@ export function SettingsSidebar({
           label: `Credentials`,
           icon: <Icon icon={KeyRound} size={2} />,
           visible: true,
+        },
+        {
+          id: `command-line`,
+          label: `Command Line`,
+          icon: <Icon icon={Terminal} size={2} />,
+          visible: isDesktop,
         },
         {
           id: `local-runtime`,

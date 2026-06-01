@@ -25,6 +25,12 @@ extraResources:
     to: agent-skills
     filter:
       - '**/*'
+  - from: ../electric-ax/dist-desktop
+    to: cli/electric-ax/dist
+    filter:
+      - '**/*'
+  - from: ../electric-ax/docker-compose.full.yml
+    to: cli/electric-ax/docker-compose.full.yml
 
 asar: true
 asarUnpack:

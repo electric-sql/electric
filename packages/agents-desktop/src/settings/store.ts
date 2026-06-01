@@ -16,6 +16,7 @@ import {
   normalizeApiKeys,
   saveApiKeysToSecret,
 } from '../credentials/api-keys'
+import { normalizeEnabledModelValues } from '../credentials/model-picker'
 import { normalizeServer, normalizeServers } from './servers'
 
 export { settingsPath } from '../shared/paths'
@@ -27,6 +28,7 @@ export const DEFAULT_SETTINGS: DesktopSettings = {
   defaultServerId: null,
   workingDirectory: null,
   apiKeysRef: GLOBAL_API_KEYS_REF,
+  launchAtLogin: false,
   codex: { enabled: false, source: null },
 }
 
@@ -147,6 +149,9 @@ export async function loadDesktopSettings(
       typeof parsed.apiKeysRef === `string` && parsed.apiKeysRef.trim()
         ? parsed.apiKeysRef.trim()
         : GLOBAL_API_KEYS_REF
+    const enabledModelValues = normalizeEnabledModelValues(
+      parsed.enabledModelValues
+    )
     Object.assign(deps.settings, {
       servers,
       defaultServerId,
@@ -155,8 +160,11 @@ export async function loadDesktopSettings(
           ? parsed.workingDirectory
           : null,
       apiKeysRef,
+      launchAtLogin: parsed.launchAtLogin === true,
       onboardingDismissed: parsed.onboardingDismissed === true,
       codex: normalizeCodexSettings(parsed.codex),
+      enabledModelValues:
+        enabledModelValues.length > 0 ? enabledModelValues : undefined,
       mcp: normalizeMcp(parsed.mcp),
       pullWakeRunnerId,
     })

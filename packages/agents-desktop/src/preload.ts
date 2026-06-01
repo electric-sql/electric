@@ -16,6 +16,8 @@ import type {
   DesktopServerFetchResponse,
   DesktopState,
   DiscoveredServer,
+  ElectricCliStatus,
+  LaunchAtLoginStatus,
   OnboardingState,
   ServerConfig,
 } from './shared/types'
@@ -156,6 +158,8 @@ const api = {
     ipcRenderer.invoke(`desktop:get-api-keys-status`),
   saveApiKeys: (keys: ApiKeys): Promise<void> =>
     ipcRenderer.invoke(`desktop:save-api-keys`, keys),
+  saveEnabledModels: (values: Array<string>): Promise<void> =>
+    ipcRenderer.invoke(`desktop:save-enabled-models`, values),
   codexSignIn: (): Promise<CodexStatus> =>
     ipcRenderer.invoke(`desktop:codex-sign-in`),
   codexEnableSource: (source: CodexAuthSource): Promise<CodexStatus> =>
@@ -164,8 +168,18 @@ const api = {
     ipcRenderer.invoke(`desktop:codex-disable`),
   restartLocalRuntimes: (): Promise<void> =>
     ipcRenderer.invoke(`desktop:restart-local-runtimes`),
+  getCliStatus: (): Promise<ElectricCliStatus> =>
+    ipcRenderer.invoke(`desktop:get-cli-status`),
+  installCli: (): Promise<ElectricCliStatus> =>
+    ipcRenderer.invoke(`desktop:install-cli`),
+  uninstallCli: (): Promise<ElectricCliStatus> =>
+    ipcRenderer.invoke(`desktop:uninstall-cli`),
   clearAllLocalData: (): Promise<void> =>
     ipcRenderer.invoke(`desktop:clear-all-local-data`),
+  getLaunchAtLoginStatus: (): Promise<LaunchAtLoginStatus> =>
+    ipcRenderer.invoke(`desktop:get-launch-at-login`),
+  setLaunchAtLogin: (enabled: boolean): Promise<LaunchAtLoginStatus> =>
+    ipcRenderer.invoke(`desktop:set-launch-at-login`, enabled),
   getOnboardingState: (): Promise<OnboardingState> =>
     ipcRenderer.invoke(`desktop:get-onboarding-state`),
   setOnboardingDismissed: (dismissed: boolean): Promise<void> =>
