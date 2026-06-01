@@ -7,6 +7,7 @@ import {
   Palette,
   Plug,
   Server,
+  Terminal,
   Trash2,
   UserCircle,
 } from 'lucide-react'
@@ -126,6 +127,17 @@ export function GeneralPage(): React.ReactElement {
               navigate({ to: `/settings/$category`, params: { category } })
             }
           />
+          {isDesktop && (
+            <SettingsLinkRow
+              icon={Terminal}
+              label="Command Line"
+              description="Install and inspect the electric terminal command."
+              category="command-line"
+              onNavigate={(category) =>
+                navigate({ to: `/settings/$category`, params: { category } })
+              }
+            />
+          )}
           {isDesktop && launchAtLogin?.supported && (
             <SettingsLinkRow
               icon={Brain}

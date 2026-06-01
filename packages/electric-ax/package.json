@@ -38,6 +38,7 @@
   },
   "scripts": {
     "build": "tsdown",
+    "build:desktop": "tsdown --config tsdown.desktop.config.ts",
     "dev": "tsdown --watch",
     "test": "vitest run",
     "coverage": "pnpm exec vitest run --coverage",

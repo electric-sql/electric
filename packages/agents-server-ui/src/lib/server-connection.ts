@@ -165,6 +165,25 @@ export interface LaunchAtLoginStatus {
   reason: string | null
 }
 
+export type ElectricCliInstallKind =
+  | `not-installed`
+  | `managed`
+  | `manual`
+  | `shadowed`
+  | `broken`
+
+export interface ElectricCliStatus {
+  kind: ElectricCliInstallKind
+  command: `electric`
+  path: string | null
+  version: string | null
+  bundledVersion: string
+  managedPath: string | null
+  installDir: string
+  installDirOnPath: boolean
+  error: string | null
+}
+
 /**
  * Commands fired from the Electron application menu / tray over the
  * `desktop:command` IPC channel. The renderer's command handler (see
@@ -313,6 +332,9 @@ declare global {
       codexEnableSource?: (source: CodexAuthSource) => Promise<CodexStatus>
       codexDisable?: () => Promise<CodexStatus>
       restartLocalRuntimes?: () => Promise<void>
+      getCliStatus?: () => Promise<ElectricCliStatus>
+      installCli?: () => Promise<ElectricCliStatus>
+      uninstallCli?: () => Promise<ElectricCliStatus>
       clearAllLocalData?: () => Promise<void>
       getLaunchAtLoginStatus?: () => Promise<LaunchAtLoginStatus>
       setLaunchAtLogin?: (enabled: boolean) => Promise<LaunchAtLoginStatus>
@@ -536,6 +558,18 @@ export async function codexDisable(): Promise<CodexStatus | null> {
 
 export async function restartLocalRuntimes(): Promise<void> {
   await window.electronAPI?.restartLocalRuntimes?.()
+}
+
+export async function loadCliStatus(): Promise<ElectricCliStatus | null> {
+  return (await window.electronAPI?.getCliStatus?.()) ?? null
+}
+
+export async function installCli(): Promise<ElectricCliStatus | null> {
+  return (await window.electronAPI?.installCli?.()) ?? null
+}
+
+export async function uninstallCli(): Promise<ElectricCliStatus | null> {
+  return (await window.electronAPI?.uninstallCli?.()) ?? null
 }
 
 export async function clearAllLocalData(): Promise<void> {
