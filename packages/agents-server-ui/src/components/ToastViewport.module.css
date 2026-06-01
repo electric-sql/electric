@@ -1,0 +1,79 @@
+.viewport {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: var(--ds-z-toast);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(420px, calc(100vw - 32px));
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 24px;
+  gap: 10px;
+  align-items: start;
+  padding: 12px;
+  border: 1px solid var(--ds-border-2);
+  border-left-width: 3px;
+  border-radius: 8px;
+  background: var(--ds-surface-raised);
+  box-shadow: var(--ds-shadow-3);
+}
+
+.toast[data-tone='danger'] {
+  border-left-color: var(--ds-red-9);
+}
+
+.toast[data-tone='warning'] {
+  border-left-color: var(--ds-amber-9);
+}
+
+.toast[data-tone='success'] {
+  border-left-color: var(--ds-green-9);
+}
+
+.toast[data-tone='info'] {
+  border-left-color: var(--ds-blue-9);
+}
+
+.icon {
+  margin-top: 2px;
+  color: var(--ds-text-2);
+}
+
+.toast[data-tone='danger'] .icon {
+  color: var(--ds-red-11);
+}
+
+.toast[data-tone='warning'] .icon {
+  color: var(--ds-amber-11);
+}
+
+.toast[data-tone='success'] .icon {
+  color: var(--ds-green-11);
+}
+
+.toast[data-tone='info'] .icon {
+  color: var(--ds-blue-11);
+}
+
+.content {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.description {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.close {
+  margin-top: -4px;
+  margin-right: -4px;
+}

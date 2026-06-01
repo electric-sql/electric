@@ -6,6 +6,7 @@ import { appendPathToUrl } from '@electric-ax/agents-runtime/client'
 import type { ReactNode } from 'react'
 import { serverFetch } from './auth-fetch'
 import { entityApiUrl, entitySpawnApiUrl } from './entity-api'
+import { showToast } from './toast'
 
 type EntityStatus =
   | `spawning`
@@ -276,6 +277,52 @@ export interface SignalInput {
   payload?: unknown
 }
 
+function parseErrorResponse(text: string): string | null {
+  if (!text) return null
+  try {
+    const data = JSON.parse(text) as {
+      error?: { message?: unknown }
+      message?: unknown
+    }
+    if (typeof data.error?.message === `string`) return data.error.message
+    if (typeof data.message === `string`) return data.message
+  } catch {
+    // Keep the raw response text below.
+  }
+  return text
+}
+
+function compactToastText(text: string): string {
+  const trimmed = text.trim()
+  return trimmed.length > 360 ? `${trimmed.slice(0, 357)}...` : trimmed
+}
+
+function showSignalFailureToast(input: {
+  action: `kill` | `signal`
+  entityUrl: string
+  signal: EntitySignal
+  status?: number
+  responseText?: string
+  error?: unknown
+}): void {
+  const title = input.action === `kill` ? `Kill failed` : `Signal failed`
+  const status = input.status ? ` (${input.status})` : ``
+  const parsed =
+    input.responseText !== undefined
+      ? parseErrorResponse(input.responseText)
+      : input.error instanceof Error
+        ? input.error.message
+        : input.error
+          ? String(input.error)
+          : null
+  const details = parsed ? compactToastText(parsed) : `No response details.`
+  showToast({
+    tone: `danger`,
+    title: `${title}${status}`,
+    description: `${input.signal} to ${input.entityUrl}: ${details}`,
+  })
+}
+
 function createSpawnAction(
   baseUrl: string,
   entitiesCollection: EntitiesCollection
@@ -350,19 +397,35 @@ function createKillAction(
       })
     },
     mutationFn: async (entityUrl) => {
-      const res = await serverFetch(
-        entityApiUrl(baseUrl, entityUrl, `/signal`),
-        {
+      const url = entityApiUrl(baseUrl, entityUrl, `/signal`)
+      let res: Response
+      try {
+        res = await serverFetch(url, {
           method: `POST`,
           headers: { 'content-type': `application/json` },
           body: JSON.stringify({
             signal: `SIGKILL`,
             reason: `Killed from agents UI`,
           }),
-        }
-      )
+        })
+      } catch (err) {
+        showSignalFailureToast({
+          action: `kill`,
+          entityUrl,
+          signal: `SIGKILL`,
+          error: err,
+        })
+        throw err
+      }
       if (!res.ok) {
         const text = await res.text().catch(() => ``)
+        showSignalFailureToast({
+          action: `kill`,
+          entityUrl,
+          signal: `SIGKILL`,
+          status: res.status,
+          responseText: text,
+        })
         throw new Error(text || `Kill failed (${res.status})`)
       }
       const data = (await res.json()) as { txid: number }
@@ -413,16 +476,32 @@ function createSignalAction(
       if (reason !== undefined) body.reason = reason
       if (payload !== undefined) body.payload = payload
 
-      const res = await serverFetch(
-        entityApiUrl(baseUrl, entityUrl, `/signal`),
-        {
+      const url = entityApiUrl(baseUrl, entityUrl, `/signal`)
+      let res: Response
+      try {
+        res = await serverFetch(url, {
           method: `POST`,
           headers: { 'content-type': `application/json` },
           body: JSON.stringify(body),
-        }
-      )
+        })
+      } catch (err) {
+        showSignalFailureToast({
+          action: `signal`,
+          entityUrl,
+          signal,
+          error: err,
+        })
+        throw err
+      }
       if (!res.ok) {
         const text = await res.text().catch(() => ``)
+        showSignalFailureToast({
+          action: `signal`,
+          entityUrl,
+          signal,
+          status: res.status,
+          responseText: text,
+        })
         throw new Error(text || `Signal failed (${res.status})`)
       }
       const data = (await res.json()) as { txid: number }
