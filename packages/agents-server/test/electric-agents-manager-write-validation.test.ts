@@ -34,6 +34,65 @@ function createManager() {
   })
 }
 
+function createAttachmentManager({
+  entityStatus = `running`,
+  readJson = [],
+  streamClient = {},
+}: {
+  entityStatus?: string
+  readJson?: Array<unknown>
+  streamClient?: Record<string, unknown>
+} = {}) {
+  return {
+    manager: new EntityManager({
+      registry: {
+        getEntity: vi.fn().mockResolvedValue({
+          url: `/chat/session-1`,
+          status: entityStatus,
+          streams: { main: `/chat/session-1` },
+        }),
+        getEntityType: vi.fn(),
+        replaceEntityManifestSource: vi.fn(),
+        close: vi.fn(),
+      } as any,
+      streamClient: {
+        create: vi.fn(),
+        append: vi.fn(),
+        delete: vi.fn(),
+        read: vi.fn(),
+        readJson: vi.fn().mockResolvedValue(readJson),
+        ...streamClient,
+      } as any,
+      validator: new SchemaValidator(),
+      wakeRegistry: {
+        setTimeoutCallback: vi.fn(),
+        setDebounceCallback: vi.fn(),
+      } as any,
+    }),
+  }
+}
+
+function attachmentManifest(value: Record<string, unknown>) {
+  return {
+    type: `manifest`,
+    key: `attachment:att-1`,
+    headers: { operation: `upsert` },
+    value: {
+      key: `attachment:att-1`,
+      kind: `attachment`,
+      id: `att-1`,
+      streamPath: `/chat/session-1/attachments/att-1`,
+      status: `complete`,
+      subject: { type: `inbox`, key: `msg-1` },
+      role: `input`,
+      mimeType: `image/png`,
+      byteLength: 4,
+      createdAt: `2026-01-01T00:00:00.000Z`,
+      ...value,
+    },
+  }
+}
+
 describe(`ElectricAgentsManager.validateWriteEvent`, () => {
   it(`validates delete events against old_value instead of value`, async () => {
     const manager = createManager()
@@ -77,6 +136,69 @@ describe(`ElectricAgentsManager.validateWriteEvent`, () => {
       false
     )
     expect((manager as any).isValidWriteToken(entity, `claim-token`)).toBe(true)
+  })
+})
+
+describe(`ElectricAgentsManager attachments`, () => {
+  it(`does not delete an existing stream when duplicate attachment creation conflicts`, async () => {
+    const create = vi.fn().mockRejectedValue({ status: 409 })
+    const remove = vi.fn()
+    const { manager } = createAttachmentManager({
+      streamClient: { create, delete: remove },
+    })
+
+    await expect(
+      manager.createAttachment(`/chat/session-1`, {
+        id: `att-1`,
+        bytes: new Uint8Array([1, 2, 3]),
+        mimeType: `image/png`,
+        subject: { type: `inbox`, key: `msg-1` },
+      })
+    ).rejects.toMatchObject({
+      status: 409,
+      message: `Attachment already exists at id "att-1"`,
+    })
+
+    expect(remove).not.toHaveBeenCalled()
+  })
+
+  it(`rejects attachment reads whose manifest points at a non-canonical stream`, async () => {
+    const read = vi.fn()
+    const { manager } = createAttachmentManager({
+      readJson: [
+        attachmentManifest({
+          streamPath: `/chat/other/attachments/att-1`,
+        }),
+      ],
+      streamClient: { read },
+    })
+
+    await expect(
+      manager.readAttachment(`/chat/session-1`, `att-1`)
+    ).rejects.toMatchObject({
+      status: 409,
+      message: `Attachment stream path does not match its entity and id`,
+    })
+
+    expect(read).not.toHaveBeenCalled()
+  })
+
+  it(`rejects attachment deletes for entities that are not accepting writes`, async () => {
+    const remove = vi.fn()
+    const { manager } = createAttachmentManager({
+      entityStatus: `stopped`,
+      readJson: [attachmentManifest({})],
+      streamClient: { delete: remove },
+    })
+
+    await expect(
+      manager.deleteAttachment(`/chat/session-1`, `att-1`)
+    ).rejects.toMatchObject({
+      status: 409,
+      message: `Entity is not accepting writes`,
+    })
+
+    expect(remove).not.toHaveBeenCalled()
   })
 })
 

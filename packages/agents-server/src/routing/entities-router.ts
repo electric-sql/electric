@@ -25,6 +25,7 @@ import {
   shouldLinkDispatchBeforeInitialMessage,
   unlinkEntityDispatchSubscription,
 } from './dispatch-policy.js'
+import { ElectricAgentsError } from '../entity-manager.js'
 import { routeBody, withSchema } from './schema.js'
 import type { ElectricAgentsEntity } from '../electric-agents-types.js'
 import type { JsonRouteRequest } from './schema.js'
@@ -203,6 +204,25 @@ type ScheduleBody = Static<typeof scheduleBodySchema>
 type EventSourceSubscriptionBody = Static<
   typeof eventSourceSubscriptionBodySchema
 >
+type AttachmentSubjectType = `inbox` | `run` | `text` | `tool_call` | `context`
+type AttachmentRole = `input` | `output`
+type ParsedAttachmentForm = {
+  id?: string
+  bytes: Uint8Array
+  mimeType: string
+  filename?: string
+  subject: { type: AttachmentSubjectType; key: string }
+  role?: AttachmentRole
+  meta?: Record<string, unknown>
+}
+
+const attachmentSubjectTypes = new Set<AttachmentSubjectType>([
+  `inbox`,
+  `run`,
+  `text`,
+  `tool_call`,
+  `context`,
+])
 
 export const entitiesRouter: EntitiesRoutes = Router<
   AgentsRouteRequest,
@@ -233,6 +253,21 @@ entitiesRouter.post(
   withExistingEntity,
   withSchema(sendBodySchema),
   sendEntity
+)
+entitiesRouter.post(
+  `/:type/:instanceId/attachments`,
+  withExistingEntity,
+  createAttachment
+)
+entitiesRouter.get(
+  `/:type/:instanceId/attachments/:attachmentId`,
+  withExistingEntity,
+  readAttachment
+)
+entitiesRouter.delete(
+  `/:type/:instanceId/attachments/:attachmentId`,
+  withExistingEntity,
+  deleteAttachment
 )
 entitiesRouter.patch(
   `/:type/:instanceId/inbox/:messageKey`,
@@ -316,6 +351,131 @@ function requireExistingEntityRoute(
     throw new Error(`existing entity middleware did not run`)
   }
   return request.entityRoute
+}
+
+function invalidAttachmentRequest(message: string): never {
+  throw new ElectricAgentsError(ErrCodeInvalidRequest, message, 400)
+}
+
+function formString(form: FormData, key: string): string | undefined {
+  const value = form.get(key)
+  if (typeof value !== `string`) return undefined
+  const trimmed = value.trim()
+  return trimmed || undefined
+}
+
+function parseJsonFormField<T>(form: FormData, key: string): T | undefined {
+  const raw = formString(form, key)
+  if (!raw) return undefined
+  try {
+    return JSON.parse(raw) as T
+  } catch {
+    invalidAttachmentRequest(`Invalid JSON field: ${key}`)
+  }
+}
+
+function parseAttachmentSubject(
+  form: FormData
+): ParsedAttachmentForm[`subject`] {
+  const explicit = parseJsonFormField<unknown>(form, `subject`)
+  if (explicit !== undefined) {
+    if (!explicit || typeof explicit !== `object` || Array.isArray(explicit)) {
+      invalidAttachmentRequest(`attachment subject must be an object`)
+    }
+    const subject = explicit as Record<string, unknown>
+    const type = subject.type
+    const key = subject.key
+    if (typeof type !== `string` || typeof key !== `string`) {
+      invalidAttachmentRequest(`attachment subject requires type and key`)
+    }
+    if (!attachmentSubjectTypes.has(type as AttachmentSubjectType)) {
+      invalidAttachmentRequest(`invalid attachment subject type`)
+    }
+    return { type: type as AttachmentSubjectType, key }
+  }
+
+  const type = formString(form, `subjectType`)
+  const key = formString(form, `subjectKey`)
+  if (!type || !key) {
+    invalidAttachmentRequest(`attachment subject is required`)
+  }
+  if (!attachmentSubjectTypes.has(type as AttachmentSubjectType)) {
+    invalidAttachmentRequest(`invalid attachment subject type`)
+  }
+  return { type: type as AttachmentSubjectType, key }
+}
+
+type UploadedFormFile = {
+  arrayBuffer: () => Promise<ArrayBuffer>
+  type?: string
+  name?: string
+}
+
+function getUploadedFormFile(
+  value: FormDataEntryValue | null
+): UploadedFormFile | null {
+  if (
+    value !== null &&
+    typeof value === `object` &&
+    `arrayBuffer` in value &&
+    typeof (value as { arrayBuffer?: unknown }).arrayBuffer === `function`
+  ) {
+    return value as unknown as UploadedFormFile
+  }
+  return null
+}
+
+async function parseAttachmentForm(
+  request: AgentsRouteRequest
+): Promise<ParsedAttachmentForm> {
+  const contentType = request.headers.get(`content-type`)?.toLowerCase() ?? ``
+  if (!contentType.includes(`multipart/form-data`)) {
+    invalidAttachmentRequest(`Attachment uploads must use multipart/form-data`)
+  }
+
+  let form: FormData
+  try {
+    form = await (request as unknown as Request).formData()
+  } catch {
+    invalidAttachmentRequest(`Invalid multipart form data`)
+  }
+
+  const file = getUploadedFormFile(form.get(`file`))
+  if (!file) {
+    invalidAttachmentRequest(`Missing file field`)
+  }
+
+  const role = formString(form, `role`)
+  if (role !== undefined && role !== `input` && role !== `output`) {
+    invalidAttachmentRequest(`invalid attachment role`)
+  }
+
+  const fileName =
+    formString(form, `filename`) ??
+    (typeof file.name === `string` ? file.name : undefined)
+  const mimeType =
+    formString(form, `mimeType`) ||
+    (typeof file.type === `string` ? file.type : undefined) ||
+    `application/octet-stream`
+  const meta = parseJsonFormField<Record<string, unknown>>(form, `meta`)
+  if (meta !== undefined && (typeof meta !== `object` || Array.isArray(meta))) {
+    invalidAttachmentRequest(`attachment meta must be an object`)
+  }
+
+  return {
+    id: formString(form, `id`),
+    bytes: new Uint8Array(await file.arrayBuffer()),
+    mimeType,
+    filename: fileName,
+    subject: parseAttachmentSubject(form),
+    role,
+    meta,
+  }
+}
+
+function contentDisposition(filename: string): string {
+  const fallback = filename.replace(/["\\\r\n]/g, `_`)
+  return `attachment; filename="${fallback}"; filename*=UTF-8''${encodeURIComponent(filename)}`
 }
 
 function rejectPrincipalEntityMutation(
@@ -693,6 +853,72 @@ async function sendEntity(
   }
 
   return status(204)
+}
+
+async function createAttachment(
+  request: AgentsRouteRequest,
+  ctx: TenantContext
+): Promise<Response> {
+  const principalMutationError = rejectPrincipalEntityMutation(
+    request,
+    `given attachments`
+  )
+  if (principalMutationError) return principalMutationError
+
+  const { entityUrl } = requireExistingEntityRoute(request)
+  const form = await parseAttachmentForm(request)
+  const result = await ctx.entityManager.createAttachment(entityUrl, {
+    id: form.id,
+    bytes: form.bytes,
+    mimeType: form.mimeType,
+    filename: form.filename,
+    subject: form.subject,
+    role: form.role,
+    createdBy: ctx.principal.url,
+    meta: form.meta,
+  })
+  return json(result, { status: 201 })
+}
+
+async function readAttachment(
+  request: AgentsRouteRequest,
+  ctx: TenantContext
+): Promise<Response> {
+  const { entityUrl } = requireExistingEntityRoute(request)
+  const result = await ctx.entityManager.readAttachment(
+    entityUrl,
+    decodeURIComponent(request.params.attachmentId)
+  )
+  const headers = new Headers({
+    'content-type': result.attachment.mimeType,
+    'content-length': String(result.bytes.length),
+    'cache-control': `private, max-age=31536000, immutable`,
+  })
+  if (result.attachment.filename) {
+    headers.set(
+      `content-disposition`,
+      contentDisposition(result.attachment.filename)
+    )
+  }
+  return new Response(result.bytes, { status: 200, headers })
+}
+
+async function deleteAttachment(
+  request: AgentsRouteRequest,
+  ctx: TenantContext
+): Promise<Response> {
+  const principalMutationError = rejectPrincipalEntityMutation(
+    request,
+    `stripped of attachments`
+  )
+  if (principalMutationError) return principalMutationError
+
+  const { entityUrl } = requireExistingEntityRoute(request)
+  const result = await ctx.entityManager.deleteAttachment(
+    entityUrl,
+    decodeURIComponent(request.params.attachmentId)
+  )
+  return json(result)
 }
 
 async function updateInboxMessage(

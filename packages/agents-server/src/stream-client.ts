@@ -225,7 +225,7 @@ export class StreamClient {
 
   async create(
     path: string,
-    opts: { contentType: string; body?: Uint8Array | string }
+    opts: { contentType: string; body?: Uint8Array | string; closed?: boolean }
   ): Promise<void> {
     return await withSpan(`stream.create`, async (span) => {
       span.setAttributes({
@@ -237,6 +237,7 @@ export class StreamClient {
         headers: this.streamHeaders(),
         contentType: opts.contentType,
         body: opts.body,
+        closed: opts.closed,
       })
     })
   }
@@ -368,38 +369,18 @@ export class StreamClient {
         offset: fromOffset ?? `-1`,
         live: false,
       })
-      const messages: Array<StreamMessage> = []
-
-      return await new Promise<StreamReadResult>((resolve, reject) => {
-        let settled = false
-        let unsub = () => {}
-
-        const finish = (r: StreamReadResult) => {
-          if (settled) return
-          settled = true
-          unsub()
-          resolve(r)
-        }
-
-        unsub = response.subscribeBytes((chunk) => {
-          messages.push({
-            data: chunk.data,
-            offset: chunk.offset,
-          })
-          if (chunk.upToDate || chunk.streamClosed) {
-            finish({ messages })
-          }
-        })
-
-        response.closed
-          .then(() => finish({ messages }))
-          .catch((err) => {
-            if (settled) return
-            settled = true
-            unsub()
-            reject(err)
-          })
-      })
+      const body = await response.body()
+      return {
+        messages:
+          body.length === 0
+            ? []
+            : [
+                {
+                  data: body,
+                  offset: response.offset,
+                },
+              ],
+      }
     })
   }
 

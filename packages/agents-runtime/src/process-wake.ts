@@ -1907,6 +1907,12 @@ export async function processWake(
         doObserve,
         doSpawn,
         doMkdb,
+        doCreateAttachment: (attachment) =>
+          serverClient
+            .createAttachment({ entityUrl, attachment })
+            .then((result) => result.attachment),
+        doReadAttachment: (id) =>
+          serverClient.readAttachment({ entityUrl, id }),
         prepareAgentRun: waitForSharedStateWiring,
         executeSend: (send) => executeSend(send),
         doSetTag: (key, value) =>

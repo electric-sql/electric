@@ -15,6 +15,7 @@ const modelCatalog: BuiltinModelCatalog = {
     label: `Anthropic Claude Sonnet 4.6`,
     value: `anthropic:claude-sonnet-4-6`,
     reasoning: true,
+    input: [`text`, `image`],
   },
   choices: [
     {
@@ -23,6 +24,7 @@ const modelCatalog: BuiltinModelCatalog = {
       label: `Anthropic Claude Sonnet 4.6`,
       value: `anthropic:claude-sonnet-4-6`,
       reasoning: true,
+      input: [`text`, `image`],
     },
   ],
 }
@@ -137,6 +139,71 @@ describe(`horton tool composition`, () => {
     } as any
 
     await expect(extractFirstUserMessage(ctx)).resolves.toBe(`fallback`)
+  })
+
+  it(`includes input attachments in the title source text`, async () => {
+    const ctx = {
+      db: {
+        collections: {
+          inbox: {
+            toArray: [
+              {
+                key: `m-1`,
+                from: `user`,
+                payload: { text: `Can you critique this UI?` },
+                _seq: 1,
+              },
+            ],
+          },
+          manifests: {
+            toArray: [
+              {
+                kind: `attachment`,
+                id: `att-1`,
+                subject: { type: `inbox`, key: `m-1` },
+                role: `input`,
+                mimeType: `image/png`,
+                filename: `screen.png`,
+              },
+            ],
+          },
+        },
+      },
+    } as any
+
+    await expect(extractFirstUserMessage(ctx)).resolves.toBe(
+      [`Can you critique this UI?`, `Attached image: screen.png`].join(`\n`)
+    )
+  })
+
+  it(`can title an image-only first message from its attachment metadata`, async () => {
+    const ctx = {
+      db: {
+        collections: {
+          inbox: {
+            toArray: [
+              { key: `m-1`, from: `user`, payload: { text: `` }, _seq: 1 },
+            ],
+          },
+          manifests: {
+            toArray: [
+              {
+                kind: `attachment`,
+                id: `att-1`,
+                subject: { type: `inbox`, key: `m-1` },
+                role: `input`,
+                mimeType: `image/png`,
+                filename: `screen.png`,
+              },
+            ],
+          },
+        },
+      },
+    } as any
+
+    await expect(extractFirstUserMessage(ctx)).resolves.toBe(
+      `Attached image: screen.png`
+    )
   })
 
   it(`adds event source tools through the built-in electric tool factory`, async () => {

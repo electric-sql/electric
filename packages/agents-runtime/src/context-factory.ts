@@ -22,11 +22,15 @@ import type {
   AgentModel,
   AgentRunResult,
   AgentTool,
+  AttachmentCreateInput,
+  AttachmentsApi,
   EntitySignal,
   EntityHandle,
   EntityStreamDBWithActions,
   HandlerContext,
+  LLMContentBlock,
   LLMMessage,
+  ManifestAttachmentEntry,
   ObservationHandle,
   ObservationSource,
   RunHandle,
@@ -50,6 +54,9 @@ function agentModelProvider(config: AgentConfig): string {
     ? (config.provider ?? `anthropic`)
     : config.model.provider
 }
+
+const MAX_HYDRATED_IMAGE_ATTACHMENTS = 4
+const MAX_HYDRATED_IMAGE_ATTACHMENT_BYTES = 10 * 1024 * 1024
 
 export interface HandlerContextConfig<TState extends StateProxy = StateProxy> {
   entityUrl: string
@@ -96,6 +103,10 @@ export interface HandlerContextConfig<TState extends StateProxy = StateProxy> {
     id: string,
     schema: TSchema
   ) => SharedStateHandle<TSchema>
+  doCreateAttachment?: (
+    input: AttachmentCreateInput
+  ) => Promise<ManifestAttachmentEntry>
+  doReadAttachment?: (id: string) => Promise<Uint8Array>
   prepareAgentRun?: () => Promise<void>
   executeSend: (send: {
     targetUrl: string
@@ -253,6 +264,44 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
     wakeSession: config.wakeSession,
   })
 
+  const listAttachments: AttachmentsApi[`list`] = (filter) => {
+    const attachments = config.db.collections.manifests.toArray
+      .filter((entry) => entry.kind === `attachment`)
+      .map((entry) => entry as unknown as ManifestAttachmentEntry)
+    return attachments.filter((attachment) => {
+      if (filter?.role && attachment.role !== filter.role) return false
+      if (
+        filter?.subject &&
+        (attachment.subject.type !== filter.subject.type ||
+          attachment.subject.key !== filter.subject.key)
+      ) {
+        return false
+      }
+      return true
+    })
+  }
+
+  const attachmentsApi: AttachmentsApi = {
+    list: listAttachments,
+    get(id) {
+      return listAttachments().find((attachment) => attachment.id === id)
+    },
+    async read(id) {
+      if (!config.doReadAttachment) {
+        throw new Error(`[agent-runtime] attachments.read() is not configured`)
+      }
+      return await config.doReadAttachment(id)
+    },
+    async create(input) {
+      if (!config.doCreateAttachment) {
+        throw new Error(
+          `[agent-runtime] attachments.create() is not configured`
+        )
+      }
+      return await config.doCreateAttachment(input)
+    },
+  }
+
   function structuralHash(nextConfig: UseContextConfig): string {
     const sources = Object.entries(nextConfig.sources)
       .sort(([leftName], [rightName]) => leftName.localeCompare(rightName))
@@ -263,6 +312,127 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
       sourceBudget: nextConfig.sourceBudget,
       sources,
     })
+  }
+
+  function bytesToBase64(bytes: Uint8Array): string {
+    const chunkSize = 0x8000
+    let binary = ``
+    for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+      const chunk = bytes.subarray(offset, offset + chunkSize)
+      binary += String.fromCharCode(...chunk)
+    }
+    return btoa(binary)
+  }
+
+  function attachmentDescriptor(attachment: ManifestAttachmentEntry): string {
+    return `${attachment.filename ?? attachment.id}, type=${attachment.mimeType}, size=${attachment.byteLength ?? `unknown`}`
+  }
+
+  function selectHydratableImageAttachmentIds(
+    messages: Array<LLMMessage>
+  ): Set<string> {
+    const selected = new Set<string>()
+    let selectedBytes = 0
+
+    for (
+      let messageIndex = messages.length - 1;
+      messageIndex >= 0;
+      messageIndex--
+    ) {
+      const message = messages[messageIndex]
+      if (!message || typeof message.content === `string`) continue
+
+      for (
+        let blockIndex = message.content.length - 1;
+        blockIndex >= 0;
+        blockIndex--
+      ) {
+        const block = message.content[blockIndex]
+        if (!block || block.type !== `attachment` || selected.has(block.id)) {
+          continue
+        }
+
+        const attachment = attachmentsApi.get(block.id)
+        if (
+          !attachment ||
+          attachment.status !== `complete` ||
+          !attachment.mimeType.startsWith(`image/`)
+        ) {
+          continue
+        }
+
+        const byteLength = attachment.byteLength ?? 0
+        if (
+          selected.size >= MAX_HYDRATED_IMAGE_ATTACHMENTS ||
+          selectedBytes + byteLength > MAX_HYDRATED_IMAGE_ATTACHMENT_BYTES
+        ) {
+          continue
+        }
+
+        selected.add(block.id)
+        selectedBytes += byteLength
+      }
+    }
+
+    return selected
+  }
+
+  async function hydrateAttachmentBlocks(
+    messages: Array<LLMMessage>
+  ): Promise<Array<LLMMessage>> {
+    const hydratableImageAttachmentIds =
+      selectHydratableImageAttachmentIds(messages)
+
+    return await Promise.all(
+      messages.map(async (message) => {
+        if (typeof message.content === `string`) {
+          return message
+        }
+        const content = await Promise.all(
+          message.content.map(async (block): Promise<LLMContentBlock> => {
+            if (block.type !== `attachment`) {
+              return block
+            }
+            const attachment = attachmentsApi.get(block.id)
+            if (!attachment) {
+              return {
+                type: `text`,
+                text: `[attachment missing: id=${block.id}]`,
+              }
+            }
+            if (
+              attachment.status !== `complete` ||
+              !attachment.mimeType.startsWith(`image/`)
+            ) {
+              return {
+                type: `text`,
+                text: `[attachment: ${attachmentDescriptor(attachment)}]`,
+              }
+            }
+            if (!hydratableImageAttachmentIds.has(block.id)) {
+              return {
+                type: `text`,
+                text: `[attachment not sent to model: ${attachmentDescriptor(attachment)}, reason=image attachment prompt limit]`,
+              }
+            }
+            try {
+              const bytes = await attachmentsApi.read(block.id)
+              return {
+                type: `image`,
+                data: bytesToBase64(bytes),
+                mimeType: attachment.mimeType,
+              }
+            } catch (error) {
+              return {
+                type: `text`,
+                text: `[attachment unreadable: id=${block.id}, error=${error instanceof Error ? error.message : String(error)}]`,
+              }
+            }
+          })
+        )
+        return { ...message, content }
+      })
+    )
   }
 
   function readContextHistoryOffset(row: { key: string }): string | undefined {
@@ -516,10 +686,12 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
             )
           },
         })
-        return runAgent(messages, autoTools)
+        return runAgent(await hydrateAttachmentBlocks(messages), autoTools)
       }
 
-      return runAgent(timelineToMessages(config.db))
+      return runAgent(
+        await hydrateAttachmentBlocks(timelineToMessages(config.db))
+      )
     },
   }
 
@@ -596,6 +768,7 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         afterMs: opts?.afterMs,
       })
     },
+    attachments: attachmentsApi,
     onSignal(handler): void {
       config.registerSignalHandler?.(handler)
     },

@@ -1,7 +1,12 @@
 import type { EntityTags, TagOperation } from './tags'
 import { appendPathToUrl } from './url'
 import { buildEventSourceSubscriptionId } from './event-sources'
-import type { ClaimTokenHeader, HeadersProvider } from './types'
+import type {
+  AttachmentCreateInput,
+  ClaimTokenHeader,
+  HeadersProvider,
+  ManifestAttachmentEntry,
+} from './types'
 import type { EntitySignal } from './entity-schema'
 import type {
   EventSourceContract,
@@ -95,6 +100,14 @@ export interface SignalEntityOptions {
 
 export interface RuntimeServerClient {
   sendEntityMessage: (options: SendEntityMessageOptions) => Promise<void>
+  createAttachment: (options: {
+    entityUrl: string
+    attachment: AttachmentCreateInput
+  }) => Promise<{ txid: string; attachment: ManifestAttachmentEntry }>
+  readAttachment: (options: {
+    entityUrl: string
+    id: string
+  }) => Promise<Uint8Array>
   spawnEntity: (options: SpawnEntityOptions) => Promise<RuntimeEntityInfo>
   getEntity: (entityUrl: string) => Promise<RuntimeEntityInfo>
   ensureSharedStateStream: (sharedStateId: string) => Promise<string>
@@ -278,6 +291,77 @@ export function createRuntimeServerClient(
         `send to ${targetUrl} failed (${response.status}): ${await readErrorText(response)}`
       )
     }
+  }
+
+  const createAttachment = async ({
+    entityUrl,
+    attachment,
+  }: {
+    entityUrl: string
+    attachment: AttachmentCreateInput
+  }): Promise<{ txid: string; attachment: ManifestAttachmentEntry }> => {
+    const form = new FormData()
+    let bytes: Blob
+    if (attachment.bytes instanceof Blob) {
+      bytes = attachment.bytes
+    } else if (attachment.bytes instanceof Uint8Array) {
+      const copy = new Uint8Array(attachment.bytes.byteLength)
+      copy.set(attachment.bytes)
+      bytes = new Blob([copy.buffer], {
+        type: attachment.mimeType ?? `application/octet-stream`,
+      })
+    } else {
+      bytes = new Blob([attachment.bytes], {
+        type: attachment.mimeType ?? `application/octet-stream`,
+      })
+    }
+    form.set(
+      `file`,
+      bytes,
+      attachment.filename && attachment.filename.trim()
+        ? attachment.filename
+        : `attachment`
+    )
+    if (attachment.mimeType) form.set(`mimeType`, attachment.mimeType)
+    if (attachment.filename) form.set(`filename`, attachment.filename)
+    form.set(`subject`, JSON.stringify(attachment.subject))
+    form.set(`role`, attachment.role ?? `input`)
+    if (attachment.meta) form.set(`meta`, JSON.stringify(attachment.meta))
+
+    const response = await request(`${entityRpcPath(entityUrl)}/attachments`, {
+      method: `POST`,
+      body: form,
+    })
+
+    if (!response.ok) {
+      throw new Error(
+        `create attachment on ${entityUrl} failed (${response.status}): ${await readErrorText(response)}`
+      )
+    }
+
+    return (await response.json()) as {
+      txid: string
+      attachment: ManifestAttachmentEntry
+    }
+  }
+
+  const readAttachment = async ({
+    entityUrl,
+    id,
+  }: {
+    entityUrl: string
+    id: string
+  }): Promise<Uint8Array> => {
+    const response = await request(
+      `${entityRpcPath(entityUrl)}/attachments/${encodeURIComponent(id)}`,
+      { method: `GET` }
+    )
+    if (!response.ok) {
+      throw new Error(
+        `read attachment ${id} on ${entityUrl} failed (${response.status}): ${await readErrorText(response)}`
+      )
+    }
+    return new Uint8Array(await response.arrayBuffer())
   }
 
   const getEntity = async (entityUrl: string): Promise<RuntimeEntityInfo> => {
@@ -669,6 +753,8 @@ export function createRuntimeServerClient(
 
   return {
     sendEntityMessage,
+    createAttachment,
+    readAttachment,
     spawnEntity,
     getEntity,
     ensureSharedStateStream,

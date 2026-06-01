@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
+import { eq, useLiveQuery } from '@tanstack/react-db'
 import { useEntityTimeline } from '../../hooks/useEntityTimeline'
 import { EntityTimeline } from '../EntityTimeline'
 import { MessageInput } from '../MessageInput'
 import { EntityContextDrawer } from '../EntityContextDrawer'
 import { useElectricAgents } from '../../lib/ElectricAgentsProvider'
+import { schemaModelSupportsImageInput } from '../../lib/modelCapabilities'
 import type { ViewProps } from '../../lib/workspace/viewRegistry'
 import type { EntityTimelineQueryRow } from '@electric-ax/agents-runtime/client'
 import type { OptimisticInboxMessage } from '../../lib/sendMessage'
@@ -106,6 +108,7 @@ export function ChatLogView({
       loading={loading}
       error={error}
       entityStopped={entityStopped}
+      baseUrl={baseUrl}
       cacheKey={`${baseUrl}${connectUrl ?? ``}:${scrollToBottomSignal ?? 0}`}
       tileId={tileId}
       entityUrl={connectUrl}
@@ -139,10 +142,23 @@ function GenericChatBody({
     loading,
     error,
   } = useEntityTimeline(baseUrl || null, entityUrl)
-  const { signalEntity } = useElectricAgents()
+  const { signalEntity, entityTypesCollection } = useElectricAgents()
   const navigate = useNavigate()
   const [sentMessageSignal, setSentMessageSignal] = useState(0)
   const [stopPending, setStopPending] = useState(false)
+  const { data: matchingEntityTypes = [] } = useLiveQuery(
+    (query) => {
+      if (!entityTypesCollection) return undefined
+      return query
+        .from({ t: entityTypesCollection })
+        .where(({ t }) => eq(t.name, entity.type))
+    },
+    [entityTypesCollection, entity.type]
+  )
+  const imageAttachmentsEnabled = schemaModelSupportsImageInput(
+    matchingEntityTypes[0]?.creation_schema,
+    entity.spawn_args
+  )
   const optimisticInlineInboxKeys = useMemo(
     () =>
       new Set(
@@ -218,6 +234,7 @@ function GenericChatBody({
         loading={loading}
         error={error}
         entityStopped={entityStopped}
+        baseUrl={baseUrl}
         cacheKey={`${baseUrl}${entityUrl ?? ``}`}
         tileId={tileId}
         entityUrl={entityUrl}
@@ -233,6 +250,7 @@ function GenericChatBody({
         disabled={entityStopped || !db}
         generationActive={generationActive}
         stopPending={stopPending}
+        imageAttachmentsEnabled={imageAttachmentsEnabled}
         pendingMessages={drawerPendingInbox}
         inlineQueuedSubmits={
           !entityStopped &&
@@ -243,6 +261,7 @@ function GenericChatBody({
           <EntityContextDrawer
             entity={entity}
             db={db}
+            baseUrl={baseUrl}
             tileId={tileId}
             pendingMessages={pending.pendingMessages}
             pendingEditingKey={pending.editingKey}
