@@ -1,5 +1,11 @@
 # @electric-ax/agents-runtime
 
+## 0.3.7
+
+### Patch Changes
+
+- 9e01e58: Preserve and surface detailed run failure information from the Pi adapter so failed runs can render actionable error details instead of a generic failure message.
+
 ## 0.3.6
 
 ### Patch Changes

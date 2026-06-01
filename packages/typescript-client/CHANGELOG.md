@@ -1,5 +1,11 @@
 # @electric-sql/client
 
+## 1.5.20
+
+### Patch Changes
+
+- ae2d039: Fix `requestSnapshot()` so it resolves only after the injected snapshot batch has been delivered to subscribers, including async and reentrant subscriber paths.
+
 ## 1.5.19
 
 ### Patch Changes
