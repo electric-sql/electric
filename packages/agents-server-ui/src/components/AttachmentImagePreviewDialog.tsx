@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Image as ImageIcon, X } from 'lucide-react'
+import { Download, Image as ImageIcon, X } from 'lucide-react'
 import { Dialog, Icon, IconButton } from '../ui'
-import { formatAttachmentSize } from '../lib/attachments'
+import { downloadAttachment, formatAttachmentSize } from '../lib/attachments'
 import { serverFetch } from '../lib/auth-fetch'
 import styles from './AttachmentImagePreviewDialog.module.css'
 
@@ -39,19 +39,38 @@ export function AttachmentImagePreviewDialog({
             <span>{attachment.name}</span>
             <small>{label}</small>
           </div>
-          <Dialog.Close
-            render={
-              <IconButton
-                aria-label="Close image preview"
-                title="Close image preview"
-                size={2}
-                variant="soft"
-                tone="neutral"
-              >
-                <Icon icon={X} size={2} />
-              </IconButton>
-            }
-          />
+          <div className={styles.imagePreviewActions}>
+            <IconButton
+              aria-label="Download original image"
+              title="Download original image"
+              size={2}
+              variant="soft"
+              tone="neutral"
+              onClick={() => {
+                void downloadAttachment({
+                  url: attachment.url,
+                  filename: attachment.name,
+                }).catch((error) => {
+                  console.error(`Attachment download failed`, error)
+                })
+              }}
+            >
+              <Icon icon={Download} size={2} />
+            </IconButton>
+            <Dialog.Close
+              render={
+                <IconButton
+                  aria-label="Close image preview"
+                  title="Close image preview"
+                  size={2}
+                  variant="soft"
+                  tone="neutral"
+                >
+                  <Icon icon={X} size={2} />
+                </IconButton>
+              }
+            />
+          </div>
         </div>
         <div className={styles.imagePreviewStage}>
           {imageUrl ? (

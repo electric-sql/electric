@@ -609,7 +609,7 @@ async function proxyPassThrough(
   ctx: TenantContext
 ): Promise<Response> {
   const streamPath = new URL(request.url).pathname
-  if (ctx.entityManager.isAttachmentStreamPath(streamPath)) {
+  if (ctx.entityManager?.isAttachmentStreamPath(streamPath)) {
     return new Response(null, { status: 404 })
   }
   const upstream = await forwardToDurableStreams(ctx, request)

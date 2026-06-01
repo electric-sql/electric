@@ -208,6 +208,28 @@ function getEntityAttachmentStreamPath(
   return `${entityUrl.replace(/\/+$/, ``)}/attachments/${attachmentId}`
 }
 
+function isStreamCreateConflict(error: unknown): boolean {
+  return (
+    !!error &&
+    typeof error === `object` &&
+    ((`status` in error && error.status === 409) ||
+      (`code` in error && error.code === `CONFLICT_SEQ`))
+  )
+}
+
+function assertCanonicalAttachmentStreamPath(
+  entityUrl: string,
+  attachment: ManifestAttachmentEntry
+): void {
+  const expected = getEntityAttachmentStreamPath(entityUrl, attachment.id)
+  if (attachment.streamPath === expected) return
+  throw new ElectricAgentsError(
+    ErrCodeInvalidRequest,
+    `Attachment stream path does not match its entity and id`,
+    409
+  )
+}
+
 function validateAttachmentId(id: string): void {
   if (!id || id.includes(`/`) || id.startsWith(`.`)) {
     throw new ElectricAgentsError(
@@ -2040,12 +2062,14 @@ export class EntityManager {
         : {}),
     }
 
+    let streamCreated = false
     try {
       await this.streamClient.create(streamPath, {
         contentType: mimeType,
         body: req.bytes,
         closed: true,
       })
+      streamCreated = true
       await this.writeManifestEntry(
         entityUrl,
         manifestKey,
@@ -2054,7 +2078,16 @@ export class EntityManager {
         { txid }
       )
     } catch (error) {
-      await this.streamClient.delete(streamPath).catch(() => undefined)
+      if (streamCreated) {
+        await this.streamClient.delete(streamPath).catch(() => undefined)
+      }
+      if (!streamCreated && isStreamCreateConflict(error)) {
+        throw new ElectricAgentsError(
+          ErrCodeInvalidRequest,
+          `Attachment already exists at id "${id}"`,
+          409
+        )
+      }
       throw error
     }
 
@@ -2101,6 +2134,7 @@ export class EntityManager {
         409
       )
     }
+    assertCanonicalAttachmentStreamPath(entityUrl, attachment)
 
     const result = await this.streamClient.read(attachment.streamPath)
     return {
@@ -2113,6 +2147,21 @@ export class EntityManager {
     entityUrl: string,
     id: string
   ): Promise<{ txid: string }> {
+    const entity = await this.registry.getEntity(entityUrl)
+    if (!entity) {
+      throw new ElectricAgentsError(ErrCodeNotFound, `Entity not found`, 404)
+    }
+    if (rejectsNormalWrites(entity.status)) {
+      throw new ElectricAgentsError(
+        ErrCodeNotRunning,
+        `Entity is not accepting writes`,
+        409
+      )
+    }
+    if (this.isForkWorkLockedEntity(entityUrl)) {
+      this.assertEntityNotForkWorkLocked(entityUrl)
+    }
+
     const attachment = await this.getAttachment(entityUrl, id)
     if (!attachment) {
       throw new ElectricAgentsError(
@@ -2121,6 +2170,7 @@ export class EntityManager {
         404
       )
     }
+    assertCanonicalAttachmentStreamPath(entityUrl, attachment)
     const txid = randomUUID()
     await this.writeManifestEntry(
       entityUrl,

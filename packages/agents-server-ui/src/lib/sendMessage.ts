@@ -58,6 +58,10 @@ export function createClientInboxKey(): string {
   return `client-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 }
 
+function createClientAttachmentId(): string {
+  return globalThis.crypto?.randomUUID?.() ?? createClientInboxKey()
+}
+
 function nextOptimisticInboxOrderIndex(): number {
   optimisticInboxOrderIndex += 1
   if (optimisticInboxOrderIndex >= Number.MAX_SAFE_INTEGER) {
@@ -157,12 +161,16 @@ export async function uploadMessageAttachments({
   entityUrl: string
   key: string
   attachments: Array<File> | undefined
-}): Promise<void> {
-  if (!attachments || attachments.length === 0) return
+}): Promise<Array<string>> {
+  if (!attachments || attachments.length === 0) return []
 
-  await Promise.all(
-    attachments.map(async (file) => {
+  const uploadedIds: Array<string> = []
+  try {
+    for (const file of attachments) {
+      const id = createClientAttachmentId()
+      uploadedIds.push(id)
       const form = new FormData()
+      form.set(`id`, id)
       form.set(`file`, file, file.name || `attachment`)
       form.set(
         `subject`,
@@ -190,7 +198,40 @@ export async function uploadMessageAttachments({
         const body = await res.text().catch(() => ``)
         throw readSendError(res.status, body)
       }
-    })
+      const data = (await res.json()) as { attachment?: { id?: unknown } }
+      if (data.attachment?.id !== id) {
+        throw new Error(`Attachment upload returned an invalid response`)
+      }
+    }
+  } catch (error) {
+    await deleteUploadedAttachments({ baseUrl, entityUrl, ids: uploadedIds })
+    throw error
+  }
+
+  return uploadedIds
+}
+
+async function deleteUploadedAttachments({
+  baseUrl,
+  entityUrl,
+  ids,
+}: {
+  baseUrl: string
+  entityUrl: string
+  ids: Array<string>
+}): Promise<void> {
+  if (ids.length === 0) return
+  await Promise.allSettled(
+    ids.map((id) =>
+      serverFetch(
+        entityApiUrl(
+          baseUrl,
+          entityUrl,
+          `/attachments/${encodeURIComponent(id)}`
+        ),
+        { method: `DELETE` }
+      )
+    )
   )
 }
 
@@ -218,26 +259,35 @@ export async function sendEntityMessage({
     url,
     from ?? getConfiguredActivePrincipal() ?? ``
   )
-  await uploadMessageAttachments({
+  const uploadedAttachmentIds = await uploadMessageAttachments({
     baseUrl,
     entityUrl,
     key,
     attachments,
   })
-  const res = await serverFetch(url, {
-    method: `POST`,
-    headers: { 'content-type': `application/json` },
-    body: JSON.stringify({
-      from: sender,
-      key,
-      payload: { text },
-      mode,
-      position,
-    }),
-  })
-  if (!res.ok) {
-    const body = await res.text().catch(() => ``)
-    throw readSendError(res.status, body)
+  try {
+    const res = await serverFetch(url, {
+      method: `POST`,
+      headers: { 'content-type': `application/json` },
+      body: JSON.stringify({
+        from: sender,
+        key,
+        payload: { text },
+        mode,
+        position,
+      }),
+    })
+    if (!res.ok) {
+      const body = await res.text().catch(() => ``)
+      throw readSendError(res.status, body)
+    }
+  } catch (error) {
+    await deleteUploadedAttachments({
+      baseUrl,
+      entityUrl,
+      ids: uploadedAttachmentIds,
+    })
+    throw error
   }
 }
 

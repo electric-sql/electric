@@ -55,6 +55,9 @@ function agentModelProvider(config: AgentConfig): string {
     : config.model.provider
 }
 
+const MAX_HYDRATED_IMAGE_ATTACHMENTS = 4
+const MAX_HYDRATED_IMAGE_ATTACHMENT_BYTES = 10 * 1024 * 1024
+
 export interface HandlerContextConfig<TState extends StateProxy = StateProxy> {
   entityUrl: string
   entityType: string
@@ -321,9 +324,65 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
     return btoa(binary)
   }
 
+  function attachmentDescriptor(attachment: ManifestAttachmentEntry): string {
+    return `${attachment.filename ?? attachment.id}, type=${attachment.mimeType}, size=${attachment.byteLength ?? `unknown`}`
+  }
+
+  function selectHydratableImageAttachmentIds(
+    messages: Array<LLMMessage>
+  ): Set<string> {
+    const selected = new Set<string>()
+    let selectedBytes = 0
+
+    for (
+      let messageIndex = messages.length - 1;
+      messageIndex >= 0;
+      messageIndex--
+    ) {
+      const message = messages[messageIndex]
+      if (!message || typeof message.content === `string`) continue
+
+      for (
+        let blockIndex = message.content.length - 1;
+        blockIndex >= 0;
+        blockIndex--
+      ) {
+        const block = message.content[blockIndex]
+        if (!block || block.type !== `attachment` || selected.has(block.id)) {
+          continue
+        }
+
+        const attachment = attachmentsApi.get(block.id)
+        if (
+          !attachment ||
+          attachment.status !== `complete` ||
+          !attachment.mimeType.startsWith(`image/`)
+        ) {
+          continue
+        }
+
+        const byteLength = attachment.byteLength ?? 0
+        if (
+          selected.size >= MAX_HYDRATED_IMAGE_ATTACHMENTS ||
+          selectedBytes + byteLength > MAX_HYDRATED_IMAGE_ATTACHMENT_BYTES
+        ) {
+          continue
+        }
+
+        selected.add(block.id)
+        selectedBytes += byteLength
+      }
+    }
+
+    return selected
+  }
+
   async function hydrateAttachmentBlocks(
     messages: Array<LLMMessage>
   ): Promise<Array<LLMMessage>> {
+    const hydratableImageAttachmentIds =
+      selectHydratableImageAttachmentIds(messages)
+
     return await Promise.all(
       messages.map(async (message) => {
         if (typeof message.content === `string`) {
@@ -347,7 +406,13 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
             ) {
               return {
                 type: `text`,
-                text: `[attachment: ${attachment.filename ?? attachment.id}, type=${attachment.mimeType}, size=${attachment.byteLength ?? `unknown`}]`,
+                text: `[attachment: ${attachmentDescriptor(attachment)}]`,
+              }
+            }
+            if (!hydratableImageAttachmentIds.has(block.id)) {
+              return {
+                type: `text`,
+                text: `[attachment not sent to model: ${attachmentDescriptor(attachment)}, reason=image attachment prompt limit]`,
               }
             }
             try {

@@ -160,6 +160,14 @@
   border: 1px solid var(--ds-gray-a4);
   border-radius: var(--ds-radius-4);
   background: var(--ds-surface-1);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.fileAttachment:focus-visible {
+  outline: 2px solid var(--ds-accent-9);
+  outline-offset: 2px;
 }
 
 .fileAttachment span {

@@ -127,7 +127,7 @@ export function useAttachmentDrafts({
     onDragEnd: React.DragEventHandler<HTMLElement>
   }
   fileInputRef: React.RefObject<HTMLInputElement | null>
-  addAttachments: (files: FileList | null) => void
+  addAttachments: (files: Iterable<File> | null) => void
   openAttachmentPicker: () => void
   handlePaste: React.ClipboardEventHandler<HTMLElement>
   removeAttachment: (index: number) => void
@@ -146,9 +146,9 @@ export function useAttachmentDrafts({
   }, [])
 
   const addAttachments = useCallback(
-    (files: FileList | null) => {
+    (files: Iterable<File> | null) => {
       if (disabled) return
-      if (!files || files.length === 0) return
+      if (!files) return
       appendAttachments(filterAcceptedFiles(files, policy))
     },
     [appendAttachments, disabled, policy]

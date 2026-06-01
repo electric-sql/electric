@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import type { EntityTimelineSection } from '@electric-ax/agents-runtime/client'
 import { Icon, Stack, Text } from '../ui'
-import { formatAttachmentSize } from '../lib/attachments'
+import { downloadAttachment, formatAttachmentSize } from '../lib/attachments'
 import {
   AttachmentImagePreviewDialog,
   useAttachmentObjectUrl,
@@ -148,14 +148,26 @@ function AttachmentPreview({
   }
 
   return (
-    <a className={styles.fileAttachment} href={attachment.url} title={label}>
+    <button
+      type="button"
+      className={styles.fileAttachment}
+      title={label}
+      onClick={() => {
+        void downloadAttachment({
+          url: attachment.url,
+          filename: attachment.name,
+        }).catch((error) => {
+          console.error(`Attachment download failed`, error)
+        })
+      }}
+    >
       <Icon icon={FileIcon} size={2} />
       <span>
         <strong>{attachment.name}</strong>
         <small>{formatAttachmentSize(attachment.byteLength)}</small>
       </span>
       <Icon icon={Download} size={1} />
-    </a>
+    </button>
   )
 }
 

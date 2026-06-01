@@ -176,8 +176,13 @@ export function MessageInput({
     setEditingMessage(null)
     tx.isPersisted.promise.catch((err: Error) => {
       setError(err.message)
+      if (!editingMessage) {
+        setValue((current) => (current ? current : text))
+        addAttachments(files)
+      }
     })
   }, [
+    addAttachments,
     attachments,
     imageAttachmentsEnabled,
     canSubmit,

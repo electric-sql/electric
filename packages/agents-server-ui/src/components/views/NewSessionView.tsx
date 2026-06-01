@@ -242,8 +242,8 @@ export function NewSessionView({
       args?: Record<string, unknown>,
       initialUserText?: string,
       initialAttachments?: Array<File>
-    ) => {
-      if (!spawnEntity) return
+    ): Promise<boolean> => {
+      if (!spawnEntity) return false
       setError(null)
       const name = nanoid(10)
       const hasInitialAttachments =
@@ -281,10 +281,12 @@ export function NewSessionView({
         helpers.openEntity(entityUrl, {
           target: { tileId, position: `replace` },
         })
+        return true
       } catch (err) {
         setError(
           `Could not start session: ${err instanceof Error ? err.message : String(err)}.`
         )
+        return false
       }
     },
     [baseUrl, helpers, selectedRunnerId, spawnEntity, tileId]
@@ -327,8 +329,12 @@ export function NewSessionView({
   }, [handleCancelSelected, selected, setToolbarTitle])
 
   const handleStartDefault = useCallback(
-    (text: string, args: Record<string, unknown>, attachments: Array<File>) => {
-      if (!defaultAgent) return
+    async (
+      text: string,
+      args: Record<string, unknown>,
+      attachments: Array<File>
+    ): Promise<boolean> => {
+      if (!defaultAgent) return false
       // Inject the picker's choice into the spawn args for the
       // composer flow only — non-default agents have their own
       // schemas and may not understand `workingDirectory`. Also
@@ -337,7 +343,7 @@ export function NewSessionView({
       const augmented =
         workingDirectory !== null ? { ...args, workingDirectory } : args
       if (workingDirectory !== null) addRecentDir(workingDirectory)
-      void doSpawn(defaultAgent.name, augmented, text, attachments)
+      return await doSpawn(defaultAgent.name, augmented, text, attachments)
     },
     [defaultAgent, doSpawn, workingDirectory, addRecentDir]
   )
@@ -392,7 +398,7 @@ function Picker({
     text: string,
     args: Record<string, unknown>,
     attachments: Array<File>
-  ) => void
+  ) => Promise<boolean>
   spawnReady: boolean
   error: string | null
   workingDirectory: string | null
@@ -677,7 +683,7 @@ function DefaultAgentComposer({
     text: string,
     args: Record<string, unknown>,
     attachments: Array<File>
-  ) => void
+  ) => Promise<boolean>
   disabled?: boolean
   workingDirectory: string | null
   onChangeWorkingDirectory: (path: string | null) => void
@@ -756,8 +762,14 @@ function DefaultAgentComposer({
     for (const [k, v] of Object.entries(args)) {
       if (v !== undefined && v !== ``) cleaned[k] = v
     }
-    onSubmit(trimmed, cleaned, files)
-    clearAttachments()
+    void onSubmit(trimmed, cleaned, files)
+      .then((ok) => {
+        if (ok) clearAttachments()
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        setSubmitting(false)
+      })
   }, [
     args,
     attachments,
