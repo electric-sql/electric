@@ -142,6 +142,7 @@ function statusBadge(item: ToolCallItem): StatusBadge {
 function ToolBody({ item }: { item: ToolCallItem }): React.ReactElement {
   const args = item.args
   const r = parseResult(item.result)
+  const errorText = item.error?.trim()
 
   const fallbackDiff =
     item.toolName === `edit` &&
@@ -164,6 +165,11 @@ function ToolBody({ item }: { item: ToolCallItem }): React.ReactElement {
         <Stack direction="column" gap={2}>
           <span className={toolBlock.sectionLabel}>Command</span>
           <pre className={toolBlock.codeBlock}>{args.command as string}</pre>
+          {errorText && (
+            <Text size={1} tone="danger">
+              {errorText}
+            </Text>
+          )}
           {r.text && (
             <>
               <Stack align="center" gap={2}>
@@ -190,6 +196,11 @@ function ToolBody({ item }: { item: ToolCallItem }): React.ReactElement {
       return (
         <Stack direction="column" gap={2}>
           <span className={toolBlock.sectionLabel}>Content</span>
+          {errorText && (
+            <Text size={1} tone="danger">
+              {errorText}
+            </Text>
+          )}
           <pre className={toolBlock.codeBlock}>
             {r.text ? truncate(r.text, 2000) : `(empty)`}
           </pre>
@@ -208,6 +219,11 @@ function ToolBody({ item }: { item: ToolCallItem }): React.ReactElement {
               />
             </>
           ) : null}
+          {errorText && (
+            <Text size={1} tone="danger">
+              {errorText}
+            </Text>
+          )}
           {r.text && (
             <Text size={1} tone={item.isError ? `danger` : `success`}>
               {r.text}
@@ -223,6 +239,11 @@ function ToolBody({ item }: { item: ToolCallItem }): React.ReactElement {
           <pre className={toolBlock.codeBlock}>
             {JSON.stringify(args, null, 2)}
           </pre>
+          {errorText && (
+            <Text size={1} tone="danger">
+              {errorText}
+            </Text>
+          )}
           {r.text && (
             <>
               <span className={toolBlock.sectionLabel}>Output</span>

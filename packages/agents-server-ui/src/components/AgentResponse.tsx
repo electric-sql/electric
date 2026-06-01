@@ -270,6 +270,7 @@ function liveToolCallToContentItem(
         : {},
     status: item.status,
     result: stringifyToolPayload(item.result),
+    error: typeof item.error === `string` ? item.error : undefined,
     isError: item.status === `failed` || Boolean(item.error),
   }
 }
@@ -321,8 +322,37 @@ function liveRunItemsToContentItems(
 
 function errorText(errors: Array<EntityTimelineErrorItem>): string | undefined {
   return errors.length > 0
-    ? errors.map((error) => error.message).join(`; `)
+    ? errors
+        .map((error) =>
+          error.error_code
+            ? `${error.error_code}: ${error.message}`
+            : error.message
+        )
+        .join(`; `)
     : undefined
+}
+
+function failedRunText(
+  run: EntityTimelineRunRow,
+  items: Array<EntityTimelineRunItem>
+): string | undefined {
+  if (run.status !== `failed`) return undefined
+
+  const failedTool = items.find(
+    (item) =>
+      item.toolCall?.status === `failed` &&
+      typeof item.toolCall.error === `string` &&
+      item.toolCall.error.trim().length > 0
+  )?.toolCall
+  if (failedTool) {
+    return `${failedTool.tool_name} failed: ${failedTool.error}`
+  }
+
+  if (run.finish_reason) {
+    return `Run failed (finish_reason=${run.finish_reason})`
+  }
+
+  return `Run failed (no error details recorded)`
 }
 
 const LiveTextItem = memo(function LiveTextItem({
@@ -393,7 +423,7 @@ export const AgentResponseLive = memo(function AgentResponseLive({
   const done = run.status === `completed`
   const failureText =
     errorText(errors as Array<EntityTimelineErrorItem>) ??
-    (run.status === `failed` ? `Run failed` : undefined)
+    failedRunText(run, sortedItems)
   const lastItem = sortedItems[sortedItems.length - 1]
   const lastTextHasContent =
     lastItem?.text !== undefined && textContent(lastItem.text).trim().length > 0

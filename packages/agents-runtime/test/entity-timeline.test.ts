@@ -517,7 +517,7 @@ describe(`entity includes query`, () => {
       expect(sections).toHaveLength(1)
       expect(sections[0]).toMatchObject({
         kind: `agent_response`,
-        error: `boom`,
+        error: `TOOL_FAILED: boom`,
       })
     })
 
@@ -644,7 +644,7 @@ describe(`entity includes query`, () => {
       expect(sections).toHaveLength(1)
       expect(sections[0]).toMatchObject({
         kind: `agent_response`,
-        error: `Run failed`,
+        error: `Run failed (no error details recorded)`,
       })
     })
 
@@ -672,7 +672,7 @@ describe(`entity includes query`, () => {
       expect(sections).toHaveLength(1)
       expect(sections[0]).toMatchObject({
         kind: `agent_response`,
-        error: `db connection lost`,
+        error: `TOOL_FAILED: db connection lost`,
       })
     })
 
