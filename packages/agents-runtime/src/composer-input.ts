@@ -84,6 +84,14 @@ export interface SlashCommandRow extends SlashCommandDefinition {
   owner?: string
   version?: string
   updated_at: string
+  /**
+   * Internal layer state used by ctx.slashCommands to reconstruct the
+   * effective command after dynamic owners unregister. Consumers should read
+   * the top-level row fields as the effective command.
+   */
+  dynamic_layers?: Array<
+    DynamicSlashCommandRegistration & { updated_at: string }
+  >
 }
 
 export interface SlashCommandHelpers {

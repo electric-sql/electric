@@ -188,6 +188,11 @@ describe(`createHandlerContext`, () => {
 
     ctx.slashCommands.register({
       name: `quickstart`,
+      description: `Local quickstart`,
+      owner: `local`,
+    })
+    ctx.slashCommands.register({
+      name: `quickstart`,
       description: `Dynamic quickstart`,
       owner: `skills`,
     })
@@ -195,6 +200,7 @@ describe(`createHandlerContext`, () => {
       { name: `quickstart`, description: `Dynamic quickstart` },
     ])
     ctx.slashCommands.unregister(`quickstart`, { owner: `skills` })
+    ctx.slashCommands.unregister(`quickstart`, { owner: `local` })
 
     expect(writes).toEqual(
       expect.arrayContaining([
@@ -203,15 +209,45 @@ describe(`createHandlerContext`, () => {
           key: `quickstart`,
           value: expect.objectContaining({
             name: `quickstart`,
+            description: `Local quickstart`,
+            source: `dynamic`,
+            owner: `local`,
+          }),
+        }),
+        expect.objectContaining({
+          type: `slash_command`,
+          key: `quickstart`,
+          value: expect.objectContaining({
+            name: `quickstart`,
             description: `Dynamic quickstart`,
             source: `dynamic`,
             owner: `skills`,
+            dynamic_layers: expect.arrayContaining([
+              expect.objectContaining({
+                owner: `local`,
+                description: `Local quickstart`,
+              }),
+              expect.objectContaining({
+                owner: `skills`,
+                description: `Dynamic quickstart`,
+              }),
+            ]),
           }),
         }),
         expect.objectContaining({
           type: `slash_command`,
           key: `search`,
           headers: expect.objectContaining({ operation: `delete` }),
+        }),
+        expect.objectContaining({
+          type: `slash_command`,
+          key: `quickstart`,
+          value: expect.objectContaining({
+            name: `quickstart`,
+            description: `Local quickstart`,
+            source: `dynamic`,
+            owner: `local`,
+          }),
         }),
         expect.objectContaining({
           type: `slash_command`,

@@ -90,6 +90,19 @@ type SlashCommandValue = {
   owner?: string
   version?: string
   updated_at: string
+  dynamic_layers?: Array<{
+    name: string
+    description?: string
+    arguments?: Array<{
+      name: string
+      type: `string` | `number` | `boolean`
+      required?: boolean
+      description?: string
+    }>
+    owner?: string
+    version?: string
+    updated_at: string
+  }>
 }
 type WakeChangeEntryValue = {
   collection: string
@@ -642,6 +655,27 @@ function createSlashCommandSchema(): Schema<SlashCommandValue> {
     owner: z.string().optional(),
     version: z.string().optional(),
     updated_at: z.string(),
+    dynamic_layers: z
+      .array(
+        z.object({
+          name: z.string(),
+          description: z.string().optional(),
+          arguments: z
+            .array(
+              z.object({
+                name: z.string(),
+                type: z.enum([`string`, `number`, `boolean`]),
+                required: z.boolean().optional(),
+                description: z.string().optional(),
+              })
+            )
+            .optional(),
+          owner: z.string().optional(),
+          version: z.string().optional(),
+          updated_at: z.string(),
+        })
+      )
+      .optional(),
   })
 }
 function createContextInsertedSchema(): Schema<ContextInsertedValue> {

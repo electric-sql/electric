@@ -2,7 +2,11 @@
 
 ## Status
 
-Draft
+In progress. Milestones 1-5 are largely implemented; Milestone 4 now includes
+source-owned dynamic slash-command helpers with layered override/reveal
+semantics. Remaining work is mostly broader UI/a11y coverage, polishing
+skill-backed refresh sources, and keeping this document in sync with the
+implementation.
 
 ## Summary
 
@@ -344,13 +348,13 @@ Slash commands may be represented either as:
 - plain text with decorations, which keeps typing and editing natural, or
 - inline atom nodes/chips after explicit selection, which preserves metadata more strongly.
 
-The recommended v1 is:
+The implemented v1 uses slash-command inline atom nodes after explicit command
+selection, rendered as pill-like inline blocks. This makes accepted commands
+deleteable with one backspace while still preserving canonical visible source
+text on submit.
 
-- Use plain text plus decorations for slash-command tokens.
-- Use inline atom nodes later for selected file, symbol, branch, or other rich references where stable identity matters.
-- Derive flat composer nodes at submit time from the document text plus any structured inline nodes.
-
-This avoids making `/command` editing feel unusual while still allowing rich chips as the composer evolves.
+Unselected or pasted slash-command text can still be serialized by deriving flat
+composer nodes from the document text.
 
 ### Parser And Serializer
 
@@ -483,19 +487,19 @@ Likely built-in agent files:
 
 ### 4. Dynamic Slash Commands
 
-- Add `ctx.slashCommands` helper APIs.
-- Implement static/dynamic layering and override behavior.
-- Implement dynamic command ownership and refresh semantics.
-- Add `replaceOwned(owner, commands)` for whole-source reconciliation.
+- [x] Add `ctx.slashCommands` helper APIs.
+- [x] Implement static/dynamic layering and override behavior.
+- [x] Implement dynamic command ownership and refresh semantics.
+- [x] Add `replaceOwned(owner, commands)` for whole-source reconciliation.
 - Watch or refresh dynamic command sources and update stale registrations.
-- Add tests for register, overwrite, unregister, and static reveal.
+- [x] Add tests for register, overwrite, unregister, and static reveal.
 
 ### 5. Desktop ProseMirror Composer
 
-- Replace the desktop prompt input with a direct ProseMirror editor.
-- Add composer schema, decorations, and submit serialization.
-- Add slash-command popover sourced from `db.collections.slashCommands`.
-- Add keyboard behavior and paste handling.
+- [x] Replace the desktop prompt input with a direct ProseMirror editor.
+- [x] Add composer schema, decorations, and submit serialization.
+- [x] Add slash-command popover sourced from `db.collections.slashCommands`.
+- [x] Add keyboard behavior and paste handling.
 - Add multiline serialization and source-span tests.
 - Add basic accessibility coverage for command popover behavior.
 - Add focused UI tests where practical.

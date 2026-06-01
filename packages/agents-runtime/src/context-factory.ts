@@ -272,6 +272,7 @@ function createSlashCommandHelpers(
     `db` | `writeEvent` | `staticSlashCommands`
   >
 ): SlashCommandHelpers {
+  type DynamicLayer = DynamicSlashCommandRegistration & { updated_at: string }
   const staticCommands = new Map(
     (config.staticSlashCommands ?? []).map((command) => [command.name, command])
   )
@@ -280,6 +281,27 @@ function createSlashCommandHelpers(
       (row) => [row.name, row]
     )
   )
+  const dynamicLayers = new Map<string, Array<DynamicLayer>>()
+
+  for (const row of rows.values()) {
+    const layers =
+      row.dynamic_layers ??
+      (row.source === `dynamic`
+        ? [
+            {
+              name: row.name,
+              description: row.description,
+              arguments: row.arguments,
+              owner: row.owner,
+              version: row.version,
+              updated_at: row.updated_at,
+            },
+          ]
+        : [])
+    if (layers.length > 0) {
+      dynamicLayers.set(row.name, [...layers])
+    }
+  }
 
   const listRows = (): Array<SlashCommandRow> => Array.from(rows.values())
 
@@ -311,7 +333,19 @@ function createSlashCommandHelpers(
     )
   }
 
-  const restoreStaticOrDelete = (name: string): void => {
+  const writeEffectiveRow = (name: string): void => {
+    const layers = dynamicLayers.get(name) ?? []
+    const topLayer = layers.at(-1)
+    if (topLayer) {
+      writeRow({
+        ...topLayer,
+        key: name,
+        source: `dynamic`,
+        dynamic_layers: layers,
+      })
+      return
+    }
+
     const staticCommand = staticCommands.get(name)
     if (!staticCommand) {
       deleteRow(name)
@@ -340,13 +374,18 @@ function createSlashCommandHelpers(
   const register = (command: DynamicSlashCommandRegistration): void => {
     assertValid([command])
     const owner = command.owner ?? `handler`
-    writeRow({
+    const now = new Date().toISOString()
+    const nextLayer = {
       ...command,
-      key: command.name,
       owner,
-      source: `dynamic`,
-      updated_at: new Date().toISOString(),
-    })
+      updated_at: now,
+    }
+    const existingLayers = dynamicLayers.get(command.name) ?? []
+    dynamicLayers.set(command.name, [
+      ...existingLayers.filter((layer) => layer.owner !== owner),
+      nextLayer,
+    ])
+    writeEffectiveRow(command.name)
   }
 
   return {
@@ -355,27 +394,38 @@ function createSlashCommandHelpers(
     register,
     unregister(name, opts): void {
       const existing = getRow(name)
-      if (
-        existing?.source !== `dynamic` ||
-        (opts?.owner && existing.owner !== opts.owner)
-      ) {
+      const layers = dynamicLayers.get(name) ?? []
+      if (opts?.owner) {
+        if (!layers.some((layer) => layer.owner === opts.owner)) {
+          return
+        }
+      } else if (existing?.source !== `dynamic`) {
         return
       }
-      restoreStaticOrDelete(name)
+      const owner = opts?.owner ?? existing?.owner
+      dynamicLayers.set(
+        name,
+        owner ? layers.filter((layer) => layer.owner !== owner) : []
+      )
+      writeEffectiveRow(name)
     },
     replaceOwned(owner, commands): void {
       const ownedCommands = commands.map((command) => ({ ...command, owner }))
       assertValid(ownedCommands)
 
       const nextNames = new Set(ownedCommands.map((command) => command.name))
-      for (const row of listRows()) {
-        if (
-          row.source === `dynamic` &&
-          row.owner === owner &&
-          !nextNames.has(row.name)
-        ) {
-          restoreStaticOrDelete(row.name)
+      for (const [name, layers] of [...dynamicLayers.entries()]) {
+        if (!layers.some((layer) => layer.owner === owner)) {
+          continue
         }
+        if (nextNames.has(name)) {
+          continue
+        }
+        dynamicLayers.set(
+          name,
+          layers.filter((layer) => layer.owner !== owner)
+        )
+        writeEffectiveRow(name)
       }
 
       for (const command of ownedCommands) {
