@@ -11,6 +11,7 @@ import {
   Github,
   Laptop,
   LogIn,
+  Moon,
   Plug,
   Server,
   Sparkles,
@@ -26,12 +27,14 @@ import {
   loadDesktopState,
   installCli,
   loadLaunchAtLoginStatus,
+  loadPreventAppSuspensionPreference,
   loadOnboardingState,
   loadCliStatus,
   onCloudAuthStateChanged,
   prepareCloudAgentServerConnection,
   restartLocalRuntimes,
   saveApiKeys as persistApiKeys,
+  savePreventAppSuspensionPreference,
   setLaunchAtLogin,
   setOnboardingDismissed,
   type ApiKeys,
@@ -152,6 +155,7 @@ export function OnboardingModal(): React.ReactElement | null {
     useState<LaunchAtLoginStatus | null>(null)
   const [cliStatus, setCliStatus] = useState<ElectricCliStatus | null>(null)
   const [launchAtLoginEnabled, setLaunchAtLoginEnabled] = useState(false)
+  const [preventAppSuspension, setPreventAppSuspension] = useState(true)
   const [bootstrapped, setBootstrapped] = useState(false)
   const configAvailable = launchAtLoginStatus?.supported === true
   const steps = useMemo(
@@ -167,19 +171,22 @@ export function OnboardingModal(): React.ReactElement | null {
     let cancelled = false
 
     void (async () => {
-      const [onboarding, cloud, keys, launchAtLogin, cli] = await Promise.all([
-        loadOnboardingState(),
-        loadCloudAuthState(),
-        loadApiKeysStatus(),
-        loadLaunchAtLoginStatus(),
-        loadCliStatus(),
-      ])
+      const [onboarding, cloud, keys, launchAtLogin, cli, keepAwake] =
+        await Promise.all([
+          loadOnboardingState(),
+          loadCloudAuthState(),
+          loadApiKeysStatus(),
+          loadLaunchAtLoginStatus(),
+          loadCliStatus(),
+          loadPreventAppSuspensionPreference(),
+        ])
       if (cancelled) return
       setCloudState(cloud)
       setKeysStatus(keys)
       setLaunchAtLoginStatus(launchAtLogin)
       setCliStatus(cli)
       setLaunchAtLoginEnabled(launchAtLogin?.enabled ?? false)
+      setPreventAppSuspension(keepAwake ?? true)
       setBootstrapped(true)
 
       if (!onboarding || onboarding.dismissed) return
@@ -282,6 +289,8 @@ export function OnboardingModal(): React.ReactElement | null {
             <ConfigStep
               launchAtLoginEnabled={launchAtLoginEnabled}
               onLaunchAtLoginEnabledChange={setLaunchAtLoginEnabled}
+              preventAppSuspension={preventAppSuspension}
+              onPreventAppSuspensionChange={setPreventAppSuspension}
               cliStatus={cliStatus}
               onCliStatusChange={setCliStatus}
               onBack={() => setStep(`keys`)}
@@ -294,6 +303,7 @@ export function OnboardingModal(): React.ReactElement | null {
               onBack={() => setStep(configAvailable ? `config` : `keys`)}
               applyLaunchAtLogin={configAvailable}
               launchAtLoginEnabled={launchAtLoginEnabled}
+              preventAppSuspension={preventAppSuspension}
               onFinish={() => {
                 void closeModal()
               }}
@@ -308,6 +318,8 @@ export function OnboardingModal(): React.ReactElement | null {
 function ConfigStep({
   launchAtLoginEnabled,
   onLaunchAtLoginEnabledChange,
+  preventAppSuspension,
+  onPreventAppSuspensionChange,
   cliStatus,
   onCliStatusChange,
   onBack,
@@ -315,6 +327,8 @@ function ConfigStep({
 }: {
   launchAtLoginEnabled: boolean
   onLaunchAtLoginEnabledChange: (enabled: boolean) => void
+  preventAppSuspension: boolean
+  onPreventAppSuspensionChange: (enabled: boolean) => void
   cliStatus: ElectricCliStatus | null
   onCliStatusChange: (status: ElectricCliStatus | null) => void
   onBack: () => void
@@ -411,6 +425,25 @@ function ConfigStep({
                     ? `Repair`
                     : `Install command`}
             </Button>
+          </span>
+        </SectionRow>
+        <SectionRow>
+          <span className={styles.iconCircle}>
+            <Icon icon={Moon} size={2} />
+          </span>
+          <label className={styles.rowText} style={{ cursor: `pointer` }}>
+            <span className={styles.rowTitle}>Keep desktop awake</span>
+            <Text size={1} tone="muted">
+              Prevent full system sleep while the local runtime is starting or
+              running. The display can still sleep.
+            </Text>
+          </label>
+          <span className={styles.rowAside}>
+            <Switch
+              checked={preventAppSuspension}
+              onCheckedChange={onPreventAppSuspensionChange}
+              ariaLabel="Keep desktop awake while local runtime is active"
+            />
           </span>
         </SectionRow>
       </Section>
@@ -934,12 +967,14 @@ function ServerStep({
   onBack,
   applyLaunchAtLogin,
   launchAtLoginEnabled,
+  preventAppSuspension,
   onFinish,
 }: {
   cloudState: CloudAuthState | null
   onBack: () => void
   applyLaunchAtLogin: boolean
   launchAtLoginEnabled: boolean
+  preventAppSuspension: boolean
   onFinish: () => void | Promise<void>
 }): React.ReactElement {
   const { servers } = useAvailableServers()
@@ -962,6 +997,16 @@ function ServerStep({
           error instanceof Error
             ? error.message
             : `Could not enable open at login.`
+        )
+        return
+      }
+      try {
+        await savePreventAppSuspensionPreference(preventAppSuspension)
+      } catch (error) {
+        setServerError(
+          error instanceof Error
+            ? error.message
+            : `Could not save keep-awake preference.`
         )
         return
       }

@@ -26,7 +26,7 @@ import type {
   Provider,
   SimpleStreamOptions,
 } from '@mariozechner/pi-ai'
-import type { LLMMessage } from './types'
+import type { LLMContentBlock, LLMMessage, LLMMessageContent } from './types'
 
 // ============================================================================
 // Options
@@ -92,6 +92,27 @@ export function resolvePiModel(opts: {
 // Context Translation
 // ============================================================================
 
+function toAgentContentBlock(block: LLMContentBlock): unknown {
+  if (block.type === `text`) {
+    return { type: `text`, text: block.text }
+  }
+  if (block.type === `image`) {
+    return { type: `image`, data: block.data, mimeType: block.mimeType }
+  }
+
+  return {
+    type: `text`,
+    text: `[attachment omitted: id=${block.id}]`,
+  }
+}
+
+function toAgentContent(content: LLMMessageContent): Array<unknown> {
+  if (typeof content === `string`) {
+    return [{ type: `text`, text: content }]
+  }
+  return content.map(toAgentContentBlock)
+}
+
 export function toAgentHistory(
   messages: Array<LLMMessage>
 ): Array<AgentMessage> {
@@ -108,24 +129,33 @@ export function toAgentHistory(
       case `user`:
         history.push({
           role: `user`,
-          content: [{ type: `text`, text: message.content }],
+          content: toAgentContent(message.content),
           timestamp: Date.now(),
         } as AgentMessage)
         break
 
       case `assistant`: {
         const prev = lastAssistant()
-        const prevContent = prev?.content as
-          | Array<{ type: string; text?: string }>
-          | undefined
-        const lastBlock = prevContent?.[prevContent.length - 1]
+        const content = toAgentContent(message.content)
 
-        if (lastBlock?.type === `text`) {
-          lastBlock.text = `${lastBlock.text ?? ``}${message.content}`
+        if (prev) {
+          const prevContent = prev.content as Array<{
+            type: string
+            text?: string
+          }>
+          const lastBlock = prevContent[prevContent.length - 1]
+          const firstBlock = content[0] as { type: string; text?: string }
+
+          if (lastBlock?.type === `text` && firstBlock?.type === `text`) {
+            lastBlock.text = `${lastBlock.text ?? ``}${firstBlock.text ?? ``}`
+            prevContent.push(...content.slice(1))
+          } else {
+            prevContent.push(...content)
+          }
         } else {
           history.push({
             role: `assistant`,
-            content: [{ type: `text`, text: message.content }],
+            content,
             timestamp: Date.now(),
           } as AgentMessage)
         }
@@ -159,7 +189,7 @@ export function toAgentHistory(
           role: `toolResult`,
           toolCallId: message.toolCallId,
           toolName: toolNamesById.get(message.toolCallId) ?? ``,
-          content: [{ type: `text`, text: message.content }],
+          content: toAgentContent(message.content),
           isError: message.isError,
           timestamp: Date.now(),
         } as AgentMessage)

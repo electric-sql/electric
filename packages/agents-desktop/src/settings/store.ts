@@ -29,6 +29,7 @@ export const DEFAULT_SETTINGS: DesktopSettings = {
   workingDirectory: null,
   apiKeysRef: GLOBAL_API_KEYS_REF,
   launchAtLogin: false,
+  preventAppSuspension: true,
   codex: { enabled: false, source: null },
 }
 
@@ -161,6 +162,7 @@ export async function loadDesktopSettings(
           : null,
       apiKeysRef,
       launchAtLogin: parsed.launchAtLogin === true,
+      preventAppSuspension: parsed.preventAppSuspension !== false,
       onboardingDismissed: parsed.onboardingDismissed === true,
       codex: normalizeCodexSettings(parsed.codex),
       enabledModelValues:
@@ -183,6 +185,7 @@ export async function loadDesktopSettings(
       parsed.version !== SETTINGS_VERSION ||
       parsed.activeServer !== undefined ||
       parsed.apiKeys !== undefined ||
+      parsed.preventAppSuspension === undefined ||
       servers.some((server) => !(`id` in (server as object)))
   } catch (err) {
     console.error(`[agents-desktop] Failed to load settings:`, err)

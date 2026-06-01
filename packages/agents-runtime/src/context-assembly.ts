@@ -369,7 +369,10 @@ export async function assembleContext(
     messages.push(marker)
     overflowLog.push({
       scope: `sourceBudget`,
-      detail: marker.content,
+      detail:
+        typeof marker.content === `string`
+          ? marker.content
+          : JSON.stringify(marker.content),
     })
   }
 

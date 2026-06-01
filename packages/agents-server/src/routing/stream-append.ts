@@ -91,6 +91,9 @@ async function handleStreamAppend(
   const { manager } = runtime
   const entity = await manager.registry.getEntityByStream(path)
   const isSharedState = path.startsWith(`/_electric/shared-state/`)
+  if (!entity && manager.isAttachmentStreamPath(path)) {
+    return apiError(401, ErrCodeUnauthorized, `Invalid write token`)
+  }
   if (!entity && !isSharedState) {
     return undefined
   }

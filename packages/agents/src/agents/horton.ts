@@ -6,6 +6,7 @@ import { createHortonDocsSupport } from '../docs/knowledge-base'
 import { createSkillTools } from '@electric-ax/agents-runtime'
 import { createSpawnWorkerTool } from '../tools/spawn-worker'
 import {
+  modelInputSchemaDefs,
   modelChoiceValues,
   REASONING_EFFORT_VALUES,
   resolveBuiltinModelConfig,
@@ -323,15 +324,92 @@ function payloadToTitleText(payload: unknown): string {
   return String(payload)
 }
 
+type InboxTitleMessage = {
+  key?: unknown
+  from?: unknown
+  payload: unknown
+  _seq?: unknown
+}
+
+type TitleAttachment = {
+  kind?: unknown
+  subject?: unknown
+  role?: unknown
+  mimeType?: unknown
+  filename?: unknown
+  id?: unknown
+}
+
+function attachmentTitleText(attachment: TitleAttachment): string | null {
+  const mimeType =
+    typeof attachment.mimeType === `string` ? attachment.mimeType : ``
+  const filename =
+    typeof attachment.filename === `string` && attachment.filename.trim()
+      ? attachment.filename.trim()
+      : typeof attachment.id === `string`
+        ? attachment.id
+        : `attachment`
+  const kind = mimeType.startsWith(`image/`) ? `image` : `file`
+
+  return `Attached ${kind}: ${filename}`
+}
+
+function attachmentsForInboxMessage(
+  ctx: HandlerContext,
+  inboxKey: string
+): Array<TitleAttachment> {
+  const manifests = (
+    ctx.db.collections as {
+      manifests?: { toArray?: Array<unknown> }
+    }
+  ).manifests?.toArray
+  if (!Array.isArray(manifests)) return []
+
+  return manifests.filter((entry): entry is TitleAttachment => {
+    if (!entry || typeof entry !== `object`) return false
+    const attachment = entry as TitleAttachment
+    if (attachment.kind !== `attachment`) return false
+    if (attachment.role !== `input`) return false
+    const subject = attachment.subject
+    return (
+      subject !== null &&
+      typeof subject === `object` &&
+      !Array.isArray(subject) &&
+      (subject as { type?: unknown }).type === `inbox` &&
+      (subject as { key?: unknown }).key === inboxKey
+    )
+  })
+}
+
+function messageTitleText(
+  ctx: HandlerContext,
+  message: InboxTitleMessage
+): string {
+  const pieces: Array<string> = []
+  const text = payloadToTitleText(message.payload).trim()
+  if (text) pieces.push(text)
+
+  const key = typeof message.key === `string` ? message.key : null
+  const attachments = key ? attachmentsForInboxMessage(ctx, key) : []
+  for (const attachment of attachments) {
+    const attachmentText = attachmentTitleText(attachment)
+    if (attachmentText) pieces.push(attachmentText)
+  }
+
+  return pieces.join(`\n`)
+}
+
 export async function extractFirstUserMessage(
   ctx: HandlerContext
 ): Promise<string | null> {
-  const firstMessage = ctx.db.collections.inbox.toArray
+  const firstMessage = (
+    ctx.db.collections.inbox.toArray as Array<InboxTitleMessage>
+  )
     .filter((message) => message.from !== `system`)
     .sort((left, right) => messageSeq(left) - messageSeq(right))[0]
 
   if (!firstMessage) return null
-  const text = payloadToTitleText(firstMessage.payload)
+  const text = messageTitleText(ctx, firstMessage)
   return text.length > 0 ? text : null
 }
 
@@ -410,45 +488,44 @@ function createAssistantHandler(options: {
       (tool) => getToolName(tool) === `list_event_sources`
     )
 
-    const titlePromise =
-      ctx.firstWake && !ctx.tags.title
-        ? (async () => {
-            const firstUserMessage = await extractFirstUserMessage(ctx)
-            if (!firstUserMessage) return
+    const titlePromise = !ctx.tags.title
+      ? (async () => {
+          const firstUserMessage = await extractFirstUserMessage(ctx)
+          if (!firstUserMessage) return
 
-            let title: string | null = null
-            try {
-              const result = await generateTitle(
-                firstUserMessage,
-                createConfiguredTitleCall(
-                  modelCatalog,
-                  modelConfig,
-                  `[horton ${ctx.entityUrl}]`
-                ),
-                (reason) => {
-                  serverLog.warn(
-                    `[horton ${ctx.entityUrl}] title generation fell back to local title: ${reason}`
-                  )
-                }
-              )
-              if (result.length > 0) title = result
-            } catch (err) {
-              serverLog.warn(
-                `[horton ${ctx.entityUrl}] title generation failed: ${err instanceof Error ? err.message : String(err)}`
-              )
-            }
-
-            if (title !== null) {
-              try {
-                await ctx.setTag(`title`, title)
-              } catch (err) {
+          let title: string | null = null
+          try {
+            const result = await generateTitle(
+              firstUserMessage,
+              createConfiguredTitleCall(
+                modelCatalog,
+                modelConfig,
+                `[horton ${ctx.entityUrl}]`
+              ),
+              (reason) => {
                 serverLog.warn(
-                  `[horton ${ctx.entityUrl}] setTag failed: ${err instanceof Error ? err.message : String(err)}`
+                  `[horton ${ctx.entityUrl}] title generation fell back to local title: ${reason}`
                 )
               }
+            )
+            if (result.length > 0) title = result
+          } catch (err) {
+            serverLog.warn(
+              `[horton ${ctx.entityUrl}] title generation failed: ${err instanceof Error ? err.message : String(err)}`
+            )
+          }
+
+          if (title !== null) {
+            try {
+              await ctx.setTag(`title`, title)
+            } catch (err) {
+              serverLog.warn(
+                `[horton ${ctx.entityUrl}] setTag failed: ${err instanceof Error ? err.message : String(err)}`
+              )
             }
-          })()
-        : Promise.resolve()
+          }
+        })()
+      : Promise.resolve()
 
     if (docsSupport) {
       ctx.useContext({
@@ -604,23 +681,27 @@ export function registerHorton(
     docsUrl,
   })
 
-  const hortonCreationSchema = z.object({
-    model: z
-      .enum(modelChoiceValues(modelCatalog))
-      .default(modelCatalog.defaultChoice.value),
-    reasoningEffort: z
-      .enum(REASONING_EFFORT_VALUES)
-      .default(`auto`)
-      .describe(
-        `Reasoning effort for compatible reasoning models. Auto uses a safe provider default.`
-      ),
-    workingDirectory: z
-      .string()
-      .optional()
-      .describe(
-        `Working directory for file operations. Defaults to the server's configured cwd.`
-      ),
-  })
+  const hortonCreationSchema = z
+    .object({
+      model: z
+        .enum(modelChoiceValues(modelCatalog))
+        .default(modelCatalog.defaultChoice.value),
+      reasoningEffort: z
+        .enum(REASONING_EFFORT_VALUES)
+        .default(`auto`)
+        .describe(
+          `Reasoning effort for compatible reasoning models. Auto uses a safe provider default.`
+        ),
+      workingDirectory: z
+        .string()
+        .optional()
+        .describe(
+          `Working directory for file operations. Defaults to the server's configured cwd.`
+        ),
+    })
+    .meta({
+      $defs: modelInputSchemaDefs(modelCatalog),
+    })
 
   registry.define(`horton`, {
     description: `Friendly capable assistant — chat, code, research, dispatch`,

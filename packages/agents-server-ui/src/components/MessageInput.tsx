@@ -1,4 +1,11 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { ArrowUp, Square } from 'lucide-react'
 import type { EntityStreamDBWithActions } from '@electric-ax/agents-runtime/client'
 import {
@@ -9,6 +16,12 @@ import {
   readTextPayload,
 } from '../lib/sendMessage'
 import { Icon, Stack, Text } from '../ui'
+import {
+  AttachmentActionMenu,
+  AttachmentPreviewTray,
+  imageAttachmentDraftPolicy,
+  useAttachmentDrafts,
+} from './AttachmentDrafts'
 import styles from './MessageInput.module.css'
 import type { EntityTimelineData } from '@electric-ax/agents-runtime/client'
 import type { OptimisticInboxMessage } from '../lib/sendMessage'
@@ -20,6 +33,7 @@ export function MessageInput({
   disabled,
   generationActive = false,
   stopPending = false,
+  imageAttachmentsEnabled = true,
   pendingMessages = [],
   inlineQueuedSubmits = false,
   onOptimisticQueuedMessage,
@@ -33,6 +47,7 @@ export function MessageInput({
   disabled: boolean
   generationActive?: boolean
   stopPending?: boolean
+  imageAttachmentsEnabled?: boolean
   pendingMessages?: EntityTimelineData[`inbox`]
   inlineQueuedSubmits?: boolean
   onOptimisticQueuedMessage?: (message: OptimisticInboxMessage) => void
@@ -61,6 +76,27 @@ export function MessageInput({
     originalText: string
   } | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const attachmentsDisabled =
+    disabled || Boolean(editingMessage) || !imageAttachmentsEnabled
+  const {
+    attachments,
+    clearAttachments,
+    dropActive,
+    dropZoneProps,
+    fileInputRef,
+    addAttachments,
+    openAttachmentPicker,
+    handlePaste,
+    removeAttachment,
+  } = useAttachmentDrafts({
+    policy: imageAttachmentDraftPolicy,
+    disabled: attachmentsDisabled,
+    focusRef: textareaRef,
+  })
+
+  useEffect(() => {
+    if (!imageAttachmentsEnabled) clearAttachments()
+  }, [imageAttachmentsEnabled, clearAttachments])
 
   // Auto-grow the composer as the user types. We reset to `auto`
   // first so `scrollHeight` reports the natural content height (not
@@ -102,13 +138,25 @@ export function MessageInput({
   }, [db, baseUrl, entityUrl])
 
   const inputText = value.trim()
-  const showStop = generationActive && inputText.length === 0 && !disabled
+  const attachmentCount = imageAttachmentsEnabled ? attachments.length : 0
+  const canSubmit =
+    !disabled &&
+    (editingMessage
+      ? inputText.length > 0
+      : inputText.length > 0 || attachmentCount > 0)
+  const canAttachFiles = !disabled && !editingMessage && imageAttachmentsEnabled
+  const showStop =
+    generationActive &&
+    inputText.length === 0 &&
+    attachmentCount === 0 &&
+    !disabled
   const canStop = showStop && !stopPending
 
   const handleSubmit = useCallback(() => {
-    if (!value.trim() || disabled) return
+    if (!canSubmit) return
     setError(null)
     const text = value.trim()
+    const files = imageAttachmentsEnabled ? attachments : []
     const tx = editingMessage
       ? updateAction?.({
           key: editingMessage.key,
@@ -119,15 +167,32 @@ export function MessageInput({
       : sendAction?.({
           text,
           mode: `queued`,
+          attachments: files,
         })
     if (!tx) return
     if (!editingMessage) onSend?.()
     setValue(``)
+    clearAttachments()
     setEditingMessage(null)
     tx.isPersisted.promise.catch((err: Error) => {
       setError(err.message)
+      if (!editingMessage) {
+        setValue((current) => (current ? current : text))
+        addAttachments(files)
+      }
     })
-  }, [value, sendAction, updateAction, editingMessage, disabled, onSend])
+  }, [
+    addAttachments,
+    attachments,
+    imageAttachmentsEnabled,
+    canSubmit,
+    clearAttachments,
+    editingMessage,
+    onSend,
+    sendAction,
+    updateAction,
+    value,
+  ])
 
   const handleComposerAction = useCallback(() => {
     if (canStop) {
@@ -141,6 +206,7 @@ export function MessageInput({
     (message: EntityTimelineData[`inbox`][number]) => {
       const text = readTextPayload(message.payload)
       setError(null)
+      clearAttachments()
       updateAction?.({
         key: message.key,
         mode: `paused`,
@@ -152,7 +218,7 @@ export function MessageInput({
       setValue(text)
       textareaRef.current?.focus()
     },
-    [updateAction]
+    [clearAttachments, updateAction]
   )
 
   const cancelEditing = useCallback(() => {
@@ -168,7 +234,8 @@ export function MessageInput({
     }
     setEditingMessage(null)
     setValue(``)
-  }, [editingMessage, updateAction])
+    clearAttachments()
+  }, [clearAttachments, editingMessage, updateAction])
 
   const deleteMessage = useCallback(
     (key: string) => {
@@ -206,8 +273,7 @@ export function MessageInput({
     [updateAction]
   )
 
-  const isActive = Boolean(inputText && !disabled)
-  const isButtonActive = isActive || showStop
+  const isButtonActive = canSubmit || showStop
 
   return (
     <Stack direction="column" gap={0} className={styles.root}>
@@ -225,9 +291,14 @@ export function MessageInput({
         </Text>
       )}
       <div
-        className={[styles.composer, disabled ? styles.disabled : null]
+        className={[
+          styles.composer,
+          disabled ? styles.disabled : null,
+          dropActive ? styles.composerDropActive : null,
+        ]
           .filter(Boolean)
           .join(` `)}
+        {...dropZoneProps}
       >
         {editingMessage && (
           <div className={styles.editingBanner}>
@@ -244,11 +315,27 @@ export function MessageInput({
             </button>
           </div>
         )}
+        {imageAttachmentsEnabled && (
+          <AttachmentPreviewTray
+            attachments={attachments}
+            onRemove={removeAttachment}
+          />
+        )}
         <div className={styles.composerBody}>
+          {imageAttachmentsEnabled && (
+            <AttachmentActionMenu
+              disabled={!canAttachFiles}
+              accept={imageAttachmentDraftPolicy.accept}
+              fileInputRef={fileInputRef}
+              onFilesSelected={addAttachments}
+              onAttach={openAttachmentPicker}
+            />
+          )}
           <textarea
             ref={textareaRef}
             value={value}
             onChange={(e) => setValue(e.target.value)}
+            onPaste={handlePaste}
             // Tell mobile virtual keyboards that Enter means "send" so the
             // GBoard / iOS keyboard surfaces a send-shaped action key and
             // — critically on Android Chrome — fires `keydown` with

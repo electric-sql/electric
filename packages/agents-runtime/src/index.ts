@@ -1,5 +1,10 @@
 export type {
   LLMMessage,
+  LLMContentBlock,
+  LLMMessageContent,
+  AttachmentCreateInput,
+  AttachmentsApi,
+  ManifestAttachmentEntry,
   ManifestChildEntry,
   ManifestContextEntry,
   ManifestEntry,
@@ -97,12 +102,21 @@ export type {
   ContextInserted as ContextInsertedEvent,
   ContextRemoved as ContextRemovedEvent,
   Manifest,
+  ManifestAttachmentEntry as ManifestAttachmentEntryRow,
+  AttachmentRole,
+  AttachmentStatus,
+  AttachmentSubject,
+  AttachmentSubjectType,
   ManifestContextEntry as ManifestContextEntryRow,
   ReplayWatermark,
   WakeConfigValue,
 } from './entity-schema'
 
 export { createEntityStreamDB } from './entity-stream-db'
+export {
+  getEntityAttachmentStreamPath,
+  manifestAttachmentKey,
+} from './manifest-helpers'
 export {
   assertTags,
   buildTagsIndex,

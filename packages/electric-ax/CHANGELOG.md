@@ -1,5 +1,23 @@
 # electric-ax
 
+## 0.2.10
+
+### Patch Changes
+
+- 0a15a47: Bundle the Electric CLI with the desktop app and add managed install/status UI.
+- 98b51d6: Update Electric Agents packages to depend on the stable Durable Streams
+  packages instead of pkg.pr builds. This pulls in `@durable-streams/client`
+  0.2.6, `@durable-streams/server` 0.3.5, and `@durable-streams/state` 0.2.9.
+  Examples now resolve `@electric-ax/agents-runtime` from the workspace so they
+  do not keep older registry runtime builds pinned in the lockfile.
+- Updated dependencies [e9ea591]
+- Updated dependencies [d921a9f]
+- Updated dependencies [98b51d6]
+- Updated dependencies [aed2189]
+- Updated dependencies [52a641f]
+  - @electric-ax/agents-runtime@0.3.6
+  - @electric-ax/agents@0.4.10
+
 ## 0.2.9
 
 ### Patch Changes

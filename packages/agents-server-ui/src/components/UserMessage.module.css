@@ -84,6 +84,111 @@
   overflow-wrap: anywhere;
 }
 
+.attachments {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(176px, 100%), 240px));
+  gap: 8px;
+  align-items: start;
+}
+
+.imageAttachment,
+.fileAttachment {
+  color: inherit;
+  text-decoration: none;
+}
+
+.imageAttachment {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) 32px;
+  width: min(240px, 100%);
+  aspect-ratio: 1;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--ds-gray-a4);
+  border-radius: var(--ds-radius-4);
+  background: var(--ds-surface-1);
+  cursor: zoom-in;
+  font: inherit;
+  text-align: left;
+}
+
+.imageAttachment img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: var(--ds-gray-a2);
+}
+
+.imageAttachment:focus-visible {
+  outline: 2px solid var(--ds-accent-9);
+  outline-offset: 2px;
+}
+
+.imageLoading {
+  display: grid;
+  place-items: center;
+  color: var(--ds-text-3);
+  background: var(--ds-gray-a2);
+}
+
+.imageAttachment span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0 8px;
+  color: var(--ds-text-2);
+  font-size: var(--ds-text-xs);
+  line-height: var(--ds-text-xs-lh);
+}
+
+.imageAttachment span,
+.fileAttachment strong,
+.fileAttachment small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fileAttachment {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 14px;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 8px;
+  border: 1px solid var(--ds-gray-a4);
+  border-radius: var(--ds-radius-4);
+  background: var(--ds-surface-1);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.fileAttachment:focus-visible {
+  outline: 2px solid var(--ds-accent-9);
+  outline-offset: 2px;
+}
+
+.fileAttachment span {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.fileAttachment strong {
+  color: var(--ds-text-1);
+  font-size: var(--ds-text-xs);
+  font-weight: 500;
+  line-height: var(--ds-text-xs-lh);
+}
+
+.fileAttachment small {
+  color: var(--ds-text-3);
+  font-size: 10px;
+  line-height: 14px;
+}
+
 .meta {
   opacity: 0.4;
   /* Match the bubble's 12px horizontal padding so the timestamp/sender

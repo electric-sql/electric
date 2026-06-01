@@ -272,6 +272,22 @@
 .composer:focus-within {
   border-color: var(--ds-accent-a6);
 }
+.composerDropActive {
+  border-color: var(--ds-accent-a7);
+  box-shadow:
+    0 0 0 1px var(--ds-accent-a5),
+    0 8px 28px rgba(15, 15, 30, 0.1);
+}
+
+.composerDropActive::after {
+  content: '';
+  position: absolute;
+  inset: 6px;
+  border: 1px dashed var(--ds-accent-a8);
+  border-radius: calc(var(--ds-radius-5) - 5px);
+  background: var(--ds-accent-a2);
+  pointer-events: none;
+}
 .composerDisabled {
   opacity: 0.6;
 }

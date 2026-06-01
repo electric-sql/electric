@@ -1,4 +1,4 @@
-import { app } from 'electron'
+import { app, powerSaveBlocker } from 'electron'
 import { AGENT_SKILLS_DIR } from '../shared/paths'
 import {
   MCP_OAUTH_REDIRECT_BASE,
@@ -25,6 +25,7 @@ import type {
   RegistrySnapshot,
   RuntimeEntry,
   ServerConfig,
+  LocalRuntimeStatus,
 } from '../shared/types'
 
 export type RuntimeLifecycleDeps = {
@@ -34,6 +35,7 @@ export type RuntimeLifecycleDeps = {
     workingDirectory?: string | null
     mcp?: { servers: Array<McpServerConfig> }
     pullWakeRunnerId?: string | null
+    preventAppSuspension?: boolean
     enabledModelValues?: Array<string>
   }
   runtimeEntries: Map<string, RuntimeEntry>
@@ -58,6 +60,8 @@ export type RuntimeLifecycleDeps = {
   getCloudAuthState: () => CloudAuthState | undefined
 }
 
+let powerSaveBlockerId: number | null = null
+
 function reconnectDelayMs(attempt: number): number {
   const base = Math.min(
     RECONNECT_MAX_MS,
@@ -71,6 +75,42 @@ export function hasConnectedLocalRuntime(deps: RuntimeLifecycleDeps): boolean {
     (server) =>
       server.localRuntimeEnabled && server.desiredState === `connected`
   )
+}
+
+function shouldPreventAppSuspension(deps: RuntimeLifecycleDeps): boolean {
+  if (deps.settings.preventAppSuspension === false) return false
+  return [...deps.runtimeEntries.values()].some(
+    (entry) =>
+      entry.desiredState === `connected` &&
+      ([`starting`, `running`] as Array<LocalRuntimeStatus>).includes(
+        entry.localRuntimeStatus
+      )
+  )
+}
+
+export function refreshPowerSaveBlocker(deps: RuntimeLifecycleDeps): void {
+  const shouldBlock = shouldPreventAppSuspension(deps)
+  if (shouldBlock) {
+    if (
+      powerSaveBlockerId === null ||
+      !powerSaveBlocker.isStarted(powerSaveBlockerId)
+    ) {
+      powerSaveBlockerId = powerSaveBlocker.start(`prevent-app-suspension`)
+      console.info(
+        `[agents-desktop] Enabled power save blocker to keep the desktop runtime available while connected.`
+      )
+    }
+    return
+  }
+
+  if (
+    powerSaveBlockerId !== null &&
+    powerSaveBlocker.isStarted(powerSaveBlockerId)
+  ) {
+    powerSaveBlocker.stop(powerSaveBlockerId)
+    console.info(`[agents-desktop] Disabled power save blocker.`)
+  }
+  powerSaveBlockerId = null
 }
 
 export async function restartConnectedRuntimes(
@@ -134,6 +174,7 @@ export async function stopRuntimeEntry(
     ?.localRuntimeEnabled
     ? `stopped`
     : `disabled`
+  refreshPowerSaveBlocker(deps)
   if (current) {
     await current.stop()
   }
@@ -204,6 +245,7 @@ export async function startRuntime(
     entry.lastError = null
     entry.reconnectAttempt = 0
     entry.lastConnectedAt = Date.now()
+    refreshPowerSaveBlocker(deps)
     deps.refreshDesktopState()
     return
   }
@@ -277,6 +319,7 @@ export async function startRuntime(
   entry.runtime = nextRuntime
   entry.localRuntimeStatus = `starting`
   entry.runtimeError = null
+  refreshPowerSaveBlocker(deps)
   deps.refreshDesktopState()
 
   try {
@@ -292,6 +335,7 @@ export async function startRuntime(
     entry.lastError = null
     entry.reconnectAttempt = 0
     entry.lastConnectedAt = Date.now()
+    refreshPowerSaveBlocker(deps)
     deps.refreshDesktopState()
     const reg = nextRuntime.mcpRegistry
     if (reg) {
@@ -317,6 +361,7 @@ export async function startRuntime(
       startupNetworkError ??
       (error instanceof Error ? error.message : String(error))
     entry.reconnectAttempt += 1
+    refreshPowerSaveBlocker(deps)
     scheduleReconnect(deps, serverId)
   }
 }

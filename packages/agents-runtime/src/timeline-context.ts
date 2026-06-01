@@ -13,8 +13,9 @@ import type {
   TimelineOrder,
 } from './entity-timeline'
 import type { EntityStreamDB } from './entity-stream-db'
-import type { Signal } from './entity-schema'
+import type { ManifestAttachmentEntry, Signal } from './entity-schema'
 import type {
+  LLMContentBlock,
   LLMMessage,
   TimelineItem,
   TimelineProjectionOpts,
@@ -388,6 +389,7 @@ export function materializeTimeline(
         return {
           kind: `inbox`,
           at: orderToOffset(entry.order),
+          key: entry.item.key,
           payload: entry.item.payload,
         }
 
@@ -441,6 +443,7 @@ export function timelineMessages(
   const projection = opts.projection ?? defaultProjection
   const since = opts.since ?? Number.NEGATIVE_INFINITY
   const items = materializeTimeline(buildEntityTimelineData(db))
+  const attachmentsByInboxKey = attachmentsBySubjectInboxKey(db)
   const messages: Array<TimestampedMessage> = []
 
   for (const item of items) {
@@ -449,7 +452,10 @@ export function timelineMessages(
     }
 
     for (const message of projection(item) ?? []) {
-      messages.push({ ...message, at: item.at })
+      messages.push({
+        ...withInboxAttachments(message, item, attachmentsByInboxKey),
+        at: item.at,
+      })
     }
   }
 
@@ -460,4 +466,68 @@ export function timelineToMessages(db: EntityStreamDB): Array<LLMMessage> {
   return timelineMessages(db).map(
     ({ at: _at, ...message }) => message as LLMMessage
   )
+}
+
+function isAttachmentManifest(
+  value: unknown
+): value is ManifestAttachmentEntry {
+  return (
+    typeof value === `object` &&
+    value !== null &&
+    `kind` in value &&
+    value.kind === `attachment` &&
+    `id` in value &&
+    typeof value.id === `string` &&
+    `subject` in value &&
+    typeof value.subject === `object` &&
+    value.subject !== null
+  )
+}
+
+function attachmentsBySubjectInboxKey(
+  db: EntityStreamDB
+): Map<string, Array<ManifestAttachmentEntry>> {
+  const byKey = new Map<string, Array<ManifestAttachmentEntry>>()
+  for (const value of db.collections.manifests.toArray) {
+    if (
+      !isAttachmentManifest(value) ||
+      value.role !== `input` ||
+      value.status !== `complete` ||
+      value.subject.type !== `inbox`
+    ) {
+      continue
+    }
+    const existing = byKey.get(value.subject.key) ?? []
+    existing.push(value)
+    byKey.set(value.subject.key, existing)
+  }
+  return byKey
+}
+
+function withInboxAttachments(
+  message: LLMMessage,
+  item: TimelineItem,
+  attachmentsByInboxKey: Map<string, Array<ManifestAttachmentEntry>>
+): LLMMessage {
+  if (item.kind !== `inbox` || message.role !== `user`) {
+    return message
+  }
+  const attachments = attachmentsByInboxKey.get(item.key)
+  if (!attachments || attachments.length === 0) {
+    return message
+  }
+  const content: Array<LLMContentBlock> =
+    typeof message.content === `string`
+      ? [{ type: `text`, text: message.content }]
+      : [...message.content]
+  content.push(
+    ...attachments.map((attachment) => ({
+      type: `attachment` as const,
+      id: attachment.id,
+    }))
+  )
+  return {
+    ...message,
+    content,
+  }
 }

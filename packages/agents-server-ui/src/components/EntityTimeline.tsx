@@ -31,9 +31,15 @@ import {
 import { usePaneFindAdapterRegistration } from '../hooks/usePaneFind'
 import { useOptionalWorkspace } from '../hooks/useWorkspace'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
+import {
+  attachmentDisplayName,
+  attachmentDownloadUrl,
+  isAttachmentManifest,
+} from '../lib/attachments'
 import { warmMarkdownRenderCache } from '../lib/markdownRenderCache'
 import { Icon, IconButton, ScrollArea, Stack, Text, Tooltip } from '../ui'
 import { UserMessage } from './UserMessage'
+import type { UserMessageAttachment } from './UserMessage'
 import { AgentResponseLive } from './AgentResponse'
 import { InlineEventCard } from './InlineEventCard'
 import { InlineStatusBadge } from './InlineStatusBadge'
@@ -595,6 +601,8 @@ function manifestKindLabel(manifest: Manifest): string {
       return `Shared state`
     case `effect`:
       return `Effect`
+    case `attachment`:
+      return `Attachment`
     case `context`:
       return `Context`
     case `schedule`:
@@ -610,6 +618,7 @@ function manifestTitle(manifest: Manifest): string {
       return manifest.sourceRef
     case `shared-state`:
     case `effect`:
+    case `attachment`:
     case `context`:
     case `schedule`:
       return manifest.id
@@ -626,6 +635,8 @@ function manifestMeta(manifest: Manifest): string {
       return `${manifest.mode} · ${Object.keys(manifest.collections).join(`, `)}`
     case `effect`:
       return manifest.function_ref
+    case `attachment`:
+      return `${manifest.mimeType} · ${manifest.status}`
     case `context`:
       return `${Object.keys(manifest.attrs).length} attrs`
     case `schedule`:
@@ -665,6 +676,15 @@ function manifestDetails(
         { label: `Function`, value: manifest.function_ref },
         { label: `Config`, value: shortJson(manifest.config) },
       ]
+    case `attachment`:
+      return [
+        { label: `File`, value: attachmentDisplayName(manifest) },
+        { label: `MIME`, value: manifest.mimeType },
+        {
+          label: `Subject`,
+          value: `${manifest.subject.type}:${manifest.subject.key}`,
+        },
+      ]
     case `context`:
       return [
         { label: `Name`, value: manifest.name },
@@ -688,6 +708,7 @@ function manifestIcon(manifest: Manifest) {
   if (getManifestStateSourceId(manifest)) return Database
   if (getManifestEntityUrl(manifest)) return GitBranch
   if (manifest.kind === `schedule`) return Radio
+  if (manifest.kind === `attachment`) return FileJson
   return FileJson
 }
 
@@ -764,6 +785,7 @@ const TimelineRow = memo(function TimelineRow({
   renderWidth,
   entityUrl,
   tileId,
+  attachmentsByInboxKey,
   entityStatusByUrl,
   stopUserMessageKey,
   stopPending,
@@ -778,6 +800,7 @@ const TimelineRow = memo(function TimelineRow({
   renderWidth: number
   entityUrl: string | null
   tileId: string | null
+  attachmentsByInboxKey: Map<string, Array<UserMessageAttachment>>
   entityStatusByUrl: Map<string, EntityStatus>
   stopUserMessageKey: string | null
   stopPending: boolean
@@ -795,6 +818,7 @@ const TimelineRow = memo(function TimelineRow({
           timestamp: Number.isFinite(timestamp) ? timestamp : Date.now(),
           isInitial: isInitialUserMessage,
         }}
+        attachments={attachmentsByInboxKey.get(row.inbox.key)}
         showStop={
           stopUserMessageKey !== null && row.$key === stopUserMessageKey
         }
@@ -852,6 +876,7 @@ export function EntityTimeline({
   loading,
   error,
   entityStopped,
+  baseUrl,
   cacheKey,
   tileId,
   entityUrl = null,
@@ -864,6 +889,7 @@ export function EntityTimeline({
   loading: boolean
   error: string | null
   entityStopped: boolean
+  baseUrl: string
   cacheKey?: string | null
   tileId?: string | null
   entityUrl?: string | null
@@ -927,48 +953,77 @@ export function EntityTimeline({
   const handledScrollSignalRef = useRef(scrollToBottomSignal)
   const previousStreamingAgentKeyRef = useRef<string | null>(null)
   const textColumnWidth = Math.max(0, contentWidth - CHAT_SURFACE_GUTTER)
+  const displayRows = useMemo(
+    () => rows.filter((row) => !isAttachmentManifest(row.manifest)),
+    [rows]
+  )
+  const attachmentsByInboxKey = useMemo(() => {
+    const byKey = new Map<string, Array<UserMessageAttachment>>()
+    if (!entityUrl) return byKey
+    for (const row of rows) {
+      const manifest = row.manifest
+      if (
+        !isAttachmentManifest(manifest) ||
+        manifest.subject.type !== `inbox`
+      ) {
+        continue
+      }
+      const entry: UserMessageAttachment = {
+        id: manifest.id,
+        name: attachmentDisplayName(manifest),
+        mimeType: manifest.mimeType,
+        byteLength: manifest.byteLength,
+        status: manifest.status,
+        url: attachmentDownloadUrl(baseUrl, entityUrl, manifest.id),
+      }
+      const existing = byKey.get(manifest.subject.key) ?? []
+      existing.push(entry)
+      byKey.set(manifest.subject.key, existing)
+    }
+    return byKey
+  }, [baseUrl, entityUrl, rows])
 
   const spawnTime = useMemo(() => {
-    for (const row of rows) {
+    for (const row of displayRows) {
       if (!row.inbox) continue
       const timestamp = Date.parse(row.inbox.timestamp)
       return Number.isFinite(timestamp) ? timestamp : null
     }
     return null
-  }, [rows])
+  }, [displayRows])
 
   const lastStreamingAgentKey = useMemo(() => {
-    for (let index = rows.length - 1; index >= 0; index--) {
-      const row = rows[index]
+    for (let index = displayRows.length - 1; index >= 0; index--) {
+      const row = displayRows[index]
       if (row.run) {
         return row.run.status === `started` ? row.$key : null
       }
     }
     return null
-  }, [rows])
+  }, [displayRows])
 
   const stopUserMessageKey = useMemo(() => {
     if (!lastStreamingAgentKey) return null
-    const streamingIndex = rows.findIndex(
+    const streamingIndex = displayRows.findIndex(
       (row) => row.$key === lastStreamingAgentKey
     )
     if (streamingIndex < 0) return null
     for (let index = streamingIndex - 1; index >= 0; index--) {
-      const row = rows[index]
+      const row = displayRows[index]
       if (row?.inbox) {
         return row.$key
       }
     }
     return null
-  }, [lastStreamingAgentKey, rows])
+  }, [displayRows, lastStreamingAgentKey])
   const firstInboxRowKey = useMemo(
-    () => rows.find((row) => row.inbox)?.$key ?? null,
-    [rows]
+    () => displayRows.find((row) => row.inbox)?.$key ?? null,
+    [displayRows]
   )
   const responseTimestampByRowKey = useMemo(() => {
     const timestampByRowKey = new Map<string, number | null>()
     let lastUserTimestamp: number | null = null
-    for (const row of rows) {
+    for (const row of displayRows) {
       if (row.inbox) {
         const timestamp = Date.parse(row.inbox.timestamp)
         lastUserTimestamp = Number.isFinite(timestamp) ? timestamp : null
@@ -977,7 +1032,7 @@ export function EntityTimeline({
       }
     }
     return timestampByRowKey
-  }, [rows])
+  }, [displayRows])
   const updateRunSearchText = useCallback((rowKey: string, text: string) => {
     setRunSearchTextByKey((current) => {
       if (text.length === 0) {
@@ -1059,17 +1114,18 @@ export function EntityTimeline({
   )
 
   const rowVirtualizer = useVirtualizer({
-    count: rows.length,
+    count: displayRows.length,
     getScrollElement: () => viewport,
     estimateSize: (index) =>
       cachedSizeMapRef.current.get(
-        rows[index] ? renderRowKey(rows[index]!) : ``
-      ) ?? estimateRowHeight(rows[index], textColumnWidth),
-    getItemKey: (index) => (rows[index] ? renderRowKey(rows[index]!) : index),
+        displayRows[index] ? renderRowKey(displayRows[index]!) : ``
+      ) ?? estimateRowHeight(displayRows[index], textColumnWidth),
+    getItemKey: (index) =>
+      displayRows[index] ? renderRowKey(displayRows[index]!) : index,
     gap: 0,
     overscan: 6,
     measureElement: measureRowElement,
-    enabled: rows.length > 0,
+    enabled: displayRows.length > 0,
   })
 
   const paneFindAdapter = useMemo<PaneFindAdapter>(() => {
@@ -1085,7 +1141,7 @@ export function EntityTimeline({
         const matches: Array<TimelinePaneFindMatch> = []
         if (!query.trim()) return matches
 
-        rows.forEach((row, rowIndex) => {
+        displayRows.forEach((row, rowIndex) => {
           const rowKey = renderRowKey(row)
           const text = timelineRowSearchText(row, runSearchTextByKey)
           const starts = getTextMatchStarts(text, query)
@@ -1118,7 +1174,7 @@ export function EntityTimeline({
         return getCurrentMatchIndexInRoot(root, query, match)
       },
     }
-  }, [contentElement, rowVirtualizer, rows, runSearchTextByKey])
+  }, [contentElement, displayRows, rowVirtualizer, runSearchTextByKey])
 
   usePaneFindAdapterRegistration(tileId ?? null, paneFindAdapter)
 
@@ -1128,9 +1184,9 @@ export function EntityTimeline({
 
   const scrollToTimelineEnd = useCallback(
     (opts?: { force?: boolean }) => {
-      if (!viewport || rows.length === 0) return
+      if (!viewport || displayRows.length === 0) return
       const force = opts?.force ?? false
-      rowVirtualizer.scrollToIndex(rows.length - 1, { align: `end` })
+      rowVirtualizer.scrollToIndex(displayRows.length - 1, { align: `end` })
 
       // The stopped/status footer sits outside the virtual list, so make sure the
       // physical scroll container is also flush with its full content height.
@@ -1139,7 +1195,7 @@ export function EntityTimeline({
         viewport.scrollTop = viewport.scrollHeight
       })
     },
-    [rowVirtualizer, rows.length, viewport]
+    [displayRows.length, rowVirtualizer, viewport]
   )
 
   const scrollAreaRef = useCallback((node: HTMLDivElement | null) => {
@@ -1295,7 +1351,7 @@ export function EntityTimeline({
   }, [viewport])
 
   useLayoutEffect(() => {
-    if (!viewport || rows.length === 0) return
+    if (!viewport || displayRows.length === 0) return
     if (!isNearBottom.current) return
 
     const frame = requestAnimationFrame(() => {
@@ -1303,7 +1359,7 @@ export function EntityTimeline({
     })
 
     return () => cancelAnimationFrame(frame)
-  }, [rows, scrollToTimelineEnd, viewport])
+  }, [displayRows, scrollToTimelineEnd, viewport])
 
   useLayoutEffect(() => {
     if (!contentElement || !viewport) return
@@ -1346,13 +1402,13 @@ export function EntityTimeline({
     isNearBottom.current = true
     setShowJumpToBottom(false)
 
-    if (!viewport || rows.length === 0) return
+    if (!viewport || displayRows.length === 0) return
     const frame = requestAnimationFrame(() => {
       scrollToTimelineEnd({ force: true })
     })
 
     return () => cancelAnimationFrame(frame)
-  }, [rows.length, scrollToBottomSignal, scrollToTimelineEnd, viewport])
+  }, [displayRows.length, scrollToBottomSignal, scrollToTimelineEnd, viewport])
 
   useEffect(
     () => () => {
@@ -1364,12 +1420,12 @@ export function EntityTimeline({
   )
 
   const jumpToBottom = useCallback(() => {
-    if (rows.length > 0) {
+    if (displayRows.length > 0) {
       isNearBottom.current = true
       setShowJumpToBottom(false)
       scrollToTimelineEnd({ force: true })
     }
-  }, [rows.length, scrollToTimelineEnd])
+  }, [displayRows.length, scrollToTimelineEnd])
 
   if (loading) {
     return (
@@ -1432,7 +1488,7 @@ export function EntityTimeline({
             )}
           </Stack>
 
-          {rows.length === 0 ? (
+          {displayRows.length === 0 ? (
             <Stack justify="center" py={6}>
               <Text tone="muted" size={2} className={styles.emptyState}>
                 Waiting for events...
@@ -1447,7 +1503,7 @@ export function EntityTimeline({
               }}
             >
               {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                const row = rows[virtualRow.index]
+                const row = displayRows[virtualRow.index]
                 const rowKey = renderRowKey(row)
 
                 // Stable row key. The previous implementation appended
@@ -1484,6 +1540,7 @@ export function EntityTimeline({
                         renderWidth={textColumnWidth}
                         entityUrl={entityUrl}
                         tileId={tileId ?? null}
+                        attachmentsByInboxKey={attachmentsByInboxKey}
                         entityStatusByUrl={entityStatusByUrl}
                         stopUserMessageKey={stopUserMessageKey}
                         stopPending={stopPending}

@@ -11,3 +11,14 @@ export function manifestSharedStateKey(id: string): string {
 export function manifestEffectKey(functionRef: string, id: string): string {
   return `effect:${functionRef}:${id}`
 }
+
+export function manifestAttachmentKey(id: string): string {
+  return `attachment:${id}`
+}
+
+export function getEntityAttachmentStreamPath(
+  entityUrl: string,
+  attachmentId: string
+): string {
+  return `${entityUrl.replace(/\/+$/, ``)}/attachments/${attachmentId}`
+}

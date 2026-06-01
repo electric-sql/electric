@@ -35,6 +35,7 @@ import type {
   ContextRemoved as EntityContextRemoved,
   EntitySignal,
   Manifest as EntityManifest,
+  ManifestAttachmentEntry as EntityManifestAttachmentEntry,
   ManifestChildEntry as EntityManifestChildEntry,
   ManifestContextEntry as EntityManifestContextEntry,
   ManifestCronScheduleEntry as EntityManifestCronScheduleEntry,
@@ -223,8 +224,19 @@ export type LLMMessage =
   | LLMToolCallMessage
   | LLMToolResultMessage
 
+export type LLMContentBlock =
+  | { type: `text`; text: string }
+  | { type: `image`; data: string; mimeType: string }
+  | {
+      type: `attachment`
+      id: string
+      detail?: `low` | `high` | `auto`
+    }
+
+export type LLMMessageContent = string | Array<LLMContentBlock>
+
 interface LLMMessageBase {
-  content: string
+  content: LLMMessageContent
 }
 
 export interface LLMUserMessage extends LLMMessageBase {
@@ -296,6 +308,7 @@ export interface UseContextConfig {
 }
 
 export type ManifestEntry = EntityManifest
+export type ManifestAttachmentEntry = EntityManifestAttachmentEntry
 export type ManifestChildEntry = EntityManifestChildEntry
 export type ManifestContextEntry = EntityManifestContextEntry
 export type ManifestCronScheduleEntry = EntityManifestCronScheduleEntry
@@ -319,8 +332,30 @@ export interface ContextEntry extends ContextEntryInput {
   insertedAt: number
 }
 
+export type AttachmentCreateInput = {
+  bytes: Uint8Array | ArrayBuffer | Blob
+  mimeType?: string
+  filename?: string
+  subject: {
+    type: `inbox` | `run` | `text` | `tool_call` | `context`
+    key: string
+  }
+  role?: `input` | `output`
+  meta?: Record<string, JsonValue>
+}
+
+export interface AttachmentsApi {
+  list(filter?: {
+    subject?: AttachmentCreateInput[`subject`]
+    role?: `input` | `output`
+  }): Array<ManifestAttachmentEntry>
+  get(id: string): ManifestAttachmentEntry | undefined
+  read(id: string): Promise<Uint8Array>
+  create(input: AttachmentCreateInput): Promise<ManifestAttachmentEntry>
+}
+
 export type TimelineItem =
-  | { kind: `inbox`; at: number; payload: unknown }
+  | { kind: `inbox`; at: number; key: string; payload: unknown }
   | { kind: `wake`; at: number; payload: unknown }
   | { kind: `signal`; at: number; signal: EntitySignalEntry }
   | {
@@ -509,6 +544,7 @@ export interface RuntimeContext {
     payload: unknown,
     opts?: { type?: string; afterMs?: number }
   ) => Promise<SendResult>
+  attachments: AttachmentsApi
   createEffect: (functionRef: string, key: string, config: JsonValue) => boolean
 }
 
@@ -914,6 +950,7 @@ export interface HandlerContext<
     payload: unknown,
     opts?: { type?: string; afterMs?: number }
   ) => Promise<SendResult>
+  attachments: AttachmentsApi
   /**
    * Register a handler for lifecycle signals delivered while this wake is active.
    * Runtime/server-controlled signals are not delivered here: SIGINT aborts the
