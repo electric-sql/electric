@@ -313,7 +313,12 @@ export async function assembleContext(
     }
   }
 
-  volatileMessages.sort((left, right) => left.at - right.at)
+  // Preserve volatile source order. Volatile sources such as
+  // ctx.timelineMessages() may return a model-facing transcript order that
+  // intentionally differs from raw stream-offset order, e.g. interrupted run
+  // output before the SIGINT marker that raced ahead of buffered runtime
+  // writes. `at` remains metadata for truncation ranges and load tools, but it
+  // must not globally reorder already-projected context.
 
   const remainingBudget = Math.max(0, config.sourceBudget - budgetUsed)
   const accepted: Array<VolatileMessage> = []
