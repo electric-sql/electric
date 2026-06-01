@@ -2,6 +2,11 @@ import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { completeSimple, getModel } from '@mariozechner/pi-ai'
+import {
+  MOONSHOT_PROVIDER,
+  getMoonshotApiKey,
+  getMoonshotModel,
+} from './moonshot-models'
 import type { AgentConfig } from './types'
 import type { KnownProvider } from '@mariozechner/pi-ai'
 
@@ -26,6 +31,7 @@ const PREFERRED_IDS_BY_PROVIDER: Record<string, Array<string>> = {
   openai: [`gpt-4.1-nano`, `gpt-4o-mini`, `gpt-4.1-mini`],
   'openai-codex': [`gpt-5.4-mini`, `gpt-5.1-codex-mini`],
   deepseek: [`deepseek-v4-flash`, `deepseek-v4-pro`],
+  moonshot: [`kimi-k2.6`, `kimi-k2.5`, `moonshot-v1-8k`],
 }
 
 function hasEnv(name: string): boolean {
@@ -58,12 +64,14 @@ export type AvailableProvider =
   | `openai`
   | `openai-codex`
   | `deepseek`
+  | typeof MOONSHOT_PROVIDER
 
 export function detectAvailableProviders(): Array<AvailableProvider> {
   const providers: Array<AvailableProvider> = []
   if (hasEnv(`ANTHROPIC_API_KEY`)) providers.push(`anthropic`)
   if (hasEnv(`OPENAI_API_KEY`)) providers.push(`openai`)
   if (hasEnv(`DEEPSEEK_API_KEY`)) providers.push(`deepseek`)
+  if (getMoonshotApiKey()) providers.push(MOONSHOT_PROVIDER)
   if (readCodexAccessToken() !== undefined) providers.push(`openai-codex`)
   return providers
 }
@@ -101,6 +109,13 @@ function envCatalog(): LowCostModelCatalog {
       reasoning: true,
     })
   }
+  if (providers.includes(MOONSHOT_PROVIDER)) {
+    choices.push({
+      provider: MOONSHOT_PROVIDER,
+      id: `kimi-k2.6`,
+      reasoning: false,
+    })
+  }
   return { choices, defaultChoice: choices[0] }
 }
 
@@ -115,6 +130,7 @@ export function selectLowCostModelChoice(
     `openai`,
     `anthropic`,
     `deepseek`,
+    MOONSHOT_PROVIDER,
   ].filter((provider): provider is string => Boolean(provider))
 
   for (const provider of providerOrder) {
@@ -149,6 +165,25 @@ export function selectLowCostModelChoice(
   )
 }
 
+function resolveLowCostModel(choice: LowCostModelChoice) {
+  if (choice.provider === MOONSHOT_PROVIDER) return getMoonshotModel(choice.id)
+  return getModel(
+    choice.provider as Parameters<typeof getModel>[0],
+    choice.id as Parameters<typeof getModel>[1]
+  )
+}
+
+async function resolveLowCostApiKey(input: {
+  provider: string
+  modelConfig?: LowCostModelConfig
+}): Promise<string | undefined> {
+  if (input.modelConfig?.getApiKey) {
+    return await input.modelConfig.getApiKey(input.provider)
+  }
+  if (input.provider === MOONSHOT_PROVIDER) return getMoonshotApiKey()
+  return undefined
+}
+
 export async function completeWithLowCostModel(input: {
   catalog?: LowCostModelCatalog
   modelConfig?: LowCostModelConfig
@@ -160,10 +195,7 @@ export async function completeWithLowCostModel(input: {
   maxTokens: number
 }): Promise<string> {
   const choice = selectLowCostModelChoice(input.catalog, input.modelConfig)
-  const model = getModel(
-    choice.provider as Parameters<typeof getModel>[0],
-    choice.id as Parameters<typeof getModel>[1]
-  )
+  const model = resolveLowCostModel(choice)
   if (!model) {
     throw new Error(
       `unknown ${input.purpose} model "${choice.id}" for provider "${choice.provider}"`
@@ -174,9 +206,10 @@ export async function completeWithLowCostModel(input: {
     `${input.logPrefix ?? ``}${input.logPrefix ? ` ` : ``}${input.purpose} using ${choice.provider}:${choice.id}`
   )
 
-  const apiKey = input.modelConfig?.getApiKey
-    ? await input.modelConfig.getApiKey(choice.provider)
-    : undefined
+  const apiKey = await resolveLowCostApiKey({
+    provider: choice.provider,
+    modelConfig: input.modelConfig,
+  })
   const res = await completeSimple(
     model,
     {

@@ -13,6 +13,7 @@ export type CredentialsIpcDeps = {
   }
   getApiKeysStatus: () => Promise<unknown>
   setApiKeys: (keys: ApiKeys) => Promise<void>
+  setEnabledModels: (values: Array<string>) => Promise<void>
   signInCodex: () => Promise<unknown>
   enableCodexSource: (source: CodexAuthSource) => Promise<unknown>
   disableCodex: () => Promise<unknown>
@@ -28,6 +29,12 @@ export function registerCredentialsIpcHandlers(deps: CredentialsIpcDeps): void {
   ipcMain.handle(`desktop:save-api-keys`, async (_event, keys: ApiKeys) => {
     await deps.setApiKeys(keys)
   })
+  ipcMain.handle(
+    `desktop:save-enabled-models`,
+    async (_event, values: Array<string>) => {
+      await deps.setEnabledModels(values)
+    }
+  )
   ipcMain.handle(`desktop:codex-sign-in`, () => deps.signInCodex())
   ipcMain.handle(
     `desktop:codex-enable-source`,

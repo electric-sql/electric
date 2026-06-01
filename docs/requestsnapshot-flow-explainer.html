@@ -1,0 +1,853 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>requestSnapshot publish ordering explainer</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #18212f;
+        --muted: #5f6978;
+        --paper: #fbfaf7;
+        --panel: #ffffff;
+        --line: #d9ded8;
+        --soft: #eef3ef;
+        --teal: #0f766e;
+        --teal-soft: #d9f2ed;
+        --blue: #2563eb;
+        --blue-soft: #dbeafe;
+        --amber: #b45309;
+        --amber-soft: #fef3c7;
+        --red: #b42318;
+        --red-soft: #fee4e2;
+        --green: #237447;
+        --green-soft: #dcfce7;
+        --violet: #6d28d9;
+        --violet-soft: #ede9fe;
+        --shadow: 0 18px 45px rgba(31, 41, 55, 0.08);
+        --radius: 8px;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+        line-height: 1.5;
+      }
+
+      a {
+        color: var(--blue);
+      }
+
+      .page {
+        min-height: 100vh;
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
+        gap: 36px;
+        align-items: center;
+        min-height: min(720px, 88vh);
+        padding: 64px clamp(20px, 5vw, 72px) 44px;
+        border-bottom: 1px solid var(--line);
+        background:
+          linear-gradient(90deg, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.38)),
+          repeating-linear-gradient(
+            90deg,
+            rgba(15, 118, 110, 0.08) 0,
+            rgba(15, 118, 110, 0.08) 1px,
+            transparent 1px,
+            transparent 72px
+          ),
+          repeating-linear-gradient(
+            0deg,
+            rgba(37, 99, 235, 0.07) 0,
+            rgba(37, 99, 235, 0.07) 1px,
+            transparent 1px,
+            transparent 72px
+          ),
+          #f6f4ef;
+      }
+
+      .hero h1 {
+        margin: 0 0 18px;
+        max-width: 880px;
+        font-size: clamp(44px, 6vw, 78px);
+        line-height: 0.98;
+        letter-spacing: 0;
+      }
+
+      .hero p {
+        margin: 0;
+        max-width: 760px;
+        font-size: 18px;
+        color: var(--muted);
+      }
+
+      .hero-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 28px;
+      }
+
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 40px;
+        padding: 9px 14px;
+        border-radius: 7px;
+        border: 1px solid var(--line);
+        background: var(--panel);
+        color: var(--ink);
+        font-weight: 650;
+        text-decoration: none;
+      }
+
+      .button.primary {
+        border-color: var(--teal);
+        background: var(--teal);
+        color: white;
+      }
+
+      .hero-visual {
+        min-height: 390px;
+        padding: 18px;
+        border: 1px solid rgba(24, 33, 47, 0.12);
+        border-radius: var(--radius);
+        background: rgba(255, 255, 255, 0.86);
+        box-shadow: var(--shadow);
+      }
+
+      .mini-code {
+        margin: 0;
+        padding: 14px;
+        overflow: auto;
+        border-radius: 7px;
+        background: #172033;
+        color: #e5eef8;
+        font-size: 13px;
+        line-height: 1.55;
+      }
+
+      .content {
+        padding: 42px clamp(20px, 5vw, 72px) 72px;
+      }
+
+      .section {
+        max-width: 1180px;
+        margin: 0 auto 54px;
+      }
+
+      .section h2 {
+        margin: 0 0 12px;
+        font-size: clamp(26px, 3.2vw, 40px);
+        letter-spacing: 0;
+      }
+
+      .section > p {
+        max-width: 920px;
+        margin: 0 0 20px;
+        color: var(--muted);
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .card {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--panel);
+        padding: 16px;
+        box-shadow: 0 8px 25px rgba(31, 41, 55, 0.04);
+      }
+
+      .card h3 {
+        margin: 0 0 8px;
+        font-size: 17px;
+      }
+
+      .card p {
+        margin: 0;
+        color: var(--muted);
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        min-height: 24px;
+        margin-bottom: 10px;
+        padding: 3px 8px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 750;
+        text-transform: uppercase;
+      }
+
+      .badge.red {
+        background: var(--red-soft);
+        color: var(--red);
+      }
+
+      .badge.amber {
+        background: var(--amber-soft);
+        color: var(--amber);
+      }
+
+      .badge.green {
+        background: var(--green-soft);
+        color: var(--green);
+      }
+
+      .badge.blue {
+        background: var(--blue-soft);
+        color: var(--blue);
+      }
+
+      .badge.violet {
+        background: var(--violet-soft);
+        color: var(--violet);
+      }
+
+      .diagram {
+        overflow: auto;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--panel);
+        box-shadow: var(--shadow);
+      }
+
+      .diagram-inner {
+        min-width: 860px;
+        padding: 22px;
+      }
+
+      .lanes {
+        display: grid;
+        grid-template-columns: 160px repeat(6, minmax(105px, 1fr));
+        gap: 8px;
+        align-items: stretch;
+      }
+
+      .lane-head,
+      .tick,
+      .event {
+        border-radius: 7px;
+        border: 1px solid var(--line);
+        min-height: 58px;
+        padding: 10px;
+        background: #fff;
+      }
+
+      .lane-head {
+        display: flex;
+        align-items: center;
+        font-weight: 750;
+        background: #f3f6f4;
+      }
+
+      .tick {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+
+      .event {
+        font-size: 13px;
+      }
+
+      .event strong {
+        display: block;
+        margin-bottom: 4px;
+        color: var(--ink);
+      }
+
+      .event.blank {
+        background:
+          linear-gradient(135deg, transparent 48%, #eef0ec 49%, #eef0ec 51%, transparent 52%),
+          #fbfbf8;
+      }
+
+      .event.blocked {
+        border-color: #f1b8b4;
+        background: var(--red-soft);
+      }
+
+      .event.waiting {
+        border-color: #ead08a;
+        background: var(--amber-soft);
+      }
+
+      .event.ok {
+        border-color: #9fd6b4;
+        background: var(--green-soft);
+      }
+
+      .event.alt {
+        border-color: #a9c0f8;
+        background: var(--blue-soft);
+      }
+
+      .tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 0 0 14px;
+      }
+
+      .tab {
+        min-height: 38px;
+        padding: 8px 12px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: var(--panel);
+        color: var(--ink);
+        cursor: pointer;
+        font: inherit;
+        font-weight: 700;
+      }
+
+      .tab[aria-selected="true"] {
+        border-color: var(--teal);
+        background: var(--teal-soft);
+        color: #084b46;
+      }
+
+      .tab-panel {
+        display: none;
+      }
+
+      .tab-panel.active {
+        display: block;
+      }
+
+      .compare {
+        width: 100%;
+        border-collapse: collapse;
+        border: 1px solid var(--line);
+        background: var(--panel);
+        border-radius: var(--radius);
+        overflow: hidden;
+      }
+
+      .compare th,
+      .compare td {
+        border-bottom: 1px solid var(--line);
+        padding: 12px;
+        text-align: left;
+        vertical-align: top;
+      }
+
+      .compare th {
+        background: #f0f4f1;
+        font-size: 13px;
+        text-transform: uppercase;
+      }
+
+      .compare tr:last-child td {
+        border-bottom: 0;
+      }
+
+      .callout {
+        border-left: 4px solid var(--teal);
+        background: var(--teal-soft);
+        padding: 14px 16px;
+        border-radius: 0 7px 7px 0;
+      }
+
+      .callout p {
+        margin: 0;
+      }
+
+      .flow-map {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(130px, 1fr));
+        gap: 10px;
+        align-items: center;
+      }
+
+      .flow-node {
+        min-height: 88px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 12px;
+        background: var(--panel);
+        position: relative;
+      }
+
+      .flow-node::after {
+        content: "";
+        position: absolute;
+        top: 50%;
+        right: -10px;
+        width: 10px;
+        border-top: 2px solid #8aa09b;
+      }
+
+      .flow-node:last-child::after {
+        display: none;
+      }
+
+      .flow-node b {
+        display: block;
+        margin-bottom: 4px;
+      }
+
+      .flow-node span {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .note-list {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .option {
+        border-left: 4px solid var(--blue);
+      }
+
+      .option.recommended {
+        border-left-color: var(--green);
+      }
+
+      code {
+        padding: 2px 5px;
+        border-radius: 5px;
+        background: #eef1ee;
+        color: #111827;
+        font-size: 0.92em;
+      }
+
+      @media (max-width: 900px) {
+        .hero {
+          grid-template-columns: 1fr;
+          min-height: auto;
+          padding-top: 42px;
+        }
+
+        .hero-visual {
+          min-height: 0;
+        }
+
+        .grid,
+        .note-list,
+        .flow-map {
+          grid-template-columns: 1fr;
+        }
+
+        .flow-node::after {
+          left: 20px;
+          right: auto;
+          top: auto;
+          bottom: -10px;
+          height: 10px;
+          width: 0;
+          border-top: 0;
+          border-left: 2px solid #8aa09b;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="hero">
+        <div>
+          <h1>requestSnapshot publish ordering</h1>
+          <p>
+            A map of the original deadlock, the current PR fix, and the safer
+            directions to consider before merging PR #4282.
+          </p>
+          <div class="hero-actions" aria-label="Page sections">
+            <a class="button primary" href="#flows">See flows</a>
+            <a class="button" href="#tradeoffs">Compare fixes</a>
+            <a class="button" href="#recommendation">Recommendation</a>
+          </div>
+        </div>
+
+        <div class="hero-visual" aria-label="Short code summary">
+          <pre class="mini-code"><code>// Original behavior
+requestSnapshot()
+  -> #onMessages(snapshot)
+  -> #publish(snapshot)
+  -> enqueue behind current #messageChain
+
+// Deadlock case
+subscriber(M1) awaits requestSnapshot()
+snapshot publish waits for subscriber(M1)
+subscriber(M1) waits for snapshot publish
+
+// Current PR behavior
+if (#isPublishing) deliver(snapshot) immediately
+
+// Review concern
+the bypass can re-enter bystander subscribers
+and can weaken SSE batch ordering.</code></pre>
+        </div>
+      </section>
+
+      <div class="content">
+        <section class="section">
+          <h2>Context</h2>
+          <p>
+            <code>ShapeStream</code> receives batches from long polling or SSE,
+            runs them through <code>#onMessages</code>, and publishes them to all
+            stream subscribers. <code>Shape.requestSnapshot()</code> depends on
+            the injected snapshot batch being processed before the call resolves,
+            because callers may read materialized rows immediately after awaiting it.
+          </p>
+
+          <div class="flow-map">
+            <div class="flow-node">
+              <b>Server batch</b>
+              <span>Long poll body or SSE messages ending at up-to-date.</span>
+            </div>
+            <div class="flow-node">
+              <b>#onMessages</b>
+              <span>Updates stream state, filters duplicate snapshot rows.</span>
+            </div>
+            <div class="flow-node">
+              <b>#publish</b>
+              <span>Calls every subscriber callback for the batch.</span>
+            </div>
+            <div class="flow-node">
+              <b>Shape</b>
+              <span>Maintains materialized rows and notifies its subscribers.</span>
+            </div>
+            <div class="flow-node">
+              <b>User code</b>
+              <span>May await requestSnapshot and then read currentRows.</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="flows">
+          <h2>Flows</h2>
+          <p>
+            Use the tabs to compare what happens before the PR, with the current
+            PR, and in the reviewer concern case.
+          </p>
+
+          <div class="tabs" role="tablist" aria-label="Flow diagrams">
+            <button class="tab" id="tab-original" role="tab" aria-selected="true" aria-controls="panel-original">
+              Original issue
+            </button>
+            <button class="tab" id="tab-current" role="tab" aria-selected="false" aria-controls="panel-current">
+              Current PR fix
+            </button>
+            <button class="tab" id="tab-risk" role="tab" aria-selected="false" aria-controls="panel-risk">
+              Ordering risk
+            </button>
+          </div>
+
+          <div class="tab-panel active" id="panel-original" role="tabpanel" aria-labelledby="tab-original">
+            <div class="diagram">
+              <div class="diagram-inner">
+                <div class="lanes">
+                  <div class="tick">Lane</div>
+                  <div class="tick">T1</div>
+                  <div class="tick">T2</div>
+                  <div class="tick">T3</div>
+                  <div class="tick">T4</div>
+                  <div class="tick">T5</div>
+                  <div class="tick">Result</div>
+
+                  <div class="lane-head">Stream</div>
+                  <div class="event alt"><strong>M1 arrives</strong>Queued through <code>#messageChain</code>.</div>
+                  <div class="event alt"><strong>Publish M1</strong>Subscriber callbacks start.</div>
+                  <div class="event waiting"><strong>Current callback awaits</strong>The chain cannot advance until callback returns.</div>
+                  <div class="event blank"></div>
+                  <div class="event blank"></div>
+                  <div class="event blocked"><strong>Stuck</strong>The active publish waits forever.</div>
+
+                  <div class="lane-head">Subscriber A</div>
+                  <div class="event blank"></div>
+                  <div class="event waiting"><strong>callback(M1)</strong>Calls <code>await stream.requestSnapshot()</code>.</div>
+                  <div class="event waiting"><strong>requestSnapshot</strong>Fetches subset data successfully.</div>
+                  <div class="event blocked"><strong>Inject snapshot</strong><code>#publish(snapshot)</code> queues behind M1.</div>
+                  <div class="event blocked"><strong>Await publish</strong>Cannot resolve.</div>
+                  <div class="event blocked"><strong>Deadlock</strong>A waits for itself indirectly.</div>
+
+                  <div class="lane-head">Message chain</div>
+                  <div class="event alt"><strong>Queue M1</strong>Normal serialized publish.</div>
+                  <div class="event waiting"><strong>M1 in flight</strong>Waiting for all subscribers.</div>
+                  <div class="event waiting"><strong>Snapshot queued</strong>Placed after M1.</div>
+                  <div class="event blocked"><strong>Cannot run snapshot</strong>M1 has not completed.</div>
+                  <div class="event blocked"><strong>Cannot finish M1</strong>Subscriber A is waiting.</div>
+                  <div class="event blocked"><strong>Cycle</strong>M1 -> A -> snapshot -> M1.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="tab-panel" id="panel-current" role="tabpanel" aria-labelledby="tab-current">
+            <div class="diagram">
+              <div class="diagram-inner">
+                <div class="lanes">
+                  <div class="tick">Lane</div>
+                  <div class="tick">T1</div>
+                  <div class="tick">T2</div>
+                  <div class="tick">T3</div>
+                  <div class="tick">T4</div>
+                  <div class="tick">T5</div>
+                  <div class="tick">Result</div>
+
+                  <div class="lane-head">Stream</div>
+                  <div class="event alt"><strong>M1 publish starts</strong><code>#isPublishing = true</code>.</div>
+                  <div class="event waiting"><strong>Subscriber awaits snapshot</strong>Nested request begins.</div>
+                  <div class="event ok"><strong>Snapshot fetched</strong>Data plus snapshot-end and subset-end.</div>
+                  <div class="event ok"><strong>Reentrant publish</strong>Current PR calls <code>deliver()</code> directly.</div>
+                  <div class="event ok"><strong>Snapshot returns</strong>Subscriber A can finish M1.</div>
+                  <div class="event ok"><strong>No deadlock</strong>The target issue is fixed.</div>
+
+                  <div class="lane-head">Subscriber A</div>
+                  <div class="event waiting"><strong>callback(M1)</strong>Calls requestSnapshot.</div>
+                  <div class="event waiting"><strong>Awaiting</strong>Suspended while snapshot request runs.</div>
+                  <div class="event ok"><strong>callback(snapshot)</strong>Runs reentrantly.</div>
+                  <div class="event ok"><strong>requestSnapshot resolves</strong>Rows are visible after await.</div>
+                  <div class="event ok"><strong>callback(M1) resumes</strong>Original callback can complete.</div>
+                  <div class="event ok"><strong>Progress</strong>No self-cycle.</div>
+
+                  <div class="lane-head">Message chain</div>
+                  <div class="event alt"><strong>M1 in flight</strong>Still waiting for subscribers.</div>
+                  <div class="event waiting"><strong>Bypass active</strong>The snapshot is not appended.</div>
+                  <div class="event ok"><strong>Nested delivery</strong>Runs outside the chain.</div>
+                  <div class="event ok"><strong>M1 unblocks</strong>After A finishes.</div>
+                  <div class="event ok"><strong>Chain continues</strong>Queued batches can run.</div>
+                  <div class="event waiting"><strong>Tradeoff</strong>Strict ordering is weakened.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="tab-panel" id="panel-risk" role="tabpanel" aria-labelledby="tab-risk">
+            <div class="diagram">
+              <div class="diagram-inner">
+                <div class="lanes">
+                  <div class="tick">Lane</div>
+                  <div class="tick">T1</div>
+                  <div class="tick">T2</div>
+                  <div class="tick">T3</div>
+                  <div class="tick">T4</div>
+                  <div class="tick">T5</div>
+                  <div class="tick">Result</div>
+
+                  <div class="lane-head">Subscriber A</div>
+                  <div class="event waiting"><strong>callback(M1)</strong>Awaits requestSnapshot.</div>
+                  <div class="event ok"><strong>snapshot starts</strong>Triggers reentrant publish.</div>
+                  <div class="event ok"><strong>snapshot ends</strong>A can complete.</div>
+                  <div class="event blank"></div>
+                  <div class="event blank"></div>
+                  <div class="event ok"><strong>A is fine</strong>The deadlock is gone.</div>
+
+                  <div class="lane-head">Subscriber B</div>
+                  <div class="event waiting"><strong>callback(M1)</strong>Also running and awaiting unrelated work.</div>
+                  <div class="event blocked"><strong>callback(snapshot)</strong>Current PR can re-enter B before M1 callback returns.</div>
+                  <div class="event blocked"><strong>Interleaving</strong>B observes M1-start, snapshot-start, snapshot-end, M1-end.</div>
+                  <div class="event blocked"><strong>State hazard</strong>Mutable work across awaits can be corrupted.</div>
+                  <div class="event blank"></div>
+                  <div class="event blocked"><strong>Reviewer concern</strong>Per-subscriber non-reentrancy is lost.</div>
+
+                  <div class="lane-head">SSE source</div>
+                  <div class="event alt"><strong>M1 batch</strong>Flushes on up-to-date.</div>
+                  <div class="event alt"><strong>onmessage is sync</strong>It does not await <code>#onMessages</code>.</div>
+                  <div class="event blocked"><strong>M2 can arrive</strong>If <code>#isPublishing</code> is true, M2 can bypass the chain too.</div>
+                  <div class="event blocked"><strong>Out-of-order risk</strong>Not limited to requestSnapshot unless the API makes it explicit.</div>
+                  <div class="event blank"></div>
+                  <div class="event blocked"><strong>Regression risk</strong>Sequential SSE batch processing is weaker.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="tradeoffs">
+          <h2>Fix Options</h2>
+          <p>
+            The core choice is whether snapshot delivery is allowed to be
+            out-of-band. If yes, make that explicit and narrow. If no, the
+            publishing model needs a stronger scheduler than a single promise chain.
+          </p>
+
+          <table class="compare">
+            <thead>
+              <tr>
+                <th>Option</th>
+                <th>How it works</th>
+                <th>Pros</th>
+                <th>Risks</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="badge amber">Current PR</span><br />Global reentrant bypass</td>
+                <td>
+                  If <code>#publish</code> sees <code>#isPublishing</code>, it
+                  calls subscriber callbacks immediately instead of appending to
+                  <code>#messageChain</code>.
+                </td>
+                <td>Small patch. Fixes the observed self-deadlock.</td>
+                <td>
+                  Bystander subscribers can be re-entered. SSE batches can bypass
+                  ordering whenever a publish is in flight.
+                </td>
+              </tr>
+              <tr>
+                <td><span class="badge blue">Explicit escape hatch</span><br />Pass publish mode</td>
+                <td>
+                  Change internals to something like
+                  <code>#onMessages(batch, { publish: "reentrant-snapshot" })</code>
+                  and only allow bypass for snapshot injection.
+                </td>
+                <td>
+                  Makes semantics reviewable. Prevents accidental bypasses from
+                  normal SSE or long-poll batches.
+                </td>
+                <td>
+                  Still permits bystander subscriber reentrancy for snapshots
+                  unless paired with per-subscriber ordering.
+                </td>
+              </tr>
+              <tr>
+                <td><span class="badge green">Recommended</span><br />Per-subscriber queues</td>
+                <td>
+                  Keep global batch ordering for normal messages, but deliver a
+                  reentrant snapshot through each subscriber's own queue. The
+                  subscriber that requested the snapshot can be handled specially
+                  or the request can await the snapshot's effects without re-entering
+                  other subscribers.
+                </td>
+                <td>
+                  Avoids the deadlock while preserving the important invariant
+                  that one subscriber is not called again before its prior callback
+                  completes.
+                </td>
+                <td>
+                  More code. Needs careful tests for unsubscribe, thrown callback
+                  errors, and snapshot control messages.
+                </td>
+              </tr>
+              <tr>
+                <td><span class="badge violet">API split</span><br />Fetch vs inject</td>
+                <td>
+                  Keep <code>fetchSnapshot()</code> pure, and make
+                  <code>requestSnapshot()</code> document a two-phase contract:
+                  update internal shape state synchronously, then notify subscribers
+                  on the normal chain.
+                </td>
+                <td>
+                  Clearer user-facing behavior. Can make immediate reads after
+                  await reliable without recursively publishing.
+                </td>
+                <td>
+                  May require moving responsibility from <code>ShapeStream</code>
+                  into <code>Shape</code> or another materialization layer.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="section">
+          <h2>Tests To Add</h2>
+          <div class="note-list">
+            <div class="card">
+              <span class="badge red">Missing</span>
+              <h3>Bystander subscriber non-reentrancy</h3>
+              <p>
+                Subscriber A awaits <code>requestSnapshot()</code>. Subscriber B
+                awaits unrelated work in its M1 callback. Assert B does not receive
+                snapshot before its M1 callback returns, or explicitly document that
+                this is allowed.
+              </p>
+            </div>
+            <div class="card">
+              <span class="badge red">Missing</span>
+              <h3>SSE batch ordering</h3>
+              <p>
+                Simulate two SSE up-to-date-delimited batches while the first
+                publish is still awaiting. Assert M2 does not bypass M1 unless
+                the new contract intentionally allows it.
+              </p>
+            </div>
+            <div class="card">
+              <span class="badge blue">Covered</span>
+              <h3>Snapshot await consistency</h3>
+              <p>
+                The PR adds a unit test proving <code>requestSnapshot()</code>
+                waits until the injected snapshot batch reaches subscribers before
+                resolving.
+              </p>
+            </div>
+            <div class="card">
+              <span class="badge blue">Covered</span>
+              <h3>Self-deadlock regression</h3>
+              <p>
+                The PR adds a unit test proving a subscriber can await
+                <code>requestSnapshot()</code> without hanging.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="recommendation">
+          <h2>Recommendation</h2>
+          <div class="callout">
+            <p>
+              Do not merge the current implementation as a hidden global bypass.
+              Either narrow and document the out-of-band snapshot path, or move to
+              a scheduler that preserves per-subscriber non-reentrancy while still
+              allowing the subscriber that requested a snapshot to make progress.
+            </p>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <script>
+      const tabs = Array.from(document.querySelectorAll('[role="tab"]'))
+      const panels = Array.from(document.querySelectorAll('[role="tabpanel"]'))
+
+      function activateTab(tab) {
+        tabs.forEach((item) => item.setAttribute("aria-selected", String(item === tab)))
+        panels.forEach((panel) => {
+          panel.classList.toggle("active", panel.id === tab.getAttribute("aria-controls"))
+        })
+      }
+
+      tabs.forEach((tab) => {
+        tab.addEventListener("click", () => activateTab(tab))
+        tab.addEventListener("keydown", (event) => {
+          const currentIndex = tabs.indexOf(tab)
+          let nextIndex = currentIndex
+
+          if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % tabs.length
+          if (event.key === "ArrowLeft") nextIndex = (currentIndex - 1 + tabs.length) % tabs.length
+          if (nextIndex !== currentIndex) {
+            event.preventDefault()
+            tabs[nextIndex].focus()
+            activateTab(tabs[nextIndex])
+          }
+        })
+      })
+    </script>
+  </body>
+</html>

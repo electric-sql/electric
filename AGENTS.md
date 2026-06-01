@@ -247,6 +247,12 @@ Before making changes to `packages/typescript-client`, **always read `packages/t
 
 ## Testing
 
+Before running `pnpm typecheck`, `pnpm test`, or package-level variants such as
+`pnpm run typecheck`, run `pnpm install` from the repository/worktree root first.
+Fresh worktrees do not have package-local dependency links until install has
+materialized the workspace, which can otherwise produce misleading TypeScript or
+module-resolution errors.
+
 ### Unit testing (mocked)
 
 ```ts

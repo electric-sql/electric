@@ -6,7 +6,7 @@ import {
   Text,
   View,
 } from 'react-native'
-import { useLiveQuery } from '@tanstack/react-db'
+import { eq, not, useLiveQuery } from '@tanstack/react-db'
 import { Fab } from '../components/Fab'
 import { Header } from '../components/Header'
 import { HomeMenu, type ServerHealth } from '../components/HomeMenu'
@@ -80,6 +80,7 @@ export function SessionListScreen({
     (q) =>
       q
         .from({ entity: entitiesCollection })
+        .where(({ entity }) => not(eq(entity.type, `principal`)))
         .orderBy(({ entity }) => entity.updated_at, `desc`),
     [entitiesCollection]
   )

@@ -234,12 +234,18 @@ describe(`ShapeStream`, () => {
       releaseSecondBatch = resolve
     })
 
+    let sseConnectionCount = 0
     const fetchMock = vi.fn((input: string | URL | Request) => {
       const url = input.toString()
 
       if (url.includes(`live_sse=true`)) {
+        sseConnectionCount++
+        const isFirst = sseConnectionCount === 1
         const stream = new ReadableStream<Uint8Array>({
           async start(controller) {
+            if (!isFirst) {
+              return
+            }
             controller.enqueue(encode(batch1Row))
             controller.enqueue(
               encode({ headers: { control: `up-to-date` }, offset: `0_1` })
@@ -280,6 +286,7 @@ describe(`ShapeStream`, () => {
               'electric-offset': `0_0`,
               'electric-cursor': `cursor-0`,
               'electric-schema': `{"id":{"type":"text"}}`,
+              'electric-up-to-date': ``,
             },
           }
         )

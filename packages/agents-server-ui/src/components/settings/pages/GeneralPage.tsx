@@ -1,16 +1,23 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import {
   Brain,
   KeyRound,
+  LogIn,
   Palette,
   Plug,
   Server,
+  Terminal,
   Trash2,
   UserCircle,
 } from 'lucide-react'
-import { Button, ConfirmDialog, Icon, Text } from '../../../ui'
-import { clearAllLocalData } from '../../../lib/server-connection'
+import { Button, ConfirmDialog, Icon, Switch, Text } from '../../../ui'
+import {
+  clearAllLocalData,
+  loadLaunchAtLoginStatus,
+  setLaunchAtLogin,
+  type LaunchAtLoginStatus,
+} from '../../../lib/server-connection'
 import {
   SettingsPanel,
   SettingsRow,
@@ -36,6 +43,31 @@ export function GeneralPage(): React.ReactElement {
   const [isClearing, setIsClearing] = useState(false)
   const [showResetConfirm, setShowResetConfirm] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [launchAtLogin, setLaunchAtLoginStatus] =
+    useState<LaunchAtLoginStatus | null>(null)
+  const [launchAtLoginBusy, setLaunchAtLoginBusy] = useState(false)
+  const [launchAtLoginError, setLaunchAtLoginError] = useState<string | null>(
+    null
+  )
+
+  useEffect(() => {
+    if (!isDesktop) return
+    let cancelled = false
+    void loadLaunchAtLoginStatus()
+      .then((status) => {
+        if (!cancelled) setLaunchAtLoginStatus(status)
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setLaunchAtLoginError(
+            err instanceof Error ? err.message : String(err)
+          )
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [isDesktop])
 
   const handleClearAllLocalData = async (): Promise<void> => {
     setError(null)
@@ -46,6 +78,19 @@ export function GeneralPage(): React.ReactElement {
       setIsClearing(false)
       setShowResetConfirm(false)
       setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  const handleLaunchAtLoginChange = async (enabled: boolean): Promise<void> => {
+    setLaunchAtLoginBusy(true)
+    setLaunchAtLoginError(null)
+    try {
+      const next = await setLaunchAtLogin(enabled)
+      setLaunchAtLoginStatus(next)
+    } catch (err) {
+      setLaunchAtLoginError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setLaunchAtLoginBusy(false)
     }
   }
 
@@ -84,6 +129,17 @@ export function GeneralPage(): React.ReactElement {
           />
           {isDesktop && (
             <SettingsLinkRow
+              icon={Terminal}
+              label="Command Line"
+              description="Install and inspect the electric terminal command."
+              category="command-line"
+              onNavigate={(category) =>
+                navigate({ to: `/settings/$category`, params: { category } })
+              }
+            />
+          )}
+          {isDesktop && launchAtLogin?.supported && (
+            <SettingsLinkRow
               icon={Brain}
               label="Local Runtime"
               description="Inspect and control the bundled local runtime."
@@ -106,6 +162,41 @@ export function GeneralPage(): React.ReactElement {
           )}
         </SettingsSection>
         <SettingsSection title="Preferences">
+          {isDesktop && (
+            <SettingsRow
+              label={
+                <span
+                  style={{
+                    display: `inline-flex`,
+                    alignItems: `center`,
+                    gap: 8,
+                  }}
+                >
+                  <Icon icon={LogIn} size={2} />
+                  Open at login
+                </span>
+              }
+              description={
+                launchAtLoginError ??
+                launchAtLogin?.reason ??
+                `Start Electric Agents when you sign in and keep the runtime available from the system tray.`
+              }
+              control={
+                <Switch
+                  checked={launchAtLogin?.enabled ?? false}
+                  disabled={
+                    launchAtLoginBusy ||
+                    !launchAtLogin ||
+                    !launchAtLogin.supported
+                  }
+                  onCheckedChange={(checked) => {
+                    void handleLaunchAtLoginChange(checked)
+                  }}
+                  ariaLabel="Open Electric Agents at login"
+                />
+              }
+            />
+          )}
           <SettingsLinkRow
             icon={Palette}
             label="Appearance"

@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useRef, useState, type ReactNode } from 'react'
 import { Eye, EyeOff, Sparkles } from 'lucide-react'
 import { Button, Field, Icon, IconButton, Input, Stack, Text } from '../ui'
 import {
@@ -12,10 +12,12 @@ export type ApiKeysFormValues = {
   anthropic: string
   openai: string
   deepseek: string
+  moonshot: string
   brave: string
 }
 
 type ApiKeyFieldId = keyof ApiKeysFormValues
+type ModelApiKeyFieldId = Exclude<ApiKeyFieldId, `brave`>
 
 interface ApiKeysFormProps {
   initial: ApiKeysFormValues
@@ -40,6 +42,7 @@ interface ApiKeysFormProps {
   layout?: `form` | `settings`
   showModelKeys?: boolean
   showBrave?: boolean
+  modelControls?: Partial<Record<ModelApiKeyFieldId, ReactNode>>
   /**
    * When `true`, persist on field blur (after the user has typed)
    * instead of waiting for a Save click. Hides the explicit
@@ -76,11 +79,13 @@ export function ApiKeysForm({
   layout = `form`,
   showModelKeys = true,
   showBrave = true,
+  modelControls,
   autoSave = false,
 }: ApiKeysFormProps): React.ReactElement {
   const [anthropic, setAnthropic] = useState(initial.anthropic)
   const [openai, setOpenai] = useState(initial.openai)
   const [deepseek, setDeepseek] = useState(initial.deepseek)
+  const [moonshot, setMoonshot] = useState(initial.moonshot)
   const [brave, setBrave] = useState(initial.brave)
   const [visibleKeys, setVisibleKeys] = useState<
     Record<ApiKeyFieldId, boolean>
@@ -88,6 +93,7 @@ export function ApiKeysForm({
     anthropic: false,
     openai: false,
     deepseek: false,
+    moonshot: false,
     brave: false,
   })
   const [saving, setSaving] = useState(false)
@@ -103,6 +109,7 @@ export function ApiKeysForm({
     anthropic: false,
     openai: false,
     deepseek: false,
+    moonshot: false,
     brave: false,
   })
 
@@ -110,19 +117,20 @@ export function ApiKeysForm({
     (showModelKeys &&
       (anthropic.trim().length > 0 ||
         openai.trim().length > 0 ||
-        deepseek.trim().length > 0)) ||
+        deepseek.trim().length > 0 ||
+        moonshot.trim().length > 0)) ||
     (showBrave && brave.trim().length > 0)
 
   const handleSave = useCallback(async (): Promise<void> => {
     if (!canSave || saving) return
     setSaving(true)
     try {
-      await onSave({ anthropic, openai, deepseek, brave })
-      persistedRef.current = { anthropic, openai, deepseek, brave }
+      await onSave({ anthropic, openai, deepseek, moonshot, brave })
+      persistedRef.current = { anthropic, openai, deepseek, moonshot, brave }
     } finally {
       setSaving(false)
     }
-  }, [anthropic, openai, deepseek, brave, canSave, saving, onSave])
+  }, [anthropic, openai, deepseek, moonshot, brave, canSave, saving, onSave])
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
@@ -154,9 +162,15 @@ export function ApiKeysForm({
   const handleAutoSaveBlur = useCallback(
     (field: ApiKeyFieldId) => {
       if (!autoSave) return
-      void persistIfDirty(field, { anthropic, openai, deepseek, brave })
+      void persistIfDirty(field, {
+        anthropic,
+        openai,
+        deepseek,
+        moonshot,
+        brave,
+      })
     },
-    [autoSave, anthropic, openai, deepseek, brave, persistIfDirty]
+    [autoSave, anthropic, openai, deepseek, moonshot, brave, persistIfDirty]
   )
 
   const wrapOnChange = useCallback(
@@ -215,6 +229,7 @@ export function ApiKeysForm({
                 />
               }
             />
+            {modelControls?.anthropic}
             <SettingsRow
               label="OpenAI API"
               description="Used for GPT models. Looks like sk-…"
@@ -231,6 +246,7 @@ export function ApiKeysForm({
                 />
               }
             />
+            {modelControls?.openai}
             <SettingsRow
               label="DeepSeek API"
               description="Used for DeepSeek models. Looks like sk-…"
@@ -247,6 +263,24 @@ export function ApiKeysForm({
                 />
               }
             />
+            {modelControls?.deepseek}
+            <SettingsRow
+              label="Kimi / Moonshot API"
+              description="Used for Kimi and Moonshot models. Looks like sk-…"
+              splitLayout
+              control={
+                <ApiKeyInput
+                  field="moonshot"
+                  placeholder="sk-…"
+                  value={moonshot}
+                  visible={visibleKeys.moonshot}
+                  onChange={wrapOnChange(`moonshot`, setMoonshot)}
+                  onBlur={() => handleAutoSaveBlur(`moonshot`)}
+                  onToggleVisible={toggleVisible}
+                />
+              }
+            />
+            {modelControls?.moonshot}
           </>
         )}
         {showBrave && (
@@ -347,6 +381,19 @@ export function ApiKeysForm({
                 value={deepseek}
                 visible={visibleKeys.deepseek}
                 onChange={setDeepseek}
+                onToggleVisible={toggleVisible}
+              />
+            </Field>
+            <Field
+              label="Kimi / Moonshot API (optional)"
+              description="Used for Kimi and Moonshot models. Looks like sk-…"
+            >
+              <ApiKeyInput
+                field="moonshot"
+                placeholder="sk-…"
+                value={moonshot}
+                visible={visibleKeys.moonshot}
+                onChange={setMoonshot}
                 onToggleVisible={toggleVisible}
               />
             </Field>

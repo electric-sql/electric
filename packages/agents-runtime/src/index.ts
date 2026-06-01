@@ -283,6 +283,15 @@ export type {
   LowCostModelChoice,
   LowCostModelConfig,
 } from './model-runner'
+export {
+  MOONSHOT_API_BASE_URL,
+  MOONSHOT_API_KEY_ENV,
+  MOONSHOT_PROVIDER,
+  getMoonshotApiKey,
+  getMoonshotModel,
+  getMoonshotModels,
+} from './moonshot-models'
+export type { MoonshotModel, MoonshotProvider } from './moonshot-models'
 
 export { createRuntimeHandler, createRuntimeRouter } from './create-handler'
 export { verifyWebhookSignature } from './webhook-signature'

@@ -9,6 +9,7 @@ import { installCompletions, setupCompletions } from './completions.js'
 import { entityApiPath } from './entity-api.js'
 import { createEntityStreamDB } from './entity-stream-db.js'
 import { ensureAnthropicApiKey } from './prompt-api-key.js'
+import { ELECTRIC_AX_CLI_VERSION } from './version.js'
 import { formatEntityConversationViewFromDB } from './view.js'
 import { appendPathToUrl } from '@electric-ax/agents-runtime'
 import { mergeElectricPrincipalHeader } from '@electric-ax/agents/server-headers'
@@ -855,6 +856,7 @@ export function createElectricProgram({
 
   program
     .name(commandName)
+    .version(ELECTRIC_AX_CLI_VERSION)
     .description(`Manage Electric tooling`)
     .showHelpAfterError()
     .showSuggestionAfterError()
