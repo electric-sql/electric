@@ -66,6 +66,14 @@ interface ItemProps<V extends string>
   children: ReactNode
 }
 
+interface GroupProps {
+  children?: ReactNode
+}
+
+interface GroupLabelProps {
+  children: ReactNode
+}
+
 function Root<V extends string>({
   value,
   defaultValue,
@@ -169,6 +177,18 @@ function Item<V extends string>({
   )
 }
 
+function Group({ children }: GroupProps): React.ReactElement {
+  return <BaseSelect.Group>{children}</BaseSelect.Group>
+}
+
+function GroupLabel({ children }: GroupLabelProps): React.ReactElement {
+  return (
+    <BaseSelect.GroupLabel className={styles.groupLabel}>
+      {children}
+    </BaseSelect.GroupLabel>
+  )
+}
+
 /**
  * Native-style select — wraps `@base-ui/react/select`.
  *
@@ -182,4 +202,4 @@ function Item<V extends string>({
  *     </Select.Content>
  *   </Select.Root>
  */
-export const Select = { Root, Trigger, Content, Item }
+export const Select = { Root, Trigger, Content, Item, Group, GroupLabel }

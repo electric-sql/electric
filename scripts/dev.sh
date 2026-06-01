@@ -70,9 +70,9 @@ cmd_build() {
 preflight() {
   cd "$REPO_ROOT"
 
-  [[ -f .env ]] || die ".env not found at repo root. Create one with ANTHROPIC_API_KEY or OPENAI_API_KEY."
-  grep -qE '^(ANTHROPIC_API_KEY|OPENAI_API_KEY)=' .env \
-    || die ".env is missing ANTHROPIC_API_KEY or OPENAI_API_KEY."
+  [[ -f .env ]] || die ".env not found at repo root. Create one with ANTHROPIC_API_KEY, OPENAI_API_KEY, DEEPSEEK_API_KEY, or MOONSHOT_API_KEY."
+  grep -qE '^(ANTHROPIC_API_KEY|OPENAI_API_KEY|DEEPSEEK_API_KEY|MOONSHOT_API_KEY)=' .env \
+    || die ".env is missing ANTHROPIC_API_KEY, OPENAI_API_KEY, DEEPSEEK_API_KEY, or MOONSHOT_API_KEY."
 
   for pkg in typescript-client agents-runtime agents-mcp agents-server agents; do
     [[ -d "packages/$pkg/dist" ]] || die "packages/$pkg/dist is missing. Run: $0 build"

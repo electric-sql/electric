@@ -10,6 +10,7 @@
 import { Agent } from '@mariozechner/pi-agent-core'
 import { getModel } from '@mariozechner/pi-ai'
 import { createOutboundBridge } from './outbound-bridge'
+import { MOONSHOT_PROVIDER, getMoonshotModel } from './moonshot-models'
 import { runtimeLog } from './log'
 import type { OutboundIdSeed } from './outbound-bridge'
 import type { ChangeEvent } from '@durable-streams/state'
@@ -22,6 +23,7 @@ import type {
 import type {
   KnownProvider,
   Model,
+  Provider,
   SimpleStreamOptions,
 } from '@mariozechner/pi-ai'
 import type { LLMMessage } from './types'
@@ -33,7 +35,7 @@ import type { LLMMessage } from './types'
 export interface PiAdapterOptions {
   systemPrompt: string
   model: string | Model<any>
-  provider?: KnownProvider
+  provider?: Provider
   tools: Array<AgentTool>
   streamFn?: StreamFn
   getApiKey?: (
@@ -62,14 +64,20 @@ type PiAgentAdapterFactory = (config: PiAgentAdapterConfig) => PiAgentHandle
 
 export function resolvePiModel(opts: {
   model: string | Model<any>
-  provider?: KnownProvider
+  provider?: Provider
 }): Model<any> {
   if (typeof opts.model !== `string`) {
     return opts.model
   }
 
   const provider = opts.provider ?? `anthropic`
-  const model = getModel(provider, opts.model as Parameters<typeof getModel>[1])
+  const model =
+    provider === MOONSHOT_PROVIDER
+      ? getMoonshotModel(opts.model)
+      : getModel(
+          provider as KnownProvider,
+          opts.model as Parameters<typeof getModel>[1]
+        )
 
   if (!model) {
     throw new Error(

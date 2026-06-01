@@ -85,9 +85,9 @@ export interface ServerConnectionState {
  * `null` means "not set". The renderer never reads these from
  * `process.env` directly — that only exists in main.
  *
- * - `anthropic` / `openai` / `deepseek`: LLM provider keys. At least
- *   one is required for the local Horton runtime to be useful; the
- *   first-launch dialog auto-opens until one is set.
+ * - `anthropic` / `openai` / `deepseek` / `moonshot`: LLM provider
+ *   keys. At least one is required for the local Horton runtime to be
+ *   useful; the first-launch dialog auto-opens until one is set.
  * - `brave`: optional search-tool auxiliary. Mirrored to
  *   `BRAVE_SEARCH_API_KEY` to enable Horton's `brave_search` tool;
  *   without it, web search falls back to Anthropic's built-in search.
@@ -105,10 +105,36 @@ export interface ApiKeys {
    * counts toward that check.
    */
   deepseek: string | null
+  /**
+   * Optional. Mirrored to `MOONSHOT_API_KEY` so the runtime can use
+   * Kimi / Moonshot models. Treated as a peer LLM provider alongside
+   * `anthropic`, `openai`, and `deepseek`.
+   */
+  moonshot: string | null
   brave: string | null
 }
 
 export type CodexAuthSource = `desktop-oauth` | `codex-cli` | `opencode`
+
+export type ModelProvider =
+  | `anthropic`
+  | `openai`
+  | `openai-codex`
+  | `deepseek`
+  | `moonshot`
+
+export interface ModelPickerChoice {
+  provider: ModelProvider
+  providerLabel: string
+  id: string
+  label: string
+  value: string
+}
+
+export interface ModelPickerStatus {
+  choices: Array<ModelPickerChoice>
+  enabled: Array<string>
+}
 
 export type CodexDetectedSource = {
   source: CodexAuthSource
@@ -135,11 +161,13 @@ export interface ApiKeysStatus {
   /**
    * Per-slot ENV-derived suggestions: a value is provided only for
    * slots that are NOT already saved, so the dialog can pre-fill
-   * empty inputs from `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` without
-   * overwriting the user's saved choice.
+   * empty inputs from `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` /
+   * `DEEPSEEK_API_KEY` / `MOONSHOT_API_KEY` without overwriting the
+   * user's saved choice.
    */
   suggested: ApiKeys
   codex: CodexStatus
+  modelPicker: ModelPickerStatus
 }
 
 /**
@@ -330,6 +358,7 @@ declare global {
       rescanServers?: () => Promise<Array<DiscoveredServer>>
       getApiKeysStatus?: () => Promise<ApiKeysStatus>
       saveApiKeys?: (keys: ApiKeys) => Promise<void>
+      saveEnabledModels?: (values: Array<string>) => Promise<void>
       codexSignIn?: () => Promise<CodexStatus>
       codexEnableSource?: (source: CodexAuthSource) => Promise<CodexStatus>
       codexDisable?: () => Promise<CodexStatus>
@@ -544,6 +573,10 @@ export async function loadApiKeysStatus(): Promise<ApiKeysStatus | null> {
 
 export async function saveApiKeys(keys: ApiKeys): Promise<void> {
   await window.electronAPI?.saveApiKeys?.(keys)
+}
+
+export async function saveEnabledModels(values: Array<string>): Promise<void> {
+  await window.electronAPI?.saveEnabledModels?.(values)
 }
 
 export async function codexSignIn(): Promise<CodexStatus | null> {

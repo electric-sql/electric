@@ -33,7 +33,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: '.tool-versions'
-          cache: pnpm
       - uses: erlef/setup-beam@v1
         with:
           version-type: strict

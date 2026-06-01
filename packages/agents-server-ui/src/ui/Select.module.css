@@ -105,6 +105,25 @@
   max-height: inherit;
 }
 
+.groupLabel {
+  padding: 7px 8px 3px;
+  font-size: var(--ds-text-xs);
+  line-height: var(--ds-text-xs-lh);
+  font-family: var(--ds-font-body);
+  font-weight: 600;
+  color: var(--ds-text-3);
+  text-transform: uppercase;
+  user-select: none;
+}
+
+.groupLabel:first-child {
+  padding-top: 4px;
+}
+
+.groupLabel ~ .item {
+  padding-left: 16px;
+}
+
 /* Same concentric-halo geometry as Menu.Item — see Menu.module.css.
    Select items don't carry a trailing inner button so the right
    padding can stay symmetric (8px), but the radius is bumped to 7px

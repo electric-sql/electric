@@ -1,5 +1,6 @@
 import type {
   BuiltinAgentsServer,
+  BuiltinModelProvider,
   McpServerConfig,
   RegistrySnapshot,
 } from '@electric-ax/agents'
@@ -96,7 +97,21 @@ export type ApiKeys = {
   anthropic: string | null
   openai: string | null
   deepseek: string | null
+  moonshot: string | null
   brave: string | null
+}
+
+export type ModelPickerChoice = {
+  provider: BuiltinModelProvider
+  providerLabel: string
+  id: string
+  label: string
+  value: string
+}
+
+export type ModelPickerStatus = {
+  choices: Array<ModelPickerChoice>
+  enabled: Array<string>
 }
 
 export type CodexAuthSource = `desktop-oauth` | `codex-cli` | `opencode`
@@ -114,6 +129,7 @@ export type DesktopSettings = {
   launchAtLogin?: boolean
   preventAppSuspension?: boolean
   codex?: CodexSettings
+  enabledModelValues?: Array<string>
   onboardingDismissed?: boolean
   mcp?: { servers: Array<McpServerConfig> }
   pullWakeRunnerId?: string
@@ -167,6 +183,7 @@ export type ApiKeysStatus = {
   saved: ApiKeys
   suggested: ApiKeys
   codex: CodexStatus
+  modelPicker: ModelPickerStatus
 }
 
 export type CodexDetectedSource = {

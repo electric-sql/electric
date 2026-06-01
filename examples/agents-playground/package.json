@@ -8,7 +8,7 @@
     "dev": "tsx --watch server.ts"
   },
   "dependencies": {
-    "@electric-ax/agents-runtime": "latest",
+    "@electric-ax/agents-runtime": "workspace:*",
     "@sinclair/typebox": "^0.34.49"
   },
   "devDependencies": {
