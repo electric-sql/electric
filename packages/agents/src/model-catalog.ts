@@ -1,6 +1,10 @@
 import { getModels } from '@mariozechner/pi-ai'
 import {
+  MOONSHOT_API_BASE_URL,
+  MOONSHOT_PROVIDER,
   detectAvailableProviders,
+  getMoonshotApiKey,
+  getMoonshotModels,
   readCodexAccessToken,
 } from '@electric-ax/agents-runtime'
 import type {
@@ -49,6 +53,7 @@ const DEFAULT_ANTHROPIC_MODEL = `claude-sonnet-4-6`
 const DEFAULT_OPENAI_MODEL = `gpt-4.1`
 const DEFAULT_CODEX_MODEL = `gpt-5.4`
 const DEFAULT_DEEPSEEK_MODEL = `deepseek-v4-flash`
+const DEFAULT_MOONSHOT_MODEL = `kimi-k2.6`
 
 function modelValue(provider: BuiltinModelProvider, id: string): string {
   return `${provider}:${id}`
@@ -58,6 +63,7 @@ function providerLabel(provider: BuiltinModelProvider): string {
   if (provider === `anthropic`) return `Anthropic`
   if (provider === `openai-codex`) return `OpenAI Codex`
   if (provider === `deepseek`) return `DeepSeek`
+  if (provider === MOONSHOT_PROVIDER) return `Kimi`
   return `OpenAI`
 }
 
@@ -96,12 +102,19 @@ async function fetchAvailableModelIds(
               },
               signal: AbortSignal.timeout(3_000),
             })
-          : await fetch(`https://api.openai.com/v1/models`, {
-              headers: {
-                authorization: `Bearer ${process.env.OPENAI_API_KEY ?? ``}`,
-              },
-              signal: AbortSignal.timeout(3_000),
-            })
+          : provider === MOONSHOT_PROVIDER
+            ? await fetch(`${MOONSHOT_API_BASE_URL}/models`, {
+                headers: {
+                  authorization: `Bearer ${getMoonshotApiKey() ?? ``}`,
+                },
+                signal: AbortSignal.timeout(3_000),
+              })
+            : await fetch(`https://api.openai.com/v1/models`, {
+                headers: {
+                  authorization: `Bearer ${process.env.OPENAI_API_KEY ?? ``}`,
+                },
+                signal: AbortSignal.timeout(3_000),
+              })
 
     if (res.status === 401 || res.status === 403) return new Set()
     if (!res.ok) return null
@@ -122,7 +135,12 @@ async function fetchAvailableModelIds(
 async function choicesForProvider(
   provider: BuiltinModelProvider
 ): Promise<Array<BuiltinModelChoice>> {
-  const knownModels = getModels(provider)
+  const knownModels =
+    provider === MOONSHOT_PROVIDER
+      ? getMoonshotModels()
+      : getModels(
+          provider as Exclude<BuiltinModelProvider, typeof MOONSHOT_PROVIDER>
+        )
 
   if (provider === `openai-codex`) {
     return knownModels.map((model) => ({
@@ -232,6 +250,11 @@ export async function createBuiltinModelCatalog(
       (choice) =>
         choice.provider === `deepseek` && choice.id === DEFAULT_DEEPSEEK_MODEL
     ) ??
+    choices.find(
+      (choice) =>
+        choice.provider === MOONSHOT_PROVIDER &&
+        choice.id === DEFAULT_MOONSHOT_MODEL
+    ) ??
     choices[0]!
 
   return { choices, defaultChoice }
@@ -260,6 +283,9 @@ export function resolveBuiltinModelConfig(
     ...(reasoningEffort && { reasoningEffort }),
     ...(choice.provider === `openai-codex` && {
       getApiKey: () => readCodexAccessToken(),
+    }),
+    ...(choice.provider === MOONSHOT_PROVIDER && {
+      getApiKey: () => getMoonshotApiKey(),
     }),
   }
 

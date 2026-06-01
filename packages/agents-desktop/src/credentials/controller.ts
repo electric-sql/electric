@@ -80,6 +80,7 @@ export function createCredentialsController(deps: {
         deps.apiKeys.anthropic ||
           deps.apiKeys.openai ||
           deps.apiKeys.deepseek ||
+          deps.apiKeys.moonshot ||
           deps.settings.codex?.enabled
       ),
       signedIn: deps.getCloudAuthStatus() === `signed-in`,

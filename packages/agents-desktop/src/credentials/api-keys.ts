@@ -5,6 +5,7 @@ export const EMPTY_API_KEYS: ApiKeys = {
   anthropic: null,
   openai: null,
   deepseek: null,
+  moonshot: null,
   brave: null,
 }
 
@@ -15,6 +16,7 @@ export function captureEnvApiKeys(env: NodeJS.ProcessEnv): ApiKeys {
     anthropic: env.ANTHROPIC_API_KEY?.trim() || null,
     openai: env.OPENAI_API_KEY?.trim() || null,
     deepseek: env.DEEPSEEK_API_KEY?.trim() || null,
+    moonshot: env.MOONSHOT_API_KEY?.trim() || null,
     brave: env.BRAVE_SEARCH_API_KEY?.trim() || null,
   }
 }
@@ -31,12 +33,19 @@ export function normalizeApiKeys(value: unknown): ApiKeys {
     anthropic: pick(maybe.anthropic),
     openai: pick(maybe.openai),
     deepseek: pick(maybe.deepseek),
+    moonshot: pick(maybe.moonshot),
     brave: pick(maybe.brave),
   }
 }
 
 export function hasAnyApiKey(keys: ApiKeys): boolean {
-  return Boolean(keys.anthropic || keys.openai || keys.deepseek || keys.brave)
+  return Boolean(
+    keys.anthropic ||
+      keys.openai ||
+      keys.deepseek ||
+      keys.moonshot ||
+      keys.brave
+  )
 }
 
 export async function loadApiKeysFromSecret(
@@ -81,6 +90,7 @@ export function applyApiKeysToEnv(
       | `ANTHROPIC_API_KEY`
       | `OPENAI_API_KEY`
       | `DEEPSEEK_API_KEY`
+      | `MOONSHOT_API_KEY`
       | `BRAVE_SEARCH_API_KEY`
   ): void => {
     const next = value ?? fallback
@@ -93,6 +103,7 @@ export function applyApiKeysToEnv(
   resolveSlot(saved.anthropic, launchEnv.anthropic, `ANTHROPIC_API_KEY`)
   resolveSlot(saved.openai, launchEnv.openai, `OPENAI_API_KEY`)
   resolveSlot(saved.deepseek, launchEnv.deepseek, `DEEPSEEK_API_KEY`)
+  resolveSlot(saved.moonshot, launchEnv.moonshot, `MOONSHOT_API_KEY`)
   resolveSlot(saved.brave, launchEnv.brave, `BRAVE_SEARCH_API_KEY`)
 }
 
@@ -108,11 +119,14 @@ export async function getApiKeysStatus(
   const saved = deps.apiKeys
   // Brave is optional (falls back to Anthropic built-in search), so it doesn't
   // count toward "the app is configured".
-  const hasAnyKey = Boolean(saved.anthropic || saved.openai || saved.deepseek)
+  const hasAnyKey = Boolean(
+    saved.anthropic || saved.openai || saved.deepseek || saved.moonshot
+  )
   const suggested: ApiKeys = {
     anthropic: saved.anthropic ? null : deps.launchEnv.anthropic,
     openai: saved.openai ? null : deps.launchEnv.openai,
     deepseek: saved.deepseek ? null : deps.launchEnv.deepseek,
+    moonshot: saved.moonshot ? null : deps.launchEnv.moonshot,
     brave: saved.brave ? null : deps.launchEnv.brave,
   }
   const codex = await deps.getCodexStatus()
@@ -138,6 +152,7 @@ export async function setApiKeys(
     normalized.anthropic !== deps.apiKeys.anthropic ||
     normalized.openai !== deps.apiKeys.openai ||
     normalized.deepseek !== deps.apiKeys.deepseek ||
+    normalized.moonshot !== deps.apiKeys.moonshot ||
     normalized.brave !== deps.apiKeys.brave
   Object.assign(deps.apiKeys, normalized)
   await saveApiKeysToSecret(deps.secretStore, deps.apiKeysRef(), deps.apiKeys)

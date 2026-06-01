@@ -149,6 +149,8 @@ export function CredentialsPage(): React.ReactElement {
                 openai: status.saved.openai ?? status.suggested.openai ?? ``,
                 deepseek:
                   status.saved.deepseek ?? status.suggested.deepseek ?? ``,
+                moonshot:
+                  status.saved.moonshot ?? status.suggested.moonshot ?? ``,
                 brave: status.saved.brave ?? ``,
               }}
               showBrave={false}
@@ -157,14 +159,16 @@ export function CredentialsPage(): React.ReactElement {
                 Boolean(
                   status.suggested.anthropic ||
                     status.suggested.openai ||
-                    status.suggested.deepseek
+                    status.suggested.deepseek ||
+                    status.suggested.moonshot
                 )
               }
-              onSave={async ({ anthropic, openai, deepseek }) => {
+              onSave={async ({ anthropic, openai, deepseek, moonshot }) => {
                 await persistApiKeys({
                   anthropic: anthropic.trim() || null,
                   openai: openai.trim() || null,
                   deepseek: deepseek.trim() || null,
+                  moonshot: moonshot.trim() || null,
                   brave: status.saved.brave ?? null,
                 })
                 await refreshStatus()
@@ -185,6 +189,7 @@ export function CredentialsPage(): React.ReactElement {
               anthropic: status.saved.anthropic ?? ``,
               openai: status.saved.openai ?? ``,
               deepseek: status.saved.deepseek ?? ``,
+              moonshot: status.saved.moonshot ?? ``,
               brave: status.saved.brave ?? status.suggested.brave ?? ``,
             }}
             showModelKeys={false}
@@ -196,6 +201,7 @@ export function CredentialsPage(): React.ReactElement {
                 anthropic: status.saved.anthropic ?? null,
                 openai: status.saved.openai ?? null,
                 deepseek: status.saved.deepseek ?? null,
+                moonshot: status.saved.moonshot ?? null,
                 brave: brave.trim() || null,
               })
               await refreshStatus()
