@@ -193,6 +193,8 @@ export interface LaunchAtLoginStatus {
   reason: string | null
 }
 
+export type PreventAppSuspensionPreference = boolean
+
 export type ElectricCliInstallKind =
   | `not-installed`
   | `managed`
@@ -369,6 +371,8 @@ declare global {
       setLaunchAtLogin?: (enabled: boolean) => Promise<LaunchAtLoginStatus>
       getOnboardingState?: () => Promise<OnboardingState>
       setOnboardingDismissed?: (dismissed: boolean) => Promise<void>
+      getPreventAppSuspension?: () => Promise<PreventAppSuspensionPreference>
+      setPreventAppSuspension?: (enabled: boolean) => Promise<void>
       getWorkingDirectory?: () => Promise<string | null>
       chooseWorkingDirectory?: () => Promise<string | null>
       /**
@@ -627,6 +631,16 @@ export async function setOnboardingDismissed(
   dismissed: boolean
 ): Promise<void> {
   await window.electronAPI?.setOnboardingDismissed?.(dismissed)
+}
+
+export async function loadPreventAppSuspensionPreference(): Promise<PreventAppSuspensionPreference | null> {
+  return (await window.electronAPI?.getPreventAppSuspension?.()) ?? null
+}
+
+export async function savePreventAppSuspensionPreference(
+  enabled: boolean
+): Promise<void> {
+  await window.electronAPI?.setPreventAppSuspension?.(enabled)
 }
 
 export async function loadCloudAuthState(): Promise<CloudAuthState | null> {
