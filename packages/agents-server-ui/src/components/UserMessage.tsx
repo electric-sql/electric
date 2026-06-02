@@ -1,4 +1,5 @@
 import { memo, useState } from 'react'
+import { Streamdown } from 'streamdown'
 import {
   Download,
   File as FileIcon,
@@ -8,6 +9,10 @@ import {
 import type { EntityTimelineSection } from '@electric-ax/agents-runtime/client'
 import { Icon, Stack, Text } from '../ui'
 import { downloadAttachment, formatAttachmentSize } from '../lib/attachments'
+import {
+  streamdownComponents,
+  streamdownControls,
+} from '../lib/streamdownConfig'
 import {
   AttachmentImagePreviewDialog,
   useAttachmentObjectUrl,
@@ -82,11 +87,7 @@ export const UserMessage = memo(function UserMessage({
             ))}
           </div>
         )}
-        {section.text ? (
-          <Text size={2} className={styles.body}>
-            {section.text}
-          </Text>
-        ) : null}
+        {section.text ? <UserMessageBody text={section.text} /> : null}
       </Stack>
       <Stack gap={2} align="center" className={styles.meta}>
         <Text size={1} tone="muted" title={sender.title}>
@@ -102,6 +103,42 @@ export const UserMessage = memo(function UserMessage({
         )}
       </Stack>
     </Stack>
+  )
+})
+
+const userMessageAllowedMarkdownElements = [
+  `p`,
+  `br`,
+  `a`,
+  `strong`,
+  `em`,
+  `del`,
+  `code`,
+  `pre`,
+  `blockquote`,
+  `ul`,
+  `ol`,
+  `li`,
+] as const
+
+const UserMessageBody = memo(function UserMessageBody({
+  text,
+}: {
+  text: string
+}): React.ReactElement {
+  return (
+    <div className={`agent-ui-markdown ${styles.body}`}>
+      <Streamdown
+        isAnimating={false}
+        linkSafety={{ enabled: false }}
+        allowedElements={userMessageAllowedMarkdownElements}
+        unwrapDisallowed
+        controls={streamdownControls}
+        components={streamdownComponents}
+      >
+        {text}
+      </Streamdown>
+    </div>
   )
 })
 
