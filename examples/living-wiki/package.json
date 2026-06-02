@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "concurrently \"pnpm run dev:vite\" \"pnpm run dev:worker\"",
     "dev:vite": "vite --host 0.0.0.0",
-    "dev:worker": "wrangler dev --local --port 8787",
+    "dev:worker": "pnpm build && wrangler dev --local --port 8787",
     "build": "vite build",
     "deploy": "pnpm build && wrangler deploy",
     "typecheck": "tsc --noEmit",

@@ -35,6 +35,8 @@ pnpm --filter @electric-ax/example-living-wiki dev:vite
 pnpm --filter @electric-ax/example-living-wiki dev:worker
 ```
 
+`dev:worker` builds the Vite client assets before starting Wrangler so a fresh checkout has the required Worker static assets.
+
 Frontend: http://localhost:5177  
 Worker: http://localhost:8787
 
