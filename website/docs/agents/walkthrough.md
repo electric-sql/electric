@@ -252,9 +252,11 @@ Define where the services are running:
 const ELECTRIC_AGENTS_URL = 'http://localhost:4437'
 const PORT = 3000
 const SERVE_URL = `http://localhost:${PORT}`
+
+const MODEL = 'claude-sonnet-4-6'
 ```
 
-Here we just hardcode the values. You'll want these to be configurable using env vars in production. How you do that depends on how you deploy your app.
+Here we just hardcode the values (including the `MODEL` our agents will use). You'll want these to be configurable using env vars in production. How you do that depends on how you deploy your app.
 
 ### Create entity registry
 
@@ -272,7 +274,7 @@ registry.define("assistant", {
   async handler(ctx) {
     ctx.useAgent({
       systemPrompt: "You are a helpful assistant.",
-      model: "claude-sonnet-4-6",
+      model: MODEL,
       tools: [],
     })
     await ctx.agent.run()
@@ -385,7 +387,7 @@ registry.define("assistant", {
   async handler(ctx) {
     ctx.useAgent({
       systemPrompt: ctx.args.systemPrompt || "You are a helpful assistant.",
-      model: "claude-sonnet-4-6",
+      model: MODEL,
       tools: []
     })
 
@@ -395,6 +397,12 @@ registry.define("assistant", {
 ```
 
 This means the `systemPrompt` for the assistant can be defined when it's spawned.
+
+We'll also add a small helper to generate entity IDs, which we'll reuse whenever we spawn a sub-agent:
+
+```ts
+const genId = () => Math.random().toString()
+```
 
 ### Manager agent
 
@@ -407,7 +415,7 @@ registry.define("manager", {
     if (wake.type === 'inbox') {
       await ctx.spawn(
         'assistant',
-        Math.random().toString(),
+        genId(),
         { systemPrompt: `Roast the user message. When done, report back to your manager.` },
         { initialMessage: wake.payload.text, wake: 'runFinished' }
       )
@@ -415,7 +423,7 @@ registry.define("manager", {
 
     ctx.useAgent({
       systemPrompt: ctx.args.systemPrompt || "You are a manager agent.",
-      model: "claude-sonnet-4-6",
+      model: MODEL,
       tools: []
     })
 
@@ -430,7 +438,7 @@ This is very similar to our `assistant` type but, as you can see, adds this impe
 if (wake.type === 'inbox') {
   await ctx.spawn(
     'assistant',
-    Math.random().toString(),
+    genId(),
     { systemPrompt: `Roast the user message. When done, report back to your manager.` },
     { initialMessage: wake.payload.text, wake: 'runFinished' }
   )
@@ -494,7 +502,7 @@ function createSpawnAssistantTool(ctx) {
     execute: async (_toolCallId: string, { task }: TaskParams) => {
       const { entityUrl } = await ctx.spawn(
         'assistant',
-        Math.random().toString(),
+        genId(),
         {},
         { initialMessage: task, wake: 'runFinished' },
       )
@@ -524,7 +532,7 @@ registry.define("manager", {
   async handler(ctx) {
     ctx.useAgent({
       systemPrompt: 'Spawn a sub-agent to roast the user message and then end your turn until they report back.',
-      model: "claude-sonnet-4-6",
+      model: MODEL,
       tools: [createSpawnAssistantTool(ctx)],
     })
 
@@ -558,7 +566,7 @@ Your job is to:
    - Evil-side debater: argues the morally evil/harmful case.
 2. Give each assistant a clear brief with the debate topic and the side they must argue.
 3. Ask each assistant to respond to you with a concise argument and their strongest three points.
-4. End your turn after spawning them. wait until you have both responses and both assistants have **fully** responded.
+4. End your turn after spawning them. When each assistant finishes, wait until you have both responses.
 5. Summarize the key arguments of the debate and provide your judge's verdict to the parent agent.
 
 Notes:
@@ -567,7 +575,7 @@ Notes:
 - Wait for **all** of the assistants to return **full** responses. Don't respond to partial / in-progress responses.
 - Do not generate/hallucinate the argument yourself. You must wait for the assistants to fully respond and then synthesize their responses. Don't anticipate or make them up.
 - Wait until the debate is fully finished before reporting back to the parent agent.`,
-      model: "claude-sonnet-4-6",
+      model: MODEL,
       tools: [createSpawnAssistantTool(ctx)]
     })
 
@@ -595,7 +603,7 @@ function createSpawnJudgeTool(ctx) {
     execute: async (_toolCallId: string, { topic }: TopicParams) => {
       const { entityUrl } = await ctx.spawn(
         'judge',
-        Math.random().toString(),
+        genId(),
         {},
         { initialMessage: `Set up a debate on this topic: ${topic}`, wake: 'runFinished' },
       )
@@ -626,7 +634,7 @@ registry.define("manager", {
 
         In either case, end your turn until they report back.
       `,
-      model: "claude-sonnet-4-6",
+      model: MODEL,
       tools: [createSpawnAssistantTool(ctx), createSpawnJudgeTool(ctx)],
     })
 
@@ -741,3 +749,364 @@ And update the judge's system prompt:
 
 
 
+
+
+---
+
+## Step 5 — Hybrid control flow (revised)
+
+In an agentic system we want the LLM to express itself by choosing and configuring the right tool calls. But the more steps we cram into a prompt, the more we're trusting an indeterministic model to follow a deterministic procedure. Let's see where that breaks — and then fix it properly.
+
+### The temptation: put the whole procedure in the prompt
+
+We already floated the idea of teaching the judge the whole debate as a numbered list. Once we add the critique round, the prompt grows to something like this:
+
+```
+When (and only when) you receive a user message:
+1. Spawn exactly two assistant sub-agents (an A-side and a B-side debater).
+2. Give each a clear brief with the topic and the side they must argue.
+3. Ask each for a concise argument and their strongest three points.
+4. End your turn. When each assistant finishes, wait until you have both responses.
+5. Send each response to the other side to rebut. End your turn and wait for both rebuttals.
+6. Once both rebuttals are back, review and compare the arguments.
+7. Summarize the debate and provide your verdict to the parent agent.
+```
+
+It reads clearly. It even mostly works. But it has two failure modes baked in, and both come from the same source — **the judge wakes on every debater run-completion and runs the LLM each time**:
+
+- **Chatter.** The A-side debater finishes first. The judge wakes, runs the LLM, and the model dutifully narrates a non-event ("A is done, B is still arguing — I'll wait."). That's a full LLM run, and tokens, spent on nothing. The same happens one level up: the manager wakes on every judge run and chatters about progress the user never asked for.
+- **Going off-piste.** "Wait until you have both responses" is a *request*, not a guarantee. A model that gets it wrong acts on a half-finished round — critiquing against one argument, or delivering a verdict before the rebuttals are in. The whole debate finishes early and wrong.
+
+These instructions are familiar if you've wrangled agents before. They work *most* of the time. But "most of the time" is exactly the property we don't want in our control flow.
+
+### The mental model
+
+The fix is to stop treating every wake as a prompt to think about. Instead:
+
+- **The wake is a signal** — "something happened" — not an instruction to run the LLM.
+- **Durable state is the truth** — what's actually happened lives in a collection you own, not in the model's reading of its transcript.
+- **The handler decides whether the LLM runs at all** — a wake that isn't actionable goes straight back to sleep.
+
+Two primitives carry this. `ctx.sleep()` ends the handler **without starting a run** — no LLM call, no text, and crucially no `runFinished` wake emitted to anyone observing. It's the canonical "this wake isn't for me." And `wake.payload?.finished_child` tells you *which* child just finished and with what.
+
+::: details Verified semantics — the wake shape
+
+The handler is `handler(ctx, wake)`. For a child completion `wake.type === 'wake'` and the data is on **`wake.payload`** (not `wake` directly): `{ changes, finished_child?, other_children?, timeout }`. `finished_child` is `{ url, type, run_status: 'completed' | 'failed', response?, error? }`.
+
+`ctx.sleep()` ends the handler without starting a run. No run means no LLM call, no text, and no `runFinished` wake emitted to observers.
+
+And a slept wake loses nothing: the server appends one idempotent `wakes` row per child finish, each carrying that run's `response`, and the default context builder projects the full timeline including those `wake` sections. So a debater's argument is durably in the judge's context whether or not the judge ran the LLM on that wake. The gate only decides *when* to run — never *whether* to capture.
+
+:::
+
+This is **hybrid control flow**: the LLM owns the creative decisions; your handler code owns the control flow, using durable state as the source of truth.
+
+### Durable state: the debate collection and the phase machine
+
+This step pulls two more exports from the runtime — `passthrough` (to type the custom collection below) and `entity` (used later, when the manager observes the judge). Extend the import:
+
+```ts
+import {
+  createEntityRegistry,
+  createRuntimeHandler,
+  entity,
+  passthrough,
+} from '@electric-ax/agents-runtime'
+```
+
+Give the judge one custom collection, `debate`, with a single `'current'` row — a judge coordinates exactly one debate:
+
+```ts
+type Debate = {
+  key: 'current'
+  topic: string
+  aUrl: string
+  bUrl: string
+  phase: 'arguing' | 'critiquing' | 'done'
+  arguments: { a?: string; b?: string }
+  rebuttals: { a?: boolean; b?: boolean }
+}
+```
+
+Declared on the entity:
+
+```ts
+state: {
+  debate: { schema: passthrough<Debate>(), primaryKey: 'key' },
+},
+```
+
+The debate is a three-phase machine: `arguing` → `critiquing` → `done`. The `arguments` and `rebuttals` fields are **per-round receipts**. `arguments` stores the argument *text* — because forwarding it to the other side to rebut needs no LLM. `rebuttals` only needs booleans, because the verdict LLM reads the full exchange from its own timeline. Both are phase-specific and never reset, which is what makes the gate race-free.
+
+### The gate
+
+This is the centrepiece. Here's the complete judge entity — the `state` from above, plus a handler that records what happened and then acts **only when the round is complete**:
+
+```ts
+registry.define('judge', {
+  description: 'Coordinates a three-phase debate: arguments, mutual rebuttals, verdict.',
+  state: {
+    debate: { schema: passthrough<Debate>(), primaryKey: 'key' },
+  },
+  async handler(ctx, wake) {
+
+    // Handle inbox messages by spawning one debate at a time.
+    // Using the LLM to formulate the briefs for each side.
+
+    if (wake.type === 'inbox') {
+      if (ctx.state.debate.get('current')) {
+        return ctx.sleep()
+      }
+
+      ctx.useAgent({
+        systemPrompt: SETUP_PROMPT,
+        model: MODEL,
+        tools: [createStartDebateTool(ctx)],
+      })
+
+      return ctx.agent.run()
+    }
+
+    // Ignore wake notifications unless they're from finished children
+    // participating in the current debate.
+
+    let debate = ctx.state.debate.get('current')
+    if (!debate || debate.phase === 'done') {
+      return ctx.sleep()
+    }
+
+    const finished = wake.payload?.finished_child
+    if (!finished) {
+      return ctx.sleep()
+    }
+
+    const side =
+      finished.url === debate.aUrl ? 'a' :
+        finished.url === debate.bUrl  ? 'b' : null
+    if (!side) {
+      return ctx.sleep()
+    }
+
+    // Record this debater's contribution for the current round.
+
+    if (debate.phase === 'arguing') {
+      ctx.state.debate.update('current', d => { d.arguments[side] = finished.response ?? '' })
+      debate = ctx.state.debate.get('current')
+
+      // Proceed once both debaters have reported for this round.
+
+      if (debate.arguments.a !== undefined && debate.arguments.b !== undefined) {
+        ctx.send(debate.aUrl, rebut(debate.arguments.b))
+        ctx.send(debate.bUrl, rebut(debate.arguments.a))
+
+        ctx.state.debate.update('current', d => { d.phase = 'critiquing' })
+      }
+
+      return ctx.sleep()
+    }
+
+    // We're in `phase === 'critiquing'`, wait until both are in.
+
+    ctx.state.debate.update('current', d => { d.rebuttals[side] = true })
+    debate = ctx.state.debate.get('current')
+
+    if (!debate.rebuttals.a || !debate.rebuttals.b) {
+      return ctx.sleep()
+    }
+
+    // Flip the phase to 'done' and have the LLM write the verdict as its reply.
+
+    ctx.state.debate.update('current', d => { d.phase = 'done' })
+
+    ctx.useAgent({
+      systemPrompt: VERDICT_PROMPT,
+      model: MODEL,
+      tools: [],
+    })
+
+    return ctx.agent.run()
+  },
+})
+```
+
+Read it as: an inbox message with no debate yet kicks off **setup**. Otherwise a child finished, so figure out which side it was, write a **phase-tagged receipt** for it, then check whether *both* receipts for the current round are in. If not, sleep — the other debater is still working, and we run nothing. Only when both are in does the handler act inline: in the `arguing` round it forwards the rebuttals (plain code, no LLM); in the `critiquing` round it flips to `done` and runs the LLM to write the verdict.
+
+The "wait for both / don't hallucinate / don't respond early" notes from the old prompt are simply gone. Code enforces them now, so the chatter and the off-piste verdict are both structurally impossible.
+
+::: details Why this is race-free
+
+If both debaters finish near-simultaneously, the runtime delivers two **separate, serialized** handler invocations — it runs one handler at a time per entity and delivers each finish as its own webhook. So the read-modify-write on the `debate` row is safe, and two finishes are never collapsed into one invocation that hides one of them.
+
+Each invocation records its own side's phase-tagged receipt. Whichever invocation observes *both* receipts advances; the first one sees only its own receipt and sleeps. No double-advance, no missed advance.
+
+A tempting alternative gate is "advance when no sibling is still `running`" — but that's racy: a debater that hasn't transitioned out of `idle` yet looks done, so a fast first critique could trigger a premature verdict. We gate on **per-side receipts written from `finished_child`**, never on liveness status, so that can't happen.
+
+And because the receipts are phase-specific fields that are never reset — `phase` only advances *after* both receipts for a round are in — a late or duplicate finish can never be misattributed across rounds.
+
+:::
+
+### Imperative vs LLM
+
+Now the "hybrid" part. Look back at the handler: when a round completes it does one of two very different things, and only one of them touches the LLM.
+
+**The rebuttal round-trip is plain code.** Once both arguments are in, the handler forwards each side's argument to the other to rebut — two `ctx.send` calls and a phase flip, no LLM run. The forwarder is just a template:
+
+```ts
+const rebut = (arg: string) =>
+  `Your opponent argued:\n\n${arg}\n\nRebut their argument(s).`
+```
+
+There's no reason to spend an LLM run shuffling text between debaters. The judge sends, flips to `critiquing`, and sleeps — waiting for the rebuttal receipts to come back through the same gate.
+
+**The LLM is reserved for the two genuinely creative moments: opening the debate and delivering the verdict.** Each gets its own scoped prompt.
+
+At setup, the LLM picks the topic and writes a brief for each side:
+
+```ts
+const SETUP_PROMPT = `You are a fair, concise debate judge opening a debate.
+Call start_debate exactly once: pick the topic line, and write a clear brief for each side:
+- "A" argues one case (e.g.: beneficial / pro / one side of the argument)
+- "B" argues the other case (e.g.: harmful  / against / the other side)
+Each brief assigns only the topic and that side's position, then asks the debater to make a
+concise argument with their own three strongest points. Do NOT supply, list, or hint at any
+arguments yourself — the debater must devise their own.
+Then end your turn. Do not narrate.`
+```
+
+It spawns the debaters through a single tool, which records their URLs into the `debate` row — that's what later lets the gate map a `finished_child` back to side `a` or `b`:
+
+```ts
+const startDebateParameters = Type.Object({
+  topic: Type.String({ description: 'Short topic line, e.g. "996 vs 4-day work week".' }),
+  aBrief: Type.String({ description: 'Brief for the A debater: topic, side, ask for their concise argument and points.' }),
+  bBrief: Type.String({ description: 'Brief for the B debater: same shape.' }),
+})
+type StartDebateParams = Static<typeof startDebateParameters>
+
+function createStartDebateTool(ctx) {
+  return {
+    name: 'start_debate',
+    label: 'Start Debate',
+    description: 'Spawn the two debaters with their opening briefs. Call exactly once.',
+    parameters: startDebateParameters,
+    execute: async (_id: string, { topic, aBrief, bBrief }: StartDebateParams) => {
+      const [a, b] = await Promise.all([
+        ctx.spawn('assistant', genId(), {}, { initialMessage: aBrief, wake: 'runFinished' }),
+        ctx.spawn('assistant', genId(), {}, { initialMessage: bBrief, wake: 'runFinished' }),
+      ])
+
+      ctx.state.debate.insert({
+        key: 'current',
+        topic,
+        aUrl: a.entityUrl,
+        bUrl: b.entityUrl,
+        phase: 'arguing',
+        arguments: {},
+        rebuttals: {},
+      })
+
+      return ({
+        content: [{
+          type: 'text' as const,
+          text: 'Debate started.'
+        }],
+        terminate: true
+      })
+    },
+  }
+}
+```
+
+At the close, there's no tool at all. The verdict is prose written for a human, so the judge runs with `tools: []` and a prompt whose whole job is to make the reply *be* the verdict:
+
+```ts
+const VERDICT_PROMPT = `You are a fair, concise debate judge closing a debate.
+Both sides have argued and critiqued each other. The full exchange is in your context.
+Weigh it and write your final verdict as your reply: summarise each side's strongest points,
+note how each critique landed, and give your impartial decision. Never argue a side.
+Do not narrate or preface — your reply IS the verdict, and it gets relayed to the user.`
+```
+
+The verdict run reads the full exchange (already in its timeline from the slept wakes) and writes its decision as its reply — that reply is what travels up to the manager.
+
+::: details Verified semantics — the verdict is the run reply
+
+The verdict is prose meant for a human, so there's no structured payload to capture — no verdict tool, no typed message. The judge just runs with `VERDICT_PROMPT` and `tools: []`, and its reply *is* the verdict. It reaches the manager as the `response` carried on the judge's `runFinished` wake (a bare `wake: 'runFinished'` includes the run's reply by default). When an LLM's output is plain text for the user, the run reply is the channel; reach for a tool argument only when you need to capture *structured* output the run reply wouldn't preserve.
+
+:::
+
+### The manager edge: observe the judge, relay when it's `done`
+
+The manager spawned the judge with `wake: 'runFinished'` (back in Step 4's `spawn_judge` tool), so it's re-invoked on **every** judge run-completion. The judge runs the LLM twice — once to open, once to close — and only the second produces a verdict. The manager's prompt says to relay one when it arrives:
+
+```ts
+const MANAGER_PROMPT = `You delegate work and relay results to the user.
+- If the user asks to debate a topic, spawn a Judge with the topic, then end your turn.
+- Otherwise, spawn an Assistant to roast the user's message, then end your turn.
+- When a Judge reports a verdict, present it to the user.`
+```
+
+But "when a Judge reports a verdict" can't be left to the model to spot in the text. The manager reads the judge's **durable state** instead: on a judge run-completion it observes the judge and checks the `debate` collection — if the phase isn't `done` (the setup run leaves it `arguing`), it sleeps; only `phase === 'done'` runs the LLM to relay.
+
+```ts
+registry.define("manager", {
+  description: "Delegates to assistants and judges and relays their results to the user.",
+  async handler(ctx, wake) {
+
+    // Only act on judge completions when the debate is fully done. Note that a
+    // *failed* judge run is not a 'completed' wake, so it skips this guard.
+
+    const child = wake.payload?.finished_child
+    if (child?.type === 'judge' && child.run_status === 'completed') {
+
+      // Shows how a parent can observe the state of a child.
+
+      const judge = await ctx.observe(entity(child.url))
+      const debate = judge.db.collections.debate.get('current')
+
+      if (debate?.phase !== 'done') {
+        return ctx.sleep()
+      }
+    }
+
+    ctx.useAgent({
+      systemPrompt: MANAGER_PROMPT,
+      model: MODEL,
+      tools: [createSpawnAssistantTool(ctx), createSpawnJudgeTool(ctx)],
+    })
+
+    await ctx.agent.run()
+  },
+})
+```
+
+When the guard passes, the verdict text is already in the manager's context — it rode in as the `response` on the same `runFinished` wake — so the LLM just presents it. And the guard keys on `completed`: a *failed* judge run isn't `completed`, so it skips the observe-check entirely and falls through to a normal run, surfacing the failure to the user with no try/catch and no manual error plumbing.
+
+::: details observe vs wake — two independent knobs
+
+`observe` and `wake` are independent. `observe: true` (the default) syncs the child's stream into the parent, so the parent can read the child's state on demand — that's what `ctx.observe(entity(child.url))` does here, reading the judge's `debate` collection. `wake` is what re-invokes the parent's handler: with `wake: 'runFinished'`, every judge run-completion re-invokes the manager, and that wake carries the finished run's reply as its `response` (included by default).
+
+So the two compose: `wake` tells the manager *when* the judge finished a run; `observe` tells it *whether the debate is actually `done`* (vs. the setup run that just opened it). The verdict the manager relays rode in on the wake; the decision of whether to relay comes from the observed state.
+
+:::
+
+### The payoff
+
+Here are the wakes the **judge** sees over a full debate, and what it actually does:
+
+| # | Judge wake | Gate decision | LLM run? | Manager woken? |
+| --- | --- | --- | --- | --- |
+| 1 | inbox "Set up a debate…" | no debate yet → setup | **yes** (`start_debate`) | yes (setup run → observes `arguing` → sleeps) |
+| 2 | A argument finished | `arguments.b` missing → sleep | no | no |
+| 3 | B argument finished | both arguments in → forward rebuttals | no (imperative forward) | no |
+| 4 | A rebuttal finished | `rebuttals.b` missing → sleep | no | no |
+| 5 | B rebuttal finished | both rebuttals in → verdict | **yes** (verdict, `tools: []`) | yes (verdict run → observes `done` → relays) |
+
+The order of 2/3 and 4/5 may swap depending on which debater finishes first — the gate is symmetric either way. The numbers:
+
+- **Judge LLM runs: 2** — open and close. Down from ~5 in the all-in-the-prompt version.
+- **Manager LLM runs from the judge: 1** — the verdict relay. The setup-run completion wakes the manager too, but it observes the debate still `arguing` and sleeps. (A *failed* judge run isn't `completed`, so it skips the guard and surfaces.)
+- **No chatter.** Steps 2–4, where the judge sleeps, emit no run, so the manager isn't woken by them at all.
+- **The debate cannot finish early.** The verdict only runs once both rebuttal receipts are durably present — there's no path for the model to "decide" otherwise.
+
+That's the whole lesson of hybrid control flow: let the LLM be creative where creativity is the point, and let your code — backed by durable state — own *when* anything runs.
