@@ -1244,6 +1244,7 @@ export async function processWake(
           payload: send.payload,
           type: send.type,
           afterMs: send.afterMs,
+          fromAgent: entityUrl,
         })
         .then(() => ({ sent: true as const, targetUrl: send.targetUrl }))
 

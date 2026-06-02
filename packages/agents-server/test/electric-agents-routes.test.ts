@@ -22,7 +22,13 @@ async function routeResponse(
   method: string,
   path: string,
   body?: unknown,
-  rawBody = false
+  rawBody = false,
+  principal = {
+    kind: `system`,
+    id: `dev-local`,
+    key: `system:dev-local`,
+    url: `/principal/system:dev-local`,
+  }
 ): Promise<Response> {
   const result = await globalRouter.fetch(
     createRequest(method, path, body, rawBody),
@@ -30,12 +36,7 @@ async function routeResponse(
       service: `test`,
       entityManager: manager,
       isShuttingDown: () => false,
-      principal: {
-        kind: `system`,
-        id: `dev-local`,
-        key: `system:dev-local`,
-        url: `/principal/system:dev-local`,
-      },
+      principal,
     } as unknown as TenantContext
   )
   expect(result).toBeInstanceOf(Response)
@@ -739,6 +740,113 @@ describe(`ElectricAgentsRoutes send endpoint`, () => {
       error: {
         code: `NOT_FOUND`,
         message: `Entity not found at /chat/missing`,
+      },
+    })
+  })
+
+  it(`rejects spoofed from_agent values`, async () => {
+    const manager = {
+      registry: {
+        getEntity: vi.fn().mockResolvedValue({ url: `/chat/test` }),
+        getEntityType: vi.fn(),
+      },
+      ensurePrincipal: vi.fn().mockResolvedValue(undefined),
+      send: vi.fn().mockResolvedValue(undefined),
+    } as any
+
+    const response = await routeResponse(
+      manager,
+      `POST`,
+      `/_electric/entities/chat/test/send`,
+      {
+        payload: { text: `hi` },
+        from_agent: `/chat/other`,
+      },
+      false,
+      {
+        kind: `agent`,
+        id: `chat/test`,
+        key: `agent:chat/test`,
+        url: `/principal/agent%3Achat%2Ftest`,
+      }
+    )
+
+    expect(manager.send).not.toHaveBeenCalled()
+    expect(response.status).toBe(400)
+    expect(await responseJson(response)).toEqual({
+      error: {
+        code: `INVALID_REQUEST`,
+        message: `Request from_agent must match authenticated agent principal`,
+      },
+    })
+  })
+
+  it(`allows matching from_agent values for agent principals`, async () => {
+    const manager = {
+      registry: {
+        getEntity: vi.fn().mockResolvedValue({ url: `/chat/test` }),
+        getEntityType: vi.fn(),
+      },
+      ensurePrincipal: vi.fn().mockResolvedValue(undefined),
+      send: vi.fn().mockResolvedValue(undefined),
+    } as any
+
+    const response = await routeResponse(
+      manager,
+      `POST`,
+      `/_electric/entities/chat/test/send`,
+      {
+        payload: { text: `hi` },
+        from_agent: `/chat/test`,
+      },
+      false,
+      {
+        kind: `agent`,
+        id: `chat/test`,
+        key: `agent:chat/test`,
+        url: `/principal/agent%3Achat%2Ftest`,
+      }
+    )
+
+    expect(response.status).toBe(204)
+    expect(manager.send).toHaveBeenCalledWith(`/chat/test`, {
+      from: `/principal/agent%3Achat%2Ftest`,
+      from_principal: `/principal/agent%3Achat%2Ftest`,
+      from_agent: `/chat/test`,
+      payload: { text: `hi` },
+      key: undefined,
+      type: undefined,
+      mode: undefined,
+      position: undefined,
+    })
+  })
+
+  it(`rejects mismatched from_principal values`, async () => {
+    const manager = {
+      registry: {
+        getEntity: vi.fn().mockResolvedValue({ url: `/chat/test` }),
+        getEntityType: vi.fn(),
+      },
+      ensurePrincipal: vi.fn().mockResolvedValue(undefined),
+      send: vi.fn().mockResolvedValue(undefined),
+    } as any
+
+    const response = await routeResponse(
+      manager,
+      `POST`,
+      `/_electric/entities/chat/test/send`,
+      {
+        payload: { text: `hi` },
+        from_principal: `/principal/user%3Aother`,
+      }
+    )
+
+    expect(manager.send).not.toHaveBeenCalled()
+    expect(response.status).toBe(400)
+    expect(await responseJson(response)).toEqual({
+      error: {
+        code: `INVALID_REQUEST`,
+        message: `Request from_principal must match Electric-Principal`,
       },
     })
   })

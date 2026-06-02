@@ -28,7 +28,10 @@ import {
 } from './dispatch-policy.js'
 import { ElectricAgentsError } from '../entity-manager.js'
 import { routeBody, withSchema } from './schema.js'
-import type { ElectricAgentsEntity } from '../electric-agents-types.js'
+import type {
+  ElectricAgentsEntity,
+  SendRequest,
+} from '../electric-agents-types.js'
 import type { JsonRouteRequest } from './schema.js'
 import type { RouterType } from 'itty-router'
 import type { TenantContext } from './context.js'
@@ -112,7 +115,29 @@ const sendBodySchema = Type.Object({
   position: Type.Optional(Type.String()),
   afterMs: Type.Optional(Type.Number()),
   from: Type.Optional(Type.String()),
+  from_principal: Type.Optional(Type.String()),
+  from_agent: Type.Optional(Type.String()),
 })
+
+function agentUrlForPrincipal(principal: {
+  kind: string
+  id: string
+  key: string
+}): string | null {
+  if (principal.kind === `agent`) return `/${principal.id}`
+  if (principal.key.startsWith(`entity:`)) {
+    return `/${principal.key.slice(`entity:`.length)}`
+  }
+  return null
+}
+
+function agentUrlPath(value: string): string {
+  try {
+    return new URL(value).pathname
+  } catch {
+    return value
+  }
+}
 
 const inboxMessageBodySchema = Type.Object({
   payload: Type.Optional(Type.Unknown()),
@@ -837,6 +862,26 @@ async function sendEntity(
       `Request from must match Electric-Principal`
     )
   }
+  if (
+    parsed.from_principal !== undefined &&
+    parsed.from_principal !== principal.url
+  ) {
+    return apiError(
+      400,
+      ErrCodeInvalidRequest,
+      `Request from_principal must match Electric-Principal`
+    )
+  }
+  if (parsed.from_agent !== undefined) {
+    const principalAgentUrl = agentUrlForPrincipal(principal)
+    if (agentUrlPath(parsed.from_agent) !== principalAgentUrl) {
+      return apiError(
+        400,
+        ErrCodeInvalidRequest,
+        `Request from_agent must match authenticated agent principal`
+      )
+    }
+  }
   await ctx.entityManager.ensurePrincipal(principal)
   const { entityUrl, entity } = requireExistingEntityRoute(request)
 
@@ -845,28 +890,25 @@ async function sendEntity(
     : await backfillEntityDispatchPolicy(ctx, entity)
   await linkEntityDispatchSubscription(ctx, dispatchEntity)
 
+  const sendReq: SendRequest = {
+    from: principal.url,
+    from_principal: principal.url,
+    from_agent: parsed.from_agent,
+    payload: parsed.payload,
+    key: parsed.key,
+    type: parsed.type,
+    mode: parsed.mode,
+    position: parsed.position,
+  }
+
   if (parsed.afterMs && parsed.afterMs > 0) {
     await ctx.entityManager.enqueueDelayedSend(
       entityUrl,
-      {
-        from: principal.url,
-        payload: parsed.payload,
-        key: parsed.key,
-        type: parsed.type,
-        mode: parsed.mode,
-        position: parsed.position,
-      },
+      sendReq,
       new Date(Date.now() + parsed.afterMs)
     )
   } else {
-    await ctx.entityManager.send(entityUrl, {
-      from: principal.url,
-      payload: parsed.payload,
-      key: parsed.key,
-      type: parsed.type,
-      mode: parsed.mode,
-      position: parsed.position,
-    })
+    await ctx.entityManager.send(entityUrl, sendReq)
   }
 
   return status(204)

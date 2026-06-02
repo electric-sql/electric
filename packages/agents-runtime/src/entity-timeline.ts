@@ -1240,6 +1240,8 @@ function buildEntityTimelineQuery(
     order: coalesce(inbox._timeline_order, `~`),
     key: inbox.key,
     from: coalesce(inbox.from, `unknown`),
+    from_principal: inbox.from_principal,
+    from_agent: inbox.from_agent,
     payload: inbox.payload,
     timestamp: coalesce(inbox.timestamp, ``),
     mode: coalesce(inbox.mode, `immediate`),

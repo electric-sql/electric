@@ -144,6 +144,8 @@ export function useEntityTimeline(
             key: msg.key,
             order: msg._timeline_order ?? msg._seq ?? Number.MAX_SAFE_INTEGER,
             from: msg.from,
+            from_principal: msg.from_principal,
+            from_agent: msg.from_agent,
             payload: msg.payload,
             timestamp: msg.timestamp,
             mode: msg.mode ?? `queued`,

@@ -1369,6 +1369,7 @@ describe(`processWake`, () => {
     expect(String(sendUrl)).toContain(`target-entity-2/send`)
     const body = JSON.parse(sendOpts!.body as string) as Record<string, unknown>
     expect(body.from).toBeUndefined()
+    expect(body.from_agent).toBe(`http://localhost:3000/test-agent/agent-1`)
     expect((sendOpts!.headers as Headers).get(`electric-principal`)).toBe(
       `entity:test-agent/agent-1`
     )

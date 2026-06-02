@@ -316,6 +316,8 @@ export class ElectricAgentsTenantRuntime {
         payload.entityUrl,
         {
           from: payload.from,
+          from_principal: payload.from_principal,
+          from_agent: payload.from_agent,
           payload: payload.payload,
           key: payload.key ?? `scheduled-task-${taskId}`,
           type: payload.type,
@@ -461,6 +463,7 @@ export class ElectricAgentsTenantRuntime {
       {
         entityUrl: targetUrl,
         from: senderUrl,
+        from_agent: senderUrl,
         payload: value.payload,
         key: `scheduled-${producerId}`,
         type:
