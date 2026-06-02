@@ -204,9 +204,10 @@ export function NewSessionView({
     userSelectedRunnerRef.current = true
     setSelectedRunnerId(id)
   }, [])
-  // Re-evaluate the default whenever the list of runners or the
-  // desktop's runner id changes. Prefer the desktop's own runner if
-  // it's enabled, else fall back to the first runner.
+  // Re-evaluate the default whenever the list of runners or the desktop's
+  // runner id changes. An explicit user choice (tracked via
+  // `userSelectedRunnerRef`) wins while it still exists; otherwise prefer the
+  // desktop's own runner if enabled, else fall back to the first runner.
   useEffect(() => {
     if (enabledRunners.length === 0) {
       if (selectedRunnerId !== null) setSelectedRunnerId(null)
@@ -238,8 +239,8 @@ export function NewSessionView({
   }, [enabledRunners, desktopRunnerId, selectedRunnerId])
 
   // Sandbox profiles ride alongside the runner row. Read the advertised
-  // list off whichever runner the spawn will dispatch to, sorted by
-  // label for picker stability.
+  // list off whichever runner the spawn will dispatch to, preserving the
+  // runtime's advertised order (default profile first).
   const allSandboxProfiles = useMemo<Array<ElectricSandboxProfile>>(() => {
     if (!selectedRunnerId) return []
     const runner = enabledRunners.find((r) => r.id === selectedRunnerId)

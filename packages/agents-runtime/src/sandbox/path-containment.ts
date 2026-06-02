@@ -13,6 +13,25 @@ import { posix } from 'node:path'
  * be routed through here.
  */
 
+/**
+ * Assert the isolated provider's `workingDirectory` is an absolute POSIX path.
+ * Containment below names locations inside the container/VM, so a relative or
+ * non-POSIX working directory would silently `posix.resolve` against the host
+ * cwd in `absoluteSandboxPath` — a foot-gun. Call once at provider construction
+ * to fail loudly instead.
+ */
+export function assertAbsolutePosixWorkingDirectory(
+  workingDirectory: string
+): void {
+  if (!posix.isAbsolute(workingDirectory)) {
+    throw new Error(
+      `sandbox workingDirectory must be an absolute POSIX path, got: ${JSON.stringify(
+        workingDirectory
+      )}`
+    )
+  }
+}
+
 /** Resolve a user-supplied `path` against `workingDirectory` to an absolute posix path. */
 export function absoluteSandboxPath(
   workingDirectory: string,

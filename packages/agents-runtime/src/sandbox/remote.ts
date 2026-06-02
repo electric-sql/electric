@@ -10,7 +10,11 @@ import {
 import { createE2BClient } from './remote/e2b'
 import { fetchInSandbox } from './exec-fetch'
 import { sandboxWipesOnDispose } from './identity'
-import { absoluteSandboxPath, isPathWithinSandbox } from './path-containment'
+import {
+  absoluteSandboxPath,
+  assertAbsolutePosixWorkingDirectory,
+  isPathWithinSandbox,
+} from './path-containment'
 import type { RemoteSandboxClient } from './remote/types'
 
 export type RemoteProvider = `e2b`
@@ -85,6 +89,9 @@ export interface RemoteSandboxOpts {
  */
 export async function remoteSandbox(opts: RemoteSandboxOpts): Promise<Sandbox> {
   const workingDirectory = opts.workingDirectory ?? `/work`
+  // Names a location inside the provider VM, so it must be absolute POSIX —
+  // a relative value would silently join against the host cwd in containment.
+  assertAbsolutePosixWorkingDirectory(workingDirectory)
   const persistent = opts.persistent === true
   const owner = opts.owner !== false
   const initialPolicy: NetworkPolicy =

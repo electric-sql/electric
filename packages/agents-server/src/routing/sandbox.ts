@@ -74,6 +74,13 @@ export async function resolveSandboxForSpawn(
  * callers, where only the parent's *stored* explicit key is available.)
  *
  * For a non-inherit choice the request passes through unchanged.
+ *
+ * NOTE: `inherit: true` takes the parent's identity AND durability wholesale —
+ * any sibling field on the request (e.g. a caller-supplied `persistent: false`)
+ * is intentionally ignored, because a child attaches to the parent's existing
+ * sandbox and cannot change how that sandbox is torn down. `sandboxChoiceSchema`
+ * permits the `{ inherit: true, persistent: ... }` combination, so the
+ * precedence is resolved here rather than rejected at the schema level.
  */
 function applyInheritedSandbox(
   requested: SandboxChoice,
