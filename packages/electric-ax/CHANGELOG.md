@@ -1,5 +1,18 @@
 # electric-ax
 
+## 0.2.12
+
+### Patch Changes
+
+- d5708c7: Bump `@durable-streams/{client,server,state}` pins in step with `@electric-ax/agents-runtime` and `@electric-ax/agents-server` to pick up the fork-at-pointer (`Stream-Fork-Offset` + `Stream-Fork-Sub-Offset`) wire protocol that the new fork-at-message UX depends on. No other code changes in these packages.
+- Updated dependencies [17b374f]
+- Updated dependencies [1a7d72e]
+- Updated dependencies [d5708c7]
+- Updated dependencies [d5708c7]
+- Updated dependencies [f2d3d5e]
+  - @electric-ax/agents-runtime@0.3.8
+  - @electric-ax/agents@0.4.12
+
 ## 0.2.11
 
 ### Patch Changes

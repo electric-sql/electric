@@ -1,5 +1,20 @@
 # @electric-ax/agents-mobile
 
+## 0.0.10
+
+### Patch Changes
+
+- Updated dependencies [17b374f]
+- Updated dependencies [f73d64a]
+- Updated dependencies [1a7d72e]
+- Updated dependencies [d5708c7]
+- Updated dependencies [d5708c7]
+- Updated dependencies [4e2cc22]
+- Updated dependencies [2896820]
+- Updated dependencies [f2d3d5e]
+  - @electric-ax/agents-runtime@0.3.8
+  - @electric-ax/agents-server-ui@0.4.15
+
 ## 0.0.9
 
 ### Patch Changes
