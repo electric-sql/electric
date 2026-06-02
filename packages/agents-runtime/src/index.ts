@@ -26,6 +26,7 @@ export type {
   AgentConfig,
   AgentModel,
   EntityDefinition,
+  EntityTypePermissionGrantDefinition,
   EntityActionsFactory,
   EntityActionMap,
   EntityArgs,

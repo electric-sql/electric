@@ -292,6 +292,13 @@ export function registerWorker(
   const { streamFn, modelCatalog } = options
   registry.define(`worker`, {
     description: `Internal — generic worker spawned by other agents. Configure via spawn args (systemPrompt + tools + optional sharedDb).`,
+    permissionGrants: [
+      {
+        subject_kind: `principal_kind`,
+        subject_value: `user`,
+        permission: `spawn`,
+      },
+    ],
     async handler(ctx) {
       const args = parseWorkerArgs(ctx.args)
       const readSet = new Set<string>()

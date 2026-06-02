@@ -413,6 +413,13 @@ export interface EntityCreated {
   parent_url?: string
 }
 
+export type EntityTypePermissionGrantDefinition = {
+  subject_kind: `principal` | `principal_kind`
+  subject_value: string
+  permission: `spawn` | `manage`
+  expires_at?: string
+}
+
 export interface PendingSend {
   targetUrl: string
   payload: unknown
@@ -1047,6 +1054,7 @@ export interface EntityDefinition<
   creationSchema?: TCreationSchema
   inboxSchemas?: Record<string, StandardJSONSchemaV1>
   stateSchemas?: Record<string, StandardJSONSchemaV1>
+  permissionGrants?: ReadonlyArray<EntityTypePermissionGrantDefinition>
 
   handler: (
     ctx: HandlerContext<

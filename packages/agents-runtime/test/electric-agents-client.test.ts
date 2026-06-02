@@ -93,7 +93,7 @@ describe(`createAgentsClient`, () => {
     })
     expect(mockState.createStreamDB).toHaveBeenCalledWith({
       streamOptions: {
-        url: `http://electric-agents.test${source.streamUrl}`,
+        url: `http://electric-agents.test/_entities/source-1`,
         contentType: `application/json`,
       },
       state: source.schema,
@@ -117,7 +117,7 @@ describe(`createAgentsClient`, () => {
 
     expect(mockState.createStreamDB).toHaveBeenCalledWith({
       streamOptions: {
-        url: `http://electric-agents.test/t/tenant-a/v1${source.streamUrl}`,
+        url: `http://electric-agents.test/t/tenant-a/v1/_entities/source-1`,
         contentType: `application/json`,
       },
       state: source.schema,

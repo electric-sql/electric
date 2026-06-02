@@ -30,6 +30,7 @@ services:
     environment:
       DATABASE_URL: postgresql://electric_agents:electric_agents@postgres:5432/electric_agents
       ELECTRIC_INSECURE: 'true'
+      ELECTRIC_FEATURE_FLAGS: allow_subqueries
     depends_on:
       postgres:
         condition: service_healthy
