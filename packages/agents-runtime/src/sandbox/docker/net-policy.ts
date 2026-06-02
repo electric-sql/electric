@@ -132,12 +132,12 @@ export function isPrivateOrLinkLocal(rawHost: string): boolean {
     if (a === 100 && b >= 64 && b <= 127) return true // CGNAT
     return false
   }
-  // IPv6 literal (very small allowlist of dangerous ranges)
-  if (host === `::1` || host.toLowerCase().startsWith(`fe80:`)) return true
-  if (
-    host.toLowerCase().startsWith(`fc`) ||
-    host.toLowerCase().startsWith(`fd`)
-  )
-    return true
+  // IPv6 literal (very small allowlist of dangerous ranges). Every check
+  // requires the colon so it only ever matches an actual IPv6 literal — a DNS
+  // hostname reaching here (e.g. `fc2.com`, `fda.gov`) has no colon and stays
+  // public. `fc00::/7` (ULA) is the first hextet starting `fc`/`fd`.
+  const lower = host.toLowerCase()
+  if (lower === `::1` || lower.startsWith(`fe80:`)) return true
+  if (/^f[cd][0-9a-f]{0,2}:/.test(lower)) return true
   return false
 }

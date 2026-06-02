@@ -53,7 +53,9 @@ describe(`isPrivateOrLinkLocal (SSRF guard)`, () => {
     `0.0.0.0`, // unspecified
     `::1`, // IPv6 loopback
     `fe80::1`, // IPv6 link-local
+    `fc00::1`, // IPv6 ULA (fc00::/7)
     `fd00::1`, // IPv6 ULA
+    `fdab:1234::1`, // IPv6 ULA, longer first hextet
   ])(`flags %s as private/link-local`, (host) => {
     expect(isPrivateOrLinkLocal(host)).toBe(true)
   })
@@ -64,6 +66,20 @@ describe(`isPrivateOrLinkLocal (SSRF guard)`, () => {
       expect(isPrivateOrLinkLocal(host)).toBe(false)
     }
   )
+
+  // The IPv6 ULA check (fc00::/7) must require the colon: a DNS hostname that
+  // merely starts with `fc`/`fd` is public and must not be denied. Without the
+  // colon guard these popular domains were wrongly blocked by the docker fetch
+  // tool regardless of the allow-all / allowlist policy.
+  it.each([
+    `fc2.com`, // top-traffic public site
+    `fda.gov`, // US FDA
+    `fdrive.com`,
+    `fcdomain.com`,
+    `fc-bayern.com`,
+  ])(`treats fc/fd public hostname %s as public`, (host) => {
+    expect(isPrivateOrLinkLocal(host)).toBe(false)
+  })
 
   it.each([
     `2130706433`, // 127.0.0.1 as a decimal integer
