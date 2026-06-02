@@ -1,7 +1,7 @@
 {
   "name": "@electric-sql/client",
   "description": "Postgres everywhere - your data, in sync, wherever you need it.",
-  "version": "1.5.19",
+  "version": "1.5.20",
   "keywords": [
     "tanstack-intent"
   ],
@@ -18,7 +18,7 @@
     "@types/uuid": "^10.0.0",
     "@typescript-eslint/eslint-plugin": "^7.14.1",
     "@typescript-eslint/parser": "^7.14.1",
-    "@vitest/coverage-istanbul": "4.0.15",
+    "@vitest/coverage-v8": "4.0.15",
     "cache-control-parser": "^2.0.6",
     "concurrently": "^8.2.2",
     "eslint": "^8.57.0",

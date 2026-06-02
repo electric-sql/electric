@@ -1,5 +1,22 @@
 # @electric-ax/agents-desktop
 
+## 0.1.12
+
+### Patch Changes
+
+- 7d029a9: Keep Electric Agents Desktop awake while the local runtime is active, with controls in Settings, onboarding, and the tray menu.
+- Updated dependencies [ae2d039]
+  - @electric-sql/client@1.5.20
+
+## 0.1.11
+
+### Patch Changes
+
+- 0a15a47: Bundle the Electric CLI with the desktop app and add managed install/status UI.
+- d921a9f: Allow desktop users to choose which configured provider models appear in Horton's model picker, and group model dropdown entries by provider.
+- aed2189: Add Kimi / Moonshot API support for local Horton runtimes, including model catalog entries, runtime provider resolution, desktop credential persistence, and UI credential inputs.
+- 7001f8f: Add a launch-at-login preference for Electric Agents Desktop, including background startup handling, settings/onboarding controls, and a shared Base UI switch control.
+
 ## 0.1.10
 
 ### Patch Changes

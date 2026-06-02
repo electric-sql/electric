@@ -54,6 +54,8 @@ export type UpdateTrayDeps = {
   connectServer: (serverId: string) => Promise<void>
   disconnectServer: (serverId: string) => Promise<void>
   saveSettings: () => Promise<void>
+  preventAppSuspension: boolean
+  setPreventAppSuspension: (enabled: boolean) => Promise<void>
   stopRuntimeEntry: (entry: RuntimeEntry) => Promise<void>
   restartRuntime: (serverId?: string | null) => Promise<void>
   refreshDesktopState: () => void
@@ -85,6 +87,17 @@ export function updateTray(deps: UpdateTrayDeps): void {
     {
       label: `New Window`,
       click: () => deps.createWindow(),
+    },
+    { type: `separator` },
+    {
+      label: `Keep Awake While Local Runtime Is Active`,
+      type: `checkbox`,
+      checked: deps.preventAppSuspension,
+      click: (item) => {
+        void deps.setPreventAppSuspension(item.checked).then(() => {
+          deps.refreshDesktopState()
+        })
+      },
     },
     { type: `separator` },
     {

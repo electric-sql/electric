@@ -23,7 +23,15 @@ import type {
 } from '../src/types'
 
 // Soak-style defaults. Override with env vars for focused hunts.
-const NUM_RUNS = Number(process.env.PBT_MICRO_RUNS ?? `500`)
+// Keep coverage runs lighter: Istanbul retains substantially more async/PBT
+// state than normal test runs, while the ordinary test job still exercises
+// the full 500-run default.
+const IS_COVERAGE_RUN =
+  process.argv.includes(`--coverage`) ||
+  process.env.npm_lifecycle_event === `coverage`
+const NUM_RUNS = Number(
+  process.env.PBT_MICRO_RUNS ?? (IS_COVERAGE_RUN ? `50` : `500`)
+)
 const SEED = process.env.PBT_MICRO_SEED
   ? Number(process.env.PBT_MICRO_SEED)
   : undefined
@@ -1686,6 +1694,19 @@ describe(`canonicalShapeKey cross-module invariants PBT`, () => {
 //      no further fetches are issued.
 
 describe(`Shape #fetchSnapshotWithRetry 409 loop PBT`, () => {
+  let warnSpy: ReturnType<typeof vi.spyOn>
+
+  beforeEach(() => {
+    // These tests intentionally generate 409 responses without handles to
+    // exercise retry/cache-buster behavior. Suppress the expected warning so
+    // Vitest coverage doesn't retain large per-test stderr buffers.
+    warnSpy = vi.spyOn(console, `warn`).mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    warnSpy.mockRestore()
+  })
+
   const emptySnapshotResponseBody = JSON.stringify({
     metadata: {
       snapshot_mark: 1,

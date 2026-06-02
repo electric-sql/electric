@@ -1,5 +1,39 @@
 # @electric-ax/agents-server-ui
 
+## 0.4.14
+
+### Patch Changes
+
+- 7d029a9: Keep Electric Agents Desktop awake while the local runtime is active, with controls in Settings, onboarding, and the tray menu.
+- Updated dependencies [9e01e58]
+  - @electric-ax/agents-runtime@0.3.7
+
+## 0.4.13
+
+### Patch Changes
+
+- e9ea591: Show detailed agent run failure information in the timeline instead of the generic `Run failed` fallback. Run errors now include their error code, failed tool calls preserve and render their error text, and failed runs fall back to tool errors or finish reasons when no run error row is available.
+- 86643d5: Prefer live Electric Cloud server metadata when rendering saved Cloud servers so project, environment, and workspace names stay up to date in the desktop server picker.
+- 0a15a47: Bundle the Electric CLI with the desktop app and add managed install/status UI.
+- d921a9f: Allow desktop users to choose which configured provider models appear in Horton's model picker, and group model dropdown entries by provider.
+- 98b51d6: Update Electric Agents packages to depend on the stable Durable Streams
+  packages instead of pkg.pr builds. This pulls in `@durable-streams/client`
+  0.2.6, `@durable-streams/server` 0.3.5, and `@durable-streams/state` 0.2.9.
+  Examples now resolve `@electric-ax/agents-runtime` from the workspace so they
+  do not keep older registry runtime builds pinned in the lockfile.
+- aed2189: Add Kimi / Moonshot API support for local Horton runtimes, including model catalog entries, runtime provider resolution, desktop credential persistence, and UI credential inputs.
+- 52a641f: Add manifest-backed attachments for agents.
+
+  Attachments are uploaded through entity routes, stored in private attachment streams, referenced by manifest entries, and exposed to runtime handlers through `ctx.attachments`. The server UI can attach image files to user messages, renders message attachments with authenticated preview/download actions, exposes image previews from attachment manifest rows, rolls back uploaded attachments when send fails, and hides image attachment controls for models whose registered pi-ai metadata does not include image input. Image hydration now has a simple newest-images byte/count guardrail. Horton title generation now also works when the first user message is sent after attachment upload, including image-only starts.
+
+- c89aac8: Surface failed signal and kill requests in the UI with toast notifications instead of silently swallowing persistence failures.
+- 7001f8f: Add a launch-at-login preference for Electric Agents Desktop, including background startup handling, settings/onboarding controls, and a shared Base UI switch control.
+- Updated dependencies [e9ea591]
+- Updated dependencies [98b51d6]
+- Updated dependencies [aed2189]
+- Updated dependencies [52a641f]
+  - @electric-ax/agents-runtime@0.3.6
+
 ## 0.4.12
 
 ### Patch Changes

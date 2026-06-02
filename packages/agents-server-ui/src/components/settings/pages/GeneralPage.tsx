@@ -15,6 +15,8 @@ import { Button, ConfirmDialog, Icon, Switch, Text } from '../../../ui'
 import {
   clearAllLocalData,
   loadLaunchAtLoginStatus,
+  loadPreventAppSuspensionPreference,
+  savePreventAppSuspensionPreference,
   setLaunchAtLogin,
   type LaunchAtLoginStatus,
 } from '../../../lib/server-connection'
@@ -49,6 +51,10 @@ export function GeneralPage(): React.ReactElement {
   const [launchAtLoginError, setLaunchAtLoginError] = useState<string | null>(
     null
   )
+  const [preventAppSuspension, setPreventAppSuspension] = useState(true)
+  const [preventAppSuspensionError, setPreventAppSuspensionError] = useState<
+    string | null
+  >(null)
 
   useEffect(() => {
     if (!isDesktop) return
@@ -60,6 +66,17 @@ export function GeneralPage(): React.ReactElement {
       .catch((err) => {
         if (!cancelled) {
           setLaunchAtLoginError(
+            err instanceof Error ? err.message : String(err)
+          )
+        }
+      })
+    void loadPreventAppSuspensionPreference()
+      .then((value) => {
+        if (!cancelled && value !== null) setPreventAppSuspension(value)
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setPreventAppSuspensionError(
             err instanceof Error ? err.message : String(err)
           )
         }
@@ -91,6 +108,21 @@ export function GeneralPage(): React.ReactElement {
       setLaunchAtLoginError(err instanceof Error ? err.message : String(err))
     } finally {
       setLaunchAtLoginBusy(false)
+    }
+  }
+
+  const handlePreventAppSuspensionChange = async (
+    enabled: boolean
+  ): Promise<void> => {
+    setPreventAppSuspension(enabled)
+    setPreventAppSuspensionError(null)
+    try {
+      await savePreventAppSuspensionPreference(enabled)
+    } catch (err) {
+      setPreventAppSuspension(!enabled)
+      setPreventAppSuspensionError(
+        err instanceof Error ? err.message : String(err)
+      )
     }
   }
 
@@ -193,6 +225,24 @@ export function GeneralPage(): React.ReactElement {
                     void handleLaunchAtLoginChange(checked)
                   }}
                   ariaLabel="Open Electric Agents at login"
+                />
+              }
+            />
+          )}
+          {isDesktop && (
+            <SettingsRow
+              label="Keep desktop awake while local runtime is active"
+              description={
+                preventAppSuspensionError ??
+                `Allows ongoing sessions and incoming mobile-triggered sessions to keep working while the local desktop runtime is active. The display can still sleep.`
+              }
+              control={
+                <Switch
+                  checked={preventAppSuspension}
+                  onCheckedChange={(checked) => {
+                    void handlePreventAppSuspensionChange(checked)
+                  }}
+                  ariaLabel="Keep desktop awake while local runtime is active"
                 />
               }
             />

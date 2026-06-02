@@ -1,5 +1,67 @@
 # @electric-ax/agents-mobile
 
+## 0.0.9
+
+### Patch Changes
+
+- Updated dependencies [7d029a9]
+- Updated dependencies [9e01e58]
+  - @electric-ax/agents-server-ui@0.4.14
+  - @electric-ax/agents-runtime@0.3.7
+
+## 0.0.8
+
+### Patch Changes
+
+- acad656: Add an in-app "Delete account" button to the Account screen (visible
+  when signed in to Electric Cloud). Tapping the button opens the
+  account-deletion instructions page at
+  https://electric-sql.com/about/legal/delete-account in the system
+  browser. Required for Google Play submission.
+- 1c6ebf9: Bump `expo` to `54.0.35` and `expo-router` to `~6.0.24` to match the
+  patch versions expo-doctor expects (so the `Agents Mobile PR` CI
+  check stops failing on `expo-doctor`'s "packages match versions
+  required by installed Expo SDK" check).
+- b2ddd59: Redesign mobile onboarding to mirror the desktop wizard and make it
+  mandatory until a server connection is saved.
+  - Two-step wizard (Cloud sign-in → Server selection) sharing the desktop
+    wizard's visual anatomy — step indicator, step header, section cards,
+    pinned footer respecting safe-area insets. Mobile has no local Horton
+    runtime so the "model providers" step is omitted.
+  - Cloud server picker rows commit the connection on tap via a new
+    `onConnect(url)` callback, fixing the bug where tapping a cloud row
+    populated the URL input instead of connecting. Manual self-hosted URL
+    entry lives in a collapsible "Custom server" section with inline error
+    display.
+  - Onboarding is now mandatory until `onComplete` saves a URL — the
+    "Don't show this again" and "Skip for now" escape valves are removed.
+    Invariant: `onboardingDismissed=true ⟹ serverUrl is set`.
+  - `ServerSetupScreen` is rewritten on top of the step-2 anatomy so the
+    Settings → Server screen and the onboarding server step stay aligned.
+  - Cloud → server auto-advance is a one-shot per sign-in transition,
+    seeded from `startStep` so warm restarts with a restored session
+    don't silently re-advance when the user taps Back.
+  - `DiagnosticsScreen` gains a `__DEV__`-gated **Clear all local data**
+    action that wipes AsyncStorage, signs out of Cloud, and reloads the
+    JS bundle into a fresh onboarding flow. Copy mirrors the desktop
+    Settings → General → Reset wording.
+
+- cf27b10: Align the mobile sessions overview with the desktop sidebar by hiding
+  principal entities and using the same lifecycle ordering for status
+  groups.
+- 1331cf6: Prevent the mobile session screen from flashing white while the embedded stream WebView boots by applying the themed background to all native DOM/WebView layers.
+- Updated dependencies [e9ea591]
+- Updated dependencies [86643d5]
+- Updated dependencies [0a15a47]
+- Updated dependencies [d921a9f]
+- Updated dependencies [98b51d6]
+- Updated dependencies [aed2189]
+- Updated dependencies [52a641f]
+- Updated dependencies [c89aac8]
+- Updated dependencies [7001f8f]
+  - @electric-ax/agents-runtime@0.3.6
+  - @electric-ax/agents-server-ui@0.4.13
+
 ## 0.0.7
 
 ### Patch Changes

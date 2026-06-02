@@ -1,5 +1,34 @@
 # @electric-ax/agents-server
 
+## 0.4.14
+
+### Patch Changes
+
+- 9a92af5: Defer logger initialization to first use so packaged Electron apps (where cwd is `/`) no longer crash trying to `mkdir '/logs'`. Logger init is now wrapped in try-catch with stderr fallback so logging infrastructure never throws. Add `ELECTRIC_AGENTS_LOG_FILE=false` escape hatch to the agents package for parity with agents-server.
+- Updated dependencies [ae2d039]
+- Updated dependencies [9e01e58]
+  - @electric-sql/client@1.5.20
+  - @electric-ax/agents-runtime@0.3.7
+
+## 0.4.13
+
+### Patch Changes
+
+- 98b51d6: Update Electric Agents packages to depend on the stable Durable Streams
+  packages instead of pkg.pr builds. This pulls in `@durable-streams/client`
+  0.2.6, `@durable-streams/server` 0.3.5, and `@durable-streams/state` 0.2.9.
+  Examples now resolve `@electric-ax/agents-runtime` from the workspace so they
+  do not keep older registry runtime builds pinned in the lockfile.
+- 52a641f: Add manifest-backed attachments for agents.
+
+  Attachments are uploaded through entity routes, stored in private attachment streams, referenced by manifest entries, and exposed to runtime handlers through `ctx.attachments`. The server UI can attach image files to user messages, renders message attachments with authenticated preview/download actions, exposes image previews from attachment manifest rows, rolls back uploaded attachments when send fails, and hides image attachment controls for models whose registered pi-ai metadata does not include image input. Image hydration now has a simple newest-images byte/count guardrail. Horton title generation now also works when the first user message is sent after attachment upload, including image-only starts.
+
+- Updated dependencies [e9ea591]
+- Updated dependencies [98b51d6]
+- Updated dependencies [aed2189]
+- Updated dependencies [52a641f]
+  - @electric-ax/agents-runtime@0.3.6
+
 ## 0.4.12
 
 ## 0.4.11

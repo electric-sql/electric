@@ -613,6 +613,12 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #tickPromiseResolver?: () => void
   #tickPromiseRejecter?: (reason?: unknown) => void
   #messageChain = Promise.resolve<void[]>([]) // promise chain for incoming messages
+  // Tracks when subscriber callbacks are actively being delivered from
+  // #messageChain. requestSnapshot can inject a nested batch from inside a
+  // subscriber; in that reentrant case #publish uses this as an intentional
+  // escape hatch to deliver the nested snapshot batch immediately rather than
+  // queueing it behind the subscriber that is awaiting it.
+  #isPublishing = false
   #snapshotTracker = new SnapshotTracker()
   #pauseLock: PauseLock
   #currentFetchUrl?: URL // Current fetch URL for computing shape key
@@ -884,6 +890,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }
 
   async #requestShape(requestShapeCacheBuster?: string): Promise<void> {
+    if (this.options.signal?.aborted) {
+      this.#teardown()
+      return
+    }
+
     // ErrorState should never reach the request loop — re-throw so
     // #start's catch block can route it through onError properly.
     if (this.#syncState instanceof ErrorState) {
@@ -1002,8 +1013,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
         if (!newShapeHandle) {
           console.warn(
             `[Electric] Received 409 response without a shape handle header. ` +
-              `This likely indicates a proxy or CDN stripping required headers.`,
-            new Error(`stack trace`)
+              `This likely indicates a proxy or CDN stripping required headers.`
           )
         }
         const nextRequestShapeCacheBuster = createCacheBuster()
@@ -1426,7 +1436,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
     return true
   }
 
-  async #onMessages(batch: Array<Message<T>>, isSseMessage = false) {
+  async #onMessages(
+    batch: Array<Message<T>>,
+    isSseMessage = false,
+    opts: { allowReentrantPublishBypass?: boolean } = {}
+  ) {
     if (!Array.isArray(batch)) {
       console.warn(
         `[Electric] #onMessages called with non-array argument (${typeof batch}). ` +
@@ -1478,7 +1492,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
       return true // Always process control messages
     })
 
-    await this.#publish(messagesToProcess)
+    await this.#publish(messagesToProcess, {
+      allowReentrantBypass: opts.allowReentrantPublishBypass,
+    })
   }
 
   /**
@@ -1770,12 +1786,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
     }
   }
 
-  async #publish(messages: Message<T>[]): Promise<void[]> {
-    // We process messages asynchronously
-    // but SSE's `onmessage` handler is synchronous.
-    // We use a promise chain to ensure that the handlers
-    // execute sequentially in the order the messages were received.
-    this.#messageChain = this.#messageChain.then(() =>
+  async #publish(
+    messages: Message<T>[],
+    opts: { allowReentrantBypass?: boolean } = {}
+  ): Promise<void[]> {
+    const deliver = () =>
       Promise.all(
         Array.from(this.#subscribers.values()).map(async ([callback, __]) => {
           try {
@@ -1787,7 +1802,24 @@ export class ShapeStream<T extends Row<unknown> = Row>
           }
         })
       )
-    )
+
+    // We process messages asynchronously but SSE's `onmessage` handler is
+    // synchronous. Use a promise chain to ensure handlers execute sequentially
+    // in the order messages were received. Only requestSnapshot's injected
+    // snapshot batch is allowed to bypass the queue reentrantly; ordinary
+    // stream batches (including SSE batches) must remain serialized.
+    if (this.#isPublishing && opts.allowReentrantBypass) {
+      return deliver()
+    }
+
+    this.#messageChain = this.#messageChain.then(async () => {
+      this.#isPublishing = true
+      try {
+        return await deliver()
+      } finally {
+        this.#isPublishing = false
+      }
+    })
 
     return this.#messageChain
   }
@@ -1953,7 +1985,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
         metadata,
         new Set(data.map((message) => message.key))
       )
-      this.#onMessages(dataWithEndBoundary, false)
+      await this.#onMessages(dataWithEndBoundary, false, {
+        allowReentrantPublishBypass: true,
+      })
 
       // On cold start the stream's offset is still at "now". Advance it
       // to the snapshot's position so no updates are missed in between.
@@ -2088,8 +2122,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
         } else {
           console.warn(
             `[Electric] Received 409 response without a shape handle header. ` +
-              `This likely indicates a proxy or CDN stripping required headers.`,
-            new Error(`stack trace`)
+              `This likely indicates a proxy or CDN stripping required headers.`
           )
         }
         const nextCacheBuster = createCacheBuster()
