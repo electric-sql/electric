@@ -1,4 +1,5 @@
 import { handleRestRequest } from './routes'
+import { handleTrpcRequest } from './trpc-router'
 import type { WorkerEnv } from './env'
 
 export default {
@@ -7,6 +8,12 @@ export default {
     env: WorkerEnv,
     _ctx?: ExecutionContext
   ): Promise<Response> {
+    const url = new URL(request.url)
+
+    if (url.pathname.startsWith(`/trpc`)) {
+      return handleTrpcRequest(request, env)
+    }
+
     const restResponse = await handleRestRequest(request, env)
     if (restResponse) return restResponse
 

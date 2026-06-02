@@ -34,4 +34,19 @@ describe(`living wiki worker`, () => {
       error: `Not found`,
     })
   })
+
+  it(`returns tRPC health JSON`, async () => {
+    const request = new Request(`https://living-wiki.test/trpc/health`, {
+      method: `GET`,
+    })
+    const response = await worker.fetch(request, env, {} as ExecutionContext)
+
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as { result: { data: unknown } }
+    expect(body.result.data).toMatchObject({
+      ok: true,
+      app: `living-wiki`,
+      env: `test`,
+    })
+  })
 })
