@@ -249,6 +249,8 @@ function GenericChatBody({
       if (row.inbox && anchor) {
         const capturedAnchor = anchor
         map.set(row.$key, () => {
+          // forkEntity surfaces failures via a danger toast before
+          // rejecting, so the caller just needs to swallow the rejection.
           void forkEntity(entityUrl, { pointer: capturedAnchor })
             .then((res) =>
               navigate({

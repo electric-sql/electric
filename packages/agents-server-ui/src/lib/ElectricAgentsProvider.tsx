@@ -324,6 +324,29 @@ function showSignalFailureToast(input: {
   })
 }
 
+function showForkFailureToast(input: {
+  entityUrl: string
+  status?: number
+  responseText?: string
+  error?: unknown
+}): void {
+  const status = input.status ? ` (${input.status})` : ``
+  const parsed =
+    input.responseText !== undefined
+      ? parseErrorResponse(input.responseText)
+      : input.error instanceof Error
+        ? input.error.message
+        : input.error
+          ? String(input.error)
+          : null
+  const details = parsed ? compactToastText(parsed) : `No response details.`
+  showToast({
+    tone: `danger`,
+    title: `Fork failed${status}`,
+    description: `${input.entityUrl}: ${details}`,
+  })
+}
+
 function createSpawnAction(
   baseUrl: string,
   entitiesCollection: EntitiesCollection
@@ -525,28 +548,33 @@ function createForkEntity(baseUrl: string) {
           },
         }
       : {}
-    const res = await serverFetch(entityApiUrl(baseUrl, entityUrl, `/fork`), {
-      method: `POST`,
-      headers: { 'content-type': `application/json` },
-      body: JSON.stringify(body),
-    })
+    const url = entityApiUrl(baseUrl, entityUrl, `/fork`)
+    let res: Response
+    try {
+      res = await serverFetch(url, {
+        method: `POST`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify(body),
+      })
+    } catch (err) {
+      showForkFailureToast({ entityUrl, error: err })
+      throw err
+    }
     if (!res.ok) {
       const text = await res.text().catch(() => ``)
-      let message = text || `Fork failed (${res.status})`
-      try {
-        const data = JSON.parse(text) as {
-          error?: { message?: string }
-          message?: string
-        }
-        message = data.error?.message ?? data.message ?? message
-      } catch {
-        // Keep the raw response text.
-      }
+      showForkFailureToast({
+        entityUrl,
+        status: res.status,
+        responseText: text,
+      })
+      const message = parseErrorResponse(text) ?? `Fork failed (${res.status})`
       throw new Error(message)
     }
     const data = (await res.json()) as { root?: { url?: string } }
     if (!data.root?.url) {
-      throw new Error(`Fork returned an invalid response`)
+      const message = `Fork returned an invalid response`
+      showForkFailureToast({ entityUrl, error: message })
+      throw new Error(message)
     }
     return { url: data.root.url }
   }
