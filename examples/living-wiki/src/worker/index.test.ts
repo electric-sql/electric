@@ -49,4 +49,12 @@ describe(`living wiki worker`, () => {
       env: `test`,
     })
   })
+
+  it(`does not route non-tRPC prefix matches to tRPC`, async () => {
+    const request = new Request(`https://living-wiki.test/trpcfoo`)
+    const response = await worker.fetch(request, env, {} as ExecutionContext)
+
+    expect(response.status).toBe(200)
+    await expect(response.text()).resolves.toBe(`Living Wiki API`)
+  })
 })

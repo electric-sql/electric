@@ -10,7 +10,7 @@ export default {
   ): Promise<Response> {
     const url = new URL(request.url)
 
-    if (url.pathname.startsWith(`/trpc`)) {
+    if (url.pathname === `/trpc` || url.pathname.startsWith(`/trpc/`)) {
       return handleTrpcRequest(request, env)
     }
 
