@@ -16,7 +16,7 @@
     "@mariozechner/pi-agent-core": "^0.70.2",
     "@radix-ui/themes": "^3.3.0",
     "@sinclair/typebox": "^0.34.0",
-    "@tanstack/db": "^0.6.0",
+    "@tanstack/db": "^0.6.6",
     "@tanstack/react-db": "^0.1.78",
     "d3-force": "^3.0.0",
     "react": "^19.2.4",

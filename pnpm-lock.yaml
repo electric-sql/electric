@@ -182,8 +182,8 @@ importers:
         specifier: ^0.34.0
         version: 0.34.49
       '@tanstack/db':
-        specifier: ^0.6.0
-        version: 0.6.5(typescript@5.8.3)
+        specifier: ^0.6.6
+        version: 0.6.7(typescript@5.8.3)
       '@tanstack/react-db':
         specifier: ^0.1.78
         version: 0.1.83(react@19.2.5)(typescript@5.8.3)
@@ -38696,7 +38696,7 @@ snapshots:
       metro-cache: 0.83.3
       metro-core: 0.83.3
       metro-runtime: 0.83.3
-      yaml: 2.8.1
+      yaml: 2.9.0
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -38711,7 +38711,7 @@ snapshots:
       metro-cache: 0.83.7
       metro-core: 0.83.7
       metro-runtime: 0.83.7
-      yaml: 2.8.1
+      yaml: 2.9.0
     transitivePeerDependencies:
       - bufferutil
       - supports-color
