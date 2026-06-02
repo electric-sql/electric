@@ -46,8 +46,7 @@ defmodule Electric.Application do
       # Cap the Sentry transport sender backlog to shed load instead of letting
       # queued Sentry events grow unbounded during error bursts. `sync_threshold:
       # nil` disables the default sync-mode switch (which would block the logging
-      # process) so we rely solely on discard. Leading-edge protection only; see
-      # electric-sql/alco-agent-tasks#45 §3.
+      # process) so we rely solely on discard.
       Electric.Telemetry.Sentry.add_logger_handler(
         Electric.Telemetry.Sentry.default_handler_id(),
         discard_threshold: 2000,

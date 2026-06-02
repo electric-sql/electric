@@ -26,9 +26,7 @@ config :logger, :default_formatter,
 
 # The default logger_std_h handler writes application logs to stdout. Cap its
 # OLP mailbox so error bursts shed stdout logs instead of blocking Logger
-# callers (sync mode) or letting the queue grow unbounded. This is leading-edge
-# protection under redeployment shock; it is not sufficient under deep
-# scheduler starvation. See electric-sql/alco-agent-tasks#45 §3.
+# callers (sync mode) or letting the queue grow unbounded.
 config :logger, :default_handler,
   config: %{sync_mode_qlen: 2000, drop_mode_qlen: 2000, flush_qlen: 5000}
 
@@ -385,8 +383,7 @@ if Electric.telemetry_enabled?() do
            # Cap the OLP mailbox so log bursts shed events instead of letting
            # the queue grow unbounded. `sync_mode_qlen` is intentionally omitted:
            # OtelMetricExporter.LogHandler forces `sync_mode_qlen == drop_mode_qlen`,
-           # so setting it is a no-op. Same leading-edge-only caveat as the default
-           # handler above (electric-sql/alco-agent-tasks#45 §3).
+           # so setting it is a no-op.
            drop_mode_qlen: 2000,
            flush_qlen: 5000,
            metadata_map: %{
