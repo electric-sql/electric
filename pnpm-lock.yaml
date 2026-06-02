@@ -182,8 +182,8 @@ importers:
         specifier: ^0.34.0
         version: 0.34.49
       '@tanstack/db':
-        specifier: ^0.6.0
-        version: 0.6.5(typescript@5.8.3)
+        specifier: ^0.6.6
+        version: 0.6.6(typescript@5.8.3)
       '@tanstack/react-db':
         specifier: ^0.1.78
         version: 0.1.83(react@19.2.5)(typescript@5.8.3)

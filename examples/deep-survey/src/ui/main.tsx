@@ -85,7 +85,7 @@ function App() {
       setSendError(null)
       try {
         const res = await fetch(
-          `${config.darixUrl}${swarm.orchestratorUrl}/send`,
+          `${config.darixUrl}/_electric/entities${swarm.orchestratorUrl}/send`,
           {
             method: `POST`,
             headers: { 'Content-Type': `application/json` },
