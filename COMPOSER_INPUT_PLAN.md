@@ -4,7 +4,8 @@
 
 Implemented through the core runtime, server, built-in Horton integration, and
 desktop/server UI composer. Remaining work is polish-level: broader browser/a11y
-coverage and future rich reference node types beyond slash commands.
+coverage, richer slash-command argument UX, and future rich reference node types
+beyond slash commands.
 
 ## Summary
 
@@ -441,6 +442,10 @@ command, returns skill tools (`use_skill` / `remove_skill`) for model-initiated
 loading, and exposes a `skills_catalog` context source that handlers can merge
 into their existing `ctx.useContext` call.
 
+Skill context and manifest entries are flushed before the first agent run starts,
+so UI timelines and manifest drawers can show proactively loaded slash-command
+context during the response rather than only after the wake completes.
+
 ## Implementation Touchpoints
 
 Likely runtime and server files:
@@ -472,24 +477,24 @@ Likely built-in agent files:
 
 ### 1. Shared Types And Validation
 
-- Add `ComposerInputPayload` and `ComposerNode` types.
-- Add runtime validation for `composer_input`.
-- Define offset and node invariant checks.
-- Add tests for valid and invalid payloads.
-- Add parser/serializer fixtures with real slash-command and multiline examples.
+- [x] Add `ComposerInputPayload` and `ComposerNode` types.
+- [x] Add runtime validation for `composer_input`.
+- [x] Define offset and node invariant checks.
+- [x] Add tests for valid and invalid payloads.
+- [x] Add parser/serializer fixtures with real slash-command and multiline examples.
 
 ### 2. Static Slash Commands
 
-- Add `EntityDefinition.slashCommands`.
-- Materialize static commands into `db.collections.slashCommands`.
-- Add tests for entity definition registration and UI-readable command state.
+- [x] Add `EntityDefinition.slashCommands`.
+- [x] Materialize static commands into `db.collections.slashCommands`.
+- [x] Add tests for entity definition registration and UI-readable command state.
 
 ### 3. Handler Wake And Helpers
 
-- Move or mirror wake onto `ctx.wake`.
-- Tighten wake typing with at least an inbox discriminant.
-- Add composer-input helper functions.
-- Add tests for inbox-to-wake mapping.
+- [x] Move or mirror wake onto `ctx.wake`.
+- [x] Tighten wake typing with at least an inbox discriminant.
+- [x] Add composer-input helper functions.
+- [x] Add tests for inbox-to-wake mapping.
 
 ### 4. Dynamic Slash Commands
 
@@ -507,14 +512,15 @@ Likely built-in agent files:
 - [x] Add slash-command popover sourced from `db.collections.slashCommands`.
 - [x] Add keyboard behavior and paste handling.
 - [x] Add multiline serialization and source-span tests.
-- Add basic accessibility coverage for command popover behavior.
-- Add focused UI tests where practical.
+- [ ] Add browser/a11y coverage for command popover behavior.
+- [ ] Add focused UI tests where practical.
 
 ### 6. Built-In Agent Integration
 
 - [x] Update built-in handlers to accept `composer_input`.
 - [x] Add skill-backed command registration if skill metadata supports it.
 - [x] Add examples such as `/quickstart`, `/pr-review`, or `/worktree`.
+- [x] Flush proactively loaded skill context before the first agent run starts.
 
 ## Follow-Up Polish
 
