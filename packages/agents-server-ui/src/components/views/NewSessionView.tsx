@@ -30,6 +30,7 @@ import {
   schemaModelSupportsImageInput,
 } from '../../lib/modelCapabilities'
 import { ComposerEditor, serializeComposerInput } from '../ComposerEditor'
+import { ComposerShell } from '../ComposerShell'
 import styles from '../NewSessionPage.module.css'
 import type {
   ElectricEntityType,
@@ -1043,33 +1044,22 @@ function DefaultAgentComposer({
         .filter(Boolean)
         .join(` `)}
     >
-      <div
-        className={[
-          styles.composer,
-          dropActive ? styles.composerDropActive : null,
-        ]
-          .filter(Boolean)
-          .join(` `)}
+      <ComposerShell
+        className={styles.spawnComposerShell}
+        disabled={disabled}
+        dropActive={dropActive}
         onPaste={handlePaste}
-        {...dropZoneProps}
-      >
-        {imageAttachmentsEnabled && (
-          <AttachmentPreviewTray
-            attachments={attachments}
-            onRemove={removeAttachment}
-          />
-        )}
-        <ComposerEditor
-          value={value}
-          onChange={setValue}
-          onSubmit={submit}
-          slashCommands={slashCommands}
-          placeholder={placeholder}
-          disabled={disabled || submitting}
-          className={styles.newSessionComposerEditor}
-        />
-        <div className={styles.composerFooter}>
-          <div className={styles.composerControls}>
+        dropZoneProps={dropZoneProps}
+        attachments={
+          imageAttachmentsEnabled ? (
+            <AttachmentPreviewTray
+              attachments={attachments}
+              onRemove={removeAttachment}
+            />
+          ) : null
+        }
+        controls={
+          <>
             {imageAttachmentsEnabled && (
               <AttachmentActionMenu
                 disabled={disabled || submitting}
@@ -1106,8 +1096,10 @@ function DefaultAgentComposer({
                 />
               ) : null
             )}
-          </div>
-          <div className={styles.composerSendCluster}>
+          </>
+        }
+        send={
+          <>
             {submitting && (
               <span className={styles.composerHint}>Starting…</span>
             )}
@@ -1125,9 +1117,18 @@ function DefaultAgentComposer({
             >
               <Icon icon={ArrowUp} size={3} />
             </button>
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      >
+        <ComposerEditor
+          value={value}
+          onChange={setValue}
+          onSubmit={submit}
+          slashCommands={slashCommands}
+          placeholder={placeholder}
+          disabled={disabled || submitting}
+        />
+      </ComposerShell>
       <div className={styles.composerMeta}>
         {runners.length > 0 && (
           <RunnerPickerPill

@@ -11,6 +11,7 @@ import {
   readTextPayload,
 } from '../lib/sendMessage'
 import { ComposerEditor, serializeComposerInput } from './ComposerEditor'
+import { ComposerShell } from './ComposerShell'
 import { Icon, Stack, Text } from '../ui'
 import {
   AttachmentActionMenu,
@@ -187,12 +188,12 @@ export function MessageInput({
               mode: `queued`,
               attachments: files,
             })
-        : sendComposerAction?.({
-            payload:
-              composerPayload ??
-              serializeComposerInput(text, effectiveSlashCommands),
-            mode: `queued`,
-          })
+          : sendComposerAction?.({
+              payload:
+                composerPayload ??
+                serializeComposerInput(text, effectiveSlashCommands),
+              mode: `queued`,
+            })
       if (!tx) return
       if (!editingMessage) onSend?.()
       setValue(``)
@@ -317,39 +318,39 @@ export function MessageInput({
           {error}
         </Text>
       )}
-      <div
-        className={[
-          styles.composer,
-          disabled ? styles.disabled : null,
-          dropActive ? styles.composerDropActive : null,
-        ]
-          .filter(Boolean)
-          .join(` `)}
-        {...dropZoneProps}
-      >
-        {editingMessage && (
-          <div className={styles.editingBanner}>
-            <Text size={1} tone="muted">
-              Editing queued message
-            </Text>
-            <button
-              type="button"
-              aria-label="Cancel editing queued message"
-              onClick={cancelEditing}
-              className={styles.editingCancel}
-            >
-              Cancel
-            </button>
-          </div>
-        )}
-        {imageAttachmentsEnabled && (
-          <AttachmentPreviewTray
-            attachments={attachments}
-            onRemove={removeAttachment}
-          />
-        )}
-        <div className={styles.composerBody} onPaste={handlePaste}>
-          {imageAttachmentsEnabled && (
+      <ComposerShell
+        className={styles.chatComposerShell}
+        disabled={disabled}
+        dropActive={dropActive}
+        onPaste={handlePaste}
+        dropZoneProps={dropZoneProps}
+        banner={
+          editingMessage ? (
+            <div className={styles.editingBanner}>
+              <Text size={1} tone="muted">
+                Editing queued message
+              </Text>
+              <button
+                type="button"
+                aria-label="Cancel editing queued message"
+                onClick={cancelEditing}
+                className={styles.editingCancel}
+              >
+                Cancel
+              </button>
+            </div>
+          ) : null
+        }
+        attachments={
+          imageAttachmentsEnabled ? (
+            <AttachmentPreviewTray
+              attachments={attachments}
+              onRemove={removeAttachment}
+            />
+          ) : null
+        }
+        controls={
+          imageAttachmentsEnabled ? (
             <AttachmentActionMenu
               disabled={!canAttachFiles}
               accept={imageAttachmentDraftPolicy.accept}
@@ -357,15 +358,9 @@ export function MessageInput({
               onFilesSelected={addAttachments}
               onAttach={openAttachmentPicker}
             />
-          )}
-          <ComposerEditor
-            value={value}
-            onChange={setValue}
-            onSubmit={handleSubmit}
-            slashCommands={effectiveSlashCommands}
-            placeholder={disabled ? `Entity stopped` : `Send a message...`}
-            disabled={disabled}
-          />
+          ) : null
+        }
+        send={
           <button
             type="button"
             aria-label={showStop ? `Stop generating` : `Send message`}
@@ -397,8 +392,17 @@ export function MessageInput({
               {...(showStop ? { fill: `currentColor`, strokeWidth: 0 } : {})}
             />
           </button>
-        </div>
-      </div>
+        }
+      >
+        <ComposerEditor
+          value={value}
+          onChange={setValue}
+          onSubmit={handleSubmit}
+          slashCommands={effectiveSlashCommands}
+          placeholder={disabled ? `Entity stopped` : `Send a message...`}
+          disabled={disabled}
+        />
+      </ComposerShell>
     </Stack>
   )
 }

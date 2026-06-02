@@ -20,6 +20,8 @@ import {
 import { Schema, type Node as ProseMirrorNode } from 'prosemirror-model'
 import { EditorState, Plugin, TextSelection } from 'prosemirror-state'
 import { Decoration, DecorationSet } from 'prosemirror-view'
+import { keymap } from 'prosemirror-keymap'
+import { deleteSelection, selectAll } from 'prosemirror-commands'
 import 'prosemirror-view/style/prosemirror.css'
 
 import styles from './MessageInput.module.css'
@@ -46,13 +48,32 @@ const composerSchema = new Schema({
       parseDOM: [{ tag: `br` }],
       toDOM: () => [`br`],
     },
-    slash_command: {
+    slash_call: {
       inline: true,
       group: `inline`,
+      content: `slash_command slash_argument*`,
+      isolating: true,
+      selectable: false,
+      attrs: {},
+      parseDOM: [{ tag: `span[data-composer-node="slash_call"]` }],
+      toDOM: () => [
+        `span`,
+        {
+          class: styles.slashCall,
+          'data-composer-node': `slash_call`,
+        },
+        0,
+      ],
+    },
+    slash_command: {
+      inline: true,
       atom: true,
-      selectable: true,
+      selectable: false,
       attrs: {
-        name: {},
+        // default is unused — every call site creates with a real name — but
+        // ProseMirror requires a default so it can synthesise this node when
+        // filling the required position in slash_call's content expression.
+        name: { default: `` },
       },
       parseDOM: [
         {
@@ -80,12 +101,11 @@ const composerSchema = new Schema({
     },
     slash_argument: {
       inline: true,
-      group: `inline`,
       content: `text*`,
       isolating: true,
-      selectable: true,
+      selectable: false,
       attrs: {
-        name: {},
+        name: { default: `` },
         type: { default: `string` },
         required: { default: false },
       },
@@ -169,20 +189,27 @@ export const formatSlashCommandArgumentHint = (
   return ``
 }
 
+interface SlashCallInsertPlan {
+  nodes: Array<ProseMirrorNode>
+  cursorOffset: number
+}
+
 const createSlashCommandInsertContent = (
   schema: Schema,
   command: SlashCommandRow
-): Array<ProseMirrorNode> => {
+): SlashCallInsertPlan | null => {
   const name = normalizeCommandName(command.name)
-  const commandNode = schema.nodes.slash_command?.create({ name })
-  if (!commandNode) return []
+  const commandType = schema.nodes.slash_command
+  const callType = schema.nodes.slash_call
+  const argumentType = schema.nodes.slash_argument
+  if (!commandType || !callType) return null
 
-  const content: Array<ProseMirrorNode> = [commandNode]
-  const argumentNodeType = schema.nodes.slash_argument
+  const commandNode = commandType.create({ name })
+  const callChildren: Array<ProseMirrorNode> = [commandNode]
   for (const argument of command.arguments ?? []) {
-    if (!argumentNodeType) break
-    content.push(
-      argumentNodeType.create({
+    if (!argumentType) break
+    callChildren.push(
+      argumentType.create({
         name: argument.name,
         type: argument.type,
         required: argument.required === true,
@@ -190,15 +217,18 @@ const createSlashCommandInsertContent = (
     )
   }
 
-  if ((command.arguments ?? []).length === 0) {
-    content.push(schema.text(` `))
+  const callNode = callType.create(null, callChildren)
+  const hasArguments = (command.arguments ?? []).length > 0
+  const trailingSpace = schema.text(` `)
+
+  return {
+    nodes: [callNode, trailingSpace],
+    // hasArguments: cursor lands at start of the first argument's text content
+    //   = enter call (+1) + past command atom (+1) + enter arg (+1)
+    // no args: cursor lands after the trailing space
+    cursorOffset: hasArguments ? 3 : callNode.nodeSize + 1,
   }
-
-  return content
 }
-
-const contentSize = (content: Array<ProseMirrorNode>): number =>
-  content.reduce((size, node) => size + node.nodeSize, 0)
 
 const appendSourcePart = (parts: Array<string>, part: string): void => {
   if (
@@ -209,19 +239,6 @@ const appendSourcePart = (parts: Array<string>, part: string): void => {
     parts.push(` `)
   }
   parts.push(part)
-}
-
-const firstArgumentInnerOffset = (
-  content: Array<ProseMirrorNode>
-): number | null => {
-  let offset = 0
-  for (const node of content) {
-    if (node.type.name === `slash_argument`) {
-      return offset + 1
-    }
-    offset += node.nodeSize
-  }
-  return null
 }
 
 const createDocFromSource = (source: string): ProseMirrorNode => {
@@ -247,10 +264,14 @@ const sourceFromDoc = (doc: ProseMirrorNode): string => {
         parts.push(node.text ?? ``)
       } else if (node.type.name === `hard_break`) {
         parts.push(`\n`)
-      } else if (node.type.name === `slash_command`) {
-        parts.push(`/${String(node.attrs.name)}`)
-      } else if (node.type.name === `slash_argument`) {
-        appendSourcePart(parts, node.textContent)
+      } else if (node.type.name === `slash_call`) {
+        node.forEach((child) => {
+          if (child.type.name === `slash_command`) {
+            parts.push(`/${String(child.attrs.name)}`)
+          } else if (child.type.name === `slash_argument`) {
+            appendSourcePart(parts, child.textContent)
+          }
+        })
       }
     })
   })
@@ -309,23 +330,24 @@ const serializeComposerInputFromDoc = (
         return
       }
 
-      if (node.type.name === `slash_command`) {
-        const name = normalizeCommandName(String(node.attrs.name))
-        const raw = `/${name}`
-        const start = sourceParts.join(``).length
-        sourceParts.push(raw)
-        nodes.push({
-          kind: `slash_command`,
-          start,
-          end: start + raw.length,
-          raw,
-          name,
+      if (node.type.name === `slash_call`) {
+        node.forEach((child) => {
+          if (child.type.name === `slash_command`) {
+            const name = normalizeCommandName(String(child.attrs.name))
+            const raw = `/${name}`
+            const start = sourceParts.join(``).length
+            sourceParts.push(raw)
+            nodes.push({
+              kind: `slash_command`,
+              start,
+              end: start + raw.length,
+              raw,
+              name,
+            })
+          } else if (child.type.name === `slash_argument`) {
+            appendSourcePart(sourceParts, child.textContent)
+          }
         })
-        return
-      }
-
-      if (node.type.name === `slash_argument`) {
-        appendSourcePart(sourceParts, node.textContent)
       }
     })
   })
@@ -347,6 +369,18 @@ const serializeComposerInputFromDoc = (
   return mergedNodes.length > 0 ? { source, nodes: mergedNodes } : { source }
 }
 
+const createSlashCallAnchor = (): HTMLElement => {
+  const el = document.createElement(`span`)
+  el.className = styles.slashCallAnchor
+  // Must be explicitly contenteditable=false; otherwise the browser treats
+  // the empty span as editable and arrow keys / clicks can park the caret
+  // inside it, which then maps back to the same PM position and confuses
+  // navigation across the slash_call boundary.
+  el.contentEditable = `false`
+  el.setAttribute(`aria-hidden`, `true`)
+  return el
+}
+
 const createDecorationPlugin = (
   slashCommands: Array<SlashCommandRow>
 ): Plugin =>
@@ -359,6 +393,25 @@ const createDecorationPlugin = (
         const decorations: Array<Decoration> = []
 
         state.doc.descendants((node, pos) => {
+          // Slash-call anchors: tiny non-editable widgets either side of every
+          // slash_call so the cursor always has visible space to land in/click
+          // on, even when the call is the first or last child of a paragraph.
+          if (node.type.name === `slash_call`) {
+            decorations.push(
+              Decoration.widget(pos, createSlashCallAnchor, {
+                side: -1,
+                key: `slash-call-anchor-before`,
+              })
+            )
+            decorations.push(
+              Decoration.widget(pos + node.nodeSize, createSlashCallAnchor, {
+                side: 1,
+                key: `slash-call-anchor-after`,
+              })
+            )
+            return false
+          }
+
           if (!node.isText || !node.text) return
 
           const commandPattern = /(^|\s)\/([a-z][a-z0-9_-]*)(?=\s|$)/g
@@ -412,7 +465,15 @@ const createEditorState = (
   EditorState.create({
     doc: createDocFromSource(value),
     schema: composerSchema,
-    plugins: [reactKeys(), createDecorationPlugin(slashCommands)],
+    plugins: [
+      reactKeys(),
+      keymap({
+        'Mod-a': selectAll,
+        Backspace: deleteSelection,
+        Delete: deleteSelection,
+      }),
+      createDecorationPlugin(slashCommands),
+    ],
   })
 
 function ComposerEditorEvents({
@@ -470,61 +531,256 @@ function ComposerEditorEvents({
     if (!selection.empty) return false
 
     const $cursor = selection.$from
+
+    // Empty argument slot: remove just the slot.
     if (
       $cursor.parent.type.name === `slash_argument` &&
       $cursor.parent.content.size === 0
     ) {
       const from = $cursor.before()
       const to = $cursor.after()
-      const beforeArgument = doc.resolve(from)
-      const maybeSpace = beforeArgument.nodeBefore
-      const deleteFrom =
-        maybeSpace?.isText && maybeSpace.text === ` ` ? from - 1 : from
-      view.dispatch(view.state.tr.delete(deleteFrom, to).scrollIntoView())
+      view.dispatch(view.state.tr.delete(from, to).scrollIntoView())
       return true
     }
 
+    // At the start of a non-empty argument: swallow the backspace so PM
+    // doesn't try to merge across the isolating boundary.
+    if (
+      $cursor.parent.type.name === `slash_argument` &&
+      $cursor.parentOffset === 0
+    ) {
+      return true
+    }
+
+    // Inside a slash_call but outside any argument slot: delete the whole call.
+    if ($cursor.parent.type.name === `slash_call`) {
+      const callStart = $cursor.before()
+      const callEnd = $cursor.after()
+      const $after = doc.resolve(callEnd)
+      const trailing = $after.nodeAfter
+      const removeTrailingSpace =
+        trailing?.isText === true && trailing.text === ` `
+      const to = removeTrailingSpace ? callEnd + 1 : callEnd
+      view.dispatch(view.state.tr.delete(callStart, to).scrollIntoView())
+      return true
+    }
+
+    // Just after a slash_call (optionally past a trailing space): delete the call.
     const cursor = selection.from
     const beforeCursor = doc.resolve(cursor)
     const maybeSpace = beforeCursor.nodeBefore
     const hasTrailingSpace =
-      maybeSpace?.isText && maybeSpace.text === ` ` && cursor > 1
-    const atomCursor = hasTrailingSpace ? cursor - 1 : cursor
-    const atomBefore = doc.resolve(atomCursor).nodeBefore
+      maybeSpace?.isText === true && maybeSpace.text === ` ` && cursor > 1
+    const callCursor = hasTrailingSpace ? cursor - 1 : cursor
+    const callBefore = doc.resolve(callCursor).nodeBefore
 
-    if (
-      atomBefore?.type.name !== `slash_command` &&
-      atomBefore?.type.name !== `slash_argument`
-    ) {
-      return false
-    }
+    if (callBefore?.type.name !== `slash_call`) return false
 
-    const from = atomCursor - atomBefore.nodeSize
-    const to = hasTrailingSpace ? cursor : atomCursor
+    const from = callCursor - callBefore.nodeSize
+    const to = hasTrailingSpace ? cursor : callCursor
     view.dispatch(view.state.tr.delete(from, to).scrollIntoView())
     return true
   })
+
+  const collapseSelectionToSide = useEditorEventCallback(
+    (view, direction: `left` | `right`) => {
+      if (!view) return false
+      const { state } = view
+      const { selection, doc } = state
+      if (selection.empty) return false
+      const target = direction === `left` ? selection.from : selection.to
+      const bias = direction === `left` ? -1 : 1
+      const next = TextSelection.near(doc.resolve(target), bias)
+      view.dispatch(state.tr.setSelection(next).scrollIntoView())
+      return true
+    }
+  )
+
+  const moveCursorAcrossSlot = useEditorEventCallback(
+    (view, direction: `left` | `right`) => {
+      if (!view) return false
+      const { state } = view
+      const { selection, doc } = state
+      if (!selection.empty) return false
+      const $cursor = selection.$from
+
+      if (direction === `right`) {
+        // End of an argument: hop to the next slot or exit the call.
+        if (
+          $cursor.parent.type.name === `slash_argument` &&
+          $cursor.parentOffset === $cursor.parent.content.size
+        ) {
+          const after = $cursor.after()
+          const $after = doc.resolve(after)
+          const next = $after.nodeAfter
+          if (next?.type.name === `slash_argument`) {
+            view.dispatch(
+              state.tr.setSelection(TextSelection.create(doc, after + 1))
+            )
+            return true
+          }
+          const callEnd = $after.after()
+          view.dispatch(
+            state.tr.setSelection(TextSelection.create(doc, callEnd))
+          )
+          return true
+        }
+
+        // Inside slash_call but outside any arg (e.g. cursor parked between
+        // slash_command and the first arg, or right at the end of the call).
+        if ($cursor.parent.type.name === `slash_call`) {
+          const parent = $cursor.parent
+          const start = $cursor.start()
+          let nextArgEnter: number | null = null
+          let walk = 0
+          parent.forEach((child) => {
+            if (
+              nextArgEnter === null &&
+              child.type.name === `slash_argument` &&
+              walk >= $cursor.parentOffset
+            ) {
+              nextArgEnter = start + walk + 1
+            }
+            walk += child.nodeSize
+          })
+          if (nextArgEnter !== null) {
+            view.dispatch(
+              state.tr.setSelection(TextSelection.create(doc, nextArgEnter))
+            )
+            return true
+          }
+          view.dispatch(
+            state.tr.setSelection(TextSelection.create(doc, $cursor.after()))
+          )
+          return true
+        }
+
+        // Approaching a slash_call from the left: jump into first slot or past it.
+        const nodeAfter = $cursor.nodeAfter
+        if (nodeAfter?.type.name === `slash_call`) {
+          const callStart = $cursor.pos
+          let argOffset = -1
+          let walk = 0
+          nodeAfter.forEach((child) => {
+            if (argOffset === -1 && child.type.name === `slash_argument`) {
+              argOffset = walk
+            }
+            walk += child.nodeSize
+          })
+          if (argOffset !== -1) {
+            view.dispatch(
+              state.tr.setSelection(
+                TextSelection.create(doc, callStart + 1 + argOffset + 1)
+              )
+            )
+            return true
+          }
+          view.dispatch(
+            state.tr.setSelection(
+              TextSelection.create(doc, callStart + nodeAfter.nodeSize)
+            )
+          )
+          return true
+        }
+        return false
+      }
+
+      // direction === 'left'
+      if (
+        $cursor.parent.type.name === `slash_argument` &&
+        $cursor.parentOffset === 0
+      ) {
+        const before = $cursor.before()
+        const $before = doc.resolve(before)
+        const prev = $before.nodeBefore
+        if (prev?.type.name === `slash_argument`) {
+          view.dispatch(
+            state.tr.setSelection(TextSelection.create(doc, before - 1))
+          )
+          return true
+        }
+        const callStart = $before.before()
+        view.dispatch(
+          state.tr.setSelection(TextSelection.create(doc, callStart))
+        )
+        return true
+      }
+
+      // Inside slash_call but outside any arg: walk back to the end of the
+      // nearest preceding arg, or exit before the call if there isn't one.
+      if ($cursor.parent.type.name === `slash_call`) {
+        const parent = $cursor.parent
+        const start = $cursor.start()
+        let prevArgEnd: number | null = null
+        let walk = 0
+        parent.forEach((child) => {
+          if (
+            child.type.name === `slash_argument` &&
+            walk + child.nodeSize <= $cursor.parentOffset
+          ) {
+            prevArgEnd = start + walk + child.nodeSize - 1
+          }
+          walk += child.nodeSize
+        })
+        if (prevArgEnd !== null) {
+          view.dispatch(
+            state.tr.setSelection(TextSelection.create(doc, prevArgEnd))
+          )
+          return true
+        }
+        view.dispatch(
+          state.tr.setSelection(TextSelection.create(doc, $cursor.before()))
+        )
+        return true
+      }
+
+      // Approaching a slash_call from the right: jump into last slot or before it.
+      const nodeBefore = $cursor.nodeBefore
+      if (nodeBefore?.type.name === `slash_call`) {
+        const callEnd = $cursor.pos
+        const callStart = callEnd - nodeBefore.nodeSize
+        let lastArgOffset = -1
+        let lastArgSize = 0
+        let walk = 0
+        nodeBefore.forEach((child) => {
+          if (child.type.name === `slash_argument`) {
+            lastArgOffset = walk
+            lastArgSize = child.nodeSize
+          }
+          walk += child.nodeSize
+        })
+        if (lastArgOffset !== -1) {
+          const endOfArg = callStart + 1 + lastArgOffset + lastArgSize - 1
+          view.dispatch(
+            state.tr.setSelection(TextSelection.create(doc, endOfArg))
+          )
+          return true
+        }
+        view.dispatch(
+          state.tr.setSelection(TextSelection.create(doc, callStart))
+        )
+        return true
+      }
+      return false
+    }
+  )
 
   const insertSlashCommand = useEditorEventCallback(
     (view, command: SlashCommandRow) => {
       const currentSlashQuery = keyboardStateRef.current.slashQuery
       if (!view || !currentSlashQuery) return
 
-      const content = createSlashCommandInsertContent(
-        view.state.schema,
-        command
-      )
-      if (content.length === 0) return
+      const plan = createSlashCommandInsertContent(view.state.schema, command)
+      if (!plan) return
       const transaction = view.state.tr.replaceWith(
         currentSlashQuery.from,
         currentSlashQuery.to,
-        content
+        plan.nodes
       )
       transaction.setSelection(
         TextSelection.create(
           transaction.doc,
-          currentSlashQuery.from +
-            (firstArgumentInnerOffset(content) ?? contentSize(content))
+          currentSlashQuery.from + plan.cursorOffset
         )
       )
 
@@ -602,6 +858,24 @@ function ComposerEditorEvents({
         return
       }
 
+      if (
+        event.key === `ArrowRight` &&
+        (collapseSelectionToSide(`right`) || moveCursorAcrossSlot(`right`))
+      ) {
+        event.preventDefault()
+        event.stopPropagation()
+        return
+      }
+
+      if (
+        event.key === `ArrowLeft` &&
+        (collapseSelectionToSide(`left`) || moveCursorAcrossSlot(`left`))
+      ) {
+        event.preventDefault()
+        event.stopPropagation()
+        return
+      }
+
       if (event.key === `Enter` && !event.shiftKey) {
         event.preventDefault()
         event.stopPropagation()
@@ -646,21 +920,17 @@ function SlashCommandPopover({
     (view, command: SlashCommandRow) => {
       if (!view || !slashQuery) return
 
-      const content = createSlashCommandInsertContent(
-        view.state.schema,
-        command
-      )
-      if (content.length === 0) return
+      const plan = createSlashCommandInsertContent(view.state.schema, command)
+      if (!plan) return
       const transaction = view.state.tr.replaceWith(
         slashQuery.from,
         slashQuery.to,
-        content
+        plan.nodes
       )
       transaction.setSelection(
         TextSelection.create(
           transaction.doc,
-          slashQuery.from +
-            (firstArgumentInnerOffset(content) ?? contentSize(content))
+          slashQuery.from + plan.cursorOffset
         )
       )
 

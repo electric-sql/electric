@@ -251,43 +251,16 @@
   gap: 0;
   margin: 0 calc(-1 * var(--ds-space-4));
 }
-.composer {
-  display: flex;
-  flex-direction: column;
-  gap: var(--ds-space-2);
-  padding: var(--ds-space-3) var(--ds-space-4);
-  background: var(--ds-input-bg);
-  border: 1px solid var(--ds-gray-a4);
-  border-radius: var(--ds-radius-5);
-  box-shadow:
-    0 1px 3px rgba(15, 15, 30, 0.04),
-    0 1px 1px rgba(15, 15, 30, 0.02);
-  transition: border-color 0.15s ease;
-  /* Stack on top of `.composerMeta` so its bottom edge paints over
-     the meta tray's hidden top 20px (mirrors the chat composer's
-     z-indexing over `<EntityContextDrawer>`). */
-  position: relative;
-  z-index: 1;
-}
-.composer:focus-within {
-  border-color: var(--ds-accent-a6);
-}
-.composerDropActive {
-  border-color: var(--ds-accent-a7);
-  box-shadow:
-    0 0 0 1px var(--ds-accent-a5),
-    0 8px 28px rgba(15, 15, 30, 0.1);
+/* Variant tuning for the shared `<ComposerShell>` on the spawn page.
+   Inherits the shell's default geometry (16px sides, 8px footer
+   bottom inset, -8px cluster negatives so chip labels line up with
+   the editor text column). The first-prompt input wants a roomier
+   typing surface than chat, so we raise the editor's min-content
+   height. */
+.spawnComposerShell {
+  --composer-editor-min-h: 72px;
 }
 
-.composerDropActive::after {
-  content: '';
-  position: absolute;
-  inset: 6px;
-  border: 1px dashed var(--ds-accent-a8);
-  border-radius: calc(var(--ds-radius-5) - 5px);
-  background: var(--ds-accent-a2);
-  pointer-events: none;
-}
 .composerDisabled {
   opacity: 0.6;
 }
@@ -333,63 +306,6 @@
   z-index: 0;
 }
 
-/* Auto-grow is driven by inline `height = scrollHeight` from
-   NewSessionPage.tsx (mirrors `MessageInput.tsx`). `min-height`
-   floors the resting state at ~3 lines so the empty composer reads
-   as a generous "tell me what to do" input rather than a single
-   line. `max-height` caps growth and `overflow: auto` then takes
-   over for very long prompts. The browser clamps the inline height
-   against both bounds so the JS auto-resize stays a one-liner. */
-.composerTextarea {
-  border: none;
-  outline: none;
-  background: transparent;
-  font-size: var(--ds-chat-text);
-  line-height: var(--ds-chat-text-lh);
-  color: var(--ds-text-1);
-  font-family: var(--ds-font-body);
-  resize: none;
-  overflow: auto;
-  min-height: 72px;
-  max-height: 280px;
-  width: 100%;
-  padding: 0;
-}
-.composerTextarea::placeholder {
-  color: var(--ds-text-3);
-}
-
-.newSessionComposerEditor {
-  min-height: 72px;
-}
-
-.composerFooter {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--ds-space-3);
-  flex-wrap: wrap;
-}
-.composerControls {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-wrap: wrap;
-  min-width: 0;
-  /* Pill triggers have 8px inline padding. Shift the overlay left by
-     that amount so the first pill's label aligns with the textarea
-     text column, then drop it 4px so the chip edge has the same
-     8px inset from the composer bottom as it has from the side. */
-  margin-left: -8px;
-  transform: translateY(4px);
-}
-.composerSendCluster {
-  display: flex;
-  align-items: center;
-  gap: var(--ds-space-3);
-  margin-left: auto;
-  margin-right: -4px;
-}
 .composerHint {
   font-size: var(--ds-text-xs);
   color: var(--ds-text-3);

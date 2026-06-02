@@ -1,0 +1,177 @@
+/* Shared frame for the message composer. Both the chat composer
+   (`MessageInput`) and the spawn-page composer (`NewSessionView`) render
+   their layout through this shell with identical padding/margin geometry
+   — the only thing variants differ on is the editor's min-content height
+   (chat is compact, spawn is roomy for the first prompt).
+
+   All layout is variable-driven so a future variant can re-tune any axis
+   without forking the shell. Variables read here & in
+   `MessageInput.module.css`:
+
+     --composer-footer-h         height of the absolute footer row
+                                 (matches its tallest child, used to
+                                 size the editor's reserved bottom inset)
+     --composer-editor-padding-* padding on the contenteditable so the
+                                 click target extends to the frame edge
+     --composer-editor-min-h     min content-height of the editor (set
+                                 per variant — chat default 40px, spawn
+                                 raises to 72px)
+     --composer-footer-pad-*     padding inside the footer row
+     --composer-controls-margin-left,
+     --composer-send-margin-right  pulls the clusters outside the footer
+                                   padding so chip labels line up with
+                                   the editor's text column
+
+   Defaults set here keep both variants visually identical out of the
+   box: 16px editor sides, 8px footer bottom inset, -8px cluster
+   negatives. */
+.shell {
+  --composer-footer-h: 24px;
+  --composer-editor-padding-top: var(--ds-space-3);
+  --composer-editor-padding-right: var(--ds-space-4);
+  --composer-editor-padding-bottom: calc(
+    var(--composer-footer-h) + var(--ds-space-2)
+  );
+  --composer-editor-padding-left: var(--ds-space-4);
+  --composer-footer-pad-right: var(--ds-space-4);
+  --composer-footer-pad-bottom: var(--ds-space-2);
+  --composer-footer-pad-left: var(--ds-space-4);
+  --composer-controls-margin-left: -8px;
+  --composer-send-margin-right: -8px;
+
+  box-sizing: border-box;
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  background: var(--ds-surface-raised);
+  border: 1px solid var(--ds-border-1);
+  border-radius: var(--ds-radius-5);
+  /* Soft drop shadow so the composer reads as a docked card lifted off
+     its parent surface (the timeline above in chat, the page
+     background in spawn). */
+  box-shadow:
+    0 1px 3px rgba(15, 15, 30, 0.04),
+    0 1px 1px rgba(15, 15, 30, 0.02);
+  transition: border-color 0.15s ease;
+}
+
+.shell:focus-within {
+  border-color: var(--ds-accent-a6);
+}
+
+.disabled {
+  opacity: 0.5;
+}
+
+/* Drag-and-drop highlight: accent border + dashed inner outline. */
+.dropActive {
+  border-color: var(--ds-accent-a7);
+  box-shadow:
+    0 0 0 1px var(--ds-accent-a5),
+    0 8px 28px rgba(15, 15, 30, 0.1);
+}
+.dropActive::after {
+  content: '';
+  position: absolute;
+  inset: 6px;
+  border: 1px dashed var(--ds-accent-a8);
+  border-radius: calc(var(--ds-radius-5) - 5px);
+  background: var(--ds-accent-a2);
+  pointer-events: none;
+}
+
+/* Re-inset the attachment preview tray now that the shell no longer
+   pads its children. CSS modules hash the literal `previewTray` class
+   to something like `_previewTray_abc`, so substring-match the global
+   class on whatever AttachmentDrafts renders. */
+.shell :global([class*='previewTray']) {
+  margin: var(--ds-space-3) var(--ds-space-3) 0;
+}
+
+/* Absolutely positioned over the editor's reserved bottom padding so
+   the typing area expands underneath rather than pushing the controls.
+   No `min-height` — collapses to the natural height of its tallest
+   child (the 24px icon buttons).
+
+   Padding is variable-driven so each variant can tune the inset
+   independently of the editor padding (which is set on the wrap by
+   the matching `--composer-editor-padding-*` vars). Defaults to 8px
+   on each side, matching the spawn variant. */
+.footer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ds-space-3);
+  flex-wrap: wrap;
+  /* Padding-top reserves a small fade strip *inside* the footer's own
+     box so the gradient is the footer's leading edge rather than a
+     separate element floating above it. Controls remain anchored at
+     the bottom of the footer via the existing bottom padding.
+     The fade is intentionally tiny (5px) so it only covers the last
+     few descender pixels of the last visible text line — the editor's
+     `::after` spacer (sized to `--composer-editor-padding-bottom`)
+     keeps the rest of the line clear of the solid footer surface. */
+  padding: var(--composer-footer-fade-h, 5px)
+    var(--composer-footer-pad-right, var(--ds-space-2))
+    var(--composer-footer-pad-bottom, var(--ds-space-2))
+    var(--composer-footer-pad-left, var(--ds-space-2));
+  /* Single linear gradient that does both jobs in one pass:
+     - 0 → fade-h:        transparent → surface (the fade strip)
+     - fade-h → 100%:     constant surface (the solid seal)
+     A layered approach (fade strip + separate solid fill) doesn't
+     work here because the solid layer paints under the fade strip
+     too, so the "transparent" stop is actually covered → hard line
+     at the top of the footer. Repeating the stop at `fade-h` and
+     again at `100%` keeps everything below the fade strip a flat
+     `--ds-surface-raised` and gives the fade real transparency. The
+     `color-mix(..., transparent)` at the first stop avoids `transparent`'s
+     `rgba(0,0,0,0)` interpolation, which would tint the fade dark on
+     a light surface. The shell's bottom radii are inherited so the
+     opaque seal stays flush with the rounded corners. */
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--ds-surface-raised), transparent) 0,
+    var(--ds-surface-raised) var(--composer-footer-fade-h, 5px),
+    var(--ds-surface-raised) 100%
+  );
+  border-bottom-left-radius: inherit;
+  border-bottom-right-radius: inherit;
+  /* Footer catches clicks itself (no `pointer-events: none`) so its
+     bare background can route empty-area clicks back into the editor
+     via the `onClick` handler on the React side. Controls still get
+     priority because their own click handlers stop the focus path
+     (we filter on `event.target === event.currentTarget`). */
+  cursor: text;
+}
+/* Controls and the send cluster should not show the text caret cursor
+   on hover — they have their own pointer affordances. */
+.controls,
+.sendCluster {
+  cursor: auto;
+}
+
+/* Negative margins let a variant pull the controls / send cluster a
+   few pixels outside the footer's padding box. The spawn variant uses
+   `-8px` so its pill triggers (which have 8px inline padding) get their
+   labels lined up with the editor's text column. Default 0 keeps both
+   clusters honoring the footer padding directly. */
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  min-width: 0;
+  margin-left: var(--composer-controls-margin-left, 0);
+}
+
+.sendCluster {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-3);
+  margin-left: auto;
+  margin-right: var(--composer-send-margin-right, 0);
+}
