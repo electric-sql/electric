@@ -14,6 +14,7 @@ import { WORKER_TOOL_NAMES, createSpawnWorkerTool } from '../tools/spawn-worker'
 import {
   REASONING_EFFORT_VALUES,
   resolveBuiltinModelConfig,
+  type BuiltinAgentModelConfig,
   type BuiltinModelCatalog,
 } from '../model-catalog'
 import type { WorkerToolName } from '../tools/spawn-worker'
@@ -117,7 +118,11 @@ function buildToolsForWorker(
   tools: ReadonlyArray<WorkerToolName>,
   sandbox: Sandbox,
   ctx: HandlerContext,
-  readSet: Set<string>
+  readSet: Set<string>,
+  opts: {
+    modelCatalog: BuiltinModelCatalog
+    modelConfig: BuiltinAgentModelConfig
+  }
 ): Array<AgentTool> {
   const out: Array<AgentTool> = []
   for (const name of tools) {
@@ -138,7 +143,12 @@ function buildToolsForWorker(
         out.push(braveSearchTool)
         break
       case `fetch_url`:
-        out.push(createFetchUrlTool(sandbox))
+        out.push(
+          createFetchUrlTool(sandbox, {
+            catalog: opts.modelCatalog,
+            modelConfig: opts.modelConfig,
+          })
+        )
         break
       case `spawn_worker`:
         out.push(createSpawnWorkerTool(ctx))
@@ -298,15 +308,16 @@ export function registerWorker(
       // ctx.sandbox is provisioned and disposed by the runtime sandbox
       // pool — subsequent wakes for the same worker reuse the same
       // instance until idle-TTL eviction.
+      const modelConfig = resolveBuiltinModelConfig(
+        modelCatalog,
+        args as unknown as Readonly<Record<string, unknown>>
+      )
       const builtinTools = buildToolsForWorker(
         args.tools,
         ctx.sandbox,
         ctx,
-        readSet
-      )
-      const modelConfig = resolveBuiltinModelConfig(
-        modelCatalog,
-        args as unknown as Readonly<Record<string, unknown>>
+        readSet,
+        { modelCatalog, modelConfig }
       )
 
       const sharedStateTools: Array<AgentTool> = []
