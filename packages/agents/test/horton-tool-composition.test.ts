@@ -48,6 +48,12 @@ async function captureAgentConfig(
     firstWake: false,
     tags: {},
     db: { collections: { inbox: { toArray: [] } } },
+    sandbox: {
+      workingDirectory: `/work`,
+      readFile: vi.fn(async () => {
+        throw new Error(`ENOENT`)
+      }),
+    },
     useContext: vi.fn(),
     useAgent,
     agent: { run: vi.fn(async () => {}) },

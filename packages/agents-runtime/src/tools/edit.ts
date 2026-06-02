@@ -1,15 +1,16 @@
-import { readFile, writeFile } from 'node:fs/promises'
 import { relative, resolve } from 'node:path'
 import { createTwoFilesPatch } from 'diff'
 import { Type } from '@sinclair/typebox'
 import { runtimeLog } from '../log'
+import { SandboxError } from '../sandbox/types'
+import type { Sandbox } from '../sandbox/types'
 import type { AgentTool } from '@mariozechner/pi-agent-core'
 
 const READ_GUARD_MESSAGE = (rel: string): string =>
   `File ${rel} has not been read in this session (sessions are per-wake — re-read after waking from a worker).`
 
 export function createEditTool(
-  workingDirectory: string,
+  sandbox: Sandbox,
   readSet: Set<string>
 ): AgentTool {
   return {
@@ -44,29 +45,21 @@ export function createEditTool(
         new_string: string
         replace_all?: boolean
       }
+      // `key`/`rel` are pure-string normalizations (readSet key + messages);
+      // an out-of-workspace path can't have been read, so the read-guard
+      // below naturally refuses it. Symlink/containment escapes are caught
+      // from the sandbox's FS calls as SandboxError('policy').
+      const key = resolve(sandbox.workingDirectory, filePath)
+      const rel = relative(sandbox.workingDirectory, key)
       try {
-        const resolved = resolve(workingDirectory, filePath)
-        const rel = relative(workingDirectory, resolved)
-        if (rel.startsWith(`..`)) {
-          return {
-            content: [
-              {
-                type: `text` as const,
-                text: `Error: Path "${filePath}" is outside the working directory`,
-              },
-            ],
-            details: { replacements: 0 },
-          }
-        }
-
-        if (!readSet.has(resolved)) {
+        if (!readSet.has(key)) {
           return {
             content: [{ type: `text` as const, text: READ_GUARD_MESSAGE(rel) }],
             details: { replacements: 0 },
           }
         }
 
-        const original = await readFile(resolved, `utf-8`)
+        const original = (await sandbox.readFile(filePath)).toString(`utf-8`)
 
         if (!replace_all) {
           const first = original.indexOf(old_string)
@@ -98,7 +91,7 @@ export function createEditTool(
             original.slice(0, first) +
             new_string +
             original.slice(first + old_string.length)
-          await writeFile(resolved, updated, `utf-8`)
+          await sandbox.writeFile(filePath, updated)
           const patch = createTwoFilesPatch(rel, rel, original, updated)
           return {
             content: [
@@ -125,7 +118,7 @@ export function createEditTool(
           }
         }
         const updated = parts.join(new_string)
-        await writeFile(resolved, updated, `utf-8`)
+        await sandbox.writeFile(filePath, updated)
         const patch = createTwoFilesPatch(rel, rel, original, updated)
         return {
           content: [
@@ -137,6 +130,17 @@ export function createEditTool(
           details: { replacements: count, diff: patch },
         }
       } catch (err) {
+        if (err instanceof SandboxError && err.kind === `policy`) {
+          return {
+            content: [
+              {
+                type: `text` as const,
+                text: `Error: Path "${filePath}" is outside the working directory`,
+              },
+            ],
+            details: { replacements: 0 },
+          }
+        }
         runtimeLog.warn(
           `[edit tool]`,
           `failed to edit ${filePath}: ${err instanceof Error ? err.message : String(err)}`

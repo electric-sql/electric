@@ -11,6 +11,7 @@ import { Router, json, status } from 'itty-router'
 import { apiError } from '../electric-agents-http.js'
 import { parsePrincipalKey, principalUrl } from '../principal.js'
 import { dispatchPolicySchema } from '../dispatch-policy-schema.js'
+import { sandboxChoiceSchema } from '../sandbox-choice-schema.js'
 import {
   ErrCodeNotFound,
   ErrCodeUnknownEntityType,
@@ -82,6 +83,7 @@ const spawnBodySchema = Type.Object({
   tags: Type.Optional(stringRecordSchema),
   parent: Type.Optional(Type.String()),
   dispatch_policy: Type.Optional(dispatchPolicySchema),
+  sandbox: Type.Optional(sandboxChoiceSchema),
   initialMessage: Type.Optional(Type.Unknown()),
   wake: Type.Optional(
     Type.Object({
@@ -969,6 +971,7 @@ async function spawnEntity(
     tags: parsed.tags,
     parent: parsed.parent,
     dispatch_policy: dispatchPolicy,
+    sandbox: parsed.sandbox,
     initialMessage: undefined,
     wake: parsed.wake,
     created_by: principal.url,

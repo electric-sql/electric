@@ -1,5 +1,6 @@
 import type { ElectricEntity } from './ElectricAgentsProvider'
 import { abbreviatePath, detectHomeDir, tildifyPath } from './pathDisplay'
+import { getEntityRunnerId, shortenId } from './entityRuntime'
 
 /**
  * Session list grouping by recency.
@@ -199,6 +200,46 @@ export function groupByStatus(
 /** Title-case a snake_case / kebab-case identifier for use as a label. */
 function formatLabel(id: string): string {
   return id.replace(/[-_]+/g, ` `).replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+/**
+ * Group by the pinned runner read from each entity's `dispatch_policy`.
+ * `runnerLabelById` maps a runner id to its display label (resolved from the
+ * runners collection by the caller); ids absent from the map fall back to a
+ * shortened form. Entities with no pinned runner collect in a trailing "None"
+ * bucket — same convention as `groupByWorkingDirectory`. Most-populous group
+ * first, alphabetical tiebreaker.
+ */
+export function groupByRunner(
+  entities: ReadonlyArray<ElectricEntity>,
+  runnerLabelById: ReadonlyMap<string, string>
+): Array<SessionGroup> {
+  const buckets = new Map<string, Group>()
+  const noRunner = new Group(`runner:none`, `older`, `None`)
+
+  for (const entity of [...entities].sort(
+    (a, b) => b.updated_at - a.updated_at
+  )) {
+    const runnerId = getEntityRunnerId(entity)
+    if (runnerId === null) {
+      noRunner.items.push(entity)
+      continue
+    }
+    let group = buckets.get(runnerId)
+    if (!group) {
+      const label = runnerLabelById.get(runnerId) ?? shortenId(runnerId)
+      group = new Group(`runner:${runnerId}`, `older`, label, runnerId)
+      buckets.set(runnerId, group)
+    }
+    group.items.push(entity)
+  }
+
+  const runnerGroups = Array.from(buckets.values()).sort((a, b) => {
+    const dx = b.items.length - a.items.length
+    if (dx !== 0) return dx
+    return a.label.localeCompare(b.label)
+  })
+  return noRunner.items.length > 0 ? [...runnerGroups, noRunner] : runnerGroups
 }
 
 /**

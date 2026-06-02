@@ -28,6 +28,8 @@ import type {
   EntityStreamDB as RuntimeEntityStreamDB,
   EntityStreamDBWithActions as RuntimeEntityStreamDBWithActions,
 } from './entity-stream-db'
+import type { Sandbox, SandboxProfile } from './sandbox/types'
+import type { SandboxSelectionConfig } from './sandbox/identity'
 import type {
   ChildStatusEntry,
   ContextEntryAttrs as EntityContextEntryAttrs,
@@ -521,6 +523,7 @@ export interface RuntimeContext {
       initialMessage?: unknown
       tags?: Record<string, string>
       observe?: boolean
+      sandbox?: SpawnSandboxOption
     }
   ) => Promise<EntityHandle>
   observe: ((
@@ -650,6 +653,21 @@ export interface WebhookNotification {
     streams: { main: string; error: string }
     tags?: Record<string, string>
     spawnArgs?: Record<string, unknown>
+    sandbox?: {
+      profile: string
+      /** Explicit cross-entity key (set directly or adopted via `inherit`). */
+      key?: string
+      /** Per-entity (default) or per-wake identity when no explicit `key`. */
+      scope?: `entity` | `wake`
+      /** Idle-teardown durability; defaults by scope when unset. */
+      persistent?: boolean
+      /**
+       * Whether this entity owns the sandbox (create + attach + govern
+       * teardown) or only attaches to an owner's. Defaults to owner; an
+       * `inherit` spawn stores `false`.
+       */
+      owner?: boolean
+    } | null
     createdBy?: string
   }
   principal?: RuntimePrincipal
@@ -714,6 +732,15 @@ export interface ProcessWakeConfig {
   idleTimeout?: number
   /** Heartbeat interval in ms (default: 10_000) */
   heartbeatInterval?: number
+  /**
+   * Sandbox profiles registered on this runtime, indexed by profile
+   * name. Built by `createRuntimeRouter` from the `sandboxProfiles`
+   * option. processWake looks up the profile named on
+   * `entity.sandbox.profile` at wake-session start. When the entity
+   * has no profile set, processWake falls back to an in-process
+   * unrestricted sandbox at the host's cwd.
+   */
+  sandboxProfiles?: ReadonlyMap<string, SandboxProfile>
 }
 
 export type WakePhase = `setup` | `active` | `closing` | `closed`
@@ -772,6 +799,17 @@ export interface SetupCompleteResult {
 }
 
 // ── Wake Primitives ──────────────────────────────────────────────
+
+/**
+ * Sandbox selection when spawning a child entity.
+ * - `'inherit'` — adopt the parent wake's resolved sandbox (profile + resolved
+ *   key + persistent); gracefully yields none if the parent has no sandbox.
+ * - object form — pick a `profile`, optionally with `scope` / `persistent`,
+ *   join an explicit shared `key`, or `inherit: true`.
+ */
+export type SpawnSandboxOption =
+  | `inherit`
+  | (SandboxSelectionConfig & { profile?: string; inherit?: boolean })
 
 export type Wake =
   | `runFinished`
@@ -904,6 +942,18 @@ export interface HandlerContext<
    * cancellable work such as fetches or subprocesses.
    */
   signal: AbortSignal
+  /**
+   * Sandbox for this wake. Provisioned by the runtime from the
+   * sandbox profile named on `entity.sandbox.profile` (or an
+   * unrestricted-at-cwd fallback if nothing was selected) at the
+   * start of each wake-session, and disposed in `processWake`'s
+   * outer `finally`. A single wake-session that drains multiple
+   * queued wakes for the same entity reuses one sandbox; across
+   * wake-sessions a new sandbox is constructed and inter-wake state
+   * preservation is the provider's responsibility. Handlers must NOT
+   * call `sandbox.dispose()` — `processWake` owns disposal.
+   */
+  sandbox: Sandbox
   useAgent: (config: AgentConfig) => AgentHandle
   useContext: (config: UseContextConfig) => void
   timelineMessages: (opts?: TimelineProjectionOpts) => Array<TimestampedMessage>
@@ -927,6 +977,7 @@ export interface HandlerContext<
        * parent never awaits child completion.
        */
       observe?: boolean
+      sandbox?: SpawnSandboxOption
     }
   ) => Promise<EntityHandle>
   observe: ((

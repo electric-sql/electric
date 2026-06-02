@@ -1,12 +1,13 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, relative, resolve } from 'node:path'
 import { createTwoFilesPatch } from 'diff'
 import { Type } from '@sinclair/typebox'
 import { runtimeLog } from '../log'
+import { SandboxError } from '../sandbox/types'
+import type { Sandbox } from '../sandbox/types'
 import type { AgentTool } from '@mariozechner/pi-agent-core'
 
 export function createWriteTool(
-  workingDirectory: string,
+  sandbox: Sandbox,
   readSet?: Set<string>
 ): AgentTool {
   return {
@@ -26,34 +27,23 @@ export function createWriteTool(
         path: string
         content: string
       }
+      // Containment is enforced by the sandbox (it owns the filesystem);
+      // an escaping path rejects with SandboxError('policy'), handled below.
+      // `key`/`rel` are pure-string normalizations for the readSet and the
+      // diff header — not a security check.
+      const key = resolve(sandbox.workingDirectory, filePath)
+      const rel = relative(sandbox.workingDirectory, key)
       try {
-        const resolved = resolve(workingDirectory, filePath)
-        const rel = relative(workingDirectory, resolved)
-        if (rel.startsWith(`..`)) {
-          return {
-            content: [
-              {
-                type: `text` as const,
-                text: `Error: Path "${filePath}" is outside the working directory`,
-              },
-            ],
-            details: { bytesWritten: 0 },
-          }
-        }
-
         let original = ``
-        let existed = true
-        try {
-          original = await readFile(resolved, `utf-8`)
-        } catch (err) {
-          const code = (err as NodeJS.ErrnoException).code
-          if (code !== `ENOENT`) throw err
-          existed = false
+        const existed = await sandbox.exists(filePath)
+        if (existed) {
+          const buf = await sandbox.readFile(filePath)
+          original = buf.toString(`utf-8`)
         }
 
-        await mkdir(dirname(resolved), { recursive: true })
-        await writeFile(resolved, content, `utf-8`)
-        readSet?.add(resolved)
+        await sandbox.mkdir(dirname(filePath), { recursive: true })
+        await sandbox.writeFile(filePath, content)
+        readSet?.add(key)
 
         const bytesWritten = Buffer.byteLength(content, `utf-8`)
         const patch = createTwoFilesPatch(
@@ -75,6 +65,17 @@ export function createWriteTool(
           details: { bytesWritten, diff: patch, existed },
         }
       } catch (err) {
+        if (err instanceof SandboxError && err.kind === `policy`) {
+          return {
+            content: [
+              {
+                type: `text` as const,
+                text: `Error: Path "${filePath}" is outside the working directory`,
+              },
+            ],
+            details: { bytesWritten: 0 },
+          }
+        }
         runtimeLog.warn(
           `[write tool]`,
           `failed to write ${filePath}: ${err instanceof Error ? err.message : String(err)}`

@@ -3,6 +3,8 @@ import { ChevronDown, ChevronRight, Pin } from 'lucide-react'
 import { StatusDot } from './StatusDot'
 import { HoverCard, Icon, Text } from '../ui'
 import { getEntityDisplayTitle } from '../lib/entityDisplay'
+import { useEntityRuntimeInfo } from './EntityRuntimeBadges'
+import { runnerDisplayLabel } from '../lib/entityRuntime'
 import { formatAbsoluteDateTime, formatRelativeTime } from '../lib/formatTime'
 import { setWorkspaceDrag } from '../lib/workspace/dragPayload'
 import styles from './SidebarRow.module.css'
@@ -267,6 +269,14 @@ export function SidebarRowInfo({
   const lastActiveRel = formatRelativeTime(entity.updated_at)
   const lastActiveAbs = formatAbsoluteDateTime(entity.updated_at)
 
+  // Runner + sandbox the session is associated with — resolved from the
+  // (shared) runners collection so we can show labels rather than raw ids.
+  const runtime = useEntityRuntimeInfo(entity)
+  const runnerLabel = runtime.runnerId
+    ? runnerDisplayLabel(runtime.runner, runtime.runnerId)
+    : null
+  const sandboxLabel = runtime.sandbox.label
+
   return (
     <div className={styles.info}>
       <Text size={2} className={styles.infoTitle}>
@@ -284,6 +294,8 @@ export function SidebarRowInfo({
         </Text>
       </div>
       <div className={styles.infoTimes}>
+        {runnerLabel && <InfoTimeRow label="Runner" value={runnerLabel} />}
+        {sandboxLabel && <InfoTimeRow label="Sandbox" value={sandboxLabel} />}
         <InfoTimeRow label="Spawned" value={spawnedAbs} />
         <InfoTimeRow
           label="Last active"

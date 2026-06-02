@@ -32,6 +32,7 @@ import {
 } from './electric-agents-types.js'
 import { parseDispatchPolicy } from './dispatch-policy-schema.js'
 import { applyTypeDefaultSubscriptionScope } from './routing/dispatch-policy.js'
+import { resolveSandboxForSpawn } from './routing/sandbox.js'
 import {
   isBuiltInSystemPrincipalUrl,
   principalFromCreatedBy,
@@ -650,6 +651,13 @@ export class EntityManager {
           )
         : entityType.default_dispatch_policy
 
+    const sandbox = await resolveSandboxForSpawn(
+      this.registry,
+      dispatchPolicy,
+      req.sandbox,
+      parentEntity
+    )
+
     const now = Date.now()
     const entityData: ElectricAgentsEntity = {
       type: typeName,
@@ -664,6 +672,7 @@ export class EntityManager {
       write_token: writeToken,
       tags: initialTags,
       spawn_args: req.args,
+      sandbox,
       type_revision: entityType.revision,
       inbox_schemas: entityType.inbox_schemas,
       state_schemas: entityType.state_schemas,
@@ -3201,6 +3210,7 @@ export class EntityManager {
         streams: entity.streams,
         tags: entity.tags,
         spawnArgs: entity.spawn_args,
+        sandbox: entity.sandbox,
         createdBy: entity.created_by,
       },
       principal: principalFromCreatedBy(entity.created_by),

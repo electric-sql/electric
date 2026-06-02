@@ -38,12 +38,36 @@ const ENTITY_STATUSES: [EntityStatus, ...Array<EntityStatus>] = [
   `killed`,
 ]
 
+// A dispatch policy pins an entity's wakes to a target. We only need the
+// `runner` target's id for display ("which runner runs this session"); other
+// target kinds (e.g. webhook) carry no runner. Kept permissive so an unknown
+// target shape syncs without tripping validation.
+const dispatchPolicySchema = z.object({
+  targets: z
+    .array(
+      z.object({
+        type: z.string(),
+        runnerId: z.string().optional(),
+        url: z.string().optional(),
+        subscription_id: z.string().optional(),
+      })
+    )
+    .default([]),
+})
+
+export type ElectricDispatchPolicy = z.infer<typeof dispatchPolicySchema>
+
 const entitySchema = z.object({
   url: z.string(),
   type: z.string(),
   status: z.enum(ENTITY_STATUSES),
   tags: z.record(z.string()).default({}),
   spawn_args: z.record(z.unknown()).default({}),
+  sandbox: z
+    .object({ profile: z.string(), key: z.string().optional() })
+    .nullable()
+    .optional(),
+  dispatch_policy: dispatchPolicySchema.nullable().optional(),
   parent: z.string().nullable(),
   type_revision: z.coerce.number().nullable().optional(),
   inbox_schemas: z.record(z.unknown()).nullable().optional(),
@@ -61,6 +85,15 @@ const entityTypeSchema = z.object({
   serve_endpoint: z.string().nullable(),
   created_at: z.string(),
   updated_at: z.string(),
+})
+
+const sandboxProfileAdvertisementSchema = z.object({
+  name: z.string(),
+  label: z.string(),
+  description: z.string().optional(),
+  // True for off-host (remote-provider) sandboxes: the workspace lives in the
+  // provider VM, so a host working directory doesn't apply.
+  remote: z.boolean().optional(),
 })
 
 const runnerDiagnosticsSchema = z.object({
@@ -95,6 +128,12 @@ const runnerSchema = z.object({
   last_seen_at: z.string().nullable().optional(),
   liveness_lease_expires_at: z.string().nullable().optional(),
   diagnostics: runnerDiagnosticsSchema.nullable().optional(),
+  // Coerce a missing/null jsonb column to an empty list — `.default([])`
+  // covers `undefined` but not a Postgres NULL.
+  sandbox_profiles: z.preprocess(
+    (v) => (Array.isArray(v) ? v : []),
+    z.array(sandboxProfileAdvertisementSchema)
+  ),
   created_at: z.string(),
   updated_at: z.string(),
 })
@@ -112,6 +151,9 @@ const runnerRuntimeDiagnosticsSchema = z.object({
 export type ElectricEntity = z.infer<typeof entitySchema>
 export type ElectricEntityType = z.infer<typeof entityTypeSchema>
 export type ElectricRunner = z.infer<typeof runnerSchema>
+export type ElectricSandboxProfile = z.infer<
+  typeof sandboxProfileAdvertisementSchema
+>
 export type ElectricRunnerRuntimeDiagnostics = z.infer<
   typeof runnerRuntimeDiagnosticsSchema
 >
@@ -133,6 +175,8 @@ function createEntitiesCollection(baseUrl: string) {
             `status`,
             `tags`,
             `spawn_args`,
+            `sandbox`,
+            `dispatch_policy`,
             `parent`,
             `type_revision`,
             `inbox_schemas`,
@@ -268,6 +312,7 @@ interface SpawnInput {
   parent?: string
   initialMessage?: unknown
   dispatch_policy?: RunnerDispatchPolicy
+  sandbox?: { profile: string; key?: string }
 }
 
 export interface SignalInput {
@@ -328,13 +373,17 @@ function createSpawnAction(
   entitiesCollection: EntitiesCollection
 ) {
   return createOptimisticAction<SpawnInput>({
-    onMutate: ({ type, name, tags, args }) => {
+    onMutate: ({ type, name, tags, args, sandbox, dispatch_policy }) => {
       entitiesCollection.insert({
         url: `/${type}/${name}`,
         type,
         status: `spawning`,
         tags: tags ?? {},
         spawn_args: args ?? {},
+        sandbox: sandbox ?? null,
+        // Mirror the pinned runner optimistically so the runner badge shows
+        // immediately on spawn rather than after the first server sync.
+        dispatch_policy: dispatch_policy ?? null,
         parent: null,
         created_at: Date.now(),
         updated_at: Date.now(),
@@ -348,6 +397,7 @@ function createSpawnAction(
       parent,
       initialMessage,
       dispatch_policy,
+      sandbox,
     }) => {
       const body: Record<string, unknown> = {}
       if (args) body.args = args
@@ -355,6 +405,7 @@ function createSpawnAction(
       if (parent) body.parent = parent
       if (initialMessage) body.initialMessage = initialMessage
       if (dispatch_policy) body.dispatch_policy = dispatch_policy
+      if (sandbox) body.sandbox = sandbox
 
       const res = await serverFetch(entitySpawnApiUrl(baseUrl, type, name), {
         method: `PUT`,

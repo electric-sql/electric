@@ -39,6 +39,7 @@ import styles from '../NewSessionPage.module.css'
 import type {
   ElectricEntityType,
   ElectricRunner,
+  ElectricSandboxProfile,
 } from '../../lib/ElectricAgentsProvider'
 import type { StandaloneViewProps } from '../../lib/workspace/viewRegistry'
 
@@ -198,29 +199,63 @@ export function NewSessionView({
   }, [])
 
   const [selectedRunnerId, setSelectedRunnerId] = useState<string | null>(null)
-  // Re-evaluate the default whenever the list of runners or the
-  // desktop's runner id changes. Prefer the desktop's own runner if
-  // it's enabled, else fall back to the first runner.
+  const userSelectedRunnerRef = useRef(false)
+  const handleChangeSelectedRunner = useCallback((id: string | null) => {
+    userSelectedRunnerRef.current = true
+    setSelectedRunnerId(id)
+  }, [])
+  // Re-evaluate the default whenever the list of runners or the desktop's
+  // runner id changes. An explicit user choice (tracked via
+  // `userSelectedRunnerRef`) wins while it still exists; otherwise prefer the
+  // desktop's own runner if enabled, else fall back to the first runner.
   useEffect(() => {
-    if (
-      selectedRunnerId &&
-      enabledRunners.some((r) => r.id === selectedRunnerId)
-    ) {
-      return
-    }
     if (enabledRunners.length === 0) {
       if (selectedRunnerId !== null) setSelectedRunnerId(null)
+      userSelectedRunnerRef.current = false
       return
     }
-    if (
-      desktopRunnerId &&
+
+    const selectedRunnerStillExists =
+      selectedRunnerId !== null &&
+      enabledRunners.some((r) => r.id === selectedRunnerId)
+    if (!selectedRunnerStillExists) {
+      userSelectedRunnerRef.current = false
+    }
+
+    const desktopRunnerStillExists =
+      desktopRunnerId !== null &&
       enabledRunners.some((r) => r.id === desktopRunnerId)
-    ) {
-      setSelectedRunnerId(desktopRunnerId)
-      return
+
+    const preferredRunnerId =
+      !userSelectedRunnerRef.current && desktopRunnerStillExists
+        ? desktopRunnerId
+        : selectedRunnerStillExists
+          ? selectedRunnerId
+          : enabledRunners[0]!.id
+
+    if (selectedRunnerId !== preferredRunnerId) {
+      setSelectedRunnerId(preferredRunnerId)
     }
-    setSelectedRunnerId(enabledRunners[0]!.id)
   }, [enabledRunners, desktopRunnerId, selectedRunnerId])
+
+  // Sandbox profiles ride alongside the runner row. Read the advertised
+  // list off whichever runner the spawn will dispatch to, preserving the
+  // runtime's advertised order (default profile first).
+  const allSandboxProfiles = useMemo<Array<ElectricSandboxProfile>>(() => {
+    if (!selectedRunnerId) return []
+    const runner = enabledRunners.find((r) => r.id === selectedRunnerId)
+    if (!runner) return []
+    // A runner row may sync before its sandbox_profiles are populated (or
+    // predate the column), so guard against a missing/non-array value.
+    //
+    // Preserve the runtime's advertised order — do NOT sort. The runtime
+    // advertises its default profile first (e.g. `local` before `docker`),
+    // and `pickDefaultSandboxProfile` selects `profiles[0]`. Sorting (e.g. by
+    // label) would silently make a different profile the default — sorting by
+    // label put "Docker" ahead of "Local", defaulting new sessions to Docker
+    // wherever the daemon is reachable.
+    return [...(runner.sandbox_profiles ?? [])]
+  }, [selectedRunnerId, enabledRunners])
 
   const defaultAgent = useMemo(
     () => entityTypes.find((t) => t.name === DEFAULT_AGENT_NAME) ?? null,
@@ -241,7 +276,8 @@ export function NewSessionView({
       typeName: string,
       args?: Record<string, unknown>,
       initialUserText?: string,
-      initialAttachments?: Array<File>
+      initialAttachments?: Array<File>,
+      sandboxProfile?: string | null
     ): Promise<boolean> => {
       if (!spawnEntity) return false
       setError(null)
@@ -259,6 +295,16 @@ export function NewSessionView({
                 targets: [
                   { type: `runner` as const, runnerId: selectedRunnerId },
                 ],
+              },
+            }
+          : {}),
+        // Key by the session URL for a persistent, shared workspace: files
+        // survive across wakes and spawned subagents share the container.
+        ...(sandboxProfile
+          ? {
+              sandbox: {
+                profile: sandboxProfile,
+                key: `/${typeName}/${name}`,
               },
             }
           : {}),
@@ -332,20 +378,32 @@ export function NewSessionView({
     async (
       text: string,
       args: Record<string, unknown>,
-      attachments: Array<File>
+      attachments: Array<File>,
+      sandboxProfile: string | null
     ): Promise<boolean> => {
       if (!defaultAgent) return false
-      // Inject the picker's choice into the spawn args for the
-      // composer flow only — non-default agents have their own
-      // schemas and may not understand `workingDirectory`. Also
-      // remember the chosen path so the next session opens with the
-      // same default.
-      const augmented =
-        workingDirectory !== null ? { ...args, workingDirectory } : args
-      if (workingDirectory !== null) addRecentDir(workingDirectory)
-      return await doSpawn(defaultAgent.name, augmented, text, attachments)
+      // Inject the picker's choice into the spawn args for the composer flow
+      // only — non-default agents have their own schemas and may not
+      // understand `workingDirectory`. A remote sandbox runs in the provider
+      // VM, so a host working directory is meaningless there: skip it (and the
+      // recent-dirs bump) for remote profiles. Otherwise remember the chosen
+      // path so the next session opens with the same default.
+      const profileIsRemote = isSandboxProfileRemote(
+        allSandboxProfiles,
+        sandboxProfile
+      )
+      const includeWorkingDir = workingDirectory !== null && !profileIsRemote
+      const augmented = includeWorkingDir ? { ...args, workingDirectory } : args
+      if (includeWorkingDir) addRecentDir(workingDirectory)
+      return await doSpawn(
+        defaultAgent.name,
+        augmented,
+        text,
+        attachments,
+        sandboxProfile
+      )
     },
-    [defaultAgent, doSpawn, workingDirectory, addRecentDir]
+    [defaultAgent, doSpawn, workingDirectory, addRecentDir, allSandboxProfiles]
   )
 
   return (
@@ -354,14 +412,24 @@ export function NewSessionView({
         {selected ? (
           <SelectedAgentForm
             entityType={selected}
+            sandboxProfiles={allSandboxProfiles}
             onCancel={handleCancelSelected}
-            onSubmit={(args) => void doSpawn(selected.name, args)}
+            onSubmit={(args, sandboxProfile) =>
+              void doSpawn(
+                selected.name,
+                args,
+                undefined,
+                undefined,
+                sandboxProfile
+              )
+            }
             error={error}
           />
         ) : (
           <Picker
             defaultAgent={defaultAgent}
             otherAgents={otherAgents}
+            defaultAgentSandboxProfiles={defaultAgent ? allSandboxProfiles : []}
             onSelectType={handleSelectType}
             onStartDefault={handleStartDefault}
             spawnReady={Boolean(spawnEntity)}
@@ -370,7 +438,7 @@ export function NewSessionView({
             onChangeWorkingDirectory={setWorkingDirectory}
             runners={enabledRunners}
             selectedRunnerId={selectedRunnerId}
-            onChangeSelectedRunner={setSelectedRunnerId}
+            onChangeSelectedRunner={handleChangeSelectedRunner}
           />
         )}
       </div>
@@ -381,6 +449,7 @@ export function NewSessionView({
 function Picker({
   defaultAgent,
   otherAgents,
+  defaultAgentSandboxProfiles,
   onSelectType,
   onStartDefault,
   spawnReady,
@@ -393,11 +462,13 @@ function Picker({
 }: {
   defaultAgent: ElectricEntityType | null
   otherAgents: Array<ElectricEntityType>
+  defaultAgentSandboxProfiles: Array<ElectricSandboxProfile>
   onSelectType: (t: ElectricEntityType) => void
   onStartDefault: (
     text: string,
     args: Record<string, unknown>,
-    attachments: Array<File>
+    attachments: Array<File>,
+    sandboxProfile: string | null
   ) => Promise<boolean>
   spawnReady: boolean
   error: string | null
@@ -430,6 +501,7 @@ function Picker({
       {defaultAgent && (
         <DefaultAgentComposer
           agent={defaultAgent}
+          sandboxProfiles={defaultAgentSandboxProfiles}
           onSubmit={onStartDefault}
           disabled={!spawnReady}
           workingDirectory={workingDirectory}
@@ -611,15 +683,22 @@ function CodexDetectedPrompt(): React.ReactElement | null {
 
 function SelectedAgentForm({
   entityType,
+  sandboxProfiles,
   onCancel,
   onSubmit,
   error,
 }: {
   entityType: ElectricEntityType
+  sandboxProfiles: Array<ElectricSandboxProfile>
   onCancel: () => void
-  onSubmit: (args: Record<string, unknown>) => void
+  onSubmit: (
+    args: Record<string, unknown>,
+    sandboxProfile: string | null
+  ) => void
   error: string | null
 }): React.ReactElement {
+  const [sandboxProfile, setSandboxProfile] =
+    useSandboxProfileSelection(sandboxProfiles)
   return (
     <Stack direction="column" gap={4} className={styles.selectedFlow}>
       <div className={styles.heading}>
@@ -644,10 +723,98 @@ function SelectedAgentForm({
         <SchemaForm
           schema={entityType.creation_schema}
           submitLabel="Create"
-          onSubmit={onSubmit}
+          onSubmit={(args) => onSubmit(args, sandboxProfile)}
           onCancel={onCancel}
+          extraRows={
+            sandboxProfiles.length > 0 ? (
+              <SandboxProfileRow
+                profiles={sandboxProfiles}
+                value={sandboxProfile}
+                onChange={setSandboxProfile}
+              />
+            ) : null
+          }
         />
       </div>
+    </Stack>
+  )
+}
+
+function pickDefaultSandboxProfile(
+  profiles: ReadonlyArray<ElectricSandboxProfile>
+): string | null {
+  return profiles.length === 0 ? null : profiles[0]!.name
+}
+
+/**
+ * Picker selection that survives a live update to the advertised profile
+ * list. When the user explicitly picks a profile we remember it and restore
+ * it as soon as it's offered again — so a transient list change (e.g. a
+ * runtime restart re-advertising its profiles, which briefly drops one)
+ * can't silently downgrade an explicit choice to the default. Falls back to
+ * the default only when the user hasn't chosen.
+ */
+function useSandboxProfileSelection(
+  sandboxProfiles: ReadonlyArray<ElectricSandboxProfile>
+): readonly [string | null, (next: string) => void] {
+  const [sandboxProfile, setSandboxProfile] = useState<string | null>(() =>
+    pickDefaultSandboxProfile(sandboxProfiles)
+  )
+  const chosenRef = useRef<string | null>(null)
+  useEffect(() => {
+    setSandboxProfile((current) => {
+      const chosen = chosenRef.current
+      if (chosen && sandboxProfiles.some((p) => p.name === chosen))
+        return chosen
+      if (current && sandboxProfiles.some((p) => p.name === current))
+        return current
+      return pickDefaultSandboxProfile(sandboxProfiles)
+    })
+  }, [sandboxProfiles])
+  const choose = useCallback((next: string) => {
+    chosenRef.current = next
+    setSandboxProfile(next)
+  }, [])
+  return [sandboxProfile, choose] as const
+}
+
+function isSandboxProfileRemote(
+  profiles: ReadonlyArray<ElectricSandboxProfile>,
+  name: string | null
+): boolean {
+  return name != null && profiles.some((p) => p.name === name && p.remote)
+}
+
+function SandboxProfileRow({
+  profiles,
+  value,
+  onChange,
+}: {
+  profiles: ReadonlyArray<ElectricSandboxProfile>
+  value: string | null
+  onChange: (next: string) => void
+}): React.ReactElement {
+  const selectedValue = value ?? pickDefaultSandboxProfile(profiles)
+  return (
+    <Stack direction="column" gap={1}>
+      <Text size={1} tone="muted">
+        Sandbox
+      </Text>
+      <Select.Root<string>
+        value={selectedValue}
+        onValueChange={(v) => {
+          if (v) onChange(v)
+        }}
+      >
+        <Select.Trigger />
+        <Select.Content>
+          {profiles.map((p) => (
+            <Select.Item key={p.name} value={p.name}>
+              {p.label}
+            </Select.Item>
+          ))}
+        </Select.Content>
+      </Select.Root>
     </Stack>
   )
 }
@@ -670,6 +837,7 @@ function inlineSchemaProperties(
 
 function DefaultAgentComposer({
   agent,
+  sandboxProfiles,
   onSubmit,
   disabled,
   workingDirectory,
@@ -679,10 +847,12 @@ function DefaultAgentComposer({
   onChangeSelectedRunner,
 }: {
   agent: ElectricEntityType
+  sandboxProfiles: ReadonlyArray<ElectricSandboxProfile>
   onSubmit: (
     text: string,
     args: Record<string, unknown>,
-    attachments: Array<File>
+    attachments: Array<File>,
+    sandboxProfile: string | null
   ) => Promise<boolean>
   disabled?: boolean
   workingDirectory: string | null
@@ -691,6 +861,16 @@ function DefaultAgentComposer({
   selectedRunnerId: string | null
   onChangeSelectedRunner: (id: string | null) => void
 }): React.ReactElement {
+  const [sandboxProfile, setSandboxProfile] =
+    useSandboxProfileSelection(sandboxProfiles)
+  const selectedSandboxProfile =
+    sandboxProfile ?? pickDefaultSandboxProfile(sandboxProfiles)
+  // A remote sandbox lives in the provider VM, so a host working directory
+  // doesn't apply — hide the picker for those profiles.
+  const selectedProfileIsRemote = useMemo(
+    () => isSandboxProfileRemote(sandboxProfiles, selectedSandboxProfile),
+    [sandboxProfiles, selectedSandboxProfile]
+  )
   const [value, setValue] = useState(``)
   const [submitting, setSubmitting] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -762,7 +942,7 @@ function DefaultAgentComposer({
     for (const [k, v] of Object.entries(args)) {
       if (v !== undefined && v !== ``) cleaned[k] = v
     }
-    void onSubmit(trimmed, cleaned, files)
+    void onSubmit(trimmed, cleaned, files, selectedSandboxProfile)
       .then((ok) => {
         if (ok) clearAttachments()
       })
@@ -777,6 +957,7 @@ function DefaultAgentComposer({
     clearAttachments,
     disabled,
     onSubmit,
+    selectedSandboxProfile,
     submitting,
     value,
   ])
@@ -889,16 +1070,33 @@ function DefaultAgentComposer({
         </div>
       </div>
       <div className={styles.composerMeta}>
-        <WorkingDirectoryPicker
-          value={workingDirectory}
-          onChange={onChangeWorkingDirectory}
-          disabled={submitting || disabled}
-        />
         {runners.length > 0 && (
           <RunnerPickerPill
             runners={runners}
             value={selectedRunnerId}
             onChange={onChangeSelectedRunner}
+            disabled={submitting || disabled}
+          />
+        )}
+        {sandboxProfiles.length > 0 ? (
+          <PillSelect
+            label="Sandbox"
+            value={selectedSandboxProfile ?? ``}
+            options={sandboxProfiles.map((p) => p.name)}
+            optionLabels={Object.fromEntries(
+              sandboxProfiles.map((p) => [p.name, p.label])
+            )}
+            onChange={(next) => setSandboxProfile(next)}
+            disabled={submitting || disabled}
+          />
+        ) : null}
+        {/* Working directory comes last: the chosen sandbox decides whether a
+            host directory is even relevant. A remote sandbox runs in the
+            provider VM, so the picker is hidden for those profiles. */}
+        {!selectedProfileIsRemote && (
+          <WorkingDirectoryPicker
+            value={workingDirectory}
+            onChange={onChangeWorkingDirectory}
             disabled={submitting || disabled}
           />
         )}
@@ -1007,6 +1205,7 @@ function PillSelect({
   value,
   options,
   groupByProvider = false,
+  optionLabels,
   onChange,
   disabled,
 }: {
@@ -1014,6 +1213,7 @@ function PillSelect({
   value: string
   options: Array<string>
   groupByProvider?: boolean
+  optionLabels?: Record<string, string>
   onChange: (value: string) => void
   disabled?: boolean
 }): React.ReactElement {
@@ -1033,7 +1233,9 @@ function PillSelect({
         renderValue={
           groupByProvider
             ? (current) => (current ? modelOptionLabel(current) : label)
-            : undefined
+            : optionLabels
+              ? (v) => (v ? (optionLabels[v] ?? v) : v)
+              : undefined
         }
       />
       <Select.Content>
@@ -1050,7 +1252,7 @@ function PillSelect({
             ))
           : options.map((opt) => (
               <Select.Item key={opt} value={opt}>
-                {opt}
+                {optionLabels?.[opt] ?? opt}
               </Select.Item>
             ))}
       </Select.Content>

@@ -38,6 +38,7 @@ import type {
   SharedStateSchemaMap,
   SourceHandleInfo,
   SpawnHandleInfo,
+  SpawnSandboxOption,
   StateCollectionProxy,
   StateProxy,
   Wake,
@@ -63,6 +64,7 @@ export interface WiringConfig {
       initialMessage?: unknown
       wake?: Wake
       tags?: Record<string, string>
+      sandbox?: SpawnSandboxOption
     }
   ) => Promise<{ entityUrl: string; streamPath: string }>
   /** Create a child StreamDB, preload it, and register it for cleanup. */
@@ -987,6 +989,7 @@ export function createSetupContext(
         wake?: Wake
         tags?: Record<string, string>
         observe?: boolean
+        sandbox?: SpawnSandboxOption
       }
     ): Promise<EntityHandle> {
       const observeChild = opts?.observe !== false
@@ -1117,6 +1120,7 @@ export function createSetupContext(
                 initialMessage: opts?.initialMessage,
                 wake: opts?.wake,
                 tags: opts?.tags,
+                sandbox: opts?.sandbox,
               }
             )
           realEntityUrl = childUrl

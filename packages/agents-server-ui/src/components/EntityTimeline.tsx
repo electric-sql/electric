@@ -10,7 +10,7 @@ import {
 } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useLiveQuery } from '@tanstack/react-db'
-import { inArray } from '@durable-streams/state'
+import { eq, inArray } from '@durable-streams/state'
 import {
   measureElement as defaultMeasureElement,
   useVirtualizer,
@@ -36,6 +36,10 @@ import {
   attachmentDownloadUrl,
   isAttachmentManifest,
 } from '../lib/attachments'
+import {
+  resolveSandboxProfile,
+  sandboxDisplayLabel,
+} from '../lib/entityRuntime'
 import { warmMarkdownRenderCache } from '../lib/markdownRenderCache'
 import { Icon, IconButton, ScrollArea, Stack, Text, Tooltip } from '../ui'
 import { UserMessage } from './UserMessage'
@@ -898,7 +902,7 @@ export function EntityTimeline({
   stopPending?: boolean
   onStopGeneration?: () => void
 }): React.ReactElement {
-  const { entitiesCollection } = useElectricAgents()
+  const { entitiesCollection, runnersCollection } = useElectricAgents()
   const referencedEntityUrlKey = useMemo(
     () => stableEntityUrlKey(entities.map((entity) => entity.url)),
     [entities]
@@ -922,6 +926,36 @@ export function EntityTimeline({
     },
     [entitiesCollection, referencedEntityUrlKey]
   )
+  // Pull the sandbox profile name for the currently-focused entity so
+  // we can surface it as a read-only badge next to the spawned marker.
+  // The sandbox choice is set at spawn time and immutable for the
+  // entity's lifetime, so a single read here is sufficient.
+  const { data: focusedEntity = [] } = useLiveQuery(
+    (q) => {
+      if (!entitiesCollection || !entityUrl) return undefined
+      return q
+        .from({ e: entitiesCollection as any })
+        .where(({ e }: any) => eq(e.url, entityUrl))
+        .select(({ e }: any) => ({ sandbox: e.sandbox }))
+    },
+    [entitiesCollection, entityUrl]
+  )
+  const sandboxProfileName = focusedEntity[0]?.sandbox?.profile ?? null
+  // Resolve the profile's advertised label (e.g. "Docker") rather than the raw
+  // profile name, matching how the header/sidebar badges render it.
+  const { data: runners = [] } = useLiveQuery(
+    (q) => {
+      if (!runnersCollection) return undefined
+      return q.from({ r: runnersCollection })
+    },
+    [runnersCollection]
+  )
+  const sandboxLabel = sandboxProfileName
+    ? (sandboxDisplayLabel(
+        resolveSandboxProfile(runners, sandboxProfileName),
+        sandboxProfileName
+      ) ?? sandboxProfileName)
+    : null
   const entityStatusByUrl = useMemo(() => {
     const statusByUrl = new Map<string, EntityStatus>()
     for (const entity of entities) {
@@ -1464,7 +1498,7 @@ export function EntityTimeline({
           ref={contentRef}
           className={`${styles.content} mobile-chat-content`}
         >
-          <Stack>
+          <Stack gap={2} direction="row">
             {spawnTime ? (
               <Tooltip content={formatAbsoluteDateTimeVerbose(spawnTime)}>
                 <span ref={spawnMarkerRef} className={styles.statusPill}>
@@ -1485,6 +1519,15 @@ export function EntityTimeline({
                   spawned
                 </Text>
               </span>
+            )}
+            {sandboxLabel && (
+              <Tooltip content={`Sandbox: ${sandboxLabel}`}>
+                <span className={styles.statusPill}>
+                  <Text size={1} tone="muted" className={styles.statusText}>
+                    {`sandbox · ${sandboxLabel}`}
+                  </Text>
+                </span>
+              </Tooltip>
             )}
           </Stack>
 

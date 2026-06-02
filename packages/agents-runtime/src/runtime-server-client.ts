@@ -49,6 +49,18 @@ export interface SpawnEntityOptions {
   parentUrl?: string
   initialMessage?: unknown
   tags?: Record<string, string>
+  /**
+   * Sandbox selection — a `profile` with optional `scope` / `persistent`, an
+   * explicit shared `key`, or `inherit` the parent's resolved sandbox.
+   */
+  sandbox?: {
+    profile?: string
+    key?: string
+    scope?: `entity` | `wake`
+    persistent?: boolean
+    owner?: boolean
+    inherit?: boolean
+  }
   dispatch_policy?: DispatchPolicy
   wake?: {
     subscriberUrl: string
@@ -385,6 +397,7 @@ export function createRuntimeServerClient(
     parentUrl,
     initialMessage,
     tags,
+    sandbox,
     dispatch_policy,
     wake,
   }: SpawnEntityOptions): Promise<RuntimeEntityInfo> => {
@@ -393,6 +406,7 @@ export function createRuntimeServerClient(
     if (parentUrl !== undefined) body.parent = parentUrl
     if (initialMessage !== undefined) body.initialMessage = initialMessage
     if (tags && Object.keys(tags).length > 0) body.tags = tags
+    if (sandbox !== undefined) body.sandbox = sandbox
     if (dispatch_policy !== undefined) body.dispatch_policy = dispatch_policy
     if (wake !== undefined) body.wake = wake
 

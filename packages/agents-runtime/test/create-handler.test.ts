@@ -6,6 +6,7 @@ import {
   createRuntimeRouter,
 } from '../src/create-handler'
 import { clearRegistry, defineEntity } from '../src/define-entity'
+import { SandboxError } from '../src/sandbox/types'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { KeyObject } from 'node:crypto'
 import type {
@@ -300,6 +301,75 @@ describe(`createRuntimeHandler`, () => {
       wakeErrorCount: 0,
       typeNames: [`test-agent`],
     })
+  })
+
+  it(`isolates a SandboxError('unavailable') wake without taking the runner down`, async () => {
+    // A wake whose sandbox profile was dropped by a runner re-registration race
+    // rejects with SandboxError('unavailable'). It must fail only that one wake:
+    // the handler keeps accepting and completing other wakes (the runner stays
+    // up), and the error is recorded for drain rather than thrown synchronously.
+    defineEntity(`test-agent`, { handler: async () => {} })
+    processWakeMock
+      .mockRejectedValueOnce(
+        new SandboxError(
+          `unavailable`,
+          `sandbox profile "docker" not registered`
+        )
+      )
+      .mockResolvedValueOnce(undefined)
+
+    const handler = createRuntimeHandler({
+      baseUrl: `http://localhost:3000`,
+      handlerUrl: `http://localhost:4000/electric-agents`,
+      webhookSignature: false,
+    })
+
+    const notification = (n: number) => ({
+      consumerId: `consumer-${n}`,
+      epoch: 1,
+      wakeId: `wake-${n}`,
+      streamPath: `/streams/entity:test-${n}`,
+      streams: [{ path: `/streams/entity:test-${n}`, offset: `0_0` }],
+      callback: `http://localhost:3000/_electric/wakes/wake-${n}`,
+      claimToken: `tok-${n}`,
+      entity: {
+        type: `test-agent`,
+        status: `active`,
+        url: `http://localhost:3000/test-agent/test-${n}`,
+        streams: {
+          main: `/streams/entity:test-${n}`,
+          error: `/streams/entity-error:test-${n}`,
+        },
+      },
+    })
+
+    const post = (n: number) =>
+      handler.handleWebhookRequest(
+        new Request(`http://localhost/electric-agents`, {
+          method: `POST`,
+          headers: { 'content-type': `application/json` },
+          body: JSON.stringify(notification(n)),
+        })
+      )
+
+    // The failing wake (1) is dispatched, then a healthy wake (2). Both are
+    // accepted (200) — the rejection doesn't propagate out of dispatch.
+    expect((await post(1)).status).toBe(200)
+    expect((await post(2)).status).toBe(200)
+    await flushAsyncWork()
+
+    // The healthy wake completed; exactly one error was recorded and isolated.
+    expect(handler.debugState()).toMatchObject({
+      pendingWakeCount: 0,
+      pendingWakeLabels: [],
+      wakeErrorCount: 1,
+      typeNames: [`test-agent`],
+    })
+    expect(processWakeMock).toHaveBeenCalledTimes(2)
+
+    // Drain surfaces the isolated error (so it's observable), then clears.
+    await expect(handler.waitForSettled()).rejects.toThrow(`not registered`)
+    expect(handler.debugState()).toMatchObject({ wakeErrorCount: 0 })
   })
 
   it(`returns 400 for invalid JSON`, async () => {

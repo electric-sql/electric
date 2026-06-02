@@ -3,6 +3,7 @@ import { getCronStreamPath } from '../src/cron-utils'
 import { createHandlerContext } from '../src/context-factory'
 import { ENTITY_COLLECTIONS } from '../src/entity-schema'
 import { createLocalOnlyTestCollection } from './helpers/local-only'
+import { testSandboxStub } from './helpers/context-test-helpers'
 import type { EntityStreamDBWithActions } from '../src/types'
 import type { ChangeEvent } from '@durable-streams/state'
 
@@ -57,6 +58,7 @@ describe(`createHandlerContext`, () => {
       firstWake: false,
       args: {},
       db,
+      sandbox: testSandboxStub,
       state: {},
       actions: {},
       electricTools: [],
@@ -171,6 +173,7 @@ describe(`createHandlerContext`, () => {
       firstWake: false,
       args: {},
       db,
+      sandbox: testSandboxStub,
       state: {},
       actions: {},
       electricTools: [],

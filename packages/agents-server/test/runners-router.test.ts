@@ -21,6 +21,7 @@ function runner(overrides: Record<string, unknown> = {}) {
     admin_status: `enabled` as const,
     liveness: `offline` as const,
     wake_stream: `/runners/runner-1/wake`,
+    sandbox_profiles: [],
     created_at: new Date(0).toISOString(),
     updated_at: new Date(0).toISOString(),
     ...overrides,
@@ -138,6 +139,33 @@ describe(`runner routes`, () => {
     expect(ctx.streamClient.ensure).toHaveBeenCalledWith(
       `/runners/runner-1/wake`,
       { contentType: `application/json` }
+    )
+  })
+
+  it(`forwards advertised sandbox profiles including the remote flag`, async () => {
+    const ctx = buildContext()
+
+    const response = await globalRouter.fetch(
+      request(`POST`, `/_electric/runners`, {
+        id: `runner-1`,
+        owner_principal: `/principal/user%3Aowner%40example.com`,
+        label: `Local runner`,
+        sandbox_profiles: [
+          { name: `local`, label: `Local` },
+          { name: `e2b`, label: `E2B`, remote: true },
+        ],
+      }),
+      ctx
+    )
+
+    expect(response.status).toBe(201)
+    expect(ctx.entityManager.registry.createRunner).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sandboxProfiles: [
+          { name: `local`, label: `Local` },
+          { name: `e2b`, label: `E2B`, remote: true },
+        ],
+      })
     )
   })
 

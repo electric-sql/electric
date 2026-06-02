@@ -11,6 +11,7 @@ import { passthrough } from './entity-schema'
 import { runtimeLog } from './log'
 import { appendPathToUrl } from './url'
 import { verifyWebhookSignature } from './webhook-signature'
+import type { SandboxProfile } from './sandbox/types'
 import type { EntityRegistry } from './define-entity'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { WebhookSignatureVerifierConfig } from './webhook-signature'
@@ -106,6 +107,15 @@ export interface RuntimeRouterConfig {
   /** Max number of concurrent entity-type registrations (default: 8). */
   registrationConcurrency?: number
   /**
+   * Sandbox profiles registered by this runtime. Each profile is a
+   * `(name, label, description?, factory)` tuple — the factory stays
+   * local to the runtime; only the descriptive fields are advertised
+   * to the agents-server (via the runner registration) and surfaced
+   * in the UI picker. Spawn payloads pass `sandbox.profile` and the
+   * server validates against the target runner's advertised set.
+   */
+  sandboxProfiles?: ReadonlyArray<SandboxProfile>
+  /**
    * Public URL of this runtime, forwarded to the agents-server so it can be
    * included in GET /api/runtimes. If omitted the runtime is registered but
    * excluded from the public runtimes list.
@@ -161,6 +171,20 @@ export interface RuntimeRouter {
   /** Names of all registered entity types */
   readonly typeNames: Array<string>
 
+  /**
+   * Wire-shape descriptors for sandbox profiles registered on this
+   * runtime. Used by the runner registration to advertise the profile
+   * set to the agents-server (factory closures are intentionally not
+   * included).
+   */
+  readonly sandboxProfileDescriptors: Array<{
+    name: string
+    label: string
+    description?: string
+    /** True for off-host (remote-provider) profiles; see SandboxProfile.remote. */
+    remote?: boolean
+  }>
+
   /** Register all entity types with the durable streams server */
   registerTypes: () => Promise<void>
 }
@@ -201,17 +225,31 @@ export function createRuntimeRouter(
     webhookSignature,
   } = normalized
 
+  const getRegisteredType = (name: string) =>
+    registry ? registry.get(name) : getEntityType(name)
+  const getRegisteredTypes = () =>
+    registry ? registry.list() : listEntityTypes()
+
+  // Index the runtime's profiles by name. Duplicate names are a
+  // configuration bug — fail fast rather than silently dropping one.
+  const sandboxProfiles = new Map<string, SandboxProfile>()
+  for (const profile of config.sandboxProfiles ?? []) {
+    if (sandboxProfiles.has(profile.name)) {
+      throw new Error(
+        `[agent-runtime] duplicate sandbox profile name "${profile.name}" registered on createRuntimeRouter`
+      )
+    }
+    sandboxProfiles.set(profile.name, profile)
+  }
+
   const wakeConfig: ProcessWakeConfig = {
     baseUrl,
     registry,
     createElectricTools,
     idleTimeout,
     heartbeatInterval,
+    sandboxProfiles,
   }
-  const getRegisteredType = (name: string) =>
-    registry ? registry.get(name) : getEntityType(name)
-  const getRegisteredTypes = () =>
-    registry ? registry.list() : listEntityTypes()
   const debugRegistrationTiming =
     process.env.ELECTRIC_AGENTS_DEBUG_REGISTRATION_TIMING === `1`
   const pendingWakes = new Set<Promise<void>>()
@@ -541,6 +579,17 @@ export function createRuntimeRouter(
     }
   }
 
+  const sandboxProfileDescriptors = [...sandboxProfiles.values()].map(
+    (profile) => ({
+      name: profile.name,
+      label: profile.label,
+      ...(profile.description !== undefined && {
+        description: profile.description,
+      }),
+      ...(profile.remote !== undefined && { remote: profile.remote }),
+    })
+  )
+
   return {
     handleRequest,
     handleWebhookRequest,
@@ -553,6 +602,7 @@ export function createRuntimeRouter(
     get typeNames() {
       return getRegisteredTypes().map((entry) => entry.name)
     },
+    sandboxProfileDescriptors,
     registerTypes,
   }
 }
@@ -600,6 +650,7 @@ export function createRuntimeHandler(
     get typeNames() {
       return router.typeNames
     },
+    sandboxProfileDescriptors: router.sandboxProfileDescriptors,
     registerTypes: router.registerTypes,
   }
 }
