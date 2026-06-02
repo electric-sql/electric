@@ -57,12 +57,13 @@ export function buildCloudAuthHeaders(
 ): Record<string, string> | null {
   const server = findCloudServerForUrl(deps.getServers(), url)
   if (!server || !server.tenantId) return null
+  const cloudAuthState = deps.getCloudAuthState()
+  if (cloudAuthState?.status !== `signed-in`) return null
   const token = deps.getAgentsToken(server.tenantId)
   if (!token) return null
   const headers: Record<string, string> = {
     Authorization: `Bearer ${token}`,
   }
-  const cloudAuthState = deps.getCloudAuthState()
   if (cloudAuthState?.userId) {
     headers[`x-electric-asserted-user-id`] = cloudAuthState.userId
   }

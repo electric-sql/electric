@@ -163,6 +163,15 @@ export async function startRuntime(
       deps.refreshDesktopState()
       return
     }
+
+    const cloudAuthState = deps.getCloudAuthState()
+    if (cloudAuthState?.status !== `signed-in`) {
+      entry.status = `error`
+      entry.lastError = `Sign in to Electric Cloud before connecting to ${activeServer.name}.`
+      deps.refreshDesktopState()
+      return
+    }
+
     try {
       const prepared = await deps
         .getCloudAgentServers()
@@ -172,18 +181,12 @@ export async function startRuntime(
         await deps.saveSettings()
       }
     } catch (err) {
-      const cachedToken = deps
-        .getCloudAgentServers()
-        .getAgentsToken(activeServer.tenantId)
-      if (!cachedToken) {
-        entry.status = `error`
-        entry.lastError = `Could not prepare cloud agents token for ${activeServer.name}: ${
-          err instanceof Error ? err.message : String(err)
-        }`
-        deps.refreshDesktopState()
-        return
-      }
-      console.warn(`[agents-desktop] cloud agents token refresh failed:`, err)
+      entry.status = `error`
+      entry.lastError = `Could not prepare cloud agents token for ${activeServer.name}: ${
+        err instanceof Error ? err.message : String(err)
+      }`
+      deps.refreshDesktopState()
+      return
     }
   }
 
