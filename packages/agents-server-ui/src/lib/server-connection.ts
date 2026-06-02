@@ -378,6 +378,15 @@ declare global {
         reconnect: (name: string, serverId?: string) => Promise<void>
         disable: (name: string, serverId?: string) => Promise<void>
         enable: (name: string, serverId?: string) => Promise<void>
+        /**
+         * Add (when the name is new) or edit (when it already exists in
+         * settings.json) an MCP server in the desktop's global config.
+         * Writes settings.json, pushes the new extras list to every
+         * live runtime, and re-broadcasts the enriched snapshot.
+         */
+        upsert: (cfg: unknown) => Promise<void>
+        /** Remove an MCP server from the desktop's global config. */
+        remove: (name: string) => Promise<void>
       }
       /**
        * Electric Cloud sign-in surface. The Electron main process owns
