@@ -168,6 +168,16 @@ export async function loadDesktopSettings(
       enabledModelValues:
         enabledModelValues.length > 0 ? enabledModelValues : undefined,
       mcp: normalizeMcp(parsed.mcp),
+      seededDefaultMcpServerNames: Array.isArray(
+        (parsed as { seededDefaultMcpServerNames?: unknown })
+          .seededDefaultMcpServerNames
+      )
+        ? (
+            parsed as { seededDefaultMcpServerNames: Array<unknown> }
+          ).seededDefaultMcpServerNames.filter(
+            (n): n is string => typeof n === `string`
+          )
+        : undefined,
       pullWakeRunnerId,
     })
     if (parsed.apiKeys !== undefined) {

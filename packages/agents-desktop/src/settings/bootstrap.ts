@@ -1,5 +1,6 @@
 import { normalizeServer } from './servers'
 import { loadDesktopSettings } from './store'
+import { seedDefaultMcpServers } from './mcp-defaults'
 import { INITIAL_SERVER_URL, PULL_WAKE_RUNNER_ID } from '../shared/constants'
 import type {
   ApiKeys,
@@ -79,11 +80,17 @@ export async function loadSettings(deps: SettingsBootstrapDeps): Promise<void> {
     ensureRuntimeEntry: deps.ensureRuntimeEntry,
     pullWakeRunnerId: PULL_WAKE_RUNNER_ID,
   })
+  // Seed built-in MCP servers (opt-out): mutates settings + flips the
+  // per-name seeded flag. Runs after the disk load so removals from a
+  // previous launch (stored in `seededDefaultMcpServerNames`) are
+  // honored, and before any runtime starts so the first connection
+  // sees these in its `extraMcpServers`.
+  const mcpSeeded = seedDefaultMcpServers(deps.settings)
   Object.assign(deps.state, deps.desktopStateForWindow(null))
   await applyInitialServerFromEnv(deps)
   deps.applyApiKeys()
   await deps.syncCodexEnvironment()
-  if (shouldSave) {
+  if (shouldSave || mcpSeeded) {
     await deps.saveSettings()
   }
 }
