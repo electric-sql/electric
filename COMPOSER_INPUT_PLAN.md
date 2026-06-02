@@ -2,11 +2,9 @@
 
 ## Status
 
-In progress. Milestones 1-5 are largely implemented; Milestone 4 now includes
-source-owned dynamic slash-command helpers with layered override/reveal
-semantics. Remaining work is mostly broader UI/a11y coverage, polishing
-skill-backed refresh sources, and keeping this document in sync with the
-implementation.
+Implemented through the core runtime, server, built-in Horton integration, and
+desktop/server UI composer. Remaining work is polish-level: broader browser/a11y
+coverage and future rich reference node types beyond slash commands.
 
 ## Summary
 
@@ -419,7 +417,8 @@ A handler-side loader can discover and register skill-backed slash commands:
 
 ```ts
 export const handler = async (ctx: EntityHandlerContext) => {
-  await skillsLoader(ctx)
+  const skills = createContextSkillLoader(skillsRegistry)
+  const loadedSkills = skills.load(ctx)
 
   // continue normal handler flow
 }
@@ -434,6 +433,13 @@ The loader can:
 - inject skill content or context
 
 The loader should be idempotent and cheap on repeated wakes.
+
+The implemented runtime helper is `createContextSkillLoader`. It reconciles
+user-invocable skill slash commands with `replaceOwned`, proactively loads the
+matching skill when the current `composer_input` wake contains a skill slash
+command, returns skill tools (`use_skill` / `remove_skill`) for model-initiated
+loading, and exposes a `skills_catalog` context source that handlers can merge
+into their existing `ctx.useContext` call.
 
 ## Implementation Touchpoints
 
@@ -491,7 +497,7 @@ Likely built-in agent files:
 - [x] Implement static/dynamic layering and override behavior.
 - [x] Implement dynamic command ownership and refresh semantics.
 - [x] Add `replaceOwned(owner, commands)` for whole-source reconciliation.
-- Watch or refresh dynamic command sources and update stale registrations.
+- [x] Watch or refresh dynamic command sources and update stale registrations.
 - [x] Add tests for register, overwrite, unregister, and static reveal.
 
 ### 5. Desktop ProseMirror Composer
@@ -500,23 +506,22 @@ Likely built-in agent files:
 - [x] Add composer schema, decorations, and submit serialization.
 - [x] Add slash-command popover sourced from `db.collections.slashCommands`.
 - [x] Add keyboard behavior and paste handling.
-- Add multiline serialization and source-span tests.
+- [x] Add multiline serialization and source-span tests.
 - Add basic accessibility coverage for command popover behavior.
 - Add focused UI tests where practical.
 
 ### 6. Built-In Agent Integration
 
-- Update built-in handlers to accept `composer_input`.
-- Add skill-backed command registration if skill metadata supports it.
-- Add examples such as `/quickstart`, `/pr-review`, or `/worktree`.
+- [x] Update built-in handlers to accept `composer_input`.
+- [x] Add skill-backed command registration if skill metadata supports it.
+- [x] Add examples such as `/quickstart`, `/pr-review`, or `/worktree`.
 
-## Open Questions
+## Follow-Up Polish
 
-- What exact discriminated union should `ctx.wake` expose?
-- Should slash-command names be strictly lowercase kebab-case?
-- Should slash commands remain plain decorated text after autocomplete selection, or become inline atom nodes after explicit selection?
-- Should the desktop composer be shared with the web/server UI immediately, or first land in desktop only?
-- How much argument metadata is needed for a useful v1 popover?
+- Add browser-level coverage for command popover focus, keyboard navigation, and screen-reader semantics.
+- Add richer inline reference nodes for files, symbols, and branches once the resolver UX is designed.
+- Decide whether `dynamic_layers` should remain visible on `SlashCommandRow` or be hidden behind an internal metadata shape in a later cleanup.
+- Extend slash-command argument metadata when the UI is ready to render structured argument hints beyond name/description.
 
 ## Decisions Before Implementation
 

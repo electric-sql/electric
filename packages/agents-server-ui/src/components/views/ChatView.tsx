@@ -226,15 +226,6 @@ function GenericChatBody({
   const drawerPendingInbox = inlinePendingInbox
     ? visiblePendingInbox.slice(1)
     : visiblePendingInbox
-  const { data: matchingEntityTypes = [] } = useLiveQuery(
-    (query) => {
-      if (!entityTypesCollection) return undefined
-      return query
-        .from({ t: entityTypesCollection })
-        .where(({ t }) => eq(t.name, entity.type))
-    },
-    [entityTypesCollection, entity.type]
-  )
   const fallbackSlashCommands = useMemo<Array<SlashCommandRow>>(
     () =>
       (matchingEntityTypes[0]?.slash_commands ?? []).map((command) => ({

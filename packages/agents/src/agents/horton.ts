@@ -2,7 +2,6 @@ import path from 'node:path'
 import { z } from 'zod'
 import { serverLog } from '../log'
 import { createHortonDocsSupport } from '../docs/knowledge-base'
-import { createSkillTools } from '@electric-ax/agents-runtime'
 import { createSpawnWorkerTool } from '../tools/spawn-worker'
 import {
   modelInputSchemaDefs,
@@ -13,10 +12,14 @@ import {
   type BuiltinModelCatalog,
 } from '../model-catalog'
 import type { AgentTool, StreamFn } from '@mariozechner/pi-agent-core'
+import {
+  buildSkillSlashCommands,
+  createContextSkillLoader,
+  completeWithLowCostModel,
+} from '@electric-ax/agents-runtime'
 import type {
   EntityRegistry,
   HandlerContext,
-  SlashCommandDefinition,
   WakeEvent,
 } from '@electric-ax/agents-runtime'
 import {
@@ -29,7 +32,6 @@ import {
   createSendTool,
 } from '@electric-ax/agents-runtime/tools'
 import type { Sandbox } from '@electric-ax/agents-runtime/sandbox'
-import { completeWithLowCostModel } from '@electric-ax/agents-runtime'
 import { mcp } from '@electric-ax/agents-mcp'
 import type { SkillsRegistry } from '@electric-ax/agents-runtime'
 
@@ -38,12 +40,10 @@ export const HORTON_MODEL = `claude-sonnet-4-6`
 const TITLE_SYSTEM_PROMPT =
   `You generate concise chat session titles in 3-5 words. ` +
   `Respond with only the title, no quotes, no punctuation, no preamble.`
-const SLASH_COMMAND_NAME_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/
-const SLASH_COMMAND_ARGUMENT_NAME_PATTERN = /^[a-z][a-zA-Z0-9_]*$/
-
 const TITLE_USER_PROMPT = (userMessage: string): string =>
   `User request:\n${userMessage}`
 const TITLE_GENERATION_TIMEOUT_MS = 8_000
+const HORTON_SKILLS_SLASH_COMMAND_OWNER = `horton:skills`
 
 const TITLE_STOP_WORDS = new Set([
   `a`,
@@ -125,39 +125,6 @@ function buildFallbackTitle(userMessage: string): string {
   const selected =
     informativeWords.length >= 2 ? informativeWords.slice(0, 5) : backupWords
   return selected.join(` `).slice(0, 80).trim() || `Untitled Chat`
-}
-
-export function buildHortonSlashCommands(
-  skillsRegistry: SkillsRegistry | null | undefined
-): Array<SlashCommandDefinition> {
-  if (!skillsRegistry) {
-    return []
-  }
-
-  return Array.from(skillsRegistry.catalog.values())
-    .filter(
-      (skill) =>
-        skill.userInvocable && SLASH_COMMAND_NAME_PATTERN.test(skill.name)
-    )
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .map((skill) => ({
-      name: skill.name,
-      description: skill.description,
-      ...(skill.arguments && skill.arguments.length > 0
-        ? {
-            arguments: skill.arguments
-              .filter((name) => SLASH_COMMAND_ARGUMENT_NAME_PATTERN.test(name))
-              .map((name) => ({
-                name,
-                type: `string` as const,
-                required: false,
-                ...(skill.argumentHint
-                  ? { description: skill.argumentHint }
-                  : {}),
-              })),
-          }
-        : {}),
-    }))
 }
 
 function createConfiguredTitleCall(
@@ -510,12 +477,17 @@ function createAssistantHandler(options: {
     modelCatalog,
     docsUrl,
   } = options
-  const hasSkills = Boolean(skillsRegistry && skillsRegistry.catalog.size > 0)
+  const skillLoader = createContextSkillLoader(skillsRegistry, {
+    slashCommandOwner: HORTON_SKILLS_SLASH_COMMAND_OWNER,
+  })
+  const hasSkills = skillLoader.hasSkills
 
   return async function assistantHandler(
     ctx: HandlerContext,
     wake: WakeEvent
   ): Promise<void> {
+    const loadedSkills = await skillLoader.load(ctx)
+
     const readSet = new Set<string>()
     const modelConfig = resolveBuiltinModelConfig(modelCatalog, ctx.args)
     // The sandbox's own working directory is the single source of truth for
@@ -537,9 +509,7 @@ function createAssistantHandler(options: {
         modelCatalog,
         logPrefix: `[horton ${ctx.entityUrl}]`,
       }),
-      ...(skillsRegistry && skillsRegistry.catalog.size > 0
-        ? createSkillTools(skillsRegistry, ctx)
-        : []),
+      ...loadedSkills.tools,
       ...mcp.tools(),
     ]
     const hasEventSourceTools = tools.some(
@@ -628,13 +598,7 @@ function createAssistantHandler(options: {
               }
             : {}),
           ...(skillsRegistry && skillsRegistry.catalog.size > 0
-            ? {
-                skills_catalog: {
-                  content: () => skillsRegistry.renderCatalog(2_000),
-                  max: 2_000,
-                  cache: `stable` as const,
-                },
-              }
+            ? loadedSkills.sources
             : {}),
         },
       })
@@ -642,11 +606,7 @@ function createAssistantHandler(options: {
       ctx.useContext({
         sourceBudget: 100_000,
         sources: {
-          skills_catalog: {
-            content: () => skillsRegistry.renderCatalog(2_000),
-            max: 2_000,
-            cache: `stable` as const,
-          },
+          ...loadedSkills.sources,
           conversation: {
             content: () => ctx.timelineMessages(),
             cache: `volatile`,
@@ -780,7 +740,7 @@ export function registerHorton(
         permission: `spawn`,
       },
     ],
-    slashCommands: buildHortonSlashCommands(skillsRegistry),
+    slashCommands: buildSkillSlashCommands(skillsRegistry),
     handler: assistantHandler,
   })
 

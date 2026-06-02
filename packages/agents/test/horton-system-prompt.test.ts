@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  buildHortonSlashCommands,
-  buildHortonSystemPrompt,
-} from '../src/agents/horton'
-import type { SkillsRegistry } from '@electric-ax/agents-runtime'
+import { buildHortonSystemPrompt } from '../src/agents/horton'
 
 describe(`buildHortonSystemPrompt`, () => {
   it(`includes onboarding block by default`, () => {
@@ -67,79 +63,5 @@ describe(`buildHortonSystemPrompt`, () => {
     expect(prompt).toContain(`# Runtime model`)
     expect(prompt).toContain(`provider "openai"`)
     expect(prompt).toContain(`model "gpt-4.1"`)
-  })
-})
-
-describe(`buildHortonSlashCommands`, () => {
-  it(`declares user-invocable skills as slash commands`, () => {
-    const skillsRegistry: SkillsRegistry = {
-      catalog: new Map([
-        [
-          `quickstart`,
-          {
-            name: `quickstart`,
-            description: `Guided quickstart`,
-            whenToUse: `User wants a tutorial`,
-            keywords: [`quickstart`],
-            userInvocable: true,
-            max: 1000,
-            charCount: 100,
-            contentHash: `hash-1`,
-            source: `/skills/quickstart.md`,
-          },
-        ],
-        [
-          `init`,
-          {
-            name: `init`,
-            description: `Scaffold a project`,
-            whenToUse: `User wants a new app`,
-            keywords: [`init`],
-            arguments: [`project_name`],
-            argumentHint: `[project-name]`,
-            userInvocable: true,
-            max: 1000,
-            charCount: 100,
-            contentHash: `hash-2`,
-            source: `/skills/init.md`,
-          },
-        ],
-        [
-          `internal`,
-          {
-            name: `internal`,
-            description: `Internal helper`,
-            whenToUse: `Never directly`,
-            keywords: [],
-            userInvocable: false,
-            max: 1000,
-            charCount: 100,
-            contentHash: `hash-3`,
-            source: `/skills/internal.md`,
-          },
-        ],
-      ]),
-      renderCatalog: () => ``,
-      readContent: async () => null,
-    }
-
-    expect(buildHortonSlashCommands(skillsRegistry)).toEqual([
-      {
-        name: `init`,
-        description: `Scaffold a project`,
-        arguments: [
-          {
-            name: `project_name`,
-            type: `string`,
-            required: false,
-            description: `[project-name]`,
-          },
-        ],
-      },
-      {
-        name: `quickstart`,
-        description: `Guided quickstart`,
-      },
-    ])
   })
 })

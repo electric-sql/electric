@@ -143,7 +143,7 @@ export const serializeComposerInput = (
     slashCommands.map((command) => normalizeCommandName(command.name))
   )
   const nodes: ComposerInputPayload[`nodes`] = []
-  const commandPattern = /(^|\s)\/([a-z][a-z0-9_-]*)(?=\s|$)/g
+  const commandPattern = /(^|\s)\/([a-z][a-z0-9]*(?:-[a-z0-9]+)*)(?=\s|$)/g
   let match: RegExpExecArray | null
 
   while ((match = commandPattern.exec(source)) !== null) {

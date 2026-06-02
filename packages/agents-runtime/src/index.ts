@@ -316,7 +316,16 @@ export type { ProcessWakeConfig } from './types'
 // body (and any sibling reference docs) on demand.
 export { createSkillsRegistry } from './skills/registry'
 export { createSkillTools } from './skills/tools'
+export {
+  buildSkillSlashCommands,
+  createContextSkillLoader,
+} from './skills/context-loader'
 export type { SkillsRegistry, SkillMeta } from './skills/types'
+export type {
+  ContextSkillLoader,
+  ContextSkillLoaderOptions,
+  LoadedSkillContext,
+} from './skills/context-loader'
 
 export { DEFAULT_STATE_SCHEMAS } from './default-state-schemas'
 export { createContextEntriesApi } from './context-entries'

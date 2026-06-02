@@ -2,11 +2,109 @@ import fs from 'node:fs'
 import fsPromises from 'node:fs/promises'
 import path from 'node:path'
 import { Type } from '@sinclair/typebox'
-import type { AgentTool, HandlerContext } from '@electric-ax/agents-runtime'
+import type { AgentTool, HandlerContext } from '../types'
 import type { SkillsRegistry } from './types'
 
 function skillContextId(name: string): string {
   return `skill:${name}`
+}
+
+export interface LoadSkillResult {
+  loaded: boolean
+  alreadyLoaded?: boolean
+  truncated?: boolean
+  chars?: number
+  message: string
+  contextSource?: string
+}
+
+export async function loadSkillIntoContext(
+  registry: SkillsRegistry,
+  ctx: Pick<HandlerContext, `insertContext` | `getContext`>,
+  name: string,
+  args?: string
+): Promise<LoadSkillResult> {
+  const meta = registry.catalog.get(name)
+  if (!meta) {
+    const available = Array.from(registry.catalog.keys()).join(`, `)
+    return {
+      loaded: false,
+      message: `Skill "${name}" not found. Available skills: ${available || `none`}`,
+    }
+  }
+
+  const contextId = skillContextId(name)
+  if (ctx.getContext(contextId)) {
+    return {
+      loaded: false,
+      alreadyLoaded: true,
+      message: `Skill "${name}" is already loaded.`,
+    }
+  }
+
+  let content = await registry.readContent(name)
+  if (content === null) {
+    return {
+      loaded: false,
+      message: `Error: could not read skill file for "${name}".`,
+    }
+  }
+
+  let truncated = false
+  if (content.length > meta.max) {
+    truncated = true
+    content = content.slice(0, meta.max)
+  }
+
+  if (args) {
+    content = substituteArgs(content, args, meta.arguments)
+  }
+
+  ctx.insertContext(contextId, {
+    name: `skill_instructions`,
+    attrs: { skill: name, type: `directive` },
+    content,
+  })
+
+  const skillDir = path.join(path.dirname(meta.source), name)
+  const truncNote = truncated
+    ? `\n\nWARNING: Content was truncated from ${meta.charCount.toLocaleString()} to ${meta.max.toLocaleString()} chars. Inform the user.`
+    : ``
+
+  const allRefFiles = listRefFiles(skillDir)
+  const mdFiles = allRefFiles.filter((f) => f.endsWith(`.md`))
+  const refContents: Array<string> = []
+  for (const f of mdFiles) {
+    try {
+      const refContent = await fsPromises.readFile(
+        path.join(skillDir, f),
+        `utf-8`
+      )
+      const refId = `${skillContextId(name)}:${f}`
+      ctx.insertContext(refId, {
+        name: `skill_reference`,
+        attrs: { skill: name, file: f },
+        content: refContent,
+      })
+      refContents.push(`--- ${f} ---\n${refContent}`)
+    } catch {
+      // skip unreadable files
+    }
+  }
+
+  const hasRefDir = allRefFiles.length > 0
+  const dirNote = hasRefDir ? `\nSkill directory: ${skillDir}` : ``
+  const refSection =
+    refContents.length > 0 ? `\n\n${refContents.join(`\n\n`)}` : ``
+  const contextSource = `SKILL ACTIVATED: "${name}". The instructions below override your default behavior. Follow them exactly. Do not read any files to find this content — it is all here.\n${dirNote}${truncNote}\n\n${content}${refSection}`
+
+  return {
+    loaded: true,
+    truncated,
+    chars: content.length,
+    message: contextSource,
+    contextSource,
+  }
 }
 
 export function createSkillTools(
@@ -29,107 +127,17 @@ export function createSkillTools(
     }),
     execute: async (_toolCallId, params) => {
       const { name, args } = params as { name: string; args?: string }
-
-      const meta = registry.catalog.get(name)
-      if (!meta) {
-        const available = Array.from(registry.catalog.keys()).join(`, `)
-        return {
-          content: [
-            {
-              type: `text` as const,
-              text: `Skill "${name}" not found. Available skills: ${available || `none`}`,
-            },
-          ],
-          details: { loaded: false },
-        }
-      }
-
-      const contextId = skillContextId(name)
-      if (ctx.getContext(contextId)) {
-        return {
-          content: [
-            {
-              type: `text` as const,
-              text: `Skill "${name}" is already loaded.`,
-            },
-          ],
-          details: { loaded: false, alreadyLoaded: true },
-        }
-      }
-
-      let content = await registry.readContent(name)
-      if (content === null) {
-        return {
-          content: [
-            {
-              type: `text` as const,
-              text: `Error: could not read skill file for "${name}".`,
-            },
-          ],
-          details: { loaded: false },
-        }
-      }
-
-      let truncated = false
-      if (content.length > meta.max) {
-        truncated = true
-        content = content.slice(0, meta.max)
-      }
-
-      // Substitute arguments if provided
-      if (args) {
-        content = substituteArgs(content, args, meta.arguments)
-      }
-
-      // Also store in context for persistence across wakes
-      ctx.insertContext(contextId, {
-        name: `skill_instructions`,
-        attrs: { skill: name, type: `directive` },
-        content,
-      })
-
-      const skillDir = path.join(path.dirname(meta.source), name)
-      const truncNote = truncated
-        ? `\n\nWARNING: Content was truncated from ${meta.charCount.toLocaleString()} to ${meta.max.toLocaleString()} chars. Inform the user.`
-        : ``
-
-      // Auto-load .md reference files
-      const allRefFiles = listRefFiles(skillDir)
-      const mdFiles = allRefFiles.filter((f) => f.endsWith(`.md`))
-      const refContents: Array<string> = []
-      for (const f of mdFiles) {
-        try {
-          const refContent = await fsPromises.readFile(
-            path.join(skillDir, f),
-            `utf-8`
-          )
-          const refId = `${skillContextId(name)}:${f}`
-          ctx.insertContext(refId, {
-            name: `skill_reference`,
-            attrs: { skill: name, file: f },
-            content: refContent,
-          })
-          refContents.push(`--- ${f} ---\n${refContent}`)
-        } catch {
-          // skip unreadable files
-        }
-      }
-
-      const hasRefDir = allRefFiles.length > 0
-      const dirNote = hasRefDir ? `\nSkill directory: ${skillDir}` : ``
-      const refSection =
-        refContents.length > 0 ? `\n\n${refContents.join(`\n\n`)}` : ``
-
-      // Return the FULL skill content in the tool result so the model
-      // sees it with maximum attention weight
-      const toolResult = `SKILL ACTIVATED: "${name}". The instructions below override your default behavior. Follow them exactly. Do not read any files to find this content — it is all here.\n${dirNote}${truncNote}\n\n${content}${refSection}`
+      const result = await loadSkillIntoContext(registry, ctx, name, args)
 
       return {
-        content: [{ type: `text` as const, text: toolResult }],
+        content: [{ type: `text` as const, text: result.message }],
         details: {
-          loaded: true,
-          truncated,
-          chars: content.length,
+          loaded: result.loaded,
+          ...(result.alreadyLoaded
+            ? { alreadyLoaded: result.alreadyLoaded }
+            : {}),
+          ...(result.truncated ? { truncated: result.truncated } : {}),
+          ...(result.chars !== undefined ? { chars: result.chars } : {}),
         },
       }
     },
