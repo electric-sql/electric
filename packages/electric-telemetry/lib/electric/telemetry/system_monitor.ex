@@ -32,7 +32,7 @@ defmodule ElectricTelemetry.SystemMonitor do
         {opts.long_message_queue_disable_threshold, opts.long_message_queue_enable_threshold}
     )
 
-    {:ok, %{long_message_queue_pids: %{}, long_message_queue_timer: nil}}
+    {:ok, %{long_message_queue_pids: MapSet.new(), long_message_queue_timer: nil}}
   end
 
   def handle_info({:monitor, gc_pid, :long_gc, info}, state) do
@@ -106,7 +106,7 @@ defmodule ElectricTelemetry.SystemMonitor do
     state =
       %{
         state
-        | long_message_queue_pids: Map.put(state.long_message_queue_pids, pid, {type, subtype})
+        | long_message_queue_pids: MapSet.put(state.long_message_queue_pids, pid)
       }
       |> maybe_start_long_message_queue_timer()
 
@@ -116,21 +116,22 @@ defmodule ElectricTelemetry.SystemMonitor do
   def handle_info({:monitor, pid, :long_message_queue, false}, state) do
     Logger.debug("Long message queue no longer detected for pid #{inspect(pid)}")
 
-    {:noreply, %{state | long_message_queue_pids: Map.delete(state.long_message_queue_pids, pid)}}
-  end
-
-  def handle_info(:recheck_message_queues, state)
-      when map_size(state.long_message_queue_pids) == 0 do
-    :timer.cancel(state.long_message_queue_timer)
-    {:noreply, %{state | long_message_queue_timer: nil}}
+    {:noreply,
+     %{state | long_message_queue_pids: MapSet.delete(state.long_message_queue_pids, pid)}}
   end
 
   def handle_info(:recheck_message_queues, state) do
-    Enum.each(state.long_message_queue_pids, fn {pid, {type, subtype}} ->
-      log_long_message_queue_event(pid, type, subtype)
-    end)
+    if MapSet.size(state.long_message_queue_pids) == 0 do
+      :timer.cancel(state.long_message_queue_timer)
+      {:noreply, %{state | long_message_queue_timer: nil}}
+    else
+      Enum.each(state.long_message_queue_pids, fn pid ->
+        {type, subtype} = proc_type_and_subtype(pid)
+        log_long_message_queue_event(pid, type, subtype)
+      end)
 
-    {:noreply, state}
+      {:noreply, state}
+    end
   end
 
   defp log_long_message_queue_event(pid, type, subtype) do
