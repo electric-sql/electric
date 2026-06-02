@@ -277,6 +277,39 @@ describe(`Wake Registry`, () => {
     expect(results[0]!.wakeMessage.changes[0]!.kind).toBe(`insert`)
   })
 
+  it(`includes inbox message details in wake changes`, async () => {
+    const registry = new WakeRegistry(createMockDb())
+    await registry.register({
+      subscriberUrl: `/agent/self`,
+      sourceUrl: `/agent/self`,
+      condition: { on: `change`, collections: [`inbox`] },
+      oneShot: false,
+    })
+
+    const results = registry.evaluate(`/agent/self`, {
+      type: `inbox`,
+      key: `msg-1`,
+      value: {
+        from: `/principal/agent%3Aself`,
+        payload: { text: `wake up` },
+        timestamp: `2026-01-01T00:00:00.000Z`,
+        message_type: `reminder`,
+      },
+      headers: { operation: `insert` },
+    })
+
+    expect(results).toHaveLength(1)
+    expect(results[0]!.wakeMessage.changes[0]).toEqual({
+      collection: `inbox`,
+      kind: `insert`,
+      key: `msg-1`,
+      from: `/principal/agent%3Aself`,
+      payload: { text: `wake up` },
+      timestamp: `2026-01-01T00:00:00.000Z`,
+      message_type: `reminder`,
+    })
+  })
+
   it(`ignores events for non-matching collections`, async () => {
     const registry = new WakeRegistry(createMockDb())
     await registry.register({
