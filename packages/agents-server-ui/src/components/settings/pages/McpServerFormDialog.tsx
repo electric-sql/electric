@@ -130,7 +130,29 @@ function parseEnv(input: string): Record<string, string> | undefined {
   return Object.keys(env).length > 0 ? env : undefined
 }
 
-function buildConfig(state: FormState): {
+/**
+ * Pull the baseline auth object out of an existing config — but only if
+ * its mode matches what the form has selected. When the user switches
+ * auth modes the prior shape is structurally incompatible (different
+ * required fields, different unknowns), so we start fresh.
+ */
+function baselineAuthForMode(
+  baseline: McpServerConfigInput | undefined,
+  mode: AuthMode
+): Record<string, unknown> {
+  if (!baseline || baseline.transport !== `http`) return {}
+  const existing = baseline.auth as Record<string, unknown> | undefined
+  if (!existing || existing.mode !== mode) return {}
+  // Shallow copy — we only overwrite top-level auth fields below, so
+  // a structural clone is overkill; sub-objects (`client`, `tokens`)
+  // are preserved by reference but never mutated in place.
+  return { ...existing }
+}
+
+function buildConfig(
+  state: FormState,
+  baseline?: McpServerConfigInput
+): {
   cfg?: McpServerConfigInput
   error?: string
 } {
@@ -157,11 +179,21 @@ function buildConfig(state: FormState): {
       auth = { mode: `none` }
     } else if (state.authMode === `apiKey`) {
       if (!state.apiKey.key.trim()) return { error: `API key is required` }
-      auth = { mode: `apiKey`, key: state.apiKey.key }
+      auth = {
+        ...baselineAuthForMode(baseline, `apiKey`),
+        mode: `apiKey`,
+        key: state.apiKey.key,
+      }
       if (state.apiKey.headerName.trim()) {
         auth.headerName = state.apiKey.headerName.trim()
+      } else {
+        delete auth.headerName
       }
-      if (state.apiKey.valuePrefix) auth.valuePrefix = state.apiKey.valuePrefix
+      if (state.apiKey.valuePrefix) {
+        auth.valuePrefix = state.apiKey.valuePrefix
+      } else {
+        delete auth.valuePrefix
+      }
     } else if (state.authMode === `clientCredentials`) {
       if (
         !state.clientCredentials.tokenUrl.trim() ||
@@ -172,7 +204,11 @@ function buildConfig(state: FormState): {
           error: `Token URL, client id, and client secret are required for clientCredentials`,
         }
       }
+      // Preserve baseline `audience`, `resource`, and any other fields
+      // we don't render — the form is a strict subset of the
+      // McpServerConfig.auth schema.
       auth = {
+        ...baselineAuthForMode(baseline, `clientCredentials`),
         mode: `clientCredentials`,
         tokenUrl: state.clientCredentials.tokenUrl.trim(),
         clientId: state.clientCredentials.clientId.trim(),
@@ -180,32 +216,57 @@ function buildConfig(state: FormState): {
       }
       const scopes = splitCsv(state.clientCredentials.scopes)
       if (scopes.length > 0) auth.scopes = scopes
+      else delete auth.scopes
     } else {
-      auth = { mode: `authorizationCode` }
+      // Preserve baseline `resource`, `redirectUri`, `client`, `tokens`,
+      // `oauthProviderRef`, and any persistence-helper callbacks. The
+      // form only renders `scopes` for this mode.
+      auth = {
+        ...baselineAuthForMode(baseline, `authorizationCode`),
+        mode: `authorizationCode`,
+      }
       const scopes = splitCsv(state.authorizationCode.scopes)
       if (scopes.length > 0) auth.scopes = scopes
+      else delete auth.scopes
     }
-    const cfg: McpServerConfigInput = {
+    // Spread baseline first so any top-level keys we don't render
+    // (e.g. unknown future fields someone added by hand) survive.
+    const baselineTop =
+      baseline?.transport === `http`
+        ? (baseline as Record<string, unknown>)
+        : {}
+    const cfg = {
+      ...baselineTop,
       name,
-      transport: `http`,
+      transport: `http` as const,
       url,
       auth,
-    }
+    } as McpServerConfigInput
     if (timeoutMs !== undefined) cfg.timeoutMs = timeoutMs
+    else delete cfg.timeoutMs
     return { cfg }
   }
   const command = state.command.trim()
   if (!command) return { error: `Command is required` }
-  const cfg: McpServerConfigInput = {
+  // Preserve any baseline top-level fields we don't render (most
+  // notably `auth`, which is typically `none` for stdio but the
+  // schema does permit it).
+  const baselineTop =
+    baseline?.transport === `stdio` ? (baseline as Record<string, unknown>) : {}
+  const cfg = {
+    ...baselineTop,
     name,
-    transport: `stdio`,
+    transport: `stdio` as const,
     command,
-  }
+  } as McpServerConfigInput
   const args = splitLines(state.args)
   if (args.length > 0) cfg.args = args
+  else delete cfg.args
   const env = parseEnv(state.env)
   if (env) cfg.env = env
+  else delete cfg.env
   if (timeoutMs !== undefined) cfg.timeoutMs = timeoutMs
+  else delete cfg.timeoutMs
   return { cfg }
 }
 
@@ -251,7 +312,7 @@ export function McpServerFormDialog({
   }, [isEdit, state.name, existingNames])
 
   const handleSubmit = async (): Promise<void> => {
-    const { cfg, error: validationError } = buildConfig(state)
+    const { cfg, error: validationError } = buildConfig(state, initial)
     if (validationError || !cfg) {
       setError(validationError ?? `Invalid configuration`)
       return
