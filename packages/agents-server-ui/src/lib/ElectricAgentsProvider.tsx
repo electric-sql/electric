@@ -478,8 +478,7 @@ function createSpawnAction(
         throw new Error(message)
       }
       const data = (await res.json()) as { txid: number }
-      await entitiesCollection.utils.awaitTxId(data.txid, 10_000)
-      return data
+      return { txid: data.txid }
     },
   })
 }
@@ -692,6 +691,13 @@ export function ElectricAgentsProvider({
       cleanupAppCollections(previousBaseUrl)
     }
     if (!baseUrl) cleanupAppCollectionsExcept(null)
+  }, [baseUrl])
+
+  useEffect(() => {
+    if (!baseUrl) return
+    void preloadAppCollections(baseUrl).catch((err) => {
+      console.error(`Failed to preload agents app collections`, err)
+    })
   }, [baseUrl])
 
   const state = useMemo<ElectricAgentsState>(() => {

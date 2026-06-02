@@ -153,19 +153,20 @@ export function NewSessionView({
     () => recentDirs[0] ?? null
   )
 
-  const { data: entityTypes = [] } = useLiveQuery(
-    (query) => {
-      if (!entityTypesCollection) return undefined
-      return query
-        .from({ t: entityTypesCollection })
-        .where(({ t }) => not(eq(t.name, `worker`)))
-        .where(({ t }) => not(eq(t.name, `principal`)))
-        .orderBy(({ t }) => t.name, `asc`)
-    },
-    [entityTypesCollection]
-  )
+  const { data: entityTypes = [], isLoading: entityTypesLoading } =
+    useLiveQuery(
+      (query) => {
+        if (!entityTypesCollection) return undefined
+        return query
+          .from({ t: entityTypesCollection })
+          .where(({ t }) => not(eq(t.name, `worker`)))
+          .where(({ t }) => not(eq(t.name, `principal`)))
+          .orderBy(({ t }) => t.name, `asc`)
+      },
+      [entityTypesCollection]
+    )
 
-  const { data: enabledRunners = [] } = useLiveQuery(
+  const { data: enabledRunners = [], isLoading: runnersLoading } = useLiveQuery(
     (query) => {
       if (!runnersCollection) return undefined
       return query
@@ -182,16 +183,20 @@ export function NewSessionView({
   // selection (preserves the old desktop behaviour of routing wakes to
   // the bundled local runtime). `null` outside Electron / before the
   // first state fetch.
+  const isDesktop = typeof window !== `undefined` && Boolean(window.electronAPI)
   const [desktopRunnerId, setDesktopRunnerId] = useState<string | null>(null)
+  const [desktopRunnerLoaded, setDesktopRunnerLoaded] = useState(!isDesktop)
   useEffect(() => {
     let cancelled = false
     void loadDesktopState().then((s) => {
       if (cancelled) return
       setDesktopRunnerId(s?.pullWakeRunnerId?.trim() || null)
+      setDesktopRunnerLoaded(true)
     })
-    const off = onDesktopStateChanged((s) =>
+    const off = onDesktopStateChanged((s) => {
       setDesktopRunnerId(s?.pullWakeRunnerId?.trim() || null)
-    )
+      setDesktopRunnerLoaded(true)
+    })
     return () => {
       cancelled = true
       off?.()
@@ -440,6 +445,14 @@ export function NewSessionView({
     [defaultAgent, doSpawn, workingDirectory, addRecentDir, allSandboxProfiles]
   )
 
+  const defaultComposerReady =
+    Boolean(spawnEntity) &&
+    !entityTypesLoading &&
+    !runnersLoading &&
+    desktopRunnerLoaded &&
+    (!isDesktop || desktopRunnerId === null || desktopRunnerIsAvailable) &&
+    effectiveRunnerId !== null
+
   return (
     <div className={styles.body}>
       <div className={styles.container}>
@@ -468,6 +481,7 @@ export function NewSessionView({
             onSelectType={handleSelectType}
             onStartDefault={handleStartDefault}
             spawnReady={Boolean(spawnEntity)}
+            defaultComposerReady={defaultComposerReady}
             error={error}
             workingDirectory={workingDirectory}
             onChangeWorkingDirectory={setWorkingDirectory}
@@ -488,6 +502,7 @@ function Picker({
   onSelectType,
   onStartDefault,
   spawnReady,
+  defaultComposerReady,
   error,
   workingDirectory,
   onChangeWorkingDirectory,
@@ -506,6 +521,7 @@ function Picker({
     sandboxProfile: string | null
   ) => Promise<boolean>
   spawnReady: boolean
+  defaultComposerReady: boolean
   error: string | null
   workingDirectory: string | null
   onChangeWorkingDirectory: (path: string | null) => void
@@ -538,7 +554,7 @@ function Picker({
           agent={defaultAgent}
           sandboxProfiles={defaultAgentSandboxProfiles}
           onSubmit={onStartDefault}
-          disabled={!spawnReady}
+          disabled={!defaultComposerReady}
           workingDirectory={workingDirectory}
           onChangeWorkingDirectory={onChangeWorkingDirectory}
           runners={runners}

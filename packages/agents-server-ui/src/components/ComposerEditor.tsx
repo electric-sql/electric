@@ -78,6 +78,57 @@ const composerSchema = new Schema({
         ]
       },
     },
+    slash_argument: {
+      inline: true,
+      group: `inline`,
+      content: `text*`,
+      isolating: true,
+      selectable: true,
+      attrs: {
+        name: {},
+        type: { default: `string` },
+        required: { default: false },
+      },
+      parseDOM: [
+        {
+          tag: `span[data-composer-node="slash_argument"]`,
+          getAttrs: (node) => {
+            if (!(node instanceof HTMLElement)) return false
+            const name = node.getAttribute(`data-name`)
+            return name
+              ? {
+                  name,
+                  type: node.getAttribute(`data-type`) ?? `string`,
+                  required: node.getAttribute(`data-required`) === `true`,
+                }
+              : false
+          },
+        },
+      ],
+      toDOM: (node) => {
+        const name = String(node.attrs.name)
+        const type = String(node.attrs.type)
+        const required = node.attrs.required === true
+        return [
+          `span`,
+          {
+            class: styles.slashArgumentSlot,
+            'data-composer-node': `slash_argument`,
+            'data-name': name,
+            'data-type': type,
+            'data-required': required ? `true` : `false`,
+          },
+          [
+            `span`,
+            {
+              class: styles.slashArgumentValue,
+              'data-placeholder': name,
+            },
+            0,
+          ],
+        ]
+      },
+    },
   },
   marks: {},
 })
@@ -102,6 +153,76 @@ interface DismissedSlashQuery extends SlashQuery {}
 
 const normalizeCommandName = (name: string): string =>
   name.startsWith(`/`) ? name.slice(1) : name
+
+export const formatSlashCommandArgumentHint = (
+  command: SlashCommandRow
+): string => {
+  if (command.arguments && command.arguments.length > 0) {
+    return command.arguments
+      .map((arg) => {
+        const label = arg.required ? arg.name : `[${arg.name}]`
+        return arg.type === `string` ? label : `${label}: ${arg.type}`
+      })
+      .join(` `)
+  }
+
+  return ``
+}
+
+const createSlashCommandInsertContent = (
+  schema: Schema,
+  command: SlashCommandRow
+): Array<ProseMirrorNode> => {
+  const name = normalizeCommandName(command.name)
+  const commandNode = schema.nodes.slash_command?.create({ name })
+  if (!commandNode) return []
+
+  const content: Array<ProseMirrorNode> = [commandNode]
+  const argumentNodeType = schema.nodes.slash_argument
+  for (const argument of command.arguments ?? []) {
+    if (!argumentNodeType) break
+    content.push(
+      argumentNodeType.create({
+        name: argument.name,
+        type: argument.type,
+        required: argument.required === true,
+      })
+    )
+  }
+
+  if ((command.arguments ?? []).length === 0) {
+    content.push(schema.text(` `))
+  }
+
+  return content
+}
+
+const contentSize = (content: Array<ProseMirrorNode>): number =>
+  content.reduce((size, node) => size + node.nodeSize, 0)
+
+const appendSourcePart = (parts: Array<string>, part: string): void => {
+  if (
+    part.length > 0 &&
+    parts.length > 0 &&
+    !/\s$/.test(parts[parts.length - 1] ?? ``)
+  ) {
+    parts.push(` `)
+  }
+  parts.push(part)
+}
+
+const firstArgumentInnerOffset = (
+  content: Array<ProseMirrorNode>
+): number | null => {
+  let offset = 0
+  for (const node of content) {
+    if (node.type.name === `slash_argument`) {
+      return offset + 1
+    }
+    offset += node.nodeSize
+  }
+  return null
+}
 
 const createDocFromSource = (source: string): ProseMirrorNode => {
   const paragraphs = source.split(`\n`)
@@ -128,6 +249,8 @@ const sourceFromDoc = (doc: ProseMirrorNode): string => {
         parts.push(`\n`)
       } else if (node.type.name === `slash_command`) {
         parts.push(`/${String(node.attrs.name)}`)
+      } else if (node.type.name === `slash_argument`) {
+        appendSourcePart(parts, node.textContent)
       }
     })
   })
@@ -198,6 +321,11 @@ const serializeComposerInputFromDoc = (
           raw,
           name,
         })
+        return
+      }
+
+      if (node.type.name === `slash_argument`) {
+        appendSourcePart(sourceParts, node.textContent)
       }
     })
   })
@@ -313,6 +441,7 @@ function ComposerEditorEvents({
     selectedCommand,
     slashCommands,
     slashQuery,
+    submit,
   })
 
   useEffect(() => {
@@ -323,6 +452,7 @@ function ComposerEditorEvents({
       selectedCommand,
       slashCommands,
       slashQuery,
+      submit,
     }
   }, [
     autocompleteOpen,
@@ -331,12 +461,28 @@ function ComposerEditorEvents({
     selectedCommand,
     slashCommands,
     slashQuery,
+    submit,
   ])
 
-  const deleteSlashCommandBeforeCursor = useEditorEventCallback((view) => {
+  const deleteComposerAtomBeforeCursor = useEditorEventCallback((view) => {
     if (!view) return false
     const { selection, doc } = view.state
     if (!selection.empty) return false
+
+    const $cursor = selection.$from
+    if (
+      $cursor.parent.type.name === `slash_argument` &&
+      $cursor.parent.content.size === 0
+    ) {
+      const from = $cursor.before()
+      const to = $cursor.after()
+      const beforeArgument = doc.resolve(from)
+      const maybeSpace = beforeArgument.nodeBefore
+      const deleteFrom =
+        maybeSpace?.isText && maybeSpace.text === ` ` ? from - 1 : from
+      view.dispatch(view.state.tr.delete(deleteFrom, to).scrollIntoView())
+      return true
+    }
 
     const cursor = selection.from
     const beforeCursor = doc.resolve(cursor)
@@ -346,7 +492,10 @@ function ComposerEditorEvents({
     const atomCursor = hasTrailingSpace ? cursor - 1 : cursor
     const atomBefore = doc.resolve(atomCursor).nodeBefore
 
-    if (atomBefore?.type.name !== `slash_command`) {
+    if (
+      atomBefore?.type.name !== `slash_command` &&
+      atomBefore?.type.name !== `slash_argument`
+    ) {
       return false
     }
 
@@ -361,18 +510,22 @@ function ComposerEditorEvents({
       const currentSlashQuery = keyboardStateRef.current.slashQuery
       if (!view || !currentSlashQuery) return
 
-      const name = normalizeCommandName(command.name)
-      const commandNode = view.state.schema.nodes.slash_command?.create({
-        name,
-      })
-      if (!commandNode) return
+      const content = createSlashCommandInsertContent(
+        view.state.schema,
+        command
+      )
+      if (content.length === 0) return
       const transaction = view.state.tr.replaceWith(
         currentSlashQuery.from,
         currentSlashQuery.to,
-        [commandNode, view.state.schema.text(` `)]
+        content
       )
       transaction.setSelection(
-        TextSelection.create(transaction.doc, currentSlashQuery.from + 2)
+        TextSelection.create(
+          transaction.doc,
+          currentSlashQuery.from +
+            (firstArgumentInnerOffset(content) ?? contentSize(content))
+        )
       )
 
       view.dispatch(transaction)
@@ -418,7 +571,7 @@ function ComposerEditorEvents({
             ? normalizeCommandName(command.name)
             : null
           if (selectedName === current.slashQuery.query) {
-            submit(view.state.doc)
+            current.submit(view.state.doc)
           } else if (command) {
             insertSlashCommand(command)
           }
@@ -443,7 +596,7 @@ function ComposerEditorEvents({
         }
       }
 
-      if (event.key === `Backspace` && deleteSlashCommandBeforeCursor()) {
+      if (event.key === `Backspace` && deleteComposerAtomBeforeCursor()) {
         event.preventDefault()
         event.stopPropagation()
         return
@@ -452,7 +605,7 @@ function ComposerEditorEvents({
       if (event.key === `Enter` && !event.shiftKey) {
         event.preventDefault()
         event.stopPropagation()
-        submit(view.state.doc)
+        current.submit(view.state.doc)
         return
       }
 
@@ -493,18 +646,22 @@ function SlashCommandPopover({
     (view, command: SlashCommandRow) => {
       if (!view || !slashQuery) return
 
-      const name = normalizeCommandName(command.name)
-      const commandNode = view.state.schema.nodes.slash_command?.create({
-        name,
-      })
-      if (!commandNode) return
+      const content = createSlashCommandInsertContent(
+        view.state.schema,
+        command
+      )
+      if (content.length === 0) return
       const transaction = view.state.tr.replaceWith(
         slashQuery.from,
         slashQuery.to,
-        [commandNode, view.state.schema.text(` `)]
+        content
       )
       transaction.setSelection(
-        TextSelection.create(transaction.doc, slashQuery.from + 2)
+        TextSelection.create(
+          transaction.doc,
+          slashQuery.from +
+            (firstArgumentInnerOffset(content) ?? contentSize(content))
+        )
       )
 
       view.dispatch(transaction)
@@ -555,6 +712,7 @@ function SlashCommandPopover({
         <div className={styles.slashList} role="listbox">
           {commands.map((command, index) => {
             const name = normalizeCommandName(command.name)
+            const argumentHint = formatSlashCommandArgumentHint(command)
             return (
               <div
                 key={command.key ?? `${command.source}:${name}`}
@@ -571,7 +729,15 @@ function SlashCommandPopover({
                   insertSlashCommand(command)
                 }}
               >
-                <span className={styles.slashOptionName}>/{name}</span>
+                <span className={styles.slashOptionName}>
+                  /{name}
+                  {argumentHint ? (
+                    <span className={styles.slashOptionArguments}>
+                      {` `}
+                      {argumentHint}
+                    </span>
+                  ) : null}
+                </span>
                 {command.description ? (
                   <span className={styles.slashOptionDescription}>
                     {command.description}

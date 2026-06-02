@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { serializeComposerInput } from './ComposerEditor'
+import {
+  formatSlashCommandArgumentHint,
+  serializeComposerInput,
+} from './ComposerEditor'
 import type { SlashCommandRow } from '@electric-ax/agents-runtime/client'
 
 const slashCommands: Array<SlashCommandRow> = [
@@ -14,6 +17,19 @@ const slashCommands: Array<SlashCommandRow> = [
     key: `pr-review`,
     name: `pr-review`,
     description: `Review a PR`,
+    arguments: [
+      {
+        name: `number`,
+        type: `number`,
+        required: true,
+        description: `Pull request number`,
+      },
+      {
+        name: `include_tests`,
+        type: `boolean`,
+        required: false,
+      },
+    ],
     source: `static`,
     updated_at: `2026-01-01T00:00:00.000Z`,
   },
@@ -71,5 +87,17 @@ describe(`serializeComposerInput`, () => {
     ).toEqual({
       source: `/QuickStart /bad_command /also--bad`,
     })
+  })
+})
+
+describe(`formatSlashCommandArgumentHint`, () => {
+  it(`formats required and optional arguments as menu hint text`, () => {
+    expect(formatSlashCommandArgumentHint(slashCommands[1]!)).toBe(
+      `number: number [include_tests]: boolean`
+    )
+  })
+
+  it(`returns an empty hint for commands without arguments`, () => {
+    expect(formatSlashCommandArgumentHint(slashCommands[0]!)).toBe(``)
   })
 })

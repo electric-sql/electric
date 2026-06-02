@@ -215,17 +215,75 @@
   display: inline-flex;
   align-items: center;
   max-width: 100%;
-  padding: 0 5px;
+  padding: 1px 9px;
+  border: 1px solid var(--ds-accent-a5);
   border-radius: var(--ds-radius-3);
-  background: var(--ds-accent-a3);
+  background: var(--ds-accent-a2);
   color: var(--ds-accent-11);
   font-size: 0.95em;
-  line-height: 1.35;
+  font-weight: 600;
+  line-height: 1.45;
   white-space: nowrap;
   vertical-align: baseline;
 }
 
 .slashCommandPill:global(.ProseMirror-selectednode) {
+  outline: 2px solid var(--ds-accent-a6);
+  outline-offset: 1px;
+}
+
+.slashArgumentSlot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  min-width: 50px;
+  max-width: 100%;
+  padding: 1px 10px;
+  margin: 0 3px;
+  border: 1px solid var(--ds-gray-a5);
+  border-radius: var(--ds-radius-3);
+  background: var(--ds-gray-a3);
+  color: var(--ds-text-1);
+  font-size: 0.9em;
+  font-weight: 500;
+  line-height: 1.45;
+  vertical-align: baseline;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+}
+
+.slashCommandPill + .slashArgumentSlot,
+.slashArgumentSlot + .slashArgumentSlot {
+  margin-left: 4px;
+}
+
+.slashCommandPill + .slashArgumentSlot::before,
+.slashArgumentSlot + .slashArgumentSlot::before {
+  content: '';
+  position: absolute;
+  left: -5px;
+  top: 50%;
+  z-index: -1;
+  width: 5px;
+  height: 1px;
+  background: var(--ds-gray-a6);
+  transform: translateY(-50%);
+}
+
+.slashArgumentValue {
+  min-width: 0;
+  outline: none;
+  white-space: pre;
+  text-align: center;
+}
+
+.slashArgumentValue:empty::before {
+  content: attr(data-placeholder);
+  color: var(--ds-text-2);
+  pointer-events: none;
+}
+
+.slashArgumentSlot:global(.ProseMirror-selectednode) {
   outline: 2px solid var(--ds-accent-a6);
   outline-offset: 1px;
 }
@@ -265,6 +323,11 @@
   color: var(--ds-text-1);
   font-size: var(--ds-text-sm);
   line-height: var(--ds-text-sm-lh);
+}
+
+.slashOptionArguments {
+  color: var(--ds-text-3);
+  font-weight: 400;
 }
 
 .slashOptionDescription {

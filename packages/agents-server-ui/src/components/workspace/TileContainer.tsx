@@ -89,7 +89,7 @@ function EntityTileBody({
   const { workspace, helpers } = useWorkspace()
   const canRearrange = listTiles(workspace.root).length > 1
 
-  const { data: matches = [] } = useLiveQuery(
+  const { data: matches = [], isLoading } = useLiveQuery(
     (q) => {
       if (!entitiesCollection) return undefined
       return q
@@ -111,13 +111,13 @@ function EntityTileBody({
   // If the entity disappears entirely (e.g. user killed it elsewhere),
   // close this tile so the workspace doesn't keep dead references.
   useEffect(() => {
-    if (matches.length === 0 && entitiesCollection) {
+    if (matches.length === 0 && entitiesCollection && !isLoading) {
       const t = setTimeout(() => {
         if (matches.length === 0) helpers.closeTile(tile.id)
       }, 250)
       return () => clearTimeout(t)
     }
-  }, [matches.length, entitiesCollection, helpers, tile.id])
+  }, [matches.length, entitiesCollection, helpers, isLoading, tile.id])
 
   if (!entity) {
     return (
