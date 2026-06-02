@@ -80,8 +80,23 @@
 .body {
   font-size: var(--ds-chat-text);
   line-height: var(--ds-chat-text-lh);
-  white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+/* User-authored text gets Slack/Discord-style lightweight markdown: links
+   (including bare URLs), emphasis, inline/fenced code, lists and quotes. Keep
+   it compact inside the message bubble and preserve plain newline behavior so
+   ordinary chat messages still look like chat, not documents. */
+.body > div > *:first-child {
+  margin-top: 0;
+}
+
+.body > div > *:last-child {
+  margin-bottom: 0;
+}
+
+.body p {
+  white-space: pre-wrap;
 }
 
 .attachments {
