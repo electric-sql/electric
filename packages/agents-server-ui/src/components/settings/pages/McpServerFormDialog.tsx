@@ -1,16 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { X } from 'lucide-react'
-import {
-  Button,
-  Dialog,
-  Field,
-  Icon,
-  IconButton,
-  Input,
-  Stack,
-  Text,
-  Textarea,
-} from '../../../ui'
+import { Button, Dialog, Field, Input, Text, Textarea } from '../../../ui'
 import inputStyles from '../../../ui/Input.module.css'
 import type { McpServerConfigInput } from '../../../hooks/useMcpServersIpc'
 
@@ -331,45 +320,19 @@ export function McpServerFormDialog({
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
-      <Dialog.Content
-        maxWidth={560}
-        style={{ maxHeight: `90vh`, overflow: `auto` }}
-      >
-        <div
-          style={{
-            display: `flex`,
-            alignItems: `flex-start`,
-            justifyContent: `space-between`,
-            marginBottom: 12,
-          }}
-        >
-          <div>
-            <Dialog.Title>
-              {isEdit ? `Edit MCP server` : `Add MCP server`}
-            </Dialog.Title>
-            <Dialog.Description>
-              {isEdit
-                ? `Update the configuration. Name and transport are immutable — remove and re-add to change them.`
-                : `Add a server to your desktop settings. Use stdio for a locally-spawned process or http for a remote MCP endpoint.`}
-            </Dialog.Description>
-          </div>
-          <Dialog.Close
-            render={
-              <IconButton
-                type="button"
-                size={1}
-                variant="ghost"
-                tone="neutral"
-                round
-                aria-label="Close dialog"
-              >
-                <Icon icon={X} size={2} />
-              </IconButton>
-            }
-          />
-        </div>
+      <Dialog.Content maxWidth={560} style={{ maxHeight: `90vh` }}>
+        <Dialog.Header>
+          <Dialog.Title>
+            {isEdit ? `Edit MCP server` : `Add MCP server`}
+          </Dialog.Title>
+          <Dialog.Description>
+            {isEdit
+              ? `Update the configuration. Name and transport are immutable — remove and re-add to change them.`
+              : `Add a server to your desktop settings. Use stdio for a locally-spawned process or http for a remote MCP endpoint.`}
+          </Dialog.Description>
+        </Dialog.Header>
 
-        <Stack direction="column" gap={3}>
+        <Dialog.Body>
           <Field
             label="Name"
             required
@@ -645,20 +608,20 @@ export function McpServerFormDialog({
               {error}
             </Text>
           )}
+        </Dialog.Body>
 
-          <Stack direction="row" gap={2} justify="end">
-            <Dialog.Close
-              render={
-                <Button variant="soft" tone="neutral" disabled={submitting}>
-                  Cancel
-                </Button>
-              }
-            />
-            <Button onClick={() => void handleSubmit()} disabled={submitting}>
-              {isEdit ? `Save changes` : `Add server`}
-            </Button>
-          </Stack>
-        </Stack>
+        <Dialog.Footer>
+          <Dialog.Close
+            render={
+              <Button variant="soft" tone="neutral" disabled={submitting}>
+                Cancel
+              </Button>
+            }
+          />
+          <Button onClick={() => void handleSubmit()} disabled={submitting}>
+            {isEdit ? `Save changes` : `Add server`}
+          </Button>
+        </Dialog.Footer>
       </Dialog.Content>
     </Dialog.Root>
   )

@@ -1,5 +1,8 @@
 import { Dialog as BaseDialog } from '@base-ui/react/dialog'
+import { X } from 'lucide-react'
 import type { CSSProperties, ReactNode } from 'react'
+import { Icon } from './Icon'
+import { IconButton } from './IconButton'
 import styles from './Dialog.module.css'
 
 interface RootProps {
@@ -118,6 +121,84 @@ function Description({
   )
 }
 
+/**
+ * Standard dialog header — title/description on the left, an X close
+ * button on the right. Pair with `Dialog.Title` + `Dialog.Description`
+ * as children. Replaces the ad-hoc flex row that consumers were
+ * hand-rolling around `Dialog.Title` + an IconButton-Close.
+ */
+function Header({
+  children,
+  closeAriaLabel = `Close dialog`,
+}: {
+  children: ReactNode
+  closeAriaLabel?: string
+}): React.ReactElement {
+  return (
+    <div className={styles.header}>
+      <div className={styles.headerText}>{children}</div>
+      <CloseButton ariaLabel={closeAriaLabel} />
+    </div>
+  )
+}
+
+/** Scrollable body — vertical Stack-like layout with the standard gap. */
+function Body({
+  children,
+  className,
+}: {
+  children: ReactNode
+  className?: string
+}): React.ReactElement {
+  return (
+    <div className={[styles.body, className].filter(Boolean).join(` `)}>
+      {children}
+    </div>
+  )
+}
+
+/**
+ * Footer for actions — right-aligned row. Wrap cancel + submit buttons.
+ * The cancel button is typically a `Dialog.Close` render-prop wrapping
+ * a `Button` so it dismisses without consumer wiring.
+ */
+function Footer({
+  children,
+  className,
+}: {
+  children: ReactNode
+  className?: string
+}): React.ReactElement {
+  return (
+    <div className={[styles.footer, className].filter(Boolean).join(` `)}>
+      {children}
+    </div>
+  )
+}
+
+function CloseButton({
+  ariaLabel = `Close dialog`,
+}: {
+  ariaLabel?: string
+}): React.ReactElement {
+  return (
+    <BaseDialog.Close
+      render={
+        <IconButton
+          type="button"
+          size={1}
+          variant="ghost"
+          tone="neutral"
+          round
+          aria-label={ariaLabel}
+        >
+          <Icon icon={X} size={2} />
+        </IconButton>
+      }
+    />
+  )
+}
+
 export const Dialog = {
   Root,
   Trigger: BaseDialog.Trigger,
@@ -125,4 +206,8 @@ export const Dialog = {
   Content,
   Title,
   Description,
+  Header,
+  Body,
+  Footer,
+  CloseButton,
 }
