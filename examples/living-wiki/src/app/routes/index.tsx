@@ -1,4 +1,5 @@
 import { createRoute } from '@tanstack/react-router'
+import { HealthPanel } from '../components/HealthPanel'
 import { Route as rootRoute } from './__root'
 
 export const Route = createRoute({
@@ -34,7 +35,7 @@ function IndexRoute() {
         A multiplayer substrate-engineering demo where humans and agents compile
         sources into a living wiki graph.
       </p>
-      <div id="health-panel-root" />
+      <HealthPanel />
     </section>
   )
 }
