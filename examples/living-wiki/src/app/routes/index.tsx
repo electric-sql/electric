@@ -1,6 +1,9 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createRoute } from '@tanstack/react-router'
+import { Route as rootRoute } from './__root'
 
-export const Route = createFileRoute(`/` as never)({
+export const Route = createRoute({
+  getParentRoute: () => rootRoute,
+  path: `/`,
   component: IndexRoute,
 })
 
