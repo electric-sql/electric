@@ -1,7 +1,7 @@
 {
   "name": "@electric-ax/agents-server-ui",
   "private": true,
-  "version": "0.4.14",
+  "version": "0.4.15",
   "type": "module",
   "scripts": {
     "build": "vite build",
