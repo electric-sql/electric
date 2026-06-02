@@ -253,13 +253,13 @@ export class CloudAgentServers {
     tenantId: string
   ): Promise<{ url: string; tenantId: string }> {
     const url = cloudAgentServerUrl(tenantId)
-    const cached = this.getAgentsToken(tenantId)
-    if (cached) return { url, tenantId }
-
     const token = await this.cloudAuth.getToken()
     if (!token) {
       throw new Error(`Not signed in to Electric Cloud`)
     }
+
+    const cached = this.getAgentsToken(tenantId)
+    if (cached) return { url, tenantId }
     const agentsToken = await this.fetchAgentsToken(tenantId, token)
     this.agentsTokens.set(tenantId, agentsToken)
     await this.secretStore.set(`${TOKEN_REF_PREFIX}${tenantId}`, agentsToken)
