@@ -53,4 +53,28 @@ describe(`StreamClient.fork`, () => {
       sourceEvent,
     ])
   })
+
+  it(`forks at a sub-offset to truncate source history`, async () => {
+    // The durable-streams TS server treats one POST as one message,
+    // regardless of content type — so writing the source as a single
+    // body=JSON.stringify([a,b,c]) creates ONE flattened message of
+    // three JSON values. Sub-offset 2 then slices that to two values.
+    await client.create(`/source-sub-offset`, {
+      contentType: `application/json`,
+      body: JSON.stringify([
+        { key: `a`, value: 1 },
+        { key: `b`, value: 2 },
+        { key: `c`, value: 3 },
+      ]),
+    })
+
+    await client.fork(`/fork-truncated`, `/source-sub-offset`, {
+      forkPointer: { offset: null, subOffset: 2 },
+    })
+
+    await expect(client.readJson(`/fork-truncated`)).resolves.toEqual([
+      { key: `a`, value: 1 },
+      { key: `b`, value: 2 },
+    ])
+  })
 })

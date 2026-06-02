@@ -25,6 +25,46 @@
   padding-right: 44px;
 }
 
+/* "Fork from here" hover-revealed button. Sits in the same top-right
+ * slot as `.stopButton`, but they're mutually exclusive: while a run is
+ * generating we show stop; otherwise (eligible messages) we show fork.
+ * Opacity-toggled rather than display-toggled so the layout doesn't
+ * shift on hover. Always visible to keyboard users via :focus-within. */
+.forkButton {
+  all: unset;
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--ds-radius-full);
+  background: var(--ds-gray-a3);
+  color: var(--ds-gray-12);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 0.12s ease,
+    background 0.12s ease;
+}
+
+.bubble:hover .forkButton,
+.bubble:focus-within .forkButton,
+.forkButton:focus-visible {
+  opacity: 1;
+}
+
+.forkButton:hover {
+  background: var(--ds-gray-a4);
+}
+
+.forkButton:focus-visible {
+  outline: 2px solid var(--ds-accent-a6);
+  outline-offset: 2px;
+}
+
 .stopButton {
   all: unset;
   position: absolute;

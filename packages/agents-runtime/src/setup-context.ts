@@ -5,6 +5,7 @@ import {
   queryOnce,
 } from '@durable-streams/state'
 import { createWakeSession } from './wake-session'
+import { comparePointers, type EventPointer } from './event-pointer'
 import {
   manifestChildKey,
   manifestEffectKey,
@@ -638,20 +639,20 @@ export function createSetupContext(
 
   type OffsetAwareCollection<TRow extends { key: string | number }> = {
     toArray: Array<TRow>
-    __electricRowOffsets?: Map<string | number, string>
+    __electricRowOffsets?: Map<string | number, EventPointer>
   }
 
   function sortRowsByCollectionOrder<TRow extends { key: string | number }>(
     collection: OffsetAwareCollection<TRow>
   ): Array<TRow> {
     return [...collection.toArray].sort((left, right) => {
-      const leftOffset = collection.__electricRowOffsets?.get(left.key)
-      const rightOffset = collection.__electricRowOffsets?.get(right.key)
-      if (leftOffset && rightOffset) {
-        return leftOffset.localeCompare(rightOffset)
+      const leftPointer = collection.__electricRowOffsets?.get(left.key)
+      const rightPointer = collection.__electricRowOffsets?.get(right.key)
+      if (leftPointer && rightPointer) {
+        return comparePointers(leftPointer, rightPointer)
       }
-      if (leftOffset) return -1
-      if (rightOffset) return 1
+      if (leftPointer) return -1
+      if (rightPointer) return 1
 
       const leftSeq = Reflect.get(left, `_seq`)
       const rightSeq = Reflect.get(right, `_seq`)

@@ -4,6 +4,7 @@ import {
   FetchError,
   IdempotentProducer,
 } from '@durable-streams/client'
+import type { EventPointer } from '@electric-ax/agents-runtime'
 import { ErrCodeNotFound } from './electric-agents-types.js'
 import { ATTR, injectTraceHeaders, withSpan } from './tracing.js'
 import type { HeadersRecord, MaybePromise } from '@durable-streams/client'
@@ -242,7 +243,11 @@ export class StreamClient {
     })
   }
 
-  async fork(path: string, sourcePath: string): Promise<void> {
+  async fork(
+    path: string,
+    sourcePath: string,
+    opts?: { forkPointer?: EventPointer }
+  ): Promise<void> {
     return await withSpan(`stream.fork`, async (span) => {
       span.setAttributes({
         [ATTR.STREAM_PATH]: path,
@@ -251,6 +256,17 @@ export class StreamClient {
       const headers: Record<string, string> = {
         'content-type': `application/json`,
         'Stream-Forked-From': new URL(this.streamUrl(sourcePath)).pathname,
+      }
+      if (opts?.forkPointer) {
+        // The durable-streams server returns 400 if Stream-Fork-Sub-Offset
+        // > 0 without an accompanying Stream-Fork-Offset. When our
+        // pointer's offset is `null` (anchor at stream start), send the
+        // explicit zero-offset string to satisfy that constraint.
+        const ZERO_OFFSET = `0000000000000000_0000000000000000`
+        headers[`Stream-Fork-Offset`] = opts.forkPointer.offset ?? ZERO_OFFSET
+        if (opts.forkPointer.subOffset > 0) {
+          headers[`Stream-Fork-Sub-Offset`] = String(opts.forkPointer.subOffset)
+        }
       }
       injectTraceHeaders(headers)
 

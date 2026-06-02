@@ -334,3 +334,11 @@ export type {
 
 export { registerToolProvider, unregisterToolProvider } from './tool-providers'
 export type { ToolProviderEntry } from './tool-providers'
+
+export {
+  comparePointers,
+  formatPointerOrderToken,
+  STREAM_START_POINTER,
+  STREAM_TOKEN_PREFIX,
+} from './event-pointer'
+export type { EventPointer } from './event-pointer'

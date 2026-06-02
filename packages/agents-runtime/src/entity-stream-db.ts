@@ -8,6 +8,7 @@ import {
   isControlEvent,
 } from '@durable-streams/state'
 import { builtInCollections, passthrough } from './entity-schema'
+import { formatPointerOrderToken, type EventPointer } from './event-pointer'
 import type {
   ActionDefinition,
   ChangeEvent,
@@ -45,7 +46,7 @@ interface EntityWriteUtils {
 type EntityCollectionMeta = {
   __electricSourceDb?: EntityStreamDBWithActions
   __electricSourceId?: string
-  __electricRowOffsets?: Map<string | number, string>
+  __electricRowOffsets?: Map<string | number, EventPointer>
   __electricTimelineOrders?: Map<string | number, string>
 }
 
@@ -99,14 +100,6 @@ type EntityStreamDBOptions = {
 )
 
 const WRITE_TXID_TIMEOUT_MS = 20_000
-const TIMELINE_OFFSET_WIDTH = 24
-const TIMELINE_BATCH_INDEX_WIDTH = 8
-
-function formatStreamTimelineOrder(offset: string, index: number): string {
-  return `stream:${offset.padStart(TIMELINE_OFFSET_WIDTH, `0`)}:${index
-    .toString()
-    .padStart(TIMELINE_BATCH_INDEX_WIDTH, `0`)}`
-}
 
 /**
  * Create a StreamDB connected to a Electric Agents entity stream.
@@ -145,7 +138,10 @@ export function createEntityStreamDB(
     ...streamCustomState,
   }
   const collectionNameByEventType = new Map<string, string>()
-  const rowOffsetsByCollection = new Map<string, Map<string | number, string>>()
+  const rowOffsetsByCollection = new Map<
+    string,
+    Map<string | number, EventPointer>
+  >()
   const timelineOrdersByCollection = new Map<
     string,
     Map<string | number, string>
@@ -155,6 +151,12 @@ export function createEntityStreamDB(
     rowOffsetsByCollection.set(name, new Map())
     timelineOrdersByCollection.set(name, new Map())
   }
+
+  // Tracks the END offset of the previous batch — i.e. the START
+  // offset of the next batch's items, which is the anchor we pair
+  // with each item's sub-offset to form an `EventPointer`. `null`
+  // before any batch has arrived (anchor at stream start).
+  let previousBatchOffset: string | null = null
   // Build a reverse map from TanStack DB collection id to schema key
   const collIdToSchemaKey: Record<string, string> = {}
   for (const name of Object.keys(mergedCollections)) {
@@ -285,7 +287,21 @@ export function createEntityStreamDB(
     onBeforeBatch: (batch) => {
       opts?.onBeforeBatch?.(batch)
       replayBatchOffset.current = batch.offset
-      batch.items.forEach((item, itemIndex) => {
+      // `Stream-Fork-Sub-Offset` addresses items WITHIN A SINGLE LOG
+      // ENTRY (the first log entry past the anchor), not items globally
+      // past the anchor. To mint server-compatible pointers we group
+      // items in the batch by their `headers.offset` (= the end offset
+      // of the log entry that produced them, stable at write time).
+      // Each contiguous group of items sharing an `headers.offset` is
+      // one log entry; within it sub-offsets are 1..K. The anchor
+      // offset for that group is the END offset of the PRECEDING log
+      // entry — either the previous distinct `headers.offset` we saw
+      // in this batch, or `previousBatchOffset` for the first group in
+      // a fresh batch.
+      let currentEntryOffset: string | null = null
+      let priorEntryOffset: string | null = previousBatchOffset
+      let positionInEntry = 0
+      batch.items.forEach((item) => {
         if (isControlEvent(item)) {
           if (item.headers.control === `reset`) {
             for (const offsets of rowOffsetsByCollection.values()) {
@@ -294,14 +310,34 @@ export function createEntityStreamDB(
             for (const orders of timelineOrdersByCollection.values()) {
               orders.clear()
             }
+            previousBatchOffset = null
+            currentEntryOffset = null
+            priorEntryOffset = null
+            positionInEntry = 0
           }
           return
         }
         if (!isChangeEvent(item)) return
         const collectionName = collectionNameByEventType.get(item.type)
         if (!collectionName) return
-        const offset = item.headers.offset ?? batch.offset
-        rowOffsetsByCollection.get(collectionName)?.set(item.key, offset)
+
+        const itemEntryOffset =
+          typeof (item.headers as Record<string, unknown>).offset === `string`
+            ? ((item.headers as Record<string, unknown>).offset as string)
+            : null
+        if (itemEntryOffset !== currentEntryOffset) {
+          // Boundary into a new log entry.
+          priorEntryOffset = currentEntryOffset ?? previousBatchOffset
+          currentEntryOffset = itemEntryOffset
+          positionInEntry = 0
+        }
+        positionInEntry++
+
+        const pointer: EventPointer = {
+          offset: priorEntryOffset,
+          subOffset: positionInEntry,
+        }
+        rowOffsetsByCollection.get(collectionName)?.set(item.key, pointer)
 
         if (item.headers.operation === `delete`) return
         if (typeof item.value !== `object` || item.value === null) return
@@ -310,11 +346,16 @@ export function createEntityStreamDB(
         if (!orders) return
         let order = orders.get(item.key)
         if (!order) {
-          order = formatStreamTimelineOrder(offset, itemIndex)
+          order = formatPointerOrderToken(pointer)
           orders.set(item.key, order)
         }
         ;(item.value as Record<string, unknown>)._timeline_order = order
       })
+      // After processing the batch, advance the anchor for next time.
+      // `batch.offset` is the `Stream-Next-Offset` for this batch —
+      // i.e. the cursor that the NEXT batch's items will be addressed
+      // relative to.
+      previousBatchOffset = batch.offset
     },
     onBatch: (batch) => {
       opts?.onBatch?.(batch)
@@ -669,11 +710,17 @@ export function createEntityStreamDB(
         event.value !== null
       ) {
         const orders = timelineOrdersByCollection.get(collectionName)
+        // applyEvent stages an in-process event (not delivered through
+        // a wire batch). It carries a single event, so the pointer's
+        // sub-offset is always 1 ("the one item past this anchor").
+        // If no real offset is available, synthesize a monotonically-
+        // increasing `local:...` token so successive applyEvent calls
+        // still sort in invocation order.
         const offset =
           event.headers.offset ??
           `local:${Date.now().toString().padStart(13, `0`)}`
-        const order =
-          orders?.get(event.key) ?? formatStreamTimelineOrder(offset, 0)
+        const pointer: EventPointer = { offset, subOffset: 1 }
+        const order = orders?.get(event.key) ?? formatPointerOrderToken(pointer)
         orders?.set(event.key, order)
         ;(event.value as Record<string, unknown>)._timeline_order = order
       }

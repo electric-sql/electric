@@ -137,6 +137,15 @@ const inboxMessageBodySchema = Type.Object({
 const forkBodySchema = Type.Object({
   instance_id: Type.Optional(Type.String()),
   waitTimeoutMs: Type.Optional(Type.Number()),
+  // Optional anchor pointing at an event on the source root's `main`
+  // stream. Wire shape is snake_case; the route handler translates to
+  // camelCase before forwarding to entity-manager.
+  fork_pointer: Type.Optional(
+    Type.Object({
+      offset: Type.Union([Type.String(), Type.Null()]),
+      sub_offset: Type.Number(),
+    })
+  ),
 })
 
 const setTagBodySchema = Type.Object({
@@ -796,6 +805,12 @@ async function forkEntity(
   const result = await ctx.entityManager.forkSubtree(entityUrl, {
     rootInstanceId: parsed.instance_id,
     waitTimeoutMs: parsed.waitTimeoutMs,
+    ...(parsed.fork_pointer && {
+      forkPointer: {
+        offset: parsed.fork_pointer.offset,
+        subOffset: parsed.fork_pointer.sub_offset,
+      },
+    }),
   })
   for (const forkedEntity of result.entities) {
     await linkEntityDispatchSubscription(ctx, forkedEntity)
