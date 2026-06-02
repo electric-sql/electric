@@ -88,9 +88,9 @@ Write `examples/living-wiki/package.json`:
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "pnpm run --parallel \"/^dev:/\"",
+    "dev": "concurrently \"pnpm run dev:vite\" \"pnpm run dev:worker\"",
     "dev:vite": "vite --host 0.0.0.0",
-    "dev:worker": "wrangler dev --local --port 8787",
+    "dev:worker": "pnpm build && wrangler dev --local --port 8787",
     "build": "vite build",
     "deploy": "pnpm build && wrangler deploy",
     "typecheck": "tsc --noEmit",
@@ -117,6 +117,7 @@ Write `examples/living-wiki/package.json`:
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.2.0",
+    "concurrently": "^9.2.1",
     "jsdom": "^27.0.0",
     "typescript": "^5.7.0",
     "vite": "^7.2.4",
@@ -851,7 +852,7 @@ import { createRouter } from '@tanstack/react-router'
 import { Route as rootRoute } from './routes/__root'
 import { Route as indexRoute } from './routes/index'
 
-const routeTree = rootRoute.addChildren([indexRoute])
+const routeTree = rootRoute.addChildren({ indexRoute })
 
 export const router = createRouter({ routeTree })
 
@@ -1328,10 +1329,10 @@ Run in terminal A:
 
 ```bash
 cd /Users/kylemathews/programs/electric/examples/living-wiki
-pnpm wrangler dev --local --port 8787
+pnpm run dev:worker
 ```
 
-Run in terminal B:
+This builds frontend assets before starting Worker dev. Run in terminal B:
 
 ```bash
 curl -s http://localhost:8787/api/health | node -e 'let s=""; process.stdin.on("data", d => s += d); process.stdin.on("end", () => { const j = JSON.parse(s); if (!j.ok || j.app !== "living-wiki") process.exit(1); console.log(j.app, j.env); })'

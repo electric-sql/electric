@@ -42,3 +42,4 @@ _artifacts
 
 # npm local cache/logs
 .npm/
+**/.wrangler/
