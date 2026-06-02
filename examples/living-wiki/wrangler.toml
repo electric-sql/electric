@@ -1,0 +1,15 @@
+name = "living-wiki-demo"
+main = "src/worker/index.ts"
+compatibility_date = "2026-06-02"
+compatibility_flags = ["nodejs_compat"]
+
+[assets]
+directory = "./dist/client"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+
+[vars]
+APP_ENV = "local"
+ELECTRIC_CLOUD_API_URL = "https://api.electric-sql.cloud"
+ELECTRIC_AGENTS_SPACE_ID = "local-dev-space"
+ENABLE_SEEDED_DEMO = "true"
