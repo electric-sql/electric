@@ -1,17 +1,40 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as Linking from 'expo-linking'
 import type { ReactNode } from 'react'
 import { cloudAuth } from './cloudAuth'
+import { resolveActiveAfterCloudSignOut } from './availableServers'
+import { getCloudServiceIdFromServerUrl } from './cloudAgentUrls'
+import {
+  addSavedServer,
+  getSavedServers,
+  removeCloudSavedServers,
+} from './savedServers'
 import { prepareServerHeaders } from './serverHeaders'
 
 const SERVER_URL_KEY = `electric-agents-mobile.server-url`
 const ONBOARDING_DISMISSED_KEY = `electric-agents-mobile.onboarding-dismissed`
 
+function hostOf(url: string): string {
+  try {
+    return new URL(url).host || url
+  } catch {
+    return url
+  }
+}
+
 type MobileAppState = {
   loading: boolean
   serverUrl: string | null
-  saveServerUrl: (next: string) => Promise<void>
+  /** Set (or, with `null`, clear) the active server. */
+  saveServerUrl: (next: string | null) => Promise<void>
   launchUrl: string | null
   /**
    * Whether the user has finished or explicitly opted out of the
@@ -47,6 +70,22 @@ export function MobileAppStateProvider({
       // headers registered. Otherwise a race window lets early fetches
       // go out unauthenticated and 401 against Cloud servers.
       await prepareServerHeaders(storedUrl)
+      // Migrate users upgrading from the single-URL model: surface their
+      // active self-hosted server in the saved list so it appears in the
+      // unified picker. Cloud servers are intentionally skipped — they come
+      // from the live shape list (and would be purged on sign-out anyway).
+      if (
+        storedUrl &&
+        getCloudServiceIdFromServerUrl(storedUrl) === null &&
+        !getSavedServers().some((s) => s.url === storedUrl)
+      ) {
+        addSavedServer({
+          id: storedUrl,
+          name: hostOf(storedUrl),
+          url: storedUrl,
+          source: `manual`,
+        })
+      }
       setServerUrl(storedUrl)
       setLaunchUrl(initialUrl)
       setOnboardingDismissedState(storedOnboarding === `true`)
@@ -54,28 +93,54 @@ export function MobileAppStateProvider({
     })()
   }, [])
 
+  const persistServerUrl = useCallback(
+    async (next: string | null): Promise<void> => {
+      if (next) {
+        await AsyncStorage.setItem(SERVER_URL_KEY, next)
+      } else {
+        await AsyncStorage.removeItem(SERVER_URL_KEY)
+      }
+      setServerUrl(next)
+    },
+    []
+  )
+
   // Re-apply headers on cloud-auth transitions so a fresh sign-in
   // immediately makes the agents-token available to in-flight
   // collections without restarting the app. Also re-runs on serverUrl
   // change (covers `saveServerUrl`).
+  //
+  // On sign-out we additionally purge persisted Cloud servers and, if the
+  // active server was a Cloud server (now unreachable without a token),
+  // fall back to a remaining self-hosted server — or clear the active
+  // server, which routes the user to the server-setup screen.
   useEffect(() => {
     if (loading) return
-    void prepareServerHeaders(serverUrl)
-    const unsubscribe = cloudAuth.subscribe(() => {
+    const apply = (): void => {
+      if (cloudAuth.getState().status === `signed-out`) {
+        removeCloudSavedServers()
+        const next = resolveActiveAfterCloudSignOut(
+          serverUrl,
+          getSavedServers()
+        )
+        if (next.changed) {
+          void persistServerUrl(next.url)
+          return
+        }
+      }
       void prepareServerHeaders(serverUrl)
-    })
+    }
+    apply()
+    const unsubscribe = cloudAuth.subscribe(apply)
     return unsubscribe
-  }, [serverUrl, loading])
+  }, [serverUrl, loading, persistServerUrl])
 
   const value = useMemo<MobileAppState>(
     () => ({
       loading,
       serverUrl,
       launchUrl,
-      saveServerUrl: async (next: string) => {
-        await AsyncStorage.setItem(SERVER_URL_KEY, next)
-        setServerUrl(next)
-      },
+      saveServerUrl: persistServerUrl,
       onboardingDismissed,
       setOnboardingDismissed: async (next: boolean) => {
         if (next) {
@@ -86,7 +151,7 @@ export function MobileAppStateProvider({
         setOnboardingDismissedState(next)
       },
     }),
-    [loading, serverUrl, launchUrl, onboardingDismissed]
+    [loading, serverUrl, launchUrl, onboardingDismissed, persistServerUrl]
   )
 
   return (
