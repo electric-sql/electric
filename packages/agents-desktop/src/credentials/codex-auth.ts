@@ -283,24 +283,14 @@ async function refreshCodexAuthIfNeeded(
   return next
 }
 
-async function clearCodexAuth(
-  deps: Pick<
-    CodexAuthDeps,
-    `settings` | `getSecretStore` | `saveSettings` | `markCredentialsDirty`
-  >
-): Promise<void> {
+async function clearCodexAuth(deps: CodexAuthDeps): Promise<void> {
   deps.settings.codex = { enabled: false, source: null }
   await deps.getSecretStore().delete(CODEX_AUTH_REF)
   await deps.saveSettings()
   deps.markCredentialsDirty()
 }
 
-export async function syncCodexEnvironment(
-  deps: Pick<
-    CodexAuthDeps,
-    `settings` | `getSecretStore` | `saveSettings` | `markCredentialsDirty`
-  >
-): Promise<void> {
+export async function syncCodexEnvironment(deps: CodexAuthDeps): Promise<void> {
   process.env.ELECTRIC_CODEX_REQUIRE_OPT_IN = `1`
   delete process.env.ELECTRIC_CODEX_ACCESS_TOKEN
   const codex = deps.settings.codex ?? { enabled: false, source: null }
