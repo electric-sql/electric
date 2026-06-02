@@ -1,4 +1,5 @@
 import { BuiltinAgentsServer } from './server.js'
+import { installDurableStreamsFetchCache } from './durable-streams-cache.js'
 import { mergeElectricPrincipalHeader } from './server-headers.js'
 import type { BuiltinAgentsServerOptions } from './server.js'
 
@@ -160,6 +161,8 @@ export async function runBuiltinAgentsEntrypoint({
   server: BuiltinAgentsEntrypointServer
   url: string
 }> {
+  installDurableStreamsFetchCache()
+
   const options = resolveBuiltinAgentsEntrypointOptions(env, cwd)
   const server = createServer(options)
   const url = await server.start()
