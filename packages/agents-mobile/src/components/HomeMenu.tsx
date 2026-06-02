@@ -113,12 +113,14 @@ export function HomeMenu({
 
   const handleClose = (): void => {
     onClose()
-    // Reset the submenu so the next open shows the root page. Done
-    // after the dismiss animation so the user doesn't see a flash.
+    // Reset the submenu so the next open shows the root page. Done after
+    // the dismiss animation completes (BottomSheet closes over 190ms, the
+    // drill transition over 180ms) so the pane doesn't visibly snap back
+    // to root mid-close.
     setTimeout(() => {
       setPage(`root`)
       resetDrill()
-    }, 150)
+    }, 200)
   }
 
   const goTo = (next: Page, direction: 1 | -1): void => {
@@ -381,15 +383,23 @@ function ServerListPage({
   const { saveServerUrl } = useMobileAppState()
   const { state: cloudState } = useCloudAuth()
   const [connectingKey, setConnectingKey] = useState<string | null>(null)
+  const [connectError, setConnectError] = useState<string | null>(null)
 
   const selectServer = async (item: AvailableServer): Promise<void> => {
     if (connectingKey) return
     setConnectingKey(item.key)
+    setConnectError(null)
     try {
-      // For a live Cloud server not yet in the saved list, persist it so
-      // it survives a relaunch (and can be purged on sign-out).
+      // For a live Cloud server not yet in the saved list, register its
+      // auth headers first — Cloud rejects unauthenticated requests with
+      // 401, so this must succeed before we switch to it.
       if (!item.saved && item.kind === `cloud`) {
         await prepareServerHeaders(item.url)
+      }
+      await saveServerUrl(item.url)
+      // Persist only after the switch succeeds, so the saved list never
+      // holds a server we couldn't actually connect to.
+      if (!item.saved && item.kind === `cloud`) {
         const serviceId = getCloudServiceIdFromServerUrl(item.url)
         addSavedServer({
           id: serviceId ?? item.url,
@@ -398,8 +408,11 @@ function ServerListPage({
           source: `electric-cloud`,
         })
       }
-      await saveServerUrl(item.url)
       onClose()
+    } catch (err) {
+      // Surface the failure in-sheet rather than silently closing the
+      // spinner — mirrors ServerSetupScreen's cloudConnectError handling.
+      setConnectError(err instanceof Error ? err.message : String(err))
     } finally {
       setConnectingKey(null)
     }
@@ -455,6 +468,11 @@ function ServerListPage({
               }}
             />
           ))
+        )}
+        {connectError && (
+          <Text style={[styles.errorText, { color: tokens.red11 }]}>
+            {connectError}
+          </Text>
         )}
       </BottomSheetSection>
       <BottomSheetSeparator />
@@ -535,5 +553,11 @@ const styles = StyleSheet.create({
   },
   connecting: {
     fontSize: 16,
+  },
+  errorText: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 13,
+    lineHeight: 18,
   },
 })

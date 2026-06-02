@@ -119,7 +119,7 @@ export function addSavedServer(server: SavedServer): void {
   update(next)
 }
 
-export function removeSavedServer(id: string): void {
+export function removeSavedServerById(id: string): void {
   const next = current.filter((s) => s.id !== id)
   if (next.length !== current.length) update(next)
 }

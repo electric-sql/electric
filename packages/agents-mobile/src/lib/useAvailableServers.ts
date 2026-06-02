@@ -24,6 +24,6 @@ export function useAvailableServers() {
         serverUrl,
         cloudAgentServerUrl
       ),
-    [saved, cloudServers, serverUrl]
+    [saved, cloudServers, serverUrl, cloudAgentServerUrl]
   )
 }

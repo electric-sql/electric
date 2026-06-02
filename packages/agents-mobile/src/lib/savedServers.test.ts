@@ -61,11 +61,11 @@ describe(`savedServers`, () => {
   })
 
   it(`removes a server by id`, async () => {
-    const { addSavedServer, removeSavedServer, getSavedServers } =
+    const { addSavedServer, removeSavedServerById, getSavedServers } =
       await freshModule()
     addSavedServer(manual)
     addSavedServer(cloud)
-    removeSavedServer(cloud.id)
+    removeSavedServerById(cloud.id)
     expect(getSavedServers()).toEqual([manual])
   })
 

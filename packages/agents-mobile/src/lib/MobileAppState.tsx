@@ -74,6 +74,10 @@ export function MobileAppStateProvider({
       // active self-hosted server in the saved list so it appears in the
       // unified picker. Cloud servers are intentionally skipped — they come
       // from the live shape list (and would be purged on sign-out anyway).
+      // Caveat: an old query-param-routed Cloud URL is not recognised by
+      // getCloudServiceIdFromServerUrl (returns null), so it migrates as
+      // `manual` and won't be purged on sign-out. Accepted — that legacy
+      // URL format predates the unified picker and affects few/no users.
       if (
         storedUrl &&
         getCloudServiceIdFromServerUrl(storedUrl) === null &&
