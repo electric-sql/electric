@@ -170,6 +170,64 @@ pnpm --filter @electric-ax/example-living-wiki test src/shared/agents-proxy.test
 pnpm --filter @electric-ax/example-living-wiki test
 ```
 
+## Living Wiki Shared State
+
+Living Wiki shared-state rows are defined in `src/shared/wiki-state.ts` and observed in the browser through the Worker proxy route:
+
+```text
+GET /api/observe/:wikiSpaceId/shared-state
+```
+
+The current shared-state schema includes:
+
+- `wiki_spaces`
+- `actors`
+- `memberships`
+- `activity_events`
+- `sources`
+- `wiki_pages`
+- `wiki_links`
+- `review_items`
+- `agent_runs`
+
+Browser code should use `createLivingWikiStateDb` from `src/app/db/wikiStateDb.ts` to create a typed stream DB. The helper calls `createStreamDB` with the Worker-local observe URL and does not call `preload()` automatically.
+
+```typescript
+import { createLivingWikiStateDb } from './app/db/wikiStateDb'
+
+const db = createLivingWikiStateDb({ wikiSpaceId: 'wiki_demo' })
+```
+
+Shared event helpers live in `src/shared/wiki-state-events.ts`. They build validated rows and durable insert events without appending to a real stream.
+
+```typescript
+import { buildActivityEventRow } from './shared/wiki-state-events'
+
+const event = buildActivityEventRow({
+  wiki_space_id: 'wiki_demo',
+  actor_id: 'actor_alice',
+  actor_kind: 'human',
+  event_type: 'space_joined',
+  summary: 'Alice joined the workspace',
+  subject_type: 'membership',
+  subject_id: 'membership_wiki_demo_actor_alice',
+})
+```
+
+Shared-state security invariants:
+
+- Browser code observes shared state only through `/api/observe/:wikiSpaceId/shared-state`.
+- Browser code must not import Worker env modules or Agents proxy internals.
+- Browser helpers must not expose raw `living-wiki:*` shared-state IDs, `/_electric/shared-state` paths, upstream Agents URLs, tokens, or principal keys.
+
+Shared-state test commands:
+
+```bash
+pnpm --filter @electric-ax/example-living-wiki test src/shared/wiki-state.test.ts src/shared/wiki-state-ids.test.ts src/shared/wiki-state-events.test.ts src/app/db/wikiStateDb.test.ts
+pnpm --filter @electric-ax/example-living-wiki test
+pnpm --filter @electric-ax/example-living-wiki typecheck
+```
+
 ## Security boundary
 
 Configure `ELECTRIC_CLOUD_API_TOKEN` only as a Worker secret. Do not import it into browser code, expose it through public configuration, or include it in JSON responses. Browser-facing REST and tRPC responses should contain only the data needed by the Living Wiki UI.
