@@ -61,7 +61,9 @@ export default ({ config }: ConfigContext): ExpoConfig =>
       },
     },
     {
-      url: `https://sentry.io/`,
+      // EU region — must match the DSN host (`ingest.de.sentry.io`) so
+      // sentry-cli uploads source maps to the right org/project.
+      url: `https://de.sentry.io/`,
       organization: sentryOrganization,
       project: sentryProject,
     }
