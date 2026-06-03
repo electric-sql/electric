@@ -38,13 +38,9 @@
     ],
     "*.{json,css,md,vue,yml,yaml}": "node_modules/.bin/prettier --write"
   },
-  "//pnpm.overrides": "Collapse the @tanstack/db 0.6.x line to a single version so collections/transactions/live-queries (singleton, instanceof-based) don't break from duplicate copies. @durable-streams/state declares an open ^0.6.0 while @tanstack/react-db pins an exact 0.6.x, so a single app pulls in two 0.6.x copies. Scoped to 0.6.x on purpose: the legacy example starters pin 0.0.x/0.5.8 and must not be forced onto 0.6.x. Stopgap — drop this once @durable-streams/state ships @tanstack/db as a peer dep (durable-streams PR #381) and we bump to it.",
   "pnpm": {
     "patchedDependencies": {
       "@microsoft/fetch-event-source": "patches/@microsoft__fetch-event-source.patch"
-    },
-    "overrides": {
-      "@tanstack/db@>=0.6.0 <0.7.0": "0.6.7"
     }
   }
 }

@@ -4,11 +4,11 @@ import type {
   StandardTypedV1,
 } from '@standard-schema/spec'
 import type {
-  StreamDB as BaseStreamDB,
   ChangeEvent,
   CollectionDefinition as StateCollectionDefinition,
   StateEvent,
 } from '@durable-streams/state'
+import type { StreamDB as BaseStreamDB } from '@durable-streams/state/db'
 import type { EntityRegistry } from './define-entity'
 import type {
   Collection as TanStackCollection,

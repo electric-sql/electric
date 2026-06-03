@@ -4,7 +4,7 @@ import type {
   SharedStateHandle,
 } from '@electric-ax/agents-runtime'
 import { db } from '@electric-ax/agents-runtime'
-import { queryOnce } from '@durable-streams/state'
+import { queryOnce } from '@durable-streams/state/db'
 import { Type } from '@sinclair/typebox'
 import { exec, execFile } from 'node:child_process'
 import type { AgentTool } from '@mariozechner/pi-agent-core'

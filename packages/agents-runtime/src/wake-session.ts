@@ -1,4 +1,4 @@
-import { createTransaction, deepEquals } from '@durable-streams/state'
+import { createTransaction, deepEquals } from '@durable-streams/state/db'
 import { entityStateSchema } from './entity-schema'
 import type { ChangeEvent } from '@durable-streams/state'
 import type {
