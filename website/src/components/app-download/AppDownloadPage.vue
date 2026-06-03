@@ -24,6 +24,7 @@ import { VPButton } from 'vitepress/theme'
 import Section from '../agents-home/Section.vue'
 import BottomCtaStrap from '../BottomCtaStrap.vue'
 import AdPlaceholder from './AdPlaceholder.vue'
+import AppMockupEmbed from '../brand-toys/app/AppMockupEmbed.vue'
 import AppMockupShadowHost from '../brand-toys/app/AppMockupShadowHost.vue'
 import HeroChatStateScene from '../brand-toys/app/scenes/desktop/HeroChatStateScene.vue'
 
@@ -452,7 +453,31 @@ const primaryPlatform = computed(
       <div class="ad-scenarios-grid">
         <article class="ad-scenarios-card">
           <div class="ad-scenarios-illo">
-            <AdPlaceholder name="scenario-1.png" aspect="16/9" />
+            <!--
+              Scenario 1 mockup — sidebar + chat. The sidebar uses the
+              default fixture (with "Refactor auth helpers" selected at
+              the top, status streaming) so the eye reads "a fresh
+              session has arrived". Chat title is reframed as a GitHub
+              issue id to anchor the CI spawn in the headline above.
+              Disable container-query reflow so the sidebar stays
+              visible at the card's narrow width — explicit visibility
+              props decide the layout.
+            -->
+            <AppMockupEmbed
+              :scene="HeroChatStateScene"
+              :scene-props="{
+                os: 'auto',
+                theme: 'dark',
+                responsive: false,
+                showSidebar: true,
+                showChatTile: true,
+                showStateTile: false,
+                title: 'Fix flaky auth test · issue/1724',
+                sessionId: 'horton/issue-1724',
+              }"
+              aspect="16/9"
+              :scale="0.75"
+            />
           </div>
           <p class="ad-scenarios-touches mono">
             Touches: Cloud · mobile · steer · stop · review
@@ -470,7 +495,31 @@ const primaryPlatform = computed(
 
         <article class="ad-scenarios-card">
           <div class="ad-scenarios-illo">
-            <AdPlaceholder name="scenario-2.png" aspect="16/9" />
+            <!--
+              Scenario 2 mockup — sidebar + chat. The visual hook is
+              the WORKER TREE under the parent "Rename across packages"
+              — the sidebar's existing fixture has this expanded with
+              4 workers (typescript-client, agents-runtime,
+              agents-server, agents-server-ui). We highlight the
+              parent so the eye lands on the tree, then reads down to
+              the child workers below it.
+            -->
+            <AppMockupEmbed
+              :scene="HeroChatStateScene"
+              :scene-props="{
+                os: 'auto',
+                theme: 'dark',
+                responsive: false,
+                showSidebar: true,
+                showChatTile: true,
+                showStateTile: false,
+                sidebarSelectedUrl: '/horton/parallel-rename',
+                title: 'Rename across packages',
+                sessionId: 'horton/parallel-rename',
+              }"
+              aspect="16/9"
+              :scale="0.75"
+            />
           </div>
           <p class="ad-scenarios-touches mono">
             Touches: desktop · working-dir · workers · tile · fork
@@ -487,7 +536,30 @@ const primaryPlatform = computed(
 
         <article class="ad-scenarios-card">
           <div class="ad-scenarios-illo">
-            <AdPlaceholder name="scenario-3.png" aspect="16/9" />
+            <!--
+              Scenario 3 mockup — state inspector only. With sidebar
+              and chat tile both hidden, the state tile is the
+              leftmost surface in the window so the scene
+              automatically routes the macOS chrome inset (78-px
+              header padding past the traffic lights) to it. The
+              title is rebranded as a custom `summarizer` entity to
+              anchor the SDK / debug-without-redeploy story above.
+            -->
+            <AppMockupEmbed
+              :scene="HeroChatStateScene"
+              :scene-props="{
+                os: 'auto',
+                theme: 'dark',
+                responsive: false,
+                showSidebar: false,
+                showChatTile: false,
+                showStateTile: true,
+                title: 'Summarise outline draft',
+                sessionId: 'summarizer/r3kc8mq',
+              }"
+              aspect="16/9"
+              :scale="0.75"
+            />
           </div>
           <p class="ad-scenarios-touches mono">
             Touches: SDK · state explorer · timeline · fork · MCP
@@ -504,7 +576,31 @@ const primaryPlatform = computed(
 
         <article class="ad-scenarios-card">
           <div class="ad-scenarios-illo">
-            <AdPlaceholder name="scenario-4.png" aspect="16/9" />
+            <!--
+              Scenario 4 mockup — chat only. The agent has already
+              finished overnight, so we pause the typewriter at full
+              progress so the chat reads as "morning catch-up on a
+              completed run" rather than a live stream. Chat tile is
+              the leftmost surface — same chrome-inset routing as
+              scenario 3.
+            -->
+            <AppMockupEmbed
+              :scene="HeroChatStateScene"
+              :scene-props="{
+                os: 'auto',
+                theme: 'dark',
+                responsive: false,
+                showSidebar: false,
+                showChatTile: true,
+                showStateTile: false,
+                paused: true,
+                progress: 1,
+                title: 'Nightly research · v0.4 → v0.5 changes',
+                sessionId: 'research/nightly-1729',
+              }"
+              aspect="16/9"
+              :scale="0.75"
+            />
           </div>
           <p class="ad-scenarios-touches mono">
             Touches: Cloud · cron wake · mobile · fork · send

@@ -88,6 +88,49 @@ const props = withDefaults(
      * AppDownloadPage.vue keep this fixed; toy exposes it for review.
      */
     splitRatio?: number
+    /**
+     * Visibility toggles. `false` removes the element from the DOM
+     * entirely so the layout collapses cleanly (no leftover flex
+     * basis). Defaults are `true` so the hero usage stays unchanged.
+     *
+     * `showSidebar`     → render the left sessions rail.
+     * `showChatTile`    → render the chat (left workspace tile).
+     * `showStateTile`   → render the state inspector (right tile).
+     *
+     * Marketing pages can use this to focus on one part of the app
+     * (e.g. state-only for an SDK-debug story, chat-only for a
+     * "morning catch-up" narrative) without dropping the chrome.
+     * The leftmost visible tile automatically picks up the macOS
+     * chrome-inset (78-px header pad past the traffic lights).
+     */
+    showSidebar?: boolean
+    showChatTile?: boolean
+    showStateTile?: boolean
+    /**
+     * Responsive container-query layout. When `true` (default) the
+     * scene auto-collapses tiles based on its own rendered width:
+     *
+     *   <  950 px → sidebar hidden
+     *   <  720 px → state tile dropped
+     *
+     * For mockups embedded at fixed sizes (e.g. inside a 16/9 card),
+     * pass `responsive: false` to disable the container queries and
+     * let the explicit visibility props decide the layout regardless
+     * of width.
+     */
+    responsive?: boolean
+    /**
+     * Override the sidebar's `selectedUrl`. Lets a single fixture
+     * carry several stories — e.g. one scenario card highlights the
+     * fresh CI-spawned session, another highlights the parent of a
+     * workers tree.
+     */
+    sidebarSelectedUrl?: string | null
+    /**
+     * Whether the sidebar should paint its bottom server-picker /
+     * settings strip. Some narrow embeds drop it for legibility.
+     */
+    showSidebarFooter?: boolean
   }>(),
   {
     os: 'auto',
@@ -99,6 +142,12 @@ const props = withDefaults(
     title: 'Test Message Received',
     sessionId: 'horton/70cqMB5GnW',
     splitRatio: 0.5,
+    showSidebar: true,
+    showChatTile: true,
+    showStateTile: true,
+    responsive: true,
+    sidebarSelectedUrl: null,
+    showSidebarFooter: true,
   }
 )
 
@@ -111,6 +160,28 @@ const resolvedOs = computed<DetectedOs>(() =>
 /** Windows / Linux paint a real custom titlebar; macOS does NOT —
  * the OS overlays the traffic lights via hiddenInset. */
 const showCustomTitlebar = computed(() => resolvedOs.value !== 'macos')
+
+/**
+ * Identify which surface visually sits in the top-left of the window
+ * — so its header gets the macOS traffic-light inset (78 px left
+ * padding) when the OS is macOS. Order of precedence matches the
+ * actual rendered column order: sidebar → chat → state.
+ */
+const leftmostKind = computed<'sidebar' | 'chat' | 'state' | 'none'>(() => {
+  if (props.showSidebar) return 'sidebar'
+  if (props.showChatTile) return 'chat'
+  if (props.showStateTile) return 'state'
+  return 'none'
+})
+
+/** True when only one tile is visible and it should fill the workspace
+ * (regardless of `splitRatio`). */
+const singleTileMode = computed(() => {
+  return (
+    (props.showChatTile && !props.showStateTile) ||
+    (!props.showChatTile && props.showStateTile)
+  )
+})
 </script>
 
 <template>
@@ -118,6 +189,9 @@ const showCustomTitlebar = computed(() => resolvedOs.value !== 'macos')
     class="hero-scene app-mockup-root"
     :data-os="resolvedOs"
     :data-theme="theme"
+    :data-leftmost="leftmostKind"
+    :data-responsive="responsive ? 'true' : 'false'"
+    :data-single-tile="singleTileMode ? 'true' : 'false'"
     :style="{ '--split-ratio': splitRatio }"
   >
     <AppWindowFrame :os="resolvedOs">
@@ -126,7 +200,7 @@ const showCustomTitlebar = computed(() => resolvedOs.value !== 'macos')
       </template>
 
       <div class="hero-scene-body">
-        <div class="hero-scene-sidebar">
+        <div v-if="showSidebar" class="hero-scene-sidebar">
           <div v-if="resolvedOs === 'macos'" class="sidebar-titlebar-row">
             <AppTitlebarControls
               :collapsed="false"
@@ -136,12 +210,19 @@ const showCustomTitlebar = computed(() => resolvedOs.value !== 'macos')
           <AppSidebar
             :no-header="resolvedOs === 'macos'"
             section-label="Today"
-            :show-footer="true"
+            :show-footer="showSidebarFooter"
+            :selected-url="sidebarSelectedUrl"
           />
         </div>
 
-        <div class="hero-scene-workspace">
-          <div class="hero-scene-tile hero-scene-tile-chat">
+        <div
+          v-if="showChatTile || showStateTile"
+          class="hero-scene-workspace"
+        >
+          <div
+            v-if="showChatTile"
+            class="hero-scene-tile hero-scene-tile-chat"
+          >
             <ChatTileContent
               :title="title"
               :session-id="sessionId"
@@ -149,17 +230,26 @@ const showCustomTitlebar = computed(() => resolvedOs.value !== 'macos')
               :paused="paused"
               :cps="cps"
               density="comfortable"
-              :show-close="true"
+              :show-close="showChatTile && showStateTile"
+              :chrome-inset-target="
+                resolvedOs === 'macos' && leftmostKind === 'chat'
+              "
             />
           </div>
-          <div class="hero-scene-tile hero-scene-tile-state">
+          <div
+            v-if="showStateTile"
+            class="hero-scene-tile hero-scene-tile-state"
+          >
             <StateTileContent
               :title="title"
               :session-id="sessionId"
               :pulse-rate="pulseRate"
               :paused="paused"
               density="comfortable"
-              :show-close="true"
+              :show-close="showChatTile && showStateTile"
+              :chrome-inset-target="
+                resolvedOs === 'macos' && leftmostKind === 'state'
+              "
             />
           </div>
         </div>
@@ -265,6 +355,24 @@ const showCustomTitlebar = computed(() => resolvedOs.value !== 'macos')
   flex: calc(1 - var(--split-ratio)) 0 0;
 }
 
+/* Single-tile mode (only one of chat / state visible) — the lone tile
+   should fill the whole workspace regardless of `--split-ratio`. */
+.hero-scene[data-single-tile='true'] .hero-scene-tile-chat,
+.hero-scene[data-single-tile='true'] .hero-scene-tile-state {
+  flex: 1 0 0;
+}
+
+/* macOS hidden-inset chrome: when the chat tile is the leftmost
+   surface in the window (no sidebar), bump its header padding past the
+   traffic lights so the title clears them. The same applies to the
+   state tile when it's the leftmost. The actual padding lives on
+   `AppTileHeader` via the `chrome-inset-target` prop, which adds
+   `padding-left: 78px` to the header — we only need to *route* the
+   prop here from the scene's `leftmostKind` computed. The CSS rule
+   below stays as a defensive belt-and-braces for the responsive
+   container-query path (next block); the prop wiring above is the
+   primary mechanism. */
+
 /* ───────── Container-query breakpoints ─────────
 
    We intentionally use `@container` over `@media` so the scene
@@ -282,16 +390,22 @@ const showCustomTitlebar = computed(() => resolvedOs.value !== 'macos')
                  them.
      <  720 px → state tile dropped; chat fills workspace.
      <  500 px → chat fills workspace, no further drops.
+
+   The `[data-responsive='true']` qualifier lets specific embeds opt
+   out (e.g. the §3.5 scenario cards force a sidebar+chat layout
+   regardless of width).
 */
 
 @container hero-scene (max-width: 949px) {
-  .hero-scene-sidebar {
+  .hero-scene[data-responsive='true'] .hero-scene-sidebar {
     display: none;
   }
   /* The chat tile is now the leftmost column under the macOS traffic
      lights — hint its tile header to bump its left padding so the
      title clears them. */
-  .hero-scene-tile-chat :deep(.tile-header) {
+  .hero-scene[data-responsive='true']
+    .hero-scene-tile-chat
+    :deep(.tile-header) {
     padding-left: 78px;
   }
 }
@@ -305,16 +419,18 @@ const showCustomTitlebar = computed(() => resolvedOs.value !== 'macos')
 }
 
 @container hero-scene (max-width: 719px) {
-  .hero-scene-tile-state {
+  .hero-scene[data-responsive='true'] .hero-scene-tile-state {
     display: none;
   }
-  .hero-scene-tile-chat {
+  .hero-scene[data-responsive='true'] .hero-scene-tile-chat {
     flex: 1 0 0;
   }
   /* Single-tile mode — hide the chat tile's close X. With no other
      tile in the workspace there's nothing to close back to, matching
      the live UI's full-width chat layout. */
-  .hero-scene-tile-chat :deep(.action-btn-close) {
+  .hero-scene[data-responsive='true']
+    .hero-scene-tile-chat
+    :deep(.action-btn-close) {
     display: none;
   }
 }
@@ -324,8 +440,12 @@ const showCustomTitlebar = computed(() => resolvedOs.value !== 'macos')
      the chat-surface column-cap entirely so the bubble + composer
      fill the available width — matches the live product's mobile
      layout where there's no concept of a chat-surface gutter. */
-  .hero-scene-tile-chat :deep(.chat-column),
-  .hero-scene-tile-chat :deep(.composer-inner) {
+  .hero-scene[data-responsive='true']
+    .hero-scene-tile-chat
+    :deep(.chat-column),
+  .hero-scene[data-responsive='true']
+    .hero-scene-tile-chat
+    :deep(.composer-inner) {
     width: 100%;
     max-width: 100%;
   }

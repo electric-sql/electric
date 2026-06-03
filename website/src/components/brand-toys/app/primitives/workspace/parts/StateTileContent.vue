@@ -26,6 +26,10 @@ withDefaults(
     /** Forwarded to AppTileHeader — the right tile in a split shows
      * a close X. Single-tile scenes leave it false. */
     showClose?: boolean
+    /** Bump the header padding past macOS traffic lights — set true
+     * on the leftmost tile when sidebar (and any tile to the left)
+     * is hidden. Mirrors the same prop on `ChatTileContent`. */
+    chromeInsetTarget?: boolean
   }>(),
   {
     title: 'Test Message Received',
@@ -34,6 +38,7 @@ withDefaults(
     paused: false,
     density: 'comfortable',
     showClose: true,
+    chromeInsetTarget: false,
   }
 )
 </script>
@@ -49,6 +54,7 @@ withDefaults(
         sandbox-label="Local"
         active-view="state"
         :views="['chat', 'state']"
+        :chrome-inset-target="chromeInsetTarget"
         :show-close="showClose"
       />
     </template>
