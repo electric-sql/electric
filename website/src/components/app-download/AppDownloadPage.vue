@@ -240,10 +240,13 @@ const primaryPlatform = computed(
     <section class="ad-hero">
       <div class="ad-hero-inner">
         <h1 class="ad-hero-name">
-          Electric&nbsp;<span class="ad-hero-accent">Agents</span>&nbsp;App
+          Run, observe and steer
+          your&nbsp;<span class="ad-hero-accent">agents</span>.
         </h1>
         <p class="ad-hero-text">
-          A native home for your long-running&nbsp;agents.
+          Desktop and mobile clients for the Electric Agents platform — one app
+          to code with Horton, attach to remote sessions, and build your own
+          agents on the infra and&nbsp;SDK.
         </p>
 
         <div class="ad-hero-actions">
@@ -254,6 +257,10 @@ const primaryPlatform = computed(
             :text="primaryPlatform.downloads[0].label"
             :href="latestReleaseUrl(primaryPlatform.downloads[0].assetName)"
           />
+          <!-- TODO(phase 6): swap href to "#download" once §7 ships an
+               umbrella anchor on the download block. Pointing at
+               "#desktop" today lands users at the first sub-section,
+               which is the right scroll target for now. -->
           <VPButton
             tag="a"
             size="medium"
@@ -261,6 +268,61 @@ const primaryPlatform = computed(
             text="Other platforms"
             href="#desktop"
           />
+        </div>
+
+        <!--
+          Platform glyph row.
+
+          Communicates multi-platform breadth above the fold without
+          relying on the downloads block further down. Five muted
+          glyph + label pairs in a CSS grid; the iOS + Android pair
+          gets a `Preview` pill in the second grid row beneath them
+          (one shared label rather than per-glyph clutter) because
+          the mobile apps don't have public App Store / Play
+          listings yet — see §7 mobile sub-section.
+        -->
+        <div
+          class="ad-hero-platforms"
+          aria-label="Available on macOS, Windows and Linux. Native iOS and Android apps in preview."
+        >
+          <span class="ad-hero-glyph">
+            <span
+              class="ad-hero-glyph-icon ad-icon ad-icon--apple"
+              aria-hidden="true"
+            />
+            <span class="ad-hero-glyph-label mono">macOS</span>
+          </span>
+          <span class="ad-hero-glyph">
+            <span
+              class="ad-hero-glyph-icon ad-icon ad-icon--windows"
+              aria-hidden="true"
+            />
+            <span class="ad-hero-glyph-label mono">Windows</span>
+          </span>
+          <span class="ad-hero-glyph">
+            <span
+              class="ad-hero-glyph-icon ad-icon ad-icon--linux"
+              aria-hidden="true"
+            />
+            <span class="ad-hero-glyph-label mono">Linux</span>
+          </span>
+          <span class="ad-hero-glyph is-preview">
+            <span
+              class="ad-hero-glyph-icon ad-icon ad-icon--apple"
+              aria-hidden="true"
+            />
+            <span class="ad-hero-glyph-label mono">iOS</span>
+          </span>
+          <span class="ad-hero-glyph is-preview">
+            <span
+              class="ad-hero-glyph-icon ad-icon ad-icon--android"
+              aria-hidden="true"
+            />
+            <span class="ad-hero-glyph-label mono">Android</span>
+          </span>
+          <span class="ad-hero-platform-preview mono" aria-hidden="true"
+            >Preview</span
+          >
         </div>
 
         <p class="ad-hero-meta">
@@ -273,10 +335,6 @@ const primaryPlatform = computed(
           >
         </p>
       </div>
-
-      <!-- TODO(phase 2): rewrite headline + sub, add the
-           5-platform glyph row under the CTAs, and drop in the
-           desktop + mobile screenshot pair behind the hero. -->
     </section>
 
     <!--
@@ -300,11 +358,31 @@ const primaryPlatform = computed(
 
     <!-- ─────────────── §2 — Visual strap (desktop + mobile) ─────────────── -->
     <Section id="visual">
-      <AdPlaceholder
-        name="§2 — Visual strap"
-        sublabel="Desktop + mobile screenshots side-by-side · same session, two devices"
-        aspect="21/9"
-      />
+      <!--
+        Phase 2 lands the strap as a placeholder PAIR — desktop window
+        on the left, phone screen on the right — so the layout reads
+        as the eventual two-device shot even before real screenshots
+        arrive. Phase 5 swaps each placeholder for the captured
+        asset (desktop-hero.png / mobile-hero.png) without touching
+        the surrounding chrome.
+      -->
+      <div class="ad-visual-strap">
+        <AdPlaceholder
+          class="ad-visual-strap-desktop"
+          name="desktop-hero.png"
+          sublabel="Sidebar tree + tile workspace · chat tile left · state explorer right"
+          aspect="16/10"
+        />
+        <AdPlaceholder
+          class="ad-visual-strap-mobile"
+          name="mobile-hero.png"
+          sublabel="Mobile chat screen · same session, live streaming response"
+          aspect="9/16"
+        />
+      </div>
+      <p class="ad-visual-strap-caption mono">
+        Same session. Two devices. One control plane.
+      </p>
     </Section>
 
     <!-- ─────────────────── §3 — Three ways to use it ─────────────────── -->
@@ -653,7 +731,107 @@ const primaryPlatform = computed(
   border-bottom-color: var(--vp-c-brand-1);
 }
 
-/* ── §2 desktop ─────────────────────────────────────────────── */
+/* ── §1 hero — platform glyph row ───────────────────────────── *
+   Sits between the CTA buttons and the release-notes link, two
+   rows in a 5-column grid:
+     row 1 — five [icon + label] pairs (macOS · Windows · Linux ·
+             iOS · Android)
+     row 2 — a single `Preview` pill positioned beneath the iOS +
+             Android pair (columns 4–5), softly marking the native
+             mobile apps as not-yet-public.
+   On narrow viewports the row collapses to 3 columns, with iOS +
+   Android wrapping onto a second visual row that keeps the
+   preview pill anchored beneath them. */
+
+.ad-hero-platforms {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(56px, auto));
+  justify-content: center;
+  align-items: start;
+  gap: 14px 28px;
+  margin: 32px auto 0;
+  max-width: 540px;
+}
+
+.ad-hero-glyph {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  color: var(--vp-c-text-3);
+}
+
+.ad-hero-glyph-icon {
+  font-size: 22px;
+  color: var(--vp-c-text-2);
+}
+
+.ad-hero-glyph.is-preview .ad-hero-glyph-icon {
+  /* Mobile glyphs are noticeably (but gently) more muted than the
+     desktop trio so the eye reads "this is a different cluster"
+     before it ever reaches the Preview pill below. */
+  color: color-mix(in srgb, var(--vp-c-text-2) 65%, transparent);
+}
+
+.ad-hero-glyph-label {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--vp-c-text-3);
+}
+
+.ad-hero-platform-preview {
+  grid-row: 2;
+  grid-column: 4 / 6;
+  justify-self: center;
+  align-self: start;
+  margin-top: 4px;
+  padding: 3px 10px;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--vp-c-brand-1) 80%, var(--vp-c-text-3));
+  background: color-mix(in srgb, var(--vp-c-brand-1) 10%, transparent);
+  border: 1px solid
+    color-mix(in srgb, var(--vp-c-brand-1) 32%, var(--vp-c-divider));
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+/* ── §2 visual strap ────────────────────────────────────────── *
+   Desktop screenshot left (16:10), phone screenshot right (9:16);
+   the 2.4:1 column split keeps both placeholders' rendered
+   heights close while preserving each device's natural aspect
+   ratio. Caption sits centred below the pair. */
+
+.ad-visual-strap {
+  display: grid;
+  /* `minmax(0, …)` overrides the default `min-width: auto` on grid
+     items so that the placeholders' aspect-ratio + intrinsic content
+     can't push the columns past their fractional allocation. Without
+     this, the AdPlaceholder labels widen the mobile column enough to
+     overflow the section's max-width. */
+  grid-template-columns: minmax(0, 2.4fr) minmax(0, 1fr);
+  gap: 24px;
+  align-items: stretch;
+}
+
+.ad-visual-strap-caption {
+  margin: 22px 0 0;
+  text-align: center;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  color: var(--vp-c-text-3);
+}
+
+@media (max-width: 768px) {
+  .ad-visual-strap {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
+/* ── §7a desktop ────────────────────────────────────────────── */
 
 .ad-desktop-grid {
   display: grid;
@@ -764,7 +942,7 @@ const primaryPlatform = computed(
   gap: 6px;
 }
 
-/* ── §3 mobile ──────────────────────────────────────────────── */
+/* ── §7b mobile ─────────────────────────────────────────────── */
 
 .ad-mobile-grid {
   display: grid;
@@ -838,7 +1016,7 @@ const primaryPlatform = computed(
   color: var(--vp-c-text-1);
 }
 
-/* ── §4 canary ──────────────────────────────────────────────── *
+/* ── §7c canary ─────────────────────────────────────────────── *
    Single compact list rather than four mini-card boxes. Each row:
    icon + platform + inline download chips, hairline-separated
    like an engineering reference table. */
