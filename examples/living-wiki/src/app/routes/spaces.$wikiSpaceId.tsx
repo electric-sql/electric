@@ -38,15 +38,31 @@ function SpaceRoute() {
 const isDemoAvatarColor = (value: string): value is DemoAvatarColor =>
   demoAvatarColors.some((color) => color === value)
 
+const parseIntakeText = (value: string) => {
+  const trimmed = value.trim()
+  try {
+    const url = new URL(trimmed)
+    return {
+      kind: `url` as const,
+      title: url.hostname || trimmed,
+      url: url.toString(),
+    }
+  } catch {
+    const firstLine = trimmed.split(/\r?\n/, 1)[0]?.trim()
+    return {
+      kind: `text` as const,
+      title: firstLine ? firstLine.slice(0, 80) : `Untitled note`,
+      body: trimmed,
+    }
+  }
+}
+
 export function SpaceRoutePage({ wikiSpaceId }: { wikiSpaceId: string }) {
   const [storedActorId, setStoredActorId] = useState(readStoredActorId)
   const [displayName, setDisplayName] = useState(``)
   const [avatarColor, setAvatarColor] = useState<DemoAvatarColor>(`blue`)
   const [joinedSpace, setJoinedSpace] = useState<WikiSpaceSnapshot | null>(null)
-  const [sourceKind, setSourceKind] = useState<`text` | `url`>(`text`)
-  const [sourceTitle, setSourceTitle] = useState(``)
-  const [sourceBody, setSourceBody] = useState(``)
-  const [sourceUrl, setSourceUrl] = useState(``)
+  const [intakeText, setIntakeText] = useState(``)
   const [sourceError, setSourceError] = useState<Error | null>(null)
   const [sourceMessage, setSourceMessage] = useState<string | undefined>()
   const [submittingSource, setSubmittingSource] = useState(false)
@@ -135,30 +151,18 @@ export function SpaceRoutePage({ wikiSpaceId }: { wikiSpaceId: string }) {
     event.preventDefault()
     if (!displayedSpace) return
 
+    const parsedIntake = parseIntakeText(intakeText)
+
     setSubmittingSource(true)
     setSourceError(null)
     setSourceMessage(`Submitting source…`)
     try {
-      await createLivingWikiApiClient().submitSource(
-        sourceKind === `text`
-          ? {
-              wikiSpaceId,
-              actorId: displayedSpace.currentActor.id,
-              kind: `text`,
-              title: sourceTitle,
-              body: sourceBody,
-            }
-          : {
-              wikiSpaceId,
-              actorId: displayedSpace.currentActor.id,
-              kind: `url`,
-              title: sourceTitle,
-              url: sourceUrl,
-            }
-      )
-      setSourceTitle(``)
-      setSourceBody(``)
-      setSourceUrl(``)
+      await createLivingWikiApiClient().submitSource({
+        wikiSpaceId,
+        actorId: displayedSpace.currentActor.id,
+        ...parsedIntake,
+      })
+      setIntakeText(``)
       setSourceMessage(`Source submitted.`)
       await refreshSharedState()
     } catch (nextError) {
@@ -252,60 +256,25 @@ export function SpaceRoutePage({ wikiSpaceId }: { wikiSpaceId: string }) {
         onSubmit={(event) => void onSubmitSource(event)}
       >
         <div className="lw-private-intake-heading">PRIVATE INTAKE AGENT</div>
-        <h2>Submit a source</h2>
+        <h2>Send to Intake Agent</h2>
         <label>
-          Source type
-          <select
-            aria-label="Source type"
-            value={sourceKind}
-            onChange={(event) =>
-              setSourceKind(
-                event.currentTarget.value === `url` ? `url` : `text`
-              )
-            }
-          >
-            <option value="text">Text note</option>
-            <option value="url">URL</option>
-          </select>
-        </label>
-        <label style={{ display: `block`, marginTop: 12 }}>
-          Source title
-          <input
-            aria-label="Source title"
+          Paste URL or note
+          <textarea
+            aria-label="Paste URL or note"
             required
-            value={sourceTitle}
-            onChange={(event) => setSourceTitle(event.currentTarget.value)}
+            placeholder={`Paste URL or note…\n"Stigmergy dissolves culture vs institutions; protocols reshape cognition..."`}
+            value={intakeText}
+            onChange={(event) => setIntakeText(event.currentTarget.value)}
           />
         </label>
-        {sourceKind === `text` ? (
-          <label style={{ display: `block`, marginTop: 12 }}>
-            Source text
-            <textarea
-              aria-label="Source text"
-              required
-              placeholder={`Paste URL or note…\n"Stigmergy dissolves culture vs institutions; protocols reshape cognition..."`}
-              value={sourceBody}
-              onChange={(event) => setSourceBody(event.currentTarget.value)}
-            />
-          </label>
-        ) : (
-          <label style={{ display: `block`, marginTop: 12 }}>
-            Source URL
-            <input
-              aria-label="Source URL"
-              required
-              type="url"
-              value={sourceUrl}
-              onChange={(event) => setSourceUrl(event.currentTarget.value)}
-            />
-          </label>
-        )}
         <button
           type="submit"
           disabled={submittingSource || displayedSpace === null}
           style={{ marginTop: 12 }}
         >
-          {submittingSource ? `Submitting source…` : `Submit source`}
+          {submittingSource
+            ? `Sending to Intake Agent…`
+            : `Send to Intake Agent`}
         </button>
         <div aria-live="polite">
           {sourceMessage ? <p>{sourceMessage}</p> : null}

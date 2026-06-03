@@ -204,15 +204,17 @@ describe(`SpaceRoutePage`, () => {
       ) as typeof fetch
     render(<SpaceRoutePage wikiSpaceId="wiki_test" />)
     await screen.findByRole(`heading`, { name: `Test Space` })
-    fireEvent.change(screen.getByRole(`textbox`, { name: `Source title` }), {
-      target: { value: `Room note` },
-    })
-    fireEvent.change(screen.getByRole(`textbox`, { name: `Source text` }), {
-      target: { value: `Important local knowledge` },
-    })
-    fireEvent.click(screen.getByRole(`button`, { name: `Submit source` }))
+    fireEvent.change(
+      screen.getByRole(`textbox`, { name: `Paste URL or note` }),
+      {
+        target: { value: `Room note\nImportant local knowledge` },
+      }
+    )
+    fireEvent.click(
+      screen.getByRole(`button`, { name: `Send to Intake Agent` })
+    )
     expect(
-      screen.getByRole(`button`, { name: `Submitting source…` })
+      screen.getByRole(`button`, { name: `Sending to Intake Agent…` })
     ).toBeInTheDocument()
     await waitFor(() => expect(refreshSharedState).toHaveBeenCalled())
     expect(screen.getByText(`Source submitted.`)).toBeInTheDocument()
@@ -225,7 +227,53 @@ describe(`SpaceRoutePage`, () => {
       actorId: `actor_ada`,
       kind: `text`,
       title: `Room note`,
-      body: `Important local knowledge`,
+      body: `Room note\nImportant local knowledge`,
+    })
+  })
+
+  it(`submits a pasted URL through the same intake form`, async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(makeSnapshot()), {
+          headers: { 'content-type': `application/json` },
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            source: {
+              ...sourceRow,
+              kind: `url`,
+              url: `https://example.com/notes`,
+            },
+            activityEventId: `event_source-url`,
+          }),
+          { headers: { 'content-type': `application/json` } }
+        )
+      ) as typeof fetch
+    render(<SpaceRoutePage wikiSpaceId="wiki_test" />)
+    await screen.findByRole(`heading`, { name: `Test Space` })
+    fireEvent.change(
+      screen.getByRole(`textbox`, { name: `Paste URL or note` }),
+      {
+        target: { value: `https://example.com/notes` },
+      }
+    )
+    fireEvent.click(
+      screen.getByRole(`button`, { name: `Send to Intake Agent` })
+    )
+    await waitFor(() => expect(refreshSharedState).toHaveBeenCalled())
+    const [, init] = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.find(
+        ([path]) => path === `/api/spaces/wiki_test/sources`
+      ) as [string, RequestInit]
+    expect(JSON.parse(String(init.body))).toEqual({
+      actorId: `actor_ada`,
+      kind: `url`,
+      title: `example.com`,
+      url: `https://example.com/notes`,
     })
   })
 
