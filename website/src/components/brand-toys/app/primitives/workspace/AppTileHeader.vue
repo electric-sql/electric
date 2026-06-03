@@ -312,8 +312,12 @@ const VIEW_LABELS: Record<string, string> = {
   font-size: var(--ds-text-xs);
   font-weight: 500;
   line-height: 1;
-  flex-shrink: 0;
-  max-width: 220px;
+  /* Allow runtime badges to shrink — when the tile is narrow the
+     "Electric Agents Desktop" badge must yield space so the title
+     stays visible. The label inside truncates with ellipsis. */
+  flex-shrink: 1;
+  min-width: 28px;
+  max-width: 110px;
   box-sizing: border-box;
 }
 

@@ -83,9 +83,9 @@ const props = withDefaults(
     sessionId?: string
     /**
      * Chat-tile flex ratio inside the workspace split (0..1). Default
-     * 0.6 = 60/40 split with the chat tile getting the wider share.
-     * Scenes consumed by AppDownloadPage.vue keep this fixed; toy
-     * exposes it for review.
+     * 0.5 = 50/50 split — matches the live product's default splitter
+     * position when both tiles are open. Scenes consumed by
+     * AppDownloadPage.vue keep this fixed; toy exposes it for review.
      */
     splitRatio?: number
   }>(),
@@ -98,7 +98,7 @@ const props = withDefaults(
     pulseRate: 0.8,
     title: 'Test Message Received',
     sessionId: 'horton/70cqMB5GnW',
-    splitRatio: 0.6,
+    splitRatio: 0.5,
   }
 )
 

@@ -1647,7 +1647,7 @@ export const TOYS: readonly ToyDef[] = [
         min: 0.3,
         max: 0.85,
         step: 0.05,
-        default: 0.6,
+        default: 0.5,
         label: `Chat tile share`,
         description: `Workspace split — chat tile's flex-grow share; state tile gets the rest.`,
       },

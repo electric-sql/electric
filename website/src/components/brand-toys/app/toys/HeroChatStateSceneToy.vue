@@ -35,7 +35,7 @@ const props = withDefaults(
     paused: false,
     cps: 60,
     pulseRate: 0.8,
-    splitRatio: 0.6,
+    splitRatio: 0.5,
     title: 'Test Message Received',
     sessionId: 'horton/70cqMB5GnW',
   }
