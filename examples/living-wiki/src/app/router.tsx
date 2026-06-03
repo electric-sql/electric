@@ -1,8 +1,9 @@
 import { createRouter } from '@tanstack/react-router'
 import { Route as rootRoute } from './routes/__root'
 import { Route as indexRoute } from './routes/index'
+import { Route as spaceRoute } from './routes/spaces.$wikiSpaceId'
 
-const routeTree = rootRoute.addChildren({ indexRoute })
+const routeTree = rootRoute.addChildren({ indexRoute, spaceRoute })
 
 export const router = createRouter({ routeTree })
 
