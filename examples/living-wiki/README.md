@@ -120,11 +120,11 @@ The Worker proxies Electric Agents runtime streams so the browser never contacts
 
 ### Environment Variables (Worker-only)
 
-| Variable                        | Required        | Description                                                               |
-| ------------------------------- | --------------- | ------------------------------------------------------------------------- |
-| `ELECTRIC_AGENTS_BASE_URL`      | Yes (for proxy) | Electric Agents runtime base URL. Worker-only — never exposed to browser. |
-| `ELECTRIC_AGENTS_TOKEN`         | No              | Bearer token for Agents runtime auth. Injected server-side.               |
-| `ELECTRIC_AGENTS_PRINCIPAL_KEY` | No              | Principal key header value. Injected server-side.                         |
+| Variable                        | Required        | Description                                                                                                                                                                          |
+| ------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ELECTRIC_AGENTS_BASE_URL`      | Yes (for proxy) | Electric Agents runtime base URL. Worker-only — never exposed to browser.                                                                                                            |
+| `ELECTRIC_AGENTS_TOKEN`         | No              | Bearer token for Agents runtime auth. Injected server-side.                                                                                                                          |
+| `ELECTRIC_AGENTS_PRINCIPAL_KEY` | No              | Fallback principal header value when no demo actor context is supplied. Requests with `actorId` derive `electric-principal` from the verified actor display name entered in the app. |
 
 ### Proxy Routes
 
@@ -136,7 +136,7 @@ GET /api/agents/entities/:wikiSpaceId/:entityKind/:entityId/stream
 
 Proxies the main durable stream for a specific entity. The Worker resolves the upstream entity metadata path, looks up the stream URL, and proxies it with server-side auth. Currently supports `entityKind: wiki-space`.
 
-Query params forwarded: `offset`, `live` (only `long-poll`), `cursor`.
+Query params forwarded: `offset`, `live` (only `long-poll`), `cursor`. The optional `actorId` query param is consumed by the Worker to derive the upstream `electric-principal` from that actor's display name and is not forwarded upstream.
 
 **Observe Stream**
 
@@ -149,7 +149,7 @@ Proxies observation streams for a wiki space. `observeKind` is one of:
 - `entities` — membership stream (Worker ensures the stream with server-derived tags)
 - `shared-state` — shared state stream (Worker derives the shared-state ID)
 
-Query params forwarded: `offset`, `live` (only `long-poll`), `cursor`.
+Query params forwarded: `offset`, `live` (only `long-poll`), `cursor`. The optional `actorId` query param is consumed by the Worker to derive the upstream `electric-principal` from that actor's display name and is not forwarded upstream.
 
 ### Browser Client Helpers
 

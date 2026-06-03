@@ -1,6 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { handleAgentsProxyRequest } from './routes'
 import type { WorkerEnv } from '../env'
+import {
+  resetLocalDemoWikiSpaceStoreForTests,
+  seedLocalDemoWikiSpace,
+} from '../wiki-space-store'
 
 const secretToken = `super-secret-token`
 const env: WorkerEnv = {
@@ -20,6 +24,11 @@ const unconfiguredEnv: WorkerEnv = {
 function makeRequest(path: string, method: string = `GET`): Request {
   return new Request(`https://app.test${path}`, { method })
 }
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+  resetLocalDemoWikiSpaceStoreForTests()
+})
 
 async function expectErrorJson(
   response: Response,
@@ -200,6 +209,64 @@ describe(`agents proxy route handler`, () => {
         makeRequest(`/api/observe/space..1/entities`),
         env
       )
+      expect(response).toBeDefined()
+      await expectErrorJson(response!, 400)
+    })
+  })
+
+  describe(`principal derivation`, () => {
+    it(`uses the verified demo actor display name as the upstream principal`, async () => {
+      await seedLocalDemoWikiSpace({
+        wikiSpaceId: `wiki_demo`,
+        actorId: `actor_ada`,
+        title: `Demo`,
+        displayName: `Ada Lovelace`,
+        avatarColor: `blue`,
+        createdAt: `2026-06-03T00:00:00.000Z`,
+      })
+      const calls: RequestInit[] = []
+      vi.stubGlobal(
+        `fetch`,
+        vi.fn(async (_input, init) => {
+          calls.push(init ?? {})
+          return new Response(`ok`)
+        })
+      )
+
+      const response = await handleAgentsProxyRequest(
+        new Request(
+          `https://app.test/api/observe/wiki_demo/shared-state?actorId=actor_ada&offset=1`,
+          {
+            headers: {
+              'electric-principal': `browser-supplied`,
+            },
+          }
+        ),
+        env
+      )
+
+      expect(response).toBeDefined()
+      expect(await response!.text()).toBe(`ok`)
+      const headers = new Headers(calls[0].headers)
+      expect(headers.get(`electric-principal`)).toBe(`Ada Lovelace`)
+      expect(headers.get(`authorization`)).toBe(`Bearer ${secretToken}`)
+    })
+
+    it(`returns 400 when actorId is not a member of the wiki space`, async () => {
+      await seedLocalDemoWikiSpace({
+        wikiSpaceId: `wiki_demo`,
+        actorId: `actor_ada`,
+        title: `Demo`,
+        displayName: `Ada Lovelace`,
+        avatarColor: `blue`,
+        createdAt: `2026-06-03T00:00:00.000Z`,
+      })
+
+      const response = await handleAgentsProxyRequest(
+        makeRequest(`/api/observe/wiki_demo/shared-state?actorId=actor_grace`),
+        env
+      )
+
       expect(response).toBeDefined()
       await expectErrorJson(response!, 400)
     })

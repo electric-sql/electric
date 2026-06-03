@@ -27,12 +27,14 @@ type ProxyAgentsStreamRequestOptions = {
   env: WorkerEnv
   target: AgentsProxyTarget
   fetchImpl?: AgentsProxyFetch
+  principal?: string
 }
 
 type RuntimeContext = {
   baseUrl: string
   env: WorkerEnv
   fetchImpl: AgentsProxyFetch
+  principal?: string
 }
 
 export async function proxyAgentsStreamRequest({
@@ -40,8 +42,9 @@ export async function proxyAgentsStreamRequest({
   env,
   target,
   fetchImpl = fetch,
+  principal,
 }: ProxyAgentsStreamRequestOptions): Promise<Response> {
-  const context = getRuntimeContext(env, fetchImpl)
+  const context = getRuntimeContext(env, fetchImpl, principal)
 
   switch (target.kind) {
     case `shared-state-observe`:
@@ -73,15 +76,17 @@ export async function proxyAgentsResolvedStreamRequest({
   env,
   streamPath,
   fetchImpl = fetch,
+  principal,
 }: {
   request: Request
   env: WorkerEnv
   streamPath: string
   fetchImpl?: AgentsProxyFetch
+  principal?: string
 }): Promise<Response> {
   return proxyResolvedStreamWithContext({
     request,
-    context: getRuntimeContext(env, fetchImpl),
+    context: getRuntimeContext(env, fetchImpl, principal),
     streamPath,
   })
 }
@@ -99,7 +104,11 @@ async function proxyResolvedStreamWithContext({
     buildStreamUrl(context.baseUrl, streamPath, request),
     {
       method: `GET`,
-      headers: buildUpstreamHeaders(request.headers, context.env),
+      headers: buildUpstreamHeaders(
+        request.headers,
+        context.env,
+        context.principal
+      ),
     }
   )
 
@@ -137,7 +146,9 @@ export async function ensureEntitiesObservationStream({
     buildUrl(runtime.baseUrl, path).toString(),
     {
       method: `POST`,
-      headers: withJsonHeader(buildUpstreamHeaders(new Headers(), runtime.env)),
+      headers: withJsonHeader(
+        buildUpstreamHeaders(new Headers(), runtime.env, runtime.principal)
+      ),
       body: JSON.stringify(body),
     }
   )
@@ -156,14 +167,15 @@ export async function ensureEntitiesObservationStream({
 
 function getRuntimeContext(
   env: WorkerEnv,
-  fetchImpl: AgentsProxyFetch
+  fetchImpl: AgentsProxyFetch,
+  principal?: string
 ): RuntimeContext {
   try {
     const config = getAgentsRuntimeConfig(env)
     if (!config.configured || !config.baseUrl) {
       throw new AgentsProxyConfigError()
     }
-    return { baseUrl: config.baseUrl, env, fetchImpl }
+    return { baseUrl: config.baseUrl, env, fetchImpl, principal }
   } catch (error) {
     if (error instanceof AgentsProxyConfigError) throw error
     throw new AgentsProxyConfigError(
@@ -180,7 +192,11 @@ async function lookupEntityMainStreamPath(
     buildUrl(context.baseUrl, metadataPath).toString(),
     {
       method: `GET`,
-      headers: buildUpstreamHeaders(new Headers(), context.env),
+      headers: buildUpstreamHeaders(
+        new Headers(),
+        context.env,
+        context.principal
+      ),
     }
   )
   const data = await parseUpstreamJson(
@@ -313,14 +329,19 @@ function validateRelativeAbsoluteStreamPath(path: string): void {
   }
 }
 
-function buildUpstreamHeaders(from: Headers, env: WorkerEnv): Headers {
+function buildUpstreamHeaders(
+  from: Headers,
+  env: WorkerEnv,
+  principal?: string
+): Headers {
   const headers = copyAllowedRequestHeaders(from)
   if (env.ELECTRIC_AGENTS_TOKEN) {
     // Agents discovery did not prove a universal token header; use explicit Bearer auth and never forward browser auth.
     headers.set(`authorization`, `Bearer ${env.ELECTRIC_AGENTS_TOKEN}`)
   }
-  if (env.ELECTRIC_AGENTS_PRINCIPAL_KEY) {
-    headers.set(`electric-principal`, env.ELECTRIC_AGENTS_PRINCIPAL_KEY)
+  const upstreamPrincipal = principal ?? env.ELECTRIC_AGENTS_PRINCIPAL_KEY
+  if (upstreamPrincipal) {
+    headers.set(`electric-principal`, upstreamPrincipal)
   }
   return headers
 }

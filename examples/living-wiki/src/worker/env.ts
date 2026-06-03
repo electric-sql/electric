@@ -8,7 +8,7 @@ export type WorkerEnv = {
   ELECTRIC_AGENTS_BASE_URL?: string
   /** Secret Agents runtime token. Never expose in browser-facing JSON. */
   ELECTRIC_AGENTS_TOKEN?: string
-  /** Optional principal header value for Agents runtime calls. Never expose. */
+  /** Optional fallback principal header value when a verified demo actor principal is unavailable. Never expose. */
   ELECTRIC_AGENTS_PRINCIPAL_KEY?: string
   ENABLE_SEEDED_DEMO?: string
 }

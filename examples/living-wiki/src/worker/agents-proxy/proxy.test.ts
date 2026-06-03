@@ -59,6 +59,27 @@ describe(`agents proxy adapter`, () => {
     expect(headers.has(`electric-claim-token`)).toBe(false)
   })
 
+  it(`uses an explicit request principal before the static fallback principal`, async () => {
+    const { calls, fetchImpl } = fetchRecorder(new Response(`ok`))
+
+    await proxyAgentsStreamRequest({
+      request: new Request(
+        `https://app.test/api/observe/wiki_demo/shared-state`
+      ),
+      env,
+      target: {
+        kind: `shared-state-observe`,
+        sharedStateId: `id`,
+        streamPath: `/_electric/shared-state/id`,
+      },
+      principal: `Ada Lovelace`,
+      fetchImpl,
+    })
+
+    const headers = new Headers(calls[0].init?.headers)
+    expect(headers.get(`electric-principal`)).toBe(`Ada Lovelace`)
+  })
+
   it(`sanitizes stream response headers and preserves status/body`, async () => {
     const { fetchImpl } = fetchRecorder(
       new Response(`stream-body`, {

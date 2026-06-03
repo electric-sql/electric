@@ -3,12 +3,18 @@ import type {
   AgentsObserveTargetInput,
 } from '../../shared/agents-proxy'
 
-export function getEntityStreamUrl(input: AgentsEntityTargetInput): string {
+export function getEntityStreamUrl(
+  input: AgentsEntityTargetInput,
+  protocolParams?: Record<string, string> | URLSearchParams
+): string {
   const wikiSpaceId = encodeURIComponent(input.wikiSpaceId)
   const entityKind = encodeURIComponent(input.entityKind)
   const entityId = encodeURIComponent(input.entityId)
 
-  return `/api/agents/entities/${wikiSpaceId}/${entityKind}/${entityId}/stream`
+  return withSearchParams(
+    `/api/agents/entities/${wikiSpaceId}/${entityKind}/${entityId}/stream`,
+    protocolParams
+  )
 }
 
 export function getObserveUrl(
@@ -18,11 +24,17 @@ export function getObserveUrl(
   const wikiSpaceId = encodeURIComponent(input.wikiSpaceId)
   const observeKind = encodeURIComponent(input.observeKind)
 
-  const basePath = `/api/observe/${wikiSpaceId}/${observeKind}`
+  return withSearchParams(
+    `/api/observe/${wikiSpaceId}/${observeKind}`,
+    protocolParams
+  )
+}
 
-  if (!protocolParams) {
-    return basePath
-  }
+function withSearchParams(
+  basePath: string,
+  protocolParams?: Record<string, string> | URLSearchParams
+): string {
+  if (!protocolParams) return basePath
 
   const searchParams =
     protocolParams instanceof URLSearchParams

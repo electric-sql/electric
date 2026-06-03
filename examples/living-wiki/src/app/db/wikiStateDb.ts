@@ -5,6 +5,7 @@ import {
 } from '@durable-streams/state'
 import { getObserveUrl } from '../api/agentsProxyApi'
 import {
+  actorIdSchema,
   livingWikiStateSchema,
   wikiSpaceIdSchema,
   type livingWikiStateCollections,
@@ -12,6 +13,7 @@ import {
 
 export interface CreateLivingWikiStateDbInput {
   wikiSpaceId: string
+  actorId?: string
 }
 
 export type LivingWikiStateDb = StreamDB<typeof livingWikiStateCollections>
@@ -28,11 +30,15 @@ export function createLivingWikiStateDb(
   options: CreateLivingWikiStateDbOptions = {}
 ): LivingWikiStateDb {
   const wikiSpaceId = wikiSpaceIdSchema.parse(input.wikiSpaceId)
+  const actorId = input.actorId ? actorIdSchema.parse(input.actorId) : undefined
   const createDb = options.createStreamDB ?? createStreamDB
 
   return createDb({
     streamOptions: {
-      url: getObserveUrl({ wikiSpaceId, observeKind: `shared-state` }),
+      url: getObserveUrl(
+        { wikiSpaceId, observeKind: `shared-state` },
+        actorId ? { actorId } : undefined
+      ),
       contentType: `application/json`,
     },
     state: livingWikiStateSchema,

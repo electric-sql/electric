@@ -29,6 +29,24 @@ describe(`createLivingWikiStateDb`, () => {
     })
   })
 
+  it(`adds actor context to the Worker-proxied shared-state URL`, () => {
+    const fakeDb = { collections: {}, preload: vi.fn() }
+    const createStreamDB = createFakeStreamDB(fakeDb)
+
+    createLivingWikiStateDb(
+      { wikiSpaceId: `wiki_demo`, actorId: `actor_ada` },
+      { createStreamDB }
+    )
+
+    expect(createStreamDB).toHaveBeenCalledWith({
+      streamOptions: {
+        url: `/api/observe/wiki_demo/shared-state?actorId=actor_ada`,
+        contentType: `application/json`,
+      },
+      state: livingWikiStateSchema,
+    })
+  })
+
   it(`rejects invalid wikiSpaceId values before creating the DB`, () => {
     const createStreamDB = vi.fn()
 
@@ -42,6 +60,19 @@ describe(`createLivingWikiStateDb`, () => {
     expect(() =>
       createLivingWikiStateDb({ wikiSpaceId: `space_demo` }, { createStreamDB })
     ).toThrow()
+    expect(createStreamDB).not.toHaveBeenCalled()
+  })
+
+  it(`rejects invalid actorId values before creating the DB`, () => {
+    const createStreamDB = vi.fn()
+
+    expect(() =>
+      createLivingWikiStateDb(
+        { wikiSpaceId: `wiki_demo`, actorId: `actor/secret` },
+        { createStreamDB }
+      )
+    ).toThrow()
+
     expect(createStreamDB).not.toHaveBeenCalled()
   })
 

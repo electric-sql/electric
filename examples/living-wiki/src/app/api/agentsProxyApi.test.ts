@@ -25,6 +25,21 @@ describe(`getEntityStreamUrl`, () => {
       `/api/agents/entities/space%20with%20spaces/wiki-space/id%2Fwith%2Fslashes/stream`
     )
   })
+
+  it(`can include demo actor context as query params`, () => {
+    const url = getEntityStreamUrl(
+      {
+        wikiSpaceId: `wiki_demo`,
+        entityKind: `wiki-space`,
+        entityId: `entity_123`,
+      },
+      { actorId: `actor_ada` }
+    )
+
+    expect(url).toBe(
+      `/api/agents/entities/wiki_demo/wiki-space/entity_123/stream?actorId=actor_ada`
+    )
+  })
 })
 
 describe(`getObserveUrl`, () => {

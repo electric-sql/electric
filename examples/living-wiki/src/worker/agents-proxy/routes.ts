@@ -1,5 +1,11 @@
 import { ZodError } from 'zod'
+import { actorIdSchema } from '../../shared/wiki-state'
 import type { WorkerEnv } from '../env'
+import {
+  getWikiSpaceStore,
+  WikiSpaceActorNotFoundError,
+  WikiSpaceNotFoundError,
+} from '../wiki-space-store'
 import {
   AgentsProxyAdapterError,
   AgentsProxyConfigError,
@@ -10,6 +16,13 @@ import { resolveEntityMainStreamTarget, resolveObserveTarget } from './targets'
 const ENTITY_STREAM_PATTERN =
   /^\/api\/agents\/entities\/([^/]+)\/([^/]+)\/([^/]+)\/stream$/
 const OBSERVE_PATTERN = /^\/api\/observe\/([^/]+)\/([^/]+)$/
+
+class AgentsProxyPrincipalError extends Error {
+  constructor(message = `Invalid principal actor`) {
+    super(message)
+    this.name = `AgentsProxyPrincipalError`
+  }
+}
 
 export async function handleAgentsProxyRequest(
   request: Request,
@@ -46,12 +59,22 @@ async function handleEntityStreamRequest(
   entityId: string
 ): Promise<Response> {
   try {
+    const decodedWikiSpaceId = decodeURIComponent(wikiSpaceId)
     const target = resolveEntityMainStreamTarget({
-      wikiSpaceId: decodeURIComponent(wikiSpaceId),
+      wikiSpaceId: decodedWikiSpaceId,
       entityKind: decodeURIComponent(entityKind),
       entityId: decodeURIComponent(entityId),
     })
-    return await proxyAgentsStreamRequest({ request, env, target })
+    return await proxyAgentsStreamRequest({
+      request,
+      env,
+      target,
+      principal: await resolveRequestPrincipal(
+        request,
+        env,
+        decodedWikiSpaceId
+      ),
+    })
   } catch (error) {
     return handleProxyError(error)
   }
@@ -64,18 +87,54 @@ async function handleObserveRequest(
   observeKind: string
 ): Promise<Response> {
   try {
+    const decodedWikiSpaceId = decodeURIComponent(wikiSpaceId)
     const target = resolveObserveTarget({
-      wikiSpaceId: decodeURIComponent(wikiSpaceId),
+      wikiSpaceId: decodedWikiSpaceId,
       observeKind: decodeURIComponent(observeKind),
     })
-    return await proxyAgentsStreamRequest({ request, env, target })
+    return await proxyAgentsStreamRequest({
+      request,
+      env,
+      target,
+      principal: await resolveRequestPrincipal(
+        request,
+        env,
+        decodedWikiSpaceId
+      ),
+    })
   } catch (error) {
     return handleProxyError(error)
   }
 }
 
+async function resolveRequestPrincipal(
+  request: Request,
+  env: WorkerEnv,
+  wikiSpaceId: string
+): Promise<string | undefined> {
+  const actorId = new URL(request.url).searchParams.get(`actorId`)
+  if (!actorId) return undefined
+
+  try {
+    const snapshot = await getWikiSpaceStore(env).getSpace({
+      wikiSpaceId,
+      actorId: actorIdSchema.parse(actorId),
+    })
+    return snapshot.currentActor.displayName
+  } catch (error) {
+    if (
+      error instanceof ZodError ||
+      error instanceof WikiSpaceNotFoundError ||
+      error instanceof WikiSpaceActorNotFoundError
+    ) {
+      throw new AgentsProxyPrincipalError()
+    }
+    throw error
+  }
+}
+
 function handleProxyError(error: unknown): Response {
-  if (error instanceof ZodError) {
+  if (error instanceof ZodError || error instanceof AgentsProxyPrincipalError) {
     return errorJson(`Invalid request`, 400)
   }
   if (error instanceof AgentsProxyConfigError) {

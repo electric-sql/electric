@@ -38,8 +38,12 @@ export type LivingWikiStateQueryAdapter = <T>(
 
 export interface UseLivingWikiStateViewModelsOptions {
   wikiSpaceId?: string
+  actorId?: string
   db?: LivingWikiStateDb
-  createDb?: (input: { wikiSpaceId: string }) => LivingWikiStateDb
+  createDb?: (input: {
+    wikiSpaceId: string
+    actorId?: string
+  }) => LivingWikiStateDb
   queryAdapter?: LivingWikiStateQueryAdapter
   ownLifecycle?: boolean
 }
@@ -68,6 +72,7 @@ const defaultQueryAdapter: LivingWikiStateQueryAdapter = <T>(
 
 export function useLivingWikiStateViewModels({
   wikiSpaceId,
+  actorId,
   db: providedDb,
   createDb = createLivingWikiStateDb,
   queryAdapter = defaultQueryAdapter,
@@ -75,8 +80,8 @@ export function useLivingWikiStateViewModels({
 }: UseLivingWikiStateViewModelsOptions): UseLivingWikiStateViewModelsResult {
   const ownedDb = useMemo(() => {
     if (providedDb !== undefined || wikiSpaceId === undefined) return undefined
-    return createDb({ wikiSpaceId })
-  }, [createDb, providedDb, wikiSpaceId])
+    return createDb({ wikiSpaceId, actorId })
+  }, [actorId, createDb, providedDb, wikiSpaceId])
 
   const db = providedDb ?? ownedDb
 
