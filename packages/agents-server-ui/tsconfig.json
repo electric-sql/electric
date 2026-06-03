@@ -10,12 +10,13 @@
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    // "node" needed: typecheck pulls agents-runtime's node-using source via paths.
-    "types": ["vite/client", "node"],
+    "types": ["vite/client"],
     "baseUrl": ".",
+    // Only the browser-safe `client` entry is source-mapped (matches the vite
+    // alias). The index resolves via package exports to dist so its node-using
+    // sandbox re-exports stay behind skipLibCheck instead of leaking into the UI.
     "paths": {
-      "@electric-ax/agents-runtime": ["../agents-runtime/src/index.ts"],
-      "@electric-ax/agents-runtime/*": ["../agents-runtime/src/*"]
+      "@electric-ax/agents-runtime/client": ["../agents-runtime/src/client.ts"]
     }
   },
   "include": ["src", "vite.config.ts"]
