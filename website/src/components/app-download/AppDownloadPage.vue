@@ -24,6 +24,8 @@ import { VPButton } from 'vitepress/theme'
 import Section from '../agents-home/Section.vue'
 import BottomCtaStrap from '../BottomCtaStrap.vue'
 import AdPlaceholder from './AdPlaceholder.vue'
+import AppMockupShadowHost from '../brand-toys/app/AppMockupShadowHost.vue'
+import HeroChatStateScene from '../brand-toys/app/scenes/desktop/HeroChatStateScene.vue'
 
 const githubReleaseBase = `https://github.com/electric-sql/electric/releases`
 const appReleaseNotesUrl = `${githubReleaseBase}?q=%22%40electric-ax%2Fagents-desktop%22&expanded=true`
@@ -303,6 +305,35 @@ const primaryPlatform = computed(
           </span>
         </div>
       </div>
+
+      <!--
+        Hero mockup pair — live HTML/CSS desktop mockup with a phone
+        placeholder overlapping its right edge. The desktop scene is
+        the real animated mockup (HeroChatStateScene); the phone is
+        a placeholder until the mobile mockup primitive lands. Sits
+        OUTSIDE `.ad-hero-inner` so it can break the inner column's
+        820-px cap and span the full hero width.
+      -->
+      <div class="ad-hero-mockup">
+        <div class="ad-hero-mockup-stage">
+          <div class="ad-hero-mockup-desktop">
+            <AppMockupShadowHost
+              :scene="HeroChatStateScene"
+              :scene-props="{ os: 'auto', theme: 'dark' }"
+            />
+          </div>
+          <div class="ad-hero-mockup-phone" aria-hidden="true">
+            <AdPlaceholder
+              name="mobile-hero.png"
+              sublabel="Mobile chat — same session, live streaming response"
+              aspect="9/19"
+            />
+          </div>
+        </div>
+        <p class="ad-hero-mockup-caption mono">
+          Same session. Two devices. One control plane.
+        </p>
+      </div>
     </section>
 
     <!--
@@ -313,40 +344,16 @@ const primaryPlatform = computed(
       the same across phases, so each fill-in is a localised diff.
 
       Phase ownership for each section:
-        §2   visual strap          → phase 2 placeholder pair · phase 5 real shots
+        §2   visual strap          → folded into the §1 hero — the
+                                      desktop+mobile pair lives there
+                                      now so visitors land directly
+                                      on the product shot.
         §3   three ways to use it  → phase 3 ✓
         §3.5 scenarios             → phase 3 ✓ copy · phase 5 illustrations
         §4   multi-device          → phase 4 ✓ copy · phase 5 diagram SVG
         §5   bundled Horton        → phase 4 ✓
         §6   built for builders    → phase 3 ✓
     -->
-
-    <!-- ─────────────── §2 — Visual strap (desktop + mobile) ─────────────── -->
-    <Section id="visual">
-      <!--
-        Phase 2 lands the strap as a placeholder PAIR — desktop window
-        on the left, phone screen on the right — so the layout reads
-        as the eventual two-device shot even before real screenshots
-        arrive. Phase 5 swaps each placeholder for the captured
-        asset (desktop-hero.png / mobile-hero.png) without touching
-        the surrounding chrome.
-      -->
-      <div class="ad-visual-strap">
-        <AdPlaceholder
-          name="desktop-hero.png"
-          sublabel="Sidebar tree + tile workspace · chat tile left · state explorer right"
-          aspect="16/10"
-        />
-        <AdPlaceholder
-          name="mobile-hero.png"
-          sublabel="Mobile chat screen · same session, live streaming response"
-          aspect="9/16"
-        />
-      </div>
-      <p class="ad-visual-strap-caption mono">
-        Same session. Two devices. One control plane.
-      </p>
-    </Section>
 
     <!-- ─────────────────── §3 — Three ways to use it ─────────────────── *
          Three side-by-side cards (Code locally · Attach remotely · Build
@@ -1259,25 +1266,99 @@ const primaryPlatform = computed(
   white-space: nowrap;
 }
 
-/* ── §2 visual strap ────────────────────────────────────────── *
-   Desktop screenshot left (16:10), phone screenshot right (9:16);
-   the 2.4:1 column split keeps both placeholders' rendered
-   heights close while preserving each device's natural aspect
-   ratio. Caption sits centred below the pair. */
+/* ── §1 hero mockup pair ────────────────────────────────────── *
+   Live desktop mockup + overlapping phone placeholder, sitting at
+   the bottom of the hero. The desktop scene is HeroChatStateScene
+   (real animated HTML/CSS, OS-reactive); the phone is a placeholder
+   until the mobile mockup primitive lands.
 
-.ad-visual-strap {
-  display: grid;
-  /* `minmax(0, …)` overrides the default `min-width: auto` on grid
-     items so that the placeholders' aspect-ratio + intrinsic content
-     can't push the columns past their fractional allocation. Without
-     this, the AdPlaceholder labels widen the mobile column enough to
-     overflow the section's max-width. */
-  grid-template-columns: minmax(0, 2.4fr) minmax(0, 1fr);
-  gap: 24px;
+   Layout:
+     ┌──────────────────────────────────────────────────────────┐
+     │                                                          │
+     │   [ HeroChatStateScene ]              ┌──────┐           │
+     │                                       │      │           │
+     │   …                                   │ 📱   │           │
+     │                                       │      │           │
+     │                                       └──────┘           │
+     │                                                          │
+     │             Same session. Two devices.                   │
+     └──────────────────────────────────────────────────────────┘
+
+   Stage uses `position: relative` + container queries so the phone
+   can absolute-overlap the desktop on wide viewports and tuck under
+   it (stacked) on narrow viewports without breaking the layout.
+   The desktop scene already runs its own internal container queries
+   (sidebar collapse, state-tile drop) — sizing the mockup wrapper to
+   a fixed width makes those breakpoints fire predictably regardless
+   of the surrounding column. */
+
+.ad-hero-mockup {
+  /* Break out of the hero's 820-px text column so the mockup can
+     fill the page width with breathing room. The 1240-px cap matches
+     the design — wider screens just centre the stage. */
+  max-width: 1240px;
+  margin: 56px auto 0;
+  padding: 0 24px;
+  container-type: inline-size;
+  container-name: hero-mockup;
+}
+
+.ad-hero-mockup-stage {
+  position: relative;
+  width: 100%;
+  /* Aspect roughly matches the desktop scene + phone overlap so the
+     stage reserves vertical space without depending on the scene's
+     intrinsic height. The desktop scene fills the stage; the phone
+     hangs off the right edge as an absolute overlay. */
+  aspect-ratio: 16 / 10;
+  display: flex;
   align-items: stretch;
 }
 
-.ad-visual-strap-caption {
+.ad-hero-mockup-desktop {
+  /* Desktop occupies most of the stage, leaving room on the right for
+     the phone to overlap. Width is a percentage so the scene's
+     internal container queries (sidebar / state-tile breakpoints)
+     fire predictably as the viewport shrinks. */
+  flex: 1 1 auto;
+  width: 86%;
+  max-width: 86%;
+  /* Keep the scene flush-left so the phone overlaps the chat tile's
+     right edge — the design intent in the reference. */
+  align-self: stretch;
+}
+
+.ad-hero-mockup-phone {
+  position: absolute;
+  /* Hang off the right edge of the desktop. The phone's left edge
+     overlaps the desktop's right column by ~40 px so the eye reads
+     "two devices, one workflow" rather than "two separate panels". */
+  right: 24px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 22%;
+  min-width: 200px;
+  max-width: 280px;
+  /* Drop shadow lifts the phone off the desktop visually so the
+     overlap reads as foreground, not as a clipped device. */
+  filter: drop-shadow(-8px 8px 24px rgba(0, 0, 0, 0.35))
+    drop-shadow(0 2px 6px rgba(0, 0, 0, 0.25));
+  z-index: 2;
+}
+
+/* The AdPlaceholder used as the phone needs a phone-shaped frame:
+   tall, rounded corners, dark surface so it reads as a device shell
+   even before the real mockup primitive lands. Style the inner
+   `.ad-placeholder` it renders via `:deep()` so we don't have to
+   touch the placeholder primitive itself. */
+.ad-hero-mockup-phone :deep(.ad-placeholder) {
+  height: 100%;
+  border-radius: 32px;
+  border-width: 1.5px;
+  background: color-mix(in srgb, var(--vp-c-bg-soft) 75%, transparent);
+}
+
+.ad-hero-mockup-caption {
   margin: 22px 0 0;
   text-align: center;
   font-size: 13px;
@@ -1285,10 +1366,29 @@ const primaryPlatform = computed(
   color: var(--vp-c-text-3);
 }
 
-@media (max-width: 768px) {
-  .ad-visual-strap {
-    grid-template-columns: 1fr;
-    gap: 16px;
+/* Below ~720 px container width the overlap stops working — the
+   desktop tile has already collapsed its state pane (via its own
+   @container query at 720 px), and squeezing a phone alongside makes
+   both unreadable. Stack instead: desktop on top, phone below,
+   centred. */
+@container hero-mockup (max-width: 720px) {
+  .ad-hero-mockup-stage {
+    flex-direction: column;
+    align-items: center;
+    aspect-ratio: auto;
+    gap: 24px;
+  }
+  .ad-hero-mockup-desktop {
+    width: 100%;
+    max-width: 100%;
+    aspect-ratio: 16 / 10;
+  }
+  .ad-hero-mockup-phone {
+    position: static;
+    transform: none;
+    width: 60%;
+    max-width: 280px;
+    aspect-ratio: 9 / 19;
   }
 }
 
