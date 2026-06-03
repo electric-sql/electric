@@ -7,11 +7,13 @@
     "development": {
       "node": "24.11.1",
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "environment": "development"
     },
     "preview": {
       "node": "24.11.1",
       "distribution": "internal",
+      "environment": "preview",
       "android": {
         "buildType": "apk"
       }
@@ -19,6 +21,7 @@
     "preview-ios-simulator": {
       "node": "24.11.1",
       "distribution": "internal",
+      "environment": "preview",
       "ios": {
         "simulator": true
       }
@@ -26,17 +29,20 @@
     "canary": {
       "node": "24.11.1",
       "distribution": "internal",
+      "environment": "preview",
       "android": {
         "buildType": "apk"
       }
     },
     "canary-store": {
       "node": "24.11.1",
-      "distribution": "store"
+      "distribution": "store",
+      "environment": "production"
     },
     "production": {
       "node": "24.11.1",
-      "distribution": "store"
+      "distribution": "store",
+      "environment": "production"
     }
   },
   "submit": {
