@@ -244,12 +244,12 @@ A 2×2 (or horizontally-scrolling) strip of worked end-to-end examples. The purp
 │    GitHub issue → CI spawns Horton → triage on phone →       │
 │    finish on desk                                            │
 │                                                              │
-│    A new GitHub issue (or `issue_comment`, or a workflow_    │
-│    dispatch from CI) opens a new agent session on Electric   │
-│    Cloud. You get a notification on your phone, skim the     │
-│    diff Horton drafted, push back a steering message         │
-│    ("don't touch the migration files"), then pick up on      │
-│    your laptop to merge.                                     │
+│    Your software factory opens a new agent session on        │
+│    Electric Cloud — a fresh GitHub issue, an                 │
+│    `issue_comment`, or a `workflow_dispatch` from CI. You    │
+│    get a notification on your phone, skim the diff Horton    │
+│    drafted, push back a steering message ("don't touch the   │
+│    migration files"), then pick up on your laptop to merge.  │
 │                                                              │
 │    Touches:  Cloud · mobile · steer · stop · review          │
 ├──────────────────────────────────────────────────────────────┤

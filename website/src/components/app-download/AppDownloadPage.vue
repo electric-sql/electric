@@ -505,11 +505,12 @@ const primaryPlatform = computed(
             GitHub issue → CI spawns Horton → triage on phone → finish on desk
           </h3>
           <p class="ad-scenarios-body">
-            A new GitHub issue (or <code>issue_comment</code>, or a
-            <code>workflow_dispatch</code> from CI) opens a new agent session on
-            Electric Cloud. You get a notification on your phone, skim the diff
-            Horton drafted, push back a steering message ("don't touch the
-            migration files"), then pick up on your laptop to merge.
+            Your software factory opens a new agent session on Electric Cloud —
+            a fresh GitHub issue, an <code>issue_comment</code>, or a
+            <code>workflow_dispatch</code> from CI. You get a notification on
+            your phone, skim the diff Horton drafted, push back a steering
+            message ("don't touch the migration files"), then pick up on your
+            laptop to merge.
           </p>
         </article>
 
