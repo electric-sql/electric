@@ -12,7 +12,7 @@ Wrangler + Vite + React scaffold for the Living Wiki Electric Agents demo.
 - Base UI
 - Inter font
 - tRPC
-- REST health/proxy routes
+- REST health routes and WikiSpace API routes
 
 ## Local development
 
@@ -76,12 +76,14 @@ The browser calls the Worker through `/api/*` REST endpoints and `/trpc/*` tRPC 
 
 ### REST endpoints
 
+- `GET /api/health` returns Worker health status.
 - `POST /api/spaces` creates a demo WikiSpace.
 - `POST /api/spaces/:wikiSpaceId/join` joins an existing demo WikiSpace.
 - `GET /api/spaces/:wikiSpaceId` gets a demo WikiSpace. Pass `actorId` as a query parameter when reading as a specific demo actor.
 
 ### tRPC procedures
 
+- `health` returns Worker health status.
 - `space.create` creates a demo WikiSpace.
 - `space.join` joins an existing demo WikiSpace.
 - `space.get` gets a demo WikiSpace.
