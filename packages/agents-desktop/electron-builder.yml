@@ -73,6 +73,13 @@ linux:
         - x64
 
 publish:
-  provider: github
-  owner: electric-sql
-  repo: electric
+  # Using `generic` (not `github`) because the electric-sql/electric repo
+  # publishes many packages to the same Releases page (changesets-style).
+  # GitHub's "latest" marker tracks whichever release was most recently
+  # tagged across all packages, so the `github` provider grabs the wrong
+  # release and can't find latest-mac.yml.
+  # Instead we point at the moving `agents-desktop-latest` tag that the
+  # release workflow maintains specifically for desktop stable builds.
+  # Canary builds override `url` to `agents-desktop-canary` at build time.
+  provider: generic
+  url: 'https://github.com/electric-sql/electric/releases/download/agents-desktop-latest'

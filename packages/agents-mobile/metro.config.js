@@ -1,11 +1,12 @@
 const path = require(`node:path`)
-const { getDefaultConfig } = require(`expo/metro-config`)
+// Drop-in for `getDefaultConfig` that injects Sentry Debug IDs for source maps.
+const { getSentryExpoConfig } = require(`@sentry/react-native/metro`)
 
 const projectRoot = __dirname
 const workspaceRoot = path.resolve(projectRoot, `../..`)
 const serverUiRoot = path.resolve(workspaceRoot, `packages/agents-server-ui`)
 
-const config = getDefaultConfig(projectRoot)
+const config = getSentryExpoConfig(projectRoot)
 const defaultResolveRequest = config.resolver.resolveRequest
 
 const forcedAliases = {

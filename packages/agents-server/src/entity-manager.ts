@@ -2047,12 +2047,7 @@ export class EntityManager {
     manifests: Map<string, Record<string, unknown>>
   ): Promise<void> {
     for (const [manifestKey, manifest] of manifests) {
-      await this.syncEntitiesManifestSource(
-        entityUrl,
-        manifestKey,
-        `upsert`,
-        manifest
-      )
+      await this.syncManifestLinks(entityUrl, manifestKey, `upsert`, manifest)
 
       const wake = buildManifestWakeRegistration(
         entityUrl,
@@ -2617,14 +2612,21 @@ export class EntityManager {
     return updated
   }
 
-  async ensureEntitiesMembershipStream(tags: Record<string, string>): Promise<{
+  async ensureEntitiesMembershipStream(
+    tags: Record<string, string>,
+    principal: { url: string; kind: string }
+  ): Promise<{
     sourceRef: string
     streamUrl: string
   }> {
     if (!this.entityBridgeManager) {
       throw new Error(`Entity bridge manager not configured`)
     }
-    return this.entityBridgeManager.register(this.validateTags(tags))
+    return this.entityBridgeManager.register(
+      this.validateTags(tags),
+      principal.url,
+      principal.kind
+    )
   }
 
   async writeManifestEntry(
@@ -2657,12 +2659,12 @@ export class EntityManager {
       await this.streamClient.appendIdempotent(entity.streams.main, encoded, {
         producerId: opts.producerId,
       })
-      await this.syncEntitiesManifestSource(entityUrl, key, operation, value)
+      await this.syncManifestLinks(entityUrl, key, operation, value)
       return
     }
 
     await this.streamClient.append(entity.streams.main, encoded)
-    await this.syncEntitiesManifestSource(entityUrl, key, operation, value)
+    await this.syncManifestLinks(entityUrl, key, operation, value)
   }
 
   async upsertCronSchedule(
@@ -3040,7 +3042,7 @@ export class EntityManager {
     })
   }
 
-  private async syncEntitiesManifestSource(
+  private async syncManifestLinks(
     entityUrl: string,
     manifestKey: string,
     operation: `insert` | `update` | `upsert` | `delete`,
@@ -3052,6 +3054,14 @@ export class EntityManager {
       entityUrl,
       manifestKey,
       sourceRef
+    )
+
+    const sharedStateId =
+      operation === `delete` ? undefined : this.extractSharedStateId(value)
+    await this.registry.replaceSharedStateLink(
+      entityUrl,
+      manifestKey,
+      sharedStateId
     )
   }
 
@@ -3066,6 +3076,24 @@ export class EntityManager {
       return manifest.sourceRef
     }
     return undefined
+  }
+
+  private extractSharedStateId(
+    manifest?: Record<string, unknown>
+  ): string | undefined {
+    if (manifest?.kind === `shared-state` && typeof manifest.id === `string`) {
+      return manifest.id
+    }
+
+    if (manifest?.kind !== `source` || manifest.sourceType !== `db`) {
+      return undefined
+    }
+
+    if (typeof manifest.sourceRef === `string`) {
+      return manifest.sourceRef
+    }
+    const config = isRecord(manifest.config) ? manifest.config : undefined
+    return typeof config?.id === `string` ? config.id : undefined
   }
 
   /**

@@ -44,6 +44,26 @@ describe(`runtime-server-client.setTag`, () => {
     )
   })
 
+  it(`ensureSharedStateStream sends the owner entity header`, async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = []
+    const fakeFetch = vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push({ url, init })
+      return new Response(null, { status: 201 })
+    }) as unknown as typeof fetch
+    const client = createRuntimeServerClient({
+      baseUrl: `http://test.example`,
+      fetch: fakeFetch,
+    })
+
+    await expect(
+      client.ensureSharedStateStream(`board-1`, `/task/owner`)
+    ).resolves.toBe(`/_electric/shared-state/board-1`)
+
+    const headers = new Headers(calls[0]!.init?.headers)
+    expect(headers.get(`content-type`)).toBe(`application/json`)
+    expect(headers.get(`electric-owner-entity`)).toBe(`/task/owner`)
+  })
+
   it(`sends POST with bearer token and tag body`, async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = []
     const fakeFetch = vi.fn(async (url: string, init?: RequestInit) => {

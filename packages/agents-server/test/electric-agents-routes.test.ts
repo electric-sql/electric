@@ -287,6 +287,12 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
         createRequest(`PUT`, `/_electric/shared-state/board-1`),
         {
           service: `test`,
+          principal: {
+            kind: `system`,
+            id: `dev-local`,
+            key: `system:dev-local`,
+            url: `/principal/system:dev-local`,
+          },
           durableStreamsUrl: `http://durable.local/custom/ds-prefix`,
           isShuttingDown: () => false,
         } as unknown as TenantContext
@@ -747,7 +753,10 @@ describe(`ElectricAgentsRoutes send endpoint`, () => {
   it(`rejects spoofed from_agent values`, async () => {
     const manager = {
       registry: {
-        getEntity: vi.fn().mockResolvedValue({ url: `/chat/test` }),
+        getEntity: vi.fn().mockResolvedValue({
+          url: `/chat/test`,
+          created_by: `/principal/agent%3Achat%2Ftest`,
+        }),
         getEntityType: vi.fn(),
       },
       ensurePrincipal: vi.fn().mockResolvedValue(undefined),
@@ -784,7 +793,10 @@ describe(`ElectricAgentsRoutes send endpoint`, () => {
   it(`allows matching from_agent values for agent principals`, async () => {
     const manager = {
       registry: {
-        getEntity: vi.fn().mockResolvedValue({ url: `/chat/test` }),
+        getEntity: vi.fn().mockResolvedValue({
+          url: `/chat/test`,
+          created_by: `/principal/agent%3Achat%2Ftest`,
+        }),
         getEntityType: vi.fn(),
       },
       ensurePrincipal: vi.fn().mockResolvedValue(undefined),

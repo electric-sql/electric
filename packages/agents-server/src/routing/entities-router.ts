@@ -16,6 +16,7 @@ import {
   ErrCodeNotFound,
   ErrCodeUnknownEntityType,
   ErrCodeInvalidRequest,
+  ErrCodeUnauthorized,
   toPublicEntity,
 } from '../electric-agents-types.js'
 import {
@@ -27,9 +28,17 @@ import {
   unlinkEntityDispatchSubscription,
 } from './dispatch-policy.js'
 import { ElectricAgentsError } from '../entity-manager.js'
+import {
+  canAccessEntity,
+  canAccessEntityType,
+  isPermissionBypassPrincipal,
+  principalSubject,
+} from '../permissions.js'
 import { routeBody, withSchema } from './schema.js'
 import type {
   ElectricAgentsEntity,
+  ElectricAgentsEntityType,
+  EntityPermission,
   SendRequest,
 } from '../electric-agents-types.js'
 import type { JsonRouteRequest } from './schema.js'
@@ -39,9 +48,11 @@ import type { EventSourceSubscriptionInput } from '@electric-ax/agents-runtime'
 
 interface AgentsRouteRequest extends JsonRouteRequest {
   entityRoute?: ExistingEntityRoute
+  spawnRoute?: SpawnableEntityRoute
 }
 
 type ExistingEntityRoute = { entityUrl: string; entity: ElectricAgentsEntity }
+type SpawnableEntityRoute = { entityType: ElectricAgentsEntityType }
 type AgentsRouteArgs = [TenantContext]
 type AgentsRouteResult = Response | undefined
 
@@ -81,6 +92,41 @@ const wakeConditionSchema = Type.Union([
   }),
 ])
 
+const permissionSubjectSchema = Type.Object(
+  {
+    subject_kind: Type.Union([
+      Type.Literal(`principal`),
+      Type.Literal(`principal_kind`),
+    ]),
+    subject_value: Type.String(),
+  },
+  { additionalProperties: false }
+)
+
+const entityPermissionSchema = Type.Union([
+  Type.Literal(`read`),
+  Type.Literal(`write`),
+  Type.Literal(`delete`),
+  Type.Literal(`signal`),
+  Type.Literal(`fork`),
+  Type.Literal(`schedule`),
+  Type.Literal(`spawn`),
+  Type.Literal(`manage`),
+])
+
+const entityPermissionGrantInputSchema = Type.Object(
+  {
+    ...permissionSubjectSchema.properties,
+    permission: entityPermissionSchema,
+    propagation: Type.Optional(
+      Type.Union([Type.Literal(`self`), Type.Literal(`descendants`)])
+    ),
+    copy_to_children: Type.Optional(Type.Boolean()),
+    expires_at: Type.Optional(Type.String()),
+  },
+  { additionalProperties: false }
+)
+
 const spawnBodySchema = Type.Object({
   args: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
   tags: Type.Optional(stringRecordSchema),
@@ -88,6 +134,7 @@ const spawnBodySchema = Type.Object({
   dispatch_policy: Type.Optional(dispatchPolicySchema),
   sandbox: Type.Optional(sandboxChoiceSchema),
   initialMessage: Type.Optional(Type.Unknown()),
+  grants: Type.Optional(Type.Array(entityPermissionGrantInputSchema)),
   wake: Type.Optional(
     Type.Object({
       subscriberUrl: Type.String(),
@@ -240,6 +287,9 @@ type ScheduleBody = Static<typeof scheduleBodySchema>
 type EventSourceSubscriptionBody = Static<
   typeof eventSourceSubscriptionBodySchema
 >
+type EntityPermissionGrantInput = Static<
+  typeof entityPermissionGrantInputSchema
+>
 type AttachmentSubjectType = `inbox` | `run` | `text` | `tool_call` | `context`
 type AttachmentRole = `input` | `output`
 type ParsedAttachmentForm = {
@@ -273,87 +323,136 @@ entitiesRouter.put(
   `/:type/:instanceId`,
   withSpawnableEntityType,
   withSchema(spawnBodySchema),
+  withSpawnPermission,
   spawnEntity
 )
-entitiesRouter.get(`/:type/:instanceId`, withExistingEntity, getEntity)
-entitiesRouter.head(`/:type/:instanceId`, withExistingEntity, headEntity)
-entitiesRouter.delete(`/:type/:instanceId`, withExistingEntity, killEntity)
+entitiesRouter.get(
+  `/:type/:instanceId`,
+  withExistingEntity,
+  withEntityPermission(`read`),
+  getEntity
+)
+entitiesRouter.head(
+  `/:type/:instanceId`,
+  withExistingEntity,
+  withEntityPermission(`read`),
+  headEntity
+)
+entitiesRouter.delete(
+  `/:type/:instanceId`,
+  withExistingEntity,
+  withEntityPermission(`delete`),
+  killEntity
+)
 entitiesRouter.post(
   `/:type/:instanceId/signal`,
   withExistingEntity,
   withSchema(signalBodySchema),
+  withEntityPermission(`signal`),
   signalEntity
 )
 entitiesRouter.post(
   `/:type/:instanceId/send`,
   withExistingEntity,
   withSchema(sendBodySchema),
+  withEntityPermission(`write`),
   sendEntity
 )
 entitiesRouter.post(
   `/:type/:instanceId/attachments`,
   withExistingEntity,
+  withEntityPermission(`write`),
   createAttachment
 )
 entitiesRouter.get(
   `/:type/:instanceId/attachments/:attachmentId`,
   withExistingEntity,
+  withEntityPermission(`read`),
   readAttachment
 )
 entitiesRouter.delete(
   `/:type/:instanceId/attachments/:attachmentId`,
   withExistingEntity,
+  withEntityPermission(`write`),
   deleteAttachment
 )
 entitiesRouter.patch(
   `/:type/:instanceId/inbox/:messageKey`,
   withExistingEntity,
   withSchema(inboxMessageBodySchema),
+  withEntityPermission(`write`),
   updateInboxMessage
 )
 entitiesRouter.delete(
   `/:type/:instanceId/inbox/:messageKey`,
   withExistingEntity,
+  withEntityPermission(`write`),
   deleteInboxMessage
 )
 entitiesRouter.post(
   `/:type/:instanceId/fork`,
   withExistingEntity,
   withSchema(forkBodySchema),
+  withEntityPermission(`fork`),
   forkEntity
 )
 entitiesRouter.post(
   `/:type/:instanceId/tags/:tagKey`,
   withExistingEntity,
   withSchema(setTagBodySchema),
+  withEntityPermission(`write`),
   setTag
 )
 entitiesRouter.delete(
   `/:type/:instanceId/tags/:tagKey`,
   withExistingEntity,
+  withEntityPermission(`write`),
   deleteTag
 )
 entitiesRouter.put(
   `/:type/:instanceId/schedules/:scheduleId`,
   withExistingEntity,
   withSchema(scheduleBodySchema),
+  withEntityPermission(`schedule`),
   upsertSchedule
 )
 entitiesRouter.delete(
   `/:type/:instanceId/schedules/:scheduleId`,
   withExistingEntity,
+  withEntityPermission(`schedule`),
   deleteSchedule
 )
 entitiesRouter.put(
   `/:type/:instanceId/event-source-subscriptions/:subscriptionId`,
   withExistingEntity,
   withSchema(eventSourceSubscriptionBodySchema),
+  withEntityPermission(`write`),
   upsertEventSourceSubscription
 )
 entitiesRouter.delete(
   `/:type/:instanceId/event-source-subscriptions/:subscriptionId`,
   withExistingEntity,
+  withEntityPermission(`write`),
   deleteEventSourceSubscription
+)
+entitiesRouter.get(
+  `/:type/:instanceId/grants`,
+  withExistingEntity,
+  withEntityPermission(`manage`),
+  listEntityPermissionGrants
+)
+entitiesRouter.post(
+  `/:type/:instanceId/grants`,
+  withExistingEntity,
+  withSchema(entityPermissionGrantInputSchema),
+  withEntityPermission(`manage`),
+  createEntityPermissionGrant
+)
+entitiesRouter.delete(
+  `/:type/:instanceId/grants/:grantId`,
+  withExistingEntity,
+  withEntityPermission(`manage`),
+  deleteEntityPermissionGrant
 )
 
 function entityUrlFromSegments(
@@ -528,6 +627,31 @@ function rejectPrincipalEntityMutation(
   )
 }
 
+function parseExpiresAt(value: string | undefined): Date | undefined {
+  if (value === undefined) return undefined
+  const expiresAt = new Date(value)
+  if (Number.isNaN(expiresAt.getTime())) {
+    throw new ElectricAgentsError(
+      ErrCodeInvalidRequest,
+      `Invalid expires_at timestamp`,
+      400
+    )
+  }
+  return expiresAt
+}
+
+function parseGrantId(request: AgentsRouteRequest): number {
+  const grantId = Number.parseInt(String(request.params.grantId), 10)
+  if (!Number.isSafeInteger(grantId) || grantId <= 0) {
+    throw new ElectricAgentsError(
+      ErrCodeInvalidRequest,
+      `Invalid grant id`,
+      400
+    )
+  }
+  return grantId
+}
+
 async function withExistingEntity(
   request: AgentsRouteRequest,
   ctx: TenantContext
@@ -599,7 +723,94 @@ async function withSpawnableEntityType(
     )
   }
 
+  request.spawnRoute = { entityType }
   return undefined
+}
+
+function withEntityPermission(permission: EntityPermission) {
+  return async (
+    request: AgentsRouteRequest,
+    ctx: TenantContext
+  ): Promise<AgentsRouteResult> => {
+    const { entity } = requireExistingEntityRoute(request)
+    if (await canAccessEntity(ctx, entity, permission, request as Request)) {
+      return undefined
+    }
+    return apiError(
+      401,
+      ErrCodeUnauthorized,
+      `Principal is not allowed to ${permission} ${entity.url}`
+    )
+  }
+}
+
+async function withSpawnPermission(
+  request: AgentsRouteRequest,
+  ctx: TenantContext
+): Promise<AgentsRouteResult> {
+  const parsed = routeBody<SpawnBody>(request)
+  const entityType = request.spawnRoute?.entityType
+  if (!entityType) {
+    throw new Error(`spawnable entity type middleware did not run`)
+  }
+
+  if (
+    !(await canAccessEntityType(ctx, entityType, `spawn`, request as Request))
+  ) {
+    return apiError(
+      401,
+      ErrCodeUnauthorized,
+      `Principal is not allowed to spawn ${entityType.name}`
+    )
+  }
+
+  if (!parsed.parent) return undefined
+
+  const parent = await ctx.entityManager.registry.getEntity(parsed.parent)
+  if (!parent) {
+    return apiError(404, ErrCodeNotFound, `Parent entity not found`)
+  }
+  if (await canAccessEntity(ctx, parent, `spawn`, request as Request)) {
+    return await validateParentedSpawnGrants(request, ctx, parent, parsed)
+  }
+  return apiError(
+    401,
+    ErrCodeUnauthorized,
+    `Principal is not allowed to spawn children from ${parent.url}`
+  )
+}
+
+async function validateParentedSpawnGrants(
+  request: AgentsRouteRequest,
+  ctx: TenantContext,
+  parent: ElectricAgentsEntity,
+  parsed: SpawnBody
+): Promise<AgentsRouteResult> {
+  const needsParentManage = (parsed.grants ?? []).some(
+    requiresParentManageForInitialGrant
+  )
+  if (!needsParentManage) return undefined
+
+  if (await canAccessEntity(ctx, parent, `manage`, request as Request)) {
+    return undefined
+  }
+
+  return apiError(
+    401,
+    ErrCodeUnauthorized,
+    `Principal is not allowed to delegate broad grants from ${parent.url}`
+  )
+}
+
+function requiresParentManageForInitialGrant(
+  grant: EntityPermissionGrantInput
+): boolean {
+  return (
+    grant.permission === `manage` ||
+    grant.subject_kind === `principal_kind` ||
+    grant.propagation === `descendants` ||
+    grant.copy_to_children === true
+  )
 }
 
 async function listEntities(
@@ -611,8 +822,59 @@ async function listEntities(
     status: firstQueryValue(query.status),
     parent: firstQueryValue(query.parent),
     created_by: firstQueryValue(query.created_by),
+    readableBy: {
+      ...principalSubject(ctx.principal),
+      bypass: isPermissionBypassPrincipal(ctx),
+    },
   })
   return json(entities.map((entity) => toPublicEntity(entity)))
+}
+
+async function listEntityPermissionGrants(
+  request: AgentsRouteRequest,
+  ctx: TenantContext
+): Promise<Response> {
+  const { entityUrl } = requireExistingEntityRoute(request)
+  const grants =
+    await ctx.entityManager.registry.listEntityPermissionGrants(entityUrl)
+  return json({ grants })
+}
+
+async function createEntityPermissionGrant(
+  request: AgentsRouteRequest,
+  ctx: TenantContext
+): Promise<Response> {
+  const { entityUrl } = requireExistingEntityRoute(request)
+  const parsed = routeBody<EntityPermissionGrantInput>(request)
+  const grant = await ctx.entityManager.registry.createEntityPermissionGrant({
+    entityUrl,
+    permission: parsed.permission,
+    subjectKind: parsed.subject_kind,
+    subjectValue: parsed.subject_value,
+    propagation: parsed.propagation,
+    copyToChildren: parsed.copy_to_children,
+    expiresAt: parseExpiresAt(parsed.expires_at),
+    createdBy: ctx.principal.url,
+  })
+  await ctx.entityBridgeManager.onEntityChanged(entityUrl)
+  return json(grant, { status: 201 })
+}
+
+async function deleteEntityPermissionGrant(
+  request: AgentsRouteRequest,
+  ctx: TenantContext
+): Promise<Response> {
+  const { entityUrl } = requireExistingEntityRoute(request)
+  const deleted = await ctx.entityManager.registry.deleteEntityPermissionGrant(
+    entityUrl,
+    parseGrantId(request)
+  )
+  if (deleted) {
+    await ctx.entityBridgeManager.onEntityChanged(entityUrl)
+  }
+  return deleted
+    ? status(204)
+    : apiError(404, ErrCodeNotFound, `Grant not found`)
 }
 
 async function upsertSchedule(
@@ -1033,6 +1295,25 @@ async function spawnEntity(
     wake: parsed.wake,
     created_by: principal.url,
   })
+  if (parsed.parent) {
+    await ctx.entityManager.registry.copyEntityPermissionGrantsForSpawn(
+      parsed.parent,
+      entity.url,
+      principal.url
+    )
+  }
+  for (const grant of parsed.grants ?? []) {
+    await ctx.entityManager.registry.createEntityPermissionGrant({
+      entityUrl: entity.url,
+      permission: grant.permission,
+      subjectKind: grant.subject_kind,
+      subjectValue: grant.subject_value,
+      propagation: grant.propagation,
+      copyToChildren: grant.copy_to_children,
+      expiresAt: parseExpiresAt(grant.expires_at),
+      createdBy: principal.url,
+    })
+  }
   const linkBeforeInitialMessage =
     parsed.initialMessage !== undefined &&
     shouldLinkDispatchBeforeInitialMessage(dispatchPolicy)

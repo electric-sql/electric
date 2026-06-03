@@ -63,9 +63,14 @@ export function createAgentsClient(config: AgentsClientConfig): AgentsClient {
       }
 
       if (source.sourceType === `entities`) {
-        await serverClient.ensureEntitiesMembershipStream(
+        const ensured = await serverClient.ensureEntitiesMembershipStream(
           (source as EntitiesObservationSource).tags
         )
+        source = {
+          ...source,
+          sourceRef: ensured.sourceRef,
+          streamUrl: ensured.streamUrl,
+        }
       }
 
       if (!source.streamUrl || !source.schema) {

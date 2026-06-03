@@ -227,3 +227,55 @@ export async function saveDesktopSettings(
     JSON.stringify(serializeSettings(settings), null, 2)
   )
 }
+
+// Anthropic tool-name regex — server names get prefixed `mcp__<server>__<tool>`,
+// so the server name's allowed character set must match.
+const MCP_SERVER_NAME_RE = /^[a-zA-Z0-9_-]{1,128}$/
+
+export function validateMcpServerConfig(cfg: McpServerConfig): string | null {
+  if (!cfg || typeof cfg !== `object`) return `Config must be an object`
+  if (typeof cfg.name !== `string` || !MCP_SERVER_NAME_RE.test(cfg.name)) {
+    return `Name must match ${MCP_SERVER_NAME_RE.source}`
+  }
+  if (cfg.transport === `http`) {
+    if (!cfg.url || typeof cfg.url !== `string`) return `HTTP url is required`
+    if (!/^https?:\/\//.test(cfg.url))
+      return `HTTP url must start with http(s)://`
+    if (!cfg.auth || typeof cfg.auth !== `object`) return `Auth is required`
+  } else if (cfg.transport === `stdio`) {
+    if (!cfg.command || typeof cfg.command !== `string`) {
+      return `Stdio command is required`
+    }
+  } else {
+    return `Transport must be 'http' or 'stdio'`
+  }
+  return null
+}
+
+/**
+ * Upsert an MCP server in `settings.mcp.servers` by name. The caller
+ * is responsible for persisting via `saveDesktopSettings` and pushing
+ * the updated extras to any live runtime.
+ */
+export function upsertMcpServerInSettings(
+  settings: DesktopSettings,
+  cfg: McpServerConfig
+): void {
+  const error = validateMcpServerConfig(cfg)
+  if (error) throw new Error(error)
+  const existing = settings.mcp?.servers ?? []
+  const filtered = existing.filter((s) => s.name !== cfg.name)
+  filtered.push(cfg)
+  settings.mcp = { servers: filtered }
+}
+
+export function removeMcpServerFromSettings(
+  settings: DesktopSettings,
+  name: string
+): boolean {
+  const existing = settings.mcp?.servers ?? []
+  const next = existing.filter((s) => s.name !== name)
+  if (next.length === existing.length) return false
+  settings.mcp = next.length > 0 ? { servers: next } : undefined
+  return true
+}

@@ -705,6 +705,13 @@ export function registerHorton(
   registry.define(`horton`, {
     description: `Friendly capable assistant — chat, code, research, dispatch`,
     creationSchema: hortonCreationSchema,
+    permissionGrants: [
+      {
+        subject_kind: `principal_kind`,
+        subject_value: `user`,
+        permission: `spawn`,
+      },
+    ],
     handler: assistantHandler,
   })
 
