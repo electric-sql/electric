@@ -104,14 +104,25 @@ withDefaults(
   border-radius: 6px;
 }
 
-/* Traffic-lights overlay. Position matches the Apple hiddenInset
-   default coordinates so the lights land where the OS would paint
-   them. Z-indexed above the workspace so the lights stay on top of
-   any content the leftmost column scrolls under them. */
+/* Traffic-lights overlay. Positioned as a 44-px-tall flex row from the
+   top-left corner so the dots vertically centre at the same y as the
+   tile-header / MainHeader controls (sidebar toggle, search, history
+   buttons) — this matches the live app, where Electron's
+   `trafficLightPosition: { x: 16, y: 14 }` puts dot-centre y at 20 px
+   while toolbar buttons sit centred in a 44-px row (y = 22), reading
+   as aligned to the eye.
+
+   Without `display: flex` + explicit height, the inline-flex
+   `<AppTrafficLights>` content inherits the wrapper's default
+   line-height, inflating the wrapper to ~22 px tall and pushing the
+   dots down a few px below the toolbar baseline. */
 .app-window-frame-traffic-lights {
   position: absolute;
-  top: 13px;
-  left: 13px;
+  top: 0;
+  left: 16px;
+  height: 44px;
+  display: flex;
+  align-items: center;
   z-index: 10;
   /* The lights themselves are non-interactive in the mockup — there's
      nothing to close — but we keep the click target so hover states
