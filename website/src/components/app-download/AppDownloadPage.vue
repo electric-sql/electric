@@ -1202,16 +1202,17 @@ const primaryPlatform = computed(
 /* Vertical divider centred in the 28px column gap between the
    desktop trio (cols 1-3) and the mobile pair (cols 4-5). Sits as
    an absolutely-positioned hairline on the iOS glyph, anchored
-   off its container's relative positioning. Height roughly matches
-   the icon glyph so the line reads as part of the row, not a
-   section divider. */
+   off its container's relative positioning. Top:0 + bottom:<badge
+   area> stretches the line from the top of the iOS icon down to
+   the bottom of its label — matching the desktop column height —
+   while clearing the small `Preview` chip that hangs below.  */
 .ad-hero-glyph:nth-child(4)::before {
   content: '';
   position: absolute;
   left: -14px;
-  top: 2px;
+  top: 0;
+  bottom: 20px;
   width: 1px;
-  height: 22px;
   background: var(--vp-c-divider);
 }
 
@@ -1234,18 +1235,18 @@ const primaryPlatform = computed(
   color: var(--vp-c-text-3);
 }
 
-/* Per-glyph `Preview` chip — one tucked under each mobile glyph's
-   label (iOS, Android). Read as a title-style badge on each
-   platform rather than a single anchor pill that left the row
-   feeling lopsided. Identical chip rendered twice gives the bottom
-   of the row a symmetric, paired feel and removes any ambiguity
-   about which platforms are in preview without needing to lean on
-   the icon-colour cue alone. */
+/* Per-glyph `Preview` chip — one tucked tight under each mobile
+   glyph's label (iOS, Android). Reads as a title-style badge on
+   each platform rather than a single anchor pill that left the
+   row feeling lopsided. Sized down to ~7px so the chip lives as
+   visual punctuation under the label, not a second mark
+   competing for attention with the icon. */
 .ad-hero-glyph-preview {
-  margin-top: 4px;
-  padding: 1px 6px;
-  font-size: 8px;
-  letter-spacing: 0.14em;
+  margin-top: 2px;
+  padding: 0 5px;
+  font-size: 7px;
+  line-height: 1.4;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: color-mix(in srgb, var(--vp-c-brand-1) 80%, var(--vp-c-text-3));
   background: color-mix(in srgb, var(--vp-c-brand-1) 10%, transparent);
