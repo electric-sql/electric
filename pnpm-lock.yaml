@@ -741,6 +741,9 @@ importers:
       '@durable-streams/state':
         specifier: ^0.2.9
         version: 0.2.9(typescript@5.9.3)
+      '@electric-ax/agents-runtime':
+        specifier: workspace:*
+        version: link:../../packages/agents-runtime
       '@tanstack/db':
         specifier: ^0.6.6
         version: 0.6.7(typescript@5.9.3)
@@ -27128,7 +27131,7 @@ snapshots:
       proxy-agent: 6.5.0
       typebox: 1.1.34
       undici: 7.25.0
-      zod-to-json-schema: 3.25.2(zod@3.25.76)
+      zod-to-json-schema: 3.25.2(zod@4.3.6)
     transitivePeerDependencies:
       - '@modelcontextprotocol/sdk'
       - aws-crt

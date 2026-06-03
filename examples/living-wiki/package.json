@@ -24,7 +24,8 @@
     "@trpc/server": "^11.7.2",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "zod": "^4.3.6"
+    "zod": "^4.3.6",
+    "@electric-ax/agents-runtime": "workspace:*"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.16.12",
