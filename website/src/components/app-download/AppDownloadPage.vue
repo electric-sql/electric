@@ -301,16 +301,6 @@ const primaryPlatform = computed(
             >Preview</span
           >
         </div>
-
-        <p class="ad-hero-meta">
-          <a
-            class="ad-meta-link"
-            :href="appReleaseNotesUrl"
-            target="_blank"
-            rel="noreferrer"
-            >Release notes</a
-          >
-        </p>
       </div>
     </section>
 
@@ -849,6 +839,16 @@ const primaryPlatform = computed(
         </article>
       </div>
 
+      <p class="ad-download-meta">
+        <a
+          class="ad-meta-link"
+          :href="appReleaseNotesUrl"
+          target="_blank"
+          rel="noreferrer"
+          >Release notes</a
+        >
+      </p>
+
       <aside class="custom-block warning ad-signing-note">
         <p class="custom-block-title">Unsigned Preview</p>
         <p>
@@ -1144,10 +1144,14 @@ const primaryPlatform = computed(
   gap: 12px;
 }
 
-.ad-hero-meta {
-  margin: 18px 0 0;
+.ad-download-meta {
+  /* Small follow-up line under the §7a desktop download grid;
+     previously sat in the hero as `Release notes`, moved down so
+     the hero stays focused on the CTAs + platform glyphs. */
+  margin: 28px 0 0;
   font-size: 13px;
   color: var(--vp-c-text-3);
+  text-align: center;
 }
 
 .ad-meta-link {
@@ -1186,11 +1190,28 @@ const primaryPlatform = computed(
 }
 
 .ad-hero-glyph {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 6px;
   color: var(--vp-c-text-3);
+}
+
+/* Vertical divider centred in the 28px column gap between the
+   desktop trio (cols 1-3) and the mobile pair (cols 4-5). Sits as
+   an absolutely-positioned hairline on the iOS glyph, anchored
+   off its container's relative positioning. Height roughly matches
+   the icon glyph so the line reads as part of the row, not a
+   section divider. */
+.ad-hero-glyph:nth-child(4)::before {
+  content: '';
+  position: absolute;
+  left: -14px;
+  top: 2px;
+  width: 1px;
+  height: 22px;
+  background: var(--vp-c-divider);
 }
 
 .ad-hero-glyph-icon {
@@ -1217,10 +1238,10 @@ const primaryPlatform = computed(
   grid-column: 4 / 6;
   justify-self: center;
   align-self: start;
-  margin-top: 4px;
-  padding: 3px 10px;
-  font-size: 10px;
-  letter-spacing: 0.12em;
+  margin-top: 2px;
+  padding: 1px 7px;
+  font-size: 8px;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   color: color-mix(in srgb, var(--vp-c-brand-1) 80%, var(--vp-c-text-3));
   background: color-mix(in srgb, var(--vp-c-brand-1) 10%, transparent);
