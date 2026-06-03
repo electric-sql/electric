@@ -14,8 +14,16 @@
    for the real content one section at a time; the surrounding chrome
    doesn't change. */
 defineProps<{
-  /** Short label rendered inside the placeholder, e.g.
-   *  "§3 — Three ways to use it". Also written to `data-placeholder`. */
+  /** Short label rendered inside the placeholder and written to the
+   *  `data-placeholder` attribute. Two conventions in use today:
+   *  - **Section slot** — e.g. `§3 — Three ways to use it`. Use when
+   *    the placeholder stands in for an entire section's content
+   *    (cards, copy, scenario grid, etc.) that lands in a later
+   *    phase.
+   *  - **Asset filename** — e.g. `desktop-hero.png`. Use when the
+   *    placeholder stands in for a specific image / SVG slot that
+   *    will be filled by a captured asset. The filename matches the
+   *    final asset path under `website/public/img/app/`. */
   name: string
   /** Optional CSS aspect-ratio (e.g. "16/9", "21/9"). When omitted,
    *  the placeholder uses its content's intrinsic height with the

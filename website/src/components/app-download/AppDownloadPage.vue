@@ -27,6 +27,7 @@ import AdPlaceholder from './AdPlaceholder.vue'
 
 const githubReleaseBase = `https://github.com/electric-sql/electric/releases`
 const appReleaseNotesUrl = `${githubReleaseBase}?q=%22%40electric-ax%2Fagents-desktop%22&expanded=true`
+const agentsMobileRepoUrl = `https://github.com/electric-sql/electric/tree/main/packages/agents-mobile`
 
 type DesktopPlatformId =
   | 'macos-arm64'
@@ -146,31 +147,6 @@ const canaryEntries: CanaryEntry[] = [
       },
       { label: `DEB`, assetName: `Electric-Agents-canary-linux-x64.deb` },
     ],
-  },
-]
-
-type MobilePlatform = {
-  id: 'ios' | 'android'
-  icon: 'apple' | 'android'
-  storeIcon: 'appstore' | 'googleplay'
-  name: string
-  storeLabel: string
-}
-
-const mobilePlatforms: MobilePlatform[] = [
-  {
-    id: `ios`,
-    icon: `apple`,
-    storeIcon: `appstore`,
-    name: `iOS`,
-    storeLabel: `App Store`,
-  },
-  {
-    id: `android`,
-    icon: `android`,
-    storeIcon: `googleplay`,
-    name: `Android`,
-    storeLabel: `Google Play`,
   },
 ]
 
@@ -338,17 +314,14 @@ const primaryPlatform = computed(
     </section>
 
     <!--
-      Phase 1 placeholder block.
+      Sections §2–§6 land their structure (this Section shell + an
+      <AdPlaceholder> inside) in phase 1, and have their real copy /
+      visuals filled in as the rewrite progresses (see
+      APP_PAGE_PLAN.md §7 for the phase schedule). The chrome stays
+      the same across phases, so each fill-in is a localised diff.
 
-      The six <Section> shells below are the new structure for the
-      /app page rewrite (see APP_PAGE_PLAN.md). Each one carries an
-      <AdPlaceholder> as its content for now; later phases swap each
-      placeholder for the section's real copy + visuals. The chrome
-      stays the same, so each swap is a localised diff.
-
-      Phases that fill each section:
-        §2 visual strap          → phase 2 (placeholder image pair)
-                                   phase 5 (real screenshots)
+      Phase ownership for each section:
+        §2 visual strap          → phase 2 placeholder pair · phase 5 real shots
         §3 three ways to use it  → phase 3
         §3.5 scenarios           → phase 3
         §4 multi-device          → phase 4
@@ -368,13 +341,11 @@ const primaryPlatform = computed(
       -->
       <div class="ad-visual-strap">
         <AdPlaceholder
-          class="ad-visual-strap-desktop"
           name="desktop-hero.png"
           sublabel="Sidebar tree + tile workspace · chat tile left · state explorer right"
           aspect="16/10"
         />
         <AdPlaceholder
-          class="ad-visual-strap-mobile"
           name="mobile-hero.png"
           sublabel="Mobile chat screen · same session, live streaming response"
           aspect="9/16"
@@ -435,14 +406,14 @@ const primaryPlatform = computed(
 
       The three <Section> blocks below (desktop / mobile / canary)
       collectively make up §7 of the new page. They keep their own
-      anchors (#desktop, #mobile, #canary) for backwards compatibility
-      with any external links; phase 6 verifies these still resolve
-      after the rest of the page is in place.
+      anchors (#desktop, #mobile, #canary) for backwards
+      compatibility with any external links; phase 6 verifies these
+      still resolve after the rest of the page is in place.
 
-      Phase 1 leaves their copy untouched. The mobile sub-section is
-      still labelled "Coming soon"; a later phase reframes it as
-      "Mobile · Preview" linking to packages/agents-mobile on GitHub
-      (see APP_PAGE_PLAN.md §7).
+      Desktop and canary keep their original cards / list verbatim.
+      The mobile sub-section is reframed as `Mobile · Preview`
+      pointing at packages/agents-mobile on GitHub (see
+      APP_PAGE_PLAN.md §7 for the locked body string).
     -->
 
     <!-- ─────────────────── §7a — Desktop ─────────────────── -->
@@ -505,37 +476,47 @@ const primaryPlatform = computed(
       </aside>
     </Section>
 
-    <!-- ─────────────────── §7b — Mobile (coming soon) ─────────────────── -->
+    <!-- ─────────────────── §7b — Mobile · Preview ─────────────────── *
+         Reframed from the original "Coming soon" two-card grid to a
+         single Preview card pointing at the source repo. The mobile
+         apps are not launching with this page, so the two-card
+         iOS/Android grid + disabled App Store / Play badges would
+         read as vapor; the single repo-link card is honest about
+         the current state and matches the `Preview` framing
+         introduced by the §1 hero glyph row. See APP_PAGE_PLAN.md
+         §7 for the locked body string. -->
     <Section id="mobile" :dark="true">
-      <template #eyebrow>Mobile · Coming soon</template>
+      <template #eyebrow>Mobile · Preview</template>
       <template #title>Native iOS &amp; Android</template>
       <template #subtitle>
-        Native mobile clients are in development. Same agents you run on the
-        desktop, in your&nbsp;pocket.
+        Same agents you run on the desktop, in your&nbsp;pocket.
       </template>
 
-      <div class="ad-mobile-grid">
-        <article
-          v-for="platform in mobilePlatforms"
-          :key="platform.id"
-          class="ad-mobile-card"
-          aria-disabled="true"
-        >
-          <span class="ad-mobile-icon" aria-hidden="true">
-            <span class="ad-icon" :class="`ad-icon--${platform.icon}`" />
-          </span>
-          <h3 class="ad-mobile-name">{{ platform.name }}</h3>
-          <span class="ad-soon-pill mono">Coming soon</span>
-          <span class="ad-store-badge">
-            <span
-              class="ad-store-glyph ad-icon"
-              :class="`ad-icon--${platform.storeIcon}`"
-              aria-hidden="true"
-            />
-            <span class="ad-store-label">{{ platform.storeLabel }}</span>
-          </span>
-        </article>
-      </div>
+      <article class="ad-mobile-preview-card">
+        <p class="ad-mobile-preview-body">
+          Native iOS and Android clients are in active development. The source
+          lives in
+          <a
+            class="ad-mobile-preview-link"
+            :href="agentsMobileRepoUrl"
+            target="_blank"
+            rel="noreferrer"
+            >packages/agents-mobile</a
+          >
+          — clone the repo and run the Expo dev build today, or watch the repo
+          to be notified when the public App Store and Google Play listings
+          ship with&nbsp;v1.
+        </p>
+        <div class="ad-mobile-preview-actions">
+          <VPButton
+            tag="a"
+            size="medium"
+            theme="alt"
+            text="View on GitHub →"
+            :href="agentsMobileRepoUrl"
+          />
+        </div>
+      </article>
     </Section>
 
     <!-- ─────────────────── §7c — Canary ─────────────────── -->
@@ -659,12 +640,6 @@ const primaryPlatform = computed(
 .ad-icon--android {
   --icon-url: url('https://api.iconify.design/simple-icons/android.svg');
 }
-.ad-icon--appstore {
-  --icon-url: url('https://api.iconify.design/simple-icons/appstore.svg');
-}
-.ad-icon--googleplay {
-  --icon-url: url('https://api.iconify.design/simple-icons/googleplay.svg');
-}
 
 /* ── §1 hero ────────────────────────────────────────────────── */
 
@@ -739,9 +714,10 @@ const primaryPlatform = computed(
      row 2 — a single `Preview` pill positioned beneath the iOS +
              Android pair (columns 4–5), softly marking the native
              mobile apps as not-yet-public.
-   On narrow viewports the row collapses to 3 columns, with iOS +
-   Android wrapping onto a second visual row that keeps the
-   preview pill anchored beneath them. */
+   The 5-column layout is preserved on narrow viewports — the per-
+   glyph `minmax(56px, auto)` columns compress comfortably down to
+   ~360px without label truncation, so a responsive collapse to a
+   2-row grid would only add complexity for no readability gain. */
 
 .ad-hero-platforms {
   display: grid;
@@ -942,78 +918,45 @@ const primaryPlatform = computed(
   gap: 6px;
 }
 
-/* ── §7b mobile ─────────────────────────────────────────────── */
+/* ── §7b mobile · preview ───────────────────────────────────── *
+   Single card replacing the previous two-card iOS/Android grid.
+   Body text + GitHub CTA — body and actions sit side-by-side on
+   desktop, stack vertically below 768px. */
 
-.ad-mobile-grid {
+.ad-mobile-preview-card {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px;
-}
-
-.ad-mobile-card {
-  display: grid;
-  grid-template-columns: 40px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 14px;
-  padding: 20px;
+  gap: 24px;
+  padding: 24px 28px;
   border: 1px solid var(--vp-c-divider);
   border-radius: 16px;
   background: var(--vp-c-bg);
+  max-width: 920px;
 }
 
-.ad-mobile-icon {
-  font-size: 22px;
-  width: 40px;
-  height: 40px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 10px;
-  background: var(--vp-c-bg-soft);
-  border: 1px solid var(--vp-c-divider);
-  color: var(--vp-c-text-1);
-}
-
-.ad-mobile-icon .ad-icon {
-  font-size: 22px;
-}
-
-.ad-mobile-name {
+.ad-mobile-preview-body {
   margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--vp-c-text-1);
-}
-
-.ad-soon-pill {
-  padding: 3px 9px;
-  font-size: 10px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  background: color-mix(in srgb, var(--vp-c-brand-1) 16%, transparent);
-  color: var(--vp-c-brand-1);
-  border-radius: 999px;
-  white-space: nowrap;
-  justify-self: end;
-}
-
-.ad-store-badge {
-  grid-column: 1 / -1;
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  border-radius: 10px;
-  background: var(--vp-c-bg-soft);
+  font-size: 15px;
+  line-height: 1.6;
   color: var(--vp-c-text-2);
-  font-size: 14px;
-  font-weight: 500;
+  text-wrap: pretty;
 }
 
-.ad-store-glyph {
-  font-size: 18px;
-  color: var(--vp-c-text-1);
+.ad-mobile-preview-link {
+  color: var(--vp-c-brand-1);
+  text-decoration: none;
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--vp-c-brand-1) 30%, transparent);
+}
+
+.ad-mobile-preview-link:hover {
+  border-bottom-color: var(--vp-c-brand-1);
+}
+
+.ad-mobile-preview-actions {
+  display: flex;
+  align-items: center;
 }
 
 /* ── §7c canary ─────────────────────────────────────────────── *
@@ -1108,8 +1051,7 @@ const primaryPlatform = computed(
 /* ── Responsive ─────────────────────────────────────────────── */
 
 @media (max-width: 900px) {
-  .ad-desktop-grid,
-  .ad-mobile-grid {
+  .ad-desktop-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -1124,6 +1066,13 @@ const primaryPlatform = computed(
   .ad-hero-text {
     font-size: 18px;
   }
+  .ad-mobile-preview-card {
+    grid-template-columns: 1fr;
+    padding: 20px 22px;
+  }
+  .ad-mobile-preview-actions {
+    justify-self: start;
+  }
 }
 
 @media (max-width: 560px) {
@@ -1135,9 +1084,6 @@ const primaryPlatform = computed(
     align-items: stretch;
     max-width: 280px;
     margin: 0 auto;
-  }
-  .ad-mobile-card {
-    grid-template-columns: 36px minmax(0, 1fr) auto;
   }
   .ad-canary-item {
     grid-template-columns: 20px minmax(0, 1fr);
