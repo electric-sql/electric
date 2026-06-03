@@ -192,36 +192,53 @@ export function BottomSheetSection({
 
 export function BottomSheetItem({
   label,
+  subtitle,
   icon,
   trailing,
   active,
   onPress,
   destructive,
+  disabled,
 }: {
   label: string
+  subtitle?: string
   icon?: ReactNode
   trailing?: ReactNode
   active?: boolean
   onPress: () => void
   destructive?: boolean
+  disabled?: boolean
 }): React.ReactElement {
   const tokens = useTokens()
   const styles = useMemo(() => itemStyles(tokens), [tokens])
   return (
-    <Pressable onPress={onPress}>
+    <Pressable onPress={onPress} disabled={disabled}>
       {({ pressed }) => (
-        <View style={[styles.row, pressed ? styles.pressed : null]}>
+        <View
+          style={[
+            styles.row,
+            pressed && !disabled ? styles.pressed : null,
+            disabled ? styles.disabled : null,
+          ]}
+        >
           <View style={styles.icon}>{icon}</View>
-          <Text
-            numberOfLines={1}
-            style={[
-              styles.label,
-              destructive ? styles.destructive : null,
-              active ? styles.activeLabel : null,
-            ]}
-          >
-            {label}
-          </Text>
+          <View style={styles.labelColumn}>
+            <Text
+              numberOfLines={1}
+              style={[
+                styles.label,
+                destructive ? styles.destructive : null,
+                active ? styles.activeLabel : null,
+              ]}
+            >
+              {label}
+            </Text>
+            {subtitle ? (
+              <Text numberOfLines={1} style={styles.subtitle}>
+                {subtitle}
+              </Text>
+            ) : null}
+          </View>
           <View style={styles.trailing}>
             {trailing ?? (active ? <CheckGlyph color={tokens.text1} /> : null)}
           </View>
@@ -314,22 +331,33 @@ function itemStyles(tokens: Tokens) {
       flexDirection: `row`,
       alignItems: `center`,
       gap: spacing.sm,
-      height: rowHeight.lg,
+      minHeight: rowHeight.lg,
+      paddingVertical: 6,
       paddingHorizontal: spacing.sm,
       borderRadius: radii.md,
     },
     pressed: {
       backgroundColor: tokens.bgHover,
     },
+    disabled: {
+      opacity: 0.5,
+    },
     icon: {
       width: 22,
       alignItems: `center`,
       justifyContent: `center`,
     },
-    label: {
+    labelColumn: {
       flex: 1,
+      gap: 1,
+    },
+    label: {
       color: tokens.text1,
       fontSize: fontSize.base,
+    },
+    subtitle: {
+      color: tokens.text3,
+      fontSize: 11,
     },
     activeLabel: {
       fontWeight: `500`,

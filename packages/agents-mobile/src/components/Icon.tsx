@@ -36,6 +36,8 @@ export type IconName =
   | `square`
   | `github`
   | `google`
+  | `cloud`
+  | `user`
 
 const PATHS: Record<IconName, string> = {
   back: `M15 18l-6-6 6-6`,
@@ -51,6 +53,8 @@ const PATHS: Record<IconName, string> = {
   moon: `M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z`,
   system: `M4 5h16v11H4zM9 20h6M12 16v4`,
   server: `M5 5h14v6H5zM5 13h14v6H5zM8 8h.01M8 16h.01`,
+  cloud: `M17.5 19a4.5 4.5 0 1 0-1.4-8.78A6 6 0 1 0 6 16.66 4 4 0 0 0 7 19h10.5Z`,
+  user: `M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM5 21a7 7 0 0 1 14 0`,
   filter: `M4 5h16l-6 8v6l-4-2v-4Z`,
   info: `M12 8v.01M11 12h1v4h1M12 21a9 9 0 1 1 0-18 9 9 0 0 1 0 18Z`,
   swap: `M7 4l-3 3 3 3M4 7h13M17 14l3 3-3 3M20 17H7`,
