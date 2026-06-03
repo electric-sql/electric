@@ -3,6 +3,7 @@ name: Agents Mobile PR
 on:
   pull_request:
     # `labeled` so adding `mobile-eas-build` triggers a build immediately.
+    # `paths` applies to label events too, so the label only acts on PRs that touch these paths.
     types: [opened, synchronize, reopened, labeled]
     paths:
       - 'packages/agents-mobile/**'
