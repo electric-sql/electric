@@ -60,7 +60,7 @@ The user-facing pitch we land on:
 >
 > One UI. One streaming control plane. Many devices, many users.
 
-**On the "software factory" phrase.** It's a useful frame for the middle bullet — remote sessions spawned by CI / webhooks / issues — but it is **not** the headline. The page mentions it in this §2 pitch block, in the §3 "Attach remotely" card body, and in §3.5 scenario 1, then moves on. The hero copy in §4 deliberately omits the phrase — the main narrative is _one app for the whole platform_; software factory is one named scenario within it.
+**On the "software factory" phrase.** It's a useful frame for the middle bullet — remote sessions spawned by CI / webhooks / issues — but it is **not** the headline. The page mentions it in this §2 pitch block, in the §3 "Attach remotely" card body, and in §3.5 scenario 1, then moves on. The page hero (see §1 Hero in the section-by-section block below) deliberately omits the phrase — the main narrative is _one app for the whole platform_; software factory is one named scenario within it.
 
 The phrase already shows up in `website/blog/posts/2026-03-26-stream-db.md`; this page is the first place we let it act as a named scenario rather than a throwaway aside.
 
@@ -423,9 +423,11 @@ Backed by: every capability cited is a composition of the features already mappe
 - **Desktop sub-section** — keep `<VPButton>` per-platform cards and the recommended-card highlight. Keep the `Unsigned Preview` callout exactly as it is.
 - **Mobile sub-section** — the apps are not launching with this page. Reframe accordingly:
   - **Headline:** `Mobile · Preview` (no Coming-soon pill — the framing is "you can build it from source today", not vapor).
-  - **Body:** one short paragraph confirming the apps exist in `packages/agents-mobile`, link straight to the directory on GitHub. Mention that public App Store / Play listings will ship with the v1 mobile launch.
+  - **Final body copy (lock this string):**
+    > Native iOS and Android clients are in active development. The source lives in [`packages/agents-mobile`](https://github.com/electric-sql/electric/tree/main/packages/agents-mobile) — clone the repo and run the Expo dev build today, or watch the repo to be notified when the public App Store and Google Play listings ship with v1.
+  - **CTA:** one primary link, `View on GitHub →`, pointing at the `packages/agents-mobile` directory on the default branch.
   - **No platform cards yet** — the two-card iOS/Android grid only makes sense once there are real install paths. For now, one combined `Mobile · Preview` card with a single GitHub link reads more honestly than two side-by-side "coming soon" placeholders.
-  - Until launch, the page can still legitimately mention mobile in the hero glyph row and in the §3 / §3.5 scenario copy — the apps run, just not from a public store. The §1 hero glyph row should add a tiny "preview" mark to the iOS / Android glyphs (recommend a `(preview)` superscript under the row, not on each individual glyph, to avoid cluttering the visual).
+  - Until launch, the page can still legitimately mention mobile in the hero glyph row and in the §3 / §3.5 scenario copy — the apps run, just not from a public store. The §1 hero glyph row adds a small `preview` mark spanning the iOS + Android glyphs (one label under the pair, not per-glyph, to avoid cluttering the visual).
 - **Canary** — keep the existing list verbatim. It's already the right shape.
 
 ### §8 Bottom CTA strap
@@ -479,7 +481,7 @@ If a claim can't be linked to a row in this table, cut it from the page before m
 
 ## 6. Visual assets we'll need
 
-> **Ship placeholders first.** Every image / SVG slot on this page lands as a styled placeholder block in PR 1, with a `data-placeholder="…"` attribute and a TODO comment marking where the real asset goes. The page can ship and look credible without any of these files existing yet — we fill them in as PR 5 (or as individual follow-ups). Don't block the rewrite on imagery.
+> **Ship placeholders first.** Every image / SVG slot on this page lands as a styled placeholder block in phase 1, with a `data-placeholder="…"` attribute and a TODO comment marking where the real asset goes. The page can ship and look credible without any of these files existing yet — we fill them in during phase 5 (or as small follow-up PRs after merge). Don't block the rewrite on imagery.
 
 The placeholder block should be a single component (suggested: `<AdPlaceholder name="…" aspect="16/9" />`) styled as a dashed-border, soft-bg rectangle with the slot name centred in mono — same visual language as the existing `.ad-platform-card` border + tone. Putting them behind one component means swapping each one for a real `<img>` / `<svg>` later is a one-line change per slot.
 
@@ -495,44 +497,49 @@ All assets land in `website/public/img/app/`.
 
 ---
 
-## 7. Implementation plan
+## 7. Implementation plan — one PR, worked through in phases
 
-Suggested PR slicing — small, reviewable, each one shippable on its own. **Every PR ships with placeholders where real images / SVGs will eventually live**; nothing in the plan blocks on producing those assets.
+The rewrite ships as a **single pull request**. Internally we sequence the work as six phases so the diff stays readable and so we can stop, review, and resume the working tree in a coherent state at the end of each phase. Phases are a working aid for the author and the reviewer — **not** independent PRs.
 
-1. **PR 1 — plan + skeleton + placeholder component + main nav entry.**
-   - Land `APP_PAGE_PLAN.md` (this doc).
+**Every phase lands with placeholders where real images / SVGs eventually live.** Nothing in this plan blocks on producing those assets; missing imagery is filled in either as part of phase 5 in this PR or as small follow-up PRs after merge.
+
+The branch already has two commits ahead of `main` — this plan doc, and the main-nav entry (`MegaNav.vue` / `MegaNavMobile.vue`). Phase 1's nav-entry work is therefore already done; the remaining phases continue on the same branch and land together when the PR is opened for review.
+
+1. **Phase 1 — skeleton + placeholder component + main nav entry.**
+   - Land `APP_PAGE_PLAN.md` (this doc). _Already committed._
    - Rename `AppDownloadPage.vue` → `AppPage.vue` (or keep the name; doesn't really matter — references only live in `app.md`).
    - Add `<AdPlaceholder name="…" aspect="…">` component.
    - Add empty `<Section>` shells for §2 / §3 / §3.5 / §4 / §5 / §6, each containing the appropriate placeholder block + a TODO comment.
    - Move existing per-platform cards into §7.
-   - **Add the App entry to the main nav** in `website/.vitepress/theme/components/MegaNav.vue` and `MegaNavMobile.vue`. Sits in its own visual group between `Sync` and `Cloud`, with a `'|'` divider on each side. Plain `{ id: 'app', label: 'App', link: '/app' }` link (no dropdown panel — the page is self-contained). Also add `if (p.startsWith('/app')) return 'app'` to the `activeId` computed in `MegaNav.vue` so the link highlights when the user is on the page.
-   - No copy or visual changes shipped to users yet — page renders the new structure with placeholders and the existing downloads.
+   - **Add the App entry to the main nav** in `website/.vitepress/theme/components/MegaNav.vue` and `MegaNavMobile.vue`. Sits in its own visual group between `Sync` and `Cloud`, with a `'|'` divider on each side. Plain `{ id: 'app', label: 'App', link: '/app' }` link (no dropdown panel — the page is self-contained). Also add `if (p.startsWith('/app')) return 'app'` to the `activeId` computed in `MegaNav.vue` so the link highlights when the user is on the page. _Already committed._
+   - End-of-phase state: page renders the new structure with placeholders and the existing downloads; no copy or visual changes shipped to users yet.
 
-2. **PR 2 — hero rewrite + glyph row.**
-   - New headline + sub (no "software factory" in hero; copy per §4 above).
+2. **Phase 2 — hero rewrite + glyph row.**
+   - New headline + sub (no "software factory" in hero; copy per §1 Hero above).
    - Add the 5-platform glyph row under the CTAs.
    - §2 visual strap still a placeholder pair (`desktop-hero` + `mobile-hero` placeholders).
 
-3. **PR 3 — "Three ways to use it" (§3) + scenarios (§3.5) + "Built for builders" (§6).**
+3. **Phase 3 — "Three ways to use it" (§3) + scenarios (§3.5) + "Built for builders" (§6).**
    - Pure copy + Iconify card grids; scenario cards land as placeholder image + final body copy.
    - This is where "software factory" lives — once in the §3 middle card, once in §3.5 scenario 1.
 
-4. **PR 4 — multi-device + bundled Horton sections (§4, §5).**
-   - Inline SVG diagram for §4 _or_ a placeholder block (pick whichever is cheaper at PR time).
+4. **Phase 4 — multi-device + bundled Horton sections (§4, §5).**
+   - Inline SVG diagram for §4 _or_ a placeholder block (pick whichever is cheaper at the time).
    - Two card-style detail blocks for §5 (tools + providers + skills + "things you can ask").
 
-5. **PR 5 — fill in placeholders with real assets.**
+5. **Phase 5 — fill in placeholders with real assets.**
    - Capture desktop + mobile hero screenshots, drop into §2. The mobile shot should look real (run the Expo dev build against a local server) but the page should not promise public store availability.
    - Capture / illustrate scenarios 1–4 for §3.5.
-   - Producing the `multi-device.svg` for §4 if we didn't ship one in PR 4.
-   - The mobile `Preview` card in §7 stays as a single combined card pointing at `packages/agents-mobile` on GitHub. Only swap to per-platform install cards once App Store / Play listings are live — that's a follow-up PR after the v1 mobile launch, not part of this page rewrite.
+   - Producing the `multi-device.svg` for §4 if we didn't ship one in phase 4.
+   - The mobile `Preview` card in §7 stays as a single combined card pointing at `packages/agents-mobile` on GitHub. Only swap to per-platform install cards once App Store / Play listings are live — that's a separate follow-up PR after the v1 mobile launch, not part of this page rewrite.
+   - **Optional**: if real assets aren't ready when the rest of the PR is, this phase can be deferred to a small follow-up PR. The page is still credible with `<AdPlaceholder>` blocks shown.
 
-6. **PR 6 — polish + redirects.**
+6. **Phase 6 — polish + redirects.**
    - Verify all anchors (`#desktop`, `#mobile`, `#download`, `#canary`) still work — the old fragments should redirect to §7 sub-sections.
    - Run `pnpm --filter website build` to confirm no regressions.
    - Visual QA in light + dark.
 
-Doing the page this way means at every step the live `/app` is better than it was, and we never ship a half-rewritten state. PRs 1–4 are pure markup + copy — they can ship in a single working day without waiting on design.
+Phases 1–4 are pure markup + copy — they can land in a single working day without waiting on design. Phase 5 is the only one that needs real screenshots, and phase 6 is short by construction. When opening the PR for review, list these six phases in the PR description and structure the commits to match so the diff reads in the same order.
 
 ---
 
@@ -547,7 +554,7 @@ Doing the page this way means at every step the live `/app` is better than it wa
 
 ## 9. Open questions
 
-- **§3.5 scenarios — keep all four, or trim to two?** Four scenarios is generous and risks padding. Two strong ones might land harder. Recommend ship four in PR 3 and review at PR 5 once we have real illustrations — easy to cut, easy to defend.
-- **Should §4 ship without a diagram in PR 4, or wait for the SVG?** Recommend ship without — the copy is strong on its own and we can layer the diagram in later without re-flowing the section.
-- ~~**Mobile sub-section in §7 — TestFlight / internal-testing tracks ready?**~~ _Resolved: mobile won't launch with this page._ §7 ships with a single `Mobile · Preview` card linking to `packages/agents-mobile` on GitHub. Per-platform install paths land in a follow-up PR after the public v1 mobile launch.
+- **§3.5 scenarios — keep all four, or trim to two?** Four scenarios is generous and risks padding. Two strong ones might land harder. Recommend ship four in phase 3 and reassess at phase 5 once we have real illustrations — easy to cut before opening the PR for review, easy to defend if we keep them.
+- **Should §4 ship without a diagram in phase 4, or wait for the SVG?** Recommend ship without — the copy is strong on its own and we can layer the diagram in later without re-flowing the section.
+- ~~**Mobile sub-section in §7 — TestFlight / internal-testing tracks ready?**~~ _Resolved: mobile won't launch with this page._ §7 ships with a single `Mobile · Preview` card linking to `packages/agents-mobile` on GitHub. Per-platform install paths land in a small follow-up PR after the public v1 mobile launch.
 - **Card 3 eyebrow — `Build with the SDK` vs `Build & debug`?** Both work. `Build with the SDK` is more honest about what the card is for (the platform builders); `Build & debug` is friendlier to people who haven't yet decided whether they're going to build. Recommend `Build with the SDK` and trust the body copy to soften it.
