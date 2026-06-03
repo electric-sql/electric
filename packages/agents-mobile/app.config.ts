@@ -28,6 +28,10 @@ export default ({ config }: ConfigContext): ExpoConfig =>
       plugins: [
         `expo-router`,
         `expo-web-browser`,
+        // The chat WebView (Expo DOM / streamdown) ships regex lookbehind,
+        // which JavaScriptCore only parses on iOS 16.4+. Below that the whole
+        // DOM bundle fails to parse and the chat renders blank.
+        [`expo-build-properties`, { ios: { deploymentTarget: `16.4` } }],
         // Android-only: forward new intents in MainActivity.kt so
         // OAuth redirect deep links delivered after the Chrome
         // Custom Tab dismisses actually reach expo-linking /
