@@ -120,6 +120,72 @@ describe(`createLivingWikiApiClient`, () => {
     )
   })
 
+  it(`GETs shared-state snapshot rows`, async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({
+        wiki_spaces: [],
+        actors: [],
+        memberships: [],
+        activity_events: [],
+        sources: [],
+        wiki_pages: [],
+        wiki_links: [],
+        review_items: [],
+        agent_runs: [],
+      })
+    )
+    const api = createLivingWikiApiClient({ fetch: fetchMock as typeof fetch })
+
+    await expect(
+      api.getSharedStateSnapshot({ wikiSpaceId: `wiki_demo` })
+    ).resolves.toMatchObject({ sources: [] })
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/spaces/wiki_demo/shared-state-snapshot`,
+      { method: `GET` }
+    )
+  })
+
+  it(`POSTs source submissions without duplicating wikiSpaceId in the body`, async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({
+        source: {
+          id: `source_note`,
+          wiki_space_id: `wiki_demo`,
+          kind: `text`,
+          status: `submitted`,
+          title: `Note`,
+          url: null,
+          text_preview: `Body`,
+          submitted_by_actor_id: `actor_alice`,
+          submitted_at: `2026-06-03T00:00:00.000Z`,
+          published_at: null,
+          metadata: { body_length: 4 },
+        },
+        activityEventId: `event_note`,
+      })
+    )
+    const api = createLivingWikiApiClient({ fetch: fetchMock as typeof fetch })
+
+    await api.submitSource({
+      wikiSpaceId: `wiki_demo`,
+      actorId: `actor_alice`,
+      kind: `text`,
+      title: `Note`,
+      body: `Body`,
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith(`/api/spaces/wiki_demo/sources`, {
+      method: `POST`,
+      headers: { 'content-type': `application/json` },
+      body: JSON.stringify({
+        actorId: `actor_alice`,
+        title: `Note`,
+        kind: `text`,
+        body: `Body`,
+      }),
+    })
+  })
+
   it(`throws LivingWikiApiError for non-2xx JSON errors`, async () => {
     const fetchMock = vi.fn(async () =>
       jsonResponse({ ok: false, error: `Space not found` }, { status: 404 })

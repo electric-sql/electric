@@ -6,8 +6,9 @@ import {
   type WikiSpaceSnapshot,
 } from '../../shared/space'
 import { readDemoSessionIdentity } from '../../shared/session'
+import { createLivingWikiApiClient } from '../api/livingWikiApi'
 import { WikiStateDashboard } from '../components/wiki-state/WikiStateDashboard'
-import { useLivingWikiStateViewModels } from '../hooks/useLivingWikiStateViewModels'
+import { useLivingWikiStateSnapshot } from '../hooks/useLivingWikiStateSnapshot'
 import { useJoinSpace, useSpace } from '../hooks/useSpace'
 import { Route as rootRoute } from './__root'
 
@@ -42,15 +43,23 @@ export function SpaceRoutePage({ wikiSpaceId }: { wikiSpaceId: string }) {
   const [displayName, setDisplayName] = useState(``)
   const [avatarColor, setAvatarColor] = useState<DemoAvatarColor>(`blue`)
   const [joinedSpace, setJoinedSpace] = useState<WikiSpaceSnapshot | null>(null)
+  const [sourceKind, setSourceKind] = useState<`text` | `url`>(`text`)
+  const [sourceTitle, setSourceTitle] = useState(``)
+  const [sourceBody, setSourceBody] = useState(``)
+  const [sourceUrl, setSourceUrl] = useState(``)
+  const [sourceError, setSourceError] = useState<Error | null>(null)
+  const [submittingSource, setSubmittingSource] = useState(false)
   const { space, loading, error, refresh } = useSpace(
     wikiSpaceId,
     storedActorId
   )
   const join = useJoinSpace(wikiSpaceId)
   const displayedSpace = joinedSpace ?? space
-  const { viewModel: sharedStateViewModel } = useLivingWikiStateViewModels({
-    wikiSpaceId,
-  })
+  const {
+    viewModel: sharedStateViewModel,
+    refresh: refreshSharedState,
+    error: sharedStateError,
+  } = useLivingWikiStateSnapshot({ wikiSpaceId })
 
   async function onJoin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -58,6 +67,44 @@ export function SpaceRoutePage({ wikiSpaceId }: { wikiSpaceId: string }) {
     setJoinedSpace(snapshot)
     setStoredActorId(snapshot.currentActor.id)
     setDisplayName(``)
+    await refreshSharedState()
+  }
+
+  async function onSubmitSource(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!displayedSpace) return
+
+    setSubmittingSource(true)
+    setSourceError(null)
+    try {
+      await createLivingWikiApiClient().submitSource(
+        sourceKind === `text`
+          ? {
+              wikiSpaceId,
+              actorId: displayedSpace.currentActor.id,
+              kind: `text`,
+              title: sourceTitle,
+              body: sourceBody,
+            }
+          : {
+              wikiSpaceId,
+              actorId: displayedSpace.currentActor.id,
+              kind: `url`,
+              title: sourceTitle,
+              url: sourceUrl,
+            }
+      )
+      setSourceTitle(``)
+      setSourceBody(``)
+      setSourceUrl(``)
+      await refreshSharedState()
+    } catch (nextError) {
+      setSourceError(
+        nextError instanceof Error ? nextError : new Error(String(nextError))
+      )
+    } finally {
+      setSubmittingSource(false)
+    }
   }
 
   return (
@@ -90,7 +137,71 @@ export function SpaceRoutePage({ wikiSpaceId }: { wikiSpaceId: string }) {
         </>
       ) : null}
 
+      {sharedStateError ? (
+        <p role="alert">Shared state: {sharedStateError.message}</p>
+      ) : null}
       <WikiStateDashboard viewModel={sharedStateViewModel} />
+
+      <form
+        onSubmit={(event) => void onSubmitSource(event)}
+        style={{ marginTop: 24 }}
+      >
+        <h2>Submit a source</h2>
+        <label>
+          Source type
+          <select
+            aria-label="Source type"
+            value={sourceKind}
+            onChange={(event) =>
+              setSourceKind(
+                event.currentTarget.value === `url` ? `url` : `text`
+              )
+            }
+          >
+            <option value="text">Text note</option>
+            <option value="url">URL</option>
+          </select>
+        </label>
+        <label style={{ display: `block`, marginTop: 12 }}>
+          Source title
+          <input
+            aria-label="Source title"
+            required
+            value={sourceTitle}
+            onChange={(event) => setSourceTitle(event.currentTarget.value)}
+          />
+        </label>
+        {sourceKind === `text` ? (
+          <label style={{ display: `block`, marginTop: 12 }}>
+            Source text
+            <textarea
+              aria-label="Source text"
+              required
+              value={sourceBody}
+              onChange={(event) => setSourceBody(event.currentTarget.value)}
+            />
+          </label>
+        ) : (
+          <label style={{ display: `block`, marginTop: 12 }}>
+            Source URL
+            <input
+              aria-label="Source URL"
+              required
+              type="url"
+              value={sourceUrl}
+              onChange={(event) => setSourceUrl(event.currentTarget.value)}
+            />
+          </label>
+        )}
+        <button
+          type="submit"
+          disabled={submittingSource || displayedSpace === null}
+          style={{ marginTop: 12 }}
+        >
+          Submit source
+        </button>
+        {sourceError ? <p role="alert">{sourceError.message}</p> : null}
+      </form>
 
       <form onSubmit={(event) => void onJoin(event)} style={{ marginTop: 24 }}>
         <h2>Join this space</h2>

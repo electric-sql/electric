@@ -80,6 +80,8 @@ The browser calls the Worker through `/api/*` REST endpoints and `/trpc/*` tRPC 
 - `POST /api/spaces` creates a demo WikiSpace.
 - `POST /api/spaces/:wikiSpaceId/join` joins an existing demo WikiSpace.
 - `GET /api/spaces/:wikiSpaceId` gets a demo WikiSpace. Pass `actorId` as a query parameter when reading as a specific demo actor.
+- `GET /api/spaces/:wikiSpaceId/shared-state-snapshot` returns Worker-local demo shared-state rows for the dashboard fallback path.
+- `POST /api/spaces/:wikiSpaceId/sources` stores a submitted text or URL source row without fetching, scraping, digesting, or calling an LLM.
 
 ### tRPC procedures
 
@@ -88,7 +90,7 @@ The browser calls the Worker through `/api/*` REST endpoints and `/trpc/*` tRPC 
 - `space.join` joins an existing demo WikiSpace.
 - `space.get` gets a demo WikiSpace.
 
-This slice uses a local demo Worker adapter (`LocalDemoWikiSpaceStore`) backed by Worker-local memory. It is intended for the scaffolded create/join/get flow only and does not persist across Worker isolates or deploys.
+This slice uses local demo Worker adapters (`LocalDemoWikiSpaceStore` and `LocalDemoWikiStateProducer`) backed by Worker-local memory. Create/join bootstraps `wiki_spaces`, `actors`, `memberships`, and `activity_events` rows; source submission stores `submitted` source metadata plus a `source_submitted` activity event. It is intended for the scaffolded demo flow only and does not persist across Worker isolates or deploys.
 
 ## Electric Agents Proxy Boundary
 
@@ -190,7 +192,7 @@ The current shared-state schema includes:
 - `review_items`
 - `agent_runs`
 
-Browser code should use `createLivingWikiStateDb` from `src/app/db/wikiStateDb.ts` to create a typed stream DB. The helper calls `createStreamDB` with the Worker-local observe URL and does not call `preload()` automatically.
+Browser code can use `createLivingWikiStateDb` from `src/app/db/wikiStateDb.ts` to create a typed stream DB for the real observe path. The helper calls `createStreamDB` with the Worker-local observe URL and does not call `preload()` automatically. While the demo Worker is still backed by local memory rather than a real shared-state producer, the route uses `GET /api/spaces/:wikiSpaceId/shared-state-snapshot` as a clearly named fallback read path.
 
 ```typescript
 import { createLivingWikiStateDb } from './app/db/wikiStateDb'
@@ -252,7 +254,9 @@ The `/spaces/:wikiSpaceId` route now renders a read-only shared-state dashboard 
 - `src/app/selectors/wikiStateViewModels.ts`
 - `src/app/components/wiki-state/*`
 
-The dashboard shell currently uses pure selectors and empty row arrays in the route. It does not create a StreamDB, call `preload()`, use live queries, fetch network data, mutate shared state, or send entity commands. Live query wiring is intentionally separate from this scaffold.
+The dashboard has two read paths: `useLivingWikiStateViewModels` wires the future live StreamDB observe path, while the current route uses `useLivingWikiStateSnapshot` to read Worker-local demo rows from the fallback snapshot endpoint. The dashboard remains read-only: it does not mutate shared state directly or send entity commands.
+
+The source submission form posts to the Worker API and stores only submitted text/URL metadata. URL submissions are not fetched or scraped, text submissions are bounded, and no digesting, LLM calls, graph/page generation, review resolution, or role orchestration is implemented in this slice.
 
 Entity/dashboard test commands:
 

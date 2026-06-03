@@ -5,6 +5,7 @@ import {
   joinSpaceInputSchema,
 } from '../shared/space'
 import type { ErrorResponse, HealthResponse } from '../shared/types'
+import { submitSourceCommandSchema } from '../shared/wiki-state-sources'
 import { getElectricCloudConfig } from './electric-cloud'
 import { isSeededDemoEnabled, type WorkerEnv } from './env'
 import {
@@ -12,6 +13,7 @@ import {
   WikiSpaceActorNotFoundError,
   WikiSpaceNotFoundError,
 } from './wiki-space-store'
+import { getWikiStateProducer } from './wiki-state-producer'
 
 function json(data: unknown, init?: ResponseInit): Response {
   return new Response(JSON.stringify(data), {
@@ -91,7 +93,9 @@ export async function handleRestRequest(
     if (input instanceof Response) return input
 
     try {
-      return json(await getWikiSpaceStore(env).createSpace(input))
+      const snapshot = await getWikiSpaceStore(env).createSpace(input)
+      getWikiStateProducer().bootstrapSpace(snapshot)
+      return json(snapshot)
     } catch (error) {
       return handleRestSpaceError(error)
     }
@@ -109,7 +113,53 @@ export async function handleRestRequest(
     if (input instanceof Response) return input
 
     try {
-      return json(await getWikiSpaceStore(env).joinSpace(input))
+      const snapshot = await getWikiSpaceStore(env).joinSpace(input)
+      getWikiStateProducer().recordJoin(snapshot)
+      return json(snapshot)
+    } catch (error) {
+      return handleRestSpaceError(error)
+    }
+  }
+
+  const sourceMatch = url.pathname.match(/^\/api\/spaces\/([^/]+)\/sources$/)
+  if (sourceMatch && request.method === `POST`) {
+    const body = await parseJsonBody(request)
+    if (body instanceof Response) return body
+
+    const input = parseInput(submitSourceCommandSchema, {
+      ...(typeof body === `object` && body !== null ? body : {}),
+      wikiSpaceId: sourceMatch[1],
+    })
+    if (input instanceof Response) return input
+
+    try {
+      await getWikiSpaceStore(env).getSpace({
+        wikiSpaceId: input.wikiSpaceId,
+        actorId: input.actorId,
+      })
+      const result = getWikiStateProducer().submitSource(input)
+      return json({
+        source: result.source,
+        activityEventId: result.activityEvent.id,
+      })
+    } catch (error) {
+      return handleRestSpaceError(error)
+    }
+  }
+
+  const sharedStateMatch = url.pathname.match(
+    /^\/api\/spaces\/([^/]+)\/shared-state-snapshot$/
+  )
+  if (sharedStateMatch && request.method === `GET`) {
+    const input = parseInput(
+      getSpaceInputSchema.shape.wikiSpaceId,
+      sharedStateMatch[1]
+    )
+    if (input instanceof Response) return input
+
+    try {
+      await getWikiSpaceStore(env).getSpace({ wikiSpaceId: input })
+      return json(getWikiStateProducer().getRows(input))
     } catch (error) {
       return handleRestSpaceError(error)
     }

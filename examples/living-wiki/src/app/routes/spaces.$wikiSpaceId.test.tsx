@@ -4,8 +4,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { demoSessionStorageKey } from '../../shared/session'
 import { SpaceRoutePage } from './spaces.$wikiSpaceId'
 
-vi.mock(`../hooks/useLivingWikiStateViewModels`, () => ({
-  useLivingWikiStateViewModels: () => ({
+const refreshSharedState = vi.fn(async () => {})
+
+vi.mock(`../hooks/useLivingWikiStateSnapshot`, () => ({
+  useLivingWikiStateSnapshot: () => ({
     viewModel: {
       activityEvents: [],
       members: [],
@@ -24,8 +26,9 @@ vi.mock(`../hooks/useLivingWikiStateViewModels`, () => ({
         hasOpenItems: false,
       },
     },
-    isLoading: false,
-    isError: false,
+    loading: false,
+    error: null,
+    refresh: refreshSharedState,
   }),
 }))
 
@@ -73,6 +76,7 @@ const makeSnapshot = (
 afterEach(() => {
   globalThis.fetch = originalFetch
   window.localStorage.clear()
+  refreshSharedState.mockClear()
   vi.restoreAllMocks()
 })
 
@@ -163,5 +167,65 @@ describe(`SpaceRoutePage`, () => {
         }),
       }
     )
+  })
+
+  it(`submits a text source and refreshes shared state`, async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(makeSnapshot()), {
+          headers: { 'content-type': `application/json` },
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            source: {
+              id: `source_note`,
+              wiki_space_id: `wiki_test`,
+              kind: `text`,
+              status: `submitted`,
+              title: `Room note`,
+              url: null,
+              text_preview: `Important local knowledge`,
+              submitted_by_actor_id: `actor_ada`,
+              submitted_at: `2026-06-03T00:00:00.000Z`,
+              published_at: null,
+              metadata: { body_length: 25 },
+            },
+            activityEventId: `event_source-note`,
+          }),
+          { headers: { 'content-type': `application/json` } }
+        )
+      ) as typeof fetch
+
+    render(<SpaceRoutePage wikiSpaceId="wiki_test" />)
+    await screen.findByRole(`heading`, { name: `Test Space` })
+
+    fireEvent.change(screen.getByRole(`textbox`, { name: `Source title` }), {
+      target: { value: `Room note` },
+    })
+    fireEvent.change(screen.getByRole(`textbox`, { name: `Source text` }), {
+      target: { value: `Important local knowledge` },
+    })
+    fireEvent.click(screen.getByRole(`button`, { name: `Submit source` }))
+
+    await waitFor(() => expect(refreshSharedState).toHaveBeenCalled())
+    const calls = vi.mocked(globalThis.fetch).mock.calls
+    const sourceCall = calls.find(
+      ([path]) => path === `/api/spaces/wiki_test/sources`
+    )
+    expect(sourceCall).toBeDefined()
+    const [, sourceInit] = sourceCall as [string, RequestInit]
+    expect(sourceInit).toMatchObject({
+      method: `POST`,
+      headers: { 'content-type': `application/json` },
+    })
+    expect(JSON.parse(String(sourceInit.body))).toEqual({
+      actorId: `actor_ada`,
+      kind: `text`,
+      title: `Room note`,
+      body: `Important local knowledge`,
+    })
   })
 })

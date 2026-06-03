@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import worker from './index'
 import { resetLocalDemoWikiSpaceStoreForTests } from './wiki-space-store'
+import { resetLocalDemoWikiStateProducerForTests } from './wiki-state-producer'
 
 const env = {
   APP_ENV: `test`,
@@ -39,6 +40,7 @@ const readTrpcData = async <T>(response: Response): Promise<T> => {
 describe(`living wiki worker`, () => {
   beforeEach(() => {
     resetLocalDemoWikiSpaceStoreForTests()
+    resetLocalDemoWikiStateProducerForTests()
   })
 
   it(`returns REST health JSON`, async () => {
@@ -106,6 +108,49 @@ describe(`living wiki worker`, () => {
     expect(snapshot.currentActor.id).toBe(snapshot.space.createdByActorId)
     expect(snapshot.currentActor.wikiSpaceId).toBe(snapshot.space.id)
     expect(snapshot.actors).toHaveLength(1)
+  })
+
+  it(`exposes Worker-local shared-state rows after REST create`, async () => {
+    const createdResponse = await worker.fetch(
+      new Request(`https://living-wiki.test/api/spaces`, {
+        method: `POST`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({
+          title: `Demo`,
+          displayName: `Alice`,
+          avatarColor: `blue`,
+        }),
+      }),
+      env,
+      {} as ExecutionContext
+    )
+    const created = (await createdResponse.json()) as { space: { id: string } }
+
+    const response = await worker.fetch(
+      new Request(
+        `https://living-wiki.test/api/spaces/${created.space.id}/shared-state-snapshot`
+      ),
+      env,
+      {} as ExecutionContext
+    )
+
+    expect(response.status).toBe(200)
+    const rows = (await response.json()) as {
+      wiki_spaces: unknown[]
+      actors: unknown[]
+      memberships: Array<{ role: string }>
+      activity_events: Array<{ event_type: string }>
+      sources: unknown[]
+    }
+    expect(rows.wiki_spaces).toHaveLength(1)
+    expect(rows.actors).toHaveLength(1)
+    expect(rows.memberships).toEqual([
+      expect.objectContaining({ role: `owner` }),
+    ])
+    expect(rows.activity_events).toEqual([
+      expect.objectContaining({ event_type: `space_created` }),
+    ])
+    expect(rows.sources).toEqual([])
   })
 
   it(`joins spaces over REST using the URL space id`, async () => {
@@ -249,6 +294,115 @@ describe(`living wiki worker`, () => {
     const body = JSON.parse(text) as { ok: false; error: string }
     expect(body.ok).toBe(false)
     expect(body.error).toContain(`Actor not found`)
+  })
+
+  it(`submits non-fetch source rows over REST`, async () => {
+    const createdResponse = await worker.fetch(
+      new Request(`https://living-wiki.test/api/spaces`, {
+        method: `POST`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({
+          title: `Demo`,
+          displayName: `Alice`,
+          avatarColor: `blue`,
+        }),
+      }),
+      env,
+      {} as ExecutionContext
+    )
+    const created = (await createdResponse.json()) as {
+      space: { id: string }
+      currentActor: { id: string }
+    }
+
+    const response = await worker.fetch(
+      new Request(
+        `https://living-wiki.test/api/spaces/${created.space.id}/sources`,
+        {
+          method: `POST`,
+          headers: { 'content-type': `application/json` },
+          body: JSON.stringify({
+            actorId: created.currentActor.id,
+            kind: `url`,
+            title: `Electric Agents`,
+            url: `https://electric-sql.com/docs/agents`,
+          }),
+        }
+      ),
+      env,
+      {} as ExecutionContext
+    )
+
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as {
+      source: { status: string; kind: string; url: string }
+      activityEventId: string
+    }
+    expect(body.source).toMatchObject({
+      status: `submitted`,
+      kind: `url`,
+      url: `https://electric-sql.com/docs/agents`,
+    })
+    expect(body.activityEventId).toMatch(/^event_/)
+
+    const snapshotResponse = await worker.fetch(
+      new Request(
+        `https://living-wiki.test/api/spaces/${created.space.id}/shared-state-snapshot`
+      ),
+      env,
+      {} as ExecutionContext
+    )
+    const rows = (await snapshotResponse.json()) as {
+      sources: unknown[]
+      activity_events: Array<{ event_type: string }>
+    }
+    expect(rows.sources).toHaveLength(1)
+    expect(rows.activity_events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ event_type: `source_submitted` }),
+      ])
+    )
+  })
+
+  it(`rejects source submissions from unknown actors`, async () => {
+    const createdResponse = await worker.fetch(
+      new Request(`https://living-wiki.test/api/spaces`, {
+        method: `POST`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({
+          title: `Demo`,
+          displayName: `Alice`,
+          avatarColor: `blue`,
+        }),
+      }),
+      env,
+      {} as ExecutionContext
+    )
+    const created = (await createdResponse.json()) as { space: { id: string } }
+
+    const response = await worker.fetch(
+      new Request(
+        `https://living-wiki.test/api/spaces/${created.space.id}/sources`,
+        {
+          method: `POST`,
+          headers: { 'content-type': `application/json` },
+          body: JSON.stringify({
+            actorId: `actor_missing`,
+            kind: `text`,
+            title: `Private note`,
+            body: `Short note`,
+          }),
+        }
+      ),
+      env,
+      {} as ExecutionContext
+    )
+
+    expect(response.status).toBe(404)
+    await expect(response.json()).resolves.toMatchObject({
+      ok: false,
+      error: `Actor not found`,
+    })
   })
 
   it(`does not include configured token strings in REST space JSON`, async () => {
