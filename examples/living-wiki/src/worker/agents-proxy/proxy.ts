@@ -205,6 +205,8 @@ async function parseUpstreamJson(
   response: Response,
   message: string
 ): Promise<unknown> {
+  if (!response.ok) throw new AgentsProxyAdapterError(message)
+
   try {
     return await response.json()
   } catch {
@@ -253,8 +255,12 @@ function buildStreamUrl(
 
 function buildUrl(baseUrl: string, path: string): URL {
   validateRelativeAbsoluteStreamPath(path)
-  const normalizedBase = baseUrl.endsWith(`/`) ? baseUrl.slice(0, -1) : baseUrl
-  return new URL(`${normalizedBase}${path}`)
+  const upstream = new URL(baseUrl)
+  const basePath = upstream.pathname.replace(/\/+$/u, ``)
+  upstream.pathname = `${basePath}${path}`
+  upstream.search = ``
+  upstream.hash = ``
+  return upstream
 }
 
 function validateRelativeAbsoluteStreamPath(path: string): void {
@@ -265,13 +271,38 @@ function validateRelativeAbsoluteStreamPath(path: string): void {
   ) {
     throw new AgentsProxyAdapterError(`Invalid upstream stream path`)
   }
-  const parsed = new URL(path, `https://agents-proxy.invalid`)
+
+  let parsed: URL
+  try {
+    parsed = new URL(path, `https://agents-proxy.invalid`)
+  } catch {
+    throw new AgentsProxyAdapterError(`Invalid upstream stream path`)
+  }
+
   if (
     parsed.origin !== `https://agents-proxy.invalid` ||
     parsed.username ||
-    parsed.password
+    parsed.password ||
+    parsed.search ||
+    parsed.hash
   ) {
     throw new AgentsProxyAdapterError(`Invalid upstream stream path`)
+  }
+
+  for (const segment of path.split(`/`)) {
+    let decodedSegment = segment
+    for (let i = 0; i < 3; i += 1) {
+      try {
+        const next = decodeURIComponent(decodedSegment)
+        if (next === decodedSegment) break
+        decodedSegment = next
+      } catch {
+        throw new AgentsProxyAdapterError(`Invalid upstream stream path`)
+      }
+    }
+    if (decodedSegment === `.` || decodedSegment === `..`) {
+      throw new AgentsProxyAdapterError(`Invalid upstream stream path`)
+    }
   }
 }
 

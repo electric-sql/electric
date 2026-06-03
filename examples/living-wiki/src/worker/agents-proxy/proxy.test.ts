@@ -176,6 +176,140 @@ describe(`agents proxy adapter`, () => {
     expect(await res.text()).toBe(`entities`)
   })
 
+  it(`rejects plain and encoded traversal paths from metadata and ensure responses`, async () => {
+    const traversalPaths = [
+      `/../admin`,
+      `/foo/../../admin`,
+      `/%2e%2e/admin`,
+      `/%2E%2e/admin`,
+    ]
+
+    for (const streamPath of traversalPaths) {
+      await expect(
+        proxyAgentsStreamRequest({
+          request: new Request(`https://app.test/`),
+          env,
+          target: {
+            kind: `entity-main-stream-via-metadata`,
+            entityType: `wiki-space`,
+            instanceId: `id`,
+            metadataPath: `/_electric/entities/wiki-space/id`,
+          },
+          fetchImpl: async () =>
+            Response.json({ streams: { main: streamPath } }),
+        })
+      ).rejects.toThrow(/invalid upstream stream path/i)
+
+      await expect(
+        proxyAgentsStreamRequest({
+          request: new Request(`https://app.test/`),
+          env,
+          target: {
+            kind: `entities-observe-via-ensure`,
+            ensurePath: `/_electric/observations/entities/ensure-stream`,
+            ensureBody: { tags: { wiki_space_id: `wiki` } },
+          },
+          fetchImpl: async () => Response.json({ streamUrl: streamPath }),
+        })
+      ).rejects.toThrow(/invalid upstream stream path/i)
+    }
+  })
+
+  it(`preserves configured base path when joining upstream paths`, async () => {
+    const runtimeEnv = {
+      ...env,
+      ELECTRIC_AGENTS_BASE_URL: `https://agents.example/runtime`,
+    }
+    const calls: string[] = []
+    const fetchImpl: typeof fetch = async (input) => {
+      calls.push(String(input))
+      return new Response(`ok`)
+    }
+
+    await proxyAgentsStreamRequest({
+      request: new Request(`https://app.test/`),
+      env: runtimeEnv,
+      target: {
+        kind: `shared-state-observe`,
+        sharedStateId: `id`,
+        streamPath: `/shared`,
+      },
+      fetchImpl,
+    })
+
+    expect(calls[0]).toBe(`https://agents.example/runtime/shared`)
+    expect(calls[0]).not.toBe(`https://agents.example/shared`)
+
+    await expect(
+      proxyAgentsStreamRequest({
+        request: new Request(`https://app.test/`),
+        env: runtimeEnv,
+        target: {
+          kind: `shared-state-observe`,
+          sharedStateId: `id`,
+          streamPath: `/../shared`,
+        },
+        fetchImpl,
+      })
+    ).rejects.toThrow(/invalid upstream stream path/i)
+  })
+
+  it(`rejects non-OK metadata and ensure JSON responses before trusting paths`, async () => {
+    await expect(
+      proxyAgentsStreamRequest({
+        request: new Request(`https://app.test/`),
+        env,
+        target: {
+          kind: `entity-main-stream-via-metadata`,
+          entityType: `wiki-space`,
+          instanceId: `id`,
+          metadataPath: `/_electric/entities/wiki-space/id`,
+        },
+        fetchImpl: async () =>
+          Response.json({ streams: { main: `/valid` } }, { status: 500 }),
+      })
+    ).rejects.toThrow(/invalid upstream entity metadata response/i)
+
+    await expect(
+      proxyAgentsStreamRequest({
+        request: new Request(`https://app.test/`),
+        env,
+        target: {
+          kind: `entities-observe-via-ensure`,
+          ensurePath: `/_electric/observations/entities/ensure-stream`,
+          ensureBody: { tags: { wiki_space_id: `wiki` } },
+        },
+        fetchImpl: async () =>
+          Response.json({ streamUrl: `/valid` }, { status: 500 }),
+      })
+    ).rejects.toThrow(/invalid upstream ensure response/i)
+  })
+
+  it(`does not consume stream body before returning response`, async () => {
+    let controller: ReadableStreamDefaultController<Uint8Array> | undefined
+    const body = new ReadableStream<Uint8Array>({
+      start(c) {
+        controller = c
+      },
+    })
+    const fetchImpl: typeof fetch = async () => new Response(body)
+
+    const response = await proxyAgentsStreamRequest({
+      request: new Request(`https://app.test/`),
+      env,
+      target: {
+        kind: `shared-state-observe`,
+        sharedStateId: `id`,
+        streamPath: `/stream`,
+      },
+      fetchImpl,
+    })
+
+    controller?.enqueue(new TextEncoder().encode(`streamed`))
+    controller?.close()
+    expect(await response.text()).toBe(`streamed`)
+  })
+
   it(`rejects invalid ensure streamUrl and adapter errors do not leak secrets`, async () => {
     const fetchImpl: typeof fetch = async () =>
       Response.json({ streamUrl: `//evil.test/path` })
