@@ -10,7 +10,8 @@
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "types": ["vite/client"],
+    // "node" needed: typecheck pulls agents-runtime's node-using source via paths.
+    "types": ["vite/client", "node"],
     "baseUrl": ".",
     "paths": {
       "@electric-ax/agents-runtime": ["../agents-runtime/src/index.ts"],
