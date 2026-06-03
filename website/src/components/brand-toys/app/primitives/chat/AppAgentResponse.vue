@@ -34,6 +34,8 @@
    Pure primitive — does NOT include `.app-mockup-root`. */
 
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { Copy } from 'lucide-vue-next'
+import AppIcon from '../AppIcon.vue'
 import { CHAT_FIXTURE, CHAT_FIXTURE_LENGTH } from '../../fixtures'
 
 type ResponseState = 'idle' | 'thinking' | 'streaming' | 'completed'
@@ -51,6 +53,8 @@ const props = withDefaults(
     hasCodeBlock?: boolean
     /** Render the trailing tool-call pill. Defaults to `true`. */
     hasToolCall?: boolean
+    /** Time string shown in the meta row (e.g. "14:59"). */
+    timestamp?: string
   }>(),
   {
     state: 'streaming',
@@ -59,6 +63,7 @@ const props = withDefaults(
     cps: 60,
     hasCodeBlock: true,
     hasToolCall: true,
+    timestamp: '14:59',
   }
 )
 
@@ -246,6 +251,13 @@ const toolCallVisible = computed(
     effectiveProgress.value >= CHAT_FIXTURE.toolCall.appearAt
 )
 
+/** Show the meta row (✓ done · time · copy) once the streaming run has
+ * completed — matches the live AgentResponse, which only paints the
+ * meta row when `done === true` is on the section. */
+const showMetaRow = computed(
+  () => props.state === 'completed' || effectiveProgress.value >= 1
+)
+
 /* Render single-backtick inline code as <code class="inline-code">.
    v-html is safe here because the fixture is hand-crafted — we belt+brace
    by escaping HTML-special chars before re-introducing the <code> tag. */
@@ -264,130 +276,89 @@ function renderInline(input: string): string {
 
 <template>
   <div ref="rootEl" class="agent-response-root" :data-state="state">
-    <div class="agent-avatar" aria-hidden="true">
-      <span class="agent-glyph" />
-    </div>
+    <template v-if="state === 'thinking'">
+      <div class="thinking">
+        <span class="thinking-label">Thinking</span>
+        <span class="thinking-dots">
+          <span class="dot" /><span class="dot" /><span class="dot" />
+        </span>
+      </div>
+    </template>
 
-    <div class="agent-body">
-      <template v-if="state === 'thinking'">
-        <div class="thinking">
-          <span class="thinking-label">Thinking</span>
-          <span class="thinking-dots">
-            <span class="dot" /><span class="dot" /><span class="dot" />
-          </span>
-        </div>
-      </template>
+    <template v-else>
+      <p class="paragraph">
+        <span v-html="renderInline(visiblePre)" />
+        <span v-if="caretSegment === 'pre'" class="caret" aria-hidden="true" />
+      </p>
 
-      <template v-else>
-        <p class="paragraph">
-          <span v-html="renderInline(visiblePre)" />
-          <span
-            v-if="caretSegment === 'pre'"
+      <div v-if="hasCodeBlock && segments.code" class="code-slab">
+        <div class="code-slab-tag mono">ts</div>
+        <pre class="code-slab-body mono"><code>{{ visibleCode }}<span
+            v-if="caretSegment === 'code'"
             class="caret"
             aria-hidden="true"
-          />
-        </p>
+          /></code></pre>
+      </div>
 
-        <div v-if="hasCodeBlock && segments.code" class="code-slab">
-          <div class="code-slab-tag mono">ts</div>
-          <pre class="code-slab-body mono"><code>{{ visibleCode }}<span
-              v-if="caretSegment === 'code'"
-              class="caret"
-              aria-hidden="true"
-            /></code></pre>
-        </div>
+      <p v-if="segments.post" class="paragraph">
+        <span v-html="renderInline(visiblePost)" />
+        <span v-if="caretSegment === 'post'" class="caret" aria-hidden="true" />
+      </p>
 
-        <p v-if="segments.post" class="paragraph">
-          <span v-html="renderInline(visiblePost)" />
-          <span
-            v-if="caretSegment === 'post'"
-            class="caret"
-            aria-hidden="true"
-          />
-        </p>
+      <div
+        v-if="hasToolCall"
+        class="tool-call-pill"
+        :data-visible="toolCallVisible ? 'true' : 'false'"
+        aria-label="Tool call"
+      >
+        <span class="tool-call-chip mono">tool</span>
+        <span class="tool-call-name mono">{{
+          CHAT_FIXTURE.toolCall.name
+        }}</span>
+        <span class="tool-call-args mono">{{
+          CHAT_FIXTURE.toolCall.args
+        }}</span>
+      </div>
 
-        <div
-          v-if="hasToolCall"
-          class="tool-call-pill"
-          :data-visible="toolCallVisible ? 'true' : 'false'"
-          aria-label="Tool call"
-        >
-          <span class="tool-call-chip mono">tool</span>
-          <span class="tool-call-name mono">{{
-            CHAT_FIXTURE.toolCall.name
-          }}</span>
-          <span class="tool-call-args mono">{{
-            CHAT_FIXTURE.toolCall.args
-          }}</span>
-        </div>
-      </template>
-    </div>
+      <!--
+        Meta row at the bottom of the response: ✓ done · time + copy
+        button on the right. Only appears once streaming has completed,
+        matching the live AgentResponse component (which only renders
+        this row when the section's `done === true`).
+      -->
+      <div
+        class="meta-row"
+        :data-visible="showMetaRow ? 'true' : 'false'"
+        aria-hidden="true"
+      >
+        <span class="meta-done">✓ done</span>
+        <span class="meta-sep">·</span>
+        <span class="meta-time">{{ timestamp }}</span>
+        <span class="meta-copy" title="Copy response">
+          <AppIcon :icon="Copy" :size="1" />
+        </span>
+      </div>
+    </template>
   </div>
 </template>
 
 <style scoped>
+/* Mirrors `AgentResponse.module.css` `.root`:
+     margin-inline: auto; width: max(0px, calc(100% - 24px));
+   That keeps the agent text column 12-px in from each edge of the
+   user-bubble surface above — so the bubble's rounded corners visually
+   wrap around the agent column rather than running flush. */
 .agent-response-root {
+  margin-inline: auto;
+  width: max(0px, calc(100% - 24px));
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
+  flex-direction: column;
+  gap: 8px;
   font-family: var(--ds-font-body);
   color: var(--ds-text-1);
-  width: 100%;
-}
-
-/* ───────── Avatar ───────── */
-
-.agent-avatar {
-  flex-shrink: 0;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--ds-radius-full);
-  background: var(--ds-accent-a3);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.agent-glyph {
-  width: 14px;
-  height: 14px;
-  border-radius: 3px;
-  background: var(--ds-accent-9);
-  position: relative;
-}
-.agent-glyph::before,
-.agent-glyph::after {
-  content: '';
-  position: absolute;
-  background: var(--ds-text-on-accent);
-}
-.agent-glyph::before {
-  /* Lightning bolt left arm. */
-  left: 5px;
-  top: 2px;
-  width: 2px;
-  height: 6px;
-  transform: skewX(-20deg);
-}
-.agent-glyph::after {
-  /* Lightning bolt right arm. */
-  right: 4px;
-  bottom: 2px;
-  width: 2px;
-  height: 6px;
-  transform: skewX(-20deg);
 }
 
 /* ───────── Body ───────── */
-
-.agent-body {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding-top: 4px;
-}
 
 .paragraph {
   margin: 0;
@@ -562,17 +533,71 @@ function renderInline(input: string): string {
   max-width: 280px;
 }
 
+/* ───────── Meta row (✓ done · time · copy) ─────────
+   Mirrors `.metaRow` from AgentResponse.module.css — only painted
+   when the run is "done". The copy button lives at margin-left:auto
+   so it pins to the right edge of the column, like the live UI. */
+.meta-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  font-size: var(--ds-text-xs);
+  color: var(--ds-text-4, var(--ds-text-3));
+  opacity: 0;
+  transform: translateY(2px);
+  transition:
+    opacity 220ms ease,
+    transform 220ms ease;
+  pointer-events: none;
+  margin-top: 4px;
+}
+.meta-row[data-visible='true'] {
+  opacity: 0.7;
+  transform: none;
+}
+
+.meta-done {
+  /* Match `.doneText` — slightly more muted than .meta-time. */
+  opacity: 0.85;
+}
+
+.meta-sep {
+  opacity: 0.7;
+}
+
+.meta-time {
+  /* Match `.timeText` — same muted tone as .meta-sep. */
+  opacity: 0.95;
+}
+
+.meta-copy {
+  margin-left: auto;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--ds-radius-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: inherit;
+}
+
 /* ───────── Reduced motion ───────── */
 
 @media (prefers-reduced-motion: reduce) {
   .caret,
   .thinking-dots .dot,
-  .tool-call-pill {
+  .tool-call-pill,
+  .meta-row {
     animation: none !important;
     transition: none !important;
   }
   .tool-call-pill {
     opacity: 1;
+    transform: none;
+  }
+  .meta-row[data-visible='true'] {
+    opacity: 0.7;
     transform: none;
   }
 }

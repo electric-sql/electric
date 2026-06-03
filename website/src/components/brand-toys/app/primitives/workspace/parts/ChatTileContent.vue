@@ -26,6 +26,7 @@
 import AppAgentResponse from '../../chat/AppAgentResponse.vue'
 import AppMessageBubble from '../../chat/AppMessageBubble.vue'
 import AppMessageInput from '../../chat/AppMessageInput.vue'
+import AppTimelineMarker from '../../chat/AppTimelineMarker.vue'
 import AppTileHeader from '../AppTileHeader.vue'
 import AppTileShell from '../AppTileShell.vue'
 import { CHAT_FIXTURE } from '../../../fixtures'
@@ -50,6 +51,17 @@ withDefaults(
     /** Show the close X in the header — true when this is the right
      * tile in a split layout. */
     showClose?: boolean
+    /** Time string shown in the timeline's "spawned · …" marker. */
+    spawnTime?: string
+    /** Sandbox name shown in the timeline's "sandbox · …" marker. */
+    sandboxLabel?: string
+    /** User-message bubble sender (matches live `formatSender`
+     * output, e.g. "system:dev-local"). */
+    userSender?: string
+    /** User-message bubble timestamp. */
+    userTimestamp?: string
+    /** Agent response done-row timestamp. */
+    agentTimestamp?: string
   }>(),
   {
     title: 'Test Message Received',
@@ -63,6 +75,11 @@ withDefaults(
     density: 'comfortable',
     chromeInsetTarget: false,
     showClose: false,
+    spawnTime: '14:59',
+    sandboxLabel: 'Local',
+    userSender: 'system:dev-local',
+    userTimestamp: '14:59',
+    agentTimestamp: '14:59',
   }
 )
 </script>
@@ -85,7 +102,15 @@ withDefaults(
 
     <div class="chat-surface" :data-density="density">
       <div class="chat-column">
-        <AppMessageBubble :text="CHAT_FIXTURE.userPrompt" sender="sam" />
+        <div class="timeline-markers">
+          <AppTimelineMarker label="spawned" :value="spawnTime" />
+          <AppTimelineMarker label="sandbox" :value="sandboxLabel" />
+        </div>
+        <AppMessageBubble
+          :text="CHAT_FIXTURE.userPrompt"
+          :sender="userSender"
+          :timestamp="userTimestamp"
+        />
         <AppAgentResponse
           :state="state"
           :progress="progress"
@@ -93,6 +118,7 @@ withDefaults(
           :cps="cps"
           :has-code-block="hasCodeBlock"
           :has-tool-call="hasToolCall"
+          :timestamp="agentTimestamp"
         />
       </div>
     </div>
@@ -138,6 +164,17 @@ withDefaults(
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+/* Inline row of timeline markers — spawned · 14:59 + sandbox · Local
+   side-by-side at the very top of the chat column. Mirrors the live
+   timeline's row of `.statusPill` chips that anchor the column to a
+   real-product timeline log entry. */
+.timeline-markers {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
 }
 
 /* Composer column — same width math as the chat surface. The composer

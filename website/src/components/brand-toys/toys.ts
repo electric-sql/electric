@@ -1299,6 +1299,35 @@ export const TOYS: readonly ToyDef[] = [
     animated: false,
   },
   {
+    id: `app-timeline-marker`,
+    label: `App — timeline marker`,
+    group: `app`,
+    description: `Quiet timeline log entry — left-bordered "spawned · 14:59" / "sandbox · Local" pill that anchors the chat column to a real-product timeline. Mirrors EntityTimeline.module.css .statusPill.`,
+    component: () =>
+      import(`./app/toys/AppTimelineMarkerToy.vue`).then((m) => m.default),
+    controls: [
+      { name: `label`, type: `string`, default: `spawned` },
+      { name: `value`, type: `string`, default: `14:59` },
+      {
+        name: `secondLabel`,
+        type: `string`,
+        default: `sandbox`,
+        description: `Optional second marker rendered side-by-side. Pass empty string to hide it.`,
+      },
+      { name: `secondValue`, type: `string`, default: `Local` },
+      {
+        name: `theme`,
+        type: `select`,
+        default: `dark`,
+        options: [`light`, `dark`],
+      },
+    ],
+    defaultSize: { w: 480, h: 200 },
+    background: `dark`,
+    source: `src/components/brand-toys/app/primitives/chat/AppTimelineMarker.vue`,
+    animated: false,
+  },
+  {
     id: `app-message-bubble`,
     label: `App — message bubble`,
     group: `app`,
