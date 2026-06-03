@@ -14,6 +14,7 @@ const emptyViewModel: WikiStateDashboardViewModel = {
     totalPages: 0,
     totalLinks: 0,
   },
+  pageCards: [],
   reviewSummary: {
     open: 0,
     approved: 0,
@@ -42,6 +43,11 @@ describe(`WikiStateDashboard`, () => {
     ).toBeInTheDocument()
     expect(
       screen.getByText(`The graph is waiting for proposed pages and links.`)
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        `No wiki pages yet. Propose a page from a submitted source.`
+      )
     ).toBeInTheDocument()
     expect(
       screen.getByText(
@@ -107,6 +113,41 @@ describe(`WikiStateDashboard`, () => {
             totalPages: 3,
             totalLinks: 2,
           },
+          pageCards: [
+            {
+              id: `page_canonical`,
+              title: `Canonical demo page`,
+              slug: `canonical-demo-page`,
+              status: `canonical`,
+              summary: `Approved wiki content is visible here.`,
+              bodyPreview: null,
+              sourceCount: 1,
+              createdAt: `2026-06-03T00:00:00.000Z`,
+              updatedAt: `2026-06-03T00:00:00.000Z`,
+            },
+            {
+              id: `page_proposed`,
+              title: `Proposed demo page`,
+              slug: `proposed-demo-page`,
+              status: `proposed`,
+              summary: null,
+              bodyPreview: `Draft content awaits review.`,
+              sourceCount: 2,
+              createdAt: `2026-06-03T00:00:00.000Z`,
+              updatedAt: `2026-06-03T00:00:00.000Z`,
+            },
+            {
+              id: `page_rejected`,
+              title: `Rejected demo page`,
+              slug: `rejected-demo-page`,
+              status: `rejected`,
+              summary: `Rejected content stays visible for the demo trail.`,
+              bodyPreview: null,
+              sourceCount: 0,
+              createdAt: `2026-06-03T00:00:00.000Z`,
+              updatedAt: `2026-06-03T00:00:00.000Z`,
+            },
+          ],
           reviewSummary: {
             open: 2,
             approved: 1,
@@ -124,6 +165,9 @@ describe(`WikiStateDashboard`, () => {
     expect(
       screen.getByText(/3 total .* 2 canonical .* 1 proposed/)
     ).toBeInTheDocument()
+    expect(screen.getByText(`Canonical demo page`)).toBeInTheDocument()
+    expect(screen.getByText(`Proposed`)).toBeInTheDocument()
+    expect(screen.getByText(`Rejected demo page`)).toBeInTheDocument()
     expect(screen.getByText(`2 open`)).toBeInTheDocument()
   })
 })

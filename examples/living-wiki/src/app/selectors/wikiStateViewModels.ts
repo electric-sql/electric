@@ -36,6 +36,18 @@ export type WikiGraphSummaryViewModel = {
   totalLinks: number
 }
 
+export type WikiPageCardViewModel = {
+  id: string
+  title: string
+  slug: string
+  status: WikiPageRow[`status`]
+  summary: string | null
+  bodyPreview: string | null
+  sourceCount: number
+  createdAt: string
+  updatedAt: string
+}
+
 export type ReviewQueueSummaryViewModel = {
   open: number
   approved: number
@@ -91,6 +103,46 @@ function countGraphStatuses<
     rejected: rows.filter((row) => row.status === `rejected`).length,
     total: rows.length,
   }
+}
+
+const pageStatusSortOrder: Record<WikiPageRow[`status`], number> = {
+  canonical: 0,
+  proposed: 1,
+  rejected: 2,
+}
+
+function previewBody(body: string | null): string | null {
+  if (body === null) return null
+  const normalized = body.replace(/\s+/g, ` `).trim()
+  if (normalized.length <= 220) return normalized
+  return `${normalized.slice(0, 217)}…`
+}
+
+export function selectWikiPageCards(
+  pages: WikiPageRow[]
+): WikiPageCardViewModel[] {
+  return [...pages]
+    .sort((a, b) => {
+      const statusComparison =
+        pageStatusSortOrder[a.status] - pageStatusSortOrder[b.status]
+      if (statusComparison !== 0) return statusComparison
+
+      const titleComparison = a.title.localeCompare(b.title)
+      if (titleComparison !== 0) return titleComparison
+
+      return b.updated_at.localeCompare(a.updated_at)
+    })
+    .map((page) => ({
+      id: page.id,
+      title: page.title,
+      slug: page.slug,
+      status: page.status,
+      summary: page.summary,
+      bodyPreview: previewBody(page.body),
+      sourceCount: page.source_ids.length,
+      createdAt: page.created_at,
+      updatedAt: page.updated_at,
+    }))
 }
 
 export function selectWikiGraphSummary(

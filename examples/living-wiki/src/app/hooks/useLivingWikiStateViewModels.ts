@@ -20,6 +20,7 @@ import {
   selectReviewQueueSummary,
   selectSourcesByStatus,
   selectWikiGraphSummary,
+  selectWikiPageCards,
 } from '../selectors/wikiStateViewModels'
 
 export type LivingWikiStateViewModels = WikiStateDashboardViewModel
@@ -54,6 +55,7 @@ const emptyViewModel: LivingWikiStateViewModels = {
   members: selectMemberCards([], []),
   sources: selectSourcesByStatus([]),
   graphSummary: selectWikiGraphSummary([], []),
+  pageCards: selectWikiPageCards([]),
   reviewSummary: selectReviewQueueSummary([]),
 }
 
@@ -110,6 +112,7 @@ export function useLivingWikiStateViewModels({
         wikiPages.data ?? [],
         wikiLinks.data ?? []
       ),
+      pageCards: selectWikiPageCards(wikiPages.data ?? []),
       reviewSummary: selectReviewQueueSummary(reviewItems.data ?? []),
     },
     isLoading:

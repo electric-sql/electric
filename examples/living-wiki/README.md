@@ -266,7 +266,7 @@ The `/spaces/:wikiSpaceId` route now renders a read-only shared-state dashboard 
 - `src/app/selectors/wikiStateViewModels.ts`
 - `src/app/components/wiki-state/*`
 
-The dashboard has two read paths: `useLivingWikiStateViewModels` wires the future live StreamDB observe path, while the current route uses `useLivingWikiStateSnapshot` to read Worker-local demo rows from the fallback snapshot endpoint. The dashboard remains read-only: it does not mutate shared state directly or send entity commands.
+The dashboard has two read paths: `useLivingWikiStateViewModels` wires the future live StreamDB observe path, while the current route uses `useLivingWikiStateSnapshot` to read Worker-local demo rows from the fallback snapshot endpoint. The dashboard now includes wiki page cards so proposed, canonical, and rejected demo pages are visible beyond graph counts. The dashboard remains read-only: it does not mutate shared state directly or send entity commands.
 
 The source submission form posts to the Worker API and stores only submitted text/URL metadata. URL submissions are not fetched or scraped, text submissions are bounded, and no digesting, LLM calls, graph/page generation, review resolution, or role orchestration is implemented in this slice.
 

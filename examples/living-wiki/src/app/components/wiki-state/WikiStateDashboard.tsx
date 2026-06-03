@@ -7,18 +7,21 @@ import type {
   ReviewQueueSummaryViewModel,
   SourcesByStatusViewModel,
   WikiGraphSummaryViewModel,
+  WikiPageCardViewModel,
 } from '../../selectors/wikiStateViewModels'
 import { ActivityFeed } from './ActivityFeed'
 import { MembersPanel } from './MembersPanel'
 import { ReviewQueuePanel } from './ReviewQueuePanel'
 import { SourcesPanel } from './SourcesPanel'
 import { WikiGraphPanel } from './WikiGraphPanel'
+import { WikiPagesPanel } from './WikiPagesPanel'
 
 export type WikiStateDashboardViewModel = {
   activityEvents: ActivityEventRow[]
   members: MemberCardViewModel[]
   sources: SourcesByStatusViewModel
   graphSummary: WikiGraphSummaryViewModel
+  pageCards: WikiPageCardViewModel[]
   reviewSummary: ReviewQueueSummaryViewModel
   reviewItems?: ReviewItemRow[]
 }
@@ -50,6 +53,7 @@ export function WikiStateDashboard({
         actionsDisabled={actionsDisabled}
       />
       <WikiGraphPanel summary={viewModel.graphSummary} />
+      <WikiPagesPanel pages={viewModel.pageCards ?? []} />
       <ReviewQueuePanel
         summary={viewModel.reviewSummary}
         reviewItems={viewModel.reviewItems}

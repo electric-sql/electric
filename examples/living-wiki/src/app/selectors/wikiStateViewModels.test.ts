@@ -14,6 +14,7 @@ import {
   selectReviewQueueSummary,
   selectSourcesByStatus,
   selectWikiGraphSummary,
+  selectWikiPageCards,
 } from './wikiStateViewModels'
 
 const t = `2026-06-03T00:00:00.000Z`
@@ -117,6 +118,7 @@ describe(`wiki state view-model selectors`, () => {
       total: 0,
       hasOpenItems: false,
     })
+    expect(selectWikiPageCards([])).toEqual([])
   })
 
   it(`sorts recent activity by occurred_at descending`, () => {
@@ -161,6 +163,35 @@ describe(`wiki state view-model selectors`, () => {
       role: `observer`,
       status: `left`,
       actorMissing: true,
+    })
+  })
+
+  it(`maps page cards in demo-friendly status order`, () => {
+    const cards = selectWikiPageCards([
+      {
+        ...page(`page_zed`, `rejected`),
+        title: `Zed`,
+        summary: null,
+        body: `A long rejected page body.`,
+        source_ids: [`source_a`, `source_b`],
+      },
+      { ...page(`page_alpha`, `canonical`), title: `Alpha`, summary: `Ready` },
+      {
+        ...page(`page_beta`, `proposed`),
+        title: `Beta`,
+        summary: `Needs review`,
+      },
+    ])
+
+    expect(cards.map((card) => `${card.status}:${card.title}`)).toEqual([
+      `canonical:Alpha`,
+      `proposed:Beta`,
+      `rejected:Zed`,
+    ])
+    expect(cards[2]).toMatchObject({
+      slug: `zed`,
+      bodyPreview: `A long rejected page body.`,
+      sourceCount: 2,
     })
   })
 

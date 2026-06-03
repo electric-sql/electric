@@ -11,6 +11,7 @@ import {
   selectReviewQueueSummary,
   selectSourcesByStatus,
   selectWikiGraphSummary,
+  selectWikiPageCards,
 } from '../selectors/wikiStateViewModels'
 
 export type UseLivingWikiStateSnapshotOptions = {
@@ -48,6 +49,7 @@ export function snapshotToViewModel(
       snapshot.wiki_pages,
       snapshot.wiki_links
     ),
+    pageCards: selectWikiPageCards(snapshot.wiki_pages),
     reviewSummary: selectReviewQueueSummary(snapshot.review_items),
     reviewItems: snapshot.review_items,
   }

@@ -42,6 +42,21 @@ describe(`useLivingWikiStateSnapshot`, () => {
           created_at: `2026-06-03T00:00:00.000Z`,
         },
       ],
+      wiki_pages: [
+        {
+          id: `page_demo`,
+          wiki_space_id: `wiki_demo`,
+          slug: `demo`,
+          title: `Demo`,
+          status: `canonical`,
+          summary: `Demo summary`,
+          body: null,
+          source_ids: [],
+          created_at: `2026-06-03T00:00:00.000Z`,
+          updated_at: `2026-06-03T00:00:00.000Z`,
+          created_by_run_id: null,
+        },
+      ],
       memberships: [
         {
           id: `membership_wiki_demo_actor_alice`,
@@ -56,6 +71,9 @@ describe(`useLivingWikiStateSnapshot`, () => {
 
     expect(viewModel.members).toEqual([
       expect.objectContaining({ displayName: `Alice`, role: `owner` }),
+    ])
+    expect(viewModel.pageCards).toEqual([
+      expect.objectContaining({ title: `Demo`, status: `canonical` }),
     ])
   })
 
