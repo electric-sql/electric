@@ -74,6 +74,31 @@ export function formatAbsoluteDateTimeVerbose(ts: number): string {
   })
 }
 
+/**
+ * Compact elapsed-duration label intended for live "thinking" timers
+ * (next to the agent's `Thinking` indicator while a response is in
+ * flight). Returns one of:
+ *   - `0s` … `59s`
+ *   - `1m`, `1m 5s`, `12m 7s`
+ *   - `1h`, `1h 3m`, `2h 47m`
+ *
+ * Takes raw milliseconds (the caller is expected to have already
+ * subtracted the start timestamp); not seconds/ms-ambiguous like
+ * `toMillis`, since the input is a duration, not a wall-clock value.
+ */
+export function formatElapsedDuration(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000))
+  if (total < 60) return `${total}s`
+  if (total < 3600) {
+    const m = Math.floor(total / 60)
+    const s = total % 60
+    return s === 0 ? `${m}m` : `${m}m ${s}s`
+  }
+  const h = Math.floor(total / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  return m === 0 ? `${h}h` : `${h}h ${m}m`
+}
+
 /** Short clock-style label, e.g. `14:18`. Locale chooses 24h vs am/pm. */
 export function formatShortTime(ts: number): string {
   const d = new Date(toMillis(ts))
