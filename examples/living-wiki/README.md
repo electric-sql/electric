@@ -228,6 +228,40 @@ pnpm --filter @electric-ax/example-living-wiki test
 pnpm --filter @electric-ax/example-living-wiki typecheck
 ```
 
+## Entity and Dashboard Scaffold
+
+The current server-side Agents scaffold lives under `src/server/**`. It defines an inert `wiki_space` entity registration and role/manual text modules for:
+
+- curator
+- synthesizer
+- reviewer
+- source-ingester
+
+This scaffold does not host a runtime webhook yet and does not run LLMs, ingest sources, generate graph content, resolve reviews, or orchestrate roles. The `wiki_space` handler only derives the per-space shared-state identity and registers the shared-state collection map on first wake; tests use fake runtime context objects.
+
+```typescript
+import { createEntityRegistry } from '@electric-ax/agents-runtime'
+import { registerWikiSpace } from './server/entities/wiki-space'
+
+const registry = createEntityRegistry()
+registerWikiSpace(registry)
+```
+
+The `/spaces/:wikiSpaceId` route now renders a read-only shared-state dashboard shell. Dashboard selectors and components live under:
+
+- `src/app/selectors/wikiStateViewModels.ts`
+- `src/app/components/wiki-state/*`
+
+The dashboard shell currently uses pure selectors and empty row arrays in the route. It does not create a StreamDB, call `preload()`, use live queries, fetch network data, mutate shared state, or send entity commands. Live query wiring is intentionally separate from this scaffold.
+
+Entity/dashboard test commands:
+
+```bash
+pnpm --filter @electric-ax/example-living-wiki test src/server src/app/selectors src/app/components/wiki-state 'src/app/routes/spaces.$wikiSpaceId.test.tsx'
+pnpm --filter @electric-ax/example-living-wiki test
+pnpm --filter @electric-ax/example-living-wiki typecheck
+```
+
 ## Security boundary
 
 Configure `ELECTRIC_CLOUD_API_TOKEN` only as a Worker secret. Do not import it into browser code, expose it through public configuration, or include it in JSON responses. Browser-facing REST and tRPC responses should contain only the data needed by the Living Wiki UI.
