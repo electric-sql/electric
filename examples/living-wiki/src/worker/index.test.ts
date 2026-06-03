@@ -160,6 +160,31 @@ describe(`living wiki worker`, () => {
     expect(snapshot.currentActor.id).toBe(created.currentActor.id)
   })
 
+  it(`returns a tRPC not found error for unknown current actors`, async () => {
+    const created = await readTrpcData<{ space: { id: string } }>(
+      await trpcRequest(
+        `space.create`,
+        { title: `Demo`, displayName: `Alice`, avatarColor: `blue` },
+        `POST`
+      )
+    )
+
+    const response = await trpcRequest(
+      `space.get`,
+      { wikiSpaceId: created.space.id, actorId: `actor_missing` },
+      `GET`
+    )
+
+    expect(response.status).toBe(404)
+    const body = (await response.json()) as {
+      error: { message: string; data: { code: string } }
+    }
+    expect(body.error.message).toContain(
+      `Actor not found in WikiSpace ${created.space.id}: actor_missing`
+    )
+    expect(body.error.data.code).toBe(`NOT_FOUND`)
+  })
+
   it(`returns a tRPC not found error for unknown spaces`, async () => {
     const response = await trpcRequest(
       `space.get`,

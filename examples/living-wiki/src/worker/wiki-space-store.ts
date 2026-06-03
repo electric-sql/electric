@@ -37,6 +37,16 @@ export class WikiSpaceNotFoundError extends Error {
   }
 }
 
+export class WikiSpaceActorNotFoundError extends Error {
+  constructor(
+    public readonly wikiSpaceId: string,
+    public readonly actorId: string
+  ) {
+    super(`Actor not found in WikiSpace ${wikiSpaceId}: ${actorId}`)
+    this.name = `WikiSpaceActorNotFoundError`
+  }
+}
+
 const createTimestamp = (): string => new Date().toISOString()
 
 const createUniqueId = (prefix: `wiki` | `actor`): string => {
@@ -61,9 +71,15 @@ const toSnapshot = (
 ): WikiSpaceSnapshot => {
   const actors = record.actors.map((actor) => ({ ...actor }))
   const currentActor =
-    actors.find((actor) => actor.id === requestedActorId) ?? actors[0]
+    requestedActorId === undefined
+      ? actors[0]
+      : actors.find((actor) => actor.id === requestedActorId)
 
   if (currentActor === undefined) {
+    if (requestedActorId !== undefined) {
+      throw new WikiSpaceActorNotFoundError(record.space.id, requestedActorId)
+    }
+
     throw new WikiSpaceNotFoundError(record.space.id)
   }
 

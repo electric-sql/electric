@@ -8,7 +8,11 @@ import {
 } from '../shared/space'
 import type { WorkerEnv } from './env'
 import { healthResponse } from './routes'
-import { getWikiSpaceStore, WikiSpaceNotFoundError } from './wiki-space-store'
+import {
+  getWikiSpaceStore,
+  WikiSpaceActorNotFoundError,
+  WikiSpaceNotFoundError,
+} from './wiki-space-store'
 
 export type TrpcContext = {
   env: WorkerEnv
@@ -17,7 +21,10 @@ export type TrpcContext = {
 const t = initTRPC.context<TrpcContext>().create()
 
 const handleSpaceStoreError = (error: unknown): never => {
-  if (error instanceof WikiSpaceNotFoundError) {
+  if (
+    error instanceof WikiSpaceNotFoundError ||
+    error instanceof WikiSpaceActorNotFoundError
+  ) {
     throw new TRPCError({ code: `NOT_FOUND`, message: error.message })
   }
 

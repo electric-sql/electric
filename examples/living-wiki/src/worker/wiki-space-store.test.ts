@@ -3,6 +3,7 @@ import { wikiSpaceSnapshotSchema } from '../shared/space'
 import type { WorkerEnv } from './env'
 import {
   LocalDemoWikiSpaceStore,
+  WikiSpaceActorNotFoundError,
   WikiSpaceNotFoundError,
   getWikiSpaceStore,
   resetLocalDemoWikiSpaceStoreForTests,
@@ -111,6 +112,31 @@ describe(`LocalDemoWikiSpaceStore`, () => {
     ).resolves.toMatchObject({
       currentActor: { id: joined.currentActor.id },
     })
+  })
+
+  it(`throws a typed error when an explicit actor id is unknown`, async () => {
+    const store = new LocalDemoWikiSpaceStore()
+    const created = await store.createSpace({
+      title: `Demo`,
+      displayName: `Ada`,
+      avatarColor: `blue`,
+    })
+
+    await expect(
+      store.getSpace({
+        wikiSpaceId: created.space.id,
+        actorId: `actor_missing`,
+      })
+    ).rejects.toMatchObject({
+      wikiSpaceId: created.space.id,
+      actorId: `actor_missing`,
+    })
+    await expect(
+      store.getSpace({
+        wikiSpaceId: created.space.id,
+        actorId: `actor_missing`,
+      })
+    ).rejects.toBeInstanceOf(WikiSpaceActorNotFoundError)
   })
 
   it(`throws a typed error for unknown spaces`, async () => {
