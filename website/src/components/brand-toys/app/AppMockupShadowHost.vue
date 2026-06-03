@@ -74,31 +74,46 @@ const hostRef = ref<HTMLDivElement | null>(null)
 let shadowApp: ReturnType<typeof createApp> | null = null
 let styleObserver: MutationObserver | null = null
 
-/* The shadow root needs a baseline reset. VitePress's body sets a
-   `font-family` / `font-size` / `line-height` we don't want bleeding
-   in via `inherit`; the shadow boundary blocks normal inheritance,
-   but the mount point still needs sensible defaults so the
-   design-token CSS can override per-element. */
+/* The shadow root needs a baseline reset. The shadow boundary blocks
+   STYLE RULES from the host page, but it does NOT block CSS
+   inheritance — the host element gets its computed styles from the
+   page (e.g. `text-align: center` from `.ad-hero`), and the shadow
+   content inherits those through the host. So we need to explicitly
+   neutralise every inheritable text/typography property on `:host`
+   and re-establish a known baseline on the mount point. */
 const SHADOW_RESET = `
   :host {
     /* Take the parent's grid/flex slot but stop layout from leaking
        into the host page's reflow as the inner mockup updates. */
     display: block;
     contain: content;
-    /* Reset typography that would otherwise inherit from the host
-       page even with the shadow boundary in place — the boundary
-       only blocks inheritance THROUGH it, not the host element's
-       own computed styles which the inner mount-point sees as
-       its parent. */
+    /* Block every inheritable text/typography property from the
+       host page. \`text-align\` is the one that bit us first
+       (\`.ad-hero { text-align: center }\` inherits straight through
+       the shadow boundary into every text node), but the same risk
+       applies to the rest — neutralise the lot in one place so
+       future host-page rules can't surprise us. */
+    text-align: initial;
+    text-indent: initial;
+    text-transform: initial;
+    text-decoration: initial;
+    direction: initial;
+    letter-spacing: initial;
+    word-spacing: initial;
+    white-space: initial;
+    word-break: initial;
+    overflow-wrap: initial;
     font: initial;
     color: initial;
     line-height: initial;
+    cursor: initial;
   }
 
   .app-mockup-shadow-mount {
-    /* Match the live Electron app's renderer baseline:
-       SF / system-ui at 13 px / 1.45. The brand-toys design tokens
-       override this per-element where needed. */
+    /* Re-establish a known baseline that matches the live Electron
+       app's renderer: SF / system-ui at 13 px / 1.45, left-aligned.
+       Brand-toys design tokens override per-element from here. */
+    text-align: left;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
       Oxygen, Ubuntu, Cantarell, 'Helvetica Neue', Arial, sans-serif;
     font-size: 13px;
