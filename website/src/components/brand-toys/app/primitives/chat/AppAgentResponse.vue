@@ -265,11 +265,35 @@ const visiblePost = computed(() =>
   segments.value.post ? visibleSlice(segments.value.post) : ''
 )
 
+/* ───────── Reveal gates ─────────
+   Block-level elements only mount once the streaming cursor crosses
+   their segment start. This matches how a real model client renders
+   token streams: the code-fence well materialises when the assistant
+   emits ```, not at message creation; the post paragraph appears as
+   prose resumes after the fence. Without these gates the empty
+   containers reserve their natural height and the response reads
+   as "lots of empty boxes filling in" instead of "blocks materialising
+   one after another". */
+const cursorPos = computed(
+  () => effectiveProgress.value * segments.value.total
+)
+const codeBlockMounted = computed(
+  () =>
+    props.hasCodeBlock &&
+    segments.value.code !== null &&
+    cursorPos.value >= segments.value.code.start
+)
+const postParagraphMounted = computed(
+  () =>
+    segments.value.post !== null && cursorPos.value >= segments.value.post.start
+)
+
 const caretSegment = computed<'pre' | 'code' | 'post' | 'done'>(() => {
   if (effectiveProgress.value >= 1) return 'done'
-  const cursor = effectiveProgress.value * segments.value.total
-  if (segments.value.code && cursor < segments.value.code.start) return 'pre'
-  if (segments.value.code && cursor < segments.value.code.end) return 'code'
+  if (segments.value.code && cursorPos.value < segments.value.code.start)
+    return 'pre'
+  if (segments.value.code && cursorPos.value < segments.value.code.end)
+    return 'code'
   if (segments.value.post) return 'post'
   return 'pre'
 })
@@ -320,34 +344,43 @@ function renderInline(input: string): string {
         <span v-if="caretSegment === 'pre'" class="caret" aria-hidden="true" />
       </p>
 
-      <div v-if="hasCodeBlock && segments.code" class="code-slab">
-        <div class="code-slab-tag mono">ts</div>
-        <pre class="code-slab-body mono"><code>{{ visibleCode }}<span
+      <Transition name="reveal">
+        <div v-if="codeBlockMounted" class="code-slab">
+          <div class="code-slab-tag mono">ts</div>
+          <pre class="code-slab-body mono"><code>{{ visibleCode }}<span
             v-if="caretSegment === 'code'"
             class="caret"
             aria-hidden="true"
           /></code></pre>
-      </div>
+        </div>
+      </Transition>
 
-      <p v-if="segments.post" class="paragraph">
-        <span v-html="renderInline(visiblePost)" />
-        <span v-if="caretSegment === 'post'" class="caret" aria-hidden="true" />
-      </p>
+      <Transition name="reveal">
+        <p v-if="postParagraphMounted" class="paragraph">
+          <span v-html="renderInline(visiblePost)" />
+          <span
+            v-if="caretSegment === 'post'"
+            class="caret"
+            aria-hidden="true"
+          />
+        </p>
+      </Transition>
 
-      <div
-        v-if="hasToolCall"
-        class="tool-call-pill"
-        :data-visible="toolCallVisible ? 'true' : 'false'"
-        aria-label="Tool call"
-      >
-        <span class="tool-call-chip mono">tool</span>
-        <span class="tool-call-name mono">{{
-          CHAT_FIXTURE.toolCall.name
-        }}</span>
-        <span class="tool-call-args mono">{{
-          CHAT_FIXTURE.toolCall.args
-        }}</span>
-      </div>
+      <Transition name="reveal">
+        <div
+          v-if="hasToolCall && toolCallVisible"
+          class="tool-call-pill"
+          aria-label="Tool call"
+        >
+          <span class="tool-call-chip mono">tool</span>
+          <span class="tool-call-name mono">{{
+            CHAT_FIXTURE.toolCall.name
+          }}</span>
+          <span class="tool-call-args mono">{{
+            CHAT_FIXTURE.toolCall.args
+          }}</span>
+        </div>
+      </Transition>
 
       <!--
         Meta row at the bottom of the response: ✓ done · time + copy
@@ -525,14 +558,26 @@ function renderInline(input: string): string {
   border-radius: var(--ds-radius-3);
   background: var(--ds-surface-soft);
   align-self: flex-start;
-  opacity: 0;
-  transform: translateY(4px);
+  pointer-events: none;
+}
+
+/* ───────── Reveal transition ─────────
+   Shared enter animation for block-level reveals (code-slab, post
+   paragraph, tool-call pill). Each block fades + lifts in over 220 ms
+   when the streaming cursor crosses its segment start, so the
+   response reads as "blocks materialising one after another" rather
+   than "everything painted at t=0". No leave animation — we never
+   unmount these once revealed within a single loop iteration. */
+.reveal-enter-active {
   transition:
     opacity 220ms ease,
     transform 220ms ease;
-  pointer-events: none;
 }
-.tool-call-pill[data-visible='true'] {
+.reveal-enter-from {
+  opacity: 0;
+  transform: translateY(4px);
+}
+.reveal-enter-to {
   opacity: 1;
   transform: translateY(0);
 }
@@ -624,12 +669,14 @@ function renderInline(input: string): string {
 @media (prefers-reduced-motion: reduce) {
   .caret,
   .thinking-dots .dot,
-  .tool-call-pill,
   .meta-row {
     animation: none !important;
     transition: none !important;
   }
-  .tool-call-pill {
+  .reveal-enter-active {
+    transition: none !important;
+  }
+  .reveal-enter-from {
     opacity: 1;
     transform: none;
   }
