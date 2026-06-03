@@ -262,7 +262,7 @@ const primaryPlatform = computed(
         -->
         <div
           class="ad-hero-platforms"
-          aria-label="Available on macOS, Windows and Linux. Native iOS and Android apps in preview."
+          aria-label="Available on macOS, Windows and Linux. Native iOS and Android apps in mobile preview."
         >
           <span class="ad-hero-glyph">
             <span
@@ -300,7 +300,7 @@ const primaryPlatform = computed(
             <span class="ad-hero-glyph-label mono">Android</span>
           </span>
           <span class="ad-hero-platform-preview mono" aria-hidden="true"
-            >Preview</span
+            >Mobile preview</span
           >
         </div>
       </div>
@@ -1230,12 +1230,21 @@ const primaryPlatform = computed(
   color: var(--vp-c-text-3);
 }
 
+/* Single mono caption centred under the full glyph row. Originally
+   anchored under cols 4-5 (iOS + Android) so it physically sat under
+   the cluster it described, but that left the right half of row 2
+   visually loaded with the desktop trio carrying nothing on the
+   left — the row read as lopsided. Spanning all 5 columns + centring
+   restores horizontal balance; the muted colour treatment on the
+   mobile glyphs themselves still signals which platforms are in
+   preview, and the explicit `Mobile preview` text removes any
+   ambiguity now that the pill isn't directly below iOS/Android. */
 .ad-hero-platform-preview {
   grid-row: 2;
-  grid-column: 4 / 6;
+  grid-column: 1 / 6;
   justify-self: center;
   align-self: start;
-  margin-top: 2px;
+  margin-top: 6px;
   padding: 1px 7px;
   font-size: 8px;
   letter-spacing: 0.14em;
