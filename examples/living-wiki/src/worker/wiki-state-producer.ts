@@ -14,6 +14,14 @@ import {
   buildWikiStateJoinRows,
   type WikiStateBootstrapRows,
 } from '../shared/wiki-state-bootstrap'
+import { buildActivityEventRow } from '../shared/wiki-state-events'
+import { createActivityEventId } from '../shared/wiki-state-ids'
+import { buildWikiPageFromSubmittedSource } from '../shared/wiki-state-pages'
+import {
+  buildOpenReviewItemForPage,
+  resolveReviewItemCommandSchema,
+  type ResolveReviewItemCommand,
+} from '../shared/wiki-state-reviews'
 import {
   buildSourceSubmissionRows,
   type SubmitSourceCommand,
@@ -43,7 +51,28 @@ export type WikiStateProducer = {
     activityEvent: ActivityEventRow
     rows: WikiStateSnapshotRows
   }
+  proposePageFromSource(command: ProposePageFromSourceCommand): {
+    page: WikiPageRow
+    reviewItem: ReviewItemRow
+    activityEvent: ActivityEventRow
+    rows: WikiStateSnapshotRows
+  }
+  resolveReviewItem(command: ResolveReviewItemCommand): {
+    page: WikiPageRow
+    reviewItem: ReviewItemRow
+    activityEvent: ActivityEventRow
+    rows: WikiStateSnapshotRows
+  }
   getRows(wikiSpaceId: string): WikiStateSnapshotRows
+}
+
+export type ProposePageFromSourceCommand = {
+  wikiSpaceId: string
+  actorId: string
+  sourceId: string
+  title?: string
+  slug?: string
+  body?: string
 }
 
 type SpaceRows = {
@@ -52,6 +81,8 @@ type SpaceRows = {
   memberships: Map<string, MembershipRow>
   activityEvents: Map<string, ActivityEventRow>
   sources: Map<string, SourceRow>
+  wikiPages: Map<string, WikiPageRow>
+  reviewItems: Map<string, ReviewItemRow>
 }
 
 const spaces = new Map<string, SpaceRows>()
@@ -62,6 +93,8 @@ const emptyRows = (): SpaceRows => ({
   memberships: new Map(),
   activityEvents: new Map(),
   sources: new Map(),
+  wikiPages: new Map(),
+  reviewItems: new Map(),
 })
 
 const getSpaceRows = (wikiSpaceId: string): SpaceRows => {
@@ -95,9 +128,9 @@ const toSnapshotRows = (rows: SpaceRows): WikiStateSnapshotRows => ({
     a.occurred_at.localeCompare(b.occurred_at)
   ),
   sources: Array.from(rows.sources.values()),
-  wiki_pages: [],
+  wiki_pages: Array.from(rows.wikiPages.values()),
   wiki_links: [],
-  review_items: [],
+  review_items: Array.from(rows.reviewItems.values()),
   agent_runs: [],
 })
 
@@ -160,6 +193,121 @@ export class LocalDemoWikiStateProducer implements WikiStateProducer {
     return {
       source: sourceRows.source,
       activityEvent: sourceRows.activityEvent,
+      rows: toSnapshotRows(rows),
+    }
+  }
+
+  proposePageFromSource(command: ProposePageFromSourceCommand) {
+    const rows = getSpaceRows(command.wikiSpaceId)
+    const source = rows.sources.get(command.sourceId)
+    if (!source) throw new Error(`Source not found`)
+    if (source.status !== `submitted`)
+      throw new Error(`Source is not submitted`)
+    const now = new Date()
+    const page = buildWikiPageFromSubmittedSource(source, {
+      title: command.title,
+      slug: command.slug,
+      body: command.body,
+      now: () => now,
+      pageSeed: `page-${command.wikiSpaceId}-${command.sourceId}`,
+    })
+    const reviewItem = buildOpenReviewItemForPage(page, source, {
+      now: () => now,
+      reviewSeed: `review-${command.wikiSpaceId}-${command.sourceId}`,
+    })
+    const activityEvent = buildActivityEventRow(
+      {
+        wiki_space_id: command.wikiSpaceId,
+        actor_id: command.actorId,
+        actor_kind: `human`,
+        event_type: `page_proposed`,
+        summary: `Proposed page ${page.title} for review`,
+        subject_type: `wiki_page`,
+        subject_id: page.id,
+        visibility: `ambient`,
+        metadata: {
+          source_id: source.id,
+          page_id: page.id,
+          review_item_id: reviewItem.id,
+        },
+      },
+      {
+        id: createActivityEventId(
+          `page-proposed-${command.wikiSpaceId}-${command.sourceId}`
+        ),
+        now: () => now,
+      }
+    )
+    rows.wikiPages.set(page.id, rows.wikiPages.get(page.id) ?? page)
+    rows.reviewItems.set(
+      reviewItem.id,
+      rows.reviewItems.get(reviewItem.id) ?? reviewItem
+    )
+    rows.activityEvents.set(activityEvent.id, activityEvent)
+    return {
+      page: rows.wikiPages.get(page.id)!,
+      reviewItem: rows.reviewItems.get(reviewItem.id)!,
+      activityEvent,
+      rows: toSnapshotRows(rows),
+    }
+  }
+
+  resolveReviewItem(command: ResolveReviewItemCommand) {
+    const parsed = resolveReviewItemCommandSchema.parse(command)
+    const rows = getSpaceRows(parsed.wikiSpaceId)
+    const review = rows.reviewItems.get(parsed.reviewItemId)
+    if (!review) throw new Error(`Review item not found`)
+    if (review.status !== `open`)
+      throw new Error(`Review item already resolved`)
+    const page = rows.wikiPages.get(review.target_id)
+    if (!page) throw new Error(`Review page not found`)
+    const now = new Date().toISOString()
+    const status = parsed.resolution === `approve` ? `approved` : `rejected`
+    const pageStatus =
+      parsed.resolution === `approve` ? `canonical` : `rejected`
+    const reviewItem = {
+      ...review,
+      status,
+      resolved_at: now,
+      resolved_by_actor_id: parsed.actorId,
+      resolution_note: parsed.note ?? null,
+    } as ReviewItemRow
+    const nextPage = {
+      ...page,
+      status: pageStatus,
+      updated_at: now,
+    } as WikiPageRow
+    rows.reviewItems.set(review.id, reviewItem)
+    rows.wikiPages.set(page.id, nextPage)
+    const activityEvent = buildActivityEventRow(
+      {
+        wiki_space_id: parsed.wikiSpaceId,
+        actor_id: parsed.actorId,
+        actor_kind: `human`,
+        event_type:
+          status === `approved` ? `review_approved` : `review_rejected`,
+        summary: `${status === `approved` ? `Approved` : `Rejected`} review for ${page.title}`,
+        subject_type: `review_item`,
+        subject_id: review.id,
+        visibility: `ambient`,
+        metadata: {
+          page_id: page.id,
+          review_item_id: review.id,
+          resolution: parsed.resolution,
+        },
+      },
+      {
+        id: createActivityEventId(
+          `review-${parsed.resolution}-${parsed.wikiSpaceId}-${review.id}`
+        ),
+        now: () => new Date(now),
+      }
+    )
+    rows.activityEvents.set(activityEvent.id, activityEvent)
+    return {
+      page: nextPage,
+      reviewItem,
+      activityEvent,
       rows: toSnapshotRows(rows),
     }
   }

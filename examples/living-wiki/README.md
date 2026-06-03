@@ -269,3 +269,9 @@ pnpm --filter @electric-ax/example-living-wiki typecheck
 ## Security boundary
 
 Configure `ELECTRIC_CLOUD_API_TOKEN` only as a Worker secret. Do not import it into browser code, expose it through public configuration, or include it in JSON responses. Browser-facing REST and tRPC responses should contain only the data needed by the Living Wiki UI.
+
+### Manual page proposal and review flow
+
+The demo dashboard can now turn a submitted source into a proposed wiki page and an open page review item through Worker-local REST endpoints. The proposal is deterministic and manual-review oriented: text sources use only the stored `text_preview`, while URL sources use only submitted URL metadata. URL sources are not fetched, scraped, or digested, and no LLM/AI generation is performed.
+
+Any local demo human actor that belongs to the space may approve or reject an open page review. Approval marks the review `approved` and the page `canonical`; rejection marks the review `rejected` and the page `rejected`. This remains an in-memory demo flow only. Graph/link generation, source digesting, LLM calls, Agents runtime role orchestration, upstream shared-state writes, and durable persistence are not implemented in this phase.

@@ -49,6 +49,7 @@ export function snapshotToViewModel(
       snapshot.wiki_links
     ),
     reviewSummary: selectReviewQueueSummary(snapshot.review_items),
+    reviewItems: snapshot.review_items,
   }
 }
 

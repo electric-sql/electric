@@ -49,6 +49,10 @@ export function SpaceRoutePage({ wikiSpaceId }: { wikiSpaceId: string }) {
   const [sourceUrl, setSourceUrl] = useState(``)
   const [sourceError, setSourceError] = useState<Error | null>(null)
   const [submittingSource, setSubmittingSource] = useState(false)
+  const [proposalSourceId, setProposalSourceId] = useState(``)
+  const [reviewNote, setReviewNote] = useState(``)
+  const [reviewFlowError, setReviewFlowError] = useState<Error | null>(null)
+  const [reviewFlowBusy, setReviewFlowBusy] = useState(false)
   const { space, loading, error, refresh } = useSpace(
     wikiSpaceId,
     storedActorId
@@ -68,6 +72,54 @@ export function SpaceRoutePage({ wikiSpaceId }: { wikiSpaceId: string }) {
     setStoredActorId(snapshot.currentActor.id)
     setDisplayName(``)
     await refreshSharedState()
+  }
+
+  async function onProposePage(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!displayedSpace) return
+    setReviewFlowBusy(true)
+    setReviewFlowError(null)
+    try {
+      await createLivingWikiApiClient().proposePageFromSource({
+        wikiSpaceId,
+        actorId: displayedSpace.currentActor.id,
+        sourceId: proposalSourceId,
+      })
+      setProposalSourceId(``)
+      await refreshSharedState()
+    } catch (nextError) {
+      setReviewFlowError(
+        nextError instanceof Error ? nextError : new Error(String(nextError))
+      )
+    } finally {
+      setReviewFlowBusy(false)
+    }
+  }
+
+  async function onResolveReview(
+    reviewItemId: string,
+    resolution: `approve` | `reject`
+  ) {
+    if (!displayedSpace) return
+    setReviewFlowBusy(true)
+    setReviewFlowError(null)
+    try {
+      await createLivingWikiApiClient().resolveReviewItem({
+        wikiSpaceId,
+        actorId: displayedSpace.currentActor.id,
+        reviewItemId,
+        resolution,
+        note: reviewNote || undefined,
+      })
+      setReviewNote(``)
+      await refreshSharedState()
+    } catch (nextError) {
+      setReviewFlowError(
+        nextError instanceof Error ? nextError : new Error(String(nextError))
+      )
+    } finally {
+      setReviewFlowBusy(false)
+    }
   }
 
   async function onSubmitSource(event: FormEvent<HTMLFormElement>) {
@@ -141,6 +193,68 @@ export function SpaceRoutePage({ wikiSpaceId }: { wikiSpaceId: string }) {
         <p role="alert">Shared state: {sharedStateError.message}</p>
       ) : null}
       <WikiStateDashboard viewModel={sharedStateViewModel} />
+
+      <section style={{ marginTop: 24 }}>
+        <h2>Manual page proposal and review</h2>
+        <p>
+          Proposals are deterministic templates from submitted source metadata
+          only. URL sources are not fetched and no AI generation occurs.
+        </p>
+        <form onSubmit={(event) => void onProposePage(event)}>
+          <label>
+            Source ID
+            <input
+              aria-label="Source ID"
+              required
+              value={proposalSourceId}
+              onChange={(event) =>
+                setProposalSourceId(event.currentTarget.value)
+              }
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={reviewFlowBusy || displayedSpace === null}
+            style={{ marginLeft: 12 }}
+          >
+            Propose page
+          </button>
+        </form>
+        <label style={{ display: `block`, marginTop: 12 }}>
+          Review note
+          <input
+            aria-label="Review note"
+            value={reviewNote}
+            onChange={(event) => setReviewNote(event.currentTarget.value)}
+          />
+        </label>
+        <ul>
+          {(sharedStateViewModel.reviewItems ?? [])
+            .filter((item) => item.status === `open`)
+            .map((item) => (
+              <li key={item.id}>
+                {item.id}: {item.suggested_change}
+                {` `}
+                <button
+                  type="button"
+                  disabled={reviewFlowBusy || displayedSpace === null}
+                  onClick={() => void onResolveReview(item.id, `approve`)}
+                >
+                  Approve
+                </button>
+                {` `}
+                <button
+                  type="button"
+                  disabled={reviewFlowBusy || displayedSpace === null}
+                  onClick={() => void onResolveReview(item.id, `reject`)}
+                >
+                  Reject
+                </button>
+              </li>
+            ))}
+        </ul>
+        {reviewFlowError ? <p role="alert">{reviewFlowError.message}</p> : null}
+      </section>
 
       <form
         onSubmit={(event) => void onSubmitSource(event)}

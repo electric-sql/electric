@@ -26,6 +26,10 @@ import {
   type WikiSpaceRow,
 } from '../../shared/wiki-state'
 import {
+  resolveReviewItemCommandSchema,
+  type ResolveReviewItemCommand,
+} from '../../shared/wiki-state-reviews'
+import {
   submitSourceCommandSchema,
   type SubmitSourceCommand,
 } from '../../shared/wiki-state-sources'
@@ -56,6 +60,19 @@ export type SubmitSourceResult = {
   source: SourceRow
   activityEventId: string
 }
+export type ProposePageFromSourceInput = {
+  wikiSpaceId: string
+  actorId: string
+  sourceId: string
+  title?: string
+  slug?: string
+  body?: string
+}
+export type PageReviewResult = {
+  page: WikiPageRow
+  reviewItem: ReviewItemRow
+  activityEventId: string
+}
 
 const livingWikiSharedStateSnapshotSchema = z.object({
   wiki_spaces: z.array(wikiSpaceSchema),
@@ -73,6 +90,11 @@ const submitSourceResultSchema = z.object({
   source: sourceSchema,
   activityEventId: z.string().regex(/^event_[a-z0-9_-]+$/),
 })
+const pageReviewResultSchema = z.object({
+  page: wikiPageSchema,
+  reviewItem: reviewItemSchema,
+  activityEventId: z.string().regex(/^event_[a-z0-9_-]+$/),
+})
 
 export type LivingWikiApiClient = {
   createSpace(input: CreateSpaceInput): Promise<WikiSpaceSnapshot>
@@ -82,6 +104,10 @@ export type LivingWikiApiClient = {
     wikiSpaceId: string
   }): Promise<LivingWikiSharedStateSnapshot>
   submitSource(input: SubmitSourceCommand): Promise<SubmitSourceResult>
+  proposePageFromSource(
+    input: ProposePageFromSourceInput
+  ): Promise<PageReviewResult>
+  resolveReviewItem(input: ResolveReviewItemCommand): Promise<PageReviewResult>
 }
 
 type LivingWikiApiClientOptions = {
@@ -211,6 +237,41 @@ export function createLivingWikiApiClient(
         ),
         livingWikiSharedStateSnapshotSchema,
         `Invalid shared state response`
+      )
+    },
+
+    async proposePageFromSource(input) {
+      const { wikiSpaceId, ...body } = input
+      return parseJsonResponse(
+        await fetchImpl(
+          url(`/api/spaces/${encodeURIComponent(wikiSpaceId)}/pages/propose`),
+          {
+            method: `POST`,
+            headers: { 'content-type': `application/json` },
+            body: JSON.stringify(body),
+          }
+        ),
+        pageReviewResultSchema,
+        `Invalid page proposal response`
+      )
+    },
+
+    async resolveReviewItem(input) {
+      const parsed = resolveReviewItemCommandSchema.parse(input)
+      const { wikiSpaceId, reviewItemId, ...body } = parsed
+      return parseJsonResponse(
+        await fetchImpl(
+          url(
+            `/api/spaces/${encodeURIComponent(wikiSpaceId)}/reviews/${encodeURIComponent(reviewItemId)}/resolve`
+          ),
+          {
+            method: `POST`,
+            headers: { 'content-type': `application/json` },
+            body: JSON.stringify(body),
+          }
+        ),
+        pageReviewResultSchema,
+        `Invalid review resolution response`
       )
     },
 

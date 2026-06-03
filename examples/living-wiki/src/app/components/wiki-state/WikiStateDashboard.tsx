@@ -1,4 +1,7 @@
-import type { ActivityEventRow } from '../../../shared/wiki-state'
+import type {
+  ActivityEventRow,
+  ReviewItemRow,
+} from '../../../shared/wiki-state'
 import type {
   MemberCardViewModel,
   ReviewQueueSummaryViewModel,
@@ -17,6 +20,7 @@ export type WikiStateDashboardViewModel = {
   sources: SourcesByStatusViewModel
   graphSummary: WikiGraphSummaryViewModel
   reviewSummary: ReviewQueueSummaryViewModel
+  reviewItems?: ReviewItemRow[]
 }
 
 export function WikiStateDashboard({

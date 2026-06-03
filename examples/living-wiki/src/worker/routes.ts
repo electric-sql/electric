@@ -1,10 +1,16 @@
-import { ZodError, type ZodSchema } from 'zod'
+import { z, ZodError, type ZodSchema } from 'zod'
 import {
   createSpaceInputSchema,
   getSpaceInputSchema,
   joinSpaceInputSchema,
 } from '../shared/space'
 import type { ErrorResponse, HealthResponse } from '../shared/types'
+import {
+  actorIdSchema,
+  sourceIdSchema,
+  wikiSpaceIdSchema,
+} from '../shared/wiki-state'
+import { resolveReviewItemCommandSchema } from '../shared/wiki-state-reviews'
 import { submitSourceCommandSchema } from '../shared/wiki-state-sources'
 import { getElectricCloudConfig } from './electric-cloud'
 import { isSeededDemoEnabled, type WorkerEnv } from './env'
@@ -37,6 +43,15 @@ export function healthResponse(env: WorkerEnv): HealthResponse {
     seededDemoEnabled: isSeededDemoEnabled(env),
   }
 }
+
+const proposePageCommandSchema = z.object({
+  wikiSpaceId: wikiSpaceIdSchema,
+  actorId: actorIdSchema,
+  sourceId: sourceIdSchema,
+  title: z.string().trim().min(1).max(160).optional(),
+  slug: z.string().trim().min(1).max(160).optional(),
+  body: z.string().trim().min(1).max(20_000).optional(),
+})
 
 const badRequest = (message: string): Response =>
   json({ ok: false, error: message }, { status: 400 })
@@ -143,6 +158,68 @@ export async function handleRestRequest(
         activityEventId: result.activityEvent.id,
       })
     } catch (error) {
+      return handleRestSpaceError(error)
+    }
+  }
+
+  const proposeMatch = url.pathname.match(
+    /^\/api\/spaces\/([^/]+)\/pages\/propose$/
+  )
+  if (proposeMatch && request.method === `POST`) {
+    const body = await parseJsonBody(request)
+    if (body instanceof Response) return body
+    const input = parseInput(proposePageCommandSchema, {
+      ...(typeof body === `object` && body !== null ? body : {}),
+      wikiSpaceId: proposeMatch[1],
+    })
+    if (input instanceof Response) return input
+    try {
+      await getWikiSpaceStore(env).getSpace({
+        wikiSpaceId: input.wikiSpaceId,
+        actorId: input.actorId,
+      })
+      const result = getWikiStateProducer().proposePageFromSource(input)
+      return json({
+        page: result.page,
+        reviewItem: result.reviewItem,
+        activityEventId: result.activityEvent.id,
+      })
+    } catch (error) {
+      if (error instanceof Error && /Source/.test(error.message))
+        return badRequest(error.message)
+      return handleRestSpaceError(error)
+    }
+  }
+
+  const resolveMatch = url.pathname.match(
+    /^\/api\/spaces\/([^/]+)\/reviews\/([^/]+)\/resolve$/
+  )
+  if (resolveMatch && request.method === `POST`) {
+    const body = await parseJsonBody(request)
+    if (body instanceof Response) return body
+    const input = parseInput(resolveReviewItemCommandSchema, {
+      ...(typeof body === `object` && body !== null ? body : {}),
+      wikiSpaceId: resolveMatch[1],
+      reviewItemId: resolveMatch[2],
+    })
+    if (input instanceof Response) return input
+    try {
+      await getWikiSpaceStore(env).getSpace({
+        wikiSpaceId: input.wikiSpaceId,
+        actorId: input.actorId,
+      })
+      const result = getWikiStateProducer().resolveReviewItem(input)
+      return json({
+        page: result.page,
+        reviewItem: result.reviewItem,
+        activityEventId: result.activityEvent.id,
+      })
+    } catch (error) {
+      if (error instanceof Error && /Review/.test(error.message))
+        return json(
+          { ok: false, error: error.message },
+          { status: error.message.includes(`already`) ? 409 : 400 }
+        )
       return handleRestSpaceError(error)
     }
   }
