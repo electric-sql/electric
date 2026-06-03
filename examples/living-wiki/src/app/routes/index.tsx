@@ -29,6 +29,7 @@ function IndexRoute() {
   const [seededDemoEnabled, setSeededDemoEnabled] = useState(false)
   const [seedLoading, setSeedLoading] = useState(false)
   const [seedError, setSeedError] = useState<string | undefined>()
+  const [seedMessage, setSeedMessage] = useState<string | undefined>()
   const [resetLoading, setResetLoading] = useState(false)
   const [resetMessage, setResetMessage] = useState<string | undefined>()
 
@@ -62,6 +63,7 @@ function IndexRoute() {
   async function onStartSeededDemo() {
     setSeedLoading(true)
     setSeedError(undefined)
+    setSeedMessage(`Starting seeded demo…`)
     setResetMessage(undefined)
     try {
       const result = await createLivingWikiApiClient().startSeededDemo()
@@ -70,11 +72,13 @@ function IndexRoute() {
         displayName: result.space.currentActor.displayName,
         avatarColor: result.space.currentActor.avatarColor,
       })
+      setSeedMessage(`Seeded demo ready.`)
       await navigate({
         to: `/spaces/$wikiSpaceId`,
         params: { wikiSpaceId: result.space.space.id },
       })
     } catch (error) {
+      setSeedMessage(undefined)
       setSeedError(error instanceof Error ? error.message : `Seed failed`)
     } finally {
       setSeedLoading(false)
@@ -84,7 +88,8 @@ function IndexRoute() {
   async function onResetSeededDemo() {
     setResetLoading(true)
     setSeedError(undefined)
-    setResetMessage(undefined)
+    setSeedMessage(undefined)
+    setResetMessage(`Resetting seeded demo…`)
     try {
       await createLivingWikiApiClient().resetSeededDemo()
       clearDemoSessionIdentity(window.localStorage)
@@ -130,7 +135,7 @@ function IndexRoute() {
             disabled={seedLoading}
             onClick={() => void onStartSeededDemo()}
           >
-            Start seeded demo
+            {seedLoading ? `Starting seeded demo…` : `Start seeded demo`}
           </button>
           <button
             type="button"
@@ -138,9 +143,12 @@ function IndexRoute() {
             onClick={() => void onResetSeededDemo()}
             style={{ marginLeft: 12 }}
           >
-            Reset seeded demo
+            {resetLoading ? `Resetting seeded demo…` : `Reset seeded demo`}
           </button>
-          {resetMessage ? <p>{resetMessage}</p> : null}
+          <div aria-live="polite">
+            {seedMessage ? <p>{seedMessage}</p> : null}
+            {resetMessage ? <p>{resetMessage}</p> : null}
+          </div>
           {seedError ? <p role="alert">{seedError}</p> : null}
         </div>
       ) : null}

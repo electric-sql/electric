@@ -41,6 +41,7 @@ export function ReviewQueuePanel({
                   {` `}
                   <button
                     type="button"
+                    aria-label={`Approve review: ${item.suggested_change}`}
                     disabled={actionsDisabled}
                     onClick={() => onResolveReview?.(item.id, `approve`)}
                   >
@@ -49,6 +50,7 @@ export function ReviewQueuePanel({
                   {` `}
                   <button
                     type="button"
+                    aria-label={`Reject review: ${item.suggested_change}`}
                     disabled={actionsDisabled}
                     onClick={() => onResolveReview?.(item.id, `reject`)}
                   >

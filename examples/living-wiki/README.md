@@ -48,9 +48,19 @@ Enable the Worker-local seeded demo flag, start dev, then open the homepage and 
 ENABLE_SEEDED_DEMO=true pnpm --filter @electric-ax/example-living-wiki dev
 ```
 
-The **Start seeded demo** button calls `POST /api/demo/seed`, stores the returned demo actor identity in browser session storage, and navigates to the seeded WikiSpace. The seed creates one deterministic space, owner actor, and submitted text source; repeated seed calls are idempotent. When the flag is enabled, **Reset seeded demo** calls `POST /api/demo/reset`, clears the Worker-local demo space and shared-state stores, and removes the browser demo session identity. Seeded data is Worker-local memory only and is not durable across Worker isolates, Wrangler state resets, or deploys.
+The **Start seeded demo** button calls `POST /api/demo/seed`, stores the returned demo actor identity in browser `localStorage`, and navigates to the seeded WikiSpace. The seed creates one deterministic space, owner actor, and submitted text source; repeated seed calls are idempotent. When the flag is enabled, **Reset seeded demo** calls `POST /api/demo/reset`, clears the Worker-local demo space and shared-state stores, and removes the browser demo session identity. Seeded data is Worker-local memory only and is not durable across Worker isolates, Wrangler state resets, or deploys.
 
-Manual path: run the same dev command without `ENABLE_SEEDED_DEMO=true`, create a space from the homepage, then submit text or URL sources from the space page.
+Smoke checklist for the seeded path:
+
+1. Click **Reset seeded demo** if you want a clean run.
+2. Click **Start seeded demo**.
+3. Confirm the seeded source appears in **Sources**.
+4. Click **Propose page** on that source.
+5. Confirm **Review queue** has one open item and **Wiki pages** shows a proposed page card.
+6. Click **Approve** on the review.
+7. Confirm **Wiki pages** shows the page as canonical and **Review queue** shows one approved item.
+
+Manual path: run the same dev command without `ENABLE_SEEDED_DEMO=true`, create a space from the homepage, submit a text or URL source from the space page, click **Propose page**, then approve or reject the review.
 
 ## Commands
 

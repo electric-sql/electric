@@ -211,7 +211,11 @@ describe(`SpaceRoutePage`, () => {
       target: { value: `Important local knowledge` },
     })
     fireEvent.click(screen.getByRole(`button`, { name: `Submit source` }))
+    expect(
+      screen.getByRole(`button`, { name: `Submitting source…` })
+    ).toBeInTheDocument()
     await waitFor(() => expect(refreshSharedState).toHaveBeenCalled())
+    expect(screen.getByText(`Source submitted.`)).toBeInTheDocument()
     const [, init] = vi
       .mocked(globalThis.fetch)
       .mock.calls.find(
@@ -250,7 +254,9 @@ describe(`SpaceRoutePage`, () => {
     render(<SpaceRoutePage wikiSpaceId="wiki_test" />)
     await screen.findByRole(`heading`, { name: `Test Space` })
     fireEvent.click(screen.getByRole(`button`, { name: `Propose page` }))
+    expect(screen.getByText(`Proposing page…`)).toBeInTheDocument()
     await waitFor(() => expect(refreshSharedState).toHaveBeenCalled())
+    expect(screen.getByText(`Page proposal created.`)).toBeInTheDocument()
     const [, init] = vi
       .mocked(globalThis.fetch)
       .mock.calls.find(
@@ -295,8 +301,14 @@ describe(`SpaceRoutePage`, () => {
     ) as typeof fetch
     render(<SpaceRoutePage wikiSpaceId="wiki_test" />)
     await screen.findByRole(`heading`, { name: `Test Space` })
-    fireEvent.click(screen.getByRole(`button`, { name: `Approve` }))
+    fireEvent.click(
+      screen.getByRole(`button`, {
+        name: `Approve review: Review proposed page: Room note`,
+      })
+    )
+    expect(screen.getByText(`Resolving review…`)).toBeInTheDocument()
     await waitFor(() => expect(refreshSharedState).toHaveBeenCalled())
+    expect(screen.getByText(`Review approved.`)).toBeInTheDocument()
     const [, init] = vi
       .mocked(globalThis.fetch)
       .mock.calls.find(

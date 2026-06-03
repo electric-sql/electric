@@ -48,9 +48,13 @@ export function SpaceRoutePage({ wikiSpaceId }: { wikiSpaceId: string }) {
   const [sourceBody, setSourceBody] = useState(``)
   const [sourceUrl, setSourceUrl] = useState(``)
   const [sourceError, setSourceError] = useState<Error | null>(null)
+  const [sourceMessage, setSourceMessage] = useState<string | undefined>()
   const [submittingSource, setSubmittingSource] = useState(false)
   const [reviewNote, setReviewNote] = useState(``)
   const [reviewFlowError, setReviewFlowError] = useState<Error | null>(null)
+  const [reviewFlowMessage, setReviewFlowMessage] = useState<
+    string | undefined
+  >()
   const [reviewFlowBusy, setReviewFlowBusy] = useState(false)
   const { space, loading, error, refresh } = useSpace(
     wikiSpaceId,
@@ -77,14 +81,17 @@ export function SpaceRoutePage({ wikiSpaceId }: { wikiSpaceId: string }) {
     if (!displayedSpace) return
     setReviewFlowBusy(true)
     setReviewFlowError(null)
+    setReviewFlowMessage(`Proposing page…`)
     try {
       await createLivingWikiApiClient().proposePageFromSource({
         wikiSpaceId,
         actorId: displayedSpace.currentActor.id,
         sourceId,
       })
+      setReviewFlowMessage(`Page proposal created.`)
       await refreshSharedState()
     } catch (nextError) {
+      setReviewFlowMessage(undefined)
       setReviewFlowError(
         nextError instanceof Error ? nextError : new Error(String(nextError))
       )
@@ -100,6 +107,7 @@ export function SpaceRoutePage({ wikiSpaceId }: { wikiSpaceId: string }) {
     if (!displayedSpace) return
     setReviewFlowBusy(true)
     setReviewFlowError(null)
+    setReviewFlowMessage(`Resolving review…`)
     try {
       await createLivingWikiApiClient().resolveReviewItem({
         wikiSpaceId,
@@ -108,9 +116,13 @@ export function SpaceRoutePage({ wikiSpaceId }: { wikiSpaceId: string }) {
         resolution,
         note: reviewNote || undefined,
       })
+      setReviewFlowMessage(
+        resolution === `approve` ? `Review approved.` : `Review rejected.`
+      )
       setReviewNote(``)
       await refreshSharedState()
     } catch (nextError) {
+      setReviewFlowMessage(undefined)
       setReviewFlowError(
         nextError instanceof Error ? nextError : new Error(String(nextError))
       )
@@ -125,6 +137,7 @@ export function SpaceRoutePage({ wikiSpaceId }: { wikiSpaceId: string }) {
 
     setSubmittingSource(true)
     setSourceError(null)
+    setSourceMessage(`Submitting source…`)
     try {
       await createLivingWikiApiClient().submitSource(
         sourceKind === `text`
@@ -146,8 +159,10 @@ export function SpaceRoutePage({ wikiSpaceId }: { wikiSpaceId: string }) {
       setSourceTitle(``)
       setSourceBody(``)
       setSourceUrl(``)
+      setSourceMessage(`Source submitted.`)
       await refreshSharedState()
     } catch (nextError) {
+      setSourceMessage(undefined)
       setSourceError(
         nextError instanceof Error ? nextError : new Error(String(nextError))
       )
@@ -197,6 +212,9 @@ export function SpaceRoutePage({ wikiSpaceId }: { wikiSpaceId: string }) {
         }
         actionsDisabled={reviewFlowBusy || displayedSpace === null}
       />
+      <div aria-live="polite">
+        {reviewFlowMessage ? <p>{reviewFlowMessage}</p> : null}
+      </div>
       {reviewFlowError ? <p role="alert">{reviewFlowError.message}</p> : null}
 
       <section style={{ marginTop: 24 }}>
@@ -276,8 +294,11 @@ export function SpaceRoutePage({ wikiSpaceId }: { wikiSpaceId: string }) {
           disabled={submittingSource || displayedSpace === null}
           style={{ marginTop: 12 }}
         >
-          Submit source
+          {submittingSource ? `Submitting source…` : `Submit source`}
         </button>
+        <div aria-live="polite">
+          {sourceMessage ? <p>{sourceMessage}</p> : null}
+        </div>
         {sourceError ? <p role="alert">{sourceError.message}</p> : null}
       </form>
 
