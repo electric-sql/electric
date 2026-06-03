@@ -156,7 +156,7 @@ const VIEW_LABELS: Record<string, string> = {
       </span>
       <span
         v-if="showClose"
-        class="action-btn"
+        class="action-btn action-btn-close"
         aria-hidden="true"
         title="Close"
       >

@@ -292,6 +292,12 @@ const showCustomTitlebar = computed(() => resolvedOs.value !== 'macos')
   .hero-scene-tile-chat {
     flex: 1 0 0;
   }
+  /* Single-tile mode — hide the chat tile's close X. With no other
+     tile in the workspace there's nothing to close back to, matching
+     the live UI's full-width chat layout. */
+  .hero-scene-tile-chat :deep(.action-btn-close) {
+    display: none;
+  }
 }
 
 @container hero-scene (max-width: 639px) {
