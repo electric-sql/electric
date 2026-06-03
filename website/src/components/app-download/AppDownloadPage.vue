@@ -220,7 +220,8 @@ const primaryPlatform = computed(
         </h1>
         <p class="ad-hero-text">
           Desktop and mobile clients — one app to code with Horton, attach to
-          remote sessions, and build your own agents on the infra and&nbsp;SDK.
+          remote sessions, and build your own agents on
+          <a href="/agents">Electric&nbsp;Agents</a>.
         </p>
 
         <div class="ad-hero-actions">
@@ -1117,6 +1118,23 @@ const primaryPlatform = computed(
   max-width: 660px;
   line-height: 1.45;
   text-wrap: balance;
+}
+
+/* Inline link inside the hero paragraph — points at the Agents
+   landing page. Sits in the muted sub-copy so a flat VitePress
+   default would disappear; lift it to brand-1 with a thin
+   underline to read as an unambiguous link without breaking the
+   sub-copy's quiet tone. */
+.ad-hero-text a {
+  color: var(--vp-c-brand-1);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  transition: color 120ms ease;
+}
+
+.ad-hero-text a:hover {
+  color: var(--vp-c-brand-2);
 }
 
 .ad-hero-actions {
