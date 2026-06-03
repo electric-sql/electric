@@ -321,12 +321,12 @@ const primaryPlatform = computed(
       the same across phases, so each fill-in is a localised diff.
 
       Phase ownership for each section:
-        §2 visual strap          → phase 2 placeholder pair · phase 5 real shots
-        §3 three ways to use it  → phase 3
-        §3.5 scenarios           → phase 3
-        §4 multi-device          → phase 4
-        §5 bundled Horton        → phase 4
-        §6 built for builders    → phase 3
+        §2   visual strap          → phase 2 placeholder pair · phase 5 real shots
+        §3   three ways to use it  → phase 3 ✓
+        §3.5 scenarios             → phase 3 ✓ copy · phase 5 illustrations
+        §4   multi-device          → phase 4
+        §5   bundled Horton        → phase 4
+        §6   built for builders    → phase 3 ✓
     -->
 
     <!-- ─────────────── §2 — Visual strap (desktop + mobile) ─────────────── -->
@@ -356,22 +356,218 @@ const primaryPlatform = computed(
       </p>
     </Section>
 
-    <!-- ─────────────────── §3 — Three ways to use it ─────────────────── -->
+    <!-- ─────────────────── §3 — Three ways to use it ─────────────────── *
+         Three side-by-side cards (Code locally · Attach remotely · Build
+         with the SDK). Each card pairs a lucide icon, a category eyebrow,
+         a hero title, the locked body copy from APP_PAGE_PLAN.md §3, and
+         a "You can:" bullet list — the bullets are the per-mode anchor
+         that makes the abstract pitch concrete without spilling into
+         §3.5 scenarios. The strip beneath the grid restates the
+         one-integrated-platform line as the section's takeaway. -->
     <Section id="three-ways">
-      <AdPlaceholder
-        name="§3 — Three ways to use it"
-        sublabel="Three cards: Code locally · Attach remotely · Build with the SDK"
-        aspect="16/6"
-      />
+      <template #eyebrow>What you can do</template>
+      <template #title>Three ways to use it.</template>
+
+      <div class="ad-modes-grid">
+        <article class="ad-modes-card">
+          <span class="ad-modes-icon" aria-hidden="true">
+            <span class="ad-icon ad-icon--code" />
+          </span>
+          <p class="ad-modes-eyebrow mono">Code locally</p>
+          <h3 class="ad-modes-title">Code with Horton, locally.</h3>
+          <p class="ad-modes-body">
+            Horton ships in the desktop. Pick a model (Anthropic, OpenAI,
+            DeepSeek, Moonshot, Codex). Pick a working directory. Chat to a
+            coding agent that can read, write, edit, run bash, search the
+            web, fetch URLs, and spawn parallel workers.
+          </p>
+          <p class="ad-modes-list-label mono">You can</p>
+          <ul class="ad-modes-list">
+            <li>
+              Refactor a folder of TypeScript files while Horton runs
+              parallel workers per module.
+            </li>
+            <li>
+              Bisect a regression by spawning a worker to reproduce, then
+              another to fix.
+            </li>
+            <li>
+              Scaffold a fresh project with <code>/init</code>, then
+              iterate with <code>/quickstart</code>.
+            </li>
+            <li>
+              Review a diff or a PR description and ask Horton to draft
+              follow-ups.
+            </li>
+          </ul>
+        </article>
+
+        <article class="ad-modes-card">
+          <span class="ad-modes-icon" aria-hidden="true">
+            <span class="ad-icon ad-icon--radio" />
+          </span>
+          <p class="ad-modes-eyebrow mono">Attach remotely</p>
+          <h3 class="ad-modes-title">Attach to remote sessions.</h3>
+          <p class="ad-modes-body">
+            Connect to any agents-server — your own, your team's, or
+            Electric Cloud. Sessions spawned by CI, webhooks, GitHub
+            issues, cron or your software factory appear live in the
+            sidebar. Pick one up on the desktop, follow it on your phone,
+            stop or steer it from either.
+          </p>
+          <p class="ad-modes-list-label mono">You can</p>
+          <ul class="ad-modes-list">
+            <li>
+              Triage a GitHub-issue-spawned Horton session on your phone,
+              finish it from your laptop.
+            </li>
+            <li>
+              Watch a CI agent open a PR, push a steering message before
+              it merges.
+            </li>
+            <li>
+              Pause a long-running cron-triggered pipeline and resume from
+              where it left off.
+            </li>
+            <li>
+              Hand a session off to a teammate by sharing the entity URL —
+              the multi-user view sees the same stream.
+            </li>
+          </ul>
+        </article>
+
+        <article class="ad-modes-card">
+          <span class="ad-modes-icon" aria-hidden="true">
+            <span class="ad-icon ad-icon--microscope" />
+          </span>
+          <p class="ad-modes-eyebrow mono">Build with the SDK</p>
+          <h3 class="ad-modes-title">Build agents on the SDK.</h3>
+          <p class="ad-modes-body">
+            It's also the dev tool for the entities <em>you</em> write
+            with the SDK (<code>@electric-ax/agents-runtime</code>). Live
+            state explorer, entity timeline, fork-from-here, manifest
+            drawer, MCP servers, skills, and a tile workspace for
+            following parent + workers in parallel.
+          </p>
+          <p class="ad-modes-list-label mono">You can</p>
+          <ul class="ad-modes-list">
+            <li>
+              Drop in on a stuck entity and watch its inbox / runs /
+              manifest update in real time.
+            </li>
+            <li>
+              Fork a session at any past point to A/B test a prompt or
+              tool change.
+            </li>
+            <li>
+              Step through a failed worker's tool calls without
+              redeploying the host app.
+            </li>
+            <li>
+              Run a parent and three children side-by-side in a tile
+              workspace, then deep-link the layout.
+            </li>
+          </ul>
+        </article>
+      </div>
+
+      <p class="ad-modes-strip mono">
+        One integrated platform — code, attach, and build in one app.
+      </p>
     </Section>
 
-    <!-- ─────────────────── §3.5 — Scenarios ─────────────────── -->
-    <Section id="scenarios">
-      <AdPlaceholder
-        name="§3.5 — Scenarios"
-        sublabel="Four worked end-to-end examples spanning the three modes above"
-        aspect="16/8"
-      />
+    <!-- ─────────────────── §3.5 — Scenarios ─────────────────── *
+         Four worked end-to-end stories that span the three modes from
+         §3. Each card carries a placeholder illustration at the top,
+         a `Touches:` eyebrow in mono naming the moving parts, the
+         scenario title, and a short body paragraph. The dark section
+         background sets these apart from the §3 cards above and the
+         §6 builder cards below — they read as the page's "in practice"
+         interlude. Body strings are locked in APP_PAGE_PLAN.md §3.5;
+         do not edit them here without updating that doc. -->
+    <Section id="scenarios" :dark="true">
+      <template #eyebrow>Scenarios</template>
+      <template #title>What this looks like in practice.</template>
+      <template #subtitle>
+        Four short stories that span the three modes above. None of them
+        require code you don't have today.
+      </template>
+
+      <div class="ad-scenarios-grid">
+        <article class="ad-scenarios-card">
+          <div class="ad-scenarios-illo">
+            <AdPlaceholder name="scenario-1.png" aspect="16/9" />
+          </div>
+          <p class="ad-scenarios-touches mono">
+            Touches · Cloud · mobile · steer · stop · review
+          </p>
+          <h3 class="ad-scenarios-title">
+            GitHub issue → CI spawns Horton → triage on phone → finish on
+            desk
+          </h3>
+          <p class="ad-scenarios-body">
+            A new GitHub issue (or <code>issue_comment</code>, or a
+            <code>workflow_dispatch</code> from CI) opens a new agent
+            session on Electric Cloud. You get a notification on your
+            phone, skim the diff Horton drafted, push back a steering
+            message ("don't touch the migration files"), then pick up on
+            your laptop to merge.
+          </p>
+        </article>
+
+        <article class="ad-scenarios-card">
+          <div class="ad-scenarios-illo">
+            <AdPlaceholder name="scenario-2.png" aspect="16/9" />
+          </div>
+          <p class="ad-scenarios-touches mono">
+            Touches · desktop · working-dir · workers · tile · fork
+          </p>
+          <h3 class="ad-scenarios-title">
+            Local refactor with parallel workers
+          </h3>
+          <p class="ad-scenarios-body">
+            Open the desktop, point Horton at a repo, ask for a rename
+            across packages. Horton spawns a worker per package, you
+            watch all four in a 2×2 tile workspace, fork the one that
+            took the wrong turn, ship the diff.
+          </p>
+        </article>
+
+        <article class="ad-scenarios-card">
+          <div class="ad-scenarios-illo">
+            <AdPlaceholder name="scenario-3.png" aspect="16/9" />
+          </div>
+          <p class="ad-scenarios-touches mono">
+            Touches · SDK · state explorer · timeline · fork · MCP
+          </p>
+          <h3 class="ad-scenarios-title">
+            Build an agent on the SDK, debug it without a redeploy
+          </h3>
+          <p class="ad-scenarios-body">
+            You ship a custom <code>summarizer</code> entity with the
+            SDK. It's getting stuck on certain inputs. Open the state
+            explorer, watch its shared state evolve, fork the failing
+            session, change the prompt, replay.
+          </p>
+        </article>
+
+        <article class="ad-scenarios-card">
+          <div class="ad-scenarios-illo">
+            <AdPlaceholder name="scenario-4.png" aspect="16/9" />
+          </div>
+          <p class="ad-scenarios-touches mono">
+            Touches · Cloud · cron wake · mobile · fork · send
+          </p>
+          <h3 class="ad-scenarios-title">
+            Cron-triggered overnight pipeline
+          </h3>
+          <p class="ad-scenarios-body">
+            Cron kicks off a nightly research agent on the cloud server.
+            Open the mobile app in the morning, see what it found, hand
+            off the most promising lead to a fresh session for follow-up.
+          </p>
+        </article>
+      </div>
     </Section>
 
     <!-- ─────────────────── §4 — Multi-device, multi-user ─────────────────── -->
@@ -392,13 +588,107 @@ const primaryPlatform = computed(
       />
     </Section>
 
-    <!-- ─────────────────── §6 — Built for builders ─────────────────── -->
+    <!-- ─────────────────── §6 — Built for builders ─────────────────── *
+         Six compact cards (3×2 desktop, 2×2 → 1×6 at narrower widths).
+         Each card: lucide icon, 2-4 word title, one-sentence body
+         describing the feature, and a "Use it to…" hint pulled from
+         APP_PAGE_PLAN.md §6 so the card doesn't read as a dry spec
+         row. Every feature listed here is shipping today — see the
+         claim→code mapping in APP_PAGE_PLAN.md §5 if you're tempted
+         to add anything else to this grid. -->
     <Section id="builders">
-      <AdPlaceholder
-        name="§6 — Built for builders"
-        sublabel="State explorer · entity timeline · tile workspace · MCP · local discovery · CLI installer"
-        aspect="16/8"
-      />
+      <template #eyebrow>Dev tools</template>
+      <template #title>Built for builders.</template>
+      <template #subtitle>
+        When you ship your own entities on the Electric Agents infra and
+        SDK (<code>@electric-ax/agents-runtime</code>), the same app
+        becomes the dev tool you'd otherwise have to write yourself.
+      </template>
+
+      <div class="ad-builders-grid">
+        <article class="ad-builders-card">
+          <span class="ad-builders-icon" aria-hidden="true">
+            <span class="ad-icon ad-icon--layout" />
+          </span>
+          <h3 class="ad-builders-title">Tile workspace</h3>
+          <p class="ad-builders-body">
+            Split right / down cycle, find, <code>?layout=</code> deep
+            link.
+          </p>
+          <p class="ad-builders-hint">
+            Use it to follow a parent and three workers in parallel
+            without losing context.
+          </p>
+        </article>
+
+        <article class="ad-builders-card">
+          <span class="ad-builders-icon" aria-hidden="true">
+            <span class="ad-icon ad-icon--database" />
+          </span>
+          <h3 class="ad-builders-title">State explorer</h3>
+          <p class="ad-builders-body">
+            Live view of every shared-state source per entity.
+          </p>
+          <p class="ad-builders-hint">
+            Use it to watch shared state evolve while your agent runs.
+          </p>
+        </article>
+
+        <article class="ad-builders-card">
+          <span class="ad-builders-icon" aria-hidden="true">
+            <span class="ad-icon ad-icon--history" />
+          </span>
+          <h3 class="ad-builders-title">Entity timeline</h3>
+          <p class="ad-builders-body">
+            Runs, inbox, manifests, fork-from-here.
+          </p>
+          <p class="ad-builders-hint">
+            Use it to fork at any past point to A/B test a change.
+          </p>
+        </article>
+
+        <article class="ad-builders-card">
+          <span class="ad-builders-icon" aria-hidden="true">
+            <span class="ad-icon ad-icon--cable" />
+          </span>
+          <h3 class="ad-builders-title">MCP &amp; skills</h3>
+          <p class="ad-builders-body">
+            Add MCP servers, OAuth handled natively, workspace
+            <code>mcp.json</code> override.
+          </p>
+          <p class="ad-builders-hint">
+            Use it to snap in a tool server, OAuth handled for you.
+          </p>
+        </article>
+
+        <article class="ad-builders-card">
+          <span class="ad-builders-icon" aria-hidden="true">
+            <span class="ad-icon ad-icon--radar" />
+          </span>
+          <h3 class="ad-builders-title">Local discovery</h3>
+          <p class="ad-builders-body">
+            Finds dev servers on localhost ports.
+          </p>
+          <p class="ad-builders-hint">
+            Use it — the dev server you just <code>pnpm dev</code>'d
+            shows up automatically.
+          </p>
+        </article>
+
+        <article class="ad-builders-card">
+          <span class="ad-builders-icon" aria-hidden="true">
+            <span class="ad-icon ad-icon--terminal" />
+          </span>
+          <h3 class="ad-builders-title">CLI installer</h3>
+          <p class="ad-builders-body">
+            Installs the <code>electric</code> command system-wide.
+          </p>
+          <p class="ad-builders-hint">
+            Use it to drop <code>electric</code> on your PATH without
+            touching npm.
+          </p>
+        </article>
+      </div>
     </Section>
 
     <!--
@@ -641,6 +931,37 @@ const primaryPlatform = computed(
   --icon-url: url('https://api.iconify.design/simple-icons/android.svg');
 }
 
+/* lucide icons — used by the §3 mode cards and the §6 builder grid.
+   `lucide` is already the icon set used inside `agents-server-ui`, so
+   the marketing page and the product share visual vocabulary. */
+.ad-icon--code {
+  --icon-url: url('https://api.iconify.design/lucide/code-2.svg');
+}
+.ad-icon--radio {
+  --icon-url: url('https://api.iconify.design/lucide/radio-tower.svg');
+}
+.ad-icon--microscope {
+  --icon-url: url('https://api.iconify.design/lucide/microscope.svg');
+}
+.ad-icon--layout {
+  --icon-url: url('https://api.iconify.design/lucide/layout-grid.svg');
+}
+.ad-icon--database {
+  --icon-url: url('https://api.iconify.design/lucide/database.svg');
+}
+.ad-icon--history {
+  --icon-url: url('https://api.iconify.design/lucide/history.svg');
+}
+.ad-icon--cable {
+  --icon-url: url('https://api.iconify.design/lucide/cable.svg');
+}
+.ad-icon--radar {
+  --icon-url: url('https://api.iconify.design/lucide/radar.svg');
+}
+.ad-icon--terminal {
+  --icon-url: url('https://api.iconify.design/lucide/terminal.svg');
+}
+
 /* ── §1 hero ────────────────────────────────────────────────── */
 
 .ad-hero {
@@ -805,6 +1126,296 @@ const primaryPlatform = computed(
     grid-template-columns: 1fr;
     gap: 16px;
   }
+}
+
+/* ── §3 three ways to use it ────────────────────────────────── *
+   Three equal-width cards in a row at desktop widths, collapsing
+   to two columns < 980px and one column on mobile. Each card is a
+   vertical stack of: icon · category eyebrow · title · body
+   paragraph · "You can" label · 4-item bullet list. Cards stretch
+   to equal heights via `align-items: stretch` on the grid so the
+   list bottoms line up across all three even when bullet copy
+   varies slightly in length.
+
+   The strip beneath the grid restates the one-integrated-platform
+   takeaway as a centred, mono, muted single line. */
+
+.ad-modes-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+  align-items: stretch;
+}
+
+.ad-modes-card {
+  display: flex;
+  flex-direction: column;
+  padding: 28px 26px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 16px;
+  background: var(--vp-c-bg);
+  transition:
+    transform 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.ad-modes-card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(
+    in srgb,
+    var(--vp-c-brand-1) 45%,
+    var(--vp-c-divider)
+  );
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.08);
+}
+
+.ad-modes-icon {
+  font-size: 22px;
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--vp-c-brand-1) 8%, transparent);
+  border: 1px solid
+    color-mix(in srgb, var(--vp-c-brand-1) 22%, var(--vp-c-divider));
+  color: var(--vp-c-brand-1);
+  margin-bottom: 18px;
+}
+
+.ad-modes-icon .ad-icon {
+  font-size: 22px;
+}
+
+.ad-modes-eyebrow {
+  margin: 0 0 8px;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--vp-c-text-3);
+}
+
+.ad-modes-title {
+  margin: 0 0 12px;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  color: var(--vp-c-text-1);
+  text-wrap: balance;
+}
+
+.ad-modes-body {
+  margin: 0 0 20px;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--vp-c-text-2);
+  text-wrap: pretty;
+}
+
+/* "You can" mini-eyebrow above each bullet list. Same mono-uppercase
+   feel as the card eyebrow so the visual rhythm inside each card
+   stays consistent without introducing a second typographic
+   register.
+
+   `margin-top: auto` lives on the LABEL (not the list) so the whole
+   "You can …" block — label and bullets together — anchors to the
+   bottom of the card. Cards with shorter body copy get extra
+   whitespace BETWEEN body and label, not between label and list. */
+.ad-modes-list-label {
+  margin: auto 0 8px;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--vp-c-text-3);
+}
+
+.ad-modes-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.ad-modes-list li {
+  position: relative;
+  padding-left: 16px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--vp-c-text-2);
+}
+
+.ad-modes-list li::before {
+  content: '·';
+  position: absolute;
+  left: 4px;
+  top: -1px;
+  color: var(--vp-c-brand-1);
+  font-weight: 700;
+}
+
+.ad-modes-list code {
+  font-size: 12.5px;
+}
+
+.ad-modes-strip {
+  margin: 36px auto 0;
+  text-align: center;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  color: var(--vp-c-text-3);
+}
+
+/* ── §3.5 scenarios ─────────────────────────────────────────── *
+   2×2 grid of worked examples that span the three modes from §3.
+   Each card stacks: placeholder illustration (16:9) at the top,
+   a `Touches · …` mono eyebrow, a semi-bold title, then ~3 lines
+   of body. The dark section background tints the cards slightly
+   so the illos read as the headline visual without overpowering
+   the copy beneath. */
+
+.ad-scenarios-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+
+.ad-scenarios-card {
+  display: flex;
+  flex-direction: column;
+  padding: 24px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 16px;
+  background: var(--vp-c-bg);
+  /* On the dark Section background we want the card to read as a
+     light surface above the alt fill, with a slightly more
+     prominent border so the edge stays defined. */
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
+}
+
+.ad-scenarios-illo {
+  margin-bottom: 18px;
+}
+
+.ad-scenarios-touches {
+  margin: 0 0 10px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--vp-c-text-3);
+}
+
+.ad-scenarios-title {
+  margin: 0 0 12px;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--vp-c-text-1);
+  letter-spacing: -0.005em;
+  text-wrap: balance;
+}
+
+.ad-scenarios-body {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--vp-c-text-2);
+  text-wrap: pretty;
+}
+
+.ad-scenarios-body code {
+  font-size: 12.5px;
+}
+
+/* ── §6 built for builders ──────────────────────────────────── *
+   3×2 grid at desktop widths, collapses to 2 columns then 1. Each
+   card holds a lucide icon, a short title, a one-sentence feature
+   description, and a "Use it to…" hint. The hint is intentionally
+   typed as a separate paragraph (rather than appended inline to
+   the body) so it can carry its own slightly muted colour and act
+   as the card's call-to-mind. */
+
+.ad-builders-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.ad-builders-card {
+  display: flex;
+  flex-direction: column;
+  padding: 22px 22px 24px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 14px;
+  background: var(--vp-c-bg);
+  transition:
+    transform 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.ad-builders-card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(
+    in srgb,
+    var(--vp-c-brand-1) 45%,
+    var(--vp-c-divider)
+  );
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.07);
+}
+
+.ad-builders-icon {
+  font-size: 18px;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--vp-c-brand-1) 8%, transparent);
+  border: 1px solid
+    color-mix(in srgb, var(--vp-c-brand-1) 22%, var(--vp-c-divider));
+  color: var(--vp-c-brand-1);
+  margin-bottom: 14px;
+}
+
+.ad-builders-icon .ad-icon {
+  font-size: 18px;
+}
+
+.ad-builders-title {
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--vp-c-text-1);
+  line-height: 1.3;
+}
+
+.ad-builders-body {
+  margin: 0 0 12px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--vp-c-text-2);
+  text-wrap: pretty;
+}
+
+.ad-builders-body code,
+.ad-builders-hint code {
+  font-size: 12px;
+}
+
+.ad-builders-hint {
+  margin: auto 0 0;
+  padding-top: 12px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--vp-c-text-3);
+  border-top: 1px dashed var(--vp-c-divider);
+  text-wrap: pretty;
 }
 
 /* ── §7a desktop ────────────────────────────────────────────── */
@@ -1050,6 +1661,18 @@ const primaryPlatform = computed(
 
 /* ── Responsive ─────────────────────────────────────────────── */
 
+@media (max-width: 980px) {
+  /* The three §3 mode cards carry a lot of body + list text and
+     start to look cramped before the rest of the page does, so they
+     drop to a 2-up grid earlier than the desktop downloads. */
+  .ad-modes-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ad-builders-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 900px) {
   .ad-desktop-grid {
     grid-template-columns: 1fr;
@@ -1072,6 +1695,28 @@ const primaryPlatform = computed(
   }
   .ad-mobile-preview-actions {
     justify-self: start;
+  }
+  .ad-modes-grid {
+    grid-template-columns: 1fr;
+  }
+  .ad-modes-card {
+    padding: 24px 22px;
+  }
+  .ad-modes-title {
+    font-size: 20px;
+  }
+  .ad-scenarios-grid {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+  .ad-scenarios-title {
+    font-size: 17px;
+  }
+}
+
+@media (max-width: 600px) {
+  .ad-builders-grid {
+    grid-template-columns: 1fr;
   }
 }
 
