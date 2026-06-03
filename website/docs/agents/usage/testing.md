@@ -15,7 +15,7 @@ Test agent handlers without calling the LLM by providing canned responses:
 ```ts
 ctx.useAgent({
   systemPrompt: "...",
-  model: "claude-sonnet-4-5-20250929",
+  model: "claude-sonnet-4-6",
   tools: [...ctx.electricTools],
   testResponses: ["Hello! How can I help?"],
 })

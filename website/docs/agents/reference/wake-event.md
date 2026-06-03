@@ -76,7 +76,7 @@ type WakeMessage = {
   other_children?: Array<{
     url: string
     type: string
-    status: "spawning" | "running" | "idle" | "stopped"
+    status: "spawning" | "running" | "idle" | "paused" | "stopping" | "stopped" | "killed"
   }>
 }
 ```

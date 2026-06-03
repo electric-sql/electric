@@ -40,8 +40,11 @@ interface RuntimeRouterConfig {
   handlerUrl?: string // legacy alias for serveEndpoint
   registry?: EntityRegistry
   subscriptionPathForType?: (typeName: string) => string
+  defaultDispatchPolicyForType?: (typeName: string) => DispatchPolicy | undefined
+  serverHeaders?: HeadersProvider
+  webhookSignature?: false | Partial<WebhookSignatureVerifierConfig>
   idleTimeout?: number // ms before closing idle wake (default: 20000)
-  heartbeatInterval?: number // ms between heartbeats (default: 30000)
+  heartbeatInterval?: number // ms between heartbeats (default: 10000)
   createElectricTools?: (context: {
     entityUrl: string
     entityType: string
@@ -65,11 +68,31 @@ interface RuntimeRouterConfig {
       messageType?: string
     }): Promise<{ txid: string }>
     deleteSchedule(opts: { id: string }): Promise<{ txid: string }>
+    listEventSources(): Promise<Array<EventSourceContract>>
+    subscribeToEventSource(
+      opts: EventSourceSubscriptionInput
+    ): Promise<{ txid: string; subscription: EventSourceSubscription }>
+    unsubscribeFromEventSource(opts: { id: string }): Promise<{ txid: string }>
   }) => AgentTool[] | Promise<AgentTool[]> // factory for extra agent tools
   onWakeError?: (error: Error) => boolean | void // return true to mark handled
   registrationConcurrency?: number // max concurrent type registrations (default: 8)
+  sandboxProfiles?: ReadonlyArray<SandboxProfile>
+  publicUrl?: string
+  name?: string
 }
 ```
+
+Key fields:
+
+| Field                          | Description                                                                                                      |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| `serveEndpoint`                | Public webhook callback URL. When present, type registration includes webhook dispatch unless a default dispatch policy overrides it. |
+| `serverHeaders`                | Headers sent on control-plane requests to the agents server, including type registration and wake claims.        |
+| `webhookSignature`             | Webhook signature verification config. Enabled by default against `${baseUrl}/__ds/jwks.json`; set to `false` only for trusted in-process tests. |
+| `defaultDispatchPolicyForType` | Override the default dispatch policy registered per entity type. Use this for pull-wake runner targets.          |
+| `sandboxProfiles`              | Named sandbox profiles advertised by this runtime. Spawn requests can select one by profile name.                |
+| `publicUrl`                    | Public URL for this runtime, surfaced by server runtime metadata APIs when available.                            |
+| `name`                         | Human-readable runtime name. Defaults to `"default"`.                                                           |
 
 ## HTTP server
 
@@ -103,10 +126,7 @@ Must be called after your app starts listening.
 await runtime.registerTypes()
 ```
 
-This makes two requests per entity type:
-
-1. `POST /_electric/entity-types` — registers the type definition and schemas.
-2. `PUT /{type}/**?subscription={type}-handler` — creates a webhook subscription for the type.
+This sends `POST /_electric/entity-types` for each entity type. The request includes the type definition, state schemas, permission grants, optional `serve_endpoint`, and optional default dispatch policy. When `serveEndpoint` is set and no custom default dispatch policy is provided, registration uses webhook dispatch to that endpoint.
 
 ## RuntimeHandler
 
@@ -142,7 +162,7 @@ interface RuntimeDebugState {
 | `waitForSettled`       | Waits for all in-flight wakes; throws on errors                                    |
 | `abortWakes`           | Cancels all in-flight wake handlers immediately                                    |
 | `debugState`           | Returns a snapshot of internal runtime state for diagnostics                       |
-| `registerTypes`        | Registers entity types and webhook subscriptions with the Electric Agents runtime server     |
+| `registerTypes`        | Registers entity types, schemas, permission grants, and default dispatch policy with the Electric Agents runtime server |
 
 ## createRuntimeRouter
 

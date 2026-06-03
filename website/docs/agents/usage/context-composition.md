@@ -17,6 +17,7 @@ Most entities don't need `useContext` -- the default timeline assembly works wel
 - **Budget token space** across multiple content sources (docs, conversation history, retrieved context)
 - **Mix static and dynamic content** with different caching behavior
 - **Inject external content** (documentation, search results, knowledge bases) alongside conversation history
+- **Hydrate uploaded files or images** through manifest-backed [attachments](./attachments)
 
 ## UseContextConfig
 
@@ -190,7 +191,7 @@ async handler(ctx, wake) {
 
   ctx.useAgent({
     systemPrompt: "You are a helpful assistant.",
-    model: "claude-sonnet-4-5-20250929",
+    model: "claude-sonnet-4-6",
     tools,
   })
   await ctx.agent.run()

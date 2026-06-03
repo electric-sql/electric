@@ -21,7 +21,8 @@ interface EntityDefinition {
   ) => Record<string, (...args: unknown[]) => void>
   creationSchema?: StandardJSONSchemaV1
   inboxSchemas?: Record<string, StandardJSONSchemaV1>
-  outputSchemas?: Record<string, StandardJSONSchemaV1>
+  stateSchemas?: Record<string, StandardJSONSchemaV1>
+  permissionGrants?: EntityTypePermissionGrantDefinition[]
   handler(ctx: HandlerContext, wake: WakeEvent): void | Promise<void>
 }
 ```
@@ -35,7 +36,8 @@ interface EntityDefinition {
 | `actions`        | `(collections) => Record<string, (...args) => void>` | No       | Factory for custom non-CRUD actions. Receives TanStack DB collections, returns named action functions exposed on `ctx.actions`. |
 | `creationSchema` | `StandardJSONSchemaV1`                               | No       | JSON Schema for spawn arguments validation.                                                                        |
 | `inboxSchemas`   | `Record<string, StandardJSONSchemaV1>`               | No       | JSON Schemas for inbound message types, keyed by message type.                                                     |
-| `outputSchemas`  | `Record<string, StandardJSONSchemaV1>`               | No       | JSON Schemas for output event types. Defaults are provided by the runtime.                                         |
+| `stateSchemas`   | `Record<string, StandardJSONSchemaV1>`               | No       | Additional JSON Schemas included in the registered entity type's state schema map.                                 |
+| `permissionGrants` | `EntityTypePermissionGrantDefinition[]`            | No       | Initial permission grants applied when this entity type is registered.                                             |
 | `handler`        | `(ctx, wake) => void \| Promise<void>`               | Yes      | The function invoked on each wake. Receives [`HandlerContext`](./handler-context) and [`WakeEvent`](./wake-event). |
 
 ## CollectionDefinition
@@ -55,3 +57,25 @@ interface CollectionDefinition {
 | `schema`     | `StandardSchemaV1` | -                | Zod or Standard Schema validator for the row type. |
 | `type`       | `string`           | `"state:{name}"` | Event type string used in the durable stream.      |
 | `primaryKey` | `string`           | `"key"`          | Primary key field name on the row.                 |
+
+## Permission grants
+
+`permissionGrants` lets an entity type declare the initial access grants that the server stores for entities of that type.
+
+```ts
+registry.define("worker", {
+  description: "Internal worker agent",
+  permissionGrants: [
+    {
+      subject_kind: "principal_kind",
+      subject_value: "user",
+      permission: "spawn",
+    },
+  ],
+  async handler(ctx, wake) {
+    // ...
+  },
+})
+```
+
+The server currently recognizes `read`, `write`, `delete`, `signal`, `fork`, `schedule`, `spawn`, and `manage` permissions. Grants can target a specific principal or a principal kind, and may include propagation options depending on the server route that creates them.

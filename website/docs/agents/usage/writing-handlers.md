@@ -61,10 +61,10 @@ interface HandlerContext<TState extends StateProxy = StateProxy> {
     entityUrl: string,
     payload: unknown,
     opts?: { type?: string; afterMs?: number }
-  ) => void
+  ) => Promise<SendResult>
   recordRun: () => RunHandle
   setTag: (key: string, value: string) => Promise<void>
-  removeTag: (key: string) => Promise<void>
+  deleteTag: (key: string) => Promise<void>
   sleep: () => void
 }
 ```
@@ -97,7 +97,7 @@ interface HandlerContext<TState extends StateProxy = StateProxy> {
 | `send`             | Sends a message to another entity's inbox. Supports delayed delivery via `afterMs`.                                                                     |
 | `recordRun`        | Records non-LLM work in the built-in `runs` collection so `runFinished` observers are woken.                                                            |
 | `setTag`           | Sets a tag on this entity.                                                                                                                              |
-| `removeTag`        | Removes a tag from this entity.                                                                                                                         |
+| `deleteTag`        | Deletes a tag from this entity.                                                                                                                         |
 | `sleep`            | Returns the entity to idle without re-waking.                                                                                                           |
 
 ## WakeEvent
@@ -146,7 +146,7 @@ registry.define("assistant", {
 
     ctx.useAgent({
       systemPrompt: "You are a helpful assistant.",
-      model: "claude-sonnet-4-5-20250929",
+      model: "claude-sonnet-4-6",
       tools: [...ctx.electricTools],
     })
     await ctx.agent.run()
@@ -242,7 +242,7 @@ async handler(ctx) {
   const { systemPrompt } = ctx.args as { systemPrompt: string }
   ctx.useAgent({
     systemPrompt,
-    model: 'claude-sonnet-4-5-20250929',
+    model: 'claude-sonnet-4-6',
     tools: [...ctx.electricTools],
   })
   await ctx.agent.run()
@@ -274,7 +274,7 @@ async handler(ctx) {
 
   ctx.useAgent({
     systemPrompt: 'You are an assistant with lookup capabilities.',
-    model: 'claude-sonnet-4-5-20250929',
+    model: 'claude-sonnet-4-6',
     tools: [...ctx.electricTools, myTool],
   })
   await ctx.agent.run()

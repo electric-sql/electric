@@ -26,8 +26,11 @@ import { BuiltinAgentsServer } from "@electric-ax/agents"
 
 const server = new BuiltinAgentsServer({
   agentServerUrl: "http://localhost:4437",
-  port: 4448,
   workingDirectory: process.cwd(),
+  pullWake: {
+    runnerId: "builtin-agents",
+    registerRunner: true,
+  },
 })
 
 await server.start()
@@ -137,10 +140,10 @@ Programmatic embedders (other than the desktop) pass the resolved set as an arra
 
 ## Per-agent allowlist
 
-Entity definitions opt into MCP servers explicitly via the `mcp.tools()` helper from `@electric-ax/agents-runtime`:
+Entity definitions opt into MCP servers explicitly via the `mcp.tools()` helper from `@electric-ax/agents-mcp`:
 
 ```ts
-import { mcp } from "@electric-ax/agents-runtime"
+import { mcp } from "@electric-ax/agents-mcp"
 
 registry.define("research-agent", {
   async handler(ctx) {

@@ -27,6 +27,7 @@ const child = await ctx.spawn(type, id, args?, opts?)
 | `opts.wake`           | `Wake`                    | When to wake the parent (see below)    |
 | `opts.tags`           | `Record<string, string>`  | Key-value tags applied to the child    |
 | `opts.observe`        | `boolean`                 | Also observe the child (default: true) |
+| `opts.sandbox`        | `SpawnSandboxOption`      | Sandbox profile or inheritance for the child |
 
 `spawn` is a creation-only operation. Calling it with a `(type, id)` pair that already exists in the entity's manifest throws an error. Use `observe(entity(url))` to get a handle to an existing child.
 
@@ -37,6 +38,8 @@ The `wake` option controls when the parent's handler is re-invoked:
 - `{ on: 'change', collections?: string[], debounceMs?: number, timeoutMs?: number }` — wake when specified collections change.
 
 Returns an [`EntityHandle`](#entityhandle).
+
+Use [Sandboxing](./sandboxing) when children need isolated filesystem, process, or network access, or when a worker should inherit its parent's sandbox.
 
 ## EntityHandle
 

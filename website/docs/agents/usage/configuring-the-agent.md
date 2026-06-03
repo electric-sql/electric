@@ -42,7 +42,7 @@ interface AgentConfig {
 async handler(ctx) {
   ctx.useAgent({
     systemPrompt: 'You are a helpful assistant.',
-    model: 'claude-sonnet-4-5-20250929',
+    model: 'claude-sonnet-4-6',
     tools: [...ctx.electricTools],
   })
   await ctx.agent.run()
@@ -106,7 +106,7 @@ You must call `useAgent` before calling `run()`. Calling `ctx.agent.run()` witho
 When `model` is a string, the runtime resolves it through the configured `provider` (default `"anthropic"`). You can also pass a resolved `Model` object directly.
 
 ```ts
-model: "claude-sonnet-4-5-20250929"
+model: "claude-sonnet-4-6"
 provider: "anthropic"
 ```
 
@@ -119,7 +119,7 @@ For testing handlers without making LLM calls, pass `testResponses`. Two forms a
 ```ts
 ctx.useAgent({
   systemPrompt: "...",
-  model: "claude-sonnet-4-5-20250929",
+  model: "claude-sonnet-4-6",
   tools: [...ctx.electricTools],
   testResponses: ["Hello! How can I help?", "Sure, I can do that."],
 })

@@ -87,3 +87,15 @@ interface ChildStatusEntry {
   status: "spawning" | "running" | "idle" | "paused" | "stopping" | "stopped" | "killed"
 }
 ```
+
+Status values:
+
+| Status     | Description                                                 |
+| ---------- | ----------------------------------------------------------- |
+| `spawning` | Entity creation is in progress.                             |
+| `running`  | Handler is currently executing.                             |
+| `idle`     | Handler has completed; entity is waiting for the next wake. |
+| `paused`   | Entity is paused.                                           |
+| `stopping` | Entity is stopping and rejects normal writes.                |
+| `stopped`  | Entity has been stopped or deleted.                         |
+| `killed`   | Entity was killed by a terminal lifecycle signal.            |

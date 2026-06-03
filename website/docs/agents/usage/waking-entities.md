@@ -8,9 +8,9 @@ outline: [2, 3]
 
 # Waking entities
 
-Entities in Electric Agents are driven by **wakes**. A wake is a single handler invocation triggered by something outside the handler: a new message, a child finishing, a change in an observed stream, or a schedule. Between wakes the entity is idle — no process, no memory, no running handler.
+Entities in Electric Agents are driven by **wakes**. A wake is a single handler invocation triggered by something outside the handler: a new message, a child finishing, a change in an observed stream, a schedule, or an external event source. Between wakes the entity is idle — no process, no memory, no running handler.
 
-Everything you do to make an entity respond to something — `ctx.spawn(..., { wake })`, `ctx.observe(..., { wake })`, `ctx.send()`, `upsertCronSchedule()` — is ultimately a way to produce a wake.
+Everything you do to make an entity respond to something — `ctx.spawn(..., { wake })`, `ctx.observe(..., { wake })`, `ctx.send()`, `upsertCronSchedule()`, or `subscribe_event_source` — is ultimately a way to produce a wake.
 
 ## The mental model
 
@@ -18,7 +18,7 @@ Everything you do to make an entity respond to something — `ctx.spawn(..., { w
 external event  ─►  wake entry (persisted)  ─►  handler invocation  ─►  WakeEvent passed to handler
 ```
 
-1. **External event.** A message arrives, a child transitions, a watched collection changes, a cron fires.
+1. **External event.** A message arrives, a child transitions, a watched collection changes, a cron fires, or a subscribed event source receives matching data.
 2. **Wake entry is persisted** to the entity's stream. This is the durability guarantee — wakes survive process restarts, network blips, and crashes. A wake that was written will eventually be delivered to a handler.
 3. **Handler is invoked.** The runtime picks up the wake, loads the entity's state, and calls your handler with a `WakeEvent` describing what triggered this invocation.
 4. **Handler runs.** You read `ctx.events`, inspect `wake`, configure the agent, emit new events. When the handler returns (or calls `ctx.sleep()`), the entity goes idle until the next wake.
@@ -27,7 +27,7 @@ This means handlers are re-entrant: the same handler function is called fresh on
 
 ## What produces a wake
 
-There are five things that can wake an entity:
+There are six things that can wake an entity:
 
 ### 1. An incoming message
 
@@ -84,6 +84,12 @@ await ctx.observe(db("board-1", schema), {
 ### 5. A schedule
 
 Runtime hosts can expose schedule-management tools through `ctx.electricTools`. The current schedule tool set is `list_schedules`, `upsert_cron_schedule`, `upsert_future_send`, and `delete_schedule`. Schedule entries live on the entity's manifest, so they survive restarts and can be updated or cancelled idempotently.
+
+### 6. An event source
+
+Runtime hosts can expose event-source tools through `ctx.electricTools`. An entity can subscribe to external webhook-backed feeds with `subscribe_event_source`; matching future events wake the entity with hydrated event data.
+
+See [Event sources](./event-sources).
 
 ## Reading a WakeEvent
 
@@ -145,4 +151,6 @@ When the handler finishes (or calls `ctx.sleep()`), the entity returns to idle. 
 - [WakeEvent](../reference/wake-event) — full type reference and wake-type catalog.
 - [Spawning & coordinating](./spawning-and-coordinating) — using `wake` with `spawn` and `observe`.
 - [Shared state](./shared-state) — using `wake` with `observe(db(...))`.
+- [Event sources](./event-sources) — subscribing entities to external event feeds.
+- [Signals](./signals) — lifecycle controls that can interrupt or notify active entities.
 - [Writing handlers](./writing-handlers) — `HandlerContext` and `firstWake` patterns.

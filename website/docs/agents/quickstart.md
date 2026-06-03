@@ -121,7 +121,7 @@ registry.define("assistant", {
   async handler(ctx) {
     ctx.useAgent({
       systemPrompt: "You are a helpful assistant.",
-      model: "claude-sonnet-4-5-20250929",
+      model: "claude-sonnet-4-6",
       tools: [...ctx.electricTools],
     })
     await ctx.agent.run()
@@ -202,4 +202,4 @@ See the [CLI reference](./reference/cli#start) for the full set of commands.
 - [Defining entities](./usage/defining-entities) — entity types, schemas, and configuration.
 - [Writing handlers](./usage/writing-handlers) — handler lifecycle and the `ctx` API.
 - [Configuring the agent](./usage/configuring-the-agent) — `useAgent`, models, tools, and streaming.
-- [Built-in agents](./entities/agents/horton) — Horton, Worker, and Coder, the agents that ship with the runtime.
+- [Built-in agents](./entities/agents/horton) — Horton and Worker, the agents that ship with the runtime.

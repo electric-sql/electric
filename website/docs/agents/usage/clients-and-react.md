@@ -17,7 +17,6 @@ Use the client APIs when you need to observe agents from application code rather
 
 ```ts
 import {
-  codingSession,
   createAgentsClient,
   entity,
   entities,
@@ -43,16 +42,26 @@ console.log(membersDb.collections.members.toArray)
 interface AgentsClientConfig {
   baseUrl: string
   fetch?: typeof globalThis.fetch
+  principalKey?: string
 }
 
 interface AgentsClient {
   observe(
     source: ObservationSource
   ): Promise<EntityStreamDB | ObservationStreamDB>
+  signal(options: {
+    entityUrl: string
+    signal: EntitySignal
+    reason?: string
+    payload?: unknown
+  }): Promise<{ txid: number }>
+  kill(entityUrl: string, reason?: string): Promise<{ txid: number }>
 }
 ```
 
 `observe(entity(url))` returns an `EntityStreamDB`. `observe(entities(...))` and `observe(db(...))` return an `ObservationStreamDB`.
+
+Use `principalKey` when observing or signalling against a server that enforces principal-scoped access.
 
 :::: warning
 `client.observe(cron(...))` is not currently supported. Use cron sources from handler wake subscriptions, or schedule tools exposed through `ctx.electricTools`.

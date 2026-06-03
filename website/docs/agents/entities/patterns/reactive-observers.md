@@ -50,7 +50,7 @@ export function registerMonitor(registry: EntityRegistry) {
 
       ctx.useAgent({
         systemPrompt: MONITOR_SYSTEM_PROMPT,
-        model: `claude-sonnet-4-5-20250929`,
+        model: `claude-sonnet-4-6`,
         tools: [...ctx.electricTools, observeTool],
       })
       await ctx.agent.run()
