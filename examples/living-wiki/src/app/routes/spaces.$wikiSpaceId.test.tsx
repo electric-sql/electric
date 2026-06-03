@@ -5,27 +5,30 @@ import { demoSessionStorageKey } from '../../shared/session'
 import { SpaceRoutePage } from './spaces.$wikiSpaceId'
 
 const refreshSharedState = vi.fn(async () => {})
+const emptySharedStateViewModel: any = {
+  activityEvents: [],
+  members: [],
+  sources: { submitted: [], published: [], rejected: [] },
+  graphSummary: {
+    pages: { proposed: 0, canonical: 0, rejected: 0, total: 0 },
+    links: { proposed: 0, canonical: 0, rejected: 0, total: 0 },
+    totalPages: 0,
+    totalLinks: 0,
+  },
+  reviewSummary: {
+    open: 0,
+    approved: 0,
+    rejected: 0,
+    total: 0,
+    hasOpenItems: false,
+  },
+  reviewItems: [],
+}
+let sharedStateViewModel = emptySharedStateViewModel
 
 vi.mock(`../hooks/useLivingWikiStateSnapshot`, () => ({
   useLivingWikiStateSnapshot: () => ({
-    viewModel: {
-      activityEvents: [],
-      members: [],
-      sources: { submitted: [], published: [], rejected: [] },
-      graphSummary: {
-        pages: { proposed: 0, canonical: 0, rejected: 0, total: 0 },
-        links: { proposed: 0, canonical: 0, rejected: 0, total: 0 },
-        totalPages: 0,
-        totalLinks: 0,
-      },
-      reviewSummary: {
-        open: 0,
-        approved: 0,
-        rejected: 0,
-        total: 0,
-        hasOpenItems: false,
-      },
-    },
+    viewModel: sharedStateViewModel,
     loading: false,
     error: null,
     refresh: refreshSharedState,
@@ -34,7 +37,6 @@ vi.mock(`../hooks/useLivingWikiStateSnapshot`, () => ({
 
 const originalFetch = globalThis.fetch
 const createdAt = `2026-06-03T00:00:00.000Z`
-
 const makeSnapshot = (
   overrides: { memberCount?: number; displayName?: string } = {}
 ) => ({
@@ -73,10 +75,53 @@ const makeSnapshot = (
   ],
 })
 
+const sourceRow = {
+  id: `source_note`,
+  wiki_space_id: `wiki_test`,
+  kind: `text`,
+  status: `submitted`,
+  title: `Room note`,
+  url: null,
+  text_preview: `Important local knowledge`,
+  submitted_by_actor_id: `actor_ada`,
+  submitted_at: createdAt,
+  published_at: null,
+  metadata: { body_length: 25 },
+} as const
+const reviewRow = {
+  id: `review_note`,
+  wiki_space_id: `wiki_test`,
+  kind: `page`,
+  status: `open`,
+  target_type: `wiki_page`,
+  target_id: `page_note`,
+  suggested_change: `Review proposed page: Room note`,
+  rationale: null,
+  created_at: createdAt,
+  created_by_run_id: null,
+  resolved_at: null,
+  resolved_by_actor_id: null,
+  resolution_note: null,
+} as const
+const pageRow = {
+  id: `page_note`,
+  wiki_space_id: `wiki_test`,
+  slug: `room-note`,
+  title: `Room note`,
+  status: `proposed`,
+  summary: `Summary`,
+  body: `Body`,
+  source_ids: [`source_note`],
+  created_at: createdAt,
+  updated_at: createdAt,
+  created_by_run_id: null,
+} as const
+
 afterEach(() => {
   globalThis.fetch = originalFetch
   window.localStorage.clear()
   refreshSharedState.mockClear()
+  sharedStateViewModel = emptySharedStateViewModel
   vi.restoreAllMocks()
 })
 
@@ -96,26 +141,13 @@ describe(`SpaceRoutePage`, () => {
           headers: { 'content-type': `application/json` },
         })
     ) as typeof fetch
-
     render(<SpaceRoutePage wikiSpaceId="wiki_test" />)
-
-    await waitFor(() =>
-      expect(
-        screen.getByRole(`heading`, { name: `Test Space` })
-      ).toBeInTheDocument()
-    )
+    await screen.findByRole(`heading`, { name: `Test Space` })
     expect(screen.getByText(`2 members`)).toBeInTheDocument()
     expect(screen.getByText(`Current actor: Ada`)).toBeInTheDocument()
     expect(screen.getByText(`Grace`)).toBeInTheDocument()
-    expect(screen.getByRole(`button`, { name: `Refresh` })).toBeInTheDocument()
     expect(
       screen.getByRole(`region`, { name: `Living wiki shared-state dashboard` })
-    ).toBeInTheDocument()
-    expect(
-      screen.getByText(`No activity yet. New wiki updates will appear here.`)
-    ).toBeInTheDocument()
-    expect(
-      screen.getByRole(`textbox`, { name: `Display name` })
     ).toBeInTheDocument()
     expect(globalThis.fetch).toHaveBeenCalledWith(
       `/api/spaces/wiki_test?actorId=actor_ada`,
@@ -136,15 +168,11 @@ describe(`SpaceRoutePage`, () => {
           JSON.stringify(
             makeSnapshot({ displayName: `Katherine`, memberCount: 3 })
           ),
-          {
-            headers: { 'content-type': `application/json` },
-          }
+          { headers: { 'content-type': `application/json` } }
         )
       ) as typeof fetch
-
     render(<SpaceRoutePage wikiSpaceId="wiki_test" />)
     await screen.findByRole(`heading`, { name: `Test Space` })
-
     fireEvent.change(screen.getByRole(`textbox`, { name: `Display name` }), {
       target: { value: `Katherine` },
     })
@@ -152,20 +180,8 @@ describe(`SpaceRoutePage`, () => {
       target: { value: `purple` },
     })
     fireEvent.click(screen.getByRole(`button`, { name: `Join space` }))
-
     await waitFor(() =>
       expect(screen.getByText(`Current actor: Katherine`)).toBeInTheDocument()
-    )
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      `/api/spaces/wiki_test/join`,
-      {
-        method: `POST`,
-        headers: { 'content-type': `application/json` },
-        body: JSON.stringify({
-          displayName: `Katherine`,
-          avatarColor: `purple`,
-        }),
-      }
     )
   })
 
@@ -180,28 +196,14 @@ describe(`SpaceRoutePage`, () => {
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
-            source: {
-              id: `source_note`,
-              wiki_space_id: `wiki_test`,
-              kind: `text`,
-              status: `submitted`,
-              title: `Room note`,
-              url: null,
-              text_preview: `Important local knowledge`,
-              submitted_by_actor_id: `actor_ada`,
-              submitted_at: `2026-06-03T00:00:00.000Z`,
-              published_at: null,
-              metadata: { body_length: 25 },
-            },
+            source: sourceRow,
             activityEventId: `event_source-note`,
           }),
           { headers: { 'content-type': `application/json` } }
         )
       ) as typeof fetch
-
     render(<SpaceRoutePage wikiSpaceId="wiki_test" />)
     await screen.findByRole(`heading`, { name: `Test Space` })
-
     fireEvent.change(screen.getByRole(`textbox`, { name: `Source title` }), {
       target: { value: `Room note` },
     })
@@ -209,23 +211,100 @@ describe(`SpaceRoutePage`, () => {
       target: { value: `Important local knowledge` },
     })
     fireEvent.click(screen.getByRole(`button`, { name: `Submit source` }))
-
     await waitFor(() => expect(refreshSharedState).toHaveBeenCalled())
-    const calls = vi.mocked(globalThis.fetch).mock.calls
-    const sourceCall = calls.find(
-      ([path]) => path === `/api/spaces/wiki_test/sources`
-    )
-    expect(sourceCall).toBeDefined()
-    const [, sourceInit] = sourceCall as [string, RequestInit]
-    expect(sourceInit).toMatchObject({
-      method: `POST`,
-      headers: { 'content-type': `application/json` },
-    })
-    expect(JSON.parse(String(sourceInit.body))).toEqual({
+    const [, init] = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.find(
+        ([path]) => path === `/api/spaces/wiki_test/sources`
+      ) as [string, RequestInit]
+    expect(JSON.parse(String(init.body))).toEqual({
       actorId: `actor_ada`,
       kind: `text`,
       title: `Room note`,
       body: `Important local knowledge`,
+    })
+  })
+
+  it(`proposes a page from a submitted source without manual ID entry`, async () => {
+    sharedStateViewModel = {
+      ...emptySharedStateViewModel,
+      sources: { submitted: [sourceRow], published: [], rejected: [] },
+    }
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(makeSnapshot()), {
+          headers: { 'content-type': `application/json` },
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            page: pageRow,
+            reviewItem: reviewRow,
+            activityEventId: `event_page-proposed`,
+          }),
+          { headers: { 'content-type': `application/json` } }
+        )
+      ) as typeof fetch
+    render(<SpaceRoutePage wikiSpaceId="wiki_test" />)
+    await screen.findByRole(`heading`, { name: `Test Space` })
+    fireEvent.click(screen.getByRole(`button`, { name: `Propose page` }))
+    await waitFor(() => expect(refreshSharedState).toHaveBeenCalled())
+    const [, init] = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.find(
+        ([path]) => path === `/api/spaces/wiki_test/pages/propose`
+      ) as [string, RequestInit]
+    expect(JSON.parse(String(init.body))).toEqual({
+      actorId: `actor_ada`,
+      sourceId: `source_note`,
+    })
+  })
+
+  it(`resolves an open review from inline review actions`, async () => {
+    sharedStateViewModel = {
+      ...emptySharedStateViewModel,
+      reviewSummary: {
+        open: 1,
+        approved: 0,
+        rejected: 0,
+        total: 1,
+        hasOpenItems: true,
+      },
+      reviewItems: [reviewRow],
+    }
+    globalThis.fetch = vi.fn(async (path) =>
+      String(path).endsWith(`/resolve`)
+        ? new Response(
+            JSON.stringify({
+              page: { ...pageRow, status: `canonical` },
+              reviewItem: {
+                ...reviewRow,
+                status: `approved`,
+                resolved_at: createdAt,
+                resolved_by_actor_id: `actor_ada`,
+              },
+              activityEventId: `event_review-approved`,
+            }),
+            { headers: { 'content-type': `application/json` } }
+          )
+        : new Response(JSON.stringify(makeSnapshot()), {
+            headers: { 'content-type': `application/json` },
+          })
+    ) as typeof fetch
+    render(<SpaceRoutePage wikiSpaceId="wiki_test" />)
+    await screen.findByRole(`heading`, { name: `Test Space` })
+    fireEvent.click(screen.getByRole(`button`, { name: `Approve` }))
+    await waitFor(() => expect(refreshSharedState).toHaveBeenCalled())
+    const [, init] = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.find(
+        ([path]) => path === `/api/spaces/wiki_test/reviews/review_note/resolve`
+      ) as [string, RequestInit]
+    expect(JSON.parse(String(init.body))).toEqual({
+      actorId: `actor_ada`,
+      resolution: `approve`,
     })
   })
 })

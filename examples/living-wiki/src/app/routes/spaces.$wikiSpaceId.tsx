@@ -49,7 +49,6 @@ export function SpaceRoutePage({ wikiSpaceId }: { wikiSpaceId: string }) {
   const [sourceUrl, setSourceUrl] = useState(``)
   const [sourceError, setSourceError] = useState<Error | null>(null)
   const [submittingSource, setSubmittingSource] = useState(false)
-  const [proposalSourceId, setProposalSourceId] = useState(``)
   const [reviewNote, setReviewNote] = useState(``)
   const [reviewFlowError, setReviewFlowError] = useState<Error | null>(null)
   const [reviewFlowBusy, setReviewFlowBusy] = useState(false)
@@ -74,8 +73,7 @@ export function SpaceRoutePage({ wikiSpaceId }: { wikiSpaceId: string }) {
     await refreshSharedState()
   }
 
-  async function onProposePage(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+  async function onProposePage(sourceId: string) {
     if (!displayedSpace) return
     setReviewFlowBusy(true)
     setReviewFlowError(null)
@@ -83,9 +81,8 @@ export function SpaceRoutePage({ wikiSpaceId }: { wikiSpaceId: string }) {
       await createLivingWikiApiClient().proposePageFromSource({
         wikiSpaceId,
         actorId: displayedSpace.currentActor.id,
-        sourceId: proposalSourceId,
+        sourceId,
       })
-      setProposalSourceId(``)
       await refreshSharedState()
     } catch (nextError) {
       setReviewFlowError(
@@ -192,7 +189,15 @@ export function SpaceRoutePage({ wikiSpaceId }: { wikiSpaceId: string }) {
       {sharedStateError ? (
         <p role="alert">Shared state: {sharedStateError.message}</p>
       ) : null}
-      <WikiStateDashboard viewModel={sharedStateViewModel} />
+      <WikiStateDashboard
+        viewModel={sharedStateViewModel}
+        onProposePage={(sourceId) => void onProposePage(sourceId)}
+        onResolveReview={(reviewItemId, resolution) =>
+          void onResolveReview(reviewItemId, resolution)
+        }
+        actionsDisabled={reviewFlowBusy || displayedSpace === null}
+      />
+      {reviewFlowError ? <p role="alert">{reviewFlowError.message}</p> : null}
 
       <section style={{ marginTop: 24 }}>
         <h2>Manual page proposal and review</h2>
@@ -200,26 +205,11 @@ export function SpaceRoutePage({ wikiSpaceId }: { wikiSpaceId: string }) {
           Proposals are deterministic templates from submitted source metadata
           only. URL sources are not fetched and no AI generation occurs.
         </p>
-        <form onSubmit={(event) => void onProposePage(event)}>
-          <label>
-            Source ID
-            <input
-              aria-label="Source ID"
-              required
-              value={proposalSourceId}
-              onChange={(event) =>
-                setProposalSourceId(event.currentTarget.value)
-              }
-            />
-          </label>
-          <button
-            type="submit"
-            disabled={reviewFlowBusy || displayedSpace === null}
-            style={{ marginLeft: 12 }}
-          >
-            Propose page
-          </button>
-        </form>
+        <p>
+          Use the <strong>Propose page</strong> buttons on submitted sources and
+          the inline review buttons in the dashboard above. No ID copying is
+          required.
+        </p>
         <label style={{ display: `block`, marginTop: 12 }}>
           Review note
           <input
@@ -228,32 +218,6 @@ export function SpaceRoutePage({ wikiSpaceId }: { wikiSpaceId: string }) {
             onChange={(event) => setReviewNote(event.currentTarget.value)}
           />
         </label>
-        <ul>
-          {(sharedStateViewModel.reviewItems ?? [])
-            .filter((item) => item.status === `open`)
-            .map((item) => (
-              <li key={item.id}>
-                {item.id}: {item.suggested_change}
-                {` `}
-                <button
-                  type="button"
-                  disabled={reviewFlowBusy || displayedSpace === null}
-                  onClick={() => void onResolveReview(item.id, `approve`)}
-                >
-                  Approve
-                </button>
-                {` `}
-                <button
-                  type="button"
-                  disabled={reviewFlowBusy || displayedSpace === null}
-                  onClick={() => void onResolveReview(item.id, `reject`)}
-                >
-                  Reject
-                </button>
-              </li>
-            ))}
-        </ul>
-        {reviewFlowError ? <p role="alert">{reviewFlowError.message}</p> : null}
       </section>
 
       <form

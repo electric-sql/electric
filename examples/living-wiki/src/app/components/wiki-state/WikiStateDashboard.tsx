@@ -25,8 +25,17 @@ export type WikiStateDashboardViewModel = {
 
 export function WikiStateDashboard({
   viewModel,
+  onProposePage,
+  onResolveReview,
+  actionsDisabled = false,
 }: {
   viewModel: WikiStateDashboardViewModel
+  onProposePage?: (sourceId: string) => void
+  onResolveReview?: (
+    reviewItemId: string,
+    resolution: `approve` | `reject`
+  ) => void
+  actionsDisabled?: boolean
 }) {
   return (
     <section
@@ -35,9 +44,18 @@ export function WikiStateDashboard({
     >
       <ActivityFeed events={viewModel.activityEvents} />
       <MembersPanel members={viewModel.members} />
-      <SourcesPanel sources={viewModel.sources} />
+      <SourcesPanel
+        sources={viewModel.sources}
+        onProposePage={onProposePage}
+        actionsDisabled={actionsDisabled}
+      />
       <WikiGraphPanel summary={viewModel.graphSummary} />
-      <ReviewQueuePanel summary={viewModel.reviewSummary} />
+      <ReviewQueuePanel
+        summary={viewModel.reviewSummary}
+        reviewItems={viewModel.reviewItems}
+        onResolveReview={onResolveReview}
+        actionsDisabled={actionsDisabled}
+      />
     </section>
   )
 }

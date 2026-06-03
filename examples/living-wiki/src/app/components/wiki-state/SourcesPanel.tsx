@@ -8,8 +8,12 @@ const labels = {
 
 export function SourcesPanel({
   sources,
+  onProposePage,
+  actionsDisabled = false,
 }: {
   sources: SourcesByStatusViewModel
+  onProposePage?: (sourceId: string) => void
+  actionsDisabled?: boolean
 }) {
   const total =
     sources.submitted.length +
@@ -32,7 +36,19 @@ export function SourcesPanel({
             </h3>
             <ul>
               {sources[status].map((source) => (
-                <li key={source.id}>{source.title}</li>
+                <li key={source.id}>
+                  <strong>{source.title}</strong> <span>({source.kind})</span>
+                  {status === `submitted` && onProposePage ? (
+                    <button
+                      type="button"
+                      disabled={actionsDisabled}
+                      onClick={() => onProposePage(source.id)}
+                      style={{ marginLeft: 12 }}
+                    >
+                      Propose page
+                    </button>
+                  ) : null}
+                </li>
               ))}
             </ul>
           </div>
