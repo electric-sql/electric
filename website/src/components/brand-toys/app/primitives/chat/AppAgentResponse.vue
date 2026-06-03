@@ -2,8 +2,14 @@
 /* AppAgentResponse — Horton response with streaming typewriter.
    ─────────────────────────────────────────────────────────────────
    The animated centrepiece of the desktop hero. Renders a fixed fixture
-   string (paragraph + fenced code block + paragraph + tool-call pill)
-   character-by-character at `cps` chars/sec.
+   string (paragraph + fenced code block + paragraph + tool-call pill).
+
+   Streaming is word-by-word — the global progress cursor advances at
+   `cps` chars/sec smoothly, but the rendered text snaps DOWN to the
+   last whitespace boundary the cursor has crossed. So instead of
+   revealing one character per frame (which reads as a typewriter,
+   not an LLM), whole words appear in chunks every ~80-100 ms — closer
+   to how real LLM clients render token streams.
 
    State machine:
 
@@ -12,8 +18,8 @@
      thinking   → small "Thinking…" line with a pulsing dot trio
                   (we render this when `state === 'thinking'`; not
                   driven by progress)
-     streaming  → the body materialises from left→right at `cps`
-                  chars/sec; caret follows the cursor
+     streaming  → the body materialises word-by-word at `cps`
+                  chars/sec; caret follows the last revealed word
      completed  → full body, no caret
 
    Loop behaviour:
@@ -222,10 +228,33 @@ function visibleSlice(segment: { text: string; start: number; end: number }) {
   const localScaled = Math.floor(
     (localOriginal / (segment.end - segment.start)) * segment.text.length
   )
-  return segment.text.slice(
-    0,
-    Math.max(0, Math.min(segment.text.length, localScaled))
-  )
+  const charEnd = Math.max(0, Math.min(segment.text.length, localScaled))
+  return segment.text.slice(0, snapToWordEnd(segment.text, charEnd))
+}
+
+/* ───────── Word-boundary snap ─────────
+   Round `end` DOWN to the largest position ≤ `end` that sits at a
+   whitespace boundary (so we never render a partial word). Returns 0
+   while we're still inside the very first word — the caret marks the
+   "next word inbound" beat without revealing characters of the word
+   itself. This gives the chunked-token feel readers know from
+   ChatGPT / Claude streaming UIs.
+
+   Whitespace = ASCII space, tab, CR, LF, NBSP. Punctuation is treated
+   as part of the surrounding word — we deliberately don't break on
+   `(){}[].,;:`'"` etc. because tokens like `'@electric/auth'` or
+   `createSession(jwt)` should reveal as a single chunk, not split
+   mid-identifier. */
+function snapToWordEnd(text: string, end: number): number {
+  if (end >= text.length) return text.length
+  for (let i = end - 1; i >= 0; i--) {
+    const c = text.charCodeAt(i)
+    /* space, tab, LF, CR, NBSP */
+    if (c === 32 || c === 9 || c === 10 || c === 13 || c === 160) {
+      return i + 1
+    }
+  }
+  return 0
 }
 
 const visiblePre = computed(() => visibleSlice(segments.value.pre))
