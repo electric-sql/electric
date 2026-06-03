@@ -12,8 +12,13 @@ next:
   link: '/docs/agents/usage/overview'
 ---
 
+<script setup>
+  import YoutubeEmbed from '../../src/components/YoutubeEmbed.vue'
+</script>
+
 <style scoped>
-  figure {
+  figure,
+  .embed-container {
     margin: 32px 0;
     border-radius: 2px;
     overflow: hidden;
@@ -23,6 +28,10 @@ next:
 # Walkthrough
 
 This guide walks through the steps to go from a new, or existing, web or mobile application to a dynamic <span class="no-wrap">multi-agent</span> system with [Electric Agents](/agents/).
+
+<div class="embed-container">
+  <YoutubeEmbed video-id="..." title="Serverless agents -- agents in functions, not sandboxes" />
+</div>
 
 ## Getting started
 
@@ -49,7 +58,7 @@ pnpm create hono@latest walkthrough \
     --install
 ```
 
-This command uses the nodejs template. Hono supports [various runtimes](https://hono.dev/docs/getting-started/basic), including edge functions to deploy your [agents as serverless functions](/blog/2026/05/26/serverless-agents).
+This command uses the nodejs template. Hono supports [various runtimes](https://hono.dev/docs/getting-started/basic), including edge functions to deploy your [agents as serverless functions](/blog/2026/06/04/serverless-agents).
 
 Change into the generated folder and run the dev server:
 
@@ -312,7 +321,7 @@ All of the actual messaging and communication to and between agents happens over
 
 The notification system wakes the agents and tells them that there's new data on the streams to consume. This allows agents to sleep (and thus scale to zero) when not being used.
 
-See the [Durable Streams](/blog/2026/04/08/data-primitive-agent-loop) and [Serverless Agents](/blog/2026/05/26/serverless-agents) blog posts for more information.
+See the [Durable Streams](/blog/2026/04/08/data-primitive-agent-loop) and [Serverless Agents](/blog/2026/06/04/serverless-agents) blog posts for more information.
 
 :::
 

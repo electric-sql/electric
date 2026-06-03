@@ -17,7 +17,7 @@ import EntityOverviewDiagram from '../../src/components/agents-home/EntityOvervi
 
 Electric Agents is **the durable runtime for long-lived agents**.
 
-It's a runtime and communication fabric for spawning and scaling collaborative agents <span class="no-wrap-sm">[on serverless compute](/blog/2026/05/26/serverless-agents)</span> using your existing web systems.
+It's a runtime and communication fabric for spawning and scaling collaborative agents <span class="no-wrap-sm">[on serverless compute](/blog/2026/06/04/serverless-agents)</span> using your existing web systems.
 
 > [!Warning] ✨&nbsp; Start using Electric Agents now
 > See the [Quickstart](/docs/agents/quickstart) to fire the system up and try the built-in agents.
