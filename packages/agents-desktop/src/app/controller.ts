@@ -388,6 +388,7 @@ export function createDesktopMainController(ctx: DesktopAppContext) {
     popupApplicationMenuSection,
     popupAppIconMenu,
     lastMcpSnapshots,
+    windows,
     getCloudAuth: ctx.getCloudAuth,
     getCloudAgentServers: ctx.getCloudAgentServers,
     getLaunchAtLoginStatus,

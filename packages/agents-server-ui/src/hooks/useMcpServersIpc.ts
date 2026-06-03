@@ -1,6 +1,17 @@
 import { useEffect, useState } from 'react'
 import type { McpServerRow } from './mcpServerTypes'
 
+/**
+ * Shape of the config object accepted by `upsert`. Mirrors
+ * `McpServerConfig` from `@electric-ax/agents-mcp`; defined as `unknown`
+ * here to keep the hook surface free of a Node-only dep.
+ */
+export type McpServerConfigInput = {
+  name: string
+  transport: `http` | `stdio`
+  [key: string]: unknown
+}
+
 export interface UseMcpServersIpcResult {
   servers: ReadonlyArray<McpServerRow>
   /** True until the first snapshot lands. */
@@ -14,6 +25,10 @@ export interface UseMcpServersIpcResult {
   reconnect(name: string): Promise<void>
   disable(name: string): Promise<void>
   enable(name: string): Promise<void>
+  /** Add (new name) or edit (existing name) a settings.json MCP entry. */
+  upsert(cfg: McpServerConfigInput): Promise<void>
+  /** Remove a settings.json MCP entry by name. */
+  remove(name: string): Promise<void>
 }
 
 const noopAction = async () => {}
@@ -63,6 +78,8 @@ export function useMcpServersIpc(): UseMcpServersIpcResult {
       reconnect: noopAction,
       disable: noopAction,
       enable: noopAction,
+      upsert: noopAction,
+      remove: noopAction,
     }
   }
 
@@ -73,5 +90,7 @@ export function useMcpServersIpc(): UseMcpServersIpcResult {
     reconnect: mcp.reconnect,
     disable: mcp.disable,
     enable: mcp.enable,
+    upsert: (cfg) => mcp.upsert(cfg),
+    remove: (name) => mcp.remove(name),
   }
 }

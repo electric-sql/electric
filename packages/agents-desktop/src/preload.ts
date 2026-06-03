@@ -18,6 +18,7 @@ import type {
   DiscoveredServer,
   ElectricCliStatus,
   LaunchAtLoginStatus,
+  McpServerConfig,
   OnboardingState,
   PreventAppSuspensionPreference,
   ServerConfig,
@@ -276,6 +277,10 @@ const api = {
       ipcRenderer.invoke(`desktop:mcp-disable`, name, serverId),
     enable: (name: string, serverId?: string): Promise<void> =>
       ipcRenderer.invoke(`desktop:mcp-enable`, name, serverId),
+    upsert: (cfg: McpServerConfig): Promise<void> =>
+      ipcRenderer.invoke(`desktop:mcp-upsert`, cfg),
+    remove: (name: string): Promise<void> =>
+      ipcRenderer.invoke(`desktop:mcp-remove`, name),
   },
   // ── Electric Cloud auth surface ────────────────────────────────
   // Sign-in opens a child BrowserWindow that intercepts the
