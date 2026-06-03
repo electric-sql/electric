@@ -203,31 +203,37 @@ This section does the heavy positioning lift. It is also where the **software-fa
 - **Section eyebrow:** _none_. Earlier drafts carried a `WHAT YOU CAN DO` section eyebrow, but it just restated the title `Three ways to use it.` and added chrome we don't need. See the "Copy review pass" note at the end of this section.
 - **Card eyebrows:** _none on any of the three cards_. Earlier drafts carried `Code locally` / `Attach remotely` / `Build with the SDK` per-card eyebrows; they were near-duplicates of the sentence-form titles. The card titles now do the categorisation work on their own.
 
+**Tightening pass (locked).** An earlier version of the cards had ~40-50-word paragraphs and 3 long-form bullets per card; the section read as a wall of text relative to the rest of the page. The current locked copy halves each body (≈18-27 words) and uses 4 short one-line bullets per card. The model enumeration was dropped from card 1 (it's already in §5 pillar 1); the device-handoff sentence was dropped from card 2 (it's the topic of §4); the 7-feature enumeration in card 3's body was trimmed to 3 features (§6 expands on the rest).
+
 - **Card 1 — "Code with Horton, locally."**
-  - Body: Horton ships in the desktop. Pick a model (Anthropic, OpenAI, DeepSeek, Moonshot, Codex). Pick a working directory. Chat to a coding agent that can read, write, edit, run bash, search the web, fetch URLs, and spawn parallel workers.
-  - **You can:** (locked, 3 bullets — the 4-bullet version was too tall in the card grid)
-    - Refactor a folder of TypeScript files while Horton runs parallel workers per module.
-    - Bisect a regression by spawning a worker to reproduce, then another to fix.
-    - Use `/quickstart` to learn Electric Agents by building a multi-agent tutorial app.
+  - Body: Horton ships in the desktop. Pick a model, point at a directory, chat to a coding agent that edits, runs bash, and spawns parallel workers.
+  - **You can:** (locked, 4 short bullets)
+    - Refactor a folder, one worker per file
+    - Bisect a regression — one worker repros, one fixes
+    - Edit code, run bash, search the web in one chat
+    - Learn Electric Agents with `/quickstart`
   - **`/quickstart` framing.** `packages/agents/skills/quickstart.md` describes itself as `Guided quickstart — build a full Electric Agents app from entity to frontend` — it walks the user through building a manager/worker app on the SDK. The earlier "scaffold a fresh project with `/init`, then iterate with `/quickstart`" bullet mis-framed this as a generic dev workflow; the corrected bullet ties Horton's slash skills to Electric Agents learning, which is what they actually do. `/init` was dropped from the bullet to keep it to one verb — it is still discoverable in-app.
   - Backed by: `packages/agents-desktop/src/runtime/lifecycle.ts` (BuiltinAgentsServer), `packages/agents/src/agents/horton.ts`, `WorkingDirectoryPicker`, `ApiKeysForm`, `CredentialsPage`.
 
 - **Card 2 — "Attach to remote sessions."**
-  - Body: Connect to any agents-server — your own, your team's, or Electric Cloud. Sessions spawned by CI, webhooks, GitHub issues, cron or your software factory appear live in the sidebar. Pick one up on the desktop, follow it on your phone, stop or steer it from either.
-  - **You can:** (locked, 3 bullets)
-    - Triage a GitHub-issue-spawned Horton session on your phone, finish it from your laptop.
-    - Watch a CI agent open a PR, push a steering message before it merges.
-    - Pause a long-running cron-triggered pipeline and resume from where it left off.
-  - **Teammate hand-off bullet removed.** An earlier 4-bullet draft included `Hand a session off to a teammate by sharing the entity URL — the multi-user view sees the same stream.` That claim is the explicit topic of §4 pillar 2; restating it here read as redundant once §4 was in place. Multi-user is still on the page.
+  - Body: Connect to any agents-server — your own or Electric Cloud. Sessions spawned by CI, webhooks, GitHub issues, cron or your software factory show up live.
+  - **You can:** (locked, 4 short bullets)
+    - Triage a GitHub-issue session on the phone, finish on the desk
+    - Steer a CI agent before its PR merges
+    - Pause and resume a cron-triggered pipeline
+    - Hand a session off between devices mid-run
+  - **Multi-user is the topic of §4.** An earlier draft of this card had a `Hand a session off to a teammate by sharing the entity URL — the multi-user view sees the same stream.` bullet. That claim is the explicit topic of §4 pillar 2; the trimmer locked here keeps mid-run device handoff (single user, multi-device) and leaves the teammate-handoff claim to §4 where it has room to breathe.
   - Backed by: `ServersPage` (multi-server config), `cloud-auth.ts` + `cloud-agent-servers.ts`, `local-discovery.ts`, mobile `ServerSetupScreen` / `SessionListScreen` / `SessionMenu` (signal stop/steer).
 
 - **Card 3 — "Build your own agents."**
-  - Body: It's also the dev tool for the entities _you_ write with the SDK (`@electric-ax/agents-runtime`). Live state explorer, entity timeline, fork-from-here, manifest drawer, MCP servers, skills, and a tile workspace for following parent + workers in parallel.
+  - Body: It's also the dev tool for the entities _you_ write with the SDK (`@electric-ax/agents-runtime`) — state explorer, timeline, fork-from-here.
   - Title note: an earlier draft of this plan repeated the eyebrow text as the title (`"Build with the SDK."`), which read as redundant once both lines sat in the rendered card. The locked title mirrors cards 1 and 2 — verb + object — and connects to the body's "the entities _you_ write" emphasis. The eyebrow has since been removed entirely (see top of §3).
-  - **You can:** (locked, 3 bullets)
-    - Drop in on a stuck entity and watch its inbox / runs / manifest update in real time.
-    - Fork a session at any past point to A/B test a prompt or tool change.
-    - Step through a failed worker's tool calls without redeploying the host app.
+  - Feature-list trim: the original body listed 7 features (state explorer, entity timeline, fork-from-here, manifest drawer, MCP servers, skills, tile workspace). The trim picks 3 as a scannable sample; §6 "Built for builders" carries the full 6-card grid so nothing is lost.
+  - **You can:** (locked, 4 short bullets)
+    - Watch a stuck entity's inbox + runs in real time
+    - Fork any past point to A/B test a change
+    - Step through a failed worker without redeploying
+    - Tile parent + workers side-by-side
   - Backed by: `StateExplorerPanel`, `EntityTimeline`, `EntityContextDrawer`, `Workspace` + `TileContainer`, `McpServersPage`, `useExpandedTreeNodes`.
 
 - **Strip under the cards** (one line, centred, muted):

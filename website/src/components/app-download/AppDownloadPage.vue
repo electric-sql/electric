@@ -225,8 +225,7 @@ const primaryPlatform = computed(
         </h1>
         <p class="ad-hero-text">
           Desktop and mobile clients — one app to code with Horton, attach to
-          remote sessions, and build your own agents on the infra
-          and&nbsp;SDK.
+          remote sessions, and build your own agents on the infra and&nbsp;SDK.
         </p>
 
         <div class="ad-hero-actions">
@@ -367,25 +366,16 @@ const primaryPlatform = computed(
           </span>
           <h3 class="ad-modes-title">Code with Horton, locally.</h3>
           <p class="ad-modes-body">
-            Horton ships in the desktop. Pick a model (Anthropic, OpenAI,
-            DeepSeek, Moonshot, Codex). Pick a working directory. Chat to a
-            coding agent that can read, write, edit, run bash, search the web,
-            fetch URLs, and spawn parallel workers.
+            Horton ships in the desktop. Pick a model, point at a directory,
+            chat to a coding agent that edits, runs bash, and spawns parallel
+            workers.
           </p>
           <p class="ad-modes-list-label mono">You can:</p>
           <ul class="ad-modes-list">
-            <li>
-              Refactor a folder of TypeScript files while Horton runs parallel
-              workers per module.
-            </li>
-            <li>
-              Bisect a regression by spawning a worker to reproduce, then
-              another to fix.
-            </li>
-            <li>
-              Use <code>/quickstart</code> to learn Electric Agents by building
-              a multi-agent tutorial app.
-            </li>
+            <li>Refactor a folder, one worker per file</li>
+            <li>Bisect a regression — one worker repros, one fixes</li>
+            <li>Edit code, run bash, search the web in one chat</li>
+            <li>Learn Electric Agents with <code>/quickstart</code></li>
           </ul>
         </article>
 
@@ -395,25 +385,18 @@ const primaryPlatform = computed(
           </span>
           <h3 class="ad-modes-title">Attach to remote sessions.</h3>
           <p class="ad-modes-body">
-            Connect to any agents-server — your own, your team's, or Electric
-            Cloud. Sessions spawned by CI, webhooks, GitHub issues, cron or your
-            software factory appear live in the sidebar. Pick one up on the
-            desktop, follow it on your phone, stop or steer it from either.
+            Connect to any agents-server — your own or Electric Cloud. Sessions
+            spawned by CI, webhooks, GitHub issues, cron or your software
+            factory show up live.
           </p>
           <p class="ad-modes-list-label mono">You can:</p>
           <ul class="ad-modes-list">
             <li>
-              Triage a GitHub-issue-spawned Horton session on your phone, finish
-              it from your laptop.
+              Triage a GitHub-issue session on the phone, finish on the desk
             </li>
-            <li>
-              Watch a CI agent open a PR, push a steering message before it
-              merges.
-            </li>
-            <li>
-              Pause a long-running cron-triggered pipeline and resume from where
-              it left off.
-            </li>
+            <li>Steer a CI agent before its PR merges</li>
+            <li>Pause and resume a cron-triggered pipeline</li>
+            <li>Hand a session off between devices mid-run</li>
           </ul>
         </article>
 
@@ -424,25 +407,15 @@ const primaryPlatform = computed(
           <h3 class="ad-modes-title">Build your own agents.</h3>
           <p class="ad-modes-body">
             It's also the dev tool for the entities <em>you</em> write with the
-            SDK (<code>@electric-ax/agents-runtime</code>). Live state explorer,
-            entity timeline, fork-from-here, manifest drawer, MCP servers,
-            skills, and a tile workspace for following parent + workers in
-            parallel.
+            SDK (<code>@electric-ax/agents-runtime</code>) — state explorer,
+            timeline, fork-from-here.
           </p>
           <p class="ad-modes-list-label mono">You can:</p>
           <ul class="ad-modes-list">
-            <li>
-              Drop in on a stuck entity and watch its inbox / runs / manifest
-              update in real time.
-            </li>
-            <li>
-              Fork a session at any past point to A/B test a prompt or tool
-              change.
-            </li>
-            <li>
-              Step through a failed worker's tool calls without redeploying the
-              host app.
-            </li>
+            <li>Watch a stuck entity's inbox + runs in real time</li>
+            <li>Fork any past point to A/B test a change</li>
+            <li>Step through a failed worker without redeploying</li>
+            <li>Tile parent + workers side-by-side</li>
           </ul>
         </article>
       </div>
@@ -898,8 +871,8 @@ const primaryPlatform = computed(
 
         <div class="ad-mobile-preview-content">
           <p class="ad-mobile-preview-body">
-            Native iOS and Android clients are in active development. The
-            source lives in
+            Native iOS and Android clients are in active development. The source
+            lives in
             <a
               class="ad-mobile-preview-link"
               :href="agentsMobileRepoUrl"
@@ -907,9 +880,9 @@ const primaryPlatform = computed(
               rel="noreferrer"
               >packages/agents-mobile</a
             >
-            — clone the repo and run the Expo dev build today, or watch the
-            repo to be notified when the public App Store and Google Play
-            listings ship with&nbsp;v1.
+            — clone the repo and run the Expo dev build today, or watch the repo
+            to be notified when the public App Store and Google Play listings
+            ship with&nbsp;v1.
           </p>
           <div class="ad-mobile-preview-actions">
             <VPButton
