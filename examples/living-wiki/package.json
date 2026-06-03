@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",
+    "@durable-streams/state": "^0.2.9",
     "@tanstack/db": "^0.6.6",
     "@tanstack/react-db": "^0.1.78",
     "@tanstack/react-router": "^1.139.7",

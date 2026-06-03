@@ -738,6 +738,9 @@ importers:
       '@base-ui/react':
         specifier: ^1.4.1
         version: 1.4.1(@types/react@19.2.14)(date-fns@4.1.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      '@durable-streams/state':
+        specifier: ^0.2.9
+        version: 0.2.9(typescript@5.9.3)
       '@tanstack/db':
         specifier: ^0.6.6
         version: 0.6.7(typescript@5.9.3)
