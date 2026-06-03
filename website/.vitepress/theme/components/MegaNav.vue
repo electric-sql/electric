@@ -89,6 +89,14 @@ const NAV = [
     },
   },
   '|',
+  // App sits in its own visual group between the infra products
+  // (Agents / Streams / Sync) and the cloud / pricing cluster, with a
+  // divider on each side. It's neither an infra primitive nor cloud
+  // infrastructure — it's the desktop + mobile client surface for the
+  // whole platform, so it gets its own slot in the bar. Plain link
+  // (no dropdown) because the page is self-contained.
+  { id: 'app', label: 'App', link: '/app' },
+  '|',
   {
     id: 'cloud',
     label: 'Cloud',
@@ -173,6 +181,7 @@ const activeId = computed(() => {
   if (p.startsWith('/agents') || p.startsWith('/docs/agents')) return 'agents'
   if (p.startsWith('/streams') || p.startsWith('/docs/streams')) return 'streams'
   if (p.startsWith('/sync') || p.startsWith('/docs/sync')) return 'sync'
+  if (p.startsWith('/app')) return 'app'
   if (p.startsWith('/cloud')) return 'cloud'
   if (p.startsWith('/pricing')) return 'pricing'
   if (p.startsWith('/blog')) return 'blog'
