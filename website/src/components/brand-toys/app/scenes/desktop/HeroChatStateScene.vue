@@ -223,15 +223,23 @@ const showCustomTitlebar = computed(() => resolvedOs.value !== 'macos')
      share via flex-grow on the chat tile and (1 - split) on the state
      tile. We keep both at flex-basis: 0 so the ratios apply directly. */
   background: var(--ds-bg);
-  /* Live `Workspace.module.css` paints a hairline + soft inner shadow
-     on the LEFT edge of the workspace pane (i.e. the divider between
-     sidebar and tiles). `--ds-border-1` retains contrast over both
-     the sidebar's chrome-bg AND the tile-header's --ds-bg, so the
-     line stays visible from the very top of the window down through
-     the content — matching what the live UI paints. */
+  /* Hairline divider between the sidebar (lighter --ds-chrome-bg) and
+     the workspace (darker --ds-bg). `--ds-border-1` is `gray-a3` on
+     dark mode — alpha-on-bg keeps the line visible across both the
+     sidebar's chrome-bg AND the tile-header's --ds-bg, so it reads
+     continuously from the top of the window down through the body.
+
+     NOTE: the live `Workspace.module.css` adds a `-1px 0 2px ...`
+     soft inner shadow on top of this. We DON'T copy it here: the
+     mockup sits on a dark stage where the bg-step (chrome-bg →
+     ds-bg) is already a visible edge, so layering a shadow on top
+     of the bg-step + the explicit hairline produces three close
+     visual edges (light → dark band → light line → dark bg) that
+     read as a doubled border. The live app gets away with the
+     shadow because its stage / page bg sits at a different
+     elevation; in the mockup we need the cleaner single-line
+     reading. */
   border-left: 1px solid var(--ds-border-1);
-  box-shadow: -1px 0 2px
-    color-mix(in oklab, var(--ds-gray-12) 5%, transparent);
 }
 
 .hero-scene-tile {
