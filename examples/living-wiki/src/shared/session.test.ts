@@ -62,6 +62,16 @@ describe(`demo session identity`, () => {
     expect(readDemoSessionIdentity(storage)).toEqual({})
   })
 
+  it(`ignores stored identities with invalid actor ids`, () => {
+    const storage = new MemoryStorage()
+    storage.setItem(
+      `living-wiki.demo-session.v1`,
+      JSON.stringify({ actorId: `undefined`, avatarColor: `blue` })
+    )
+
+    expect(readDemoSessionIdentity(storage)).toEqual({})
+  })
+
   it(`clears the stored identity`, () => {
     const storage = new MemoryStorage()
     writeDemoSessionIdentity(storage, { actorId: `actor_abc123` })

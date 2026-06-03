@@ -1,5 +1,5 @@
 import { renderHook, waitFor } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { LivingWikiApiClient } from '../api/livingWikiApi'
 import {
   snapshotToViewModel,
@@ -29,6 +29,10 @@ const client = (overrides: Partial<LivingWikiApiClient>): LivingWikiApiClient =>
   }) as LivingWikiApiClient
 
 describe(`useLivingWikiStateSnapshot`, () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
   it(`maps snapshot rows to dashboard view models`, () => {
     const viewModel = snapshotToViewModel({
       ...emptyRows,
@@ -90,5 +94,28 @@ describe(`useLivingWikiStateSnapshot`, () => {
       wikiSpaceId: `wiki_demo`,
     })
     expect(result.current.error).toBeNull()
+  })
+
+  it(`does not refetch on rerender when using the default API client`, async () => {
+    const fetch = vi.fn(
+      async () =>
+        new Response(JSON.stringify(emptyRows), {
+          headers: { 'content-type': `application/json` },
+        })
+    )
+    vi.stubGlobal(`fetch`, fetch)
+
+    const { result, rerender } = renderHook(() =>
+      useLivingWikiStateSnapshot({ wikiSpaceId: `wiki_demo` })
+    )
+
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    rerender()
+
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(fetch).toHaveBeenCalledWith(
+      `/api/spaces/wiki_demo/shared-state-snapshot`,
+      { method: `GET` }
+    )
   })
 })

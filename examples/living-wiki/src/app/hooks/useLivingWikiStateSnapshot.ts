@@ -57,10 +57,13 @@ export function snapshotToViewModel(
 
 export function useLivingWikiStateSnapshot({
   wikiSpaceId,
-  client = createLivingWikiApiClient(),
+  client,
 }: UseLivingWikiStateSnapshotOptions): UseLivingWikiStateSnapshotResult {
   const mounted = useRef(false)
   const requestId = useRef(0)
+  const defaultClient = useRef<LivingWikiApiClient | undefined>(undefined)
+  const resolvedClient =
+    client ?? (defaultClient.current ??= createLivingWikiApiClient())
   const [snapshot, setSnapshot] =
     useState<LivingWikiSharedStateSnapshot>(emptySnapshot)
   const [loading, setLoading] = useState(true)
@@ -73,7 +76,7 @@ export function useLivingWikiStateSnapshot({
     setError(null)
 
     try {
-      const next = await client.getSharedStateSnapshot({ wikiSpaceId })
+      const next = await resolvedClient.getSharedStateSnapshot({ wikiSpaceId })
       if (mounted.current && requestId.current === currentRequest) {
         setSnapshot(next)
       }
@@ -88,7 +91,7 @@ export function useLivingWikiStateSnapshot({
         setLoading(false)
       }
     }
-  }, [client, wikiSpaceId])
+  }, [resolvedClient, wikiSpaceId])
 
   useEffect(() => {
     mounted.current = true

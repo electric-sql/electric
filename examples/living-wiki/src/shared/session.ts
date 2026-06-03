@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { demoAvatarColorSchema, type DemoAvatarColor } from './space'
+import { actorIdSchema } from './wiki-state'
 
 export const demoSessionStorageKey = `living-wiki.demo-session.v1`
 
@@ -10,7 +11,7 @@ export type DemoSessionIdentity = {
 }
 
 const demoSessionIdentitySchema = z.object({
-  actorId: z.string().optional(),
+  actorId: actorIdSchema.optional(),
   displayName: z.string().optional(),
   avatarColor: demoAvatarColorSchema.optional(),
 })
