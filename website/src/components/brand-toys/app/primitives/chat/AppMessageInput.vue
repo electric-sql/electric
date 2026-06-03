@@ -2,28 +2,31 @@
 /* AppMessageInput — composer slab (static).
    ─────────────────────────────────────────────────────────────────
    Mirrors `packages/agents-server-ui/src/components/MessageInput.tsx`
-   + `MessageInput.module.css`.
+   + `MessageInput.module.css` exactly:
 
-   The live composer is a single flex row with `align-items: flex-end`
-   wrapping `[+ AttachmentActionMenu] [textarea] [↑ composerSend]`. The
-   textarea has a 40-px min-height; the buttons are 20-24 px tall and
-   flex-end-aligned, so the placeholder sits at the natural top of the
-   textarea while the buttons sink to the bottom of the row — visually
-   reading as a "footer" beneath the text:
+   - `.composerBody` is a SINGLE flex row with `align-items: flex-end`
+     and `gap: 8px`. NOT a two-row grid.
+   - The textarea has `min-height: 40px` so the body floors at 40 px
+     even when empty. Buttons are 24×24 and flex-end-aligned, so they
+     sink to the bottom of the 40-px row while the placeholder text
+     starts at the natural top.
+   - That's what produces the visual "footer" effect — the gap above
+     the buttons is exactly `40 - 24 = 16 px`, no extra row padding.
 
-     ┌─────────────────────────────────────────┐
-     │  Send a message...                      │  ← placeholder top
-     │                                         │
-     │  +                                  ↑   │  ← buttons bottom
-     └─────────────────────────────────────────┘
+     ┌───────────── 40 px ─────────────┐
+     │  Send a message...              │  ← placeholder top
+     │                                 │
+     │  +                          ↑   │  ← buttons bottom (24×24)
+     └─────────────────────────────────┘
 
    Geometry from the source (`MessageInput.module.css` +
    `AttachmentDrafts.module.css`):
      - .composer:        --ds-surface-raised fill, 1-px --ds-border-1
                          border, 12-px corner radius, 12-px padding,
                          --ds-shadow-1 lift.
-     - .composerBody:    align-items: flex-end, gap: 8px (--ds-space-2).
-     - .textarea:        min-height 40 px, 13-px chat-text, no border.
+     - .composerBody:    display: flex, align-items: flex-end,
+                         gap: 8px (--ds-space-2).
+     - .textarea:        flex: 1, min-height: 40px, 13-px chat-text.
      - .addMenuTrigger:  24×24 round, --ds-text-3 colour
                          (the live AttachmentActionMenu trigger).
      - .composerSend:    24×24 round, --ds-gray-a3 disabled fill,
@@ -60,9 +63,11 @@ withDefaults(
   <div class="composer-root">
     <div class="composer">
       <div class="composer-body">
-        <span class="textarea-mock">{{ placeholder }}</span>
         <span class="attach-btn" aria-hidden="true" title="Attach">
           <AppIcon :icon="Plus" :size="2" />
+        </span>
+        <span class="textarea-mock">
+          <span class="textarea-placeholder">{{ placeholder }}</span>
         </span>
         <span
           class="composer-send"
@@ -99,50 +104,52 @@ withDefaults(
   padding: 12px;
 }
 
-/* Composer body — `[textarea] [+] [↑]` rendered as a single CSS
-   grid where the textarea spans both columns of the top row and the
-   buttons sit on a footer row beneath it. The grid gives us the
-   explicit two-row composition the live UI emerges via
-   `align-items: flex-end` on a 40-px-tall flex row. */
+/* Composer body — single flex row. `align-items: flex-end` sinks the
+   24-px buttons to the bottom of the 40-px textarea row. `gap: 8px`
+   matches the live `--ds-space-2`. The "footer" feel is emergent —
+   it's just the textarea's min-height + flex-end alignment, not a
+   second row with extra padding. */
 
 .composer-body {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  grid-template-rows: auto auto;
-  row-gap: 4px;
-  column-gap: 8px;
+  display: flex;
+  align-items: flex-end;
+  gap: var(--ds-space-2);
   min-width: 0;
   width: 100%;
 }
 
 /* ───────── Textarea (mock) ─────────
-   Spans both columns of the top row — the buttons sit beneath it.
-   Matches the live `.textarea` font + chat-text colour rules. */
+   Mimics the live `.textarea`: flex:1, min-height:40px, chat-text.
+   We render the placeholder via an inner span aligned to the top so
+   the visual matches a real empty textarea (text starts at the top
+   even though the surrounding row is 40 px tall). */
 
 .textarea-mock {
-  grid-column: 1 / -1;
-  grid-row: 1;
+  flex: 1;
   min-width: 0;
+  min-height: 40px;
+  display: flex;
+  align-items: flex-start;
   font-size: var(--ds-chat-text);
   line-height: var(--ds-chat-text-lh);
   color: var(--ds-text-3);
+}
+
+.textarea-placeholder {
+  display: block;
+  width: 100%;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  /* The live textarea has min-height 40 px; in the mockup we don't
-     need that vertical room because the buttons live on their own
-     row below — a single line of placeholder text is the resting
-     state. */
 }
 
 /* ───────── Attach button ─────────
-   Mirrors `AttachmentDrafts.module.css` `.addMenuTrigger` (the real
-   trigger rendered by `AttachmentActionMenu`): 24×24 round,
-   --ds-text-3 colour. Sits at the leading edge of the footer row. */
+   Mirrors `AttachmentDrafts.module.css` `.addMenuTrigger`: 24×24
+   round, --ds-text-3 colour. flex-end aligns it to the bottom of
+   the 40-px row alongside the send button. */
 
 .attach-btn {
-  grid-column: 1;
-  grid-row: 2;
+  flex-shrink: 0;
   width: 24px;
   height: 24px;
   border-radius: var(--ds-radius-full);
@@ -150,17 +157,14 @@ withDefaults(
   align-items: center;
   justify-content: center;
   color: var(--ds-text-3);
-  justify-self: start;
 }
 
 /* ───────── Send button ─────────
    Mirrors `MessageInput.module.css` `.composerSend`: 24×24 round,
-   --ds-gray-a3 disabled fill, --ds-accent-9 active fill. Sits at the
-   trailing edge of the footer row. */
+   --ds-gray-a3 disabled fill, --ds-accent-9 active fill. */
 
 .composer-send {
-  grid-column: 2;
-  grid-row: 2;
+  flex-shrink: 0;
   width: 24px;
   height: 24px;
   border-radius: var(--ds-radius-full);
@@ -169,8 +173,6 @@ withDefaults(
   justify-content: center;
   background: var(--ds-gray-a3);
   color: var(--ds-text-3);
-  justify-self: end;
-  align-self: center;
   transition:
     background 0.12s ease,
     color 0.12s ease;
