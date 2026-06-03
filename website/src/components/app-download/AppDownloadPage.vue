@@ -1326,6 +1326,16 @@ const primaryPlatform = computed(
   /* Keep the scene flush-left so the phone overlaps the chat tile's
      right edge — the design intent in the reference. */
   align-self: stretch;
+  /* Visually scale the desktop to 80 % of its layout size so the
+     mockup pair has more breathing room on the page. The transform
+     leaves the layout box at the original size, which means the
+     scene's internal container queries (sidebar collapse at 950 px,
+     state-tile drop at 720 px) keep firing at the design widths.
+     Anchoring at the top-right keeps the desktop's right edge in
+     place so the phone overlay still overlaps the chat tile's right
+     column as intended. */
+  transform: scale(0.8);
+  transform-origin: top right;
 }
 
 .ad-hero-mockup-phone {
@@ -1382,6 +1392,10 @@ const primaryPlatform = computed(
     width: 100%;
     max-width: 100%;
     aspect-ratio: 16 / 10;
+    /* Drop the scale once the layout stacks; the desktop is the
+       primary device on its own row, so it should fill the column
+       at full size rather than leaving an empty band on the left. */
+    transform: none;
   }
   .ad-hero-mockup-phone {
     position: static;
