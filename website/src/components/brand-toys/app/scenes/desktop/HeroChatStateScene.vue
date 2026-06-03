@@ -223,6 +223,15 @@ const showCustomTitlebar = computed(() => resolvedOs.value !== 'macos')
      share via flex-grow on the chat tile and (1 - split) on the state
      tile. We keep both at flex-basis: 0 so the ratios apply directly. */
   background: var(--ds-bg);
+  /* Live `Workspace.module.css` paints a hairline + soft inner shadow
+     on the LEFT edge of the workspace pane (i.e. the divider between
+     sidebar and tiles). `--ds-border-1` retains contrast over both
+     the sidebar's chrome-bg AND the tile-header's --ds-bg, so the
+     line stays visible from the very top of the window down through
+     the content — matching what the live UI paints. */
+  border-left: 1px solid var(--ds-border-1);
+  box-shadow: -1px 0 2px
+    color-mix(in oklab, var(--ds-gray-12) 5%, transparent);
 }
 
 .hero-scene-tile {
@@ -230,9 +239,10 @@ const showCustomTitlebar = computed(() => resolvedOs.value !== 'macos')
   flex-direction: column;
   min-width: 0;
   height: 100%;
-  /* Hairline divider between the two tiles — same style the live
-     product uses on workspace splits. */
-  border-left: 1px solid var(--ds-divider);
+  /* Inter-tile divider — same `--ds-border-1` token the live workspace
+     splitter uses, so the line stays visible across the tile-header
+     row (--ds-bg) and the body alike. */
+  border-left: 1px solid var(--ds-border-1);
 }
 
 .hero-scene-tile:first-child {
