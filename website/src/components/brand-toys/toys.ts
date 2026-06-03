@@ -1247,6 +1247,14 @@ export const TOYS: readonly ToyDef[] = [
       },
       { name: `sectionLabel`, type: `string`, default: `Today` },
       {
+        name: `showFooter`,
+        type: `boolean`,
+        default: true,
+        label: `Show footer`,
+        description: `Server picker + filter / settings strip at the bottom.`,
+      },
+      { name: `serverUrl`, type: `string`, default: `localhost:4437` },
+      {
         name: `theme`,
         type: `select`,
         default: `dark`,
@@ -1289,23 +1297,16 @@ export const TOYS: readonly ToyDef[] = [
     id: `app-message-input`,
     label: `App — message input`,
     group: `app`,
-    description: `Composer slab — raised surface, hairline border, send button. Phase 4 chat primitive.`,
+    description: `Composer slab — raised surface, hairline border, send button. Single-row body matching MessageInput.tsx (no chip strip; that belongs to the spawn drawer). Phase 4 chat primitive.`,
     component: () =>
       import(`./app/toys/AppMessageInputToy.vue`).then((m) => m.default),
     controls: [
       {
         name: `placeholder`,
         type: `string`,
-        default: `Reply to Horton…`,
+        default: `Send a message...`,
       },
-      {
-        name: `queuedCount`,
-        type: `number`,
-        min: 0,
-        max: 5,
-        step: 1,
-        default: 0,
-      },
+      { name: `sendActive`, type: `boolean`, default: true },
       {
         name: `theme`,
         type: `select`,
@@ -1367,43 +1368,12 @@ export const TOYS: readonly ToyDef[] = [
     animated: true,
   },
   {
-    id: `app-state-row`,
-    label: `App — state row`,
+    id: `app-state-inspector`,
+    label: `App — state inspector`,
     group: `app`,
-    description: `Single state-explorer row — kind hue, mono key/value/source. Phase 4 state primitive.`,
+    description: `3-panel state explorer (StreamDB + Types + Records + Events) with deterministic pulse loop on the events list. Matches the desktop app's right-tile state inspector. Phase 5 state primitive.`,
     component: () =>
-      import(`./app/toys/AppStateRowToy.vue`).then((m) => m.default),
-    controls: [
-      {
-        name: `rowIndex`,
-        type: `number`,
-        min: 0,
-        max: 9,
-        step: 1,
-        default: 0,
-        label: `Row index`,
-        description: `Index into STATE_TABLE_FIXTURE.`,
-      },
-      { name: `pulsing`, type: `boolean`, default: false },
-      {
-        name: `theme`,
-        type: `select`,
-        default: `dark`,
-        options: [`light`, `dark`],
-      },
-    ],
-    defaultSize: { w: 720, h: 160 },
-    background: `dark`,
-    source: `src/components/brand-toys/app/primitives/state/AppStateRow.vue`,
-    animated: false,
-  },
-  {
-    id: `app-state-table`,
-    label: `App — state table`,
-    group: `app`,
-    description: `State-explorer grid with deterministic row pulse loop. Phase 4 state primitive.`,
-    component: () =>
-      import(`./app/toys/AppStateTableToy.vue`).then((m) => m.default),
+      import(`./app/toys/AppStateInspectorToy.vue`).then((m) => m.default),
     controls: [
       {
         name: `pulseRate`,
@@ -1415,7 +1385,12 @@ export const TOYS: readonly ToyDef[] = [
         label: `Pulses / sec`,
       },
       { name: `paused`, type: `boolean`, default: false },
-      { name: `showHeader`, type: `boolean`, default: true },
+      {
+        name: `density`,
+        type: `select`,
+        default: `comfortable`,
+        options: [`comfortable`, `compact`],
+      },
       {
         name: `theme`,
         type: `select`,
@@ -1423,20 +1398,44 @@ export const TOYS: readonly ToyDef[] = [
         options: [`light`, `dark`],
       },
     ],
-    defaultSize: { w: 720, h: 480 },
+    defaultSize: { w: 720, h: 600 },
     background: `dark`,
-    source: `src/components/brand-toys/app/primitives/state/AppStateTable.vue`,
+    source: `src/components/brand-toys/app/primitives/state/AppStateInspector.vue`,
     animated: true,
   },
   {
     id: `app-tile-shell`,
     label: `App — tile shell`,
     group: `app`,
-    description: `Workspace tile chrome (header + body slot). Phase 4 workspace primitive.`,
+    description: `Workspace tile chrome (header + body slot). Header demonstrates the full action cluster: status pill + runner badge + sandbox badge + view toggles + overflow menu. Phase 4 workspace primitive.`,
     component: () =>
       import(`./app/toys/AppTileShellToy.vue`).then((m) => m.default),
     controls: [
-      { name: `title`, type: `string`, default: `/horton/code-refactor` },
+      {
+        name: `title`,
+        type: `string`,
+        default: `Test Message Received`,
+      },
+      {
+        name: `sessionId`,
+        type: `string`,
+        default: `horton/70cqMB5GnW`,
+      },
+      {
+        name: `status`,
+        type: `select`,
+        default: `running`,
+        options: [
+          `idle`,
+          `running`,
+          `streaming`,
+          `spawning`,
+          `paused`,
+          `stopped`,
+        ],
+      },
+      { name: `chromeInsetTarget`, type: `boolean`, default: false },
+      { name: `showClose`, type: `boolean`, default: false },
       {
         name: `theme`,
         type: `select`,
@@ -1453,7 +1452,7 @@ export const TOYS: readonly ToyDef[] = [
     id: `app-chat-tile-content`,
     label: `App — chat tile content`,
     group: `app`,
-    description: `ChatTileContent — header + bubble + agent response + composer. Phase 4 composed primitive.`,
+    description: `ChatTileContent — header + bubble + agent response + composer. Now passes session id + runner / sandbox badges through the header to match EntityHeader.tsx. Phase 4 composed primitive.`,
     component: () =>
       import(`./app/toys/ChatTileContentToy.vue`).then((m) => m.default),
     controls: [
@@ -1482,6 +1481,7 @@ export const TOYS: readonly ToyDef[] = [
         default: `comfortable`,
         options: [`comfortable`, `compact`],
       },
+      { name: `chromeInsetTarget`, type: `boolean`, default: false },
       {
         name: `theme`,
         type: `select`,
@@ -1498,7 +1498,7 @@ export const TOYS: readonly ToyDef[] = [
     id: `app-state-tile-content`,
     label: `App — state tile content`,
     group: `app`,
-    description: `StateTileContent — header + state-explorer table with pulse loop. Phase 4 composed primitive.`,
+    description: `StateTileContent — header + 3-panel state inspector with pulse loop on the events list. Phase 4 composed primitive (rebuilt in phase 5 to match the real desktop-app inspector).`,
     component: () =>
       import(`./app/toys/StateTileContentToy.vue`).then((m) => m.default),
     controls: [
@@ -1518,6 +1518,7 @@ export const TOYS: readonly ToyDef[] = [
         default: `comfortable`,
         options: [`comfortable`, `compact`],
       },
+      { name: `showClose`, type: `boolean`, default: true },
       {
         name: `theme`,
         type: `select`,
@@ -1528,6 +1529,73 @@ export const TOYS: readonly ToyDef[] = [
     defaultSize: { w: 720, h: 700 },
     background: `dark`,
     source: `src/components/brand-toys/app/primitives/workspace/parts/StateTileContent.vue`,
+    animated: true,
+  },
+  {
+    id: `scene-hero-chat-state`,
+    label: `App — scene: hero (chat + state)`,
+    group: `app`,
+    description: `Desktop hero scene — full window: titlebar + sidebar + chat tile + state tile. § 2 desktop column. Phase 5 deliverable; drag the stage to walk the breakpoint cascade (sidebar hidden → state dropped → titlebar compact).`,
+    component: () =>
+      import(`./app/toys/HeroChatStateSceneToy.vue`).then((m) => m.default),
+    controls: [
+      {
+        name: `os`,
+        type: `select`,
+        default: `auto`,
+        options: [`auto`, `macos`, `windows`, `linux`],
+      },
+      {
+        name: `theme`,
+        type: `select`,
+        default: `dark`,
+        options: [`light`, `dark`],
+      },
+      {
+        name: `progress`,
+        type: `number`,
+        min: -1,
+        max: 1,
+        step: 0.01,
+        default: -1,
+        label: `Progress (-1 = auto)`,
+        description: `Manual scrub for the typewriter. -1 lets the internal RAF driver loop.`,
+      },
+      { name: `paused`, type: `boolean`, default: false },
+      {
+        name: `cps`,
+        type: `number`,
+        min: 5,
+        max: 200,
+        step: 5,
+        default: 60,
+        label: `Chars per sec`,
+      },
+      {
+        name: `pulseRate`,
+        type: `number`,
+        min: 0,
+        max: 5,
+        step: 0.1,
+        default: 0.8,
+        label: `Pulses / sec`,
+      },
+      {
+        name: `splitRatio`,
+        type: `number`,
+        min: 0.3,
+        max: 0.85,
+        step: 0.05,
+        default: 0.6,
+        label: `Chat tile share`,
+        description: `Workspace split — chat tile's flex-grow share; state tile gets the rest.`,
+      },
+      { name: `title`, type: `string`, default: `Test Message Received` },
+      { name: `sessionId`, type: `string`, default: `horton/70cqMB5GnW` },
+    ],
+    defaultSize: { w: 1280, h: 800 },
+    background: `dark`,
+    source: `src/components/brand-toys/app/scenes/desktop/HeroChatStateScene.vue`,
     animated: true,
   },
 

@@ -26,6 +26,7 @@
    Mount inside a scene or toy that provides the cascade. */
 
 import { computed } from 'vue'
+import AppSidebarFooter from './AppSidebarFooter.vue'
 import AppSidebarRow from './AppSidebarRow.vue'
 import { SIDEBAR_FIXTURE, type MockSidebarRow } from '../../fixtures'
 
@@ -48,6 +49,10 @@ interface Props {
    * matcher — `null` falls back to the fixture's own selected row.
    */
   selectedUrl?: string | null
+  /** Render the bottom server-picker / settings strip. */
+  showFooter?: boolean
+  /** Server URL shown in the footer's server picker. */
+  serverUrl?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -55,6 +60,8 @@ const props = withDefaults(defineProps<Props>(), {
   noHeader: false,
   sectionLabel: 'Today',
   selectedUrl: null,
+  showFooter: true,
+  serverUrl: 'localhost:4437',
 })
 
 /**
@@ -144,6 +151,13 @@ const annotated = computed(() => {
         </div>
       </div>
     </div>
+
+    <!--
+      Footer (server picker + filter + settings). Real sidebar
+      always paints this; the prop is here so per-toy demos can hide
+      it when the focus is on the tree above.
+    -->
+    <AppSidebarFooter v-if="showFooter" :server-url="serverUrl" />
   </aside>
 </template>
 

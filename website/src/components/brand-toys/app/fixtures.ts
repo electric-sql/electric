@@ -205,109 +205,113 @@ I've also drafted a \`vitest\` case that covers the happy path and a malformed-J
  * a chars-per-second target into a per-frame progress increment. */
 export const CHAT_FIXTURE_LENGTH = CHAT_FIXTURE.agentResponseText.length
 
-// ─────────────────────────── State table ───────────────────────────
+// ─────────────────────────── State inspector ───────────────────────────
 
 /**
- * One row in the state-explorer table. The real product has more
- * shape than this (key path, value preview, source entity, last
- * updated, etc.), but the marketing mockup only needs enough to
- * render a believable table grid with the right hue per row class.
+ * One Type row in the left "Types" panel of the state inspector.
+ * The real product groups records by type; the marketing mockup
+ * follows the same shape with a fixed label + row count + a
+ * selected flag on the active type.
  */
-export interface MockStateRow {
-  /** State key — left column. Mono font. */
-  key: string
-  /** Value preview — middle column. Truncated with ellipsis. */
-  value: string
-  /** Source entity url — right column. Mono, muted. */
-  source: string
-  /** Hue used for the row's left border + key text. */
-  kind: `message` | `tool-call` | `tool-result` | `event` | `error`
+export interface MockStateType {
+  name: string
+  count: number
+  selected?: boolean
 }
 
-export const STATE_TABLE_FIXTURE: readonly MockStateRow[] = [
+/** Default Types panel fixture — modelled on the real-app screenshot
+ * (entity_created / inbox / run / step / text / text_delta / tags),
+ * with `text_delta` selected as the type whose Records the right
+ * panel renders. */
+export const STATE_TYPES_FIXTURE: readonly MockStateType[] = [
+  { name: `entity_created`, count: 1 },
+  { name: `inbox`, count: 1 },
+  { name: `run`, count: 1 },
+  { name: `step`, count: 1 },
+  { name: `text`, count: 1 },
+  { name: `text_delta`, count: 6, selected: true },
+  { name: `tags`, count: 1 },
+]
+
+/**
+ * One Record row in the right "Records" panel of the state inspector.
+ * Mirrors the real columns: key (mono record id), from (mono
+ * principal url), payload (preview of the stored value).
+ */
+export interface MockStateRecord {
+  key: string
+  from: string
+  payload: string
+}
+
+export const STATE_RECORDS_FIXTURE: readonly MockStateRecord[] = [
   {
-    key: `inbox.next`,
-    value: `{ "type": "wake", "from": "/cron" }`,
-    source: `/horton/code-refactor`,
-    kind: `message`,
-  },
-  {
-    key: `runs[12].status`,
-    value: `"streaming"`,
-    source: `/horton/code-refactor`,
-    kind: `event`,
-  },
-  {
-    key: `tools.read_file`,
-    value: `"packages/auth/src/index.ts"`,
-    source: `/horton/code-refactor`,
-    kind: `tool-call`,
-  },
-  {
-    key: `tools.read_file.result`,
-    value: `"export function authenticate(jwt …"`,
-    source: `/horton/code-refactor`,
-    kind: `tool-result`,
-  },
-  {
-    key: `manifest.skills`,
-    value: `["code-refactor", "vitest", "claude-4.6-sonnet"]`,
-    source: `/horton/code-refactor`,
-    kind: `event`,
-  },
-  {
-    key: `runs[12].messages.last`,
-    value: `"Here's the helper applied at the entry point …"`,
-    source: `/horton/code-refactor`,
-    kind: `message`,
-  },
-  {
-    key: `workers.spawned`,
-    value: `["typescript-client", "agents-runtime"]`,
-    source: `/horton/parallel-rename`,
-    kind: `event`,
-  },
-  {
-    key: `errors.last`,
-    value: `null`,
-    source: `/horton/code-refactor`,
-    kind: `error`,
-  },
-  {
-    key: `tools.run_bash`,
-    value: `"pnpm vitest run packages/auth"`,
-    source: `/horton/code-refactor`,
-    kind: `tool-call`,
-  },
-  {
-    key: `tools.run_bash.result`,
-    value: `"  Tests  3 passed (3)"`,
-    source: `/horton/code-refactor`,
-    kind: `tool-result`,
+    key: `msg-in-1780491582518-283dha`,
+    from: `/principal/system%3Adev-local`,
+    payload: `Test`,
   },
 ]
 
 /**
- * Deterministic pulse order for the state-explorer animation.
+ * One Event row in the bottom "Events" panel.
  *
- * Indexes into `STATE_TABLE_FIXTURE`. Every `1 / pulseRate` seconds
- * the cursor advances one step and the row at that index lights up
- * for ~600 ms (CSS keyframe). Wraps to the start of the list — the
- * same recording every cycle.
- *
- * Pattern logic: alternate "obvious activity" rows (messages, events,
- * tool calls) with one quiet row (errors.last) so the table reads as
- * mostly active with occasional idle frames — same rhythm a real
- * agent run produces.
+ * Each event represents a streamdb insert (`INS`) — the real product
+ * also surfaces updates and deletes, but the steady-state marketing
+ * fixture only paints inserts since that's what dominates a live
+ * agent run. Numbered with a 2-digit zero-padded index in the UI.
  */
-export const STATE_PULSE_ORDER: readonly number[] = [
-  0, // inbox.next            (message)
-  2, // tools.read_file       (tool-call)
-  3, // tools.read_file.result (tool-result)
-  5, // runs[12].messages.last (message)
-  1, // runs[12].status       (event)
-  8, // tools.run_bash        (tool-call)
-  9, // tools.run_bash.result (tool-result)
-  6, // workers.spawned       (event)
-  7, // errors.last           (idle dim)
+export interface MockStateEvent {
+  /** 1-based index, displayed in mono on the left edge. */
+  index: number
+  /** The event verb — only `INS` for the marketing fixture. */
+  kind: `INS` | `UPD` | `DEL`
+  /** Type:key dotted summary, e.g. `inbox:msg-in-1780…`. */
+  summary: string
+}
+
+export const STATE_EVENTS_FIXTURE: readonly MockStateEvent[] = [
+  { index: 1, kind: `INS`, summary: `entity_created:entity-created` },
+  { index: 2, kind: `INS`, summary: `inbox:msg-in-1780491582518-283dha` },
+  { index: 3, kind: `INS`, summary: `run:run-0` },
+  { index: 4, kind: `INS`, summary: `step:step-0` },
+  { index: 5, kind: `INS`, summary: `text:msg-0` },
+  { index: 6, kind: `INS`, summary: `text_delta:msg-0:0` },
+  { index: 7, kind: `INS`, summary: `tags:title` },
+  { index: 8, kind: `INS`, summary: `text_delta:msg-0:1` },
+  { index: 9, kind: `INS`, summary: `text_delta:msg-0:2` },
+  { index: 10, kind: `INS`, summary: `text_delta:msg-0:3` },
+  { index: 11, kind: `INS`, summary: `text_delta:msg-0:4` },
+  { index: 12, kind: `INS`, summary: `text_delta:msg-0:5` },
+  { index: 13, kind: `INS`, summary: `text:msg-0:end` },
+  { index: 14, kind: `INS`, summary: `step:step-0:end` },
+  { index: 15, kind: `INS`, summary: `run:run-0:end` },
 ]
+
+/**
+ * Deterministic pulse cursor for the Events panel — same convention
+ * as `STATE_PULSE_ORDER` below (kept for the legacy AppStateTable
+ * primitive while it's still around). Index list points into
+ * `STATE_EVENTS_FIXTURE`. Designed to walk the bottom of the list
+ * (rows 12–15) in order, then loop back — matches the cadence of a
+ * real run wrapping up, with text_delta inserts trailing into
+ * step / run end events. */
+export const STATE_EVENT_PULSE_ORDER: readonly number[] = [
+  9, // text_delta:msg-0:2
+  10, // text_delta:msg-0:3
+  11, // text_delta:msg-0:4
+  12, // text_delta:msg-0:5
+  6, // text_delta:msg-0:0
+  7, // tags:title
+  8, // text_delta:msg-0:1
+  13, // text:msg-0:end
+  14, // step:step-0:end
+]
+
+// ─────────────────────────── Legacy state table ───────────────────────────
+
+/* The previous flat-table fixtures (`STATE_TABLE_FIXTURE`,
+   `STATE_PULSE_ORDER`, `MockStateRow`) were removed alongside the
+   `AppStateTable` / `AppStateRow` primitives during the post-review
+   correction pass — the new `AppStateInspector` covers the same
+   ground in a 3-panel layout that matches the real product. See
+   §0 of APP_DESKTOP_MOCKUP_PLAN.md. */

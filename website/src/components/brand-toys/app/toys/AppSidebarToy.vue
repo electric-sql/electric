@@ -30,12 +30,16 @@ withDefaults(
     /** Suppress the 44-px header spacer (see file comment above). */
     noHeader?: boolean
     sectionLabel?: string
+    showFooter?: boolean
+    serverUrl?: string
     theme?: 'light' | 'dark'
   }>(),
   {
     width: 240,
     noHeader: false,
     sectionLabel: 'Today',
+    showFooter: true,
+    serverUrl: 'localhost:4437',
     theme: 'dark',
   }
 )
@@ -44,7 +48,12 @@ withDefaults(
 <template>
   <div class="sb-toy app-mockup-root" :data-theme="theme">
     <div class="sb-toy-stage" :style="{ width: `${width}px` }">
-      <AppSidebar :no-header="noHeader" :section-label="sectionLabel" />
+      <AppSidebar
+        :no-header="noHeader"
+        :section-label="sectionLabel"
+        :show-footer="showFooter"
+        :server-url="serverUrl"
+      />
     </div>
   </div>
 </template>

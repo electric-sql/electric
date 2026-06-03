@@ -1,33 +1,48 @@
 <script setup lang="ts">
 /* AppMessageInput — composer slab (static).
    ─────────────────────────────────────────────────────────────────
-   Mirrors `packages/agents-server-ui/src/components/MessageInput.module.css`:
+   Mirrors `packages/agents-server-ui/src/components/MessageInput.tsx`
+   + `MessageInput.module.css` body shape:
 
-   - Outer .root: -20-px top margin so the slab visually sits ON TOP of
-     the chat surface above. We don't replicate this in the primitive
-     itself — scenes/tile shells decide if they want the lift; the
-     primitive just paints the composer at 0,0.
-   - Composer fill: --ds-surface-raised (raised input surface).
-   - Border: 1-px --ds-border-1, 12-px corner radius.
-   - Soft 1-px drop-shadow (same recipe as the user bubble).
-   - 12-px padding all around — keeps the textarea text column aligned
-     with the bubble text column above.
+     [+]  [textarea — "Send a message..."]                    [↑]
+      │              flex                                      │
+      │                                                        │
+      └─ AttachmentActionMenu                              ─── Send / Stop button
 
-   Static primitive — no animation, no live focus state. The mockup
-   doesn't need a real textarea, just the visual slab + a placeholder
-   line + the standard "send" button on the right edge.
+   The chip strip below (model picker / sandbox picker / working dir)
+   only appears on the spawn screen via `EntityContextDrawer` — NOT
+   in the regular session composer. The mockup paints just the body.
+
+   Geometry from the source:
+     - .composer:    --ds-surface-raised fill, 1-px --ds-border-1
+                     border, 12-px corner radius, 12-px padding,
+                     --ds-shadow-1 lift.
+     - .composerBody: align-items: flex-end, gap: 8px (--ds-space-2).
+     - .textarea:    min-height 40 px, transparent, no border.
+     - .composerSend: 24×24 round, --ds-gray-a3 disabled fill,
+                      --ds-accent-9 active fill (we render `active`
+                      since the mockup never types anything).
+
+   The composer's outer .root carries -20-px top margin in the live
+   product so the slab visually sits ON TOP of the chat surface above
+   (combined with the bottom-fade mask on the chat surface). We
+   honour that here so scenes don't have to reset it.
 
    Pure primitive — does NOT include `.app-mockup-root`. */
 
 withDefaults(
   defineProps<{
     placeholder?: string
-    /** Number of queued/pending messages indicator pip count. */
-    queuedCount?: number
+    /**
+     * Render the send button in active (accent-filled) or disabled
+     * (neutral) state. The marketing mockup keeps it active to read
+     * as "ready to send" — readers shouldn't see a greyed-out button.
+     */
+    sendActive?: boolean
   }>(),
   {
-    placeholder: 'Reply to Horton…',
-    queuedCount: 0,
+    placeholder: 'Send a message...',
+    sendActive: true,
   }
 )
 </script>
@@ -35,30 +50,18 @@ withDefaults(
 <template>
   <div class="composer-root">
     <div class="composer">
-      <div class="composer-inner">
-        <span class="placeholder">{{ placeholder }}</span>
-        <div class="composer-controls">
-          <span
-            v-if="queuedCount > 0"
-            class="queue-pip"
-            :title="`${queuedCount} queued`"
-          >
-            +{{ queuedCount }}
-          </span>
-          <span class="send-btn" aria-label="Send">
-            <span class="send-glyph" />
-          </span>
-        </div>
-      </div>
-      <div class="composer-toolbar">
-        <span class="tool-chip">
-          <span class="tool-chip-glyph" />
-          <span class="tool-chip-label">Attach</span>
+      <div class="composer-body">
+        <span class="attach-btn" aria-hidden="true" title="Attach">
+          <span class="attach-glyph" />
         </span>
-        <span class="tool-chip mono">claude-4.6-sonnet</span>
-        <span class="tool-spacer" />
-        <span class="kbd-hint mono">
-          <span class="kbd">⌘</span><span class="kbd">↵</span>
+        <span class="textarea-mock">{{ placeholder }}</span>
+        <span
+          class="composer-send"
+          :data-active="sendActive ? 'true' : 'false'"
+          aria-hidden="true"
+          title="Send message"
+        >
+          <span class="send-glyph" />
         </span>
       </div>
     </div>
@@ -70,9 +73,9 @@ withDefaults(
   width: 100%;
   font-family: var(--ds-font-body);
   /* Lift the slab into the chat surface above — matches the live
-     composer's -20px margin-top. Scenes that need the slab to sit
-     flush should reset this with a parent CSS override. */
-  margin-top: -16px;
+     composer's -20-px margin-top. The mask + bg on the chat surface
+     paints over the lifted area cleanly. */
+  margin-top: -20px;
   position: relative;
   z-index: 1;
 }
@@ -85,146 +88,134 @@ withDefaults(
     0 1px 3px rgba(15, 15, 30, 0.04),
     0 1px 1px rgba(15, 15, 30, 0.02);
   padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
 }
 
-.composer-inner {
+.composer-body {
   display: flex;
-  align-items: flex-start;
+  align-items: flex-end;
   gap: 8px;
-  min-height: 36px;
+  min-width: 0;
+  width: 100%;
 }
 
-.placeholder {
+/* ───────── Attach button ───────── */
+
+.attach-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--ds-radius-2);
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ds-text-3);
+  /* Align baseline with the textarea's first line — the textarea
+     min-height (40 px) sits below this 28-px target so without the
+     margin-bottom the + glyph would float a few pixels above the
+     textarea's text baseline. */
+  margin-bottom: 6px;
+}
+
+/* `+` plus sign — two crossed 1.5-px bars. */
+.attach-glyph {
+  position: relative;
+  width: 12px;
+  height: 12px;
+  display: inline-block;
+}
+.attach-glyph::before,
+.attach-glyph::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  background: currentColor;
+  border-radius: 1px;
+}
+.attach-glyph::before {
+  width: 12px;
+  height: 1.5px;
+}
+.attach-glyph::after {
+  width: 1.5px;
+  height: 12px;
+}
+
+/* ───────── Textarea (mock) ───────── */
+
+.textarea-mock {
   flex: 1;
   min-width: 0;
-  color: var(--ds-text-3);
+  align-self: stretch;
+  /* Match the live textarea's 40-px min-height + chat-text font. The
+     placeholder colour also matches the textarea's ::placeholder
+     rule (--ds-text-3). */
+  min-height: 40px;
+  display: flex;
+  align-items: flex-start;
+  padding-top: 10px;
   font-size: var(--ds-chat-text);
   line-height: var(--ds-chat-text-lh);
-  /* Two lines worth of breathing room so the slab reads as a real
-     textarea even with one-line placeholder text. */
-  padding: 6px 4px;
+  color: var(--ds-text-3);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.composer-controls {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
+/* ───────── Send button ───────── */
 
-.queue-pip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 18px;
-  padding: 0 6px;
-  border-radius: var(--ds-radius-full);
-  background: var(--ds-gray-a3);
-  color: var(--ds-text-2);
-  font-size: 10px;
-  line-height: 1;
-  font-weight: 500;
-}
-
-.send-btn {
+.composer-send {
   width: 28px;
   height: 28px;
   border-radius: var(--ds-radius-full);
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ds-gray-a3);
+  color: var(--ds-text-3);
+  /* Align with the textarea's first line — same trick as the attach
+     button on the left. */
+  margin-bottom: 6px;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+
+.composer-send[data-active='true'] {
   background: var(--ds-accent-9);
   color: var(--ds-text-on-accent);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: default;
 }
 
-/* Send glyph — small upward triangle drawn with two borders. */
+/* Up-arrow glyph — the live UI uses `lucide-react`'s ArrowUp at size
+   3 (16 px). We approximate with a 7-px CSS triangle + line. */
 .send-glyph {
-  width: 0;
-  height: 0;
-  border-left: 5px solid transparent;
-  border-right: 5px solid transparent;
-  border-bottom: 7px solid currentColor;
-  /* Optical-centre nudge — the triangle's centre of mass sits low,
-     translateY pulls it back up to mid. */
-  transform: translateY(-1px);
-}
-
-/* ───────── Toolbar (attach / model / kbd) ───────── */
-
-.composer-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  border-top: 1px solid var(--ds-divider);
-  padding-top: 8px;
-}
-
-.tool-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border-radius: var(--ds-radius-full);
-  background: transparent;
-  color: var(--ds-text-3);
-  font-size: var(--ds-text-xs);
-  border: 1px solid var(--ds-border-1);
-}
-
-.tool-chip.mono {
-  font-family: var(--ds-font-mono);
-  font-size: 11px;
-}
-
-.tool-chip-glyph {
-  width: 10px;
-  height: 10px;
-  border: 1.5px solid currentColor;
-  border-radius: 2px;
   position: relative;
+  width: 12px;
+  height: 12px;
   display: inline-block;
 }
-.tool-chip-glyph::before {
+.send-glyph::before {
   content: '';
   position: absolute;
-  inset: 1.5px;
-  border-top: 1.5px solid currentColor;
+  left: 50%;
+  top: 1px;
+  width: 1.6px;
+  height: 10px;
+  background: currentColor;
+  border-radius: 1px;
+  transform: translateX(-50%);
 }
-
-.tool-chip-label {
-  line-height: 1;
-}
-
-.tool-spacer {
-  flex: 1;
-}
-
-.kbd-hint {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  opacity: 0.7;
-}
-
-.kbd {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 16px;
-  height: 16px;
-  padding: 0 3px;
-  border-radius: var(--ds-radius-1);
-  background: var(--ds-chip-bg);
-  border: 1px solid var(--ds-chip-border);
-  color: var(--ds-text-2);
-  font-size: var(--ds-text-2xs);
-  line-height: 1;
+.send-glyph::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 1px;
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-bottom: 5px solid currentColor;
+  transform: translateX(-50%);
 }
 </style>

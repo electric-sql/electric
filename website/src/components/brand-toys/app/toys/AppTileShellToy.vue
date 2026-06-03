@@ -2,7 +2,10 @@
 /* AppTileShellToy — brand-toys wrapper.
    ─────────────────────────────────────────────────────────────────
    Renders an empty AppTileShell with a sample header so the chrome
-   geometry can be reviewed before any real content lands.
+   geometry can be reviewed before any real content lands. The
+   header now demonstrates the full action cluster — status pill +
+   runner badge + sandbox badge + view toggles + overflow menu — to
+   match the live `EntityHeader.tsx`.
    See APP_DESKTOP_MOCKUP_PLAN.md §6 for the controls schema. */
 
 import '../shared.css'
@@ -12,10 +15,24 @@ import AppTileShell from '../primitives/workspace/AppTileShell.vue'
 withDefaults(
   defineProps<{
     title?: string
+    sessionId?: string
+    status?:
+      | 'idle'
+      | 'running'
+      | 'streaming'
+      | 'spawning'
+      | 'paused'
+      | 'stopped'
+    chromeInsetTarget?: boolean
+    showClose?: boolean
     theme?: 'light' | 'dark'
   }>(),
   {
-    title: '/horton/code-refactor',
+    title: 'Test Message Received',
+    sessionId: 'horton/70cqMB5GnW',
+    status: 'running',
+    chromeInsetTarget: false,
+    showClose: false,
     theme: 'dark',
   }
 )
@@ -25,7 +42,17 @@ withDefaults(
   <div class="tile-toy app-mockup-root" :data-theme="theme">
     <AppTileShell>
       <template #header>
-        <AppTileHeader :title="title" status="streaming" />
+        <AppTileHeader
+          :title="title"
+          :session-id="sessionId"
+          :status="status"
+          runner-label="Electric Agents Desktop"
+          sandbox-label="Local"
+          active-view="chat"
+          :views="['chat', 'state']"
+          :chrome-inset-target="chromeInsetTarget"
+          :show-close="showClose"
+        />
       </template>
       <div class="tile-toy-placeholder">
         <span>tile body</span>

@@ -17,6 +17,7 @@ const props = withDefaults(
     paused?: boolean
     cps?: number
     density?: 'comfortable' | 'compact'
+    chromeInsetTarget?: boolean
     theme?: 'light' | 'dark'
   }>(),
   {
@@ -24,6 +25,7 @@ const props = withDefaults(
     paused: false,
     cps: 60,
     density: 'comfortable',
+    chromeInsetTarget: false,
     theme: 'dark',
   }
 )
@@ -40,6 +42,7 @@ const progressProp = computed(() =>
       :paused="paused"
       :cps="cps"
       :density="density"
+      :chrome-inset-target="chromeInsetTarget"
     />
   </div>
 </template>

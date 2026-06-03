@@ -33,6 +33,7 @@ import { CHAT_FIXTURE } from '../../../fixtures'
 withDefaults(
   defineProps<{
     title?: string
+    sessionId?: string
     /** Forwarded to AppAgentResponse. */
     state?: 'idle' | 'thinking' | 'streaming' | 'completed'
     progress?: number | null
@@ -43,9 +44,16 @@ withDefaults(
     /** Layout density. `compact` removes chat-surface vertical padding
      * for sub-700-px container widths. */
     density?: 'comfortable' | 'compact'
+    /** Bump the header padding past macOS traffic lights — set true
+     * on the leftmost tile when sidebar is hidden. */
+    chromeInsetTarget?: boolean
+    /** Show the close X in the header — true when this is the right
+     * tile in a split layout. */
+    showClose?: boolean
   }>(),
   {
-    title: '/horton/code-refactor',
+    title: 'Test Message Received',
+    sessionId: 'horton/70cqMB5GnW',
     state: 'streaming',
     progress: null,
     paused: false,
@@ -53,6 +61,8 @@ withDefaults(
     hasCodeBlock: true,
     hasToolCall: true,
     density: 'comfortable',
+    chromeInsetTarget: false,
+    showClose: false,
   }
 )
 </script>
@@ -60,7 +70,17 @@ withDefaults(
 <template>
   <AppTileShell>
     <template #header>
-      <AppTileHeader :title="title" status="streaming" />
+      <AppTileHeader
+        :title="title"
+        :session-id="sessionId"
+        status="running"
+        runner-label="Electric Agents Desktop"
+        sandbox-label="Local"
+        active-view="chat"
+        :views="['chat', 'state']"
+        :chrome-inset-target="chromeInsetTarget"
+        :show-close="showClose"
+      />
     </template>
 
     <div class="chat-surface" :data-density="density">
@@ -78,7 +98,7 @@ withDefaults(
     </div>
     <div class="composer-column">
       <div class="composer-inner">
-        <AppMessageInput placeholder="Reply to Horton…" />
+        <AppMessageInput placeholder="Send a message..." />
       </div>
     </div>
   </AppTileShell>

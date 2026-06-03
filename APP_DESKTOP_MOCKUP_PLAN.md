@@ -1,10 +1,72 @@
 # Desktop mockup — plan
 
-> **Status:** draft for review.
+> **Status:** draft for review. **Phase 5 in progress — see "Post-review correction (Phase 5)" below for the chrome rearchitecture that landed after the first pass got the titlebar / tile header / composer / state inspector wrong.**
 > **Goal:** ship a small **mockup kit** — composable primitives + page-slot scenes — that match the running apps pixel-for-pixel, _and_ use it to fill the §2 hero strap of `AppDownloadPage.vue`. The kit is sized to land §2 cleanly _and_ to extend to other slots on the App page (modes thumbnails, scenarios, mobile preview, OG images) without re-engineering the primitives. This plan ships the §2 scenes only; future scenes are out of scope but explicitly enabled.
 > **Where it lives:** developed and reviewed inside the existing `/brand-toys` framework; consumed by `website/src/components/app-download/AppDownloadPage.vue` once the scenes look right.
 > **Audience:** coding agents / collaborators picking this up after `APP_PAGE_PLAN.md`.
 > **PR shape:** one pull request, sequenced internally as eight phases. Phases 1–7 are reviewable inside `/brand-toys` without touching user-visible pages; phase 8 lands the integration into `AppDownloadPage.vue`. No follow-up PRs are required for this plan to ship.
+
+---
+
+## 0. Post-review correction (Phase 5)
+
+After phases 1–4 landed, side-by-side review against real screenshots
+(`website/src/components/brand-toys/app/_reference/`) surfaced four
+architectural mistakes in my first pass. The corrections below
+**supersede** the corresponding sections of the original plan and
+guide the Phase 5 + retroactive Phase 2/4 fixes:
+
+1. **No separate titlebar on macOS.** The desktop app uses Electron's
+   `hiddenInset` titlebar style, which means the traffic lights are
+   painted **by the OS over the renderer** at a fixed top-left
+   position. The renderer just paints a 44-px-tall drag region (the
+   `SidebarHeader` spacer; or the leftmost tile's `MainHeader` strip
+   when the sidebar is collapsed) and the lights overlay it. There is
+   **no separate `<AppTitlebar>` component for macOS scenes**.
+   - `AppWindowFrame` now overlays `AppTrafficLights` as an
+     absolutely-positioned element at top-left when `os='macos'`.
+   - `AppTitlebar` is retained only for Windows/Linux scenes, where a
+     real custom titlebar strip (`DesktopTitleBar.tsx`) sits at the
+     top of the window with app icon + menu sections + window
+     controls.
+
+2. **Tile header (= `EntityHeader`) is much richer.** The real strip
+   carries a display title + session-id subtitle + copy-id icon
+   cluster on the left, and a status pill + runner badge + sandbox
+   badge + view-toggle icons + overflow menu + close button on the
+   right. My first pass rendered just a status dot + mono title, which
+   read as "tab bar" rather than "entity header". Rebuilt
+   `AppTileHeader` to match `EntityHeader.tsx` exactly.
+
+3. **Composer body is single-row.** My first pass added a chip strip
+   below the textarea with `Attach`, `claude-4.6-sonnet`, and a `⌘↵`
+   kbd hint — that strip belongs to the **spawn screen**'s
+   `EntityContextDrawer`, NOT the regular session composer.
+   `AppMessageInput` now mirrors the live `MessageInput.tsx` body:
+   a `+` attach button on the left, the textarea flexes, and the
+   send button caps the right edge. No chip strip. (A future
+   `MobileChatScene` may render a stripped-down spawn variant; that
+   stays out of scope for §2.)
+
+4. **State inspector is a 3-panel layout, not a flat table.** The real
+   state inspector has a top selector strip (StreamDB + runtime), a
+   horizontal split into `Types` (left, with row counts per type) and
+   `Records` (right, key / from / payload table for the selected
+   type), and an `Events` panel at the bottom with `INS` insert pills
+   - add (+) / refresh (↻) affordances on each row.
+     `AppStateInspector` (renamed from `AppStateTable`) renders this
+     structure, with the deterministic pulse loop now firing on the
+     `Events` panel rows where the visual cadence reads strongest.
+
+5. **Sidebar footer.** The sidebar terminates in a `SidebarFooter`
+   row carrying the server picker (`● localhost:4437` with a
+   chevron), a filter / view-menu icon, and a settings cog. My first
+   pass dropped this entirely. Added `AppSidebarFooter` and mounted
+   it inside `AppSidebar` with a top hairline divider matching the
+   live `SidebarFooter.module.css`.
+
+The §6 toy-by-toy controls schema below still applies; the fix list
+just changed _what each primitive paints_, not the toy contract.
 
 ---
 

@@ -1,32 +1,39 @@
 <script setup lang="ts">
-/* StateTileContent — composed state-explorer content.
+/* StateTileContent — composed state-inspector content.
    ─────────────────────────────────────────────────────────────────
-   Drops the AppStateTable into an AppTileShell + AppTileHeader. This
-   is the desktop "right tile" of the hero scene; reused at narrow
-   container widths only when the chat tile is also visible.
+   Drops the AppStateInspector into an AppTileShell + AppTileHeader.
+   This is the desktop "right tile" of the hero scene; reused at
+   narrow container widths only when the chat tile is also visible.
 
    Animation pass-through:
-     - `pulseRate`, `paused` are forwarded to AppStateTable.
-     - `density` swaps the table padding (header-only flag for compact).
+     - `pulseRate`, `paused` are forwarded to AppStateInspector.
+     - `density` swaps the inspector's compact mode (drops the
+       StreamDB strip + tightens row heights) for sub-700-px widths.
 
    Pure primitive — does NOT include `.app-mockup-root`. */
 
-import AppStateTable from '../../state/AppStateTable.vue'
+import AppStateInspector from '../../state/AppStateInspector.vue'
 import AppTileHeader from '../AppTileHeader.vue'
 import AppTileShell from '../AppTileShell.vue'
 
 withDefaults(
   defineProps<{
     title?: string
+    sessionId?: string
     pulseRate?: number
     paused?: boolean
     density?: 'comfortable' | 'compact'
+    /** Forwarded to AppTileHeader — the right tile in a split shows
+     * a close X. Single-tile scenes leave it false. */
+    showClose?: boolean
   }>(),
   {
-    title: 'state — /horton/code-refactor',
+    title: 'Test Message Received',
+    sessionId: 'horton/70cqMB5GnW',
     pulseRate: 0.8,
     paused: false,
     density: 'comfortable',
+    showClose: true,
   }
 )
 </script>
@@ -34,14 +41,23 @@ withDefaults(
 <template>
   <AppTileShell>
     <template #header>
-      <AppTileHeader :title="title" status="streaming" />
+      <AppTileHeader
+        :title="title"
+        :session-id="sessionId"
+        status="running"
+        runner-label="Electric Agents Desktop"
+        sandbox-label="Local"
+        active-view="state"
+        :views="['chat', 'state']"
+        :show-close="showClose"
+      />
     </template>
 
-    <div class="state-surface" :data-density="density">
-      <AppStateTable
+    <div class="state-surface">
+      <AppStateInspector
         :pulse-rate="pulseRate"
         :paused="paused"
-        :show-header="density === 'comfortable'"
+        :density="density"
       />
     </div>
   </AppTileShell>
@@ -55,12 +71,6 @@ withDefaults(
   flex-direction: column;
   overflow: hidden;
   background: var(--ds-bg);
-}
-
-.state-surface[data-density='comfortable'] {
-  padding: 0;
-}
-.state-surface[data-density='compact'] {
-  padding: 0;
+  border-top: 1px solid var(--ds-divider);
 }
 </style>

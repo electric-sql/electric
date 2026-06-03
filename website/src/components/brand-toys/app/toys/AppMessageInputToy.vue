@@ -10,12 +10,12 @@ import AppMessageInput from '../primitives/chat/AppMessageInput.vue'
 withDefaults(
   defineProps<{
     placeholder?: string
-    queuedCount?: number
+    sendActive?: boolean
     theme?: 'light' | 'dark'
   }>(),
   {
-    placeholder: 'Reply to Horton…',
-    queuedCount: 0,
+    placeholder: 'Send a message...',
+    sendActive: true,
     theme: 'dark',
   }
 )
@@ -24,7 +24,7 @@ withDefaults(
 <template>
   <div class="input-toy app-mockup-root" :data-theme="theme">
     <div class="input-toy-stage">
-      <AppMessageInput :placeholder="placeholder" :queued-count="queuedCount" />
+      <AppMessageInput :placeholder="placeholder" :send-active="sendActive" />
     </div>
   </div>
 </template>
@@ -43,13 +43,12 @@ withDefaults(
 .input-toy-stage {
   width: 100%;
   max-width: 640px;
-  /* Reset the composer's negative-top margin so the slab sits in the
-     middle of the toy stage rather than lifted off the top. */
   margin-top: 16px;
 }
 
-/* The composer's own root has a -16px margin-top that lifts it onto a
-   chat surface in scenes — neutralise it here for the standalone toy. */
+/* The composer's own root has a -20px margin-top that lifts it onto
+   a chat surface in scenes — neutralise it here for the standalone
+   toy so the slab sits at its natural baseline. */
 .input-toy-stage :deep(.composer-root) {
   margin-top: 0;
 }
