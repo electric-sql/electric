@@ -3,6 +3,7 @@
 > **Status:** draft for review.
 > **Goal:** turn `website/app.md` (`AppDownloadPage.vue`) from a Cursor-style downloads index into a real product landing page that explains what `@electric-ax/agents-desktop` + `@electric-ax/agents-mobile` actually do.
 > **Tone:** matches existing landing pages — `agents-home`, `streams-home`, `sync-home`, `cloud-home`. Reuses `Section`, `BottomCtaStrap`, `InstallPill`, `HeroNetworkBg`-style chrome.
+> **Heading convention:** no trailing full stops on H1 / H2 / H3 titles. The other landing pages (`agents-home`, `streams-home`, `sync-home`, `cloud-home`, `home`) all render their `<template #title>` slots without final periods; the `/app` page now matches. Subtitles / body copy / bullet captions remain proper sentences with their normal punctuation.
 > **Author/agent note:** all desktop/mobile capability claims below are grounded in code that is already in `packages/agents-desktop` and `packages/agents-mobile` — nothing on this page should make promises the apps don't keep.
 
 ---
@@ -200,12 +201,12 @@ This section does the heavy positioning lift. It is also where the **software-fa
                   one integrated platform
 ```
 
-- **Section eyebrow:** _none_. Earlier drafts carried a `WHAT YOU CAN DO` section eyebrow, but it just restated the title `Three ways to use it.` and added chrome we don't need. See the "Copy review pass" note at the end of this section.
+- **Section eyebrow:** _none_. Earlier drafts carried a `WHAT YOU CAN DO` section eyebrow, but it just restated the title `Three ways to use it` and added chrome we don't need. See the "Copy review pass" note at the end of this section.
 - **Card eyebrows:** _none on any of the three cards_. Earlier drafts carried `Code locally` / `Attach remotely` / `Build with the SDK` per-card eyebrows; they were near-duplicates of the sentence-form titles. The card titles now do the categorisation work on their own.
 
 **Tightening pass (locked).** An earlier version of the cards had ~40-50-word paragraphs and 3 long-form bullets per card; the section read as a wall of text relative to the rest of the page. The current locked copy halves each body (≈18-27 words) and uses 4 short one-line bullets per card. The model enumeration was dropped from card 1 (it's already in §5 pillar 1); the device-handoff sentence was dropped from card 2 (it's the topic of §4); the 7-feature enumeration in card 3's body was trimmed to 3 features (§6 expands on the rest).
 
-- **Card 1 — "Code with Horton, locally."**
+- **Card 1 — "Code with Horton, locally"**
   - Body: Horton ships in the desktop. Pick a model, point at a directory, chat to a coding agent that edits, runs bash, and spawns parallel workers.
   - **You can:** (locked, 4 short bullets)
     - Refactor a folder, one worker per file
@@ -215,7 +216,7 @@ This section does the heavy positioning lift. It is also where the **software-fa
   - **`/quickstart` framing.** `packages/agents/skills/quickstart.md` describes itself as `Guided quickstart — build a full Electric Agents app from entity to frontend` — it walks the user through building a manager/worker app on the SDK. The earlier "scaffold a fresh project with `/init`, then iterate with `/quickstart`" bullet mis-framed this as a generic dev workflow; the corrected bullet ties Horton's slash skills to Electric Agents learning, which is what they actually do. `/init` was dropped from the bullet to keep it to one verb — it is still discoverable in-app.
   - Backed by: `packages/agents-desktop/src/runtime/lifecycle.ts` (BuiltinAgentsServer), `packages/agents/src/agents/horton.ts`, `WorkingDirectoryPicker`, `ApiKeysForm`, `CredentialsPage`.
 
-- **Card 2 — "Attach to remote sessions."**
+- **Card 2 — "Attach to remote sessions"**
   - Body: Connect to any agents-server — your own or Electric Cloud. Sessions spawned by CI, webhooks, GitHub issues, cron or your software factory show up live.
   - **You can:** (locked, 4 short bullets)
     - Triage a GitHub-issue session on the phone, finish on the desk
@@ -225,7 +226,7 @@ This section does the heavy positioning lift. It is also where the **software-fa
   - **Multi-user is the topic of §4.** An earlier draft of this card had a `Hand a session off to a teammate by sharing the entity URL — the multi-user view sees the same stream.` bullet. That claim is the explicit topic of §4 pillar 2; the trimmer locked here keeps mid-run device handoff (single user, multi-device) and leaves the teammate-handoff claim to §4 where it has room to breathe.
   - Backed by: `ServersPage` (multi-server config), `cloud-auth.ts` + `cloud-agent-servers.ts`, `local-discovery.ts`, mobile `ServerSetupScreen` / `SessionListScreen` / `SessionMenu` (signal stop/steer).
 
-- **Card 3 — "Build your own agents."**
+- **Card 3 — "Build your own agents"**
   - Body: It's also the dev tool for the entities _you_ write with the SDK (`@electric-ax/agents-runtime`) — state explorer, timeline, fork-from-here.
   - Title note: an earlier draft of this plan repeated the eyebrow text as the title (`"Build with the SDK."`), which read as redundant once both lines sat in the rendered card. The locked title mirrors cards 1 and 2 — verb + object — and connects to the body's "the entities _you_ write" emphasis. The eyebrow has since been removed entirely (see top of §3).
   - Feature-list trim: the original body listed 7 features (state explorer, entity timeline, fork-from-here, manifest drawer, MCP servers, skills, tile workspace). The trim picks 3 as a scannable sample; §6 "Built for builders" carries the full 6-card grid so nothing is lost.
@@ -290,8 +291,8 @@ A 2×2 (or horizontally-scrolling) strip of worked end-to-end examples. The purp
 └──────────────────────────────────────────────────────────────┘
 ```
 
-- **Section eyebrow:** _none_. Earlier drafts had `SCENARIOS` above the title; the title `What this looks like in practice.` is enough.
-- **Headline:** `What this looks like in practice.`
+- **Section eyebrow:** _none_. Earlier drafts had `SCENARIOS` above the title; the title `What this looks like in practice` is enough.
+- **Headline:** `What this looks like in practice`
 - **Sub:** Four short stories that span the three modes above. None of them require code you don't have today.
 - Format suggestion: render as four cards with the `Touches: …` line as in-card metadata in mono, the title in semi-bold, then ~3 lines of body. Reuse the `.ad-platform-card` chrome from the current page so the visual rhythm doesn't fork.
 - **Implementation note:** each scenario gets a placeholder image slot at the top of the card (`<div class="ad-scenario-illo" data-placeholder="scenario-1.png">`). We'll fill those in later when we capture the actual flows; PR ships with a styled placeholder block.
@@ -323,8 +324,8 @@ Backed by: every capability cited is a composition of the features already mappe
                   └────────┘    └──────────┘
 ```
 
-- **Section eyebrow:** _none_. Earlier drafts had `MULTI-DEVICE` above the title; the title is `Multi-device, multi-user.` so the eyebrow was pure repetition.
-- **Headline:** `Multi-device, multi-user.`
+- **Section eyebrow:** _none_. Earlier drafts had `MULTI-DEVICE` above the title; the title is `Multi-device, multi-user` so the eyebrow was pure repetition.
+- **Headline:** `Multi-device, multi-user`
 - **Body:** Agents run on the server, not the client. The desktop and mobile apps are live views into the same Electric streams — open the same session from your laptop and your phone, hand work off between devices, share a workspace with your team. Sign in once with GitHub or Google; your Electric Cloud workspaces appear automatically. The desktop can even register itself as a pull-wake runner so your laptop becomes a worker for your cloud agents — close the lid and they finish on the next runner that comes online.
 - Backed by: `cloud-auth.ts` (GitHub/Google OAuth), `cloud-agent-servers.ts`, `pullWake` config in `BuiltinAgentsServer` startup, mobile `CloudAuthContext` + `CloudServerPicker`.
 - **No screenshot needed** — keep the ASCII flavour or render the diagram as an inline SVG matching the existing `EntityOverviewDiagram.vue` style (already in `website/src/components/`).
@@ -351,13 +352,13 @@ Backed by: every capability cited is a composition of the features already mappe
 └─────────────────────────────────────────────┘
 ```
 
-- **Section eyebrow:** _none_. Earlier drafts had `BUNDLED AGENT` above the title; the title `Horton, in the box.` already conveys "bundled".
-- **Headline:** `Horton, in the box.`
+- **Section eyebrow:** _none_. Earlier drafts had `BUNDLED AGENT` above the title; the title `Horton, in the box` already conveys "bundled".
+- **Headline:** `Horton, in the box`
 - **Sub:** A friendly, capable general-purpose chat agent with code-editing superpowers — no server-side setup required.
 - Three sub-bullets:
-  - **Pick your provider.** Bring your own API key (stored in the OS keychain), or sign in to Codex. Anthropic, OpenAI, DeepSeek and Moonshot for models; Brave Search and E2B for tools.
-  - **Pick your working directory.** Horton reads and edits whatever you point it at — no per-project install. The picker walks your filesystem; recent directories surface automatically.
-  - **Skills + slash commands.** Type `/quickstart` to learn Electric Agents itself; write your own skills to ship reusable workflows.
+  - **Pick your provider** — Bring your own API key (stored in the OS keychain), or sign in to Codex. Anthropic, OpenAI, DeepSeek and Moonshot for models; Brave Search and E2B for tools.
+  - **Pick your working directory** — Horton reads and edits whatever you point it at — no per-project install. The picker walks your filesystem; recent directories surface automatically.
+  - **Skills + slash commands** — Type `/quickstart` to learn Electric Agents itself; write your own skills to ship reusable workflows.
 
 Provider-list rationale: the locked pillar 1 body explicitly splits the §5 ASCII's "Providers" listing into _models_ (Anthropic, OpenAI, DeepSeek, Moonshot) and _tools_ (Brave Search, E2B). The ASCII grouped them all under "Providers (you BYO key, OS keychain)" but rendering them as a single set in the pillar body reads as imprecise once Brave/E2B sit next to Anthropic/OpenAI — they're different kinds of providers, both happen to share the BYO-key pattern.
 
@@ -398,7 +399,7 @@ Pillar 3 `/quickstart` framing: `packages/agents/skills/quickstart.md` is `Guide
 ```
 
 - **Section eyebrow:** _none_. Earlier drafts had `DEV TOOLS` above the title.
-- **Headline:** `Built for builders.`
+- **Headline:** `Built for builders`
 - **Sub:** When you ship your own entities on the Electric Agents infra and SDK (`@electric-ax/agents-runtime`), the same app becomes the dev tool you'd otherwise have to write yourself.
 - A 2×3 (or 3×2) grid of compact cards covering the six features above. Each card is icon + 4-word title + one-sentence body.
 - **`Use it to…` hints removed.** An earlier draft carried a dashed-divider "Use it to…" sub-paragraph on every card. The §3.5 scenarios already do the show-don't-spec work; layering hints onto each spec card pushed total text over the line. Spec-sheet rhythm wins here.

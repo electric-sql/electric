@@ -356,14 +356,14 @@ const primaryPlatform = computed(
          the grid restates the one-integrated-platform line as the
          section's takeaway. Body strings locked in APP_PAGE_PLAN.md §3. -->
     <Section id="three-ways">
-      <template #title>Three ways to use it.</template>
+      <template #title>Three ways to use it</template>
 
       <div class="ad-modes-grid">
         <article class="ad-modes-card">
           <span class="ad-modes-icon" aria-hidden="true">
             <span class="ad-icon ad-icon--code" />
           </span>
-          <h3 class="ad-modes-title">Code with Horton, locally.</h3>
+          <h3 class="ad-modes-title">Code with Horton, locally</h3>
           <p class="ad-modes-body">
             Horton ships in the desktop. Pick a model, point at a directory,
             chat to a coding agent that edits, runs bash, and spawns parallel
@@ -382,7 +382,7 @@ const primaryPlatform = computed(
           <span class="ad-modes-icon" aria-hidden="true">
             <span class="ad-icon ad-icon--radio" />
           </span>
-          <h3 class="ad-modes-title">Attach to remote sessions.</h3>
+          <h3 class="ad-modes-title">Attach to remote sessions</h3>
           <p class="ad-modes-body">
             Connect to any agents-server — your own or Electric Cloud. Sessions
             spawned by CI, webhooks, GitHub issues, cron or your software
@@ -403,7 +403,7 @@ const primaryPlatform = computed(
           <span class="ad-modes-icon" aria-hidden="true">
             <span class="ad-icon ad-icon--microscope" />
           </span>
-          <h3 class="ad-modes-title">Build your own agents.</h3>
+          <h3 class="ad-modes-title">Build your own agents</h3>
           <p class="ad-modes-body">
             It's also the dev tool for the entities <em>you</em> write with the
             SDK (<code>@electric-ax/agents-runtime</code>) — state explorer,
@@ -434,7 +434,7 @@ const primaryPlatform = computed(
          interlude. Body strings are locked in APP_PAGE_PLAN.md §3.5;
          do not edit them here without updating that doc. -->
     <Section id="scenarios" :dark="true">
-      <template #title>What this looks like in practice.</template>
+      <template #title>What this looks like in practice</template>
       <template #subtitle>
         Four short stories that span the three modes above. None of them require
         code you don't have today.
@@ -519,7 +519,7 @@ const primaryPlatform = computed(
          across the subtitle and the three pillars below the diagram so
          the body reads as scannable rather than a wall of prose. -->
     <Section id="multi-device">
-      <template #title>Multi-device, multi-user.</template>
+      <template #title>Multi-device, multi-user</template>
       <template #subtitle>
         Agents run on the server, not the client. The desktop and mobile apps
         are live views into the same Electric streams.
@@ -586,7 +586,7 @@ const primaryPlatform = computed(
          rung) but consistent; in light mode it's a pronounced dark
          strip on a light page. -->
     <Section id="horton" :dark="true">
-      <template #title>Horton, in the box.</template>
+      <template #title>Horton, in the box</template>
       <template #subtitle>
         A friendly, capable general-purpose chat agent with code-editing
         superpowers — no server-side setup required.
@@ -597,7 +597,7 @@ const primaryPlatform = computed(
           <span class="ad-horton-pillar-icon" aria-hidden="true">
             <span class="ad-icon ad-icon--key-round" />
           </span>
-          <h3 class="ad-horton-pillar-title">Pick your provider.</h3>
+          <h3 class="ad-horton-pillar-title">Pick your provider</h3>
           <p class="ad-horton-pillar-body">
             Bring your own API key (stored in the OS keychain), or sign in to
             Codex. Anthropic, OpenAI, DeepSeek and Moonshot for models; Brave
@@ -609,7 +609,7 @@ const primaryPlatform = computed(
           <span class="ad-horton-pillar-icon" aria-hidden="true">
             <span class="ad-icon ad-icon--folder-tree" />
           </span>
-          <h3 class="ad-horton-pillar-title">Pick your working directory.</h3>
+          <h3 class="ad-horton-pillar-title">Pick your working directory</h3>
           <p class="ad-horton-pillar-body">
             Horton reads and edits whatever you point it at — no per-project
             install. The picker walks your filesystem; recent directories
@@ -621,7 +621,7 @@ const primaryPlatform = computed(
           <span class="ad-horton-pillar-icon" aria-hidden="true">
             <span class="ad-icon ad-icon--wand" />
           </span>
-          <h3 class="ad-horton-pillar-title">Skills + slash commands.</h3>
+          <h3 class="ad-horton-pillar-title">Skills + slash commands</h3>
           <p class="ad-horton-pillar-body">
             Type <code>/quickstart</code> to learn Electric Agents itself; write
             your own skills to ship reusable workflows.
@@ -690,7 +690,7 @@ const primaryPlatform = computed(
          claim→code mapping in APP_PAGE_PLAN.md §5 / §6 if you're
          tempted to add anything else. -->
     <Section id="builders">
-      <template #title>Built for builders.</template>
+      <template #title>Built for builders</template>
       <template #subtitle>
         When you ship your own entities on the Electric Agents infra and SDK
         (<code>@electric-ax/agents-runtime</code>), the same app becomes the dev
