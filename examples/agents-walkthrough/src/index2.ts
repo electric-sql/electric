@@ -39,7 +39,7 @@ registry.define(`manager`, {
         `assistant`,
         genId(),
         {
-          systemPrompt: `Roast the user message. When done, report back to your manager.`,
+          systemPrompt: `Reverse the user message.`,
         },
         {
           initialMessage: (wake.payload as { text: string }).text,

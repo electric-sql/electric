@@ -72,7 +72,12 @@ registry.define(`manager`, {
   description: `A manager agent that delegates work to an assistant`,
   async handler(ctx) {
     ctx.useAgent({
-      systemPrompt: `Spawn a sub-agent to roast the user message and then end your turn until they report back.`,
+      systemPrompt: `
+        When given a user message that is a single word, spawn an
+        assistant to reverse the user message.
+
+        When asked direct questions, answer them yourself.
+      `,
       model: MODEL,
       tools: [createSpawnAssistantTool(ctx)],
     })

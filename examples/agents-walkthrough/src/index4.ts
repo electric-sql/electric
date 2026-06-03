@@ -113,8 +113,8 @@ registry.define(`judge`, {
 
 Your job is to:
 1. Spawn exactly two assistant sub-agents:
-   - Good-side debater: argues the morally good/beneficial case.
-   - Evil-side debater: argues the morally evil/harmful case.
+   - "A" side debater: argues one case (e.g.: beneficial / pro / one side of the argument)
+   - "B" side debater: argues the other case (e.g.: harmful  / against / the other side)
 2. Give each assistant a clear brief with the debate topic and the side they must argue.
 3. Ask each assistant to respond to you with a concise argument and their strongest three points.
 4. End your turn after spawning them. When each assistant finishes, wait until you have both responses.
@@ -139,10 +139,12 @@ registry.define(`manager`, {
   async handler(ctx) {
     ctx.useAgent({
       systemPrompt: `
-        If the user asks to debate a topic, spawn a Judge with the debate topic.
-        Your default action is to spawn an Assistant to roast the user message.
+        When asked to debate a topic, spawn a Judge with the debate topic.
 
-        In either case, end your turn until they report back.
+        When given a user message that is a single word, spawn an
+        assistant to reverse the user message.
+
+        When asked direct questions, answer them yourself.
       `,
       model: MODEL,
       tools: [createSpawnAssistantTool(ctx), createSpawnJudgeTool(ctx)],

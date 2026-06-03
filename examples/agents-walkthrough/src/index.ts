@@ -202,16 +202,17 @@ registry.define(`judge`, {
       return ctx.sleep()
     }
 
-    const finished = (wake.payload as { finished_child?: FinishedChild })
-      ?.finished_child
-    if (!finished) {
+    const finished_child = wake.payload?.finished_child as
+      | FinishedChild
+      | undefined
+    if (!finished_child) {
       return ctx.sleep()
     }
 
     const side =
-      finished.url === debate.aUrl
+      finished_child.url === debate.aUrl
         ? `a`
-        : finished.url === debate.bUrl
+        : finished_child.url === debate.bUrl
           ? `b`
           : null
     if (!side) {
@@ -222,7 +223,7 @@ registry.define(`judge`, {
 
     if (debate.phase === `arguing`) {
       ctx.state.debate.update(`current`, (d) => {
-        d.arguments[side] = finished.response ?? ``
+        d.arguments[side] = finished_child.response ?? ``
       })
       debate = ctx.state.debate.get(`current`)!
 
@@ -307,34 +308,33 @@ function createSpawnJudgeTool(ctx: HandlerContext) {
   }
 }
 
-const MANAGER_PROMPT = `You delegate work and relay results to the user.
-- If the user asks to debate a topic, spawn a Judge with the topic, then end your turn.
-- Otherwise, spawn an Assistant to roast the user's message, then end your turn.
-- When a Judge reports a verdict, present it to the user.`
-
 registry.define(`manager`, {
   description: `Delegates to assistants and judges and relays their results to the user.`,
   async handler(ctx, wake) {
-    // Only act on judge completions when the debate is fully done. Note that a
-    // *failed* judge run is not a 'completed' wake, so it skips this guard.
+    if ((wake.type = `wake`)) {
+      const child = wake.payload?.finished_child as FinishedChild | undefined
 
-    const child = (wake.payload as { finished_child?: FinishedChild })
-      ?.finished_child
-    if (child?.type === `judge` && child.run_status === `completed`) {
-      // Shows how a parent can observe the state of a child.
+      if (child?.type === `judge` && child.run_status === `completed`) {
+        const judge = await ctx.observe(entity(child.url))
 
-      const judge = await ctx.observe(entity(child.url))
-      const debate = judge.db.collections.debate.get(`current`) as
-        | Debate
-        | undefined
-
-      if (debate?.phase !== `done`) {
-        return ctx.sleep()
+        const debate = judge.db.collections.debate.get(`current`) as
+          | Debate
+          | undefined
+        if (debate?.phase !== `done`) {
+          return ctx.sleep()
+        }
       }
     }
 
     ctx.useAgent({
-      systemPrompt: MANAGER_PROMPT,
+      systemPrompt: `
+        When asked to debate a topic, spawn a Judge with the debate topic.
+
+        When given a user message that is a single word, spawn an
+        assistant to reverse the user message.
+
+        When asked direct questions, answer them yourself.
+      `,
       model: MODEL,
       tools: [createSpawnAssistantTool(ctx), createSpawnJudgeTool(ctx)],
     })
