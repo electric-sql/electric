@@ -7,6 +7,7 @@ import {
 } from '../../shared/space'
 import { readDemoSessionIdentity } from '../../shared/session'
 import { createLivingWikiApiClient } from '../api/livingWikiApi'
+import { IntakeAgentTimeline } from '../components/agents/IntakeAgentTimeline'
 import { WikiStateDashboard } from '../components/wiki-state/WikiStateDashboard'
 import { useLivingWikiStateSnapshot } from '../hooks/useLivingWikiStateSnapshot'
 import { useJoinSpace, useSpace } from '../hooks/useSpace'
@@ -38,34 +39,11 @@ function SpaceRoute() {
 const isDemoAvatarColor = (value: string): value is DemoAvatarColor =>
   demoAvatarColors.some((color) => color === value)
 
-const parseIntakeText = (value: string) => {
-  const trimmed = value.trim()
-  try {
-    const url = new URL(trimmed)
-    return {
-      kind: `url` as const,
-      title: url.hostname || trimmed,
-      url: url.toString(),
-    }
-  } catch {
-    const firstLine = trimmed.split(/\r?\n/, 1)[0]?.trim()
-    return {
-      kind: `text` as const,
-      title: firstLine ? firstLine.slice(0, 80) : `Untitled note`,
-      body: trimmed,
-    }
-  }
-}
-
 export function SpaceRoutePage({ wikiSpaceId }: { wikiSpaceId: string }) {
   const [storedActorId, setStoredActorId] = useState(readStoredActorId)
   const [displayName, setDisplayName] = useState(``)
   const [avatarColor, setAvatarColor] = useState<DemoAvatarColor>(`blue`)
   const [joinedSpace, setJoinedSpace] = useState<WikiSpaceSnapshot | null>(null)
-  const [intakeText, setIntakeText] = useState(``)
-  const [sourceError, setSourceError] = useState<Error | null>(null)
-  const [sourceMessage, setSourceMessage] = useState<string | undefined>()
-  const [submittingSource, setSubmittingSource] = useState(false)
   const [reviewNote, setReviewNote] = useState(``)
   const [reviewFlowError, setReviewFlowError] = useState<Error | null>(null)
   const [reviewFlowMessage, setReviewFlowMessage] = useState<
@@ -147,34 +125,6 @@ export function SpaceRoutePage({ wikiSpaceId }: { wikiSpaceId: string }) {
     }
   }
 
-  async function onSubmitSource(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!displayedSpace) return
-
-    const parsedIntake = parseIntakeText(intakeText)
-
-    setSubmittingSource(true)
-    setSourceError(null)
-    setSourceMessage(`Submitting source…`)
-    try {
-      await createLivingWikiApiClient().submitSource({
-        wikiSpaceId,
-        actorId: displayedSpace.currentActor.id,
-        ...parsedIntake,
-      })
-      setIntakeText(``)
-      setSourceMessage(`Source submitted.`)
-      await refreshSharedState()
-    } catch (nextError) {
-      setSourceMessage(undefined)
-      setSourceError(
-        nextError instanceof Error ? nextError : new Error(String(nextError))
-      )
-    } finally {
-      setSubmittingSource(false)
-    }
-  }
-
   return (
     <section className="lw-space-frame">
       <header className="lw-space-topbar">
@@ -251,40 +201,7 @@ export function SpaceRoutePage({ wikiSpaceId }: { wikiSpaceId: string }) {
         </label>
       </section>
 
-      <form
-        className="lw-private-intake"
-        onSubmit={(event) => void onSubmitSource(event)}
-      >
-        <div className="lw-private-intake-heading">PRIVATE INTAKE AGENT</div>
-        <h2>Send to Intake Agent</h2>
-        <label>
-          Paste URL or note
-          <textarea
-            aria-label="Paste URL or note"
-            required
-            placeholder={`Paste URL or note…\n"Stigmergy dissolves culture vs institutions; protocols reshape cognition..."`}
-            value={intakeText}
-            onChange={(event) => setIntakeText(event.currentTarget.value)}
-          />
-        </label>
-        <button
-          type="submit"
-          disabled={submittingSource || displayedSpace === null}
-          style={{ marginTop: 12 }}
-        >
-          {submittingSource
-            ? `Sending to Intake Agent…`
-            : `Send to Intake Agent`}
-        </button>
-        <div aria-live="polite">
-          {sourceMessage ? <p>{sourceMessage}</p> : null}
-        </div>
-        {sourceError ? <p role="alert">{sourceError.message}</p> : null}
-        <p className="lw-intake-response">
-          Intake Agent: I’ll publish submitted notes into the compile loop once
-          the Agents pass-through backend is connected.
-        </p>
-      </form>
+      <IntakeAgentTimeline wikiSpaceId={wikiSpaceId} />
 
       <form onSubmit={(event) => void onJoin(event)} className="lw-join-panel">
         <h2>Join this space</h2>

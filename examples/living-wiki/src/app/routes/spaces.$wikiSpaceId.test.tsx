@@ -35,6 +35,14 @@ vi.mock(`../hooks/useLivingWikiStateSnapshot`, () => ({
   }),
 }))
 
+vi.mock(`../components/agents/IntakeAgentTimeline`, () => ({
+  IntakeAgentTimeline: ({ wikiSpaceId }: { wikiSpaceId: string }) => (
+    <section aria-label="Private intake agent">
+      Intake agent timeline for {wikiSpaceId}
+    </section>
+  ),
+}))
+
 const originalFetch = globalThis.fetch
 const createdAt = `2026-06-03T00:00:00.000Z`
 const makeSnapshot = (
@@ -149,6 +157,9 @@ describe(`SpaceRoutePage`, () => {
     expect(
       screen.getByRole(`region`, { name: `Living wiki shared-state dashboard` })
     ).toBeInTheDocument()
+    expect(
+      screen.getByRole(`region`, { name: `Private intake agent` })
+    ).toHaveTextContent(`Intake agent timeline for wiki_test`)
     expect(globalThis.fetch).toHaveBeenCalledWith(
       `/api/spaces/wiki_test?actorId=actor_ada`,
       { method: `GET` }
@@ -183,98 +194,6 @@ describe(`SpaceRoutePage`, () => {
     await waitFor(() =>
       expect(screen.getByText(`Current actor: Katherine`)).toBeInTheDocument()
     )
-  })
-
-  it(`submits a text source and refreshes shared state`, async () => {
-    globalThis.fetch = vi
-      .fn()
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify(makeSnapshot()), {
-          headers: { 'content-type': `application/json` },
-        })
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            source: sourceRow,
-            activityEventId: `event_source-note`,
-          }),
-          { headers: { 'content-type': `application/json` } }
-        )
-      ) as typeof fetch
-    render(<SpaceRoutePage wikiSpaceId="wiki_test" />)
-    await screen.findByRole(`heading`, { name: `Test Space` })
-    fireEvent.change(
-      screen.getByRole(`textbox`, { name: `Paste URL or note` }),
-      {
-        target: { value: `Room note\nImportant local knowledge` },
-      }
-    )
-    fireEvent.click(
-      screen.getByRole(`button`, { name: `Send to Intake Agent` })
-    )
-    expect(
-      screen.getByRole(`button`, { name: `Sending to Intake Agent…` })
-    ).toBeInTheDocument()
-    await waitFor(() => expect(refreshSharedState).toHaveBeenCalled())
-    expect(screen.getByText(`Source submitted.`)).toBeInTheDocument()
-    const [, init] = vi
-      .mocked(globalThis.fetch)
-      .mock.calls.find(
-        ([path]) => path === `/api/spaces/wiki_test/sources`
-      ) as [string, RequestInit]
-    expect(JSON.parse(String(init.body))).toEqual({
-      actorId: `actor_ada`,
-      kind: `text`,
-      title: `Room note`,
-      body: `Room note\nImportant local knowledge`,
-    })
-  })
-
-  it(`submits a pasted URL through the same intake form`, async () => {
-    globalThis.fetch = vi
-      .fn()
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify(makeSnapshot()), {
-          headers: { 'content-type': `application/json` },
-        })
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            source: {
-              ...sourceRow,
-              kind: `url`,
-              url: `https://example.com/notes`,
-            },
-            activityEventId: `event_source-url`,
-          }),
-          { headers: { 'content-type': `application/json` } }
-        )
-      ) as typeof fetch
-    render(<SpaceRoutePage wikiSpaceId="wiki_test" />)
-    await screen.findByRole(`heading`, { name: `Test Space` })
-    fireEvent.change(
-      screen.getByRole(`textbox`, { name: `Paste URL or note` }),
-      {
-        target: { value: `https://example.com/notes` },
-      }
-    )
-    fireEvent.click(
-      screen.getByRole(`button`, { name: `Send to Intake Agent` })
-    )
-    await waitFor(() => expect(refreshSharedState).toHaveBeenCalled())
-    const [, init] = vi
-      .mocked(globalThis.fetch)
-      .mock.calls.find(
-        ([path]) => path === `/api/spaces/wiki_test/sources`
-      ) as [string, RequestInit]
-    expect(JSON.parse(String(init.body))).toEqual({
-      actorId: `actor_ada`,
-      kind: `url`,
-      title: `example.com`,
-      url: `https://example.com/notes`,
-    })
   })
 
   it(`proposes a page from a submitted source without manual ID entry`, async () => {
