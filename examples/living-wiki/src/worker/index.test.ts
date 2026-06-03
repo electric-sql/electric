@@ -413,29 +413,6 @@ describe(`living wiki worker`, () => {
     await expect(response.json()).resolves.toMatchObject({ ok: false })
   })
 
-  it(`returns an empty shared-state snapshot when Worker-local space memory is missing`, async () => {
-    const response = await worker.fetch(
-      new Request(
-        `https://living-wiki.test/api/spaces/wiki_missing/shared-state-snapshot`
-      ),
-      env,
-      {} as ExecutionContext
-    )
-
-    expect(response.status).toBe(200)
-    await expect(response.json()).resolves.toMatchObject({
-      wiki_spaces: [],
-      actors: [],
-      memberships: [],
-      activity_events: [],
-      sources: [],
-      wiki_pages: [],
-      wiki_links: [],
-      review_items: [],
-      agent_runs: [],
-    })
-  })
-
   it(`returns 404 JSON for unknown REST spaces`, async () => {
     const response = await worker.fetch(
       new Request(`https://living-wiki.test/api/spaces/wiki_missing`),
