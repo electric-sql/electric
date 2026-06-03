@@ -594,7 +594,9 @@ onBeforeUnmount(() => {
 
 /* Each event row is a `<Stack>` with `<Text size={1} family="mono">`
    index, `<Badge size={1}>` op pill and `<Code size={1}>` summary —
-   so every text element resolves to 11px. */
+   so every text element resolves to 11px. The live `.eventRow` has
+   no per-row divider — rows read as a flat list, separated only by
+   the panel-header above. */
 .event-row {
   display: grid;
   grid-template-columns: 24px auto minmax(0, 1fr) auto;
@@ -605,7 +607,6 @@ onBeforeUnmount(() => {
   font-size: var(--ds-text-xs);
   line-height: var(--ds-text-xs-lh);
   color: var(--ds-text-2);
-  border-bottom: var(--line);
   background: transparent;
 }
 
