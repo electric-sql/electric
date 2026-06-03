@@ -4,6 +4,31 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { demoSessionStorageKey } from '../../shared/session'
 import { SpaceRoutePage } from './spaces.$wikiSpaceId'
 
+vi.mock(`../hooks/useLivingWikiStateViewModels`, () => ({
+  useLivingWikiStateViewModels: () => ({
+    viewModel: {
+      activityEvents: [],
+      members: [],
+      sources: { submitted: [], published: [], rejected: [] },
+      graphSummary: {
+        pages: { proposed: 0, canonical: 0, rejected: 0, total: 0 },
+        links: { proposed: 0, canonical: 0, rejected: 0, total: 0 },
+        totalPages: 0,
+        totalLinks: 0,
+      },
+      reviewSummary: {
+        open: 0,
+        approved: 0,
+        rejected: 0,
+        total: 0,
+        hasOpenItems: false,
+      },
+    },
+    isLoading: false,
+    isError: false,
+  }),
+}))
+
 const originalFetch = globalThis.fetch
 const createdAt = `2026-06-03T00:00:00.000Z`
 
