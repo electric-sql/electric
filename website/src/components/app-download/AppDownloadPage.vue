@@ -215,15 +215,18 @@ const primaryPlatform = computed(
     <!-- ─────────────────── §1 — Hero ─────────────────── -->
     <section class="ad-hero">
       <div class="ad-hero-inner">
+        <!-- Strap above the H1: the old title's verb-chain demoted to a
+             small mono lead-line so the product name (`Electric Agents
+             App.`) lands as the headline. Keeps the page's promise
+             visible above the fold without competing with the brand. -->
+        <p class="ad-hero-strap mono">run · observe · steer</p>
         <h1 class="ad-hero-name">
-          Run, observe and steer your&nbsp;<span class="ad-hero-accent"
-            >agents</span
-          >.
+          Electric Agents&nbsp;<span class="ad-hero-accent">App</span>.
         </h1>
         <p class="ad-hero-text">
-          Desktop and mobile clients for the Electric Agents platform — one app
-          to code with Horton, attach to remote sessions, and build your own
-          agents on the infra and&nbsp;SDK.
+          Desktop and mobile clients — one app to code with Horton, attach to
+          remote sessions, and build your own agents on the infra
+          and&nbsp;SDK.
         </p>
 
         <div class="ad-hero-actions">
@@ -1109,6 +1112,18 @@ const primaryPlatform = computed(
   position: relative;
   max-width: 820px;
   margin: 0 auto;
+}
+
+.ad-hero-strap {
+  /* Small mono lead-line above the H1. Lowercase, dot-separated to
+     mirror the page's other mono accents (sub-labels under
+     placeholders, `Touches: …` lines in §3.5). Sits at ~32% the
+     visual weight of the H1 below it so the headline still
+     dominates. */
+  margin: 0 0 14px;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  color: var(--vp-c-text-3);
 }
 
 .ad-hero-name {
