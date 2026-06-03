@@ -1055,9 +1055,8 @@ export const TOYS: readonly ToyDef[] = [
   // Primitives + scenes for the App-page mockup work
   // (see APP_DESKTOP_MOCKUP_PLAN.md). The "app" group covers
   // everything inside `website/src/components/brand-toys/app/` —
-  // tokens probe (this entry), chrome primitives, sidebar / chat /
-  // state parts, and the high-level scenes consumed by
-  // `AppDownloadPage.vue`.
+  // tokens probe, chrome primitives, sidebar / chat / state parts,
+  // and the high-level scenes consumed by `AppDownloadPage.vue`.
   {
     id: `app-tokens-probe`,
     label: `App — tokens probe`,
@@ -1076,6 +1075,95 @@ export const TOYS: readonly ToyDef[] = [
     defaultSize: { w: 1100, h: 720 },
     background: `dark`,
     source: `src/components/brand-toys/app/AppTokensProbe.vue`,
+    animated: false,
+  },
+  {
+    id: `app-traffic-lights`,
+    label: `App — traffic lights`,
+    group: `app`,
+    description: `macOS close / minimize / maximize dots. Phase 2 chrome primitive.`,
+    component: () =>
+      import(`./app/toys/AppTrafficLightsToy.vue`).then((m) => m.default),
+    controls: [
+      {
+        name: `state`,
+        type: `select`,
+        default: `normal`,
+        options: [`normal`, `hover`, `active`],
+        description: `Glyphs (× / − / +) appear in hover/active; default macOS look hides them.`,
+      },
+      {
+        name: `theme`,
+        type: `select`,
+        default: `dark`,
+        options: [`light`, `dark`],
+      },
+    ],
+    defaultSize: { w: 360, h: 160 },
+    background: `dark`,
+    source: `src/components/brand-toys/app/primitives/chrome/AppTrafficLights.vue`,
+    animated: false,
+  },
+  {
+    id: `app-titlebar`,
+    label: `App — titlebar`,
+    group: `app`,
+    description: `OS-aware titlebar primitive (macOS traffic lights · Windows/Linux menu strip + window controls). Phase 2 chrome primitive.`,
+    component: () =>
+      import(`./app/toys/AppTitlebarToy.vue`).then((m) => m.default),
+    controls: [
+      {
+        name: `os`,
+        type: `select`,
+        default: `auto`,
+        options: [`auto`, `macos`, `windows`, `linux`],
+        description: `'auto' resolves via useDetectedOs() to the visitor's OS. Explicit values force a fixed variant.`,
+      },
+      {
+        name: `mode`,
+        type: `select`,
+        default: `full`,
+        options: [`full`, `compact`],
+        description: `'compact' strips menu strip + window controls — the variant scenes flip to at narrow container widths.`,
+      },
+      {
+        name: `theme`,
+        type: `select`,
+        default: `dark`,
+        options: [`light`, `dark`],
+      },
+      { name: `title`, type: `string`, default: `` },
+    ],
+    defaultSize: { w: 1100, h: 240 },
+    background: `dark`,
+    source: `src/components/brand-toys/app/primitives/chrome/AppTitlebar.vue`,
+    animated: false,
+  },
+  {
+    id: `app-window-frame`,
+    label: `App — window frame`,
+    group: `app`,
+    description: `Outer rounded shell + titlebar slot + empty workspace placeholder. Phase 2 chrome primitive.`,
+    component: () =>
+      import(`./app/toys/AppWindowFrameToy.vue`).then((m) => m.default),
+    controls: [
+      {
+        name: `os`,
+        type: `select`,
+        default: `auto`,
+        options: [`auto`, `macos`, `windows`, `linux`],
+        description: `'auto' resolves via useDetectedOs(). Drives the outer border-radius (10px macOS / 8px Win / 6px Linux).`,
+      },
+      {
+        name: `theme`,
+        type: `select`,
+        default: `dark`,
+        options: [`light`, `dark`],
+      },
+    ],
+    defaultSize: { w: 1280, h: 800 },
+    background: `dark`,
+    source: `src/components/brand-toys/app/primitives/chrome/AppWindowFrame.vue`,
     animated: false,
   },
 
