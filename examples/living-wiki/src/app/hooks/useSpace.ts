@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createLivingWikiApiClient } from '../api/livingWikiApi'
 import type {
   CreateSpaceInput,
@@ -50,11 +50,15 @@ const persistCurrentActor = (snapshot: WikiSpaceSnapshot): void => {
     return
   }
 
-  writeDemoSessionIdentity(storage, {
-    actorId: snapshot.currentActor.id,
-    displayName: snapshot.currentActor.displayName,
-    avatarColor: snapshot.currentActor.avatarColor,
-  })
+  try {
+    writeDemoSessionIdentity(storage, {
+      actorId: snapshot.currentActor.id,
+      displayName: snapshot.currentActor.displayName,
+      avatarColor: snapshot.currentActor.avatarColor,
+    })
+  } catch {
+    // Session persistence is best-effort and should not fail successful API calls.
+  }
 }
 
 export function useSpace(
@@ -64,54 +68,51 @@ export function useSpace(
   const [space, setSpace] = useState<WikiSpaceSnapshot | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
+  const mountedRef = useRef(false)
+  const requestIdRef = useRef(0)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const refresh = useCallback(async () => {
-    setLoading(true)
-    setError(null)
+    const requestId = ++requestIdRef.current
+    if (mountedRef.current) {
+      if (mountedRef.current) {
+        setLoading(true)
+        setError(null)
+      }
+    }
 
     try {
       const snapshot = await createLivingWikiApiClient().getSpace({
         wikiSpaceId,
         actorId,
       })
-      setSpace(snapshot)
+      if (mountedRef.current && requestId === requestIdRef.current) {
+        setSpace(snapshot)
+      }
       return snapshot
     } catch (caughtError) {
       const error = toError(caughtError)
-      setError(error)
-      setSpace(null)
+      if (mountedRef.current && requestId === requestIdRef.current) {
+        setError(error)
+        setSpace(null)
+      }
       return null
     } finally {
-      setLoading(false)
+      if (mountedRef.current && requestId === requestIdRef.current) {
+        setLoading(false)
+      }
     }
   }, [actorId, wikiSpaceId])
 
   useEffect(() => {
-    let active = true
-
-    setLoading(true)
-    setError(null)
-
-    createLivingWikiApiClient()
-      .getSpace({ wikiSpaceId, actorId })
-      .then((snapshot) => {
-        if (!active) return
-        setSpace(snapshot)
-      })
-      .catch((caughtError: unknown) => {
-        if (!active) return
-        setError(toError(caughtError))
-        setSpace(null)
-      })
-      .finally(() => {
-        if (!active) return
-        setLoading(false)
-      })
-
-    return () => {
-      active = false
-    }
-  }, [actorId, wikiSpaceId])
+    void refresh()
+  }, [refresh])
 
   return { space, loading, error, refresh }
 }
@@ -119,10 +120,20 @@ export function useSpace(
 export function useCreateSpace(): UseCreateSpaceResult {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
+  const mountedRef = useRef(false)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const createSpace = useCallback(async (input: CreateSpaceInput) => {
-    setLoading(true)
-    setError(null)
+    if (mountedRef.current) {
+      setLoading(true)
+      setError(null)
+    }
 
     try {
       const snapshot = await createLivingWikiApiClient().createSpace(input)
@@ -130,10 +141,14 @@ export function useCreateSpace(): UseCreateSpaceResult {
       return snapshot
     } catch (caughtError) {
       const error = toError(caughtError)
-      setError(error)
+      if (mountedRef.current) {
+        setError(error)
+      }
       throw error
     } finally {
-      setLoading(false)
+      if (mountedRef.current) {
+        setLoading(false)
+      }
     }
   }, [])
 
@@ -143,6 +158,14 @@ export function useCreateSpace(): UseCreateSpaceResult {
 export function useJoinSpace(wikiSpaceId: string): UseJoinSpaceResult {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
+  const mountedRef = useRef(false)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const joinSpace = useCallback(
     async (input: UseJoinSpaceInput) => {
@@ -158,10 +181,14 @@ export function useJoinSpace(wikiSpaceId: string): UseJoinSpaceResult {
         return snapshot
       } catch (caughtError) {
         const error = toError(caughtError)
-        setError(error)
+        if (mountedRef.current) {
+          setError(error)
+        }
         throw error
       } finally {
-        setLoading(false)
+        if (mountedRef.current) {
+          setLoading(false)
+        }
       }
     },
     [wikiSpaceId]
