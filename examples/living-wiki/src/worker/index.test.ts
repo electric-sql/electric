@@ -68,6 +68,58 @@ describe(`living wiki worker`, () => {
     expect(text).not.toContain(env.ELECTRIC_AGENTS_PRINCIPAL_KEY)
   })
 
+  it(`rejects REST seeded demo when disabled`, async () => {
+    const response = await worker.fetch(
+      new Request(`https://living-wiki.test/api/demo/seed`, { method: `POST` }),
+      { ...env, ENABLE_SEEDED_DEMO: `false` },
+      {} as ExecutionContext
+    )
+
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toMatchObject({
+      ok: false,
+      error: `Seeded demo is disabled`,
+    })
+  })
+
+  it(`seeds the REST demo idempotently with a submitted source`, async () => {
+    const request = () =>
+      new Request(`https://living-wiki.test/api/demo/seed`, { method: `POST` })
+
+    const first = await worker.fetch(request(), env, {} as ExecutionContext)
+    const second = await worker.fetch(request(), env, {} as ExecutionContext)
+
+    expect(first.status).toBe(200)
+    expect(second.status).toBe(200)
+    const firstBody = (await first.json()) as {
+      space: { space: { id: string }; currentActor: { id: string } }
+      sourceId: string
+    }
+    const secondBody = await second.json()
+    expect(secondBody).toEqual(firstBody)
+
+    const snapshot = await worker.fetch(
+      new Request(
+        `https://living-wiki.test/api/spaces/${firstBody.space.space.id}/shared-state-snapshot`
+      ),
+      env,
+      {} as ExecutionContext
+    )
+    const rows = (await snapshot.json()) as {
+      sources: unknown[]
+      activity_events: unknown[]
+    }
+    expect(rows.sources).toHaveLength(1)
+    expect(rows.sources).toEqual([
+      expect.objectContaining({
+        id: firstBody.sourceId,
+        status: `submitted`,
+        kind: `text`,
+      }),
+    ])
+    expect(rows.activity_events).toHaveLength(2)
+  })
+
   it(`returns 404 JSON for unknown API routes`, async () => {
     const request = new Request(`https://living-wiki.test/api/missing`)
     const response = await worker.fetch(request, env, {} as ExecutionContext)

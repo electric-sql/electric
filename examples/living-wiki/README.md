@@ -40,6 +40,18 @@ pnpm --filter @electric-ax/example-living-wiki dev:worker
 Frontend: http://localhost:5177  
 Worker: http://localhost:8787
 
+### Seeded demo script
+
+Enable the Worker-local seeded demo flag, start dev, then open the homepage and click **Start seeded demo**:
+
+```bash
+ENABLE_SEEDED_DEMO=true pnpm --filter @electric-ax/example-living-wiki dev
+```
+
+The button calls `POST /api/demo/seed`, stores the returned demo actor identity in browser session storage, and navigates to the seeded WikiSpace. The seed creates one deterministic space, owner actor, and submitted text source; repeated seed calls are idempotent. Seeded data is Worker-local memory only and is not durable across Worker isolates, Wrangler state resets, or deploys. There is no reset endpoint in this slice.
+
+Manual path: run the same dev command without `ENABLE_SEEDED_DEMO=true`, create a space from the homepage, then submit text or URL sources from the space page.
+
 ## Commands
 
 ```bash

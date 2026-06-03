@@ -163,6 +163,47 @@ export class LocalDemoWikiSpaceStore implements WikiSpaceStore {
   }
 }
 
+export type SeedLocalDemoWikiSpaceCommand = {
+  wikiSpaceId: string
+  actorId: string
+  title: string
+  displayName: string
+  avatarColor: DemoActor[`avatarColor`]
+  createdAt: string
+}
+
+export async function seedLocalDemoWikiSpace(
+  command: SeedLocalDemoWikiSpaceCommand
+): Promise<WikiSpaceSnapshot> {
+  const existing = localDemoSpaces.get(command.wikiSpaceId)
+
+  if (existing !== undefined) {
+    return toSnapshot(existing, command.actorId)
+  }
+
+  const actor: DemoActor = {
+    id: command.actorId,
+    wikiSpaceId: command.wikiSpaceId,
+    kind: `human`,
+    displayName: normalizeDisplayName(command.displayName),
+    avatarColor: command.avatarColor,
+    createdAt: command.createdAt,
+  }
+  const record: InternalSpaceRecord = {
+    space: {
+      id: command.wikiSpaceId,
+      title: normalizeSpaceTitle(command.title),
+      createdAt: command.createdAt,
+      createdByActorId: command.actorId,
+    },
+    actors: [actor],
+  }
+
+  localDemoSpaces.set(command.wikiSpaceId, record)
+
+  return toSnapshot(record, command.actorId)
+}
+
 export const getWikiSpaceStore = (_env: WorkerEnv): WikiSpaceStore =>
   new LocalDemoWikiSpaceStore()
 

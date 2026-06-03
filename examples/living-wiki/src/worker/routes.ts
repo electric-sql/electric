@@ -14,6 +14,7 @@ import { resolveReviewItemCommandSchema } from '../shared/wiki-state-reviews'
 import { submitSourceCommandSchema } from '../shared/wiki-state-sources'
 import { getElectricCloudConfig } from './electric-cloud'
 import { isSeededDemoEnabled, type WorkerEnv } from './env'
+import { seedLivingWikiDemo } from './seeded-demo'
 import {
   getWikiSpaceStore,
   WikiSpaceActorNotFoundError,
@@ -98,6 +99,17 @@ export async function handleRestRequest(
 
   if (url.pathname === `/api/health` && request.method === `GET`) {
     return json(healthResponse(env))
+  }
+
+  if (url.pathname === `/api/demo/seed` && request.method === `POST`) {
+    if (!isSeededDemoEnabled(env)) {
+      return json(
+        { ok: false, error: `Seeded demo is disabled` },
+        { status: 403 }
+      )
+    }
+
+    return json(await seedLivingWikiDemo(env))
   }
 
   if (url.pathname === `/api/spaces` && request.method === `POST`) {

@@ -1,8 +1,11 @@
-import { FormEvent, useState } from 'react'
+import { FormEvent, useEffect, useState } from 'react'
 import { createRoute, useNavigate } from '@tanstack/react-router'
 import { HealthPanel } from '../components/HealthPanel'
+import { createLivingWikiApiClient } from '../api/livingWikiApi'
 import { useCreateSpace } from '../hooks/useSpace'
 import { demoAvatarColors, type DemoAvatarColor } from '../../shared/space'
+import type { HealthResponse } from '../../shared/types'
+import { writeDemoSessionIdentity } from '../../shared/session'
 import { Route as rootRoute } from './__root'
 
 export const Route = createRoute({
@@ -20,6 +23,23 @@ function IndexRoute() {
   const [title, setTitle] = useState(``)
   const [displayName, setDisplayName] = useState(``)
   const [avatarColor, setAvatarColor] = useState<DemoAvatarColor>(`blue`)
+  const [seededDemoEnabled, setSeededDemoEnabled] = useState(false)
+  const [seedLoading, setSeedLoading] = useState(false)
+  const [seedError, setSeedError] = useState<string | undefined>()
+
+  useEffect(() => {
+    let cancelled = false
+    fetch(`/api/health`)
+      .then((response) => response.json() as Promise<HealthResponse>)
+      .then((health) => {
+        if (!cancelled && health.ok)
+          setSeededDemoEnabled(health.seededDemoEnabled)
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   async function onCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -32,6 +52,27 @@ function IndexRoute() {
       to: `/spaces/$wikiSpaceId`,
       params: { wikiSpaceId: snapshot.space.id },
     })
+  }
+
+  async function onStartSeededDemo() {
+    setSeedLoading(true)
+    setSeedError(undefined)
+    try {
+      const result = await createLivingWikiApiClient().startSeededDemo()
+      writeDemoSessionIdentity(window.localStorage, {
+        actorId: result.space.currentActor.id,
+        displayName: result.space.currentActor.displayName,
+        avatarColor: result.space.currentActor.avatarColor,
+      })
+      await navigate({
+        to: `/spaces/$wikiSpaceId`,
+        params: { wikiSpaceId: result.space.space.id },
+      })
+    } catch (error) {
+      setSeedError(error instanceof Error ? error.message : `Seed failed`)
+    } finally {
+      setSeedLoading(false)
+    }
   }
 
   return (
@@ -60,6 +101,19 @@ function IndexRoute() {
         A multiplayer substrate-engineering demo where humans and agents compile
         sources into a living wiki graph.
       </p>
+
+      {seededDemoEnabled ? (
+        <div style={{ margin: `24px 0` }}>
+          <button
+            type="button"
+            disabled={seedLoading}
+            onClick={() => void onStartSeededDemo()}
+          >
+            Start seeded demo
+          </button>
+          {seedError ? <p role="alert">{seedError}</p> : null}
+        </div>
+      ) : null}
 
       <form
         onSubmit={(event) => void onCreate(event)}

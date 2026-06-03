@@ -37,6 +37,20 @@ const jsonResponse = (body: unknown, init?: ResponseInit) =>
   })
 
 describe(`createLivingWikiApiClient`, () => {
+  it(`POSTs startSeededDemo to /api/demo/seed and validates the response`, async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({ space: snapshot, sourceId: `source_seeded_demo` })
+    )
+    const api = createLivingWikiApiClient({ fetch: fetchMock as typeof fetch })
+
+    await expect(api.startSeededDemo()).resolves.toEqual({
+      space: snapshot,
+      sourceId: `source_seeded_demo`,
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith(`/api/demo/seed`, { method: `POST` })
+  })
+
   it(`POSTs createSpace to /api/spaces and validates the snapshot`, async () => {
     const fetchMock = vi.fn(async () => jsonResponse(snapshot))
     const api = createLivingWikiApiClient({ fetch: fetchMock as typeof fetch })
