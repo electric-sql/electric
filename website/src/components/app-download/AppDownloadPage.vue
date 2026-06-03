@@ -317,10 +317,12 @@ const primaryPlatform = computed(
       <div class="ad-hero-mockup">
         <div class="ad-hero-mockup-stage">
           <div class="ad-hero-mockup-desktop">
-            <AppMockupShadowHost
-              :scene="HeroChatStateScene"
-              :scene-props="{ os: 'auto', theme: 'dark' }"
-            />
+            <div class="ad-hero-mockup-desktop-inner">
+              <AppMockupShadowHost
+                :scene="HeroChatStateScene"
+                :scene-props="{ os: 'auto', theme: 'dark' }"
+              />
+            </div>
           </div>
           <div class="ad-hero-mockup-phone" aria-hidden="true">
             <AdPlaceholder
@@ -1326,16 +1328,27 @@ const primaryPlatform = computed(
   /* Keep the scene flush-left so the phone overlaps the chat tile's
      right edge — the design intent in the reference. */
   align-self: stretch;
-  /* Visually scale the desktop to 80 % of its layout size so the
-     mockup pair has more breathing room on the page. The transform
-     leaves the layout box at the original size, which means the
-     scene's internal container queries (sidebar collapse at 950 px,
-     state-tile drop at 720 px) keep firing at the design widths.
-     Anchoring at the top-right keeps the desktop's right edge in
-     place so the phone overlay still overlaps the chat tile's right
-     column as intended. */
+  /* Clip the inner sizing wrapper, which renders at 125 % so the
+     scene's intrinsic layout box is bigger than this footprint —
+     anything that bleeds past the visible footprint is cut here. */
+  overflow: hidden;
+}
+
+/* Inner sizing wrapper. We render the scene at 125 % of the desktop
+   footprint and then scale it back down by 0.8, so the visible result
+   fills `.ad-hero-mockup-desktop` exactly while the scene itself is
+   rendered at a higher intrinsic resolution — every UI element
+   (sidebar, tile headers, message text, state inspector rows…) lands
+   on screen at 80 % of its native size, giving the same on-page
+   footprint as a full-resolution desktop screenshot but with finer
+   detail per pixel. The scene's internal `@container` queries still
+   fire at the larger intrinsic width (~107 % of the stage), so the
+   sidebar + state tile remain visible at any reasonable hero width. */
+.ad-hero-mockup-desktop-inner {
+  width: 125%;
+  height: 125%;
   transform: scale(0.8);
-  transform-origin: top right;
+  transform-origin: top left;
 }
 
 .ad-hero-mockup-phone {
@@ -1392,9 +1405,14 @@ const primaryPlatform = computed(
     width: 100%;
     max-width: 100%;
     aspect-ratio: 16 / 10;
-    /* Drop the scale once the layout stacks; the desktop is the
-       primary device on its own row, so it should fill the column
-       at full size rather than leaving an empty band on the left. */
+  }
+  .ad-hero-mockup-desktop-inner {
+    /* Drop the oversized-render trick once the layout stacks. The
+       desktop is the primary device on its own row, so it should fill
+       the column at 1:1 rather than rendering at 125 % and scaling
+       back down. */
+    width: 100%;
+    height: 100%;
     transform: none;
   }
   .ad-hero-mockup-phone {

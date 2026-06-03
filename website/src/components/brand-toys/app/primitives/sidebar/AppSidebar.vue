@@ -167,7 +167,18 @@ const annotated = computed(() => {
      CSS — the primitive itself just fills its parent column. */
   width: 100%;
   height: 100%;
-  flex-shrink: 0;
+  /* Allow the sidebar to shrink below its `height: 100%` flex-basis
+     when its parent is a flex-column with a sibling above it (e.g.
+     `HeroChatStateScene` mounts a 44-px titlebar-controls row in the
+     same column on macOS). Without this, `height: 100%` + the default
+     `flex-shrink: 1` would still resolve to the parent's full height
+     and overflow by the sibling's height — clipping the footer below
+     the workspace's `overflow: hidden`. `min-height: 0` lifts the
+     default min-content lower bound so the flex algorithm can actually
+     shrink us. In a block-layout parent (e.g. the standalone toy), the
+     `height: 100%` still applies as a regular block height, so this
+     change is layout-context-safe. */
+  min-height: 0;
   background: var(--ds-chrome-bg);
   display: flex;
   flex-direction: column;
@@ -196,6 +207,12 @@ const annotated = computed(() => {
   padding: 0 8px 8px;
   flex: 1;
   min-height: 0;
+  /* When the row tree is taller than the available space, hide the
+     overflow rather than letting it push the footer out of view.
+     The live product scrolls; here we just clip — the mockup never
+     needs to reveal beyond what the fixture defines, and adding a
+     visible scrollbar would muddy the design read. */
+  overflow: hidden;
   /* Custom property the AppSidebarRow's connector lines read off
      the tree wrapper. Set on `.tree` below; declared here too as a
      fallback in case the wrapper is removed in a future variant. */
