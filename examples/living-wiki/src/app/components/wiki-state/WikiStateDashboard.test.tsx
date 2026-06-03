@@ -54,6 +54,13 @@ describe(`WikiStateDashboard`, () => {
         `No review items yet. Curator decisions will appear here.`
       )
     ).toBeInTheDocument()
+    expect(screen.getByText(`No queue item selected`)).toBeInTheDocument()
+    expect(screen.getByText(`No global chat messages yet.`)).toBeInTheDocument()
+    expect(screen.queryByText(`Compiled Knowledge`)).not.toBeInTheDocument()
+    expect(screen.queryByText(`LLM Wiki`)).not.toBeInTheDocument()
+    expect(
+      screen.queryByText(`Maya: I added a source on RFCs`)
+    ).not.toBeInTheDocument()
   })
 
   it(`renders non-empty dashboard text`, () => {

@@ -301,25 +301,40 @@ textarea {
   background: rgba(245, 245, 255, 0.68);
 }
 
-.lw-node-compiled {
+.lw-node-1 {
   top: 14%;
   left: 39%;
 }
-.lw-node-llm {
+.lw-node-2 {
   top: 42%;
   left: 16%;
 }
-.lw-node-rag {
+.lw-node-3 {
   top: 42%;
   right: 18%;
 }
-.lw-node-protocol {
+.lw-node-4 {
   top: 62%;
   left: 36%;
 }
-.lw-node-culture {
-  bottom: 10%;
+.lw-node-5 {
   right: 14%;
+  bottom: 10%;
+}
+
+.lw-empty-graph {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(24rem, calc(100% - 2rem));
+  padding: 1rem;
+  transform: translate(-50%, -50%);
+  border: 1px dashed rgba(23, 32, 51, 0.2);
+  border-radius: 18px;
+  color: var(--lw-muted);
+  background: rgba(255, 255, 255, 0.7);
+  text-align: center;
+  font-weight: 700;
 }
 
 .lw-edge {

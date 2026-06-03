@@ -55,10 +55,12 @@ export function WikiStateDashboard({
     pageCards.find((page) => page.status === `proposed`) ?? pageCards[0]
   const submittedSources = viewModel.sources.submitted
   const selectedSource = submittedSources[0]
+  const hasGraphData =
+    viewModel.graphSummary.totalPages > 0 ||
+    viewModel.graphSummary.totalLinks > 0
   const graphNodes = Math.max(
     viewModel.graphSummary.totalPages,
-    pageCards.length,
-    selectedSource ? 4 : 3
+    pageCards.length
   )
 
   return (
@@ -97,12 +99,12 @@ export function WikiStateDashboard({
             {openReview?.suggested_change ??
               selectedPage?.title ??
               selectedSource?.title ??
-              `WikiAgent: Protocol Stigmergy`}
+              `No queue item selected`}
           </h3>
           <p>
             Status:{` `}
             <strong>
-              {openReview?.status ?? selectedPage?.status ?? `proposed`}
+              {openReview?.status ?? selectedPage?.status ?? `empty`}
             </strong>
           </p>
           <p>Sources: {submittedSources.length}</p>
@@ -145,13 +147,13 @@ export function WikiStateDashboard({
 
         <section className="lw-agent-chat" aria-label="Agent chat">
           <div className="lw-divider-title">Agent Chat</div>
-          <p>
-            <strong>You:</strong> why page?
-          </p>
-          <p>
-            <strong>Agent:</strong> It connects source notes into durable
-            compiled knowledge and asks for human review.
-          </p>
+          {openReview || selectedPage || selectedSource ? (
+            <p>
+              WikiAgent context will appear here for the selected queue item.
+            </p>
+          ) : (
+            <p>No active WikiAgent conversation yet.</p>
+          )}
         </section>
       </aside>
 
@@ -171,27 +173,34 @@ export function WikiStateDashboard({
           className="lw-graph-map"
           aria-label={`${graphNodes} wiki graph nodes`}
         >
-          <div className="lw-node lw-node-solid lw-node-compiled">
-            ○ Compiled Knowledge
-          </div>
-          <div className="lw-edge lw-edge-a" />
-          <div className="lw-node lw-node-faint lw-node-llm">○ LLM Wiki</div>
-          <div className="lw-edge lw-edge-b" />
-          <div className="lw-node lw-node-solid lw-node-rag">○ RAG</div>
-          <div className="lw-edge lw-edge-c" />
-          <div className="lw-node lw-node-solid lw-node-protocol">
-            ○ Protocol Communities
-          </div>
-          <div className="lw-edge lw-edge-d" />
-          <div className="lw-node lw-node-faint lw-node-culture">
-            ○ Culture-World-Machines
-          </div>
-          <div className="lw-tooltip-card">
-            <strong>Edge: LLM Wiki ↔ Protocol Stigmergy</strong>
-            <span>Proposed by: TopicCuratorAgent</span>
-            <span>Reason: shared source lineage + claims</span>
-            <span>Status: pending approval</span>
-          </div>
+          {hasGraphData ? (
+            <>
+              {pageCards.slice(0, 5).map((page, index) => (
+                <div
+                  key={page.id}
+                  className={`lw-node ${page.status === `proposed` ? `lw-node-faint` : `lw-node-solid`} lw-node-${index + 1}`}
+                >
+                  ○ {page.title}
+                </div>
+              ))}
+              {viewModel.graphSummary.totalLinks > 0 ? (
+                <>
+                  <div className="lw-edge lw-edge-a" />
+                  <div className="lw-edge lw-edge-b" />
+                </>
+              ) : null}
+              <div className="lw-tooltip-card">
+                <strong>Living graph</strong>
+                <span>{viewModel.graphSummary.totalPages} pages</span>
+                <span>{viewModel.graphSummary.totalLinks} links</span>
+                <span>Status reflects shared-state rows.</span>
+              </div>
+            </>
+          ) : (
+            <div className="lw-empty-graph">
+              Add a source or connect the Agents stream to populate this graph.
+            </div>
+          )}
         </div>
 
         <div className="lw-center-panels">
@@ -208,8 +217,11 @@ export function WikiStateDashboard({
         <div className="lw-panel-label">RIGHT PULSE</div>
         <section className="lw-pulse-section" aria-label="Global chat">
           <h2>Global Chat</h2>
-          <p>Maya: I added a source on RFCs</p>
-          <p>Agent-7: try comparing it to Karpathy</p>
+          {viewModel.activityEvents.length > 0 ? (
+            <p>Shared activity is flowing. Chat messages will appear here.</p>
+          ) : (
+            <p>No global chat messages yet.</p>
+          )}
         </section>
         <ActivityFeed events={viewModel.activityEvents} />
         <MembersPanel members={viewModel.members} />
