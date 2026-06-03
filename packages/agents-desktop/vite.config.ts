@@ -9,6 +9,7 @@ const REPO_ROOT = path.resolve(PACKAGE_DIR, `../..`)
 
 const MUST_EXTERNALIZE = new Set([
   `electron`,
+  `electron-updater`,
   `better-sqlite3`,
   `sqlite-vec`,
   `canvas`,

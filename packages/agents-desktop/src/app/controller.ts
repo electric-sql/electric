@@ -2,6 +2,7 @@ import { BrowserWindow } from 'electron'
 import type { DesktopAppContext } from './context'
 import * as AppLifecycle from './lifecycle'
 import * as LoginItems from './login-items'
+import { createDesktopUpdater } from './updater'
 import * as CloudAuthInjection from '../cloud/auth-injection'
 import * as ServerFetch from '../cloud/server-fetch'
 import { createCredentialsController } from '../credentials/controller'
@@ -305,12 +306,20 @@ export function createDesktopMainController(ctx: DesktopAppContext) {
     AppLifecycle.applyNativeAppearance(ctx, appearance)
   }
 
+  const updater = createDesktopUpdater({
+    showOrCreateWindow,
+  })
+
+  const checkForUpdates = (): Promise<void> =>
+    updater.checkForUpdates({ triggeredManually: true })
+
   const applicationMenuDeps: ApplicationMenu.ApplicationMenuDeps = {
     windows,
     createWindow,
     sendCommand,
     quitApp,
     showAboutDialog,
+    checkForUpdates,
   }
 
   function showAboutDialog(): void {
@@ -345,7 +354,11 @@ export function createDesktopMainController(ctx: DesktopAppContext) {
     win: BrowserWindow,
     bounds: DesktopMenuPopupBounds
   ): void => {
-    ApplicationMenu.popupAppIconMenu({ showAboutDialog }, win, bounds)
+    ApplicationMenu.popupAppIconMenu(
+      { showAboutDialog, checkForUpdates },
+      win,
+      bounds
+    )
   }
 
   const desktopIpcDeps: DesktopIpc.RegisterDesktopIpcDeps = {
@@ -473,6 +486,7 @@ export function createDesktopMainController(ctx: DesktopAppContext) {
     syncLaunchAtLoginSetting,
     connectConfiguredServers,
     startDiscoveryLoop: localDiscovery.startDiscoveryLoop,
+    initializeUpdater: updater.initialize,
     quitApp,
   }
 }
