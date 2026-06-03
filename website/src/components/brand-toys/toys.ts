@@ -52,6 +52,7 @@ export type ToyGroup =
   | `streams`
   | `cloud`
   | `home`
+  | `app`
   | `misc`
 
 export interface ToyDef {
@@ -1050,6 +1051,34 @@ export const TOYS: readonly ToyDef[] = [
     animated: false,
   },
 
+  // ─────────────────────────── APP MOCKUP KIT ───────────────────────────
+  // Primitives + scenes for the App-page mockup work
+  // (see APP_DESKTOP_MOCKUP_PLAN.md). The "app" group covers
+  // everything inside `website/src/components/brand-toys/app/` —
+  // tokens probe (this entry), chrome primitives, sidebar / chat /
+  // state parts, and the high-level scenes consumed by
+  // `AppDownloadPage.vue`.
+  {
+    id: `app-tokens-probe`,
+    label: `App — tokens probe`,
+    group: `app`,
+    description: `Swatch grid of the --ds-* working palette. Phase 1 token-bridge sanity check.`,
+    component: () => import(`./app/AppTokensProbe.vue`).then((m) => m.default),
+    controls: [
+      {
+        name: `theme`,
+        type: `select`,
+        default: `dark`,
+        options: [`light`, `dark`],
+        description: `Toggle the .app-mockup-root data-theme attribute. Should switch independently of the brand-toys page's forced html.dark class.`,
+      },
+    ],
+    defaultSize: { w: 1100, h: 720 },
+    background: `dark`,
+    source: `src/components/brand-toys/app/AppTokensProbe.vue`,
+    animated: false,
+  },
+
   // ─────────────────────────── MISC STANDALONE ───────────────────────────
   {
     id: `scalability-chart`,
@@ -1111,6 +1140,7 @@ export const GROUP_ORDER: readonly ToyGroup[] = [
   `streams`,
   `cloud`,
   `home`,
+  `app`,
   `misc`,
 ]
 
@@ -1121,5 +1151,6 @@ export const GROUP_LABELS: Record<ToyGroup, string> = {
   streams: `Streams`,
   cloud: `Cloud`,
   home: `Homepage`,
+  app: `App`,
   misc: `Misc`,
 }
