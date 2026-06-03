@@ -2,26 +2,32 @@
 /* AppMessageInput — composer slab (static).
    ─────────────────────────────────────────────────────────────────
    Mirrors `packages/agents-server-ui/src/components/MessageInput.tsx`
-   + `MessageInput.module.css` body shape:
+   + `MessageInput.module.css`.
 
-     [+]  [textarea — "Send a message..."]                    [↑]
-      │              flex                                      │
-      │                                                        │
-      └─ AttachmentActionMenu                              ─── Send / Stop button
+   The live composer is a single flex row with `align-items: flex-end`
+   wrapping `[+ AttachmentActionMenu] [textarea] [↑ composerSend]`. The
+   textarea has a 40-px min-height; the buttons are 20-24 px tall and
+   flex-end-aligned, so the placeholder sits at the natural top of the
+   textarea while the buttons sink to the bottom of the row — visually
+   reading as a "footer" beneath the text:
 
-   The chip strip below (model picker / sandbox picker / working dir)
-   only appears on the spawn screen via `EntityContextDrawer` — NOT
-   in the regular session composer. The mockup paints just the body.
+     ┌─────────────────────────────────────────┐
+     │  Send a message...                      │  ← placeholder top
+     │                                         │
+     │  +                                  ↑   │  ← buttons bottom
+     └─────────────────────────────────────────┘
 
-   Geometry from the source:
-     - .composer:    --ds-surface-raised fill, 1-px --ds-border-1
-                     border, 12-px corner radius, 12-px padding,
-                     --ds-shadow-1 lift.
-     - .composerBody: align-items: flex-end, gap: 8px (--ds-space-2).
-     - .textarea:    min-height 40 px, transparent, no border.
-     - .composerSend: 24×24 round, --ds-gray-a3 disabled fill,
-                      --ds-accent-9 active fill (we render `active`
-                      since the mockup never types anything).
+   Geometry from the source (`MessageInput.module.css` +
+   `AttachmentDrafts.module.css`):
+     - .composer:        --ds-surface-raised fill, 1-px --ds-border-1
+                         border, 12-px corner radius, 12-px padding,
+                         --ds-shadow-1 lift.
+     - .composerBody:    align-items: flex-end, gap: 8px (--ds-space-2).
+     - .textarea:        min-height 40 px, 13-px chat-text, no border.
+     - .addMenuTrigger:  24×24 round, --ds-text-3 colour
+                         (the live AttachmentActionMenu trigger).
+     - .composerSend:    24×24 round, --ds-gray-a3 disabled fill,
+                         --ds-accent-9 active fill.
 
    The composer's outer .root carries -20-px top margin in the live
    product so the slab visually sits ON TOP of the chat surface above
@@ -54,10 +60,10 @@ withDefaults(
   <div class="composer-root">
     <div class="composer">
       <div class="composer-body">
+        <span class="textarea-mock">{{ placeholder }}</span>
         <span class="attach-btn" aria-hidden="true" title="Attach">
           <AppIcon :icon="Plus" :size="2" />
         </span>
-        <span class="textarea-mock">{{ placeholder }}</span>
         <span
           class="composer-send"
           :data-active="sendActive ? 'true' : 'false'"
@@ -93,70 +99,78 @@ withDefaults(
   padding: 12px;
 }
 
+/* Composer body — `[textarea] [+] [↑]` rendered as a single CSS
+   grid where the textarea spans both columns of the top row and the
+   buttons sit on a footer row beneath it. The grid gives us the
+   explicit two-row composition the live UI emerges via
+   `align-items: flex-end` on a 40-px-tall flex row. */
+
 .composer-body {
-  display: flex;
-  align-items: flex-end;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto;
+  row-gap: 4px;
+  column-gap: 8px;
   min-width: 0;
   width: 100%;
 }
 
-/* ───────── Attach button ─────────
-   Mirrors `MessageInput.module.css` `.inlineIconButton`: 20×20,
-   --ds-text-3 colour. Bottom-aligned with the textarea via the
-   parent `.composer-body { align-items: flex-end }`. */
-
-.attach-btn {
-  width: 20px;
-  height: 20px;
-  border-radius: var(--ds-radius-3);
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--ds-text-3);
-  /* Sit alongside the bottom-aligned send button — small lift so the
-     glyph doesn't crowd the textarea's bottom edge. */
-  margin-bottom: 8px;
-}
-
-/* ───────── Textarea (mock) ───────── */
+/* ───────── Textarea (mock) ─────────
+   Spans both columns of the top row — the buttons sit beneath it.
+   Matches the live `.textarea` font + chat-text colour rules. */
 
 .textarea-mock {
-  flex: 1;
+  grid-column: 1 / -1;
+  grid-row: 1;
   min-width: 0;
-  align-self: stretch;
-  /* Match the live textarea's 40-px min-height + chat-text font. The
-     placeholder colour also matches the textarea's ::placeholder
-     rule (--ds-text-3). */
-  min-height: 40px;
-  display: flex;
-  align-items: flex-start;
-  padding-top: 10px;
   font-size: var(--ds-chat-text);
   line-height: var(--ds-chat-text-lh);
   color: var(--ds-text-3);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  /* The live textarea has min-height 40 px; in the mockup we don't
+     need that vertical room because the buttons live on their own
+     row below — a single line of placeholder text is the resting
+     state. */
+}
+
+/* ───────── Attach button ─────────
+   Mirrors `AttachmentDrafts.module.css` `.addMenuTrigger` (the real
+   trigger rendered by `AttachmentActionMenu`): 24×24 round,
+   --ds-text-3 colour. Sits at the leading edge of the footer row. */
+
+.attach-btn {
+  grid-column: 1;
+  grid-row: 2;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--ds-radius-full);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ds-text-3);
+  justify-self: start;
 }
 
 /* ───────── Send button ─────────
    Mirrors `MessageInput.module.css` `.composerSend`: 24×24 round,
-   --ds-gray-a3 disabled fill, --ds-accent-9 active fill. */
+   --ds-gray-a3 disabled fill, --ds-accent-9 active fill. Sits at the
+   trailing edge of the footer row. */
 
 .composer-send {
+  grid-column: 2;
+  grid-row: 2;
   width: 24px;
   height: 24px;
   border-radius: var(--ds-radius-full);
-  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   background: var(--ds-gray-a3);
   color: var(--ds-text-3);
-  /* Live `.composerBody` is `align-items: flex-end`, so the send
-     button sits flush with the bottom of the textarea (no margin). */
+  justify-self: end;
+  align-self: center;
   transition:
     background 0.12s ease,
     color 0.12s ease;
