@@ -230,18 +230,23 @@ describe(`living wiki worker`, () => {
       env,
       {} as ExecutionContext
     )
-    const created = (await createdResponse.json()) as { space: { id: string } }
+    const created = (await createdResponse.json()) as {
+      space: { id: string }
+      currentActor: { id: string }
+    }
+    const missingActorId = `${created.currentActor.id}_missing`
 
     const response = await worker.fetch(
       new Request(
-        `https://living-wiki.test/api/spaces/${created.space.id}?actorId=actor_missing`
+        `https://living-wiki.test/api/spaces/${created.space.id}?actorId=${missingActorId}`
       ),
       env,
       {} as ExecutionContext
     )
 
-    expect(response.status).toBe(404)
-    const body = (await response.json()) as { ok: false; error: string }
+    const text = await response.text()
+    expect(response.status, text).toBe(404)
+    const body = JSON.parse(text) as { ok: false; error: string }
     expect(body.ok).toBe(false)
     expect(body.error).toContain(`Actor not found`)
   })
@@ -365,26 +370,31 @@ describe(`living wiki worker`, () => {
   })
 
   it(`returns a tRPC not found error for unknown current actors`, async () => {
-    const created = await readTrpcData<{ space: { id: string } }>(
+    const created = await readTrpcData<{
+      space: { id: string }
+      currentActor: { id: string }
+    }>(
       await trpcRequest(
         `space.create`,
         { title: `Demo`, displayName: `Alice`, avatarColor: `blue` },
         `POST`
       )
     )
+    const missingActorId = `${created.currentActor.id}_missing`
 
     const response = await trpcRequest(
       `space.get`,
-      { wikiSpaceId: created.space.id, actorId: `actor_missing` },
+      { wikiSpaceId: created.space.id, actorId: missingActorId },
       `GET`
     )
 
-    expect(response.status).toBe(404)
-    const body = (await response.json()) as {
+    const text = await response.text()
+    expect(response.status, text).toBe(404)
+    const body = JSON.parse(text) as {
       error: { message: string; data: { code: string } }
     }
     expect(body.error.message).toContain(
-      `Actor not found in WikiSpace ${created.space.id}: actor_missing`
+      `Actor not found in WikiSpace ${created.space.id}: ${missingActorId}`
     )
     expect(body.error.data.code).toBe(`NOT_FOUND`)
   })
