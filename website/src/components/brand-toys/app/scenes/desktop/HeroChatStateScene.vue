@@ -254,18 +254,19 @@ const showCustomTitlebar = computed(() => resolvedOs.value !== 'macos')
    not the viewport. A small embed (e.g. inside a 600-px column) gets
    the compact layout even on a 1920-px screen.
 
-   Breakpoints map (= the §6 plan widths shifted in slightly to
-   account for scene padding inside the page column):
+   Breakpoints map (calibrated against the live UI screenshots — the
+   1024-px reference still shows the sidebar visible, so the cutoff
+   sits below that):
 
-     < 1100 px → sidebar hidden; chat tile becomes the leftmost
-                 column and (on macOS) needs to clear the traffic
-                 lights — chromeInsetTarget pushes its title 78 px
-                 right past them.
-     <  860 px → state tile dropped; chat fills workspace.
-     <  640 px → chat fills workspace, no further drops.
+     <  950 px → sidebar hidden; chat tile becomes the leftmost column
+                 and (on macOS) needs to clear the traffic lights —
+                 chromeInsetTarget pushes its title 78 px right past
+                 them.
+     <  720 px → state tile dropped; chat fills workspace.
+     <  500 px → chat fills workspace, no further drops.
 */
 
-@container hero-scene (max-width: 1099px) {
+@container hero-scene (max-width: 949px) {
   .hero-scene-sidebar {
     display: none;
   }
@@ -285,7 +286,7 @@ const showCustomTitlebar = computed(() => resolvedOs.value !== 'macos')
   padding-left: 10px;
 }
 
-@container hero-scene (max-width: 859px) {
+@container hero-scene (max-width: 719px) {
   .hero-scene-tile-state {
     display: none;
   }
@@ -300,7 +301,7 @@ const showCustomTitlebar = computed(() => resolvedOs.value !== 'macos')
   }
 }
 
-@container hero-scene (max-width: 639px) {
+@container hero-scene (max-width: 499px) {
   /* When the chat tile is the only thing left in the workspace, drop
      the chat-surface column-cap entirely so the bubble + composer
      fill the available width — matches the live product's mobile

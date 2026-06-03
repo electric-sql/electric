@@ -194,8 +194,11 @@ const VIEW_LABELS: Record<string, string> = {
   display: inline-flex;
   align-items: baseline;
   gap: var(--ds-space-2);
-  flex: 1;
-  min-width: 0;
+  /* Keep at least 60 px reserved for the title even when the actions
+     cluster is wide — at narrow tile widths this is enough to show
+     "Test ..." (truncated), matching the live UI's behaviour. */
+  flex: 1 1 60px;
+  min-width: 60px;
 }
 
 /* Display title — `<Text size={2}>` in the live `EntityHeader` →
@@ -248,7 +251,12 @@ const VIEW_LABELS: Record<string, string> = {
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  flex-shrink: 0;
+  /* Allow the actions row to shrink when the tile is narrow — the
+     runtime badges' own flex-shrink:1 + max-width let them truncate
+     so status / sandbox / view-toggles / menu / close all stay
+     visible. */
+  flex-shrink: 1;
+  min-width: 0;
 }
 
 /* ───────── Status pill ───────── */
@@ -314,10 +322,12 @@ const VIEW_LABELS: Record<string, string> = {
   line-height: 1;
   /* Allow runtime badges to shrink — when the tile is narrow the
      "Electric Agents Desktop" badge must yield space so the title
-     stays visible. The label inside truncates with ellipsis. */
+     and the close X both stay visible. The label inside truncates
+     with ellipsis. Cap chosen so a 360-px tile still fits the full
+     actions cluster (status + 2 badges + 2 view btns + menu + X). */
   flex-shrink: 1;
   min-width: 28px;
-  max-width: 110px;
+  max-width: 90px;
   box-sizing: border-box;
 }
 
