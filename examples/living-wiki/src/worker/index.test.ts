@@ -63,6 +63,196 @@ describe(`living wiki worker`, () => {
     })
   })
 
+  it(`creates spaces over REST`, async () => {
+    const response = await worker.fetch(
+      new Request(`https://living-wiki.test/api/spaces`, {
+        method: `POST`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({
+          title: `Demo`,
+          displayName: `Alice`,
+          avatarColor: `blue`,
+        }),
+      }),
+      env,
+      {} as ExecutionContext
+    )
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get(`content-type`)).toBe(
+      `application/json; charset=utf-8`
+    )
+    const snapshot = (await response.json()) as {
+      space: { id: string; memberCount: number; createdByActorId: string }
+      currentActor: { id: string; wikiSpaceId: string; displayName: string }
+      actors: unknown[]
+    }
+    expect(snapshot.space.id).toMatch(/^wiki_/)
+    expect(snapshot.space.memberCount).toBe(1)
+    expect(snapshot.currentActor.id).toBe(snapshot.space.createdByActorId)
+    expect(snapshot.currentActor.wikiSpaceId).toBe(snapshot.space.id)
+    expect(snapshot.actors).toHaveLength(1)
+  })
+
+  it(`joins spaces over REST using the URL space id`, async () => {
+    const createdResponse = await worker.fetch(
+      new Request(`https://living-wiki.test/api/spaces`, {
+        method: `POST`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({
+          title: `Demo`,
+          displayName: `Alice`,
+          avatarColor: `blue`,
+        }),
+      }),
+      env,
+      {} as ExecutionContext
+    )
+    const created = (await createdResponse.json()) as { space: { id: string } }
+
+    const response = await worker.fetch(
+      new Request(
+        `https://living-wiki.test/api/spaces/${created.space.id}/join`,
+        {
+          method: `POST`,
+          headers: { 'content-type': `application/json` },
+          body: JSON.stringify({
+            wikiSpaceId: `wiki_wrong`,
+            displayName: `Bob`,
+            avatarColor: `green`,
+          }),
+        }
+      ),
+      env,
+      {} as ExecutionContext
+    )
+
+    expect(response.status).toBe(200)
+    const snapshot = (await response.json()) as {
+      space: { id: string; memberCount: number }
+      currentActor: { displayName: string }
+    }
+    expect(snapshot.space.id).toBe(created.space.id)
+    expect(snapshot.space.memberCount).toBe(2)
+    expect(snapshot.currentActor.displayName).toBe(`Bob`)
+  })
+
+  it(`gets spaces over REST using actorId from the query string`, async () => {
+    const createdResponse = await worker.fetch(
+      new Request(`https://living-wiki.test/api/spaces`, {
+        method: `POST`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({
+          title: `Demo`,
+          displayName: `Alice`,
+          avatarColor: `blue`,
+        }),
+      }),
+      env,
+      {} as ExecutionContext
+    )
+    const created = (await createdResponse.json()) as {
+      space: { id: string }
+      currentActor: { id: string }
+    }
+
+    const response = await worker.fetch(
+      new Request(
+        `https://living-wiki.test/api/spaces/${created.space.id}?actorId=${created.currentActor.id}`
+      ),
+      env,
+      {} as ExecutionContext
+    )
+
+    expect(response.status).toBe(200)
+    const snapshot = (await response.json()) as { currentActor: { id: string } }
+    expect(snapshot.currentActor.id).toBe(created.currentActor.id)
+  })
+
+  it(`returns 400 JSON for invalid REST payloads`, async () => {
+    const response = await worker.fetch(
+      new Request(`https://living-wiki.test/api/spaces`, {
+        method: `POST`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({
+          title: ``,
+          displayName: `Alice`,
+          avatarColor: `blue`,
+        }),
+      }),
+      env,
+      {} as ExecutionContext
+    )
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toMatchObject({ ok: false })
+  })
+
+  it(`returns 404 JSON for unknown REST spaces`, async () => {
+    const response = await worker.fetch(
+      new Request(`https://living-wiki.test/api/spaces/wiki_missing`),
+      env,
+      {} as ExecutionContext
+    )
+
+    expect(response.status).toBe(404)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: `Space not found`,
+    })
+  })
+
+  it(`returns 404 JSON for unknown REST current actors`, async () => {
+    const createdResponse = await worker.fetch(
+      new Request(`https://living-wiki.test/api/spaces`, {
+        method: `POST`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({
+          title: `Demo`,
+          displayName: `Alice`,
+          avatarColor: `blue`,
+        }),
+      }),
+      env,
+      {} as ExecutionContext
+    )
+    const created = (await createdResponse.json()) as { space: { id: string } }
+
+    const response = await worker.fetch(
+      new Request(
+        `https://living-wiki.test/api/spaces/${created.space.id}?actorId=actor_missing`
+      ),
+      env,
+      {} as ExecutionContext
+    )
+
+    expect(response.status).toBe(404)
+    const body = (await response.json()) as { ok: false; error: string }
+    expect(body.ok).toBe(false)
+    expect(body.error).toContain(`Actor not found`)
+  })
+
+  it(`does not include configured token strings in REST space JSON`, async () => {
+    const response = await worker.fetch(
+      new Request(`https://living-wiki.test/api/spaces`, {
+        method: `POST`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({
+          title: `Demo`,
+          displayName: `Alice`,
+          avatarColor: `blue`,
+        }),
+      }),
+      env,
+      {} as ExecutionContext
+    )
+
+    expect(response.status).toBe(200)
+    await expect(response.text()).resolves.not.toContain(
+      env.ELECTRIC_CLOUD_API_TOKEN
+    )
+  })
+
   it(`returns tRPC health JSON`, async () => {
     const request = new Request(`https://living-wiki.test/trpc/health`, {
       method: `GET`,

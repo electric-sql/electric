@@ -1,6 +1,17 @@
+import { ZodError, type ZodSchema } from 'zod'
+import {
+  createSpaceInputSchema,
+  getSpaceInputSchema,
+  joinSpaceInputSchema,
+} from '../shared/space'
 import type { ErrorResponse, HealthResponse } from '../shared/types'
 import { getElectricCloudConfig } from './electric-cloud'
 import { isSeededDemoEnabled, type WorkerEnv } from './env'
+import {
+  getWikiSpaceStore,
+  WikiSpaceActorNotFoundError,
+  WikiSpaceNotFoundError,
+} from './wiki-space-store'
 
 function json(data: unknown, init?: ResponseInit): Response {
   return new Response(JSON.stringify(data), {
@@ -25,6 +36,43 @@ export function healthResponse(env: WorkerEnv): HealthResponse {
   }
 }
 
+const badRequest = (message: string): Response =>
+  json({ ok: false, error: message }, { status: 400 })
+
+async function parseJsonBody(request: Request): Promise<unknown | Response> {
+  try {
+    return await request.json()
+  } catch {
+    return badRequest(`Invalid JSON`)
+  }
+}
+
+const parseInput = <T>(schema: ZodSchema<T>, input: unknown): T | Response => {
+  const result = schema.safeParse(input)
+
+  if (!result.success) {
+    return badRequest(`Invalid input`)
+  }
+
+  return result.data
+}
+
+const handleRestSpaceError = (error: unknown): Response => {
+  if (error instanceof WikiSpaceNotFoundError) {
+    return json({ ok: false, error: `Space not found` }, { status: 404 })
+  }
+
+  if (error instanceof WikiSpaceActorNotFoundError) {
+    return json({ ok: false, error: `Actor not found` }, { status: 404 })
+  }
+
+  if (error instanceof ZodError) {
+    return badRequest(`Invalid input`)
+  }
+
+  throw error
+}
+
 export async function handleRestRequest(
   request: Request,
   env: WorkerEnv
@@ -33,6 +81,55 @@ export async function handleRestRequest(
 
   if (url.pathname === `/api/health` && request.method === `GET`) {
     return json(healthResponse(env))
+  }
+
+  if (url.pathname === `/api/spaces` && request.method === `POST`) {
+    const body = await parseJsonBody(request)
+    if (body instanceof Response) return body
+
+    const input = parseInput(createSpaceInputSchema, body)
+    if (input instanceof Response) return input
+
+    try {
+      return json(await getWikiSpaceStore(env).createSpace(input))
+    } catch (error) {
+      return handleRestSpaceError(error)
+    }
+  }
+
+  const joinMatch = url.pathname.match(/^\/api\/spaces\/([^/]+)\/join$/)
+  if (joinMatch && request.method === `POST`) {
+    const body = await parseJsonBody(request)
+    if (body instanceof Response) return body
+
+    const input = parseInput(joinSpaceInputSchema, {
+      ...(typeof body === `object` && body !== null ? body : {}),
+      wikiSpaceId: joinMatch[1],
+    })
+    if (input instanceof Response) return input
+
+    try {
+      return json(await getWikiSpaceStore(env).joinSpace(input))
+    } catch (error) {
+      return handleRestSpaceError(error)
+    }
+  }
+
+  const getMatch = url.pathname.match(/^\/api\/spaces\/([^/]+)$/)
+  if (getMatch && request.method === `GET`) {
+    const input = parseInput(getSpaceInputSchema, {
+      wikiSpaceId: getMatch[1],
+      ...(url.searchParams.has(`actorId`)
+        ? { actorId: url.searchParams.get(`actorId`) }
+        : {}),
+    })
+    if (input instanceof Response) return input
+
+    try {
+      return json(await getWikiSpaceStore(env).getSpace(input))
+    } catch (error) {
+      return handleRestSpaceError(error)
+    }
   }
 
   if (url.pathname.startsWith(`/api/`)) {
