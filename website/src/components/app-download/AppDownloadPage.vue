@@ -215,11 +215,6 @@ const primaryPlatform = computed(
     <!-- ─────────────────── §1 — Hero ─────────────────── -->
     <section class="ad-hero">
       <div class="ad-hero-inner">
-        <!-- Strap above the H1: the old title's verb-chain demoted to a
-             small mono lead-line so the product name (`Electric Agents
-             App.`) lands as the headline. Keeps the page's promise
-             visible above the fold without competing with the brand. -->
-        <p class="ad-hero-strap mono">run · observe · steer</p>
         <h1 class="ad-hero-name">
           Electric Agents&nbsp;<span class="ad-hero-accent">App</span>
         </h1>
@@ -291,6 +286,9 @@ const primaryPlatform = computed(
               aria-hidden="true"
             />
             <span class="ad-hero-glyph-label mono">iOS</span>
+            <span class="ad-hero-glyph-preview mono" aria-hidden="true"
+              >Preview</span
+            >
           </span>
           <span class="ad-hero-glyph is-preview">
             <span
@@ -298,10 +296,10 @@ const primaryPlatform = computed(
               aria-hidden="true"
             />
             <span class="ad-hero-glyph-label mono">Android</span>
+            <span class="ad-hero-glyph-preview mono" aria-hidden="true"
+              >Preview</span
+            >
           </span>
-          <span class="ad-hero-platform-preview mono" aria-hidden="true"
-            >Mobile preview</span
-          >
         </div>
       </div>
     </section>
@@ -1096,18 +1094,6 @@ const primaryPlatform = computed(
   margin: 0 auto;
 }
 
-.ad-hero-strap {
-  /* Small mono lead-line above the H1. Lowercase, dot-separated to
-     mirror the page's other mono accents (sub-labels under
-     placeholders, `Touches: …` lines in §3.5). Sits at ~32% the
-     visual weight of the H1 below it so the headline still
-     dominates. */
-  margin: 0 0 14px;
-  font-size: 13px;
-  letter-spacing: 0.04em;
-  color: var(--vp-c-text-3);
-}
-
 .ad-hero-name {
   font-size: 56px;
   font-weight: 700;
@@ -1230,22 +1216,16 @@ const primaryPlatform = computed(
   color: var(--vp-c-text-3);
 }
 
-/* Single mono caption centred under the full glyph row. Originally
-   anchored under cols 4-5 (iOS + Android) so it physically sat under
-   the cluster it described, but that left the right half of row 2
-   visually loaded with the desktop trio carrying nothing on the
-   left — the row read as lopsided. Spanning all 5 columns + centring
-   restores horizontal balance; the muted colour treatment on the
-   mobile glyphs themselves still signals which platforms are in
-   preview, and the explicit `Mobile preview` text removes any
-   ambiguity now that the pill isn't directly below iOS/Android. */
-.ad-hero-platform-preview {
-  grid-row: 2;
-  grid-column: 1 / 6;
-  justify-self: center;
-  align-self: start;
-  margin-top: 6px;
-  padding: 1px 7px;
+/* Per-glyph `Preview` chip — one tucked under each mobile glyph's
+   label (iOS, Android). Read as a title-style badge on each
+   platform rather than a single anchor pill that left the row
+   feeling lopsided. Identical chip rendered twice gives the bottom
+   of the row a symmetric, paired feel and removes any ambiguity
+   about which platforms are in preview without needing to lean on
+   the icon-colour cue alone. */
+.ad-hero-glyph-preview {
+  margin-top: 4px;
+  padding: 1px 6px;
   font-size: 8px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
