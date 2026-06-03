@@ -90,6 +90,86 @@ The browser calls the Worker through `/api/*` REST endpoints and `/trpc/*` tRPC 
 
 This slice uses a local demo Worker adapter (`LocalDemoWikiSpaceStore`) backed by Worker-local memory. It is intended for the scaffolded create/join/get flow only and does not persist across Worker isolates or deploys.
 
+## Electric Agents Proxy Boundary
+
+The Worker proxies Electric Agents runtime streams so the browser never contacts the Agents upstream directly.
+
+### Environment Variables (Worker-only)
+
+| Variable                        | Required        | Description                                                               |
+| ------------------------------- | --------------- | ------------------------------------------------------------------------- |
+| `ELECTRIC_AGENTS_BASE_URL`      | Yes (for proxy) | Electric Agents runtime base URL. Worker-only — never exposed to browser. |
+| `ELECTRIC_AGENTS_TOKEN`         | No              | Bearer token for Agents runtime auth. Injected server-side.               |
+| `ELECTRIC_AGENTS_PRINCIPAL_KEY` | No              | Principal key header value. Injected server-side.                         |
+
+### Proxy Routes
+
+**Entity Main Stream**
+
+```
+GET /api/agents/entities/:wikiSpaceId/:entityKind/:entityId/stream
+```
+
+Proxies the main durable stream for a specific entity. The Worker resolves the upstream entity metadata path, looks up the stream URL, and proxies it with server-side auth. Currently supports `entityKind: wiki-space`.
+
+Query params forwarded: `offset`, `live` (only `long-poll`), `cursor`.
+
+**Observe Stream**
+
+```
+GET /api/observe/:wikiSpaceId/:observeKind
+```
+
+Proxies observation streams for a wiki space. `observeKind` is one of:
+
+- `entities` — membership stream (Worker ensures the stream with server-derived tags)
+- `shared-state` — shared state stream (Worker derives the shared-state ID)
+
+Query params forwarded: `offset`, `live` (only `long-poll`), `cursor`.
+
+### Browser Client Helpers
+
+```typescript
+import { getEntityStreamUrl, getObserveUrl } from './app/api/agentsProxyApi'
+
+// Entity stream URL
+const streamUrl = getEntityStreamUrl({
+  wikiSpaceId: 'wiki_demo',
+  entityKind: 'wiki-space',
+  entityId: 'entity_123',
+})
+// → /api/agents/entities/wiki_demo/wiki-space/entity_123/stream
+
+// Observe URL with protocol params
+const observeUrl = getObserveUrl(
+  { wikiSpaceId: 'wiki_demo', observeKind: 'entities' },
+  { offset: '0', live: 'long-poll' }
+)
+// → /api/observe/wiki_demo/entities?offset=0&live=long-poll
+```
+
+### Security Invariants
+
+- Browser code must use `/api/agents/...` and `/api/observe/...` routes, never the Electric Agents upstream base URL
+- All upstream auth (token, principal) is injected server-side — never sent to or readable by the browser
+- Only allowlisted query params are forwarded; arbitrary params like `table`, `where`, `path` are dropped
+- Browser request headers (`authorization`, `cookie`, etc.) are never forwarded upstream
+- Response headers `content-encoding` and `content-length` are stripped from proxied responses
+- Entity kinds and observe kinds are validated against an allowlist; unknown kinds return 400
+- Route parameter IDs are validated to be URL-safe with no path traversal
+
+### Test Commands
+
+```bash
+# Run proxy boundary tests
+pnpm --filter @electric-ax/example-living-wiki test src/worker/agents-proxy/
+pnpm --filter @electric-ax/example-living-wiki test src/app/api/agentsProxyApi.test.ts
+pnpm --filter @electric-ax/example-living-wiki test src/shared/agents-proxy.test.ts
+
+# Run all tests
+pnpm --filter @electric-ax/example-living-wiki test
+```
+
 ## Security boundary
 
 Configure `ELECTRIC_CLOUD_API_TOKEN` only as a Worker secret. Do not import it into browser code, expose it through public configuration, or include it in JSON responses. Browser-facing REST and tRPC responses should contain only the data needed by the Living Wiki UI.
