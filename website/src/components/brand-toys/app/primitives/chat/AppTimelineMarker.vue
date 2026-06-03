@@ -43,14 +43,17 @@ withDefaults(
 .timeline-marker {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  /* Live `.statusPill { gap: var(--ds-space-2) }` (= 8px). */
+  gap: var(--ds-space-2);
   padding: 2px 0 2px 10px;
   border-left: 2px solid var(--ds-gray-a3);
   color: var(--ds-text-4, var(--ds-text-3));
   letter-spacing: 0.02em;
   font-family: var(--ds-font-body);
+  /* Live label uses `<Text size={1}>` → `--ds-text-xs` (11px) /
+     `--ds-text-xs-lh` (1.45). */
   font-size: var(--ds-text-xs);
-  line-height: var(--ds-text-xs-lh, 1.4);
+  line-height: var(--ds-text-xs-lh);
   opacity: 0.7;
 }
 

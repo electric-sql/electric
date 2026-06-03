@@ -63,34 +63,34 @@ withDefaults(
   font-family: var(--ds-font-body);
 }
 
-/* ───────── Server picker ───────── */
+/* ───────── Server picker ─────────
+   Mirrors `ServerPicker.module.css` `.tile`/`.dot`/`.tileLabel`. */
 
 .server-picker {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   flex: 1;
   min-width: 0;
-  /* 3-px row inset + 22-px icon slot to match the SidebarRow
-     concentric halo geometry above. */
-  padding: 3px;
+  height: var(--ds-row-height-md);
+  padding: 0 3px;
   border-radius: var(--ds-radius-item);
-  color: var(--ds-text-2);
+  color: var(--ds-text-1);
 }
 
 .server-picker-dot {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   flex-shrink: 0;
-  /* The icon-slot the dot sits in is 22-px wide on SidebarRow; we
-     keep the dot itself smaller and let the gap shape the column. */
-  margin-left: 4px;
+  /* Sits inside a 22-px icon-slot column on the live `.tileStatusSlot`;
+     leading margin pushes the dot to the column centre. */
+  margin-left: 8px;
+  margin-right: 4px;
   background: var(--ds-gray-8);
 }
 .server-picker-dot[data-status='connected'] {
   background: var(--ds-green-9);
-  box-shadow: 0 0 0 2px var(--ds-green-a3);
 }
 .server-picker-dot[data-status='reconnecting'] {
   background: var(--ds-amber-9);
@@ -102,7 +102,8 @@ withDefaults(
 .server-picker-label {
   flex: 1;
   min-width: 0;
-  font-size: 11.5px;
+  font-size: var(--ds-text-sm);
+  line-height: var(--ds-text-sm-lh);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -119,11 +120,13 @@ withDefaults(
   color: var(--ds-text-3);
 }
 
-/* ───────── Footer icon buttons ───────── */
+/* ───────── Footer icon buttons ─────────
+   Mirrors live `<IconButton size={1}>` in SidebarViewMenu / SettingsMenu —
+   24×24 hit area with Icon size={2} (13px). */
 
 .footer-icon-btn {
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   border-radius: var(--ds-radius-2);
   display: inline-flex;
   align-items: center;

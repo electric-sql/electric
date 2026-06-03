@@ -235,21 +235,21 @@ onBeforeUnmount(() => {
             aria-hidden="true"
             title="Go to live"
           >
-            <AppIcon :icon="SkipForward" :size="1" />
+            <AppIcon :icon="SkipForward" :size="2" />
           </span>
           <span
             class="events-toolbar-btn"
             aria-hidden="true"
             title="Expand all"
           >
-            <AppIcon :icon="ListTree" :size="1" />
+            <AppIcon :icon="ListTree" :size="2" />
           </span>
           <span
             class="events-toolbar-btn"
             aria-hidden="true"
             title="Collapse all"
           >
-            <AppIcon :icon="ListCollapse" :size="1" />
+            <AppIcon :icon="ListCollapse" :size="2" />
           </span>
         </span>
       </div>
@@ -269,10 +269,10 @@ onBeforeUnmount(() => {
           }}</span>
           <span class="event-row-actions">
             <span class="event-row-action" aria-hidden="true" title="Expand">
-              <AppIcon :icon="Plus" :size="1" />
+              <AppIcon :icon="Plus" :size="2" />
             </span>
             <span class="event-row-action" aria-hidden="true" title="Focus">
-              <AppIcon :icon="Crosshair" :size="1" />
+              <AppIcon :icon="Crosshair" :size="2" />
             </span>
           </span>
         </div>
@@ -293,36 +293,43 @@ onBeforeUnmount(() => {
   --line: 1px solid var(--ds-divider);
 }
 
-/* ───────── StreamDB strip ───────── */
+/* ───────── StreamDB strip ─────────
+   Live: `StateExplorerPanel.tsx` `StateSourceHeader` —
+   `<Stack px={3} py={2}>` + Text size={1} weight="medium" muted
+   ("StreamDB") + Badge size={1} (count) + Select trigger.
+   Text size={1} → `--ds-text-xs` (11px); Badge size={1} → 11px / h18. */
 
 .streamdb-strip {
   flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 10px;
+  padding: 8px 12px;
   border-bottom: var(--line);
-  background: var(--ds-surface-soft);
-  font-size: 11.5px;
+  background: var(--ds-bg);
+  font-size: var(--ds-text-xs);
+  line-height: var(--ds-text-xs-lh);
   color: var(--ds-text-2);
 }
 
 .strip-label {
   font-weight: 500;
-  color: var(--ds-text-1);
+  color: var(--ds-text-2);
 }
 
+/* Mirrors `<Badge size={1}>` in the live UI: 11px font / 18px tall /
+   2px 6px padding / 500 weight / pill-radius. */
 .strip-count {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 16px;
-  min-width: 16px;
-  padding: 0 4px;
-  border-radius: var(--ds-radius-1);
+  height: 18px;
+  padding: 2px 6px;
+  border-radius: var(--ds-radius-full);
   background: var(--ds-gray-a3);
-  color: var(--ds-text-2);
-  font-size: 10px;
+  color: var(--ds-gray-11);
+  font-size: var(--ds-text-xs);
+  font-weight: 500;
   line-height: 1;
 }
 
@@ -341,7 +348,8 @@ onBeforeUnmount(() => {
 
 .strip-selector-label {
   flex: 1;
-  font-size: 11.5px;
+  font-size: var(--ds-text-xs);
+  line-height: var(--ds-text-xs-lh);
   color: var(--ds-text-1);
 }
 
@@ -382,40 +390,47 @@ onBeforeUnmount(() => {
   flex: 1;
 }
 
+/* Header strip above each panel — mirrors live `TypeList.tsx` /
+   `EventSidebar.tsx` headers: `<Stack px={3} py={1}>` with Text size={1}
+   weight="medium" muted + Badge size={1}. So fonts are all 11px. */
 .panel-header {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   height: 28px;
-  padding: 0 10px;
+  padding: 0 12px;
   border-bottom: var(--line);
-  background: var(--ds-surface-soft);
-  font-size: 11px;
+  background: var(--ds-bg);
+  font-size: var(--ds-text-xs);
+  line-height: var(--ds-text-xs-lh);
   color: var(--ds-text-2);
 }
 
 .panel-title {
   font-weight: 500;
-  color: var(--ds-text-1);
+  color: var(--ds-text-2);
   text-transform: capitalize;
 }
 
+/* Same Badge size={1} geometry as `.strip-count` above. */
 .panel-count {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 14px;
-  min-width: 14px;
-  padding: 0 3px;
-  border-radius: var(--ds-radius-1);
+  height: 18px;
+  padding: 2px 6px;
+  border-radius: var(--ds-radius-full);
   background: var(--ds-gray-a3);
-  color: var(--ds-text-3);
-  font-size: 10px;
+  color: var(--ds-gray-11);
+  font-size: var(--ds-text-xs);
+  font-weight: 500;
   line-height: 1;
 }
 
-/* ───────── Types list ───────── */
+/* ───────── Types list ─────────
+   Live `TypeList.tsx` rows use `<Text size={1}>` (11px) for both name
+   and count — `tone="muted"` is colour only, not size. */
 
 .types-list {
   flex: 1;
@@ -423,24 +438,31 @@ onBeforeUnmount(() => {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  padding: var(--ds-space-2);
+  gap: 4px;
 }
 
 .type-row {
   display: flex;
   align-items: center;
-  height: 26px;
-  padding: 0 10px;
-  font-size: 11.5px;
+  gap: 8px;
+  height: 22px;
+  padding: 0 var(--ds-space-2);
+  border-radius: var(--ds-radius-2);
+  font-size: var(--ds-text-xs);
+  line-height: var(--ds-text-xs-lh);
   color: var(--ds-text-2);
   cursor: default;
   position: relative;
-  border-left: 2px solid transparent;
 }
 
 .type-row[data-selected='true'] {
-  background: var(--ds-bg-hover);
-  color: var(--ds-text-1);
-  border-left-color: var(--ds-accent-9);
+  background: var(--ds-accent-a3);
+  color: var(--ds-accent-11, var(--ds-accent-9));
+}
+
+.type-row[data-selected='true'] .type-row-name {
+  font-weight: 500;
 }
 
 .type-row-name {
@@ -454,15 +476,16 @@ onBeforeUnmount(() => {
 .type-row-count {
   flex-shrink: 0;
   color: var(--ds-text-3);
-  font-size: 10.5px;
-  margin-left: 8px;
+  font-size: var(--ds-text-xs);
 }
 
 .type-row[data-selected='true'] .type-row-count {
   color: var(--ds-accent-11, var(--ds-accent-9));
 }
 
-/* ───────── Records table ───────── */
+/* ───────── Records table ─────────
+   Live `StateTable.module.css` `.gridTable { font-size: var(--ds-text-xs) }`
+   so every cell + header renders at 11px. */
 
 .records-table {
   flex: 1;
@@ -480,8 +503,8 @@ onBeforeUnmount(() => {
   padding: 0 12px;
   height: 22px;
   align-items: center;
-  font-size: 10.5px;
-  letter-spacing: 0.02em;
+  font-size: var(--ds-text-xs);
+  line-height: 1;
   color: var(--ds-text-3);
   border-bottom: var(--line);
   background: var(--ds-bg);
@@ -504,7 +527,8 @@ onBeforeUnmount(() => {
   padding: 0 12px;
   height: 28px;
   align-items: center;
-  font-size: 11.5px;
+  font-size: var(--ds-text-xs);
+  line-height: var(--ds-text-xs-lh);
   color: var(--ds-text-2);
 }
 
@@ -526,7 +550,9 @@ onBeforeUnmount(() => {
   color: var(--ds-text-2);
 }
 
-/* ───────── Events panel ───────── */
+/* ───────── Events panel ─────────
+   Live `EventSidebar.tsx` toolbar buttons: `<IconButton size={1}>`
+   (24×24) with custom 14px lucide icons. */
 
 .events-panel {
   flex: 1;
@@ -538,20 +564,20 @@ onBeforeUnmount(() => {
 .events-header {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .events-toolbar {
   margin-left: auto;
   display: inline-flex;
   align-items: center;
-  gap: 1px;
+  gap: 4px;
 }
 
 .events-toolbar-btn {
-  width: 22px;
-  height: 22px;
-  border-radius: var(--ds-radius-1);
+  width: 24px;
+  height: 24px;
+  border-radius: var(--ds-radius-2);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -566,14 +592,18 @@ onBeforeUnmount(() => {
   flex-direction: column;
 }
 
+/* Each event row is a `<Stack>` with `<Text size={1} family="mono">`
+   index, `<Badge size={1}>` op pill and `<Code size={1}>` summary —
+   so every text element resolves to 11px. */
 .event-row {
   display: grid;
-  grid-template-columns: 24px 36px minmax(0, 1fr) auto;
+  grid-template-columns: 24px auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
-  height: 26px;
-  padding: 0 10px;
-  font-size: 11.5px;
+  height: 28px;
+  padding: 0 12px;
+  font-size: var(--ds-text-xs);
+  line-height: var(--ds-text-xs-lh);
   color: var(--ds-text-2);
   border-bottom: var(--line);
   background: transparent;
@@ -581,20 +611,23 @@ onBeforeUnmount(() => {
 
 .event-row-index {
   color: var(--ds-text-3);
-  font-size: 10.5px;
+  font-size: var(--ds-text-xs);
 }
 
+/* Live op badge — `<Badge size={1} variant="soft" tone="success">`. */
 .event-row-kind {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 16px;
-  padding: 0 5px;
-  border-radius: var(--ds-radius-1);
+  height: 18px;
+  padding: 2px 6px;
+  border-radius: var(--ds-radius-full);
   background: var(--ds-green-a3);
   color: var(--ds-green-11, var(--ds-green-9));
-  font-size: 9.5px;
-  letter-spacing: 0.04em;
+  font-size: var(--ds-text-xs);
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0.02em;
 }
 
 .event-row-summary {
@@ -607,12 +640,12 @@ onBeforeUnmount(() => {
 .event-row-actions {
   display: inline-flex;
   align-items: center;
-  gap: 1px;
+  gap: 2px;
 }
 
 .event-row-action {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   border-radius: var(--ds-radius-1);
   display: inline-flex;
   align-items: center;
@@ -649,19 +682,20 @@ onBeforeUnmount(() => {
   }
 }
 
-/* ───────── Compact density ───────── */
+/* ───────── Compact density ─────────
+   Tightens row heights only. Font sizes already sit at 11px (the
+   smallest token in the live UI), so the compact mode stays at the
+   same 11px and only loses a few pixels of vertical padding. */
 
 .state-inspector[data-density='compact'] .streamdb-strip {
   display: none;
 }
 .state-inspector[data-density='compact'] .panel-header {
   height: 24px;
-  font-size: 10.5px;
 }
 .state-inspector[data-density='compact'] .type-row,
 .state-inspector[data-density='compact'] .record-row,
 .state-inspector[data-density='compact'] .event-row {
-  height: 24px;
-  font-size: 11px;
+  height: 22px;
 }
 </style>

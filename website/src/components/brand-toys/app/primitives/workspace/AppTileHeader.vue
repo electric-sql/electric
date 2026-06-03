@@ -10,22 +10,24 @@
      light gutter; see `chromeInsetTarget` for the leftmost-tile
      padding boost).
    - Left cluster (`title`):
-       - Display title — `--ds-text-1`, weight 500, 14 px.
-       - Session id subtitle — mono, `--ds-text-3`, 11 px, sits to
-         the right of the title with a small gap. Concatenated
-         inline (no line break) — matches the live UI.
+       - Display title — `<Text size={2}>` in the live `EntityHeader` —
+         `--ds-text-1` colour, default 400 weight, 12 px (`--ds-text-sm`).
+       - Session id subtitle — mono, `--ds-text-3`, 12 px (`--ds-text-sm`),
+         sits to the right of the title with a small 4-px gap.
        - Copy icon (lucide `Copy`) — hover-revealed in the live
          product; we paint it dimmed at rest in the mockup.
    - Right cluster (`actions`):
        - InlineStatusBadge — soft pill with a 5-px dot, tone derived
-         from `status`.
+         from `status`. 11 px / 20 px tall (toolBlock override).
        - Runner badge (lucide `Server` icon) — neutral soft.
+         11 px / 18 px tall / 2 px 6 px padding (live `Badge size={1}`).
        - Sandbox badge (lucide `Box` icon) — info soft when remote /
          neutral when local.
        - View-toggle icon buttons — lucide `MessageSquare` (chat) +
          `Database` (state-explorer), matching `registerViews.ts`.
-       - Overflow `MoreHorizontal` button.
-       - Close `X` button.
+         24×24 hit area (live `IconButton size={1}`) + 13-px icon.
+       - Overflow `MoreHorizontal` button — 24×24 + 15-px icon.
+       - Close `X` button — 24×24 + 15-px icon.
 
    `chromeInsetTarget` (= the `chrome-inset-target` data attribute on
    the live header) bumps the left padding past the macOS traffic
@@ -158,7 +160,7 @@ const VIEW_LABELS: Record<string, string> = {
         aria-hidden="true"
         title="Close"
       >
-        <AppIcon :icon="X" :size="2" />
+        <AppIcon :icon="X" :size="3" />
       </span>
     </div>
   </header>
@@ -191,35 +193,38 @@ const VIEW_LABELS: Record<string, string> = {
 .tile-header-title {
   display: inline-flex;
   align-items: baseline;
-  gap: 8px;
+  gap: var(--ds-space-2);
   flex: 1;
   min-width: 0;
 }
 
+/* Display title — `<Text size={2}>` in the live `EntityHeader` →
+   `--ds-text-sm` (12px) at the default 400 weight, no letter-spacing. */
 .title-name {
-  font-size: 14px;
-  font-weight: 500;
+  font-size: var(--ds-text-sm);
+  line-height: var(--ds-text-sm-lh);
   color: var(--ds-text-1);
-  letter-spacing: -0.005em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  flex-shrink: 0;
-  /* Cap the display title so the session id always gets some room
-     before the right cluster takes the rest. */
-  max-width: 60%;
+  flex-shrink: 1;
+  min-width: 0;
 }
 
 .title-id-group {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
   color: var(--ds-text-3);
+  flex-shrink: 1;
 }
 
+/* Session id subtitle — mono at `--ds-text-sm` (12px) per the live
+   `EntityHeader.module.css` `.subtitle` rule. */
 .title-id {
-  font-size: 11.5px;
+  font-size: var(--ds-text-sm);
+  line-height: var(--ds-text-sm-lh);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -242,7 +247,7 @@ const VIEW_LABELS: Record<string, string> = {
 .tile-header-actions {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   flex-shrink: 0;
 }
 
@@ -290,28 +295,31 @@ const VIEW_LABELS: Record<string, string> = {
   color: var(--ds-text-3);
 }
 
-/* ───────── Runtime badges (runner + sandbox) ───────── */
+/* ───────── Runtime badges (runner + sandbox) ─────────
+   Live `<Badge tone="neutral" variant="soft" size={1}>` →
+   font-size 11px, line-height 1, height 18px, padding 2px 6px,
+   weight 500, gap 4px (Badge default). */
 
 .runtime-badge {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  height: 22px;
-  padding: 0 8px 0 6px;
+  gap: 4px;
+  height: 18px;
+  padding: 2px 6px;
   border-radius: var(--ds-radius-full);
   background: var(--ds-gray-a3);
-  color: var(--ds-text-2);
-  font-size: 11.5px;
+  color: var(--ds-gray-11);
+  font-size: var(--ds-text-xs);
+  font-weight: 500;
   line-height: 1;
   flex-shrink: 0;
-  border: 1px solid var(--ds-divider);
   max-width: 220px;
+  box-sizing: border-box;
 }
 
 .runtime-badge[data-tone='info'] {
   background: var(--ds-accent-a3);
   color: var(--ds-accent-11, var(--ds-accent-9));
-  border-color: transparent;
 }
 
 .runtime-badge-label {
@@ -320,7 +328,8 @@ const VIEW_LABELS: Record<string, string> = {
   text-overflow: ellipsis;
 }
 
-/* ───────── View-toggle icons ───────── */
+/* ───────── View-toggle icons ─────────
+   Live: `<IconButton size={1}>` → 24×24, with Icon size={2} (13px). */
 
 .view-strip {
   display: inline-flex;
@@ -330,8 +339,8 @@ const VIEW_LABELS: Record<string, string> = {
 }
 
 .view-btn {
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   border-radius: var(--ds-radius-2);
   display: inline-flex;
   align-items: center;
@@ -345,16 +354,17 @@ const VIEW_LABELS: Record<string, string> = {
   color: var(--ds-text-1);
 }
 
-/* ───────── Action buttons (more / close) ───────── */
+/* ───────── Action buttons (more / close) ─────────
+   Live: SplitMenu trigger + close-tile button both use IconButton size={1}
+   (24×24) with Icon size={3} (15px). */
 
 .action-btn {
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   border-radius: var(--ds-radius-2);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   color: var(--ds-text-3);
-  margin-left: 2px;
 }
 </style>

@@ -390,6 +390,10 @@ function renderInline(input: string): string {
   overflow: hidden;
 }
 
+/* Code well — visually a Streamdown-style fenced block. The body
+   uses the same chat font size (`--ds-chat-text` = 13px) the live
+   markdown column uses, so the typography stays in step with the
+   prose around it. The "ts" tag mimics a Streamdown language label. */
 .code-slab-tag {
   position: absolute;
   top: 8px;
@@ -399,7 +403,7 @@ function renderInline(input: string): string {
   background: var(--ds-chip-bg);
   border: 1px solid var(--ds-chip-border);
   color: var(--ds-text-3);
-  font-size: 10px;
+  font-size: var(--ds-text-2xs);
   line-height: 16px;
   text-transform: lowercase;
   letter-spacing: 0.04em;
@@ -407,7 +411,7 @@ function renderInline(input: string): string {
 
 .code-slab-body {
   margin: 0;
-  font-size: 12.5px;
+  font-size: var(--ds-text-sm);
   line-height: 1.55;
   color: var(--ds-text-1);
   white-space: pre-wrap;
@@ -504,28 +508,31 @@ function renderInline(input: string): string {
   transform: translateY(0);
 }
 
+/* Live `<Badge size={1} variant="soft" tone="accent">` —
+   11px / 18px tall / 2px 6px padding / 500 weight / pill-radius. */
 .tool-call-chip {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   height: 18px;
-  padding: 0 6px;
-  border-radius: var(--ds-radius-1);
+  padding: 2px 6px;
+  border-radius: var(--ds-radius-full);
   background: var(--ds-accent-a3);
   color: var(--ds-accent-11, var(--ds-accent-9));
-  font-size: 10px;
+  font-size: var(--ds-text-xs);
+  font-weight: 500;
   line-height: 1;
   text-transform: lowercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
 }
 
 .tool-call-name {
-  font-size: 12px;
+  font-size: var(--ds-text-sm);
   color: var(--ds-text-1);
 }
 
 .tool-call-args {
-  font-size: 12px;
+  font-size: var(--ds-text-sm);
   color: var(--ds-text-3);
   white-space: nowrap;
   overflow: hidden;
@@ -573,8 +580,9 @@ function renderInline(input: string): string {
 
 .meta-copy {
   margin-left: auto;
-  width: 22px;
-  height: 22px;
+  /* Live `<IconButton size={1}>` → 24×24 with Icon size={1} (11px). */
+  width: 24px;
+  height: 24px;
   border-radius: var(--ds-radius-2);
   display: inline-flex;
   align-items: center;

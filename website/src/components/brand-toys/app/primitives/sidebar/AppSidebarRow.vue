@@ -101,7 +101,7 @@ const BASE_PADDING_LEFT = 3
       class="expand-btn-visible"
       aria-hidden="true"
     >
-      <AppIcon :icon="ChevronDown" :size="1" />
+      <AppIcon :icon="ChevronDown" :size="2" />
     </span>
   </div>
 </template>

@@ -17,7 +17,8 @@
      - 44-px tall row.
      - 2-px gap between icons.
      - 84-px left inset on macOS desktop (= traffic lights gutter).
-     - 32×32 button hit areas with --ds-radius-2 corners.
+     - 24×24 button hit areas (live `<IconButton size={1}>`) with
+       `--ds-radius-2` corners.
      - Each icon at size 3 (= 15 px).
 
    Pure primitive — does NOT include `.app-mockup-root`. Mount under
@@ -95,8 +96,8 @@ withDefaults(
 }
 
 .ctl-btn {
-  width: 32px;
-  height: 32px;
+  width: 24px;
+  height: 24px;
   border-radius: var(--ds-radius-2);
   display: inline-flex;
   align-items: center;

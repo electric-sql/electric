@@ -109,7 +109,7 @@ const annotated = computed(() => {
       -->
       <button class="new-session-row" type="button" tabindex="-1">
         <span class="new-session-icon-slot">
-          <AppIcon :icon="SquarePen" :size="2" />
+          <AppIcon :icon="SquarePen" :size="3" />
         </span>
         <span class="new-session-label">New session</span>
         <span class="new-session-kbd mono" aria-hidden="true">
@@ -173,8 +173,8 @@ const annotated = computed(() => {
   flex-direction: column;
   font-family: var(--ds-font-body);
   /* Tighten the line-height baseline; rows + section header set
-     their own. */
-  font-size: 12px;
+     their own. Matches the live sidebar's `--ds-text-sm` (12px). */
+  font-size: var(--ds-text-sm);
   /* Hairline divider against the workspace column on the right. */
   border-right: 1px solid var(--ds-divider);
 }
@@ -278,7 +278,7 @@ const annotated = computed(() => {
 .section-label {
   flex: 1;
   min-width: 0;
-  font-size: 11px;
+  font-size: var(--ds-text-xs);
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;

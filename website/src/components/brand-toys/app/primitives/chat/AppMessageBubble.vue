@@ -79,12 +79,14 @@ withDefaults(
 .meta {
   display: inline-flex;
   align-items: baseline;
-  gap: 6px;
+  /* Live `<Stack gap={2}>` → `--ds-space-2` (= 8px). */
+  gap: var(--ds-space-2);
   opacity: 0.4;
   /* Match the bubble's 12-px horizontal padding so the meta row
      aligns with the body's text column, not the bubble's outer edge. */
   padding-inline: 12px;
   font-size: var(--ds-text-xs);
+  line-height: var(--ds-text-xs-lh);
   color: var(--ds-text-2);
 }
 

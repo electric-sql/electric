@@ -101,22 +101,23 @@ withDefaults(
   width: 100%;
 }
 
-/* ───────── Attach button ───────── */
+/* ───────── Attach button ─────────
+   Mirrors `MessageInput.module.css` `.inlineIconButton`: 20×20,
+   --ds-text-3 colour. Bottom-aligned with the textarea via the
+   parent `.composer-body { align-items: flex-end }`. */
 
 .attach-btn {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--ds-radius-2);
+  width: 20px;
+  height: 20px;
+  border-radius: var(--ds-radius-3);
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   color: var(--ds-text-3);
-  /* Align baseline with the textarea's first line — the textarea
-     min-height (40 px) sits below this 28-px target so without the
-     margin-bottom the + glyph would float a few pixels above the
-     textarea's text baseline. */
-  margin-bottom: 6px;
+  /* Sit alongside the bottom-aligned send button — small lift so the
+     glyph doesn't crowd the textarea's bottom edge. */
+  margin-bottom: 8px;
 }
 
 /* ───────── Textarea (mock) ───────── */
@@ -140,11 +141,13 @@ withDefaults(
   text-overflow: ellipsis;
 }
 
-/* ───────── Send button ───────── */
+/* ───────── Send button ─────────
+   Mirrors `MessageInput.module.css` `.composerSend`: 24×24 round,
+   --ds-gray-a3 disabled fill, --ds-accent-9 active fill. */
 
 .composer-send {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   border-radius: var(--ds-radius-full);
   flex-shrink: 0;
   display: inline-flex;
@@ -152,9 +155,8 @@ withDefaults(
   justify-content: center;
   background: var(--ds-gray-a3);
   color: var(--ds-text-3);
-  /* Align with the textarea's first line — same trick as the attach
-     button on the left. */
-  margin-bottom: 6px;
+  /* Live `.composerBody` is `align-items: flex-end`, so the send
+     button sits flush with the bottom of the textarea (no margin). */
   transition:
     background 0.12s ease,
     color 0.12s ease;
