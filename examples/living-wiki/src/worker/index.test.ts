@@ -580,4 +580,134 @@ describe(`living wiki worker`, () => {
       env.ELECTRIC_CLOUD_API_TOKEN
     )
   })
+  it(`proposes and resolves page reviews over REST with controlled edge-case errors`, async () => {
+    const createdResponse = await worker.fetch(
+      new Request(`https://living-wiki.test/api/spaces`, {
+        method: `POST`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({
+          title: `Demo`,
+          displayName: `Alice`,
+          avatarColor: `blue`,
+        }),
+      }),
+      env,
+      {} as ExecutionContext
+    )
+    const created = (await createdResponse.json()) as {
+      space: { id: string }
+      currentActor: { id: string }
+    }
+
+    const missingSource = await worker.fetch(
+      new Request(
+        `https://living-wiki.test/api/spaces/${created.space.id}/pages/propose`,
+        {
+          method: `POST`,
+          headers: { 'content-type': `application/json` },
+          body: JSON.stringify({
+            actorId: created.currentActor.id,
+            sourceId: `source_missing`,
+          }),
+        }
+      ),
+      env,
+      {} as ExecutionContext
+    )
+    expect(missingSource.status).toBe(400)
+    await expect(missingSource.json()).resolves.toMatchObject({
+      ok: false,
+      error: `Source not found`,
+    })
+
+    const missingActor = await worker.fetch(
+      new Request(
+        `https://living-wiki.test/api/spaces/${created.space.id}/pages/propose`,
+        {
+          method: `POST`,
+          headers: { 'content-type': `application/json` },
+          body: JSON.stringify({ sourceId: `source_missing` }),
+        }
+      ),
+      env,
+      {} as ExecutionContext
+    )
+    expect(missingActor.status).toBe(400)
+
+    const sourceResponse = await worker.fetch(
+      new Request(
+        `https://living-wiki.test/api/spaces/${created.space.id}/sources`,
+        {
+          method: `POST`,
+          headers: { 'content-type': `application/json` },
+          body: JSON.stringify({
+            actorId: created.currentActor.id,
+            kind: `text`,
+            title: `Note`,
+            body: `Body`,
+          }),
+        }
+      ),
+      env,
+      {} as ExecutionContext
+    )
+    const source = (await sourceResponse.json()) as { source: { id: string } }
+
+    const proposalResponse = await worker.fetch(
+      new Request(
+        `https://living-wiki.test/api/spaces/${created.space.id}/pages/propose`,
+        {
+          method: `POST`,
+          headers: { 'content-type': `application/json` },
+          body: JSON.stringify({
+            actorId: created.currentActor.id,
+            sourceId: source.source.id,
+          }),
+        }
+      ),
+      env,
+      {} as ExecutionContext
+    )
+    expect(proposalResponse.status).toBe(200)
+    const proposal = (await proposalResponse.json()) as {
+      page: { status: string }
+      reviewItem: { id: string; status: string }
+    }
+    expect(proposal.page.status).toBe(`proposed`)
+    expect(proposal.reviewItem.status).toBe(`open`)
+
+    const invalidAction = await worker.fetch(
+      new Request(
+        `https://living-wiki.test/api/spaces/${created.space.id}/reviews/${proposal.reviewItem.id}/resolve`,
+        {
+          method: `POST`,
+          headers: { 'content-type': `application/json` },
+          body: JSON.stringify({
+            actorId: created.currentActor.id,
+            resolution: `maybe`,
+          }),
+        }
+      ),
+      env,
+      {} as ExecutionContext
+    )
+    expect(invalidAction.status).toBe(400)
+
+    const missingReview = await worker.fetch(
+      new Request(
+        `https://living-wiki.test/api/spaces/${created.space.id}/reviews/review_missing/resolve`,
+        {
+          method: `POST`,
+          headers: { 'content-type': `application/json` },
+          body: JSON.stringify({
+            actorId: created.currentActor.id,
+            resolution: `reject`,
+          }),
+        }
+      ),
+      env,
+      {} as ExecutionContext
+    )
+    expect(missingReview.status).toBe(400)
+  })
 })

@@ -25,7 +25,7 @@ describe(`wiki-state-pages`, () => {
     expect(page.slug).toBe(`hello-wiki`)
     expect(page.body).toContain(`Body text`)
   })
-  it(`builds a URL page proposal without fetching`, () => {
+  it(`builds a URL page proposal from URL metadata only without fetching or digesting`, () => {
     const { source } = buildSourceSubmissionRows(
       {
         wikiSpaceId: `wiki_demo`,
@@ -38,10 +38,19 @@ describe(`wiki-state-pages`, () => {
     )
     const page = buildWikiPageFromSubmittedSource(source, { now })
     expect(page.body).toContain(`Source URL: https://example.com/a`)
-    expect(page.body).toContain(`No URL fetch`)
+    expect(page.body).toContain(`Source title: Docs`)
+    expect(page.body).toContain(
+      `No URL fetch, scraping, digesting, or AI generation has occurred.`
+    )
+    expect(page.body).not.toContain(`text preview`)
+    expect(page.body).not.toContain(`digest:`)
   })
   it(`sanitizes slugs and rejects non-submitted sources`, () => {
     expect(slugifyWikiPageTitle(`  !!! `, `source_abc`)).toBe(`source-abc`)
+    expect(
+      slugifyWikiPageTitle(` Café 🚀 / 100% -- Launch!!! `, `source_abc`)
+    ).toBe(`caf-100-launch`)
+    expect(slugifyWikiPageTitle(`---`, `source_abc_DEF`)).toBe(`source-abc----`)
     const { source } = buildSourceSubmissionRows(
       {
         wikiSpaceId: `wiki_demo`,

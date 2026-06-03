@@ -134,4 +134,132 @@ describe(`LocalDemoWikiStateProducer`, () => {
     expect(result.rows.wiki_links).toEqual([])
     expect(result.rows.review_items).toEqual([])
   })
+  it(`proposes pages idempotently and returns page/review rows`, () => {
+    const producer = getWikiStateProducer()
+    producer.bootstrapSpace(snapshot)
+    const { source } = producer.submitSource({
+      wikiSpaceId: `wiki_demo`,
+      actorId: `actor_alice`,
+      kind: `text`,
+      title: `Proposal`,
+      body: `Draft body`,
+    })
+
+    const first = producer.proposePageFromSource({
+      wikiSpaceId: `wiki_demo`,
+      actorId: `actor_alice`,
+      sourceId: source.id,
+    })
+    const second = producer.proposePageFromSource({
+      wikiSpaceId: `wiki_demo`,
+      actorId: `actor_alice`,
+      sourceId: source.id,
+    })
+
+    expect(second.page.id).toBe(first.page.id)
+    expect(second.reviewItem.id).toBe(first.reviewItem.id)
+    expect(second.rows.wiki_pages).toHaveLength(1)
+    expect(second.rows.review_items).toHaveLength(1)
+    expect(
+      second.rows.activity_events.filter(
+        (event) => event.event_type === `page_proposed`
+      )
+    ).toHaveLength(1)
+  })
+
+  it(`throws for missing proposal sources`, () => {
+    const producer = getWikiStateProducer()
+    producer.bootstrapSpace(snapshot)
+
+    expect(() =>
+      producer.proposePageFromSource({
+        wikiSpaceId: `wiki_demo`,
+        actorId: `actor_alice`,
+        sourceId: `source_missing`,
+      })
+    ).toThrow(/Source not found/)
+  })
+
+  it(`approves and rejects page reviews with page status updates`, () => {
+    const producer = getWikiStateProducer()
+    producer.bootstrapSpace(snapshot)
+    const approvedSource = producer.submitSource({
+      wikiSpaceId: `wiki_demo`,
+      actorId: `actor_alice`,
+      kind: `text`,
+      title: `Approve Me`,
+      body: `A`,
+    }).source
+    const approvedProposal = producer.proposePageFromSource({
+      wikiSpaceId: `wiki_demo`,
+      actorId: `actor_alice`,
+      sourceId: approvedSource.id,
+    })
+
+    const approved = producer.resolveReviewItem({
+      wikiSpaceId: `wiki_demo`,
+      actorId: `actor_alice`,
+      reviewItemId: approvedProposal.reviewItem.id,
+      resolution: `approve`,
+      note: `Looks good`,
+    })
+    expect(approved.reviewItem.status).toBe(`approved`)
+    expect(approved.reviewItem.resolution_note).toBe(`Looks good`)
+    expect(approved.page.status).toBe(`canonical`)
+    expect(approved.activityEvent.event_type).toBe(`review_approved`)
+
+    const rejectedSource = producer.submitSource({
+      wikiSpaceId: `wiki_demo`,
+      actorId: `actor_alice`,
+      kind: `text`,
+      title: `Reject Me`,
+      body: `R`,
+    }).source
+    const rejectedProposal = producer.proposePageFromSource({
+      wikiSpaceId: `wiki_demo`,
+      actorId: `actor_alice`,
+      sourceId: rejectedSource.id,
+    })
+    const rejected = producer.resolveReviewItem({
+      wikiSpaceId: `wiki_demo`,
+      actorId: `actor_alice`,
+      reviewItemId: rejectedProposal.reviewItem.id,
+      resolution: `reject`,
+    })
+    expect(rejected.reviewItem.status).toBe(`rejected`)
+    expect(rejected.page.status).toBe(`rejected`)
+    expect(rejected.activityEvent.event_type).toBe(`review_rejected`)
+  })
+
+  it(`rejects already resolved reviews`, () => {
+    const producer = getWikiStateProducer()
+    producer.bootstrapSpace(snapshot)
+    const source = producer.submitSource({
+      wikiSpaceId: `wiki_demo`,
+      actorId: `actor_alice`,
+      kind: `text`,
+      title: `Once`,
+      body: `Only once`,
+    }).source
+    const proposal = producer.proposePageFromSource({
+      wikiSpaceId: `wiki_demo`,
+      actorId: `actor_alice`,
+      sourceId: source.id,
+    })
+    producer.resolveReviewItem({
+      wikiSpaceId: `wiki_demo`,
+      actorId: `actor_alice`,
+      reviewItemId: proposal.reviewItem.id,
+      resolution: `approve`,
+    })
+
+    expect(() =>
+      producer.resolveReviewItem({
+        wikiSpaceId: `wiki_demo`,
+        actorId: `actor_alice`,
+        reviewItemId: proposal.reviewItem.id,
+        resolution: `reject`,
+      })
+    ).toThrow(/already resolved/)
+  })
 })

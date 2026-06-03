@@ -214,4 +214,118 @@ describe(`createLivingWikiApiClient`, () => {
       message: `Invalid space response`,
     })
   })
+  it(`POSTs page proposals to expected endpoint and body`, async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({
+        page: {
+          id: `page_demo`,
+          wiki_space_id: `wiki_demo`,
+          slug: `demo`,
+          title: `Demo`,
+          status: `proposed`,
+          summary: `Summary`,
+          body: `Body`,
+          source_ids: [`source_demo`],
+          created_at: `2026-06-03T00:00:00.000Z`,
+          updated_at: `2026-06-03T00:00:00.000Z`,
+          created_by_run_id: null,
+        },
+        reviewItem: {
+          id: `review_demo`,
+          wiki_space_id: `wiki_demo`,
+          kind: `page`,
+          status: `open`,
+          target_type: `wiki_page`,
+          target_id: `page_demo`,
+          suggested_change: `Review proposed page: Demo`,
+          rationale: null,
+          created_at: `2026-06-03T00:00:00.000Z`,
+          created_by_run_id: null,
+          resolved_at: null,
+          resolved_by_actor_id: null,
+          resolution_note: null,
+        },
+        activityEventId: `event_demo`,
+      })
+    )
+    const api = createLivingWikiApiClient({ fetch: fetchMock as typeof fetch })
+
+    await api.proposePageFromSource({
+      wikiSpaceId: `wiki_demo`,
+      actorId: `actor_alice`,
+      sourceId: `source_demo`,
+      title: `Demo`,
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/spaces/wiki_demo/pages/propose`,
+      {
+        method: `POST`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({
+          actorId: `actor_alice`,
+          sourceId: `source_demo`,
+          title: `Demo`,
+        }),
+      }
+    )
+  })
+
+  it(`POSTs review resolutions to expected endpoint and body`, async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({
+        page: {
+          id: `page_demo`,
+          wiki_space_id: `wiki_demo`,
+          slug: `demo`,
+          title: `Demo`,
+          status: `canonical`,
+          summary: `Summary`,
+          body: `Body`,
+          source_ids: [`source_demo`],
+          created_at: `2026-06-03T00:00:00.000Z`,
+          updated_at: `2026-06-03T00:00:00.000Z`,
+          created_by_run_id: null,
+        },
+        reviewItem: {
+          id: `review_demo`,
+          wiki_space_id: `wiki_demo`,
+          kind: `page`,
+          status: `approved`,
+          target_type: `wiki_page`,
+          target_id: `page_demo`,
+          suggested_change: `Review proposed page: Demo`,
+          rationale: null,
+          created_at: `2026-06-03T00:00:00.000Z`,
+          created_by_run_id: null,
+          resolved_at: `2026-06-03T00:01:00.000Z`,
+          resolved_by_actor_id: `actor_alice`,
+          resolution_note: `Ship it`,
+        },
+        activityEventId: `event_demo`,
+      })
+    )
+    const api = createLivingWikiApiClient({ fetch: fetchMock as typeof fetch })
+
+    await api.resolveReviewItem({
+      wikiSpaceId: `wiki_demo`,
+      actorId: `actor_alice`,
+      reviewItemId: `review_demo`,
+      resolution: `approve`,
+      note: `Ship it`,
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/spaces/wiki_demo/reviews/review_demo/resolve`,
+      {
+        method: `POST`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({
+          actorId: `actor_alice`,
+          resolution: `approve`,
+          note: `Ship it`,
+        }),
+      }
+    )
+  })
 })
