@@ -175,8 +175,13 @@ const annotated = computed(() => {
   /* Tighten the line-height baseline; rows + section header set
      their own. Matches the live sidebar's `--ds-text-sm` (12px). */
   font-size: var(--ds-text-sm);
-  /* Hairline divider against the workspace column on the right. */
-  border-right: 1px solid var(--ds-divider);
+  /* Note: NO border-right here. The hairline between the sidebar and
+     the workspace is painted by the parent scene on the workspace's
+     left edge so it runs continuously across the macOS titlebar-
+     controls row above the sidebar. Painting it here would only
+     cover the body region (the titlebar-controls row sits outside
+     this `.sidebar` element) and would stack with the workspace's
+     border-left to read as a doubled 2-px line below the header. */
 }
 
 /* Empty header band — scenes without a titlebar above (e.g. a
