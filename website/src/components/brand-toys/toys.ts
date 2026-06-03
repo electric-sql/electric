@@ -1140,6 +1140,38 @@ export const TOYS: readonly ToyDef[] = [
     animated: false,
   },
   {
+    id: `app-titlebar-controls`,
+    label: `App — titlebar controls`,
+    group: `app`,
+    description: `Stationary titlebar control cluster — sidebar toggle (PanelLeftClose), search, back / forward chevrons. Mirrors the live TitlebarControls overlay; macOS desktop indents past the traffic lights via chromeInsetTarget. Phase 5 chrome primitive.`,
+    component: () =>
+      import(`./app/toys/AppTitlebarControlsToy.vue`).then((m) => m.default),
+    controls: [
+      {
+        name: `collapsed`,
+        type: `boolean`,
+        default: false,
+        description: `Sidebar collapsed? Drives PanelLeft (true) vs PanelLeftClose (false).`,
+      },
+      {
+        name: `chromeInsetTarget`,
+        type: `boolean`,
+        default: true,
+        description: `Bump left padding past the macOS traffic lights (84-px). Set false for inline placements without an overlay.`,
+      },
+      {
+        name: `theme`,
+        type: `select`,
+        default: `dark`,
+        options: [`light`, `dark`],
+      },
+    ],
+    defaultSize: { w: 480, h: 200 },
+    background: `dark`,
+    source: `src/components/brand-toys/app/primitives/chrome/AppTitlebarControls.vue`,
+    animated: false,
+  },
+  {
     id: `app-window-frame`,
     label: `App — window frame`,
     group: `app`,

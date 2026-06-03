@@ -51,6 +51,7 @@
 import { computed } from 'vue'
 import AppSidebar from '../../primitives/sidebar/AppSidebar.vue'
 import AppTitlebar from '../../primitives/chrome/AppTitlebar.vue'
+import AppTitlebarControls from '../../primitives/chrome/AppTitlebarControls.vue'
 import AppWindowFrame from '../../primitives/chrome/AppWindowFrame.vue'
 import ChatTileContent from '../../primitives/workspace/parts/ChatTileContent.vue'
 import StateTileContent from '../../primitives/workspace/parts/StateTileContent.vue'
@@ -126,8 +127,14 @@ const showCustomTitlebar = computed(() => resolvedOs.value !== 'macos')
 
       <div class="hero-scene-body">
         <div class="hero-scene-sidebar">
+          <div v-if="resolvedOs === 'macos'" class="sidebar-titlebar-row">
+            <AppTitlebarControls
+              :collapsed="false"
+              :chrome-inset-target="true"
+            />
+          </div>
           <AppSidebar
-            :no-header="false"
+            :no-header="resolvedOs === 'macos'"
             section-label="Today"
             :show-footer="true"
           />
@@ -142,6 +149,7 @@ const showCustomTitlebar = computed(() => resolvedOs.value !== 'macos')
               :paused="paused"
               :cps="cps"
               density="comfortable"
+              :show-close="true"
             />
           </div>
           <div class="hero-scene-tile hero-scene-tile-state">
@@ -191,6 +199,19 @@ const showCustomTitlebar = computed(() => resolvedOs.value !== 'macos')
   display: flex;
   flex-direction: column;
   min-width: 0;
+}
+
+/* On macOS the sidebar gets a 44-px titlebar-controls row at top
+   that holds the sidebar-toggle, search, and history buttons (matches
+   the live `TitlebarControls` overlay). The traffic lights sit over
+   the leftmost 84-px of this row via the AppWindowFrame overlay. */
+.sidebar-titlebar-row {
+  flex-shrink: 0;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  background: var(--ds-chrome-bg);
+  border-bottom: 1px solid transparent;
 }
 
 .hero-scene-workspace {

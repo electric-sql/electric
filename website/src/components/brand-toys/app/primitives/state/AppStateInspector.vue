@@ -30,6 +30,15 @@
 
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
+  ChevronsUpDown,
+  Crosshair,
+  ListCollapse,
+  ListTree,
+  Plus,
+  SkipForward,
+} from 'lucide-vue-next'
+import AppIcon from '../AppIcon.vue'
+import {
   STATE_EVENT_PULSE_ORDER,
   STATE_EVENTS_FIXTURE,
   STATE_RECORDS_FIXTURE,
@@ -155,7 +164,9 @@ onBeforeUnmount(() => {
       <span class="strip-count">1</span>
       <span class="strip-selector">
         <span class="strip-selector-label mono">runtime</span>
-        <span class="strip-selector-chevron" aria-hidden="true" />
+        <span class="strip-selector-chevron" aria-hidden="true">
+          <AppIcon :icon="ChevronsUpDown" :size="1" />
+        </span>
       </span>
     </div>
 
@@ -219,14 +230,26 @@ onBeforeUnmount(() => {
         <span class="panel-title">Events</span>
         <span class="panel-count">{{ STATE_EVENTS_FIXTURE.length }}</span>
         <span class="events-toolbar">
-          <span class="events-toolbar-btn" aria-hidden="true" title="Forward">
-            <span class="events-toolbar-glyph events-toolbar-glyph-arrow" />
+          <span
+            class="events-toolbar-btn"
+            aria-hidden="true"
+            title="Go to live"
+          >
+            <AppIcon :icon="SkipForward" :size="1" />
           </span>
-          <span class="events-toolbar-btn" aria-hidden="true" title="Filter">
-            <span class="events-toolbar-glyph events-toolbar-glyph-filter" />
+          <span
+            class="events-toolbar-btn"
+            aria-hidden="true"
+            title="Expand all"
+          >
+            <AppIcon :icon="ListTree" :size="1" />
           </span>
-          <span class="events-toolbar-btn" aria-hidden="true" title="Refresh">
-            <span class="events-toolbar-glyph events-toolbar-glyph-refresh" />
+          <span
+            class="events-toolbar-btn"
+            aria-hidden="true"
+            title="Collapse all"
+          >
+            <AppIcon :icon="ListCollapse" :size="1" />
           </span>
         </span>
       </div>
@@ -245,11 +268,11 @@ onBeforeUnmount(() => {
             e.summary
           }}</span>
           <span class="event-row-actions">
-            <span class="event-row-action" aria-hidden="true" title="Add">
-              <span class="event-action-glyph event-action-glyph-add" />
+            <span class="event-row-action" aria-hidden="true" title="Expand">
+              <AppIcon :icon="Plus" :size="1" />
             </span>
-            <span class="event-row-action" aria-hidden="true" title="Replay">
-              <span class="event-action-glyph event-action-glyph-refresh" />
+            <span class="event-row-action" aria-hidden="true" title="Focus">
+              <AppIcon :icon="Crosshair" :size="1" />
             </span>
           </span>
         </div>
@@ -323,11 +346,12 @@ onBeforeUnmount(() => {
 }
 
 .strip-selector-chevron {
-  width: 8px;
-  height: 8px;
-  border-right: 1.5px solid var(--ds-text-3);
-  border-bottom: 1.5px solid var(--ds-text-3);
-  transform: rotate(45deg) translate(-2px, -2px);
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ds-text-3);
   flex-shrink: 0;
 }
 
@@ -534,79 +558,6 @@ onBeforeUnmount(() => {
   color: var(--ds-text-3);
 }
 
-.events-toolbar-glyph {
-  width: 12px;
-  height: 12px;
-  position: relative;
-  display: inline-block;
-}
-
-.events-toolbar-glyph-arrow::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  margin: auto;
-  width: 8px;
-  height: 1.4px;
-  background: currentColor;
-}
-.events-toolbar-glyph-arrow::after {
-  content: '';
-  position: absolute;
-  right: 1px;
-  top: 50%;
-  width: 0;
-  height: 0;
-  border-left: 4px solid currentColor;
-  border-top: 3px solid transparent;
-  border-bottom: 3px solid transparent;
-  transform: translateY(-50%);
-}
-
-.events-toolbar-glyph-filter {
-  border: 1.4px solid currentColor;
-  border-bottom: none;
-  border-left: none;
-  border-right: none;
-}
-.events-toolbar-glyph-filter::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 12px;
-  height: 1.4px;
-  background: currentColor;
-}
-.events-toolbar-glyph-filter::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: 1px;
-  width: 1.4px;
-  height: 11px;
-  background: currentColor;
-  transform: translateX(-50%) rotate(0deg);
-  clip-path: polygon(50% 0, 100% 0, 100% 60%, 50% 100%, 0 60%, 0 0);
-}
-
-.events-toolbar-glyph-refresh {
-  border: 1.4px solid currentColor;
-  border-radius: 50%;
-  border-top-color: transparent;
-}
-.events-toolbar-glyph-refresh::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 0;
-  height: 0;
-  border-top: 4px solid currentColor;
-  border-left: 3px solid transparent;
-  border-right: 3px solid transparent;
-}
-
 .events-list {
   flex: 1;
   min-height: 0;
@@ -668,48 +619,6 @@ onBeforeUnmount(() => {
   justify-content: center;
   color: var(--ds-text-3);
   opacity: 0.7;
-}
-
-.event-action-glyph {
-  width: 10px;
-  height: 10px;
-  position: relative;
-  display: inline-block;
-}
-
-.event-action-glyph-add::before,
-.event-action-glyph-add::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  margin: auto;
-  background: currentColor;
-  border-radius: 1px;
-}
-.event-action-glyph-add::before {
-  width: 9px;
-  height: 1.3px;
-}
-.event-action-glyph-add::after {
-  width: 1.3px;
-  height: 9px;
-}
-
-.event-action-glyph-refresh {
-  border: 1.3px solid currentColor;
-  border-radius: 50%;
-  border-top-color: transparent;
-}
-.event-action-glyph-refresh::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 0;
-  height: 0;
-  border-top: 3px solid currentColor;
-  border-left: 2.5px solid transparent;
-  border-right: 2.5px solid transparent;
 }
 
 /* Pulse keyframe — matches the legacy AppStateRow pulse but tuned

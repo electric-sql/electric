@@ -24,6 +24,8 @@
    Pure primitive — does NOT include a `.app-mockup-root` wrapper.
    Mount inside a scene or toy that provides the cascade. */
 
+import { ChevronDown } from 'lucide-vue-next'
+import AppIcon from '../AppIcon.vue'
 import type { MockEntityStatus } from '../../fixtures'
 
 withDefaults(
@@ -99,7 +101,7 @@ const BASE_PADDING_LEFT = 3
       class="expand-btn-visible"
       aria-hidden="true"
     >
-      <span class="chevron-down" />
+      <AppIcon :icon="ChevronDown" :size="1" />
     </span>
   </div>
 </template>
@@ -227,16 +229,5 @@ const BASE_PADDING_LEFT = 3
   height: 22px;
   border-radius: var(--ds-radius-2);
   color: var(--ds-text-3);
-}
-
-/* Down chevron drawn with a CSS rotation of two skewed lines.
-   8x4 px glyph, two 1px borders rotated to form a "v". */
-.chevron-down {
-  width: 7px;
-  height: 7px;
-  border-bottom: 1.5px solid currentColor;
-  border-right: 1.5px solid currentColor;
-  transform: translateY(-2px) rotate(45deg);
-  display: inline-block;
 }
 </style>

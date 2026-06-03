@@ -16,6 +16,9 @@
 
    Pure primitive — does NOT include `.app-mockup-root`. */
 
+import { ChevronsUpDown, ListFilter, Settings } from 'lucide-vue-next'
+import AppIcon from '../AppIcon.vue'
+
 withDefaults(
   defineProps<{
     /** Server URL displayed in the picker. */
@@ -35,13 +38,15 @@ withDefaults(
     <div class="server-picker">
       <span class="server-picker-dot" :data-status="serverStatus" />
       <span class="server-picker-label mono">{{ serverUrl }}</span>
-      <span class="server-picker-chevron" aria-hidden="true" />
+      <span class="server-picker-chevron" aria-hidden="true">
+        <AppIcon :icon="ChevronsUpDown" :size="1" />
+      </span>
     </div>
     <span class="footer-icon-btn" aria-hidden="true" title="View options">
-      <span class="footer-icon footer-icon-filter" />
+      <AppIcon :icon="ListFilter" :size="2" />
     </span>
     <span class="footer-icon-btn" aria-hidden="true" title="Settings">
-      <span class="footer-icon footer-icon-settings" />
+      <AppIcon :icon="Settings" :size="2" />
     </span>
   </div>
 </template>
@@ -106,11 +111,12 @@ withDefaults(
 
 .server-picker-chevron {
   flex-shrink: 0;
-  width: 8px;
-  height: 8px;
-  border-right: 1.4px solid var(--ds-text-3);
-  border-bottom: 1.4px solid var(--ds-text-3);
-  transform: rotate(45deg) translate(-1px, -1px);
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ds-text-3);
 }
 
 /* ───────── Footer icon buttons ───────── */
@@ -124,61 +130,5 @@ withDefaults(
   justify-content: center;
   color: var(--ds-text-3);
   flex-shrink: 0;
-}
-
-.footer-icon {
-  position: relative;
-  display: inline-block;
-  width: 14px;
-  height: 14px;
-}
-
-/* Filter / sliders glyph — three horizontal rules with offset
-   knobs. */
-.footer-icon-filter::before,
-.footer-icon-filter::after,
-.footer-icon-filter {
-  --bar: 1.4px solid currentColor;
-}
-.footer-icon-filter::before,
-.footer-icon-filter::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 1.4px;
-  background: currentColor;
-}
-.footer-icon-filter::before {
-  top: 3px;
-}
-.footer-icon-filter::after {
-  bottom: 3px;
-}
-.footer-icon-filter {
-  border-top: var(--bar);
-}
-
-/* Settings cog glyph — drawn with a circular border + radial spokes.
-   Approximation; the real lucide cog has 8 spokes. */
-.footer-icon-settings {
-  border: 1.4px solid currentColor;
-  border-radius: 50%;
-}
-.footer-icon-settings::before,
-.footer-icon-settings::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  margin: auto;
-  background: currentColor;
-}
-.footer-icon-settings::before {
-  width: 12px;
-  height: 1.4px;
-}
-.footer-icon-settings::after {
-  width: 1.4px;
-  height: 12px;
 }
 </style>

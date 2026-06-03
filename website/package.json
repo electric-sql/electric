@@ -47,6 +47,7 @@
   "dependencies": {
     "@electric-sql/pglite": "0.4.5",
     "@electric-sql/pglite-repl": "0.3.5",
+    "lucide-vue-next": "^0.561.0",
     "posthog-js": "^1.236.4"
   }
 }

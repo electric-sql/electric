@@ -26,6 +26,8 @@
    Mount inside a scene or toy that provides the cascade. */
 
 import { computed } from 'vue'
+import { SquarePen } from 'lucide-vue-next'
+import AppIcon from '../AppIcon.vue'
 import AppSidebarFooter from './AppSidebarFooter.vue'
 import AppSidebarRow from './AppSidebarRow.vue'
 import { SIDEBAR_FIXTURE, type MockSidebarRow } from '../../fixtures'
@@ -107,9 +109,7 @@ const annotated = computed(() => {
       -->
       <button class="new-session-row" type="button" tabindex="-1">
         <span class="new-session-icon-slot">
-          <!-- Pencil glyph — drawn with two pseudo-elements rather
-               than an icon library. 12×12 px, --ds-text-1. -->
-          <span class="new-session-pencil" aria-hidden="true" />
+          <AppIcon :icon="SquarePen" :size="2" />
         </span>
         <span class="new-session-label">New session</span>
         <span class="new-session-kbd mono" aria-hidden="true">
@@ -224,38 +224,6 @@ const annotated = computed(() => {
   justify-content: center;
   color: var(--ds-text-1);
   position: relative;
-}
-
-/* Pencil glyph — a 9×9 rotated rectangle with a small "tip" pseudo
-   below it. Crude but legible at 12×12 — what your eye reads on
-   the real "+ new session" pencil icon. */
-.new-session-pencil {
-  width: 11px;
-  height: 11px;
-  position: relative;
-  display: inline-block;
-}
-.new-session-pencil::before {
-  content: '';
-  position: absolute;
-  left: 1px;
-  top: 1px;
-  width: 8px;
-  height: 2.5px;
-  background: currentColor;
-  transform: rotate(-45deg) translate(0, 4.2px);
-  border-radius: 0.5px;
-}
-.new-session-pencil::after {
-  content: '';
-  position: absolute;
-  right: 0;
-  top: 0;
-  width: 3px;
-  height: 3px;
-  background: currentColor;
-  transform: rotate(45deg);
-  border-radius: 0.5px;
 }
 
 .new-session-label {

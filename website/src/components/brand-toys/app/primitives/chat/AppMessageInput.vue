@@ -30,6 +30,9 @@
 
    Pure primitive — does NOT include `.app-mockup-root`. */
 
+import { ArrowUp, Plus } from 'lucide-vue-next'
+import AppIcon from '../AppIcon.vue'
+
 withDefaults(
   defineProps<{
     placeholder?: string
@@ -52,7 +55,7 @@ withDefaults(
     <div class="composer">
       <div class="composer-body">
         <span class="attach-btn" aria-hidden="true" title="Attach">
-          <span class="attach-glyph" />
+          <AppIcon :icon="Plus" :size="2" />
         </span>
         <span class="textarea-mock">{{ placeholder }}</span>
         <span
@@ -61,7 +64,7 @@ withDefaults(
           aria-hidden="true"
           title="Send message"
         >
-          <span class="send-glyph" />
+          <AppIcon :icon="ArrowUp" :size="3" />
         </span>
       </div>
     </div>
@@ -116,31 +119,6 @@ withDefaults(
   margin-bottom: 6px;
 }
 
-/* `+` plus sign — two crossed 1.5-px bars. */
-.attach-glyph {
-  position: relative;
-  width: 12px;
-  height: 12px;
-  display: inline-block;
-}
-.attach-glyph::before,
-.attach-glyph::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  margin: auto;
-  background: currentColor;
-  border-radius: 1px;
-}
-.attach-glyph::before {
-  width: 12px;
-  height: 1.5px;
-}
-.attach-glyph::after {
-  width: 1.5px;
-  height: 12px;
-}
-
 /* ───────── Textarea (mock) ───────── */
 
 .textarea-mock {
@@ -185,37 +163,5 @@ withDefaults(
 .composer-send[data-active='true'] {
   background: var(--ds-accent-9);
   color: var(--ds-text-on-accent);
-}
-
-/* Up-arrow glyph — the live UI uses `lucide-react`'s ArrowUp at size
-   3 (16 px). We approximate with a 7-px CSS triangle + line. */
-.send-glyph {
-  position: relative;
-  width: 12px;
-  height: 12px;
-  display: inline-block;
-}
-.send-glyph::before {
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: 1px;
-  width: 1.6px;
-  height: 10px;
-  background: currentColor;
-  border-radius: 1px;
-  transform: translateX(-50%);
-}
-.send-glyph::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: 1px;
-  width: 0;
-  height: 0;
-  border-left: 4px solid transparent;
-  border-right: 4px solid transparent;
-  border-bottom: 5px solid currentColor;
-  transform: translateX(-50%);
 }
 </style>

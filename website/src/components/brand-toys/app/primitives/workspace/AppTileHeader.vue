@@ -14,16 +14,17 @@
        - Session id subtitle — mono, `--ds-text-3`, 11 px, sits to
          the right of the title with a small gap. Concatenated
          inline (no line break) — matches the live UI.
-       - Copy icon — clipboard glyph, hover-revealed in the live UI;
-         we paint it dimmed at rest in the mockup.
+       - Copy icon (lucide `Copy`) — hover-revealed in the live
+         product; we paint it dimmed at rest in the mockup.
    - Right cluster (`actions`):
        - InlineStatusBadge — soft pill with a 5-px dot, tone derived
          from `status`.
-       - Runner badge — server icon + label, neutral soft.
-       - Sandbox badge — box icon + label, info soft when remote /
+       - Runner badge (lucide `Server` icon) — neutral soft.
+       - Sandbox badge (lucide `Box` icon) — info soft when remote /
          neutral when local.
-       - View-toggle icon buttons — chat, state-explorer, etc.
-       - Overflow `…` button.
+       - View-toggle icon buttons — lucide `MessageSquare` (chat) +
+         `Database` (state-explorer), matching `registerViews.ts`.
+       - Overflow `MoreHorizontal` button.
        - Close `X` button.
 
    `chromeInsetTarget` (= the `chrome-inset-target` data attribute on
@@ -33,6 +34,17 @@
 
    Pure primitive — does NOT include a `.app-mockup-root` wrapper.
 */
+
+import {
+  Box,
+  Copy,
+  Database,
+  MessageSquare,
+  MoreHorizontal,
+  Server,
+  X,
+} from 'lucide-vue-next'
+import AppIcon from '../AppIcon.vue'
 
 withDefaults(
   defineProps<{
@@ -55,9 +67,9 @@ withDefaults(
     /** Sandbox is remote? Drives the badge tone. */
     sandboxRemote?: boolean
     /** Active view (highlights the matching toggle). */
-    activeView?: 'chat' | 'state' | 'logs' | 'fork'
+    activeView?: 'chat' | 'state'
     /** Available view toggles. Pass `[]` to hide the strip. */
-    views?: ReadonlyArray<'chat' | 'state' | 'logs' | 'fork'>
+    views?: ReadonlyArray<'chat' | 'state'>
     /** Show the close (X) button. The right tile in a split sets this
      * `true`; the leftmost tile keeps the menu only. */
     showClose?: boolean
@@ -78,11 +90,14 @@ withDefaults(
   }
 )
 
+const VIEW_ICONS = {
+  chat: MessageSquare,
+  state: Database,
+} as const
+
 const VIEW_LABELS: Record<string, string> = {
   chat: 'Chat',
-  state: 'State',
-  logs: 'Logs',
-  fork: 'Forks',
+  state: 'State Explorer',
 }
 </script>
 
@@ -96,10 +111,7 @@ const VIEW_LABELS: Record<string, string> = {
       <span v-if="sessionId" class="title-id-group">
         <span class="title-id mono" :title="sessionId">{{ sessionId }}</span>
         <span class="title-copy" aria-hidden="true">
-          <span class="copy-glyph">
-            <span class="copy-glyph-front" />
-            <span class="copy-glyph-back" />
-          </span>
+          <AppIcon :icon="Copy" :size="1" />
         </span>
       </span>
     </div>
@@ -111,7 +123,7 @@ const VIEW_LABELS: Record<string, string> = {
       </span>
 
       <span v-if="runnerLabel" class="runtime-badge" :title="runnerLabel">
-        <span class="runtime-badge-icon icon-server" aria-hidden="true" />
+        <AppIcon :icon="Server" :size="1" />
         <span class="runtime-badge-label">{{ runnerLabel }}</span>
       </span>
       <span
@@ -120,7 +132,7 @@ const VIEW_LABELS: Record<string, string> = {
         :data-tone="sandboxRemote ? 'info' : 'neutral'"
         :title="sandboxLabel"
       >
-        <span class="runtime-badge-icon icon-box" aria-hidden="true" />
+        <AppIcon :icon="Box" :size="1" />
         <span class="runtime-badge-label">{{ sandboxLabel }}</span>
       </span>
 
@@ -133,12 +145,12 @@ const VIEW_LABELS: Record<string, string> = {
           :title="VIEW_LABELS[view]"
           aria-hidden="true"
         >
-          <span :class="`view-glyph view-glyph-${view}`" />
+          <AppIcon :icon="VIEW_ICONS[view]" :size="2" />
         </span>
       </span>
 
-      <span class="action-btn" aria-hidden="true" title="More">
-        <span class="action-glyph action-glyph-more" />
+      <span class="action-btn" aria-hidden="true" title="Tile actions">
+        <AppIcon :icon="MoreHorizontal" :size="3" />
       </span>
       <span
         v-if="showClose"
@@ -146,7 +158,7 @@ const VIEW_LABELS: Record<string, string> = {
         aria-hidden="true"
         title="Close"
       >
-        <span class="action-glyph action-glyph-close" />
+        <AppIcon :icon="X" :size="2" />
       </span>
     </div>
   </header>
@@ -221,35 +233,8 @@ const VIEW_LABELS: Record<string, string> = {
   width: 14px;
   height: 14px;
   flex-shrink: 0;
-  opacity: 0.5;
-}
-
-/* Clipboard glyph — two stacked rounded rectangles with a small
-   notch on top. Drawn purely in CSS so we don't drag a Lucide icon. */
-.copy-glyph {
-  position: relative;
-  width: 10px;
-  height: 10px;
-  display: inline-block;
-}
-.copy-glyph-front,
-.copy-glyph-back {
-  position: absolute;
-  border: 1px solid currentColor;
-  border-radius: 1.5px;
-}
-.copy-glyph-back {
-  width: 8px;
-  height: 8px;
-  left: 0;
-  top: 2px;
-}
-.copy-glyph-front {
-  width: 8px;
-  height: 8px;
-  left: 2px;
-  top: 0;
-  background: var(--ds-bg);
+  opacity: 0.55;
+  color: var(--ds-text-3);
 }
 
 /* ───────── Actions cluster ───────── */
@@ -335,51 +320,6 @@ const VIEW_LABELS: Record<string, string> = {
   text-overflow: ellipsis;
 }
 
-.runtime-badge-icon {
-  width: 12px;
-  height: 12px;
-  flex-shrink: 0;
-  position: relative;
-  display: inline-block;
-}
-
-/* Server glyph — three stacked rounded rectangles with a small dot. */
-.icon-server {
-  border: 1px solid currentColor;
-  border-radius: 2px;
-}
-.icon-server::before,
-.icon-server::after {
-  content: '';
-  position: absolute;
-  left: 1px;
-  width: 8px;
-  height: 1px;
-  background: currentColor;
-}
-.icon-server::before {
-  top: 3px;
-}
-.icon-server::after {
-  bottom: 3px;
-}
-
-/* Box glyph — open carton seen from the side. */
-.icon-box {
-  border: 1px solid currentColor;
-  border-radius: 1px;
-  transform: skewY(-12deg);
-}
-.icon-box::before {
-  content: '';
-  position: absolute;
-  left: -1px;
-  right: -1px;
-  top: 3px;
-  height: 1px;
-  background: currentColor;
-}
-
 /* ───────── View-toggle icons ───────── */
 
 .view-strip {
@@ -398,58 +338,11 @@ const VIEW_LABELS: Record<string, string> = {
   justify-content: center;
   color: var(--ds-text-3);
   background: transparent;
-  position: relative;
 }
 
 .view-btn[data-active='true'] {
   background: var(--ds-bg-hover);
   color: var(--ds-text-1);
-}
-
-.view-glyph {
-  width: 14px;
-  height: 14px;
-  position: relative;
-  display: inline-block;
-}
-
-/* Chat glyph — speech bubble with rounded tail. */
-.view-glyph-chat {
-  border: 1.5px solid currentColor;
-  border-radius: 3px;
-}
-.view-glyph-chat::after {
-  content: '';
-  position: absolute;
-  left: 2px;
-  bottom: -3px;
-  width: 4px;
-  height: 4px;
-  background: var(--ds-bg);
-  border-left: 1.5px solid currentColor;
-  border-bottom: 1.5px solid currentColor;
-  transform: rotate(-45deg);
-  transform-origin: left bottom;
-}
-
-/* State glyph — three stacked rows. */
-.view-glyph-state::before,
-.view-glyph-state::after,
-.view-glyph-state {
-  --line: 1.5px solid currentColor;
-}
-.view-glyph-state {
-  border-top: var(--line);
-  border-bottom: var(--line);
-}
-.view-glyph-state::before,
-.view-glyph-state::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 50%;
-  border-top: 1.5px solid currentColor;
 }
 
 /* ───────── Action buttons (more / close) ───────── */
@@ -463,57 +356,5 @@ const VIEW_LABELS: Record<string, string> = {
   justify-content: center;
   color: var(--ds-text-3);
   margin-left: 2px;
-}
-
-.action-glyph {
-  position: relative;
-  display: inline-block;
-}
-
-/* Three-dot more glyph. */
-.action-glyph-more {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: currentColor;
-}
-.action-glyph-more::before,
-.action-glyph-more::after {
-  content: '';
-  position: absolute;
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: currentColor;
-  top: 0;
-}
-.action-glyph-more::before {
-  left: -7px;
-}
-.action-glyph-more::after {
-  left: 7px;
-}
-
-/* Close X glyph. */
-.action-glyph-close {
-  width: 12px;
-  height: 12px;
-}
-.action-glyph-close::before,
-.action-glyph-close::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  margin: auto;
-  width: 11px;
-  height: 1.5px;
-  background: currentColor;
-  border-radius: 1px;
-}
-.action-glyph-close::before {
-  transform: rotate(45deg);
-}
-.action-glyph-close::after {
-  transform: rotate(-45deg);
 }
 </style>
