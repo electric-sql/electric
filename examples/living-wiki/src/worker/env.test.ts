@@ -41,4 +41,40 @@ describe(`Agents runtime env config`, () => {
       })
     ).toThrow(`Invalid ELECTRIC_AGENTS_BASE_URL`)
   })
+
+  it(`rejects Agents runtime base URLs with username/password credentials`, () => {
+    expect(() =>
+      getAgentsRuntimeConfig({
+        ...baseEnv,
+        ELECTRIC_AGENTS_BASE_URL: `https://user:pass@agents.example.test/runtime`,
+      })
+    ).toThrow(`Invalid ELECTRIC_AGENTS_BASE_URL`)
+  })
+
+  it(`rejects Agents runtime base URLs with query/search`, () => {
+    expect(() =>
+      getAgentsRuntimeConfig({
+        ...baseEnv,
+        ELECTRIC_AGENTS_BASE_URL: `https://agents.example.test/runtime?x=1`,
+      })
+    ).toThrow(`Invalid ELECTRIC_AGENTS_BASE_URL`)
+  })
+
+  it(`rejects Agents runtime base URLs with hash/fragment`, () => {
+    expect(() =>
+      getAgentsRuntimeConfig({
+        ...baseEnv,
+        ELECTRIC_AGENTS_BASE_URL: `https://agents.example.test/runtime#frag`,
+      })
+    ).toThrow(`Invalid ELECTRIC_AGENTS_BASE_URL`)
+  })
+
+  it(`normalizes trailing slash for valid Agents runtime base URLs`, () => {
+    expect(
+      getAgentsRuntimeConfig({
+        ...baseEnv,
+        ELECTRIC_AGENTS_BASE_URL: `http://agents.example.test/runtime/`,
+      }).baseUrl
+    ).toBe(`http://agents.example.test/runtime`)
+  })
 })

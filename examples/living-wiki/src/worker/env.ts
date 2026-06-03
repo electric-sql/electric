@@ -51,5 +51,9 @@ function normalizeAgentsBaseUrl(value: string): string {
     throw new Error(`Invalid ELECTRIC_AGENTS_BASE_URL`)
   }
 
+  if (url.username || url.password || url.search || url.hash) {
+    throw new Error(`Invalid ELECTRIC_AGENTS_BASE_URL`)
+  }
+
   return url.toString().replace(/\/$/, ``)
 }
