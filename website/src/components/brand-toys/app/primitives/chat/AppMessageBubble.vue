@@ -88,11 +88,8 @@ withDefaults(
   font-size: var(--ds-text-xs);
   line-height: var(--ds-text-xs-lh);
   color: var(--ds-text-2);
-}
-
-.meta-sender {
-  font-variant-caps: small-caps;
-  letter-spacing: 0.02em;
+  /* Live `.meta` is plain `<Text size={1} tone="muted">` — no caps
+     tweaks, no letter-spacing. */
 }
 
 .meta-sep {
