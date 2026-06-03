@@ -220,9 +220,10 @@ This section does the heavy positioning lift. It is also where the **software-fa
     - Hand a session off to a teammate by sharing the entity URL — the multi-user view sees the same stream.
   - Backed by: `ServersPage` (multi-server config), `cloud-auth.ts` + `cloud-agent-servers.ts`, `local-discovery.ts`, mobile `ServerSetupScreen` / `SessionListScreen` / `SessionMenu` (signal stop/steer).
 
-- **Card 3 — "Build with the SDK."**
+- **Card 3 — "Build your own agents."**
   - Eyebrow: `Build with the SDK`
   - Body: It's also the dev tool for the entities _you_ write with the SDK (`@electric-ax/agents-runtime`). Live state explorer, entity timeline, fork-from-here, manifest drawer, MCP servers, skills, and a tile workspace for following parent + workers in parallel.
+  - Title note: an earlier draft of this plan repeated the eyebrow text as the title (`"Build with the SDK."`), which read as redundant once both lines sat in the rendered card. The locked title mirrors cards 1 and 2 — verb + object — and connects to the body's "the entities _you_ write" emphasis.
   - **You can:**
     - Drop in on a stuck entity and watch its inbox / runs / manifest update in real time.
     - Fork a session at any past point to A/B test a prompt or tool change.

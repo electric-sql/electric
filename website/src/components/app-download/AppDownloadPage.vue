@@ -216,8 +216,9 @@ const primaryPlatform = computed(
     <section class="ad-hero">
       <div class="ad-hero-inner">
         <h1 class="ad-hero-name">
-          Run, observe and steer
-          your&nbsp;<span class="ad-hero-accent">agents</span>.
+          Run, observe and steer your&nbsp;<span class="ad-hero-accent"
+            >agents</span
+          >.
         </h1>
         <p class="ad-hero-text">
           Desktop and mobile clients for the Electric Agents platform — one app
@@ -378,22 +379,22 @@ const primaryPlatform = computed(
           <p class="ad-modes-body">
             Horton ships in the desktop. Pick a model (Anthropic, OpenAI,
             DeepSeek, Moonshot, Codex). Pick a working directory. Chat to a
-            coding agent that can read, write, edit, run bash, search the
-            web, fetch URLs, and spawn parallel workers.
+            coding agent that can read, write, edit, run bash, search the web,
+            fetch URLs, and spawn parallel workers.
           </p>
-          <p class="ad-modes-list-label mono">You can</p>
+          <p class="ad-modes-list-label mono">You can:</p>
           <ul class="ad-modes-list">
             <li>
-              Refactor a folder of TypeScript files while Horton runs
-              parallel workers per module.
+              Refactor a folder of TypeScript files while Horton runs parallel
+              workers per module.
             </li>
             <li>
               Bisect a regression by spawning a worker to reproduce, then
               another to fix.
             </li>
             <li>
-              Scaffold a fresh project with <code>/init</code>, then
-              iterate with <code>/quickstart</code>.
+              Scaffold a fresh project with <code>/init</code>, then iterate
+              with <code>/quickstart</code>.
             </li>
             <li>
               Review a diff or a PR description and ask Horton to draft
@@ -409,29 +410,28 @@ const primaryPlatform = computed(
           <p class="ad-modes-eyebrow mono">Attach remotely</p>
           <h3 class="ad-modes-title">Attach to remote sessions.</h3>
           <p class="ad-modes-body">
-            Connect to any agents-server — your own, your team's, or
-            Electric Cloud. Sessions spawned by CI, webhooks, GitHub
-            issues, cron or your software factory appear live in the
-            sidebar. Pick one up on the desktop, follow it on your phone,
-            stop or steer it from either.
+            Connect to any agents-server — your own, your team's, or Electric
+            Cloud. Sessions spawned by CI, webhooks, GitHub issues, cron or your
+            software factory appear live in the sidebar. Pick one up on the
+            desktop, follow it on your phone, stop or steer it from either.
           </p>
-          <p class="ad-modes-list-label mono">You can</p>
+          <p class="ad-modes-list-label mono">You can:</p>
           <ul class="ad-modes-list">
             <li>
-              Triage a GitHub-issue-spawned Horton session on your phone,
-              finish it from your laptop.
+              Triage a GitHub-issue-spawned Horton session on your phone, finish
+              it from your laptop.
             </li>
             <li>
-              Watch a CI agent open a PR, push a steering message before
-              it merges.
+              Watch a CI agent open a PR, push a steering message before it
+              merges.
             </li>
             <li>
-              Pause a long-running cron-triggered pipeline and resume from
-              where it left off.
+              Pause a long-running cron-triggered pipeline and resume from where
+              it left off.
             </li>
             <li>
-              Hand a session off to a teammate by sharing the entity URL —
-              the multi-user view sees the same stream.
+              Hand a session off to a teammate by sharing the entity URL — the
+              multi-user view sees the same stream.
             </li>
           </ul>
         </article>
@@ -441,31 +441,31 @@ const primaryPlatform = computed(
             <span class="ad-icon ad-icon--microscope" />
           </span>
           <p class="ad-modes-eyebrow mono">Build with the SDK</p>
-          <h3 class="ad-modes-title">Build agents on the SDK.</h3>
+          <h3 class="ad-modes-title">Build your own agents.</h3>
           <p class="ad-modes-body">
-            It's also the dev tool for the entities <em>you</em> write
-            with the SDK (<code>@electric-ax/agents-runtime</code>). Live
-            state explorer, entity timeline, fork-from-here, manifest
-            drawer, MCP servers, skills, and a tile workspace for
-            following parent + workers in parallel.
+            It's also the dev tool for the entities <em>you</em> write with the
+            SDK (<code>@electric-ax/agents-runtime</code>). Live state explorer,
+            entity timeline, fork-from-here, manifest drawer, MCP servers,
+            skills, and a tile workspace for following parent + workers in
+            parallel.
           </p>
-          <p class="ad-modes-list-label mono">You can</p>
+          <p class="ad-modes-list-label mono">You can:</p>
           <ul class="ad-modes-list">
             <li>
-              Drop in on a stuck entity and watch its inbox / runs /
-              manifest update in real time.
+              Drop in on a stuck entity and watch its inbox / runs / manifest
+              update in real time.
             </li>
             <li>
-              Fork a session at any past point to A/B test a prompt or
-              tool change.
+              Fork a session at any past point to A/B test a prompt or tool
+              change.
             </li>
             <li>
-              Step through a failed worker's tool calls without
-              redeploying the host app.
+              Step through a failed worker's tool calls without redeploying the
+              host app.
             </li>
             <li>
-              Run a parent and three children side-by-side in a tile
-              workspace, then deep-link the layout.
+              Run a parent and three children side-by-side in a tile workspace,
+              then deep-link the layout.
             </li>
           </ul>
         </article>
@@ -489,8 +489,8 @@ const primaryPlatform = computed(
       <template #eyebrow>Scenarios</template>
       <template #title>What this looks like in practice.</template>
       <template #subtitle>
-        Four short stories that span the three modes above. None of them
-        require code you don't have today.
+        Four short stories that span the three modes above. None of them require
+        code you don't have today.
       </template>
 
       <div class="ad-scenarios-grid">
@@ -499,19 +499,17 @@ const primaryPlatform = computed(
             <AdPlaceholder name="scenario-1.png" aspect="16/9" />
           </div>
           <p class="ad-scenarios-touches mono">
-            Touches · Cloud · mobile · steer · stop · review
+            Touches: Cloud · mobile · steer · stop · review
           </p>
           <h3 class="ad-scenarios-title">
-            GitHub issue → CI spawns Horton → triage on phone → finish on
-            desk
+            GitHub issue → CI spawns Horton → triage on phone → finish on desk
           </h3>
           <p class="ad-scenarios-body">
             A new GitHub issue (or <code>issue_comment</code>, or a
-            <code>workflow_dispatch</code> from CI) opens a new agent
-            session on Electric Cloud. You get a notification on your
-            phone, skim the diff Horton drafted, push back a steering
-            message ("don't touch the migration files"), then pick up on
-            your laptop to merge.
+            <code>workflow_dispatch</code> from CI) opens a new agent session on
+            Electric Cloud. You get a notification on your phone, skim the diff
+            Horton drafted, push back a steering message ("don't touch the
+            migration files"), then pick up on your laptop to merge.
           </p>
         </article>
 
@@ -520,16 +518,16 @@ const primaryPlatform = computed(
             <AdPlaceholder name="scenario-2.png" aspect="16/9" />
           </div>
           <p class="ad-scenarios-touches mono">
-            Touches · desktop · working-dir · workers · tile · fork
+            Touches: desktop · working-dir · workers · tile · fork
           </p>
           <h3 class="ad-scenarios-title">
             Local refactor with parallel workers
           </h3>
           <p class="ad-scenarios-body">
-            Open the desktop, point Horton at a repo, ask for a rename
-            across packages. Horton spawns a worker per package, you
-            watch all four in a 2×2 tile workspace, fork the one that
-            took the wrong turn, ship the diff.
+            Open the desktop, point Horton at a repo, ask for a rename across
+            packages. Horton spawns a worker per package, you watch all four in
+            a 2×2 tile workspace, fork the one that took the wrong turn, ship
+            the diff.
           </p>
         </article>
 
@@ -538,16 +536,16 @@ const primaryPlatform = computed(
             <AdPlaceholder name="scenario-3.png" aspect="16/9" />
           </div>
           <p class="ad-scenarios-touches mono">
-            Touches · SDK · state explorer · timeline · fork · MCP
+            Touches: SDK · state explorer · timeline · fork · MCP
           </p>
           <h3 class="ad-scenarios-title">
             Build an agent on the SDK, debug it without a redeploy
           </h3>
           <p class="ad-scenarios-body">
-            You ship a custom <code>summarizer</code> entity with the
-            SDK. It's getting stuck on certain inputs. Open the state
-            explorer, watch its shared state evolve, fork the failing
-            session, change the prompt, replay.
+            You ship a custom <code>summarizer</code> entity with the SDK. It's
+            getting stuck on certain inputs. Open the state explorer, watch its
+            shared state evolve, fork the failing session, change the prompt,
+            replay.
           </p>
         </article>
 
@@ -556,15 +554,13 @@ const primaryPlatform = computed(
             <AdPlaceholder name="scenario-4.png" aspect="16/9" />
           </div>
           <p class="ad-scenarios-touches mono">
-            Touches · Cloud · cron wake · mobile · fork · send
+            Touches: Cloud · cron wake · mobile · fork · send
           </p>
-          <h3 class="ad-scenarios-title">
-            Cron-triggered overnight pipeline
-          </h3>
+          <h3 class="ad-scenarios-title">Cron-triggered overnight pipeline</h3>
           <p class="ad-scenarios-body">
-            Cron kicks off a nightly research agent on the cloud server.
-            Open the mobile app in the morning, see what it found, hand
-            off the most promising lead to a fresh session for follow-up.
+            Cron kicks off a nightly research agent on the cloud server. Open
+            the mobile app in the morning, see what it found, hand off the most
+            promising lead to a fresh session for follow-up.
           </p>
         </article>
       </div>
@@ -600,9 +596,9 @@ const primaryPlatform = computed(
       <template #eyebrow>Dev tools</template>
       <template #title>Built for builders.</template>
       <template #subtitle>
-        When you ship your own entities on the Electric Agents infra and
-        SDK (<code>@electric-ax/agents-runtime</code>), the same app
-        becomes the dev tool you'd otherwise have to write yourself.
+        When you ship your own entities on the Electric Agents infra and SDK
+        (<code>@electric-ax/agents-runtime</code>), the same app becomes the dev
+        tool you'd otherwise have to write yourself.
       </template>
 
       <div class="ad-builders-grid">
@@ -612,12 +608,11 @@ const primaryPlatform = computed(
           </span>
           <h3 class="ad-builders-title">Tile workspace</h3>
           <p class="ad-builders-body">
-            Split right / down cycle, find, <code>?layout=</code> deep
-            link.
+            Split right / down cycle, find, <code>?layout=</code> deep link.
           </p>
           <p class="ad-builders-hint">
-            Use it to follow a parent and three workers in parallel
-            without losing context.
+            Use it to follow a parent and three workers in parallel without
+            losing context.
           </p>
         </article>
 
@@ -666,12 +661,10 @@ const primaryPlatform = computed(
             <span class="ad-icon ad-icon--radar" />
           </span>
           <h3 class="ad-builders-title">Local discovery</h3>
-          <p class="ad-builders-body">
-            Finds dev servers on localhost ports.
-          </p>
+          <p class="ad-builders-body">Finds dev servers on localhost ports.</p>
           <p class="ad-builders-hint">
-            Use it — the dev server you just <code>pnpm dev</code>'d
-            shows up automatically.
+            Use it — the dev server you just <code>pnpm dev</code>'d shows up
+            automatically.
           </p>
         </article>
 
@@ -684,8 +677,8 @@ const primaryPlatform = computed(
             Installs the <code>electric</code> command system-wide.
           </p>
           <p class="ad-builders-hint">
-            Use it to drop <code>electric</code> on your PATH without
-            touching npm.
+            Use it to drop <code>electric</code> on your PATH without touching
+            npm.
           </p>
         </article>
       </div>
@@ -794,8 +787,8 @@ const primaryPlatform = computed(
             >packages/agents-mobile</a
           >
           — clone the repo and run the Expo dev build today, or watch the repo
-          to be notified when the public App Store and Google Play listings
-          ship with&nbsp;v1.
+          to be notified when the public App Store and Google Play listings ship
+          with&nbsp;v1.
         </p>
         <div class="ad-mobile-preview-actions">
           <VPButton
@@ -1132,13 +1125,22 @@ const primaryPlatform = computed(
    Three equal-width cards in a row at desktop widths, collapsing
    to two columns < 980px and one column on mobile. Each card is a
    vertical stack of: icon · category eyebrow · title · body
-   paragraph · "You can" label · 4-item bullet list. Cards stretch
-   to equal heights via `align-items: stretch` on the grid so the
-   list bottoms line up across all three even when bullet copy
-   varies slightly in length.
+   paragraph · "You can:" label · 4-item bullet list.
+
+   List-bottoms alignment across cards is the product of TWO
+   mechanisms working together:
+     1. `align-items: stretch` on the grid → cards take the height
+        of the tallest one, so all three share a bottom edge.
+     2. `margin-top: auto` on `.ad-modes-list-label` (NOT the list)
+        → the (label + list) block anchors to the bottom of each
+        card's flex column, so when body copy is shorter the extra
+        space lands above the label, not between label and list.
+   Either mechanism alone is insufficient: stretching without the
+   auto-margin leaves lists floating mid-card; auto-margin without
+   stretching collapses each card's height to its content.
 
    The strip beneath the grid restates the one-integrated-platform
-   takeaway as a centred, mono, muted single line. */
+   takeaway as a centred, muted single line. */
 
 .ad-modes-grid {
   display: grid;
@@ -1272,10 +1274,12 @@ const primaryPlatform = computed(
 /* ── §3.5 scenarios ─────────────────────────────────────────── *
    2×2 grid of worked examples that span the three modes from §3.
    Each card stacks: placeholder illustration (16:9) at the top,
-   a `Touches · …` mono eyebrow, a semi-bold title, then ~3 lines
-   of body. The dark section background tints the cards slightly
-   so the illos read as the headline visual without overpowering
-   the copy beneath. */
+   a `Touches: …` mono eyebrow, a semi-bold title, then ~3 lines
+   of body. The Section is rendered with `:dark="true"`, which
+   forces dark theme variables for its subtree — so the cards
+   render dark even in global light mode and pop as the page's
+   "in practice" interlude between the §3 modes grid and the §6
+   builder grid. */
 
 .ad-scenarios-grid {
   display: grid;
@@ -1289,10 +1293,13 @@ const primaryPlatform = computed(
   padding: 24px;
   border: 1px solid var(--vp-c-divider);
   border-radius: 16px;
+  /* `--vp-c-bg` is one rung BELOW the dark Section's `--ea-surface-alt`
+     (= `--vp-c-bg-soft`) fill, so cards read as recessed panels
+     within the section rather than elevated tiles — same convention
+     the `.ad-mobile-preview-card` further down uses for the same
+     dark-section context. The thin border keeps the edge defined
+     against the slightly lighter section fill. */
   background: var(--vp-c-bg);
-  /* On the dark Section background we want the card to read as a
-     light surface above the alt fill, with a slightly more
-     prominent border so the edge stays defined. */
   box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
 }
 
