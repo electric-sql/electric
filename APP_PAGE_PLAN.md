@@ -117,34 +117,34 @@ Every section uses the existing `<Section>` block from `website/src/components/a
 
 ```text
                     ┌─────────────────────────────┐
-                    │      ELECTRIC AGENTS APP    │
+                    │   run · observe · steer     │   ← mono strap
                     └─────────────────────────────┘
 
-           Run, observe and steer your agents.
+              Electric Agents App
+                       ^^^ brand-accent (cyan), no period
 
-       Desktop and mobile clients for the Electric Agents
-       platform — one app to code with Horton, attach to
-       remote sessions, and build your own agents on the
-       infra and SDK.
+       Desktop and mobile clients — one app to code with
+       Horton, attach to remote sessions, and build your
+       own agents on the infra and SDK.
 
           ┌──────────────────────────┐  ┌────────────────┐
           │  Download for Mac (M-)   │  │ Other platforms│
           └──────────────────────────┘  └────────────────┘
 
-                  Apple  Windows  Linux  iOS  Android
+                Apple │ Windows │ Linux │ iOS │ Android
                        (glyph row, muted)
                                     ^^^^^^^^^^^^^^ preview
-
-                       Release notes →
+                       ↑ vertical divider between desktop
+                         (Apple/Win/Linux) and mobile (iOS/Android)
 ```
 
-- **Headline:** `Run, observe and steer your agents.`
-  Keep the brand-accented "Agents" treatment from `<AgentsHero>` if we want it.
-- **Sub:** `Desktop and mobile clients for the Electric Agents platform — one app to code with Horton, attach to remote sessions, and build your own agents on the infra and SDK.`
+- **Strap:** `run · observe · steer` rendered as a small mono lead-line above the H1. Demotes the old verb-chain headline so the product name can land as the brand mark.
+- **Headline (H1):** `Electric Agents App` — `App` carries the brand-accent (cyan), matching the `Electric <Agents>` treatment from `<AgentsHero>`. **No trailing period** — keeps the punctuation aligned with the `/agents` hero convention and avoids a non-accented `.` floating after the cyan word.
+- **Sub:** `Desktop and mobile clients — one app to code with Horton, attach to remote sessions, and build your own agents on the infra and SDK.`
 - **Primary CTA:** platform-detected download button (existing behaviour; keep `detectMacArch()`).
-- **Secondary CTA:** `Other platforms` jumping to `#download`.
-- **New glyph row** under the CTAs: 5 platform glyphs in a muted row. Communicates multi-platform breadth without scrolling. iOS + Android carry a small `preview` mark (single label under the pair, not per-glyph) — see §7 for the matching mobile section.
-- **Release notes link** stays where it is today.
+- **Secondary CTA:** `Other platforms` jumping to `#desktop`.
+- **Glyph row** under the CTAs: 5 platform glyphs in a muted row, with a thin vertical divider between the three desktop glyphs and the two mobile glyphs. Communicates the desktop/mobile split visually. iOS + Android carry a small `Preview` mark (single label under the pair) — see §7 for the matching mobile section.
+- **No `Release notes` link in the hero.** The link lives under the §7a desktop download grid where it belongs (it documents desktop releases specifically).
 
 > Why this matters: the current hero is text-only and the platform breadth is buried in §2/§3. Surfacing macOS / Windows / Linux / iOS / Android above the fold reframes the page from "download a desktop app" to "download an app for your fleet".
 

@@ -221,7 +221,7 @@ const primaryPlatform = computed(
              visible above the fold without competing with the brand. -->
         <p class="ad-hero-strap mono">run · observe · steer</p>
         <h1 class="ad-hero-name">
-          Electric Agents&nbsp;<span class="ad-hero-accent">App</span>.
+          Electric Agents&nbsp;<span class="ad-hero-accent">App</span>
         </h1>
         <p class="ad-hero-text">
           Desktop and mobile clients — one app to code with Horton, attach to
