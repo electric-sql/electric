@@ -325,8 +325,8 @@ const primaryPlatform = computed(
         §2   visual strap          → phase 2 placeholder pair · phase 5 real shots
         §3   three ways to use it  → phase 3 ✓
         §3.5 scenarios             → phase 3 ✓ copy · phase 5 illustrations
-        §4   multi-device          → phase 4
-        §5   bundled Horton        → phase 4
+        §4   multi-device          → phase 4 ✓ copy · phase 5 diagram SVG
+        §5   bundled Horton        → phase 4 ✓
         §6   built for builders    → phase 3 ✓
     -->
 
@@ -567,22 +567,178 @@ const primaryPlatform = computed(
       </div>
     </Section>
 
-    <!-- ─────────────────── §4 — Multi-device, multi-user ─────────────────── -->
+    <!-- ─────────────────── §4 — Multi-device, multi-user ─────────────────── *
+         Phase 4 ships this section with copy + an `<AdPlaceholder>` for the
+         multi-device diagram (16/8). Phase 5 swaps the placeholder for an
+         inline SVG matching the `EntityOverviewDiagram.vue` style — see
+         APP_PAGE_PLAN.md §4 + §9 open-questions for the deliberate "ship
+         without the SVG" decision. The locked plan paragraph is split
+         across the subtitle and the three pillars below the diagram so
+         the body reads as scannable rather than a wall of prose. -->
     <Section id="multi-device">
+      <template #eyebrow>Multi-device</template>
+      <template #title>Multi-device, multi-user.</template>
+      <template #subtitle>
+        Agents run on the server, not the client. The desktop and mobile apps
+        are live views into the same Electric streams.
+      </template>
+
       <AdPlaceholder
-        name="§4 — Multi-device, multi-user"
+        name="multi-device.svg"
         sublabel="Diagram: phone ↔ Electric Cloud ↔ desktop (also a pull-wake worker)"
         aspect="16/8"
       />
+
+      <div class="ad-multi-pillars">
+        <article class="ad-multi-pillar">
+          <span class="ad-multi-icon" aria-hidden="true">
+            <span class="ad-icon ad-icon--monitor-smartphone" />
+          </span>
+          <h3 class="ad-multi-title">Same session, every device</h3>
+          <p class="ad-multi-body">
+            Open the same session from your laptop and your phone, hand work
+            off between devices, follow a long-running run from wherever
+            you happen to be.
+          </p>
+        </article>
+
+        <article class="ad-multi-pillar">
+          <span class="ad-multi-icon" aria-hidden="true">
+            <span class="ad-icon ad-icon--users" />
+          </span>
+          <h3 class="ad-multi-title">Shared with your team</h3>
+          <p class="ad-multi-body">
+            Sign in once with GitHub or Google; your Electric Cloud workspaces
+            appear automatically. Share a session with a teammate by sharing
+            its URL — the multi-user view sees the same stream.
+          </p>
+        </article>
+
+        <article class="ad-multi-pillar">
+          <span class="ad-multi-icon" aria-hidden="true">
+            <span class="ad-icon ad-icon--cpu" />
+          </span>
+          <h3 class="ad-multi-title">Pull-wake runners</h3>
+          <p class="ad-multi-body">
+            The desktop can register itself as a pull-wake runner, so your
+            laptop becomes a worker for your cloud agents. Close the lid and
+            they finish on the next runner that comes online.
+          </p>
+        </article>
+      </div>
     </Section>
 
-    <!-- ─────────────────── §5 — Bundled Horton ─────────────────── -->
-    <Section id="horton">
-      <AdPlaceholder
-        name="§5 — Bundled Horton"
-        sublabel="Model picker · working-directory picker · tools · skills · /slash commands"
-        aspect="16/8"
-      />
+    <!-- ─────────────────── §5 — Bundled Horton ─────────────────── *
+         Two-zone layout that intentionally breaks from the §3 / §3.5 / §6
+         card grids so the page has visual variety as the reader scrolls.
+         Zone 1: three capability pillars (provider · working directory ·
+         skills + slash) restating the three sub-bullets locked in
+         APP_PAGE_PLAN.md §5. Zone 2: "Things you can ask Horton to do"
+         3-column prompt grid (Chat / Code / Research) with example
+         prompts in `<code>` so the visual reads as a prompt library
+         rather than a marketing list. The Section uses `:dark="true"`
+         so this block sits as a contrasting hero strip for Horton
+         between the surrounding §4 + §6 sections — bundled agent gets
+         the marquee treatment without taking the headline. In dark
+         global mode the surface difference is subtle (one `--vp-c-bg`
+         rung) but consistent; in light mode it's a pronounced dark
+         strip on a light page. -->
+    <Section id="horton" :dark="true">
+      <template #eyebrow>Bundled agent</template>
+      <template #title>Horton, in the box.</template>
+      <template #subtitle>
+        A friendly, capable general-purpose chat agent with code-editing
+        superpowers — no server-side setup required.
+      </template>
+
+      <div class="ad-horton-pillars">
+        <article class="ad-horton-pillar">
+          <span class="ad-horton-pillar-icon" aria-hidden="true">
+            <span class="ad-icon ad-icon--key-round" />
+          </span>
+          <h3 class="ad-horton-pillar-title">Pick your provider.</h3>
+          <p class="ad-horton-pillar-body">
+            Bring your own API key (stored in the OS keychain via
+            <code>SecretStore</code>), or sign in to Codex. Anthropic,
+            OpenAI, DeepSeek and Moonshot for models; Brave Search and
+            E2B for tools — keys never leave your machine.
+          </p>
+        </article>
+
+        <article class="ad-horton-pillar">
+          <span class="ad-horton-pillar-icon" aria-hidden="true">
+            <span class="ad-icon ad-icon--folder-tree" />
+          </span>
+          <h3 class="ad-horton-pillar-title">Pick your working directory.</h3>
+          <p class="ad-horton-pillar-body">
+            Horton reads and edits whatever you point it at — no per-project
+            install. Bash, web search, fetch URL, spawn worker, send,
+            skills: all in the bundled toolset.
+          </p>
+        </article>
+
+        <article class="ad-horton-pillar">
+          <span class="ad-horton-pillar-icon" aria-hidden="true">
+            <span class="ad-icon ad-icon--wand" />
+          </span>
+          <h3 class="ad-horton-pillar-title">Skills + slash commands.</h3>
+          <p class="ad-horton-pillar-body">
+            Type <code>/quickstart</code> to load the guided onboarding
+            skill; install your own skills to ship workflows to your team.
+            Slash commands are first-class — discoverable, composable,
+            shareable.
+          </p>
+        </article>
+      </div>
+
+      <div class="ad-horton-ask">
+        <p class="ad-horton-ask-eyebrow mono">Things you can ask Horton to do</p>
+        <div class="ad-horton-ask-grid">
+          <article class="ad-horton-ask-col">
+            <header class="ad-horton-ask-header">
+              <span class="ad-horton-ask-icon" aria-hidden="true">
+                <span class="ad-icon ad-icon--message-circle" />
+              </span>
+              <h3>Chat</h3>
+            </header>
+            <ul>
+              <li><code>Summarise this docs page</code></li>
+              <li><code>Plan a refactor</code></li>
+              <li><code>Explain this stack trace</code></li>
+              <li><code>Draft a launch tweet</code></li>
+            </ul>
+          </article>
+
+          <article class="ad-horton-ask-col">
+            <header class="ad-horton-ask-header">
+              <span class="ad-horton-ask-icon" aria-hidden="true">
+                <span class="ad-icon ad-icon--braces" />
+              </span>
+              <h3>Code</h3>
+            </header>
+            <ul>
+              <li><code>Refactor this file</code></li>
+              <li><code>Write tests for X</code></li>
+              <li><code>Bisect this regression</code></li>
+              <li><code>Apply the same change across these 4 files</code></li>
+            </ul>
+          </article>
+
+          <article class="ad-horton-ask-col">
+            <header class="ad-horton-ask-header">
+              <span class="ad-horton-ask-icon" aria-hidden="true">
+                <span class="ad-icon ad-icon--compass" />
+              </span>
+              <h3>Research</h3>
+            </header>
+            <ul>
+              <li><code>Find the latest spec for Y</code></li>
+              <li><code>Diff what changed since v1.2</code></li>
+              <li><code>Pull the open PRs touching this dir</code></li>
+            </ul>
+          </article>
+        </div>
+      </div>
     </Section>
 
     <!-- ─────────────────── §6 — Built for builders ─────────────────── *
@@ -954,6 +1110,38 @@ const primaryPlatform = computed(
 }
 .ad-icon--terminal {
   --icon-url: url('https://api.iconify.design/lucide/terminal.svg');
+}
+
+/* §4 multi-device pillars + §5 Horton pillars + §5 ask-grid. Kept in
+   their own block (rather than appended to the lucide list above) so
+   it's obvious which icons are owned by phase 4 — easier to retire if
+   the sections ever get restructured. */
+.ad-icon--monitor-smartphone {
+  --icon-url: url('https://api.iconify.design/lucide/monitor-smartphone.svg');
+}
+.ad-icon--users {
+  --icon-url: url('https://api.iconify.design/lucide/users.svg');
+}
+.ad-icon--cpu {
+  --icon-url: url('https://api.iconify.design/lucide/cpu.svg');
+}
+.ad-icon--key-round {
+  --icon-url: url('https://api.iconify.design/lucide/key-round.svg');
+}
+.ad-icon--folder-tree {
+  --icon-url: url('https://api.iconify.design/lucide/folder-tree.svg');
+}
+.ad-icon--wand {
+  --icon-url: url('https://api.iconify.design/lucide/wand-2.svg');
+}
+.ad-icon--message-circle {
+  --icon-url: url('https://api.iconify.design/lucide/message-circle.svg');
+}
+.ad-icon--braces {
+  --icon-url: url('https://api.iconify.design/lucide/braces.svg');
+}
+.ad-icon--compass {
+  --icon-url: url('https://api.iconify.design/lucide/compass.svg');
 }
 
 /* ── §1 hero ────────────────────────────────────────────────── */
@@ -1338,6 +1526,222 @@ const primaryPlatform = computed(
   font-size: 12.5px;
 }
 
+/* ── §4 multi-device, multi-user ────────────────────────────── *
+   Three-pillar grid that sits below the diagram placeholder
+   (16/8). Equal-width columns at desktop widths, collapsing to
+   2 then 1 at narrower breakpoints alongside the rest of the
+   page. Pillars use the same brand-tinted square icon chip as
+   §3 modes so the visual vocabulary stays consistent — no need
+   for a second register of icon styling on the page. The whole
+   block sits 36px below the diagram, matching the gap between
+   the §3 modes grid and its strip. */
+
+.ad-multi-pillars {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+  margin-top: 36px;
+}
+
+.ad-multi-pillar {
+  display: flex;
+  flex-direction: column;
+}
+
+.ad-multi-icon {
+  font-size: 20px;
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--vp-c-brand-1) 8%, transparent);
+  border: 1px solid
+    color-mix(in srgb, var(--vp-c-brand-1) 22%, var(--vp-c-divider));
+  color: var(--vp-c-brand-1);
+  margin-bottom: 14px;
+}
+
+.ad-multi-icon .ad-icon {
+  font-size: 20px;
+}
+
+.ad-multi-title {
+  margin: 0 0 8px;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  line-height: 1.3;
+  color: var(--vp-c-text-1);
+}
+
+.ad-multi-body {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--vp-c-text-2);
+  text-wrap: pretty;
+}
+
+/* ── §5 Horton, in the box ──────────────────────────────────── *
+   Two-zone layout under a `:dark` Section:
+     Zone 1 — three capability pillars (provider · working
+              directory · skills + slash) in a 3-column grid.
+     Zone 2 — "Things you can ask Horton to do" 3-column prompt
+              grid (Chat / Code / Research) with `<code>` example
+              prompts so the visual reads as a prompt library
+              rather than another card grid.
+   The two zones are separated by a dashed hairline rule (not a
+   solid block) so the section reads as one continuous Horton
+   pitch rather than two unrelated sub-sections. */
+
+.ad-horton-pillars {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 28px;
+  margin-top: 8px;
+}
+
+.ad-horton-pillar {
+  display: flex;
+  flex-direction: column;
+}
+
+.ad-horton-pillar-icon {
+  font-size: 20px;
+  width: 42px;
+  height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--vp-c-brand-1) 12%, transparent);
+  border: 1px solid
+    color-mix(in srgb, var(--vp-c-brand-1) 28%, var(--vp-c-divider));
+  color: var(--vp-c-brand-1);
+  margin-bottom: 16px;
+}
+
+.ad-horton-pillar-icon .ad-icon {
+  font-size: 20px;
+}
+
+.ad-horton-pillar-title {
+  margin: 0 0 10px;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  line-height: 1.3;
+  color: var(--vp-c-text-1);
+}
+
+.ad-horton-pillar-body {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--vp-c-text-2);
+  text-wrap: pretty;
+}
+
+.ad-horton-pillar-body code {
+  font-size: 12.5px;
+}
+
+.ad-horton-ask {
+  margin-top: 44px;
+  padding-top: 36px;
+  border-top: 1px dashed var(--vp-c-divider);
+}
+
+.ad-horton-ask-eyebrow {
+  margin: 0 0 18px;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--vp-c-text-3);
+}
+
+.ad-horton-ask-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 22px;
+}
+
+.ad-horton-ask-col {
+  display: flex;
+  flex-direction: column;
+  padding: 18px 18px 14px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 12px;
+  background: var(--vp-c-bg);
+}
+
+.ad-horton-ask-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--vp-c-divider);
+}
+
+.ad-horton-ask-icon {
+  font-size: 16px;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--vp-c-brand-1) 8%, transparent);
+  border: 1px solid
+    color-mix(in srgb, var(--vp-c-brand-1) 22%, var(--vp-c-divider));
+  color: var(--vp-c-brand-1);
+}
+
+.ad-horton-ask-icon .ad-icon {
+  font-size: 16px;
+}
+
+.ad-horton-ask-header h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--vp-c-text-1);
+}
+
+.ad-horton-ask-col ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.ad-horton-ask-col li {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--vp-c-text-2);
+}
+
+.ad-horton-ask-col code {
+  font-size: 12.5px;
+  /* Code chips in the ask-grid are the section's hero ornament — the
+     reader skims the section and the chips are what they pick up.
+     Slightly more padding and a softer background than VitePress's
+     default inline-code styling so the chips read as prompt
+     primitives, not random inline references. */
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--vp-c-brand-1) 7%, var(--vp-c-bg-soft));
+  border: 1px solid
+    color-mix(in srgb, var(--vp-c-brand-1) 14%, var(--vp-c-divider));
+  color: var(--vp-c-text-1);
+}
+
 /* ── §6 built for builders ──────────────────────────────────── *
    3×2 grid at desktop widths, collapses to 2 columns then 1. Each
    card holds a lucide icon, a short title, a one-sentence feature
@@ -1672,8 +2076,17 @@ const primaryPlatform = computed(
 @media (max-width: 980px) {
   /* The three §3 mode cards carry a lot of body + list text and
      start to look cramped before the rest of the page does, so they
-     drop to a 2-up grid earlier than the desktop downloads. */
+     drop to a 2-up grid earlier than the desktop downloads. The §4
+     multi-device pillars and §5 Horton pillars / ask-grid collapse
+     here too so the page reflows together rather than at staggered
+     breakpoints — easier to reason about, and the three-pillar
+     blocks read more comfortably at half-width than at thirds. */
   .ad-modes-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ad-multi-pillars,
+  .ad-horton-pillars,
+  .ad-horton-ask-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .ad-builders-grid {
@@ -1718,6 +2131,16 @@ const primaryPlatform = computed(
     gap: 18px;
   }
   .ad-scenarios-title {
+    font-size: 17px;
+  }
+  /* On mobile, §4 / §5 also drop to single columns so the long body
+     text doesn't get squeezed against a half-width column. */
+  .ad-multi-pillars,
+  .ad-horton-pillars,
+  .ad-horton-ask-grid {
+    grid-template-columns: 1fr;
+  }
+  .ad-horton-pillar-title {
     font-size: 17px;
   }
 }
