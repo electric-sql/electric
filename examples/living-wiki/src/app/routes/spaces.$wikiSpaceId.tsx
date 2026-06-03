@@ -172,33 +172,42 @@ export function SpaceRoutePage({ wikiSpaceId }: { wikiSpaceId: string }) {
   }
 
   return (
-    <section className="lw-card" style={{ padding: 32 }}>
-      <p style={{ color: `var(--lw-muted)`, fontWeight: 700 }}>Wiki space</p>
-      {loading && displayedSpace === null ? <p>Loading space…</p> : null}
-      {error ? <p role="alert">{error.message}</p> : null}
-      {displayedSpace ? (
-        <>
-          <h1>{displayedSpace.space.title}</h1>
-          <p>{displayedSpace.space.memberCount} members</p>
-          <p>Current actor: {displayedSpace.currentActor.displayName}</p>
+    <section className="lw-space-frame">
+      <header className="lw-space-topbar">
+        <div>
+          <span className="lw-kicker">Living Wiki:</span>
+          {` `}
+          <h1 aria-label={displayedSpace?.space.title ?? wikiSpaceId}>
+            “{displayedSpace?.space.title ?? wikiSpaceId}”
+          </h1>
+        </div>
+        <nav aria-label="Space actions" className="lw-topbar-actions">
+          <button type="button" disabled={displayedSpace === null}>
+            + Invite
+          </button>
+          <button type="button">Layers ▾</button>
           <button
             type="button"
             onClick={() => void refresh()}
             disabled={loading}
+            aria-label="Refresh wiki space"
           >
-            Refresh
+            ⚙
           </button>
-          <h2>Actors</h2>
-          <ul>
-            {displayedSpace.actors.map((actor) => (
-              <li key={actor.id}>
-                <strong>{actor.displayName}</strong>
-                {` `}
-                <span>({actor.avatarColor})</span>
-              </li>
-            ))}
-          </ul>
-        </>
+        </nav>
+      </header>
+
+      {loading && displayedSpace === null ? <p>Loading space…</p> : null}
+      {error ? <p role="alert">{error.message}</p> : null}
+      {displayedSpace ? (
+        <div className="lw-presence-strip" aria-label="Space presence">
+          <span>{displayedSpace.space.memberCount} members</span>
+          <span>Current actor: {displayedSpace.currentActor.displayName}</span>
+          <span>Actors:</span>
+          {displayedSpace.actors.map((actor) => (
+            <span key={actor.id}>{actor.displayName}</span>
+          ))}
+        </div>
       ) : null}
 
       {sharedStateError ? (
@@ -217,7 +226,7 @@ export function SpaceRoutePage({ wikiSpaceId }: { wikiSpaceId: string }) {
       </div>
       {reviewFlowError ? <p role="alert">{reviewFlowError.message}</p> : null}
 
-      <section style={{ marginTop: 24 }}>
+      <section className="lw-review-note-panel">
         <h2>Manual page proposal and review</h2>
         <p>
           Proposals are deterministic templates from submitted source metadata
@@ -239,9 +248,10 @@ export function SpaceRoutePage({ wikiSpaceId }: { wikiSpaceId: string }) {
       </section>
 
       <form
+        className="lw-private-intake"
         onSubmit={(event) => void onSubmitSource(event)}
-        style={{ marginTop: 24 }}
       >
+        <div className="lw-private-intake-heading">PRIVATE INTAKE AGENT</div>
         <h2>Submit a source</h2>
         <label>
           Source type
@@ -273,6 +283,7 @@ export function SpaceRoutePage({ wikiSpaceId }: { wikiSpaceId: string }) {
             <textarea
               aria-label="Source text"
               required
+              placeholder={`Paste URL or note…\n"Stigmergy dissolves culture vs institutions; protocols reshape cognition..."`}
               value={sourceBody}
               onChange={(event) => setSourceBody(event.currentTarget.value)}
             />
@@ -300,9 +311,13 @@ export function SpaceRoutePage({ wikiSpaceId }: { wikiSpaceId: string }) {
           {sourceMessage ? <p>{sourceMessage}</p> : null}
         </div>
         {sourceError ? <p role="alert">{sourceError.message}</p> : null}
+        <p className="lw-intake-response">
+          Intake Agent: I’ll publish submitted notes into the compile loop once
+          the Agents pass-through backend is connected.
+        </p>
       </form>
 
-      <form onSubmit={(event) => void onJoin(event)} style={{ marginTop: 24 }}>
+      <form onSubmit={(event) => void onJoin(event)} className="lw-join-panel">
         <h2>Join this space</h2>
         <label>
           Display name
