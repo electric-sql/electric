@@ -268,6 +268,7 @@ function validateRelativeAbsoluteStreamPath(path: string): void {
     !path.startsWith(`/`) ||
     path.startsWith(`//`) ||
     /^https?:\/\//i.test(path) ||
+    path.includes(`\\`) ||
     /%(?:2f|5c)/iu.test(path)
   ) {
     throw new AgentsProxyAdapterError(`Invalid upstream stream path`)
@@ -301,7 +302,12 @@ function validateRelativeAbsoluteStreamPath(path: string): void {
         throw new AgentsProxyAdapterError(`Invalid upstream stream path`)
       }
     }
-    if (decodedSegment === `.` || decodedSegment === `..`) {
+    if (
+      decodedSegment === `.` ||
+      decodedSegment === `..` ||
+      decodedSegment.includes(`/`) ||
+      decodedSegment.includes(`\\`)
+    ) {
       throw new AgentsProxyAdapterError(`Invalid upstream stream path`)
     }
   }
