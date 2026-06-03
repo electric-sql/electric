@@ -135,6 +135,13 @@ export const sourceSchema = z
         message: `Published sources require published_at`,
       })
     }
+    if (source.status !== `published` && source.published_at !== null) {
+      ctx.addIssue({
+        code: `custom`,
+        path: [`published_at`],
+        message: `Unpublished sources must not include published_at`,
+      })
+    }
   })
 
 export const wikiPageSchema = z

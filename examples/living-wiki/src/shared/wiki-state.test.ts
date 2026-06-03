@@ -240,6 +240,20 @@ describe(`living wiki shared-state schemas`, () => {
       }).success
     ).toBe(false)
     expect(
+      sourceSchema.safeParse({
+        ...rows.sources,
+        status: `submitted`,
+        published_at: now,
+      }).success
+    ).toBe(false)
+    expect(
+      sourceSchema.safeParse({
+        ...rows.sources,
+        status: `rejected`,
+        published_at: now,
+      }).success
+    ).toBe(false)
+    expect(
       agentRunSchema.safeParse({
         ...rows.agent_runs,
         status: `succeeded`,
