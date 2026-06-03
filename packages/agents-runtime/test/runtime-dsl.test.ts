@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
-import { queryOnce } from '@durable-streams/state'
+import { queryOnce } from '@durable-streams/state/db'
 import { z } from 'zod'
 import { entity, manifestSourceKey } from '../src/index'
 import { comparePointers, type EventPointer } from '../src/event-pointer'

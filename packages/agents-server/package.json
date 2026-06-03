@@ -46,8 +46,8 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
     "@durable-streams/client": "^0.2.6",
-    "@durable-streams/server": "^0.3.5",
-    "@durable-streams/state": "^0.2.9",
+    "@durable-streams/server": "^0.3.7",
+    "@durable-streams/state": "^0.3.1",
     "@electric-ax/agents-runtime": "workspace:*",
     "@electric-sql/client": "^1.5.20",
     "@mariozechner/pi-agent-core": "^0.70.2",

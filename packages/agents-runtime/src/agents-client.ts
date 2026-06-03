@@ -1,4 +1,4 @@
-import { createStreamDB } from '@durable-streams/state'
+import { createStreamDB } from '@durable-streams/state/db'
 import { createEntityStreamDB } from './entity-stream-db'
 import { normalizeObservationSchema } from './observation-schema'
 import { createRuntimeServerClient } from './runtime-server-client'

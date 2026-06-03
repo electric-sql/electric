@@ -7,7 +7,7 @@
  * so we feed them directly to StreamDB without transformation.
  */
 
-import { createStreamDB } from '@durable-streams/state'
+import { createStreamDB } from '@durable-streams/state/db'
 import { appendPathToUrl, entityStateSchema } from '@electric-ax/agents-runtime'
 import { entityApiUrl } from './entity-api.js'
 import type { EntityStreamDB } from '@electric-ax/agents-runtime'

@@ -1,5 +1,5 @@
 import { DurableStream, IdempotentProducer } from '@durable-streams/client'
-import { createStreamDB, queryOnce } from '@durable-streams/state'
+import { createStreamDB, queryOnce } from '@durable-streams/state/db'
 import { getEntityType } from './define-entity'
 import { createEntityStreamDB } from './entity-stream-db'
 import { entityStateSchema, isManagementEvent } from './entity-schema'

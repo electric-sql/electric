@@ -10,7 +10,7 @@ import {
   localOnlyCollectionOptions,
   or,
   toArray,
-} from '@durable-streams/state'
+} from '@durable-streams/state/db'
 import { caseWhen } from '@tanstack/db'
 import type {
   Collection,

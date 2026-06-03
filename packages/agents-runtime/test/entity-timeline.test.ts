@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import {
   createCollection,
   createLiveQueryCollection,
-} from '@durable-streams/state'
+} from '@durable-streams/state/db'
 import {
   buildEntityTimelineData,
   compareTimelineOrders,
