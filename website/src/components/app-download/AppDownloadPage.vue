@@ -1211,7 +1211,7 @@ const primaryPlatform = computed(
   position: absolute;
   left: -14px;
   top: 0;
-  bottom: 15px;
+  bottom: 17px;
   width: 1px;
   background: var(--vp-c-divider);
 }
@@ -1245,7 +1245,7 @@ const primaryPlatform = computed(
    pulls the chip back through the parent's 6px flex `gap` so it
    sits ~1px under the label rather than 6px below it. */
 .ad-hero-glyph-preview {
-  margin-top: -3px;
+  margin-top: -1px;
   padding: 0 5px;
   font-size: 7px;
   line-height: 1.4;
