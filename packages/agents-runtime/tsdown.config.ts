@@ -8,8 +8,7 @@ const config: Options = {
     `src/sandbox.ts`,
     `src/sandbox-docker.ts`,
     `src/client.ts`,
-    // First-class entry so its .d.ts is stable; as a raced chunk it intermittently
-    // fails dts generation under CI's parallel build.
+    // First-class entry so its .d.ts is stable (raced chunk fails dts gen in CI).
     `src/skills/types.ts`,
   ],
   format: [`esm`, `cjs`],
