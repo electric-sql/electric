@@ -23,6 +23,7 @@ import { VPButton } from 'vitepress/theme'
 
 import Section from '../agents-home/Section.vue'
 import BottomCtaStrap from '../BottomCtaStrap.vue'
+import AdPlaceholder from './AdPlaceholder.vue'
 
 const githubReleaseBase = `https://github.com/electric-sql/electric/releases`
 const appReleaseNotesUrl = `${githubReleaseBase}?q=%22%40electric-ax%2Fagents-desktop%22&expanded=true`
@@ -273,12 +274,100 @@ const primaryPlatform = computed(
         </p>
       </div>
 
-      <!-- TODO(follow-up): app screenshot / mockup goes here. The
-           previous CSS-rendered agents-server-ui mockup was removed
-           to keep the hero clean ahead of a proper image asset. -->
+      <!-- TODO(phase 2): rewrite headline + sub, add the
+           5-platform glyph row under the CTAs, and drop in the
+           desktop + mobile screenshot pair behind the hero. -->
     </section>
 
-    <!-- ─────────────────── §2 — Desktop ─────────────────── -->
+    <!--
+      Phase 1 placeholder block.
+
+      The six <Section> shells below are the new structure for the
+      /app page rewrite (see APP_PAGE_PLAN.md). Each one carries an
+      <AdPlaceholder> as its content for now; later phases swap each
+      placeholder for the section's real copy + visuals. The chrome
+      stays the same, so each swap is a localised diff.
+
+      Phases that fill each section:
+        §2 visual strap          → phase 2 (placeholder image pair)
+                                   phase 5 (real screenshots)
+        §3 three ways to use it  → phase 3
+        §3.5 scenarios           → phase 3
+        §4 multi-device          → phase 4
+        §5 bundled Horton        → phase 4
+        §6 built for builders    → phase 3
+    -->
+
+    <!-- ─────────────── §2 — Visual strap (desktop + mobile) ─────────────── -->
+    <Section id="visual">
+      <AdPlaceholder
+        name="§2 — Visual strap"
+        sublabel="Desktop + mobile screenshots side-by-side · same session, two devices"
+        aspect="21/9"
+      />
+    </Section>
+
+    <!-- ─────────────────── §3 — Three ways to use it ─────────────────── -->
+    <Section id="three-ways">
+      <AdPlaceholder
+        name="§3 — Three ways to use it"
+        sublabel="Three cards: Code locally · Attach remotely · Build with the SDK"
+        aspect="16/6"
+      />
+    </Section>
+
+    <!-- ─────────────────── §3.5 — Scenarios ─────────────────── -->
+    <Section id="scenarios">
+      <AdPlaceholder
+        name="§3.5 — Scenarios"
+        sublabel="Four worked end-to-end examples spanning the three modes above"
+        aspect="16/8"
+      />
+    </Section>
+
+    <!-- ─────────────────── §4 — Multi-device, multi-user ─────────────────── -->
+    <Section id="multi-device">
+      <AdPlaceholder
+        name="§4 — Multi-device, multi-user"
+        sublabel="Diagram: phone ↔ Electric Cloud ↔ desktop (also a pull-wake worker)"
+        aspect="16/8"
+      />
+    </Section>
+
+    <!-- ─────────────────── §5 — Bundled Horton ─────────────────── -->
+    <Section id="horton">
+      <AdPlaceholder
+        name="§5 — Bundled Horton"
+        sublabel="Model picker · working-directory picker · tools · skills · /slash commands"
+        aspect="16/8"
+      />
+    </Section>
+
+    <!-- ─────────────────── §6 — Built for builders ─────────────────── -->
+    <Section id="builders">
+      <AdPlaceholder
+        name="§6 — Built for builders"
+        sublabel="State explorer · entity timeline · tile workspace · MCP · local discovery · CLI installer"
+        aspect="16/8"
+      />
+    </Section>
+
+    <!--
+      ═══════════════════ §7 — Download ═══════════════════
+
+      The three <Section> blocks below (desktop / mobile / canary)
+      collectively make up §7 of the new page. They keep their own
+      anchors (#desktop, #mobile, #canary) for backwards compatibility
+      with any external links; phase 6 verifies these still resolve
+      after the rest of the page is in place.
+
+      Phase 1 leaves their copy untouched. The mobile sub-section is
+      still labelled "Coming soon"; a later phase reframes it as
+      "Mobile · Preview" linking to packages/agents-mobile on GitHub
+      (see APP_PAGE_PLAN.md §7).
+    -->
+
+    <!-- ─────────────────── §7a — Desktop ─────────────────── -->
     <Section id="desktop">
       <template #eyebrow>Desktop</template>
       <template #title>Choose your platform</template>
@@ -338,7 +427,7 @@ const primaryPlatform = computed(
       </aside>
     </Section>
 
-    <!-- ─────────────────── §3 — Mobile (coming soon) ─────────────────── -->
+    <!-- ─────────────────── §7b — Mobile (coming soon) ─────────────────── -->
     <Section id="mobile" :dark="true">
       <template #eyebrow>Mobile · Coming soon</template>
       <template #title>Native iOS &amp; Android</template>
@@ -371,7 +460,7 @@ const primaryPlatform = computed(
       </div>
     </Section>
 
-    <!-- ─────────────────── §4 — Canary ─────────────────── -->
+    <!-- ─────────────────── §7c — Canary ─────────────────── -->
     <Section id="canary">
       <template #eyebrow>Pre-release</template>
       <template #title>Canary builds</template>
@@ -420,7 +509,7 @@ const primaryPlatform = computed(
       </p>
     </Section>
 
-    <!-- ─────────────────── §5 — Bottom CTA ─────────────────── -->
+    <!-- ─────────────────── §8 — Bottom CTA ─────────────────── -->
     <BottomCtaStrap id="get-started">
       <template #eyebrow>
         <span>Durable · long-running · cloud-connected</span>
