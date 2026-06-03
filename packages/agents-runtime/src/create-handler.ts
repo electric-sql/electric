@@ -510,6 +510,9 @@ export function createRuntimeRouter(
             ? mapSchemas(definition.stateSchemas)
             : {}),
         },
+        ...(definition.permissionGrants && {
+          permission_grants: definition.permissionGrants,
+        }),
       }
 
       const defaultDispatchPolicy = defaultDispatchPolicyForType?.(name)

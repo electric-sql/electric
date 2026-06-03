@@ -122,7 +122,10 @@ export interface RuntimeServerClient {
   }) => Promise<Uint8Array>
   spawnEntity: (options: SpawnEntityOptions) => Promise<RuntimeEntityInfo>
   getEntity: (entityUrl: string) => Promise<RuntimeEntityInfo>
-  ensureSharedStateStream: (sharedStateId: string) => Promise<string>
+  ensureSharedStateStream: (
+    sharedStateId: string,
+    ownerEntityUrl?: string
+  ) => Promise<string>
   signalEntity: (options: SignalEntityOptions) => Promise<{ txid: number }>
   ensureStream: (streamPath: string, contentType?: string) => Promise<string>
   deleteEntity: (entityUrl: string) => Promise<void>
@@ -447,19 +450,24 @@ export function createRuntimeServerClient(
   }
 
   const ensureSharedStateStream = async (
-    sharedStateId: string
+    sharedStateId: string,
+    ownerEntityUrl?: string
   ): Promise<string> => {
     const streamPath = getSharedStateStreamPath(sharedStateId)
-    return await ensureStream(streamPath, `application/json`)
+    return await ensureStream(streamPath, `application/json`, ownerEntityUrl)
   }
 
   const ensureStream = async (
     streamPath: string,
-    contentType = `application/json`
+    contentType = `application/json`,
+    ownerEntityUrl?: string
   ): Promise<string> => {
     const response = await request(streamPath, {
       method: `PUT`,
-      headers: { 'content-type': contentType },
+      headers: {
+        'content-type': contentType,
+        ...(ownerEntityUrl ? { 'electric-owner-entity': ownerEntityUrl } : {}),
+      },
     })
 
     if (!response.ok && response.status !== 409) {

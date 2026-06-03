@@ -78,6 +78,7 @@ function entityRow(
     url,
     type: `task`,
     status,
+    created_by: `/principal/user%3Aowner`,
     tags,
     spawn_args: {},
     parent: null,
@@ -144,7 +145,11 @@ describe(`EntityProjector`, () => {
     await startPromise
 
     const facade = projector.forTenant(`svc-a`, registry as never)
-    const result = await facade.register({ demo: `x` })
+    const result = await facade.register(
+      { demo: `x` },
+      `/principal/user%3Aowner`,
+      `user`
+    )
 
     expect(mockState.constructedOptions).toHaveLength(1)
     expect(mockState.constructedOptions[0]).toMatchObject({

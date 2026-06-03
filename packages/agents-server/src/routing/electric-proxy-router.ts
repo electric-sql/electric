@@ -5,6 +5,7 @@
 
 import { Router } from 'itty-router'
 import { apiError, responseHeaders } from '../electric-agents-http.js'
+import { isPermissionBypassPrincipal } from '../permissions.js'
 import { buildElectricProxyTarget } from '../utils/server-utils.js'
 import type { IRequest, RouterType } from 'itty-router'
 import type { TenantContext } from './context.js'
@@ -33,12 +34,15 @@ async function proxyElectric(
     return apiError(500, `ELECTRIC_PROXY_FAILED`, `Electric URL not configured`)
   }
 
+  await ctx.entityManager.registry.pruneExpiredPermissionGrants?.()
   const target = buildElectricProxyTarget({
     incomingUrl: new URL(request.url),
     electricUrl: ctx.electricUrl,
     electricSecret: ctx.electricSecret,
     tenantId: ctx.service,
     principalUrl: ctx.principal.url,
+    principalKind: ctx.principal.kind,
+    permissionBypass: isPermissionBypassPrincipal(ctx),
   })
   const headers = new Headers(request.headers)
   headers.delete(`host`)
