@@ -38,7 +38,7 @@ What it **should** sell, in priority order:
    - Coding locally with Horton.
    - Attaching to remote sessions spawned by CI / webhooks / issues / cron — software-factory-style workflows.
    - Observing and steering the agents _you are building_ on the Electric Agents infra and SDK — state explorer, entity timeline, fork-from-here, MCP, skills, working-directory picker.
-2. **It works across devices and users.** Desktop on macOS / Windows / Linux, native mobile on iOS / Android, all looking at the same durable Electric streams. Multi-server, multi-tenant, Electric Cloud sign-in built in.
+2. **It works across devices and users.** Desktop on macOS / Windows / Linux today, native mobile on iOS / Android in active development, all looking at the same durable Electric streams. Multi-server, multi-tenant, Electric Cloud sign-in built in. _The mobile apps preview on this page but are not yet available from a public app store — see §7._
 3. **The bundled Horton.** General-purpose chat agent and coding agent in the same app — pick a model (Anthropic / OpenAI / DeepSeek / Moonshot / Codex), point at a working directory, go.
 4. **It bridges local and cloud.** Your laptop can act as a pull-wake runner for cloud agents, so the same desktop is both a UI and a worker.
 
@@ -60,7 +60,7 @@ The user-facing pitch we land on:
 >
 > One UI. One streaming control plane. Many devices, many users.
 
-**On the "software factory" phrase.** It's a useful frame for the middle bullet — remote sessions spawned by CI / webhooks / issues — but it is **not** the headline. The page should mention it relatively high (in the §3 "Attach remotely" card body, and once in §1 hero sub-copy), then move on. The main narrative is _one app for the whole platform_; software factory is one named scenario within it.
+**On the "software factory" phrase.** It's a useful frame for the middle bullet — remote sessions spawned by CI / webhooks / issues — but it is **not** the headline. The page mentions it in this §2 pitch block, in the §3 "Attach remotely" card body, and in §3.5 scenario 1, then moves on. The hero copy in §4 deliberately omits the phrase — the main narrative is _one app for the whole platform_; software factory is one named scenario within it.
 
 The phrase already shows up in `website/blog/posts/2026-03-26-stream-db.md`; this page is the first place we let it act as a named scenario rather than a throwaway aside.
 
@@ -99,7 +99,7 @@ The phrase already shows up in `website/blog/posts/2026-03-26-stream-db.md`; thi
 ├─────────────────────────────────────────────────────────────┤
 │ §7 DOWNLOAD                                                 │
 │    Desktop per-platform cards (current §2)                  │
-│    Mobile App Store / Play row (current §3, upgraded)       │
+│    Mobile · Preview card → packages/agents-mobile on GitHub │
 │    Canary builds (current §4)                               │
 ├─────────────────────────────────────────────────────────────┤
 │ §8 BOTTOM CTA STRAP                                         │
@@ -133,6 +133,7 @@ Every section uses the existing `<Section>` block from `website/src/components/a
 
                   Apple  Windows  Linux  iOS  Android
                        (glyph row, muted)
+                                    ^^^^^^^^^^^^^^ preview
 
                        Release notes →
 ```
@@ -142,7 +143,7 @@ Every section uses the existing `<Section>` block from `website/src/components/a
 - **Sub:** `Desktop and mobile clients for the Electric Agents platform — one app to code with Horton, attach to remote sessions, and build your own agents on the infra and SDK.`
 - **Primary CTA:** platform-detected download button (existing behaviour; keep `detectMacArch()`).
 - **Secondary CTA:** `Other platforms` jumping to `#download`.
-- **New glyph row** under the CTAs: 5 platform glyphs in a muted row. Communicates multi-platform breadth without scrolling.
+- **New glyph row** under the CTAs: 5 platform glyphs in a muted row. Communicates multi-platform breadth without scrolling. iOS + Android carry a small `preview` mark (single label under the pair, not per-glyph) — see §7 for the matching mobile section.
 - **Release notes link** stays where it is today.
 
 > Why this matters: the current hero is text-only and the platform breadth is buried in §2/§3. Surfacing macOS / Windows / Linux / iOS / Android above the fold reframes the page from "download a desktop app" to "download an app for your fleet".
@@ -249,7 +250,7 @@ A 2×2 (or horizontally-scrolling) strip of worked end-to-end examples. The purp
 │    ("don't touch the migration files"), then pick up on      │
 │    your laptop to merge.                                     │
 │                                                              │
-│    Touches:  Cloud · mobile · steer · stop · merge           │
+│    Touches:  Cloud · mobile · steer · stop · review          │
 ├──────────────────────────────────────────────────────────────┤
 │  Scenario 2                                                  │
 │    Local refactor with parallel workers                      │
@@ -298,17 +299,16 @@ Backed by: every capability cited is a composition of the features already mappe
                 │   Electric Cloud       │
                 │   ◯  durable agents    │
                 └────────────────────────┘
-                  ▲          ▲         ▲
-                  │          │         │
-                  │          │         │  pull-wake runner
-            sees+steers   sees+steers  registers itself
-                  │          │         │
-              ┌────────┐ ┌──────┐ ┌──────────────┐
-              │ phone  │ │ web  │ │ desktop app  │
-              └────────┘ └──────┘ │ (also a      │
-                                   │  worker for  │
-                                   │  cloud)      │
-                                   └──────────────┘
+                       ▲              ▲
+                       │              │  pull-wake runner
+                  sees+steers     registers itself,
+                       │          sees+steers
+                       │              │
+                  ┌────────┐    ┌──────────┐
+                  │ phone  │    │ desktop  │
+                  │        │    │ (also a  │
+                  │        │    │ worker)  │
+                  └────────┘    └──────────┘
 ```
 
 - **Headline:** `Multi-device, multi-user.`
@@ -406,25 +406,31 @@ Backed by: every capability cited is a composition of the features already mappe
 
       Unsigned-preview banner (kept as-is, current copy)
 
-┌──────────────────────┐ ┌──────────────────────┐
-│  iOS                 │ │  Android             │
-│  TestFlight invite   │ │  Internal-testing    │
-│  · App Store (soon)  │ │  link · Play (soon)  │
-└──────────────────────┘ └──────────────────────┘
+┌─────────────────────────────────────────────────┐
+│  Mobile · Preview                               │
+│                                                 │
+│  Native iOS and Android apps are in active      │
+│  development. Want to follow along or run a     │
+│  dev build today?                               │
+│                                                 │
+│  → packages/agents-mobile on GitHub             │
+│  · App Store / Google Play coming with v1       │
+└─────────────────────────────────────────────────┘
 
    Pre-release / canary (existing compact list)
 ```
 
 - **Desktop sub-section** — keep `<VPButton>` per-platform cards and the recommended-card highlight. Keep the `Unsigned Preview` callout exactly as it is.
-- **Mobile sub-section** — upgrade from "Coming soon" to _actual_ download paths:
-  - **iOS:** TestFlight invite link (we have EAS builds in `packages/agents-mobile/dist/`). Public App Store badge stays "coming soon" until the listing is live.
-  - **Android:** internal-testing Play link (EAS `export:android`). Public Play badge stays "coming soon" until the listing is live.
-  - If TestFlight / internal-testing isn't ready by ship day, fall back to a `Download .ipa / .apk` build artifact link — but **only** if there's a real artifact to point at. Don't ship the section if it's still vapor.
+- **Mobile sub-section** — the apps are not launching with this page. Reframe accordingly:
+  - **Headline:** `Mobile · Preview` (no Coming-soon pill — the framing is "you can build it from source today", not vapor).
+  - **Body:** one short paragraph confirming the apps exist in `packages/agents-mobile`, link straight to the directory on GitHub. Mention that public App Store / Play listings will ship with the v1 mobile launch.
+  - **No platform cards yet** — the two-card iOS/Android grid only makes sense once there are real install paths. For now, one combined `Mobile · Preview` card with a single GitHub link reads more honestly than two side-by-side "coming soon" placeholders.
+  - Until launch, the page can still legitimately mention mobile in the hero glyph row and in the §3 / §3.5 scenario copy — the apps run, just not from a public store. The §1 hero glyph row should add a tiny "preview" mark to the iOS / Android glyphs (recommend a `(preview)` superscript under the row, not on each individual glyph, to avoid cluttering the visual).
 - **Canary** — keep the existing list verbatim. It's already the right shape.
 
 ### §8 Bottom CTA strap
 
-Keep the existing `<BottomCtaStrap>` block but tighten the copy and reorder buttons to put the runtime-first story ahead of Cloud:
+Keep the existing `<BottomCtaStrap>` block — copy and button order already work for this page:
 
 ```text
 ┌──────────────────────────────────────────────────────┐
@@ -516,10 +522,10 @@ Suggested PR slicing — small, reviewable, each one shippable on its own. **Eve
    - Two card-style detail blocks for §5 (tools + providers + skills + "things you can ask").
 
 5. **PR 5 — fill in placeholders with real assets.**
-   - Capture desktop + mobile hero screenshots, drop into §2.
+   - Capture desktop + mobile hero screenshots, drop into §2. The mobile shot should look real (run the Expo dev build against a local server) but the page should not promise public store availability.
    - Capture / illustrate scenarios 1–4 for §3.5.
-   - Replace "Coming soon" mobile cards with TestFlight / internal-testing links if available.
    - Producing the `multi-device.svg` for §4 if we didn't ship one in PR 4.
+   - The mobile `Preview` card in §7 stays as a single combined card pointing at `packages/agents-mobile` on GitHub. Only swap to per-platform install cards once App Store / Play listings are live — that's a follow-up PR after the v1 mobile launch, not part of this page rewrite.
 
 6. **PR 6 — polish + redirects.**
    - Verify all anchors (`#desktop`, `#mobile`, `#download`, `#canary`) still work — the old fragments should redirect to §7 sub-sections.
@@ -543,5 +549,5 @@ Doing the page this way means at every step the live `/app` is better than it wa
 
 - **§3.5 scenarios — keep all four, or trim to two?** Four scenarios is generous and risks padding. Two strong ones might land harder. Recommend ship four in PR 3 and review at PR 5 once we have real illustrations — easy to cut, easy to defend.
 - **Should §4 ship without a diagram in PR 4, or wait for the SVG?** Recommend ship without — the copy is strong on its own and we can layer the diagram in later without re-flowing the section.
-- **Mobile sub-section in §7 — TestFlight / internal-testing tracks ready?** If yes, swap "Coming soon" for real install links in PR 5. If not, keep "Coming soon" and add the EAS update channel as a fine-print line — credibility signal that we're past the "wireframe" stage even if public stores aren't live.
+- ~~**Mobile sub-section in §7 — TestFlight / internal-testing tracks ready?**~~ _Resolved: mobile won't launch with this page._ §7 ships with a single `Mobile · Preview` card linking to `packages/agents-mobile` on GitHub. Per-platform install paths land in a follow-up PR after the public v1 mobile launch.
 - **Card 3 eyebrow — `Build with the SDK` vs `Build & debug`?** Both work. `Build with the SDK` is more honest about what the card is for (the platform builders); `Build & debug` is friendlier to people who haven't yet decided whether they're going to build. Recommend `Build with the SDK` and trust the body copy to soften it.
