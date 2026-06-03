@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  '@tanstack/db@>=0.6.0 <0.7.0': 0.6.7
+
 patchedDependencies:
   '@microsoft/fetch-event-source':
     hash: 46f4e76dd960e002a542732bb4323817a24fce1673cb71e2f458fe09776fa188
@@ -102,8 +105,8 @@ importers:
         specifier: ^0.34.0
         version: 0.34.49
       '@tanstack/db':
-        specifier: ^0.6.0
-        version: 0.6.5(typescript@5.8.3)
+        specifier: 0.6.7
+        version: 0.6.7(typescript@5.8.3)
       '@tanstack/react-db':
         specifier: ^0.1.78
         version: 0.1.83(react@19.2.5)(typescript@5.8.3)
@@ -182,7 +185,7 @@ importers:
         specifier: ^0.34.0
         version: 0.34.49
       '@tanstack/db':
-        specifier: ^0.6.6
+        specifier: 0.6.7
         version: 0.6.7(typescript@5.8.3)
       '@tanstack/react-db':
         specifier: ^0.1.78
@@ -1683,8 +1686,8 @@ importers:
         specifier: ~7.2.0
         version: 7.2.0(expo@54.0.35)(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
       '@tanstack/db':
-        specifier: ^0.6.5
-        version: 0.6.6(typescript@5.9.3)
+        specifier: 0.6.7
+        version: 0.6.7(typescript@5.9.3)
       '@tanstack/electric-db-collection':
         specifier: ^0.3.3
         version: 0.3.4(typescript@5.9.3)
@@ -1798,8 +1801,8 @@ importers:
         specifier: ^1.1.0
         version: 1.1.0
       '@tanstack/db':
-        specifier: ^0.6.6
-        version: 0.6.6(typescript@5.9.3)
+        specifier: 0.6.7
+        version: 0.6.7(typescript@5.9.3)
       '@tanstack/react-db':
         specifier: '>=0.1.78'
         version: 0.1.83(react@19.2.0)(typescript@5.9.3)
@@ -2014,8 +2017,8 @@ importers:
         specifier: ^1.0.2
         version: 1.0.2(react@19.1.0)
       '@tanstack/db':
-        specifier: ^0.6.6
-        version: 0.6.6(typescript@5.9.3)
+        specifier: 0.6.7
+        version: 0.6.7(typescript@5.9.3)
       '@tanstack/electric-db-collection':
         specifier: ^0.3.4
         version: 0.3.4(typescript@5.9.3)
@@ -2105,8 +2108,8 @@ importers:
         specifier: ^1.5.20
         version: link:../typescript-client
       '@tanstack/db':
-        specifier: ^0.6.4
-        version: 0.6.5(typescript@5.8.3)
+        specifier: 0.6.7
+        version: 0.6.7(typescript@5.8.3)
       '@tanstack/react-db':
         specifier: ^0.1.82
         version: 0.1.83(react@19.2.0)(typescript@5.8.3)
@@ -9544,16 +9547,6 @@ packages:
 
   '@tanstack/db@0.5.8':
     resolution: {integrity: sha512-X6z/OFTzQ8tyOKiWCEqQPSH/w+pmEWack+EMPweAyssXvT6qbfBayRxSoKl93ZTTdgWHBpGlQE75+vVkT1Szqw==}
-    peerDependencies:
-      typescript: '>=4.7'
-
-  '@tanstack/db@0.6.5':
-    resolution: {integrity: sha512-gtCuAo4UtC9SR/kTMu5fVEff6qZ2R1FZi9X7MybtHKA6wve7RePifGG6qBI4OmMB+7juT5/+glNbnqZOrG0/pg==}
-    peerDependencies:
-      typescript: '>=4.7'
-
-  '@tanstack/db@0.6.6':
-    resolution: {integrity: sha512-v1Mphjtwy/6m3ixhNFackRp8XYgdJYGFUUBQ80d0lsipk0MYKHIoePpHGSum95nerLDcP/8+fu5qj0Vrvmskqw==}
     peerDependencies:
       typescript: '>=4.7'
 
@@ -30371,27 +30364,6 @@ snapshots:
       '@tanstack/pacer-lite': 0.1.1
       typescript: 5.7.2
 
-  '@tanstack/db@0.6.5(typescript@5.8.3)':
-    dependencies:
-      '@standard-schema/spec': 1.1.0
-      '@tanstack/db-ivm': 0.1.18(typescript@5.8.3)
-      '@tanstack/pacer-lite': 0.2.1
-      typescript: 5.8.3
-
-  '@tanstack/db@0.6.5(typescript@5.9.3)':
-    dependencies:
-      '@standard-schema/spec': 1.1.0
-      '@tanstack/db-ivm': 0.1.18(typescript@5.9.3)
-      '@tanstack/pacer-lite': 0.2.1
-      typescript: 5.9.3
-
-  '@tanstack/db@0.6.6(typescript@5.9.3)':
-    dependencies:
-      '@standard-schema/spec': 1.1.0
-      '@tanstack/db-ivm': 0.1.18(typescript@5.9.3)
-      '@tanstack/pacer-lite': 0.2.1
-      typescript: 5.9.3
-
   '@tanstack/db@0.6.7(typescript@5.8.3)':
     dependencies:
       '@standard-schema/spec': 1.1.0
@@ -30477,7 +30449,7 @@ snapshots:
     dependencies:
       '@electric-sql/client': 1.5.18
       '@standard-schema/spec': 1.1.0
-      '@tanstack/db': 0.6.6(typescript@5.9.3)
+      '@tanstack/db': 0.6.7(typescript@5.9.3)
       '@tanstack/store': 0.9.3
       debug: 4.4.3
     transitivePeerDependencies:
@@ -30525,7 +30497,7 @@ snapshots:
 
   '@tanstack/react-db@0.1.83(react@19.2.0)(typescript@5.8.3)':
     dependencies:
-      '@tanstack/db': 0.6.5(typescript@5.8.3)
+      '@tanstack/db': 0.6.7(typescript@5.8.3)
       react: 19.2.0
       use-sync-external-store: 1.6.0(react@19.2.0)
     transitivePeerDependencies:
@@ -30533,7 +30505,7 @@ snapshots:
 
   '@tanstack/react-db@0.1.83(react@19.2.0)(typescript@5.9.3)':
     dependencies:
-      '@tanstack/db': 0.6.5(typescript@5.9.3)
+      '@tanstack/db': 0.6.7(typescript@5.9.3)
       react: 19.2.0
       use-sync-external-store: 1.6.0(react@19.2.0)
     transitivePeerDependencies:
@@ -30541,7 +30513,7 @@ snapshots:
 
   '@tanstack/react-db@0.1.83(react@19.2.5)(typescript@5.8.3)':
     dependencies:
-      '@tanstack/db': 0.6.5(typescript@5.8.3)
+      '@tanstack/db': 0.6.7(typescript@5.8.3)
       react: 19.2.5
       use-sync-external-store: 1.6.0(react@19.2.5)
     transitivePeerDependencies:
@@ -30549,7 +30521,7 @@ snapshots:
 
   '@tanstack/react-db@0.1.84(react@19.1.0)(typescript@5.9.3)':
     dependencies:
-      '@tanstack/db': 0.6.6(typescript@5.9.3)
+      '@tanstack/db': 0.6.7(typescript@5.9.3)
       react: 19.1.0
       use-sync-external-store: 1.6.0(react@19.1.0)
     transitivePeerDependencies:
