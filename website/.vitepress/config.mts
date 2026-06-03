@@ -261,6 +261,10 @@ const agentsDocsSidebar = [
         link: '/docs/agents/usage/managing-state',
       },
       {
+        text: 'Permissions & principals',
+        link: '/docs/agents/usage/permissions-and-principals',
+      },
+      {
         text: 'Spawning & coordinating',
         link: '/docs/agents/usage/spawning-and-coordinating',
       },
@@ -268,6 +272,9 @@ const agentsDocsSidebar = [
         text: 'Waking entities',
         link: '/docs/agents/usage/waking-entities',
       },
+      { text: 'Signals', link: '/docs/agents/usage/signals' },
+      { text: 'Sandboxing', link: '/docs/agents/usage/sandboxing' },
+      { text: 'Attachments', link: '/docs/agents/usage/attachments' },
       { text: 'Shared state', link: '/docs/agents/usage/shared-state' },
       {
         text: 'Clients & React',
@@ -282,6 +289,7 @@ const agentsDocsSidebar = [
         text: 'Embedded built-ins',
         link: '/docs/agents/usage/embedded-builtins',
       },
+      { text: 'Event sources', link: '/docs/agents/usage/event-sources' },
       { text: 'MCP servers', link: '/docs/agents/usage/mcp-servers' },
       { text: 'Testing', link: '/docs/agents/usage/testing' },
     ],

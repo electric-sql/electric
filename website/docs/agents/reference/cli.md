@@ -23,7 +23,8 @@ npm install -g electric-ax
 | `ELECTRIC_AGENTS_PRINCIPAL`      | -                       | Optional principal key sent as `Electric-Principal` |
 | `ELECTRIC_AGENTS_SERVER_HEADERS` | -                       | Optional JSON object of additional server headers |
 | `ELECTRIC_AGENTS_PORT`           | `4437`                  | Port used by `start` / `quickstart`          |
-| `ELECTRIC_AGENTS_BUILTIN_PORT`   | `4448`                  | Webhook port for `start-builtin`             |
+| `ELECTRIC_AGENTS_PULL_WAKE_RUNNER_ID` | `builtin-{identity}` | Pull-wake runner id for `start-builtin`      |
+| `PULL_WAKE_RUNNER_ID`            | -                       | Legacy alias for `ELECTRIC_AGENTS_PULL_WAKE_RUNNER_ID` |
 | `ELECTRIC_AGENTS_COMPOSE_PROJECT` | `electric-agents`       | Docker Compose project name                  |
 | `ANTHROPIC_API_KEY`              | -                       | Required for `start-builtin` and `quickstart` |
 
@@ -94,6 +95,19 @@ electric agents observe /chat/my-convo --from 0
 | ----------------- | -------------------------------- |
 | `--from <offset>` | Start streaming from this offset |
 
+### <span class="cli-command"><code>view &lt;url&gt; [--from &lt;offset&gt;]</code></span> {#view-url-from-offset}
+
+Print an entity conversation once.
+
+```bash
+electric agents view /chat/my-convo
+electric agents view /chat/my-convo --from 0
+```
+
+| Option            | Description                 |
+| ----------------- | --------------------------- |
+| `--from <offset>` | Start reading from this offset |
+
 ### <span class="cli-command"><code>inspect &lt;url&gt;</code></span> {#inspect-url}
 
 Show entity details. Outputs JSON.
@@ -120,9 +134,23 @@ electric agents ps --parent /manager/my-manager
 
 Output shows `URL`, `STATUS`, `CREATED`, and `LAST ACTIVE` columns with human-readable relative timestamps. Results are sorted by most recently active first.
 
+### <span class="cli-command"><code>signal &lt;url&gt; &lt;signal&gt; [--reason &lt;text&gt;] [--payload &lt;json&gt;]</code></span> {#signal-url-signal}
+
+Send a lifecycle signal to an entity.
+
+```bash
+electric agents signal /chat/my-convo SIGINT --reason "stop current run"
+electric agents signal /chat/my-convo SIGUSR --payload '{"refresh":true}'
+```
+
+| Option             | Description                         |
+| ------------------ | ----------------------------------- |
+| `--reason <text>`  | Human-readable signal reason        |
+| `--payload <json>` | JSON payload to attach to the signal |
+
 ### <span class="cli-command"><code>kill &lt;url&gt;</code></span> {#kill-url}
 
-Delete an entity.
+Send `SIGKILL` to an entity.
 
 ```bash
 electric agents kill /chat/my-convo
@@ -138,7 +166,7 @@ electric agents start
 
 ### <span class="cli-command"><code>start-builtin [--anthropic-api-key &lt;key&gt;]</code></span> {#start-builtin}
 
-Start the built-in Horton runtime and register built-in agent types with the coordinator server.
+Start the built-in Horton and worker runtime, register built-in agent types, and run a pull-wake runner.
 
 ```bash
 electric agents start-builtin --anthropic-api-key sk-ant-...

@@ -75,7 +75,7 @@ registry.define("support", {
     if (wake.type === "inbox") {
       ctx.useAgent({
         systemPrompt: "You are a support agent.",
-        model: "claude-sonnet-4-5-20250929",
+        model: "claude-sonnet-4-6",
         tools: [...ctx.electricTools, searchKbTool],
       })
       await ctx.agent.run()
@@ -228,5 +228,7 @@ See [Managing state](/docs/agents/usage/managing-state) for more information.
 - [Writing handlers](/docs/agents/usage/writing-handlers) — handler lifecycle and the `ctx` API.
 - [Configuring the agent](/docs/agents/usage/configuring-the-agent) — `useAgent`, models, tools, and streaming.
 - [Spawning & coordinating](/docs/agents/usage/spawning-and-coordinating) — multi-entity topologies and shared state.
-- [Built-in agents](/docs/agents/entities/agents/horton) — Horton, Worker, and Coder, the agents that ship with the runtime.
+- [Permissions & principals](/docs/agents/usage/permissions-and-principals) — entity access control and principal-scoped clients.
+- [Sandboxing](/docs/agents/usage/sandboxing), [Attachments](/docs/agents/usage/attachments), [Signals](/docs/agents/usage/signals), and [Event sources](/docs/agents/usage/event-sources) — newer runtime capabilities for hosted agents.
+- [Built-in agents](/docs/agents/entities/agents/horton) — Horton and Worker, the agents that ship with the runtime.
 - [Examples](/docs/agents/examples/playground) — pattern walkthroughs and demo apps.

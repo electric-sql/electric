@@ -40,9 +40,10 @@ type WorkerToolName =
   | "read"
   | "write"
   | "edit"
-  | "brave_search"
+  | "web_search"
   | "fetch_url"
   | "spawn_worker"
+  | "send"
 ```
 
 These are the same primitives Horton uses. Pick the smallest subset the worker needs — tools are the worker's permission set.
@@ -57,7 +58,7 @@ The canonical way to spawn a worker is the `spawn_worker` tool, which Horton cal
 spawn_worker({
   systemPrompt:
     "You are a focused researcher. Find the three most-cited papers on X and return their titles, authors, and DOIs as a markdown table.",
-  tools: ["brave_search", "fetch_url"],
+  tools: ["web_search", "fetch_url"],
   initialMessage: "Begin research now.",
 })
 ```
@@ -75,7 +76,7 @@ The spawn uses `wake: { on: 'runFinished', includeResponse: true }`, so the spaw
 1. Parses `ctx.args` into `WorkerArgs`. Throws if `systemPrompt` is empty, if `tools` contains an unknown name, or if neither `tools` nor `sharedDb` is provided.
 2. Builds the requested tool instances against the worker's `workingDirectory` (and a fresh per-wake `readSet` for the read-first-then-edit guard).
 3. If `sharedDb` is present, connects with `ctx.observe(db(id, schema))` and exposes generated `read_*`, `write_*`, `update_*`, and `delete_*` tools (`write_*` only in `"write-only"` mode).
-4. Configures the agent with `HORTON_MODEL` (`claude-sonnet-4-5-20250929`), the provided system prompt (with a brief reporting-back footer appended), and the assembled tool list.
+4. Configures the agent with `HORTON_MODEL` (`claude-sonnet-4-6` by default), the provided system prompt (with a brief reporting-back footer appended), and the assembled tool list.
 5. Runs the agent until the LLM stops.
 
 ::: warning Least-privilege sandbox
@@ -96,7 +97,7 @@ When you finish, respond with a concise report covering what was done and any ke
 | Property          | Value                                                                 |
 | ----------------- | --------------------------------------------------------------------- |
 | Type name         | `worker`                                                              |
-| Model             | `HORTON_MODEL` (`claude-sonnet-4-5-20250929`)                         |
-| Tools             | Subset of 7 primitives plus optional shared-state tools. **No `ctx.electricTools`.** |
+| Model             | `HORTON_MODEL` (`claude-sonnet-4-6` by default)                       |
+| Tools             | Subset of 8 primitives plus optional shared-state tools. **No `ctx.electricTools`.** |
 | Working directory | Provided to `registerWorker` at bootstrap                             |
 | Description       | `Internal — generic worker spawned by other agents. Configure via spawn args (systemPrompt + tools + optional sharedDb).` |

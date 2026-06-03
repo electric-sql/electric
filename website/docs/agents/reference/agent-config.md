@@ -32,7 +32,7 @@ interface AgentConfig {
 | Field           | Type                         | Required | Description                                                                                         |
 | --------------- | ---------------------------- | -------- | --------------------------------------------------------------------------------------------------- |
 | `systemPrompt`  | `string`                     | Yes      | System prompt sent to the LLM on each step.                                                         |
-| `model`         | `string \| Model<any>`       | Yes      | Model identifier (e.g. `"claude-sonnet-4-5-20250929"`) or a resolved model object.                  |
+| `model`         | `string \| Model<any>`       | Yes      | Model identifier (e.g. `"claude-sonnet-4-6"`) or a resolved model object.                  |
 | `provider`      | `KnownProvider`              | No       | Provider to use when `model` is a string. Defaults to `"anthropic"`.                                |
 | `tools`         | `AgentTool[]`                | Yes      | Tools available to the LLM. Spread `ctx.electricTools` when your runtime host provides runtime-level tools. See [`AgentTool`](./agent-tool). |
 | `streamFn`      | `StreamFn`                   | No       | Optional streaming callback passed to the underlying agent.                                         |

@@ -2,13 +2,13 @@
 title: Built-in collections
 titleTemplate: "... - Electric Agents"
 description: >-
-  Reference for the 17 runtime-managed collections: runs, steps, texts, toolCalls, inbox, errors, and more.
+  Reference for the 18 runtime-managed collections: runs, steps, texts, toolCalls, inbox, signals, errors, and more.
 outline: [2, 3]
 ---
 
 # Built-in collections
 
-Every entity automatically has these 17 collections, populated by the runtime as the agent operates. Custom state collections defined in `EntityDefinition.state` are merged with these at creation time.
+Every entity automatically has these 18 collections, populated by the runtime as the agent operates. Custom state collections defined in `EntityDefinition.state` are merged with these at creation time.
 
 **Source:** `@electric-ax/agents-runtime` -- `entity-schema.ts`
 
@@ -27,14 +27,15 @@ Every entity automatically has these 17 collections, populated by the runtime as
 | `wakes`            | `wake`             | `WakeEntry`        | Wake delivery records        |
 | `entityCreated`    | `entity_created`   | `EntityCreated`    | Entity bootstrap metadata    |
 | `entityStopped`    | `entity_stopped`   | `EntityStopped`    | Entity shutdown signal       |
+| `signals`          | `signal`           | `Signal`           | Lifecycle signal records     |
 | `childStatus`      | `child_status`     | `ChildStatusEntry` | Child/observed entity status |
 | `tags`             | `tags`             | `TagEntry`         | Entity tags                  |
+| `manifests`        | `manifest`         | `Manifest`         | Durable resource manifests   |
 | `contextInserted`  | `context_inserted` | `ContextInserted`  | Context additions            |
 | `contextRemoved`   | `context_removed`  | `ContextRemoved`   | Context removals             |
-| `manifests`        | `manifest`         | `Manifest`         | Durable resource manifests   |
 | `replayWatermarks` | `replay_watermark` | `ReplayWatermark`  | Replay progress tracking     |
 
-All collections use `key` as the primary key.
+All collections use `key` as the primary key. Runtime-managed timeline rows may also include `_timeline_order` for stable timeline sorting.
 
 ## Type definitions
 
@@ -90,6 +91,7 @@ interface TextDelta {
 interface ToolCall {
   key: string
   run_id?: string
+  tool_call_id?: string
   tool_name: string
   status: "started" | "args_complete" | "executing" | "completed" | "failed"
   args?: unknown
@@ -126,10 +128,15 @@ interface ErrorEvent {
 ```ts
 interface MessageReceived {
   key: string
-  from: string
+  from?: string
   payload?: unknown
-  timestamp: string
+  timestamp?: string
   message_type?: string
+  mode?: "immediate" | "queued" | "paused" | "steer"
+  status?: "pending" | "processed" | "cancelled"
+  position?: string
+  processed_at?: string
+  cancelled_at?: string
 }
 ```
 
@@ -150,6 +157,10 @@ interface WakeChangeEntry {
   collection: string
   kind: "insert" | "update" | "delete"
   key: string
+  from?: string
+  payload?: unknown
+  timestamp?: string
+  message_type?: string
 }
 
 interface WakeFinishedChildEntry {
@@ -163,7 +174,7 @@ interface WakeFinishedChildEntry {
 interface WakeOtherChildEntry {
   url: string
   type: string
-  status: "spawning" | "running" | "idle" | "stopped"
+  status: "spawning" | "running" | "idle" | "paused" | "stopping" | "stopped" | "killed"
 }
 ```
 
@@ -189,6 +200,25 @@ interface EntityStopped {
 }
 ```
 
+### Signal
+
+```ts
+interface Signal {
+  key: string
+  signal: "SIGINT" | "SIGHUP" | "SIGTERM" | "SIGKILL" | "SIGSTOP" | "SIGCONT" | "SIGUSR"
+  status: "unhandled" | "handled"
+  sender?: string
+  reason?: string
+  payload?: unknown
+  timestamp: string
+  handled_at?: string
+  handled_by?: string
+  outcome?: "transitioned" | "ignored" | "invalid_for_state" | "delivered" | "aborted" | "shutdown_requested" | "failed"
+  previous_state?: ChildStatusEntry["status"]
+  new_state?: ChildStatusEntry["status"]
+}
+```
+
 ### ChildStatusEntry
 
 ```ts
@@ -196,7 +226,7 @@ interface ChildStatusEntry {
   key: string
   entity_url: string
   entity_type: string
-  status: "spawning" | "running" | "idle" | "stopped"
+  status: "spawning" | "running" | "idle" | "paused" | "stopping" | "stopped" | "killed"
 }
 ```
 
@@ -243,6 +273,7 @@ type Manifest =
   | ManifestSourceEntry
   | ManifestSharedStateEntry
   | ManifestEffectEntry
+  | ManifestAttachmentEntry
   | ManifestContextEntry
   | ManifestCronScheduleEntry
   | ManifestFutureSendScheduleEntry
@@ -281,6 +312,27 @@ interface ManifestEffectEntry {
   id: string
   function_ref: string
   config: unknown
+}
+
+interface ManifestAttachmentEntry {
+  key: string
+  kind: "attachment"
+  id: string
+  streamPath: string
+  status: "pending" | "complete" | "failed"
+  subject: {
+    type: "inbox" | "run" | "text" | "tool_call" | "context"
+    key: string
+  }
+  role: "input" | "output"
+  mimeType: string
+  filename?: string
+  byteLength?: number
+  sha256?: string
+  createdAt: string
+  createdBy?: string
+  error?: string
+  meta?: Record<string, JsonValue>
 }
 
 interface ManifestContextEntry {

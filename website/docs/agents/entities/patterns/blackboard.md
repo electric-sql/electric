@@ -58,7 +58,7 @@ export function registerDebate(registry: EntityRegistry) {
 
       ctx.useAgent({
         systemPrompt: DEBATE_SYSTEM_PROMPT,
-        model: `claude-sonnet-4-5-20250929`,
+        model: `claude-sonnet-4-6`,
         tools: [...ctx.electricTools, startTool, checkTool, endTool],
       })
       await ctx.agent.run()

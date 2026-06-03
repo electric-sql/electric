@@ -24,7 +24,7 @@ And schemas:
 
 - `creationSchema` -- validated spawn args
 - `inboxSchemas` -- typed message contracts
-- `outputSchemas` -- what the entity emits (for UI binding)
+- `stateSchemas` -- additional registered state schemas
 
 See [Defining entities](/docs/agents/usage/defining-entities) and [EntityDefinition reference](/docs/agents/reference/entity-definition).
 
@@ -56,7 +56,7 @@ The context API passed into the handler:
 | `ctx.observe(db(id, schema), opts)` | Join existing shared state                                            |
 | `ctx.recordRun()`                   | Record non-LLM work as a run for `runFinished` observers              |
 | `ctx.setTag(key, value)`            | Set a tag on this entity                                              |
-| `ctx.removeTag(key)`                | Remove a tag from this entity                                         |
+| `ctx.deleteTag(key)`                | Delete a tag from this entity                                         |
 
 See [Writing handlers](/docs/agents/usage/writing-handlers) and [HandlerContext reference](/docs/agents/reference/handler-context).
 
@@ -65,7 +65,7 @@ See [Writing handlers](/docs/agents/usage/writing-handlers) and [HandlerContext 
 ```ts
 ctx.useAgent({
   systemPrompt: string,
-  model: string | Model<any>, // e.g. 'claude-sonnet-4-5-20250929'
+  model: string | Model<any>, // e.g. 'claude-sonnet-4-6'
   provider?: KnownProvider,   // defaults to 'anthropic' for string models
   tools: AgentTool[],      // [...ctx.electricTools, ...custom]
   streamFn?: StreamFn,     // optional streaming callback
@@ -192,7 +192,17 @@ See [Managing state](/docs/agents/usage/managing-state).
 
 See [Spawning & coordinating](/docs/agents/usage/spawning-and-coordinating) and [EntityHandle reference](/docs/agents/reference/entity-handle).
 
-## 7. Shared state (cross-entity)
+## 7. Runtime capabilities
+
+Use the dedicated guides for runtime features that cut across handlers, clients, and hosted built-ins:
+
+- [Permissions & principals](/docs/agents/usage/permissions-and-principals) — principal-scoped access to types and entities.
+- [Sandboxing](/docs/agents/usage/sandboxing) — filesystem, process, and network isolation for LLM-driven tools.
+- [Attachments](/docs/agents/usage/attachments) — upload, read, and hydrate files and images.
+- [Signals](/docs/agents/usage/signals) — interrupt, pause, resume, kill, and notify entities.
+- [Event sources](/docs/agents/usage/event-sources) — subscribe entities to external webhook-backed feeds.
+
+## 8. Shared state (cross-entity)
 
 Define a schema map, then create/connect:
 
@@ -213,9 +223,9 @@ shared.findings.insert({ key: "f1", text: "..." })
 
 See [Shared state](/docs/agents/usage/shared-state) and [SharedStateHandle reference](/docs/agents/reference/shared-state-handle).
 
-## 8. Built-in collections
+## 9. Built-in collections
 
-Every entity automatically has 17 `ctx.db.collections`:
+Every entity automatically has 18 `ctx.db.collections`:
 
 | Collection         | Purpose                   | Key fields                                                             |
 | ------------------ | ------------------------- | ---------------------------------------------------------------------- |
@@ -230,8 +240,9 @@ Every entity automatically has 17 `ctx.db.collections`:
 | `wakes`            | Wake event history        | `source, timeout, changes`                                             |
 | `entityCreated`    | Bootstrap metadata        | `entity_type, args, parent_url`                                        |
 | `entityStopped`    | Shutdown signal           | `timestamp, reason`                                                    |
+| `signals`          | Lifecycle signal records  | `signal, status, outcome`                                              |
 | `childStatus`      | Child entity status       | `entity_url, status`                                                   |
-| `manifests`        | Wiring declarations       | discriminated union: child/source/shared-state/effect/context/schedule |
+| `manifests`        | Wiring declarations       | discriminated union: child/source/shared-state/effect/attachment/context/schedule |
 | `replayWatermarks` | Replay offset tracking    | `source_id, offset`                                                    |
 | `tags`             | Entity tags/labels        | `key, value`                                                           |
 | `contextInserted`  | Context additions         | `id, name, attrs, content, timestamp`                                  |
@@ -239,7 +250,7 @@ Every entity automatically has 17 `ctx.db.collections`:
 
 See [Built-in collections](/docs/agents/reference/built-in-collections).
 
-## 9. CLI (`electric agents`)
+## 10. CLI (`electric agents`)
 
 Interact with the system using the Electric Agents CLI:
 
@@ -250,6 +261,8 @@ Interact with the system using the Electric Agents CLI:
 | `electric agents spawn /type/id --args '{...}'` | Create entity                |
 | `electric agents send /type/id 'message'`     | Send message                 |
 | `electric agents observe /type/id`            | Stream entity events         |
+| `electric agents view /type/id`               | Print entity conversation once |
+| `electric agents signal /type/id SIGINT`      | Send a lifecycle signal      |
 | `electric agents inspect /type/id`            | Show entity state            |
 | `electric agents ps [--type --status --parent]` | List entities                |
 | `electric agents kill /type/id`               | Delete entity                |
@@ -261,7 +274,7 @@ Interact with the system using the Electric Agents CLI:
 
 See [CLI reference](/docs/agents/reference/cli).
 
-## 10. App setup
+## 11. App setup
 
 ```ts
 const registry = createEntityRegistry()
@@ -279,7 +292,7 @@ await runtime.registerTypes() // register all types with runtime server
 
 See [App setup](/docs/agents/usage/app-setup) and [RuntimeHandler reference](/docs/agents/reference/runtime-handler).
 
-## 11. App clients and embedded built-ins
+## 12. App clients and embedded built-ins
 
 Use the client and embedding APIs when you need to work with agents outside an entity handler:
 

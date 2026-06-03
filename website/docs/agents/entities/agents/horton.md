@@ -32,25 +32,25 @@ Horton is configured with `ctx.electricTools` plus the base Horton tool set:
 | `read`         | Read a file. Tracked in a per-wake `readSet`.            |
 | `write`        | Create or overwrite a file.                              |
 | `edit`         | Targeted string replacement (file must be `read` first). |
-| `brave_search` | Web search via the Brave Search API.                     |
+| `web_search`   | Web search via the configured search provider.            |
 | `fetch_url`    | Fetch a URL and return it as markdown.                   |
 | `spawn_worker` | Dispatch a subagent for an isolated subtask.             |
 
-`brave_search` requires `BRAVE_SEARCH_API_KEY` in the environment; without it the tool errors at call time.
+`web_search` uses the search provider configured by the built-in runtime; Brave search requires `BRAVE_SEARCH_API_KEY`.
 
 When docs support or skills are available, Horton also adds the docs search tool and skill tools during bootstrap.
 
 ## Title generation
 
-After the first agent run completes, Horton calls `generateTitle()` (Haiku) to summarise the user's first message into a 3-5 word session title and stores it via `ctx.setTag('title', title)`. Failures are logged and ignored — the entity continues without a title.
+After the first agent run completes, Horton calls `generateTitle()` using the configured low-cost model to summarise the user's first message into a 3-5 word session title and stores it via `ctx.setTag('title', title)`. Failures are logged and ignored — the entity continues without a title.
 
 ## Details
 
 | Property          | Value                                             |
 | ----------------- | ------------------------------------------------- |
 | Type name         | `horton`                                          |
-| Model             | `HORTON_MODEL` (`claude-sonnet-4-5-20250929`)     |
-| Title model       | `claude-haiku-4-5-20251001`                       |
+| Model             | `HORTON_MODEL` (`claude-sonnet-4-6` by default)   |
+| Title model       | Configured low-cost model                         |
 | Tools             | `ctx.electricTools` + base Horton tool set, plus docs/skill tools when configured |
 | Working directory | Passed at bootstrap (defaults to `process.cwd()`) |
 | Title generation  | Yes, after the first run if no title tag exists   |

@@ -24,7 +24,7 @@ export function registerDispatcher(registry: EntityRegistry) {
 
       ctx.useAgent({
         systemPrompt: DISPATCHER_SYSTEM_PROMPT,
-        model: `claude-sonnet-4-5-20250929`,
+        model: `claude-sonnet-4-6`,
         tools: [...ctx.electricTools, dispatchTool],
       })
       await ctx.agent.run()
