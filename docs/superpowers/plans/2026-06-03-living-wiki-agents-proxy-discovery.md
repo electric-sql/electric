@@ -20,6 +20,16 @@ Task: Phase 3 Task 1 discovery for `docs/superpowers/plans/2026-06-03-living-wik
 - `node_modules/.pnpm/@durable-streams+client@0.2.6/node_modules/@durable-streams/client/dist/index.d.cts`
 - `examples/deep-survey/src/ui/hooks/useSwarm.ts`
 - `examples/deep-survey/src/server/index.ts`
+- `docs/superpowers/specs/2026-06-02-living-wiki-demo-plan.md`
+- `docs/superpowers/plans/2026-06-02-living-wiki-scaffold.md`
+- `docs/superpowers/plans/2026-06-03-living-wiki-api-boundary.md`
+- `examples/living-wiki/src/worker/env.ts`
+- `examples/living-wiki/src/worker/routes.ts`
+- `examples/living-wiki/src/worker/trpc-router.ts`
+- `examples/living-wiki/src/app/api/livingWikiApi.ts`
+- `examples/living-wiki/README.md`
+- `packages/agents/skills/quickstart.md`
+- `examples/deep-survey/src/server/orchestrator.ts`
 
 Helpful greps from the plan were run against `packages/agents-runtime`, `packages/agents`, `packages/agents-server`, `packages/typescript-client`, durable-streams packages, and `examples/deep-survey`.
 
@@ -171,7 +181,31 @@ No evidence was found that browser stream GETs need to send any client-supplied 
 
 The Worker should inject upstream credentials/principal server-side if configured. Candidate env names should remain Living Wiki-specific, e.g. `ELECTRIC_AGENTS_BASE_URL`, `ELECTRIC_AGENTS_TOKEN`, and optional `ELECTRIC_AGENTS_PRINCIPAL_KEY`. The exact token header for the deployed upstream was not proven by this discovery; implement the minimal explicit behavior and tests, and do not expose these values in health/config JSON.
 
-## 6. Recommended locked public Worker route shape for Tasks 2+
+## 6. Current Living Wiki code impact on route/env/client-wrapper decisions
+
+The current Living Wiki scaffold/API-boundary files confirm that the browser already talks only to the Worker through application-owned routes and a typed REST wrapper:
+
+- `env.ts` currently exposes scaffold-era Electric Cloud settings (`ELECTRIC_CLOUD_API_URL`, optional `ELECTRIC_CLOUD_API_TOKEN`, `ELECTRIC_AGENTS_SPACE_ID`) plus `APP_ENV` and seeded-demo flags. Agents stream proxy work should add separate upstream Agents runtime settings (for example `ELECTRIC_AGENTS_BASE_URL`, optional token/principal settings) rather than repurposing the Cloud API URL, because Durable Streams/Agents runtime routes are not the same surface as the Electric Cloud management API.
+- `routes.ts` already owns `/api/health`, `/api/spaces`, `/api/spaces/:wikiSpaceId/join`, and `/api/spaces/:wikiSpaceId`. New observe/proxy routes should stay under `/api/...`, avoid those existing paths, and preserve the current JSON error style for non-stream REST routes.
+- `trpc-router.ts` mirrors the WikiSpace create/join/get commands behind `space.*` procedures and keeps `health`. Agents stream observation should not be added as broad tRPC pass-through because durable-stream reads need header/query sanitization and streaming response handling; narrow tRPC commands can be added later only for validated non-stream commands.
+- `livingWikiApi.ts` is a REST client wrapper that validates Worker JSON snapshots with shared schemas and constructs only app-owned URLs. The Agents browser wrapper should follow this pattern: build safe Living Wiki URLs, validate app-level inputs such as `wikiSpaceId`/entity kind, and never accept raw upstream `/_electric/...`, `entityUrl`, `streamPath`, tags, or secret headers from callers.
+- `README.md` documents the Worker as the browser security boundary and explicitly says Electric Cloud token values must not appear in browser code or JSON responses. The same rule applies to any Agents runtime token/principal env.
+
+Recommendation impact: no locked route/scope changes were needed. Env recommendations are clarified to add Agents runtime env names alongside the existing Cloud env rather than replacing the scaffold's current `ELECTRIC_CLOUD_*` management settings.
+
+## 7. Quickstart and Deep Survey orchestrator findings
+
+`packages/agents/skills/quickstart.md` confirms the intended Agents programming model: entity types are defined with `registry.define()`, entity instances are addressed by URLs such as `/perspectives/test-1`, server code can use `createRuntimeServerClient()` for spawn/send operations, and frontend code can use `createAgentsClient`, `entity(url)`, and `useChat` to observe durable entity streams. It also confirms that the browser examples subscribe to specific entity streams rather than sending arbitrary runtime control-plane requests.
+
+`examples/deep-survey/src/server/orchestrator.ts` confirms a concrete manager/worker shape relevant to Living Wiki: an `orchestrator` entity derives its entity id from `ctx.entityUrl`, creates a deterministic shared-state id (`wiki-swarm-${entityId}`), calls `ctx.mkdb(...)` on first wake, observes that shared state with `ctx.observe(db(...))`, spawns child entities with `ctx.spawn(type, id, args, { initialMessage, wake: 'runFinished', tags })`, and uses tags such as `swarm_id` for membership/group observation. This supports deriving Living Wiki observe tags server-side from `wikiSpaceId` and using deterministic shared-state ids until they can be resolved from a WikiSpace record.
+
+Entity-kind impact: the examples support simple lower-case entity types such as `orchestrator`, `worker`, and app-specific worker types. For Living Wiki public routes, keep `entityKind` as a Living Wiki allowlisted enum mapped server-side to real Agents types; do not let the browser choose arbitrary upstream entity types.
+
+Send/tRPC impact: quickstart Step 4 uses a server route plus `createRuntimeServerClient().spawnEntity(...)` for privileged actions, reinforcing the recommendation to expose narrow app command routes instead of broad browser tRPC/control-plane proxying. If Living Wiki later needs send/spawn, it should remain a validated Worker-side command that computes target URLs.
+
+Observe route-shape impact: quickstart frontend examples and Deep Survey's shared-state/orchestrator flow reinforce the three safe observe cases already identified: specific entity stream, entities-by-server-derived-tags stream, and deterministic/resolved shared-state stream. No recommendation changes were needed beyond documenting that Living Wiki should derive tags and shared-state ids server-side.
+
+## 8. Recommended locked public Worker route shape for Tasks 2+
 
 Use safe Living Wiki routes that encode intent, not upstream paths:
 
@@ -195,7 +229,7 @@ Optional compatibility/ensure route:
 
 Avoid exposing public routes that mirror arbitrary `/_electric/...` paths.
 
-## 7. Non-streaming send/tRPC scope recommendation
+## 9. Non-streaming send/tRPC scope recommendation
 
 Defer non-streaming `send`, `signal`, spawn, attachments, tags, schedules, and broad tRPC/control-plane proxying unless a concrete Living Wiki UI flow in this phase requires them.
 
@@ -205,7 +239,7 @@ If `send` is included, expose only a narrow Living Wiki command route such as:
 
 Validate a small shared body schema, normalize it server-side to the confirmed upstream `sendEntityMessage` body (`payload`, optional `type`, `afterMs`, `mode`, `position`), and never accept raw upstream `targetUrl` from the browser.
 
-## 8. Uncertainty / blockers
+## 10. Uncertainty / blockers
 
 No implementation blocker for stream proxying was found.
 
