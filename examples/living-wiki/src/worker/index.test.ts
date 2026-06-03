@@ -7,6 +7,9 @@ const env = {
   ELECTRIC_CLOUD_API_URL: `https://api.example.test`,
   ELECTRIC_CLOUD_API_TOKEN: `test-token`,
   ELECTRIC_AGENTS_SPACE_ID: `space_test`,
+  ELECTRIC_AGENTS_BASE_URL: `https://agents-secret.example.test/runtime`,
+  ELECTRIC_AGENTS_TOKEN: `agents-test-secret-token`,
+  ELECTRIC_AGENTS_PRINCIPAL_KEY: `agents-principal-secret-key`,
   ENABLE_SEEDED_DEMO: `true`,
 } satisfies Record<string, string>
 
@@ -50,6 +53,17 @@ describe(`living wiki worker`, () => {
       electricCloudConfigured: true,
       seededDemoEnabled: true,
     })
+  })
+
+  it(`does not leak Agents runtime env values through REST health JSON`, async () => {
+    const request = new Request(`https://living-wiki.test/api/health`)
+    const response = await worker.fetch(request, env, {} as ExecutionContext)
+
+    expect(response.status).toBe(200)
+    const text = await response.text()
+    expect(text).not.toContain(env.ELECTRIC_AGENTS_BASE_URL)
+    expect(text).not.toContain(env.ELECTRIC_AGENTS_TOKEN)
+    expect(text).not.toContain(env.ELECTRIC_AGENTS_PRINCIPAL_KEY)
   })
 
   it(`returns 404 JSON for unknown API routes`, async () => {
