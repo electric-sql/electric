@@ -6,6 +6,14 @@ import {
   type WikiSpaceSnapshot,
 } from '../../shared/space'
 import { readDemoSessionIdentity } from '../../shared/session'
+import { WikiStateDashboard } from '../components/wiki-state/WikiStateDashboard'
+import {
+  selectMemberCards,
+  selectRecentActivity,
+  selectReviewQueueSummary,
+  selectSourcesByStatus,
+  selectWikiGraphSummary,
+} from '../selectors/wikiStateViewModels'
 import { useJoinSpace, useSpace } from '../hooks/useSpace'
 import { Route as rootRoute } from './__root'
 
@@ -46,6 +54,13 @@ export function SpaceRoutePage({ wikiSpaceId }: { wikiSpaceId: string }) {
   )
   const join = useJoinSpace(wikiSpaceId)
   const displayedSpace = joinedSpace ?? space
+  const emptySharedStateViewModel = {
+    activityEvents: selectRecentActivity([]),
+    members: selectMemberCards([], []),
+    sources: selectSourcesByStatus([]),
+    graphSummary: selectWikiGraphSummary([], []),
+    reviewSummary: selectReviewQueueSummary([]),
+  }
 
   async function onJoin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -76,13 +91,16 @@ export function SpaceRoutePage({ wikiSpaceId }: { wikiSpaceId: string }) {
           <ul>
             {displayedSpace.actors.map((actor) => (
               <li key={actor.id}>
-                <strong>{actor.displayName}</strong>{' '}
+                <strong>{actor.displayName}</strong>
+                {` `}
                 <span>({actor.avatarColor})</span>
               </li>
             ))}
           </ul>
         </>
       ) : null}
+
+      <WikiStateDashboard viewModel={emptySharedStateViewModel} />
 
       <form onSubmit={(event) => void onJoin(event)} style={{ marginTop: 24 }}>
         <h2>Join this space</h2>

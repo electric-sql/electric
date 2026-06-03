@@ -80,6 +80,12 @@ describe(`SpaceRoutePage`, () => {
     expect(screen.getByText(`Grace`)).toBeInTheDocument()
     expect(screen.getByRole(`button`, { name: `Refresh` })).toBeInTheDocument()
     expect(
+      screen.getByRole(`region`, { name: `Living wiki shared-state dashboard` })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(`No activity yet. New wiki updates will appear here.`)
+    ).toBeInTheDocument()
+    expect(
       screen.getByRole(`textbox`, { name: `Display name` })
     ).toBeInTheDocument()
     expect(globalThis.fetch).toHaveBeenCalledWith(
