@@ -2,7 +2,7 @@
 /* AppAgentResponse — Horton response with streaming typewriter.
    ─────────────────────────────────────────────────────────────────
    The animated centrepiece of the desktop hero. Renders a fixed fixture
-   string (paragraph + fenced code block + paragraph + tool-call pill).
+   string (paragraph + fenced code block + paragraph + tool-call card).
 
    Streaming is word-by-word — the global progress cursor advances at
    `cps` chars/sec smoothly, but the rendered text snaps DOWN to the
@@ -40,7 +40,7 @@
    Pure primitive — does NOT include `.app-mockup-root`. */
 
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { Copy } from 'lucide-vue-next'
+import { ChevronRight, Copy, Download, Wrench } from 'lucide-vue-next'
 import AppIcon from '../AppIcon.vue'
 import { CHAT_FIXTURE, CHAT_FIXTURE_LENGTH } from '../../fixtures'
 
@@ -345,13 +345,27 @@ function renderInline(input: string): string {
       </p>
 
       <Transition name="reveal">
-        <div v-if="codeBlockMounted" class="code-slab">
-          <div class="code-slab-tag mono">ts</div>
-          <pre class="code-slab-body mono"><code>{{ visibleCode }}<span
-            v-if="caretSegment === 'code'"
-            class="caret"
-            aria-hidden="true"
-          /></code></pre>
+        <div v-if="codeBlockMounted" class="code-block">
+          <div class="code-block-row">
+            <div class="code-block-header">
+              <span>ts</span>
+            </div>
+            <div class="code-block-actions" aria-hidden="true">
+              <span class="code-block-action-btn" title="Copy code">
+                <AppIcon :icon="Copy" :size="1" />
+              </span>
+              <span class="code-block-action-btn" title="Download code">
+                <AppIcon :icon="Download" :size="1" />
+              </span>
+            </div>
+          </div>
+          <div class="code-block-body">
+            <pre class="mono"><code>{{ visibleCode }}<span
+              v-if="caretSegment === 'code'"
+              class="caret"
+              aria-hidden="true"
+            /></code></pre>
+          </div>
         </div>
       </Transition>
 
@@ -369,16 +383,19 @@ function renderInline(input: string): string {
       <Transition name="reveal">
         <div
           v-if="hasToolCall && toolCallVisible"
-          class="tool-call-pill"
+          class="tool-call-card"
           aria-label="Tool call"
         >
-          <span class="tool-call-chip mono">tool</span>
-          <span class="tool-call-name mono">{{
-            CHAT_FIXTURE.toolCall.name
-          }}</span>
-          <span class="tool-call-args mono">{{
-            CHAT_FIXTURE.toolCall.args
-          }}</span>
+          <div class="tool-call-header">
+            <span class="tool-call-icon" aria-hidden="true">
+              <AppIcon :icon="Wrench" :size="2" />
+            </span>
+            <span class="tool-call-name mono">{{ CHAT_FIXTURE.toolCall.name }}</span>
+            <span class="tool-call-summary">{{ CHAT_FIXTURE.toolCall.args }}</span>
+            <span class="tool-call-toggle" aria-hidden="true">
+              <AppIcon :icon="ChevronRight" :size="1" />
+            </span>
+          </div>
         </div>
       </Transition>
 
@@ -441,47 +458,89 @@ function renderInline(input: string): string {
   color: var(--ds-text-1);
 }
 
-/* ───────── Code slab ───────── */
+/* ───────── Code block ─────────
+   Mirrors `MarkdownCodeBlock.tsx` + `markdown.css` — a 2-row layout:
 
-.code-slab {
-  position: relative;
-  background: var(--ds-code-bg, var(--ds-surface-soft));
-  border: 1px solid var(--ds-border-1);
-  border-radius: var(--ds-radius-3);
-  padding: 12px 14px;
-  overflow: hidden;
+     ┌──────────────────────────────────────────────────┐
+     │ ts                          [copy] [download]    │  .code-block-row
+     ├──────────────────────────────────────────────────┤
+     │ <pre><code>…</code></pre>                        │  .code-block-body
+     └──────────────────────────────────────────────────┘
+
+   The header row sits ABOVE the bordered body. Language label is plain
+   muted mono text on the left; copy + download icon-buttons sit on the
+   right. Body has its own border + tinted background, slightly darker
+   than the surface so the code reads as inset content. */
+
+.code-block {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
 }
 
-/* Code well — visually a Streamdown-style fenced block. The body
-   uses the same chat font size (`--ds-chat-text` = 13px) the live
-   markdown column uses, so the typography stays in step with the
-   prose around it. The "ts" tag mimics a Streamdown language label. */
-.code-slab-tag {
-  position: absolute;
-  top: 8px;
-  right: 10px;
-  padding: 0 6px;
-  border-radius: var(--ds-radius-1);
-  background: var(--ds-chip-bg);
-  border: 1px solid var(--ds-chip-border);
+.code-block-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 16px;
+  padding: 0 2px;
+  gap: 8px;
+}
+
+.code-block-header {
+  display: inline-flex;
+  align-items: center;
   color: var(--ds-text-3);
-  font-size: var(--ds-text-2xs);
-  line-height: 16px;
+  font-family: var(--ds-font-body);
+  font-size: var(--ds-text-xs);
+  line-height: 1;
+  min-width: 0;
+}
+.code-block-header span {
+  font-family: var(--ds-font-mono);
   text-transform: lowercase;
-  letter-spacing: 0.04em;
 }
 
-.code-slab-body {
+.code-block-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.code-block-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--ds-radius-2);
+  color: var(--ds-text-4, var(--ds-text-3));
+  opacity: 0.7;
+}
+
+.code-block-body {
+  background: color-mix(in oklab, var(--ds-bg) 72%, var(--ds-surface));
+  border: 1px solid var(--ds-gray-a4, var(--ds-border-1));
+  border-radius: var(--ds-radius-3);
+  padding: 9px 11px;
+  overflow-x: auto;
+}
+
+.code-block-body pre {
   margin: 0;
-  font-size: var(--ds-text-sm);
-  line-height: 1.55;
+  padding: 0;
+  background: none;
+  border-radius: 0;
+}
+
+.code-block-body code {
+  font-family: var(--ds-font-mono);
+  font-size: var(--ds-text-xs);
+  line-height: 1.5;
   color: var(--ds-text-1);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-}
-
-.code-slab-body code {
-  font-family: var(--ds-font-mono);
 }
 
 /* ───────── Caret ───────── */
@@ -547,23 +606,77 @@ function renderInline(input: string): string {
   }
 }
 
-/* ───────── Tool-call pill ───────── */
+/* ───────── Tool-call card ─────────
+   Mirrors `InlineEventCard` + `toolBlock.module.css` — a full-width
+   card with a tinted header strip. The collapsed shape is:
 
-.tool-call-pill {
+     ┌──────────────────────────────────────────────────┐
+     │ [🔧] tool_name  summary…              [chevron]  │  .tool-call-header
+     └──────────────────────────────────────────────────┘
+
+   - Card: 1px gray-a3 border, radius-4, surface bg, shadow-1
+   - Header: gap 8, padding 7px 10px, mono 12px, gray-a1 tinted bg
+   - Wrench icon (18×18), tool name (mono), summary (body, ellipsis),
+     chevron (16×16 right). */
+
+.tool-call-card {
+  border: 1px solid var(--ds-gray-a3, var(--ds-border-1));
+  border-radius: var(--ds-radius-4);
+  overflow: hidden;
+  background: var(--ds-surface);
+  box-shadow: var(--ds-shadow-1);
+}
+
+.tool-call-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  font-family: var(--ds-font-mono);
+  color: var(--ds-text-1);
+  background: var(--ds-gray-a1, transparent);
+}
+
+.tool-call-icon {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 8px 5px 5px;
-  border: 1px solid var(--ds-border-1);
-  border-radius: var(--ds-radius-3);
-  background: var(--ds-surface-soft);
-  align-self: flex-start;
-  pointer-events: none;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: var(--ds-text-3);
+}
+
+.tool-call-name {
+  flex-shrink: 0;
+  font-family: var(--ds-font-mono);
+}
+
+.tool-call-summary {
+  color: var(--ds-text-3);
+  font-family: var(--ds-font-body);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.tool-call-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-left: auto;
+  flex-shrink: 0;
+  color: var(--ds-text-3);
 }
 
 /* ───────── Reveal transition ─────────
-   Shared enter animation for block-level reveals (code-slab, post
-   paragraph, tool-call pill). Each block fades + lifts in over 220 ms
+   Shared enter animation for block-level reveals (code-block, post
+   paragraph, tool-call card). Each block fades + lifts in over 220 ms
    when the streaming cursor crosses its segment start, so the
    response reads as "blocks materialising one after another" rather
    than "everything painted at t=0". No leave animation — we never
@@ -580,38 +693,6 @@ function renderInline(input: string): string {
 .reveal-enter-to {
   opacity: 1;
   transform: translateY(0);
-}
-
-/* Live `<Badge size={1} variant="soft" tone="accent">` —
-   11px / 18px tall / 2px 6px padding / 500 weight / pill-radius. */
-.tool-call-chip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 18px;
-  padding: 2px 6px;
-  border-radius: var(--ds-radius-full);
-  background: var(--ds-accent-a3);
-  color: var(--ds-accent-11, var(--ds-accent-9));
-  font-size: var(--ds-text-xs);
-  font-weight: 500;
-  line-height: 1;
-  text-transform: lowercase;
-  letter-spacing: 0.02em;
-}
-
-.tool-call-name {
-  font-size: var(--ds-text-sm);
-  color: var(--ds-text-1);
-}
-
-.tool-call-args {
-  font-size: var(--ds-text-sm);
-  color: var(--ds-text-3);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 280px;
 }
 
 /* ───────── Meta row (✓ done · time · copy) ─────────
