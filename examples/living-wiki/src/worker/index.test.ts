@@ -120,6 +120,120 @@ describe(`living wiki worker`, () => {
     expect(rows.activity_events).toHaveLength(2)
   })
 
+  it(`rejects REST seeded demo reset when disabled`, async () => {
+    const response = await worker.fetch(
+      new Request(`https://living-wiki.test/api/demo/reset`, {
+        method: `POST`,
+      }),
+      { ...env, ENABLE_SEEDED_DEMO: `false` },
+      {} as ExecutionContext
+    )
+
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toMatchObject({
+      ok: false,
+      error: `Seeded demo is disabled`,
+    })
+  })
+
+  it(`resets Worker-local seeded demo space and state`, async () => {
+    const seededResponse = await worker.fetch(
+      new Request(`https://living-wiki.test/api/demo/seed`, { method: `POST` }),
+      env,
+      {} as ExecutionContext
+    )
+    const seeded = (await seededResponse.json()) as {
+      space: { space: { id: string }; currentActor: { id: string } }
+    }
+
+    const resetResponse = await worker.fetch(
+      new Request(`https://living-wiki.test/api/demo/reset`, {
+        method: `POST`,
+      }),
+      env,
+      {} as ExecutionContext
+    )
+    expect(resetResponse.status).toBe(200)
+    await expect(resetResponse.json()).resolves.toEqual({ ok: true })
+
+    const getResponse = await worker.fetch(
+      new Request(
+        `https://living-wiki.test/api/spaces/${seeded.space.space.id}`
+      ),
+      env,
+      {} as ExecutionContext
+    )
+    expect(getResponse.status).toBe(404)
+  })
+
+  it(`runs seeded happy path from source to approved canonical page`, async () => {
+    const seededResponse = await worker.fetch(
+      new Request(`https://living-wiki.test/api/demo/seed`, { method: `POST` }),
+      env,
+      {} as ExecutionContext
+    )
+    const seeded = (await seededResponse.json()) as {
+      space: { space: { id: string }; currentActor: { id: string } }
+      sourceId: string
+    }
+    const wikiSpaceId = seeded.space.space.id
+    const actorId = seeded.space.currentActor.id
+
+    const sourceSnapshot = await worker.fetch(
+      new Request(
+        `https://living-wiki.test/api/spaces/${wikiSpaceId}/shared-state-snapshot`
+      ),
+      env,
+      {} as ExecutionContext
+    )
+    await expect(sourceSnapshot.json()).resolves.toMatchObject({
+      sources: [expect.objectContaining({ id: seeded.sourceId })],
+    })
+
+    const proposalResponse = await worker.fetch(
+      new Request(
+        `https://living-wiki.test/api/spaces/${wikiSpaceId}/pages/propose`,
+        {
+          method: `POST`,
+          headers: { 'content-type': `application/json` },
+          body: JSON.stringify({ actorId, sourceId: seeded.sourceId }),
+        }
+      ),
+      env,
+      {} as ExecutionContext
+    )
+    expect(proposalResponse.status).toBe(200)
+    const proposal = (await proposalResponse.json()) as {
+      reviewItem: { id: string }
+    }
+
+    const approvalResponse = await worker.fetch(
+      new Request(
+        `https://living-wiki.test/api/spaces/${wikiSpaceId}/reviews/${proposal.reviewItem.id}/resolve`,
+        {
+          method: `POST`,
+          headers: { 'content-type': `application/json` },
+          body: JSON.stringify({ actorId, resolution: `approve` }),
+        }
+      ),
+      env,
+      {} as ExecutionContext
+    )
+    expect(approvalResponse.status).toBe(200)
+
+    const finalSnapshot = await worker.fetch(
+      new Request(
+        `https://living-wiki.test/api/spaces/${wikiSpaceId}/shared-state-snapshot`
+      ),
+      env,
+      {} as ExecutionContext
+    )
+    await expect(finalSnapshot.json()).resolves.toMatchObject({
+      wiki_pages: [expect.objectContaining({ status: `canonical` })],
+      review_items: [expect.objectContaining({ status: `approved` })],
+    })
+  })
+
   it(`returns 404 JSON for unknown API routes`, async () => {
     const request = new Request(`https://living-wiki.test/api/missing`)
     const response = await worker.fetch(request, env, {} as ExecutionContext)

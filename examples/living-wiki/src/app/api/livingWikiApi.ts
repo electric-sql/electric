@@ -77,6 +77,7 @@ export type SeededDemoResult = {
   space: WikiSpaceSnapshot
   sourceId: string
 }
+export type ResetDemoResult = { ok: true }
 
 const livingWikiSharedStateSnapshotSchema = z.object({
   wiki_spaces: z.array(wikiSpaceSchema),
@@ -103,9 +104,11 @@ const seededDemoResultSchema = z.object({
   space: wikiSpaceSnapshotSchema,
   sourceId: z.string().regex(/^source_[a-z0-9_-]+$/),
 })
+const resetDemoResultSchema = z.object({ ok: z.literal(true) })
 
 export type LivingWikiApiClient = {
   startSeededDemo(): Promise<SeededDemoResult>
+  resetSeededDemo(): Promise<ResetDemoResult>
   createSpace(input: CreateSpaceInput): Promise<WikiSpaceSnapshot>
   joinSpace(input: JoinSpaceInput): Promise<WikiSpaceSnapshot>
   getSpace(input: GetSpaceInput): Promise<WikiSpaceSnapshot>
@@ -201,6 +204,14 @@ export function createLivingWikiApiClient(
         await fetchImpl(url(`/api/demo/seed`), { method: `POST` }),
         seededDemoResultSchema,
         `Invalid seeded demo response`
+      )
+    },
+
+    async resetSeededDemo() {
+      return parseJsonResponse(
+        await fetchImpl(url(`/api/demo/reset`), { method: `POST` }),
+        resetDemoResultSchema,
+        `Invalid demo reset response`
       )
     },
 

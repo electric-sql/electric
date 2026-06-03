@@ -320,6 +320,9 @@ export class LocalDemoWikiStateProducer implements WikiStateProducer {
 export const getWikiStateProducer = (): WikiStateProducer =>
   new LocalDemoWikiStateProducer()
 
-export const resetLocalDemoWikiStateProducerForTests = (): void => {
+export const resetLocalDemoWikiStateProducer = (): void => {
   spaces.clear()
 }
+
+export const resetLocalDemoWikiStateProducerForTests =
+  resetLocalDemoWikiStateProducer

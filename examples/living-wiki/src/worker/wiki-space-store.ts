@@ -207,6 +207,8 @@ export async function seedLocalDemoWikiSpace(
 export const getWikiSpaceStore = (_env: WorkerEnv): WikiSpaceStore =>
   new LocalDemoWikiSpaceStore()
 
-export const resetLocalDemoWikiSpaceStoreForTests = (): void => {
+export const resetLocalDemoWikiSpaceStore = (): void => {
   localDemoSpaces.clear()
 }
+
+export const resetLocalDemoWikiSpaceStoreForTests = resetLocalDemoWikiSpaceStore

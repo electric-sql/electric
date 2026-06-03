@@ -5,7 +5,10 @@ import { createLivingWikiApiClient } from '../api/livingWikiApi'
 import { useCreateSpace } from '../hooks/useSpace'
 import { demoAvatarColors, type DemoAvatarColor } from '../../shared/space'
 import type { HealthResponse } from '../../shared/types'
-import { writeDemoSessionIdentity } from '../../shared/session'
+import {
+  clearDemoSessionIdentity,
+  writeDemoSessionIdentity,
+} from '../../shared/session'
 import { Route as rootRoute } from './__root'
 
 export const Route = createRoute({
@@ -26,6 +29,8 @@ function IndexRoute() {
   const [seededDemoEnabled, setSeededDemoEnabled] = useState(false)
   const [seedLoading, setSeedLoading] = useState(false)
   const [seedError, setSeedError] = useState<string | undefined>()
+  const [resetLoading, setResetLoading] = useState(false)
+  const [resetMessage, setResetMessage] = useState<string | undefined>()
 
   useEffect(() => {
     let cancelled = false
@@ -57,6 +62,7 @@ function IndexRoute() {
   async function onStartSeededDemo() {
     setSeedLoading(true)
     setSeedError(undefined)
+    setResetMessage(undefined)
     try {
       const result = await createLivingWikiApiClient().startSeededDemo()
       writeDemoSessionIdentity(window.localStorage, {
@@ -72,6 +78,21 @@ function IndexRoute() {
       setSeedError(error instanceof Error ? error.message : `Seed failed`)
     } finally {
       setSeedLoading(false)
+    }
+  }
+
+  async function onResetSeededDemo() {
+    setResetLoading(true)
+    setSeedError(undefined)
+    setResetMessage(undefined)
+    try {
+      await createLivingWikiApiClient().resetSeededDemo()
+      clearDemoSessionIdentity(window.localStorage)
+      setResetMessage(`Seeded demo reset.`)
+    } catch (error) {
+      setSeedError(error instanceof Error ? error.message : `Reset failed`)
+    } finally {
+      setResetLoading(false)
     }
   }
 
@@ -111,6 +132,15 @@ function IndexRoute() {
           >
             Start seeded demo
           </button>
+          <button
+            type="button"
+            disabled={resetLoading}
+            onClick={() => void onResetSeededDemo()}
+            style={{ marginLeft: 12 }}
+          >
+            Reset seeded demo
+          </button>
+          {resetMessage ? <p>{resetMessage}</p> : null}
           {seedError ? <p role="alert">{seedError}</p> : null}
         </div>
       ) : null}

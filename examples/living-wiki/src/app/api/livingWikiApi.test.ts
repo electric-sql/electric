@@ -51,6 +51,26 @@ describe(`createLivingWikiApiClient`, () => {
     expect(fetchMock).toHaveBeenCalledWith(`/api/demo/seed`, { method: `POST` })
   })
 
+  it(`POSTs resetSeededDemo to /api/demo/reset and validates the response`, async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ ok: true }))
+    const api = createLivingWikiApiClient({ fetch: fetchMock as typeof fetch })
+
+    await expect(api.resetSeededDemo()).resolves.toEqual({ ok: true })
+
+    expect(fetchMock).toHaveBeenCalledWith(`/api/demo/reset`, {
+      method: `POST`,
+    })
+  })
+
+  it(`rejects invalid resetSeededDemo responses`, async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ ok: false }))
+    const api = createLivingWikiApiClient({ fetch: fetchMock as typeof fetch })
+
+    await expect(api.resetSeededDemo()).rejects.toMatchObject({
+      message: `Invalid demo reset response`,
+    })
+  })
+
   it(`POSTs createSpace to /api/spaces and validates the snapshot`, async () => {
     const fetchMock = vi.fn(async () => jsonResponse(snapshot))
     const api = createLivingWikiApiClient({ fetch: fetchMock as typeof fetch })

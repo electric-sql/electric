@@ -17,10 +17,14 @@ import { isSeededDemoEnabled, type WorkerEnv } from './env'
 import { seedLivingWikiDemo } from './seeded-demo'
 import {
   getWikiSpaceStore,
+  resetLocalDemoWikiSpaceStore,
   WikiSpaceActorNotFoundError,
   WikiSpaceNotFoundError,
 } from './wiki-space-store'
-import { getWikiStateProducer } from './wiki-state-producer'
+import {
+  getWikiStateProducer,
+  resetLocalDemoWikiStateProducer,
+} from './wiki-state-producer'
 
 function json(data: unknown, init?: ResponseInit): Response {
   return new Response(JSON.stringify(data), {
@@ -110,6 +114,19 @@ export async function handleRestRequest(
     }
 
     return json(await seedLivingWikiDemo(env))
+  }
+
+  if (url.pathname === `/api/demo/reset` && request.method === `POST`) {
+    if (!isSeededDemoEnabled(env)) {
+      return json(
+        { ok: false, error: `Seeded demo is disabled` },
+        { status: 403 }
+      )
+    }
+
+    resetLocalDemoWikiSpaceStore()
+    resetLocalDemoWikiStateProducer()
+    return json({ ok: true })
   }
 
   if (url.pathname === `/api/spaces` && request.method === `POST`) {
