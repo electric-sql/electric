@@ -341,9 +341,12 @@ Backed by: every capability cited is a composition of the features already mappe
 - **Headline:** `Horton, in the box.`
 - **Sub:** A friendly, capable general-purpose chat agent with code-editing superpowers — no server-side setup required.
 - Three sub-bullets:
-  - **Pick your provider.** Bring your own API key (stored in the OS keychain via `SecretStore`), or sign in to Codex.
-  - **Pick your working directory.** Horton reads and edits whatever you point it at — no per-project install.
-  - **Skills + slash commands.** Type `/quickstart` to load the guided onboarding skill; install your own skills to ship workflows to your team.
+  - **Pick your provider.** Bring your own API key (stored in the OS keychain via `SecretStore`), or sign in to Codex. Anthropic, OpenAI, DeepSeek and Moonshot for models; Brave Search and E2B for tools — keys never leave your machine.
+  - **Pick your working directory.** Horton reads and edits whatever you point it at — no per-project install. The picker walks your filesystem; recent directories surface automatically.
+  - **Skills + slash commands.** Type `/quickstart` to load the guided onboarding skill; install your own skills to ship reusable workflows to your team.
+
+Provider-list rationale: the locked pillar 1 body explicitly splits the §5 ASCII's "Providers" listing into _models_ (Anthropic, OpenAI, DeepSeek, Moonshot) and _tools_ (Brave Search, E2B). The ASCII grouped them all under "Providers (you BYO key, OS keychain)" but rendering them as a single set in the pillar body reads as imprecise once Brave/E2B sit next to Anthropic/OpenAI — they're different kinds of providers, both happen to share the BYO-key pattern.
+
 - **Things you can ask Horton to do** (3-column list, short verbs):
   - _Chat:_ `Summarise this docs page`, `Plan a refactor`, `Explain this stack trace`, `Draft a launch tweet`.
   - _Code:_ `Refactor this file`, `Write tests for X`, `Bisect this regression`, `Apply the same change across these 4 files`.

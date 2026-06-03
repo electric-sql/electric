@@ -596,9 +596,9 @@ const primaryPlatform = computed(
           </span>
           <h3 class="ad-multi-title">Same session, every device</h3>
           <p class="ad-multi-body">
-            Open the same session from your laptop and your phone, hand work
-            off between devices, follow a long-running run from wherever
-            you happen to be.
+            Open the same session from your laptop and your phone, hand work off
+            between devices, follow a long-running run from wherever you happen
+            to be.
           </p>
         </article>
 
@@ -609,8 +609,8 @@ const primaryPlatform = computed(
           <h3 class="ad-multi-title">Shared with your team</h3>
           <p class="ad-multi-body">
             Sign in once with GitHub or Google; your Electric Cloud workspaces
-            appear automatically. Share a session with a teammate by sharing
-            its URL — the multi-user view sees the same stream.
+            appear automatically. Share a session with a teammate by sharing its
+            URL — the multi-user view sees the same stream.
           </p>
         </article>
 
@@ -659,9 +659,9 @@ const primaryPlatform = computed(
           <h3 class="ad-horton-pillar-title">Pick your provider.</h3>
           <p class="ad-horton-pillar-body">
             Bring your own API key (stored in the OS keychain via
-            <code>SecretStore</code>), or sign in to Codex. Anthropic,
-            OpenAI, DeepSeek and Moonshot for models; Brave Search and
-            E2B for tools — keys never leave your machine.
+            <code>SecretStore</code>), or sign in to Codex. Anthropic, OpenAI,
+            DeepSeek and Moonshot for models; Brave Search and E2B for tools —
+            keys never leave your machine.
           </p>
         </article>
 
@@ -672,8 +672,8 @@ const primaryPlatform = computed(
           <h3 class="ad-horton-pillar-title">Pick your working directory.</h3>
           <p class="ad-horton-pillar-body">
             Horton reads and edits whatever you point it at — no per-project
-            install. Bash, web search, fetch URL, spawn worker, send,
-            skills: all in the bundled toolset.
+            install. The picker walks your filesystem; recent directories
+            surface automatically.
           </p>
         </article>
 
@@ -683,16 +683,16 @@ const primaryPlatform = computed(
           </span>
           <h3 class="ad-horton-pillar-title">Skills + slash commands.</h3>
           <p class="ad-horton-pillar-body">
-            Type <code>/quickstart</code> to load the guided onboarding
-            skill; install your own skills to ship workflows to your team.
-            Slash commands are first-class — discoverable, composable,
-            shareable.
+            Type <code>/quickstart</code> to load the guided onboarding skill;
+            install your own skills to ship reusable workflows to your team.
           </p>
         </article>
       </div>
 
       <div class="ad-horton-ask">
-        <p class="ad-horton-ask-eyebrow mono">Things you can ask Horton to do</p>
+        <p class="ad-horton-ask-eyebrow mono">
+          Things you can ask Horton to do
+        </p>
         <div class="ad-horton-ask-grid">
           <article class="ad-horton-ask-col">
             <header class="ad-horton-ask-header">
@@ -1530,11 +1530,14 @@ const primaryPlatform = computed(
    Three-pillar grid that sits below the diagram placeholder
    (16/8). Equal-width columns at desktop widths, collapsing to
    2 then 1 at narrower breakpoints alongside the rest of the
-   page. Pillars use the same brand-tinted square icon chip as
-   §3 modes so the visual vocabulary stays consistent — no need
-   for a second register of icon styling on the page. The whole
-   block sits 36px below the diagram, matching the gap between
-   the §3 modes grid and its strip. */
+   page. Pillars share the brand-tinted square icon CHIP pattern
+   from §3 modes (same tint formula, same rounded-square shape,
+   no border-thickness change) but render slightly smaller
+   (40px/10px-radius vs §3's 44px/12px-radius) so the body copy
+   underneath stays the dominant element — these pillars carry
+   one short paragraph each rather than the §3 cards' bullet
+   list. The whole block sits 36px below the diagram, matching
+   the gap between the §3 modes grid and its strip. */
 
 .ad-multi-pillars {
   display: grid;
