@@ -267,7 +267,8 @@ function validateRelativeAbsoluteStreamPath(path: string): void {
   if (
     !path.startsWith(`/`) ||
     path.startsWith(`//`) ||
-    /^https?:\/\//i.test(path)
+    /^https?:\/\//i.test(path) ||
+    /%(?:2f|5c)/iu.test(path)
   ) {
     throw new AgentsProxyAdapterError(`Invalid upstream stream path`)
   }

@@ -182,6 +182,9 @@ describe(`agents proxy adapter`, () => {
       `/foo/../../admin`,
       `/%2e%2e/admin`,
       `/%2E%2e/admin`,
+      `/foo%2f..%2fadmin`,
+      `/foo%2F..%2Fadmin`,
+      `/foo%5c..%5cadmin`,
     ]
 
     for (const streamPath of traversalPaths) {
