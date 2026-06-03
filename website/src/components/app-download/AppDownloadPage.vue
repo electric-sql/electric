@@ -1211,7 +1211,7 @@ const primaryPlatform = computed(
   position: absolute;
   left: -14px;
   top: 0;
-  bottom: 20px;
+  bottom: 13px;
   width: 1px;
   background: var(--vp-c-divider);
 }
@@ -1230,6 +1230,7 @@ const primaryPlatform = computed(
 
 .ad-hero-glyph-label {
   font-size: 10px;
+  line-height: 1;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--vp-c-text-3);
@@ -1240,9 +1241,11 @@ const primaryPlatform = computed(
    each platform rather than a single anchor pill that left the
    row feeling lopsided. Sized down to ~7px so the chip lives as
    visual punctuation under the label, not a second mark
-   competing for attention with the icon. */
+   competing for attention with the icon. Negative margin-top
+   pulls the chip back through the parent's 6px flex `gap` so it
+   sits ~1px under the label rather than 6px below it. */
 .ad-hero-glyph-preview {
-  margin-top: 2px;
+  margin-top: -5px;
   padding: 0 5px;
   font-size: 7px;
   line-height: 1.4;
