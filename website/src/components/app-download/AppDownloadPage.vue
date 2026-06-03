@@ -802,10 +802,9 @@ const primaryPlatform = computed(
       APP_PAGE_PLAN.md §7 for the locked body string).
     -->
 
-    <!-- ─────────────────── §7a — Desktop ─────────────────── -->
+    <!-- ─────────────────── §7a — Desktop App ─────────────────── -->
     <Section id="desktop">
-      <template #eyebrow>Desktop</template>
-      <template #title>Choose your platform</template>
+      <template #title>Desktop App</template>
       <template #subtitle>
         Install the desktop app to start, monitor and return to long-running
         agents from your own computer.
@@ -882,35 +881,45 @@ const primaryPlatform = computed(
          introduced by the §1 hero glyph row. See APP_PAGE_PLAN.md
          §7 for the locked body string. -->
     <Section id="mobile" :dark="true">
-      <template #eyebrow>Mobile · Preview</template>
-      <template #title>Native iOS &amp; Android</template>
+      <template #eyebrow>Preview</template>
+      <template #title>Native iOS &amp; Android App</template>
       <template #subtitle>
         Same agents you run on the desktop, in your&nbsp;pocket.
       </template>
 
       <article class="ad-mobile-preview-card">
-        <p class="ad-mobile-preview-body">
-          Native iOS and Android clients are in active development. The source
-          lives in
-          <a
-            class="ad-mobile-preview-link"
-            :href="agentsMobileRepoUrl"
-            target="_blank"
-            rel="noreferrer"
-            >packages/agents-mobile</a
-          >
-          — clone the repo and run the Expo dev build today, or watch the repo
-          to be notified when the public App Store and Google Play listings ship
-          with&nbsp;v1.
-        </p>
-        <div class="ad-mobile-preview-actions">
-          <VPButton
-            tag="a"
-            size="medium"
-            theme="alt"
-            text="View on GitHub →"
-            :href="agentsMobileRepoUrl"
+        <div class="ad-mobile-preview-device">
+          <AdPlaceholder
+            name="mobile-app-preview.png"
+            sublabel="iOS · session list · live streaming response"
+            aspect="9/16"
           />
+        </div>
+
+        <div class="ad-mobile-preview-content">
+          <p class="ad-mobile-preview-body">
+            Native iOS and Android clients are in active development. The
+            source lives in
+            <a
+              class="ad-mobile-preview-link"
+              :href="agentsMobileRepoUrl"
+              target="_blank"
+              rel="noreferrer"
+              >packages/agents-mobile</a
+            >
+            — clone the repo and run the Expo dev build today, or watch the
+            repo to be notified when the public App Store and Google Play
+            listings ship with&nbsp;v1.
+          </p>
+          <div class="ad-mobile-preview-actions">
+            <VPButton
+              tag="a"
+              size="medium"
+              theme="alt"
+              text="View on GitHub →"
+              :href="agentsMobileRepoUrl"
+            />
+          </div>
         </div>
       </article>
     </Section>
@@ -1919,22 +1928,38 @@ const primaryPlatform = computed(
    Body text + GitHub CTA — body and actions sit side-by-side on
    desktop, stack vertically below 768px. */
 
+/* §7b mobile preview is a two-column strap: phone-shaped placeholder
+   on the left + body / CTA on the right. Matches the §2 visual-strap
+   rhythm (placeholder + caption) rather than the §7a download-grid
+   rhythm, so the dark section reads as "here's the device" rather
+   than "another row of platforms". Phase 5 swaps the placeholder for
+   a real iOS screenshot. */
 .ad-mobile-preview-card {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
   align-items: center;
-  gap: 24px;
-  padding: 24px 28px;
-  border: 1px solid var(--vp-c-divider);
-  border-radius: 16px;
-  background: var(--vp-c-bg);
+  gap: 48px;
   max-width: 920px;
+  margin: 0 auto;
+}
+
+.ad-mobile-preview-device {
+  /* AdPlaceholder fills this column at its 9:16 aspect ratio; no
+     extra chrome here — the placeholder's own dashed border + caption
+     carry the visual. */
+  width: 100%;
+}
+
+.ad-mobile-preview-content {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
 }
 
 .ad-mobile-preview-body {
   margin: 0;
-  font-size: 15px;
-  line-height: 1.6;
+  font-size: 16px;
+  line-height: 1.65;
   color: var(--vp-c-text-2);
   text-wrap: pretty;
 }
@@ -2085,7 +2110,11 @@ const primaryPlatform = computed(
   }
   .ad-mobile-preview-card {
     grid-template-columns: 1fr;
-    padding: 20px 22px;
+    gap: 28px;
+  }
+  .ad-mobile-preview-device {
+    max-width: 240px;
+    margin: 0 auto;
   }
   .ad-mobile-preview-actions {
     justify-self: start;
