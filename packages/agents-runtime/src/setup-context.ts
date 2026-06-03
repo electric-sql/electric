@@ -68,6 +68,13 @@ export interface WiringConfig {
       sandbox?: SpawnSandboxOption
     }
   ) => Promise<{ entityUrl: string; streamPath: string }>
+  /**
+   * Fork a top-level entity at the server-resolved latest completed
+   * run. Returns the new root entity's URL + main stream path.
+   */
+  forkEntity: (
+    sourceEntityUrl: string
+  ) => Promise<{ entityUrl: string; streamPath: string }>
   /** Create a child StreamDB, preload it, and register it for cleanup. */
   createChildDb: (
     streamUrl: string,

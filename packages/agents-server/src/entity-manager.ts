@@ -175,6 +175,18 @@ type ForkSubtreeOptions = {
    * `main` stream; shared-state streams clone at HEAD regardless.
    */
   forkPointer?: EventPointer
+  /**
+   * Named server-resolved anchor. Resolves to a concrete `forkPointer`
+   * by reading the source root's `main` history. Mutually exclusive with
+   * `forkPointer`. Use this when the caller doesn't have access to the
+   * source's per-row pointer side-table (e.g. an agent forking a session
+   * via a tool).
+   *
+   * - `latest_completed_run` — the most recent `runs` row on the source
+   *   with `status === 'completed'`. Errors if no such row exists. This
+   *   is the eligibility rule the per-row "Fork from here" UI uses.
+   */
+  anchor?: `latest_completed_run`
 }
 
 type ForkEntityPlan = {
@@ -909,6 +921,13 @@ export class EntityManager {
     const writeEntityLocks = new Set<string>()
     const writeStreamLocks = new Set<string>()
 
+    // Anchor-forks resolve to a concrete pointer server-side by reading the
+    // source's `main` history. Below this point the resolved pointer (or
+    // an explicit one from `opts.forkPointer`) drives the same code path —
+    // anchor handling collapses entirely into the pointer-fork flow.
+    const usePointerPath =
+      opts.forkPointer !== undefined || opts.anchor !== undefined
+
     try {
       // For pointer-forks we read the source root HISTORICALLY at a
       // frozen offset, so concurrent activity on the root past the
@@ -920,7 +939,7 @@ export class EntityManager {
       // those are HEAD-cloned and need a stable snapshot. For HEAD-forks
       // the old all-idle requirement still applies.
       let sourceTree: Array<ElectricAgentsEntity>
-      if (opts.forkPointer) {
+      if (usePointerPath) {
         const rootEntity = await this.registry.getEntity(rootUrl)
         if (!rootEntity) {
           throw new ElectricAgentsError(
@@ -949,11 +968,11 @@ export class EntityManager {
         )
       }
 
-      // When forking at a pointer, pre-read the root's main, validate the
-      // pointer against the source's true history, and materialise the
-      // root-at-pointer snapshot fragments. The pointer only applies to
-      // the root's `main` stream. Descendants kept by the manifest filter
-      // are forked at HEAD.
+      // When forking at a pointer (or anchor), pre-read the root's main,
+      // validate the pointer against the source's true history, and
+      // materialise the root-at-pointer snapshot fragments. The pointer
+      // only applies to the root's `main` stream. Descendants kept by
+      // the manifest filter are forked at HEAD.
       //
       // Pointer→position translation: the runtime mints pointers as
       // `{ offset: previousBatchOffset, subOffset: itemIndex+1 }`, where
@@ -972,16 +991,32 @@ export class EntityManager {
             sharedStateIds: Set<string>
           }
         | undefined
-      if (opts.forkPointer) {
+      let effectiveForkPointer: EventPointer | undefined = opts.forkPointer
+      if (usePointerPath) {
         const sourceEvents = await this.streamClient.readJson<
           Record<string, unknown>
         >(sourceRoot.streams.main)
         const flat = sourceEvents.flatMap((item) =>
           Array.isArray(item) ? item : [item]
         ) as Array<Record<string, unknown>>
+        if (!effectiveForkPointer && opts.anchor === `latest_completed_run`) {
+          effectiveForkPointer = this.resolveLatestCompletedRunPointer(
+            flat,
+            sourceRoot.streams.main
+          )
+        }
+        if (!effectiveForkPointer) {
+          // Defensive — would only fire on a future anchor variant we
+          // forget to handle above.
+          throw new ElectricAgentsError(
+            ErrCodeInvalidRequest,
+            `Internal: pointer-path fork with no resolved pointer`,
+            500
+          )
+        }
         const target = this.resolveForkPointerTarget(
           flat,
-          opts.forkPointer,
+          effectiveForkPointer,
           sourceRoot.streams.main
         )
         const filteredEvents = flat.slice(0, target)
@@ -1013,7 +1048,7 @@ export class EntityManager {
       // subtree except the root) are HEAD-cloned, so they must be idle
       // before we read their snapshots. Wait+lock only those — the root
       // was skipped above.
-      if (opts.forkPointer) {
+      if (usePointerPath) {
         const descendants = effectiveSubtree.filter(
           (entity) => entity.url !== sourceRoot.url
         )
@@ -1090,8 +1125,8 @@ export class EntityManager {
           await this.streamClient.fork(
             plan.fork.streams.main,
             plan.source.streams.main,
-            isRoot && opts.forkPointer
-              ? { forkPointer: opts.forkPointer }
+            isRoot && effectiveForkPointer
+              ? { forkPointer: effectiveForkPointer }
               : undefined
           )
           createdStreams.push(plan.fork.streams.main)
@@ -1459,6 +1494,58 @@ export class EntityManager {
       )
     }
     return positionAtAnchor + pointer.subOffset
+  }
+
+  /**
+   * Find an `EventPointer` that addresses the most recent `runs` row on
+   * the source's `main` stream with `status === 'completed'`. Mirrors the
+   * eligibility rule the per-row "Fork from here" UI applies — only
+   * completed runs are valid fork anchors; `started`/`failed` rows are
+   * skipped.
+   *
+   * The pointer is computed in the same coordinate system the runtime
+   * mints pointers in (see entity-stream-db's onBeforeBatch): for a row
+   * R in log entry E, the pointer is `{ offset: P, subOffset: K }` where
+   * `P` is the END offset of the log entry preceding E (or `null` for
+   * stream start) and `K` is R's 1-indexed position within E.
+   */
+  private resolveLatestCompletedRunPointer(
+    events: ReadonlyArray<Record<string, unknown>>,
+    streamPath: string
+  ): EventPointer {
+    let priorEntryOffset: string | null = null
+    let currentEntryOffset: string | null = null
+    let positionInEntry = 0
+    let latest: EventPointer | null = null
+
+    for (const event of events) {
+      const headers = isRecord(event.headers) ? event.headers : undefined
+      const eventOffset =
+        typeof headers?.offset === `string` ? headers.offset : null
+
+      if (eventOffset !== currentEntryOffset) {
+        priorEntryOffset = currentEntryOffset
+        currentEntryOffset = eventOffset
+        positionInEntry = 0
+      }
+      positionInEntry++
+
+      if (event.type !== `run`) continue
+      if (headers?.operation === `delete`) continue
+      if (!isRecord(event.value)) continue
+      if (event.value.status !== `completed`) continue
+
+      latest = { offset: priorEntryOffset, subOffset: positionInEntry }
+    }
+
+    if (!latest) {
+      throw new ElectricAgentsError(
+        ErrCodeInvalidRequest,
+        `Source ${streamPath} has no completed run to fork from`,
+        400
+      )
+    }
+    return latest
   }
 
   /**

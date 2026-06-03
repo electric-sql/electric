@@ -1017,6 +1017,20 @@ export interface HandlerContext<
       sandbox?: SpawnSandboxOption
     }
   ) => Promise<EntityHandle>
+  /**
+   * Fork a session at the latest completed run on its `main` stream.
+   * Defaults to this entity (self-fork) when `targetEntityUrl` is
+   * omitted. The fork is a sibling — not a child — of the source.
+   *
+   * `observe: true` (the default) registers an observation on the new
+   * fork wired to wake this entity on the fork's next `runFinished`.
+   * Pass `observe: false` for fire-and-forget forks where the caller
+   * never plans to react to the fork's completion.
+   */
+  fork: (
+    targetEntityUrl?: string,
+    opts?: { observe?: boolean }
+  ) => Promise<{ url: string }>
   observe: ((
     source: ObservationSource & { sourceType: `entity` },
     opts?: { wake?: Wake }

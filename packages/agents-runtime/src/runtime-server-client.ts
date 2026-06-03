@@ -125,6 +125,14 @@ export interface RuntimeServerClient {
     id: string
   }) => Promise<Uint8Array>
   spawnEntity: (options: SpawnEntityOptions) => Promise<RuntimeEntityInfo>
+  /**
+   * Fork an entity at the server-resolved `latest_completed_run` anchor.
+   * Resolves to the new root entity's info. Wraps the agents-server
+   * `POST /_electric/entities/<type>/<id>/fork` endpoint.
+   */
+  forkEntity: (options: {
+    sourceEntityUrl: string
+  }) => Promise<RuntimeEntityInfo>
   getEntity: (entityUrl: string) => Promise<RuntimeEntityInfo>
   ensureSharedStateStream: (
     sharedStateId: string,
@@ -470,6 +478,28 @@ export function createRuntimeServerClient(
     return entityInfo
   }
 
+  const forkEntity = async ({
+    sourceEntityUrl,
+  }: {
+    sourceEntityUrl: string
+  }): Promise<RuntimeEntityInfo> => {
+    const response = await request(entityRpcPath(sourceEntityUrl, `/fork`), {
+      method: `POST`,
+      headers: { 'content-type': `application/json` },
+      body: JSON.stringify({ anchor: `latest_completed_run` }),
+    })
+    if (!response.ok) {
+      throw new Error(
+        `fork ${sourceEntityUrl} failed (${response.status}): ${await readErrorText(response)}`
+      )
+    }
+    const payload = (await response.json()) as { root?: RuntimeEntityResponse }
+    return requireEntityInfo(
+      payload.root,
+      `fork ${sourceEntityUrl} returned an invalid root payload`
+    )
+  }
+
   const ensureSharedStateStream = async (
     sharedStateId: string,
     ownerEntityUrl?: string
@@ -799,6 +829,7 @@ export function createRuntimeServerClient(
     createAttachment,
     readAttachment,
     spawnEntity,
+    forkEntity,
     getEntity,
     ensureSharedStateStream,
     signalEntity,

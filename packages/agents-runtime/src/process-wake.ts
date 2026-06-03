@@ -17,7 +17,7 @@ import {
   buildHydratedEventSourceWake,
   eventSourceWakeInfoFromManifests,
 } from './event-sources'
-import { webhookObservationCollections } from './observation-sources'
+import { entity, webhookObservationCollections } from './observation-sources'
 import type { HydratedEventSourceWake } from './event-sources'
 import { SandboxError } from './sandbox/types'
 import type { Sandbox } from './sandbox/types'
@@ -1316,6 +1316,13 @@ export async function processWake(
         })
       },
 
+      forkEntity: async (
+        sourceEntityUrl: string
+      ): Promise<{ entityUrl: string; streamPath: string }> => {
+        const result = await serverClient.forkEntity({ sourceEntityUrl })
+        return { entityUrl: result.entityUrl, streamPath: result.streamPath }
+      },
+
       createChildDb: async (
         childStreamUrl: string,
         childTypeName?: string,
@@ -1734,6 +1741,25 @@ export async function processWake(
       return setupCtx.spawn(type, id, spawnArgs, opts)
     }
 
+    const doFork = async (
+      targetEntityUrl: string,
+      opts?: { observe?: boolean }
+    ): Promise<{ url: string }> => {
+      const { entityUrl: forkUrl } =
+        await wiringConfig.forkEntity(targetEntityUrl)
+      // Auto-observe by default: register a runFinished wake on the new
+      // fork so the caller wakes when the fork's next run completes.
+      // Mirrors `spawn_worker`'s default wake. Opt out with
+      // `observe: false` for fire-and-forget forks.
+      if (opts?.observe !== false) {
+        await doObserve(entity(forkUrl), {
+          on: `runFinished`,
+          includeResponse: true,
+        })
+      }
+      return { url: forkUrl }
+    }
+
     const doMkdb = <TSchema extends SharedStateSchemaMap>(
       id: string,
       schema: TSchema
@@ -2025,6 +2051,7 @@ export async function processWake(
         hydratedEventSourceWake: await hydrateCurrentEventSourceWake(),
         doObserve,
         doSpawn,
+        doFork,
         doMkdb,
         doCreateAttachment: (attachment) =>
           serverClient

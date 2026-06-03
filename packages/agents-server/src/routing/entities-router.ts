@@ -232,6 +232,11 @@ const forkBodySchema = Type.Object({
       sub_offset: Type.Number(),
     })
   ),
+  // Named server-resolved anchor. Resolves to a concrete fork pointer on
+  // the source root's `main` server-side, so callers don't need access
+  // to the source's per-row pointer side-table. Mutually exclusive with
+  // `fork_pointer`.
+  anchor: Type.Optional(Type.Literal(`latest_completed_run`)),
 })
 
 const setTagBodySchema = Type.Object({
@@ -1101,6 +1106,13 @@ async function forkEntity(
   if (principalMutationError) return principalMutationError
 
   const parsed = routeBody<ForkBody>(request)
+  if (parsed.fork_pointer && parsed.anchor) {
+    return apiError(
+      400,
+      ErrCodeInvalidRequest,
+      `fork_pointer and anchor are mutually exclusive`
+    )
+  }
   const { entityUrl, entity } = requireExistingEntityRoute(request)
   await assertDispatchPolicyAllowed(ctx, entity.dispatch_policy)
   const result = await ctx.entityManager.forkSubtree(entityUrl, {
@@ -1113,6 +1125,7 @@ async function forkEntity(
         subOffset: parsed.fork_pointer.sub_offset,
       },
     }),
+    ...(parsed.anchor && { anchor: parsed.anchor }),
   })
   for (const forkedEntity of result.entities) {
     await linkEntityDispatchSubscription(ctx, forkedEntity)

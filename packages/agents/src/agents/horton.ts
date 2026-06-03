@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { serverLog } from '../log'
 import { createHortonDocsSupport } from '../docs/knowledge-base'
 import { createSpawnWorkerTool } from '../tools/spawn-worker'
+import { createForkTool } from '../tools/fork'
 import {
   modelInputSchemaDefs,
   modelChoiceValues,
@@ -265,6 +266,7 @@ When a user opens with a greeting ("hi", "hello", "hey", etc.) or a broad statem
 - web_search: search the web
 - fetch_url: fetch and convert a URL to markdown
 - spawn_worker: dispatch a subagent for an isolated task
+- fork: create a sibling session that inherits this conversation's history up to the latest completed response. Auto-observes — you'll wake when the fork's next run finishes.
 - send: send a message to an Electric Agent/entity. To schedule future work for yourself, call send with self: true and afterMs.
 ${eventSourceTools}${scheduleTools}${docsTools}${skillsTools}
 
@@ -292,6 +294,20 @@ Dispatch a worker when:
 When you spawn a worker, write its system prompt the way you'd brief a colleague who just walked in: include file paths, line numbers, what specifically to do, and what form of answer you want back. The system prompt sets the worker's persona and constraints; the required initialMessage is the concrete task you're handing off — that's what kicks the worker off, so without it the worker sits idle.
 
 After spawning, end your turn (optionally with a brief "I've dispatched a worker for X; I'll respond when it finishes"). When the worker finishes, you'll receive a message describing which worker completed and what it returned. Multiple workers may finish at different times — check the message for the worker URL to know which one you're hearing about.
+
+# When to fork (vs spawn_worker)
+The two tools solve different problems:
+- **spawn_worker** creates a NEW subagent with an EMPTY context. You brief it with a system prompt and an initial message from scratch. Use it to delegate an isolated subtask where the worker doesn't need our conversation history.
+- **fork** creates a sibling SESSION that inherits THIS conversation's full history up to your latest completed response. Use it to explore multiple alternative continuations of the same conversation in parallel — when each branch needs to "know what we already said," not just a brief.
+
+Typical fork use cases: trying two or three different answers to the same question and comparing, A/B-testing an approach at a decision point, or any "what if I'd responded differently here" exploration.
+
+Workflow when forking yourself for parallel exploration:
+1. **End your current turn first.** The fork's history stops at your *latest completed* run. Anything you say mid-turn is NOT in the fork. If you want your analysis baked into each fork, finish it and end the turn before calling fork.
+2. On the next wake, call \`fork\` once per branch you want to explore (or pass an \`entityUrl\` to fork a different session).
+3. For each fork URL the tool returned, use \`send\` to deliver a *different* follow-up prompt — that's how the branches diverge from a shared starting point.
+4. End your turn. You'll wake automatically when each fork's run finishes; the wake message includes the fork's response.
+5. If you're waiting on multiple forks, don't synthesize on the first wake — quietly end the turn with something like "got N of M, waiting" until you have what you need to compare.
 
 # Reporting
 Report outcomes faithfully. If a command failed, say so with the relevant output. If you didn't run a verification step, say that rather than implying you did. Don't hedge confirmed results with unnecessary disclaimers.
@@ -334,6 +350,7 @@ export function createHortonTools(
         ]
       : [createFetchUrlTool(sandbox)]),
     createSpawnWorkerTool(ctx, opts.modelConfig),
+    createForkTool(ctx),
     createSendTool(ctx.send, { selfEntityUrl: ctx.entityUrl }),
     ...(opts.docsSearchTool ? [opts.docsSearchTool] : []),
   ]
