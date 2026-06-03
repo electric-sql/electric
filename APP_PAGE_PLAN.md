@@ -200,35 +200,34 @@ This section does the heavy positioning lift. It is also where the **software-fa
                   one integrated platform
 ```
 
+- **Section eyebrow:** _none_. Earlier drafts carried a `WHAT YOU CAN DO` section eyebrow, but it just restated the title `Three ways to use it.` and added chrome we don't need. See the "Copy review pass" note at the end of this section.
+- **Card eyebrows:** _none on any of the three cards_. Earlier drafts carried `Code locally` / `Attach remotely` / `Build with the SDK` per-card eyebrows; they were near-duplicates of the sentence-form titles. The card titles now do the categorisation work on their own.
+
 - **Card 1 — "Code with Horton, locally."**
-  - Eyebrow: `Code locally`
   - Body: Horton ships in the desktop. Pick a model (Anthropic, OpenAI, DeepSeek, Moonshot, Codex). Pick a working directory. Chat to a coding agent that can read, write, edit, run bash, search the web, fetch URLs, and spawn parallel workers.
-  - **You can:**
+  - **You can:** (locked, 3 bullets — the 4-bullet version was too tall in the card grid)
     - Refactor a folder of TypeScript files while Horton runs parallel workers per module.
     - Bisect a regression by spawning a worker to reproduce, then another to fix.
-    - Scaffold a fresh project with `/init`, then iterate with `/quickstart`.
-    - Review a diff or a PR description and ask Horton to draft follow-ups.
+    - Use `/quickstart` to learn Electric Agents by building a multi-agent tutorial app.
+  - **`/quickstart` framing.** `packages/agents/skills/quickstart.md` describes itself as `Guided quickstart — build a full Electric Agents app from entity to frontend` — it walks the user through building a manager/worker app on the SDK. The earlier "scaffold a fresh project with `/init`, then iterate with `/quickstart`" bullet mis-framed this as a generic dev workflow; the corrected bullet ties Horton's slash skills to Electric Agents learning, which is what they actually do. `/init` was dropped from the bullet to keep it to one verb — it is still discoverable in-app.
   - Backed by: `packages/agents-desktop/src/runtime/lifecycle.ts` (BuiltinAgentsServer), `packages/agents/src/agents/horton.ts`, `WorkingDirectoryPicker`, `ApiKeysForm`, `CredentialsPage`.
 
 - **Card 2 — "Attach to remote sessions."**
-  - Eyebrow: `Attach remotely`
   - Body: Connect to any agents-server — your own, your team's, or Electric Cloud. Sessions spawned by CI, webhooks, GitHub issues, cron or your software factory appear live in the sidebar. Pick one up on the desktop, follow it on your phone, stop or steer it from either.
-  - **You can:**
+  - **You can:** (locked, 3 bullets)
     - Triage a GitHub-issue-spawned Horton session on your phone, finish it from your laptop.
     - Watch a CI agent open a PR, push a steering message before it merges.
     - Pause a long-running cron-triggered pipeline and resume from where it left off.
-    - Hand a session off to a teammate by sharing the entity URL — the multi-user view sees the same stream.
+  - **Teammate hand-off bullet removed.** An earlier 4-bullet draft included `Hand a session off to a teammate by sharing the entity URL — the multi-user view sees the same stream.` That claim is the explicit topic of §4 pillar 2; restating it here read as redundant once §4 was in place. Multi-user is still on the page.
   - Backed by: `ServersPage` (multi-server config), `cloud-auth.ts` + `cloud-agent-servers.ts`, `local-discovery.ts`, mobile `ServerSetupScreen` / `SessionListScreen` / `SessionMenu` (signal stop/steer).
 
 - **Card 3 — "Build your own agents."**
-  - Eyebrow: `Build with the SDK`
   - Body: It's also the dev tool for the entities _you_ write with the SDK (`@electric-ax/agents-runtime`). Live state explorer, entity timeline, fork-from-here, manifest drawer, MCP servers, skills, and a tile workspace for following parent + workers in parallel.
-  - Title note: an earlier draft of this plan repeated the eyebrow text as the title (`"Build with the SDK."`), which read as redundant once both lines sat in the rendered card. The locked title mirrors cards 1 and 2 — verb + object — and connects to the body's "the entities _you_ write" emphasis.
-  - **You can:**
+  - Title note: an earlier draft of this plan repeated the eyebrow text as the title (`"Build with the SDK."`), which read as redundant once both lines sat in the rendered card. The locked title mirrors cards 1 and 2 — verb + object — and connects to the body's "the entities _you_ write" emphasis. The eyebrow has since been removed entirely (see top of §3).
+  - **You can:** (locked, 3 bullets)
     - Drop in on a stuck entity and watch its inbox / runs / manifest update in real time.
     - Fork a session at any past point to A/B test a prompt or tool change.
     - Step through a failed worker's tool calls without redeploying the host app.
-    - Run a parent and three children side-by-side in a tile workspace, then deep-link the layout.
   - Backed by: `StateExplorerPanel`, `EntityTimeline`, `EntityContextDrawer`, `Workspace` + `TileContainer`, `McpServersPage`, `useExpandedTreeNodes`.
 
 - **Strip under the cards** (one line, centred, muted):
@@ -285,10 +284,16 @@ A 2×2 (or horizontally-scrolling) strip of worked end-to-end examples. The purp
 └──────────────────────────────────────────────────────────────┘
 ```
 
+- **Section eyebrow:** _none_. Earlier drafts had `SCENARIOS` above the title; the title `What this looks like in practice.` is enough.
 - **Headline:** `What this looks like in practice.`
 - **Sub:** Four short stories that span the three modes above. None of them require code you don't have today.
-- Format suggestion: render as four cards with an eyebrow tag (the _"Touches:"_ line) in mono, the title in semi-bold, then ~3 lines of body. Reuse the `.ad-platform-card` chrome from the current page so the visual rhythm doesn't fork.
+- Format suggestion: render as four cards with the `Touches: …` line as in-card metadata in mono, the title in semi-bold, then ~3 lines of body. Reuse the `.ad-platform-card` chrome from the current page so the visual rhythm doesn't fork.
 - **Implementation note:** each scenario gets a placeholder image slot at the top of the card (`<div class="ad-scenario-illo" data-placeholder="scenario-1.png">`). We'll fill those in later when we capture the actual flows; PR ships with a styled placeholder block.
+- **Locked body trims** (copy-review pass): each scenario body lost one line to tighten the cards.
+  - Scenario 1: dropped the `issue_comment` / `workflow_dispatch` enumeration and the `("don't touch the migration files")` parenthetical, leaving `…from a fresh GitHub issue or a CI dispatch.`
+  - Scenario 2: dropped `you watch all four in a 2×2 tile workspace` (the tile workspace is the topic of §6 already).
+  - Scenario 3: dropped `watch its shared state evolve` (implied by `Open the state explorer`).
+  - Scenario 4: dropped `see what it found,` (the next clause makes the same point).
 
 Backed by: every capability cited is a composition of the features already mapped in §5 of this doc. No new code required to ship the page.
 
@@ -312,10 +317,12 @@ Backed by: every capability cited is a composition of the features already mappe
                   └────────┘    └──────────┘
 ```
 
+- **Section eyebrow:** _none_. Earlier drafts had `MULTI-DEVICE` above the title; the title is `Multi-device, multi-user.` so the eyebrow was pure repetition.
 - **Headline:** `Multi-device, multi-user.`
 - **Body:** Agents run on the server, not the client. The desktop and mobile apps are live views into the same Electric streams — open the same session from your laptop and your phone, hand work off between devices, share a workspace with your team. Sign in once with GitHub or Google; your Electric Cloud workspaces appear automatically. The desktop can even register itself as a pull-wake runner so your laptop becomes a worker for your cloud agents — close the lid and they finish on the next runner that comes online.
 - Backed by: `cloud-auth.ts` (GitHub/Google OAuth), `cloud-agent-servers.ts`, `pullWake` config in `BuiltinAgentsServer` startup, mobile `CloudAuthContext` + `CloudServerPicker`.
 - **No screenshot needed** — keep the ASCII flavour or render the diagram as an inline SVG matching the existing `EntityOverviewDiagram.vue` style (already in `website/src/components/`).
+- **Multi-user is a kept-forward claim.** Pillar 2 reads `Share a session with a teammate by sharing its URL — the multi-user view sees the same stream.` "Multi-user view" is a feature we are actively building; it is intentionally a forward-looking claim. Do not drop or hedge this language in future passes — the platform pitch depends on it.
 
 ### §5 Bundled Horton
 
@@ -338,14 +345,21 @@ Backed by: every capability cited is a composition of the features already mappe
 └─────────────────────────────────────────────┘
 ```
 
+- **Section eyebrow:** _none_. Earlier drafts had `BUNDLED AGENT` above the title; the title `Horton, in the box.` already conveys "bundled".
 - **Headline:** `Horton, in the box.`
 - **Sub:** A friendly, capable general-purpose chat agent with code-editing superpowers — no server-side setup required.
 - Three sub-bullets:
-  - **Pick your provider.** Bring your own API key (stored in the OS keychain via `SecretStore`), or sign in to Codex. Anthropic, OpenAI, DeepSeek and Moonshot for models; Brave Search and E2B for tools — keys never leave your machine.
+  - **Pick your provider.** Bring your own API key (stored in the OS keychain), or sign in to Codex. Anthropic, OpenAI, DeepSeek and Moonshot for models; Brave Search and E2B for tools.
   - **Pick your working directory.** Horton reads and edits whatever you point it at — no per-project install. The picker walks your filesystem; recent directories surface automatically.
-  - **Skills + slash commands.** Type `/quickstart` to load the guided onboarding skill; install your own skills to ship reusable workflows to your team.
+  - **Skills + slash commands.** Type `/quickstart` to learn Electric Agents itself; write your own skills to ship reusable workflows.
 
 Provider-list rationale: the locked pillar 1 body explicitly splits the §5 ASCII's "Providers" listing into _models_ (Anthropic, OpenAI, DeepSeek, Moonshot) and _tools_ (Brave Search, E2B). The ASCII grouped them all under "Providers (you BYO key, OS keychain)" but rendering them as a single set in the pillar body reads as imprecise once Brave/E2B sit next to Anthropic/OpenAI — they're different kinds of providers, both happen to share the BYO-key pattern.
+
+Pillar 1 trim rationale: an earlier draft ended with `— keys never leave your machine.` This was a near-tautology with `stored in the OS keychain` and added a security-y flavour that didn't land — dropped in the copy-review pass.
+
+Pillar 3 `/quickstart` framing: `packages/agents/skills/quickstart.md` is `Guided quickstart — build a full Electric Agents app from entity to frontend` — i.e. a guided way to **learn Electric Agents itself** by building a multi-agent tutorial app on the SDK, not generic onboarding for the desktop app. An earlier draft called it `the guided onboarding skill`, which mis-framed what it does. The locked body explicitly says `learn Electric Agents itself` to match the skill's actual scope.
+
+`SecretStore` reference removed: pillar 1 used to mention `<code>SecretStore</code>` as the keychain wrapper. Dropped in the copy-review pass — internal implementation name with no value to the reader; `OS keychain` is enough.
 
 - **Things you can ask Horton to do** (3-column list, short verbs):
   - _Chat:_ `Summarise this docs page`, `Plan a refactor`, `Explain this stack trace`, `Draft a launch tweet`.
@@ -377,16 +391,12 @@ Provider-list rationale: the locked pillar 1 body explicitly splits the §5 ASCI
 └──────────────────────┘ └──────────────────────┘
 ```
 
+- **Section eyebrow:** _none_. Earlier drafts had `DEV TOOLS` above the title.
 - **Headline:** `Built for builders.`
 - **Sub:** When you ship your own entities on the Electric Agents infra and SDK (`@electric-ax/agents-runtime`), the same app becomes the dev tool you'd otherwise have to write yourself.
 - A 2×3 (or 3×2) grid of compact cards covering the six features above. Each card is icon + 4-word title + one-sentence body.
-- **Each card carries a one-line "use it to…" hint** so the feature card doesn't read as a spec sheet:
-  - **Tile workspace** → _"…follow a parent and three workers in parallel without losing context."_
-  - **State explorer** → _"…watch shared state evolve while your agent runs."_
-  - **Entity timeline** → _"…fork at any past point to A/B test a change."_
-  - **MCP & skills** → _"…snap in a tool server, OAuth handled for you."_
-  - **Local discovery** → _"…the dev server you just `pnpm dev`'d shows up automatically."_
-  - **CLI installer** → _"…drop `electric` on your PATH without touching npm."_
+- **`Use it to…` hints removed.** An earlier draft carried a dashed-divider "Use it to…" sub-paragraph on every card. The §3.5 scenarios already do the show-don't-spec work; layering hints onto each spec card pushed total text over the line. Spec-sheet rhythm wins here.
+- **MCP & skills card body** now reads `Add MCP servers with native OAuth; workspace mcp.json takes precedence.` An earlier draft said `…workspace mcp.json override.` which was imprecise — per `packages/agents/src/server.ts` the workspace file _wins on name conflict_ with the embedder's extras, it doesn't override anything user-set in a UI sense.
 - Backed by:
   - `Workspace.tsx`, `TileContainer.tsx`, `SplitContainer.tsx`, `decodeLayout`.
   - `StateExplorerPanel`, `EventSidebar`, `StateTable`.

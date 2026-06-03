@@ -359,14 +359,12 @@ const primaryPlatform = computed(
 
     <!-- ─────────────────── §3 — Three ways to use it ─────────────────── *
          Three side-by-side cards (Code locally · Attach remotely · Build
-         with the SDK). Each card pairs a lucide icon, a category eyebrow,
-         a hero title, the locked body copy from APP_PAGE_PLAN.md §3, and
-         a "You can:" bullet list — the bullets are the per-mode anchor
-         that makes the abstract pitch concrete without spilling into
-         §3.5 scenarios. The strip beneath the grid restates the
-         one-integrated-platform line as the section's takeaway. -->
+         with the SDK). Each card: lucide icon + sentence-form title + body
+         + 3-item "You can:" bullet list. No card-level eyebrows — the
+         titles carry the categorization on their own. The strip beneath
+         the grid restates the one-integrated-platform line as the
+         section's takeaway. Body strings locked in APP_PAGE_PLAN.md §3. -->
     <Section id="three-ways">
-      <template #eyebrow>What you can do</template>
       <template #title>Three ways to use it.</template>
 
       <div class="ad-modes-grid">
@@ -374,7 +372,6 @@ const primaryPlatform = computed(
           <span class="ad-modes-icon" aria-hidden="true">
             <span class="ad-icon ad-icon--code" />
           </span>
-          <p class="ad-modes-eyebrow mono">Code locally</p>
           <h3 class="ad-modes-title">Code with Horton, locally.</h3>
           <p class="ad-modes-body">
             Horton ships in the desktop. Pick a model (Anthropic, OpenAI,
@@ -393,12 +390,8 @@ const primaryPlatform = computed(
               another to fix.
             </li>
             <li>
-              Scaffold a fresh project with <code>/init</code>, then iterate
-              with <code>/quickstart</code>.
-            </li>
-            <li>
-              Review a diff or a PR description and ask Horton to draft
-              follow-ups.
+              Use <code>/quickstart</code> to learn Electric Agents by building
+              a multi-agent tutorial app.
             </li>
           </ul>
         </article>
@@ -407,7 +400,6 @@ const primaryPlatform = computed(
           <span class="ad-modes-icon" aria-hidden="true">
             <span class="ad-icon ad-icon--radio" />
           </span>
-          <p class="ad-modes-eyebrow mono">Attach remotely</p>
           <h3 class="ad-modes-title">Attach to remote sessions.</h3>
           <p class="ad-modes-body">
             Connect to any agents-server — your own, your team's, or Electric
@@ -429,10 +421,6 @@ const primaryPlatform = computed(
               Pause a long-running cron-triggered pipeline and resume from where
               it left off.
             </li>
-            <li>
-              Hand a session off to a teammate by sharing the entity URL — the
-              multi-user view sees the same stream.
-            </li>
           </ul>
         </article>
 
@@ -440,7 +428,6 @@ const primaryPlatform = computed(
           <span class="ad-modes-icon" aria-hidden="true">
             <span class="ad-icon ad-icon--microscope" />
           </span>
-          <p class="ad-modes-eyebrow mono">Build with the SDK</p>
           <h3 class="ad-modes-title">Build your own agents.</h3>
           <p class="ad-modes-body">
             It's also the dev tool for the entities <em>you</em> write with the
@@ -463,10 +450,6 @@ const primaryPlatform = computed(
               Step through a failed worker's tool calls without redeploying the
               host app.
             </li>
-            <li>
-              Run a parent and three children side-by-side in a tile workspace,
-              then deep-link the layout.
-            </li>
           </ul>
         </article>
       </div>
@@ -486,7 +469,6 @@ const primaryPlatform = computed(
          interlude. Body strings are locked in APP_PAGE_PLAN.md §3.5;
          do not edit them here without updating that doc. -->
     <Section id="scenarios" :dark="true">
-      <template #eyebrow>Scenarios</template>
       <template #title>What this looks like in practice.</template>
       <template #subtitle>
         Four short stories that span the three modes above. None of them require
@@ -505,12 +487,10 @@ const primaryPlatform = computed(
             GitHub issue → CI spawns Horton → triage on phone → finish on desk
           </h3>
           <p class="ad-scenarios-body">
-            Your software factory opens a new agent session on Electric Cloud —
-            a fresh GitHub issue, an <code>issue_comment</code>, or a
-            <code>workflow_dispatch</code> from CI. You get a notification on
+            Your software factory opens an agent session on Electric Cloud from
+            a fresh GitHub issue or a CI dispatch. You get a notification on
             your phone, skim the diff Horton drafted, push back a steering
-            message ("don't touch the migration files"), then pick up on your
-            laptop to merge.
+            message, then pick up on your laptop to merge.
           </p>
         </article>
 
@@ -526,9 +506,8 @@ const primaryPlatform = computed(
           </h3>
           <p class="ad-scenarios-body">
             Open the desktop, point Horton at a repo, ask for a rename across
-            packages. Horton spawns a worker per package, you watch all four in
-            a 2×2 tile workspace, fork the one that took the wrong turn, ship
-            the diff.
+            packages. Horton spawns a worker per package; you fork the one that
+            took the wrong turn and ship the diff.
           </p>
         </article>
 
@@ -543,10 +522,9 @@ const primaryPlatform = computed(
             Build an agent on the SDK, debug it without a redeploy
           </h3>
           <p class="ad-scenarios-body">
-            You ship a custom <code>summarizer</code> entity with the SDK. It's
-            getting stuck on certain inputs. Open the state explorer, watch its
-            shared state evolve, fork the failing session, change the prompt,
-            replay.
+            You ship a custom <code>summarizer</code> entity with the SDK and
+            it's getting stuck on certain inputs. Open the state explorer, fork
+            the failing session, change the prompt, replay.
           </p>
         </article>
 
@@ -560,8 +538,8 @@ const primaryPlatform = computed(
           <h3 class="ad-scenarios-title">Cron-triggered overnight pipeline</h3>
           <p class="ad-scenarios-body">
             Cron kicks off a nightly research agent on the cloud server. Open
-            the mobile app in the morning, see what it found, hand off the most
-            promising lead to a fresh session for follow-up.
+            the mobile app in the morning and hand off the most promising lead
+            to a fresh session.
           </p>
         </article>
       </div>
@@ -576,7 +554,6 @@ const primaryPlatform = computed(
          across the subtitle and the three pillars below the diagram so
          the body reads as scannable rather than a wall of prose. -->
     <Section id="multi-device">
-      <template #eyebrow>Multi-device</template>
       <template #title>Multi-device, multi-user.</template>
       <template #subtitle>
         Agents run on the server, not the client. The desktop and mobile apps
@@ -644,7 +621,6 @@ const primaryPlatform = computed(
          rung) but consistent; in light mode it's a pronounced dark
          strip on a light page. -->
     <Section id="horton" :dark="true">
-      <template #eyebrow>Bundled agent</template>
       <template #title>Horton, in the box.</template>
       <template #subtitle>
         A friendly, capable general-purpose chat agent with code-editing
@@ -658,10 +634,9 @@ const primaryPlatform = computed(
           </span>
           <h3 class="ad-horton-pillar-title">Pick your provider.</h3>
           <p class="ad-horton-pillar-body">
-            Bring your own API key (stored in the OS keychain via
-            <code>SecretStore</code>), or sign in to Codex. Anthropic, OpenAI,
-            DeepSeek and Moonshot for models; Brave Search and E2B for tools —
-            keys never leave your machine.
+            Bring your own API key (stored in the OS keychain), or sign in to
+            Codex. Anthropic, OpenAI, DeepSeek and Moonshot for models; Brave
+            Search and E2B for tools.
           </p>
         </article>
 
@@ -683,8 +658,8 @@ const primaryPlatform = computed(
           </span>
           <h3 class="ad-horton-pillar-title">Skills + slash commands.</h3>
           <p class="ad-horton-pillar-body">
-            Type <code>/quickstart</code> to load the guided onboarding skill;
-            install your own skills to ship reusable workflows to your team.
+            Type <code>/quickstart</code> to learn Electric Agents itself; write
+            your own skills to ship reusable workflows.
           </p>
         </article>
       </div>
@@ -743,14 +718,13 @@ const primaryPlatform = computed(
 
     <!-- ─────────────────── §6 — Built for builders ─────────────────── *
          Six compact cards (3×2 desktop, 2×2 → 1×6 at narrower widths).
-         Each card: lucide icon, 2-4 word title, one-sentence body
-         describing the feature, and a "Use it to…" hint pulled from
-         APP_PAGE_PLAN.md §6 so the card doesn't read as a dry spec
-         row. Every feature listed here is shipping today — see the
-         claim→code mapping in APP_PAGE_PLAN.md §5 if you're tempted
-         to add anything else to this grid. -->
+         Each card: lucide icon + 2-4 word title + one-sentence body.
+         Intentionally terse spec-sheet rhythm — the page already has
+         scenarios above, so cards here just identify what's in the
+         box. Every feature listed here is shipping today; see the
+         claim→code mapping in APP_PAGE_PLAN.md §5 / §6 if you're
+         tempted to add anything else. -->
     <Section id="builders">
-      <template #eyebrow>Dev tools</template>
       <template #title>Built for builders.</template>
       <template #subtitle>
         When you ship your own entities on the Electric Agents infra and SDK
@@ -767,10 +741,6 @@ const primaryPlatform = computed(
           <p class="ad-builders-body">
             Split right / down cycle, find, <code>?layout=</code> deep link.
           </p>
-          <p class="ad-builders-hint">
-            Use it to follow a parent and three workers in parallel without
-            losing context.
-          </p>
         </article>
 
         <article class="ad-builders-card">
@@ -780,9 +750,6 @@ const primaryPlatform = computed(
           <h3 class="ad-builders-title">State explorer</h3>
           <p class="ad-builders-body">
             Live view of every shared-state source per entity.
-          </p>
-          <p class="ad-builders-hint">
-            Use it to watch shared state evolve while your agent runs.
           </p>
         </article>
 
@@ -794,9 +761,6 @@ const primaryPlatform = computed(
           <p class="ad-builders-body">
             Runs, inbox, manifests, fork-from-here.
           </p>
-          <p class="ad-builders-hint">
-            Use it to fork at any past point to A/B test a change.
-          </p>
         </article>
 
         <article class="ad-builders-card">
@@ -805,11 +769,8 @@ const primaryPlatform = computed(
           </span>
           <h3 class="ad-builders-title">MCP &amp; skills</h3>
           <p class="ad-builders-body">
-            Add MCP servers, OAuth handled natively, workspace
-            <code>mcp.json</code> override.
-          </p>
-          <p class="ad-builders-hint">
-            Use it to snap in a tool server, OAuth handled for you.
+            Add MCP servers with native OAuth; workspace
+            <code>mcp.json</code> takes precedence.
           </p>
         </article>
 
@@ -819,10 +780,6 @@ const primaryPlatform = computed(
           </span>
           <h3 class="ad-builders-title">Local discovery</h3>
           <p class="ad-builders-body">Finds dev servers on localhost ports.</p>
-          <p class="ad-builders-hint">
-            Use it — the dev server you just <code>pnpm dev</code>'d shows up
-            automatically.
-          </p>
         </article>
 
         <article class="ad-builders-card">
@@ -832,10 +789,6 @@ const primaryPlatform = computed(
           <h3 class="ad-builders-title">CLI installer</h3>
           <p class="ad-builders-body">
             Installs the <code>electric</code> command system-wide.
-          </p>
-          <p class="ad-builders-hint">
-            Use it to drop <code>electric</code> on your PATH without touching
-            npm.
           </p>
         </article>
       </div>
@@ -1380,14 +1333,6 @@ const primaryPlatform = computed(
   font-size: 22px;
 }
 
-.ad-modes-eyebrow {
-  margin: 0 0 8px;
-  font-size: 11px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--vp-c-text-3);
-}
-
 .ad-modes-title {
   margin: 0 0 12px;
   font-size: 22px;
@@ -1818,19 +1763,8 @@ const primaryPlatform = computed(
   text-wrap: pretty;
 }
 
-.ad-builders-body code,
-.ad-builders-hint code {
+.ad-builders-body code {
   font-size: 12px;
-}
-
-.ad-builders-hint {
-  margin: auto 0 0;
-  padding-top: 12px;
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--vp-c-text-3);
-  border-top: 1px dashed var(--vp-c-divider);
-  text-wrap: pretty;
 }
 
 /* ── §7a desktop ────────────────────────────────────────────── */
