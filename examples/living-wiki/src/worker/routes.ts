@@ -263,12 +263,7 @@ export async function handleRestRequest(
     )
     if (input instanceof Response) return input
 
-    try {
-      await getWikiSpaceStore(env).getSpace({ wikiSpaceId: input })
-      return json(getWikiStateProducer().getRows(input))
-    } catch (error) {
-      return handleRestSpaceError(error)
-    }
+    return json(getWikiStateProducer().getRows(input))
   }
 
   const getMatch = url.pathname.match(/^\/api\/spaces\/([^/]+)$/)
