@@ -248,8 +248,8 @@ const primaryCta = computed(() => {
           Electric Agents&nbsp;<span class="ad-hero-accent">App</span>
         </h1>
         <p class="ad-hero-text">
-          A desktop client for coding with Horton, inspecting agent&nbsp;runs, and
-          connecting to sessions on
+          A desktop client for coding with Horton, inspecting agent&nbsp;runs,
+          and connecting to sessions on
           <a href="/agents">Electric&nbsp;Agents</a>.
         </p>
 
@@ -458,7 +458,8 @@ const primaryCta = computed(() => {
           <p class="ad-modes-list-label mono">You can:</p>
           <ul class="ad-modes-list">
             <li>
-              Check a GitHub issue run on your&nbsp;phone, finish at your&nbsp;desk
+              Check a GitHub issue run on your&nbsp;phone, finish at
+              your&nbsp;desk
             </li>
             <li>Steer a CI agent before its PR&nbsp;merges</li>
             <li>Pause or resume a scheduled run</li>
