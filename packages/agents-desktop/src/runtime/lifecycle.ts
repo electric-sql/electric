@@ -297,6 +297,7 @@ export async function startRuntime(
         app.getPath(`userData`),
         `durable-streams-fetch-cache.sqlite`
       ),
+      maxCount: 10_000,
     },
     extraMcpServers: deps.settings.mcp?.servers,
     enabledModelValues: resolveEnabledModelValues(
