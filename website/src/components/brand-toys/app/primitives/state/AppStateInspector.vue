@@ -1,8 +1,7 @@
 <script setup lang="ts">
 /* AppStateInspector — real-shape state-explorer panel.
    ─────────────────────────────────────────────────────────────────
-   Mirrors the desktop-app state inspector reference screenshot
-   (`_reference/real-chat-state-explorer.png`):
+   Mirrors the desktop-app state inspector structure:
 
      [  StreamDB  1   runtime ⌄                                    ]
      ├─────────────┬──────────────────────────────────────────────┤
