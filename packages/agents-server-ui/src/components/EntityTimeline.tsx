@@ -10,7 +10,7 @@ import {
 } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useLiveQuery } from '@tanstack/react-db'
-import { eq, inArray } from '@durable-streams/state'
+import { eq, inArray } from '@durable-streams/state/db'
 import {
   measureElement as defaultMeasureElement,
   useVirtualizer,

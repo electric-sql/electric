@@ -5,7 +5,7 @@ import {
   createEntityTimelineQuery,
   normalizeTimelineEntities,
 } from '@electric-ax/agents-runtime/client'
-import { coalesce, eq } from '@durable-streams/state'
+import { coalesce, eq } from '@durable-streams/state/db'
 import { connectEntityStream } from '../lib/entity-connection'
 import type {
   EntityStreamDBWithActions,

@@ -16,6 +16,7 @@ import { apiError } from './electric-agents-http.js'
 import {
   ErrCodeInvalidRequest,
   ErrCodeUnauthorized,
+  type AuthorizeRequest,
 } from './electric-agents-types.js'
 import { ElectricAgentsError } from './entity-manager.js'
 import { serverLog } from './utils/log.js'
@@ -67,6 +68,7 @@ export interface ElectricAgentsServerOptions {
   authenticateRequest?: (
     request: Request
   ) => Promise<Principal | null> | Principal | null
+  authorizeRequest?: AuthorizeRequest
   allowDevPrincipalFallback?: boolean
   eventSources?: EventSourceCatalog
   ensureEventSourceWakeSource?: (sourceUrl: string) => Promise<void> | void
@@ -452,6 +454,9 @@ export class ElectricAgentsServer {
             ensureEventSourceWakeSource:
               this.options.ensureEventSourceWakeSource,
           }
+        : {}),
+      ...(this.options.authorizeRequest
+        ? { authorizeRequest: this.options.authorizeRequest }
         : {}),
       isShuttingDown: () => this.shuttingDown,
       mockAgent: this.mockAgentBootstrap

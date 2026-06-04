@@ -78,6 +78,13 @@
       "when": 1779062400000,
       "tag": "0010_sandbox_profiles",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1779050000000,
+      "tag": "0011_entity_permissions",
+      "breakpoints": true
     }
   ]
 }

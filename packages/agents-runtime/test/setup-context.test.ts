@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createTransaction, eq, queryOnce } from '@durable-streams/state'
+import { createTransaction, eq, queryOnce } from '@durable-streams/state/db'
 import { getCronSourceRef } from '../src/cron-utils'
 import {
   manifestChildKey,

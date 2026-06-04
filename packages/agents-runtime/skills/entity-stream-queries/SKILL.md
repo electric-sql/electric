@@ -2,7 +2,7 @@
 name: entity-stream-queries
 description: >
   Querying electric agent runtime entity streams and manifest state with
-  @durable-streams/state queryOnce and useLiveQuery. Use when reading built-in
+  @durable-streams/state/db queryOnce and useLiveQuery. Use when reading built-in
   entity collections like manifests, wakes, child_status, inbox, runs, or
   shared state from runtime code, tests, examples, or CLI code. Prefer direct
   typed queries over one-off read helpers.

@@ -25,6 +25,8 @@ import { Icon, IconButton, Stack, Text, Tooltip } from '../ui'
 import { ToolCallView } from './ToolCallView'
 import { TimeText } from './TimeText'
 import { ThinkingIndicator } from './ThinkingIndicator'
+import { ElapsedTime } from './ElapsedTime'
+import { formatElapsedDuration, toMillis } from '../lib/formatTime'
 import styles from './AgentResponse.module.css'
 import type {
   EntityTimelineContentItem,
@@ -434,6 +436,31 @@ export const AgentResponseLive = memo(function AgentResponseLive({
   const [copied, setCopied] = useState(false)
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // "Done in Xs" closure cue. We only know the real run duration for
+  // responses that finished WHILE this component instance was mounted
+  // — `sawStreamingRef` records whether we ever observed an
+  // in-flight state, and we snapshot `Date.now() - timestamp` at the
+  // first frame where the run reports completion. For runs that were
+  // already `completed` on initial mount (historical scrollback,
+  // session reopen, hard reload mid-conversation) we don't have a
+  // reliable end time on the client — `timestamp` here is the user
+  // message time, not the completion time, so subtracting `now()`
+  // would lie about the duration. In that case we keep the bare
+  // `✓ done` label rather than print a wrong number.
+  const sawStreamingRef = useRef<boolean>(isStreaming)
+  if (isStreaming) sawStreamingRef.current = true
+  const [finalDurationMs, setFinalDurationMs] = useState<number | null>(null)
+  useEffect(() => {
+    if (
+      done &&
+      sawStreamingRef.current &&
+      timestamp != null &&
+      finalDurationMs == null
+    ) {
+      setFinalDurationMs(Math.max(0, Date.now() - toMillis(timestamp)))
+    }
+  }, [done, timestamp, finalDurationMs])
+
   useEffect(() => {
     return () => {
       if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current)
@@ -479,13 +506,31 @@ export const AgentResponseLive = memo(function AgentResponseLive({
         {showThinking && <ThinkingIndicator />}
         {done && (
           <Text size={1} tone="muted" className={styles.doneText}>
-            ✓ done
+            {finalDurationMs != null
+              ? `✓ done in ${formatElapsedDuration(finalDurationMs)}`
+              : `✓ done`}
           </Text>
         )}
         {failureText && (
           <Text size={1} tone="danger">
             ✗ {failureText}
           </Text>
+        )}
+        {/* Elapsed-time ticker — visible while the response is still
+            in flight so the user can see how long the model has been
+            working ("Thinking · 12s", or just "12s" once tokens are
+            streaming). Anchored to the same `timestamp` we'd display
+            statically post-stream, so the timer's zero point matches
+            the eventual settled-state timestamp. */}
+        {isStreaming && timestamp != null && (
+          <>
+            {showThinking && (
+              <Text size={1} tone="muted" className={styles.metaSeparator}>
+                ·
+              </Text>
+            )}
+            <ElapsedTime ts={timestamp} enabled={isStreaming} />
+          </>
         )}
         {showTimestamp && (
           <>
@@ -572,6 +617,23 @@ export const AgentResponse = memo(function AgentResponse({
   const showTimestamp = timestamp != null && !isStreaming
   const hasLeadingMeta = showThinking || section.done || Boolean(section.error)
 
+  // Mirror of the `sawStreamingRef` / `finalDurationMs` capture from
+  // `AgentResponseLive` — see the comment there for why we only
+  // surface a duration when we actually witnessed streaming→done.
+  const sawStreamingRef = useRef<boolean>(isStreaming)
+  if (isStreaming) sawStreamingRef.current = true
+  const [finalDurationMs, setFinalDurationMs] = useState<number | null>(null)
+  useEffect(() => {
+    if (
+      section.done &&
+      sawStreamingRef.current &&
+      timestamp != null &&
+      finalDurationMs == null
+    ) {
+      setFinalDurationMs(Math.max(0, Date.now() - toMillis(timestamp)))
+    }
+  }, [section.done, timestamp, finalDurationMs])
+
   return (
     <Stack direction="column" gap={2} className={styles.root}>
       {section.items.map((item: EntityTimelineContentItem, i: number) => {
@@ -597,7 +659,9 @@ export const AgentResponse = memo(function AgentResponse({
         {showThinking && <ThinkingIndicator />}
         {section.done && (
           <Text size={1} tone="muted" className={styles.doneText}>
-            ✓ done
+            {finalDurationMs != null
+              ? `✓ done in ${formatElapsedDuration(finalDurationMs)}`
+              : `✓ done`}
           </Text>
         )}
         {section.error && (
@@ -605,10 +669,23 @@ export const AgentResponse = memo(function AgentResponse({
             ✗ {section.error}
           </Text>
         )}
+        {/* Elapsed-time ticker — kept in sync with the live variant
+            above so cached sections (rare during streaming, but the
+            type permits it) render the same meta row. */}
+        {isStreaming && timestamp != null && (
+          <>
+            {showThinking && (
+              <Text size={1} tone="muted" className={styles.metaSeparator}>
+                ·
+              </Text>
+            )}
+            <ElapsedTime ts={timestamp} enabled={isStreaming} />
+          </>
+        )}
         {/* Timestamp only on a settled response — while the agent is
-            still streaming we let `ThinkingIndicator` (or the
-            streaming text itself) own the meta row so it doesn't sit
-            inline with a timestamp that hasn't really happened yet. */}
+            still streaming we let `ThinkingIndicator` + `ElapsedTime`
+            own the meta row so it doesn't sit inline with a timestamp
+            that hasn't really happened yet. */}
         {showTimestamp && (
           <>
             {hasLeadingMeta && (

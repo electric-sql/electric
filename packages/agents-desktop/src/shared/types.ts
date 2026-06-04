@@ -133,6 +133,7 @@ export type DesktopSettings = {
   enabledModelValues?: Array<string>
   onboardingDismissed?: boolean
   mcp?: { servers: Array<McpServerConfig> }
+  seededDefaultMcpServerNames?: Array<string>
   pullWakeRunnerId?: string
 }
 

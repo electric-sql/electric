@@ -3,6 +3,7 @@ import {
   assertTags,
   buildTagsIndex,
   getEntitiesStreamPath,
+  hashString,
   normalizeTags,
   sourceRefForTags,
 } from '@electric-ax/agents-runtime'
@@ -15,6 +16,7 @@ import { PostgresRegistry } from './entity-registry.js'
 import { electricUrlWithPath } from './utils/electric-url.js'
 import { serverLog } from './utils/log.js'
 import { isUnregisteredTenantError } from './tenant.js'
+import { isBuiltInSystemPrincipalUrl } from './principal.js'
 import type { DrizzleDB } from './db/index.js'
 import type { EntityBridgeCoordinator } from './entity-bridge-manager.js'
 import type { EntityBridgeRow } from './entity-registry.js'
@@ -37,6 +39,7 @@ interface EntityShapeRow extends Row<unknown> {
   type: string
   status: `spawning` | `running` | `idle` | `stopped`
   tags: EntityTags
+  created_by?: string | null
   spawn_args?: Record<string, unknown> | null
   sandbox?: { profile: string } | null
   parent?: string | null
@@ -53,6 +56,7 @@ const ENTITY_SHAPE_COLUMNS = [
   `type`,
   `status`,
   `tags`,
+  `created_by`,
   `spawn_args`,
   `sandbox`,
   `parent`,
@@ -87,6 +91,16 @@ function projectionKey(tenantId: string, sourceRef: string): string {
 function sourceRefFromStreamPath(streamPath: string): string | null {
   const match = streamPath.match(/^\/_entities\/([^/]+)$/)
   return match?.[1] ?? null
+}
+
+function principalScopedSourceRef(
+  tagSourceRef: string,
+  principalUrl: string,
+  principalKind: string
+): string {
+  return `${tagSourceRef}-${hashString(
+    JSON.stringify({ principalKind, principalUrl })
+  )}`
 }
 
 function sameMember(
@@ -125,6 +139,9 @@ class ProjectedEntityBridge {
   readonly sourceRef: string
   readonly tags: EntityTags
   readonly streamUrl: string
+  private readonly principalUrl?: string
+  private readonly principalKind?: string
+  private readonly permissionBypass: boolean
 
   private currentMembers = new Map<string, EntityMembershipRow>()
   private producer: IdempotentProducer | null = null
@@ -132,12 +149,16 @@ class ProjectedEntityBridge {
 
   constructor(
     row: EntityBridgeRow,
+    private registry: PostgresRegistry,
     private streamClient: StreamClient
   ) {
     this.tenantId = row.tenantId
     this.sourceRef = row.sourceRef
     this.tags = normalizeTags(row.tags)
     this.streamUrl = row.streamUrl
+    this.principalUrl = row.principalUrl
+    this.principalKind = row.principalKind
+    this.permissionBypass = isBuiltInSystemPrincipalUrl(row.principalUrl)
   }
 
   async start(initialEntities: Iterable<EntityShapeRow>): Promise<void> {
@@ -159,7 +180,7 @@ class ProjectedEntityBridge {
       }
     )
     await this.loadCurrentMembers()
-    this.reconcile(initialEntities)
+    await this.reconcile(initialEntities)
   }
 
   async stop(): Promise<void> {
@@ -175,13 +196,14 @@ class ProjectedEntityBridge {
     }
   }
 
-  reconcile(entities: Iterable<EntityShapeRow>): void {
+  async reconcile(entities: Iterable<EntityShapeRow>): Promise<void> {
     if (this.stopped) return
 
     const staleMembers = new Map(this.currentMembers)
     for (const entity of entities) {
       if (entity.tenant_id !== this.tenantId) continue
       if (!entityMatchesTags(entity, this.tags)) continue
+      if (!(await this.canReadEntity(entity))) continue
       staleMembers.delete(entity.url)
       this.upsertEntity(entity)
     }
@@ -192,11 +214,14 @@ class ProjectedEntityBridge {
     }
   }
 
-  applyEntity(entity: EntityShapeRow): void {
+  async applyEntity(entity: EntityShapeRow): Promise<void> {
     if (this.stopped) return
     if (entity.tenant_id !== this.tenantId) return
 
-    if (!entityMatchesTags(entity, this.tags)) {
+    if (
+      !entityMatchesTags(entity, this.tags) ||
+      !(await this.canReadEntity(entity))
+    ) {
       const existing = this.currentMembers.get(entity.url)
       if (!existing) return
       this.append(`delete`, existing)
@@ -229,6 +254,16 @@ class ProjectedEntityBridge {
       this.append(`update`, next)
       this.currentMembers.set(entity.url, next)
     }
+  }
+
+  private async canReadEntity(entity: EntityShapeRow): Promise<boolean> {
+    if (this.permissionBypass) return true
+    if (!this.principalUrl || !this.principalKind) return false
+    if (entity.created_by === this.principalUrl) return true
+    return await this.registry.hasEntityPermission(entity.url, `read`, {
+      principalUrl: this.principalUrl,
+      principalKind: this.principalKind,
+    })
   }
 
   private async ensureStream(): Promise<void> {
@@ -377,7 +412,9 @@ export class EntityProjector {
   async register(
     tenantId: string,
     registry: PostgresRegistry,
-    tagsInput: unknown
+    tagsInput: unknown,
+    principalUrl: string,
+    principalKind: string
   ): Promise<{ sourceRef: string; streamUrl: string }> {
     if (!this.electricUrl) {
       throw new Error(
@@ -388,12 +425,18 @@ export class EntityProjector {
     await this.start()
     this.registries.set(tenantId, registry)
     const tags = normalizeTags(assertTags(tagsInput))
-    const sourceRef = sourceRefForTags(tags)
+    const sourceRef = principalScopedSourceRef(
+      sourceRefForTags(tags),
+      principalUrl,
+      principalKind
+    )
     const streamUrl = getEntitiesStreamPath(sourceRef)
     const row = await registry.upsertEntityBridge({
       sourceRef,
       tags,
       streamUrl,
+      principalUrl,
+      principalKind,
     })
     await registry.touchEntityBridge(sourceRef)
     await this.ensureProjection(row)
@@ -436,8 +479,12 @@ export class EntityProjector {
     }
   }
 
-  async onEntityChanged(_tenantId: string, _entityUrl: string): Promise<void> {
-    // Membership updates come from the shared Electric entities shape.
+  async onEntityChanged(tenantId: string, entityUrl: string): Promise<void> {
+    const entity = this.entities.get(entityKey(tenantId, entityUrl))
+    if (!entity) return
+    for (const projection of this.projectionsForTenant(tenantId)) {
+      await projection.applyEntity(entity)
+    }
   }
 
   async loadTenantBridges(
@@ -523,18 +570,20 @@ export class EntityProjector {
         }
         if (message.headers.control === `up-to-date`) {
           this.upToDate = true
-          this.reconcileAll()
+          await this.reconcileAll()
           this.readyResolve?.()
         }
         continue
       }
 
       if (!isChangeMessage(message)) continue
-      this.applyChangeMessage(message)
+      await this.applyChangeMessage(message)
     }
   }
 
-  private applyChangeMessage(message: ChangeMessage<EntityShapeRow>): void {
+  private async applyChangeMessage(
+    message: ChangeMessage<EntityShapeRow>
+  ): Promise<void> {
     const entity = message.value
     const key = entityKey(entity.tenant_id, entity.url)
     if (message.headers.operation === `delete`) {
@@ -550,7 +599,7 @@ export class EntityProjector {
     this.entities.set(key, entity)
     if (this.upToDate) {
       for (const projection of this.projectionsForTenant(entity.tenant_id)) {
-        projection.applyEntity(entity)
+        await projection.applyEntity(entity)
       }
     }
   }
@@ -642,7 +691,11 @@ export class EntityProjector {
         }
         throw error
       }
-      const projection = new ProjectedEntityBridge(row, streamClient)
+      const projection = new ProjectedEntityBridge(
+        row,
+        this.registryForTenant(row.tenantId),
+        streamClient
+      )
       await projection.start(this.entitiesForTenant(row.tenantId))
       this.projections.set(key, projection)
     })().finally(() => {
@@ -665,9 +718,9 @@ export class EntityProjector {
     )
   }
 
-  private reconcileAll(): void {
+  private async reconcileAll(): Promise<void> {
     for (const projection of this.projections.values()) {
-      projection.reconcile(this.entitiesForTenant(projection.tenantId))
+      await projection.reconcile(this.entitiesForTenant(projection.tenantId))
     }
   }
 
@@ -733,14 +786,20 @@ export class EntityProjectorTenantFacade implements EntityBridgeCoordinator {
 
   async stop(): Promise<void> {}
 
-  async register(tagsInput: unknown): Promise<{
+  async register(
+    tagsInput: unknown,
+    principalUrl: string,
+    principalKind: string
+  ): Promise<{
     sourceRef: string
     streamUrl: string
   }> {
     return await this.projector.register(
       this.tenantId,
       this.registry,
-      tagsInput
+      tagsInput,
+      principalUrl,
+      principalKind
     )
   }
 

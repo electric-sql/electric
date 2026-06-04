@@ -1,5 +1,5 @@
 import { createPublicKey, verify as verifySignature } from 'node:crypto'
-import type { JsonWebKey as NodeJsonWebKey } from 'node:crypto'
+import type { JsonWebKeyInput } from 'node:crypto'
 
 export interface WebhookPublicJwk {
   kty: `OKP`
@@ -73,9 +73,9 @@ export async function verifyWebhookSignature(
 
   try {
     const publicKey = createPublicKey({
-      key: jwk as unknown as NodeJsonWebKey,
+      key: jwk,
       format: `jwk`,
-    })
+    } as unknown as JsonWebKeyInput)
     const ok = verifySignature(
       null,
       bytesWithTimestamp(parsed.timestampText, body),

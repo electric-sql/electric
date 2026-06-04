@@ -255,7 +255,7 @@ jobs:
             builder_args+=("-c.mac.identity=-")
           fi
           if [[ "${{ inputs.channel }}" == "canary" ]]; then
-            builder_args+=("-c.channel=beta")
+            builder_args+=("-c.publish.channel=beta")
             builder_args+=("-c.publish.url=https://github.com/electric-sql/electric/releases/download/agents-desktop-canary")
           fi
 
@@ -272,7 +272,7 @@ jobs:
 
           builder_args=(${{ matrix.builder_args }})
           if [[ "${{ inputs.channel }}" == "canary" ]]; then
-            builder_args+=("-c.channel=beta")
+            builder_args+=("-c.publish.channel=beta")
             builder_args+=("-c.publish.url=https://github.com/electric-sql/electric/releases/download/agents-desktop-canary")
           fi
 

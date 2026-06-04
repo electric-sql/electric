@@ -1,4 +1,4 @@
-import { queryOnce } from '@durable-streams/state'
+import { queryOnce } from '@durable-streams/state/db'
 import { assembleContext } from './context-assembly'
 import { createContextEntriesApi } from './context-entries'
 import { entityStateSchema } from './entity-schema'

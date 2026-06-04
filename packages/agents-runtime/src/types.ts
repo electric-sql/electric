@@ -4,11 +4,11 @@ import type {
   StandardTypedV1,
 } from '@standard-schema/spec'
 import type {
-  StreamDB as BaseStreamDB,
   ChangeEvent,
   CollectionDefinition as StateCollectionDefinition,
   StateEvent,
 } from '@durable-streams/state'
+import type { StreamDB as BaseStreamDB } from '@durable-streams/state/db'
 import type { EntityRegistry } from './define-entity'
 import type {
   Collection as TanStackCollection,
@@ -411,6 +411,13 @@ export interface EntityCreated {
   timestamp: string
   args: JsonValue
   parent_url?: string
+}
+
+export type EntityTypePermissionGrantDefinition = {
+  subject_kind: `principal` | `principal_kind`
+  subject_value: string
+  permission: `spawn` | `manage`
+  expires_at?: string
 }
 
 export interface PendingSend {
@@ -1047,6 +1054,7 @@ export interface EntityDefinition<
   creationSchema?: TCreationSchema
   inboxSchemas?: Record<string, StandardJSONSchemaV1>
   stateSchemas?: Record<string, StandardJSONSchemaV1>
+  permissionGrants?: ReadonlyArray<EntityTypePermissionGrantDefinition>
 
   handler: (
     ctx: HandlerContext<

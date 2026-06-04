@@ -659,6 +659,13 @@ describe(`createRuntimeHandler`, () => {
     defineEntity(`schema-agent`, {
       description: `Schema agent`,
       stateSchemas: { custom: makeStandardSchema({ type: `object` }) },
+      permissionGrants: [
+        {
+          subject_kind: `principal_kind`,
+          subject_value: `user`,
+          permission: `spawn`,
+        },
+      ],
       handler: async () => {},
     })
 
@@ -698,6 +705,13 @@ describe(`createRuntimeHandler`, () => {
           },
         ],
       },
+      permission_grants: [
+        {
+          subject_kind: `principal_kind`,
+          subject_value: `user`,
+          permission: `spawn`,
+        },
+      ],
       state_schemas: expect.objectContaining({
         custom: { type: `object` },
         run: expect.any(Object),

@@ -292,9 +292,11 @@ async function clearCodexAuth(deps: CodexAuthDeps): Promise<void> {
 
 export async function syncCodexEnvironment(deps: CodexAuthDeps): Promise<void> {
   process.env.ELECTRIC_CODEX_REQUIRE_OPT_IN = `1`
-  delete process.env.ELECTRIC_CODEX_ACCESS_TOKEN
   const codex = deps.settings.codex ?? { enabled: false, source: null }
-  if (!codex.enabled || !codex.source) return
+  if (!codex.enabled || !codex.source) {
+    delete process.env.ELECTRIC_CODEX_ACCESS_TOKEN
+    return
+  }
 
   const stored = await loadStoredCodexAuth(deps)
   const refreshed =
@@ -310,6 +312,7 @@ export async function syncCodexEnvironment(deps: CodexAuthDeps): Promise<void> {
   // produced. Desktop OAuth tokens should refresh through the OAuth token
   // endpoint above; stale tokens imported from CLI/opencode auth files should be
   // deleted rather than repeatedly trusted as an enabled desktop credential.
+  delete process.env.ELECTRIC_CODEX_ACCESS_TOKEN
   await clearCodexAuth(deps)
 }
 

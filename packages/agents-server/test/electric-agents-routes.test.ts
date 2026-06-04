@@ -286,6 +286,12 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
         createRequest(`PUT`, `/_electric/shared-state/board-1`),
         {
           service: `test`,
+          principal: {
+            kind: `system`,
+            id: `dev-local`,
+            key: `system:dev-local`,
+            url: `/principal/system:dev-local`,
+          },
           durableStreamsUrl: `http://durable.local/custom/ds-prefix`,
           isShuttingDown: () => false,
         } as unknown as TenantContext

@@ -2,6 +2,9 @@ name: Agents Mobile PR
 
 on:
   pull_request:
+    # `labeled` so adding `mobile-eas-build` triggers a build immediately.
+    # `paths` applies to label events too, so the label only acts on PRs that touch these paths.
+    types: [opened, synchronize, reopened, labeled]
     paths:
       - 'packages/agents-mobile/**'
       - 'packages/agents-server-ui/**'
@@ -20,7 +23,8 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.number || github.ref }}
-  cancel-in-progress: true
+  # Don't let a label change cancel an in-progress build/checks run; only new pushes supersede.
+  cancel-in-progress: ${{ !(github.event_name == 'pull_request' && github.event.action == 'labeled') }}
 
 permissions:
   actions: read
@@ -31,6 +35,8 @@ permissions:
 jobs:
   detect:
     name: Detect mobile impact
+    # Skip label events unless it's `mobile-eas-build`, so unrelated labels don't re-run checks.
+    if: ${{ github.event_name != 'pull_request' || github.event.action != 'labeled' || github.event.label.name == 'mobile-eas-build' }}
     runs-on: ubuntu-latest
     outputs:
       should_build: ${{ steps.detect.outputs.should_build }}
@@ -93,7 +99,8 @@ jobs:
     needs:
       - detect
       - local-checks
-    if: ${{ needs.detect.outputs.should_build == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    # PRs build only with the `mobile-eas-build` label (and not from a fork, so secrets exist); workflow_dispatch always builds.
+    if: ${{ needs.detect.outputs.should_build == 'true' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && contains(github.event.pull_request.labels.*.name, 'mobile-eas-build'))) }}
     uses: ./.github/workflows/agents_mobile_build.yml
     secrets: inherit
     with:
@@ -109,12 +116,16 @@ jobs:
     needs:
       - detect
       - local-checks
-    if: ${{ needs.detect.outputs.should_build == 'true' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+    # Build was relevant but skipped: fork PR (no secrets) or no `mobile-eas-build` label.
+    if: ${{ needs.detect.outputs.should_build == 'true' && github.event_name == 'pull_request' && !(github.event.pull_request.head.repo.full_name == github.repository && contains(github.event.pull_request.labels.*.name, 'mobile-eas-build')) }}
     runs-on: ubuntu-latest
     steps:
-      - name: Comment on fork PR
+      - name: Comment that the EAS build was skipped
         uses: actions/github-script@v7
         continue-on-error: true
+        env:
+          IS_FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+          BUILD_LABEL: mobile-eas-build
         with:
           script: |
             const marker = '<!-- electric-agents-mobile-pr-build -->'
@@ -123,14 +134,18 @@ jobs:
             const sha = context.payload.pull_request.head.sha
             const shortSha = sha.slice(0, 7)
             const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`
+            const isFork = process.env.IS_FORK === 'true'
+            const label = process.env.BUILD_LABEL
+            const reason = isFork
+              ? 'The EAS Android preview build was skipped because this PR comes from a fork and repository secrets are unavailable.\nA maintainer can run the workflow manually from a trusted branch to produce an installable preview build.'
+              : `The EAS Android preview build was skipped because the \`${label}\` label is not present.\nAdd the \`${label}\` label to this PR to produce an installable preview build.`
             const body = [
               marker,
               '## Electric Agents Mobile Build',
               '',
               `Local mobile checks ran for commit \`${shortSha}\`.`,
               '',
-              'The EAS Android preview build was skipped because this PR comes from a fork and repository secrets are unavailable.',
-              'A maintainer can run the workflow manually from a trusted branch to produce an installable preview build.',
+              reason,
               '',
               `[Workflow run](${runUrl})`,
             ].join('\n')

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createTransaction } from '@durable-streams/state'
+import { createTransaction } from '@durable-streams/state/db'
 import { createAssistantMessageEventStream } from '@mariozechner/pi-ai'
 import { getCronSourceRef } from '../src/cron-utils'
 import {
@@ -88,7 +88,7 @@ const mockStreamResponse = {
 
 mockDurableStreamStream.mockResolvedValue(mockStreamResponse)
 
-vi.mock(`@durable-streams/state`, async (importOriginal) => {
+vi.mock(`@durable-streams/state/db`, async (importOriginal) => {
   const actual = await importOriginal<any>()
   return {
     ...actual,

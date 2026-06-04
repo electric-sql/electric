@@ -136,7 +136,10 @@ export function toAgentHistory(
 
       case `assistant`: {
         const prev = lastAssistant()
-        const content = toAgentContent(message.content)
+        const content = toAgentContent(message.content) as Array<{
+          type: string
+          text?: string
+        }>
 
         if (prev) {
           const prevContent = prev.content as Array<{
@@ -144,7 +147,7 @@ export function toAgentHistory(
             text?: string
           }>
           const lastBlock = prevContent[prevContent.length - 1]
-          const firstBlock = content[0] as { type: string; text?: string }
+          const firstBlock = content[0]
 
           if (lastBlock?.type === `text` && firstBlock?.type === `text`) {
             lastBlock.text = `${lastBlock.text ?? ``}${firstBlock.text ?? ``}`

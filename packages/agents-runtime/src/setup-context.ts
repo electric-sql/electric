@@ -3,7 +3,7 @@ import {
   eq,
   localOnlyCollectionOptions,
   queryOnce,
-} from '@durable-streams/state'
+} from '@durable-streams/state/db'
 import { createWakeSession } from './wake-session'
 import { comparePointers, type EventPointer } from './event-pointer'
 import {

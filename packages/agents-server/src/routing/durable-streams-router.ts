@@ -6,8 +6,16 @@ import { appendPathToUrl } from '@electric-ax/agents-runtime'
 import { Type, type Static } from '@sinclair/typebox'
 import { and, eq } from 'drizzle-orm'
 import { Router } from 'itty-router'
-import { readRequestBody, responseHeaders } from '../electric-agents-http.js'
+import {
+  apiError,
+  readRequestBody,
+  responseHeaders,
+} from '../electric-agents-http.js'
 import { subscriptionWebhooks } from '../db/schema.js'
+import {
+  ErrCodeNotFound,
+  ErrCodeUnauthorized,
+} from '../electric-agents-types.js'
 import {
   createStreamAppendRouteRequest,
   electricAgentsStreamAppendRouter,
@@ -15,6 +23,7 @@ import {
 import { validateBody } from './schema.js'
 import { rewriteLoopbackWebhookUrl } from '../utils/webhook-url.js'
 import { forwardFetchRequest } from '../utils/server-utils.js'
+import { canAccessEntity, canAccessSharedState } from '../permissions.js'
 import {
   getDefaultWebhookSigner,
   webhookSigningMetadata,
@@ -47,6 +56,8 @@ const subscriptionControlActions = [
   `ack`,
   `release`,
 ] as const
+
+const SHARED_STATE_OWNER_ENTITY_HEADER = `electric-owner-entity`
 
 export type DurableStreamsRoutes = RouterType<
   IRequest,
@@ -583,6 +594,8 @@ async function streamAppend(
   request: IRequest,
   ctx: TenantContext
 ): Promise<Response | undefined> {
+  const auth = await authorizeDurableStreamAccess(request, ctx)
+  if (auth) return auth
   return await electricAgentsStreamAppendRouter.fetch(
     createStreamAppendRouteRequest(request as Request),
     ctx.runtime,
@@ -608,10 +621,9 @@ async function proxyPassThrough(
   request: IRequest,
   ctx: TenantContext
 ): Promise<Response> {
+  const auth = await authorizeDurableStreamAccess(request, ctx)
+  if (auth) return auth
   const streamPath = new URL(request.url).pathname
-  if (ctx.entityManager?.isAttachmentStreamPath(streamPath)) {
-    return new Response(null, { status: 404 })
-  }
   const upstream = await forwardToDurableStreams(ctx, request)
   const method = request.method.toUpperCase()
   const endTrackedRead =
@@ -625,5 +637,114 @@ async function proxyPassThrough(
     return responseFromUpstream(upstream)
   } finally {
     await endTrackedRead?.()
+  }
+}
+
+async function authorizeDurableStreamAccess(
+  request: IRequest,
+  ctx: TenantContext
+): Promise<Response | undefined> {
+  const method = request.method.toUpperCase()
+  const streamPath = new URL(request.url).pathname
+
+  if (method === `GET` || method === `HEAD`) {
+    const registry = ctx.entityManager?.registry
+    const entity = registry?.getEntityByStream
+      ? await registry.getEntityByStream(streamPath)
+      : null
+    if (entity) {
+      if (await canAccessEntity(ctx, entity, `read`, request as Request)) {
+        return undefined
+      }
+      return apiError(
+        401,
+        ErrCodeUnauthorized,
+        `Principal is not allowed to read ${entity.url}`
+      )
+    }
+
+    const attachmentEntityUrl = entityUrlFromAttachmentStreamPath(streamPath)
+    if (attachmentEntityUrl) {
+      const attachmentEntity = registry?.getEntity
+        ? await registry.getEntity(attachmentEntityUrl)
+        : null
+      if (!attachmentEntity) {
+        return apiError(404, ErrCodeNotFound, `Entity not found`)
+      }
+      if (
+        await canAccessEntity(ctx, attachmentEntity, `read`, request as Request)
+      ) {
+        return undefined
+      }
+      return apiError(
+        401,
+        ErrCodeUnauthorized,
+        `Principal is not allowed to read ${attachmentEntity.url}`
+      )
+    }
+  }
+
+  const sharedStateId = sharedStateIdFromPath(streamPath)
+  if (!sharedStateId) {
+    // Durable Streams also hosts non-Agents utility streams. Entity streams,
+    // attachment streams, and shared-state streams are guarded above; paths that
+    // do not match those resource classes are intentionally passed through.
+    return undefined
+  }
+
+  if (method === `GET` || method === `HEAD`) {
+    if (
+      await canAccessSharedState(ctx, sharedStateId, `read`, request as Request)
+    ) {
+      return undefined
+    }
+    return apiError(
+      401,
+      ErrCodeUnauthorized,
+      `Principal is not allowed to read shared state`
+    )
+  }
+
+  if (method === `PUT` || method === `POST`) {
+    const ownerEntityUrl =
+      request.headers.get(SHARED_STATE_OWNER_ENTITY_HEADER)?.trim() || undefined
+    if (
+      await canAccessSharedState(
+        ctx,
+        sharedStateId,
+        `write`,
+        request as Request,
+        ownerEntityUrl
+      )
+    ) {
+      return undefined
+    }
+    return apiError(
+      401,
+      ErrCodeUnauthorized,
+      `Principal is not allowed to write shared state`
+    )
+  }
+
+  return apiError(
+    401,
+    ErrCodeUnauthorized,
+    `Principal is not allowed to access shared state`
+  )
+}
+
+function entityUrlFromAttachmentStreamPath(path: string): string | null {
+  const match = path.match(/^\/([^/]+)\/([^/]+)\/attachments\/[^/]+$/)
+  if (!match) return null
+  return `/${match[1]}/${match[2]}`
+}
+
+function sharedStateIdFromPath(path: string): string | null {
+  const match = path.match(/^\/_electric\/shared-state\/([^/]+)$/)
+  if (!match) return null
+  try {
+    return decodeURIComponent(match[1]!)
+  } catch {
+    return match[1]!
   }
 }

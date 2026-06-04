@@ -17,6 +17,8 @@ import { useTokens } from '../lib/ThemeProvider'
 import { fontSize, lineHeight, radii, rowHeight, spacing } from '../lib/theme'
 import { checkServerHealth, normalizeServerUrl } from '../lib/agentsClient'
 import { prepareServerHeaders } from '../lib/serverHeaders'
+import { getCloudServiceIdFromServerUrl } from '../lib/cloudAgentUrls'
+import { addSavedServer } from '../lib/savedServers'
 import type { Tokens } from '../lib/theme'
 
 /**
@@ -47,13 +49,26 @@ export function ServerSetupScreen({
   const isCloudSignedIn = cloudState.status === `signed-in`
   const isSigningInToCloud = cloudState.status === `signing-in`
 
-  const commit = async (url: string): Promise<string | null> => {
+  const commit = async (
+    url: string,
+    displayName?: string
+  ): Promise<string | null> => {
     setSubmitting(true)
     try {
       // Cloud agent servers reject unauthenticated requests with 401,
       // so headers must be registered before the health probe.
       await prepareServerHeaders(url)
       await checkServerHealth(url)
+      // Remember the server so it appears in the unified picker and
+      // survives a relaunch. Cloud servers are tagged so they can be
+      // purged on sign-out.
+      const serviceId = getCloudServiceIdFromServerUrl(url)
+      const name = displayName ?? hostOf(url)
+      addSavedServer(
+        serviceId
+          ? { id: serviceId, name, url, source: `electric-cloud` }
+          : { id: url, name, url, source: `manual` }
+      )
       await onSave(url)
       return null
     } catch (err) {
@@ -63,9 +78,9 @@ export function ServerSetupScreen({
     }
   }
 
-  const connectCloudRow = async (url: string): Promise<void> => {
+  const connectCloudRow = async (url: string, name: string): Promise<void> => {
     setCloudConnectError(null)
-    const err = await commit(url)
+    const err = await commit(url, name)
     if (err) setCloudConnectError(err)
   }
 
@@ -148,7 +163,7 @@ export function ServerSetupScreen({
           )}
 
           <CloudServerPicker
-            onConnect={connectCloudRow}
+            onConnect={(url, server) => connectCloudRow(url, server.name)}
             disabled={submitting}
           />
 
@@ -213,6 +228,14 @@ export function ServerSetupScreen({
       </KeyboardAvoidingView>
     </Screen>
   )
+}
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).host || url
+  } catch {
+    return url
+  }
 }
 
 function createStyles(tokens: Tokens) {
