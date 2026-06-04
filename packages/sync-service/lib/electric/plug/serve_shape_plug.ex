@@ -451,7 +451,8 @@ defmodule Electric.Plug.ServeShapePlug do
         shape_handle: get_handle(assigns) || conn.query_params["handle"],
         client_ip: conn.remote_ip,
         status: conn.status,
-        stack_id: stack_id
+        stack_id: stack_id,
+        known_error: has_known_error_header?(conn)
       }
     )
 
@@ -546,4 +547,8 @@ defmodule Electric.Plug.ServeShapePlug do
 
   defp bare_map(%_{} = struct), do: Map.from_struct(struct)
   defp bare_map(map) when is_map(map), do: map
+
+  defp has_known_error_header?(conn) do
+    Conn.get_resp_header(conn, Api.Response.known_error_header()) == ["true"]
+  end
 end

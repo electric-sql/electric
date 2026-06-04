@@ -477,4 +477,10 @@ defmodule Electric.Shapes.Api.Response do
   end
 
   def electric_headers, do: @electric_headers
+
+  @doc """
+  The response header Electric sets to mark an error as a "known" (expected,
+  typically retryable) error.
+  """
+  def known_error_header, do: @electric_known_error_header
 end
