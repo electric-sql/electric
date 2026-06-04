@@ -666,21 +666,18 @@ const primaryPlatform = computed(
         <div class="ad-signing-body">
           <p class="ad-signing-title">Unsigned Preview</p>
           <p>
-            App signing is still in progress, so macOS and Windows may need an
-            extra confirmation before opening Electric Agents for the first
-            time.
+            Signing is in progress, so macOS and Windows may ask for an extra
+            confirmation on first open.
           </p>
-          <ul>
-            <li>
-              <strong>macOS:</strong> try opening the app, then go to
-              <strong>System Settings → Privacy &amp; Security</strong> and
-              choose <strong>Open Anyway</strong>.
-            </li>
-            <li>
-              <strong>Windows:</strong> choose <strong>More info</strong>, then
-              <strong>Run anyway</strong>.
-            </li>
-          </ul>
+          <p class="ad-signing-step">
+            <strong>macOS:</strong> open the app, then
+            <strong>System Settings → Privacy &amp; Security</strong> and choose
+            <strong>Open Anyway</strong>.
+          </p>
+          <p class="ad-signing-step">
+            <strong>Windows:</strong> choose <strong>More info</strong>, then
+            <strong>Run anyway</strong>.
+          </p>
         </div>
       </aside>
 
@@ -1757,18 +1754,17 @@ const primaryPlatform = computed(
 
 .ad-signing-body p {
   margin: 0 0 6px;
-  max-width: 700px;
 }
 
 .ad-signing-body p:last-of-type {
   margin-bottom: 0;
 }
 
-.ad-signing-body ul {
-  margin: 6px 0 0;
-  padding-left: 20px;
-  display: grid;
-  gap: 4px;
+.ad-signing-step {
+  /* Stacked platform-specific instructions — flush-left under the
+     intro paragraph, no bullet indent. Slightly muted vs. the
+     intro so the eye lands on "macOS:" / "Windows:" first. */
+  color: var(--vp-c-text-2);
 }
 
 /* ── §7b mobile · preview ───────────────────────────────────── *
