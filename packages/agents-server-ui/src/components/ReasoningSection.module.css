@@ -1,0 +1,88 @@
+/* Reasoning sits above the agent's visible answer. We want it to read
+ * as secondary content — never compete with the response — but stay
+ * legible enough that a curious user can skim it.
+ *
+ * Visual hierarchy:
+ *   live    → faded markdown body, animated "Thinking" heading
+ *   settled → single muted line, click-to-expand
+ *   redacted → single muted line, no expand
+ *
+ * Top/bottom padding matches the agent-response root so the layout
+ * doesn't shift when the reasoning section disappears post-collapse. */
+
+.root {
+  margin-inline: auto;
+  width: max(0px, calc(100% - 24px));
+}
+
+.live {
+  border-left: 2px solid var(--ds-border-2);
+  padding-left: 10px;
+}
+
+.header {
+  padding-bottom: 4px;
+}
+
+.separator {
+  color: var(--ds-text-4);
+  opacity: 0.7;
+}
+
+.title {
+  color: var(--ds-text-3);
+}
+
+/* The reasoning body is rendered with `Streamdown` but at reduced
+ * weight so it reads as supporting material. `opacity` (rather than
+ * a different `color`) keeps inline code / links / emphasis tinted
+ * proportionally instead of forcing every span flat-muted. */
+.body {
+  opacity: 0.7;
+  font-size: 0.95em;
+}
+
+/* Settled collapsed row. Click target spans the whole header. */
+.settled {
+  margin-block: 4px;
+}
+
+.toggle {
+  /* Reset native button styling — visually it's just a muted line. */
+  background: none;
+  border: none;
+  padding: 2px 0;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+}
+
+.toggle:hover {
+  opacity: 1;
+}
+
+.chevron {
+  display: inline-block;
+  width: 0.8em;
+  text-align: center;
+  color: var(--ds-text-4);
+  opacity: 0.7;
+  /* Tabular-style alignment so the chevron doesn't shift the trailing
+   * label between collapsed and expanded states (▸ and ▾ render at
+   * slightly different glyph widths in most fonts). */
+  font-variant-numeric: tabular-nums;
+}
+
+.expandedBody {
+  border-left: 2px solid var(--ds-border-2);
+  padding-left: 10px;
+  margin-top: 4px;
+  opacity: 0.7;
+  font-size: 0.95em;
+}
+
+.redacted {
+  padding: 4px 0;
+  opacity: 0.6;
+}

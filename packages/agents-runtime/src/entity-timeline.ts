@@ -220,6 +220,22 @@ export type EntityTimelineRunItem =
       toolCall: EntityTimelineToolCallItem
     }
 
+export interface EntityTimelineReasoningItem {
+  key: string
+  run_id?: string
+  order: TimelineOrder
+  status: `streaming` | `completed`
+  // Concatenated content from all `reasoning_delta` rows for this row,
+  // built live by the query (mirrors `EntityTimelineTextItem.content`).
+  content: string
+  // Optional bolded title parsed at write time — only OpenAI Responses
+  // emits these; null for Anthropic / DeepSeek / Moonshot.
+  summary_title?: string
+  // Anthropic redacted-thinking opaque payload. Persist verbatim so we
+  // can echo it back on the next turn; the UI shows a placeholder.
+  encrypted?: string
+}
+
 export interface EntityTimelineStepItem {
   key: string
   run_id?: string
@@ -243,6 +259,7 @@ export interface EntityTimelineRunRow {
   status: `started` | `completed` | `failed`
   finish_reason?: string
   items: Collection<EntityTimelineRunItem>
+  reasoning: Collection<EntityTimelineReasoningItem>
   steps: Collection<EntityTimelineStepItem>
   errors: Collection<EntityTimelineErrorItem>
 }
@@ -1346,6 +1363,33 @@ function buildEntityTimelineQuery(
           content: item.textContent,
         }),
         toolCall: item.toolCall,
+      })),
+    reasoning: q
+      .from({ reasoning: db.collections.reasoning })
+      .where(({ reasoning }) => eq(reasoning.run_id, run.key))
+      .orderBy(({ reasoning }) => coalesce(reasoning._timeline_order, `~`))
+      .orderBy(({ reasoning }) => reasoning.key)
+      .select(({ reasoning }) => ({
+        key: reasoning.key,
+        run_id: reasoning.run_id,
+        order: coalesce(reasoning._timeline_order, `~`),
+        status: reasoning.status,
+        // Same delta-join pattern as `items.text.textContent` above —
+        // we concatenate every `reasoning_delta` row scoped to this
+        // reasoning row's key in `_timeline_order` then `key` order.
+        // Live: re-runs as each delta arrives; settled: stable.
+        content: concat(
+          toArray(
+            q
+              .from({ chunk: db.collections.reasoningDeltas })
+              .where(({ chunk }) => eq(chunk.reasoning_id, reasoning.key))
+              .orderBy(({ chunk }) => coalesce(chunk._timeline_order, `~`))
+              .orderBy(({ chunk }) => chunk.key)
+              .select(({ chunk }) => chunk.delta)
+          )
+        ),
+        summary_title: reasoning.summary_title,
+        encrypted: reasoning.encrypted,
       })),
     steps: q
       .from({ step: db.collections.steps })

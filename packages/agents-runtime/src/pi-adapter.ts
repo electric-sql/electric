@@ -28,6 +28,33 @@ import type {
 } from '@mariozechner/pi-ai'
 import type { LLMContentBlock, LLMMessage, LLMMessageContent } from './types'
 
+/**
+ * Split a streamed reasoning blob into `{ title, body }`.
+ *
+ * OpenAI's Responses API surfaces reasoning summaries with a bolded
+ * first line — `**Inspecting PR workflow**\n\n<body>` — which we want
+ * to drive a separate heading in the UI rather than render inline.
+ * Anthropic / DeepSeek-R1 / Moonshot K2 don't emit titles; for them
+ * the regex doesn't match and `title` stays `null`.
+ *
+ * Match is anchored to the start, requires a blank-line terminator
+ * (so partial titles mid-stream don't get prematurely promoted), and
+ * forbids `*` or newline inside the title (so we don't accidentally
+ * eat bolded emphasis later in the text).
+ */
+function parseReasoningSummary(text: string): {
+  title: string | null
+  body: string
+} {
+  const content = text.trim()
+  const match = content.match(/^\*\*([^*\n]+)\*\*(?:\r?\n\r?\n|$)/)
+  if (!match) return { title: null, body: content }
+  return {
+    title: match[1]!.trim(),
+    body: content.slice(match[0].length).trimEnd(),
+  }
+}
+
 // ============================================================================
 // Options
 // ============================================================================
@@ -221,6 +248,8 @@ export function createPiAgentAdapter(
     let disposed = false
     let stepStartTime = 0
     let textStarted = false
+    let reasoningStarted = false
+    let reasoningAccum = ``
     let abortedRun = false
 
     const model = resolvePiModel({
@@ -274,6 +303,8 @@ export function createPiAgentAdapter(
               case `message_start`: {
                 stepStartTime = Date.now()
                 textStarted = false
+                reasoningStarted = false
+                reasoningAccum = ``
                 bridge.onStepStart({
                   modelProvider: model.provider,
                   modelId: model.id,
@@ -293,6 +324,42 @@ export function createPiAgentAdapter(
                   }
                   bridge.onTextDelta(assistantEvent.delta ?? ``)
                   textDeltaCount++
+                } else if (assistantEvent?.type === `thinking_start`) {
+                  // Open a reasoning row even if no delta arrives — some
+                  // providers emit an empty thinking block (e.g. when
+                  // reasoning is gated to a level the model didn't use).
+                  // We close it on `thinking_end` regardless.
+                  if (!reasoningStarted) {
+                    reasoningStarted = true
+                    reasoningAccum = ``
+                    bridge.onReasoningStart()
+                  }
+                } else if (assistantEvent?.type === `thinking_delta`) {
+                  // Defensive: providers occasionally emit the first
+                  // delta without a matching `thinking_start`. Open the
+                  // row lazily so we don't drop the chunk.
+                  if (!reasoningStarted) {
+                    reasoningStarted = true
+                    reasoningAccum = ``
+                    bridge.onReasoningStart()
+                  }
+                  const delta = assistantEvent.delta ?? ``
+                  reasoningAccum += delta
+                  bridge.onReasoningDelta(delta)
+                } else if (assistantEvent?.type === `thinking_end`) {
+                  if (reasoningStarted) {
+                    // Parse a bolded `**Title**\n\n` prefix once, here,
+                    // so the UI can drive a heading without re-parsing on
+                    // every render. Only OpenAI's Responses API emits
+                    // these today (Anthropic / DeepSeek don't); the
+                    // helper returns no title for un-titled streams.
+                    const { title } = parseReasoningSummary(reasoningAccum)
+                    bridge.onReasoningEnd(
+                      title !== null ? { summaryTitle: title } : undefined
+                    )
+                    reasoningStarted = false
+                    reasoningAccum = ``
+                  }
                 } else {
                   runtimeLog.debug(
                     logPrefix,
@@ -338,6 +405,19 @@ export function createPiAgentAdapter(
                 if (textStarted) {
                   bridge.onTextEnd()
                   textStarted = false
+                }
+                if (reasoningStarted) {
+                  // Provider closed the message without an explicit
+                  // `thinking_end` (rare, but seen on aborts / errors).
+                  // Close the open reasoning row with whatever title we
+                  // can salvage from the accumulator so it doesn't sit
+                  // forever in `streaming` state.
+                  const { title } = parseReasoningSummary(reasoningAccum)
+                  bridge.onReasoningEnd(
+                    title !== null ? { summaryTitle: title } : undefined
+                  )
+                  reasoningStarted = false
+                  reasoningAccum = ``
                 }
 
                 const usage = msg?.usage

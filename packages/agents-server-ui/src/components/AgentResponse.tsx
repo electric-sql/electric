@@ -26,6 +26,7 @@ import { ToolCallView } from './ToolCallView'
 import { TimeText } from './TimeText'
 import { ThinkingIndicator } from './ThinkingIndicator'
 import { ElapsedTime } from './ElapsedTime'
+import { ReasoningSection, type ReasoningEntry } from './ReasoningSection'
 import { formatElapsedDuration, toMillis } from '../lib/formatTime'
 import styles from './AgentResponse.module.css'
 import type {
@@ -400,6 +401,25 @@ export const AgentResponseLive = memo(function AgentResponseLive({
     (q) => (run.errors ? q.from({ error: run.errors }) : undefined),
     [run.errors]
   )
+  // Subscribe to the run's reasoning rows so the section ticks as
+  // each `reasoning_delta` arrives. Empty array for runs without
+  // any reasoning content (most non-extended-thinking models).
+  const { data: reasoningRows = [] } = useLiveQuery(
+    (q) => (run.reasoning ? q.from({ reasoning: run.reasoning }) : undefined),
+    [run.reasoning]
+  )
+  const reasoningEntries = useMemo<Array<ReasoningEntry>>(
+    () =>
+      (reasoningRows as Array<ReasoningEntry & { order?: unknown }>)
+        .slice()
+        // The live query already orders by `_timeline_order` then key,
+        // but TanStack's projection isn't guaranteed stable across
+        // re-mounts — sort by `key` here as a cheap deterministic
+        // tiebreaker so the section doesn't visibly reflow between
+        // renders if two rows share an order.
+        .sort((a, b) => a.key.localeCompare(b.key)),
+    [reasoningRows]
+  )
   const sortedItems = useMemo(
     () => [...items].sort(compareLiveRunItems),
     [items]
@@ -477,6 +497,14 @@ export const AgentResponseLive = memo(function AgentResponseLive({
 
   return (
     <Stack direction="column" gap={2} className={styles.root}>
+      {/* Reasoning sits above the answer because providers stream it
+          first — the model "thinks" then "writes". Collapses on
+          settle so old turns don't drown out the actual response. */}
+      <ReasoningSection
+        entries={reasoningEntries}
+        isStreaming={isStreaming}
+        timestamp={timestamp}
+      />
       {sortedItems.map((item, i) => {
         if (item.text) {
           return (

@@ -7,6 +7,7 @@ interface IdCounters {
   step: number
   msg: number
   tc: number
+  reasoning: number
   deltaSeqs: Map<string, number>
 }
 
@@ -15,6 +16,7 @@ export interface OutboundIdSeed {
   step: number
   msg: number
   tc: number
+  reasoning: number
   cacheKey?: string
 }
 
@@ -42,12 +44,13 @@ function scanCounters(events: Array<ChangeEvent>): IdCounters {
     step: 0,
     msg: 0,
     tc: 0,
+    reasoning: 0,
     deltaSeqs: new Map(),
   }
 
   for (const ev of events) {
     if (!ev.key) continue
-    const match = ev.key.match(/^(run|step|msg|tc)-(\d+)/)
+    const match = ev.key.match(/^(run|step|msg|tc|reasoning)-(\d+)/)
     if (!match) continue
     const prefix = match[1] as keyof Omit<IdCounters, `deltaSeqs`>
     const nextId = parseInt(match[2]!, 10) + 1
@@ -64,6 +67,7 @@ export async function loadOutboundIdSeed(
   const steps = db.collections.steps.toArray
   const texts = db.collections.texts.toArray
   const toolCalls = db.collections.toolCalls.toArray
+  const reasoning = db.collections.reasoning.toArray
 
   const runsCollectionId = db.collections.runs.id
   const dbSeed = {
@@ -83,6 +87,10 @@ export async function loadOutboundIdSeed(
       toolCalls.map((toolCall) => toolCall.key),
       `tc`
     ),
+    reasoning: nextCounterFromKeys(
+      reasoning.map((r) => r.key),
+      `reasoning`
+    ),
   }
   const cachedSeed = outboundIdSeedCache.get(runsCollectionId)
   const seed: OutboundIdSeed = {
@@ -90,6 +98,7 @@ export async function loadOutboundIdSeed(
     step: Math.max(dbSeed.step, cachedSeed?.step ?? 0),
     msg: Math.max(dbSeed.msg, cachedSeed?.msg ?? 0),
     tc: Math.max(dbSeed.tc, cachedSeed?.tc ?? 0),
+    reasoning: Math.max(dbSeed.reasoning, cachedSeed?.reasoning ?? 0),
     cacheKey: runsCollectionId,
   }
   outboundIdSeedCache.set(runsCollectionId, seed)
@@ -110,6 +119,23 @@ export interface OutboundBridge {
   onTextStart: () => void
   onTextDelta: (delta: string) => void
   onTextEnd: () => void
+  // Reasoning / extended-thinking stream. Mirrors the text path:
+  // start opens a row, delta(s) append to a paired `reasoningDeltas`
+  // collection, end closes the row.
+  //
+  // `opts.encrypted` on end handles Anthropic's `redacted_thinking`
+  // content blocks — opaque payloads the client can't display but
+  // must round-trip back to the model verbatim on the next turn or
+  // the conversation errors. Persist as-is, render nothing.
+  //
+  // `opts.summaryTitle` (currently OpenAI Responses only — emitted
+  // as a bolded first line `**Inspecting PR workflow**\n\n<body>`)
+  // is extracted at write time so the UI can drive a separate
+  // heading without re-parsing on every render. Skip for providers
+  // that don't emit titles (Anthropic, DeepSeek-R1, Moonshot K2).
+  onReasoningStart: () => void
+  onReasoningDelta: (delta: string) => void
+  onReasoningEnd: (opts?: { encrypted?: string; summaryTitle?: string }) => void
   onToolCallStart(toolCallId: string, name: string, args: unknown): void
   onToolCallStart(name: string, args: unknown): void
   onToolCallEnd(
@@ -143,6 +169,7 @@ export function createOutboundBridge(
       step: counters.step,
       msg: counters.msg,
       tc: counters.tc,
+      reasoning: counters.reasoning,
       cacheKey,
     })
   }
@@ -152,6 +179,8 @@ export function createOutboundBridge(
   let currentStepNumber = 0
   let currentMsgKey: string | null = null
   let currentTextRunKey: string | null = null
+  let currentReasoningKey: string | null = null
+  let currentReasoningRunKey: string | null = null
   const toolCallsById = new Map<
     string,
     { key: string; runKey: string; args: unknown }
@@ -275,6 +304,56 @@ export function createOutboundBridge(
           value: { status: `completed`, run_id: currentTextRunKey } as never,
         }) as ChangeEvent
       )
+    },
+
+    onReasoningStart() {
+      const runKey = requireActiveRun(`onReasoningStart`)
+      currentReasoningKey = `reasoning-${counters.reasoning++}`
+      persistSeed()
+      currentReasoningRunKey = runKey
+      counters.deltaSeqs.set(currentReasoningKey, 0)
+      writeEvent(
+        entityStateSchema.reasoning.insert({
+          key: currentReasoningKey,
+          value: { status: `streaming`, run_id: runKey } as never,
+        }) as ChangeEvent
+      )
+    },
+
+    onReasoningDelta(delta: string) {
+      if (!currentReasoningKey) return
+      const runKey = requireActiveRun(`onReasoningDelta`)
+      const seq = counters.deltaSeqs.get(currentReasoningKey) ?? 0
+      counters.deltaSeqs.set(currentReasoningKey, seq + 1)
+      writeEvent(
+        entityStateSchema.reasoningDeltas.insert({
+          key: `${currentReasoningKey}:${seq}`,
+          value: {
+            reasoning_id: currentReasoningKey,
+            run_id: runKey,
+            delta,
+          } as never,
+        }) as ChangeEvent
+      )
+    },
+
+    onReasoningEnd(opts?: { encrypted?: string; summaryTitle?: string }) {
+      if (!currentReasoningKey) return
+      writeEvent(
+        entityStateSchema.reasoning.update({
+          key: currentReasoningKey,
+          value: {
+            status: `completed`,
+            run_id: currentReasoningRunKey,
+            ...(opts?.encrypted !== undefined && { encrypted: opts.encrypted }),
+            ...(opts?.summaryTitle !== undefined && {
+              summary_title: opts.summaryTitle,
+            }),
+          } as never,
+        }) as ChangeEvent
+      )
+      currentReasoningKey = null
+      currentReasoningRunKey = null
     },
 
     onToolCallStart(
