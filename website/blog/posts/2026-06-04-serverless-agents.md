@@ -48,7 +48,7 @@ published: true
   }
 </style>
 
-In the last few weeks, every major AI platform has shipped [managed&nbsp;agents](#managed-agents).
+Every major AI platform has now shipped [managed&nbsp;agents](#managed-agents).
 
 They're responding to the same demand, for infrastructure to bring agents online, with the same kind of [sandbox-based architecture](#the-rise-of-the-sandbox). That architecture is&nbsp;wrong.
 
@@ -66,7 +66,7 @@ That's the architecture &mdash; [serverless agents](#principles-of-serverless-ag
 
 ## Managed agents
 
-In the last few weeks, what seems like every major AI platform has shipped their version of managed agents:
+Over the last few weeks, all of these major AI labs and platforms have shipped their version of managed agents:
 
 - [Anthropic Managed Agents](https://claude.com/blog/claude-managed-agents) (April 8th)
 - [Cloudflare Project Think](https://blog.cloudflare.com/project-think) (April 15th)
