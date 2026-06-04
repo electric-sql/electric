@@ -370,6 +370,10 @@ const primaryPlatform = computed(
          section's takeaway. -->
     <Section id="three-ways">
       <template #title>Three ways to use it</template>
+      <template #subtitle>
+        Build your own agents on the SDK, code locally with the bundled
+        Horton, or attach to sessions running anywhere on your&nbsp;servers.
+      </template>
 
       <div class="ad-modes-grid">
         <article class="ad-modes-card">
@@ -379,9 +383,8 @@ const primaryPlatform = computed(
           <h3 class="ad-modes-title">Build your own agents</h3>
           <p class="ad-modes-body">
             The desktop is the dev tool for the entities <em>you</em> write
-            with the Electric Agents SDK
-            (<code>@electric-ax/agents-runtime</code>) — state explorer,
-            timeline, fork-from-here.
+            with the Electric Agents SDK — state explorer, timeline,
+            fork-from-here.
           </p>
           <p class="ad-modes-list-label mono">You can:</p>
           <ul class="ad-modes-list">
@@ -398,9 +401,8 @@ const primaryPlatform = computed(
           </span>
           <h3 class="ad-modes-title">Code with Horton, locally</h3>
           <p class="ad-modes-body">
-            Horton — our open-source coding agent — ships bundled in the same
-            app. Pick a model, point at a directory, chat to an agent that
-            edits files, runs bash, and spawns parallel workers.
+            Horton, our open-source coding agent, ships bundled. Pick a model,
+            point at a directory, edit code and run bash from chat.
           </p>
           <p class="ad-modes-list-label mono">You can:</p>
           <ul class="ad-modes-list">
@@ -417,9 +419,8 @@ const primaryPlatform = computed(
           </span>
           <h3 class="ad-modes-title">Attach to remote sessions</h3>
           <p class="ad-modes-body">
-            Wherever your agents run, attach to any agents-server — your own
-            or Electric Cloud. Sessions spawned by CI, webhooks, GitHub
-            issues, cron or your software factory show up live.
+            Wherever your agents run, attach to any agents-server. Sessions
+            spawned by CI, webhooks, issues or cron show up live.
           </p>
           <p class="ad-modes-list-label mono">You can:</p>
           <ul class="ad-modes-list">
