@@ -677,20 +677,15 @@ const primaryPlatform = computed(
     </Section>
 
     <!-- ─────────────────── §5 — Bundled Horton ─────────────────── *
-         Two-zone layout that intentionally breaks from the §3 / §3.5 / §6
-         card grids so the page has visual variety as the reader scrolls.
-         Zone 1: three capability pillars (provider · working directory ·
-         skills + slash) restating the three sub-bullets locked in
-         APP_PAGE_PLAN.md §5. Zone 2: "Things you can ask Horton to do"
-         3-column prompt grid (Chat / Code / Research) with example
-         prompts in `<code>` so the visual reads as a prompt library
-         rather than a marketing list. The Section uses `:dark="true"`
-         so this block sits as a contrasting hero strip for Horton
-         between the surrounding §4 + §6 sections — bundled agent gets
-         the marquee treatment without taking the headline. In dark
-         global mode the surface difference is subtle (one `--vp-c-bg`
-         rung) but consistent; in light mode it's a pronounced dark
-         strip on a light page. -->
+         Three capability pillars (provider · working directory · skills
+         + slash) restating the three sub-bullets locked in
+         APP_PAGE_PLAN.md §5. The Section uses `:dark="true"` so this
+         block sits as a contrasting strip for Horton between the
+         surrounding §4 + §6 sections — bundled agent gets the marquee
+         treatment without taking the headline. In dark global mode
+         the surface difference is subtle (one `--vp-c-bg` rung) but
+         consistent; in light mode it's a pronounced dark strip on a
+         light page. -->
     <Section id="horton" :dark="true">
       <template #title>Horton, in the box</template>
       <template #subtitle>
@@ -733,57 +728,6 @@ const primaryPlatform = computed(
             your own skills to ship reusable workflows.
           </p>
         </article>
-      </div>
-
-      <div class="ad-horton-ask">
-        <p class="ad-horton-ask-eyebrow mono">
-          Things you can ask Horton to do
-        </p>
-        <div class="ad-horton-ask-grid">
-          <article class="ad-horton-ask-col">
-            <header class="ad-horton-ask-header">
-              <span class="ad-horton-ask-icon" aria-hidden="true">
-                <span class="ad-icon ad-icon--message-circle" />
-              </span>
-              <h3>Chat</h3>
-            </header>
-            <ul>
-              <li><code>Summarise this docs page</code></li>
-              <li><code>Plan a refactor</code></li>
-              <li><code>Explain this stack trace</code></li>
-              <li><code>Draft a launch tweet</code></li>
-            </ul>
-          </article>
-
-          <article class="ad-horton-ask-col">
-            <header class="ad-horton-ask-header">
-              <span class="ad-horton-ask-icon" aria-hidden="true">
-                <span class="ad-icon ad-icon--braces" />
-              </span>
-              <h3>Code</h3>
-            </header>
-            <ul>
-              <li><code>Refactor this file</code></li>
-              <li><code>Write tests for X</code></li>
-              <li><code>Bisect this regression</code></li>
-              <li><code>Apply the same change across these 4 files</code></li>
-            </ul>
-          </article>
-
-          <article class="ad-horton-ask-col">
-            <header class="ad-horton-ask-header">
-              <span class="ad-horton-ask-icon" aria-hidden="true">
-                <span class="ad-icon ad-icon--compass" />
-              </span>
-              <h3>Research</h3>
-            </header>
-            <ul>
-              <li><code>Find the latest spec for Y</code></li>
-              <li><code>Diff what changed since v1.2</code></li>
-              <li><code>Pull the open PRs touching this dir</code></li>
-            </ul>
-          </article>
-        </div>
       </div>
     </Section>
 
@@ -1791,16 +1735,9 @@ const primaryPlatform = computed(
 }
 
 /* ── §5 Horton, in the box ──────────────────────────────────── *
-   Two-zone layout under a `:dark` Section:
-     Zone 1 — three capability pillars (provider · working
-              directory · skills + slash) in a 3-column grid.
-     Zone 2 — "Things you can ask Horton to do" 3-column prompt
-              grid (Chat / Code / Research) with `<code>` example
-              prompts so the visual reads as a prompt library
-              rather than another card grid.
-   The two zones are separated by a dashed hairline rule (not a
-   solid block) so the section reads as one continuous Horton
-   pitch rather than two unrelated sub-sections. */
+   Three capability pillars (provider · working directory · skills +
+   slash) in a 3-column grid sitting under a `:dark` Section, so this
+   block reads as a contrasting strip between §4 and §6. */
 
 .ad-horton-pillars {
   display: grid;
@@ -1852,100 +1789,6 @@ const primaryPlatform = computed(
 
 .ad-horton-pillar-body code {
   font-size: 12.5px;
-}
-
-.ad-horton-ask {
-  margin-top: 44px;
-  padding-top: 36px;
-  border-top: 1px dashed var(--vp-c-divider);
-}
-
-.ad-horton-ask-eyebrow {
-  margin: 0 0 18px;
-  font-size: 12px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--vp-c-text-3);
-}
-
-.ad-horton-ask-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 22px;
-}
-
-.ad-horton-ask-col {
-  display: flex;
-  flex-direction: column;
-  padding: 18px 18px 14px;
-  border: 1px solid var(--vp-c-divider);
-  border-radius: 12px;
-  background: var(--vp-c-bg);
-}
-
-.ad-horton-ask-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 14px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--vp-c-divider);
-}
-
-.ad-horton-ask-icon {
-  font-size: 16px;
-  width: 28px;
-  height: 28px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 7px;
-  background: color-mix(in srgb, var(--vp-c-brand-1) 8%, transparent);
-  border: 1px solid
-    color-mix(in srgb, var(--vp-c-brand-1) 22%, var(--vp-c-divider));
-  color: var(--vp-c-brand-1);
-}
-
-.ad-horton-ask-icon .ad-icon {
-  font-size: 16px;
-}
-
-.ad-horton-ask-header h3 {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--vp-c-text-1);
-}
-
-.ad-horton-ask-col ul {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  gap: 8px;
-}
-
-.ad-horton-ask-col li {
-  font-size: 13px;
-  line-height: 1.45;
-  color: var(--vp-c-text-2);
-}
-
-.ad-horton-ask-col code {
-  font-size: 12.5px;
-  /* Code chips in the ask-grid are the section's hero ornament — the
-     reader skims the section and the chips are what they pick up.
-     Slightly more padding and a softer background than VitePress's
-     default inline-code styling so the chips read as prompt
-     primitives, not random inline references. */
-  padding: 3px 7px;
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--vp-c-brand-1) 7%, var(--vp-c-bg-soft));
-  border: 1px solid
-    color-mix(in srgb, var(--vp-c-brand-1) 14%, var(--vp-c-divider));
-  color: var(--vp-c-text-1);
 }
 
 /* ── §6 built for builders ──────────────────────────────────── *
@@ -2296,8 +2139,7 @@ const primaryPlatform = computed(
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .ad-multi-pillars,
-  .ad-horton-pillars,
-  .ad-horton-ask-grid {
+  .ad-horton-pillars {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .ad-builders-grid {
@@ -2351,8 +2193,7 @@ const primaryPlatform = computed(
   /* On mobile, §4 / §5 also drop to single columns so the long body
      text doesn't get squeezed against a half-width column. */
   .ad-multi-pillars,
-  .ad-horton-pillars,
-  .ad-horton-ask-grid {
+  .ad-horton-pillars {
     grid-template-columns: 1fr;
   }
   .ad-horton-pillar-title {
