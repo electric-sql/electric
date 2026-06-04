@@ -365,6 +365,20 @@ export class BuiltinAgentsServer {
         }),
         new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
       ])
+      // Tear down this process's live sandbox containers NOW — their debounced
+      // idle teardowns die with the process and would leave them running.
+      // Bounded like the drain above so a hung daemon can't block quit.
+      if (this.bootstrap.shutdownSandboxes) {
+        await Promise.race([
+          this.bootstrap.shutdownSandboxes().catch((err) => {
+            serverLog.error(
+              `[builtin-agents] sandbox shutdown failed during shutdown:`,
+              err
+            )
+          }),
+          new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
+        ])
+      }
       this.bootstrap = null
     }
 

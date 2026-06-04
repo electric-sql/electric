@@ -12,6 +12,7 @@ import { createEntityLogPrefix, runtimeLog } from './log'
 import { createRuntimeServerClient } from './runtime-server-client'
 import type { RuntimeServerClient } from './runtime-server-client'
 import { unrestrictedSandbox } from './sandbox/unrestricted'
+import { ensureSandboxMaterialized } from './sandbox/lazy'
 import { resolveSandboxIdentity } from './sandbox/identity'
 import { appendPathToUrl } from './url'
 import { manifestChildKey } from './manifest-helpers'
@@ -1322,7 +1323,7 @@ export async function processWake(
         const requestedInherit =
           opts?.sandbox === `inherit` ||
           (typeof opts?.sandbox === `object` && opts.sandbox.inherit === true)
-        const sandbox = requestedInherit
+        const childSandbox = requestedInherit
           ? resolvedSandboxSelection
             ? {
                 profile: resolvedSandboxSelection.profile,
@@ -1336,6 +1337,12 @@ export async function processWake(
           : opts?.sandbox === `inherit`
             ? undefined
             : opts?.sandbox
+        // An inheriting child only ever ATTACHES by key — make sure the
+        // owner's (lazily-created) container/workspace actually exists before
+        // the child can wake, even if this wake never ran a tool itself.
+        if (requestedInherit && resolvedSandboxSelection && sandbox) {
+          await ensureSandboxMaterialized(sandbox)
+        }
         return serverClient.spawnEntity({
           type: childType,
           id: childId,
@@ -1344,7 +1351,7 @@ export async function processWake(
           initialMessage: opts?.initialMessage,
           initialMessageType: opts?.initialMessageType,
           tags: opts?.tags,
-          sandbox,
+          sandbox: childSandbox,
           wake: wakeOpt,
         })
       },
