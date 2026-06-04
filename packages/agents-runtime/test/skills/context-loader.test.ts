@@ -125,7 +125,10 @@ describe(`createContextSkillLoader`, () => {
     const loaded = await loader.load({
       wake: createWake({ source: `hello` }),
       slashCommands: {
-        replaceOwned: (owner, commands) => replaced.push({ owner, commands }),
+        replaceOwned: (
+          owner: string,
+          commands: Array<SlashCommandDefinition>
+        ) => replaced.push({ owner, commands }),
       },
       insertContext: () => undefined,
       removeContext: () => undefined,
@@ -173,7 +176,14 @@ describe(`createContextSkillLoader`, () => {
       slashCommands: {
         replaceOwned: () => undefined,
       },
-      insertContext: (id, entry) => inserted.push({ id, entry }),
+      insertContext: (
+        id: string,
+        entry: {
+          name: string
+          attrs?: Record<string, unknown>
+          content: string
+        }
+      ) => inserted.push({ id, entry }),
       removeContext: () => undefined,
       getContext: () => undefined,
     } as any)
@@ -207,7 +217,10 @@ describe(`createContextSkillLoader`, () => {
     const loaded = await loader.load({
       wake: createWake({ source: `hello` }),
       slashCommands: {
-        replaceOwned: (owner, commands) => replaced.push({ owner, commands }),
+        replaceOwned: (
+          owner: string,
+          commands: Array<SlashCommandDefinition>
+        ) => replaced.push({ owner, commands }),
       },
       insertContext: () => undefined,
       removeContext: () => undefined,

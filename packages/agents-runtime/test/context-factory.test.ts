@@ -53,6 +53,7 @@ describe(`createHandlerContext`, () => {
       state: {},
       actions: {},
       electricTools: [],
+      sandbox: testSandboxStub,
       events: [] as Array<ChangeEvent>,
       writeEvent: vi.fn(),
       wakeSession: {
@@ -143,6 +144,7 @@ describe(`createHandlerContext`, () => {
         { name: `quickstart`, description: `Static quickstart` },
       ],
       electricTools: [],
+      sandbox: testSandboxStub,
       events: [] as Array<ChangeEvent>,
       writeEvent: (event) => writes.push(event),
       wakeSession: {
