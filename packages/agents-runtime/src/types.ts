@@ -1072,13 +1072,13 @@ export interface HandlerContext<
     sourceEntityUrl: string,
     id: string,
     opts?: ForkOptions
-  ) => Promise<{ url: string }>
+  ) => Promise<EntityHandle>
   /**
    * Convenience wrapper for the common self-fork case — equivalent to
    * `ctx.fork(ctx.entityUrl, id, opts)`. Mirrors `spawn`'s ergonomics
    * (where you also don't have to spell out who the parent is).
    */
-  forkSelf: (id: string, opts?: ForkOptions) => Promise<{ url: string }>
+  forkSelf: (id: string, opts?: ForkOptions) => Promise<EntityHandle>
   observe: ((
     source: ObservationSource & { sourceType: `entity` },
     opts?: { wake?: Wake }

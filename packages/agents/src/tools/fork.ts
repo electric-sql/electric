@@ -55,7 +55,7 @@ Omit 'entityUrl' to fork your own session. Pass a different session's URL to for
         // it's not supplied (same pattern `createSpawnWorkerTool` uses
         // for the worker's id).
         const forkId = id ?? `fork-${nanoid(10)}`
-        const { url } =
+        const handle =
           entityUrl !== undefined
             ? await ctx.fork(entityUrl, forkId, opts)
             : await ctx.forkSelf(forkId, opts)
@@ -67,10 +67,10 @@ Omit 'entityUrl' to fork your own session. Pass a different session's URL to for
           content: [
             {
               type: `text` as const,
-              text: `Forked at ${url}. ${dispatchNote} End your turn; you'll wake with the fork's response when its next run finishes (same as a spawned worker).`,
+              text: `Forked at ${handle.entityUrl}. ${dispatchNote} End your turn; you'll wake with the fork's response when its next run finishes (same as a spawned worker).`,
             },
           ],
-          details: { forked: true, forkUrl: url },
+          details: { forked: true, forkUrl: handle.entityUrl },
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : `Unknown error`

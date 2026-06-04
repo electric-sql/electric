@@ -270,7 +270,7 @@ describe(`createHandlerContext: tags + tag mutations`, () => {
       wakeEvent: { type: `inbox`, payload: `hi` } as any,
       doObserve: () => Promise.resolve({} as any),
       doSpawn: () => Promise.resolve({} as any),
-      doFork: () => Promise.resolve({ url: `/horton/fork` }),
+      doFork: () => Promise.resolve({} as any),
       doMkdb: () => ({}) as any,
       executeSend: async () => ({ sent: true, targetUrl: `/horton/x` }),
       doSetTag: async (key, value) => {
