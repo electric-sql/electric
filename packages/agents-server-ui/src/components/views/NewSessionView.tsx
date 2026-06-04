@@ -451,7 +451,7 @@ export function NewSessionView({
     !entityTypesLoading &&
     !runnersLoading &&
     desktopRunnerLoaded &&
-    (!isDesktop || desktopRunnerId === null || desktopRunnerIsAvailable) &&
+    (!isDesktop || desktopRunnerId === null || desktopRunnerStillExists) &&
     effectiveRunnerId !== null
 
   return (
