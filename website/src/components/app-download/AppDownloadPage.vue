@@ -24,7 +24,6 @@ import { VPButton } from 'vitepress/theme'
 import Section from '../agents-home/Section.vue'
 import BottomCtaStrap from '../BottomCtaStrap.vue'
 import AdPlaceholder from './AdPlaceholder.vue'
-import AppMockupEmbed from '../brand-toys/app/AppMockupEmbed.vue'
 import AppMockupShadowHost from '../brand-toys/app/AppMockupShadowHost.vue'
 import HeroChatStateScene from '../brand-toys/app/scenes/desktop/HeroChatStateScene.vue'
 
@@ -340,7 +339,7 @@ const primaryPlatform = computed(
     </section>
 
     <!--
-      Sections §2–§6 land their structure (this Section shell + an
+      Sections §2–§4 land their structure (this Section shell + an
       <AdPlaceholder> inside) in phase 1, and have their real copy /
       visuals filled in as the rewrite progresses (see
       APP_PAGE_PLAN.md §7 for the phase schedule). The chrome stays
@@ -352,10 +351,10 @@ const primaryPlatform = computed(
                                       now so visitors land directly
                                       on the product shot.
         §3   three ways to use it  → phase 3 ✓
-        §3.5 scenarios             → phase 3 ✓ copy · phase 5 illustrations
-        §4   multi-device          → phase 4 ✓ copy · phase 5 diagram SVG
-        §5   bundled Horton        → phase 4 ✓
-        §6   built for builders    → phase 3 ✓
+        §4   everything in the box → phase 4 ✓ (combines the earlier
+                                      "bundled Horton" + "built for
+                                      builders" sub-sections into one
+                                      unified feature grid)
     -->
 
     <!-- ─────────────────── §3 — Three ways to use it ─────────────────── *
@@ -434,376 +433,120 @@ const primaryPlatform = computed(
       </p>
     </Section>
 
-    <!-- ─────────────────── §3.5 — Scenarios ─────────────────── *
-         Four worked end-to-end stories that span the three modes from
-         §3. Each card carries a placeholder illustration at the top,
-         a `Touches:` eyebrow in mono naming the moving parts, the
-         scenario title, and a short body paragraph. The dark section
-         background sets these apart from the §3 cards above and the
-         §6 builder cards below — they read as the page's "in practice"
-         interlude. Body strings are locked in APP_PAGE_PLAN.md §3.5;
-         do not edit them here without updating that doc. -->
-    <Section id="scenarios" :dark="true">
-      <template #title>What this looks like in practice</template>
+    <!-- ─────────────────── §4 — Everything in the box ─────────────────── *
+         One unified feature grid combining the bundled-Horton config
+         row (provider · directory · skills) with the dev-tooling row
+         (workspace · state · timeline · MCP · discovery · CLI). Cards
+         follow a tight spec-sheet rhythm — lucide icon + short title
+         + one-sentence body — so the section reads as the page's
+         comprehensive "what you get" surface. The §3 modes above
+         carry the headline framing; this grid lists what's actually
+         in the box. -->
+    <Section id="features">
+      <template #title>Everything in the box</template>
       <template #subtitle>
-        Four short stories that span the three modes above. None of them require
-        code you don't have today.
+        One desktop app — bring your own provider, point it at a directory,
+        and open the same dev tooling Electric uses to&nbsp;ship&nbsp;agents.
       </template>
 
-      <div class="ad-scenarios-grid">
-        <article class="ad-scenarios-card">
-          <div class="ad-scenarios-illo">
-            <!--
-              Scenario 1 mockup — sidebar + chat with the
-              `github-issue` chat fixture so the chat content
-              actually demonstrates the headline (CI-spawned
-              session investigating a flaky test) instead of a
-              generic refactor. Sidebar uses the default fixture
-              with the streaming horton session at the top so the
-              eye reads "fresh CI session".
-            -->
-            <AppMockupEmbed
-              :scene="HeroChatStateScene"
-              :scene-props="{
-                os: 'auto',
-                theme: 'dark',
-                responsive: false,
-                showSidebar: true,
-                showChatTile: true,
-                showStateTile: false,
-                title: 'Fix flaky auth test · issue/1724',
-                sessionId: 'horton/issue-1724',
-                chatFixtureKey: 'github-issue',
-              }"
-              aspect="16/9"
-              :scale="0.75"
-            />
-          </div>
-          <p class="ad-scenarios-touches mono">
-            Touches: Cloud · mobile · steer · stop · review
-          </p>
-          <h3 class="ad-scenarios-title">
-            GitHub issue → CI spawns Horton → triage on phone → finish on desk
-          </h3>
-          <p class="ad-scenarios-body">
-            Your software factory opens an agent session on Electric Cloud from
-            a fresh GitHub issue or a CI dispatch. You get a notification on
-            your phone, skim the diff Horton drafted, push back a steering
-            message, then pick up on your laptop to merge.
-          </p>
-        </article>
-
-        <article class="ad-scenarios-card">
-          <div class="ad-scenarios-illo">
-            <!--
-              Scenario 2 mockup — sidebar + chat with the
-              `parallel-workers` chat fixture, which mirrors the
-              sidebar's worker tree (4 workers under the
-              `parallel-rename` parent) so the chat narrative
-              ("spawning a worker per package") matches what the
-              sidebar visualises.
-            -->
-            <AppMockupEmbed
-              :scene="HeroChatStateScene"
-              :scene-props="{
-                os: 'auto',
-                theme: 'dark',
-                responsive: false,
-                showSidebar: true,
-                showChatTile: true,
-                showStateTile: false,
-                sidebarSelectedUrl: '/horton/parallel-rename',
-                title: 'Rename across packages',
-                sessionId: 'horton/parallel-rename',
-                chatFixtureKey: 'parallel-workers',
-              }"
-              aspect="16/9"
-              :scale="0.75"
-            />
-          </div>
-          <p class="ad-scenarios-touches mono">
-            Touches: desktop · working-dir · workers · tile · fork
-          </p>
-          <h3 class="ad-scenarios-title">
-            Local refactor with parallel workers
-          </h3>
-          <p class="ad-scenarios-body">
-            Open the desktop, point Horton at a repo, ask for a rename across
-            packages. Horton spawns a worker per package; you fork the one that
-            took the wrong turn and ship the diff.
-          </p>
-        </article>
-
-        <article class="ad-scenarios-card">
-          <div class="ad-scenarios-illo">
-            <!--
-              Scenario 3 mockup — state inspector only with the
-              `summarizer` state fixture. Custom entity types
-              (inputs / chunks / summaries / merged / errors)
-              demonstrate "the SDK lets you debug entities you
-              wrote", with the failed `chunk-9` thread visible in
-              the events panel — the eye lands on the failure mode
-              the headline copy describes.
-            -->
-            <AppMockupEmbed
-              :scene="HeroChatStateScene"
-              :scene-props="{
-                os: 'auto',
-                theme: 'dark',
-                responsive: false,
-                showSidebar: false,
-                showChatTile: false,
-                showStateTile: true,
-                title: 'Summarise outline draft',
-                sessionId: 'summarizer/r3kc8mq',
-                stateFixtureKey: 'summarizer',
-              }"
-              aspect="16/9"
-              :scale="0.75"
-            />
-          </div>
-          <p class="ad-scenarios-touches mono">
-            Touches: SDK · state explorer · timeline · fork · MCP
-          </p>
-          <h3 class="ad-scenarios-title">
-            Build an agent on the SDK, debug it without a redeploy
-          </h3>
-          <p class="ad-scenarios-body">
-            You ship a custom <code>summarizer</code> entity with the SDK and
-            it's getting stuck on certain inputs. Open the state explorer, fork
-            the failing session, change the prompt, replay.
-          </p>
-        </article>
-
-        <article class="ad-scenarios-card">
-          <div class="ad-scenarios-illo">
-            <!--
-              Scenario 4 mockup — chat only with the
-              `overnight-research` chat fixture. Paused at full
-              progress so the chat reads as "morning catch-up on a
-              completed nightly run" — top-5 leads from 412 sources,
-              ready to be forked off into a fresh session.
-            -->
-            <AppMockupEmbed
-              :scene="HeroChatStateScene"
-              :scene-props="{
-                os: 'auto',
-                theme: 'dark',
-                responsive: false,
-                showSidebar: false,
-                showChatTile: true,
-                showStateTile: false,
-                paused: true,
-                progress: 1,
-                title: 'Nightly research · v0.4 → v0.5 changes',
-                sessionId: 'research/nightly-1729',
-                chatFixtureKey: 'overnight-research',
-              }"
-              aspect="16/9"
-              :scale="0.75"
-            />
-          </div>
-          <p class="ad-scenarios-touches mono">
-            Touches: Cloud · cron wake · mobile · fork · send
-          </p>
-          <h3 class="ad-scenarios-title">Cron-triggered overnight pipeline</h3>
-          <p class="ad-scenarios-body">
-            Cron kicks off a nightly research agent on the cloud server. Open
-            the mobile app in the morning and hand off the most promising lead
-            to a fresh session.
-          </p>
-        </article>
-      </div>
-    </Section>
-
-    <!-- ─────────────────── §4 — Multi-device, multi-user ─────────────────── *
-         Phase 4 ships this section with copy + an `<AdPlaceholder>` for the
-         multi-device diagram (16/8). Phase 5 swaps the placeholder for an
-         inline SVG matching the `EntityOverviewDiagram.vue` style — see
-         APP_PAGE_PLAN.md §4 + §9 open-questions for the deliberate "ship
-         without the SVG" decision. The locked plan paragraph is split
-         across the subtitle and the three pillars below the diagram so
-         the body reads as scannable rather than a wall of prose. -->
-    <Section id="multi-device">
-      <template #title>Multi-device, multi-user</template>
-      <template #subtitle>
-        Agents run on the server, not the client. The desktop and mobile apps
-        are live views into the same Electric streams.
-      </template>
-
-      <AdPlaceholder
-        name="multi-device.svg"
-        sublabel="Diagram: phone ↔ Electric Cloud ↔ desktop (also a pull-wake worker)"
-        aspect="16/8"
-      />
-
-      <div class="ad-multi-pillars">
-        <article class="ad-multi-pillar">
-          <span class="ad-multi-icon" aria-hidden="true">
-            <span class="ad-icon ad-icon--monitor-smartphone" />
-          </span>
-          <h3 class="ad-multi-title">Same session, every device</h3>
-          <p class="ad-multi-body">
-            Open the same session from your laptop and your phone, hand work off
-            between devices, follow a long-running run from wherever you happen
-            to be.
-          </p>
-        </article>
-
-        <article class="ad-multi-pillar">
-          <span class="ad-multi-icon" aria-hidden="true">
-            <span class="ad-icon ad-icon--users" />
-          </span>
-          <h3 class="ad-multi-title">Shared with your team</h3>
-          <p class="ad-multi-body">
-            Sign in once with GitHub or Google; your Electric Cloud workspaces
-            appear automatically. Share a session with a teammate by sharing its
-            URL — the multi-user view sees the same stream.
-          </p>
-        </article>
-
-        <article class="ad-multi-pillar">
-          <span class="ad-multi-icon" aria-hidden="true">
-            <span class="ad-icon ad-icon--cpu" />
-          </span>
-          <h3 class="ad-multi-title">Pull-wake runners</h3>
-          <p class="ad-multi-body">
-            The desktop can register itself as a pull-wake runner, so your
-            laptop becomes a worker for your cloud agents. Close the lid and
-            they finish on the next runner that comes online.
-          </p>
-        </article>
-      </div>
-    </Section>
-
-    <!-- ─────────────────── §5 — Bundled Horton ─────────────────── *
-         Three capability pillars (provider · working directory · skills
-         + slash) restating the three sub-bullets locked in
-         APP_PAGE_PLAN.md §5. The Section uses `:dark="true"` so this
-         block sits as a contrasting strip for Horton between the
-         surrounding §4 + §6 sections — bundled agent gets the marquee
-         treatment without taking the headline. In dark global mode
-         the surface difference is subtle (one `--vp-c-bg` rung) but
-         consistent; in light mode it's a pronounced dark strip on a
-         light page. -->
-    <Section id="horton" :dark="true">
-      <template #title>Horton, in the box</template>
-      <template #subtitle>
-        A friendly, capable general-purpose chat agent with code-editing
-        superpowers — no server-side setup required.
-      </template>
-
-      <div class="ad-horton-pillars">
-        <article class="ad-horton-pillar">
-          <span class="ad-horton-pillar-icon" aria-hidden="true">
+      <div class="ad-features-grid">
+        <article class="ad-features-card">
+          <span class="ad-features-icon" aria-hidden="true">
             <span class="ad-icon ad-icon--key-round" />
           </span>
-          <h3 class="ad-horton-pillar-title">Pick your provider</h3>
-          <p class="ad-horton-pillar-body">
-            Bring your own API key (stored in the OS keychain), or sign in to
-            Codex. Anthropic, OpenAI, DeepSeek and Moonshot for models; Brave
-            Search and E2B for tools.
+          <h3 class="ad-features-title">Pick your provider</h3>
+          <p class="ad-features-body">
+            BYO API key (stored in the OS keychain) or sign in to Codex.
+            Anthropic, OpenAI, DeepSeek, Moonshot for models; Brave Search and
+            E2B for tools.
           </p>
         </article>
 
-        <article class="ad-horton-pillar">
-          <span class="ad-horton-pillar-icon" aria-hidden="true">
+        <article class="ad-features-card">
+          <span class="ad-features-icon" aria-hidden="true">
             <span class="ad-icon ad-icon--folder-tree" />
           </span>
-          <h3 class="ad-horton-pillar-title">Pick your working directory</h3>
-          <p class="ad-horton-pillar-body">
+          <h3 class="ad-features-title">Pick your working directory</h3>
+          <p class="ad-features-body">
             Horton reads and edits whatever you point it at — no per-project
-            install. The picker walks your filesystem; recent directories
-            surface automatically.
+            install. Recent directories surface automatically.
           </p>
         </article>
 
-        <article class="ad-horton-pillar">
-          <span class="ad-horton-pillar-icon" aria-hidden="true">
+        <article class="ad-features-card">
+          <span class="ad-features-icon" aria-hidden="true">
             <span class="ad-icon ad-icon--wand" />
           </span>
-          <h3 class="ad-horton-pillar-title">Skills + slash commands</h3>
-          <p class="ad-horton-pillar-body">
+          <h3 class="ad-features-title">Skills &amp; slash commands</h3>
+          <p class="ad-features-body">
             Type <code>/quickstart</code> to learn Electric Agents itself; write
             your own skills to ship reusable workflows.
           </p>
         </article>
-      </div>
-    </Section>
 
-    <!-- ─────────────────── §6 — Built for builders ─────────────────── *
-         Six compact cards (3×2 desktop, 2×2 → 1×6 at narrower widths).
-         Each card: lucide icon + 2-4 word title + one-sentence body.
-         Intentionally terse spec-sheet rhythm — the page already has
-         scenarios above, so cards here just identify what's in the
-         box. Every feature listed here is shipping today; see the
-         claim→code mapping in APP_PAGE_PLAN.md §5 / §6 if you're
-         tempted to add anything else. -->
-    <Section id="builders">
-      <template #title>Built for builders</template>
-      <template #subtitle>
-        When you ship your own entities on the Electric Agents infra and SDK
-        (<code>@electric-ax/agents-runtime</code>), the same app becomes the dev
-        tool you'd otherwise have to write yourself.
-      </template>
-
-      <div class="ad-builders-grid">
-        <article class="ad-builders-card">
-          <span class="ad-builders-icon" aria-hidden="true">
+        <article class="ad-features-card">
+          <span class="ad-features-icon" aria-hidden="true">
             <span class="ad-icon ad-icon--layout" />
           </span>
-          <h3 class="ad-builders-title">Tile workspace</h3>
-          <p class="ad-builders-body">
-            Split right / down cycle, find, <code>?layout=</code> deep link.
+          <h3 class="ad-features-title">Tile workspace</h3>
+          <p class="ad-features-body">
+            Split right / down cycle, find, fork-from-here,
+            <code>?layout=</code>&nbsp;deep&nbsp;link.
           </p>
         </article>
 
-        <article class="ad-builders-card">
-          <span class="ad-builders-icon" aria-hidden="true">
+        <article class="ad-features-card">
+          <span class="ad-features-icon" aria-hidden="true">
             <span class="ad-icon ad-icon--database" />
           </span>
-          <h3 class="ad-builders-title">State explorer</h3>
-          <p class="ad-builders-body">
-            Live view of every shared-state source per entity.
+          <h3 class="ad-features-title">State explorer</h3>
+          <p class="ad-features-body">
+            Live view of every shared-state source per entity — runs, inbox,
+            manifests, custom entities.
           </p>
         </article>
 
-        <article class="ad-builders-card">
-          <span class="ad-builders-icon" aria-hidden="true">
+        <article class="ad-features-card">
+          <span class="ad-features-icon" aria-hidden="true">
             <span class="ad-icon ad-icon--history" />
           </span>
-          <h3 class="ad-builders-title">Entity timeline</h3>
-          <p class="ad-builders-body">
-            Runs, inbox, manifests, fork-from-here.
+          <h3 class="ad-features-title">Entity timeline</h3>
+          <p class="ad-features-body">
+            Walk every event a session emitted; fork from any past point to
+            replay or A/B test a change.
           </p>
         </article>
 
-        <article class="ad-builders-card">
-          <span class="ad-builders-icon" aria-hidden="true">
+        <article class="ad-features-card">
+          <span class="ad-features-icon" aria-hidden="true">
             <span class="ad-icon ad-icon--cable" />
           </span>
-          <h3 class="ad-builders-title">MCP &amp; skills</h3>
-          <p class="ad-builders-body">
+          <h3 class="ad-features-title">MCP servers</h3>
+          <p class="ad-features-body">
             Add MCP servers with native OAuth; workspace
             <code>mcp.json</code> takes precedence.
           </p>
         </article>
 
-        <article class="ad-builders-card">
-          <span class="ad-builders-icon" aria-hidden="true">
+        <article class="ad-features-card">
+          <span class="ad-features-icon" aria-hidden="true">
             <span class="ad-icon ad-icon--radar" />
           </span>
-          <h3 class="ad-builders-title">Local discovery</h3>
-          <p class="ad-builders-body">Finds dev servers on localhost ports.</p>
+          <h3 class="ad-features-title">Local discovery</h3>
+          <p class="ad-features-body">
+            Finds dev servers on localhost ports so Horton can drive them
+            directly.
+          </p>
         </article>
 
-        <article class="ad-builders-card">
-          <span class="ad-builders-icon" aria-hidden="true">
+        <article class="ad-features-card">
+          <span class="ad-features-icon" aria-hidden="true">
             <span class="ad-icon ad-icon--terminal" />
           </span>
-          <h3 class="ad-builders-title">CLI installer</h3>
-          <p class="ad-builders-body">
-            Installs the <code>electric</code> command system-wide.
+          <h3 class="ad-features-title">CLI installer</h3>
+          <p class="ad-features-body">
+            Installs the <code>electric</code> command system-wide so scripts
+            and CI can talk to your local stack.
           </p>
         </article>
       </div>
@@ -1643,205 +1386,20 @@ const primaryPlatform = computed(
   color: var(--vp-c-text-3);
 }
 
-/* ── §3.5 scenarios ─────────────────────────────────────────── *
-   2×2 grid of worked examples that span the three modes from §3.
-   Each card stacks: placeholder illustration (16:9) at the top,
-   a `Touches: …` mono eyebrow, a semi-bold title, then ~3 lines
-   of body. The Section is rendered with `:dark="true"`, which
-   forces dark theme variables for its subtree — so the cards
-   render dark even in global light mode and pop as the page's
-   "in practice" interlude between the §3 modes grid and the §6
-   builder grid. */
+/* ── §4 everything in the box ─────────────────────────────── *
+   Unified feature grid replacing the earlier "scenarios /
+   multi-device / Horton config / builders" cluster. 3×3 at desktop
+   widths, collapses to 2 columns then 1 alongside the rest of the
+   page. Each card holds a lucide icon, a short title, and a
+   one-sentence body. */
 
-.ad-scenarios-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 24px;
-}
-
-.ad-scenarios-card {
-  display: flex;
-  flex-direction: column;
-  padding: 24px;
-  border: 1px solid var(--vp-c-divider);
-  border-radius: 16px;
-  /* `--vp-c-bg` is one rung BELOW the dark Section's `--ea-surface-alt`
-     (= `--vp-c-bg-soft`) fill, so cards read as recessed panels
-     within the section rather than elevated tiles — same convention
-     the `.ad-mobile-preview-card` further down uses for the same
-     dark-section context. The thin border keeps the edge defined
-     against the slightly lighter section fill. */
-  background: var(--vp-c-bg);
-  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
-}
-
-.ad-scenarios-illo {
-  margin-bottom: 18px;
-}
-
-.ad-scenarios-touches {
-  margin: 0 0 10px;
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--vp-c-text-3);
-}
-
-.ad-scenarios-title {
-  margin: 0 0 12px;
-  font-size: 18px;
-  font-weight: 600;
-  line-height: 1.3;
-  color: var(--vp-c-text-1);
-  letter-spacing: -0.005em;
-  text-wrap: balance;
-}
-
-.ad-scenarios-body {
-  margin: 0;
-  font-size: 14.5px;
-  line-height: 1.6;
-  color: var(--vp-c-text-2);
-  text-wrap: pretty;
-}
-
-.ad-scenarios-body code {
-  font-size: 12.5px;
-}
-
-/* ── §4 multi-device, multi-user ────────────────────────────── *
-   Three-pillar grid that sits below the diagram placeholder
-   (16/8). Equal-width columns at desktop widths, collapsing to
-   2 then 1 at narrower breakpoints alongside the rest of the
-   page. Pillars share the brand-tinted square icon CHIP pattern
-   from §3 modes (same tint formula, same rounded-square shape,
-   no border-thickness change) but render slightly smaller
-   (40px/10px-radius vs §3's 44px/12px-radius) so the body copy
-   underneath stays the dominant element — these pillars carry
-   one short paragraph each rather than the §3 cards' bullet
-   list. The whole block sits 36px below the diagram, matching
-   the gap between the §3 modes grid and its strip. */
-
-.ad-multi-pillars {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 24px;
-  margin-top: 36px;
-}
-
-.ad-multi-pillar {
-  display: flex;
-  flex-direction: column;
-}
-
-.ad-multi-icon {
-  font-size: 20px;
-  width: 40px;
-  height: 40px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--vp-c-brand-1) 8%, transparent);
-  border: 1px solid
-    color-mix(in srgb, var(--vp-c-brand-1) 22%, var(--vp-c-divider));
-  color: var(--vp-c-brand-1);
-  margin-bottom: 14px;
-}
-
-.ad-multi-icon .ad-icon {
-  font-size: 20px;
-}
-
-.ad-multi-title {
-  margin: 0 0 8px;
-  font-size: 17px;
-  font-weight: 600;
-  letter-spacing: -0.005em;
-  line-height: 1.3;
-  color: var(--vp-c-text-1);
-}
-
-.ad-multi-body {
-  margin: 0;
-  font-size: 14.5px;
-  line-height: 1.6;
-  color: var(--vp-c-text-2);
-  text-wrap: pretty;
-}
-
-/* ── §5 Horton, in the box ──────────────────────────────────── *
-   Three capability pillars (provider · working directory · skills +
-   slash) in a 3-column grid sitting under a `:dark` Section, so this
-   block reads as a contrasting strip between §4 and §6. */
-
-.ad-horton-pillars {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 28px;
-  margin-top: 8px;
-}
-
-.ad-horton-pillar {
-  display: flex;
-  flex-direction: column;
-}
-
-.ad-horton-pillar-icon {
-  font-size: 20px;
-  width: 42px;
-  height: 42px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 11px;
-  background: color-mix(in srgb, var(--vp-c-brand-1) 12%, transparent);
-  border: 1px solid
-    color-mix(in srgb, var(--vp-c-brand-1) 28%, var(--vp-c-divider));
-  color: var(--vp-c-brand-1);
-  margin-bottom: 16px;
-}
-
-.ad-horton-pillar-icon .ad-icon {
-  font-size: 20px;
-}
-
-.ad-horton-pillar-title {
-  margin: 0 0 10px;
-  font-size: 18px;
-  font-weight: 600;
-  letter-spacing: -0.005em;
-  line-height: 1.3;
-  color: var(--vp-c-text-1);
-}
-
-.ad-horton-pillar-body {
-  margin: 0;
-  font-size: 14.5px;
-  line-height: 1.6;
-  color: var(--vp-c-text-2);
-  text-wrap: pretty;
-}
-
-.ad-horton-pillar-body code {
-  font-size: 12.5px;
-}
-
-/* ── §6 built for builders ──────────────────────────────────── *
-   3×2 grid at desktop widths, collapses to 2 columns then 1. Each
-   card holds a lucide icon, a short title, a one-sentence feature
-   description, and a "Use it to…" hint. The hint is intentionally
-   typed as a separate paragraph (rather than appended inline to
-   the body) so it can carry its own slightly muted colour and act
-   as the card's call-to-mind. */
-
-.ad-builders-grid {
+.ad-features-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 18px;
 }
 
-.ad-builders-card {
+.ad-features-card {
   display: flex;
   flex-direction: column;
   padding: 22px 22px 24px;
@@ -1854,7 +1412,7 @@ const primaryPlatform = computed(
     box-shadow 0.18s ease;
 }
 
-.ad-builders-card:hover {
+.ad-features-card:hover {
   transform: translateY(-2px);
   border-color: color-mix(
     in srgb,
@@ -1864,7 +1422,7 @@ const primaryPlatform = computed(
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.07);
 }
 
-.ad-builders-icon {
+.ad-features-icon {
   font-size: 18px;
   width: 36px;
   height: 36px;
@@ -1879,11 +1437,11 @@ const primaryPlatform = computed(
   margin-bottom: 14px;
 }
 
-.ad-builders-icon .ad-icon {
+.ad-features-icon .ad-icon {
   font-size: 18px;
 }
 
-.ad-builders-title {
+.ad-features-title {
   margin: 0 0 6px;
   font-size: 16px;
   font-weight: 600;
@@ -1892,15 +1450,15 @@ const primaryPlatform = computed(
   line-height: 1.3;
 }
 
-.ad-builders-body {
-  margin: 0 0 12px;
+.ad-features-body {
+  margin: 0;
   font-size: 14px;
   line-height: 1.55;
   color: var(--vp-c-text-2);
   text-wrap: pretty;
 }
 
-.ad-builders-body code {
+.ad-features-body code {
   font-size: 12px;
 }
 
@@ -2264,11 +1822,7 @@ const primaryPlatform = computed(
   .ad-modes-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .ad-multi-pillars,
-  .ad-horton-pillars {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .ad-builders-grid {
+  .ad-features-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -2307,26 +1861,10 @@ const primaryPlatform = computed(
   .ad-modes-title {
     font-size: 20px;
   }
-  .ad-scenarios-grid {
-    grid-template-columns: 1fr;
-    gap: 18px;
-  }
-  .ad-scenarios-title {
-    font-size: 17px;
-  }
-  /* On mobile, §4 / §5 also drop to single columns so the long body
-     text doesn't get squeezed against a half-width column. */
-  .ad-multi-pillars,
-  .ad-horton-pillars {
-    grid-template-columns: 1fr;
-  }
-  .ad-horton-pillar-title {
-    font-size: 17px;
-  }
 }
 
 @media (max-width: 600px) {
-  .ad-builders-grid {
+  .ad-features-grid {
     grid-template-columns: 1fr;
   }
 }
