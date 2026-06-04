@@ -150,7 +150,9 @@ export function NewSessionScreen({
         initialMessage: message,
         runnerId: activeRunnerId,
         ...(sandboxProfile ? { sandboxProfile } : {}),
-        ...(workingDirectory && !profileIsRemote ? { workingDirectory } : {}),
+        ...(workingDirectory && sandboxProfile && !profileIsRemote
+          ? { workingDirectory }
+          : {}),
       })
       onOpenSession(entityUrl)
     } catch (err) {
@@ -252,7 +254,10 @@ export function NewSessionScreen({
             </>
           )}
 
-          {activeRunnerId && !profileIsRemote && (
+          {/* A working directory only takes effect through a sandbox-profile
+              factory, so hide the section when the runner advertises no
+              profiles (or a remote one, where a host path doesn't apply). */}
+          {sandboxProfile !== null && !profileIsRemote && (
             <>
               <Text style={styles.sectionLabel}>Working directory</Text>
               <View style={styles.typeList}>

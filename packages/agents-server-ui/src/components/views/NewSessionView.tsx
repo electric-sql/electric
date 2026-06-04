@@ -465,7 +465,10 @@ export function NewSessionView({
         allSandboxProfiles,
         sandboxProfile
       )
-      const includeWorkingDir = workingDirectory !== null && !profileIsRemote
+      // A working directory only takes effect through a sandbox-profile
+      // factory — require a (non-remote) profile or the arg is a no-op.
+      const includeWorkingDir =
+        workingDirectory !== null && sandboxProfile !== null && !profileIsRemote
       const augmented = includeWorkingDir ? { ...args, workingDirectory } : args
       const hasAttachments = attachments.length > 0
       const initialMessage =
@@ -1226,9 +1229,11 @@ function DefaultAgentComposer({
           />
         ) : null}
         {/* Working directory comes last: the chosen sandbox decides whether a
-            host directory is even relevant. A remote sandbox runs in the
-            provider VM, so the picker is hidden for those profiles. */}
-        {!selectedProfileIsRemote && (
+            host directory is even relevant. It only takes effect through a
+            sandbox-profile factory, so the picker is hidden when the runner
+            advertises no profiles — and for remote profiles, where the
+            workspace lives in the provider VM. */}
+        {selectedSandboxProfile !== null && !selectedProfileIsRemote && (
           <WorkingDirectoryPicker
             value={workingDirectory}
             onChange={onChangeWorkingDirectory}
