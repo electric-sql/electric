@@ -23,9 +23,9 @@ import { VPButton } from 'vitepress/theme'
 
 import Section from '../agents-home/Section.vue'
 import BottomCtaStrap from '../BottomCtaStrap.vue'
-import AdPlaceholder from './AdPlaceholder.vue'
 import AppMockupShadowHost from '../brand-toys/app/AppMockupShadowHost.vue'
 import HeroChatStateScene from '../brand-toys/app/scenes/desktop/HeroChatStateScene.vue'
+import HeroMobileChatScene from '../brand-toys/app/scenes/mobile/HeroMobileChatScene.vue'
 
 const githubReleaseBase = `https://github.com/electric-sql/electric/releases`
 const appReleaseNotesUrl = `${githubReleaseBase}?q=%22%40electric-ax%2Fagents-desktop%22&expanded=true`
@@ -307,10 +307,13 @@ const primaryPlatform = computed(
       </div>
 
       <!--
-        Hero mockup pair — live HTML/CSS desktop mockup with a phone
-        placeholder overlapping its right edge. The desktop scene is
-        the real animated mockup (HeroChatStateScene); the phone is
-        a placeholder until the mobile mockup primitive lands. Sits
+        Hero mockup pair — live HTML/CSS desktop mockup with a live
+        phone mockup overlapping its right edge. Both render the same
+        chat session: the desktop's `HeroChatStateScene` and the
+        mobile's `HeroMobileChatScene` import a shared
+        `heroChatProgress` ref + register against a singleton RAF
+        driver, so the typewriter ticks in lockstep across both
+        devices — same word stream, same beat, same pause. Sits
         OUTSIDE `.ad-hero-inner` so it can break the inner column's
         820-px cap and span the full hero width.
       -->
@@ -320,15 +323,18 @@ const primaryPlatform = computed(
             <div class="ad-hero-mockup-desktop-inner">
               <AppMockupShadowHost
                 :scene="HeroChatStateScene"
-                :scene-props="{ os: 'auto', theme: 'dark' }"
+                :scene-props="{
+                  os: 'auto',
+                  theme: 'dark',
+                  shareProgress: true,
+                }"
               />
             </div>
           </div>
-          <div class="ad-hero-mockup-phone" aria-hidden="true">
-            <AdPlaceholder
-              name="mobile-hero.png"
-              sublabel="Mobile chat — same session, live streaming response"
-              aspect="9/19"
+          <div class="ad-hero-mockup-phone">
+            <AppMockupShadowHost
+              :scene="HeroMobileChatScene"
+              :scene-props="{}"
             />
           </div>
         </div>
@@ -371,8 +377,8 @@ const primaryPlatform = computed(
     <Section id="three-ways">
       <template #title>Three ways to use it</template>
       <template #subtitle>
-        Build your own agents on the SDK, code locally with the bundled
-        Horton, or attach to sessions running anywhere on your&nbsp;servers.
+        Build your own agents on the SDK, code locally with the bundled Horton,
+        or attach to sessions running anywhere on your&nbsp;servers.
       </template>
 
       <div class="ad-modes-grid">
@@ -382,9 +388,8 @@ const primaryPlatform = computed(
           </span>
           <h3 class="ad-modes-title">Build your own agents</h3>
           <p class="ad-modes-body">
-            The desktop is the dev tool for the entities <em>you</em> write
-            with the Electric Agents SDK — state explorer, timeline,
-            fork-from-here.
+            The desktop is the dev tool for the entities <em>you</em> write with
+            the Electric Agents SDK — state explorer, timeline, fork-from-here.
           </p>
           <p class="ad-modes-list-label mono">You can:</p>
           <ul class="ad-modes-list">
@@ -473,8 +478,8 @@ const primaryPlatform = computed(
           </header>
           <p class="ad-features-body">
             Write your own entities with
-            <code>@electric-ax/agents-runtime</code>; the desktop becomes
-            their dev tool.
+            <code>@electric-ax/agents-runtime</code>; the desktop becomes their
+            dev tool.
           </p>
         </article>
 
@@ -600,7 +605,8 @@ const primaryPlatform = computed(
           >Local discovery <em>(dev servers on localhost)</em></span
         >
         <span class="ad-features-more-item"
-          >CLI installer <em>(<code>electric</code> command system-wide)</em></span
+          >CLI installer
+          <em>(<code>electric</code> command system-wide)</em></span
         >
       </p>
     </Section>
@@ -1261,6 +1267,11 @@ const primaryPlatform = computed(
   width: 22%;
   min-width: 200px;
   max-width: 280px;
+  /* Lock the phone wrapper to the device aspect-ratio so the inner
+     shadow host (which sizes to 100 % × 100 %) renders the scene at
+     a known shape. The AppPhoneFrame inside also carries 9/19.5 so
+     the scene fits the wrapper exactly with no letterboxing. */
+  aspect-ratio: 9 / 19.5;
   /* Drop shadow lifts the phone off the desktop visually so the
      overlap reads as foreground, not as a clipped device. */
   filter: drop-shadow(-8px 8px 24px rgba(0, 0, 0, 0.35))
@@ -1268,17 +1279,11 @@ const primaryPlatform = computed(
   z-index: 2;
 }
 
-/* The AdPlaceholder used as the phone needs a phone-shaped frame:
-   tall, rounded corners, dark surface so it reads as a device shell
-   even before the real mockup primitive lands. Style the inner
-   `.ad-placeholder` it renders via `:deep()` so we don't have to
-   touch the placeholder primitive itself. */
-.ad-hero-mockup-phone :deep(.ad-placeholder) {
-  height: 100%;
-  border-radius: 32px;
-  border-width: 1.5px;
-  background: color-mix(in srgb, var(--vp-c-bg-soft) 75%, transparent);
-}
+/* The mobile mockup phone wrapper just needs a transparent
+   container — its inner `HeroMobileChatScene` brings its own
+   `AppPhoneFrame` chrome (bezels, dynamic island, home indicator),
+   so we don't paint anything here beyond the outer drop-shadow
+   that lifts the device off the desktop mockup behind it. */
 
 .ad-hero-mockup-caption {
   margin: 22px 0 0;
@@ -1319,7 +1324,7 @@ const primaryPlatform = computed(
     transform: none;
     width: 60%;
     max-width: 280px;
-    aspect-ratio: 9 / 19;
+    aspect-ratio: 9 / 19.5;
   }
 }
 

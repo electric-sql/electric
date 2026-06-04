@@ -48,7 +48,7 @@
    Pure scene — DOES include `.app-mockup-root` so it can be dropped
    into the page directly. */
 
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import AppSidebar from '../../primitives/sidebar/AppSidebar.vue'
 import AppTitlebar from '../../primitives/chrome/AppTitlebar.vue'
 import AppTitlebarControls from '../../primitives/chrome/AppTitlebarControls.vue'
@@ -56,6 +56,10 @@ import AppWindowFrame from '../../primitives/chrome/AppWindowFrame.vue'
 import ChatTileContent from '../../primitives/workspace/parts/ChatTileContent.vue'
 import StateTileContent from '../../primitives/workspace/parts/StateTileContent.vue'
 import type { ChatFixtureKey, StateFixtureKey } from '../../fixtures'
+import {
+  heroChatProgress,
+  useHeroChatProgress,
+} from '../../useSharedHeroChatProgress'
 import {
   type DetectedOs,
   useDetectedOs,
@@ -147,6 +151,14 @@ const props = withDefaults(
      * Defaults to `'default'` — the Horton run-loop fixture.
      */
     stateFixtureKey?: StateFixtureKey
+    /**
+     * Drive the chat typewriter from the shared `heroChatProgress`
+     * singleton instead of the per-instance internal RAF inside
+     * AppAgentResponse. Used by the App-page hero so the desktop
+     * scene + the mobile scene tick in lockstep — same word
+     * stream, same beat. Off by default so the brand-toys harness
+     * still drives each toy independently. */
+    shareProgress?: boolean
   }>(),
   {
     os: 'auto',
@@ -166,6 +178,7 @@ const props = withDefaults(
     showSidebarFooter: true,
     chatFixtureKey: 'default',
     stateFixtureKey: 'default',
+    shareProgress: false,
   }
 )
 
@@ -200,10 +213,33 @@ const singleTileMode = computed(() => {
     (!props.showChatTile && props.showStateTile)
   )
 })
+
+/* When `shareProgress` is on, register this scene with the shared
+   hero chat progress driver so the singleton RAF keeps running while
+   the scene is on-screen, and merge that progress with the explicit
+   `progress` prop (the explicit prop still wins if set, e.g. when
+   the brand-toys harness manually scrubs). */
+const sceneRoot = ref<HTMLElement | null>(null)
+
+if (props.shareProgress) {
+  useHeroChatProgress({
+    trigger: () => sceneRoot.value,
+    fixtureKey: props.chatFixtureKey,
+    cps: props.cps,
+  })
+}
+
+const effectiveProgress = computed<number | null>(() => {
+  if (props.progress !== null && props.progress !== undefined)
+    return props.progress
+  if (props.shareProgress) return heroChatProgress.value
+  return null
+})
 </script>
 
 <template>
   <div
+    ref="sceneRoot"
     class="hero-scene app-mockup-root"
     :data-os="resolvedOs"
     :data-theme="theme"
@@ -238,7 +274,7 @@ const singleTileMode = computed(() => {
             <ChatTileContent
               :title="title"
               :session-id="sessionId"
-              :progress="progress"
+              :progress="effectiveProgress"
               :paused="paused"
               :cps="cps"
               density="comfortable"
