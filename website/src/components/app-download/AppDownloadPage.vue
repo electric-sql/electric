@@ -587,21 +587,21 @@ const primaryPlatform = computed(
 
       <p class="ad-features-more">
         <span class="ad-features-more-label mono">Plus:</span>
-        <span class="ad-features-more-item">
-          Working-directory picker <em>(any folder, no setup)</em>
-        </span>
-        <span class="ad-features-more-item">
-          Tile workspace <em>(split, fork-from-here, deep links)</em>
-        </span>
-        <span class="ad-features-more-item">
-          Attachments <em>(files, screenshots, folders into chat)</em>
-        </span>
-        <span class="ad-features-more-item">
-          Local discovery <em>(dev servers on localhost)</em>
-        </span>
-        <span class="ad-features-more-item">
-          CLI installer <em>(<code>electric</code> command system-wide)</em>
-        </span>
+        <span class="ad-features-more-item"
+          >Working-directory picker <em>(any folder, no setup)</em></span
+        >
+        <span class="ad-features-more-item"
+          >Tile workspace <em>(split, fork-from-here, deep links)</em></span
+        >
+        <span class="ad-features-more-item"
+          >Attachments <em>(files, screenshots, folders into chat)</em></span
+        >
+        <span class="ad-features-more-item"
+          >Local discovery <em>(dev servers on localhost)</em></span
+        >
+        <span class="ad-features-more-item"
+          >CLI installer <em>(<code>electric</code> command system-wide)</em></span
+        >
       </p>
     </Section>
 
@@ -1560,22 +1560,21 @@ const primaryPlatform = computed(
 
 /* "Plus: …" inline strip below the grid — compact way to mention
    smaller features without giving each its own card. No surrounding
-   box; sits as a flowing paragraph below the grid with a mono
-   eyebrow and mid-dot separators between items. */
+   box; centred under the grid as a flowing paragraph. Items use a
+   trailing mid-dot via `::after` (rather than a leading `::before`)
+   so when the line wraps the dot stays attached to the previous
+   item rather than orphaning at the start of the next line. */
 
 .ad-features-more {
   margin: 28px 0 0;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 6px 18px;
+  text-align: center;
   font-size: 13px;
-  line-height: 1.6;
+  line-height: 1.85;
   color: var(--vp-c-text-2);
 }
 
 .ad-features-more-label {
-  flex: 0 0 auto;
+  margin-right: 6px;
   font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1585,6 +1584,9 @@ const primaryPlatform = computed(
 .ad-features-more-item {
   color: var(--vp-c-text-1);
   font-weight: 500;
+  /* Keep each item indivisible so wrapping happens between items,
+     not in the middle of a name. */
+  white-space: nowrap;
 }
 
 .ad-features-more-item em {
@@ -1598,10 +1600,9 @@ const primaryPlatform = computed(
   font-size: 12px;
 }
 
-.ad-features-more-item + .ad-features-more-item::before {
+.ad-features-more-item:not(:last-child)::after {
   content: '·';
-  margin-right: 18px;
-  margin-left: -12px;
+  margin: 0 8px;
   color: var(--vp-c-text-3);
 }
 
