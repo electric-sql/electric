@@ -1597,35 +1597,41 @@ const primaryCta = computed(() => {
   font-size: 12px;
 }
 
-/* "Plus: …" inline strip below the grid — compact way to mention
-   smaller features without giving each its own card. No surrounding
-   box; centred under the grid as a flowing paragraph. Items use a
-   trailing mid-dot via `::after` (rather than a leading `::before`)
-   so when the line wraps the dot stays attached to the previous
-   item rather than orphaning at the start of the next line. */
+/* "Plus: …" strip below the grid — compact way to mention smaller
+   features without giving each its own card. Safari can overflow long
+   inline/nowrap runs in a centred paragraph, so this is an explicit
+   wrapping flex row instead of relying on inline text layout. */
 
 .ad-features-more {
   margin: 28px 0 0;
-  text-align: center;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: baseline;
+  gap: 2px 0;
+  max-width: 100%;
   font-size: 13px;
   line-height: 1.85;
+  text-align: center;
   color: var(--vp-c-text-2);
 }
 
 .ad-features-more-label {
-  margin-right: 6px;
+  flex: 0 0 100%;
   font-size: 11px;
+  line-height: 1.2;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--vp-c-text-3);
 }
 
 .ad-features-more-item {
+  display: inline-flex;
+  align-items: baseline;
+  max-width: 100%;
   color: var(--vp-c-text-1);
   font-weight: 500;
-  /* Keep each item indivisible so wrapping happens between items,
-     not in the middle of a name. */
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .ad-features-more-item--skills {
@@ -1637,6 +1643,7 @@ const primaryCta = computed(() => {
   font-style: normal;
   color: var(--vp-c-text-3);
   font-weight: 400;
+  white-space: nowrap;
 }
 
 .ad-features-more-item code {
@@ -1645,6 +1652,7 @@ const primaryCta = computed(() => {
 
 .ad-features-more-item:not(:last-child)::after {
   content: '·';
+  flex: 0 0 auto;
   margin: 0 8px;
   color: var(--vp-c-text-3);
 }
