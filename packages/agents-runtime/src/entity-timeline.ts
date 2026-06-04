@@ -57,6 +57,13 @@ export type EntityTimelineSection =
       items: Array<EntityTimelineContentItem>
       done?: true
       error?: string
+      // Summed across all steps of the run that produced this section.
+      // Either side may be missing if the provider didn't report it
+      // (e.g. older events recorded before tokens were persisted).
+      tokens?: {
+        input?: number
+        output?: number
+      }
     }
   | {
       kind: `wake`
@@ -103,6 +110,8 @@ export interface IncludesStep {
   status: `started` | `completed`
   model_id?: string
   duration_ms?: number
+  input_tokens?: number
+  output_tokens?: number
 }
 
 export interface IncludesError {
@@ -228,6 +237,8 @@ export interface EntityTimelineStepItem {
   status: `started` | `completed`
   model_id?: string
   duration_ms?: number
+  input_tokens?: number
+  output_tokens?: number
 }
 
 export interface EntityTimelineErrorItem {
@@ -778,6 +789,8 @@ function buildIncludesRuns(input: {
       status: step.status,
       model_id: step.model_id,
       duration_ms: step.duration_ms,
+      input_tokens: step.input_tokens,
+      output_tokens: step.output_tokens,
     })
     stepsByRun.set(step.run_id, entries)
   }
@@ -1363,6 +1376,8 @@ function buildEntityTimelineQuery(
         status: step.status,
         model_id: step.model_id,
         duration_ms: step.duration_ms,
+        input_tokens: step.input_tokens,
+        output_tokens: step.output_tokens,
       })),
     errors: q
       .from({ error: db.collections.errors })
@@ -1492,6 +1507,8 @@ export function createEntityIncludesQuery(
                   status: step.status,
                   model_id: step.model_id,
                   duration_ms: step.duration_ms,
+                  input_tokens: step.input_tokens,
+                  output_tokens: step.output_tokens,
                 }))
             ),
             errors: toArray(

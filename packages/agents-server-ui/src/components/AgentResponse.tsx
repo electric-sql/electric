@@ -26,6 +26,7 @@ import { ToolCallView } from './ToolCallView'
 import { TimeText } from './TimeText'
 import { ThinkingIndicator } from './ThinkingIndicator'
 import { ElapsedTime } from './ElapsedTime'
+import { TokenUsage } from './TokenUsage'
 import { formatElapsedDuration, toMillis } from '../lib/formatTime'
 import styles from './AgentResponse.module.css'
 import type { ForkFromHereAction } from './UserMessage'
@@ -403,6 +404,39 @@ export const AgentResponseLive = memo(function AgentResponseLive({
     (q) => (run.errors ? q.from({ error: run.errors }) : undefined),
     [run.errors]
   )
+  // Live token aggregation: subscribe to this run's step rows and
+  // sum `input_tokens` / `output_tokens` across them. Steps land
+  // their token counts on `onStepEnd`, so for a single-turn LLM call
+  // this updates once; for a tool-using run with N model calls it
+  // jumps N times as each step settles.
+  const { data: stepRows = [] } = useLiveQuery(
+    (q) => (run.steps ? q.from({ step: run.steps }) : undefined),
+    [run.steps]
+  )
+  const liveTokens = useMemo(() => {
+    let inSum = 0
+    let outSum = 0
+    let sawIn = false
+    let sawOut = false
+    for (const s of stepRows as Array<{
+      input_tokens?: number
+      output_tokens?: number
+    }>) {
+      if (typeof s.input_tokens === `number`) {
+        inSum += s.input_tokens
+        sawIn = true
+      }
+      if (typeof s.output_tokens === `number`) {
+        outSum += s.output_tokens
+        sawOut = true
+      }
+    }
+    if (!sawIn && !sawOut) return null
+    return {
+      input: sawIn ? inSum : undefined,
+      output: sawOut ? outSum : undefined,
+    }
+  }, [stepRows])
   const sortedItems = useMemo(
     () => [...items].sort(compareLiveRunItems),
     [items]
@@ -536,9 +570,24 @@ export const AgentResponseLive = memo(function AgentResponseLive({
             <ElapsedTime ts={timestamp} enabled={isStreaming} />
           </>
         )}
+        {/* Token usage — sums every step's `input_tokens` /
+            `output_tokens` as they land. Updates at step boundaries
+            (the LLM SDK only emits `usage` at end-of-step), so for a
+            single-turn call it appears once at done; for tool-using
+            runs it jumps as each step completes. */}
+        {liveTokens && (
+          <>
+            {(hasLeadingMeta || (isStreaming && timestamp != null)) && (
+              <Text size={1} tone="muted" className={styles.metaSeparator}>
+                ·
+              </Text>
+            )}
+            <TokenUsage input={liveTokens.input} output={liveTokens.output} />
+          </>
+        )}
         {showTimestamp && (
           <>
-            {hasLeadingMeta && (
+            {(hasLeadingMeta || liveTokens) && (
               <Text size={1} tone="muted" className={styles.metaSeparator}>
                 ·
               </Text>
@@ -736,13 +785,29 @@ export const AgentResponse = memo(function AgentResponse({
             <ElapsedTime ts={timestamp} enabled={isStreaming} />
           </>
         )}
+        {/* Token usage — `section.tokens` is the sum across the
+            run's steps, materialized at section-build time. Mirrors
+            the live render above so cached + live look identical. */}
+        {section.tokens && (
+          <>
+            {(hasLeadingMeta || (isStreaming && timestamp != null)) && (
+              <Text size={1} tone="muted" className={styles.metaSeparator}>
+                ·
+              </Text>
+            )}
+            <TokenUsage
+              input={section.tokens.input}
+              output={section.tokens.output}
+            />
+          </>
+        )}
         {/* Timestamp only on a settled response — while the agent is
             still streaming we let `ThinkingIndicator` + `ElapsedTime`
             own the meta row so it doesn't sit inline with a timestamp
             that hasn't really happened yet. */}
         {showTimestamp && (
           <>
-            {hasLeadingMeta && (
+            {(hasLeadingMeta || section.tokens) && (
               <Text size={1} tone="muted" className={styles.metaSeparator}>
                 ·
               </Text>
