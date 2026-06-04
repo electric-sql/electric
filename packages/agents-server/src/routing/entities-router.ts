@@ -1069,6 +1069,7 @@ async function forkEntity(
   const result = await ctx.entityManager.forkSubtree(entityUrl, {
     rootInstanceId: parsed.instance_id,
     waitTimeoutMs: parsed.waitTimeoutMs,
+    createdBy: ctx.principal.url,
     ...(parsed.fork_pointer && {
       forkPointer: {
         offset: parsed.fork_pointer.offset,

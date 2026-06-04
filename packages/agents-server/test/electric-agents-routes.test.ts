@@ -983,6 +983,7 @@ describe(`ElectricAgentsRoutes fork endpoint`, () => {
     expect(manager.forkSubtree).toHaveBeenCalledWith(`/chat/root`, {
       rootInstanceId: undefined,
       waitTimeoutMs: 5000,
+      createdBy: `/principal/system:dev-local`,
     })
     expect(response.status).toBe(201)
     expect(response.headers.get(`content-type`)).toContain(`application/json`)

@@ -20,6 +20,8 @@ import {
 } from './AttachmentImagePreviewDialog'
 import { TimeText } from './TimeText'
 import styles from './UserMessage.module.css'
+import { principalKeyFromInput } from '../lib/principals'
+import type { ElectricUser } from '../lib/ElectricAgentsProvider'
 
 type UserMessageSection = Extract<
   EntityTimelineSection,
@@ -40,6 +42,8 @@ export const UserMessage = memo(function UserMessage({
   attachments = [],
   showStop = false,
   stopPending = false,
+  currentPrincipal,
+  usersById,
   onStop,
   onForkFromHere,
 }: {
@@ -47,6 +51,8 @@ export const UserMessage = memo(function UserMessage({
   attachments?: Array<UserMessageAttachment>
   showStop?: boolean
   stopPending?: boolean
+  currentPrincipal?: string
+  usersById?: Map<string, ElectricUser>
   onStop?: () => void
   /**
    * When provided, renders a hover-revealed "Fork from here" button on
@@ -56,7 +62,7 @@ export const UserMessage = memo(function UserMessage({
    */
   onForkFromHere?: () => void
 }): React.ReactElement {
-  const sender = formatSender(section.from)
+  const sender = formatSender(section.from, { currentPrincipal, usersById })
 
   return (
     <Stack
@@ -228,30 +234,42 @@ function AttachmentPreview({
   )
 }
 
-function formatSender(from: string | null | undefined): {
+function formatSender(
+  from: string | null | undefined,
+  options: {
+    currentPrincipal?: string
+    usersById?: Map<string, ElectricUser>
+  } = {}
+): {
   label: string
   title?: string
 } {
-  if (!from) return { label: `user` }
-  if (!from.startsWith(`/principal/`)) return { label: from }
-  const segment = from.slice(`/principal/`.length)
-  if (!segment || segment.includes(`/`)) return { label: from }
-  try {
-    const key = decodeURIComponent(segment)
-    const colon = key.indexOf(`:`)
-    if (colon <= 0) return { label: key, title: from }
-    const kind = key.slice(0, colon)
-    const id = key.slice(colon + 1)
-    return {
-      label: `${kind}:${formatPrincipalId(id)}`,
-      title: key,
-    }
-  } catch {
-    return { label: from }
+  const key = principalKeyFromInput(from)
+  if (!key) return { label: from || `user` }
+  if (key === principalKeyFromInput(options.currentPrincipal)) {
+    return { label: `Me`, title: key }
+  }
+  const colon = key.indexOf(`:`)
+  if (colon <= 0) return { label: key, title: key }
+  const kind = key.slice(0, colon)
+  const id = key.slice(colon + 1)
+  if (kind === `user`) {
+    const user = options.usersById?.get(id)
+    const label = userDisplayName(user)
+    if (label) return { label, title: key }
+  }
+  return {
+    label: `${kind}:${formatPrincipalId(id)}`,
+    title: key,
   }
 }
 
 function formatPrincipalId(id: string): string {
   if (id.length <= 18) return id
   return `${id.slice(0, 8)}…${id.slice(-6)}`
+}
+
+function userDisplayName(user: ElectricUser | undefined): string | null {
+  if (!user) return null
+  return user.display_name || user.email || null
 }

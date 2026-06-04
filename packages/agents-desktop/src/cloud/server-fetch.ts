@@ -11,7 +11,7 @@ import type {
 import {
   buildSavedServerHeaders,
   type CloudAuthHeaderInjectionDeps,
-} from './auth-injection'
+} from './auth-headers'
 import { findSavedServerForUrl } from './server-matching'
 
 export type DesktopServerFetchDeps = CloudAuthHeaderInjectionDeps

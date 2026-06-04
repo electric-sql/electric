@@ -66,6 +66,22 @@ describe(`server utils`, () => {
     )
   })
 
+  it(`tenant-scopes users shapes and exposes profile columns`, () => {
+    const target = shapeTarget(
+      `table=users&where=${encodeURIComponent(`email ILIKE '%@example.com'`)}`
+    )
+
+    expect(target.searchParams.get(`table`)).toBe(`users`)
+    const columns = target.searchParams.get(`columns`)
+    expect(columns).toContain(`"display_name"`)
+    expect(columns).toContain(`"email"`)
+    expect(columns).toContain(`"avatar_url"`)
+    expect(columns).toContain(`"profile"`)
+    expect(target.searchParams.get(`where`)).toBe(
+      `tenant_id = 'tenant-test' AND (email ILIKE '%@example.com')`
+    )
+  })
+
   it(`scopes entity shapes to owner or read/manage effective grants with IN subqueries`, () => {
     const target = shapeTarget(`table=entities`)
     const where = target.searchParams.get(`where`) ?? ``

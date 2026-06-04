@@ -6,6 +6,7 @@ import type { BadgeTone } from '../ui'
 import { MainHeader } from './MainHeader'
 import { InlineStatusBadge } from './InlineStatusBadge'
 import { EntityRuntimeBadges } from './EntityRuntimeBadges'
+import { ShareEntityDialog } from './ShareEntityDialog'
 import { listViews, type ViewId } from '../lib/workspace/viewRegistry'
 import styles from './EntityHeader.module.css'
 import type { ElectricEntity } from '../lib/ElectricAgentsProvider'
@@ -197,6 +198,8 @@ function EntityActions({
             </Tooltip>
           )
         })}
+
+      <ShareEntityDialog entity={entity} />
 
       {menu}
     </span>
