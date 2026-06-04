@@ -1747,9 +1747,10 @@ export async function processWake(
       return setupCtx.spawn(type, id, spawnArgs, opts)
     }
 
-    const doFork = async (
+    const doFork = async (opts: {
       targetEntityUrl: string
-    ): Promise<{ url: string }> => {
+    }): Promise<{ url: string }> => {
+      const { targetEntityUrl } = opts
       // Child-fork: the new fork is created with `parent = me`, and a
       // `runFinished + includeResponse` wake subscription is registered
       // on it server-side, mirroring the spawn flow. Reply delivery

@@ -1019,15 +1019,20 @@ export interface HandlerContext<
   ) => Promise<EntityHandle>
   /**
    * Fork a session at the latest completed run on its `main` stream.
-   * Defaults to this entity (self-fork) when `targetEntityUrl` is
-   * omitted. The new fork is created as a CHILD of this entity (same
-   * parent-ownership model as `spawn`), and a `runFinished +
+   * Defaults to this entity (self-fork) when `opts.targetEntityUrl`
+   * is omitted. The new fork is created as a CHILD of this entity
+   * (same parent-ownership model as `spawn`), and a `runFinished +
    * includeResponse` wake is registered on it at fork time. Reply
    * delivery uses the parent's manifest-anchored wake — the same
    * mechanism `spawn` uses — so when the fork's next run finishes,
    * this entity wakes with the response in the wake message.
+   *
+   * `opts` is an options bag (rather than a positional `targetEntityUrl`
+   * arg) so future knobs — e.g. an explicit-anchor parameter — can be
+   * added without making callers thread `undefined` through earlier
+   * positions.
    */
-  fork: (targetEntityUrl?: string) => Promise<{ url: string }>
+  fork: (opts?: { targetEntityUrl?: string }) => Promise<{ url: string }>
   observe: ((
     source: ObservationSource & { sourceType: `entity` },
     opts?: { wake?: Wake }

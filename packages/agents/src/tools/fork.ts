@@ -24,7 +24,9 @@ Omit 'entityUrl' to fork your own session. Pass a different session's URL to for
     execute: async (_toolCallId, params) => {
       const { entityUrl } = params as { entityUrl?: string }
       try {
-        const { url } = await ctx.fork(entityUrl)
+        const { url } = await ctx.fork(
+          entityUrl !== undefined ? { targetEntityUrl: entityUrl } : undefined
+        )
         return {
           content: [
             {
