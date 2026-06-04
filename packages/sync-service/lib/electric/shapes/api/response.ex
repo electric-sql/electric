@@ -390,6 +390,12 @@ defmodule Electric.Shapes.Api.Response do
     Plug.Conn.put_resp_header(conn, @electric_known_error_header, "#{known_error}")
   end
 
+  # keeping this function close to `put_known_error_header/2` above so that we know exactly
+  # which value to expect for a set known_error header: i.e. "true" or "" (as opposed to e.g. "1" etc).
+  def conn_has_known_error?(conn) do
+    Plug.Conn.get_resp_header(conn, @electric_known_error_header) == ["true"]
+  end
+
   defp put_retry_after_header(conn, %__MODULE__{retry_after: nil}) do
     conn
   end
@@ -477,10 +483,4 @@ defmodule Electric.Shapes.Api.Response do
   end
 
   def electric_headers, do: @electric_headers
-
-  @doc """
-  The response header Electric sets to mark an error as a "known" (expected,
-  typically retryable) error.
-  """
-  def known_error_header, do: @electric_known_error_header
 end
