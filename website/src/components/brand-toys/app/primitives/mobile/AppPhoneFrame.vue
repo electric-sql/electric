@@ -16,10 +16,9 @@
    Geometry (calibrated against an iPhone 14/15 Pro):
      - 9:19.5 aspect ratio so the slot footprint reads as a modern
        iPhone shape rather than the older 16:9 stretched look.
-     - Bezel thickness ≈ 1.7 % of width on the sides, 2.1 % top/
-       bottom — about half the previous mock-up bezel so the screen
-       claims more of the device, matching how thin the bezels are
-       on a real iPhone Pro.
+     - Bezel thickness ≈ 1.7 % of width, constant on all sides.
+       The screen corner radius is derived from the same outer radius
+       minus that bezel inset, so the curves stay concentric.
      - Dynamic island: a small black pill ≈ 22 % of width, sized at
        a fixed 22 px tall, anchored ~1.5 % from the top of the
        device. The screen content's safe-area top inset clears it.
@@ -54,15 +53,11 @@ withDefaults(
 .phone-frame {
   position: relative;
   width: 100%;
+  --phone-bezel: 4px;
+  --phone-radius: 34px;
   /* 9:19.5 aspect — iPhone Pro family. The host (page) controls
      overall size by setting width or height on the wrapper. */
   aspect-ratio: 9 / 19.5;
-  /* Bezel thickness — outer dark ring around the screen. Uniform
-     padding all around so the bezel reads as the same width on
-     top, bottom, and sides (CSS percentage padding is computed
-     against the parent's inline-size, so a single value gives a
-     constant pixel inset on every edge). */
-  padding: 1.7%;
   /* Outer body gradient — a deep neutral with a subtle highlight
      along the top edge so it reads as a metal-glass device rather
      than a flat black rectangle. */
@@ -73,7 +68,7 @@ withDefaults(
       rgba(255, 255, 255, 0) 40%
     ),
     linear-gradient(180deg, #1a1a20 0%, #0a0a0d 60%, #16161a 100%);
-  border-radius: 14% / 6.6%;
+  border-radius: var(--phone-radius);
   box-shadow:
     /* Outer rim highlight — tiny inset ring brightening the bezel
        edge so it reads as a polished frame, not a matte cutout. */
@@ -86,12 +81,11 @@ withDefaults(
 }
 
 .phone-screen {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  /* Screen radius — slightly tighter than the device so the bezel
-     reads as a frame around it, not as the same shape. */
-  border-radius: 12.5% / 5.8%;
+  position: absolute;
+  inset: var(--phone-bezel);
+  /* Screen radius is the outer radius minus the constant bezel inset,
+     which keeps the screen and bezel curves concentric. */
+  border-radius: calc(var(--phone-radius) - var(--phone-bezel));
   overflow: hidden;
   /* Inner screen background — matches the dark-mode app shell so
      the screen reads as on even before the slot content paints. */
