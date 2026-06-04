@@ -1325,6 +1325,10 @@ export async function processWake(
           sourceEntityUrl,
           ...(opts?.parent !== undefined && { parent: opts.parent }),
           ...(opts?.wake !== undefined && { wake: opts.wake }),
+          ...(opts?.initialMessage !== undefined && {
+            initialMessage: opts.initialMessage,
+          }),
+          ...(opts?.tags !== undefined && { tags: opts.tags }),
         })
         return { entityUrl: result.entityUrl, streamPath: result.streamPath }
       },
@@ -1749,51 +1753,99 @@ export async function processWake(
 
     const doFork = async (opts: {
       targetEntityUrl: string
+      initialMessage?: unknown
+      wake?: Wake
+      tags?: Record<string, string>
+      observe?: boolean
     }): Promise<{ url: string }> => {
-      const { targetEntityUrl } = opts
-      // Child-fork: the new fork is created with `parent = me`, and a
-      // `runFinished + includeResponse` wake subscription is registered
-      // on it server-side, mirroring the spawn flow. Reply delivery
-      // back to the parent uses the same manifest-anchored wake the
-      // spawn flow uses — the parent wakes when the fork's next run
-      // finishes, and the wake message carries the fork's response.
+      const {
+        targetEntityUrl,
+        initialMessage,
+        wake: callerWake,
+        tags,
+        observe = true,
+      } = opts
+      // Child-fork (default `observe: true`): the new fork is created
+      // with `parent = me`, and a `runFinished + includeResponse` wake
+      // is registered on it server-side, mirroring the spawn flow.
+      // Reply delivery back to the parent uses the same manifest-
+      // anchored wake the spawn flow uses.
       //
-      // We don't know the new fork's URL until the server assigns it,
-      // so the manifest entry is keyed on the assigned URL after the
-      // fork creates. (Contrast: spawn knows the id up front and pre-
-      // registers a placeholder.)
-      const tentativeWake = {
-        subscriberUrl: entityUrl,
-        condition: `runFinished` as const,
-        includeResponse: true,
-      }
+      // Fire-and-forget (`observe: false`): no parent link, no wake,
+      // no manifest entry. The fork exists as a top-level sibling and
+      // the caller never hears back about it. Mirrors `spawn`'s
+      // `observe: false` semantics.
+      const wakeForRegistration = !observe
+        ? undefined
+        : (normalizeWake(callerWake) ?? {
+            subscriberUrl: entityUrl,
+            condition: `runFinished` as const,
+            includeResponse: true,
+          })
       const { entityUrl: forkUrl } = await wiringConfig.forkEntity(
         targetEntityUrl,
         {
-          parent: entityUrl,
-          wake: tentativeWake,
+          ...(observe && { parent: entityUrl }),
+          ...(wakeForRegistration && { wake: wakeForRegistration }),
+          ...(initialMessage !== undefined && { initialMessage }),
+          ...(tags && { tags }),
         }
       )
-      const segments = forkUrl.split(`/`).filter(Boolean)
-      const forkType = segments[0] ?? `unknown`
-      const forkId = segments[1] ?? forkUrl
-      const childKey = manifestChildKey(forkType, forkId)
-      // Patch the registered wake's manifestKey now that we know the
-      // assigned URL — the server-side registration doesn't include it
-      // because we didn't have it pre-fork. Server-side cleanup paths
-      // already match wakes by subscriberUrl + sourceUrl, so leaving
-      // manifestKey unset is safe; we still mirror the value into the
-      // manifest entry for parity with spawn's bookkeeping.
-      wakeSession.registerManifestEntry({
-        kind: `child`,
-        key: childKey,
-        id: forkId,
-        entity_type: forkType,
-        entity_url: forkUrl,
-        observed: true,
-        wake: { on: `runFinished`, includeResponse: true },
-      })
+      if (observe) {
+        const segments = forkUrl.split(`/`).filter(Boolean)
+        const forkType = segments[0] ?? `unknown`
+        const forkId = segments[1] ?? forkUrl
+        const childKey = manifestChildKey(forkType, forkId)
+        // Mirror the wake into the manifest entry for parity with
+        // spawn's bookkeeping — the server-side wake registry is the
+        // authoritative delivery mechanism; this keeps the parent's
+        // own state machine aware of the relationship across wakes.
+        const manifestWake = callerWake ?? {
+          on: `runFinished` as const,
+          includeResponse: true,
+        }
+        wakeSession.registerManifestEntry({
+          kind: `child`,
+          key: childKey,
+          id: forkId,
+          entity_type: forkType,
+          entity_url: forkUrl,
+          observed: true,
+          wake: manifestWake,
+        })
+      }
       return { url: forkUrl }
+    }
+
+    // Translate a user-facing `Wake` (literal `runFinished` or
+    // structured) into the wakeRegistry-compatible shape used by
+    // `wiring.forkEntity`'s `wake` field. Same translation
+    // createOrGetChild does for spawn (process-wake.ts:1272-1295).
+    type ForkWake = NonNullable<
+      NonNullable<Parameters<WiringConfig[`forkEntity`]>[1]>[`wake`]
+    >
+    function normalizeWake(wake: Wake | undefined): ForkWake | undefined {
+      if (wake === undefined) return undefined
+      const isRunFinished =
+        wake === `runFinished` ||
+        (typeof wake === `object` && wake.on === `runFinished`)
+      const condition: ForkWake[`condition`] = isRunFinished
+        ? `runFinished`
+        : (wake as Exclude<Wake, `runFinished` | { on: `runFinished` }>)
+      const result: ForkWake = {
+        subscriberUrl: entityUrl,
+        condition,
+      }
+      if (typeof wake === `object` && wake.on === `runFinished`) {
+        if (wake.includeResponse !== undefined) {
+          result.includeResponse = wake.includeResponse
+        }
+      }
+      if (typeof wake === `object` && wake.on === `change`) {
+        if (wake.debounceMs !== undefined) result.debounceMs = wake.debounceMs
+        if (wake.timeoutMs !== undefined) result.timeoutMs = wake.timeoutMs
+      }
+      return result
     }
 
     const doMkdb = <TSchema extends SharedStateSchemaMap>(

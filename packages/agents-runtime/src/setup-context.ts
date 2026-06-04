@@ -98,6 +98,8 @@ export interface WiringConfig {
         includeResponse?: boolean
         manifestKey?: string
       }
+      initialMessage?: unknown
+      tags?: Record<string, string>
     }
   ) => Promise<{ entityUrl: string; streamPath: string }>
   /** Create a child StreamDB, preload it, and register it for cleanup. */

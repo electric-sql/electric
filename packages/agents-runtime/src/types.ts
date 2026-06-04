@@ -1027,12 +1027,22 @@ export interface HandlerContext<
    * mechanism `spawn` uses — so when the fork's next run finishes,
    * this entity wakes with the response in the wake message.
    *
-   * `opts` is an options bag (rather than a positional `targetEntityUrl`
-   * arg) so future knobs — e.g. an explicit-anchor parameter — can be
-   * added without making callers thread `undefined` through earlier
-   * positions.
+   * Options mirror `spawn` where the semantics map:
+   * - `initialMessage` is delivered to the fork's inbox atomically
+   *   with creation, folding the fork+send pattern into one call.
+   * - `wake` overrides the default `runFinished + includeResponse`
+   *   subscription (e.g. to set debounce for high-fanout forking).
+   * - `tags` are stamped on top of the tags copied from the source.
+   * - `observe: false` opts out of the parent relationship entirely:
+   *   no wake, no manifest entry, no reply path — fire-and-forget.
    */
-  fork: (opts?: { targetEntityUrl?: string }) => Promise<{ url: string }>
+  fork: (opts?: {
+    targetEntityUrl?: string
+    initialMessage?: unknown
+    wake?: Wake
+    tags?: Record<string, string>
+    observe?: boolean
+  }) => Promise<{ url: string }>
   observe: ((
     source: ObservationSource & { sourceType: `entity` },
     opts?: { wake?: Wake }

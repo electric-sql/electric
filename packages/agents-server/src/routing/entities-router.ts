@@ -258,6 +258,15 @@ const forkBodySchema = Type.Object({
       manifestKey: Type.Optional(Type.String()),
     })
   ),
+  // Optional initial inbox message delivered to the new root fork
+  // immediately after creation. Atomic with the fork RPC — folds the
+  // common "fork then send" pattern into a single round-trip and means
+  // a partial failure can't leave an idle fork on the parent's
+  // manifest. Mirrors spawn's `initialMessage` field.
+  initialMessage: Type.Optional(Type.Unknown()),
+  // Optional tags stamped on the new root fork entity in addition to
+  // those copied from the source. Mirrors spawn's `tags`.
+  tags: Type.Optional(stringRecordSchema),
 })
 
 const setTagBodySchema = Type.Object({
@@ -1149,9 +1158,20 @@ async function forkEntity(
     ...(parsed.anchor && { anchor: parsed.anchor }),
     ...(parsed.parent !== undefined && { parent: parsed.parent }),
     ...(parsed.wake !== undefined && { wake: parsed.wake }),
+    ...(parsed.tags !== undefined && { tags: parsed.tags }),
   })
   for (const forkedEntity of result.entities) {
     await linkEntityDispatchSubscription(ctx, forkedEntity)
+  }
+  // Deliver the initial message via entityManager.send AFTER the
+  // dispatch subscription is linked — same ordering spawn uses. Sending
+  // before linking would land the inbox row on the stream before the
+  // dispatcher is subscribed, and the dispatcher would never pick it up.
+  if (parsed.initialMessage !== undefined) {
+    await ctx.entityManager.send(result.root.url, {
+      from: parsed.parent ?? ctx.principal.url,
+      payload: parsed.initialMessage,
+    })
   }
   return json(
     {

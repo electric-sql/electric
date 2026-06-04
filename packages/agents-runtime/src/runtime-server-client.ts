@@ -130,11 +130,15 @@ export interface RuntimeServerClient {
    * Resolves to the new root entity's info. Wraps the agents-server
    * `POST /_electric/entities/<type>/<id>/fork` endpoint.
    *
-   * Optional `parent` makes the new fork a child of that URL; pair with
-   * `wake` to register a subscription on the new fork at fork time
-   * (mirrors the spawn flow's `parent` + `wake` plumbing). Reply
-   * delivery to the parent uses the same manifest-anchored wake the
-   * spawn flow uses.
+   * Optional fields mirror `spawnEntity`:
+   * - `parent` makes the new fork a child of that URL.
+   * - `wake` registers a subscription at fork time (reply delivery
+   *   uses the parent's manifest-anchored wake when paired with a
+   *   manifest entry on the parent — same model as `spawn`).
+   * - `initialMessage` delivers an inbox message to the new fork
+   *   atomically with creation, folding fork+send into one round-trip.
+   * - `tags` stamps tags onto the new fork in addition to those
+   *   copied from the source.
    */
   forkEntity: (options: {
     sourceEntityUrl: string
@@ -147,6 +151,8 @@ export interface RuntimeServerClient {
       includeResponse?: boolean
       manifestKey?: string
     }
+    initialMessage?: unknown
+    tags?: Record<string, string>
   }) => Promise<RuntimeEntityInfo>
   getEntity: (entityUrl: string) => Promise<RuntimeEntityInfo>
   ensureSharedStateStream: (
@@ -497,6 +503,8 @@ export function createRuntimeServerClient(
     sourceEntityUrl,
     parent,
     wake,
+    initialMessage,
+    tags,
   }: {
     sourceEntityUrl: string
     parent?: string
@@ -508,12 +516,16 @@ export function createRuntimeServerClient(
       includeResponse?: boolean
       manifestKey?: string
     }
+    initialMessage?: unknown
+    tags?: Record<string, string>
   }): Promise<RuntimeEntityInfo> => {
     const body: Record<string, unknown> = {
       anchor: `latest_completed_run`,
     }
     if (parent !== undefined) body.parent = parent
     if (wake !== undefined) body.wake = wake
+    if (initialMessage !== undefined) body.initialMessage = initialMessage
+    if (tags !== undefined) body.tags = tags
     const response = await request(entityRpcPath(sourceEntityUrl, `/fork`), {
       method: `POST`,
       headers: { 'content-type': `application/json` },

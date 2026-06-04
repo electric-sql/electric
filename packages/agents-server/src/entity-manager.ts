@@ -202,6 +202,11 @@ type ForkSubtreeOptions = {
    * to wire reply delivery via the parent's manifest-anchored wake.
    */
   wake?: TypedSpawnRequest[`wake`]
+  /**
+   * Optional tags stamped onto the new root fork entity in addition
+   * to those copied from the source. Mirrors `spawn`'s `tags`.
+   */
+  tags?: Record<string, string>
 }
 
 type ForkEntityPlan = {
@@ -1116,14 +1121,25 @@ export class EntityManager {
         opts.createdBy
       )
 
-      // Override the new root fork's parent when the caller asked for a
-      // child fork. Plumbed through from `forkBodySchema.parent`; the
-      // descendants in `effectiveSubtree` keep their original parent
-      // links (remapped via `entityUrlMap` in buildForkEntityPlans).
-      if (opts.parent !== undefined) {
-        const rootPlan = entityPlans.find((plan) => plan.source.url === rootUrl)
-        if (rootPlan) {
-          rootPlan.fork.parent = opts.parent
+      // Override fields on the new root fork's plan from caller opts.
+      // Plumbed through from `forkBodySchema` — descendants in
+      // `effectiveSubtree` keep what `buildForkEntityPlans` copied.
+      //
+      // - `parent`: child-fork relationship (vs the default inheritance
+      //   from the source, which is `null` for a top-level source).
+      // - `tags`: merged on top of source tags (caller-supplied wins).
+      const rootPlanForOverrides = entityPlans.find(
+        (plan) => plan.source.url === rootUrl
+      )
+      if (rootPlanForOverrides) {
+        if (opts.parent !== undefined) {
+          rootPlanForOverrides.fork.parent = opts.parent
+        }
+        if (opts.tags !== undefined) {
+          rootPlanForOverrides.fork.tags = {
+            ...(rootPlanForOverrides.fork.tags ?? {}),
+            ...opts.tags,
+          }
         }
       }
 
