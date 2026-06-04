@@ -864,8 +864,12 @@ function createDispatcherAssistant(ctx: HandlerContext): TestAgentSpec {
           ? TYPES.f1AssistantChild
           : TYPES.f1WorkerChild
       const childId = `${parentId}-dispatch-${dispatchCount}`
-      const child = await ctx.spawn(childType, childId)
-      child.send(task)
+      const child = await ctx.spawn(
+        childType,
+        childId,
+        {},
+        { initialMessage: task }
+      )
       children.insert({ key: childId, url: child.entityUrl, kind: targetKind })
 
       status.update(`current`, (draft: Record<string, unknown>) => {
@@ -1028,13 +1032,21 @@ function createMapReduceAssistant(ctx: HandlerContext): TestAgentSpec {
         const [chunkText, delayText] = spec.split(`@`, 2)
         const childKey = `chunk-${i + 1}`
         const existingChild = children.get(childKey)
+        const childInput = `${task}:${chunkText ?? ``}`
         const child = existingChild?.url
           ? await ctx.observe(entity(existingChild.url))
-          : await ctx.spawn(TYPES.fCoordWorker, `${parentId}-${childKey}`, {
-              label: childKey,
-              delayMs: Number(delayText ?? `0`),
-            })
-        child.send(`${task}:${chunkText ?? ``}`)
+          : await ctx.spawn(
+              TYPES.fCoordWorker,
+              `${parentId}-${childKey}`,
+              {
+                label: childKey,
+                delayMs: Number(delayText ?? `0`),
+              },
+              { initialMessage: childInput }
+            )
+        if (existingChild?.url) {
+          child.send(childInput)
+        }
         upsertChildRow(children, {
           key: childKey,
           url: child.entityUrl,
@@ -1114,12 +1126,20 @@ function createPipelineAssistant(ctx: HandlerContext): TestAgentSpec {
 
         const childKey = `${parentId}-stage-${stageNumber}`
         const existingChild = children.get(childKey)
+        const stageInput = currentInput
         const child = existingChild?.url
           ? await ctx.observe(entity(existingChild.url))
-          : await ctx.spawn(TYPES.fCoordWorker, childKey, {
-              label: stages[i] ?? `stage-${stageNumber}`,
-            })
-        child.send(currentInput)
+          : await ctx.spawn(
+              TYPES.fCoordWorker,
+              childKey,
+              {
+                label: stages[i] ?? `stage-${stageNumber}`,
+              },
+              { initialMessage: stageInput }
+            )
+        if (existingChild?.url) {
+          child.send(stageInput)
+        }
         upsertChildRow(children, {
           key: childKey,
           url: child.entityUrl,
