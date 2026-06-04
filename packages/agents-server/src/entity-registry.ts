@@ -15,6 +15,7 @@ import {
   runners,
   sharedStateLinks,
   tagStreamOutbox,
+  users,
 } from './db/schema.js'
 import {
   assertEntityStatus,
@@ -43,6 +44,7 @@ import type {
   PermissionSubjectKind,
 } from './electric-agents-types.js'
 import type { EntityTags } from '@electric-ax/agents-runtime'
+import type { Principal } from './principal.js'
 
 export class EntityAlreadyExistsError extends Error {
   constructor(public readonly url: string) {
@@ -193,6 +195,18 @@ export class PostgresRegistry {
   async initialize(): Promise<void> {}
 
   close(): void {}
+
+  async ensureUserForPrincipal(principal: Principal): Promise<void> {
+    if (principal.kind !== `user`) return
+
+    await this.db
+      .insert(users)
+      .values({
+        tenantId: this.tenantId,
+        id: principal.id,
+      })
+      .onConflictDoNothing()
+  }
 
   async createRunner(
     input: RegisterRunnerInput

@@ -42,6 +42,8 @@ type TestBackendModule = {
 const agentServerModulePath = `../../agents-server/src/server`
 const agentServerTestBackendModulePath = `../../agents-server/test/test-backend`
 const TEST_PRINCIPAL_KEY = `system:runtime-dsl-test`
+const TEST_PRINCIPAL_URL = `/principal/${encodeURIComponent(TEST_PRINCIPAL_KEY)}`
+const TEST_INSPECTOR_PRINCIPAL_KEY = `system:dev-local`
 
 async function loadElectricAgentsServer(): Promise<ElectricAgentsServerConstructor> {
   const module = (await import(agentServerModulePath)) as {
@@ -628,7 +630,7 @@ export function runtimeTest(): RuntimeTestBuilder {
     url.searchParams.set(`live`, `false`)
 
     const res = await fetch(url, {
-      headers: { 'electric-principal': TEST_PRINCIPAL_KEY },
+      headers: { 'electric-principal': TEST_INSPECTOR_PRINCIPAL_KEY },
     })
     if (res.status === 204 || res.status === 404) return []
     if (!res.ok) {
@@ -876,7 +878,17 @@ export function runtimeTest(): RuntimeTestBuilder {
 
   const builder: RuntimeTestBuilder = {
     define(name: string, definition: EntityDefinition) {
-      registry.define(name, definition as unknown as EntityDefinition)
+      registry.define(name, {
+        ...definition,
+        permissionGrants: [
+          ...(definition.permissionGrants ?? []),
+          {
+            subject_kind: `principal`,
+            subject_value: TEST_PRINCIPAL_URL,
+            permission: `spawn`,
+          },
+        ],
+      } as unknown as EntityDefinition)
       return builder
     },
 

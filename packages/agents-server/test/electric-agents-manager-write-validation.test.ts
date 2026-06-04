@@ -53,6 +53,7 @@ function createAttachmentManager({
         }),
         getEntityType: vi.fn(),
         replaceEntityManifestSource: vi.fn(),
+        replaceSharedStateLink: vi.fn(),
         close: vi.fn(),
       } as any,
       streamClient: {
@@ -373,6 +374,7 @@ function createManifestManager(calls: Array<string>) {
       }),
       getEntityType: vi.fn(),
       replaceEntityManifestSource: vi.fn(),
+      replaceSharedStateLink: vi.fn(),
       close: vi.fn(),
     } as any,
     streamClient: {
