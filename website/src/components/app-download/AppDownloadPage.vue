@@ -439,122 +439,169 @@ const primaryPlatform = computed(
     </Section>
 
     <!-- ─────────────────── §4 — Everything in the box ─────────────────── *
-         One unified feature grid combining the bundled-Horton config
-         row (provider · directory · skills) with the dev-tooling row
-         (workspace · state · timeline · MCP · discovery · CLI). Cards
-         follow a tight spec-sheet rhythm — lucide icon + short title
-         + one-sentence body — so the section reads as the page's
-         comprehensive "what you get" surface. The §3 modes above
-         carry the headline framing; this grid lists what's actually
-         in the box. -->
-    <Section id="features">
+         Comprehensive feature grid covering every shipping capability
+         of the desktop + mobile apps, organised loosely by row:
+           ▸ Build with the SDK   (custom entities · state · timeline)
+           ▸ Servers & sessions   (cloud / self-host · remote · MCP)
+           ▸ Configure & use      (provider · skills · phone)
+         3×3 at desktop widths, collapses to 2 cols then 1. Cards use
+         a single-line head (icon next to title) followed by a
+         one-sentence body. Smaller details (working-directory picker,
+         tile workspace, attachments, local discovery, CLI installer)
+         live in an inline `Plus: …` strip below the grid so they
+         don't take a card slot each. The Section is rendered with
+         `:dark="true"` so this block sits as a contrasting strip
+         between §3 above and §7a below — same pattern §3.5 used to
+         use before the merge. -->
+    <Section id="features" :dark="true">
       <template #title>Everything in the box</template>
       <template #subtitle>
-        One desktop app — bring your own provider, point it at a directory,
-        and open the same dev tooling Electric uses to&nbsp;ship&nbsp;agents.
+        One desktop app — bring your own provider, attach to local or cloud
+        servers, build custom agents on the SDK, and pick up sessions on your
+        phone.
       </template>
 
       <div class="ad-features-grid">
+        <!-- Build with the SDK ────────────────────────────────── -->
         <article class="ad-features-card">
-          <span class="ad-features-icon" aria-hidden="true">
-            <span class="ad-icon ad-icon--key-round" />
-          </span>
-          <h3 class="ad-features-title">Pick your provider</h3>
+          <header class="ad-features-head">
+            <span class="ad-features-icon" aria-hidden="true">
+              <span class="ad-icon ad-icon--boxes" />
+            </span>
+            <h3 class="ad-features-title">Custom agent types</h3>
+          </header>
           <p class="ad-features-body">
-            BYO API key (stored in the OS keychain) or sign in to Codex.
-            Anthropic, OpenAI, DeepSeek, Moonshot for models; Brave Search and
-            E2B for tools.
+            Write your own entities with
+            <code>@electric-ax/agents-runtime</code>; the desktop becomes
+            their dev tool.
           </p>
         </article>
 
         <article class="ad-features-card">
-          <span class="ad-features-icon" aria-hidden="true">
-            <span class="ad-icon ad-icon--folder-tree" />
-          </span>
-          <h3 class="ad-features-title">Pick your working directory</h3>
-          <p class="ad-features-body">
-            Horton reads and edits whatever you point it at — no per-project
-            install. Recent directories surface automatically.
-          </p>
-        </article>
-
-        <article class="ad-features-card">
-          <span class="ad-features-icon" aria-hidden="true">
-            <span class="ad-icon ad-icon--wand" />
-          </span>
-          <h3 class="ad-features-title">Skills &amp; slash commands</h3>
-          <p class="ad-features-body">
-            Type <code>/quickstart</code> to learn Electric Agents itself; write
-            your own skills to ship reusable workflows.
-          </p>
-        </article>
-
-        <article class="ad-features-card">
-          <span class="ad-features-icon" aria-hidden="true">
-            <span class="ad-icon ad-icon--layout" />
-          </span>
-          <h3 class="ad-features-title">Tile workspace</h3>
-          <p class="ad-features-body">
-            Split right / down cycle, find, fork-from-here,
-            <code>?layout=</code>&nbsp;deep&nbsp;link.
-          </p>
-        </article>
-
-        <article class="ad-features-card">
-          <span class="ad-features-icon" aria-hidden="true">
-            <span class="ad-icon ad-icon--database" />
-          </span>
-          <h3 class="ad-features-title">State explorer</h3>
+          <header class="ad-features-head">
+            <span class="ad-features-icon" aria-hidden="true">
+              <span class="ad-icon ad-icon--database" />
+            </span>
+            <h3 class="ad-features-title">State explorer</h3>
+          </header>
           <p class="ad-features-body">
             Live view of every shared-state source per entity — runs, inbox,
-            manifests, custom entities.
+            manifests, custom state.
           </p>
         </article>
 
         <article class="ad-features-card">
-          <span class="ad-features-icon" aria-hidden="true">
-            <span class="ad-icon ad-icon--history" />
-          </span>
-          <h3 class="ad-features-title">Entity timeline</h3>
+          <header class="ad-features-head">
+            <span class="ad-features-icon" aria-hidden="true">
+              <span class="ad-icon ad-icon--history" />
+            </span>
+            <h3 class="ad-features-title">Entity timeline</h3>
+          </header>
           <p class="ad-features-body">
             Walk every event a session emitted; fork from any past point to
-            replay or A/B test a change.
+            replay or A/B test.
+          </p>
+        </article>
+
+        <!-- Servers & sessions ────────────────────────────────── -->
+        <article class="ad-features-card">
+          <header class="ad-features-head">
+            <span class="ad-features-icon" aria-hidden="true">
+              <span class="ad-icon ad-icon--cloud" />
+            </span>
+            <h3 class="ad-features-title">Cloud or self-hosted</h3>
+          </header>
+          <p class="ad-features-body">
+            Sign in to Electric Cloud (managed) or run your own agents-server
+            for dev or self-hosting.
           </p>
         </article>
 
         <article class="ad-features-card">
-          <span class="ad-features-icon" aria-hidden="true">
-            <span class="ad-icon ad-icon--cable" />
-          </span>
-          <h3 class="ad-features-title">MCP servers</h3>
+          <header class="ad-features-head">
+            <span class="ad-features-icon" aria-hidden="true">
+              <span class="ad-icon ad-icon--radio" />
+            </span>
+            <h3 class="ad-features-title">Connect to remote sessions</h3>
+          </header>
+          <p class="ad-features-body">
+            Attach to any agents-server; sessions spawned by CI, webhooks,
+            issues or cron show up live.
+          </p>
+        </article>
+
+        <article class="ad-features-card">
+          <header class="ad-features-head">
+            <span class="ad-features-icon" aria-hidden="true">
+              <span class="ad-icon ad-icon--cable" />
+            </span>
+            <h3 class="ad-features-title">MCP servers</h3>
+          </header>
           <p class="ad-features-body">
             Add MCP servers with native OAuth; workspace
             <code>mcp.json</code> takes precedence.
           </p>
         </article>
 
+        <!-- Configure &amp; use ───────────────────────────────── -->
         <article class="ad-features-card">
-          <span class="ad-features-icon" aria-hidden="true">
-            <span class="ad-icon ad-icon--radar" />
-          </span>
-          <h3 class="ad-features-title">Local discovery</h3>
+          <header class="ad-features-head">
+            <span class="ad-features-icon" aria-hidden="true">
+              <span class="ad-icon ad-icon--key-round" />
+            </span>
+            <h3 class="ad-features-title">Pick your provider</h3>
+          </header>
           <p class="ad-features-body">
-            Finds dev servers on localhost ports so Horton can drive them
-            directly.
+            BYO API key (OS keychain) or sign in to Codex. Anthropic, OpenAI,
+            DeepSeek, Moonshot.
           </p>
         </article>
 
         <article class="ad-features-card">
-          <span class="ad-features-icon" aria-hidden="true">
-            <span class="ad-icon ad-icon--terminal" />
-          </span>
-          <h3 class="ad-features-title">CLI installer</h3>
+          <header class="ad-features-head">
+            <span class="ad-features-icon" aria-hidden="true">
+              <span class="ad-icon ad-icon--wand" />
+            </span>
+            <h3 class="ad-features-title">Skills &amp; slash commands</h3>
+          </header>
           <p class="ad-features-body">
-            Installs the <code>electric</code> command system-wide so scripts
-            and CI can talk to your local stack.
+            Type <code>/quickstart</code> to learn Electric Agents itself, or
+            ship your own reusable skills.
+          </p>
+        </article>
+
+        <article class="ad-features-card">
+          <header class="ad-features-head">
+            <span class="ad-features-icon" aria-hidden="true">
+              <span class="ad-icon ad-icon--smartphone" />
+            </span>
+            <h3 class="ad-features-title">Continue from your phone</h3>
+          </header>
+          <p class="ad-features-body">
+            Pick up the same session on iOS or Android — steer, send, review
+            from anywhere.
           </p>
         </article>
       </div>
+
+      <p class="ad-features-more">
+        <span class="ad-features-more-label mono">Plus:</span>
+        <span class="ad-features-more-item">
+          Working-directory picker <em>(any folder, no setup)</em>
+        </span>
+        <span class="ad-features-more-item">
+          Tile workspace <em>(split, fork-from-here, deep links)</em>
+        </span>
+        <span class="ad-features-more-item">
+          Attachments <em>(files, screenshots, folders into chat)</em>
+        </span>
+        <span class="ad-features-more-item">
+          Local discovery <em>(dev servers on localhost)</em>
+        </span>
+        <span class="ad-features-more-item">
+          CLI installer <em>(<code>electric</code> command system-wide)</em>
+        </span>
+      </p>
     </Section>
 
     <!--
@@ -913,6 +960,24 @@ const primaryPlatform = computed(
 }
 .ad-icon--compass {
   --icon-url: url('https://api.iconify.design/lucide/compass.svg');
+}
+
+/* §4 "Everything in the box" feature grid — extra lucide icons
+   used by the expanded 16-card grid. */
+.ad-icon--cloud {
+  --icon-url: url('https://api.iconify.design/lucide/cloud.svg');
+}
+.ad-icon--server {
+  --icon-url: url('https://api.iconify.design/lucide/server.svg');
+}
+.ad-icon--paperclip {
+  --icon-url: url('https://api.iconify.design/lucide/paperclip.svg');
+}
+.ad-icon--smartphone {
+  --icon-url: url('https://api.iconify.design/lucide/smartphone.svg');
+}
+.ad-icon--boxes {
+  --icon-url: url('https://api.iconify.design/lucide/boxes.svg');
 }
 
 /* ── §1 hero ────────────────────────────────────────────────── */
@@ -1392,22 +1457,25 @@ const primaryPlatform = computed(
 }
 
 /* ── §4 everything in the box ─────────────────────────────── *
-   Unified feature grid replacing the earlier "scenarios /
-   multi-device / Horton config / builders" cluster. 3×3 at desktop
-   widths, collapses to 2 columns then 1 alongside the rest of the
-   page. Each card holds a lucide icon, a short title, and a
-   one-sentence body. */
+   Comprehensive feature grid — 4×4 at desktop widths, collapses
+   to 3 → 2 → 1 columns. Each card has an inline head row (icon
+   beside title) so the visual hierarchy reads as a single line
+   you can scan at a glance, with a one-sentence body below. The
+   Section is rendered with `:dark="true"`, so cards sit on the
+   dark `--ea-surface-alt` fill — `--vp-c-bg` is one rung BELOW
+   that fill in dark mode, giving cards a subtle recessed feel
+   without needing a heavy outline. */
 
 .ad-features-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 18px;
+  gap: 16px;
 }
 
 .ad-features-card {
   display: flex;
   flex-direction: column;
-  padding: 22px 22px 24px;
+  padding: 18px 18px 20px;
   border: 1px solid var(--vp-c-divider);
   border-radius: 14px;
   background: var(--vp-c-bg);
@@ -1427,37 +1495,48 @@ const primaryPlatform = computed(
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.07);
 }
 
+.ad-features-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  /* Allow the title to wrap to a second line below the icon if
+     the column gets narrow without dragging the icon down with
+     it; align-items: center keeps the chip vertically centred
+     against single-line titles which is the common case. */
+}
+
 .ad-features-icon {
-  font-size: 18px;
-  width: 36px;
-  height: 36px;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--vp-c-brand-1) 8%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--vp-c-brand-1) 12%, transparent);
   border: 1px solid
-    color-mix(in srgb, var(--vp-c-brand-1) 22%, var(--vp-c-divider));
+    color-mix(in srgb, var(--vp-c-brand-1) 28%, var(--vp-c-divider));
   color: var(--vp-c-brand-1);
-  margin-bottom: 14px;
 }
 
 .ad-features-icon .ad-icon {
-  font-size: 18px;
+  font-size: 16px;
 }
 
 .ad-features-title {
-  margin: 0 0 6px;
-  font-size: 16px;
+  margin: 0;
+  font-size: 15px;
   font-weight: 600;
   letter-spacing: -0.005em;
   color: var(--vp-c-text-1);
   line-height: 1.3;
+  text-wrap: balance;
 }
 
 .ad-features-body {
   margin: 0;
-  font-size: 14px;
+  font-size: 13.5px;
   line-height: 1.55;
   color: var(--vp-c-text-2);
   text-wrap: pretty;
@@ -1465,6 +1544,53 @@ const primaryPlatform = computed(
 
 .ad-features-body code {
   font-size: 12px;
+}
+
+/* "Plus: …" inline strip below the grid — compact way to mention
+   smaller features without giving each its own card. No surrounding
+   box; sits as a flowing paragraph below the grid with a mono
+   eyebrow and mid-dot separators between items. */
+
+.ad-features-more {
+  margin: 28px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 18px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--vp-c-text-2);
+}
+
+.ad-features-more-label {
+  flex: 0 0 auto;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--vp-c-text-3);
+}
+
+.ad-features-more-item {
+  color: var(--vp-c-text-1);
+  font-weight: 500;
+}
+
+.ad-features-more-item em {
+  margin-left: 4px;
+  font-style: normal;
+  color: var(--vp-c-text-3);
+  font-weight: 400;
+}
+
+.ad-features-more-item code {
+  font-size: 12px;
+}
+
+.ad-features-more-item + .ad-features-more-item::before {
+  content: '·';
+  margin-right: 18px;
+  margin-left: -12px;
+  color: var(--vp-c-text-3);
 }
 
 /* ── §7a desktop ────────────────────────────────────────────── */
@@ -1820,10 +1946,8 @@ const primaryPlatform = computed(
   /* The three §3 mode cards carry a lot of body + list text and
      start to look cramped before the rest of the page does, so they
      drop to a 2-up grid earlier than the desktop downloads. The §4
-     multi-device pillars and §5 Horton pillars / ask-grid collapse
-     here too so the page reflows together rather than at staggered
-     breakpoints — easier to reason about, and the three-pillar
-     blocks read more comfortably at half-width than at thirds. */
+     features grid also collapses here so the page reflows together
+     rather than at staggered breakpoints. */
   .ad-modes-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
