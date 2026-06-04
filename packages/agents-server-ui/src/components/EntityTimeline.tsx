@@ -533,7 +533,7 @@ function ManifestTimelineRow({
       workspace.helpers.openEntity(entityTarget)
       return
     }
-    navigate({
+    void (navigate as (options: unknown) => void)({
       to: `/entity/$`,
       params: { _splat: entityTarget.replace(/^\//, ``) },
     })

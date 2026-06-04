@@ -7,9 +7,9 @@
     "dev": "concurrently \"pnpm run dev:vite\" \"pnpm run dev:worker\"",
     "dev:vite": "vite --host 0.0.0.0",
     "dev:worker": "pnpm build && wrangler dev --local --port 8787",
-    "build": "vite build",
+    "build": "pnpm --filter @electric-ax/agents-runtime build && vite build",
     "deploy": "pnpm build && wrangler deploy",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "pnpm --filter @electric-ax/agents-runtime build && tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "preview": "vite preview"
@@ -17,6 +17,7 @@
   "dependencies": {
     "@base-ui/react": "^1.4.1",
     "@durable-streams/state": "^0.2.9",
+    "@electric-ax/agents-runtime": "workspace:*",
     "@tanstack/db": "^0.6.6",
     "@tanstack/react-db": "^0.1.78",
     "@tanstack/react-router": "^1.139.7",
@@ -24,8 +25,7 @@
     "@trpc/server": "^11.7.2",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "zod": "^4.3.6",
-    "@electric-ax/agents-runtime": "workspace:*"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.16.12",

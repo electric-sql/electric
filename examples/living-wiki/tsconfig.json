@@ -6,7 +6,7 @@
     "jsx": "react-jsx",
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "types": ["@cloudflare/workers-types", "vitest/globals"],
+    "types": ["@cloudflare/workers-types", "vite/client", "vitest/globals"],
     "allowImportingTsExtensions": true,
     "noEmit": true,
     "strict": true,
