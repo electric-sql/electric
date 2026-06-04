@@ -414,6 +414,7 @@ describe(`ElectricAgentsManager.forkSubtree`, () => {
       }),
       deleteEntity: vi.fn(),
       replaceEntityManifestSource: vi.fn(),
+      replaceSharedStateLink: vi.fn(),
     }
 
     const streamClient = {
@@ -597,6 +598,7 @@ describe(`ElectricAgentsManager.forkSubtree`, () => {
         }),
         deleteEntity: vi.fn(),
         replaceEntityManifestSource: vi.fn(),
+        replaceSharedStateLink: vi.fn(),
       } as any,
       streamClient: streamClient as any,
       validator: {} as any,
@@ -655,6 +657,7 @@ describe(`ElectricAgentsManager.forkSubtree`, () => {
         createEntity: vi.fn(),
         deleteEntity: vi.fn(),
         replaceEntityManifestSource: vi.fn(),
+        replaceSharedStateLink: vi.fn(),
       } as any,
       streamClient: streamClient as any,
       validator: {} as any,

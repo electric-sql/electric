@@ -174,6 +174,7 @@ function tenantContext(
         : undefined
     ),
     getEntityType: vi.fn(),
+    hasEntityPermission: vi.fn(async () => true),
   }
   return {
     service: `svc-agent-1`,
