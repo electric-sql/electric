@@ -711,6 +711,11 @@ export function registerHorton(
         subject_value: `user`,
         permission: `spawn`,
       },
+      {
+        subject_kind: `principal_kind`,
+        subject_value: `user`,
+        permission: `manage`,
+      },
     ],
     handler: assistantHandler,
   })
