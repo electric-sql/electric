@@ -6,6 +6,8 @@ import type { PgClient } from './db/index.js'
 export interface DelayedSendPayload {
   entityUrl: string
   from?: string
+  from_principal?: string
+  from_agent?: string
   payload: unknown
   key?: string
   type?: string
