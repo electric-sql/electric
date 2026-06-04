@@ -836,6 +836,28 @@ export type Wake =
       timeoutMs?: number
     }
 
+/**
+ * Options bag for `ctx.fork` / `ctx.forkSelf`. Mirrors `ctx.spawn`'s
+ * opts shape where the semantics map.
+ */
+export interface ForkOptions {
+  /** Inbox message delivered to the new fork atomically with creation. */
+  initialMessage?: unknown
+  /**
+   * Wake subscription registered on the new fork. Defaults to
+   * `{ on: 'runFinished', includeResponse: true }` when omitted.
+   */
+  wake?: Wake
+  /** Tags stamped on the new fork in addition to those copied from the source. */
+  tags?: Record<string, string>
+  /**
+   * `false` opts out of the parent relationship entirely (no parent
+   * link, no wake registration, no manifest entry). Fire-and-forget.
+   * Mirrors `spawn`'s `observe: false`. Defaults to `true`.
+   */
+  observe?: boolean
+}
+
 export type WakeMessage = Omit<WakeEntry, `key`>
 
 export type WakeEvent = {
@@ -1019,13 +1041,23 @@ export interface HandlerContext<
   ) => Promise<EntityHandle>
   /**
    * Fork a session at the latest completed run on its `main` stream.
-   * Defaults to this entity (self-fork) when `opts.targetEntityUrl`
-   * is omitted. The new fork is created as a CHILD of this entity
-   * (same parent-ownership model as `spawn`), and a `runFinished +
-   * includeResponse` wake is registered on it at fork time. Reply
-   * delivery uses the parent's manifest-anchored wake — the same
-   * mechanism `spawn` uses — so when the fork's next run finishes,
-   * this entity wakes with the response in the wake message.
+   * The new fork is created as a CHILD of this entity (same parent-
+   * ownership model as `spawn`), and a `runFinished + includeResponse`
+   * wake is registered on it at fork time. Reply delivery uses the
+   * parent's manifest-anchored wake — the same mechanism `spawn` uses
+   * — so when the fork's next run finishes, this entity wakes with the
+   * response in the wake message.
+   *
+   * Positional shape matches `ctx.spawn(type, id, args?, opts?)`:
+   *   `ctx.fork(sourceEntityUrl, id, opts?)`
+   *
+   * - `sourceEntityUrl` — the entity whose history the fork inherits.
+   *   Use `ctx.forkSelf(...)` to fork yourself (omits this arg).
+   * - `id` — the new fork's instance id (the `<id>` in `/horton/<id>`).
+   *   Required for the same reason `spawn`'s id is required: the caller
+   *   knows the new URL up front and the request is idempotent on retry
+   *   (same id → server deduplicates). Tool wrappers that target the
+   *   model layer generate this via `nanoid` — see `createForkTool`.
    *
    * Options mirror `spawn` where the semantics map:
    * - `initialMessage` is delivered to the fork's inbox atomically
@@ -1036,13 +1068,17 @@ export interface HandlerContext<
    * - `observe: false` opts out of the parent relationship entirely:
    *   no wake, no manifest entry, no reply path — fire-and-forget.
    */
-  fork: (opts?: {
-    targetEntityUrl?: string
-    initialMessage?: unknown
-    wake?: Wake
-    tags?: Record<string, string>
-    observe?: boolean
-  }) => Promise<{ url: string }>
+  fork: (
+    sourceEntityUrl: string,
+    id: string,
+    opts?: ForkOptions
+  ) => Promise<{ url: string }>
+  /**
+   * Convenience wrapper for the common self-fork case — equivalent to
+   * `ctx.fork(ctx.entityUrl, id, opts)`. Mirrors `spawn`'s ergonomics
+   * (where you also don't have to spell out who the parent is).
+   */
+  forkSelf: (id: string, opts?: ForkOptions) => Promise<{ url: string }>
   observe: ((
     source: ObservationSource & { sourceType: `entity` },
     opts?: { wake?: Wake }

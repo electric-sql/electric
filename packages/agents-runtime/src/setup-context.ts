@@ -83,6 +83,12 @@ export interface WiringConfig {
   forkEntity: (
     sourceEntityUrl: string,
     opts?: {
+      /**
+       * Caller-supplied instance id for the new fork (wired to the
+       * server's `instance_id` body field). Omit to let the server
+       * mint one (currently `<source-id>-fork-<hash>`).
+       */
+      instanceId?: string
       parent?: string
       wake?: {
         subscriberUrl: string

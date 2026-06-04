@@ -37,6 +37,7 @@ import type {
   ObservationHandle,
   ObservationSource,
   ProcessWakeConfig,
+  ForkOptions,
   SendResult,
   SharedStateSchemaMap,
   SpawnSandboxOption,
@@ -1323,6 +1324,9 @@ export async function processWake(
       ): Promise<{ entityUrl: string; streamPath: string }> => {
         const result = await serverClient.forkEntity({
           sourceEntityUrl,
+          ...(opts?.instanceId !== undefined && {
+            instanceId: opts.instanceId,
+          }),
           ...(opts?.parent !== undefined && { parent: opts.parent }),
           ...(opts?.wake !== undefined && { wake: opts.wake }),
           ...(opts?.initialMessage !== undefined && {
@@ -1751,20 +1755,12 @@ export async function processWake(
       return setupCtx.spawn(type, id, spawnArgs, opts)
     }
 
-    const doFork = async (opts: {
-      targetEntityUrl: string
-      initialMessage?: unknown
-      wake?: Wake
-      tags?: Record<string, string>
-      observe?: boolean
-    }): Promise<{ url: string }> => {
-      const {
-        targetEntityUrl,
-        initialMessage,
-        wake: callerWake,
-        tags,
-        observe = true,
-      } = opts
+    const doFork = async (
+      sourceEntityUrl: string,
+      id: string,
+      opts: ForkOptions
+    ): Promise<{ url: string }> => {
+      const { initialMessage, wake: callerWake, tags, observe = true } = opts
       // Child-fork (default `observe: true`): the new fork is created
       // with `parent = me`, and a `runFinished + includeResponse` wake
       // is registered on it server-side, mirroring the spawn flow.
@@ -1783,8 +1779,9 @@ export async function processWake(
             includeResponse: true,
           })
       const { entityUrl: forkUrl } = await wiringConfig.forkEntity(
-        targetEntityUrl,
+        sourceEntityUrl,
         {
+          instanceId: id,
           ...(observe && { parent: entityUrl }),
           ...(wakeForRegistration && { wake: wakeForRegistration }),
           ...(initialMessage !== undefined && { initialMessage }),

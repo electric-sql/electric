@@ -142,6 +142,8 @@ export interface RuntimeServerClient {
    */
   forkEntity: (options: {
     sourceEntityUrl: string
+    /** Maps to the server's `instance_id` body field. */
+    instanceId?: string
     parent?: string
     wake?: {
       subscriberUrl: string
@@ -501,12 +503,14 @@ export function createRuntimeServerClient(
 
   const forkEntity = async ({
     sourceEntityUrl,
+    instanceId,
     parent,
     wake,
     initialMessage,
     tags,
   }: {
     sourceEntityUrl: string
+    instanceId?: string
     parent?: string
     wake?: {
       subscriberUrl: string
@@ -522,6 +526,7 @@ export function createRuntimeServerClient(
     const body: Record<string, unknown> = {
       anchor: `latest_completed_run`,
     }
+    if (instanceId !== undefined) body.instance_id = instanceId
     if (parent !== undefined) body.parent = parent
     if (wake !== undefined) body.wake = wake
     if (initialMessage !== undefined) body.initialMessage = initialMessage

@@ -1,4 +1,5 @@
 import { Type } from '@sinclair/typebox'
+import { nanoid } from 'nanoid'
 import { serverLog } from '../log'
 import type { AgentTool } from '@mariozechner/pi-agent-core'
 import type { HandlerContext } from '@electric-ax/agents-runtime'
@@ -13,11 +14,16 @@ Prefer supplying an 'initialMessage' so the fork is dispatched immediately in a 
 
 Use this to explore multiple alternative continuations in parallel from the same starting point. End your current turn first so the fork includes your latest response — the anchor is always the most recently completed run.
 
-Omit 'entityUrl' to fork your own session. Pass a different session's URL to fork that session instead (the new fork is still your child).`,
+Omit 'entityUrl' to fork your own session. Pass a different session's URL to fork that session instead (the new fork is still your child). The optional 'id' names the new fork's instance — useful when you want stable, predictable URLs (e.g. labelling branches in a parallel exploration); omit to let the server mint one.`,
     parameters: Type.Object({
       entityUrl: Type.Optional(
         Type.String({
           description: `URL of the session to fork. Omit to fork your own session.`,
+        })
+      ),
+      id: Type.Optional(
+        Type.String({
+          description: `Instance id for the new fork (the \`<id>\` in \`/horton/<id>\`). Mirrors spawn_worker's id parameter. Omit to let the server assign one.`,
         })
       ),
       initialMessage: Type.Optional(
@@ -32,17 +38,27 @@ Omit 'entityUrl' to fork your own session. Pass a different session's URL to for
       ),
     }),
     execute: async (_toolCallId, params) => {
-      const { entityUrl, initialMessage, tags } = params as {
+      const { entityUrl, id, initialMessage, tags } = params as {
         entityUrl?: string
+        id?: string
         initialMessage?: unknown
         tags?: Record<string, string>
       }
       try {
-        const { url } = await ctx.fork({
-          ...(entityUrl !== undefined && { targetEntityUrl: entityUrl }),
+        const opts = {
           ...(initialMessage !== undefined && { initialMessage }),
           ...(tags !== undefined && { tags }),
-        })
+        }
+        // The library API (`ctx.fork` / `ctx.forkSelf`) requires an id
+        // — same shape as `ctx.spawn(type, id, ...)`. The model layer
+        // doesn't need to know this; we generate one via nanoid when
+        // it's not supplied (same pattern `createSpawnWorkerTool` uses
+        // for the worker's id).
+        const forkId = id ?? `fork-${nanoid(10)}`
+        const { url } =
+          entityUrl !== undefined
+            ? await ctx.fork(entityUrl, forkId, opts)
+            : await ctx.forkSelf(forkId, opts)
         const dispatchNote =
           initialMessage !== undefined
             ? `The initial message has been delivered to the fork — it will start running.`
