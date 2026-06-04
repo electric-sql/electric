@@ -36,6 +36,7 @@ type DesktopPlatformId =
   | 'macos-x64'
   | 'windows-x64'
   | 'linux-x64'
+type MobilePlatformId = 'ios' | 'android'
 
 type DownloadOption = {
   label: string
@@ -163,6 +164,7 @@ function latestReleaseUrl(assetName: string): string {
 /* Detect the visitor's OS on mount; default to macOS Apple Silicon
    so SSR / first paint always renders a sensible primary. */
 const detectedId = ref<DesktopPlatformId>('macos-arm64')
+const detectedMobileId = ref<MobilePlatformId | null>(null)
 
 /* All Mac browsers still report `Intel Mac OS X` in the UA string on
    Apple Silicon for legacy compat (it's a deliberate Apple/browser
@@ -193,7 +195,13 @@ function detectMacArch(): 'macos-arm64' | 'macos-x64' {
 onMounted(() => {
   if (typeof navigator === 'undefined') return
   const ua = `${navigator.userAgent || ''} ${navigator.platform || ''}`
-  if (/Win(dows|64|32)|WOW64|WinNT/i.test(ua)) {
+  const isIPadDesktopMode =
+    /Mac|Macintosh/i.test(ua) && (navigator.maxTouchPoints ?? 0) > 1
+  if (/Android/i.test(ua)) {
+    detectedMobileId.value = 'android'
+  } else if (/iPhone|iPad|iPod/i.test(ua) || isIPadDesktopMode) {
+    detectedMobileId.value = 'ios'
+  } else if (/Win(dows|64|32)|WOW64|WinNT/i.test(ua)) {
     detectedId.value = 'windows-x64'
   } else if (
     /Linux|X11|Ubuntu|Fedora|Debian/i.test(ua) &&
@@ -210,6 +218,25 @@ const primaryPlatform = computed(
     desktopPlatforms.find((p) => p.id === detectedId.value) ??
     desktopPlatforms[0]
 )
+
+const primaryCta = computed(() => {
+  if (detectedMobileId.value === 'ios') {
+    return {
+      label: 'iOS preview — watch repo',
+      href: '#mobile',
+    }
+  }
+  if (detectedMobileId.value === 'android') {
+    return {
+      label: 'Android preview — watch repo',
+      href: '#mobile',
+    }
+  }
+  return {
+    label: primaryPlatform.value.downloads[0].label,
+    href: latestReleaseUrl(primaryPlatform.value.downloads[0].assetName),
+  }
+})
 </script>
 
 <template>
@@ -231,8 +258,8 @@ const primaryPlatform = computed(
             tag="a"
             size="medium"
             theme="brand"
-            :text="primaryPlatform.downloads[0].label"
-            :href="latestReleaseUrl(primaryPlatform.downloads[0].assetName)"
+            :text="primaryCta.label"
+            :href="primaryCta.href"
           />
           <!-- TODO(phase 6): swap href to "#download" once §7 ships an
                umbrella anchor on the download block. Pointing at
@@ -326,6 +353,7 @@ const primaryPlatform = computed(
                 :scene-props="{
                   os: 'auto',
                   theme: 'dark',
+                  title: 'Refactor auth helpers',
                   shareProgress: true,
                 }"
               />
@@ -334,7 +362,7 @@ const primaryPlatform = computed(
           <div class="ad-hero-mockup-phone">
             <AppMockupShadowHost
               :scene="HeroMobileChatScene"
-              :scene-props="{}"
+              :scene-props="{ title: 'Refactor auth helpers' }"
             />
           </div>
         </div>
@@ -469,7 +497,7 @@ const primaryPlatform = computed(
 
       <div class="ad-features-grid">
         <!-- Build with the SDK ────────────────────────────────── -->
-        <article class="ad-features-card">
+        <article class="ad-features-card ad-features-card--skills">
           <header class="ad-features-head">
             <span class="ad-features-icon" aria-hidden="true">
               <span class="ad-icon ad-icon--boxes" />
@@ -601,6 +629,10 @@ const primaryPlatform = computed(
         <span class="ad-features-more-item"
           >Attachments <em>(files, screenshots, folders into chat)</em></span
         >
+        <span class="ad-features-more-item ad-features-more-item--skills">
+          Skills &amp; slash commands
+          <em>(<code>/quickstart</code>, reusable workflows)</em>
+        </span>
         <span class="ad-features-more-item"
           >Local discovery <em>(dev servers on localhost)</em></span
         >
@@ -639,7 +671,9 @@ const primaryPlatform = computed(
           v-for="platform in desktopPlatforms"
           :key="platform.id"
           class="ad-platform-card"
-          :class="{ 'is-recommended': platform.id === detectedId }"
+          :class="{
+            'is-recommended': !detectedMobileId && platform.id === detectedId,
+          }"
         >
           <div class="ad-platform-head">
             <span class="ad-platform-icon" aria-hidden="true">
@@ -721,7 +755,10 @@ const primaryPlatform = computed(
       </template>
 
       <div class="ad-mobile-grid">
-        <article class="ad-mobile-card">
+        <article
+          class="ad-mobile-card"
+          :class="{ 'is-recommended': detectedMobileId === 'ios' }"
+        >
           <div class="ad-mobile-head">
             <span class="ad-mobile-icon" aria-hidden="true">
               <span class="ad-icon ad-icon--apple" />
@@ -743,7 +780,10 @@ const primaryPlatform = computed(
           </div>
         </article>
 
-        <article class="ad-mobile-card">
+        <article
+          class="ad-mobile-card"
+          :class="{ 'is-recommended': detectedMobileId === 'android' }"
+        >
           <div class="ad-mobile-head">
             <span class="ad-mobile-icon" aria-hidden="true">
               <span class="ad-icon ad-icon--android" />
@@ -1233,6 +1273,7 @@ const primaryPlatform = computed(
   /* Keep the scene flush-left so the phone overlaps the chat tile's
      right edge — the design intent in the reference. */
   align-self: stretch;
+  transform: translateX(20px);
   /* Clip the inner sizing wrapper, which renders at 125 % so the
      scene's intrinsic layout box is bigger than this footprint —
      anything that bleeds past the visible footprint is cut here. */
@@ -1293,37 +1334,36 @@ const primaryPlatform = computed(
   color: var(--vp-c-text-3);
 }
 
-/* Below ~720 px container width the overlap stops working — the
-   desktop tile has already collapsed its state pane (via its own
-   @container query at 720 px), and squeezing a phone alongside makes
-   both unreadable. Stack instead: desktop on top, phone below,
-   centred. */
+/* Below ~720 px container width keep the same overlapping desktop +
+   phone composition and let both devices scale down together. The
+   phone's desktop min-width is removed here so it stays proportional
+   instead of forcing the layout to stack or overflow. */
 @container hero-mockup (max-width: 720px) {
   .ad-hero-mockup-stage {
-    flex-direction: column;
-    align-items: center;
-    aspect-ratio: auto;
-    gap: 24px;
-  }
-  .ad-hero-mockup-desktop {
-    width: 100%;
-    max-width: 100%;
     aspect-ratio: 16 / 10;
   }
-  .ad-hero-mockup-desktop-inner {
-    /* Drop the oversized-render trick once the layout stacks. The
-       desktop is the primary device on its own row, so it should fill
-       the column at 1:1 rather than rendering at 125 % and scaling
-       back down. */
-    width: 100%;
-    height: 100%;
+  .ad-hero-mockup-desktop {
+    width: 86%;
+    max-width: 86%;
     transform: none;
   }
+  .ad-hero-mockup-desktop-inner {
+    /* On narrow screens keep the full desktop window visible, but
+       render the internals smaller so more of the sidebar + split
+       workspace fits inside the same on-page footprint. Width/height
+       are the inverse of the visual scale. */
+    width: 200%;
+    height: 200%;
+    transform: scale(0.5);
+  }
   .ad-hero-mockup-phone {
-    position: static;
-    transform: none;
-    width: 60%;
-    max-width: 280px;
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 24%;
+    min-width: 0;
+    max-width: none;
     aspect-ratio: 9 / 19.5;
   }
 }
@@ -1591,6 +1631,10 @@ const primaryPlatform = computed(
   white-space: nowrap;
 }
 
+.ad-features-more-item--skills {
+  display: none;
+}
+
 .ad-features-more-item em {
   margin-left: 4px;
   font-style: normal;
@@ -1797,6 +1841,14 @@ const primaryPlatform = computed(
   border: 1px solid var(--vp-c-divider);
   border-radius: 16px;
   background: var(--vp-c-bg);
+}
+
+.ad-mobile-card.is-recommended {
+  border-color: color-mix(
+    in srgb,
+    var(--vp-c-brand-1) 40%,
+    var(--vp-c-divider)
+  );
 }
 
 .ad-mobile-head {
@@ -2019,8 +2071,20 @@ const primaryPlatform = computed(
   .ad-modes-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+  .ad-modes-card:last-child {
+    grid-column: 1 / -1;
+  }
   .ad-features-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 601px) and (max-width: 980px) {
+  .ad-features-card--skills {
+    display: none;
+  }
+  .ad-features-more-item--skills {
+    display: inline;
   }
 }
 
@@ -2052,11 +2116,31 @@ const primaryPlatform = computed(
   .ad-modes-grid {
     grid-template-columns: 1fr;
   }
+  .ad-modes-card:last-child {
+    grid-column: auto;
+  }
   .ad-modes-card {
     padding: 24px 22px;
   }
   .ad-modes-title {
     font-size: 20px;
+  }
+}
+
+@media (max-width: 640px) {
+  .ad-hero-mockup {
+    padding-inline: 8px;
+  }
+  .ad-hero-platforms {
+    transform: scale(0.82);
+    transform-origin: top center;
+    margin-top: 24px;
+  }
+}
+
+@media (max-width: 360px) {
+  .ad-hero-platforms {
+    transform: scale(0.74);
   }
 }
 

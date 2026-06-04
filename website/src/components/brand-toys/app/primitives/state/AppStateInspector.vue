@@ -54,12 +54,17 @@ const props = withDefaults(
      *  types / records / events to a specific scenario card on
      *  the /app page. */
     fixtureKey?: StateFixtureKey
+    /** Optional shared chat progress (0..1). When set, the events
+     *  panel streams rows in lockstep with the chat timeline instead
+     *  of running the standalone pulse loop. */
+    progress?: number | null
   }>(),
   {
     pulseRate: 0.8,
     paused: false,
     density: 'comfortable',
     fixtureKey: 'default',
+    progress: null,
   }
 )
 
@@ -79,8 +84,30 @@ let cursor = 0
 let intervalId: ReturnType<typeof setInterval> | null = null
 const pulseHoldTimers = new Map<number, ReturnType<typeof setTimeout>>()
 
+const syncProgress = computed(() => props.progress !== null)
+
+const visibleEventCount = computed(() => {
+  const events = fixture.value.events
+  if (!syncProgress.value) return events.length
+  const progress = Math.max(0, Math.min(1, props.progress ?? 0))
+  /* Keep the initial spawn + inbox rows visible, then stream the
+     remaining rows in as the chat reveals its tool call, code, and
+     closing result. */
+  return Math.max(2, Math.ceil(progress * events.length))
+})
+
+const visibleEvents = computed(() =>
+  fixture.value.events.slice(0, visibleEventCount.value)
+)
+
+const activePulseSet = computed(() => {
+  if (!syncProgress.value) return pulseSet.value
+  return new Set([Math.max(0, visibleEventCount.value - 1)])
+})
+
 const driven = computed(
   () =>
+    !syncProgress.value &&
     !props.paused &&
     !reducedMotion.value &&
     hasIntersected.value &&
@@ -276,10 +303,11 @@ onBeforeUnmount(() => {
       </div>
       <div class="events-list">
         <div
-          v-for="(e, i) in fixture.events"
+          v-for="(e, i) in visibleEvents"
           :key="e.index"
           class="event-row"
-          :data-pulse="pulseSet.has(i) ? 'true' : 'false'"
+          :data-pulse="activePulseSet.has(i) ? 'true' : 'false'"
+          :data-streaming="syncProgress ? 'true' : 'false'"
         >
           <span class="event-row-index mono">{{
             String(e.index).padStart(2, '0')
@@ -619,11 +647,13 @@ onBeforeUnmount(() => {
    no per-row divider — rows read as a flat list, separated only by
    the panel-header above. */
 .event-row {
+  flex: 0 0 28px;
   display: grid;
   grid-template-columns: 24px auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
   height: 28px;
+  min-height: 28px;
   padding: 0 12px;
   font-size: var(--ds-text-xs);
   line-height: var(--ds-text-xs-lh);
@@ -697,10 +727,34 @@ onBeforeUnmount(() => {
   animation: event-row-pulse 600ms cubic-bezier(0.32, 0.72, 0, 1);
 }
 
+.event-row[data-streaming='true'] {
+  animation: event-row-enter 220ms ease-out;
+}
+
+.event-row[data-streaming='true'][data-pulse='true'] {
+  animation:
+    event-row-enter 220ms ease-out,
+    event-row-pulse 600ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@keyframes event-row-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .event-row[data-pulse='true'] {
     animation: none;
     background: var(--ds-accent-a3);
+  }
+  .event-row[data-streaming='true'] {
+    animation: none;
   }
 }
 
@@ -718,6 +772,8 @@ onBeforeUnmount(() => {
 .state-inspector[data-density='compact'] .type-row,
 .state-inspector[data-density='compact'] .record-row,
 .state-inspector[data-density='compact'] .event-row {
+  flex-basis: 22px;
   height: 22px;
+  min-height: 22px;
 }
 </style>

@@ -294,6 +294,7 @@ const effectiveProgress = computed<number | null>(() => {
               :session-id="sessionId"
               :pulse-rate="pulseRate"
               :paused="paused"
+              :progress="effectiveProgress"
               density="comfortable"
               :show-close="showChatTile && showStateTile"
               :chrome-inset-target="

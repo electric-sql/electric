@@ -23,6 +23,7 @@ withDefaults(
     sessionId?: string
     pulseRate?: number
     paused?: boolean
+    progress?: number | null
     density?: 'comfortable' | 'compact'
     /** Forwarded to AppTileHeader — the right tile in a split shows
      * a close X. Single-tile scenes leave it false. */
@@ -42,6 +43,7 @@ withDefaults(
     sessionId: 'horton/70cqMB5GnW',
     pulseRate: 0.8,
     paused: false,
+    progress: null,
     density: 'comfortable',
     showClose: true,
     chromeInsetTarget: false,
@@ -70,6 +72,7 @@ withDefaults(
       <AppStateInspector
         :pulse-rate="pulseRate"
         :paused="paused"
+        :progress="progress"
         :density="density"
         :fixture-key="fixtureKey"
       />
