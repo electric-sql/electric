@@ -314,12 +314,32 @@ const caretSegment = computed<'pre' | 'code' | 'post' | 'done'>(() => {
   return 'pre'
 })
 
-const toolCallVisible = computed(
-  () =>
-    props.hasToolCall &&
-    fixture.value.toolCall !== null &&
-    effectiveProgress.value >= (fixture.value.toolCall?.appearAt ?? 1)
-)
+const toolCallVisible = computed(() => {
+  if (!props.hasToolCall || fixture.value.toolCall === null) return false
+  /* If a fixture sets a manual `appearAt` ratio, honour it as an
+     override. Otherwise fire the tool-call card a small lead before
+     the code block reveals — every default fixture's code block IS
+     the tool's result, so the natural rhythm reads as
+     "agent prepares → tool call → code result". The lead value
+     (~28 chars at 60 cps ≈ 0.4 s) gives the tool-call's enter
+     transition time to settle before the code block fades in below
+     it. */
+  const manual = fixture.value.toolCall.appearAt
+  if (manual !== undefined) {
+    return effectiveProgress.value >= manual
+  }
+  if (segments.value.code) {
+    const TOOL_CALL_LEAD_CHARS = 28
+    const trigger = Math.max(
+      0,
+      segments.value.code.start - TOOL_CALL_LEAD_CHARS
+    )
+    return cursorPos.value >= trigger
+  }
+  /* No code block AND no manual override — never show. Fixtures
+     without a code block need to opt-in via `appearAt`. */
+  return false
+})
 
 /** Show the meta row (✓ done · time · copy) once the streaming run has
  * completed — matches the live AgentResponse, which only paints the
@@ -362,6 +382,25 @@ function renderInline(input: string): string {
       </p>
 
       <Transition name="reveal">
+        <div
+          v-if="hasToolCall && toolCallVisible && fixture.toolCall"
+          class="tool-call-card"
+          aria-label="Tool call"
+        >
+          <div class="tool-call-header">
+            <span class="tool-call-icon" aria-hidden="true">
+              <AppIcon :icon="Wrench" :size="2" />
+            </span>
+            <span class="tool-call-name mono">{{ fixture.toolCall.name }}</span>
+            <span class="tool-call-summary">{{ fixture.toolCall.args }}</span>
+            <span class="tool-call-toggle" aria-hidden="true">
+              <AppIcon :icon="ChevronRight" :size="1" />
+            </span>
+          </div>
+        </div>
+      </Transition>
+
+      <Transition name="reveal">
         <div v-if="codeBlockMounted" class="code-block">
           <div class="code-block-row">
             <div class="code-block-header">
@@ -395,25 +434,6 @@ function renderInline(input: string): string {
             aria-hidden="true"
           />
         </p>
-      </Transition>
-
-      <Transition name="reveal">
-        <div
-          v-if="hasToolCall && toolCallVisible && fixture.toolCall"
-          class="tool-call-card"
-          aria-label="Tool call"
-        >
-          <div class="tool-call-header">
-            <span class="tool-call-icon" aria-hidden="true">
-              <AppIcon :icon="Wrench" :size="2" />
-            </span>
-            <span class="tool-call-name mono">{{ fixture.toolCall.name }}</span>
-            <span class="tool-call-summary">{{ fixture.toolCall.args }}</span>
-            <span class="tool-call-toggle" aria-hidden="true">
-              <AppIcon :icon="ChevronRight" :size="1" />
-            </span>
-          </div>
-        </div>
       </Transition>
 
       <!--

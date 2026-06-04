@@ -30,7 +30,7 @@ import AppTimelineMarker from '../../chat/AppTimelineMarker.vue'
 import AppTileHeader from '../AppTileHeader.vue'
 import AppTileShell from '../AppTileShell.vue'
 import { CHAT_FIXTURES, type ChatFixtureKey } from '../../../fixtures'
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
 const props = withDefaults(
   defineProps<{
@@ -91,6 +91,49 @@ const props = withDefaults(
 )
 
 const fixture = computed(() => CHAT_FIXTURES[props.fixtureKey])
+
+/* Auto-stick-to-bottom: real chat UIs pin the scroll position to the
+   newest content while the assistant streams. The mockup needs the
+   same behaviour or the streamed text just slides off-screen below
+   the chat-surface viewport once the column outgrows it.
+
+   We do this with a ResizeObserver on the inner `.chat-column` —
+   every time its height changes (each word the typewriter reveals,
+   each block that fades in) we set `scrollTop = scrollHeight` on the
+   `.chat-surface` viewport. No ref-passing across the response
+   primitive, no per-tick prop watching — the geometry IS the signal.
+
+   We do NOT auto-scroll the *first* observation: when the surface
+   first lays out, the column is already short enough to fit, and
+   triggering a scroll on initial measurement on Safari produces a
+   tiny visible jump even though there's nothing to scroll. From
+   the second observation onward (i.e. content growing), we pin. */
+const chatSurfaceEl = ref<HTMLElement | null>(null)
+const chatColumnEl = ref<HTMLElement | null>(null)
+
+let resizeObserver: ResizeObserver | null = null
+let firstObservation = true
+
+onMounted(() => {
+  if (!chatSurfaceEl.value || !chatColumnEl.value) return
+  if (typeof ResizeObserver === 'undefined') return
+
+  resizeObserver = new ResizeObserver(() => {
+    if (firstObservation) {
+      firstObservation = false
+      return
+    }
+    const surface = chatSurfaceEl.value
+    if (!surface) return
+    surface.scrollTop = surface.scrollHeight
+  })
+  resizeObserver.observe(chatColumnEl.value)
+})
+
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect()
+  resizeObserver = null
+})
 </script>
 
 <template>
@@ -109,8 +152,8 @@ const fixture = computed(() => CHAT_FIXTURES[props.fixtureKey])
       />
     </template>
 
-    <div class="chat-surface" :data-density="density">
-      <div class="chat-column">
+    <div class="chat-surface" ref="chatSurfaceEl" :data-density="density">
+      <div class="chat-column" ref="chatColumnEl">
         <div class="timeline-markers">
           <AppTimelineMarker label="spawned" :value="spawnTime" />
           <AppTimelineMarker label="sandbox" :value="sandboxLabel" />
@@ -144,7 +187,13 @@ const fixture = computed(() => CHAT_FIXTURES[props.fixtureKey])
 .chat-surface {
   flex: 1;
   min-height: 0;
-  overflow: hidden;
+  /* Real scrolling viewport so the column auto-pins to the bottom
+     while the typewriter streams. Scrollbar is hidden because the
+     mockup is a story-telling surface, not a navigable one — the
+     soft mask at the bottom already conveys "more content above". */
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
   /* Soft bottom-fade mask so the chat surface visually melts into the
      composer slab below — matches the live product. */
   -webkit-mask-image: linear-gradient(
@@ -159,6 +208,10 @@ const fixture = computed(() => CHAT_FIXTURES[props.fixtureKey])
     black calc(100% - 32px),
     transparent 100%
   );
+}
+
+.chat-surface::-webkit-scrollbar {
+  display: none;
 }
 
 .chat-surface[data-density='comfortable'] {

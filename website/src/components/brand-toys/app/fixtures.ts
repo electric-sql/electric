@@ -157,9 +157,9 @@ export const SIDEBAR_FIXTURE: readonly MockSidebarRow[] = [
 /**
  * Tagged shape for a chat fixture — one user prompt, one streaming
  * agent response. The optional `toolCall` is rendered as a small
- * card beneath the response when streaming progress crosses
- * `appearAt`. `null` means "no tool card" (some fixtures don't fire
- * a tool call at all).
+ * card just BEFORE the fenced code block in the response (the natural
+ * rhythm reads as "agent prepares → tool call → code result"). `null`
+ * means "no tool card" (some fixtures don't fire a tool call at all).
  *
  * Design rule for `agentResponseText`: the first prose paragraph is
  * always plain English (the streaming "got it" beat); the optional
@@ -176,8 +176,14 @@ export interface ChatFixtureData {
   toolCall: {
     name: string
     args: string
-    /** Progress ratio (0..1) at which the tool-call card appears. */
-    appearAt: number
+    /**
+     * Optional progress ratio (0..1) at which the tool-call card
+     * appears. When omitted, `AppAgentResponse` auto-fires the card
+     * a small lead before the code-block reveals — set this only if
+     * a fixture wants different timing (e.g. no code block, or fire
+     * after the code block).
+     */
+    appearAt?: number
   } | null
 }
 
@@ -217,7 +223,6 @@ I've also drafted a \`vitest\` case that covers the happy path and a malformed-J
     toolCall: {
       name: `read_file`,
       args: `packages/auth/src/index.ts`,
-      appearAt: 0.55,
     },
   },
 
@@ -238,7 +243,6 @@ Drafting a fix: inject a deterministic \`Clock\` in the test fixture and add a 5
     toolCall: {
       name: `read_file`,
       args: `packages/auth/src/jwt.ts`,
-      appearAt: 0.5,
     },
   },
 
@@ -259,7 +263,6 @@ Fork the one that takes a wrong turn from its run if you spot something off — 
     toolCall: {
       name: `spawn_worker`,
       args: `parallel-rename · 4 packages`,
-      appearAt: 0.55,
     },
   },
 
@@ -279,7 +282,6 @@ Want me to fork one into a fresh session and dig deeper, or hand the most promis
     toolCall: {
       name: `fetch_url`,
       args: `412 sources · 8h 14m runtime`,
-      appearAt: 0.4,
     },
   },
 } as const satisfies Record<string, ChatFixtureData>
