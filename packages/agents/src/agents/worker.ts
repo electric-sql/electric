@@ -308,6 +308,11 @@ export function registerWorker(
         subject_value: `user`,
         permission: `spawn`,
       },
+      {
+        subject_kind: `principal_kind`,
+        subject_value: `user`,
+        permission: `manage`,
+      },
     ],
     async handler(ctx) {
       const args = parseWorkerArgs(ctx.args)
