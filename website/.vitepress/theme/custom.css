@@ -586,6 +586,17 @@ span.no-visual {
 .block-xl {
   display: none !important;
 }
+@media (max-width: 1399px) {
+  .hidden-xxl {
+    display: none !important;
+  }
+  .inline-xxl {
+    display: inline !important;
+  }
+  .block-xxl {
+    display: block !important;
+  }
+}
 @media (max-width: 1059px) {
   .hidden-xl {
     display: none !important;

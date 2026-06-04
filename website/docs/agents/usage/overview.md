@@ -4,6 +4,9 @@ titleTemplate: "... - Electric Agents"
 description: >-
   High level overview of the Electric Agents system and developer APIs.
 outline: [2, 3]
+prev:
+  text: 'Walkthrough'
+  link: '/docs/agents/walkthrough'
 ---
 
 # Usage overview

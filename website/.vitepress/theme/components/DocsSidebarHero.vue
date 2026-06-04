@@ -48,6 +48,7 @@ const PRODUCTS = [
     primary: [
       { text: "Overview", link: "/docs/agents" },
       { text: "Quickstart", link: "/docs/agents/quickstart" },
+      { text: "Walkthrough", link: "/docs/agents/walkthrough" },
       { text: "Demos", link: "/agents/demos" },
     ],
   },
