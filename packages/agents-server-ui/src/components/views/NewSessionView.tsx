@@ -12,7 +12,12 @@ import { COMPOSER_INPUT_MESSAGE_TYPE } from '@electric-ax/agents-runtime/client'
 import { nanoid } from 'nanoid'
 import { useElectricAgents } from '../../lib/ElectricAgentsProvider'
 import { useWorkspace } from '../../hooks/useWorkspace'
-import { useRecentWorkingDirectories } from '../../hooks/useRecentWorkingDirectories'
+import { recentWorkingDirsForRunner } from '../../lib/recentWorkingDirectories'
+import {
+  isSandboxProfileRemote,
+  pickDefaultSandboxProfile,
+  useSandboxProfileSelection,
+} from '../../lib/sandboxProfiles'
 import {
   codexEnableSource,
   loadApiKeysStatus,
@@ -147,21 +152,16 @@ export function NewSessionView({
   tileId,
   setToolbarTitle,
 }: StandaloneViewProps): React.ReactElement {
-  const { entityTypesCollection, runnersCollection, spawnEntity } =
-    useElectricAgents()
+  const {
+    entitiesCollection,
+    entityTypesCollection,
+    runnersCollection,
+    spawnEntity,
+  } = useElectricAgents()
   const { helpers } = useWorkspace()
   const [selected, setSelected] = useState<ElectricEntityType | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const { recents: recentDirs, addRecent: addRecentDir } =
-    useRecentWorkingDirectories()
-  // Default to the most-recently-used working directory so a user
-  // who keeps opening sessions against the same project root doesn't
-  // have to re-select it each time. Initialised lazily so subsequent
-  // additions to `recents` don't yank the picker out from under the
-  // user mid-edit.
-  const [workingDirectory, setWorkingDirectory] = useState<string | null>(
-    () => recentDirs[0] ?? null
-  )
+  const [workingDirectory, setWorkingDirectory] = useState<string | null>(null)
 
   const { data: entityTypes = [], isLoading: entityTypesLoading } =
     useLiveQuery(
@@ -264,6 +264,42 @@ export function NewSessionView({
     selectedRunnerId,
     selectedRunnerStillExists,
   ])
+
+  // Recent working directories are derived from the synced sessions
+  // dispatched to the selected runner (`spawn_args.workingDirectory`), so
+  // the same per-runner list appears on every device — no local storage.
+  const { data: allEntities = [] } = useLiveQuery(
+    (query) => {
+      if (!entitiesCollection) return undefined
+      return query.from({ e: entitiesCollection })
+    },
+    [entitiesCollection]
+  )
+  const recentDirs = useMemo(
+    () =>
+      selectedRunnerId
+        ? recentWorkingDirsForRunner(allEntities, selectedRunnerId)
+        : [],
+    [allEntities, selectedRunnerId]
+  )
+
+  // Default to the selected runner's most-recently-used directory so a user
+  // who keeps opening sessions against the same project root doesn't have to
+  // re-select it each time. An explicit pick wins until the runner changes —
+  // paths from one machine may not exist on another, so switching runner
+  // re-derives the default.
+  const userPickedDirRef = useRef(false)
+  const handleChangeWorkingDirectory = useCallback((path: string | null) => {
+    userPickedDirRef.current = true
+    setWorkingDirectory(path)
+  }, [])
+  useEffect(() => {
+    userPickedDirRef.current = false
+  }, [selectedRunnerId])
+  useEffect(() => {
+    if (userPickedDirRef.current) return
+    setWorkingDirectory(recentDirs[0] ?? null)
+  }, [recentDirs])
 
   // Sandbox profiles ride alongside the runner row. Read the advertised
   // list off whichever runner the spawn will dispatch to, preserving the
@@ -422,16 +458,15 @@ export function NewSessionView({
       // Inject the picker's choice into the spawn args for the composer flow
       // only — non-default agents have their own schemas and may not
       // understand `workingDirectory`. A remote sandbox runs in the provider
-      // VM, so a host working directory is meaningless there: skip it (and the
-      // recent-dirs bump) for remote profiles. Otherwise remember the chosen
-      // path so the next session opens with the same default.
+      // VM, so a host working directory is meaningless there: skip it for
+      // remote profiles. The spawned session itself becomes the newest
+      // synced recent for this runner.
       const profileIsRemote = isSandboxProfileRemote(
         allSandboxProfiles,
         sandboxProfile
       )
       const includeWorkingDir = workingDirectory !== null && !profileIsRemote
       const augmented = includeWorkingDir ? { ...args, workingDirectory } : args
-      if (includeWorkingDir) addRecentDir(workingDirectory)
       const hasAttachments = attachments.length > 0
       const initialMessage =
         typeof input === `string`
@@ -452,7 +487,7 @@ export function NewSessionView({
         sandboxProfile
       )
     },
-    [defaultAgent, doSpawn, workingDirectory, addRecentDir, allSandboxProfiles]
+    [defaultAgent, doSpawn, workingDirectory, allSandboxProfiles]
   )
 
   const defaultComposerReady =
@@ -494,7 +529,8 @@ export function NewSessionView({
             defaultComposerReady={defaultComposerReady}
             error={error}
             workingDirectory={workingDirectory}
-            onChangeWorkingDirectory={setWorkingDirectory}
+            onChangeWorkingDirectory={handleChangeWorkingDirectory}
+            recentWorkingDirs={recentDirs}
             runners={enabledRunners}
             selectedRunnerId={effectiveRunnerId}
             onChangeSelectedRunner={handleChangeSelectedRunner}
@@ -516,6 +552,7 @@ function Picker({
   error,
   workingDirectory,
   onChangeWorkingDirectory,
+  recentWorkingDirs,
   runners,
   selectedRunnerId,
   onChangeSelectedRunner,
@@ -535,6 +572,7 @@ function Picker({
   error: string | null
   workingDirectory: string | null
   onChangeWorkingDirectory: (path: string | null) => void
+  recentWorkingDirs: ReadonlyArray<string>
   runners: Array<ElectricRunner>
   selectedRunnerId: string | null
   onChangeSelectedRunner: (id: string | null) => void
@@ -567,6 +605,7 @@ function Picker({
           disabled={!defaultComposerReady}
           workingDirectory={workingDirectory}
           onChangeWorkingDirectory={onChangeWorkingDirectory}
+          recentWorkingDirs={recentWorkingDirs}
           runners={runners}
           selectedRunnerId={selectedRunnerId}
           onChangeSelectedRunner={onChangeSelectedRunner}
@@ -801,51 +840,6 @@ function SelectedAgentForm({
   )
 }
 
-function pickDefaultSandboxProfile(
-  profiles: ReadonlyArray<ElectricSandboxProfile>
-): string | null {
-  return profiles.length === 0 ? null : profiles[0]!.name
-}
-
-/**
- * Picker selection that survives a live update to the advertised profile
- * list. When the user explicitly picks a profile we remember it and restore
- * it as soon as it's offered again — so a transient list change (e.g. a
- * runtime restart re-advertising its profiles, which briefly drops one)
- * can't silently downgrade an explicit choice to the default. Falls back to
- * the default only when the user hasn't chosen.
- */
-function useSandboxProfileSelection(
-  sandboxProfiles: ReadonlyArray<ElectricSandboxProfile>
-): readonly [string | null, (next: string) => void] {
-  const [sandboxProfile, setSandboxProfile] = useState<string | null>(() =>
-    pickDefaultSandboxProfile(sandboxProfiles)
-  )
-  const chosenRef = useRef<string | null>(null)
-  useEffect(() => {
-    setSandboxProfile((current) => {
-      const chosen = chosenRef.current
-      if (chosen && sandboxProfiles.some((p) => p.name === chosen))
-        return chosen
-      if (current && sandboxProfiles.some((p) => p.name === current))
-        return current
-      return pickDefaultSandboxProfile(sandboxProfiles)
-    })
-  }, [sandboxProfiles])
-  const choose = useCallback((next: string) => {
-    chosenRef.current = next
-    setSandboxProfile(next)
-  }, [])
-  return [sandboxProfile, choose] as const
-}
-
-function isSandboxProfileRemote(
-  profiles: ReadonlyArray<ElectricSandboxProfile>,
-  name: string | null
-): boolean {
-  return name != null && profiles.some((p) => p.name === name && p.remote)
-}
-
 function sandboxProfileLabel(profile: ElectricSandboxProfile): string {
   return profile.name === `local` ? `No sandbox` : profile.label
 }
@@ -930,6 +924,7 @@ function DefaultAgentComposer({
   disabled,
   workingDirectory,
   onChangeWorkingDirectory,
+  recentWorkingDirs,
   runners,
   selectedRunnerId,
   onChangeSelectedRunner,
@@ -945,6 +940,7 @@ function DefaultAgentComposer({
   disabled?: boolean
   workingDirectory: string | null
   onChangeWorkingDirectory: (path: string | null) => void
+  recentWorkingDirs: ReadonlyArray<string>
   runners: Array<ElectricRunner>
   selectedRunnerId: string | null
   onChangeSelectedRunner: (id: string | null) => void
@@ -1236,6 +1232,7 @@ function DefaultAgentComposer({
           <WorkingDirectoryPicker
             value={workingDirectory}
             onChange={onChangeWorkingDirectory}
+            recents={recentWorkingDirs}
             disabled={submitting || disabled}
           />
         )}
