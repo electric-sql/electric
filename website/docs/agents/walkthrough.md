@@ -128,7 +128,7 @@ pnpx electric-ax@latest agents start
 
 This will pull down and run some containers (Postgres, Electric and the Electric Agents server, which includes a Durable Streams server and the Electric Agents UI).
 
-It should finish by outputing:
+It should finish by outputting:
 
 ```
 Electric Agents dev environment is up.
@@ -214,7 +214,7 @@ You can generate API keys at [platform.claude.com/settings/keys](https://platfor
 
 Then finally update your `package.json` `dev` script to load the .env file by adding `--env-file=.env` to the `tsx watch` command.
 
-So your dev script shold look like this:
+So your dev script should look like this:
 
 ```json
 "scripts": {
@@ -386,7 +386,7 @@ So far we've defined an `assistant` entity and seen how we can spawn and interac
 
 Let's start with a deliberately naive approach: defining a manager agent that spawns a worker every time it gets a message. (We'll extend this to more useful patterns later on but let's go one step at a time so the progression is nice and clear).
 
-### Dyanmic assistant
+### Dynamic assistant
 
 First let's extend our `assistant` to accept a systemPrompt:
 
@@ -456,7 +456,7 @@ if (wake.type === 'inbox') {
 
 What this does is say "if the notification you're responding to comes from the inbox stream", which means it's a user message, then spawn a sub-agent, specifically an `assistant` with a "Reverse the user message" systemPrompt, passing through the user message from `wake.payload.text`.
 
-Now if go back to the web UI on [https://localhost:4438](https://localhost:4438) you can now also create `manager` agents:
+Now if you go back to the web UI on [https://localhost:4438](https://localhost:4438) you can now also create `manager` agents:
 
 <figure style="border: 0.5px solid #aaa">
   <a href="https://localhost:4438" target="_blank" class="no-visual">
@@ -464,9 +464,9 @@ Now if go back to the web UI on [https://localhost:4438](https://localhost:4438)
   </a>
 </figure>
 
-Create one and send it a message. You'll see the child entity in the UI (in the menu on the left hand side, you can see it says "manager + 1" you can expand that and then see the sub-agents in the menu bar.
+Create one and send it a message. You'll see the child entity in the UI. In the menu on the left-hand side you'll see it says "manager + 1"; expand that to see the sub-agents in the menu bar.
 
-Click through to the sub-agent, you'll see it's reversed the message. Back in the manager agent thread it recieves the notification of the sub-agent response but it doesn't *understand* it:
+Click through to the sub-agent, you'll see it's reversed the message. Back in the manager agent thread it receives the notification of the sub-agent response, but it doesn't *understand* it:
 
 <figure>
   <a href="https://localhost:4438" target="_blank" class="no-visual">
@@ -474,7 +474,7 @@ Click through to the sub-agent, you'll see it's reversed the message. Back in th
   </a>
 </figure>
 
-It knows its a manager agent (from its systemPrompt) but it doesn't realise that it spawned the sub-agent or that the sub-agent is responding to its instructions. That's because the sub-agent was spawned in *our imperative code*, not in the session context using a tool call.
+It knows it's a manager agent (from its systemPrompt) but it doesn't realise that it spawned the sub-agent or that the sub-agent is responding to its instructions. That's because the sub-agent was spawned in *our imperative code*, not in the session context using a tool call.
 
 ## Step 3 - Tool call spawning
 
@@ -537,7 +537,7 @@ The [`ctx.spawn`](/docs/agents/usage/spawning-and-coordinating#spawn) call that 
 
 ### Simplify the manager
 
-We can now update our manager entity to remove the previous imperative `ctx.spawn` logic and instead to pass the spawn assistant tool into the `tools` array, so that the LLM can choose to use it:
+We can now update our manager entity to remove the previous imperative `ctx.spawn` logic and instead pass the spawn assistant tool into the `tools` array:
 
 ```ts
 registry.define("manager", {
@@ -559,7 +559,7 @@ registry.define("manager", {
 })
 ```
 
-Now when we spawn a manager and message it, we see the assistant spawned and report back and the manager agent is aware of the sub-agent. Ask the manager:
+Now when we spawn a manager and message it, we see the assistant spawn and report back, and the manager agent is aware of the sub-agent. Ask the manager:
 
 > who reversed this message? how did that happen/work?
 
@@ -673,11 +673,11 @@ Now create a new manager session and instruct it to debate an issue, for example
 
 You'll see it spawn a judge *and* you'll see the judge spawn the two assistants.
 
-## Step 5 - Hybrid control flow
-
-In an agentic system, we want the LLM to be able to express itself by choosing and configuring the right tool calls in the right way. However, it's often tricky to get the LLM to always do the right thing.
+However, exactly what happens is up to the LLM's interpretation of its system prompt. What happens varies run by run and the judge and manager often hallucinate the debate results without waiting for the arguments to actually come in.
 
 ### "Make no mistakes"
+
+In an agentic system, we want the LLM to be able to express itself by choosing and configuring the right tool calls in the right way. However, it's often tricky to get the LLM to always do the right thing.
 
 In the judge prompt above, we added a series of notes to the instructions to prevent the judge from making the results up and responding too early:
 
@@ -690,9 +690,32 @@ Notes:
 - Wait until the debate is fully finished before reporting back to the parent agent.
 ```
 
-These kind of instructions may be familiar to you if you're used to wrangling LLMs and agentic systems! They often work, especially with better models. However, LLMs are indeterministic and there's always a small chance they won't follow instructions perfectly.
+These kind of instructions may be familiar to you if you're used to instructing LLMs! They often work, especially with better models. However, LLMs are non-deterministic and there's always a small chance they won't follow instructions perfectly.
 
-Say we step things up a level and make the debate control flow more complex. Say we want the judge to pass each of the assistant arguments to the other side to be able to critique and respond to.
+Say we step things up a level and make the debate control flow more complex. Let's add a phase to the debate by instructing the judge to pass each of the assistants' arguments to the opposing side so they can critique and rebut them before the judge summarizes the debate.
+
+```
+  Manager       Judge           Assistant A        Assistant B
+     │            │                  │                  │
+     ├── topic ──▶│                  │                  │
+     │            │                  │                  │
+── phase 1: arguing ───────────────────────────────────────
+     │            ├─ spawn + brief ─▶│                  │
+     │            ├──────────────────┼─ spawn + brief ─▶│
+     │            │                  │                  │
+     │            │◀──── argument ───┤                  │
+     │            │◀─────────────────┼──── argument ────┤
+     │            │                  │                  │
+── phase 2: critiquing ─────────────────────────────────────
+     │            ├── B's argument ─▶│                  │
+     │            ├──────────────────┼─ A's argument ──▶│
+     │            │                  │                  │
+     │            │◀──── rebuttal ───┤                  │
+     │            │◀─────────────────┼──── rebuttal ────┤
+     │            │                  │                  │
+── phase 3: verdict ───────────────────────────────────────
+     │◀─ verdict ─┤                  │                  │
+```
 
 We could imagine updating the steps in the system prompt like this:
 
@@ -709,58 +732,26 @@ When (and only when) you receive a user message:
 7. Summarize the key arguments of the debate and provide your judge's verdict to the parent agent.
 ```
 
-These instructions are fairly clear but it would be easy for the LLM to go off-piste. Rather than using this longer system prompt, let's instead evolve our system to use imperative control flow combined with durable state in the form of a debate collection.
+These instructions are fairly clear but it would be very easy for the LLM to go off-piste. Rather than using this longer system prompt, let's instead evolve our system to use a hybrid approach that combines the LLM instructions with imperative control flow based on durable state.
 
-### Debate collection
+## Step 5 - Hybrid control flow
 
-This step pulls two more exports from the runtime — `passthrough` (to type the custom collection below) and `entity` (used later, when the manager observes the judge):
+In this step, we're going to:
 
-```ts
-import {
-  // ...,
-  entity,
-  passthrough,
-} from '@electric-ax/agents-runtime'
-```
+1. define a `start_debate` tool call to spawn the two debating assistants
+2. add a `debate` collection to the durable state kept by the judge entity
+3. significantly update the judge entity to use imperative control flow
+4. update the manager agent to observe the judge's durable state
 
-Then define a `debate` [collection](https://tanstack.com/db/latest/docs/overview#defining-collections) on the judge entity. This collection allows us to track the progress and status of a debate.
-
-> [!Tip] ℹ&nbsp; What is a collection?
-> Electric Agents uses [TanStack DB](/sync/tanstack-db) under the hood. [Collections](https://tanstack.com/db/latest/docs/overview#defining-collections) are the core reactive data abstraction for TanStack DB.
-
-First define a schema for the data:
-
-```ts
-type Debate = {
-  key: 'current'
-  topic: string
-  aUrl: string
-  bUrl: string
-  phase: 'arguing' | 'critiquing' | 'done'
-  arguments: { a?: string; b?: string }
-  rebuttals: { a?: boolean; b?: boolean }
-}
-```
-
-Then add the collection to the entity definition's [`state`](/docs/agents/usage/shared-state):
-
-```ts
-registry.define('judge', {
-  // ...,
-  state: {
-    debate: { schema: passthrough<Debate>(), primaryKey: 'key' },
-  },
-  async handler(ctx, wake) {
-    // ...
-  }
-})
-```
+This will make the system much more reliable.
 
 ### Start debate tool
 
-We can then define a `start_debate` tool which spawns both assistants to argue the two sides of the debate and inserts a record into the debate collection to capture the arguments and track the process through the stages of the debate.
+Rather than prompting the judge to create two assistants to argue each side of the debate, we're going to define a tool call that does this instead.
 
-First we define the parameters for the tool call. Note that the LLM still writes the brief for both agents:
+This spawns the two assistants and allows the progress and status of the debate to be tracked in the state layer.
+
+First define the parameters for the tool call. Note that the LLM still writes the briefs:
 
 ```ts
 const startDebateParameters = Type.Object({
@@ -775,7 +766,7 @@ const startDebateParameters = Type.Object({
 type StartDebateParams = Static<typeof startDebateParameters>
 ```
 
-Then we define the tool, which uses [`ctx.spawn`](/docs/agents/usage/spawning-and-coordinating#spawn) to spawn the two sub-agents:
+Define the tool, which uses [`ctx.spawn`](/docs/agents/usage/spawning-and-coordinating#spawn) to spawn the two sub-agents and [`ctx.state.debate.insert`](/docs/agents/usage/managing-state#writing-and-reading-state) to setup the debate state:
 
 ```ts
 function createStartDebateTool(ctx: HandlerContext<any, any, any, any>) {
@@ -785,6 +776,7 @@ function createStartDebateTool(ctx: HandlerContext<any, any, any, any>) {
     description: `Spawn the two debaters with their opening briefs. Call exactly once.`,
     parameters: startDebateParameters,
     execute: async (_id: string, params: unknown) => {
+      // Spawn the two sub-agents
       const { topic, aBrief, bBrief } = params as StartDebateParams
       const [a, b] = await Promise.all([
         ctx.spawn(
@@ -801,14 +793,7 @@ function createStartDebateTool(ctx: HandlerContext<any, any, any, any>) {
         ),
       ])
 
-      // ...
-```
-
-And then uses [`ctx.state.debate.insert`](/docs/agents/usage/managing-state#writing-and-reading-state) to insert a debate record into the durable state collection:
-
-```ts
-      // ...
-
+      // Setup the debate state
       ctx.state.debate.insert({
         key: `current`,
         topic,
@@ -834,24 +819,74 @@ And then uses [`ctx.state.debate.insert`](/docs/agents/usage/managing-state#writ
 }
 ```
 
-### Imperative handler logic
-
-We can now update the handler logic for the judge entity. First, let's add a guard that ensures we only create one debate at a time:
+Lastly, also define this helper function that we'll use below in the judge entity handler logic:
 
 ```ts
+const rebut = (arg: string) =>
+  `Your opponent argued:\n\n${arg}\n\nRebut their argument(s).`
+```
+
+### Debate collection
+
+Now let's add the `debate` [collection](https://tanstack.com/db/latest/docs/overview#defining-collections) to the entity definition's [`state`](/docs/agents/usage/shared-state). This allows us to track the progress and status of a debate in the [durable state layer](/streams/).
+
+Pull in two more imports from `@electric-ax/agents-runtime`:
+
+```ts
+import {
+  // ...,
+  entity,
+  passthrough,
+} from '@electric-ax/agents-runtime'
+```
+
+Define a schema for the collection data:
+
+```ts
+type Debate = {
+  key: 'current'
+  topic: string
+  aUrl: string
+  bUrl: string
+  phase: 'arguing' | 'critiquing' | 'done'
+  arguments: { a?: string; b?: string }
+  rebuttals: { a?: boolean; b?: boolean }
+}
+```
+
+> [!Tip] ℹ&nbsp; What is a collection?
+> Electric Agents uses [TanStack DB](/sync/tanstack-db) under the hood. [Collections](https://tanstack.com/db/latest/docs/overview#defining-collections) are the core reactive data abstraction for TanStack DB.
+
+Configure the collection on the judge entity's `state`:
+
+```ts
+registry.define('judge', {
+  description: `Coordinates a three-phase debate: arguments, mutual rebuttals, verdict.`,
+  state: {
+    debate: { schema: passthrough<Debate>(), primaryKey: 'key' },
+  },
+  async handler(ctx, wake) {
+    // ...
+  }
+})
+```
+
+### Judge handler logic
+
+We can now update the handler logic for the judge entity (the code examples below go inside the `async handler(ctx, wake) { ... }` function shown above).
+
+First, let's add a guard that handles inbox messages (the normal user messages from the parent, the manager agent) that ensures we only create one debate at a time and passes in the start debate tool:
+
+```ts
+// Handle inbox messages
 if (wake.type === 'inbox') {
+
+  // Only allow one debate at a time.
   if (ctx.state.debate.get('current')) {
     return ctx.sleep()
   }
 
-  // ...
-```
-
-Then when starting the debate we pass in the start debate tool:
-
-```ts
-  // ...
-
+  // Pass in the start debate tool
   ctx.useAgent({
     systemPrompt: SETUP_PROMPT,
     model: MODEL,
@@ -862,29 +897,39 @@ Then when starting the debate we pass in the start debate tool:
 }
 ```
 
-Because the logic above matches on `if (wake.type === 'inbox') {` it handles all messages from the parent. Any other events will be wake notifications from the sub-agents that the judge spawns.
+> [!Tip] ℹ&nbsp; Understanding wake notifications
+> The agent receives a [wake notification](/docs/agents/usage/waking-entities#what-produces-a-wake) when there's a new message or a child sub-agent finishes a run. So in this example, the judge will receive wake notifications from the assistants:
+>
+> 1. when they finish generating their initial argument
+> 2. when they critique their opponent's argument
+>
+> These notifications call the entity handler function with a `wake.type` of `'wake'`. As opposed to user messages which have a `wake.type` of `'inbox'`.
 
-### Using durable state
+Because the logic above matches all inbox messages, any other events will be wake notifications from the assistant sub-agents. When handling these, we can use and update the durable state to control and track the progress of the debate.
 
-For these, we can use and update the durable state to control the progress of the debate. If the assistants are still making their arguments then record them:
+#### Using durable state
+
+When receiving a wake notification, check the status of the debate:
 
 ```ts
+// Read the durable state
 let debate = ctx.state.debate.get(`current`)
-
-if (debate.phase === 'arguing') {
-  ctx.state.debate.update('current', d => {
-    d.arguments[side] = finished.response ?? ''
-  })
-  debate = ctx.state.debate.get('current')
-
-  // ...
 ```
 
-When both arguments are in, imperatively use [`ctx.send`](/docs/agents/usage/spawning-and-coordinating#send) to send each argument as a message to the other assistant to rebutt and then update the state of the debate to be in the "critiquing" phase:
+If the debate is in the initial `'arguing'` phase, then the wake notification will be from an assistant responding with their initial argument. In this case, we want to record the argument and then check whether both arguments have been received.
+
+If they have, we can [`ctx.send`](/docs/agents/usage/spawning-and-coordinating#send) the arguments to the other assistant to rebut and then update the state of the debate to be in the "critiquing" phase:
 
 ```ts
-  // ...
+// If the assistants are still making their first arguments
+if (debate.phase === 'arguing') {
 
+  // Record the argument
+  ctx.state.debate.update('current', d => { d.arguments[side] = finished.response ?? '' })
+  debate = ctx.state.debate.get('current')
+
+  // If we've received both arguments, send them to the other assistant
+  // and update the debate state to move into the critiquing phase.
   if (debate.arguments.a !== undefined && debate.arguments.b !== undefined) {
     ctx.send(debate.aUrl, rebut(debate.arguments.b))
     ctx.send(debate.bUrl, rebut(debate.arguments.a))
@@ -896,14 +941,7 @@ When both arguments are in, imperatively use [`ctx.send`](/docs/agents/usage/spa
 }
 ```
 
-Where rebut is just a helper function to format the prompt:
-
-```ts
-const rebut = (arg: string) =>
-  `Your opponent argued:\n\n${arg}\n\nRebut their argument(s).`
-```
-
-Then when we're in the critiquing phase, wait until both rebuttals are in:
+Then when we get notifications and the debate is in the `'critiquing'` phase, record that we've received the rebuttal and check whether both rebuttals have been received. If so, set the debate status to `'done'` and have the LLM write the verdict as its reply:
 
 ```ts
 ctx.state.debate.update('current', d => { d.rebuttals[side] = true })
@@ -912,11 +950,7 @@ debate = ctx.state.debate.get('current')
 if (!debate.rebuttals.a || !debate.rebuttals.b) {
   return ctx.sleep()
 }
-```
 
-Then set the status to 'done' and have the LLM write the verdict as its reply:
-
-```ts
 ctx.state.debate.update('current', d => { d.phase = 'done' })
 
 ctx.useAgent({
@@ -1052,7 +1086,7 @@ registry.define(`judge`, {
 
 :::
 
-### Observing child state
+### Manager handler logic
 
 We can then update the manager entity to ignore notifications from judge sub-agents until their debate is done:
 
@@ -1060,12 +1094,15 @@ We can then update the manager entity to ignore notifications from judge sub-age
 registry.define(`manager`, {
   // ...,
   async handler(ctx, wake) {
+    // When receiving wake notifications ...
     if ((wake.type = `wake`)) {
       const child = wake.payload?.finished_child
 
+      // ... from a judge sub-agent ...
       if (child?.type === `judge` && child.run_status === `completed`) {
         const judge = await ctx.observe(entity(child.url))
 
+        // ... ignore them if the debate is still in progress ...
         const debate = judge.db.collections.debate.get(`current`)
         if (debate?.phase !== `done`) {
           return ctx.sleep()
@@ -1075,6 +1112,8 @@ registry.define(`manager`, {
 
     // ...
 ```
+
+#### Observing child state
 
 This uses the [`ctx.observe`](/docs/agents/usage/spawning-and-coordinating#observe) api to monitor the state of the judge agent:
 
@@ -1094,15 +1133,19 @@ They can just spawn agents with built in streams and durable state and observe /
 | 4 | A rebuttal | `rebuttals.b` missing → sleep | no | no | no |
 | 5 | B rebuttal | both rebuttals in → verdict | **yes** (write the verdict) | yes | yes (debate is `done`, relays verdict) |
 
-There's no chatter. Steps 2 – 4, where the judge sleeps, don't emit any LLM instruction runs, so the manager stays idle and isn't woken by them at all. The debate can't finish early: the judge only summarizes when the arguments and rebuttals are in. The manager only summarises the verdict when it's generated.
+The debate can't finish early. The judge only summarizes when the arguments and rebuttals are in. The manager only summarizes the verdict when it's properly returned. There's no path for the model to hallucinate answers or get the process wrong.
 
-There's no path for the model to hallucinate answers or get the process wrong. That's the whole point of hybrid control flow: let the LLM be creative where creativity is the point but let your code — backed by durable state — control the flow when it needs to.
+#### Hybrid control flow
+
+That's the whole point of hybrid control flow: let the LLM interpret the prompt, make decisions and be creative when it needs to but otherwise use the durable state to make the control flow deterministic when you can.
+
+So the LLM can't go off piste and your systems can be both expressive and reliable.
 
 ## Next steps
 
 Hopefully this has given you a sense of how to start building with Electric Agents.
 
-You can see the source code for the steps in this guide in the [agents-walkthrough example app](https://github.com/electric-sql/electric/tree/main/examples/agents-walkthrough) and see an interactve walkthrough in the [screencast video](https://youtu.be/beYF8FV019w) below:
+You can see the source code for the steps in this guide in the [agents-walkthrough example app](https://github.com/electric-sql/electric/tree/main/examples/agents-walkthrough) and see an interactive walkthrough in the [screencast video](https://youtu.be/beYF8FV019w) below:
 
 <div class="embed-container">
   <YoutubeEmbed video-id="beYF8FV019w" title="Electric Agents walkthrough" />
