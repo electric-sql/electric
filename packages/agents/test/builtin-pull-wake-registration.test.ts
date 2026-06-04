@@ -104,7 +104,7 @@ describe(`BuiltinAgentsServer pull-wake registration`, () => {
     ).toBe(false)
   })
 
-  it(`grants all users spawn permission on built-in entity types`, async () => {
+  it(`grants all users default built-in entity type permissions`, async () => {
     agentsServer = await startRecordingAgentsServer()
     builtinServer = new BuiltinAgentsServer({
       agentServerUrl: agentsServer.url,
@@ -124,6 +124,11 @@ describe(`BuiltinAgentsServer pull-wake registration`, () => {
       subject_kind: `principal_kind`,
       subject_value: `user`,
       permission: `spawn`,
+    })
+    expect(horton?.permission_grants).toContainEqual({
+      subject_kind: `principal_kind`,
+      subject_value: `user`,
+      permission: `manage`,
     })
     expect(worker?.permission_grants).toContainEqual({
       subject_kind: `principal_kind`,
