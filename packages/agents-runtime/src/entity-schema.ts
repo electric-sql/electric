@@ -109,6 +109,8 @@ type WakeChangeEntryValue = {
   kind: `insert` | `update` | `delete`
   key: string
   from?: string
+  from_principal?: string
+  from_agent?: string
   payload?: unknown
   timestamp?: string
   message_type?: string
@@ -190,6 +192,8 @@ type ErrorEventValue = {
 type MessageReceivedValue = {
   key?: string
   from?: string
+  from_principal?: string
+  from_agent?: string
   payload?: unknown
   timestamp?: string
   message_type?: string
@@ -404,6 +408,8 @@ function createWakeChangeSchema(): Schema<WakeChangeEntryValue> {
     kind: z.enum([`insert`, `update`, `delete`]),
     key: z.string(),
     from: z.string().optional(),
+    from_principal: z.string().optional(),
+    from_agent: z.string().optional(),
     payload: z.unknown().optional(),
     timestamp: z.string().optional(),
     message_type: z.string().optional(),
@@ -533,6 +539,8 @@ function createMessageReceivedSchema(): Schema<MessageReceivedValue> {
     key: z.string().optional(),
     ...timelineOrderField,
     from: z.string().optional(),
+    from_principal: z.string().optional(),
+    from_agent: z.string().optional(),
     payload: z.unknown().optional(),
     timestamp: z.string().optional(),
     message_type: z.string().optional(),

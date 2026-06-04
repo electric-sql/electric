@@ -86,6 +86,7 @@ export interface SendEntityMessageOptions {
   afterMs?: number
   mode?: `immediate` | `queued` | `paused` | `steer`
   position?: string
+  fromAgent?: string
 }
 
 export interface RegisterWakeOptions {
@@ -289,12 +290,14 @@ export function createRuntimeServerClient(
     afterMs,
     mode,
     position,
+    fromAgent,
   }: SendEntityMessageOptions): Promise<void> => {
     const body: Record<string, unknown> = { payload }
     if (type !== undefined) body.type = type
     if (afterMs !== undefined) body.afterMs = afterMs
     if (mode !== undefined) body.mode = mode
     if (position !== undefined) body.position = position
+    if (fromAgent !== undefined) body.from_agent = fromAgent
 
     const response = await request(`${entityRpcPath(targetUrl)}/send`, {
       method: `POST`,

@@ -25,6 +25,7 @@ export type OptimisticInboxMessage = {
   key: string
   _timeline_order: string
   from: string
+  from_principal?: string
   payload: { text: string } | ComposerInputPayload
   message_type?: string
   timestamp: string
@@ -355,6 +356,7 @@ export function createSendMessageAction({
         key,
         _timeline_order: createPendingTimelineOrder(pendingOrderIndex),
         from: sender,
+        from_principal: sender,
         payload,
         ...(type ? { message_type: type } : {}),
         timestamp: now,
