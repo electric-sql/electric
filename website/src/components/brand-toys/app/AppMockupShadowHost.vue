@@ -21,14 +21,15 @@
      1. The host element renders an empty `<div>` in the page's normal
         DOM (so SSR + layout still work).
      2. On mount, we attach an `open` shadow root to the host.
-     3. We clone every `<link rel="stylesheet">` and `<style>` element
-        from `document.head` into the shadow root. Vite (in dev) and
-        VitePress (in prod) inject the brand-toys components' scoped
-        CSS into `document.head` like any other Vue scoped style; by
-        cloning those tags into the shadow root we make the same
-        rules available inside, where they can match the mockup DOM.
-        In prod everything is bundled into one stylesheet `<link>`
-        which we clone the same way.
+     3. We clone every stylesheet-bearing `<link>` and `<style>`
+        element from `document.head` into the shadow root. Vite (in
+        dev) and VitePress (in prod) inject the brand-toys components'
+        scoped CSS into the page like any other Vue scoped style; by
+        cloning those tags into the shadow root we make the same rules
+        available inside, where they can match the mockup DOM. In prod
+        VitePress emits links as `rel="preload stylesheet"`, so the
+        clone logic checks `relList.contains('stylesheet')` rather
+        than exact string equality.
      4. We watch `document.head` for new style nodes (HMR in dev) and
         clone them into the shadow root as they arrive — so editing a
         scoped style in a brand-toys component still hot-reloads
@@ -133,11 +134,36 @@ const SHADOW_RESET = `
 `
 
 function cloneIntoShadow(node: Node, shadow: ShadowRoot): void {
-  /* `cloneNode(true)` for `<link>` re-fetches the same URL — that's
-     fine: the browser cache deduplicates, so the shadow root and
-     the page share one network round-trip. For `<style>` we just
-     copy the text content. */
+  /* VitePress prod emits stylesheet links as
+     `<link rel="preload stylesheet" as="style">`. That works in the
+     page head, but cloning the exact rel into a shadow root is less
+     predictable and, more importantly, our old selector missed it
+     entirely. Normalize cloned stylesheet links to plain
+     `rel="stylesheet"` so the shadow root definitely applies them.
+     The browser cache still deduplicates the request. */
+  if (
+    node instanceof HTMLLinkElement &&
+    node.relList.contains('stylesheet') &&
+    node.href
+  ) {
+    const link = document.createElement('link')
+    link.rel = 'stylesheet'
+    link.href = node.href
+    if (node.crossOrigin) link.crossOrigin = node.crossOrigin
+    if (node.media) link.media = node.media
+    shadow.appendChild(link)
+    return
+  }
+
+  /* For `<style>` we copy the text content verbatim. */
   shadow.appendChild(node.cloneNode(true))
+}
+
+function isStyleNode(node: Node): node is HTMLStyleElement | HTMLLinkElement {
+  return (
+    node instanceof HTMLStyleElement ||
+    (node instanceof HTMLLinkElement && node.relList.contains('stylesheet'))
+  )
 }
 
 onMounted(() => {
@@ -157,7 +183,7 @@ onMounted(() => {
      `html`, or `.VPDoc` ancestors for them to bind to, so the
      duplication is harmless. */
   const headStyles = document.head.querySelectorAll(
-    'link[rel="stylesheet"], style'
+    'link[rel~="stylesheet"], style'
   )
   for (const el of Array.from(headStyles)) {
     cloneIntoShadow(el, shadow)
@@ -168,10 +194,7 @@ onMounted(() => {
   styleObserver = new MutationObserver((mutations) => {
     for (const m of mutations) {
       for (const node of Array.from(m.addedNodes)) {
-        if (
-          node instanceof HTMLStyleElement ||
-          (node instanceof HTMLLinkElement && node.rel === 'stylesheet')
-        ) {
+        if (isStyleNode(node)) {
           cloneIntoShadow(node, shadow)
         }
       }
