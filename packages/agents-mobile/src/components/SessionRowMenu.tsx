@@ -28,9 +28,10 @@ import type { Tokens } from '../lib/theme'
  * Long-press context menu for a session row on the home screen.
  * Mobile counterpart of two web-sidebar hover affordances at once:
  * the row info popout (`SidebarRowInfo` — same fields, same
- * formatting helpers) and the pin toggle. Only root rows open this
- * menu (the caller gates it) — pinning is root-only, matching the
- * web sidebar.
+ * formatting helpers) and the pin toggle. In tree mode only root
+ * rows open it (the caller gates it, matching the web sidebar);
+ * search hits open it at any depth, like the desktop tile menu —
+ * a pinned child hoists into the Pinned section.
  */
 export function SessionRowMenu({
   open,

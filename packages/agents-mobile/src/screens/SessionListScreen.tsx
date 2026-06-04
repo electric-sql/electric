@@ -60,10 +60,11 @@ import type { Tokens } from '../lib/theme'
  * since that reads better than pretending matches still belong to
  * time buckets or to a particular subtree.
  *
- * Long-pressing a root row opens `SessionRowMenu` (entity info + a
- * pin toggle). Pinned sessions render in the PINNED section above
- * the groups and are removed from the groups below — the mobile
- * mirror of the web sidebar's pinning.
+ * Long-pressing a root row — or any search hit — opens
+ * `SessionRowMenu` (entity info + a pin toggle). Pinned sessions
+ * render in the PINNED section above the groups and are removed
+ * from the groups below — the mobile mirror of the web sidebar's
+ * pinning.
  */
 export function SessionListScreen({
   onOpenSession,
@@ -94,7 +95,7 @@ export function SessionListScreen({
 
   // Long-pressed row whose context menu (info + pin) is open.
   const [menuEntity, setMenuEntity] = useState<ElectricEntity | null>(null)
-  const onLongPressRoot = useCallback(
+  const openRowMenu = useCallback(
     (entity: ElectricEntity) => setMenuEntity(entity),
     []
   )
@@ -300,7 +301,7 @@ export function SessionListScreen({
                 childrenByParent={childrenByParent}
                 onSelectEntity={onOpenSession}
                 currentPrincipalUrl={currentPrincipalUrl}
-                onLongPressRoot={onLongPressRoot}
+                onLongPressRoot={openRowMenu}
                 pinnedSet={pinnedSet}
               />
             ))}
@@ -320,9 +321,9 @@ export function SessionListScreen({
             <Text style={styles.sectionLabel}>{group.label}</Text>
             {trimmedQuery
               ? // Flat list when searching — no expand chevrons, no
-                // tree connectors, no child-count chips, no long-press
-                // menu. The user is looking for a specific session by
-                // name.
+                // tree connectors, no child-count chips. Long-press
+                // still opens the context menu (any depth, like the
+                // desktop tile menu) so a found session can be pinned.
                 group.items.map((entity) => (
                   <SessionRow
                     key={entity.url}
@@ -330,6 +331,7 @@ export function SessionListScreen({
                     depth={0}
                     onPress={() => onOpenSession(entity.url)}
                     currentPrincipalUrl={currentPrincipalUrl}
+                    onLongPress={() => openRowMenu(entity)}
                   />
                 ))
               : // Default mode — every group item is a tree root. The
@@ -342,7 +344,7 @@ export function SessionListScreen({
                     childrenByParent={childrenByParent}
                     onSelectEntity={onOpenSession}
                     currentPrincipalUrl={currentPrincipalUrl}
-                    onLongPressRoot={onLongPressRoot}
+                    onLongPressRoot={openRowMenu}
                     pinnedSet={pinnedSet}
                   />
                 ))}
