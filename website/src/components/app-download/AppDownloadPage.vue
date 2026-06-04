@@ -358,25 +358,49 @@ const primaryPlatform = computed(
     -->
 
     <!-- ─────────────────── §3 — Three ways to use it ─────────────────── *
-         Three side-by-side cards (Code locally · Attach remotely · Build
-         with the SDK). Each card: lucide icon + sentence-form title + body
-         + 3-item "You can:" bullet list. No card-level eyebrows — the
-         titles carry the categorization on their own. The strip beneath
-         the grid restates the one-integrated-platform line as the
-         section's takeaway. Body strings locked in APP_PAGE_PLAN.md §3. -->
+         Three side-by-side cards (Build with the SDK · Code locally ·
+         Attach remotely). Each card: lucide icon + sentence-form title
+         + body + 4-item "You can:" bullet list. No card-level eyebrows
+         — the titles carry the categorization on their own. Bodies
+         intentionally read as a sequence: card 1 frames the desktop
+         as a dev tool for *your* entities, card 2 introduces Horton
+         as the bundled coding agent in the same app, card 3 ties
+         both into the attach-remotely story. The strip beneath the
+         grid restates the one-integrated-platform line as the
+         section's takeaway. -->
     <Section id="three-ways">
       <template #title>Three ways to use it</template>
 
       <div class="ad-modes-grid">
         <article class="ad-modes-card">
           <span class="ad-modes-icon" aria-hidden="true">
+            <span class="ad-icon ad-icon--microscope" />
+          </span>
+          <h3 class="ad-modes-title">Build your own agents</h3>
+          <p class="ad-modes-body">
+            The desktop is the dev tool for the entities <em>you</em> write
+            with the Electric Agents SDK
+            (<code>@electric-ax/agents-runtime</code>) — state explorer,
+            timeline, fork-from-here.
+          </p>
+          <p class="ad-modes-list-label mono">You can:</p>
+          <ul class="ad-modes-list">
+            <li>Watch a stuck entity's inbox + runs in real time</li>
+            <li>Fork any past point to A/B test a change</li>
+            <li>Step through a failed worker without redeploying</li>
+            <li>Tile parent + workers side-by-side</li>
+          </ul>
+        </article>
+
+        <article class="ad-modes-card">
+          <span class="ad-modes-icon" aria-hidden="true">
             <span class="ad-icon ad-icon--code" />
           </span>
           <h3 class="ad-modes-title">Code with Horton, locally</h3>
           <p class="ad-modes-body">
-            Horton ships in the desktop. Pick a model, point at a directory,
-            chat to a coding agent that edits, runs bash, and spawns parallel
-            workers.
+            Horton — our open-source coding agent — ships bundled in the same
+            app. Pick a model, point at a directory, chat to an agent that
+            edits files, runs bash, and spawns parallel workers.
           </p>
           <p class="ad-modes-list-label mono">You can:</p>
           <ul class="ad-modes-list">
@@ -393,9 +417,9 @@ const primaryPlatform = computed(
           </span>
           <h3 class="ad-modes-title">Attach to remote sessions</h3>
           <p class="ad-modes-body">
-            Connect to any agents-server — your own or Electric Cloud. Sessions
-            spawned by CI, webhooks, GitHub issues, cron or your software
-            factory show up live.
+            Wherever your agents run, attach to any agents-server — your own
+            or Electric Cloud. Sessions spawned by CI, webhooks, GitHub
+            issues, cron or your software factory show up live.
           </p>
           <p class="ad-modes-list-label mono">You can:</p>
           <ul class="ad-modes-list">
@@ -407,29 +431,10 @@ const primaryPlatform = computed(
             <li>Hand a session off between devices mid-run</li>
           </ul>
         </article>
-
-        <article class="ad-modes-card">
-          <span class="ad-modes-icon" aria-hidden="true">
-            <span class="ad-icon ad-icon--microscope" />
-          </span>
-          <h3 class="ad-modes-title">Build your own agents</h3>
-          <p class="ad-modes-body">
-            It's also the dev tool for the entities <em>you</em> write with the
-            SDK (<code>@electric-ax/agents-runtime</code>) — state explorer,
-            timeline, fork-from-here.
-          </p>
-          <p class="ad-modes-list-label mono">You can:</p>
-          <ul class="ad-modes-list">
-            <li>Watch a stuck entity's inbox + runs in real time</li>
-            <li>Fork any past point to A/B test a change</li>
-            <li>Step through a failed worker without redeploying</li>
-            <li>Tile parent + workers side-by-side</li>
-          </ul>
-        </article>
       </div>
 
       <p class="ad-modes-strip mono">
-        One integrated platform — code, attach, and build in one app.
+        One integrated platform — build, code, and attach in one app.
       </p>
     </Section>
 
