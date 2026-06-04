@@ -135,6 +135,11 @@ describe(`BuiltinAgentsServer pull-wake registration`, () => {
       subject_value: `user`,
       permission: `spawn`,
     })
+    expect(worker?.permission_grants).toContainEqual({
+      subject_kind: `principal_kind`,
+      subject_value: `user`,
+      permission: `manage`,
+    })
   })
 
   it(`registers through tenant path-prefixed server URLs`, async () => {
