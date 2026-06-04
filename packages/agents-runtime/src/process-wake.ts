@@ -7,6 +7,7 @@ import { normalizeObservationSchema } from './observation-schema'
 import { createWakeSession } from './wake-session'
 import { createHandlerContext } from './context-factory'
 import { createSetupContext } from './setup-context'
+import type { WiringConfig } from './setup-context'
 import { createEntityLogPrefix, runtimeLog } from './log'
 import { createRuntimeServerClient } from './runtime-server-client'
 import { unrestrictedSandbox } from './sandbox/unrestricted'
@@ -17,7 +18,7 @@ import {
   buildHydratedEventSourceWake,
   eventSourceWakeInfoFromManifests,
 } from './event-sources'
-import { entity, webhookObservationCollections } from './observation-sources'
+import { webhookObservationCollections } from './observation-sources'
 import type { HydratedEventSourceWake } from './event-sources'
 import { SandboxError } from './sandbox/types'
 import type { Sandbox } from './sandbox/types'
@@ -1317,9 +1318,14 @@ export async function processWake(
       },
 
       forkEntity: async (
-        sourceEntityUrl: string
+        sourceEntityUrl: string,
+        opts?: Parameters<WiringConfig[`forkEntity`]>[1]
       ): Promise<{ entityUrl: string; streamPath: string }> => {
-        const result = await serverClient.forkEntity({ sourceEntityUrl })
+        const result = await serverClient.forkEntity({
+          sourceEntityUrl,
+          ...(opts?.parent !== undefined && { parent: opts.parent }),
+          ...(opts?.wake !== undefined && { wake: opts.wake }),
+        })
         return { entityUrl: result.entityUrl, streamPath: result.streamPath }
       },
 
@@ -1742,21 +1748,50 @@ export async function processWake(
     }
 
     const doFork = async (
-      targetEntityUrl: string,
-      opts?: { observe?: boolean }
+      targetEntityUrl: string
     ): Promise<{ url: string }> => {
-      const { entityUrl: forkUrl } =
-        await wiringConfig.forkEntity(targetEntityUrl)
-      // Auto-observe by default: register a runFinished wake on the new
-      // fork so the caller wakes when the fork's next run completes.
-      // Mirrors `spawn_worker`'s default wake. Opt out with
-      // `observe: false` for fire-and-forget forks.
-      if (opts?.observe !== false) {
-        await doObserve(entity(forkUrl), {
-          on: `runFinished`,
-          includeResponse: true,
-        })
+      // Child-fork: the new fork is created with `parent = me`, and a
+      // `runFinished + includeResponse` wake subscription is registered
+      // on it server-side, mirroring the spawn flow. Reply delivery
+      // back to the parent uses the same manifest-anchored wake the
+      // spawn flow uses — the parent wakes when the fork's next run
+      // finishes, and the wake message carries the fork's response.
+      //
+      // We don't know the new fork's URL until the server assigns it,
+      // so the manifest entry is keyed on the assigned URL after the
+      // fork creates. (Contrast: spawn knows the id up front and pre-
+      // registers a placeholder.)
+      const tentativeWake = {
+        subscriberUrl: entityUrl,
+        condition: `runFinished` as const,
+        includeResponse: true,
       }
+      const { entityUrl: forkUrl } = await wiringConfig.forkEntity(
+        targetEntityUrl,
+        {
+          parent: entityUrl,
+          wake: tentativeWake,
+        }
+      )
+      const segments = forkUrl.split(`/`).filter(Boolean)
+      const forkType = segments[0] ?? `unknown`
+      const forkId = segments[1] ?? forkUrl
+      const childKey = manifestChildKey(forkType, forkId)
+      // Patch the registered wake's manifestKey now that we know the
+      // assigned URL — the server-side registration doesn't include it
+      // because we didn't have it pre-fork. Server-side cleanup paths
+      // already match wakes by subscriberUrl + sourceUrl, so leaving
+      // manifestKey unset is safe; we still mirror the value into the
+      // manifest entry for parity with spawn's bookkeeping.
+      wakeSession.registerManifestEntry({
+        kind: `child`,
+        key: childKey,
+        id: forkId,
+        entity_type: forkType,
+        entity_url: forkUrl,
+        observed: true,
+        wake: { on: `runFinished`, includeResponse: true },
+      })
       return { url: forkUrl }
     }
 

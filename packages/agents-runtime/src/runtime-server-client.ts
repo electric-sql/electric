@@ -129,9 +129,24 @@ export interface RuntimeServerClient {
    * Fork an entity at the server-resolved `latest_completed_run` anchor.
    * Resolves to the new root entity's info. Wraps the agents-server
    * `POST /_electric/entities/<type>/<id>/fork` endpoint.
+   *
+   * Optional `parent` makes the new fork a child of that URL; pair with
+   * `wake` to register a subscription on the new fork at fork time
+   * (mirrors the spawn flow's `parent` + `wake` plumbing). Reply
+   * delivery to the parent uses the same manifest-anchored wake the
+   * spawn flow uses.
    */
   forkEntity: (options: {
     sourceEntityUrl: string
+    parent?: string
+    wake?: {
+      subscriberUrl: string
+      condition: RegisterWakeOptions[`condition`]
+      debounceMs?: number
+      timeoutMs?: number
+      includeResponse?: boolean
+      manifestKey?: string
+    }
   }) => Promise<RuntimeEntityInfo>
   getEntity: (entityUrl: string) => Promise<RuntimeEntityInfo>
   ensureSharedStateStream: (
@@ -480,13 +495,29 @@ export function createRuntimeServerClient(
 
   const forkEntity = async ({
     sourceEntityUrl,
+    parent,
+    wake,
   }: {
     sourceEntityUrl: string
+    parent?: string
+    wake?: {
+      subscriberUrl: string
+      condition: RegisterWakeOptions[`condition`]
+      debounceMs?: number
+      timeoutMs?: number
+      includeResponse?: boolean
+      manifestKey?: string
+    }
   }): Promise<RuntimeEntityInfo> => {
+    const body: Record<string, unknown> = {
+      anchor: `latest_completed_run`,
+    }
+    if (parent !== undefined) body.parent = parent
+    if (wake !== undefined) body.wake = wake
     const response = await request(entityRpcPath(sourceEntityUrl, `/fork`), {
       method: `POST`,
       headers: { 'content-type': `application/json` },
-      body: JSON.stringify({ anchor: `latest_completed_run` }),
+      body: JSON.stringify(body),
     })
     if (!response.ok) {
       throw new Error(

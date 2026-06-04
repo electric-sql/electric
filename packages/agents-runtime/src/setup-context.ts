@@ -44,6 +44,7 @@ import type {
   Wake,
   WakeSession,
 } from './types'
+import type { TagOperation } from './tags'
 
 interface EffectScope {
   register: (
@@ -71,9 +72,33 @@ export interface WiringConfig {
   /**
    * Fork a top-level entity at the server-resolved latest completed
    * run. Returns the new root entity's URL + main stream path.
+   *
+   * Optional `parent` makes the new fork a child of that URL; pair with
+   * `wake` to register a subscription at fork time. The `condition`
+   * here is the agents-server's normalized wake shape (`'runFinished'`
+   * or `{ on: 'change', ... }`) — callers above this layer (`doFork`)
+   * translate the user-facing `Wake` into this form, the same way
+   * createOrGetChild does for spawn.
    */
   forkEntity: (
-    sourceEntityUrl: string
+    sourceEntityUrl: string,
+    opts?: {
+      parent?: string
+      wake?: {
+        subscriberUrl: string
+        condition:
+          | `runFinished`
+          | {
+              on: `change`
+              collections?: Array<string>
+              ops?: Array<TagOperation>
+            }
+        debounceMs?: number
+        timeoutMs?: number
+        includeResponse?: boolean
+        manifestKey?: string
+      }
+    }
   ) => Promise<{ entityUrl: string; streamPath: string }>
   /** Create a child StreamDB, preload it, and register it for cleanup. */
   createChildDb: (

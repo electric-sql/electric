@@ -237,6 +237,27 @@ const forkBodySchema = Type.Object({
   // to the source's per-row pointer side-table. Mutually exclusive with
   // `fork_pointer`.
   anchor: Type.Optional(Type.Literal(`latest_completed_run`)),
+  // Optional parent URL. When set, the new root fork is a CHILD of this
+  // URL (rather than inheriting the source's parent, which is `null`
+  // for the only allowed source — a top-level entity). Used by the
+  // agent `fork` tool to make a forking entity own its forks the same
+  // way a spawning entity owns its workers.
+  parent: Type.Optional(Type.String()),
+  // Optional wake subscription registered on the new root fork at fork
+  // time. Mirrors the `wake` field on spawn — the subscriber URL gets
+  // woken when the fork meets the named condition, with the response
+  // optionally inlined. Used to wire fork-as-child reply delivery
+  // through the same manifest-anchored mechanism spawn uses.
+  wake: Type.Optional(
+    Type.Object({
+      subscriberUrl: Type.String(),
+      condition: wakeConditionSchema,
+      debounceMs: Type.Optional(Type.Number()),
+      timeoutMs: Type.Optional(Type.Number()),
+      includeResponse: Type.Optional(Type.Boolean()),
+      manifestKey: Type.Optional(Type.String()),
+    })
+  ),
 })
 
 const setTagBodySchema = Type.Object({
@@ -1126,6 +1147,8 @@ async function forkEntity(
       },
     }),
     ...(parsed.anchor && { anchor: parsed.anchor }),
+    ...(parsed.parent !== undefined && { parent: parsed.parent }),
+    ...(parsed.wake !== undefined && { wake: parsed.wake }),
   })
   for (const forkedEntity of result.entities) {
     await linkEntityDispatchSubscription(ctx, forkedEntity)

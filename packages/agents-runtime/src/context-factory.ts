@@ -112,10 +112,7 @@ export interface HandlerContextConfig<TState extends StateProxy = StateProxy> {
       observe?: boolean
     }
   ) => Promise<EntityHandle>
-  doFork: (
-    targetEntityUrl: string,
-    opts?: { observe?: boolean }
-  ) => Promise<{ url: string }>
+  doFork: (targetEntityUrl: string) => Promise<{ url: string }>
   doMkdb: <TSchema extends SharedStateSchemaMap>(
     id: string,
     schema: TSchema
@@ -967,11 +964,8 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
     ): Promise<EntityHandle> {
       return config.doSpawn(type, id, args, opts)
     },
-    fork(
-      targetEntityUrl?: string,
-      opts?: { observe?: boolean }
-    ): Promise<{ url: string }> {
-      return config.doFork(targetEntityUrl ?? config.entityUrl, opts)
+    fork(targetEntityUrl?: string): Promise<{ url: string }> {
+      return config.doFork(targetEntityUrl ?? config.entityUrl)
     },
     mkdb<TSchema extends SharedStateSchemaMap>(
       id: string,

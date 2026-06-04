@@ -45,7 +45,7 @@ export function createSendTool(
         })
       ),
       payload: Type.Any({
-        description: `Message payload to deliver to the target entity.`,
+        description: `Message payload to deliver to the target entity. For chat-rendered targets (Horton sessions, your own forks), use the shape \`{ text: "..." }\` so the message body shows up in the chat UI — that's the same shape the user's chat input produces. A plain string also works. Other shapes are delivered as-is but won't render as a chat bubble body.`,
       }),
       type: Type.Optional(
         Type.String({ description: `Optional message type.` })

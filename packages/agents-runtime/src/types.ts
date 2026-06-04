@@ -1020,17 +1020,14 @@ export interface HandlerContext<
   /**
    * Fork a session at the latest completed run on its `main` stream.
    * Defaults to this entity (self-fork) when `targetEntityUrl` is
-   * omitted. The fork is a sibling — not a child — of the source.
-   *
-   * `observe: true` (the default) registers an observation on the new
-   * fork wired to wake this entity on the fork's next `runFinished`.
-   * Pass `observe: false` for fire-and-forget forks where the caller
-   * never plans to react to the fork's completion.
+   * omitted. The new fork is created as a CHILD of this entity (same
+   * parent-ownership model as `spawn`), and a `runFinished +
+   * includeResponse` wake is registered on it at fork time. Reply
+   * delivery uses the parent's manifest-anchored wake — the same
+   * mechanism `spawn` uses — so when the fork's next run finishes,
+   * this entity wakes with the response in the wake message.
    */
-  fork: (
-    targetEntityUrl?: string,
-    opts?: { observe?: boolean }
-  ) => Promise<{ url: string }>
+  fork: (targetEntityUrl?: string) => Promise<{ url: string }>
   observe: ((
     source: ObservationSource & { sourceType: `entity` },
     opts?: { wake?: Wake }

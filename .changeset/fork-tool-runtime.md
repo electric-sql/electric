@@ -2,4 +2,8 @@
 '@electric-ax/agents-runtime': patch
 ---
 
-Add `ctx.fork(targetEntityUrl?, opts?)` to `HandlerContext`. Calls the agents-server fork endpoint with `anchor: 'latest_completed_run'` to create a sibling session that inherits the source's history up to the most recent completed run. Defaults `targetEntityUrl` to `ctx.entityUrl` (self-fork). Auto-observes the new fork with `wake: { on: 'runFinished', includeResponse: true }` so the caller wakes when the fork's next run finishes; pass `observe: false` for fire-and-forget. Wired through `RuntimeServerClient.forkEntity` and a new `WiringConfig.forkEntity` injection point alongside `createOrGetChild`.
+Add `ctx.fork(targetEntityUrl?)` to `HandlerContext`. Calls the agents-server fork endpoint with `anchor: 'latest_completed_run'`, `parent: ctx.entityUrl`, and a `runFinished + includeResponse` wake — so the new fork is a CHILD of this entity (same parent-ownership model as `ctx.spawn`) and reports back via the same manifest-anchored wake mechanism `spawn` uses. Defaults `targetEntityUrl` to `ctx.entityUrl` for self-fork.
+
+Internally writes a `kind: 'child'` manifest row on the parent's `main` stream alongside the server-side wake registration, mirroring the spawn flow's bookkeeping so the relationship persists across wakes. Wired through new `parent` + `wake` fields on `RuntimeServerClient.forkEntity` and `WiringConfig.forkEntity`.
+
+The `send` tool's `payload` description now documents the canonical `{ text: "..." }` shape for chat-rendered targets (Horton sessions, agent forks) so messages emitted by `send` render as chat bubbles instead of blank bars.

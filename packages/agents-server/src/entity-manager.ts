@@ -187,6 +187,21 @@ type ForkSubtreeOptions = {
    *   is the eligibility rule the per-row "Fork from here" UI uses.
    */
   anchor?: `latest_completed_run`
+  /**
+   * Optional parent URL for the new root fork entity. When set, the
+   * new fork is a CHILD of this URL — its `parent` field is overridden
+   * (rather than inherited from the source, which is `null` for the
+   * only allowed source: a top-level entity). Pairs with `wake` to give
+   * the parent reply-delivery the same way spawn does.
+   */
+  parent?: string
+  /**
+   * Optional wake subscription registered on the new root fork at fork
+   * time. Same shape and semantics as `spawn`'s `wake` (see
+   * `TypedSpawnRequest.wake`). Typically set by the agent `fork` tool
+   * to wire reply delivery via the parent's manifest-anchored wake.
+   */
+  wake?: TypedSpawnRequest[`wake`]
 }
 
 type ForkEntityPlan = {
@@ -1101,6 +1116,17 @@ export class EntityManager {
         opts.createdBy
       )
 
+      // Override the new root fork's parent when the caller asked for a
+      // child fork. Plumbed through from `forkBodySchema.parent`; the
+      // descendants in `effectiveSubtree` keep their original parent
+      // links (remapped via `entityUrlMap` in buildForkEntityPlans).
+      if (opts.parent !== undefined) {
+        const rootPlan = entityPlans.find((plan) => plan.source.url === rootUrl)
+        if (rootPlan) {
+          rootPlan.fork.parent = opts.parent
+        }
+      }
+
       this.addForkLocks(
         this.forkWriteLockedEntities,
         effectiveSubtree.map((entity) => entity.url),
@@ -1179,6 +1205,30 @@ export class EntityManager {
         for (const plan of entityPlans) {
           await this.registry.createEntity(plan.fork)
           createdEntities.push(plan.fork.url)
+        }
+
+        // Register a wake subscription on the new root fork when the
+        // caller asked for one. Mirrors the spawn flow's wake handling
+        // (entity-manager.spawnInner). Rollback below already calls
+        // `wakeRegistry.unregisterBySource(forkUrl)` for every created
+        // entity, so this cleans up automatically on failure.
+        if (opts.wake !== undefined) {
+          const rootPlan = entityPlans.find(
+            (plan) => plan.source.url === rootUrl
+          )
+          if (rootPlan) {
+            await this.wakeRegistry.register({
+              tenantId: this.tenantId,
+              subscriberUrl: opts.wake.subscriberUrl,
+              sourceUrl: rootPlan.fork.url,
+              condition: opts.wake.condition,
+              debounceMs: opts.wake.debounceMs,
+              timeoutMs: opts.wake.timeoutMs,
+              oneShot: false,
+              includeResponse: opts.wake.includeResponse,
+              manifestKey: opts.wake.manifestKey,
+            })
+          }
         }
 
         for (const plan of entityPlans) {
