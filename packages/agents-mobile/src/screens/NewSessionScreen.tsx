@@ -11,6 +11,11 @@ import {
 } from 'react-native'
 import { useLiveQuery } from '@tanstack/react-db'
 import { eq } from '@tanstack/db'
+import {
+  abbreviatePath,
+  detectHomeDir,
+  tildifyPath,
+} from '@electric-ax/agents-server-ui/src/lib/pathDisplay'
 import { recentWorkingDirsForRunner } from '@electric-ax/agents-server-ui/src/lib/recentWorkingDirectories'
 import {
   isSandboxProfileRemote,
@@ -122,6 +127,7 @@ export function NewSessionScreen({
         : [],
     [allEntities, activeRunnerId]
   )
+  const homeDir = useMemo(() => detectHomeDir(recentDirs), [recentDirs])
 
   const handleSelectRunner = useCallback((id: string) => {
     setSelectedRunner(id)
@@ -130,6 +136,10 @@ export function NewSessionScreen({
   }, [])
 
   const workingDirectory = dirInput.trim() || null
+  // Only the default agent's schema is known to accept `workingDirectory` —
+  // other agent types have their own creation schemas and may reject unknown
+  // args (mirrors the desktop composer, which injects it for horton only).
+  const workingDirSupported = activeTypeName === DEFAULT_AGENT_NAME
 
   const start = async () => {
     if (!activeTypeName || loading) return
@@ -150,7 +160,10 @@ export function NewSessionScreen({
         initialMessage: message,
         runnerId: activeRunnerId,
         ...(sandboxProfile ? { sandboxProfile } : {}),
-        ...(workingDirectory && sandboxProfile && !profileIsRemote
+        ...(workingDirectory &&
+        workingDirSupported &&
+        sandboxProfile &&
+        !profileIsRemote
           ? { workingDirectory }
           : {}),
       })
@@ -257,38 +270,44 @@ export function NewSessionScreen({
           {/* A working directory only takes effect through a sandbox-profile
               factory, so hide the section when the runner advertises no
               profiles (or a remote one, where a host path doesn't apply). */}
-          {sandboxProfile !== null && !profileIsRemote && (
-            <>
-              <Text style={styles.sectionLabel}>Working directory</Text>
-              <View style={styles.typeList}>
-                <OptionCard
-                  label="Runner default"
-                  description="Run in the runner's configured directory."
-                  tokens={tokens}
-                  selected={workingDirectory === null}
-                  onPress={() => setDirInput(``)}
-                />
-                {recentDirs.map((dir) => (
+          {workingDirSupported &&
+            sandboxProfile !== null &&
+            !profileIsRemote && (
+              <>
+                <Text style={styles.sectionLabel}>Working directory</Text>
+                <View style={styles.typeList}>
                   <OptionCard
-                    key={dir}
-                    label={dir}
+                    label="Runner default"
+                    description="Run in the runner's configured directory."
                     tokens={tokens}
-                    selected={workingDirectory === dir}
-                    onPress={() => setDirInput(dir)}
+                    selected={workingDirectory === null}
+                    onPress={() => setDirInput(``)}
                   />
-                ))}
-              </View>
-              <TextInput
-                value={dirInput}
-                onChangeText={setDirInput}
-                placeholder="Or type an absolute path on the runner…"
-                placeholderTextColor={tokens.text3}
-                autoCapitalize="none"
-                autoCorrect={false}
-                style={styles.pathInput}
-              />
-            </>
-          )}
+                  {recentDirs.map((dir) => (
+                    <OptionCard
+                      key={dir}
+                      // Abbreviate from the head: paths share long prefixes and
+                      // differ at the tail, which is the part worth keeping.
+                      label={abbreviatePath(tildifyPath(dir, homeDir))}
+                      ellipsizeMode="head"
+                      tokens={tokens}
+                      selected={workingDirectory === dir}
+                      onPress={() => setDirInput(dir)}
+                    />
+                  ))}
+                </View>
+                <TextInput
+                  value={dirInput}
+                  onChangeText={setDirInput}
+                  accessibilityLabel="Working directory path"
+                  placeholder="Or type an absolute path on the runner…"
+                  placeholderTextColor={tokens.text3}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  style={styles.pathInput}
+                />
+              </>
+            )}
 
           {error && (
             <View style={styles.errorRow}>
@@ -366,12 +385,14 @@ function RunnerCard({
 function OptionCard({
   label,
   description,
+  ellipsizeMode,
   tokens,
   selected,
   onPress,
 }: {
   label: string
   description?: string
+  ellipsizeMode?: `head` | `tail`
   tokens: Tokens
   selected: boolean
   onPress: () => void
@@ -380,9 +401,16 @@ function OptionCard({
   return (
     <TouchableOpacity
       onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      accessibilityLabel={label}
       style={[styles.typeCard, selected ? styles.typeCardSelected : null]}
     >
-      <Text numberOfLines={1} style={styles.typeName}>
+      <Text
+        numberOfLines={1}
+        ellipsizeMode={ellipsizeMode}
+        style={styles.typeName}
+      >
         {label}
       </Text>
       {description ? (
