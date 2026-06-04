@@ -42,7 +42,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ChevronRight, Copy, Download, Wrench } from 'lucide-vue-next'
 import AppIcon from '../AppIcon.vue'
-import { CHAT_FIXTURE, CHAT_FIXTURE_LENGTH } from '../../fixtures'
+import { CHAT_FIXTURES, type ChatFixtureKey } from '../../fixtures'
 
 type ResponseState = 'idle' | 'thinking' | 'streaming' | 'completed'
 
@@ -61,6 +61,11 @@ const props = withDefaults(
     hasToolCall?: boolean
     /** Time string shown in the meta row (e.g. "14:59"). */
     timestamp?: string
+    /** Which `CHAT_FIXTURES` variant to render. Defaults to
+     *  `'default'` — the generic createSession-refactor demo used
+     *  by the hero stage. Other variants tailor the response prose
+     *  to a specific scenario card on the /app page. */
+    fixtureKey?: ChatFixtureKey
   }>(),
   {
     state: 'streaming',
@@ -70,8 +75,12 @@ const props = withDefaults(
     hasCodeBlock: true,
     hasToolCall: true,
     timestamp: '14:59',
+    fixtureKey: 'default',
   }
 )
+
+const fixture = computed(() => CHAT_FIXTURES[props.fixtureKey])
+const fixtureLength = computed(() => fixture.value.agentResponseText.length)
 
 const HOLD_AFTER_COMPLETION_MS = 3000
 
@@ -120,7 +129,7 @@ function tick(t: number) {
   } else {
     internalProgress.value = Math.min(
       1,
-      internalProgress.value + (dt * props.cps) / CHAT_FIXTURE_LENGTH
+      internalProgress.value + (dt * props.cps) / fixtureLength.value
     )
   }
   raf = requestAnimationFrame(tick)
@@ -181,7 +190,7 @@ onBeforeUnmount(() => {
    range so we can compute "how many chars of THIS segment are visible
    given the global progress" without re-walking the string each frame. */
 const segments = computed(() => {
-  const text = CHAT_FIXTURE.agentResponseText
+  const text = fixture.value.agentResponseText
   const total = text.length
   const fenceOpen = text.indexOf('```')
   if (fenceOpen < 0 || !props.hasCodeBlock) {
@@ -190,9 +199,17 @@ const segments = computed(() => {
       code: null as null | { text: string; start: number; end: number },
       post: null as null | { text: string; start: number; end: number },
       total,
+      lang: 'ts' as string,
     }
   }
-  const codeStart = text.indexOf('\n', fenceOpen) + 1
+  /* Detect the language tag right after the opening fence — the
+     fixtures lock in `ts` (default), `sh` (parallel-workers,
+     overnight-research), etc. We render the tag in the code-block
+     header so the demo reads as multi-language even though we
+     don't actually run the body through Shiki. */
+  const fenceTagEnd = text.indexOf('\n', fenceOpen)
+  const lang = text.slice(fenceOpen + 3, fenceTagEnd).trim() || 'ts'
+  const codeStart = fenceTagEnd + 1
   const fenceClose = text.indexOf('```', codeStart)
   const codeEnd = fenceClose
   const postStart = text.indexOf('\n', fenceClose + 3) + 1
@@ -213,6 +230,7 @@ const segments = computed(() => {
       end: total,
     },
     total,
+    lang,
   }
 })
 
@@ -274,9 +292,7 @@ const visiblePost = computed(() =>
    containers reserve their natural height and the response reads
    as "lots of empty boxes filling in" instead of "blocks materialising
    one after another". */
-const cursorPos = computed(
-  () => effectiveProgress.value * segments.value.total
-)
+const cursorPos = computed(() => effectiveProgress.value * segments.value.total)
 const codeBlockMounted = computed(
   () =>
     props.hasCodeBlock &&
@@ -301,7 +317,8 @@ const caretSegment = computed<'pre' | 'code' | 'post' | 'done'>(() => {
 const toolCallVisible = computed(
   () =>
     props.hasToolCall &&
-    effectiveProgress.value >= CHAT_FIXTURE.toolCall.appearAt
+    fixture.value.toolCall !== null &&
+    effectiveProgress.value >= (fixture.value.toolCall?.appearAt ?? 1)
 )
 
 /** Show the meta row (✓ done · time · copy) once the streaming run has
@@ -348,7 +365,7 @@ function renderInline(input: string): string {
         <div v-if="codeBlockMounted" class="code-block">
           <div class="code-block-row">
             <div class="code-block-header">
-              <span>ts</span>
+              <span>{{ segments.lang }}</span>
             </div>
             <div class="code-block-actions" aria-hidden="true">
               <span class="code-block-action-btn" title="Copy code">
@@ -382,7 +399,7 @@ function renderInline(input: string): string {
 
       <Transition name="reveal">
         <div
-          v-if="hasToolCall && toolCallVisible"
+          v-if="hasToolCall && toolCallVisible && fixture.toolCall"
           class="tool-call-card"
           aria-label="Tool call"
         >
@@ -390,8 +407,8 @@ function renderInline(input: string): string {
             <span class="tool-call-icon" aria-hidden="true">
               <AppIcon :icon="Wrench" :size="2" />
             </span>
-            <span class="tool-call-name mono">{{ CHAT_FIXTURE.toolCall.name }}</span>
-            <span class="tool-call-summary">{{ CHAT_FIXTURE.toolCall.args }}</span>
+            <span class="tool-call-name mono">{{ fixture.toolCall.name }}</span>
+            <span class="tool-call-summary">{{ fixture.toolCall.args }}</span>
             <span class="tool-call-toggle" aria-hidden="true">
               <AppIcon :icon="ChevronRight" :size="1" />
             </span>

@@ -370,9 +370,30 @@ const primaryPlatform = computed(
 
       <div class="ad-modes-grid">
         <article class="ad-modes-card">
-          <span class="ad-modes-icon" aria-hidden="true">
-            <span class="ad-icon ad-icon--code" />
-          </span>
+          <div class="ad-modes-illo">
+            <!--
+              Card 1 mockup — chat-only. Demonstrates "code with Horton
+              locally" by showing the chat surface mid-stream with a
+              code block in the response. Sidebar / state are hidden so
+              the card focuses on the chat itself; chat tile inherits
+              the macOS chrome inset automatically.
+            -->
+            <AppMockupEmbed
+              :scene="HeroChatStateScene"
+              :scene-props="{
+                os: 'auto',
+                theme: 'dark',
+                responsive: false,
+                showSidebar: false,
+                showChatTile: true,
+                showStateTile: false,
+                title: 'Refactor auth helpers',
+                sessionId: 'horton/code-refactor',
+              }"
+              aspect="16/10"
+              :scale="0.6"
+            />
+          </div>
           <h3 class="ad-modes-title">Code with Horton, locally</h3>
           <p class="ad-modes-body">
             Horton ships in the desktop. Pick a model, point at a directory,
@@ -389,9 +410,33 @@ const primaryPlatform = computed(
         </article>
 
         <article class="ad-modes-card">
-          <span class="ad-modes-icon" aria-hidden="true">
-            <span class="ad-icon ad-icon--radio" />
-          </span>
+          <div class="ad-modes-illo">
+            <!--
+              Card 2 mockup — sidebar + chat. Demonstrates "attach to
+              remote sessions" by leading with the sessions rail. We
+              highlight `Bisect ws regression` (an idle, recently
+              spawned-style session lower in the fixture) so the eye
+              reads "you've connected to a server and there's a list
+              of running sessions to attach to" rather than picking up
+              a streaming run mid-flight.
+            -->
+            <AppMockupEmbed
+              :scene="HeroChatStateScene"
+              :scene-props="{
+                os: 'auto',
+                theme: 'dark',
+                responsive: false,
+                showSidebar: true,
+                showChatTile: true,
+                showStateTile: false,
+                sidebarSelectedUrl: '/horton/bug-bisect',
+                title: 'Bisect ws regression',
+                sessionId: 'horton/bug-bisect',
+              }"
+              aspect="16/10"
+              :scale="0.6"
+            />
+          </div>
           <h3 class="ad-modes-title">Attach to remote sessions</h3>
           <p class="ad-modes-body">
             Connect to any agents-server — your own or Electric Cloud. Sessions
@@ -410,9 +455,32 @@ const primaryPlatform = computed(
         </article>
 
         <article class="ad-modes-card">
-          <span class="ad-modes-icon" aria-hidden="true">
-            <span class="ad-icon ad-icon--microscope" />
-          </span>
+          <div class="ad-modes-illo">
+            <!--
+              Card 3 mockup — state-inspector-only with the
+              `summarizer` state fixture so the inspector reads as
+              "this is the SDK debug view for entities you wrote",
+              not "this is the runtime for a Horton agent". Same
+              `summarizer` fixture as §3.5 #3, kept consistent so
+              the two surfaces tell one story across sections.
+            -->
+            <AppMockupEmbed
+              :scene="HeroChatStateScene"
+              :scene-props="{
+                os: 'auto',
+                theme: 'dark',
+                responsive: false,
+                showSidebar: false,
+                showChatTile: false,
+                showStateTile: true,
+                title: 'Custom entity · summarizer',
+                sessionId: 'summarizer/r3kc8mq',
+                stateFixtureKey: 'summarizer',
+              }"
+              aspect="16/10"
+              :scale="0.6"
+            />
+          </div>
           <h3 class="ad-modes-title">Build your own agents</h3>
           <p class="ad-modes-body">
             It's also the dev tool for the entities <em>you</em> write with the
@@ -454,14 +522,13 @@ const primaryPlatform = computed(
         <article class="ad-scenarios-card">
           <div class="ad-scenarios-illo">
             <!--
-              Scenario 1 mockup — sidebar + chat. The sidebar uses the
-              default fixture (with "Refactor auth helpers" selected at
-              the top, status streaming) so the eye reads "a fresh
-              session has arrived". Chat title is reframed as a GitHub
-              issue id to anchor the CI spawn in the headline above.
-              Disable container-query reflow so the sidebar stays
-              visible at the card's narrow width — explicit visibility
-              props decide the layout.
+              Scenario 1 mockup — sidebar + chat with the
+              `github-issue` chat fixture so the chat content
+              actually demonstrates the headline (CI-spawned
+              session investigating a flaky test) instead of a
+              generic refactor. Sidebar uses the default fixture
+              with the streaming horton session at the top so the
+              eye reads "fresh CI session".
             -->
             <AppMockupEmbed
               :scene="HeroChatStateScene"
@@ -474,6 +541,7 @@ const primaryPlatform = computed(
                 showStateTile: false,
                 title: 'Fix flaky auth test · issue/1724',
                 sessionId: 'horton/issue-1724',
+                chatFixtureKey: 'github-issue',
               }"
               aspect="16/9"
               :scale="0.75"
@@ -496,13 +564,12 @@ const primaryPlatform = computed(
         <article class="ad-scenarios-card">
           <div class="ad-scenarios-illo">
             <!--
-              Scenario 2 mockup — sidebar + chat. The visual hook is
-              the WORKER TREE under the parent "Rename across packages"
-              — the sidebar's existing fixture has this expanded with
-              4 workers (typescript-client, agents-runtime,
-              agents-server, agents-server-ui). We highlight the
-              parent so the eye lands on the tree, then reads down to
-              the child workers below it.
+              Scenario 2 mockup — sidebar + chat with the
+              `parallel-workers` chat fixture, which mirrors the
+              sidebar's worker tree (4 workers under the
+              `parallel-rename` parent) so the chat narrative
+              ("spawning a worker per package") matches what the
+              sidebar visualises.
             -->
             <AppMockupEmbed
               :scene="HeroChatStateScene"
@@ -516,6 +583,7 @@ const primaryPlatform = computed(
                 sidebarSelectedUrl: '/horton/parallel-rename',
                 title: 'Rename across packages',
                 sessionId: 'horton/parallel-rename',
+                chatFixtureKey: 'parallel-workers',
               }"
               aspect="16/9"
               :scale="0.75"
@@ -537,13 +605,13 @@ const primaryPlatform = computed(
         <article class="ad-scenarios-card">
           <div class="ad-scenarios-illo">
             <!--
-              Scenario 3 mockup — state inspector only. With sidebar
-              and chat tile both hidden, the state tile is the
-              leftmost surface in the window so the scene
-              automatically routes the macOS chrome inset (78-px
-              header padding past the traffic lights) to it. The
-              title is rebranded as a custom `summarizer` entity to
-              anchor the SDK / debug-without-redeploy story above.
+              Scenario 3 mockup — state inspector only with the
+              `summarizer` state fixture. Custom entity types
+              (inputs / chunks / summaries / merged / errors)
+              demonstrate "the SDK lets you debug entities you
+              wrote", with the failed `chunk-9` thread visible in
+              the events panel — the eye lands on the failure mode
+              the headline copy describes.
             -->
             <AppMockupEmbed
               :scene="HeroChatStateScene"
@@ -556,6 +624,7 @@ const primaryPlatform = computed(
                 showStateTile: true,
                 title: 'Summarise outline draft',
                 sessionId: 'summarizer/r3kc8mq',
+                stateFixtureKey: 'summarizer',
               }"
               aspect="16/9"
               :scale="0.75"
@@ -577,12 +646,11 @@ const primaryPlatform = computed(
         <article class="ad-scenarios-card">
           <div class="ad-scenarios-illo">
             <!--
-              Scenario 4 mockup — chat only. The agent has already
-              finished overnight, so we pause the typewriter at full
+              Scenario 4 mockup — chat only with the
+              `overnight-research` chat fixture. Paused at full
               progress so the chat reads as "morning catch-up on a
-              completed run" rather than a live stream. Chat tile is
-              the leftmost surface — same chrome-inset routing as
-              scenario 3.
+              completed nightly run" — top-5 leads from 412 sources,
+              ready to be forked off into a fresh session.
             -->
             <AppMockupEmbed
               :scene="HeroChatStateScene"
@@ -597,6 +665,7 @@ const primaryPlatform = computed(
                 progress: 1,
                 title: 'Nightly research · v0.4 → v0.5 changes',
                 sessionId: 'research/nightly-1729',
+                chatFixtureKey: 'overnight-research',
               }"
               aspect="16/9"
               :scale="0.75"
@@ -1588,6 +1657,14 @@ const primaryPlatform = computed(
 
 .ad-modes-icon .ad-icon {
   font-size: 22px;
+}
+
+/* Mockup illustration that sits above the title in §3 cards. The
+   embed itself is sized via aspect-ratio at the use site; this rule
+   just gives the slot bottom-margin so the title doesn't crowd
+   against it. */
+.ad-modes-illo {
+  margin-bottom: 18px;
 }
 
 .ad-modes-title {

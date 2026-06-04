@@ -155,26 +155,52 @@ export const SIDEBAR_FIXTURE: readonly MockSidebarRow[] = [
 // ─────────────────────────── Chat ───────────────────────────
 
 /**
- * One bubble, one Horton response. The user prompt is static; the
- * response is the string the streaming-typewriter walks through.
+ * Tagged shape for a chat fixture — one user prompt, one streaming
+ * agent response. The optional `toolCall` is rendered as a small
+ * card beneath the response when streaming progress crosses
+ * `appearAt`. `null` means "no tool card" (some fixtures don't fire
+ * a tool call at all).
  *
- * The response intentionally contains:
- *
- *   - One short opening paragraph ("Got it — here's …").
- *   - One fenced TypeScript code block (3-4 lines, hand-styled, NOT
- *     run through Shiki).
- *   - One closing sentence after the code block.
- *   - One tool-call pill rendered as a bordered chip — the typewriter
- *     "completes" the tool call when it crosses the chip boundary.
- *
- * Together that's enough surface to read as "a real coding-agent
- * talking" without us having to bundle a markdown renderer.
+ * Design rule for `agentResponseText`: the first prose paragraph is
+ * always plain English (the streaming "got it" beat); the optional
+ * fenced ```ts/```sh block is the only non-prose surface the
+ * primitive renders specially — bullet lists / numbered lists /
+ * markdown tables in the prose body would render as literal text
+ * because `AppAgentResponse.renderInline()` only handles inline
+ * code with single backticks. Use a fenced code block for any
+ * tabular content.
  */
-export const CHAT_FIXTURE = {
-  userPrompt: `refactor packages/auth to use the new session helper, write a quick test`,
-  agentResponseText:
-    // First paragraph — sets up the change.
-    `Got it. The new \`createSession\` helper takes a JWT and returns a typed session object — I'll thread it through the four call sites in \`packages/auth\` and add a focused test.
+export interface ChatFixtureData {
+  userPrompt: string
+  agentResponseText: string
+  toolCall: {
+    name: string
+    args: string
+    /** Progress ratio (0..1) at which the tool-call card appears. */
+    appearAt: number
+  } | null
+}
+
+/**
+ * Named chat-fixture variants. Each scenario card on the /app page
+ * picks one of these keys; the hero / brand-toy stage uses the
+ * `default` variant. New variants land here rather than as ad-hoc
+ * props at the call site, so the streaming primitive can pick up
+ * the matching `agentResponseText.length` without each consumer
+ * having to thread the length around.
+ *
+ * Locked content per scenario — these strings demonstrate the
+ * scenario's narrative (locked in APP_PAGE_PLAN.md §3.5):
+ *
+ *   default              — generic createSession refactor (hero)
+ *   github-issue         — flaky CI test investigation
+ *   parallel-workers     — fan-out rename across 4 packages
+ *   overnight-research   — completed nightly scan with leads
+ */
+export const CHAT_FIXTURES = {
+  default: {
+    userPrompt: `refactor packages/auth to use the new session helper, write a quick test`,
+    agentResponseText: `Got it. The new \`createSession\` helper takes a JWT and returns a typed session object — I'll thread it through the four call sites in \`packages/auth\` and add a focused test.
 
 Here's the helper applied at the entry point:
 
@@ -188,21 +214,89 @@ export async function authenticate(jwt: string) {
 \`\`\`
 
 I've also drafted a \`vitest\` case that covers the happy path and a malformed-JWT rejection.`,
-  /**
-   * Optional tool-call shown beside the streaming response. The
-   * mockup paints this as a small bordered "ran tool" pill that
-   * appears when the typewriter passes the marker progress (~0.55).
-   */
-  toolCall: {
-    name: `read_file`,
-    args: `packages/auth/src/index.ts`,
-    /** Progress ratio (0..1) at which the tool-call pill appears. */
-    appearAt: 0.55,
+    toolCall: {
+      name: `read_file`,
+      args: `packages/auth/src/index.ts`,
+      appearAt: 0.55,
+    },
   },
-} as const
 
-/** Length of the streaming text — used by the typewriter to convert
- * a chars-per-second target into a per-frame progress increment. */
+  'github-issue': {
+    userPrompt: `Investigate flaky auth test #1724 — fails ~30% of the time on CI, passes locally. Started after #1683 landed.`,
+    agentResponseText: `On it. Walking #1683's diff against the failing test traces — the flake started right after the JWT \`exp\` comparison switched to \`Date.now()\`, which is sensitive to clock skew between the test runner and the JWT issuer.
+
+Here's the line in question:
+
+\`\`\`ts
+// packages/auth/src/jwt.ts:42
+if (Date.now() > token.exp * 1000) {
+  throw new ExpiredTokenError()
+}
+\`\`\`
+
+Drafting a fix: inject a deterministic \`Clock\` in the test fixture and add a 5-second skew tolerance for prod. PR incoming.`,
+    toolCall: {
+      name: `read_file`,
+      args: `packages/auth/src/jwt.ts`,
+      appearAt: 0.5,
+    },
+  },
+
+  'parallel-workers': {
+    userPrompt: `rename \`getCurrentUserId\` to \`getActiveUserId\` across all four packages — update call sites + tests`,
+    agentResponseText: `On it. Spawning a worker per package so each one runs in parallel — each worker sweeps its call sites and updates tests independently, and I'll review the diffs together once they report back.
+
+Here's the worker plan:
+
+\`\`\`sh
+typescript-client   →  4 call sites
+agents-runtime      →  8 call sites
+agents-server       → 12 call sites
+agents-server-ui    →  3 call sites
+\`\`\`
+
+Fork the one that takes a wrong turn from its run if you spot something off — the tile workspace will tile parent + workers side-by-side.`,
+    toolCall: {
+      name: `spawn_worker`,
+      args: `parallel-rename · 4 packages`,
+      appearAt: 0.55,
+    },
+  },
+
+  'overnight-research': {
+    userPrompt: `Nightly scan — HN, arxiv-cs and the listed dev blogs (last 24h) for posts about local-first sync engines or agent runtimes. Top 5, with sources.`,
+    agentResponseText: `Done — scanned 412 sources overnight. Top 5 leads, ranked by signal:
+
+\`\`\`sh
+PowerSync v0.5 GA          bidirectional sync, 10× write throughput
+Convex 'reactor' pattern   long-lived background agents in actions
+Yjs + Postgres adapter     HN benchmark thread, 240+ comments
+Anthropic SDK 0.7          new tool-call streaming API
+Bonsai (arxiv 2510.18482)  ahead-of-time graph compilation
+\`\`\`
+
+Want me to fork one into a fresh session and dig deeper, or hand the most promising lead off to a separate agent?`,
+    toolCall: {
+      name: `fetch_url`,
+      args: `412 sources · 8h 14m runtime`,
+      appearAt: 0.4,
+    },
+  },
+} as const satisfies Record<string, ChatFixtureData>
+
+export type ChatFixtureKey = keyof typeof CHAT_FIXTURES
+
+/**
+ * One bubble, one Horton response — kept as a back-compat alias
+ * pointing at the `default` variant of CHAT_FIXTURES so existing
+ * imports (the hero scene, the toys) keep working unchanged.
+ */
+export const CHAT_FIXTURE: ChatFixtureData = CHAT_FIXTURES.default
+
+/** Length of the default streaming text — back-compat alias.
+ * Streaming primitives now compute the length from the active
+ * fixture themselves; this constant remains for any consumers that
+ * want the default at module-eval time. */
 export const CHAT_FIXTURE_LENGTH = CHAT_FIXTURE.agentResponseText.length
 
 // ─────────────────────────── State inspector ───────────────────────────
@@ -219,20 +313,6 @@ export interface MockStateType {
   selected?: boolean
 }
 
-/** Default Types panel fixture — modelled on the real-app screenshot
- * (entity_created / inbox / run / step / text / text_delta / tags),
- * with `text_delta` selected as the type whose Records the right
- * panel renders. */
-export const STATE_TYPES_FIXTURE: readonly MockStateType[] = [
-  { name: `entity_created`, count: 1 },
-  { name: `inbox`, count: 1 },
-  { name: `run`, count: 1 },
-  { name: `step`, count: 1 },
-  { name: `text`, count: 1 },
-  { name: `text_delta`, count: 6, selected: true },
-  { name: `tags`, count: 1 },
-]
-
 /**
  * One Record row in the right "Records" panel of the state inspector.
  * Mirrors the real columns: key (mono record id), from (mono
@@ -243,14 +323,6 @@ export interface MockStateRecord {
   from: string
   payload: string
 }
-
-export const STATE_RECORDS_FIXTURE: readonly MockStateRecord[] = [
-  {
-    key: `msg-in-1780491582518-283dha`,
-    from: `/principal/system%3Adev-local`,
-    payload: `Test`,
-  },
-]
 
 /**
  * One Event row in the bottom "Events" panel.
@@ -269,43 +341,136 @@ export interface MockStateEvent {
   summary: string
 }
 
-export const STATE_EVENTS_FIXTURE: readonly MockStateEvent[] = [
-  { index: 1, kind: `INS`, summary: `entity_created:entity-created` },
-  { index: 2, kind: `INS`, summary: `inbox:msg-in-1780491582518-283dha` },
-  { index: 3, kind: `INS`, summary: `run:run-0` },
-  { index: 4, kind: `INS`, summary: `step:step-0` },
-  { index: 5, kind: `INS`, summary: `text:msg-0` },
-  { index: 6, kind: `INS`, summary: `text_delta:msg-0:0` },
-  { index: 7, kind: `INS`, summary: `tags:title` },
-  { index: 8, kind: `INS`, summary: `text_delta:msg-0:1` },
-  { index: 9, kind: `INS`, summary: `text_delta:msg-0:2` },
-  { index: 10, kind: `INS`, summary: `text_delta:msg-0:3` },
-  { index: 11, kind: `INS`, summary: `text_delta:msg-0:4` },
-  { index: 12, kind: `INS`, summary: `text_delta:msg-0:5` },
-  { index: 13, kind: `INS`, summary: `text:msg-0:end` },
-  { index: 14, kind: `INS`, summary: `step:step-0:end` },
-  { index: 15, kind: `INS`, summary: `run:run-0:end` },
-]
+/**
+ * Tagged shape for a state-explorer fixture — the four pieces of
+ * fake data the inspector needs to render. The matching
+ * `pulseOrder` drives the deterministic Events-panel pulse: each
+ * tick the cursor advances through the order list and the
+ * corresponding `events[i]` row briefly lifts (CSS keyframe).
+ */
+export interface StateFixtureData {
+  types: readonly MockStateType[]
+  records: readonly MockStateRecord[]
+  events: readonly MockStateEvent[]
+  pulseOrder: readonly number[]
+}
 
 /**
- * Deterministic pulse cursor for the Events panel — same convention
- * as `STATE_PULSE_ORDER` below (kept for the legacy AppStateTable
- * primitive while it's still around). Index list points into
- * `STATE_EVENTS_FIXTURE`. Designed to walk the bottom of the list
- * (rows 12–15) in order, then loop back — matches the cadence of a
- * real run wrapping up, with text_delta inserts trailing into
- * step / run end events. */
-export const STATE_EVENT_PULSE_ORDER: readonly number[] = [
-  9, // text_delta:msg-0:2
-  10, // text_delta:msg-0:3
-  11, // text_delta:msg-0:4
-  12, // text_delta:msg-0:5
-  6, // text_delta:msg-0:0
-  7, // tags:title
-  8, // text_delta:msg-0:1
-  13, // text:msg-0:end
-  14, // step:step-0:end
-]
+ * Named state-fixture variants. Same pattern as `CHAT_FIXTURES` —
+ * each scenario picks a key, the hero uses `default`. New variants
+ * land here rather than at the call site so the inspector primitive
+ * can pick up the matching pulse-order list internally.
+ *
+ *   default     — Horton run-loop (entity_created → run → text_delta)
+ *   summarizer  — custom SDK entity caught mid-failure (chunk 9
+ *                 errored, summaries panel selected)
+ */
+export const STATE_FIXTURES = {
+  default: {
+    types: [
+      { name: `entity_created`, count: 1 },
+      { name: `inbox`, count: 1 },
+      { name: `run`, count: 1 },
+      { name: `step`, count: 1 },
+      { name: `text`, count: 1 },
+      { name: `text_delta`, count: 6, selected: true },
+      { name: `tags`, count: 1 },
+    ],
+    records: [
+      {
+        key: `msg-in-1780491582518-283dha`,
+        from: `/principal/system%3Adev-local`,
+        payload: `Test`,
+      },
+    ],
+    events: [
+      { index: 1, kind: `INS`, summary: `entity_created:entity-created` },
+      { index: 2, kind: `INS`, summary: `inbox:msg-in-1780491582518-283dha` },
+      { index: 3, kind: `INS`, summary: `run:run-0` },
+      { index: 4, kind: `INS`, summary: `step:step-0` },
+      { index: 5, kind: `INS`, summary: `text:msg-0` },
+      { index: 6, kind: `INS`, summary: `text_delta:msg-0:0` },
+      { index: 7, kind: `INS`, summary: `tags:title` },
+      { index: 8, kind: `INS`, summary: `text_delta:msg-0:1` },
+      { index: 9, kind: `INS`, summary: `text_delta:msg-0:2` },
+      { index: 10, kind: `INS`, summary: `text_delta:msg-0:3` },
+      { index: 11, kind: `INS`, summary: `text_delta:msg-0:4` },
+      { index: 12, kind: `INS`, summary: `text_delta:msg-0:5` },
+      { index: 13, kind: `INS`, summary: `text:msg-0:end` },
+      { index: 14, kind: `INS`, summary: `step:step-0:end` },
+      { index: 15, kind: `INS`, summary: `run:run-0:end` },
+    ],
+    /* Walks through the trailing text_delta inserts (6→12) into the
+       step / run end events — matches the cadence of a real run
+       wrapping up. */
+    pulseOrder: [9, 10, 11, 5, 6, 7, 8, 12, 13],
+  },
+
+  summarizer: {
+    /* Custom `summarizer` entity from APP_PAGE_PLAN.md §3.5
+       scenario 3: ingests a doc, splits into chunks, summarises
+       each, then merges. Caught mid-failure — chunk 9 contained a
+       single 32k token that broke the per-chunk summariser, so the
+       `summaries` count is 11 not 12 and `merged` never reached. */
+    types: [
+      { name: `inputs`, count: 3 },
+      { name: `chunks`, count: 12 },
+      { name: `summaries`, count: 11, selected: true },
+      { name: `merged`, count: 0 },
+      { name: `errors`, count: 1 },
+      { name: `tags`, count: 1 },
+    ],
+    records: [
+      {
+        key: `sum-9-malformed`,
+        from: `/principal/system%3Adev-local`,
+        payload: `…failed: chunk 9 was a single 32k token`,
+      },
+    ],
+    events: [
+      { index: 1, kind: `INS`, summary: `inputs:doc-1` },
+      { index: 2, kind: `INS`, summary: `chunks:chunk-0` },
+      { index: 3, kind: `INS`, summary: `chunks:chunk-1` },
+      { index: 4, kind: `INS`, summary: `summaries:sum-0` },
+      { index: 5, kind: `INS`, summary: `chunks:chunk-2` },
+      { index: 6, kind: `INS`, summary: `summaries:sum-1` },
+      { index: 7, kind: `INS`, summary: `chunks:chunk-3` },
+      { index: 8, kind: `INS`, summary: `summaries:sum-2` },
+      { index: 9, kind: `INS`, summary: `chunks:chunk-9` },
+      { index: 10, kind: `INS`, summary: `summaries:sum-7` },
+      { index: 11, kind: `INS`, summary: `chunks:chunk-10` },
+      { index: 12, kind: `INS`, summary: `summaries:sum-8` },
+      { index: 13, kind: `INS`, summary: `chunks:chunk-11` },
+      { index: 14, kind: `INS`, summary: `summaries:sum-10` },
+      { index: 15, kind: `INS`, summary: `errors:err-9-malformed` },
+    ],
+    /* Walks through the late-flow chunks + the trailing error so
+       the eye lands on the failure mode without us having to
+       paint it red. */
+    pulseOrder: [9, 10, 11, 12, 13, 14, 15, 8, 7],
+  },
+} as const satisfies Record<string, StateFixtureData>
+
+export type StateFixtureKey = keyof typeof STATE_FIXTURES
+
+/* ───────── Back-compat exports — point at the `default` variant
+   of STATE_FIXTURES so existing imports keep working. ───────── */
+
+/** Default Types panel fixture — modelled on the real-app screenshot. */
+export const STATE_TYPES_FIXTURE = STATE_FIXTURES.default.types
+
+export const STATE_RECORDS_FIXTURE = STATE_FIXTURES.default.records
+
+export const STATE_EVENTS_FIXTURE = STATE_FIXTURES.default.events
+
+/**
+ * Deterministic pulse cursor for the default Events panel.
+ * Inspector consumers now resolve the active fixture's `pulseOrder`
+ * internally via `STATE_FIXTURES[key].pulseOrder`; this constant
+ * remains for any callers that want the default at module-eval
+ * time.
+ */
+export const STATE_EVENT_PULSE_ORDER = STATE_FIXTURES.default.pulseOrder
 
 // ─────────────────────────── Legacy state table ───────────────────────────
 

@@ -55,6 +55,7 @@ import AppTitlebarControls from '../../primitives/chrome/AppTitlebarControls.vue
 import AppWindowFrame from '../../primitives/chrome/AppWindowFrame.vue'
 import ChatTileContent from '../../primitives/workspace/parts/ChatTileContent.vue'
 import StateTileContent from '../../primitives/workspace/parts/StateTileContent.vue'
+import type { ChatFixtureKey, StateFixtureKey } from '../../fixtures'
 import {
   type DetectedOs,
   useDetectedOs,
@@ -131,6 +132,21 @@ const props = withDefaults(
      * settings strip. Some narrow embeds drop it for legibility.
      */
     showSidebarFooter?: boolean
+    /**
+     * Which `CHAT_FIXTURES` variant the chat tile renders. Variants
+     * tailor the user prompt + agent streaming response to a
+     * specific scenario (e.g. `'github-issue'`, `'parallel-workers'`,
+     * `'overnight-research'`). Defaults to `'default'` — the
+     * generic createSession-refactor demo used by the hero stage.
+     */
+    chatFixtureKey?: ChatFixtureKey
+    /**
+     * Which `STATE_FIXTURES` variant the state inspector renders.
+     * Variants tailor the types / records / events to a specific
+     * scenario (e.g. `'summarizer'` for the SDK-debug story).
+     * Defaults to `'default'` — the Horton run-loop fixture.
+     */
+    stateFixtureKey?: StateFixtureKey
   }>(),
   {
     os: 'auto',
@@ -148,6 +164,8 @@ const props = withDefaults(
     responsive: true,
     sidebarSelectedUrl: null,
     showSidebarFooter: true,
+    chatFixtureKey: 'default',
+    stateFixtureKey: 'default',
   }
 )
 
@@ -215,14 +233,8 @@ const singleTileMode = computed(() => {
           />
         </div>
 
-        <div
-          v-if="showChatTile || showStateTile"
-          class="hero-scene-workspace"
-        >
-          <div
-            v-if="showChatTile"
-            class="hero-scene-tile hero-scene-tile-chat"
-          >
+        <div v-if="showChatTile || showStateTile" class="hero-scene-workspace">
+          <div v-if="showChatTile" class="hero-scene-tile hero-scene-tile-chat">
             <ChatTileContent
               :title="title"
               :session-id="sessionId"
@@ -234,6 +246,7 @@ const singleTileMode = computed(() => {
               :chrome-inset-target="
                 resolvedOs === 'macos' && leftmostKind === 'chat'
               "
+              :fixture-key="chatFixtureKey"
             />
           </div>
           <div
@@ -250,6 +263,7 @@ const singleTileMode = computed(() => {
               :chrome-inset-target="
                 resolvedOs === 'macos' && leftmostKind === 'state'
               "
+              :fixture-key="stateFixtureKey"
             />
           </div>
         </div>
@@ -440,9 +454,7 @@ const singleTileMode = computed(() => {
      the chat-surface column-cap entirely so the bubble + composer
      fill the available width — matches the live product's mobile
      layout where there's no concept of a chat-surface gutter. */
-  .hero-scene[data-responsive='true']
-    .hero-scene-tile-chat
-    :deep(.chat-column),
+  .hero-scene[data-responsive='true'] .hero-scene-tile-chat :deep(.chat-column),
   .hero-scene[data-responsive='true']
     .hero-scene-tile-chat
     :deep(.composer-inner) {

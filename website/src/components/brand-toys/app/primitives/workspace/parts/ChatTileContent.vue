@@ -29,9 +29,10 @@ import AppMessageInput from '../../chat/AppMessageInput.vue'
 import AppTimelineMarker from '../../chat/AppTimelineMarker.vue'
 import AppTileHeader from '../AppTileHeader.vue'
 import AppTileShell from '../AppTileShell.vue'
-import { CHAT_FIXTURE } from '../../../fixtures'
+import { CHAT_FIXTURES, type ChatFixtureKey } from '../../../fixtures'
+import { computed } from 'vue'
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     title?: string
     sessionId?: string
@@ -62,6 +63,11 @@ withDefaults(
     userTimestamp?: string
     /** Agent response done-row timestamp. */
     agentTimestamp?: string
+    /** Which `CHAT_FIXTURES` variant to render. The user prompt
+     * comes from the same fixture so prompt + response read as one
+     * cohesive scenario. Defaults to `'default'` (the generic
+     * createSession-refactor demo used by the hero). */
+    fixtureKey?: ChatFixtureKey
   }>(),
   {
     title: 'Test Message Received',
@@ -80,8 +86,11 @@ withDefaults(
     userSender: 'system:dev-local',
     userTimestamp: '14:59',
     agentTimestamp: '14:59',
+    fixtureKey: 'default',
   }
 )
+
+const fixture = computed(() => CHAT_FIXTURES[props.fixtureKey])
 </script>
 
 <template>
@@ -107,7 +116,7 @@ withDefaults(
           <AppTimelineMarker label="sandbox" :value="sandboxLabel" />
         </div>
         <AppMessageBubble
-          :text="CHAT_FIXTURE.userPrompt"
+          :text="fixture.userPrompt"
           :sender="userSender"
           :timestamp="userTimestamp"
         />
@@ -119,6 +128,7 @@ withDefaults(
           :has-code-block="hasCodeBlock"
           :has-tool-call="hasToolCall"
           :timestamp="agentTimestamp"
+          :fixture-key="fixtureKey"
         />
       </div>
     </div>

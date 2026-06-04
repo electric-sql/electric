@@ -15,6 +15,7 @@
 import AppStateInspector from '../../state/AppStateInspector.vue'
 import AppTileHeader from '../AppTileHeader.vue'
 import AppTileShell from '../AppTileShell.vue'
+import type { StateFixtureKey } from '../../../fixtures'
 
 withDefaults(
   defineProps<{
@@ -30,6 +31,11 @@ withDefaults(
      * on the leftmost tile when sidebar (and any tile to the left)
      * is hidden. Mirrors the same prop on `ChatTileContent`. */
     chromeInsetTarget?: boolean
+    /** Which `STATE_FIXTURES` variant to render. Defaults to
+     *  `'default'` (the Horton run-loop fixture). Other variants
+     *  (e.g. `'summarizer'`) tailor types/records/events to a
+     *  specific scenario card on the /app page. */
+    fixtureKey?: StateFixtureKey
   }>(),
   {
     title: 'Test Message Received',
@@ -39,6 +45,7 @@ withDefaults(
     density: 'comfortable',
     showClose: true,
     chromeInsetTarget: false,
+    fixtureKey: 'default',
   }
 )
 </script>
@@ -64,6 +71,7 @@ withDefaults(
         :pulse-rate="pulseRate"
         :paused="paused"
         :density="density"
+        :fixture-key="fixtureKey"
       />
     </div>
   </AppTileShell>

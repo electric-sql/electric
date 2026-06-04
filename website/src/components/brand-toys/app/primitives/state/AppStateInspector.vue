@@ -38,12 +38,7 @@ import {
   SkipForward,
 } from 'lucide-vue-next'
 import AppIcon from '../AppIcon.vue'
-import {
-  STATE_EVENT_PULSE_ORDER,
-  STATE_EVENTS_FIXTURE,
-  STATE_RECORDS_FIXTURE,
-  STATE_TYPES_FIXTURE,
-} from '../../fixtures'
+import { STATE_FIXTURES, type StateFixtureKey } from '../../fixtures'
 
 const PULSE_HOLD_MS = 600
 
@@ -53,13 +48,27 @@ const props = withDefaults(
     paused?: boolean
     /** Compact mode drops the StreamDB strip + tightens row heights. */
     density?: 'comfortable' | 'compact'
+    /** Which `STATE_FIXTURES` variant to render. Defaults to
+     *  `'default'` — the Horton run-loop fixture used by the hero
+     *  stage. Other variants (e.g. `'summarizer'`) tailor the
+     *  types / records / events to a specific scenario card on
+     *  the /app page. */
+    fixtureKey?: StateFixtureKey
   }>(),
   {
     pulseRate: 0.8,
     paused: false,
     density: 'comfortable',
+    fixtureKey: 'default',
   }
 )
+
+/* Resolve the active fixture once per render — the inspector reads
+   `types`, `records`, `events`, and `pulseOrder` off this. Computed
+   so swapping the fixtureKey at runtime (e.g. in the brand-toy
+   stage) reflows the panels without us having to wire up explicit
+   watchers per slice. */
+const fixture = computed(() => STATE_FIXTURES[props.fixtureKey])
 
 const reducedMotion = ref(false)
 const rootEl = ref<HTMLElement | null>(null)
@@ -80,10 +89,11 @@ const driven = computed(
 
 function tick() {
   if (!driven.value) return
-  const target =
-    STATE_EVENT_PULSE_ORDER[cursor % STATE_EVENT_PULSE_ORDER.length]
-  cursor = (cursor + 1) % STATE_EVENT_PULSE_ORDER.length
-  if (target == null || target >= STATE_EVENTS_FIXTURE.length) return
+  const order = fixture.value.pulseOrder
+  const events = fixture.value.events
+  const target = order[cursor % order.length]
+  cursor = (cursor + 1) % order.length
+  if (target == null || target >= events.length) return
 
   pulseSet.value = new Set([...pulseSet.value, target])
   const existing = pulseHoldTimers.get(target)
@@ -112,6 +122,21 @@ watch(
     if (intervalId === null) return
     clearInterval(intervalId)
     intervalId = setInterval(tick, 1000 / Math.max(0.05, props.pulseRate))
+  }
+)
+
+/* Reset the pulse cursor when the fixture variant changes so we
+   don't keep walking off the end of an order list that's shorter
+   than where the cursor currently is. Also clear any in-flight
+   pulse highlights since they reference indices into the OLD
+   `events` list. */
+watch(
+  () => props.fixtureKey,
+  () => {
+    cursor = 0
+    pulseSet.value = new Set()
+    for (const t of pulseHoldTimers.values()) clearTimeout(t)
+    pulseHoldTimers.clear()
   }
 )
 
@@ -175,11 +200,11 @@ onBeforeUnmount(() => {
       <div class="types-panel">
         <div class="panel-header">
           <span class="panel-title">Types</span>
-          <span class="panel-count">{{ STATE_TYPES_FIXTURE.length }}</span>
+          <span class="panel-count">{{ fixture.types.length }}</span>
         </div>
         <div class="types-list">
           <div
-            v-for="t in STATE_TYPES_FIXTURE"
+            v-for="t in fixture.types"
             :key="t.name"
             class="type-row"
             :data-selected="t.selected ? 'true' : 'false'"
@@ -193,7 +218,7 @@ onBeforeUnmount(() => {
       <div class="records-panel">
         <div class="panel-header records-header">
           <span class="panel-title">Records</span>
-          <span class="panel-count">{{ STATE_RECORDS_FIXTURE.length }}</span>
+          <span class="panel-count">{{ fixture.records.length }}</span>
         </div>
         <div class="records-table">
           <div class="records-table-header">
@@ -202,11 +227,7 @@ onBeforeUnmount(() => {
             <span class="records-col records-col-payload mono">payload</span>
           </div>
           <div class="records-table-rows">
-            <div
-              v-for="(r, i) in STATE_RECORDS_FIXTURE"
-              :key="i"
-              class="record-row"
-            >
+            <div v-for="(r, i) in fixture.records" :key="i" class="record-row">
               <span class="record-cell record-cell-key mono" :title="r.key">{{
                 r.key
               }}</span>
@@ -228,7 +249,7 @@ onBeforeUnmount(() => {
     <div class="events-panel">
       <div class="panel-header events-header">
         <span class="panel-title">Events</span>
-        <span class="panel-count">{{ STATE_EVENTS_FIXTURE.length }}</span>
+        <span class="panel-count">{{ fixture.events.length }}</span>
         <span class="events-toolbar">
           <span
             class="events-toolbar-btn"
@@ -255,7 +276,7 @@ onBeforeUnmount(() => {
       </div>
       <div class="events-list">
         <div
-          v-for="(e, i) in STATE_EVENTS_FIXTURE"
+          v-for="(e, i) in fixture.events"
           :key="e.index"
           class="event-row"
           :data-pulse="pulseSet.has(i) ? 'true' : 'false'"
