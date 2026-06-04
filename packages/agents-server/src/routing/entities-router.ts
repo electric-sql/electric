@@ -1145,6 +1145,48 @@ async function forkEntity(
   }
   const { entityUrl, entity } = requireExistingEntityRoute(request)
   await assertDispatchPolicyAllowed(ctx, entity.dispatch_policy)
+
+  // Validate `parent` and `wake.subscriberUrl` before forking — mirrors
+  // the spawn route's parent-validation flow. Without these checks, a
+  // direct HTTP caller could attach a fork under an arbitrary parent or
+  // register a wake firing to an arbitrary subscriber.
+  if (parsed.parent !== undefined) {
+    const parent = await ctx.entityManager.registry.getEntity(parsed.parent)
+    if (!parent) {
+      return apiError(404, ErrCodeNotFound, `Parent entity not found`)
+    }
+    if (!(await canAccessEntity(ctx, parent, `spawn`, request as Request))) {
+      return apiError(
+        401,
+        ErrCodeUnauthorized,
+        `Principal is not allowed to spawn children from ${parent.url}`
+      )
+    }
+  }
+  if (parsed.wake !== undefined) {
+    // The only sensible target for a fork's wake is the new fork's
+    // parent (so the parent gets woken when the fork's run finishes
+    // — same model as spawn). Require parent + matching subscriber to
+    // prevent a caller from registering a wake firing to an entity
+    // they don't own. If subscriber-flexibility ever becomes a real
+    // use case, replace this with a proper canAccessEntity check on
+    // the subscriber.
+    if (parsed.parent === undefined) {
+      return apiError(
+        400,
+        ErrCodeInvalidRequest,
+        `wake requires parent (the fork's wake fires to its parent)`
+      )
+    }
+    if (parsed.wake.subscriberUrl !== parsed.parent) {
+      return apiError(
+        401,
+        ErrCodeUnauthorized,
+        `wake.subscriberUrl must match parent`
+      )
+    }
+  }
+
   const result = await ctx.entityManager.forkSubtree(entityUrl, {
     rootInstanceId: parsed.instance_id,
     waitTimeoutMs: parsed.waitTimeoutMs,

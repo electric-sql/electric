@@ -1256,4 +1256,84 @@ describe(`ElectricAgentsRoutes fork endpoint`, () => {
     expect(response.status).toBe(400)
     expect(manager.forkSubtree).not.toHaveBeenCalled()
   })
+
+  it(`rejects when parent is set but does not exist`, async () => {
+    // getEntity returns the source for the source-route lookup but
+    // null for the parent lookup. Differentiate by URL.
+    const getEntity = vi.fn(async (url: string) =>
+      url === `/chat/root` ? { url: `/chat/root` } : null
+    )
+    const manager = {
+      registry: { getEntity, getEntityType: vi.fn() },
+      forkSubtree: vi.fn(),
+    } as any
+
+    const response = await routeResponse(
+      manager,
+      `POST`,
+      `/_electric/entities/chat/root/fork`,
+      {
+        anchor: `latest_completed_run`,
+        parent: `/chat/missing-parent`,
+      }
+    )
+
+    expect(response.status).toBe(404)
+    expect(manager.forkSubtree).not.toHaveBeenCalled()
+  })
+
+  it(`rejects when wake is set without parent`, async () => {
+    const manager = {
+      registry: {
+        getEntity: vi.fn().mockResolvedValue({ url: `/chat/root` }),
+        getEntityType: vi.fn(),
+      },
+      forkSubtree: vi.fn(),
+    } as any
+
+    const response = await routeResponse(
+      manager,
+      `POST`,
+      `/_electric/entities/chat/root/fork`,
+      {
+        anchor: `latest_completed_run`,
+        wake: {
+          subscriberUrl: `/chat/stranger`,
+          condition: `runFinished`,
+          includeResponse: true,
+        },
+      }
+    )
+
+    expect(response.status).toBe(400)
+    expect(manager.forkSubtree).not.toHaveBeenCalled()
+  })
+
+  it(`rejects when wake.subscriberUrl does not match parent`, async () => {
+    const manager = {
+      registry: {
+        getEntity: vi.fn().mockResolvedValue({ url: `/chat/root` }),
+        getEntityType: vi.fn(),
+      },
+      forkSubtree: vi.fn(),
+    } as any
+
+    const response = await routeResponse(
+      manager,
+      `POST`,
+      `/_electric/entities/chat/root/fork`,
+      {
+        anchor: `latest_completed_run`,
+        parent: `/chat/parent`,
+        wake: {
+          subscriberUrl: `/chat/stranger`,
+          condition: `runFinished`,
+          includeResponse: true,
+        },
+      }
+    )
+
+    expect(response.status).toBe(401)
+    expect(manager.forkSubtree).not.toHaveBeenCalled()
+  })
 })
