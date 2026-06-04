@@ -370,30 +370,9 @@ const primaryPlatform = computed(
 
       <div class="ad-modes-grid">
         <article class="ad-modes-card">
-          <div class="ad-modes-illo">
-            <!--
-              Card 1 mockup — chat-only. Demonstrates "code with Horton
-              locally" by showing the chat surface mid-stream with a
-              code block in the response. Sidebar / state are hidden so
-              the card focuses on the chat itself; chat tile inherits
-              the macOS chrome inset automatically.
-            -->
-            <AppMockupEmbed
-              :scene="HeroChatStateScene"
-              :scene-props="{
-                os: 'auto',
-                theme: 'dark',
-                responsive: false,
-                showSidebar: false,
-                showChatTile: true,
-                showStateTile: false,
-                title: 'Refactor auth helpers',
-                sessionId: 'horton/code-refactor',
-              }"
-              aspect="16/10"
-              :scale="0.6"
-            />
-          </div>
+          <span class="ad-modes-icon" aria-hidden="true">
+            <span class="ad-icon ad-icon--code" />
+          </span>
           <h3 class="ad-modes-title">Code with Horton, locally</h3>
           <p class="ad-modes-body">
             Horton ships in the desktop. Pick a model, point at a directory,
@@ -410,33 +389,9 @@ const primaryPlatform = computed(
         </article>
 
         <article class="ad-modes-card">
-          <div class="ad-modes-illo">
-            <!--
-              Card 2 mockup — sidebar + chat. Demonstrates "attach to
-              remote sessions" by leading with the sessions rail. We
-              highlight `Bisect ws regression` (an idle, recently
-              spawned-style session lower in the fixture) so the eye
-              reads "you've connected to a server and there's a list
-              of running sessions to attach to" rather than picking up
-              a streaming run mid-flight.
-            -->
-            <AppMockupEmbed
-              :scene="HeroChatStateScene"
-              :scene-props="{
-                os: 'auto',
-                theme: 'dark',
-                responsive: false,
-                showSidebar: true,
-                showChatTile: true,
-                showStateTile: false,
-                sidebarSelectedUrl: '/horton/bug-bisect',
-                title: 'Bisect ws regression',
-                sessionId: 'horton/bug-bisect',
-              }"
-              aspect="16/10"
-              :scale="0.6"
-            />
-          </div>
+          <span class="ad-modes-icon" aria-hidden="true">
+            <span class="ad-icon ad-icon--radio" />
+          </span>
           <h3 class="ad-modes-title">Attach to remote sessions</h3>
           <p class="ad-modes-body">
             Connect to any agents-server — your own or Electric Cloud. Sessions
@@ -455,32 +410,9 @@ const primaryPlatform = computed(
         </article>
 
         <article class="ad-modes-card">
-          <div class="ad-modes-illo">
-            <!--
-              Card 3 mockup — state-inspector-only with the
-              `summarizer` state fixture so the inspector reads as
-              "this is the SDK debug view for entities you wrote",
-              not "this is the runtime for a Horton agent". Same
-              `summarizer` fixture as §3.5 #3, kept consistent so
-              the two surfaces tell one story across sections.
-            -->
-            <AppMockupEmbed
-              :scene="HeroChatStateScene"
-              :scene-props="{
-                os: 'auto',
-                theme: 'dark',
-                responsive: false,
-                showSidebar: false,
-                showChatTile: false,
-                showStateTile: true,
-                title: 'Custom entity · summarizer',
-                sessionId: 'summarizer/r3kc8mq',
-                stateFixtureKey: 'summarizer',
-              }"
-              aspect="16/10"
-              :scale="0.6"
-            />
-          </div>
+          <span class="ad-modes-icon" aria-hidden="true">
+            <span class="ad-icon ad-icon--microscope" />
+          </span>
           <h3 class="ad-modes-title">Build your own agents</h3>
           <p class="ad-modes-body">
             It's also the dev tool for the entities <em>you</em> write with the
@@ -1657,14 +1589,6 @@ const primaryPlatform = computed(
 
 .ad-modes-icon .ad-icon {
   font-size: 22px;
-}
-
-/* Mockup illustration that sits above the title in §3 cards. The
-   embed itself is sized via aspect-ratio at the use site; this rule
-   just gives the slot bottom-margin so the title doesn't crowd
-   against it. */
-.ad-modes-illo {
-  margin-bottom: 18px;
 }
 
 .ad-modes-title {
