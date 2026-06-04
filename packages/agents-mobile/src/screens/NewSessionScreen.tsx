@@ -12,7 +12,6 @@ import {
 import { useLiveQuery } from '@tanstack/react-db'
 import { eq } from '@tanstack/db'
 import {
-  abbreviatePath,
   detectHomeDir,
   tildifyPath,
 } from '@electric-ax/agents-server-ui/src/lib/pathDisplay'
@@ -286,9 +285,11 @@ export function NewSessionScreen({
                   {recentDirs.map((dir) => (
                     <OptionCard
                       key={dir}
-                      // Abbreviate from the head: paths share long prefixes and
-                      // differ at the tail, which is the part worth keeping.
-                      label={abbreviatePath(tildifyPath(dir, homeDir))}
+                      // Tildify only — head ellipsizing clips at the rendered
+                      // width (adapting to device and font scale), keeping the
+                      // tail where paths differ. The full label is also what
+                      // screen readers announce; visual clipping is render-only.
+                      label={tildifyPath(dir, homeDir)}
                       ellipsizeMode="head"
                       tokens={tokens}
                       selected={workingDirectory === dir}
