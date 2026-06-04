@@ -6,6 +6,7 @@
  * functions at runtime so the token table is the single source of truth
  * for both the native shell and the embedded web bundle.
  */
+import { Platform } from 'react-native'
 
 export type ColorScheme = `light` | `dark`
 
@@ -249,3 +250,5 @@ export const rowHeight = {
   lg: 36,
   xl: 44,
 }
+
+export const monoFontFamily = Platform.OS === `ios` ? `Menlo` : `monospace`
