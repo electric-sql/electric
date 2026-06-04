@@ -658,6 +658,31 @@ const primaryPlatform = computed(
         </article>
       </div>
 
+      <aside class="ad-signing-note">
+        <span class="ad-signing-icon" aria-hidden="true">
+          <span class="ad-icon ad-icon--shield-alert" />
+        </span>
+        <div class="ad-signing-body">
+          <p class="ad-signing-title">Unsigned Preview</p>
+          <p>
+            App signing is still in progress, so macOS and Windows may need an
+            extra confirmation before opening Electric Agents for the first
+            time.
+          </p>
+          <ul>
+            <li>
+              <strong>macOS:</strong> try opening the app, then go to
+              <strong>System Settings → Privacy &amp; Security</strong> and
+              choose <strong>Open Anyway</strong>.
+            </li>
+            <li>
+              <strong>Windows:</strong> choose <strong>More info</strong>, then
+              <strong>Run anyway</strong>.
+            </li>
+          </ul>
+        </div>
+      </aside>
+
       <p class="ad-download-meta">
         <a
           class="ad-meta-link"
@@ -667,25 +692,6 @@ const primaryPlatform = computed(
           >Release notes</a
         >
       </p>
-
-      <aside class="custom-block warning ad-signing-note">
-        <p class="custom-block-title">Unsigned Preview</p>
-        <p>
-          App signing is still in progress, so macOS and Windows may need an
-          extra confirmation before opening Electric Agents for the first time.
-        </p>
-        <ul>
-          <li>
-            <strong>macOS:</strong> try opening the app, then go to
-            <strong>System Settings → Privacy &amp; Security</strong> and choose
-            <strong>Open Anyway</strong>.
-          </li>
-          <li>
-            <strong>Windows:</strong> choose <strong>More info</strong>, then
-            <strong>Run anyway</strong>.
-          </li>
-        </ul>
-      </aside>
     </Section>
 
     <!-- ─────────────────── §7b — Mobile · Preview ─────────────────── *
@@ -979,6 +985,9 @@ const primaryPlatform = computed(
 .ad-icon--boxes {
   --icon-url: url('https://api.iconify.design/lucide/boxes.svg');
 }
+.ad-icon--shield-alert {
+  --icon-url: url('https://api.iconify.design/lucide/shield-alert.svg');
+}
 
 /* ── §1 hero ────────────────────────────────────────────────── */
 
@@ -1045,10 +1054,12 @@ const primaryPlatform = computed(
 }
 
 .ad-download-meta {
-  /* Small follow-up line under the §7a desktop download grid;
-     previously sat in the hero as `Release notes`, moved down so
-     the hero stays focused on the CTAs + platform glyphs. */
-  margin: 28px 0 0;
+  /* Small "Release notes" follow-up line that sits at the very
+     bottom of the §7a desktop download section, under the signing
+     note — previously sat above the signing note, but reads more
+     naturally as the section's last word. Centred + muted to match
+     the page's other small follow-up rows. */
+  margin: 20px 0 0;
   font-size: 13px;
   color: var(--vp-c-text-3);
   text-align: center;
@@ -1688,20 +1699,74 @@ const primaryPlatform = computed(
   flex-wrap: wrap;
 }
 
+/* "Unsigned Preview" note — same hairline-dashed visual rhythm as
+   the §7b "Want it sooner?" repo note: small icon chip on the left,
+   body text on the right, dashed border so it reads as a sub-card
+   tip rather than a heavy warning callout. align-items: flex-start
+   here (vs `center` on the repo note) because this block carries
+   multiple lines + a bullet list. */
+
 .ad-signing-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
   margin-top: 24px;
-  padding-bottom: 18px;
+  padding: 14px 18px;
+  border: 1px dashed var(--vp-c-divider);
+  border-radius: 12px;
+  background: transparent;
 }
 
-.ad-signing-note p {
+.ad-signing-icon {
+  flex-shrink: 0;
+  font-size: 18px;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--vp-c-bg-soft);
+  border: 1px solid var(--vp-c-divider);
+  color: var(--vp-c-text-2);
+  /* Pin the icon chip to the first text line rather than the visual
+     midpoint of the multi-line body. */
+  margin-top: 2px;
+}
+
+.ad-signing-icon .ad-icon {
+  font-size: 18px;
+}
+
+.ad-signing-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--vp-c-text-2);
+  text-wrap: pretty;
+}
+
+.ad-signing-title {
+  margin: 0 0 6px;
+  font-weight: 600;
+  color: var(--vp-c-text-1);
+}
+
+.ad-signing-body p {
+  margin: 0 0 6px;
   max-width: 700px;
 }
 
-.ad-signing-note ul {
-  margin: 8px 0 0;
+.ad-signing-body p:last-of-type {
+  margin-bottom: 0;
+}
+
+.ad-signing-body ul {
+  margin: 6px 0 0;
   padding-left: 20px;
   display: grid;
-  gap: 6px;
+  gap: 4px;
 }
 
 /* ── §7b mobile · preview ───────────────────────────────────── *
