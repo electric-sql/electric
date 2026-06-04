@@ -894,14 +894,20 @@ const primaryPlatform = computed(
     </Section>
 
     <!-- ─────────────────── §7b — Mobile · Preview ─────────────────── *
-         Reframed from the original "Coming soon" two-card grid to a
-         single Preview card pointing at the source repo. The mobile
-         apps are not launching with this page, so the two-card
-         iOS/Android grid + disabled App Store / Play badges would
-         read as vapor; the single repo-link card is honest about
-         the current state and matches the `Preview` framing
-         introduced by the §1 hero glyph row. See APP_PAGE_PLAN.md
-         §7 for the locked body string. -->
+         Two-card grid that mirrors §7a's desktop download visual: one
+         card per app store (App Store · iOS / Google Play · Android),
+         each carrying a small "Coming soon" badge in place of a real
+         download URL. The CTA underneath links the watcher to the
+         GitHub repo so they can star/watch and get notified when
+         the listings ship — that's the closest thing to a download
+         action we can offer today.
+
+         A small follow-up note below the grid points developers at
+         `packages/agents-mobile` so anyone willing to run the Expo
+         dev build can do so today. The two-card grid + repo note
+         is the honest "Preview" framing: same visual rhythm as §7a
+         (so the page reads as a coherent download section), but
+         no fake App Store badges and no marketing-only screenshot. -->
     <Section id="mobile" :dark="true">
       <template #eyebrow>Preview</template>
       <template #title>Native iOS &amp; Android App</template>
@@ -909,41 +915,68 @@ const primaryPlatform = computed(
         Same agents you run on the desktop, in your&nbsp;pocket.
       </template>
 
-      <article class="ad-mobile-preview-card">
-        <div class="ad-mobile-preview-device">
-          <AdPlaceholder
-            name="mobile-app-preview.png"
-            sublabel="iOS · session list · live streaming response"
-            aspect="9/16"
-          />
-        </div>
-
-        <div class="ad-mobile-preview-content">
-          <p class="ad-mobile-preview-body">
-            Native iOS and Android clients are in active development. The source
-            lives in
-            <a
-              class="ad-mobile-preview-link"
-              :href="agentsMobileRepoUrl"
-              target="_blank"
-              rel="noreferrer"
-              >packages/agents-mobile</a
-            >
-            — clone the repo and run the Expo dev build today, or watch the repo
-            to be notified when the public App Store and Google Play listings
-            ship with&nbsp;v1.
-          </p>
-          <div class="ad-mobile-preview-actions">
+      <div class="ad-mobile-grid">
+        <article class="ad-mobile-card">
+          <div class="ad-mobile-head">
+            <span class="ad-mobile-icon" aria-hidden="true">
+              <span class="ad-icon ad-icon--apple" />
+            </span>
+            <div class="ad-mobile-title">
+              <h3>App Store</h3>
+              <p>iOS · iPadOS</p>
+            </div>
+            <span class="ad-mobile-badge mono">Coming soon</span>
+          </div>
+          <div class="ad-mobile-cta">
             <VPButton
               tag="a"
               size="medium"
               theme="alt"
-              text="View on GitHub →"
+              text="Notify me — watch repo"
               :href="agentsMobileRepoUrl"
             />
           </div>
-        </div>
-      </article>
+        </article>
+
+        <article class="ad-mobile-card">
+          <div class="ad-mobile-head">
+            <span class="ad-mobile-icon" aria-hidden="true">
+              <span class="ad-icon ad-icon--android" />
+            </span>
+            <div class="ad-mobile-title">
+              <h3>Google Play</h3>
+              <p>Android</p>
+            </div>
+            <span class="ad-mobile-badge mono">Coming soon</span>
+          </div>
+          <div class="ad-mobile-cta">
+            <VPButton
+              tag="a"
+              size="medium"
+              theme="alt"
+              text="Notify me — watch repo"
+              :href="agentsMobileRepoUrl"
+            />
+          </div>
+        </article>
+      </div>
+
+      <aside class="ad-mobile-repo-note">
+        <span class="ad-mobile-repo-icon" aria-hidden="true">
+          <span class="ad-icon ad-icon--github" />
+        </span>
+        <p class="ad-mobile-repo-body">
+          Want it sooner? The source lives in
+          <a
+            class="ad-mobile-repo-link"
+            :href="agentsMobileRepoUrl"
+            target="_blank"
+            rel="noreferrer"
+            >packages/agents-mobile</a
+          >
+          — clone the repo and run the Expo dev build&nbsp;today.
+        </p>
+      </aside>
     </Section>
 
     <!-- ─────────────────── §7c — Canary ─────────────────── -->
@@ -1066,6 +1099,9 @@ const primaryPlatform = computed(
 }
 .ad-icon--android {
   --icon-url: url('https://api.iconify.design/simple-icons/android.svg');
+}
+.ad-icon--github {
+  --icon-url: url('https://api.iconify.design/simple-icons/github.svg');
 }
 
 /* lucide icons — used by the §3 mode cards and the §6 builder grid.
@@ -1984,56 +2020,146 @@ const primaryPlatform = computed(
    Body text + GitHub CTA — body and actions sit side-by-side on
    desktop, stack vertically below 768px. */
 
-/* §7b mobile preview is a two-column strap: phone-shaped placeholder
-   on the left + body / CTA on the right. Matches the §2 visual-strap
-   rhythm (placeholder + caption) rather than the §7a download-grid
-   rhythm, so the dark section reads as "here's the device" rather
-   than "another row of platforms". Phase 5 swaps the placeholder for
-   a real iOS screenshot. */
-.ad-mobile-preview-card {
+/* §7b mobile preview — two-card grid mirroring §7a desktop downloads
+   (one card per app store) + a small repo-note strip beneath. The two
+   cards reuse the same visual tokens as `.ad-platform-card` so the
+   page reads as a coherent download section; the "Coming soon" badge
+   and the muted CTA replace the live download URL. */
+
+.ad-mobile-grid {
   display: grid;
-  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
-  align-items: center;
-  gap: 48px;
-  max-width: 920px;
-  margin: 0 auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  margin-top: 8px;
 }
 
-.ad-mobile-preview-device {
-  /* AdPlaceholder fills this column at its 9:16 aspect ratio; no
-     extra chrome here — the placeholder's own dashed border + caption
-     carry the visual. */
-  width: 100%;
-}
-
-.ad-mobile-preview-content {
+.ad-mobile-card {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  padding: 24px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 16px;
+  background: var(--vp-c-bg);
 }
 
-.ad-mobile-preview-body {
+.ad-mobile-head {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.ad-mobile-icon {
+  font-size: 20px;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: var(--vp-c-bg-soft);
+  border: 1px solid var(--vp-c-divider);
+  color: var(--vp-c-text-1);
+}
+
+.ad-mobile-icon .ad-icon {
+  font-size: 20px;
+}
+
+.ad-mobile-title h3 {
   margin: 0;
-  font-size: 16px;
-  line-height: 1.65;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--vp-c-text-1);
+  line-height: 1.2;
+}
+
+.ad-mobile-title p {
+  margin: 3px 0 0;
+  font-size: 13px;
+  color: var(--vp-c-text-2);
+  line-height: 1.4;
+}
+
+/* Small mono "Coming soon" badge in the head row. Sits to the right
+   of the title so the eye reads
+       [icon] App Store · iOS         [Coming soon]
+   in one sweep — same shape as the §1 hero `Preview` glyph chip but
+   muted further so it reads as status, not feature. */
+.ad-mobile-badge {
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--vp-c-text-3);
+  background: var(--vp-c-bg-soft);
+  border: 1px solid var(--vp-c-divider);
+  white-space: nowrap;
+}
+
+.ad-mobile-cta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* Small "want it sooner?" strip beneath the two-card grid pointing
+   developers at the source repo so anyone willing to run the Expo
+   dev build can do so today. Visually a hairline-bordered note —
+   sub-card weight so it reads as a follow-up tip, not as a third
+   "store". */
+.ad-mobile-repo-note {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 20px;
+  padding: 14px 18px;
+  border: 1px dashed var(--vp-c-divider);
+  border-radius: 12px;
+  background: transparent;
+}
+
+.ad-mobile-repo-icon {
+  flex-shrink: 0;
+  font-size: 18px;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--vp-c-bg-soft);
+  border: 1px solid var(--vp-c-divider);
+  color: var(--vp-c-text-2);
+}
+
+.ad-mobile-repo-icon .ad-icon {
+  font-size: 18px;
+}
+
+.ad-mobile-repo-body {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
   color: var(--vp-c-text-2);
   text-wrap: pretty;
 }
 
-.ad-mobile-preview-link {
+.ad-mobile-repo-link {
+  font-family: var(--vp-font-family-mono);
+  font-size: 13px;
   color: var(--vp-c-brand-1);
   text-decoration: none;
   border-bottom: 1px solid
     color-mix(in srgb, var(--vp-c-brand-1) 30%, transparent);
 }
 
-.ad-mobile-preview-link:hover {
+.ad-mobile-repo-link:hover {
   border-bottom-color: var(--vp-c-brand-1);
-}
-
-.ad-mobile-preview-actions {
-  display: flex;
-  align-items: center;
 }
 
 /* ── §7c canary ─────────────────────────────────────────────── *
@@ -2163,16 +2289,14 @@ const primaryPlatform = computed(
   .ad-hero-text {
     font-size: 18px;
   }
-  .ad-mobile-preview-card {
+  .ad-mobile-grid {
     grid-template-columns: 1fr;
-    gap: 28px;
+    gap: 16px;
   }
-  .ad-mobile-preview-device {
-    max-width: 240px;
-    margin: 0 auto;
-  }
-  .ad-mobile-preview-actions {
-    justify-self: start;
+  .ad-mobile-repo-note {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
   }
   .ad-modes-grid {
     grid-template-columns: 1fr;
