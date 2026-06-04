@@ -222,13 +222,13 @@ const primaryPlatform = computed(
 const primaryCta = computed(() => {
   if (detectedMobileId.value === 'ios') {
     return {
-      label: 'iOS preview — watch repo',
+      label: 'iOS preview',
       href: '#mobile',
     }
   }
   if (detectedMobileId.value === 'android') {
     return {
-      label: 'Android preview — watch repo',
+      label: 'Android preview',
       href: '#mobile',
     }
   }
@@ -248,8 +248,8 @@ const primaryCta = computed(() => {
           Electric Agents&nbsp;<span class="ad-hero-accent">App</span>
         </h1>
         <p class="ad-hero-text">
-          Desktop and mobile clients — one app to code with Horton, attach to
-          remote sessions, and build your own agents on
+          A desktop client for coding with Horton, inspecting agent&nbsp;runs, and
+          connecting to sessions on
           <a href="/agents">Electric&nbsp;Agents</a>.
         </p>
 
@@ -367,7 +367,7 @@ const primaryCta = computed(() => {
           </div>
         </div>
         <p class="ad-hero-mockup-caption mono">
-          Same session. Two devices. One control plane.
+          Follow the same run from your&nbsp;desk or your&nbsp;phone.
         </p>
       </div>
     </section>
@@ -405,8 +405,8 @@ const primaryCta = computed(() => {
     <Section id="three-ways">
       <template #title>Three ways to use it</template>
       <template #subtitle>
-        Build your own agents on the SDK, code locally with the bundled Horton,
-        or attach to sessions running anywhere on your&nbsp;servers.
+        Build your own agents, code with Horton, or connect to runs already
+        running on your&nbsp;servers.
       </template>
 
       <div class="ad-modes-grid">
@@ -416,15 +416,15 @@ const primaryCta = computed(() => {
           </span>
           <h3 class="ad-modes-title">Build your own agents</h3>
           <p class="ad-modes-body">
-            The desktop is the dev tool for the entities <em>you</em> write with
-            the Electric Agents SDK — state explorer, timeline, fork-from-here.
+            Use the desktop app to inspect entities you build with the
+            Electric&nbsp;Agents SDK: state, timelines, and forks.
           </p>
           <p class="ad-modes-list-label mono">You can:</p>
           <ul class="ad-modes-list">
-            <li>Watch a stuck entity's inbox + runs in real time</li>
-            <li>Fork any past point to A/B test a change</li>
-            <li>Step through a failed worker without redeploying</li>
-            <li>Tile parent + workers side-by-side</li>
+            <li>Watch an entity's inbox and runs live</li>
+            <li>Fork from a past event and compare changes</li>
+            <li>Debug a failed worker without redeploying</li>
+            <li>Open a parent and its workers side&nbsp;by&nbsp;side</li>
           </ul>
         </article>
 
@@ -434,15 +434,15 @@ const primaryCta = computed(() => {
           </span>
           <h3 class="ad-modes-title">Code with Horton, locally</h3>
           <p class="ad-modes-body">
-            Horton, our open-source coding agent, ships bundled. Pick a model,
-            point at a directory, edit code and run bash from chat.
+            Horton, our open-source coding agent, is included. Choose a model,
+            pick a folder, edit files, and run commands from&nbsp;chat.
           </p>
           <p class="ad-modes-list-label mono">You can:</p>
           <ul class="ad-modes-list">
-            <li>Refactor a folder, one worker per file</li>
-            <li>Bisect a regression — one worker repros, one fixes</li>
-            <li>Edit code, run bash, search the web in one chat</li>
-            <li>Learn Electric Agents with <code>/quickstart</code></li>
+            <li>Refactor a folder with parallel workers</li>
+            <li>Bisect a regression while another worker fixes it</li>
+            <li>Edit code, run bash, and search the&nbsp;web</li>
+            <li>Learn Electric&nbsp;Agents with <code>/quickstart</code></li>
           </ul>
         </article>
 
@@ -452,23 +452,23 @@ const primaryCta = computed(() => {
           </span>
           <h3 class="ad-modes-title">Attach to remote sessions</h3>
           <p class="ad-modes-body">
-            Wherever your agents run, attach to any agents-server. Sessions
-            spawned by CI, webhooks, issues or cron show up live.
+            Connect to any agents-server. Runs started by CI, webhooks, issues,
+            or cron appear in the app.
           </p>
           <p class="ad-modes-list-label mono">You can:</p>
           <ul class="ad-modes-list">
             <li>
-              Triage a GitHub-issue session on the phone, finish on the desk
+              Check a GitHub issue run on your&nbsp;phone, finish at your&nbsp;desk
             </li>
-            <li>Steer a CI agent before its PR merges</li>
-            <li>Pause and resume a cron-triggered pipeline</li>
+            <li>Steer a CI agent before its PR&nbsp;merges</li>
+            <li>Pause or resume a scheduled run</li>
             <li>Hand a session off between devices mid-run</li>
           </ul>
         </article>
       </div>
 
       <p class="ad-modes-strip mono">
-        One integrated platform — build, code, and attach in one app.
+        One place to build, run, and inspect&nbsp;agents.
       </p>
     </Section>
 
@@ -488,16 +488,15 @@ const primaryCta = computed(() => {
          between §3 above and §7a below — same pattern §3.5 used to
          use before the merge. -->
     <Section id="features" :dark="true">
-      <template #title>Everything in the box</template>
+      <template #title>What the app includes</template>
       <template #subtitle>
-        One desktop app — bring your own provider, attach to local or cloud
-        servers, build custom agents on the SDK, and pick up sessions on your
-        phone.
+        Connect your model provider, choose a server, and inspect the agents you
+        run&nbsp;today.
       </template>
 
       <div class="ad-features-grid">
         <!-- Build with the SDK ────────────────────────────────── -->
-        <article class="ad-features-card ad-features-card--skills">
+        <article class="ad-features-card">
           <header class="ad-features-head">
             <span class="ad-features-icon" aria-hidden="true">
               <span class="ad-icon ad-icon--boxes" />
@@ -505,9 +504,8 @@ const primaryCta = computed(() => {
             <h3 class="ad-features-title">Custom agent types</h3>
           </header>
           <p class="ad-features-body">
-            Write your own entities with
-            <code>@electric-ax/agents-runtime</code>; the desktop becomes their
-            dev tool.
+            Build entities with <code>@electric-ax/agents-runtime</code> and
+            inspect them in the desktop app.
           </p>
         </article>
 
@@ -519,8 +517,8 @@ const primaryCta = computed(() => {
             <h3 class="ad-features-title">State explorer</h3>
           </header>
           <p class="ad-features-body">
-            Live view of every shared-state source per entity — runs, inbox,
-            manifests, custom state.
+            See each entity's runs, inbox, manifests, and custom state in
+            one&nbsp;view.
           </p>
         </article>
 
@@ -532,8 +530,8 @@ const primaryCta = computed(() => {
             <h3 class="ad-features-title">Entity timeline</h3>
           </header>
           <p class="ad-features-body">
-            Walk every event a session emitted; fork from any past point to
-            replay or A/B test.
+            Replay a run event by event, then fork from any point to try a
+            different&nbsp;path.
           </p>
         </article>
 
@@ -546,8 +544,8 @@ const primaryCta = computed(() => {
             <h3 class="ad-features-title">Cloud or self-hosted</h3>
           </header>
           <p class="ad-features-body">
-            Sign in to Electric Cloud (managed) or run your own agents-server
-            for dev or self-hosting.
+            Use Electric&nbsp;Cloud, or point the app at an agents-server you
+            run&nbsp;yourself.
           </p>
         </article>
 
@@ -559,8 +557,8 @@ const primaryCta = computed(() => {
             <h3 class="ad-features-title">Connect to remote sessions</h3>
           </header>
           <p class="ad-features-body">
-            Attach to any agents-server; sessions spawned by CI, webhooks,
-            issues or cron show up live.
+            Open sessions started by CI, webhooks, issues, cron, or another
+            machine.
           </p>
         </article>
 
@@ -572,13 +570,13 @@ const primaryCta = computed(() => {
             <h3 class="ad-features-title">MCP servers</h3>
           </header>
           <p class="ad-features-body">
-            Add MCP servers with native OAuth; workspace
-            <code>mcp.json</code> takes precedence.
+            Add MCP servers with native OAuth. Workspace
+            <code>mcp.json</code> files are respected.
           </p>
         </article>
 
         <!-- Configure &amp; use ───────────────────────────────── -->
-        <article class="ad-features-card">
+        <article class="ad-features-card ad-features-card--skills">
           <header class="ad-features-head">
             <span class="ad-features-icon" aria-hidden="true">
               <span class="ad-icon ad-icon--key-round" />
@@ -586,8 +584,8 @@ const primaryCta = computed(() => {
             <h3 class="ad-features-title">Pick your provider</h3>
           </header>
           <p class="ad-features-body">
-            BYO API key (OS keychain) or sign in to Codex. Anthropic, OpenAI,
-            DeepSeek, Moonshot.
+            Use an API key from your keychain, or sign in to Codex. Anthropic,
+            OpenAI, DeepSeek, and Moonshot are supported.
           </p>
         </article>
 
@@ -599,8 +597,8 @@ const primaryCta = computed(() => {
             <h3 class="ad-features-title">Skills &amp; slash commands</h3>
           </header>
           <p class="ad-features-body">
-            Type <code>/quickstart</code> to learn Electric Agents itself, or
-            ship your own reusable skills.
+            Use <code>/quickstart</code> to get started, then save commands for
+            your&nbsp;workflows.
           </p>
         </article>
 
@@ -609,11 +607,11 @@ const primaryCta = computed(() => {
             <span class="ad-features-icon" aria-hidden="true">
               <span class="ad-icon ad-icon--smartphone" />
             </span>
-            <h3 class="ad-features-title">Continue from your phone</h3>
+            <h3 class="ad-features-title">Continue from your&nbsp;phone</h3>
           </header>
           <p class="ad-features-body">
-            Pick up the same session on iOS or Android — steer, send, review
-            from anywhere.
+            Open a run on iOS or Android to steer it, send a message, or check
+            progress.
           </p>
         </article>
       </div>
@@ -631,7 +629,7 @@ const primaryCta = computed(() => {
         >
         <span class="ad-features-more-item ad-features-more-item--skills">
           Skills &amp; slash commands
-          <em>(<code>/quickstart</code>, reusable workflows)</em>
+          <em>(<code>/quickstart</code>, saved workflows)</em>
         </span>
         <span class="ad-features-more-item"
           >Local discovery <em>(dev servers on localhost)</em></span
@@ -662,8 +660,8 @@ const primaryCta = computed(() => {
     <Section id="desktop">
       <template #title>Desktop App</template>
       <template #subtitle>
-        Install the desktop app to start, monitor and return to long-running
-        agents from your own computer.
+        Install the desktop app to start agents, monitor runs, and return to
+        work&nbsp;in&nbsp;progress.
       </template>
 
       <div class="ad-desktop-grid">
@@ -706,8 +704,8 @@ const primaryCta = computed(() => {
         <div class="ad-signing-body">
           <p class="ad-signing-title">Unsigned Preview</p>
           <p>
-            Signing is in progress, so macOS and Windows may ask for an extra
-            confirmation on first open.
+            Signing is still in progress, so your OS may ask for one
+            extra&nbsp;confirmation.
           </p>
           <p class="ad-signing-step">
             <strong>macOS:</strong> open the app, then
@@ -749,9 +747,9 @@ const primaryCta = computed(() => {
          no fake App Store badges and no marketing-only screenshot. -->
     <Section id="mobile" :dark="true">
       <template #eyebrow>Preview</template>
-      <template #title>Native iOS &amp; Android App</template>
+      <template #title>Native iOS &amp; Android&nbsp;App</template>
       <template #subtitle>
-        Same agents you run on the desktop, in your&nbsp;pocket.
+        Check and steer running agents from your&nbsp;phone.
       </template>
 
       <div class="ad-mobile-grid">
@@ -764,7 +762,7 @@ const primaryCta = computed(() => {
               <span class="ad-icon ad-icon--apple" />
             </span>
             <div class="ad-mobile-title">
-              <h3>App Store</h3>
+              <h3>App&nbsp;Store</h3>
               <p>iOS · iPadOS</p>
             </div>
             <span class="ad-mobile-badge mono">Coming soon</span>
@@ -774,7 +772,7 @@ const primaryCta = computed(() => {
               tag="a"
               size="medium"
               theme="alt"
-              text="Notify me — watch repo"
+              text="Watch repo"
               :href="agentsMobileRepoUrl"
             />
           </div>
@@ -789,7 +787,7 @@ const primaryCta = computed(() => {
               <span class="ad-icon ad-icon--android" />
             </span>
             <div class="ad-mobile-title">
-              <h3>Google Play</h3>
+              <h3>Google&nbsp;Play</h3>
               <p>Android</p>
             </div>
             <span class="ad-mobile-badge mono">Coming soon</span>
@@ -799,7 +797,7 @@ const primaryCta = computed(() => {
               tag="a"
               size="medium"
               theme="alt"
-              text="Notify me — watch repo"
+              text="Watch repo"
               :href="agentsMobileRepoUrl"
             />
           </div>
@@ -811,7 +809,7 @@ const primaryCta = computed(() => {
           <span class="ad-icon ad-icon--github" />
         </span>
         <p class="ad-mobile-repo-body">
-          Want it sooner? The source lives in
+          Want to try it now? The source lives in
           <a
             class="ad-mobile-repo-link"
             :href="agentsMobileRepoUrl"
@@ -819,7 +817,7 @@ const primaryCta = computed(() => {
             rel="noreferrer"
             >packages/agents-mobile</a
           >
-          — clone the repo and run the Expo dev build&nbsp;today.
+          — clone the repo and run the Expo dev&nbsp;build.
         </p>
       </aside>
     </Section>
@@ -829,9 +827,8 @@ const primaryCta = computed(() => {
       <template #eyebrow>Pre-release</template>
       <template #title>Canary builds</template>
       <template #subtitle>
-        Moving builds from the <code>main</code>&nbsp;branch. Useful for
-        previewing the newest desktop changes — prefer the release builds above
-        for day-to-day&nbsp;use.
+        Builds from <code>main</code>. Use them to preview the newest desktop
+        changes; prefer release builds for daily&nbsp;work.
       </template>
 
       <ul class="ad-canary-list">
@@ -876,7 +873,7 @@ const primaryCta = computed(() => {
     <!-- ─────────────────── §8 — Bottom CTA ─────────────────── -->
     <BottomCtaStrap id="get-started">
       <template #eyebrow>
-        <span>Durable · long-running · cloud-connected</span>
+        <span>Open source · local or cloud</span>
       </template>
       <template #title>Build with Electric&nbsp;Agents</template>
       <template #tagline>
