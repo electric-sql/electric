@@ -49,55 +49,12 @@ export function SessionRowMenu({
   onTogglePin: () => void
 }): React.ReactElement {
   const tokens = useTokens()
-  const styles = useMemo(() => createStyles(tokens), [tokens])
-  const { runnersCollection } = useAgents()
-
-  // Resolve runner/sandbox labels via the shared pure helpers (the
-  // web's `useEntityRuntimeInfo` reads its own provider context, so
-  // mobile queries its runners collection directly).
-  const { data: runners = [] } = useLiveQuery(
-    (q) => q.from({ r: runnersCollection }),
-    [runnersCollection]
-  )
-
-  const runnerId = entity ? getEntityRunnerId(entity) : null
-  const runner = resolveRunner(runners, runnerId)
-  const runnerLabel = runnerId ? runnerDisplayLabel(runner, runnerId) : null
-  const sandboxLabel = entity
-    ? resolveEffectiveSandbox(runners, entity, runner).label
-    : null
 
   return (
     <BottomSheet open={open} onClose={onClose}>
       {entity && (
         <>
-          {/* Info header — field-for-field mirror of the web hover card. */}
-          <View style={styles.info}>
-            <Text style={styles.infoTitle} numberOfLines={2}>
-              {getEntityDisplayTitle(entity)}
-            </Text>
-            <Text style={styles.infoId} numberOfLines={1}>
-              {entity.url.replace(/^\//, ``)}
-            </Text>
-            <Text style={styles.infoMeta} numberOfLines={1}>
-              {entity.type} · {entity.status}
-              {childCount > 0
-                ? ` · ${childCount} subagent${childCount === 1 ? `` : `s`}`
-                : ``}
-            </Text>
-            <View style={styles.infoRows}>
-              {runnerLabel && <InfoRow label="Runner" value={runnerLabel} />}
-              {sandboxLabel && <InfoRow label="Sandbox" value={sandboxLabel} />}
-              <InfoRow
-                label="Spawned"
-                value={formatAbsoluteDateTime(entity.created_at)}
-              />
-              <InfoRow
-                label="Last active"
-                value={formatRelativeTime(entity.updated_at)}
-              />
-            </View>
-          </View>
+          <EntityInfo entity={entity} childCount={childCount} />
           <BottomSheetSeparator />
         </>
       )}
@@ -114,6 +71,65 @@ export function SessionRowMenu({
         />
       </BottomSheetSection>
     </BottomSheet>
+  )
+}
+
+/**
+ * Info header — field-for-field mirror of the web hover card. Split
+ * out so the runners live query only subscribes while the sheet has
+ * an entity (it stays mounted, closed, for the screen's lifetime).
+ */
+function EntityInfo({
+  entity,
+  childCount,
+}: {
+  entity: ElectricEntity
+  childCount: number
+}): React.ReactElement {
+  const tokens = useTokens()
+  const styles = useMemo(() => createStyles(tokens), [tokens])
+  const { runnersCollection } = useAgents()
+
+  // Resolve runner/sandbox labels via the shared pure helpers (the
+  // web's `useEntityRuntimeInfo` reads its own provider context, so
+  // mobile queries its runners collection directly).
+  const { data: runners = [] } = useLiveQuery(
+    (q) => q.from({ r: runnersCollection }),
+    [runnersCollection]
+  )
+
+  const runnerId = getEntityRunnerId(entity)
+  const runner = resolveRunner(runners, runnerId)
+  const runnerLabel = runnerId ? runnerDisplayLabel(runner, runnerId) : null
+  const sandboxLabel = resolveEffectiveSandbox(runners, entity, runner).label
+
+  return (
+    <View style={styles.info}>
+      <Text style={styles.infoTitle} numberOfLines={2}>
+        {getEntityDisplayTitle(entity)}
+      </Text>
+      <Text style={styles.infoId} numberOfLines={1}>
+        {entity.url.replace(/^\//, ``)}
+      </Text>
+      <Text style={styles.infoMeta} numberOfLines={1}>
+        {entity.type} · {entity.status}
+        {childCount > 0
+          ? ` · ${childCount} subagent${childCount === 1 ? `` : `s`}`
+          : ``}
+      </Text>
+      <View style={styles.infoRows}>
+        {runnerLabel && <InfoRow label="Runner" value={runnerLabel} />}
+        {sandboxLabel && <InfoRow label="Sandbox" value={sandboxLabel} />}
+        <InfoRow
+          label="Spawned"
+          value={formatAbsoluteDateTime(entity.created_at)}
+        />
+        <InfoRow
+          label="Last active"
+          value={formatRelativeTime(entity.updated_at)}
+        />
+      </View>
+    </View>
   )
 }
 

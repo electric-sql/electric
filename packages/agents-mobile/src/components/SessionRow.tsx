@@ -101,6 +101,9 @@ export const SessionRow = memo(function SessionRow({
         onLongPress={onLongPress}
         // 350ms; RN's 500ms default feels unresponsive for a context menu.
         delayLongPress={350}
+        accessibilityHint={
+          onLongPress ? `Long press for session options` : undefined
+        }
       >
         {({ pressed }) => (
           <>

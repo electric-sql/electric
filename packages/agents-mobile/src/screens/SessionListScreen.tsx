@@ -93,10 +93,14 @@ export function SessionListScreen({
   const [query, setQuery] = useState(``)
   const [menuOpen, setMenuOpen] = useState(false)
 
-  // Long-pressed row whose context menu (info + pin) is open.
-  const [menuEntity, setMenuEntity] = useState<ElectricEntity | null>(null)
+  // Long-pressed row whose context menu (info + pin) is open. The
+  // snapshot only identifies the row — the rendered entity is
+  // re-resolved from the live query below so the sheet tracks
+  // updates (status, title) while open, falling back to the
+  // snapshot if the entity leaves the collection.
+  const [menuSnapshot, setMenuSnapshot] = useState<ElectricEntity | null>(null)
   const openRowMenu = useCallback(
-    (entity: ElectricEntity) => setMenuEntity(entity),
+    (entity: ElectricEntity) => setMenuSnapshot(entity),
     []
   )
 
@@ -111,6 +115,11 @@ export function SessionListScreen({
         .orderBy(({ entity }) => entity.updated_at, `desc`),
     [entitiesCollection]
   )
+
+  const menuEntity = useMemo(() => {
+    if (!menuSnapshot) return null
+    return entities.find((e) => e.url === menuSnapshot.url) ?? menuSnapshot
+  }, [entities, menuSnapshot])
 
   // Apply Show > Type / Show > Status filters before the tree build
   // so a hidden parent doesn't take its (visible) children with it —
@@ -391,7 +400,7 @@ export function SessionListScreen({
 
       <SessionRowMenu
         open={menuEntity !== null}
-        onClose={() => setMenuEntity(null)}
+        onClose={() => setMenuSnapshot(null)}
         entity={menuEntity}
         childCount={menuChildCount}
         pinned={menuEntity ? pinnedSet.has(menuEntity.url) : false}
