@@ -497,7 +497,10 @@ export class EntityManager {
 
   async ensurePrincipal(principal: Principal): Promise<ElectricAgentsEntity> {
     const existing = await this.registry.getEntity(principal.url)
-    if (existing) return existing
+    if (existing) {
+      await this.ensureUserPrincipal(principal)
+      return existing
+    }
     await this.ensurePrincipalEntityType()
     try {
       const entity = await this.spawn(`principal`, {
@@ -522,6 +525,7 @@ export class EntityManager {
           },
         })
       )
+      await this.ensureUserPrincipal(principal)
       return entity
     } catch (error) {
       if (
@@ -529,9 +533,18 @@ export class EntityManager {
         error.code === ErrCodeDuplicateURL
       ) {
         const raced = await this.registry.getEntity(principal.url)
-        if (raced) return raced
+        if (raced) {
+          await this.ensureUserPrincipal(principal)
+          return raced
+        }
       }
       throw error
+    }
+  }
+
+  private async ensureUserPrincipal(principal: Principal): Promise<void> {
+    if (principal.kind === `user`) {
+      await this.registry.ensureUserForPrincipal(principal)
     }
   }
 
