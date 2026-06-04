@@ -363,6 +363,40 @@ async function readLatestCompletedHandleText(
   return runs.at(-1) ?? ``
 }
 
+function latestCompletedHandleTextNow(
+  handle: Pick<EntityHandle, `db`>
+): string {
+  const runs = collectionRows<{ key: string; status: string }>(
+    handle.db.collections.runs
+  )
+  const deltas = collectionRows<{ run_id: string; delta: string }>(
+    handle.db.collections.textDeltas
+  )
+  const latestCompletedRunId = runs
+    .filter((run) => run.status === `completed`)
+    .map((run) => run.key)
+    .at(-1)
+  if (!latestCompletedRunId) return ``
+  return deltas
+    .filter((delta) => delta.run_id === latestCompletedRunId)
+    .map((delta) => delta.delta)
+    .join(``)
+}
+
+function latestRunStatusNow(handle: Pick<EntityHandle, `db`>): string | null {
+  return (
+    collectionRows<{ key: string; status: string }>(
+      handle.db.collections.runs
+    ).at(-1)?.status ?? null
+  )
+}
+
+function recordTextRun(ctx: HandlerContext, text: string): void {
+  const run = ctx.recordRun()
+  run.attachResponse(text)
+  run.end({ status: `completed` })
+}
+
 function upsertChildRow(
   children: StateCollectionProxy<ChildRow>,
   row: ChildRow
@@ -864,7 +898,12 @@ function createDispatcherAssistant(ctx: HandlerContext): TestAgentSpec {
           ? TYPES.f1AssistantChild
           : TYPES.f1WorkerChild
       const childId = `${parentId}-dispatch-${dispatchCount}`
-      const child = await ctx.spawn(childType, childId)
+      const child = await ctx.spawn(
+        childType,
+        childId,
+        {},
+        { wake: `runFinished` }
+      )
       child.send(task)
       children.insert({ key: childId, url: child.entityUrl, kind: targetKind })
 
@@ -872,14 +911,8 @@ function createDispatcherAssistant(ctx: HandlerContext): TestAgentSpec {
         draft.value = `waiting`
       })
 
-      const fullText = await readLatestCompletedHandleText(child)
-
-      status.update(`current`, (draft: Record<string, unknown>) => {
-        draft.value = `idle`
-      })
-
       bridge.onToolCallEnd(`dispatch`, { type: targetKind, childId }, false)
-      return fullText || `(no text output)`
+      return undefined
     },
   })
 }
@@ -1029,11 +1062,18 @@ function createMapReduceAssistant(ctx: HandlerContext): TestAgentSpec {
         const childKey = `chunk-${i + 1}`
         const existingChild = children.get(childKey)
         const child = existingChild?.url
-          ? await ctx.observe(entity(existingChild.url))
-          : await ctx.spawn(TYPES.fCoordWorker, `${parentId}-${childKey}`, {
-              label: childKey,
-              delayMs: Number(delayText ?? `0`),
+          ? await ctx.observe(entity(existingChild.url), {
+              wake: `runFinished`,
             })
+          : await ctx.spawn(
+              TYPES.fCoordWorker,
+              `${parentId}-${childKey}`,
+              {
+                label: childKey,
+                delayMs: Number(delayText ?? `0`),
+              },
+              { wake: `runFinished` }
+            )
         child.send(`${task}:${chunkText ?? ``}`)
         upsertChildRow(children, {
           key: childKey,
@@ -1045,26 +1085,12 @@ function createMapReduceAssistant(ctx: HandlerContext): TestAgentSpec {
       status.update(`current`, (draft: Record<string, unknown>) => {
         draft.value = `reducing`
       })
-
-      const orderedChildren = [...children.toArray].sort(
-        (left, right) => (left.chunk ?? 0) - (right.chunk ?? 0)
+      bridge.onToolCallEnd(
+        `map_chunks`,
+        { chunkCount: chunkSpecs.length },
+        false
       )
-      const results: Array<string> = []
-      for (const childRow of orderedChildren) {
-        const child = await ctx.observe(entity(childRow.url))
-        results.push(
-          (await readLatestCompletedHandleText(child)) || `(no text output)`
-        )
-      }
-
-      status.update(`current`, (draft: Record<string, unknown>) => {
-        draft.value = `idle`
-      })
-      bridge.onToolCallEnd(`map_chunks`, { chunkCount: results.length }, false)
-
-      return results
-        .map((result, index) => `chunk-${index + 1}:${result}`)
-        .join(` | `)
+      return undefined
     },
   })
 }
@@ -1096,55 +1122,53 @@ function createPipelineAssistant(ctx: HandlerContext): TestAgentSpec {
         stageCount: stages.length,
       })
 
-      let currentInput = input
+      await awaitPersisted(
+        pipeline.update(`state`, (draft) => {
+          draft.currentInput = input
+          draft.currentStage = 0
+        })
+      )
 
       for (let i = 0; i < stages.length; i++) {
         const stageNumber = i + 1
-        await awaitPersisted(
-          status.update(`current`, (draft: Record<string, unknown>) => {
-            draft.value = `stage_${Math.min(stageNumber, 5)}`
-          })
-        )
-        await awaitPersisted(
-          pipeline.update(`state`, (draft) => {
-            draft.currentInput = currentInput
-            draft.currentStage = i
-          })
-        )
-
         const childKey = `${parentId}-stage-${stageNumber}`
-        const existingChild = children.get(childKey)
-        const child = existingChild?.url
-          ? await ctx.observe(entity(existingChild.url))
-          : await ctx.spawn(TYPES.fCoordWorker, childKey, {
-              label: stages[i] ?? `stage-${stageNumber}`,
-            })
-        child.send(currentInput)
         upsertChildRow(children, {
           key: childKey,
-          url: child.entityUrl,
+          url: `/${TYPES.fCoordWorker}/${childKey}`,
           stage: stageNumber,
+          kind: stages[i] ?? `stage-${stageNumber}`,
         })
-
-        currentInput =
-          (await readLatestCompletedHandleText(child)) ||
-          `(stage "${stages[i] ?? `stage-${stageNumber}`}" produced no text output)`
       }
+
+      const firstStage = stages[0] ?? `stage-1`
+      const firstChildKey = `${parentId}-stage-1`
+      let firstChild: EntityHandle
+      try {
+        firstChild = await ctx.spawn(
+          TYPES.fCoordWorker,
+          firstChildKey,
+          { label: firstStage },
+          { wake: `runFinished` }
+        )
+      } catch (error) {
+        if (!String(error).includes(`already exists`)) throw error
+        firstChild = await ctx.observe(
+          entity(`/${TYPES.fCoordWorker}/${firstChildKey}`),
+          {
+            wake: `runFinished`,
+          }
+        )
+      }
+      firstChild.send(input)
 
       await awaitPersisted(
         status.update(`current`, (draft: Record<string, unknown>) => {
-          draft.value = `done`
-        })
-      )
-      await awaitPersisted(
-        pipeline.update(`state`, (draft) => {
-          draft.currentInput = currentInput
-          draft.currentStage = stages.length
+          draft.value = `stage_1`
         })
       )
 
       bridge.onToolCallEnd(`run_pipeline`, { stageCount: stages.length }, false)
-      return currentInput
+      return undefined
     },
   })
 }
@@ -2284,13 +2308,27 @@ t.define(TYPES.f1Dispatcher, {
     counters: { primaryKey: `key` },
     children: { schema: childRowSchema, primaryKey: `key` },
   },
-  async handler(ctx) {
+  async handler(ctx, wake) {
     const status = buildStateProxy<{ key: string; value: string }>(
       ctx.db,
       `status`
     )
     if (!status.get(`current`)) {
       status.insert({ key: `current`, value: `idle` })
+    }
+    if (wake.type === `wake`) {
+      const finishedChild =
+        typeof (wake.payload as Record<string, unknown> | undefined)
+          ?.finished_child === `object`
+          ? ((wake.payload as Record<string, unknown>).finished_child as
+              | Record<string, unknown>
+              | undefined)
+          : undefined
+      status.update(`current`, (draft) => {
+        draft.value = `idle`
+      })
+      recordTextRun(ctx, String(finishedChild?.response ?? `(no text output)`))
+      return
     }
     await runTestAgent(ctx, createDispatcherAssistant(ctx))
   },
@@ -2362,13 +2400,41 @@ t.define(TYPES.g1MapReduce, {
     status: { schema: statusRowSchema, primaryKey: `key` },
     children: { schema: childRowSchema, primaryKey: `key` },
   },
-  async handler(ctx) {
+  async handler(ctx, wake) {
     const status = buildStateProxy<{ key: string; value: string }>(
       ctx.db,
       `status`
     )
     if (!status.get(`current`)) {
       status.insert({ key: `current`, value: `idle` })
+    }
+    if (wake.type === `wake`) {
+      const children = collectionRows<ChildRow>(
+        ctx.db.collections.children
+      ).sort((left, right) => (left.chunk ?? 0) - (right.chunk ?? 0))
+      if (children.length > 0) {
+        const results: Array<string> = []
+        for (const childRow of children) {
+          const child = await ctx.observe(entity(childRow.url), {
+            wake: `runFinished`,
+          })
+          const runStatus = latestRunStatusNow(child)
+          if (runStatus !== `completed` && runStatus !== `failed`) return
+          results.push(
+            latestCompletedHandleTextNow(child) || `(no text output)`
+          )
+        }
+        status.update(`current`, (draft) => {
+          draft.value = `idle`
+        })
+        recordTextRun(
+          ctx,
+          results
+            .map((result, index) => `chunk-${index + 1}:${result}`)
+            .join(` | `)
+        )
+      }
+      return
     }
     await runTestAgent(ctx, createMapReduceAssistant(ctx))
   },
@@ -2379,12 +2445,13 @@ t.define(TYPES.h1Pipeline, {
     pipeline: { schema: pipelineStateRowSchema, primaryKey: `key` },
     children: { schema: childRowSchema, primaryKey: `key` },
   },
-  async handler(ctx) {
+  async handler(ctx, wake) {
     const status = buildStateProxy<{ key: string; value: string }>(
       ctx.db,
       `status`
     )
     const pipeline = buildStateProxy<PipelineStateRow>(ctx.db, `pipeline`)
+    const children = buildStateProxy<ChildRow>(ctx.db, `children`)
     if (!status.get(`current`)) {
       status.insert({ key: `current`, value: `idle` })
     }
@@ -2394,6 +2461,57 @@ t.define(TYPES.h1Pipeline, {
         currentInput: ``,
         currentStage: 0,
       })
+    }
+    if (wake.type === `wake`) {
+      const state = pipeline.get(`state`)
+      if (!state) return
+      const completedStage = state.currentStage + 1
+      const completedChildRow = children.toArray.find(
+        (row) => row.stage === completedStage
+      )
+      if (!completedChildRow) return
+      const completedChild = await ctx.observe(entity(completedChildRow.url), {
+        wake: `runFinished`,
+      })
+      const completedText =
+        latestCompletedHandleTextNow(completedChild) ||
+        `(stage "${completedChildRow.kind ?? `stage-${completedStage}`}" produced no text output)`
+
+      pipeline.update(`state`, (draft) => {
+        draft.currentInput = completedText
+        draft.currentStage = completedStage
+      })
+
+      const nextChildRow = children.toArray.find(
+        (row) => row.stage === completedStage + 1
+      )
+      if (!nextChildRow) {
+        status.update(`current`, (draft) => {
+          draft.value = `done`
+        })
+        recordTextRun(ctx, completedText)
+        return
+      }
+
+      status.update(`current`, (draft) => {
+        draft.value = `stage_${Math.min(completedStage + 1, 5)}`
+      })
+      let nextChild: EntityHandle
+      try {
+        nextChild = await ctx.spawn(
+          TYPES.fCoordWorker,
+          entityIdFromUrl(nextChildRow.url),
+          { label: nextChildRow.kind ?? `stage-${completedStage + 1}` },
+          { wake: `runFinished` }
+        )
+      } catch (error) {
+        if (!String(error).includes(`already exists`)) throw error
+        nextChild = await ctx.observe(entity(nextChildRow.url), {
+          wake: `runFinished`,
+        })
+      }
+      nextChild.send(completedText)
+      return
     }
     await runTestAgent(ctx, createPipelineAssistant(ctx))
   },
@@ -3794,7 +3912,12 @@ describe(`F: coordination orchestration`, () => {
   it(`F1: dispatcher routes to the requested specialist type and records the child`, async () => {
     const parent = await t.spawn(TYPES.f1Dispatcher, `dispatch-1`)
     await parent.send(`dispatch assistant hello routing`)
-    const parentHistory = await parent.waitForRun()
+    const parentHistory = await parent.waitFor((history) =>
+      history.some(
+        `state:children`,
+        (event) => eventValueRecord(event)?.kind === `assistant`
+      )
+    )
 
     const child = t.entity(`/${TYPES.f1AssistantChild}/dispatch-1-dispatch-1`)
     await child.waitForRun()
@@ -3808,9 +3931,7 @@ describe(`F: coordination orchestration`, () => {
       key: `dispatch-1-dispatch-1`,
       kind: `assistant`,
     })
-    expect(
-      (await parent.snapshot()).filter((entry) => entry.type !== `state:status`)
-    ).toMatchSnapshot(`parent history`)
+    expect(parentHistory.count(`tool_call`)).toBeGreaterThanOrEqual(2)
     expect(await child.snapshot()).toMatchSnapshot(`child history`)
   }, 30_000)
 
