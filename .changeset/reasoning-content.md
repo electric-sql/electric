@@ -1,6 +1,7 @@
 ---
 '@electric-ax/agents-server-ui': minor
 '@electric-ax/agents-runtime': minor
+'@electric-ax/agents': patch
 '@electric-ax/agents-desktop': patch
 ---
 
