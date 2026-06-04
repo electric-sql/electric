@@ -460,7 +460,7 @@ defmodule Electric.Replication.ShapeLogCollector do
         num_relations: MapSet.size(txn_fragment.affected_relations),
         xid: txn_fragment.xid,
         complete_transaction?: TransactionFragment.complete_transaction?(txn_fragment)
-      ],
+      ] ++ fragments_wall_duration_attrs(txn_fragment),
       state.stack_id,
       fn ->
         OpenTelemetry.start_interval(:"shape_log_collector.logging.duration_µs")
@@ -488,6 +488,21 @@ defmodule Electric.Replication.ShapeLogCollector do
       end
     )
   end
+
+  # On the commit fragment, surface the wall-clock time the whole transaction's
+  # fragments spanned as received from Postgres (begin -> commit). Because the
+  # replication stream is consumed on demand, this can be far larger than the
+  # per-fragment processing time and is the signal for transactions whose
+  # fragments straddle a consumer's suspend threshold.
+  defp fragments_wall_duration_attrs(%TransactionFragment{commit: commit})
+       when not is_nil(commit) do
+    case commit.fragments_wall_duration_us do
+      nil -> []
+      us -> ["pg_txn.fragments_wall_duration_µs": us]
+    end
+  end
+
+  defp fragments_wall_duration_attrs(_txn_fragment), do: []
 
   # If we've already processed a txn_fragment, then drop it without processing
   defp handle_txn_fragment(%{last_processed_offset: last_processed_offset} = state, txn_fragment)

@@ -32,6 +32,7 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
             tx_op_index: nil,
             tx_change_count: 0,
             tx_size: 0,
+            tx_started_at_mono: nil,
             max_tx_size: nil,
             max_batch_size: nil,
             txn_fragment: nil
@@ -41,6 +42,7 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
           tx_op_index: non_neg_integer() | nil,
           tx_change_count: non_neg_integer(),
           tx_size: non_neg_integer(),
+          tx_started_at_mono: integer() | nil,
           max_tx_size: non_neg_integer() | nil,
           max_batch_size: non_neg_integer(),
           txn_fragment: TransactionFragment.t() | nil
@@ -79,6 +81,7 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
        | tx_op_index: 0,
          tx_size: 0,
          tx_change_count: 0,
+         tx_started_at_mono: System.monotonic_time(),
          txn_fragment: %TransactionFragment{
            xid: msg.xid,
            lsn: msg.final_lsn,
@@ -223,7 +226,8 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
       transaction_size: state.tx_size,
       txn_change_count: state.tx_change_count,
       received_at_mono: now_mono,
-      initial_receive_lag: initial_lag
+      initial_receive_lag: initial_lag,
+      fragments_wall_duration_us: fragments_wall_duration_us(state, now_mono)
     }
 
     returned_txn_fragment =
@@ -236,8 +240,21 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
        | tx_op_index: nil,
          tx_size: 0,
          tx_change_count: 0,
+         tx_started_at_mono: nil,
          txn_fragment: nil
      }}
+  end
+
+  # Wall-clock time spanned by the transaction's fragments as received from
+  # Postgres, i.e. from the begin message to this commit. Because Electric
+  # consumes the replication stream on demand (e.g. it can be paused while
+  # database connections are scaled down), this includes any idle gaps between
+  # fragments and so can be much larger than the time spent processing them.
+  # nil when the begin was not seen by this converter (e.g. after a reconnect).
+  defp fragments_wall_duration_us(%__MODULE__{tx_started_at_mono: nil}, _now_mono), do: nil
+
+  defp fragments_wall_duration_us(%__MODULE__{tx_started_at_mono: started_mono}, now_mono) do
+    System.convert_time_unit(now_mono - started_mono, :native, :microsecond)
   end
 
   defguard in_transaction?(converter) when not is_nil(converter.txn_fragment)

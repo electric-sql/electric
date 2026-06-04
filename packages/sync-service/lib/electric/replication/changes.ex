@@ -40,13 +40,15 @@ defmodule Electric.Replication.Changes do
             transaction_size: non_neg_integer(),
             txn_change_count: non_neg_integer(),
             received_at_mono: integer() | nil,
-            initial_receive_lag: non_neg_integer() | nil
+            initial_receive_lag: non_neg_integer() | nil,
+            fragments_wall_duration_us: non_neg_integer() | nil
           }
 
     defstruct [
       :commit_timestamp,
       :received_at_mono,
       :initial_receive_lag,
+      :fragments_wall_duration_us,
       transaction_size: 0,
       txn_change_count: 0
     ]
