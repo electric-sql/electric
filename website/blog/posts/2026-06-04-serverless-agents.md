@@ -48,36 +48,6 @@ published: true
   }
 </style>
 
-<!--
-
-Tweets:
-
-Tweet 1
-
-```
-In the last few weeks, every major AI platform has shipped managed agents. On the same kind of sandbox-based architecture.
-
-That architecture is wrong. Managed agents don't belong in sandboxes. They belong in functions.
-
-Serverless agents with stateless logic, durability in the data layer and tool execution in backend systems. That's the architecture to actually wire agents into the workforce.
-```
-
-Tweet 2
-
-```
-The world needs managed agents. The architecture for them is serverless:
-<blog link>
-```
-
-Tweet 3:
-
-```
-You can build and run serverless agents today on the Electric Agents platform:
-<launch tweet>
-```
-
--->
-
 In the last few weeks, every major AI platform has shipped [managed&nbsp;agents](#managed-agents).
 
 They're responding to the same demand, for infrastructure to bring agents online, with the same kind of [sandbox-based architecture](#the-rise-of-the-sandbox). That architecture is&nbsp;wrong.
@@ -90,7 +60,7 @@ That's the architecture &mdash; [serverless agents](#principles-of-serverless-ag
 > Build and run serverless agents with [Electric&nbsp;Agents](/blog/2026/04/29/introducing-electric-agents) now. See the [Walkthrough](/docs/agents/walkthrough)&nbsp;guide.
 
 <div class="embed-container">
-  <YoutubeEmbed video-id="..." title="Serverless agents -- agents in functions, not sandboxes" />
+  <YoutubeEmbed video-id="beYF8FV019w" title="Electric Agents walkthrough" />
 </div>
 
 
@@ -330,15 +300,13 @@ With Electric, agents are your code in your app, running on your compute with yo
 See the [Walkthrough guide](/docs/agents/walkthrough) and video below to go from your first entity definition to collaborative, serverless, multi-agent systems on Electric:
 
 <div class="embed-container">
-  <YoutubeEmbed video-id="..." title="Serverless agents -- agents in functions, not sandboxes" />
+  <YoutubeEmbed video-id="beYF8FV019w" title="Electric Agents walkthrough" />
 </div>
 
 ### Next steps
 
 Managed agents don't belong in sandboxes. They belong in functions, with stateless agent logic, durability in the data layer and tool execution in backend systems.
 
-You can build serverless agents today, on [Electric Agents](/agents/). Re-using your existing prompts, tool calls, AI engineering. As part of your existing web infrastructure.
+You can [build serverless agents today](/docs/agents/quickstart), on [Electric Agents](/blog/2026/04/29/introducing-electric-agents). Re-using your existing prompts, tool calls, AI engineering. As part of your existing web infrastructure.
 
-See the [blog&nbsp;post](/blog/2026/04/29/introducing-electric-agents) and dive into the [Quickstart](/docs/agents/quickstart) and [Walkthrough](/docs/agents/walkthrough) guides now.
-
-If there's anything you'd like to discuss, you're welcome to [join the Electric Discord](https://discord.electric-sql.com), say hello and ask any questions there.
+If you have ideas or questions, let us know on the [Electric Discord](https://discord.electric-sql.com).
