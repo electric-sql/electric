@@ -2050,14 +2050,7 @@ export async function processWake(
             .then((result) => result.attachment),
         doReadAttachment: (id) =>
           serverClient.readAttachment({ entityUrl, id }),
-        prepareAgentRun: async () => {
-          await waitForSharedStateWiring()
-          await drainAllPendingWrites()
-          await Promise.all(pendingWakeRegistrations)
-          pendingWakeRegistrations.length = 0
-          await wakeSession.commitManifestEntries()
-          await flushProducedWrites()
-        },
+        prepareAgentRun: waitForSharedStateWiring,
         executeSend: (send) => executeSend(send),
         doSetTag: (key, value) =>
           serverClient.setTag(entityUrl, key, value, writeToken),

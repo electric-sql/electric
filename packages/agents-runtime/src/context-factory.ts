@@ -276,8 +276,9 @@ function createSlashCommandHelpers(
   const staticCommands = new Map(
     (config.staticSlashCommands ?? []).map((command) => [command.name, command])
   )
+  const slashCommandsCollection = config.db.collections.slashCommands
   const rows = new Map(
-    (config.db.collections.slashCommands.toArray as Array<SlashCommandRow>).map(
+    ((slashCommandsCollection?.toArray ?? []) as Array<SlashCommandRow>).map(
       (row) => [row.name, row]
     )
   )
