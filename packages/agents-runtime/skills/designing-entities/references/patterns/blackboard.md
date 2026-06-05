@@ -86,7 +86,7 @@ async handler(ctx, wake) {
           systemPrompt: "Argue FOR the proposition...",
           sharedState: { id: sharedId, schema: debateSchema },
         },
-        { initialMessage: `Topic: ${topic}`, wake: "runFinished" }
+        { initialMessage: `Topic: ${topic}`, wake: { on: "runFinished", includeResponse: true } }
       )
       // ... spawn `con` similarly ...
 

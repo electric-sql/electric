@@ -153,7 +153,7 @@ Current state:
 
 ### 2. Coordination Failure And Recovery
 
-- [ ] dispatcher child failure path once dispatcher stops depending on same-wake `child.text()` aggregation
+- [ ] dispatcher child failure path with runFinished continuation aggregation
 - [ ] dispatcher repeated failures across multiple wakes preserve child rows and counters
 - [ ] child failure plus later replacement child on the same parent
 
@@ -217,7 +217,7 @@ These map the newer brainstorm into the DSL plan. The important distinction is:
 
 - `1-8` basic entity lifecycle
   covered by `A1-A14`, `C1-C3`
-- `9-19` spawn mechanics except `child.run`
+- `9-19` spawn mechanics with child completion represented by runFinished wakes
   covered by `B1-B4`, `A1-A2`, `F3`, `F8`
 - `21-27` core state collection behavior
   covered by `C1-C3`, `A12`, `D1-D10`
@@ -249,10 +249,7 @@ These are important, but the right place is unit/integration tests around
 
 ### Not Current Product Direction
 
-- `20` `child.run` resolves when child run completes
-  we do not want to build the DSL around `await child.run()` orchestration
-- `87` child completion resolves parent `child.run` promise
-  same reason; this bakes in the wrong orchestration shape
+- Child completion wakes the parent via `runFinished`; orchestration should be represented as durable continuation wakes
 
 ### Real Remaining DSL Backlog From The Imported List
 
@@ -270,9 +267,7 @@ unsorted list.
 
 These are not good DSL targets unless the underlying product/runtime shape changes.
 
-- Repeated same-entity map-reduce reaggregation that relies on synchronous
-  `child.text()` reads within the same wake.
-- Repeated same-entity pipeline reruns that assume we can safely bless
-  same-wake child reuse and immediate aggregation.
+- Repeated same-entity map-reduce reaggregation that relies on synchronous child output reads.
+- Repeated same-entity pipeline reruns that assume immediate child reuse and aggregation.
 - Tests that rely on incidental scheduler ordering rather than durable semantic
   history.

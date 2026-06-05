@@ -5,7 +5,6 @@ import {
   queryOnce,
 } from '@durable-streams/state/db'
 import { createWakeSession } from './wake-session'
-import { comparePointers, type EventPointer } from './event-pointer'
 import {
   manifestChildKey,
   manifestEffectKey,
@@ -637,69 +636,6 @@ export function createSetupContext(
     }
   }
 
-  type OffsetAwareCollection<TRow extends { key: string | number }> = {
-    toArray: Array<TRow>
-    __electricRowOffsets?: Map<string | number, EventPointer>
-  }
-
-  function sortRowsByCollectionOrder<TRow extends { key: string | number }>(
-    collection: OffsetAwareCollection<TRow>
-  ): Array<TRow> {
-    return [...collection.toArray].sort((left, right) => {
-      const leftPointer = collection.__electricRowOffsets?.get(left.key)
-      const rightPointer = collection.__electricRowOffsets?.get(right.key)
-      if (leftPointer && rightPointer) {
-        return comparePointers(leftPointer, rightPointer)
-      }
-      if (leftPointer) return -1
-      if (rightPointer) return 1
-
-      const leftSeq = Reflect.get(left, `_seq`)
-      const rightSeq = Reflect.get(right, `_seq`)
-      if (typeof leftSeq === `number` && typeof rightSeq === `number`) {
-        return leftSeq - rightSeq
-      }
-      if (typeof leftSeq === `number`) return -1
-      if (typeof rightSeq === `number`) return 1
-      return String(left.key).localeCompare(String(right.key))
-    })
-  }
-
-  function readCompletedRunTexts(childDb: EntityStreamDB): Array<string> {
-    const runs = sortRowsByCollectionOrder(childDb.collections.runs)
-    const deltas = sortRowsByCollectionOrder(childDb.collections.textDeltas)
-
-    const completedRunIds = runs
-      .filter((r) => r.status === `completed`)
-      .map((r) => r.key)
-
-    const deltasByRun = new Map<string, Array<string>>()
-    for (const d of deltas) {
-      const chunks = deltasByRun.get(d.run_id) ?? []
-      chunks.push(d.delta)
-      deltasByRun.set(d.run_id, chunks)
-    }
-
-    return completedRunIds
-      .map((runId) => (deltasByRun.get(runId) ?? []).join(``))
-      .filter((text) => text.length > 0)
-  }
-
-  function latestRunStatus(
-    childDb: EntityStreamDB
-  ): `completed` | `failed` | `running` | null {
-    const runs = childDb.collections.runs.toArray as Array<{
-      key: string
-      status: string
-    }>
-    const latestRun = runs.at(-1)
-    if (!latestRun) return null
-    if (latestRun.status === `completed` || latestRun.status === `failed`) {
-      return latestRun.status
-    }
-    return `running`
-  }
-
   async function ensureObservedHandle(
     source: ObservationSource,
     opts?: { preload?: boolean; wake?: Wake }
@@ -739,17 +675,6 @@ export function createSetupContext(
 
       // ---- Inline wiring (production path) ----
       if (wiring) {
-        let runResolve: () => void = () => {}
-        let runPromise: Promise<void> = Promise.resolve(undefined)
-        const beginTrackedRun = () => {
-          runPromise = new Promise<void>((resolve) => {
-            runResolve = () => resolve(undefined)
-          })
-        }
-        const resolveTrackedRun = () => {
-          runResolve()
-        }
-
         wakeSession.registerSourceHandle(targetUrl, {
           sourceType: `entity`,
           wireDb: () => {},
@@ -769,12 +694,6 @@ export function createSetupContext(
           observedType,
           (event) => {
             observeEvents.push(event)
-            if (event.type === `run` && event.headers.operation === `update`) {
-              const value = event.value as { status?: string } | undefined
-              if (value?.status === `completed` || value?.status === `failed`) {
-                resolveTrackedRun()
-              }
-            }
           },
           { preload: shouldPreload }
         )
@@ -783,30 +702,18 @@ export function createSetupContext(
           deferredObservedHandles.set(targetUrl, observedDb)
         }
 
-        if (latestRunStatus(observedDb) !== `running`) {
-          resolveTrackedRun()
-        }
-
         const handle: EntityHandle = {
           entityUrl: targetUrl,
           db: observedDb,
           events: observeEvents,
           sourceType: `entity`,
           sourceRef: targetUrl,
-          get run() {
-            return runPromise
-          },
-          async text() {
-            await this.run
-            return readCompletedRunTexts(this.db)
-          },
           send: (msg: unknown) => {
             if (inSetup) {
               throw new Error(
                 `[agent-runtime] send() cannot be called during setup() on observed entity handles`
               )
             }
-            beginTrackedRun()
             return dispatchSend({ targetUrl, payload: msg })
           },
           status: () => {
@@ -822,21 +729,12 @@ export function createSetupContext(
       }
 
       // ---- Deferred wiring (unit test path) ----
-      let runResolve: () => void = () => {}
-      let runPromise: Promise<void> = Promise.resolve(undefined)
       const handle: EntityHandle = {
         entityUrl: targetUrl,
         sourceType: `entity`,
         sourceRef: targetUrl,
         db: null as unknown as EntityStreamDB,
         events: [],
-        get run() {
-          return runPromise
-        },
-        async text() {
-          await this.run
-          return readCompletedRunTexts(this.db)
-        },
         send: (msg: unknown) => {
           if (inSetup) {
             throw new Error(
@@ -863,12 +761,6 @@ export function createSetupContext(
               )
             }
             handle.db = observedDb
-            runPromise = new Promise<void>((res) => {
-              runResolve = () => res(undefined)
-            })
-            if (latestRunStatus(observedDb) !== `running`) {
-              runResolve()
-            }
             resolve()
           },
         })
@@ -1005,11 +897,7 @@ export function createSetupContext(
         ...(opts?.wake ? { wake: opts.wake } : {}),
       })
 
-      let runResolve: () => void
       let spawnError: Error | null = null
-      let runPromise = new Promise<void>((resolve) => {
-        runResolve = resolve
-      })
 
       let realEntityUrl = `/${type}/${id}`
 
@@ -1024,33 +912,6 @@ export function createSetupContext(
         type,
         db: null as unknown as EntityStreamDB,
         events: [],
-        get run(): Promise<void> {
-          if (inSetup) {
-            throw new Error(
-              `child.run cannot be called during setup() — use them in effects instead`
-            )
-          }
-          if (!observeChild) {
-            return Promise.reject(
-              new Error(
-                `child.run is unavailable — spawn(${type}, ${id}, ..., { observe: false }) opted out of child observation`
-              )
-            )
-          }
-          if (spawnError) {
-            return Promise.reject(spawnError)
-          }
-          return runPromise
-        },
-        async text(): Promise<Array<string>> {
-          if (!observeChild) {
-            throw new Error(
-              `child.text is unavailable — spawn(${type}, ${id}, ..., { observe: false }) opted out of child observation`
-            )
-          }
-          await this.run
-          return readCompletedRunTexts(this.db)
-        },
         send: (msg: unknown) => {
           if (inSetup) {
             throw new Error(
@@ -1063,9 +924,6 @@ export function createSetupContext(
           const result = dispatchSend({
             targetUrl: realEntityUrl,
             payload: msg,
-          })
-          runPromise = new Promise<void>((resolve) => {
-            runResolve = resolve
           })
           return result
         },
@@ -1086,12 +944,6 @@ export function createSetupContext(
         // Register spawn handle FIRST, then manifest entry
         wakeSession.registerSpawnHandle(id, {
           wireDb: () => {},
-          resolveRun: () => {
-            runResolve!()
-          },
-          rejectRun: (reason: Error) => {
-            spawnError = reason
-          },
           updateEntityUrl: (newUrl: string) => {
             realEntityUrl = newUrl
             wakeSession.registerManifestEntry(childRow(newUrl))
@@ -1131,35 +983,9 @@ export function createSetupContext(
             const childDb = await wiring.createChildDb(
               `${config.serverBaseUrl}${streamPath}`,
               type,
-              (event) => {
-                if (
-                  event.type === `run` &&
-                  event.headers.operation === `update`
-                ) {
-                  const val = event.value as { status?: string } | undefined
-                  if (val?.status === `completed` || val?.status === `failed`) {
-                    runResolve!()
-                  }
-                }
-              }
+              () => {}
             )
             handle.db = childDb
-
-            // Check if child already has a completed run
-
-            const runs = childDb.collections.runs?.toArray as
-              | Array<{ key: string; status: string }>
-              | undefined
-            if (runs) {
-              const latestRun = runs[runs.length - 1]
-              if (
-                latestRun &&
-                (latestRun.status === `completed` ||
-                  latestRun.status === `failed`)
-              ) {
-                runResolve!()
-              }
-            }
           }
         } catch (err) {
           spawnError = err instanceof Error ? err : new Error(String(err))
@@ -1173,18 +999,11 @@ export function createSetupContext(
 
       // ---- Deferred wiring (unit test path) ----
       // Register spawn handle FIRST so dynamic callbacks can find it
-      const dbReady = new Promise<void>((resolveDb, rejectDb) => {
+      const dbReady = new Promise<void>((resolveDb, _rejectDb) => {
         wakeSession.registerSpawnHandle(id, {
           wireDb: (childDb: EntityStreamDBWithActions) => {
             handle.db = childDb
             resolveDb()
-          },
-          resolveRun: () => {
-            runResolve!()
-          },
-          rejectRun: (reason: Error) => {
-            spawnError = reason
-            rejectDb(reason)
           },
           updateEntityUrl: (newUrl: string) => {
             realEntityUrl = newUrl

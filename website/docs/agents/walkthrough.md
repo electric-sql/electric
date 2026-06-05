@@ -426,7 +426,7 @@ registry.define("manager", {
         'assistant',
         genId(),
         { systemPrompt: `Reverse the user message.` },
-        { initialMessage: wake.payload.text, wake: 'runFinished' }
+        { initialMessage: wake.payload.text, wake: { on: 'runFinished', includeResponse: true } }
       )
     }
 
@@ -449,7 +449,7 @@ if (wake.type === 'inbox') {
     'assistant',
     genId(),
     { systemPrompt: `Reverse the user message.` },
-    { initialMessage: wake.payload.text, wake: 'runFinished' }
+    { initialMessage: wake.payload.text, wake: { on: 'runFinished', includeResponse: true } }
   )
 }
 ```
@@ -515,7 +515,7 @@ function createSpawnAssistantTool(ctx) {
         'assistant',
         genId(),
         {},
-        { initialMessage: task, wake: 'runFinished' },
+        { initialMessage: task, wake: { on: 'runFinished', includeResponse: true } },
       )
 
       return {
@@ -627,7 +627,7 @@ function createSpawnJudgeTool(ctx) {
         'judge',
         genId(),
         {},
-        { initialMessage: `Set up a debate on this topic: ${topic}`, wake: 'runFinished' },
+        { initialMessage: `Set up a debate on this topic: ${topic}`, wake: { on: 'runFinished', includeResponse: true } },
       )
 
       return {
@@ -783,13 +783,13 @@ function createStartDebateTool(ctx: HandlerContext<any, any, any, any>) {
           `assistant`,
           genId(),
           {},
-          { initialMessage: aBrief, wake: `runFinished` }
+          { initialMessage: aBrief, wake: { on: `runFinished`, includeResponse: true } }
         ),
         ctx.spawn(
           `assistant`,
           genId(),
           {},
-          { initialMessage: bBrief, wake: `runFinished` }
+          { initialMessage: bBrief, wake: { on: `runFinished`, includeResponse: true } }
         ),
       ])
 
@@ -1096,11 +1096,11 @@ registry.define(`manager`, {
   async handler(ctx, wake) {
     // When receiving wake notifications ...
     if ((wake.type = `wake`)) {
-      const child = wake.payload?.finished_child
+      const finishedChild = wake.payload?.finished_child
 
       // ... from a judge sub-agent ...
-      if (child?.type === `judge` && child.run_status === `completed`) {
-        const judge = await ctx.observe(entity(child.url))
+      if (finishedChild?.type === `judge` && finishedChild.run_status === `completed`) {
+        const judge = await ctx.observe(entity(finishedChild.url))
 
         // ... ignore them if the debate is still in progress ...
         const debate = judge.db.collections.debate.get(`current`)
@@ -1118,7 +1118,7 @@ registry.define(`manager`, {
 This uses the [`ctx.observe`](/docs/agents/usage/spawning-and-coordinating#observe) api to monitor the state of the judge agent:
 
 ```ts
-const judge = await ctx.observe(entity(child.url))
+const judge = await ctx.observe(entity(finishedChild.url))
 ```
 
 This is a very powerful and expressive mechanism, because it means that agents [don't need to pre-define](/blog/2026/06/04/serverless-agents#turning-the-agent-inside-out) their APIs or communication interfaces.
