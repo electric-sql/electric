@@ -120,7 +120,8 @@ defmodule Electric.Connection.Manager do
       pool_pids: %{admin: nil, snapshot: nil},
       validated_connection_opts: %{replication: nil, pool: nil},
       drop_slot_requested: false,
-      connection_status_check_interval: nil
+      connection_status_check_interval: nil,
+      slot_unblock_notice_sent: false
     ]
   end
 
@@ -131,6 +132,9 @@ defmodule Electric.Connection.Manager do
   alias Electric.StatusMonitor
 
   require Logger
+
+  defguardp admin_pool_available(state)
+            when not is_nil(state.pool_pids.admin) and is_pid(elem(state.pool_pids.admin, 0))
 
   @type status :: :waiting | :starting | :active
 
@@ -145,6 +149,9 @@ defmodule Electric.Connection.Manager do
   @type options :: [option]
 
   @connection_status_check_interval 10_000
+
+  # pg_log_standby_snapshot() is available from PostgreSQL 14.
+  @force_standby_snapshot_min_pg_version 140_000
 
   # Time after establishing replication connection before we consider it successful
   # from a retrying perspective, to allow for setup errors sent over the stream
@@ -366,6 +373,7 @@ defmodule Electric.Connection.Manager do
           state
           | replication_client_pid: pid,
             replication_configuration_blocked_by_pending_transaction: false,
+            slot_unblock_notice_sent: false,
             current_step: {:start_replication_client, :connecting}
         }
 
@@ -567,6 +575,29 @@ defmodule Electric.Connection.Manager do
     {:noreply, state}
   end
 
+  def handle_continue(
+        :unblock_slot_creation,
+        %State{current_step: {:start_replication_client, :configuring_connection}} = state
+      )
+      when admin_pool_available(state) do
+    if is_integer(state.pg_version) and
+         state.pg_version >= @force_standby_snapshot_min_pg_version do
+      pool = pool_name(state.stack_id, :admin)
+
+      case execute_force_standby_snapshot_query(pool) do
+        :ok ->
+          {:noreply, state}
+
+        {:unavailable, reason} ->
+          {:noreply, notify_slot_unblock_unavailable(state, reason)}
+      end
+    else
+      {:noreply, notify_slot_unblock_unavailable(state, :pg_version_too_old)}
+    end
+  end
+
+  def handle_continue(:unblock_slot_creation, state), do: {:noreply, state}
+
   @impl true
   def handle_info(
         {:timeout, tref, {:check_status, :replication_lock}},
@@ -609,7 +640,7 @@ defmodule Electric.Connection.Manager do
         replication_configuration_blocked_by_pending_transaction: true
     }
 
-    {:noreply, state}
+    {:noreply, state, {:continue, :unblock_slot_creation}}
   end
 
   def handle_info({:timeout, tref, {:check_status, _}}, state) do
@@ -1133,6 +1164,48 @@ defmodule Electric.Connection.Manager do
 
   defp pooled_connection_opts(state), do: state.connection_opts
 
+  # Forces Postgres to emit an XLOG_RUNNING_XACTS record so that a logical slot
+  # creation that is waiting for a consistent snapshot can proceed as soon as the
+  # blocking transaction(s) have ended. Returns :ok on success or transient
+  # failure (we'll retry on the next tick), or {:unavailable, code} when the
+  # function cannot be run at all (missing privilege or function).
+  defp execute_force_standby_snapshot_query(pool) do
+    case Postgrex.query(pool, "SELECT pg_log_standby_snapshot()", [], timeout: 5_000) do
+      {:ok, _result} ->
+        Logger.debug("Forced a standby snapshot to unblock replication slot creation")
+        :ok
+
+      {:error, %Postgrex.Error{postgres: %{code: code}}}
+      when code in [:insufficient_privilege, :undefined_function] ->
+        {:unavailable, code}
+
+      {:error, error} ->
+        Logger.warning("Failed to force a standby snapshot: #{inspect(error)}")
+        :ok
+    end
+  catch
+    kind, error ->
+      Logger.warning(
+        "Failed to force a standby snapshot: #{Exception.format(kind, error, __STACKTRACE__)}"
+      )
+
+      :ok
+  end
+
+  defp notify_slot_unblock_unavailable(%State{slot_unblock_notice_sent: true} = state, _reason),
+    do: state
+
+  defp notify_slot_unblock_unavailable(state, reason) do
+    Logger.warning(
+      "Replication slot creation is blocked by a pending transaction and Electric cannot " <>
+        "automatically unblock it (#{reason}). Grant EXECUTE ON FUNCTION pg_log_standby_snapshot() " <>
+        "to Electric's database role (PostgreSQL 14+) so the source can recover without a manual restart."
+    )
+
+    dispatch_stack_event(:replication_slot_unblock_unavailable, state)
+    %{state | slot_unblock_notice_sent: true}
+  end
+
   defp execute_lock_breaker_query(pool, lock_name, pg_backend_pid, database) do
     query = lock_breaker_query(lock_name, pg_backend_pid, database)
 
@@ -1216,9 +1289,6 @@ defmodule Electric.Connection.Manager do
         error
     end
   end
-
-  defguardp admin_pool_available(state)
-            when not is_nil(state.pool_pids.admin) and is_pid(elem(state.pool_pids.admin, 0))
 
   defp drop_publication(state) when not admin_pool_available(state) do
     Logger.warning("Skipping publication drop, pool connection not available")

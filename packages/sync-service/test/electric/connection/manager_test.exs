@@ -92,6 +92,67 @@ defmodule Electric.Connection.ConnectionManagerTest do
     end
   end
 
+  describe "self-healing stuck slot creation" do
+    @tag connection_status_check_interval: 50
+    test "emits a one-time notice and keeps waiting when the function is not permitted",
+         %{stack_id: stack_id} = ctx do
+      parent = self()
+
+      # Intercept only the pg_log_standby_snapshot() call (issued from the manager
+      # process); pass every other Postgrex query through unchanged.
+      Repatch.patch(Postgrex, :query, [mode: :shared], fn
+        _pool, "SELECT pg_log_standby_snapshot()", _params, _opts ->
+          {:error,
+           %Postgrex.Error{
+             postgres: %{
+               code: :insufficient_privilege,
+               severity: "ERROR",
+               message: "permission denied"
+             }
+           }}
+
+        pool, query, params, opts ->
+          Repatch.real(Postgrex, :query, [pool, query, params, opts])
+      end)
+
+      # Allowance doesn't follow the supervision tree, so allow the manager process
+      # to see the shared patch as soon as it has started.
+      spawn_link(fn ->
+        Stream.repeatedly(fn -> 0 end)
+        |> Enum.reduce_while(0, fn _, _ ->
+          case GenServer.whereis(Electric.Connection.Manager.name(stack_id)) do
+            nil ->
+              {:cont, 0}
+
+            pid ->
+              Repatch.allow(parent, pid)
+              {:halt, 0}
+          end
+        end)
+      end)
+
+      # Hold an xid-bearing transaction open so CREATE_REPLICATION_SLOT blocks.
+      # db_config carries an obfuscated password, so deobfuscate it like the test
+      # support does before opening a raw connection.
+      {:ok, blocker} = Postgrex.start_link(Electric.Utils.deobfuscate_password(ctx.db_config))
+      Postgrex.query!(blocker, "BEGIN", [])
+      Postgrex.query!(blocker, "SELECT txid_current()", [])
+
+      start_connection_manager(ctx)
+
+      assert_receive {:stack_status, _,
+                      :replication_slot_creation_blocked_by_pending_transactions},
+                     5_000
+
+      # The notice fires once despite many timer ticks (interval = 50 ms).
+      assert_receive {:stack_status, _, :replication_slot_unblock_unavailable}, 5_000
+      refute_receive {:stack_status, _, :replication_slot_unblock_unavailable}, 500
+
+      Postgrex.query!(blocker, "COMMIT", [])
+      GenServer.stop(blocker)
+    end
+  end
+
   describe "status monitor" do
     setup [:start_connection_manager]
 
