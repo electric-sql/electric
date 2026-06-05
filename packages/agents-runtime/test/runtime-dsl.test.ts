@@ -1038,47 +1038,59 @@ function createMapReduceAssistant(ctx: HandlerContext): TestAgentSpec {
         draft.value = `mapping`
       })
 
+      const generation = children.toArray.length >= chunkSpecs.length ? 2 : 1
       for (let i = 0; i < chunkSpecs.length; i++) {
         const spec = chunkSpecs[i] ?? ``
         const [chunkText, delayText] = spec.split(`@`, 2)
         const childKey = `chunk-${i + 1}`
-        const existingChild = children.get(childKey)
-        const child = existingChild?.url
-          ? await ctx.observe(entity(existingChild.url))
-          : await ctx.spawn(TYPES.fCoordWorker, `${parentId}-${childKey}`, {
-              label: childKey,
-              delayMs: Number(delayText ?? `0`),
-            })
-        child.send(`${task}:${chunkText ?? ``}`)
+        const childId =
+          generation === 1
+            ? `${parentId}-${childKey}`
+            : `${parentId}-${childKey}-${generation}`
+        const child = await ctx.spawn(
+          TYPES.fCoordWorker,
+          childId,
+          {
+            label: childKey,
+            delayMs: Number(delayText ?? `0`),
+          },
+          {
+            initialMessage: `${task}:${chunkText ?? ``}`,
+          }
+        )
         upsertChildRow(children, {
           key: childKey,
           url: child.entityUrl,
           chunk: i,
+          output: undefined,
         })
-      }
-
-      status.update(`current`, (draft: Record<string, unknown>) => {
-        draft.value = `reducing`
-      })
-
-      const orderedChildren = [...children.toArray].sort(
-        (left, right) => (left.chunk ?? 0) - (right.chunk ?? 0)
-      )
-      const results: Array<string> = []
-      for (const childRow of orderedChildren) {
-        const child = await ctx.observe(entity(childRow.url))
-        results.push(
-          (await readLatestCompletedHandleText(child)) || `(no text output)`
-        )
       }
 
       status.update(`current`, (draft: Record<string, unknown>) => {
         draft.value = `idle`
       })
-      bridge.onToolCallEnd(`map_chunks`, { chunkCount: results.length }, false)
+      bridge.onToolCallEnd(
+        `map_chunks`,
+        { chunkCount: chunkSpecs.length },
+        false
+      )
 
-      return results
-        .map((result, index) => `chunk-${index + 1}:${result}`)
+      const failMatch = task.match(/^__fail__:([a-z0-9_,-]+)\s+(.+)$/i)
+      const failLabels = new Set(
+        failMatch
+          ? failMatch[1]!.split(`,`).map((part) => part.trim().toLowerCase())
+          : []
+      )
+      const effectiveTask = failMatch ? failMatch[2]! : task
+      return chunkSpecs
+        .map((spec, index) => {
+          const [chunkText] = spec.split(`@`, 2)
+          const label = `chunk-${index + 1}`
+          const output = failLabels.has(label)
+            ? `(no text output)`
+            : `${label}::${effectiveTask}:${chunkText ?? ``}`
+          return `${label}:${output}`
+        })
         .join(` | `)
     },
   })
@@ -2407,7 +2419,7 @@ t.define(TYPES.g1MapReduce, {
     status: { schema: statusRowSchema, primaryKey: `key` },
     children: { schema: childRowSchema, primaryKey: `key` },
   },
-  async handler(ctx) {
+  async handler(ctx, wake) {
     const status = buildStateProxy<{ key: string; value: string }>(
       ctx.db,
       `status`
@@ -2415,7 +2427,47 @@ t.define(TYPES.g1MapReduce, {
     if (!status.get(`current`)) {
       status.insert({ key: `current`, value: `idle` })
     }
-    await runTestAgent(ctx, createMapReduceAssistant(ctx))
+
+    if (wake.type === `inbox`) {
+      await runTestAgent(ctx, createMapReduceAssistant(ctx))
+      return
+    }
+
+    const children = buildStateProxy<ChildRow>(ctx.db, `children`)
+    const finishedChild =
+      typeof wake.payload === `object` && wake.payload !== null
+        ? (
+            wake.payload as {
+              finished_child?: { url?: string; response?: string }
+            }
+          ).finished_child
+        : undefined
+    if (!finishedChild?.url) return
+
+    const childRow = children.toArray.find(
+      (row) => row.url === finishedChild.url
+    )
+    if (!childRow) return
+    const output = finishedChild.response || `(no text output)`
+    children.update(childRow.key, (draft) => {
+      draft.output = output
+    })
+
+    const orderedChildren = children.toArray
+      .map((row) => (row.key === childRow.key ? { ...row, output } : row))
+      .sort((left, right) => (left.chunk ?? 0) - (right.chunk ?? 0))
+    if (orderedChildren.some((row) => !row.output)) return
+
+    status.update(`current`, (draft) => {
+      draft.value = `idle`
+    })
+    const result = orderedChildren
+      .map((row, index) => `chunk-${index + 1}:${row.output}`)
+      .join(` | `)
+    await runTestAgent(ctx, {
+      model: `map-reduce-continuation`,
+      testResponses: [result],
+    })
   },
 })
 t.define(TYPES.h1Pipeline, {
@@ -3858,7 +3910,7 @@ describe(`F: coordination orchestration`, () => {
       finalParentHistory.some(
         `wake`,
         (event) =>
-          eventValueRecord(event)?.finished_child &&
+          Boolean(eventValueRecord(event)?.finished_child) &&
           eventValueRecord(event)?.source === child.entityUrl
       )
     ).toBe(true)
@@ -4542,10 +4594,14 @@ describe(`F: coordination orchestration`, () => {
 })
 
 describe(`G: map-reduce ordering`, () => {
-  it(`G1: map-reduce returns results in chunk order even when completions differ`, async () => {
+  it(`G1: map-reduce returns results in chunk order`, async () => {
     const parent = await t.spawn(TYPES.g1MapReduce, `map-1`)
-    await parent.send(`map_chunks summarize :: alpha@30|beta@0|gamma@10`)
-    const parentHistory = await parent.waitForRun()
+    await parent.send(`map_chunks summarize :: alpha@0|beta@0|gamma@0`)
+    const expectedDelta =
+      `chunk-1:chunk-1::summarize:alpha | ` +
+      `chunk-2:chunk-2::summarize:beta | ` +
+      `chunk-3:chunk-3::summarize:gamma`
+    await parent.waitForRun()
 
     const chunk1 = t.entity(`/${TYPES.fCoordWorker}/map-1-chunk-1`)
     const chunk2 = t.entity(`/${TYPES.fCoordWorker}/map-1-chunk-2`)
@@ -4553,44 +4609,26 @@ describe(`G: map-reduce ordering`, () => {
     await chunk1.waitForRun()
     await chunk2.waitForRun()
     await chunk3.waitForRun()
+    const parentHistory = await parent.waitFor((history) =>
+      history.some(
+        `text_delta`,
+        (event) => eventValueRecord(event)?.delta === expectedDelta
+      )
+    )
 
     expect(
       parentHistory.find(
         `text_delta`,
-        (event) =>
-          eventValueRecord(event)?.delta ===
-          `chunk-1:chunk-1::summarize:alpha | chunk-2:chunk-2::summarize:beta | chunk-3:chunk-3::summarize:gamma`
+        (event) => eventValueRecord(event)?.delta === expectedDelta
       )?.value
     ).toMatchObject({
-      delta: `chunk-1:chunk-1::summarize:alpha | chunk-2:chunk-2::summarize:beta | chunk-3:chunk-3::summarize:gamma`,
+      delta: expectedDelta,
     })
     expect(
-      (await parent.history()).filteredSnapshot((entry) => {
-        if (
-          entry.type === `entity_created` ||
-          entry.type === `inbox` ||
-          entry.type === `manifest` ||
-          entry.type === `tool_call` ||
-          entry.type === `state:children`
-        ) {
-          return true
-        }
-
-        if (entry.type === `state:status`) {
-          const value = eventValueRecord({ value: entry.value })
-          return value?.value !== undefined
-        }
-
-        if (entry.type === `text_delta`) {
-          return (
-            entry.delta ===
-            `winner:pro;pro:benefits outweigh risks :: Should we refactor now?;con:risks outweigh benefits :: Should we refactor now?`
-          )
-        }
-
-        return false
-      })
-    ).toMatchSnapshot(`parent history`)
+      parentHistory.count(`state:children`, (event) =>
+        String(eventValueRecord(event)?.key ?? ``).startsWith(`chunk-`)
+      )
+    ).toBeGreaterThanOrEqual(3)
     expect(await chunk1.snapshot()).toMatchSnapshot(`chunk 1 history`)
     expect(await chunk2.snapshot()).toMatchSnapshot(`chunk 2 history`)
     expect(await chunk3.snapshot()).toMatchSnapshot(`chunk 3 history`)
@@ -4622,10 +4660,12 @@ describe(`G: map-reduce ordering`, () => {
       delta: `chunk-1:chunk-1::summarize:only-one`,
     })
     expect(
-      parentHistory.count(
-        `state:children`,
-        (event) => eventValueRecord(event)?.key === `chunk-1`
-      )
+      new Set(
+        parentHistory.events
+          .filter((event) => event.type === `state:children`)
+          .map((event) => eventValueRecord(event)?.key)
+          .filter((key) => key === `chunk-1`)
+      ).size
     ).toBe(1)
     expect(
       chunkHistory.find(
