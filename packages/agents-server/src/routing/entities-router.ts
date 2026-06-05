@@ -186,6 +186,19 @@ function agentUrlPath(value: string): string {
   }
 }
 
+async function hasValidAgentWriteToken(
+  request: AgentsRouteRequest,
+  ctx: TenantContext,
+  fromAgent: string
+): Promise<boolean> {
+  const agentUrl = agentUrlPath(fromAgent)
+  const token = writeTokenFromRequest(request)
+  if (!token) return false
+  const agentEntity = await ctx.entityManager.registry.getEntity(agentUrl)
+  if (!agentEntity) return false
+  return ctx.entityManager.isValidWriteToken(agentEntity, token)
+}
+
 const inboxMessageBodySchema = Type.Object({
   payload: Type.Optional(Type.Unknown()),
   position: Type.Optional(Type.String()),
@@ -1137,7 +1150,14 @@ async function sendEntity(
   }
   if (parsed.from_agent !== undefined) {
     const principalAgentUrl = agentUrlForPrincipal(principal)
-    if (agentUrlPath(parsed.from_agent) !== principalAgentUrl) {
+    const fromAgentUrl = agentUrlPath(parsed.from_agent)
+    const matchesPrincipalAgent = fromAgentUrl === principalAgentUrl
+    const hasAgentWriteToken = await hasValidAgentWriteToken(
+      request,
+      ctx,
+      parsed.from_agent
+    )
+    if (!matchesPrincipalAgent && !hasAgentWriteToken) {
       return apiError(
         400,
         ErrCodeInvalidRequest,
