@@ -123,8 +123,7 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
       assert MapSet.equal?(affected, MapSet.new([{"public", "users"}]))
     end
 
-    test "records the wall-clock duration spanned by a transaction's fragments on commit",
-         %{converter: converter} do
+    test "records the transaction's begin timestamp on the commit", %{converter: converter} do
       {:buffering, converter} =
         MessageConverter.convert(
           %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
@@ -139,7 +138,7 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
 
       assert {:ok,
               %TransactionFragment{
-                commit: %Commit{fragments_wall_duration_us: duration}
+                commit: %Commit{tx_started_at: tx_started_at}
               }, _converter} =
                MessageConverter.convert(
                  %LR.Commit{
@@ -150,7 +149,7 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
                  converter
                )
 
-      assert is_integer(duration) and duration >= 0
+      assert is_integer(tx_started_at)
     end
 
     test "returns TransactionFragment with UpdatedRecord for update", %{converter: converter} do

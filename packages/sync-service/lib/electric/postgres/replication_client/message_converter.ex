@@ -227,8 +227,7 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
       txn_change_count: state.tx_change_count,
       received_at: now_mono,
       initial_receive_lag: initial_lag,
-      fragments_wall_duration_us:
-        System.convert_time_unit(now_mono - state.tx_started_at, :native, :microsecond)
+      tx_started_at: state.tx_started_at
     }
 
     returned_txn_fragment =

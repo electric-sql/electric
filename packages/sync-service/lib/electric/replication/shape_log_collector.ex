@@ -460,7 +460,7 @@ defmodule Electric.Replication.ShapeLogCollector do
         num_relations: MapSet.size(txn_fragment.affected_relations),
         xid: txn_fragment.xid,
         complete_transaction?: TransactionFragment.complete_transaction?(txn_fragment)
-      ] ++ fragments_wall_duration_attrs(txn_fragment),
+      ],
       state.stack_id,
       fn ->
         OpenTelemetry.start_interval(:"shape_log_collector.logging.duration_µs")
@@ -484,21 +484,24 @@ defmodule Electric.Replication.ShapeLogCollector do
           total_attribute: :"shape_log_collector.transaction.total_duration_µs"
         )
 
+        put_wall_clock_duration_if_commit(txn_fragment)
+
         result
       end
     )
   end
 
-  # On the commit fragment, surface the wall-clock time the transaction's
-  # fragments spanned as received from Postgres (begin -> commit). Because the
-  # replication stream is consumed on demand, this can far exceed the
-  # per-fragment processing time.
-  defp fragments_wall_duration_attrs(%TransactionFragment{
-         commit: %{fragments_wall_duration_us: us}
-       }),
-       do: ["pg_txn.fragments_wall_duration_µs": us]
+  defp put_wall_clock_duration_if_commit(%TransactionFragment{
+         commit: %{tx_started_at: tx_started_at}
+       })
+       when is_integer(tx_started_at) do
+    OpenTelemetry.add_span_attributes(
+      total_processing_time:
+        System.convert_time_unit(System.monotonic_time() - tx_started_at, :native, :millisecond)
+    )
+  end
 
-  defp fragments_wall_duration_attrs(_txn_fragment), do: []
+  defp put_wall_clock_duration_if_commit(_txn_fragment), do: :ok
 
   # If we've already processed a txn_fragment, then drop it without processing
   defp handle_txn_fragment(%{last_processed_offset: last_processed_offset} = state, txn_fragment)
