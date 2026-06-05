@@ -977,6 +977,7 @@ function createManagerWorkerAssistant(ctx: HandlerContext): TestAgentSpec {
 
         for (const perspective of perspectives) {
           const existingChild = children.get(perspective.id)
+          const isExistingChild = Boolean(existingChild?.url)
           const child = existingChild?.url
             ? await ctx.observe(entity(existingChild.url), {
                 wake: `runFinished`,
@@ -987,10 +988,12 @@ function createManagerWorkerAssistant(ctx: HandlerContext): TestAgentSpec {
                 {
                   label: perspective.id,
                   delayMs: perspective.delayMs,
-                }
+                },
+                { initialMessage: question }
               )
-          const isExistingChild = Boolean(existingChild?.url)
-          child.send(question)
+          if (isExistingChild) {
+            child.send(question)
+          }
           upsertChildRow(children, {
             key: perspective.id,
             url: child.entityUrl,
@@ -2707,11 +2710,15 @@ t.define(TYPES.n1WakeTypeParent, {
           const trimmed = message.trim()
           if (trimmed.startsWith(`spawn_and_observe `)) {
             const childId = trimmed.slice(`spawn_and_observe `.length)
-            const child = await ctx.spawn(TYPES.n1WakeTypeChild, childId)
+            const child = await ctx.spawn(
+              TYPES.n1WakeTypeChild,
+              childId,
+              {},
+              { initialMessage: `hello from parent` }
+            )
             await ctx.observe(entity(child.entityUrl), {
               wake: `runFinished`,
             })
-            child.send(`hello from parent`)
             return `spawned:${childId}:wake.type=${wake.type}`
           }
           return `echo:${trimmed}:wake.type=${wake.type}`
@@ -2817,13 +2824,12 @@ t.define(TYPES.n3IdleWakeParent, {
           const trimmed = message.trim()
           if (trimmed.startsWith(`spawn `)) {
             const childId = trimmed.slice(`spawn `.length)
-            const child = await ctx.spawn(
+            await ctx.spawn(
               TYPES.n3IdleWakeChild,
               childId,
               {},
-              { wake: `runFinished` }
+              { initialMessage: `do work`, wake: `runFinished` }
             )
-            child.send(`do work`)
             return `spawned:${childId}:wake.type=${wake.type}`
           }
           return `echo:${trimmed}:wake.type=${wake.type}`
