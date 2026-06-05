@@ -918,8 +918,12 @@ function createDispatcherAssistant(ctx: HandlerContext): TestAgentSpec {
           ? TYPES.f1AssistantChild
           : TYPES.f1WorkerChild
       const childId = `${parentId}-dispatch-${dispatchCount}`
-      const child = await ctx.spawn(childType, childId)
-      child.send(task)
+      const child = await ctx.spawn(
+        childType,
+        childId,
+        {},
+        { initialMessage: task }
+      )
       children.insert({ key: childId, url: child.entityUrl, kind: targetKind })
 
       status.update(`current`, (draft: Record<string, unknown>) => {
@@ -1087,11 +1091,18 @@ function createMapReduceAssistant(ctx: HandlerContext): TestAgentSpec {
         const existingChild = children.get(childKey)
         const child = existingChild?.url
           ? await ctx.observe(entity(existingChild.url))
-          : await ctx.spawn(TYPES.fCoordWorker, `${parentId}-${childKey}`, {
-              label: childKey,
-              delayMs: Number(delayText ?? `0`),
-            })
-        child.send(`${task}:${chunkText ?? ``}`)
+          : await ctx.spawn(
+              TYPES.fCoordWorker,
+              `${parentId}-${childKey}`,
+              {
+                label: childKey,
+                delayMs: Number(delayText ?? `0`),
+              },
+              { initialMessage: `${task}:${chunkText ?? ``}` }
+            )
+        if (existingChild?.url) {
+          child.send(`${task}:${chunkText ?? ``}`)
+        }
         upsertChildRow(children, {
           key: childKey,
           url: child.entityUrl,
@@ -1179,10 +1190,17 @@ function createPipelineAssistant(ctx: HandlerContext): TestAgentSpec {
         const existingChild = children.get(childKey)
         const child = existingChild?.url
           ? await ctx.observe(entity(existingChild.url))
-          : await ctx.spawn(TYPES.fCoordWorker, childKey, {
-              label: stages[i] ?? `stage-${stageNumber}`,
-            })
-        child.send(currentInput)
+          : await ctx.spawn(
+              TYPES.fCoordWorker,
+              childKey,
+              {
+                label: stages[i] ?? `stage-${stageNumber}`,
+              },
+              { initialMessage: currentInput }
+            )
+        if (existingChild?.url) {
+          child.send(currentInput)
+        }
         upsertChildRow(children, {
           key: childKey,
           url: child.entityUrl,
