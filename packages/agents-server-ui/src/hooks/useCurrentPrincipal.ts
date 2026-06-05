@@ -8,22 +8,23 @@ import {
   onCloudAuthStateChanged,
   type CloudAuthState,
 } from '../lib/server-connection'
-import { userIdFromPrincipal, userPrincipalUrl } from '../lib/principals'
+import { userIdFromPrincipal } from '../lib/principals'
+import { resolveCurrentPrincipal } from '../lib/currentPrincipal'
+import { useOptionalServerConnection } from './useServerConnection'
 
 export function useCurrentPrincipal(): {
   principal: string
   userId: string | null
 } {
-  const [cloudPrincipal, setCloudPrincipal] = useState<string | null>(null)
+  const serverConnection = useOptionalServerConnection()
+  const [cloudUserId, setCloudUserId] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
     const sync = (state: CloudAuthState | null): void => {
       if (cancelled) return
-      setCloudPrincipal(
-        state?.status === `signed-in` && state.userId
-          ? userPrincipalUrl(state.userId)
-          : null
+      setCloudUserId(
+        state?.status === `signed-in` && state.userId ? state.userId : null
       )
     }
 
@@ -37,8 +38,13 @@ export function useCurrentPrincipal(): {
     }
   }, [])
 
-  const principal =
-    getConfiguredActivePrincipal() ?? cloudPrincipal ?? getActivePrincipal()
+  const principal = resolveCurrentPrincipal({
+    activeServerIsCloud:
+      serverConnection?.activeServer?.source === `electric-cloud`,
+    cloudUserId,
+    configuredPrincipal: getConfiguredActivePrincipal(),
+    fallbackPrincipal: getActivePrincipal(),
+  })
   const userId = userIdFromPrincipal(principal)
 
   return useMemo(() => ({ principal, userId }), [principal, userId])

@@ -261,6 +261,9 @@ export function ShareEntityDialog({
     setLoadingGrants(true)
     setError(null)
     try {
+      // The synced effective-permissions shape is scoped to the current
+      // principal. Sharing needs the manager-only raw grant set for this
+      // entity, so load it through the manage-protected REST endpoint.
       const res = await serverFetch(
         entityApiUrl(baseUrl, entity.url, `/grants`)
       )
