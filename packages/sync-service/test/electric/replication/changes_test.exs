@@ -38,18 +38,18 @@ defmodule Electric.Replication.ChangesTest do
 
   describe "Commit.calculate_final_receive_lag/2" do
     test "returns initial lag plus elapsed time in Electric" do
-      received_at_mono = System.monotonic_time()
+      received_at = System.monotonic_time()
       initial_lag = 100
       elapsed_ms = 50
 
       commit = %Commit{
         commit_timestamp: ~U[2024-01-01 12:00:00.000Z],
-        received_at_mono: received_at_mono,
+        received_at: received_at,
         initial_receive_lag: initial_lag
       }
 
       current_mono =
-        received_at_mono + System.convert_time_unit(elapsed_ms, :millisecond, :native)
+        received_at + System.convert_time_unit(elapsed_ms, :millisecond, :native)
 
       lag = Commit.calculate_final_receive_lag(commit, current_mono)
 
@@ -62,7 +62,7 @@ defmodule Electric.Replication.ChangesTest do
 
       commit = %Commit{
         commit_timestamp: ~U[2024-01-01 12:00:00.000Z],
-        received_at_mono: mono_time,
+        received_at: mono_time,
         initial_receive_lag: initial_lag
       }
 
@@ -76,7 +76,7 @@ defmodule Electric.Replication.ChangesTest do
 
       commit = %Commit{
         commit_timestamp: ~U[2024-01-01 12:00:00.000Z],
-        received_at_mono: mono_time,
+        received_at: mono_time,
         initial_receive_lag: 0
       }
 

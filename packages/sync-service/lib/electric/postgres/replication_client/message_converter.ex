@@ -225,7 +225,7 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
       commit_timestamp: msg.commit_timestamp,
       transaction_size: state.tx_size,
       txn_change_count: state.tx_change_count,
-      received_at_mono: now_mono,
+      received_at: now_mono,
       initial_receive_lag: initial_lag,
       fragments_wall_duration_us:
         System.convert_time_unit(now_mono - state.tx_started_at, :native, :microsecond)

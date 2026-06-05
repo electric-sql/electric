@@ -39,14 +39,14 @@ defmodule Electric.Replication.Changes do
             commit_timestamp: DateTime.t() | nil,
             transaction_size: non_neg_integer(),
             txn_change_count: non_neg_integer(),
-            received_at_mono: integer() | nil,
+            received_at: integer() | nil,
             initial_receive_lag: non_neg_integer() | nil,
             fragments_wall_duration_us: non_neg_integer() | nil
           }
 
     defstruct [
       :commit_timestamp,
-      :received_at_mono,
+      :received_at,
       :initial_receive_lag,
       :fragments_wall_duration_us,
       transaction_size: 0,
@@ -87,7 +87,7 @@ defmodule Electric.Replication.Changes do
     def calculate_final_receive_lag(%__MODULE__{} = commit, current_mono) do
       elapsed_in_electric =
         System.convert_time_unit(
-          current_mono - commit.received_at_mono,
+          current_mono - commit.received_at,
           :native,
           :millisecond
         )
