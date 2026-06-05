@@ -1,6 +1,11 @@
 import { useMemo, useState } from 'react'
 import { Animated, StyleSheet, Text } from 'react-native'
-import { useLiveQuery } from '@tanstack/react-db'
+import { eq, not, useLiveQuery } from '@tanstack/react-db'
+import {
+  normalizePrincipalUrl,
+  principalKeyFromInput,
+  userIdFromPrincipal,
+} from '@electric-ax/agents-server-ui/src/lib/principals'
 import {
   BottomSheet,
   BottomSheetItem,
@@ -20,10 +25,12 @@ import {
   SIDEBAR_GROUP_BY_LABELS,
   SIDEBAR_GROUP_BY_OPTIONS,
   setSidebarGroupBy,
+  toggleSidebarCreatorVisibility,
   toggleSidebarStatusVisibility,
   toggleSidebarTypeVisibility,
   useSidebarPrefs,
 } from '../lib/sidebarPrefs'
+import { useCurrentPrincipal } from '../lib/useCurrentPrincipal'
 import {
   setThemePreference,
   THEME_PREFERENCE_LABELS,
@@ -33,6 +40,7 @@ import {
 } from '../lib/themePref'
 import { useTokens } from '../lib/ThemeProvider'
 import type { AvailableServer } from '../lib/useAvailableServers'
+import type { ElectricUser } from '../lib/agentsClient'
 
 const STATUSES: ReadonlyArray<string> = [
   `spawning`,
@@ -43,7 +51,7 @@ const STATUSES: ReadonlyArray<string> = [
 
 export type ServerHealth = `ok` | `down` | `unset`
 
-type Page = `root` | `server` | `type` | `status`
+type Page = `root` | `server` | `type` | `status` | `creator`
 
 /**
  * Bottom-sheet "more" menu for the home screen — combines the actions
@@ -55,6 +63,7 @@ type Page = `root` | `server` | `type` | `status`
  *   - server: unified list of saved + Cloud agent servers
  *   - type: per-type visibility checkboxes
  *   - status: per-status visibility checkboxes
+ *   - creator: per-principal visibility checkboxes
  */
 export function HomeMenu({
   open,
@@ -72,18 +81,29 @@ export function HomeMenu({
   onOpenAccount: () => void
 }): React.ReactElement {
   const tokens = useTokens()
-  const { serverUrl, entitiesCollection } = useAgents()
+  const { serverUrl, entitiesCollection, usersCollection } = useAgents()
   const prefs = useSidebarPrefs()
   const themePreference = useThemePreference()
   const [page, setPage] = useState<Page>(`root`)
   const { style: drillStyle, drill, reset: resetDrill } = useDrillTransition()
+  const { principal: currentPrincipal } = useCurrentPrincipal()
+  const currentPrincipalUrl = useMemo(
+    () => normalizePrincipalUrl(currentPrincipal),
+    [currentPrincipal]
+  )
 
   const { data: entities = [] } = useLiveQuery(
     (query) =>
       query
         .from({ entity: entitiesCollection })
+        .where(({ entity }) => not(eq(entity.type, `principal`)))
         .orderBy(({ entity }) => entity.updated_at, `desc`),
     [entitiesCollection]
+  )
+
+  const { data: users = [] } = useLiveQuery(
+    (query) => query.from({ user: usersCollection }),
+    [usersCollection]
   )
 
   const distinctTypes = useMemo(() => {
@@ -91,6 +111,30 @@ export function HomeMenu({
     for (const entity of entities) seen.add(entity.type)
     return Array.from(seen).sort((a, b) => a.localeCompare(b))
   }, [entities])
+  const usersById = useMemo(
+    () => new Map(users.map((user) => [user.id, user])),
+    [users]
+  )
+  const creatorOptions = useMemo(() => {
+    const seen = new Set<string>()
+    if (currentPrincipalUrl) seen.add(currentPrincipalUrl)
+    for (const entity of entities) {
+      const creator = normalizePrincipalUrl(entity.created_by)
+      if (creator) seen.add(creator)
+    }
+
+    return Array.from(seen)
+      .map((principal) =>
+        principalFilterOption(principal, {
+          currentPrincipalUrl,
+          usersById,
+        })
+      )
+      .sort((a, b) => {
+        if (a.isCurrent !== b.isCurrent) return a.isCurrent ? -1 : 1
+        return a.label.localeCompare(b.label)
+      })
+  }, [currentPrincipalUrl, entities, usersById])
 
   const availableServers = useAvailableServers()
 
@@ -135,7 +179,9 @@ export function HomeMenu({
         ? `Show types`
         : page === `status`
           ? `Show statuses`
-          : undefined
+          : page === `creator`
+            ? `Created by`
+            : undefined
 
   return (
     <BottomSheet open={open} onClose={handleClose} title={title}>
@@ -149,6 +195,7 @@ export function HomeMenu({
             onShowServers={() => goTo(`server`, 1)}
             onShowTypes={() => goTo(`type`, 1)}
             onShowStatuses={() => goTo(`status`, 1)}
+            onShowCreators={() => goTo(`creator`, 1)}
             onOpenDiagnostics={() => {
               handleClose()
               onOpenDiagnostics()
@@ -199,6 +246,31 @@ export function HomeMenu({
             }))}
           />
         )}
+
+        {page === `creator` && (
+          <SubPage
+            onBack={() => goTo(`root`, -1)}
+            rows={
+              creatorOptions.length === 0
+                ? [
+                    {
+                      key: `_empty`,
+                      label: `No creators yet`,
+                      disabled: true,
+                      onPress: () => {},
+                    },
+                  ]
+                : creatorOptions.map((creator) => ({
+                    key: creator.principal,
+                    label: creator.label,
+                    subtitle: creator.principalKey,
+                    active: !prefs.hiddenCreators.has(creator.principal),
+                    onPress: () =>
+                      toggleSidebarCreatorVisibility(creator.principal),
+                  }))
+            }
+          />
+        )}
       </Animated.View>
     </BottomSheet>
   )
@@ -212,6 +284,7 @@ function RootPage({
   onShowServers,
   onShowTypes,
   onShowStatuses,
+  onShowCreators,
   onOpenDiagnostics,
   onOpenAccount,
 }: {
@@ -222,6 +295,7 @@ function RootPage({
   onShowServers: () => void
   onShowTypes: () => void
   onShowStatuses: () => void
+  onShowCreators: () => void
   onOpenDiagnostics: () => void
   onOpenAccount: () => void
 }): React.ReactElement {
@@ -309,6 +383,21 @@ function RootPage({
             />
           }
           onPress={onShowStatuses}
+        />
+        <BottomSheetItem
+          label="Created by"
+          icon={
+            <Icon name="users" size={18} color={tokens.text2} strokeWidth={2} />
+          }
+          trailing={
+            <Icon
+              name="chevron-right"
+              size={18}
+              color={tokens.text3}
+              strokeWidth={2}
+            />
+          }
+          onPress={onShowCreators}
         />
       </BottomSheetSection>
 
@@ -510,7 +599,9 @@ function SubPage({
   rows: ReadonlyArray<{
     key: string
     label: string
+    subtitle?: string
     active?: boolean
+    disabled?: boolean
     onPress: () => void
   }>
 }): React.ReactElement {
@@ -529,7 +620,9 @@ function SubPage({
         <BottomSheetItem
           key={row.key}
           label={row.label}
+          subtitle={row.subtitle}
           active={row.active}
+          disabled={row.disabled}
           onPress={row.onPress}
         />
       ))}
@@ -539,6 +632,54 @@ function SubPage({
 
 function titleCase(id: string): string {
   return id.replace(/[-_]+/g, ` `).replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+function principalFilterOption(
+  principal: string,
+  {
+    currentPrincipalUrl,
+    usersById,
+  }: {
+    currentPrincipalUrl: string | null
+    usersById: ReadonlyMap<string, ElectricUser>
+  }
+): {
+  principal: string
+  principalKey: string
+  label: string
+  isCurrent: boolean
+} {
+  const principalKey = principalKeyFromInput(principal) ?? principal
+  const isCurrent = principal === currentPrincipalUrl
+  if (isCurrent) {
+    return { principal, principalKey, label: `Me`, isCurrent }
+  }
+  const userId = userIdFromPrincipal(principal)
+  const user = userId ? usersById.get(userId) : undefined
+  return {
+    principal,
+    principalKey,
+    label: userDisplayName(user) ?? formatPrincipalKey(principalKey),
+    isCurrent,
+  }
+}
+
+function userDisplayName(user: ElectricUser | undefined): string | null {
+  if (!user) return null
+  return user.display_name || user.email || null
+}
+
+function formatPrincipalKey(key: string): string {
+  const colon = key.indexOf(`:`)
+  if (colon <= 0) return shortenPrincipalId(key)
+  const kind = key.slice(0, colon)
+  const id = key.slice(colon + 1)
+  return `${kind}:${shortenPrincipalId(id)}`
+}
+
+function shortenPrincipalId(id: string): string {
+  if (id.length <= 18) return id
+  return `${id.slice(0, 8)}...${id.slice(-6)}`
 }
 
 const styles = StyleSheet.create({

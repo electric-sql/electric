@@ -114,6 +114,7 @@ export function SessionMenu({
   signalError,
   onSignal,
   onStopImmediately,
+  signalDisabled = false,
 }: {
   open: boolean
   onClose: () => void
@@ -123,6 +124,7 @@ export function SessionMenu({
   signalError?: string | null
   onSignal?: (signal: EntitySignal) => void
   onStopImmediately?: () => void
+  signalDisabled?: boolean
 }): React.ReactElement {
   const tokens = useTokens()
   const [signalMenuOpen, setSignalMenuOpen] = useState(false)
@@ -155,7 +157,7 @@ export function SessionMenu({
     setSignalMenuOpen(nextSignalMenuOpen)
     drill(nextSignalMenuOpen ? 1 : -1)
   }
-  const canSignal =
+  const canOpenSignalMenu =
     entity !== null &&
     entity.status !== `stopped` &&
     entity.status !== `killed` &&
@@ -163,6 +165,7 @@ export function SessionMenu({
   const handleSignalOption = (
     option: (typeof SIGNAL_OPTION_GROUPS)[number][number]
   ): void => {
+    if (signalDisabled) return
     if (option.composite === `stop-immediately`) {
       onStopImmediately?.()
     } else if (option.signal) {
@@ -315,7 +318,7 @@ export function SessionMenu({
                 onPress={() => handlePick(`state-explorer`)}
               />
             </BottomSheetSection>
-            {canSignal && (
+            {canOpenSignalMenu && (
               <>
                 <BottomSheetSeparator />
                 <BottomSheetSection>
@@ -337,6 +340,7 @@ export function SessionMenu({
                         strokeWidth={2}
                       />
                     }
+                    disabled={signalDisabled}
                     onPress={() => transitionToMenu(true)}
                   />
                 </BottomSheetSection>
