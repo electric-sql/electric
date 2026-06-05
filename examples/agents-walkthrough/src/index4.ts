@@ -37,7 +37,10 @@ function createSpawnAssistantTool(ctx: HandlerContext) {
         `assistant`,
         genId(),
         {},
-        { initialMessage: task, wake: `runFinished` }
+        {
+          initialMessage: task,
+          wake: { on: `runFinished`, includeResponse: true },
+        }
       )
 
       return {
@@ -87,7 +90,7 @@ function createSpawnJudgeTool(ctx: HandlerContext) {
         {},
         {
           initialMessage: `Set up a debate on this topic: ${topic}`,
-          wake: `runFinished`,
+          wake: { on: `runFinished`, includeResponse: true },
         }
       )
 

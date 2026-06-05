@@ -85,7 +85,7 @@ perspectives (manager)
 
 - **Entity registration:** `registerPerspectives(registry)` defines the `perspectives` entity type with a `children` state collection to track spawned workers.
 - **Manager handler:** On receiving a message, the manager uses `ctx.useAgent()` with a custom `analyze_question` tool. This tool calls `ctx.spawn('worker', ...)` for each perspective.
-- **Worker notification:** Workers are spawned with `wake: 'runFinished'`, so the manager is automatically re-invoked each time a worker completes.
+- **Worker notification:** Workers are spawned with `wake: { on: 'runFinished', includeResponse: true }`, so the manager is automatically re-invoked each time a worker completes.
 - **State tracking:** The `children` collection tracks each worker's URL.
 - **Synthesis:** Once both perspectives report back, the manager's LLM synthesizes the viewpoints into a final balanced response.
 
@@ -104,7 +104,7 @@ researcher (coordinator)
 - **Entity registration:** `registerResearcher(registry)` defines the `researcher` entity type with a `children` state collection.
 - **Coordinator handler:** The researcher first assesses whether the topic needs decomposition. For complex topics, it uses a `research_with_specialists` tool to spawn specialist workers for distinct sub-questions.
 - **Dynamic decomposition:** Unlike perspectives (fixed two workers), the researcher decides at runtime how many specialists to spawn and what each should focus on.
-- **Worker notification:** Specialists are spawned with `wake: 'runFinished'`, so the researcher is re-invoked as each finishes.
+- **Worker notification:** Specialists are spawned with `wake: { on: 'runFinished', includeResponse: true }`, so the researcher is re-invoked as each finishes.
 - **Synthesis:** Once all specialists report back, the researcher synthesizes findings into a structured response with citations.
 
 ## Adding More Examples

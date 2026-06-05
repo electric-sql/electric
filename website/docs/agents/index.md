@@ -156,7 +156,7 @@ async handler(ctx) {
       systemPrompt: "Analyse the report",
       tools: ["read"],
     },
-    { initialMessage: "Find the top three issues", wake: "runFinished" }
+    { initialMessage: "Find the top three issues", wake: { on: "runFinished", includeResponse: true } }
   )
 
   // send a message to another entity

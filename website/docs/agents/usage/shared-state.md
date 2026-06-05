@@ -61,7 +61,7 @@ const child = await ctx.spawn(
     systemPrompt: "...",
     sharedDb: { id: "research-123", schema: researchSchema },
   },
-  { initialMessage: "Research topic X", wake: "runFinished" }
+  { initialMessage: "Research topic X", wake: { on: "runFinished", includeResponse: true } }
 )
 ```
 
@@ -149,7 +149,7 @@ registry.define("debate", {
         systemPrompt: "Argue FOR the topic.",
         sharedDb: { id: `debate-${ctx.entityUrl}`, schema: debateSchema },
       },
-      { initialMessage: "The topic is: ...", wake: "runFinished" }
+      { initialMessage: "The topic is: ...", wake: { on: "runFinished", includeResponse: true } }
     )
 
     const con = await ctx.spawn(
@@ -159,7 +159,7 @@ registry.define("debate", {
         systemPrompt: "Argue AGAINST the topic.",
         sharedDb: { id: `debate-${ctx.entityUrl}`, schema: debateSchema },
       },
-      { initialMessage: "The topic is: ...", wake: "runFinished" }
+      { initialMessage: "The topic is: ...", wake: { on: "runFinished", includeResponse: true } }
     )
 
     // Read all arguments written by both workers

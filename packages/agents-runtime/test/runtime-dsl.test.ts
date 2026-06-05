@@ -68,6 +68,7 @@ const childRowSchema = z.object({
   articleKey: z.string().nullable().optional(),
   articleTopic: z.string().nullable().optional(),
   articleAuthor: z.string().nullable().optional(),
+  output: z.string().optional(),
 })
 
 const wikiMetaRowSchema = z.object({
@@ -217,6 +218,7 @@ type ChildRow = {
   articleKey?: string | null
   articleTopic?: string | null
   articleAuthor?: string | null
+  output?: string
 }
 
 type PipelineStateRow = {
@@ -357,10 +359,26 @@ function sortSnapshotEntriesByDebateSide(
 }
 
 async function readLatestCompletedHandleText(
-  handle: Pick<EntityHandle, `text`>
+  handle: Pick<EntityHandle, `db`>
 ): Promise<string> {
-  const runs = await handle.text()
-  return runs.at(-1) ?? ``
+  const started = Date.now()
+  while (Date.now() - started < 5_000) {
+    const runs = collectionRows<{ key: string; status: string }>(
+      handle.db.collections.runs
+    )
+      .filter((run) => run.status === `completed` || run.status === `failed`)
+      .sort((left, right) => String(left.key).localeCompare(String(right.key)))
+    const latestRun = runs.at(-1)
+    if (latestRun) {
+      const textDeltas = collectionRows<{ run_id: string; delta: string }>(
+        handle.db.collections.textDeltas
+      ).filter((delta) => delta.run_id === latestRun.key)
+
+      return textDeltas.map((delta) => delta.delta).join(``)
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+  return ``
 }
 
 function upsertChildRow(
@@ -864,22 +882,18 @@ function createDispatcherAssistant(ctx: HandlerContext): TestAgentSpec {
           ? TYPES.f1AssistantChild
           : TYPES.f1WorkerChild
       const childId = `${parentId}-dispatch-${dispatchCount}`
-      const child = await ctx.spawn(childType, childId)
-      child.send(task)
+      const child = await ctx.spawn(childType, childId, undefined, {
+        initialMessage: task,
+        wake: { on: `runFinished`, includeResponse: true },
+      })
       children.insert({ key: childId, url: child.entityUrl, kind: targetKind })
 
       status.update(`current`, (draft: Record<string, unknown>) => {
         draft.value = `waiting`
       })
 
-      const fullText = await readLatestCompletedHandleText(child)
-
-      status.update(`current`, (draft: Record<string, unknown>) => {
-        draft.value = `idle`
-      })
-
       bridge.onToolCallEnd(`dispatch`, { type: targetKind, childId }, false)
-      return fullText || `(no text output)`
+      return `dispatched ${targetKind} to ${child.entityUrl}`
     },
   })
 }
@@ -914,28 +928,31 @@ function createManagerWorkerAssistant(ctx: HandlerContext): TestAgentSpec {
           draft.value = `spawning`
         })
 
+        const generation =
+          children.toArray.length >= perspectives.length ? 2 : 1
         for (const perspective of perspectives) {
-          const existingChild = children.get(perspective.id)
-          const child = existingChild?.url
-            ? await ctx.observe(entity(existingChild.url), {
-                wake: `runFinished`,
-              })
-            : await ctx.spawn(
-                TYPES.fCoordWorker,
-                `${parentId}-${perspective.id}`,
-                {
-                  label: perspective.id,
-                  delayMs: perspective.delayMs,
-                }
-              )
-          child.send(question)
+          const childId =
+            generation === 1
+              ? `${parentId}-${perspective.id}`
+              : `${parentId}-${perspective.id}-${generation}`
+          const child = await ctx.spawn(
+            TYPES.fCoordWorker,
+            childId,
+            {
+              label: perspective.id,
+              delayMs: perspective.delayMs,
+            },
+            {
+              initialMessage: question,
+              wake: { on: `runFinished`, includeResponse: true },
+            }
+          )
           upsertChildRow(children, {
             key: perspective.id,
             url: child.entityUrl,
             kind: perspective.id,
           })
           upsertChildStatusRow(childStatus, perspective.id, `running`)
-          await ctx.observe(entity(child.entityUrl), { wake: `runFinished` })
         }
 
         status.update(`current`, (draft: Record<string, unknown>) => {
@@ -968,9 +985,7 @@ function createManagerWorkerAssistant(ctx: HandlerContext): TestAgentSpec {
           if (!childRow?.url) {
             continue
           }
-          const child = await ctx.observe(entity(childRow.url))
-          const fullText =
-            (await readLatestCompletedHandleText(child)) || `(no text output)`
+          const fullText = childRow.output || `(no text output)`
           results.push(`${perspective.id}:${fullText}`)
         }
 
@@ -2284,7 +2299,7 @@ t.define(TYPES.f1Dispatcher, {
     counters: { primaryKey: `key` },
     children: { schema: childRowSchema, primaryKey: `key` },
   },
-  async handler(ctx) {
+  async handler(ctx, wake) {
     const status = buildStateProxy<{ key: string; value: string }>(
       ctx.db,
       `status`
@@ -2292,7 +2307,30 @@ t.define(TYPES.f1Dispatcher, {
     if (!status.get(`current`)) {
       status.insert({ key: `current`, value: `idle` })
     }
-    await runTestAgent(ctx, createDispatcherAssistant(ctx))
+
+    if (wake.type === `inbox`) {
+      await runTestAgent(ctx, createDispatcherAssistant(ctx))
+      return
+    }
+
+    const finishedChild =
+      typeof wake.payload === `object` && wake.payload !== null
+        ? (
+            wake.payload as {
+              finished_child?: { response?: string }
+            }
+          ).finished_child
+        : undefined
+    if (finishedChild) {
+      status.update(`current`, (draft) => {
+        draft.value = `idle`
+      })
+      const response = finishedChild.response || `(no text output)`
+      await runTestAgent(ctx, {
+        model: `dispatcher-continuation`,
+        testResponses: [response],
+      })
+    }
   },
 })
 t.define(TYPES.f2Manager, {
@@ -2346,6 +2384,13 @@ t.define(TYPES.f2Manager, {
         const runStatus = String(finishedChild.run_status ?? ``)
         if (childKey && runStatus) {
           upsertChildStatusRow(childStatus, childKey, runStatus)
+          const response = String(finishedChild.response ?? ``)
+          if (response) {
+            const children = buildStateProxy<ChildRow>(ctx.db, `children`)
+            children.update(childKey, (draft) => {
+              draft.output = response
+            })
+          }
         }
       }
     }
@@ -2618,7 +2663,7 @@ t.define(TYPES.n1WakeTypeParent, {
             const childId = trimmed.slice(`spawn_and_observe `.length)
             const child = await ctx.spawn(TYPES.n1WakeTypeChild, childId)
             await ctx.observe(entity(child.entityUrl), {
-              wake: `runFinished`,
+              wake: { on: `runFinished`, includeResponse: true },
             })
             child.send(`hello from parent`)
             return `spawned:${childId}:wake.type=${wake.type}`
@@ -2730,7 +2775,7 @@ t.define(TYPES.n3IdleWakeParent, {
               TYPES.n3IdleWakeChild,
               childId,
               {},
-              { wake: `runFinished` }
+              { wake: { on: `runFinished`, includeResponse: true } }
             )
             child.send(`do work`)
             return `spawned:${childId}:wake.type=${wake.type}`
@@ -2782,7 +2827,7 @@ t.define(TYPES.n4WakeSummaryParent, {
               },
               {
                 initialMessage: `run ${spec.key}`,
-                wake: `runFinished`,
+                wake: { on: `runFinished`, includeResponse: true },
               }
             )
           }
@@ -4094,11 +4139,15 @@ describe(`F: coordination orchestration`, () => {
     })
   }, 60_000)
 
-  it(`F8: repeated spawn_perspectives reuses the same child streams for later questions`, async () => {
+  it(`F8: repeated spawn_perspectives starts a fresh child run set for later questions`, async () => {
     const parent = await t.spawn(TYPES.f2Manager, `manager-4`)
-    const optimist = t.entity(`/${TYPES.fCoordWorker}/manager-4-optimist`)
-    const pessimist = t.entity(`/${TYPES.fCoordWorker}/manager-4-pessimist`)
-    const pragmatist = t.entity(`/${TYPES.fCoordWorker}/manager-4-pragmatist`)
+    const firstOptimist = t.entity(`/${TYPES.fCoordWorker}/manager-4-optimist`)
+    const firstPessimist = t.entity(
+      `/${TYPES.fCoordWorker}/manager-4-pessimist`
+    )
+    const firstPragmatist = t.entity(
+      `/${TYPES.fCoordWorker}/manager-4-pragmatist`
+    )
 
     await parent.send(`spawn_perspectives first question`)
     await parent.waitForRun()
@@ -4107,18 +4156,6 @@ describe(`F: coordination orchestration`, () => {
 
     await parent.send(`spawn_perspectives second question`)
 
-    const secondOptimist = await optimist.waitFor(
-      (history) => history.count(`inbox`) >= 2,
-      60_000
-    )
-    const secondPessimist = await pessimist.waitFor(
-      (history) => history.count(`inbox`) >= 2,
-      60_000
-    )
-    const secondPragmatist = await pragmatist.waitFor(
-      (history) => history.count(`inbox`) >= 2,
-      60_000
-    )
     const parentHistory = await parent.waitFor((history) => {
       const childUrls = new Set(
         history.events
@@ -4126,21 +4163,34 @@ describe(`F: coordination orchestration`, () => {
           .map((event) => String(eventValueRecord(event)?.url ?? ``))
           .filter(Boolean)
       )
-      return childUrls.size === 3
+      return (
+        childUrls.has(`/${TYPES.fCoordWorker}/manager-4-optimist-2`) &&
+        childUrls.has(`/${TYPES.fCoordWorker}/manager-4-pessimist-2`) &&
+        childUrls.has(`/${TYPES.fCoordWorker}/manager-4-pragmatist-2`)
+      )
     }, 60_000)
+    const secondOptimist = t.entity(
+      `/${TYPES.fCoordWorker}/manager-4-optimist-2`
+    )
+    const secondPessimist = t.entity(
+      `/${TYPES.fCoordWorker}/manager-4-pessimist-2`
+    )
+    const secondPragmatist = t.entity(
+      `/${TYPES.fCoordWorker}/manager-4-pragmatist-2`
+    )
     await Promise.all([
-      optimist.waitForRunCount(2),
-      pessimist.waitForRunCount(2),
-      pragmatist.waitForRunCount(2),
+      secondOptimist.waitForRun(),
+      secondPessimist.waitForRun(),
+      secondPragmatist.waitForRun(),
     ])
     await t.waitForSettled()
 
-    expect(secondOptimist.count(`entity_created`)).toBe(1)
-    expect(secondPessimist.count(`entity_created`)).toBe(1)
-    expect(secondPragmatist.count(`entity_created`)).toBe(1)
-    expect(secondOptimist.count(`inbox`)).toBe(2)
-    expect(secondPessimist.count(`inbox`)).toBe(2)
-    expect(secondPragmatist.count(`inbox`)).toBe(2)
+    expect((await firstOptimist.history()).count(`inbox`)).toBe(1)
+    expect((await firstPessimist.history()).count(`inbox`)).toBe(1)
+    expect((await firstPragmatist.history()).count(`inbox`)).toBe(1)
+    expect((await secondOptimist.history()).count(`inbox`)).toBe(1)
+    expect((await secondPessimist.history()).count(`inbox`)).toBe(1)
+    expect((await secondPragmatist.history()).count(`inbox`)).toBe(1)
     expect(
       new Set(
         parentHistory.events
@@ -4148,7 +4198,7 @@ describe(`F: coordination orchestration`, () => {
           .map((event) => String(eventValueRecord(event)?.url ?? ``))
           .filter(Boolean)
       ).size
-    ).toBe(3)
+    ).toBe(6)
   }, 60_000)
 
   it(`F9: manager-worker records a targeted child failure and uses a placeholder only for that perspective`, async () => {
@@ -4222,7 +4272,9 @@ describe(`F: coordination orchestration`, () => {
   it(`F10: manager-worker can retry after a targeted failure and later collect full results`, async () => {
     const parent = await t.spawn(TYPES.f2Manager, `manager-6`)
     t.expectWakeError(`deterministic failure for pessimist`)
-    const pessimist = t.entity(`/${TYPES.fCoordWorker}/manager-6-pessimist`)
+    const failedPessimist = t.entity(
+      `/${TYPES.fCoordWorker}/manager-6-pessimist`
+    )
 
     await parent.send(
       `spawn_perspectives __fail__:pessimist Should we ship the feature?`
@@ -4242,25 +4294,14 @@ describe(`F: coordination orchestration`, () => {
       return statuses.get(`pessimist`) === `failed`
     })
     await parent.send(`spawn_perspectives Should we ship the feature?`)
-    await pessimist.waitFor((history) => {
-      const runs = history.events
-        .filter((event) => event.type === `run`)
-        .map((event) => eventValueRecord(event))
-        .filter((value): value is Record<string, unknown> => Boolean(value))
-
-      const terminalStatuses = runs
-        .filter((value) => {
-          const status = String(value.status ?? ``)
-          return status === `failed` || status === `completed`
-        })
-        .map((value) => String(value.status))
-
-      return (
-        terminalStatuses.length >= 2 &&
-        terminalStatuses.includes(`failed`) &&
-        terminalStatuses.includes(`completed`)
-      )
-    }, 60_000)
+    await failedPessimist.waitFor(
+      (history) =>
+        history.some(
+          `run`,
+          (event) => eventValueRecord(event)?.status === `failed`
+        ),
+      60_000
+    )
     await parent.waitFor((history) => {
       const statuses = new Map(
         history.events
@@ -4275,6 +4316,17 @@ describe(`F: coordination orchestration`, () => {
       )
       return statuses.get(`pessimist`) === `completed`
     })
+    const retryPessimist = t.entity(
+      `/${TYPES.fCoordWorker}/manager-6-pessimist-2`
+    )
+    await retryPessimist.waitFor(
+      (history) =>
+        history.some(
+          `run`,
+          (event) => eventValueRecord(event)?.status === `completed`
+        ),
+      60_000
+    )
     await parent.send(`wait_for_all`)
     const expectedDelta =
       `optimist:optimist::Should we ship the feature? | ` +

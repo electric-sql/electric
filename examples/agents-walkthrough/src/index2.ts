@@ -43,7 +43,7 @@ registry.define(`manager`, {
         },
         {
           initialMessage: (wake.payload as { text: string }).text,
-          wake: `runFinished`,
+          wake: { on: `runFinished`, includeResponse: true },
         }
       )
     }

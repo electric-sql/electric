@@ -41,7 +41,7 @@ function createSpawnAssistantTool(ctx: HandlerContext) {
         {},
         {
           initialMessage: task,
-          wake: `runFinished`,
+          wake: { on: `runFinished`, includeResponse: true },
         }
       )
 
@@ -118,13 +118,19 @@ function createStartDebateTool(ctx: HandlerContext<any, any, any, any>) {
           `assistant`,
           genId(),
           {},
-          { initialMessage: aBrief, wake: `runFinished` }
+          {
+            initialMessage: aBrief,
+            wake: { on: `runFinished`, includeResponse: true },
+          }
         ),
         ctx.spawn(
           `assistant`,
           genId(),
           {},
-          { initialMessage: bBrief, wake: `runFinished` }
+          {
+            initialMessage: bBrief,
+            wake: { on: `runFinished`, includeResponse: true },
+          }
         ),
       ])
 
@@ -290,7 +296,7 @@ function createSpawnJudgeTool(ctx: HandlerContext) {
         {},
         {
           initialMessage: `Set up a debate on this topic: ${topic}`,
-          wake: `runFinished`,
+          wake: { on: `runFinished`, includeResponse: true },
         }
       )
 
@@ -312,10 +318,15 @@ registry.define(`manager`, {
   description: `Delegates to assistants and judges and relays their results to the user.`,
   async handler(ctx, wake) {
     if ((wake.type = `wake`)) {
-      const child = wake.payload?.finished_child as FinishedChild | undefined
+      const finishedChild = wake.payload?.finished_child as
+        | FinishedChild
+        | undefined
 
-      if (child?.type === `judge` && child.run_status === `completed`) {
-        const judge = await ctx.observe(entity(child.url))
+      if (
+        finishedChild?.type === `judge` &&
+        finishedChild.run_status === `completed`
+      ) {
+        const judge = await ctx.observe(entity(finishedChild.url))
 
         const debate = judge.db.collections.debate.get(`current`) as
           | Debate
