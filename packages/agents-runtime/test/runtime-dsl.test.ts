@@ -691,6 +691,7 @@ function createDeterministicChildAssistant(config: {
         /^__(silent|fail)__:([a-z0-9_,-]+)\s+(.+)$/i
       )
       if (targetedMatch) {
+        const mode = targetedMatch[1]!.toLowerCase()
         const labels = targetedMatch[2]!
           .split(`,`)
           .map((part) => part.trim().toLowerCase())
