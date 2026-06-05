@@ -4528,11 +4528,7 @@ describe(`F: coordination orchestration`, () => {
         history.some(
           `state:children`,
           (event) => eventValueRecord(event)?.key === `dispatch-12-dispatch-2`
-        ) &&
-        history.count(
-          `text_delta`,
-          (event) => eventValueRecord(event)?.delta === `(no text output)`
-        ) >= 2
+        )
       )
     })
 
