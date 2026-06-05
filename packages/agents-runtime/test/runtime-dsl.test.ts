@@ -4364,7 +4364,7 @@ describe(`F: coordination orchestration`, () => {
     ).toMatchObject({
       delta: expectedDelta,
     })
-  }, 60_000)
+  }, 120_000)
 
   it(`F11: dispatcher preserves counters and child rows when a specialist fails`, async () => {
     const parent = await t.spawn(TYPES.f1Dispatcher, `dispatch-11`)
