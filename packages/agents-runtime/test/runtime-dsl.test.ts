@@ -2841,13 +2841,15 @@ t.define(TYPES.n3IdleWakeParent, {
           const trimmed = message.trim()
           if (trimmed.startsWith(`spawn `)) {
             const childId = trimmed.slice(`spawn `.length)
-            const child = await ctx.spawn(
+            await ctx.spawn(
               TYPES.n3IdleWakeChild,
               childId,
               {},
-              { wake: { on: `runFinished`, includeResponse: true } }
+              {
+                initialMessage: `do work`,
+                wake: { on: `runFinished`, includeResponse: true },
+              }
             )
-            child.send(`do work`)
             return `spawned:${childId}:wake.type=${wake.type}`
           }
           return `echo:${trimmed}:wake.type=${wake.type}`
