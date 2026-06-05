@@ -24,7 +24,7 @@ function entity(
     url: `/chat/${id}`,
     type: `chat`,
     status: `idle`,
-    streams: { main: `/chat/${id}/main`, error: `/chat/${id}/error` },
+    streams: { main: `/chat/${id}/main` },
     subscription_id: `chat-handler`,
     dispatch_policy: dispatchPolicy,
     write_token: `write-token`,

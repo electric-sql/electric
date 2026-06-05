@@ -114,12 +114,6 @@ export function runElectricAgentsConformanceTests(
             { method: `HEAD` }
           )
           expect(mainRes.status).toBe(200)
-
-          const errorRes = await fetch(
-            appendPathToUrl(ctx.baseUrl, ctx.currentEntityStreams!.error),
-            { method: `HEAD` }
-          )
-          expect(errorRes.status).toBe(200)
         })
         .run())
 
@@ -785,7 +779,6 @@ export function runElectricAgentsConformanceTests(
           ctx.currentEntityUrl = entity.url as string
           ctx.currentEntityStreams = entity.streams as {
             main: string
-            error: string
           }
           ctx.currentWriteToken = null
           ctx.history.push({
@@ -793,7 +786,7 @@ export function runElectricAgentsConformanceTests(
             entityUrl: entity.url as string,
             entityType: typeName,
             status: entity.status as string,
-            streams: entity.streams as { main: string; error: string },
+            streams: entity.streams as { main: string },
             parent: parentUrl!,
           })
         })

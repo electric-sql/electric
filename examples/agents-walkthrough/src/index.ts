@@ -208,8 +208,9 @@ registry.define(`judge`, {
       return ctx.sleep()
     }
 
-    const finished_child = (wake.payload as { finished_child?: FinishedChild })
-      .finished_child
+    const finished_child = (
+      wake.payload as { finished_child?: FinishedChild } | undefined
+    )?.finished_child
     if (!finished_child) {
       return ctx.sleep()
     }
@@ -317,8 +318,9 @@ registry.define(`manager`, {
   description: `Delegates to assistants and judges and relays their results to the user.`,
   async handler(ctx, wake) {
     if (wake.type === `wake`) {
-      const finishedChild = (wake.payload as { finished_child?: FinishedChild })
-        .finished_child
+      const finishedChild = (
+        wake.payload as { finished_child?: FinishedChild } | undefined
+      )?.finished_child
 
       if (
         finishedChild?.type === `judge` &&

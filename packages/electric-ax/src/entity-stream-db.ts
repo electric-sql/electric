@@ -52,7 +52,7 @@ export async function createEntityStreamDB(opts: {
     throw new Error(`Failed to fetch entity at ${entityUrl}: ${res.statusText}`)
   }
   const entity = (await res.json()) as {
-    streams?: { main: string; error: string }
+    streams?: { main: string }
   }
   const streamPath = getMainStreamPath(entityUrl, entity)
   const streamUrl = appendPathToUrl(baseUrl, streamPath)

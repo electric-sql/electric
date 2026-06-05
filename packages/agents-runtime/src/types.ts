@@ -655,7 +655,7 @@ export interface WebhookNotification {
     type?: string
     status: string
     url: string
-    streams: { main: string; error: string }
+    streams: { main: string }
     tags?: Record<string, string>
     spawnArgs?: Record<string, unknown>
     sandbox?: {

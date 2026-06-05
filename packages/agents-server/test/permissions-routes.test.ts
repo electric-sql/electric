@@ -33,7 +33,7 @@ function entity(url: string, createdBy = owner.url) {
     url,
     type,
     status: `idle`,
-    streams: { main: `${url}/main`, error: `${url}/error` },
+    streams: { main: `${url}/main` },
     subscription_id: `${type}-sub`,
     write_token: `${url}-token`,
     tags: {},

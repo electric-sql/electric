@@ -48,7 +48,6 @@ describe(`ElectricAgentsManager.signal semantics`, () => {
       status,
       streams: {
         main: `/chat/demo/main`,
-        error: `/chat/demo/error`,
       },
       subscription_id: `chat-handler`,
       write_token: `token`,
@@ -317,7 +316,7 @@ describe(`ElectricAgentsManager.spawn wake cleanup on failure`, () => {
     ).rejects.toThrow(`registry create failed`)
 
     expect(append).not.toHaveBeenCalled()
-    expect(deleteStream).toHaveBeenCalledTimes(2)
+    expect(deleteStream).toHaveBeenCalledTimes(1)
   })
 
   it(`rejects duplicate entity URLs before touching stream creation`, async () => {
@@ -336,7 +335,6 @@ describe(`ElectricAgentsManager.spawn wake cleanup on failure`, () => {
           status: `idle`,
           streams: {
             main: `/chat/stuck/main`,
-            error: `/chat/stuck/error`,
           },
           subscription_id: `chat-handler`,
           write_token: ``,
@@ -379,7 +377,6 @@ describe(`ElectricAgentsManager.forkSubtree`, () => {
       status: `idle`,
       streams: {
         main: `${url}/main`,
-        error: `${url}/error`,
       },
       subscription_id: `${type}-handler`,
       write_token: `${type}-token`,

@@ -364,7 +364,6 @@ function makeNotification(
       url: `http://localhost:3000/test-agent/agent-1`,
       streams: {
         main: `/streams/entity:agent-1`,
-        error: `/streams/entity-error:agent-1`,
       },
     },
     ...overrides,

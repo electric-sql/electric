@@ -40,7 +40,6 @@ function principalEntity(principalKey: string): ElectricAgentsEntity & {
     status: `idle`,
     streams: {
       main: `/principal/${encodeURIComponent(principalKey)}/main`,
-      error: `/principal/${encodeURIComponent(principalKey)}/error`,
     },
     subscription_id: `sub-principal`,
     write_token: `write-token`,

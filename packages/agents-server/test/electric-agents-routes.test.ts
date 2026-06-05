@@ -971,7 +971,7 @@ describe(`ElectricAgentsRoutes signal endpoint`, () => {
       registry: {
         getEntity: vi.fn().mockResolvedValue({
           url: `/chat/test`,
-          streams: { main: `/chat/test/main`, error: `/chat/test/error` },
+          streams: { main: `/chat/test/main` },
         }),
         getEntityType: vi.fn(),
       },
@@ -1003,7 +1003,7 @@ describe(`ElectricAgentsRoutes signal endpoint`, () => {
       registry: {
         getEntity: vi.fn().mockResolvedValue({
           url: `/chat/test`,
-          streams: { main: `/chat/test/main`, error: `/chat/test/error` },
+          streams: { main: `/chat/test/main` },
         }),
         getEntityType: vi.fn(),
       },
@@ -1032,7 +1032,6 @@ describe(`ElectricAgentsRoutes signal endpoint`, () => {
           type: `principal`,
           streams: {
             main: `/principal/user%3Aalice%40example.com/main`,
-            error: `/principal/user%3Aalice%40example.com/error`,
           },
         }),
         getEntityType: vi.fn(),
@@ -1065,7 +1064,6 @@ describe(`ElectricAgentsRoutes fork endpoint`, () => {
       status: `idle`,
       streams: {
         main: `/chat/root-copy/main`,
-        error: `/chat/root-copy/error`,
       },
       subscription_id: `chat-handler`,
       write_token: `secret-token`,
