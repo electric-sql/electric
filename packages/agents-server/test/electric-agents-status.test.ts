@@ -316,7 +316,7 @@ describe(`ElectricAgentsManager.spawn wake cleanup on failure`, () => {
     ).rejects.toThrow(`registry create failed`)
 
     expect(append).not.toHaveBeenCalled()
-    expect(deleteStream).toHaveBeenCalledTimes(2)
+    expect(deleteStream).toHaveBeenCalledTimes(1)
   })
 
   it(`rejects duplicate entity URLs before touching stream creation`, async () => {
