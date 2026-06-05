@@ -38,6 +38,7 @@ export type IconName =
   | `google`
   | `cloud`
   | `user`
+  | `users`
 
 const PATHS: Record<IconName, string> = {
   back: `M15 18l-6-6 6-6`,
@@ -55,6 +56,7 @@ const PATHS: Record<IconName, string> = {
   server: `M5 5h14v6H5zM5 13h14v6H5zM8 8h.01M8 16h.01`,
   cloud: `M17.5 19a4.5 4.5 0 1 0-1.4-8.78A6 6 0 1 0 6 16.66 4 4 0 0 0 7 19h10.5Z`,
   user: `M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM5 21a7 7 0 0 1 14 0`,
+  users: `M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M16 3.13a4 4 0 0 1 0 7.74M22 21v-2a4 4 0 0 0-3-3.87M10 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z`,
   filter: `M4 5h16l-6 8v6l-4-2v-4Z`,
   info: `M12 8v.01M11 12h1v4h1M12 21a9 9 0 1 1 0-18 9 9 0 0 1 0 18Z`,
   swap: `M7 4l-3 3 3 3M4 7h13M17 14l3 3-3 3M20 17H7`,

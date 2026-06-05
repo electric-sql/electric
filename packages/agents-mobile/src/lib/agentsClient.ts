@@ -38,6 +38,7 @@ export const entitySchema = z.object({
   tags: z.record(z.string(), z.string()).default({}),
   spawn_args: z.record(z.string(), z.unknown()).default({}),
   parent: z.string().nullable(),
+  created_by: z.string().nullable().optional(),
   type_revision: z.coerce.number().nullable().optional(),
   inbox_schemas: z.record(z.string(), z.unknown()).nullable().optional(),
   state_schemas: z.record(z.string(), z.unknown()).nullable().optional(),
@@ -68,15 +69,44 @@ export const runnerSchema = z.object({
   last_seen_at: z.string().nullable().optional(),
 })
 
+export const userSchema = z.object({
+  id: z.string(),
+  display_name: z.string().nullable(),
+  email: z.string().nullable(),
+  avatar_url: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+})
+
+export const entityEffectivePermissionSchema = z.object({
+  id: z.coerce.number(),
+  entity_url: z.string(),
+  source_entity_url: z.string(),
+  source_grant_id: z.coerce.number(),
+  permission: z.string(),
+  subject_kind: z.string(),
+  subject_value: z.string(),
+  expires_at: z.string().nullable().optional(),
+  created_at: z.string(),
+})
+
 export type ElectricEntity = z.infer<typeof entitySchema>
 export type ElectricEntityType = z.infer<typeof entityTypeSchema>
 export type ElectricRunner = z.infer<typeof runnerSchema>
+export type ElectricUser = z.infer<typeof userSchema>
+export type ElectricEntityEffectivePermission = z.infer<
+  typeof entityEffectivePermissionSchema
+>
 
 export type EntitiesCollection = ReturnType<typeof createEntitiesCollection>
 export type EntityTypesCollection = ReturnType<
   typeof createEntityTypesCollection
 >
 export type RunnersCollection = ReturnType<typeof createRunnersCollection>
+export type UsersCollection = ReturnType<typeof createUsersCollection>
+export type EntityEffectivePermissionsCollection = ReturnType<
+  typeof createEntityEffectivePermissionsCollection
+>
 
 export function normalizeServerUrl(input: string): string {
   const trimmed = input.trim().replace(/\/+$/, ``)
@@ -116,6 +146,7 @@ export function createEntitiesCollection(baseUrl: string) {
             `tags`,
             `spawn_args`,
             `parent`,
+            `created_by`,
             `type_revision`,
             `inbox_schemas`,
             `state_schemas`,
@@ -166,6 +197,46 @@ export function createRunnersCollection(baseUrl: string) {
             `last_seen_at`,
           ],
         },
+      },
+      getKey: (item) => item.id,
+    })
+  )
+}
+
+export function createUsersCollection(baseUrl: string) {
+  return createCollection(
+    electricCollectionOptions({
+      id: `mobile-users:${baseUrl}`,
+      schema: userSchema,
+      shapeOptions: {
+        url: appendPathToUrl(baseUrl, `/_electric/electric/v1/shape`),
+        fetchClient: serverFetch,
+        params: {
+          table: `users`,
+          columns: [
+            `id`,
+            `display_name`,
+            `email`,
+            `avatar_url`,
+            `created_at`,
+            `updated_at`,
+          ],
+        },
+      },
+      getKey: (item) => item.id,
+    })
+  )
+}
+
+export function createEntityEffectivePermissionsCollection(baseUrl: string) {
+  return createCollection(
+    electricCollectionOptions({
+      id: `mobile-entity-effective-permissions:${baseUrl}`,
+      schema: entityEffectivePermissionSchema,
+      shapeOptions: {
+        url: appendPathToUrl(baseUrl, `/_electric/electric/v1/shape`),
+        fetchClient: serverFetch,
+        params: { table: `entity_effective_permissions` },
       },
       getKey: (item) => item.id,
     })

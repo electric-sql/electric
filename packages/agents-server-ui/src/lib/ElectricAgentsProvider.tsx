@@ -70,6 +70,7 @@ const entitySchema = z.object({
     .optional(),
   dispatch_policy: dispatchPolicySchema.nullable().optional(),
   parent: z.string().nullable(),
+  created_by: z.string().nullable().optional(),
   type_revision: z.coerce.number().nullable().optional(),
   inbox_schemas: z.record(z.unknown()).nullable().optional(),
   state_schemas: z.record(z.unknown()).nullable().optional(),
@@ -168,6 +169,27 @@ const runnerRuntimeDiagnosticsSchema = z.object({
   updated_at: z.string(),
 })
 
+const userSchema = z.object({
+  id: z.string(),
+  display_name: z.string().nullable(),
+  email: z.string().nullable(),
+  avatar_url: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+})
+
+const entityEffectivePermissionSchema = z.object({
+  id: z.coerce.number(),
+  entity_url: z.string(),
+  source_entity_url: z.string(),
+  source_grant_id: z.coerce.number(),
+  permission: z.string(),
+  subject_kind: z.string(),
+  subject_value: z.string(),
+  expires_at: z.string().nullable().optional(),
+  created_at: z.string(),
+})
+
 export type ElectricEntity = z.infer<typeof entitySchema>
 export type ElectricEntityType = z.infer<typeof entityTypeSchema>
 export type ElectricRunner = z.infer<typeof runnerSchema>
@@ -176,6 +198,10 @@ export type ElectricSandboxProfile = z.infer<
 >
 export type ElectricRunnerRuntimeDiagnostics = z.infer<
   typeof runnerRuntimeDiagnosticsSchema
+>
+export type ElectricUser = z.infer<typeof userSchema>
+export type ElectricEntityEffectivePermission = z.infer<
+  typeof entityEffectivePermissionSchema
 >
 
 // --- Collection factories ---
@@ -198,6 +224,7 @@ function createEntitiesCollection(baseUrl: string) {
             `sandbox`,
             `dispatch_policy`,
             `parent`,
+            `created_by`,
             `type_revision`,
             `inbox_schemas`,
             `state_schemas`,
@@ -245,6 +272,36 @@ export function createRunnersCollection(baseUrl: string) {
   )
 }
 
+export function createUsersCollection(baseUrl: string) {
+  return createCollection(
+    electricCollectionOptions({
+      id: `users`,
+      schema: userSchema,
+      shapeOptions: {
+        url: appendPathToUrl(baseUrl, `/_electric/electric/v1/shape`),
+        params: { table: `users` },
+        fetchClient: serverFetch,
+      },
+      getKey: (item) => item.id,
+    })
+  )
+}
+
+export function createEntityEffectivePermissionsCollection(baseUrl: string) {
+  return createCollection(
+    electricCollectionOptions({
+      id: `entity-effective-permissions`,
+      schema: entityEffectivePermissionSchema,
+      shapeOptions: {
+        url: appendPathToUrl(baseUrl, `/_electric/electric/v1/shape`),
+        params: { table: `entity_effective_permissions` },
+        fetchClient: serverFetch,
+      },
+      getKey: (item) => item.id,
+    })
+  )
+}
+
 export function createRunnerRuntimeDiagnosticsCollection(
   baseUrl: string,
   runnerId: string
@@ -270,11 +327,17 @@ export function createRunnerRuntimeDiagnosticsCollection(
 type EntitiesCollection = ReturnType<typeof createEntitiesCollection>
 type EntityTypesCollection = ReturnType<typeof createEntityTypesCollection>
 type RunnersCollection = ReturnType<typeof createRunnersCollection>
+type UsersCollection = ReturnType<typeof createUsersCollection>
+type EntityEffectivePermissionsCollection = ReturnType<
+  typeof createEntityEffectivePermissionsCollection
+>
 
 type AppCollections = {
   entities: EntitiesCollection
   entityTypes: EntityTypesCollection
   runners: RunnersCollection
+  users: UsersCollection
+  entityEffectivePermissions: EntityEffectivePermissionsCollection
 }
 
 const appCollectionsCache = new Map<string, AppCollections>()
@@ -286,6 +349,9 @@ function getOrCreateAppCollections(baseUrl: string): AppCollections {
     entities: createEntitiesCollection(baseUrl),
     entityTypes: createEntityTypesCollection(baseUrl),
     runners: createRunnersCollection(baseUrl),
+    users: createUsersCollection(baseUrl),
+    entityEffectivePermissions:
+      createEntityEffectivePermissionsCollection(baseUrl),
   }
   appCollectionsCache.set(baseUrl, collections)
   return collections
@@ -297,6 +363,8 @@ function cleanupAppCollections(baseUrl: string): void {
   collections.entities.cleanup()
   collections.entityTypes.cleanup()
   collections.runners.cleanup()
+  collections.users.cleanup()
+  collections.entityEffectivePermissions.cleanup()
   appCollectionsCache.delete(baseUrl)
 }
 
@@ -314,6 +382,7 @@ export async function preloadAppCollections(
     collections.entities.preload(),
     collections.entityTypes.preload(),
     collections.runners.preload(),
+    collections.entityEffectivePermissions.preload(),
   ])
   return collections
 }
@@ -659,6 +728,8 @@ interface ElectricAgentsState {
   entitiesCollection: EntitiesCollection | null
   entityTypesCollection: EntityTypesCollection | null
   runnersCollection: RunnersCollection | null
+  usersCollection: UsersCollection | null
+  entityEffectivePermissionsCollection: EntityEffectivePermissionsCollection | null
   spawnEntity: ReturnType<typeof createSpawnAction> | null
   signalEntity: ReturnType<typeof createSignalAction> | null
   killEntity: ReturnType<typeof createKillAction> | null
@@ -669,6 +740,8 @@ const ElectricAgentsContext = createContext<ElectricAgentsState>({
   entitiesCollection: null,
   entityTypesCollection: null,
   runnersCollection: null,
+  usersCollection: null,
+  entityEffectivePermissionsCollection: null,
   spawnEntity: null,
   signalEntity: null,
   killEntity: null,
@@ -706,6 +779,8 @@ export function ElectricAgentsProvider({
         entitiesCollection: null,
         entityTypesCollection: null,
         runnersCollection: null,
+        usersCollection: null,
+        entityEffectivePermissionsCollection: null,
         spawnEntity: null,
         signalEntity: null,
         killEntity: null,
@@ -713,12 +788,19 @@ export function ElectricAgentsProvider({
       }
     }
 
-    const { entities, entityTypes, runners } =
-      getOrCreateAppCollections(baseUrl)
+    const {
+      entities,
+      entityTypes,
+      runners,
+      users,
+      entityEffectivePermissions,
+    } = getOrCreateAppCollections(baseUrl)
     return {
       entitiesCollection: entities,
       entityTypesCollection: entityTypes,
       runnersCollection: runners,
+      usersCollection: users,
+      entityEffectivePermissionsCollection: entityEffectivePermissions,
       spawnEntity: createSpawnAction(baseUrl, entities),
       signalEntity: createSignalAction(baseUrl, entities),
       killEntity: createKillAction(baseUrl, entities),

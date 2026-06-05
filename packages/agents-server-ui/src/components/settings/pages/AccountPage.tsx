@@ -86,11 +86,7 @@ export function AccountPage(): React.ReactElement {
           <>
             <SettingsRow
               label="Account"
-              description={
-                state?.name && state?.email
-                  ? `${state.name} (${state.email})`
-                  : (state?.name ?? state?.email ?? `Signed in`)
-              }
+              description={<AccountDescription state={state} />}
               control={
                 <SettingsStatusBadge tone="success">
                   Signed in
@@ -195,5 +191,28 @@ export function AccountPage(): React.ReactElement {
         )}
       </SettingsSection>
     </SettingsScreen>
+  )
+}
+
+function AccountDescription({
+  state,
+}: {
+  state: CloudAuthState | null
+}): React.ReactElement {
+  const label =
+    state?.name && state?.email
+      ? `${state.name} (${state.email})`
+      : (state?.name ?? state?.email ?? `Signed in`)
+  return (
+    <Stack as="span" direction="column" gap={1}>
+      <Text as="span" size={1} tone="muted">
+        {label}
+      </Text>
+      {state?.userId && (
+        <Text as="span" size={1} tone="subtle" family="mono">
+          user:{state.userId}
+        </Text>
+      )}
+    </Stack>
   )
 }

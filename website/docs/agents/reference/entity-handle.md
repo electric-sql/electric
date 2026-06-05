@@ -2,13 +2,13 @@
 title: EntityHandle
 titleTemplate: "... - Electric Agents"
 description: >-
-  API reference for EntityHandle returned by spawn and observe: streams, status, text retrieval, and messaging.
+  API reference for EntityHandle returned by spawn and observe: streams, status, and messaging.
 outline: [2, 3]
 ---
 
 # EntityHandle
 
-Handle returned by `ctx.spawn()` and `ctx.observe()`. Provides access to a child or observed entity's stream and status.
+Handle returned by `ctx.spawn()` and `ctx.observe(entity(...))`. It identifies a child or observed entity and exposes its materialized stream.
 
 **Source:** `@electric-ax/agents-runtime`
 
@@ -18,25 +18,60 @@ interface EntityHandle {
   type?: string
   db: EntityStreamDB
   events: ChangeEvent[]
-  run: Promise<void>
-  text(): Promise<string[]>
-  send(msg: unknown): void
+  send(msg: unknown): Promise<SendResult>
   status(): ChildStatus | undefined
 }
 ```
 
 ## Members
 
-| Member      | Type                       | Description                                                                         |
-| ----------- | -------------------------- | ----------------------------------------------------------------------------------- |
-| `entityUrl` | `string`                   | URL path of the entity (e.g. `"/chat/my-child"`).                                   |
-| `type`      | `string \| undefined`      | Entity type name, if known.                                                         |
-| `db`        | `EntityStreamDB`           | The entity's TanStack DB instance for querying its collections.                     |
-| `events`    | `ChangeEvent[]`            | All change events received from this entity's stream.                               |
-| `run`       | `Promise<void>`            | Promise that resolves when the entity's current run completes. Useful with `await`. |
-| `text()`    | `Promise<string[]>`        | Returns all text outputs from the entity's stream.                                  |
-| `send(msg)` | `void`                     | Send a message to this entity.                                                      |
-| `status()`  | `ChildStatus \| undefined` | Current status of the entity, or `undefined` if unknown.                            |
+| Member      | Type                       | Description                                                     |
+| ----------- | -------------------------- | --------------------------------------------------------------- |
+| `entityUrl` | `string`                   | URL path of the entity, e.g. `"/worker/child-1"`.              |
+| `type`      | `string \| undefined`      | Entity type name, if known.                                     |
+| `db`        | `EntityStreamDB`           | The entity's TanStack DB instance for querying its collections. |
+| `events`    | `ChangeEvent[]`            | Change events received from this entity's stream this wake.     |
+| `send(msg)` | `Promise<SendResult>`      | Send a follow-up message to this entity.                        |
+| `status()`  | `ChildStatus \| undefined` | Current child status, or `undefined` if unknown.                |
+
+## Coordinating with completion
+
+`EntityHandle` does **not** provide a same-wake “wait for output” API. To continue after a child finishes, spawn or observe it with a wake condition and return from the current handler:
+
+```ts
+const child = await ctx.spawn(
+  "worker",
+  "analyst-1",
+  { systemPrompt: "Analyze this input", tools: ["read"] },
+  {
+    initialMessage: "...",
+    wake: { on: "runFinished", includeResponse: true },
+  }
+)
+
+ctx.state.children.insert({
+  key: "analyst-1",
+  url: child.entityUrl,
+  status: "running",
+})
+return
+```
+
+On the later wake, inspect the finished child payload and continue orchestration:
+
+```ts
+if (wake.payload?.finished_child) {
+  const finished = wake.payload.finished_child
+  const response = finished.response ?? ""
+
+  ctx.state.children.update(finished.url, (draft) => {
+    draft.status = finished.run_status
+    draft.response = response
+  })
+}
+```
+
+For structured or large outputs, have the child write to shared state and use the `runFinished` wake as the signal that it is safe to read/reduce that state.
 
 ## ChildStatus
 
@@ -49,15 +84,6 @@ interface ChildStatusEntry {
   key: string
   entity_url: string
   entity_type: string
-  status: "spawning" | "running" | "idle" | "stopped"
+  status: "spawning" | "running" | "idle" | "paused" | "stopping" | "stopped" | "killed"
 }
 ```
-
-Status values:
-
-| Status     | Description                                                 |
-| ---------- | ----------------------------------------------------------- |
-| `spawning` | Entity creation is in progress.                             |
-| `running`  | Handler is currently executing.                             |
-| `idle`     | Handler has completed; entity is waiting for the next wake. |
-| `stopped`  | Entity has been stopped or deleted.                         |

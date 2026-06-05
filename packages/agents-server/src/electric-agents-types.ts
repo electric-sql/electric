@@ -429,7 +429,6 @@ export interface ElectricAgentsEntity {
   status: EntityStatus
   streams: {
     main: string
-    error: string
   }
   subscription_id: string
   dispatch_policy?: DispatchPolicy
@@ -458,7 +457,7 @@ export interface PublicElectricAgentsEntity {
   url: string
   type: string
   status: EntityStatus
-  streams: { main: string; error: string }
+  streams: { main: string }
   dispatch_policy?: DispatchPolicy
   tags: Record<string, string>
   spawn_args?: Record<string, unknown>

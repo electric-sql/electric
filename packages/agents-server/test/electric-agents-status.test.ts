@@ -48,7 +48,6 @@ describe(`ElectricAgentsManager.signal semantics`, () => {
       status,
       streams: {
         main: `/chat/demo/main`,
-        error: `/chat/demo/error`,
       },
       subscription_id: `chat-handler`,
       write_token: `token`,
@@ -317,7 +316,7 @@ describe(`ElectricAgentsManager.spawn wake cleanup on failure`, () => {
     ).rejects.toThrow(`registry create failed`)
 
     expect(append).not.toHaveBeenCalled()
-    expect(deleteStream).toHaveBeenCalledTimes(2)
+    expect(deleteStream).toHaveBeenCalledTimes(1)
   })
 
   it(`rejects duplicate entity URLs before touching stream creation`, async () => {
@@ -336,7 +335,6 @@ describe(`ElectricAgentsManager.spawn wake cleanup on failure`, () => {
           status: `idle`,
           streams: {
             main: `/chat/stuck/main`,
-            error: `/chat/stuck/error`,
           },
           subscription_id: `chat-handler`,
           write_token: ``,
@@ -379,7 +377,6 @@ describe(`ElectricAgentsManager.forkSubtree`, () => {
       status: `idle`,
       streams: {
         main: `${url}/main`,
-        error: `${url}/error`,
       },
       subscription_id: `${type}-handler`,
       write_token: `${type}-token`,
@@ -388,6 +385,7 @@ describe(`ElectricAgentsManager.forkSubtree`, () => {
       ...(parent ? { parent } : {}),
       created_at: Date.now(),
       updated_at: Date.now(),
+      created_by: `/principal/user%3Aoriginal-owner`,
     } as const
   }
 
@@ -479,14 +477,17 @@ describe(`ElectricAgentsManager.forkSubtree`, () => {
     const result = await manager.forkSubtree(root.url, {
       rootInstanceId: `root-copy`,
       waitTimeoutMs: 0,
+      createdBy: `/principal/user%3Aforker`,
     })
 
     expect(result.root.url).toBe(`/manager/root-copy`)
+    expect(result.root.created_by).toBe(`/principal/user%3Aforker`)
     expect(result.entities).toHaveLength(2)
     const forkedChild = result.entities.find(
       (entity) => entity.type === `worker`
     )
     expect(forkedChild?.parent).toBe(`/manager/root-copy`)
+    expect(forkedChild?.created_by).toBe(`/principal/user%3Aforker`)
 
     const firstEntityWrite = calls.findIndex((call) =>
       call.startsWith(`entity:`)

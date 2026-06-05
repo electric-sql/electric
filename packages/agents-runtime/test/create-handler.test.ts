@@ -149,7 +149,6 @@ describe(`createRuntimeHandler`, () => {
         url: `http://localhost:3000/test-agent/test-1`,
         streams: {
           main: `/streams/entity:test-1`,
-          error: `/streams/entity-error:test-1`,
         },
       },
     }
@@ -208,7 +207,6 @@ describe(`createRuntimeHandler`, () => {
         url: `http://localhost:3000/test-agent/test-1`,
         streams: {
           main: `/streams/entity:test-1`,
-          error: `/streams/entity-error:test-1`,
         },
       },
     }
@@ -270,7 +268,6 @@ describe(`createRuntimeHandler`, () => {
         url: `http://localhost:3000/test-agent/test-1`,
         streams: {
           main: `/streams/entity:test-1`,
-          error: `/streams/entity-error:test-1`,
         },
       },
     }
@@ -338,7 +335,6 @@ describe(`createRuntimeHandler`, () => {
         url: `http://localhost:3000/test-agent/test-${n}`,
         streams: {
           main: `/streams/entity:test-${n}`,
-          error: `/streams/entity-error:test-${n}`,
         },
       },
     })
@@ -462,7 +458,6 @@ describe(`createRuntimeHandler`, () => {
         url: `/nonexistent-agent/test-1`,
         streams: {
           main: `/nonexistent-agent/test-1/main`,
-          error: `/nonexistent-agent/test-1/error`,
         },
       },
     }
@@ -506,7 +501,6 @@ describe(`createRuntimeHandler`, () => {
         url: `http://localhost:3000/test-agent/test-1`,
         streams: {
           main: `/streams/entity:test-1`,
-          error: `/streams/entity-error:test-1`,
         },
       },
     }
@@ -595,7 +589,6 @@ describe(`createRuntimeHandler`, () => {
         url: `http://localhost:3000/test-agent/test-1`,
         streams: {
           main: `/streams/entity:test-1`,
-          error: `/streams/entity-error:test-1`,
         },
       },
     }

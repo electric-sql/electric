@@ -582,8 +582,6 @@ export interface EntityHandle extends ObservationHandle {
   type?: string
   db: EntityStreamDB
   events: Array<ChangeEvent>
-  run: Promise<void>
-  text: () => Promise<Array<string>>
   send: (msg: unknown) => Promise<SendResult>
   status: () => ChildStatus | undefined
 }
@@ -668,7 +666,7 @@ export interface WebhookNotification {
     type?: string
     status: string
     url: string
-    streams: { main: string; error: string }
+    streams: { main: string }
     tags?: Record<string, string>
     spawnArgs?: Record<string, unknown>
     sandbox?: {
@@ -799,8 +797,6 @@ export interface SharedStateHandleInfo {
  */
 export interface SpawnHandleInfo {
   wireDb: (db: EntityStreamDBWithActions) => void | Promise<void>
-  resolveRun: () => void
-  rejectRun: (reason: Error) => void
   /** Update the handle's entityUrl after learning the server-assigned URL. */
   updateEntityUrl: (realUrl: string) => void
 }
@@ -1014,9 +1010,8 @@ export interface HandlerContext<
       tags?: Record<string, string>
       /**
        * When false, the parent does not subscribe to the child's stream. The
-       * spawned EntityHandle is fire-and-forget: `.run`, `.text`, and
-       * `.status` throw if accessed. Use for high-fanout patterns where the
-       * parent never awaits child completion.
+       * spawned EntityHandle is fire-and-forget: `.status` throws if accessed.
+       * Use for high-fanout patterns where the parent never observes child state.
        */
       observe?: boolean
       sandbox?: SpawnSandboxOption

@@ -1,4 +1,5 @@
 import path from 'node:path'
+import { installDurableStreamsFetchCache } from './durable-streams-cache.js'
 import { serverLog } from './log.js'
 import {
   createBuiltinAgentHandler,
@@ -29,12 +30,19 @@ import type {
   PullWakeRunner,
   PullWakeRunnerConfig,
 } from '@electric-ax/agents-runtime'
+import type { DurableStreamsFetchCacheOptions } from './durable-streams-cache.js'
 import type { StreamFn } from '@mariozechner/pi-agent-core'
 
 export interface BuiltinAgentsServerOptions {
   agentServerUrl: string
   workingDirectory?: string
   mockStreamFn?: StreamFn
+  /**
+   * Configure the process-wide HTTP cache used by Undici-backed fetch calls.
+   * Defaults to a 100 MiB in-memory cache. Pass `false` to leave the global
+   * dispatcher unchanged.
+   */
+  durableStreamsFetchCache?: DurableStreamsFetchCacheOptions
   /** Pull-wake runner configuration for built-in agents. */
   pullWake: {
     runnerId: string
@@ -176,6 +184,8 @@ export class BuiltinAgentsServer {
     if (this.bootstrap || this.pullWakeRunner) {
       throw new Error(`Builtin agents runtime already started`)
     }
+
+    installDurableStreamsFetchCache(this.options.durableStreamsFetchCache)
 
     const pullWake = this.options.pullWake
     if (!pullWake?.runnerId) {

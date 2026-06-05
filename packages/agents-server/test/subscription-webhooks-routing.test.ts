@@ -106,7 +106,6 @@ function buildContext(overrides: Partial<TenantContext> = {}): TenantContext {
     status: `idle`,
     streams: {
       main: `/horton/demo/main`,
-      error: `/horton/demo/error`,
     },
     tags: {},
     spawn_args: {},
@@ -376,7 +375,6 @@ describe(`subscription webhooks for Durable Streams subscriptions`, () => {
       status: `idle`,
       streams: {
         main: `/horton/pending/main`,
-        error: `/horton/pending/error`,
       },
       tags: {},
       spawn_args: {},
@@ -465,7 +463,6 @@ describe(`subscription webhooks for Durable Streams subscriptions`, () => {
       status: `idle`,
       streams: {
         main: `/horton/demo/main`,
-        error: `/horton/demo/error`,
       },
       tags: {},
       spawn_args: {},
@@ -509,7 +506,6 @@ describe(`subscription webhooks for Durable Streams subscriptions`, () => {
                 url: `/horton/demo`,
                 streams: {
                   main: `/horton/demo/main`,
-                  error: `/horton/demo/error`,
                 },
                 tags: {},
                 spawnArgs: {},
@@ -590,7 +586,6 @@ describe(`subscription webhooks for Durable Streams subscriptions`, () => {
       status: `stopped`,
       streams: {
         main: `/horton/demo/main`,
-        error: `/horton/demo/error`,
       },
     }
     const fetchSpy = vi.spyOn(globalThis, `fetch`)

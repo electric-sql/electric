@@ -857,12 +857,9 @@ export class PostgresRegistry {
     streamPath: string
   ): Promise<ElectricAgentsEntity | null> {
     const mainSuffix = `/main`
-    const errorSuffix = `/error`
     let entityUrl: string | null = null
     if (streamPath.endsWith(mainSuffix)) {
       entityUrl = streamPath.slice(0, -mainSuffix.length)
-    } else if (streamPath.endsWith(errorSuffix)) {
-      entityUrl = streamPath.slice(0, -errorSuffix.length)
     }
     if (!entityUrl) return null
     return this.getEntity(entityUrl)
@@ -1890,7 +1887,6 @@ export class PostgresRegistry {
       status: assertEntityStatus(row.status),
       streams: {
         main: `${row.url}/main`,
-        error: `${row.url}/error`,
       },
       subscription_id: row.subscriptionId,
       dispatch_policy:

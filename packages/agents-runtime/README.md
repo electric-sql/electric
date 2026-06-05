@@ -184,14 +184,17 @@ the runtime will not run an LLM for that wake.
 ### Spawn, Observe, and Send
 
 ```ts
-const child = await ctx.spawn(`researcher`, `r-1`, { topic: `durability` })
-await child.run
+const child = await ctx.spawn(
+  `researcher`,
+  `r-1`,
+  { topic: `durability` },
+  { wake: { on: `runFinished`, includeResponse: true } }
+)
 
-child.send(`dig deeper into storage tradeoffs`)
-const text = await child.text()
+// Return from this wake. Continue when the child completion wake arrives.
 
-const observed = await ctx.observe(`/researcher/r-2`, {
-  wake: `runFinished`,
+const observed = await ctx.observe(entity(`/researcher/r-2`), {
+  wake: { on: `runFinished`, includeResponse: true },
 })
 const status = observed.status()
 

@@ -37,7 +37,10 @@ function createSpawnAssistantTool(ctx: HandlerContext) {
         `assistant`,
         genId(),
         {},
-        { initialMessage: task, wake: `runFinished` }
+        {
+          initialMessage: task,
+          wake: { on: `runFinished`, includeResponse: true },
+        }
       )
 
       return {
