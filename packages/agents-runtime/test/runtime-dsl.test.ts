@@ -359,7 +359,12 @@ function sortSnapshotEntriesByDebateSide(
 async function readLatestCompletedHandleText(
   handle: Pick<EntityHandle, `text`>
 ): Promise<string> {
-  const runs = await handle.text()
+  const runs = await Promise.race([
+    handle.text().catch(() => []),
+    new Promise<Array<string>>((resolve) =>
+      setTimeout(() => resolve([]), 2_000)
+    ),
+  ])
   return runs.at(-1) ?? ``
 }
 
