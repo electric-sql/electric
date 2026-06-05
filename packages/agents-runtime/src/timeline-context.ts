@@ -42,11 +42,14 @@ function projectInboxPayload(item: {
   if (
     item.messageType === COMPOSER_INPUT_MESSAGE_TYPE &&
     typeof item.payload === `object` &&
-    item.payload !== null &&
-    `source` in item.payload &&
-    typeof item.payload.source === `string`
+    item.payload !== null
   ) {
-    return item.payload.source
+    if (`source` in item.payload && typeof item.payload.source === `string`) {
+      return item.payload.source
+    }
+    if (`text` in item.payload && typeof item.payload.text === `string`) {
+      return item.payload.text
+    }
   }
 
   return asString(item.payload)

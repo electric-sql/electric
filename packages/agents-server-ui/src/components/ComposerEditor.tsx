@@ -414,7 +414,8 @@ const createDecorationPlugin = (
 
           if (!node.isText || !node.text) return
 
-          const commandPattern = /(^|\s)\/([a-z][a-z0-9_-]*)(?=\s|$)/g
+          const commandPattern =
+            /(^|\s)\/([a-z][a-z0-9]*(?:-[a-z0-9]+)*)(?=\s|$)/g
           let match: RegExpExecArray | null
 
           while ((match = commandPattern.exec(node.text)) !== null) {
@@ -826,7 +827,10 @@ function ComposerEditorEvents({
           const selectedName = command
             ? normalizeCommandName(command.name)
             : null
-          if (selectedName === current.slashQuery.query) {
+          if (
+            selectedName === current.slashQuery.query &&
+            !(command!.arguments && command!.arguments.length > 0)
+          ) {
             current.submit(view.state.doc)
           } else if (command) {
             insertSlashCommand(command)
@@ -1071,11 +1075,32 @@ export function ComposerEditor({
   const source = useMemo(() => sourceFromDoc(editorState.doc), [editorState])
   const isEmpty = source.length === 0
 
+  const lastSlashCommandsRef = useRef(slashCommands)
+
   useEffect(() => {
-    if (value === lastSyncedValueRef.current) return
-    setEditorState(createEditorState(value, slashCommands))
-    lastSyncedValueRef.current = value
-    lastNotifiedValueRef.current = value
+    const valueChanged = value !== lastSyncedValueRef.current
+    const commandsChanged = slashCommands !== lastSlashCommandsRef.current
+    lastSlashCommandsRef.current = slashCommands
+
+    if (valueChanged) {
+      setEditorState(createEditorState(value, slashCommands))
+      lastSyncedValueRef.current = value
+      lastNotifiedValueRef.current = value
+    } else if (commandsChanged) {
+      setEditorState((prev) =>
+        prev.reconfigure({
+          plugins: [
+            reactKeys(),
+            keymap({
+              'Mod-a': selectAll,
+              Backspace: deleteSelection,
+              Delete: deleteSelection,
+            }),
+            createDecorationPlugin(slashCommands),
+          ],
+        })
+      )
+    }
   }, [slashCommands, value])
 
   useEffect(() => {

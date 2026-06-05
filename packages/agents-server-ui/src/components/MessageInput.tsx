@@ -4,7 +4,6 @@ import { useLiveQuery } from '@tanstack/react-db'
 import type { EntityStreamDBWithActions } from '@electric-ax/agents-runtime/client'
 import {
   createDeleteInboxMessageAction,
-  createSendMessageAction,
   createSendComposerInputAction,
   createSteerInboxMessageAction,
   createUpdateInboxMessageAction,
@@ -123,19 +122,6 @@ export function MessageInput({
       ? (slashCommands as Array<SlashCommandRow>)
       : fallbackSlashCommands
 
-  const sendAction = useMemo(() => {
-    if (!db) return null
-    return createSendMessageAction({
-      db,
-      baseUrl,
-      entityUrl,
-      onOptimisticMessage: (message) => {
-        if (inlineQueuedSubmits && message.mode === `queued`) {
-          onOptimisticQueuedMessage?.(message)
-        }
-      },
-    })
-  }, [db, baseUrl, entityUrl, inlineQueuedSubmits, onOptimisticQueuedMessage])
   const sendComposerAction = useMemo(() => {
     if (!db) return null
     return createSendComposerInputAction({
@@ -191,18 +177,13 @@ export function MessageInput({
             mode: `queued`,
             status: `pending`,
           })
-        : files.length > 0
-          ? sendAction?.({
-              text,
-              mode: `queued`,
-              attachments: files,
-            })
-          : sendComposerAction?.({
-              payload:
-                composerPayload ??
-                serializeComposerInput(text, effectiveSlashCommands),
-              mode: `queued`,
-            })
+        : sendComposerAction?.({
+            payload:
+              composerPayload ??
+              serializeComposerInput(text, effectiveSlashCommands),
+            mode: `queued`,
+            ...(files.length > 0 ? { attachments: files } : {}),
+          })
       if (!tx) return
       if (!editingMessage) onSend?.()
       setValue(``)
@@ -223,7 +204,6 @@ export function MessageInput({
       canSubmit,
       clearAttachments,
       value,
-      sendAction,
       sendComposerAction,
       updateAction,
       editingMessage,

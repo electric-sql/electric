@@ -246,6 +246,8 @@ export async function sendEntityMessage({
   baseUrl,
   entityUrl,
   text,
+  payload: explicitPayload,
+  type,
   key = createClientInboxKey(),
   mode = `queued`,
   position,
@@ -254,7 +256,9 @@ export async function sendEntityMessage({
 }: {
   baseUrl: string
   entityUrl: string
-  text: string
+  text?: string
+  payload?: { text: string } | ComposerInputPayload
+  type?: string
   key?: string
   mode?: `immediate` | `queued` | `paused` | `steer`
   position?: string
@@ -272,6 +276,7 @@ export async function sendEntityMessage({
     key,
     attachments,
   })
+  const effectivePayload = explicitPayload ?? { text: text ?? `` }
   try {
     const res = await serverFetch(url, {
       method: `POST`,
@@ -279,9 +284,10 @@ export async function sendEntityMessage({
       body: JSON.stringify({
         from: sender,
         key,
-        payload: { text },
+        payload: effectivePayload,
         mode,
         position,
+        type,
       }),
     })
     if (!res.ok) {
@@ -372,19 +378,12 @@ export function createSendMessageAction({
       db.collections.inbox.insert(message)
     },
     mutationFn: async ({ payload, type, key, mode, position, attachments }) => {
-      if (
-        attachments &&
-        attachments.length > 0 &&
-        !type &&
-        payload &&
-        typeof payload === `object` &&
-        `text` in payload &&
-        typeof payload.text === `string`
-      ) {
+      if (attachments && attachments.length > 0) {
         await sendEntityMessage({
           baseUrl,
           entityUrl,
-          text: payload.text,
+          payload,
+          type,
           key,
           mode,
           position,
@@ -462,14 +461,17 @@ export function createSendComposerInputAction(args: {
   return ({
     payload,
     mode = `queued`,
+    attachments,
   }: {
     payload: ComposerInputPayload
     mode?: `immediate` | `queued` | `paused` | `steer`
+    attachments?: Array<File>
   }) =>
     sendMessage({
       payload,
       type: COMPOSER_INPUT_MESSAGE_TYPE,
       mode,
+      attachments,
     })
 }
 

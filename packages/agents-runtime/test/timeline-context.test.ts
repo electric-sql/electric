@@ -153,6 +153,25 @@ describe(`timeline context`, () => {
     ).toEqual([{ role: `user`, content: `/quickstart with auth` }])
   })
 
+  it(`projects edited composer_input payloads that lost source as plain text`, () => {
+    const result = buildTimelineMessages({
+      runs: [],
+      inbox: [
+        {
+          key: `msg-edited`,
+          order: order(1),
+          from: `user`,
+          message_type: `composer_input`,
+          payload: { text: `updated text` },
+          timestamp: `2026-03-28T00:00:00.000Z`,
+        },
+      ],
+      wakes: [],
+    })
+
+    expect(result).toEqual([{ role: `user`, content: `updated text` }])
+  })
+
   it(`buildTimelineMessages keeps pending tool calls without emitting tool results`, () => {
     expect(
       buildTimelineMessages({
