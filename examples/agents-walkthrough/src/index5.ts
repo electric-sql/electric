@@ -202,9 +202,9 @@ registry.define(`judge`, {
       return ctx.sleep()
     }
 
-    const finished_child = wake.payload?.finished_child as
-      | FinishedChild
-      | undefined
+    const finished_child = (
+      wake.payload as { finished_child?: FinishedChild } | undefined
+    )?.finished_child
     if (!finished_child) {
       return ctx.sleep()
     }
@@ -311,8 +311,10 @@ function createSpawnJudgeTool(ctx: HandlerContext) {
 registry.define(`manager`, {
   description: `Delegates to assistants and judges and relays their results to the user.`,
   async handler(ctx, wake) {
-    if ((wake.type = `wake`)) {
-      const child = wake.payload?.finished_child as FinishedChild | undefined
+    if (wake.type === `wake`) {
+      const child = (
+        wake.payload as { finished_child?: FinishedChild } | undefined
+      )?.finished_child
 
       if (child?.type === `judge` && child.run_status === `completed`) {
         const judge = await ctx.observe(entity(child.url))
