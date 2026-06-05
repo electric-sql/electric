@@ -10,9 +10,9 @@ import { captureEnvApiKeys, EMPTY_API_KEYS } from '../credentials/api-keys'
 import { DEFAULT_SETTINGS } from '../settings/store'
 import type {
   ApiKeys,
+  DesktopMcpSnapshot,
   DesktopSettings,
   DesktopState,
-  RegistrySnapshot,
   RuntimeEntry,
 } from '../shared/types'
 
@@ -31,7 +31,7 @@ export type DesktopAppContext = {
   windows: Set<BrowserWindow>
   windowSelections: Map<number, string | null>
   runtimeEntries: Map<string, RuntimeEntry>
-  lastMcpSnapshots: Map<string, RegistrySnapshot>
+  lastMcpSnapshots: Map<string, DesktopMcpSnapshot>
   shell: {
     tray: Tray | null
     aboutWindow: BrowserWindow | null

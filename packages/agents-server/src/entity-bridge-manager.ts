@@ -3,6 +3,7 @@ import {
   assertTags,
   buildTagsIndex,
   getEntitiesStreamPath,
+  hashString,
   normalizeTags,
   sourceRefForTags,
 } from '@electric-ax/agents-runtime'
@@ -13,7 +14,9 @@ import {
 } from '@electric-sql/client'
 import { serverLog } from './utils/log.js'
 import { electricUrlWithPath } from './utils/electric-url.js'
+import { buildReadableEntitiesWhere } from './utils/server-utils.js'
 import { DEFAULT_TENANT_ID } from './tenant.js'
+import { isBuiltInSystemPrincipalUrl } from './principal.js'
 import type { EntityBridgeRow, PostgresRegistry } from './entity-registry.js'
 import type { StreamClient } from './stream-client.js'
 import type {
@@ -30,7 +33,11 @@ import type {
 export interface EntityBridgeCoordinator {
   start(): Promise<void>
   stop(): Promise<void>
-  register(tagsInput: unknown): Promise<{
+  register(
+    tagsInput: unknown,
+    principalUrl: string,
+    principalKind: string
+  ): Promise<{
     sourceRef: string
     streamUrl: string
   }>
@@ -115,19 +122,44 @@ function sqlStringLiteral(value: string): string {
 
 function buildTenantTagsWhereClause(
   tenantId: string,
-  tags: EntityTags
+  tags: EntityTags,
+  principalUrl?: string,
+  principalKind?: string,
+  permissionBypass?: boolean
 ): string {
-  return `tenant_id = ${sqlStringLiteral(tenantId)} AND (${buildTagsWhereClause(tags)})`
+  const readableWhere =
+    principalUrl && principalKind
+      ? buildReadableEntitiesWhere({
+          tenantId,
+          principalUrl,
+          principalKind,
+          permissionBypass,
+        })
+      : `tenant_id = ${sqlStringLiteral(tenantId)} AND FALSE`
+  return `${readableWhere} AND (${buildTagsWhereClause(tags)})`
 }
 
 function shapeEntityKey(message: ChangeMessage<EntityShapeRow>): string {
   return message.value.url
 }
 
+function principalScopedSourceRef(
+  tagSourceRef: string,
+  principalUrl: string,
+  principalKind: string
+): string {
+  return `${tagSourceRef}-${hashString(
+    JSON.stringify({ principalKind, principalUrl })
+  )}`
+}
+
 class EntityBridge {
   readonly sourceRef: string
   readonly tags: EntityTags
   readonly streamUrl: string
+  private readonly principalUrl?: string
+  private readonly principalKind?: string
+  private readonly permissionBypass: boolean
 
   private currentMembers = new Map<string, EntityMembershipRow>()
   private producer: IdempotentProducer | null = null
@@ -152,6 +184,9 @@ class EntityBridge {
     this.sourceRef = row.sourceRef
     this.tags = normalizeTags(row.tags)
     this.streamUrl = row.streamUrl
+    this.principalUrl = row.principalUrl
+    this.principalKind = row.principalKind
+    this.permissionBypass = isBuiltInSystemPrincipalUrl(row.principalUrl)
     this.initialShapeHandle = row.shapeHandle
     this.initialShapeOffset = row.shapeOffset
   }
@@ -316,7 +351,13 @@ class EntityBridge {
       url: electricUrlWithPath(this.electricUrl, `/v1/shape`).toString(),
       params: {
         table: `entities`,
-        where: buildTenantTagsWhereClause(this.tenantId, this.tags),
+        where: buildTenantTagsWhereClause(
+          this.tenantId,
+          this.tags,
+          this.principalUrl,
+          this.principalKind,
+          this.permissionBypass
+        ),
         ...(this.electricSecret ? { secret: this.electricSecret } : {}),
         columns: [...ENTITY_SHAPE_COLUMNS],
         replica: `full`,
@@ -564,7 +605,11 @@ export class EntityBridgeManager implements EntityBridgeCoordinator {
     )
   }
 
-  async register(tagsInput: unknown): Promise<{
+  async register(
+    tagsInput: unknown,
+    principalUrl: string,
+    principalKind: string
+  ): Promise<{
     sourceRef: string
     streamUrl: string
   }> {
@@ -573,13 +618,19 @@ export class EntityBridgeManager implements EntityBridgeCoordinator {
     }
 
     const tags = normalizeTags(assertTags(tagsInput))
-    const sourceRef = sourceRefForTags(tags)
+    const sourceRef = principalScopedSourceRef(
+      sourceRefForTags(tags),
+      principalUrl,
+      principalKind
+    )
     const streamUrl = getEntitiesStreamPath(sourceRef)
 
     const row = await this.registry.upsertEntityBridge({
       sourceRef,
       tags,
       streamUrl,
+      principalUrl,
+      principalKind,
     })
     await this.registry.touchEntityBridge(sourceRef)
     await this.ensureBridge(row)

@@ -42,9 +42,9 @@ The manager defines a handler-scoped tool called `analyze_with_perspectives`. Wh
 
 1. Spawns 3 worker children -- optimist, pessimist, pragmatist -- each with a different system prompt.
 2. Sends the same question to all three as `initialMessage`.
-3. Uses `wake: 'runFinished'` to wait for each child to complete.
-4. Collects results with `Promise.all` and `handle.text()`.
-5. Returns the combined perspectives to the LLM for synthesis.
+3. Uses `wake: { on: 'runFinished', includeResponse: true }` so the manager is re-invoked as each child completes.
+4. Collects results from `runFinished` wake payloads or shared state after workers finish.
+5. Runs a synthesis step after all child-completion wakes have been recorded.
 
 On subsequent calls, the tool reuses existing children via `ctx.observe()` and `child.send()` instead of spawning new ones.
 
@@ -63,7 +63,7 @@ for (const perspective of PERSPECTIVES) {
       `worker`,
       childId,
       { systemPrompt: perspective.systemPrompt, tools: [`read`] },
-      { initialMessage: question, wake: `runFinished` }
+      { initialMessage: question, wake: { on: `runFinished`, includeResponse: true } }
     )
     children.insert({
       key: perspective.id,
@@ -87,28 +87,16 @@ for (const perspective of PERSPECTIVES) {
 
 ## Collecting results
 
-The `readLatestCompletedText` helper awaits the child's current run, reads all text outputs, and returns the last one:
+Do not wait for worker output inside the same wake. Spawn workers with `wake: { on: "runFinished", includeResponse: true }`, record each worker URL in manager state, and return. On each later child-completion wake, store `wake.payload.finished_child.response` (or read structured output from shared state). Once all workers have reported, run the reduce/synthesis step.
 
 ```ts
-async function readLatestCompletedText(
-  handle: EntityHandle,
-  fallback: string
-): Promise<string> {
-  await handle.run
-  const runs = await handle.text()
-  const latest = runs[runs.length - 1]?.trim()
-  return latest || fallback
+const finished = wake.payload?.finished_child
+if (finished) {
+  ctx.state.workers.update(finished.url, (draft) => {
+    draft.status = finished.run_status
+    draft.output = finished.response ?? ""
+  })
 }
-
-const results = await Promise.all(
-  handles.map(async ({ id, handle }) => ({
-    id,
-    text: await readLatestCompletedText(
-      handle,
-      `(no completed output from ${id})`
-    ),
-  }))
-)
 ```
 
 ## State

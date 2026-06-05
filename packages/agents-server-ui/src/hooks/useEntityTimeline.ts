@@ -5,7 +5,7 @@ import {
   createEntityTimelineQuery,
   normalizeTimelineEntities,
 } from '@electric-ax/agents-runtime/client'
-import { coalesce, eq } from '@durable-streams/state'
+import { coalesce, eq } from '@durable-streams/state/db'
 import { connectEntityStream } from '../lib/entity-connection'
 import type {
   EntityStreamDBWithActions,
@@ -144,6 +144,8 @@ export function useEntityTimeline(
             key: msg.key,
             order: msg._timeline_order ?? msg._seq ?? Number.MAX_SAFE_INTEGER,
             from: msg.from,
+            from_principal: msg.from_principal,
+            from_agent: msg.from_agent,
             payload: msg.payload,
             timestamp: msg.timestamp,
             mode: msg.mode ?? `queued`,

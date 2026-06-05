@@ -1,7 +1,7 @@
 import {
   createCollection,
   localOnlyCollectionOptions,
-} from '@durable-streams/state'
+} from '@durable-streams/state/db'
 
 let nextCollectionId = 0
 

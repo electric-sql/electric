@@ -3,7 +3,7 @@
 All examples assume:
 
 ```ts
-import { eq, queryOnce } from '@durable-streams/state'
+import { eq, queryOnce } from '@durable-streams/state/db'
 ```
 
 ## Find an existing spawned child

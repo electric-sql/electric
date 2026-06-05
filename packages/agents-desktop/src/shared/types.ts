@@ -133,6 +133,7 @@ export type DesktopSettings = {
   enabledModelValues?: Array<string>
   onboardingDismissed?: boolean
   mcp?: { servers: Array<McpServerConfig> }
+  seededDefaultMcpServerNames?: Array<string>
   pullWakeRunnerId?: string
 }
 
@@ -254,3 +255,50 @@ export type DesktopContextMenuRequest = {
 }
 
 export type { McpServerConfig, RegistrySnapshot }
+
+/**
+ * Where an MCP server row in the snapshot came from:
+ * - `settings` — the desktop's global `settings.json mcp.servers` block.
+ * - `workspace` — the workspace's `mcp.json` file.
+ * - `extras` — programmatic extras passed by another embedder (not the
+ *   desktop). Unused on the desktop today, kept for completeness.
+ */
+export type McpServerProvenance = `settings` | `workspace` | `extras`
+
+/**
+ * UI-friendly row shape broadcast from the desktop main process. Includes
+ * the registry-driven runtime fields plus provenance + shadowing so the
+ * renderer can gate per-row affordances (Edit/Remove only on `settings`
+ * rows, gray out `shadowed` rows where workspace `mcp.json` wins, etc).
+ */
+export interface DesktopMcpServerRow {
+  name: string
+  status:
+    | `connecting`
+    | `authenticating`
+    | `ready`
+    | `error`
+    | `disabled`
+    | `shadowed`
+  toolCount: number
+  transport?: string
+  url?: string
+  authMode?: string
+  authUrl?: string
+  error?: { kind: string; message: string }
+  tools?: Array<{ name: string; description?: string }>
+  provenance: McpServerProvenance
+  /** True iff a settings.json entry is overridden by a workspace mcp.json one. */
+  shadowed: boolean
+  /**
+   * Original config object — only populated for `provenance === 'settings'`
+   * rows so the renderer's Edit form can pre-fill. Workspace and extras
+   * rows omit this since they're read-only in the UI anyway.
+   */
+  config?: McpServerConfig
+}
+
+export interface DesktopMcpSnapshot {
+  seq: number
+  servers: ReadonlyArray<DesktopMcpServerRow>
+}

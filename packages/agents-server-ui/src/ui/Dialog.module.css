@@ -60,3 +60,35 @@
   color: var(--ds-text-2);
   margin: 0 0 var(--ds-space-4) 0;
 }
+
+/* ── Header / Body / Footer ─────────────────────────────────── */
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--ds-space-3);
+  margin-bottom: var(--ds-space-3);
+}
+
+/* Title + Description live in here; they keep their own bottom
+   margins so the header collapses to whichever pieces the consumer
+   actually renders. */
+.headerText {
+  flex: 1;
+  min-width: 0;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-3);
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--ds-space-2);
+  margin-top: var(--ds-space-4);
+}

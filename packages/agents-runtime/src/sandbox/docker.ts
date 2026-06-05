@@ -16,6 +16,9 @@ import {
   type Dockerode,
   type DockerodeContainer,
 } from './docker/loader'
+
+// Re-exported so the `sandbox/docker` subpath resolves it under tsconfig paths.
+export { isDockerAvailable } from './docker/loader'
 import {
   getFile,
   makeDir,

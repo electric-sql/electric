@@ -1,22 +1,26 @@
 import {
-  type CreateStreamDBOptions,
   createStateSchema,
-  createStreamDB,
-  createTransaction,
-  getStreamDBCollectionId,
   isChangeEvent,
   isControlEvent,
 } from '@durable-streams/state'
+import {
+  type CreateStreamDBOptions,
+  createStreamDB,
+  createTransaction,
+  getStreamDBCollectionId,
+} from '@durable-streams/state/db'
 import { builtInCollections, passthrough } from './entity-schema'
 import { formatPointerOrderToken, type EventPointer } from './event-pointer'
 import type {
-  ActionDefinition,
   ChangeEvent,
   CollectionDefinition,
   StateEvent,
+} from '@durable-streams/state'
+import type {
+  ActionDefinition,
   StreamDB,
   StreamDBWithActions,
-} from '@durable-streams/state'
+} from '@durable-streams/state/db'
 import type { JsonBatch } from '@durable-streams/client'
 import type { EntityDefinition } from './types'
 

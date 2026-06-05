@@ -180,6 +180,7 @@ async function resolveLowCostApiKey(input: {
   if (input.modelConfig?.getApiKey) {
     return await input.modelConfig.getApiKey(input.provider)
   }
+  if (input.provider === `openai-codex`) return readCodexAccessToken()
   if (input.provider === MOONSHOT_PROVIDER) return getMoonshotApiKey()
   return undefined
 }

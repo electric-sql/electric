@@ -85,6 +85,7 @@ export interface SendEntityMessageOptions {
   afterMs?: number
   mode?: `immediate` | `queued` | `paused` | `steer`
   position?: string
+  fromAgent?: string
 }
 
 export interface RegisterWakeOptions {
@@ -122,7 +123,10 @@ export interface RuntimeServerClient {
   }) => Promise<Uint8Array>
   spawnEntity: (options: SpawnEntityOptions) => Promise<RuntimeEntityInfo>
   getEntity: (entityUrl: string) => Promise<RuntimeEntityInfo>
-  ensureSharedStateStream: (sharedStateId: string) => Promise<string>
+  ensureSharedStateStream: (
+    sharedStateId: string,
+    ownerEntityUrl?: string
+  ) => Promise<string>
   signalEntity: (options: SignalEntityOptions) => Promise<{ txid: number }>
   ensureStream: (streamPath: string, contentType?: string) => Promise<string>
   deleteEntity: (entityUrl: string) => Promise<void>
@@ -285,12 +289,14 @@ export function createRuntimeServerClient(
     afterMs,
     mode,
     position,
+    fromAgent,
   }: SendEntityMessageOptions): Promise<void> => {
     const body: Record<string, unknown> = { payload }
     if (type !== undefined) body.type = type
     if (afterMs !== undefined) body.afterMs = afterMs
     if (mode !== undefined) body.mode = mode
     if (position !== undefined) body.position = position
+    if (fromAgent !== undefined) body.from_agent = fromAgent
 
     const response = await request(`${entityRpcPath(targetUrl)}/send`, {
       method: `POST`,
@@ -447,19 +453,24 @@ export function createRuntimeServerClient(
   }
 
   const ensureSharedStateStream = async (
-    sharedStateId: string
+    sharedStateId: string,
+    ownerEntityUrl?: string
   ): Promise<string> => {
     const streamPath = getSharedStateStreamPath(sharedStateId)
-    return await ensureStream(streamPath, `application/json`)
+    return await ensureStream(streamPath, `application/json`, ownerEntityUrl)
   }
 
   const ensureStream = async (
     streamPath: string,
-    contentType = `application/json`
+    contentType = `application/json`,
+    ownerEntityUrl?: string
   ): Promise<string> => {
     const response = await request(streamPath, {
       method: `PUT`,
-      headers: { 'content-type': contentType },
+      headers: {
+        'content-type': contentType,
+        ...(ownerEntityUrl ? { 'electric-owner-entity': ownerEntityUrl } : {}),
+      },
     })
 
     if (!response.ok && response.status !== 409) {

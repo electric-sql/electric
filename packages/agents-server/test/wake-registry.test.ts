@@ -291,6 +291,8 @@ describe(`Wake Registry`, () => {
       key: `msg-1`,
       value: {
         from: `/principal/agent%3Aself`,
+        from_principal: `/principal/agent%3Aself`,
+        from_agent: `/agent/self`,
         payload: { text: `wake up` },
         timestamp: `2026-01-01T00:00:00.000Z`,
         message_type: `reminder`,
@@ -304,6 +306,8 @@ describe(`Wake Registry`, () => {
       kind: `insert`,
       key: `msg-1`,
       from: `/principal/agent%3Aself`,
+      from_principal: `/principal/agent%3Aself`,
+      from_agent: `/agent/self`,
       payload: { text: `wake up` },
       timestamp: `2026-01-01T00:00:00.000Z`,
       message_type: `reminder`,

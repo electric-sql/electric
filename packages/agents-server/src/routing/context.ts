@@ -12,6 +12,7 @@ import type { DurableStreamsRoutingAdapter } from './durable-streams-routing-ada
 import type { Principal } from '../principal.js'
 import type { DurableStreamsBearerProvider } from '../stream-client.js'
 import type { WebhookSigner } from '../webhook-signing.js'
+import type { AuthorizeRequest } from '../electric-agents-types.js'
 
 export interface EventSourceCatalog {
   listEventSources: () =>
@@ -55,5 +56,6 @@ export interface TenantContext {
   entityBridgeManager: EntityBridgeCoordinator
   eventSources?: EventSourceCatalog
   ensureEventSourceWakeSource?: (sourceUrl: string) => Promise<void> | void
+  authorizeRequest?: AuthorizeRequest
   isShuttingDown: () => boolean
 }

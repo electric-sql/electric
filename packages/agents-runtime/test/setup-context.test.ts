@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createTransaction, eq, queryOnce } from '@durable-streams/state'
+import { createTransaction, eq, queryOnce } from '@durable-streams/state/db'
 import { getCronSourceRef } from '../src/cron-utils'
 import {
   manifestChildKey,
@@ -680,17 +680,6 @@ describe(`createSetupContext`, () => {
     expect(typeof handle.status).toBe(`function`)
   })
 
-  it(`child.run throws during setup() with guidance to use effects`, async () => {
-    const { ctx } = makeCtx()
-    const spawnPromise = ctx.spawn(`worker`, `w-1`)
-    const spawnHandles = ctx.getSpawnHandles()
-    spawnHandles.get(`w-1`)!.wireDb(mockDb())
-    const handle = await spawnPromise
-    expect(() => handle.run).toThrow(
-      `child.run cannot be called during setup() — use them in effects instead`
-    )
-  })
-
   it(`child.send() throws during setup() with guidance to use effects`, async () => {
     const { ctx } = makeCtx()
     const spawnPromise = ctx.spawn(`worker`, `w-1`)
@@ -700,17 +689,6 @@ describe(`createSetupContext`, () => {
     expect(() => handle.send({ text: `hello` })).toThrow(
       `child.send() cannot be called during setup() — use them in effects instead`
     )
-  })
-
-  it(`child.run returns a Promise after setup is complete`, async () => {
-    const { ctx } = makeCtx()
-    const spawnPromise = ctx.spawn(`worker`, `w-1`)
-    const spawnHandles = ctx.getSpawnHandles()
-    spawnHandles.get(`w-1`)!.wireDb(mockDb())
-    const handle = await spawnPromise
-    ctx.setInSetup(false)
-    const runPromise = handle.run
-    expect(runPromise).toBeInstanceOf(Promise)
   })
 
   it(`child.send() pushes to pendingSends after setup is complete`, async () => {
@@ -726,24 +704,6 @@ describe(`createSetupContext`, () => {
       targetUrl: `/worker/w-1`,
       payload: { text: `hello` },
     })
-  })
-
-  it(`child.send resets run promise — getter returns a NEW promise after send`, async () => {
-    const { ctx } = makeCtx()
-    const spawnPromise = ctx.spawn(`worker`, `w-1`)
-    const spawnHandles = ctx.getSpawnHandles()
-    spawnHandles.get(`w-1`)!.wireDb(mockDb())
-    const handle = await spawnPromise
-    ctx.setInSetup(false)
-
-    const firstRun = handle.run
-    expect(firstRun).toBeInstanceOf(Promise)
-
-    handle.send({ text: `do work` })
-
-    const secondRun = handle.run
-    expect(secondRun).toBeInstanceOf(Promise)
-    expect(secondRun).not.toBe(firstRun)
   })
 
   it(`updateEntityUrl changes handle.entityUrl and send targetUrl`, async () => {
@@ -768,31 +728,6 @@ describe(`createSetupContext`, () => {
       targetUrl: `/worker/real-uuid-123`,
       payload: { text: `hello` },
     })
-  })
-
-  it(`resolveRun resolves the child.run promise`, async () => {
-    const { ctx } = makeCtx()
-    const spawnPromise = ctx.spawn(`worker`, `w-1`)
-    const spawnHandles = ctx.getSpawnHandles()
-    spawnHandles.get(`w-1`)!.wireDb(mockDb())
-    const handle = await spawnPromise
-    ctx.setInSetup(false)
-
-    const runPromise = handle.run
-    let resolved = false
-    runPromise.then(() => {
-      resolved = true
-    })
-
-    // Not yet resolved
-    await Promise.resolve()
-    expect(resolved).toBe(false)
-
-    // processWake calls resolveRun when child completes
-    spawnHandles.get(`w-1`)!.resolveRun()
-
-    await runPromise
-    expect(resolved).toBe(true)
   })
 
   // ====================================================================
@@ -1762,36 +1697,28 @@ describe(`entity patterns`, () => {
   })
 
   // ----------------------------------------------------------------
-  // Pattern 7: Tree of Thoughts — child.send() + child.run re-promise
+  // Pattern 7: Tree of Thoughts — child.send()
   // ----------------------------------------------------------------
 
-  it(`Pattern 7 (Tree of Thoughts): child.run and child.send work after setup completes`, async () => {
+  it(`Pattern 7 (Tree of Thoughts): child.send works after setup completes`, async () => {
     const { ctx } = makeCtx()
     const branchPromise = ctx.spawn(`thought-branch`, `branch-1`)
     const spawnHandles = ctx.getSpawnHandles()
     spawnHandles.get(`branch-1`)!.wireDb(mockDb())
     const branch = await branchPromise
 
-    // During setup, run/send throw
-    expect(() => branch.run).toThrow(
-      `child.run cannot be called during setup()`
-    )
+    // During setup, send throws
     expect(() => branch.send({ explore: `path A` })).toThrow(
       `child.send() cannot be called during setup()`
     )
 
-    // After setup completes
+    // After setup completes, send is queued for processWake to deliver.
     ctx.setInSetup(false)
-
-    const run1 = branch.run
-    expect(run1).toBeInstanceOf(Promise)
-
     branch.send({ explore: `path A` })
-
-    // After send, run is a NEW promise
-    const run2 = branch.run
-    expect(run2).toBeInstanceOf(Promise)
-    expect(run2).not.toBe(run1)
+    expect(ctx.getPendingSends()).toContainEqual({
+      targetUrl: `/thought-branch/branch-1`,
+      payload: { explore: `path A` },
+    })
   })
 
   it(`Pattern 7 (Tree of Thoughts): sends accumulate in pendingSends`, async () => {
@@ -2212,53 +2139,6 @@ describe(`entity patterns`, () => {
       expect.any(Function),
       { preload: true }
     )
-  })
-
-  it(`text() returns one string per completed run`, async () => {
-    // Simulate a child entity that had two runs, each producing text
-    const childCollections: Record<string, MockCollection> = {
-      ...Object.fromEntries(
-        Object.keys(ENTITY_COLLECTIONS).map((k) => [
-          k,
-          createMockCollection([]),
-        ])
-      ),
-      runs: createMockCollection([
-        { key: `run-0`, status: `completed` },
-        { key: `run-1`, status: `completed` },
-      ]),
-      texts: createMockCollection([
-        { key: `msg-0`, status: `completed` },
-        { key: `msg-1`, status: `completed` },
-      ]),
-      textDeltas: createMockCollection([
-        { key: `msg-0:0`, text_id: `msg-0`, run_id: `run-0`, delta: `Hello ` },
-        { key: `msg-0:1`, text_id: `msg-0`, run_id: `run-0`, delta: `world` },
-        { key: `msg-1:0`, text_id: `msg-1`, run_id: `run-1`, delta: `Second ` },
-        { key: `msg-1:1`, text_id: `msg-1`, run_id: `run-1`, delta: `run` },
-      ]),
-    }
-
-    const childDb = {
-      collections: childCollections,
-    } as unknown as EntityStreamDBWithActions
-
-    // Spawn the child and immediately wire its DB via the deferred handle callback
-    const { ctx } = makeCtx()
-    const spawnPromise = ctx.spawn(`child`, `c1`)
-
-    // Wire the child DB before the spawn promise resolves
-    const spawnHandles = ctx.getSpawnHandles()
-    const handleInfo = spawnHandles.get(`c1`)
-    handleInfo?.wireDb(childDb)
-    handleInfo?.resolveRun()
-
-    const child = await spawnPromise
-    ctx.setInSetup(false)
-    const texts = await child.text()
-
-    // Should return one string per run, not all texts concatenated
-    expect(texts).toEqual([`Hello world`, `Second run`])
   })
 
   // ====================================================================

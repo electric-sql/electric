@@ -67,6 +67,78 @@ export type RunnerKind = `local` | `cloud-worker` | `sandbox` | `ci` | `server`
 export type RunnerAdminStatus = `enabled` | `disabled`
 export type RunnerLiveness = `online` | `offline`
 
+export type PermissionSubjectKind = `principal` | `principal_kind`
+export type PermissionSubject = {
+  subject_kind: PermissionSubjectKind
+  subject_value: string
+}
+export type EntityPermission =
+  | `read`
+  | `write`
+  | `delete`
+  | `signal`
+  | `fork`
+  | `schedule`
+  | `spawn`
+  | `manage`
+export type EntityTypePermission = `spawn` | `manage`
+export type EntityPermissionPropagation = `self` | `descendants`
+
+export interface EntityPermissionGrant extends PermissionSubject {
+  id: number
+  entity_url: string
+  permission: EntityPermission
+  propagation: EntityPermissionPropagation
+  copy_to_children: boolean
+  created_by?: string
+  expires_at?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface EntityTypePermissionGrant extends PermissionSubject {
+  id: number
+  entity_type: string
+  permission: EntityTypePermission
+  created_by?: string
+  expires_at?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface EntityTypePermissionGrantInput extends PermissionSubject {
+  permission: EntityTypePermission
+  expires_at?: string
+}
+
+export type AuthorizationResource =
+  | { kind: `entity`; entity: ElectricAgentsEntity }
+  | { kind: `entity_type`; entityType: ElectricAgentsEntityType }
+  | { kind: `entity_type_registration`; entityTypeName: string }
+  | {
+      kind: `shared_state`
+      sharedStateId: string
+      linkedEntityUrls: Array<string>
+    }
+
+export type AuthorizationDecision = {
+  decision: `allow` | `deny`
+  expires_at?: string
+}
+
+export type AuthorizeRequest = (input: {
+  tenant: string
+  principal: Principal
+  verb: EntityPermission | EntityTypePermission
+  resource: AuthorizationResource
+  request?: {
+    method: string
+    url: string
+    headers: Record<string, string>
+  }
+  builtInAllowed: boolean
+}) => Promise<AuthorizationDecision> | AuthorizationDecision
+
 const VALID_RUNNER_KINDS = new Set<string>([
   `local`,
   `cloud-worker`,
@@ -443,6 +515,7 @@ export interface RegisterEntityTypeRequest {
   state_schemas?: Record<string, Record<string, unknown>>
   serve_endpoint?: string
   default_dispatch_policy?: DispatchPolicy
+  permission_grants?: Array<EntityTypePermissionGrantInput>
 }
 
 export interface TypedSpawnRequest {
@@ -477,6 +550,8 @@ export interface TypedSpawnRequest {
 
 export interface SendRequest {
   from?: string
+  from_principal?: string
+  from_agent?: string
   payload?: unknown
   key?: string
   type?: string

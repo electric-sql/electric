@@ -18,6 +18,7 @@ export type ApplicationMenuDeps = {
   sendCommand: (command: DesktopCommand) => void
   quitApp: () => Promise<void>
   showAboutDialog: () => void
+  checkForUpdates: () => Promise<void>
 }
 
 function windowDisplayLabel(win: BrowserWindow): string {
@@ -78,6 +79,10 @@ export function buildApplicationMenuTemplate(
             label: APP_DISPLAY_NAME,
             submenu: [
               { role: `about` as const },
+              {
+                label: `Check for Updates…`,
+                click: () => void deps.checkForUpdates(),
+              },
               { type: `separator` as const },
               {
                 label: `Settings…`,
@@ -213,6 +218,14 @@ export function buildApplicationMenuTemplate(
           label: `About ${APP_DISPLAY_NAME}`,
           click: () => deps.showAboutDialog(),
         },
+        ...(!isMac
+          ? ([
+              {
+                label: `Check for Updates…`,
+                click: () => void deps.checkForUpdates(),
+              },
+            ] as Array<Electron.MenuItemConstructorOptions>)
+          : []),
         { type: `separator` },
         {
           label: `Electric Documentation`,
@@ -264,7 +277,7 @@ export function popupApplicationMenuSection(
 }
 
 export function popupAppIconMenu(
-  deps: Pick<ApplicationMenuDeps, `showAboutDialog`>,
+  deps: Pick<ApplicationMenuDeps, `showAboutDialog` | `checkForUpdates`>,
   win: BrowserWindow,
   bounds: DesktopMenuPopupBounds
 ): void {
@@ -275,7 +288,7 @@ export function popupAppIconMenu(
     },
     {
       label: `Check for Updates…`,
-      enabled: false,
+      click: () => void deps.checkForUpdates(),
     },
   ]).popup({
     window: win,

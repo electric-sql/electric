@@ -65,6 +65,8 @@ function buildContext(overrides: Partial<TenantContext> = {}): TenantContext {
           updated_at: new Date(0).toISOString(),
         })),
         getEntity: vi.fn(async () => null),
+        hasEntityPermission: vi.fn(async () => true),
+        hasEntityTypePermission: vi.fn(async () => true),
         updateEntityDispatchPolicy: vi.fn(async (_url, policy) =>
           entity(policy)
         ),

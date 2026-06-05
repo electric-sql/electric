@@ -1,11 +1,19 @@
-import { useState } from 'react'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { ChevronDown, ChevronRight, Pencil, Plus, Trash2 } from 'lucide-react'
 import {
   useMcpServersIpc,
+  type McpServerConfigInput,
   type UseMcpServersIpcResult,
 } from '../../../hooks/useMcpServersIpc'
 import type { McpServerRow, McpStatus } from '../../../hooks/mcpServerTypes'
-import { Button, Text } from '../../../ui'
+import {
+  Badge,
+  Button,
+  ConfirmDialog,
+  Icon,
+  IconButton,
+  Text,
+} from '../../../ui'
 import {
   SettingsActions,
   SettingsInset,
@@ -16,6 +24,7 @@ import {
   SettingsStatusBadge,
   type SettingsStatusTone,
 } from '../SettingsScreen'
+import { McpServerFormDialog } from './McpServerFormDialog'
 
 const STATUS_TONES: Record<
   McpStatus,
@@ -26,19 +35,35 @@ const STATUS_TONES: Record<
   authenticating: { label: `Sign in required`, tone: `warning` },
   error: { label: `Error`, tone: `danger` },
   disabled: { label: `Disabled`, tone: `neutral` },
+  shadowed: { label: `Overridden`, tone: `neutral` },
 }
 
 /**
  * Settings → MCP Servers. Shows the in-process MCP registry's servers,
  * pushed over IPC from the embedded BuiltinAgentsServer's registry.
  *
+ * Add / Edit / Remove operate on the desktop's global `settings.json`
+ * mcp.servers block. Rows that came from workspace `mcp.json` or from
+ * programmatic extras are read-only. When a settings.json entry's name
+ * is also claimed by workspace mcp.json, the workspace wins (existing
+ * registry rule) and the settings entry renders as `shadowed`.
+ *
  * Desktop-only: in non-Electron contexts the hook returns an empty list
- * and the page renders a hint to launch the desktop app. The sidebar
- * entry is also hidden when `electronAPI` isn't present.
+ * and the page renders a hint to launch the desktop app.
  */
 export function McpServersPage(): React.ReactElement {
   const isDesktop = typeof window !== `undefined` && Boolean(window.electronAPI)
   const ipc = useMcpServersIpc()
+  const [formOpen, setFormOpen] = useState(false)
+  const [editTarget, setEditTarget] = useState<McpServerConfigInput | null>(
+    null
+  )
+
+  const existingSettingsNames = useMemo(
+    () =>
+      ipc.servers.filter((s) => s.provenance === `settings`).map((s) => s.name),
+    [ipc.servers]
+  )
 
   if (!isDesktop) {
     return (
@@ -57,8 +82,24 @@ export function McpServersPage(): React.ReactElement {
     )
   }
 
+  const addAction = (
+    <Button
+      onClick={() => {
+        setEditTarget(null)
+        setFormOpen(true)
+      }}
+    >
+      <Icon icon={Plus} size={2} />
+      Add server
+    </Button>
+  )
+
+  const handleSubmit = async (cfg: McpServerConfigInput): Promise<void> => {
+    await ipc.upsert(cfg)
+  }
+
   return (
-    <SettingsScreen title="MCP Servers">
+    <SettingsScreen title="MCP Servers" action={addAction}>
       {ipc.loading ? (
         <SettingsSection title="Loading">
           <SettingsPanel>
@@ -70,7 +111,7 @@ export function McpServersPage(): React.ReactElement {
       ) : ipc.servers.length === 0 ? (
         <SettingsSection
           title="No servers"
-          description="MCP servers declared in mcp.json will appear here once the runtime starts."
+          description="Click 'Add server' to register your first MCP server, or define entries in a workspace mcp.json."
         >
           <SettingsPanel>
             <Text size={2} tone="muted">
@@ -84,10 +125,28 @@ export function McpServersPage(): React.ReactElement {
           description="Connected Model Context Protocol servers and their tools."
         >
           {ipc.servers.map((s) => (
-            <ServerEntry key={s.name} server={s} ipc={ipc} />
+            <ServerEntry
+              key={`${s.name}:${s.shadowed ? `shadowed` : `live`}`}
+              server={s}
+              ipc={ipc}
+              onEdit={() => {
+                if (s.config) {
+                  setEditTarget(s.config as McpServerConfigInput)
+                  setFormOpen(true)
+                }
+              }}
+            />
           ))}
         </SettingsSection>
       )}
+
+      <McpServerFormDialog
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        initial={editTarget ?? undefined}
+        onSubmit={handleSubmit}
+        existingNames={existingSettingsNames}
+      />
     </SettingsScreen>
   )
 }
@@ -95,13 +154,18 @@ export function McpServersPage(): React.ReactElement {
 function ServerEntry({
   server,
   ipc,
+  onEdit,
 }: {
   server: McpServerRow
   ipc: UseMcpServersIpcResult
+  onEdit: () => void
 }): React.ReactElement {
   const [busy, setBusy] = useState(false)
   const [showTools, setShowTools] = useState(false)
+  const [confirmRemove, setConfirmRemove] = useState(false)
   const statusInfo = STATUS_TONES[server.status]
+  const isSettings = server.provenance === `settings`
+  const isShadowed = server.shadowed
 
   const wrap = (fn: () => Promise<void>) => async () => {
     setBusy(true)
@@ -115,12 +179,14 @@ function ServerEntry({
   const metaPieces: string[] = []
   if (server.transport) metaPieces.push(server.transport)
   if (server.authMode) metaPieces.push(`auth: ${server.authMode}`)
-  metaPieces.push(
-    `${server.toolCount} tool${server.toolCount === 1 ? `` : `s`}`
-  )
+  if (!isShadowed) {
+    metaPieces.push(
+      `${server.toolCount} tool${server.toolCount === 1 ? `` : `s`}`
+    )
+  }
 
   return (
-    <>
+    <div style={isShadowed ? { opacity: 0.55 } : undefined}>
       <SettingsRow
         label={
           <span
@@ -135,6 +201,21 @@ function ServerEntry({
             <Text size={1} tone="muted">
               {metaPieces.join(` · `)}
             </Text>
+            {server.provenance === `workspace` && (
+              <Badge size={1} tone="neutral" variant="soft">
+                from mcp.json
+              </Badge>
+            )}
+            {server.provenance === `extras` && (
+              <Badge size={1} tone="neutral" variant="soft">
+                programmatic
+              </Badge>
+            )}
+            {isShadowed && (
+              <Badge size={1} tone="warning" variant="soft">
+                overridden by mcp.json
+              </Badge>
+            )}
           </span>
         }
         control={
@@ -146,7 +227,12 @@ function ServerEntry({
 
       {/* Status-line slot — always rendered so row height stays stable. */}
       <SettingsInset>
-        {server.status === `error` && server.error ? (
+        {isShadowed ? (
+          <Text size={1} tone="muted">
+            The workspace mcp.json defines a server with the same name —
+            workspace wins. Remove the workspace entry to use this one.
+          </Text>
+        ) : server.status === `error` && server.error ? (
           <Text size={1} tone="danger">
             {server.error.kind}: {server.error.message}
           </Text>
@@ -222,15 +308,62 @@ function ServerEntry({
       </SettingsInset>
 
       <SettingsActions>
-        {server.status === `disabled` ? (
-          <Button
-            variant="soft"
-            tone="neutral"
-            onClick={wrap(() => ipc.enable(server.name))}
-            disabled={busy}
-          >
-            Enable
-          </Button>
+        {isShadowed ? (
+          // Settings-side entry that's been overridden — only Edit/Remove
+          // make sense here (lifecycle verbs go to the workspace twin).
+          <>
+            <Button
+              variant="soft"
+              tone="neutral"
+              onClick={onEdit}
+              disabled={busy}
+            >
+              <Icon icon={Pencil} size={1} />
+              Edit
+            </Button>
+            <Button
+              variant="soft"
+              tone="danger"
+              onClick={() => setConfirmRemove(true)}
+              disabled={busy}
+            >
+              <Icon icon={Trash2} size={1} />
+              Remove
+            </Button>
+          </>
+        ) : server.status === `disabled` ? (
+          <>
+            <Button
+              variant="soft"
+              tone="neutral"
+              onClick={wrap(() => ipc.enable(server.name))}
+              disabled={busy}
+            >
+              Enable
+            </Button>
+            {isSettings && (
+              <>
+                <Button
+                  variant="soft"
+                  tone="neutral"
+                  onClick={onEdit}
+                  disabled={busy}
+                >
+                  <Icon icon={Pencil} size={1} />
+                  Edit
+                </Button>
+                <Button
+                  variant="soft"
+                  tone="danger"
+                  onClick={() => setConfirmRemove(true)}
+                  disabled={busy}
+                >
+                  <Icon icon={Trash2} size={1} />
+                  Remove
+                </Button>
+              </>
+            )}
+          </>
         ) : (
           <>
             {server.authMode === `authorizationCode` && (
@@ -263,9 +396,45 @@ function ServerEntry({
             >
               Disable
             </Button>
+            {isSettings && (
+              <>
+                <IconButton
+                  variant="ghost"
+                  tone="neutral"
+                  size={1}
+                  aria-label="Edit"
+                  onClick={onEdit}
+                  disabled={busy || server.status === `authenticating`}
+                >
+                  <Icon icon={Pencil} size={2} />
+                </IconButton>
+                <IconButton
+                  variant="ghost"
+                  tone="danger"
+                  size={1}
+                  aria-label="Remove"
+                  onClick={() => setConfirmRemove(true)}
+                  disabled={busy}
+                >
+                  <Icon icon={Trash2} size={2} />
+                </IconButton>
+              </>
+            )}
           </>
         )}
       </SettingsActions>
-    </>
+
+      <ConfirmDialog
+        open={confirmRemove}
+        onOpenChange={setConfirmRemove}
+        title={`Remove "${server.name}"?`}
+        description={`This removes ${server.name} from settings.json. Workspace mcp.json entries are not affected.`}
+        confirmLabel="Remove"
+        confirmTone="danger"
+        onConfirm={async () => {
+          await ipc.remove(server.name)
+        }}
+      />
+    </div>
   )
 }

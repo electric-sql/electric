@@ -1,5 +1,5 @@
 import { DurableStream, IdempotentProducer } from '@durable-streams/client'
-import { createStreamDB, queryOnce } from '@durable-streams/state'
+import { createStreamDB, queryOnce } from '@durable-streams/state/db'
 import { getEntityType } from './define-entity'
 import { createEntityStreamDB } from './entity-stream-db'
 import { entityStateSchema, isManagementEvent } from './entity-schema'
@@ -599,23 +599,6 @@ export async function processWake(
     if (event.type === `signal`) {
       handleSignalEvent(event)
       return
-    }
-    if (event.type === `child_status` && result) {
-      const spawnHandles = result.wakeSession.getSpawnHandles()
-      const val = event.value as
-        | { entity_url?: string; status?: string }
-        | undefined
-      if (val?.entity_url && spawnHandles.size > 0) {
-        if (
-          val.status === `idle` ||
-          val.status === `completed` ||
-          val.status === `stopped`
-        ) {
-          for (const [, spawnHandle] of spawnHandles) {
-            spawnHandle.resolveRun()
-          }
-        }
-      }
     }
   }
 
@@ -1244,6 +1227,7 @@ export async function processWake(
           payload: send.payload,
           type: send.type,
           afterMs: send.afterMs,
+          fromAgent: entityUrl,
         })
         .then(() => ({ sent: true as const, targetUrl: send.targetUrl }))
 
@@ -1396,7 +1380,7 @@ export async function processWake(
       ): Promise<EntityStreamDBWithActions> => {
         const ssStreamPath = serverClient.getSharedStateStreamPath(ssId)
         if (mode === `create`) {
-          await serverClient.ensureSharedStateStream(ssId)
+          await serverClient.ensureSharedStateStream(ssId, entityUrl)
         }
         const ssStreamUrl = appendPathToUrl(baseUrl, ssStreamPath)
         const ssCollections: Record<string, CollectionDefinition> = {}
@@ -1607,6 +1591,7 @@ export async function processWake(
       source: ObservationSource,
       wake?: Wake
     ): Promise<ObservationHandle> => {
+      let observedSource = source
       // Self-observation
       if (
         source.sourceType === `entity` &&
@@ -1623,10 +1608,6 @@ export async function processWake(
           entityUrl,
           db,
           events: catchUpEvents,
-          run: Promise.resolve(),
-          text() {
-            return Promise.resolve([])
-          },
           send: (msg: unknown) => {
             return executeSend({ targetUrl: entityUrl, payload: msg })
           },
@@ -1647,24 +1628,44 @@ export async function processWake(
       }
 
       if (source.sourceType === `entities`) {
-        await serverClient.ensureEntitiesMembershipStream(
+        const ensured = await serverClient.ensureEntitiesMembershipStream(
           (source as EntitiesObservationSource).tags
         )
+        const originalEntry = source.toManifestEntry() as Record<
+          string,
+          unknown
+        >
+        observedSource = {
+          ...source,
+          sourceRef: ensured.sourceRef,
+          streamUrl: ensured.streamUrl,
+          toManifestEntry() {
+            return {
+              ...originalEntry,
+              key: `source:entities:${ensured.sourceRef}`,
+              sourceRef: ensured.sourceRef,
+              config: {
+                ...((originalEntry.config as Record<string, unknown>) ?? {}),
+                streamUrl: ensured.streamUrl,
+              },
+            } as unknown as ReturnType<ObservationSource[`toManifestEntry`]>
+          },
+        }
       }
 
       if (effectiveWake) {
-        const observeHandle = await setupCtx.observe(source, {
+        const observeHandle = await setupCtx.observe(observedSource, {
           wake: effectiveWake,
         })
 
         const sourceUrl =
           sourceWakeConfig?.sourceUrl ??
-          (source.sourceType === `entity`
-            ? (source as EntityObservationSource).entityUrl
-            : source.streamUrl)
+          (observedSource.sourceType === `entity`
+            ? (observedSource as EntityObservationSource).entityUrl
+            : observedSource.streamUrl)
         if (!sourceUrl) {
           throw new Error(
-            `[agent-runtime] Cannot register wake for source '${source.sourceType}:${source.sourceRef}' without a source URL`
+            `[agent-runtime] Cannot register wake for source '${observedSource.sourceType}:${observedSource.sourceRef}' without a source URL`
           )
         }
 
@@ -1695,7 +1696,7 @@ export async function processWake(
               ? wake.includeResponse
               : undefined
             : sourceWakeConfig?.includeResponse,
-          manifestKey: source.toManifestEntry().key,
+          manifestKey: observedSource.toManifestEntry().key,
         })
 
         if (source.sourceType === `db`) {
@@ -1706,7 +1707,7 @@ export async function processWake(
         return observeHandle
       }
 
-      const observeHandle = await setupCtx.observe(source)
+      const observeHandle = await setupCtx.observe(observedSource)
       if (source.sourceType === `db`) {
         scheduleSharedStateWiring()
         await waitForSharedStateWiring()

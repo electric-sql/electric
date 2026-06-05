@@ -1,6 +1,6 @@
 {
   "name": "@electric-ax/agents-runtime",
-  "version": "0.3.7",
+  "version": "0.3.8",
   "description": "Electric agent runtime — behavioral stack for agent entities over durable streams",
   "keywords": [
     "tanstack-intent"
@@ -109,7 +109,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
     "@durable-streams/client": "^0.2.6",
-    "@durable-streams/state": "^0.2.9",
+    "@durable-streams/state": "^0.3.1",
     "@electric-ax/agents-mcp": "workspace:*",
     "@mariozechner/pi-agent-core": "^0.70.2",
     "@mariozechner/pi-ai": "^0.70.2",
@@ -129,7 +129,8 @@
     "zod-to-json-schema": "^3.25.2"
   },
   "devDependencies": {
-    "@durable-streams/server": "^0.3.5",
+    "@durable-streams/server": "^0.3.7",
+    "@tanstack/react-db": "^0.1.85",
     "@types/dockerode": "^4.0.1",
     "@types/jsdom": "^27.0.0",
     "@types/node": "^22.19.15",

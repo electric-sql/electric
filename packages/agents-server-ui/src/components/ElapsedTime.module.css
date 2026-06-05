@@ -1,0 +1,12 @@
+/* Match the dimmed tone of the meta-row siblings (done text,
+ * timestamp, separator dot) so the elapsed timer reads as part of
+ * the same row rather than as a primary signal.
+ *
+ * `tabular-nums` locks digit widths so the label doesn't jitter
+ * horizontally as seconds tick over (most proportional fonts render
+ * `1` narrower than `0`/`8`). */
+.elapsed {
+  color: var(--ds-text-4);
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+}

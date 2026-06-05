@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createAgentsClient } from '../src/agents-client'
 import { cron, entities, webhook } from '../src/observation-sources'
-import type * as StateModule from '@durable-streams/state'
+import type * as StateDbModule from '@durable-streams/state/db'
 
 const { mockState } = vi.hoisted(() => ({
   mockState: {
@@ -29,8 +29,8 @@ vi.mock(`../src/runtime-server-client`, () => ({
   }),
 }))
 
-vi.mock(`@durable-streams/state`, async (importOriginal) => {
-  const actual = await importOriginal<typeof StateModule>()
+vi.mock(`@durable-streams/state/db`, async (importOriginal) => {
+  const actual = await importOriginal<typeof StateDbModule>()
   return {
     ...actual,
     createStreamDB: (options: Record<string, unknown>) => {
@@ -93,7 +93,7 @@ describe(`createAgentsClient`, () => {
     })
     expect(mockState.createStreamDB).toHaveBeenCalledWith({
       streamOptions: {
-        url: `http://electric-agents.test${source.streamUrl}`,
+        url: `http://electric-agents.test/_entities/source-1`,
         contentType: `application/json`,
       },
       state: source.schema,
@@ -117,7 +117,7 @@ describe(`createAgentsClient`, () => {
 
     expect(mockState.createStreamDB).toHaveBeenCalledWith({
       streamOptions: {
-        url: `http://electric-agents.test/t/tenant-a/v1${source.streamUrl}`,
+        url: `http://electric-agents.test/t/tenant-a/v1/_entities/source-1`,
         contentType: `application/json`,
       },
       state: source.schema,

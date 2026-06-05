@@ -131,6 +131,7 @@ async function main(): Promise<void> {
   }
   controller.connectConfiguredServers()
   controller.startDiscoveryLoop()
+  controller.initializeUpdater()
 }
 
 void main()

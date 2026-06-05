@@ -48,6 +48,27 @@ describe(`completeWithLowCostModel`, () => {
     )
   })
 
+  test(`passes fresh ELECTRIC_CODEX_ACCESS_TOKEN for openai-codex low-cost models without modelConfig`, async () => {
+    process.env.ELECTRIC_CODEX_ACCESS_TOKEN = `codex-token`
+
+    await completeWithLowCostModel({
+      catalog: {
+        choices: [
+          { provider: `openai-codex`, id: `gpt-5.4-mini`, reasoning: false },
+        ],
+      },
+      purpose: `URL extraction`,
+      systemPrompt: `Custom instructions`,
+      prompt: `Extract the title`,
+      maxTokens: 128,
+    })
+
+    expect(completeSimple).toHaveBeenCalledOnce()
+    expect(completeSimple.mock.calls[0][2]).toMatchObject({
+      apiKey: `codex-token`,
+    })
+  })
+
   test(`passes MOONSHOT_API_KEY for moonshot low-cost models`, async () => {
     process.env.MOONSHOT_API_KEY = `moonshot-key`
 
