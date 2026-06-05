@@ -121,7 +121,7 @@ export function buildElectricProxyTarget(options: {
   if (table === `entities`) {
     target.searchParams.set(
       `columns`,
-      `"tenant_id","url","type","status","dispatch_policy","tags","spawn_args","sandbox","parent","type_revision","inbox_schemas","state_schemas","created_at","updated_at"`
+      `"tenant_id","url","type","status","dispatch_policy","tags","spawn_args","sandbox","parent","created_by","type_revision","inbox_schemas","state_schemas","created_at","updated_at"`
     )
     applyShapeWhere(
       target,
@@ -160,6 +160,20 @@ export function buildElectricProxyTarget(options: {
       `"tenant_id","id","display_name","email","avatar_url","auth_provider","auth_subject","profile","metadata","created_at","updated_at"`
     )
     applyTenantShapeWhere(target, options.tenantId)
+  } else if (table === `entity_effective_permissions`) {
+    target.searchParams.set(
+      `columns`,
+      `"tenant_id","id","entity_url","source_entity_url","source_grant_id","permission","subject_kind","subject_value","expires_at","created_at"`
+    )
+    applyShapeWhere(
+      target,
+      buildCurrentPrincipalEntityEffectivePermissionsWhere({
+        tenantId: options.tenantId,
+        principalUrl: options.principalUrl ?? ``,
+        principalKind: options.principalKind ?? ``,
+        permissionBypass: options.permissionBypass,
+      })
+    )
   } else if (table === `runner_runtime_diagnostics`) {
     target.searchParams.set(
       `columns`,
@@ -264,6 +278,32 @@ export function buildReadableEntityUrlWhere(options: {
       buildReadableEntitiesWhere(options),
       `    `
     ).trimStart()}`,
+    `)`,
+  ].join(`\n`)
+}
+
+export function buildCurrentPrincipalEntityEffectivePermissionsWhere(options: {
+  tenantId: string
+  principalUrl: string
+  principalKind: string
+  permissionBypass?: boolean
+}): string {
+  const tenant = sqlStringLiteral(options.tenantId)
+  if (options.permissionBypass) {
+    return `tenant_id = ${tenant}`
+  }
+  const principalUrl = sqlStringLiteral(options.principalUrl)
+  const principalKind = sqlStringLiteral(options.principalKind)
+  return [
+    `tenant_id = ${tenant}`,
+    `AND (`,
+    `  (subject_kind = 'principal' AND subject_value = ${principalUrl})`,
+    `  OR (subject_kind = 'principal_kind' AND subject_value = ${principalKind})`,
+    `)`,
+    `AND entity_url IN (`,
+    `  SELECT url`,
+    `  FROM entities`,
+    `  WHERE ${buildReadableEntitiesWhere(options)}`,
     `)`,
   ].join(`\n`)
 }

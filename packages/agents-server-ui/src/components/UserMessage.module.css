@@ -64,6 +64,15 @@
   background: var(--ds-gray-a4);
 }
 
+.forkButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.forkButton:disabled:hover {
+  background: var(--ds-gray-a3);
+}
+
 .forkButton:focus-visible {
   outline: 2px solid var(--ds-accent-a6);
   outline-offset: 2px;

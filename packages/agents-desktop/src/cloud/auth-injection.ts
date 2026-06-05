@@ -7,6 +7,7 @@ import {
   buildSavedServerHeaders,
   type CloudAuthHeaderInjectionDeps,
 } from './auth-headers'
+import { logPostInjectionHeaders } from './auth-debug'
 export type { CloudAuthHeaderInjectionDeps } from './auth-headers'
 
 /**
@@ -23,11 +24,24 @@ export function installCloudAuthHeaderInjection(
       buildCloudAuthHeaders(deps, details.url) ?? undefined
     )
     if (!extra) {
+      logPostInjectionHeaders({
+        transport: `webRequest`,
+        method: details.method,
+        url: details.url,
+        headers: details.requestHeaders,
+      })
       callback({ requestHeaders: details.requestHeaders })
       return
     }
+    const requestHeaders = { ...details.requestHeaders, ...extra }
+    logPostInjectionHeaders({
+      transport: `webRequest`,
+      method: details.method,
+      url: details.url,
+      headers: requestHeaders,
+    })
     callback({
-      requestHeaders: { ...details.requestHeaders, ...extra },
+      requestHeaders,
     })
   })
 
@@ -42,16 +56,29 @@ function installCloudAuthUndiciInterceptor(
     (dispatch): Dispatcher[`dispatch`] =>
       (opts, handler) => {
         const fullUrl = composeRequestUrl(opts.origin, opts.path)
-        const extra = fullUrl ? buildCloudAuthHeaders(deps, fullUrl) : null
-        if (!extra) return dispatch(opts, handler)
+        if (!fullUrl) return dispatch(opts, handler)
+        const extra = buildCloudAuthHeaders(deps, fullUrl)
+        if (!extra) {
+          logPostInjectionHeaders({
+            transport: `undici`,
+            method: opts.method,
+            url: fullUrl,
+            headers: mergeUndiciHeaders(opts.headers, {}),
+          })
+          return dispatch(opts, handler)
+        }
         const lowered: Record<string, string> = {}
         for (const [key, value] of Object.entries(extra)) {
           lowered[key.toLowerCase()] = value
         }
-        return dispatch(
-          { ...opts, headers: mergeUndiciHeaders(opts.headers, lowered) },
-          handler
-        )
+        const headers = mergeUndiciHeaders(opts.headers, lowered)
+        logPostInjectionHeaders({
+          transport: `undici`,
+          method: opts.method,
+          url: fullUrl,
+          headers,
+        })
+        return dispatch({ ...opts, headers }, handler)
       }
   )
   undici.setGlobalDispatcher(composed)

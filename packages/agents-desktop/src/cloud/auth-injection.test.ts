@@ -43,7 +43,6 @@ describe(`cloud auth header injection`, () => {
     assert.deepEqual(headers, {
       Authorization: `Bearer agents-token`,
       'electric-principal': `user:69691edf-b925-4745-9c34-d7082eeb93e9`,
-      'x-electric-asserted-user-id': `69691edf-b925-4745-9c34-d7082eeb93e9`,
       'x-electric-asserted-email': `ilia@example.com`,
       'x-electric-asserted-name': `Ilia`,
     })
@@ -72,5 +71,23 @@ describe(`cloud auth header injection`, () => {
       merged?.[`electric-principal`],
       `user:69691edf-b925-4745-9c34-d7082eeb93e9`
     )
+  })
+
+  it(`does not inject a service bearer without a signed-in Cloud principal`, () => {
+    const headers = buildCloudAuthHeaders(
+      deps({
+        getCloudAuthState: () => ({
+          status: `signed-in`,
+          email: `ilia@example.com`,
+          name: `Ilia`,
+          userId: null,
+          workspaces: null,
+          error: null,
+        }),
+      }),
+      `http://localhost:8006/t/svc-example/v1/_electric/entities/horton/a`
+    )
+
+    assert.equal(headers, null)
   })
 })

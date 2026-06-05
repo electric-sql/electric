@@ -31,13 +31,13 @@ export function buildCloudAuthHeaders(
   if (!server || !server.tenantId) return null
   const token = deps.getAgentsToken(server.tenantId)
   if (!token) return null
+  const cloudAuthState = deps.getCloudAuthState()
+  if (cloudAuthState?.status !== `signed-in` || !cloudAuthState.userId) {
+    return null
+  }
   const headers: Record<string, string> = {
     Authorization: `Bearer ${token}`,
-  }
-  const cloudAuthState = deps.getCloudAuthState()
-  if (cloudAuthState?.userId) {
-    headers[ELECTRIC_PRINCIPAL_HEADER] = `user:${cloudAuthState.userId}`
-    headers[`x-electric-asserted-user-id`] = cloudAuthState.userId
+    [ELECTRIC_PRINCIPAL_HEADER]: `user:${cloudAuthState.userId}`,
   }
   if (cloudAuthState?.email) {
     headers[`x-electric-asserted-email`] = cloudAuthState.email

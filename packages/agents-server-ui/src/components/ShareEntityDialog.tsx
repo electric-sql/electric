@@ -35,7 +35,7 @@ type EntityPermissionGrant = {
   id: number
   entity_url: string
   permission: SharePermission | string
-  subject_kind: `principal` | `principal_kind` | string
+  subject_kind: PermissionSubjectKind | string
   subject_value: string
   propagation?: `self` | `descendants` | string
   copy_to_children?: boolean
@@ -44,6 +44,31 @@ type EntityPermissionGrant = {
   created_at: string
   updated_at: string
 }
+
+type PermissionSubjectKind = `principal` | `principal_kind`
+
+type ShareTargetDisplay = {
+  primary: string
+  secondary: string
+  initials: string
+}
+
+type SharedAccessRowModel = {
+  targetId: string
+  display: ShareTargetDisplay
+  user?: ElectricUser
+  role: ShareRole
+}
+
+const ALL_USERS_TARGET_ID = `__all_users__`
+const ALL_USERS_SUBJECT_KIND = `principal_kind`
+const ALL_USERS_SUBJECT_VALUE = `user`
+const ALL_USERS_DISPLAY: ShareTargetDisplay = {
+  primary: `All users`,
+  secondary: `Everyone in this workspace`,
+  initials: `AU`,
+}
+const ALL_USERS_SEARCH_TEXT = `all users everyone workspace`
 
 const ROLE_OPTIONS: Array<{
   id: ShareRole
@@ -87,7 +112,9 @@ export function ShareEntityDialog({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState(``)
-  const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
+  const [selectedTargetId, setSelectedTargetId] = useState<string | null>(
+    ALL_USERS_TARGET_ID
+  )
   const [selectedRole, setSelectedRole] = useState<ShareRole>(`chat`)
   const { userId: currentUserId } = useCurrentPrincipal()
 
@@ -118,6 +145,13 @@ export function ShareEntityDialog({
     )
   }, [query, shareableUsers])
 
+  const showAllUsersTarget = useMemo(() => {
+    const needle = query.trim().toLowerCase()
+    return !needle || ALL_USERS_SEARCH_TEXT.includes(needle)
+  }, [query])
+
+  const visibleTargetCount = filteredUsers.length + (showAllUsersTarget ? 1 : 0)
+
   const usersById = useMemo(
     () => new Map(sortedUsers.map((user) => [user.id, user])),
     [sortedUsers]
@@ -136,6 +170,13 @@ export function ShareEntityDialog({
     return grouped
   }, [grants])
 
+  const allUsersGrants = useMemo(() => grants.filter(isAllUsersGrant), [grants])
+
+  const allUsersRole = useMemo(
+    () => roleFromGrants(allUsersGrants),
+    [allUsersGrants]
+  )
+
   const roleByUserId = useMemo(() => {
     const roles = new Map<string, ShareRole>()
     for (const [userId, userGrants] of grantsByUserId) {
@@ -146,48 +187,74 @@ export function ShareEntityDialog({
   }, [grantsByUserId])
 
   const sharedRows = useMemo(() => {
-    return [...roleByUserId.entries()]
+    const rows: Array<SharedAccessRowModel> = []
+    if (allUsersRole) {
+      rows.push({
+        targetId: ALL_USERS_TARGET_ID,
+        display: ALL_USERS_DISPLAY,
+        role: allUsersRole,
+      })
+    }
+
+    const userRows = [...roleByUserId.entries()]
       .filter(([userId]) => userId !== currentUserId)
       .map(([userId, role]) => ({
+        targetId: userId,
+        display: userDisplay(usersById.get(userId), userId),
         userId,
         user: usersById.get(userId),
         role,
       }))
-      .sort((a, b) =>
-        userDisplay(a.user, a.userId).primary.localeCompare(
-          userDisplay(b.user, b.userId).primary
-        )
-      )
-  }, [currentUserId, roleByUserId, usersById])
+      .sort((a, b) => a.display.primary.localeCompare(b.display.primary))
 
-  const selectedUser = selectedUserId ? usersById.get(selectedUserId) : null
-  const selectedExistingRole = selectedUserId
-    ? (roleByUserId.get(selectedUserId) ?? null)
-    : null
-  const selectedExistingGrants = useMemo(
-    () => (selectedUserId ? (grantsByUserId.get(selectedUserId) ?? []) : []),
-    [grantsByUserId, selectedUserId]
-  )
+    rows.push(...userRows)
+    return rows
+  }, [allUsersRole, currentUserId, roleByUserId, usersById])
+
+  const selectedTargetIsAllUsers = selectedTargetId === ALL_USERS_TARGET_ID
+  const selectedUserId = selectedTargetIsAllUsers ? null : selectedTargetId
+  const selectedUser = selectedUserId
+    ? usersById.get(selectedUserId)
+    : undefined
+  const selectedDisplay = selectedTargetIsAllUsers
+    ? ALL_USERS_DISPLAY
+    : selectedUserId
+      ? userDisplay(selectedUser, selectedUserId)
+      : null
+  const selectedExistingRole = selectedTargetIsAllUsers
+    ? allUsersRole
+    : selectedUserId
+      ? (roleByUserId.get(selectedUserId) ?? null)
+      : null
+  const selectedExistingGrants = useMemo(() => {
+    if (selectedTargetId === ALL_USERS_TARGET_ID) return allUsersGrants
+    return selectedTargetId ? (grantsByUserId.get(selectedTargetId) ?? []) : []
+  }, [allUsersGrants, grantsByUserId, selectedTargetId])
   const selectedRoleChanged =
-    selectedUserId !== null &&
+    selectedTargetId !== null &&
     !rolePermissionsMatchGrants(selectedRole, selectedExistingGrants)
 
   useEffect(() => {
     if (!open) return
+    if (selectedTargetId === ALL_USERS_TARGET_ID) return
     if (
-      selectedUserId &&
-      selectedUserId !== currentUserId &&
-      usersById.has(selectedUserId)
+      selectedTargetId &&
+      selectedTargetId !== currentUserId &&
+      usersById.has(selectedTargetId)
     ) {
       return
     }
-    setSelectedUserId(shareableUsers.at(0)?.id ?? null)
-  }, [currentUserId, open, selectedUserId, shareableUsers, usersById])
+    setSelectedTargetId(ALL_USERS_TARGET_ID)
+  }, [currentUserId, open, selectedTargetId, usersById])
 
   useEffect(() => {
-    if (!open || !selectedUserId) return
-    setSelectedRole(roleByUserId.get(selectedUserId) ?? `chat`)
-  }, [open, roleByUserId, selectedUserId])
+    if (!open || !selectedTargetId) return
+    const existingRole =
+      selectedTargetId === ALL_USERS_TARGET_ID
+        ? allUsersRole
+        : roleByUserId.get(selectedTargetId)
+    setSelectedRole(existingRole ?? `chat`)
+  }, [allUsersRole, open, roleByUserId, selectedTargetId])
 
   const loadGrants = useCallback(async () => {
     if (!baseUrl) return
@@ -217,7 +284,7 @@ export function ShareEntityDialog({
   }, [loadGrants, open])
 
   const saveSelectedRole = async () => {
-    if (!baseUrl || !selectedUserId) return
+    if (!baseUrl || !selectedTargetId) return
     if (selectedUserId === currentUserId) return
     const role = ROLE_BY_ID.get(selectedRole)
     if (!role) return
@@ -225,9 +292,14 @@ export function ShareEntityDialog({
     setSaving(true)
     setError(null)
     try {
-      const selectedPrincipalUrl = userPrincipalUrl(selectedUserId)
-      const existing = (grantsByUserId.get(selectedUserId) ?? []).filter(
-        (grant) => SHARE_PERMISSIONS.has(grant.permission)
+      const subjectKind: PermissionSubjectKind = selectedTargetIsAllUsers
+        ? ALL_USERS_SUBJECT_KIND
+        : `principal`
+      const subjectValue = selectedTargetIsAllUsers
+        ? ALL_USERS_SUBJECT_VALUE
+        : userPrincipalUrl(selectedUserId!)
+      const existing = selectedExistingGrants.filter((grant) =>
+        SHARE_PERMISSIONS.has(grant.permission)
       )
       const desired = new Set<string>(role.permissions)
       const existingPermissions = new Set(
@@ -239,7 +311,13 @@ export function ShareEntityDialog({
       const createRequests = role.permissions
         .filter((permission) => !existingPermissions.has(permission))
         .map((permission) =>
-          createGrant(baseUrl, entity.url, selectedPrincipalUrl, permission)
+          createGrant(
+            baseUrl,
+            entity.url,
+            subjectKind,
+            subjectValue,
+            permission
+          )
         )
 
       await Promise.all([...deleteRequests, ...createRequests])
@@ -247,8 +325,7 @@ export function ShareEntityDialog({
       showToast({
         tone: `success`,
         title: `Permissions updated`,
-        description: userDisplay(selectedUser ?? undefined, selectedUserId)
-          .primary,
+        description: selectedDisplay?.primary,
       })
     } catch (err) {
       const message = errorMessage(err)
@@ -263,14 +340,15 @@ export function ShareEntityDialog({
     }
   }
 
-  const removeUser = async (userId: string) => {
+  const removeTarget = async (targetId: string) => {
     if (!baseUrl) return
     setSaving(true)
     setError(null)
     try {
-      const grantsToDelete = (grantsByUserId.get(userId) ?? []).filter(
-        (grant) => SHARE_PERMISSIONS.has(grant.permission)
-      )
+      const targetIsAllUsers = targetId === ALL_USERS_TARGET_ID
+      const grantsToDelete = (
+        targetIsAllUsers ? allUsersGrants : (grantsByUserId.get(targetId) ?? [])
+      ).filter((grant) => SHARE_PERMISSIONS.has(grant.permission))
       await Promise.all(
         grantsToDelete.map((grant) =>
           deleteGrant(baseUrl, entity.url, grant.id)
@@ -280,7 +358,9 @@ export function ShareEntityDialog({
       showToast({
         tone: `success`,
         title: `Access removed`,
-        description: userDisplay(usersById.get(userId), userId).primary,
+        description: targetIsAllUsers
+          ? ALL_USERS_DISPLAY.primary
+          : userDisplay(usersById.get(targetId), targetId).primary,
       })
     } catch (err) {
       const message = errorMessage(err)
@@ -297,7 +377,7 @@ export function ShareEntityDialog({
 
   const saveDisabled =
     !baseUrl ||
-    !selectedUserId ||
+    !selectedTargetId ||
     !selectedRoleChanged ||
     saving ||
     loadingGrants
@@ -342,26 +422,26 @@ export function ShareEntityDialog({
                 size={2}
               />
               <div className={styles.userList}>
+                {showAllUsersTarget && (
+                  <TargetButton
+                    key={ALL_USERS_TARGET_ID}
+                    display={ALL_USERS_DISPLAY}
+                    active={selectedTargetId === ALL_USERS_TARGET_ID}
+                    role={allUsersRole ?? null}
+                    onClick={() => setSelectedTargetId(ALL_USERS_TARGET_ID)}
+                  />
+                )}
                 {filteredUsers.map((user) => (
-                  <UserButton
+                  <TargetButton
                     key={user.id}
+                    display={userDisplay(user, user.id)}
                     user={user}
-                    active={user.id === selectedUserId}
+                    active={user.id === selectedTargetId}
                     role={roleByUserId.get(user.id) ?? null}
-                    onClick={() => setSelectedUserId(user.id)}
+                    onClick={() => setSelectedTargetId(user.id)}
                   />
                 ))}
-                {users.length === 0 && (
-                  <Text size={2} tone="muted" className={styles.empty}>
-                    No users synced yet.
-                  </Text>
-                )}
-                {users.length > 0 && shareableUsers.length === 0 && (
-                  <Text size={2} tone="muted" className={styles.empty}>
-                    No other users synced yet.
-                  </Text>
-                )}
-                {shareableUsers.length > 0 && filteredUsers.length === 0 && (
+                {visibleTargetCount === 0 && (
                   <Text size={2} tone="muted" className={styles.empty}>
                     No matching users.
                   </Text>
@@ -370,9 +450,12 @@ export function ShareEntityDialog({
             </section>
 
             <section className={styles.rolePanel}>
-              {selectedUser ? (
+              {selectedDisplay ? (
                 <>
-                  <UserSummary user={selectedUser} />
+                  <TargetSummary
+                    display={selectedDisplay}
+                    user={selectedUser}
+                  />
                   <div className={styles.segmented} role="group">
                     {ROLE_OPTIONS.map((role) => {
                       const active = role.id === selectedRole
@@ -393,7 +476,7 @@ export function ShareEntityDialog({
                 </>
               ) : (
                 <Text size={2} tone="muted">
-                  Select a user.
+                  Select who to share with.
                 </Text>
               )}
             </section>
@@ -412,18 +495,18 @@ export function ShareEntityDialog({
             </div>
             <div className={styles.sharedList}>
               {sharedRows.map((row) => (
-                <SharedUserRow
-                  key={row.userId}
-                  userId={row.userId}
+                <SharedAccessRow
+                  key={row.targetId}
+                  display={row.display}
                   user={row.user}
                   role={row.role}
                   disabled={saving}
-                  onRemove={() => void removeUser(row.userId)}
+                  onRemove={() => void removeTarget(row.targetId)}
                 />
               ))}
               {!loadingGrants && sharedRows.length === 0 && (
                 <Text size={2} tone="muted" className={styles.empty}>
-                  No user grants yet.
+                  No grants yet.
                 </Text>
               )}
             </div>
@@ -463,18 +546,19 @@ const ShareTrigger = forwardRef<
   )
 })
 
-function UserButton({
+function TargetButton({
+  display,
   user,
   active,
   role,
   onClick,
 }: {
-  user: ElectricUser
+  display: ShareTargetDisplay
+  user?: ElectricUser
   active: boolean
   role: ShareRole | null
   onClick: () => void
 }): React.ReactElement {
-  const display = userDisplay(user, user.id)
   return (
     <button
       type="button"
@@ -492,8 +576,13 @@ function UserButton({
   )
 }
 
-function UserSummary({ user }: { user: ElectricUser }): React.ReactElement {
-  const display = userDisplay(user, user.id)
+function TargetSummary({
+  display,
+  user,
+}: {
+  display: ShareTargetDisplay
+  user?: ElectricUser
+}): React.ReactElement {
   return (
     <div className={styles.userSummary}>
       <Avatar user={user} fallback={display.initials} size="large" />
@@ -505,20 +594,19 @@ function UserSummary({ user }: { user: ElectricUser }): React.ReactElement {
   )
 }
 
-function SharedUserRow({
-  userId,
+function SharedAccessRow({
+  display,
   user,
   role,
   disabled,
   onRemove,
 }: {
-  userId: string
+  display: ShareTargetDisplay
   user?: ElectricUser
   role: ShareRole
   disabled: boolean
   onRemove: () => void
 }): React.ReactElement {
-  const display = userDisplay(user, userId)
   return (
     <div className={styles.sharedRow}>
       <Avatar user={user} fallback={display.initials} />
@@ -578,6 +666,7 @@ function Avatar({
 async function createGrant(
   baseUrl: string,
   entityUrl: string,
+  subjectKind: PermissionSubjectKind,
   subjectValue: string,
   permission: SharePermission
 ): Promise<void> {
@@ -585,7 +674,7 @@ async function createGrant(
     method: `POST`,
     headers: { 'content-type': `application/json` },
     body: JSON.stringify({
-      subject_kind: `principal`,
+      subject_kind: subjectKind,
       subject_value: subjectValue,
       permission,
     }),
@@ -634,6 +723,13 @@ function errorMessage(error: unknown): string {
 
 function roleLabel(role: ShareRole): string {
   return ROLE_BY_ID.get(role)?.label ?? role
+}
+
+function isAllUsersGrant(grant: EntityPermissionGrant): boolean {
+  return (
+    grant.subject_kind === ALL_USERS_SUBJECT_KIND &&
+    grant.subject_value === ALL_USERS_SUBJECT_VALUE
+  )
 }
 
 function userSearchText(user: ElectricUser): string {

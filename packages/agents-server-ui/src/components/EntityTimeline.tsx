@@ -44,7 +44,7 @@ import { warmMarkdownRenderCache } from '../lib/markdownRenderCache'
 import { useCurrentPrincipal } from '../hooks/useCurrentPrincipal'
 import { Icon, IconButton, ScrollArea, Stack, Text, Tooltip } from '../ui'
 import { UserMessage } from './UserMessage'
-import type { UserMessageAttachment } from './UserMessage'
+import type { ForkFromHereAction, UserMessageAttachment } from './UserMessage'
 import { AgentResponseLive } from './AgentResponse'
 import { InlineEventCard } from './InlineEventCard'
 import { InlineStatusBadge } from './InlineStatusBadge'
@@ -872,7 +872,7 @@ const TimelineRow = memo(function TimelineRow({
   onStopGeneration?: () => void
   /** When set on a user-message row, enables the "Fork from here" hover
    * button. Caller pre-resolved the pointer; we just invoke. */
-  onForkFromHere?: () => void
+  onForkFromHere?: ForkFromHereAction
   onRunSearchTextChange: (rowKey: string, text: string) => void
 }): React.ReactElement {
   if (row.inbox) {
@@ -894,7 +894,7 @@ const TimelineRow = memo(function TimelineRow({
         }
         stopPending={stopPending}
         onStop={onStopGeneration}
-        onForkFromHere={onForkFromHere}
+        forkFromHere={onForkFromHere}
       />
     )
   }
@@ -976,7 +976,7 @@ export function EntityTimeline({
    * the prop is omitted) get no fork affordance. The caller resolves
    * the fork pointer and runs the fork → navigate flow.
    */
-  forkFromHereByInboxKey?: Map<string, () => void>
+  forkFromHereByInboxKey?: Map<string, ForkFromHereAction>
 }): React.ReactElement {
   const { entitiesCollection, runnersCollection, usersCollection } =
     useElectricAgents()

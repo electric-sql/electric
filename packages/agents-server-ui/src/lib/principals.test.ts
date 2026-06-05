@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  normalizePrincipalUrl,
   principalKeyFromInput,
   principalUrlFromKey,
   userIdFromPrincipal,
@@ -18,6 +19,16 @@ describe(`principal helpers`, () => {
   it(`builds canonical user principal URLs`, () => {
     expect(userPrincipalUrl(`abc123`)).toBe(`/principal/user%3Aabc123`)
     expect(principalUrlFromKey(`user:abc123`)).toBe(`/principal/user%3Aabc123`)
+  })
+
+  it(`normalizes principal keys to canonical URLs`, () => {
+    expect(normalizePrincipalUrl(`user:abc123`)).toBe(
+      `/principal/user%3Aabc123`
+    )
+    expect(normalizePrincipalUrl(`/principal/user%3Aabc123`)).toBe(
+      `/principal/user%3Aabc123`
+    )
+    expect(normalizePrincipalUrl(null)).toBe(null)
   })
 
   it(`extracts user ids from raw keys and principal URLs`, () => {

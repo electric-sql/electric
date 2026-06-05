@@ -37,6 +37,11 @@ export type UserMessageAttachment = {
   url: string
 }
 
+export type ForkFromHereAction = {
+  disabled?: boolean
+  onFork?: () => void
+}
+
 export const UserMessage = memo(function UserMessage({
   section,
   attachments = [],
@@ -45,7 +50,7 @@ export const UserMessage = memo(function UserMessage({
   currentPrincipal,
   usersById,
   onStop,
-  onForkFromHere,
+  forkFromHere,
 }: {
   section: UserMessageSection
   attachments?: Array<UserMessageAttachment>
@@ -60,9 +65,11 @@ export const UserMessage = memo(function UserMessage({
    * `undefined` for messages where no preceding completed run anchors a
    * fork.
    */
-  onForkFromHere?: () => void
+  forkFromHere?: ForkFromHereAction
 }): React.ReactElement {
   const sender = formatSender(section.from, { currentPrincipal, usersById })
+  const showFork = !showStop && forkFromHere !== undefined
+  const forkDisabled = forkFromHere?.disabled === true || !forkFromHere?.onFork
 
   return (
     <Stack
@@ -95,13 +102,18 @@ export const UserMessage = memo(function UserMessage({
             <Icon icon={Square} size={2} fill="currentColor" strokeWidth={0} />
           </button>
         )}
-        {!showStop && onForkFromHere && (
+        {showFork && (
           <button
             type="button"
             aria-label="Fork from here"
-            title="Fork from here — re-roll the conversation starting at this message"
+            title={
+              forkDisabled
+                ? `Fork permission required`
+                : `Fork from here — re-roll the conversation starting at this message`
+            }
             className={styles.forkButton}
-            onClick={onForkFromHere}
+            disabled={forkDisabled}
+            onClick={forkFromHere?.onFork}
           >
             <Icon icon={GitFork} size={2} />
           </button>

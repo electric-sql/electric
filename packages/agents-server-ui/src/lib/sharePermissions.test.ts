@@ -6,9 +6,17 @@ import {
 } from './sharePermissions'
 
 describe(`share permissions`, () => {
-  it(`grants fork permission with view and chat roles`, () => {
+  it(`expands share roles to the permissions the UI delegates`, () => {
     expect(SHARE_ROLE_PERMISSIONS.view).toEqual([`read`, `fork`])
-    expect(SHARE_ROLE_PERMISSIONS.chat).toEqual([`read`, `write`, `fork`])
+    expect(SHARE_ROLE_PERMISSIONS.chat).toEqual([
+      `read`,
+      `write`,
+      `signal`,
+      `fork`,
+      `schedule`,
+      `spawn`,
+    ])
+    expect(SHARE_ROLE_PERMISSIONS.manage).toEqual([`manage`, `delete`])
   })
 
   it(`keeps older read-only grants visible as view but not fully up to date`, () => {
@@ -29,14 +37,17 @@ describe(`share permissions`, () => {
       rolePermissionsMatchGrants(`chat`, [
         { permission: `read` },
         { permission: `write` },
+        { permission: `signal` },
         { permission: `fork` },
+        { permission: `schedule` },
+        { permission: `spawn` },
       ])
     ).toBe(true)
     expect(
       rolePermissionsMatchGrants(`manage`, [
         { permission: `manage` },
-        { permission: `read` },
+        { permission: `delete` },
       ])
-    ).toBe(false)
+    ).toBe(true)
   })
 })

@@ -35,6 +35,7 @@ describe(`server utils`, () => {
     const columns = target.searchParams.get(`columns`)
     expect(columns).toContain(`"sandbox"`)
     expect(columns).toContain(`"dispatch_policy"`)
+    expect(columns).toContain(`"created_by"`)
     expect(target.searchParams.get(`where`)).toContain(
       `tenant_id = 'tenant-test'`
     )
@@ -80,6 +81,29 @@ describe(`server utils`, () => {
     expect(target.searchParams.get(`where`)).toBe(
       `tenant_id = 'tenant-test' AND (email ILIKE '%@example.com')`
     )
+  })
+
+  it(`scopes effective permission shapes to the current principal and readable entities`, () => {
+    const target = shapeTarget(`table=entity_effective_permissions`)
+    const where = target.searchParams.get(`where`) ?? ``
+
+    expect(target.searchParams.get(`table`)).toBe(
+      `entity_effective_permissions`
+    )
+    const columns = target.searchParams.get(`columns`)
+    expect(columns).toContain(`"entity_url"`)
+    expect(columns).toContain(`"permission"`)
+    expect(where).toContain(`tenant_id = 'tenant-test'`)
+    expect(where).toContain(
+      `(subject_kind = 'principal' AND subject_value = '/principal/user%3Aowner%40example.com')`
+    )
+    expect(where).toContain(
+      `(subject_kind = 'principal_kind' AND subject_value = 'user')`
+    )
+    expect(where).toContain(`entity_url IN (`)
+    expect(where).toContain(`FROM entities`)
+    expect(where).toContain(`created_by =`)
+    expect(where).toContain(`permission IN ('read', 'manage')`)
   })
 
   it(`scopes entity shapes to owner or read/manage effective grants with IN subqueries`, () => {

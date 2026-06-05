@@ -37,6 +37,7 @@ import { useWorkspaceHotkeys } from './hooks/useWorkspaceHotkeys'
 import { useWorkspacePersistence } from './hooks/useWorkspacePersistence'
 import { useDocumentTitle } from './hooks/useDocumentTitle'
 import { PaneFindProvider, usePaneFindCommands } from './hooks/usePaneFind'
+import { useEntityPermission } from './hooks/useEntityPermission'
 import { Sidebar } from './components/Sidebar'
 import { SearchPalette } from './components/SearchPalette'
 import { Workspace } from './components/workspace/Workspace'
@@ -158,8 +159,10 @@ function RootShell(): React.ReactElement {
     [entitiesCollection, activeEntityUrl]
   )
   const activeEntity = activeEntityMatches.at(0)
+  const activeEntityCanSignal = useEntityPermission(activeEntity, `signal`)
   const activeEntityCanReceiveSignal =
     activeEntity !== undefined &&
+    activeEntityCanSignal &&
     activeEntity.status !== `stopped` &&
     activeEntity.status !== `killed`
 

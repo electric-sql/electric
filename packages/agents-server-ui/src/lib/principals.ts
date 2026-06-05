@@ -22,6 +22,13 @@ export function principalKeyFromInput(
   }
 }
 
+export function normalizePrincipalUrl(
+  value: string | null | undefined
+): string | null {
+  const key = principalKeyFromInput(value)
+  return key ? principalUrlFromKey(key) : null
+}
+
 export function userPrincipalUrl(userId: string): string {
   return principalUrlFromKey(`user:${userId}`)
 }

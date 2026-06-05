@@ -42,6 +42,20 @@ export class SecretStore {
     await this.persist(envelope)
   }
 
+  async deleteByPrefix(prefix: string): Promise<number> {
+    const envelope = await this.load()
+    let deleted = 0
+    for (const ref of Object.keys(envelope.secrets)) {
+      if (!ref.startsWith(prefix)) continue
+      delete envelope.secrets[ref]
+      deleted += 1
+    }
+    if (deleted > 0) {
+      await this.persist(envelope)
+    }
+    return deleted
+  }
+
   private async load(): Promise<SecretEnvelope> {
     if (this.cache) return this.cache
     try {

@@ -1,4 +1,12 @@
-export type SharePermission = `read` | `write` | `fork` | `manage`
+export type SharePermission =
+  | `read`
+  | `write`
+  | `delete`
+  | `signal`
+  | `fork`
+  | `schedule`
+  | `spawn`
+  | `manage`
 export type ShareRole = `view` | `chat` | `manage`
 
 export type SharePermissionGrantLike = {
@@ -8,14 +16,18 @@ export type SharePermissionGrantLike = {
 export const SHARE_PERMISSIONS = new Set<string>([
   `read`,
   `write`,
+  `delete`,
+  `signal`,
   `fork`,
+  `schedule`,
+  `spawn`,
   `manage`,
 ])
 
 export const SHARE_ROLE_PERMISSIONS = {
   view: [`read`, `fork`],
-  chat: [`read`, `write`, `fork`],
-  manage: [`manage`],
+  chat: [`read`, `write`, `signal`, `fork`, `schedule`, `spawn`],
+  manage: [`manage`, `delete`],
 } as const satisfies Record<ShareRole, ReadonlyArray<SharePermission>>
 
 export function roleFromGrants(
