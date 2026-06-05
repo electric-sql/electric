@@ -12,6 +12,10 @@ import { getModel } from '@mariozechner/pi-ai'
 import { createOutboundBridge } from './outbound-bridge'
 import { MOONSHOT_PROVIDER, getMoonshotModel } from './moonshot-models'
 import { runtimeLog } from './log'
+import {
+  ModelProviderError,
+  toModelProviderError,
+} from './model-provider-error'
 import type { OutboundIdSeed } from './outbound-bridge'
 import type { ChangeEvent } from '@durable-streams/state'
 import type {
@@ -42,6 +46,25 @@ export interface PiAdapterOptions {
     provider: string
   ) => Promise<string | undefined> | string | undefined
   onPayload?: SimpleStreamOptions[`onPayload`]
+  modelTimeoutMs?: number
+  modelMaxRetries?: number
+}
+
+const DEFAULT_MODEL_TIMEOUT_MS = 30_000
+const DEFAULT_MODEL_MAX_RETRIES = 0
+
+function readPositiveIntEnv(name: string): number | undefined {
+  const raw = process.env[name]
+  if (!raw) return undefined
+  const parsed = Number(raw)
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : undefined
+}
+
+function readNonNegativeIntEnv(name: string): number | undefined {
+  const raw = process.env[name]
+  if (!raw) return undefined
+  const parsed = Number(raw)
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : undefined
 }
 
 interface PiAgentAdapterConfig {
@@ -227,8 +250,16 @@ export function createPiAgentAdapter(
       model: opts.model,
       ...(opts.provider && { provider: opts.provider }),
     })
+    const modelTimeoutMs =
+      opts.modelTimeoutMs ??
+      readPositiveIntEnv(`ELECTRIC_AGENTS_MODEL_TIMEOUT_MS`) ??
+      DEFAULT_MODEL_TIMEOUT_MS
+    const modelMaxRetries =
+      opts.modelMaxRetries ??
+      readNonNegativeIntEnv(`ELECTRIC_AGENTS_MODEL_MAX_RETRIES`) ??
+      DEFAULT_MODEL_MAX_RETRIES
 
-    const agent = new Agent({
+    const agentOptions = {
       initialState: {
         systemPrompt: opts.systemPrompt,
         tools: opts.tools as Array<never>,
@@ -238,7 +269,18 @@ export function createPiAgentAdapter(
       ...(opts.streamFn && { streamFn: opts.streamFn }),
       ...(opts.getApiKey && { getApiKey: opts.getApiKey }),
       ...(opts.onPayload && { onPayload: opts.onPayload }),
-    })
+      // Pi forwards these options to provider stream calls in current releases.
+      // Keep them as a top-level passthrough so unreachable providers settle
+      // even when the caller did not provide a custom stream function. Older
+      // type definitions don't expose them yet, so keep our timeout fallback
+      // below as the hard guarantee.
+      timeoutMs: modelTimeoutMs,
+      maxRetries: modelMaxRetries,
+    }
+
+    const agent = new Agent(
+      agentOptions as ConstructorParameters<typeof Agent>[0]
+    )
 
     function processAgentEvents(
       resolveWhenDone: () => void,
@@ -361,8 +403,11 @@ export function createPiAgentAdapter(
                 })
 
                 if (isError) {
-                  throw new Error(
-                    `pi-agent message_end error: ${msg.errorMessage ?? `unknown error`} (stopReason=${msg.stopReason ?? `none`})`
+                  throw toModelProviderError(
+                    new Error(
+                      `pi-agent message_end error: ${msg.errorMessage ?? `unknown error`} (stopReason=${msg.stopReason ?? `none`})`
+                    ),
+                    { provider: model.provider, model: model.id }
                   )
                 }
                 break
@@ -437,19 +482,37 @@ export function createPiAgentAdapter(
           let settled = false
           let unsubscribe = (): void => {}
           let abortFallback: ReturnType<typeof setTimeout> | null = null
+          let modelTimeout: ReturnType<typeof setTimeout> | null = null
           const clearAbortFallback = (): void => {
             if (!abortFallback) return
             clearTimeout(abortFallback)
             abortFallback = null
           }
+          const clearModelTimeout = (): void => {
+            if (!modelTimeout) return
+            clearTimeout(modelTimeout)
+            modelTimeout = null
+          }
           const finish = (finishReason: `stop` | `aborted` | `error`): void => {
             if (settled) return
             settled = true
             clearAbortFallback()
+            clearModelTimeout()
             running = false
             abortSignal?.removeEventListener(`abort`, abortRun)
             unsubscribe()
             bridge.onRunEnd({ finishReason })
+          }
+          const failWithProviderError = (err: unknown): ModelProviderError => {
+            const providerError = toModelProviderError(err, {
+              provider: model.provider,
+              model: model.id,
+            })
+            bridge.onError({
+              errorCode: providerError.code,
+              message: providerError.message,
+            })
+            return providerError
           }
           const abortRun = (): void => {
             if (settled) return
@@ -476,12 +539,24 @@ export function createPiAgentAdapter(
             },
             (err) => {
               if (settled) return
+              const providerError = failWithProviderError(err)
               finish(`error`)
-              reject(err)
+              reject(providerError)
             }
           )
 
           abortSignal?.addEventListener(`abort`, abortRun, { once: true })
+          modelTimeout = setTimeout(() => {
+            if (settled) return
+            const providerError = failWithProviderError(
+              new Error(
+                `model provider request timed out after ${modelTimeoutMs}ms`
+              )
+            )
+            agent.abort()
+            finish(`error`)
+            reject(providerError)
+          }, modelTimeoutMs)
           const runPromise =
             input !== undefined ? agent.prompt(input) : agent.continue()
           if (abortSignal?.aborted) {
@@ -491,8 +566,9 @@ export function createPiAgentAdapter(
           Promise.resolve(runPromise).catch((err: Error) => {
             if (settled) return
             if (abortedRun) return
+            const providerError = failWithProviderError(err)
             finish(`error`)
-            reject(err)
+            reject(providerError)
           })
         })
       },

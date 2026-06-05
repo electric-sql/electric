@@ -858,6 +858,8 @@ export interface AgentConfig {
     provider: string
   ) => Promise<string | undefined> | string | undefined
   onPayload?: SimpleStreamOptions[`onPayload`]
+  modelTimeoutMs?: number
+  modelMaxRetries?: number
   testResponses?: TestResponses
 }
 

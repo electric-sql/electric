@@ -322,16 +322,14 @@ function liveRunItemsToContentItems(
   return contentItems
 }
 
+function formatError(error: EntityTimelineErrorItem): string {
+  return error.error_code
+    ? `${error.error_code}: ${error.message}`
+    : error.message
+}
+
 function errorText(errors: Array<EntityTimelineErrorItem>): string | undefined {
-  return errors.length > 0
-    ? errors
-        .map((error) =>
-          error.error_code
-            ? `${error.error_code}: ${error.message}`
-            : error.message
-        )
-        .join(`; `)
-    : undefined
+  return errors.length > 0 ? errors.map(formatError).join(`; `) : undefined
 }
 
 function failedRunText(
@@ -713,18 +711,6 @@ export const AgentResponse = memo(function AgentResponse({
               )}
             </IconButton>
           </Tooltip>
-        )}
-        {section.done && copyText && (
-          <button
-            type="button"
-            className={styles.copyButton}
-            onClick={() => void copyResponseText()}
-            aria-label="Copy response text"
-            title={copied ? `Copied` : `Copy all response text`}
-          >
-            {copied ? <Check size={12} /> : <Copy size={12} />}
-            <span>{copied ? `Copied` : `Copy`}</span>
-          </button>
         )}
       </Stack>
     </Stack>
