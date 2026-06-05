@@ -4,7 +4,7 @@ import {
   eq,
   localOnlyCollectionOptions,
   queryOnce,
-} from '@durable-streams/state'
+} from '@durable-streams/state/db'
 import { createWakeSession } from '../src/wake-session'
 import type { ManifestEntry } from '../src/types'
 

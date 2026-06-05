@@ -7,6 +7,7 @@ function shapeTarget(query: string): URL {
     electricUrl: `http://electric.local`,
     tenantId: `tenant-test`,
     principalUrl: `/principal/user%3Aowner%40example.com`,
+    principalKind: `user`,
   })
 }
 
@@ -34,7 +35,14 @@ describe(`server utils`, () => {
     const columns = target.searchParams.get(`columns`)
     expect(columns).toContain(`"sandbox"`)
     expect(columns).toContain(`"dispatch_policy"`)
-    expect(target.searchParams.get(`where`)).toBe(`tenant_id = 'tenant-test'`)
+    expect(columns).toContain(`"created_by"`)
+    expect(target.searchParams.get(`where`)).toContain(
+      `tenant_id = 'tenant-test'`
+    )
+    expect(target.searchParams.get(`where`)).toContain(`created_by =`)
+    expect(target.searchParams.get(`where`)).toContain(
+      `FROM entity_effective_permissions`
+    )
   })
 
   it(`combines runner owner scoping with Electric protocol where clauses`, () => {
@@ -57,5 +65,90 @@ describe(`server utils`, () => {
     expect(target.searchParams.get(`where`)).toBe(
       `tenant_id = 'tenant-test' AND owner_principal = '/principal/user%3Aowner%40example.com' AND (runner_id = 'runner-1')`
     )
+  })
+
+  it(`tenant-scopes users shapes and exposes only display columns`, () => {
+    const target = shapeTarget(
+      `table=users&where=${encodeURIComponent(`email ILIKE '%@example.com'`)}`
+    )
+
+    expect(target.searchParams.get(`table`)).toBe(`users`)
+    const columns = target.searchParams.get(`columns`)
+    expect(columns).toContain(`"display_name"`)
+    expect(columns).toContain(`"email"`)
+    expect(columns).toContain(`"avatar_url"`)
+    expect(columns).not.toContain(`"auth_provider"`)
+    expect(columns).not.toContain(`"auth_subject"`)
+    expect(columns).not.toContain(`"profile"`)
+    expect(columns).not.toContain(`"metadata"`)
+    expect(target.searchParams.get(`where`)).toBe(
+      `tenant_id = 'tenant-test' AND (email ILIKE '%@example.com')`
+    )
+  })
+
+  it(`scopes effective permission shapes to the current principal and readable entities`, () => {
+    const target = shapeTarget(`table=entity_effective_permissions`)
+    const where = target.searchParams.get(`where`) ?? ``
+
+    expect(target.searchParams.get(`table`)).toBe(
+      `entity_effective_permissions`
+    )
+    const columns = target.searchParams.get(`columns`)
+    expect(columns).toContain(`"entity_url"`)
+    expect(columns).toContain(`"permission"`)
+    expect(where).toContain(`tenant_id = 'tenant-test'`)
+    expect(where).toContain(
+      `(subject_kind = 'principal' AND subject_value = '/principal/user%3Aowner%40example.com')`
+    )
+    expect(where).toContain(
+      `(subject_kind = 'principal_kind' AND subject_value = 'user')`
+    )
+    expect(where).toContain(`entity_url IN (`)
+    expect(where).toContain(`FROM entities`)
+    expect(where).toContain(`created_by =`)
+    expect(where).toContain(`permission IN ('read', 'manage')`)
+  })
+
+  it(`scopes entity shapes to owner or read/manage effective grants with IN subqueries`, () => {
+    const target = shapeTarget(`table=entities`)
+    const where = target.searchParams.get(`where`) ?? ``
+
+    expect(where).toContain(`tenant_id = 'tenant-test'`)
+    expect(where).toContain(
+      `created_by = '/principal/user%3Aowner%40example.com'`
+    )
+    expect(where).toContain(`url IN (`)
+    expect(where).toContain(`FROM entity_effective_permissions`)
+    expect(where).toContain(`permission IN ('read', 'manage')`)
+    expect(where).toContain(
+      `(subject_kind = 'principal_kind' AND subject_value = 'user')`
+    )
+    expect(where).not.toMatch(/\bEXISTS\b/i)
+  })
+
+  it(`scopes entity-url tables through readable entity URLs without correlated subqueries`, () => {
+    const target = shapeTarget(`table=entity_dispatch_state`)
+    const where = target.searchParams.get(`where`) ?? ``
+
+    expect(where).toContain(`entity_url IN (`)
+    expect(where).toContain(`SELECT url`)
+    expect(where).toContain(`FROM entities`)
+    expect(where).toContain(`url IN (`)
+    expect(where).toContain(`FROM entity_effective_permissions`)
+    expect(where).not.toMatch(/\bEXISTS\b/i)
+    expect(where).not.toContain(`entity_dispatch_state.`)
+  })
+
+  it(`scopes entity type shapes to spawn/manage grants`, () => {
+    const target = shapeTarget(`table=entity_types`)
+    const where = target.searchParams.get(`where`) ?? ``
+
+    expect(where).toContain(`name IN (`)
+    expect(where).toContain(`FROM entity_type_permission_grants`)
+    expect(where).toContain(`permission IN ('spawn', 'manage')`)
+    expect(where).toContain(
+      `(subject_kind = 'principal_kind' AND subject_value = 'user')`
+    )
+    expect(where).not.toMatch(/\bEXISTS\b/i)
   })
 })

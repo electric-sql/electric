@@ -4,11 +4,11 @@ import type {
   StandardTypedV1,
 } from '@standard-schema/spec'
 import type {
-  StreamDB as BaseStreamDB,
   ChangeEvent,
   CollectionDefinition as StateCollectionDefinition,
   StateEvent,
 } from '@durable-streams/state'
+import type { StreamDB as BaseStreamDB } from '@durable-streams/state/db'
 import type { EntityRegistry } from './define-entity'
 import type {
   Collection as TanStackCollection,
@@ -413,6 +413,13 @@ export interface EntityCreated {
   parent_url?: string
 }
 
+export type EntityTypePermissionGrantDefinition = {
+  subject_kind: `principal` | `principal_kind`
+  subject_value: string
+  permission: `spawn` | `manage`
+  expires_at?: string
+}
+
 export interface PendingSend {
   targetUrl: string
   payload: unknown
@@ -564,8 +571,6 @@ export interface EntityHandle extends ObservationHandle {
   type?: string
   db: EntityStreamDB
   events: Array<ChangeEvent>
-  run: Promise<void>
-  text: () => Promise<Array<string>>
   send: (msg: unknown) => Promise<SendResult>
   status: () => ChildStatus | undefined
 }
@@ -781,8 +786,6 @@ export interface SharedStateHandleInfo {
  */
 export interface SpawnHandleInfo {
   wireDb: (db: EntityStreamDBWithActions) => void | Promise<void>
-  resolveRun: () => void
-  rejectRun: (reason: Error) => void
   /** Update the handle's entityUrl after learning the server-assigned URL. */
   updateEntityUrl: (realUrl: string) => void
 }
@@ -972,9 +975,8 @@ export interface HandlerContext<
       tags?: Record<string, string>
       /**
        * When false, the parent does not subscribe to the child's stream. The
-       * spawned EntityHandle is fire-and-forget: `.run`, `.text`, and
-       * `.status` throw if accessed. Use for high-fanout patterns where the
-       * parent never awaits child completion.
+       * spawned EntityHandle is fire-and-forget: `.status` throws if accessed.
+       * Use for high-fanout patterns where the parent never observes child state.
        */
       observe?: boolean
       sandbox?: SpawnSandboxOption
@@ -1047,6 +1049,7 @@ export interface EntityDefinition<
   creationSchema?: TCreationSchema
   inboxSchemas?: Record<string, StandardJSONSchemaV1>
   stateSchemas?: Record<string, StandardJSONSchemaV1>
+  permissionGrants?: ReadonlyArray<EntityTypePermissionGrantDefinition>
 
   handler: (
     ctx: HandlerContext<

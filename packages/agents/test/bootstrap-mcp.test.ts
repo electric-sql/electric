@@ -236,6 +236,55 @@ describe(`BuiltinAgentsServer — MCP merge`, () => {
     expect(server.mcpRegistry!.get(`workspace-only`)).toBeUndefined()
   })
 
+  it(`setExtraMcpServers re-applies merged config at runtime`, async () => {
+    // Start with a single extras entry; mcp.json is empty.
+    server = new BuiltinAgentsServer({
+      agentServerUrl: mockServer.url,
+      pullWake: { runnerId: `test-runner` },
+      mockStreamFn,
+      workingDirectory: workspace,
+      loadProjectMcpConfig: true,
+      extraMcpServers: [
+        {
+          name: `initial`,
+          transport: `http`,
+          url: `https://example.invalid/mcp`,
+          auth: { mode: `apiKey`, key: `k`, headerName: `X-Api-Key` },
+        },
+      ],
+    })
+    await server.start()
+    await waitForServers(server, [`initial`])
+
+    // Replace extras with a brand-new entry — the prior one should be
+    // dropped from the registry without a restart.
+    await server.setExtraMcpServers([
+      {
+        name: `replacement`,
+        transport: `http`,
+        url: `https://example.invalid/mcp`,
+        auth: { mode: `apiKey`, key: `k`, headerName: `X-Api-Key` },
+      },
+    ])
+    await waitForServers(server, [`replacement`])
+
+    // Re-applying with the same extras list shouldn't blow up either —
+    // idempotent, no churn in the registry.
+    await server.setExtraMcpServers([
+      {
+        name: `replacement`,
+        transport: `http`,
+        url: `https://example.invalid/mcp`,
+        auth: { mode: `apiKey`, key: `k`, headerName: `X-Api-Key` },
+      },
+    ])
+    await waitForServers(server, [`replacement`])
+
+    // Clearing extras removes everything.
+    await server.setExtraMcpServers([])
+    await waitForServers(server, [])
+  })
+
   it(`stop() tears down MCP registry, watcher, and tool provider`, async () => {
     await writeMcpJson(workspace, {
       servers: {

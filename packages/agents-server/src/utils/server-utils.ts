@@ -96,6 +96,8 @@ export function buildElectricProxyTarget(options: {
   electricSecret?: string
   tenantId: string
   principalUrl?: string
+  principalKind?: string
+  permissionBypass?: boolean
 }): URL {
   const targetPath = options.incomingUrl.pathname.replace(
     `/_electric/electric`,
@@ -119,15 +121,31 @@ export function buildElectricProxyTarget(options: {
   if (table === `entities`) {
     target.searchParams.set(
       `columns`,
-      `"tenant_id","url","type","status","dispatch_policy","tags","spawn_args","sandbox","parent","type_revision","inbox_schemas","state_schemas","created_at","updated_at"`
+      `"tenant_id","url","type","status","dispatch_policy","tags","spawn_args","sandbox","parent","created_by","type_revision","inbox_schemas","state_schemas","created_at","updated_at"`
     )
-    applyTenantShapeWhere(target, options.tenantId)
+    applyShapeWhere(
+      target,
+      buildReadableEntitiesWhere({
+        tenantId: options.tenantId,
+        principalUrl: options.principalUrl ?? ``,
+        principalKind: options.principalKind ?? ``,
+        permissionBypass: options.permissionBypass,
+      })
+    )
   } else if (table === `entity_types`) {
     target.searchParams.set(
       `columns`,
       `"tenant_id","name","description","creation_schema","inbox_schemas","state_schemas","serve_endpoint","default_dispatch_policy","revision","created_at","updated_at"`
     )
-    applyTenantShapeWhere(target, options.tenantId)
+    applyShapeWhere(
+      target,
+      buildSpawnableEntityTypesWhere({
+        tenantId: options.tenantId,
+        principalUrl: options.principalUrl ?? ``,
+        principalKind: options.principalKind ?? ``,
+        permissionBypass: options.permissionBypass,
+      })
+    )
   } else if (table === `runners`) {
     target.searchParams.set(
       `columns`,
@@ -136,6 +154,26 @@ export function buildElectricProxyTarget(options: {
     applyTenantShapeWhere(target, options.tenantId, [
       `owner_principal = ${sqlStringLiteral(options.principalUrl ?? ``)}`,
     ])
+  } else if (table === `users`) {
+    target.searchParams.set(
+      `columns`,
+      `"tenant_id","id","display_name","email","avatar_url","created_at","updated_at"`
+    )
+    applyTenantShapeWhere(target, options.tenantId)
+  } else if (table === `entity_effective_permissions`) {
+    target.searchParams.set(
+      `columns`,
+      `"tenant_id","id","entity_url","source_entity_url","source_grant_id","permission","subject_kind","subject_value","expires_at","created_at"`
+    )
+    applyShapeWhere(
+      target,
+      buildCurrentPrincipalEntityEffectivePermissionsWhere({
+        tenantId: options.tenantId,
+        principalUrl: options.principalUrl ?? ``,
+        principalKind: options.principalKind ?? ``,
+        permissionBypass: options.permissionBypass,
+      })
+    )
   } else if (table === `runner_runtime_diagnostics`) {
     target.searchParams.set(
       `columns`,
@@ -149,22 +187,152 @@ export function buildElectricProxyTarget(options: {
       `columns`,
       `"tenant_id","entity_url","pending_source_streams","pending_reason","pending_since","outstanding_wake_id","outstanding_wake_target","outstanding_wake_created_at","active_consumer_id","active_runner_id","active_epoch","active_claimed_at","active_lease_expires_at","last_wake_id","last_claimed_at","last_released_at","last_completed_at","last_error","updated_at"`
     )
-    applyTenantShapeWhere(target, options.tenantId)
+    applyShapeWhere(
+      target,
+      buildReadableEntityUrlWhere({
+        tenantId: options.tenantId,
+        principalUrl: options.principalUrl ?? ``,
+        principalKind: options.principalKind ?? ``,
+        permissionBypass: options.permissionBypass,
+      })
+    )
   } else if (table === `wake_notifications`) {
     target.searchParams.set(
       `columns`,
       `"tenant_id","wake_id","entity_url","target_type","target_runner_id","target_webhook_url","target_worker_pool_id","runner_wake_stream","runner_wake_stream_offset","notification_public","delivery_status","claim_status","created_at","delivered_at","claimed_at","resolved_at"`
     )
-    applyTenantShapeWhere(target, options.tenantId)
+    applyShapeWhere(
+      target,
+      buildReadableEntityUrlWhere({
+        tenantId: options.tenantId,
+        principalUrl: options.principalUrl ?? ``,
+        principalKind: options.principalKind ?? ``,
+        permissionBypass: options.permissionBypass,
+      })
+    )
   } else if (table === `consumer_claims`) {
     target.searchParams.set(
       `columns`,
       `"tenant_id","consumer_id","epoch","wake_id","entity_url","stream_path","runner_id","status","claimed_at","last_heartbeat_at","lease_expires_at","released_at","acked_streams","updated_at"`
     )
-    applyTenantShapeWhere(target, options.tenantId)
+    applyShapeWhere(
+      target,
+      buildReadableEntityUrlWhere({
+        tenantId: options.tenantId,
+        principalUrl: options.principalUrl ?? ``,
+        principalKind: options.principalKind ?? ``,
+        permissionBypass: options.permissionBypass,
+      })
+    )
   }
 
   return target
+}
+
+export function buildReadableEntitiesWhere(options: {
+  tenantId: string
+  principalUrl: string
+  principalKind: string
+  permissionBypass?: boolean
+}): string {
+  const tenant = sqlStringLiteral(options.tenantId)
+  if (options.permissionBypass) {
+    return `tenant_id = ${tenant}`
+  }
+  const principalUrl = sqlStringLiteral(options.principalUrl)
+  const principalKind = sqlStringLiteral(options.principalKind)
+  return [
+    `tenant_id = ${tenant}`,
+    `AND (`,
+    `  created_by = ${principalUrl}`,
+    `  OR url IN (`,
+    `    SELECT entity_url`,
+    `    FROM entity_effective_permissions`,
+    `    WHERE tenant_id = ${tenant}`,
+    `      AND permission IN ('read', 'manage')`,
+    `      AND (`,
+    `        (subject_kind = 'principal' AND subject_value = ${principalUrl})`,
+    `        OR (subject_kind = 'principal_kind' AND subject_value = ${principalKind})`,
+    `      )`,
+    `  )`,
+    `)`,
+  ].join(`\n`)
+}
+
+export function buildReadableEntityUrlWhere(options: {
+  tenantId: string
+  principalUrl: string
+  principalKind: string
+  permissionBypass?: boolean
+}): string {
+  const tenant = sqlStringLiteral(options.tenantId)
+  if (options.permissionBypass) {
+    return `tenant_id = ${tenant}`
+  }
+  return [
+    `tenant_id = ${tenant}`,
+    `AND entity_url IN (`,
+    `  SELECT url`,
+    `  FROM entities`,
+    `  WHERE ${indentWhere(
+      buildReadableEntitiesWhere(options),
+      `    `
+    ).trimStart()}`,
+    `)`,
+  ].join(`\n`)
+}
+
+export function buildCurrentPrincipalEntityEffectivePermissionsWhere(options: {
+  tenantId: string
+  principalUrl: string
+  principalKind: string
+  permissionBypass?: boolean
+}): string {
+  const tenant = sqlStringLiteral(options.tenantId)
+  if (options.permissionBypass) {
+    return `tenant_id = ${tenant}`
+  }
+  const principalUrl = sqlStringLiteral(options.principalUrl)
+  const principalKind = sqlStringLiteral(options.principalKind)
+  return [
+    `tenant_id = ${tenant}`,
+    `AND (`,
+    `  (subject_kind = 'principal' AND subject_value = ${principalUrl})`,
+    `  OR (subject_kind = 'principal_kind' AND subject_value = ${principalKind})`,
+    `)`,
+    `AND entity_url IN (`,
+    `  SELECT url`,
+    `  FROM entities`,
+    `  WHERE ${buildReadableEntitiesWhere(options)}`,
+    `)`,
+  ].join(`\n`)
+}
+
+export function buildSpawnableEntityTypesWhere(options: {
+  tenantId: string
+  principalUrl: string
+  principalKind: string
+  permissionBypass?: boolean
+}): string {
+  const tenant = sqlStringLiteral(options.tenantId)
+  if (options.permissionBypass) {
+    return `tenant_id = ${tenant}`
+  }
+  const principalUrl = sqlStringLiteral(options.principalUrl)
+  const principalKind = sqlStringLiteral(options.principalKind)
+  return [
+    `tenant_id = ${tenant}`,
+    `AND name IN (`,
+    `  SELECT entity_type`,
+    `  FROM entity_type_permission_grants`,
+    `  WHERE tenant_id = ${tenant}`,
+    `    AND permission IN ('spawn', 'manage')`,
+    `    AND (`,
+    `      (subject_kind = 'principal' AND subject_value = ${principalUrl})`,
+    `      OR (subject_kind = 'principal_kind' AND subject_value = ${principalKind})`,
+    `    )`,
+    `)`,
+  ].join(`\n`)
 }
 
 export async function forwardFetchRequest(options: {
@@ -248,17 +416,29 @@ function applyTenantShapeWhere(
   tenantId: string,
   extraConditions: Array<string> = []
 ): void {
-  const tenantWhere = [
-    `tenant_id = ${sqlStringLiteral(tenantId)}`,
-    ...extraConditions,
-  ].join(` AND `)
+  applyShapeWhere(
+    target,
+    [`tenant_id = ${sqlStringLiteral(tenantId)}`, ...extraConditions].join(
+      ` AND `
+    )
+  )
+}
+
+function applyShapeWhere(target: URL, enforcedWhere: string): void {
   const existingWhere = target.searchParams.get(`where`)
   target.searchParams.set(
     `where`,
-    existingWhere ? `${tenantWhere} AND (${existingWhere})` : tenantWhere
+    existingWhere ? `${enforcedWhere} AND (${existingWhere})` : enforcedWhere
   )
 }
 
 function sqlStringLiteral(value: string): string {
   return `'${value.replace(/'/g, `''`)}'`
+}
+
+function indentWhere(where: string, prefix: string): string {
+  return where
+    .split(`\n`)
+    .map((line) => `${prefix}${line}`)
+    .join(`\n`)
 }

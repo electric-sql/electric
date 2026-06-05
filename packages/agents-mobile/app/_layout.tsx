@@ -18,8 +18,12 @@ import {
 } from '../src/lib/MobileAppState'
 import { CloudAuthProvider } from '../src/lib/CloudAuthContext'
 import { isCallbackUrl } from '../src/lib/cloudAuth'
+import { Sentry, initSentry } from '../src/lib/sentry'
 
-export default function RootLayout(): React.ReactElement {
+// Initialize early so startup crashes are captured (no-op in dev).
+initSentry()
+
+function RootLayout(): React.ReactElement {
   return (
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider initialMetrics={initialWindowMetrics}>
@@ -34,6 +38,8 @@ export default function RootLayout(): React.ReactElement {
     </GestureHandlerRootView>
   )
 }
+
+export default Sentry.wrap(RootLayout)
 
 function RootNavigator(): React.ReactElement {
   const { loading, serverUrl, launchUrl, onboardingDismissed } =

@@ -1,3 +1,4 @@
+import path from 'node:path'
 import { app, powerSaveBlocker } from 'electron'
 import { AGENT_SKILLS_DIR } from '../shared/paths'
 import {
@@ -293,6 +294,14 @@ export async function startRuntime(
   const nextRuntime = new BuiltinAgentsServer({
     agentServerUrl: activeServer.url,
     workingDirectory: deps.settings.workingDirectory ?? app.getPath(`home`),
+    durableStreamsFetchCache: {
+      store: `sqlite`,
+      sqliteLocation: path.join(
+        app.getPath(`userData`),
+        `durable-streams-fetch-cache.sqlite`
+      ),
+      maxCount: 10_000,
+    },
     extraMcpServers: deps.settings.mcp?.servers,
     enabledModelValues: resolveEnabledModelValues(
       deps.settings.enabledModelValues

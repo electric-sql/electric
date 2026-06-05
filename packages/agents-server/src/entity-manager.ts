@@ -163,6 +163,7 @@ type ForkSubtreeOptions = {
   rootInstanceId?: string
   waitTimeoutMs?: number
   waitPollMs?: number
+  createdBy?: string
   /**
    * Optional anchor pointing at an event on the source root's `main` stream.
    * When set: only events at or before the pointer are kept on the root's
@@ -497,7 +498,10 @@ export class EntityManager {
 
   async ensurePrincipal(principal: Principal): Promise<ElectricAgentsEntity> {
     const existing = await this.registry.getEntity(principal.url)
-    if (existing) return existing
+    if (existing) {
+      await this.ensureUserPrincipal(principal)
+      return existing
+    }
     await this.ensurePrincipalEntityType()
     try {
       const entity = await this.spawn(`principal`, {
@@ -522,6 +526,7 @@ export class EntityManager {
           },
         })
       )
+      await this.ensureUserPrincipal(principal)
       return entity
     } catch (error) {
       if (
@@ -529,9 +534,18 @@ export class EntityManager {
         error.code === ErrCodeDuplicateURL
       ) {
         const raced = await this.registry.getEntity(principal.url)
-        if (raced) return raced
+        if (raced) {
+          await this.ensureUserPrincipal(principal)
+          return raced
+        }
       }
       throw error
+    }
+  }
+
+  private async ensureUserPrincipal(principal: Principal): Promise<void> {
+    if (principal.kind === `user`) {
+      await this.registry.ensureUserForPrincipal(principal)
     }
   }
 
@@ -1045,7 +1059,8 @@ export class EntityManager {
       const entityPlans = this.buildForkEntityPlans(
         effectiveSubtree,
         entityUrlMap,
-        stringMap
+        stringMap,
+        opts.createdBy
       )
 
       this.addForkLocks(
@@ -1726,7 +1741,8 @@ export class EntityManager {
   private buildForkEntityPlans(
     entitiesToFork: Array<ElectricAgentsEntity>,
     entityUrlMap: Map<string, string>,
-    stringMap: Map<string, string>
+    stringMap: Map<string, string>,
+    createdBy?: string
   ): Array<ForkEntityPlan> {
     const now = Date.now()
     return entitiesToFork.map((source) => {
@@ -1756,6 +1772,7 @@ export class EntityManager {
         write_token: randomUUID(),
         spawn_args: spawnArgs,
         parent,
+        created_by: createdBy ?? source.created_by,
         created_at: now,
         updated_at: now,
       }
@@ -2047,12 +2064,7 @@ export class EntityManager {
     manifests: Map<string, Record<string, unknown>>
   ): Promise<void> {
     for (const [manifestKey, manifest] of manifests) {
-      await this.syncEntitiesManifestSource(
-        entityUrl,
-        manifestKey,
-        `upsert`,
-        manifest
-      )
+      await this.syncManifestLinks(entityUrl, manifestKey, `upsert`, manifest)
 
       const wake = buildManifestWakeRegistration(
         entityUrl,
@@ -2125,6 +2137,7 @@ export class EntityManager {
       {
         entityUrl: targetUrl,
         from: senderUrl,
+        from_agent: senderUrl,
         payload: manifest.payload,
         key: `scheduled-${producerId}`,
         type:
@@ -2191,7 +2204,7 @@ export class EntityManager {
       `msg-in-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
     const value: Record<string, unknown> = {
-      from: req.from,
+      from: req.from_principal ?? req.from,
       payload: req.payload,
       timestamp: now,
       mode: req.mode ?? `immediate`,
@@ -2199,6 +2212,12 @@ export class EntityManager {
         req.mode === `queued` || req.mode === `paused`
           ? `pending`
           : `processed`,
+    }
+    if (req.from_principal) {
+      value.from_principal = req.from_principal
+    }
+    if (req.from_agent) {
+      value.from_agent = req.from_agent
     }
     if (req.type) {
       value.message_type = req.type
@@ -2610,14 +2629,21 @@ export class EntityManager {
     return updated
   }
 
-  async ensureEntitiesMembershipStream(tags: Record<string, string>): Promise<{
+  async ensureEntitiesMembershipStream(
+    tags: Record<string, string>,
+    principal: { url: string; kind: string }
+  ): Promise<{
     sourceRef: string
     streamUrl: string
   }> {
     if (!this.entityBridgeManager) {
       throw new Error(`Entity bridge manager not configured`)
     }
-    return this.entityBridgeManager.register(this.validateTags(tags))
+    return this.entityBridgeManager.register(
+      this.validateTags(tags),
+      principal.url,
+      principal.kind
+    )
   }
 
   async writeManifestEntry(
@@ -2650,12 +2676,12 @@ export class EntityManager {
       await this.streamClient.appendIdempotent(entity.streams.main, encoded, {
         producerId: opts.producerId,
       })
-      await this.syncEntitiesManifestSource(entityUrl, key, operation, value)
+      await this.syncManifestLinks(entityUrl, key, operation, value)
       return
     }
 
     await this.streamClient.append(entity.streams.main, encoded)
-    await this.syncEntitiesManifestSource(entityUrl, key, operation, value)
+    await this.syncManifestLinks(entityUrl, key, operation, value)
   }
 
   async upsertCronSchedule(
@@ -2950,6 +2976,8 @@ export class EntityManager {
       {
         entityUrl,
         from: req.from,
+        from_principal: req.from_principal,
+        from_agent: req.from_agent,
         payload: req.payload,
         key: req.key,
         type: req.type,
@@ -3031,7 +3059,7 @@ export class EntityManager {
     })
   }
 
-  private async syncEntitiesManifestSource(
+  private async syncManifestLinks(
     entityUrl: string,
     manifestKey: string,
     operation: `insert` | `update` | `upsert` | `delete`,
@@ -3043,6 +3071,14 @@ export class EntityManager {
       entityUrl,
       manifestKey,
       sourceRef
+    )
+
+    const sharedStateId =
+      operation === `delete` ? undefined : this.extractSharedStateId(value)
+    await this.registry.replaceSharedStateLink(
+      entityUrl,
+      manifestKey,
+      sharedStateId
     )
   }
 
@@ -3057,6 +3093,24 @@ export class EntityManager {
       return manifest.sourceRef
     }
     return undefined
+  }
+
+  private extractSharedStateId(
+    manifest?: Record<string, unknown>
+  ): string | undefined {
+    if (manifest?.kind === `shared-state` && typeof manifest.id === `string`) {
+      return manifest.id
+    }
+
+    if (manifest?.kind !== `source` || manifest.sourceType !== `db`) {
+      return undefined
+    }
+
+    if (typeof manifest.sourceRef === `string`) {
+      return manifest.sourceRef
+    }
+    const config = isRecord(manifest.config) ? manifest.config : undefined
+    return typeof config?.id === `string` ? config.id : undefined
   }
 
   /**

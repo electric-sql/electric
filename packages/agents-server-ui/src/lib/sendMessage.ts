@@ -21,6 +21,7 @@ export type OptimisticInboxMessage = {
   key: string
   _timeline_order: string
   from: string
+  from_principal?: string
   payload: { text: string }
   timestamp: string
   mode: `immediate` | `queued` | `paused` | `steer`
@@ -347,6 +348,7 @@ export function createSendMessageAction({
         key,
         _timeline_order: createPendingTimelineOrder(pendingOrderIndex),
         from: sender,
+        from_principal: sender,
         payload: { text },
         timestamp: now,
         mode,

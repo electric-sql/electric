@@ -33,3 +33,23 @@
   margin-right: 5px;
   color: var(--ds-text-3);
 }
+
+.wideMenu {
+  min-width: 240px;
+}
+
+.principalText {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.principalLabel,
+.principalKey {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

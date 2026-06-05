@@ -185,6 +185,12 @@ export class CloudAgentServers {
     await this.secretStore.delete(`${TOKEN_REF_PREFIX}${tenantId}`)
   }
 
+  /** Drop every cached + persisted agents token. Used when Cloud auth signs out. */
+  async forgetAllAgentsTokens(): Promise<void> {
+    this.agentsTokens.clear()
+    await this.secretStore.deleteByPrefix(TOKEN_REF_PREFIX)
+  }
+
   getState(): CloudAgentServersState {
     return this.state
   }

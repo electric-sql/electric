@@ -316,6 +316,8 @@ export class ElectricAgentsTenantRuntime {
         payload.entityUrl,
         {
           from: payload.from,
+          from_principal: payload.from_principal,
+          from_agent: payload.from_agent,
           payload: payload.payload,
           key: payload.key ?? `scheduled-task-${taskId}`,
           type: payload.type,
@@ -461,6 +463,7 @@ export class ElectricAgentsTenantRuntime {
       {
         entityUrl: targetUrl,
         from: senderUrl,
+        from_agent: senderUrl,
         payload: value.payload,
         key: `scheduled-${producerId}`,
         type:
@@ -499,6 +502,14 @@ export class ElectricAgentsTenantRuntime {
       manifestKey,
       sourceRef
     )
+
+    const sharedStateId =
+      operation === `delete` ? undefined : this.extractSharedStateId(value)
+    await this.manager.registry.replaceSharedStateLink(
+      ownerEntityUrl,
+      manifestKey,
+      sharedStateId
+    )
   }
 
   private extractEntitiesSourceRef(
@@ -512,6 +523,29 @@ export class ElectricAgentsTenantRuntime {
       return manifest.sourceRef
     }
     return undefined
+  }
+
+  private extractSharedStateId(
+    manifest: Record<string, unknown> | undefined
+  ): string | undefined {
+    if (manifest?.kind === `shared-state` && typeof manifest.id === `string`) {
+      return manifest.id
+    }
+
+    if (manifest?.kind !== `source` || manifest.sourceType !== `db`) {
+      return undefined
+    }
+
+    if (typeof manifest.sourceRef === `string`) {
+      return manifest.sourceRef
+    }
+    const config =
+      typeof manifest.config === `object` &&
+      manifest.config !== null &&
+      !Array.isArray(manifest.config)
+        ? (manifest.config as Record<string, unknown>)
+        : undefined
+    return typeof config?.id === `string` ? config.id : undefined
   }
 
   private async maybeMarkEntityIdleAfterRunFinished(

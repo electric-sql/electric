@@ -21,10 +21,12 @@
     "@electric-ax/agents-server-ui": "workspace:*",
     "@expo/metro-runtime": "~6.1.2",
     "@react-native-async-storage/async-storage": "^2.2.0",
+    "@sentry/react-native": "~7.2.0",
     "@tanstack/db": "^0.6.5",
-    "@tanstack/electric-db-collection": "^0.3.3",
-    "@tanstack/react-db": "^0.1.83",
+    "@tanstack/electric-db-collection": "^0.3.5",
+    "@tanstack/react-db": "^0.1.85",
     "expo": "54.0.35",
+    "expo-build-properties": "~1.0.10",
     "expo-constants": "~18.0.13",
     "expo-linking": "~8.0.12",
     "expo-router": "~6.0.24",
@@ -43,6 +45,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@sentry/cli": "2.55.0",
     "@types/node": "^25.9.1",
     "@types/react": "19.1.17",
     "@vitest/coverage-v8": "^4.1.0",

@@ -2,6 +2,7 @@ import { BrowserWindow } from 'electron'
 import type { DesktopAppContext } from './context'
 import * as AppLifecycle from './lifecycle'
 import * as LoginItems from './login-items'
+import { createDesktopUpdater } from './updater'
 import * as CloudAuthInjection from '../cloud/auth-injection'
 import * as ServerFetch from '../cloud/server-fetch'
 import { createCredentialsController } from '../credentials/controller'
@@ -242,6 +243,36 @@ export function createDesktopMainController(ctx: DesktopAppContext) {
   const forgetServer = (serverId: string): Promise<void> =>
     runtime.forgetServer(serverId)
 
+  let forgetCloudServersOnSignOutPromise: Promise<void> | null = null
+  const forgetCloudServersOnSignOut = (): void => {
+    const cloudServerIds = settings.servers
+      .filter((server) => server.source === `electric-cloud`)
+      .map((server) => server.id)
+    if (cloudServerIds.length === 0 && !ctx.services.cloudAgentServers) return
+    if (forgetCloudServersOnSignOutPromise) return
+
+    forgetCloudServersOnSignOutPromise = (async () => {
+      for (const serverId of cloudServerIds) {
+        await forgetServer(serverId)
+      }
+      await ctx.getCloudAgentServers().forgetAllAgentsTokens()
+      if (cloudServerIds.length > 0) {
+        console.info(
+          `[agents-desktop] Removed ${cloudServerIds.length} saved Cloud server(s) after Cloud sign-out.`
+        )
+      }
+    })()
+      .catch((err) => {
+        console.warn(
+          `[agents-desktop] Failed to remove saved Cloud servers after sign-out:`,
+          err
+        )
+      })
+      .finally(() => {
+        forgetCloudServersOnSignOutPromise = null
+      })
+  }
+
   const setSelectedServerForWindow = (
     win: BrowserWindow | null,
     serverId: string | null
@@ -305,12 +336,20 @@ export function createDesktopMainController(ctx: DesktopAppContext) {
     AppLifecycle.applyNativeAppearance(ctx, appearance)
   }
 
+  const updater = createDesktopUpdater({
+    showOrCreateWindow,
+  })
+
+  const checkForUpdates = (): Promise<void> =>
+    updater.checkForUpdates({ triggeredManually: true })
+
   const applicationMenuDeps: ApplicationMenu.ApplicationMenuDeps = {
     windows,
     createWindow,
     sendCommand,
     quitApp,
     showAboutDialog,
+    checkForUpdates,
   }
 
   function showAboutDialog(): void {
@@ -345,7 +384,11 @@ export function createDesktopMainController(ctx: DesktopAppContext) {
     win: BrowserWindow,
     bounds: DesktopMenuPopupBounds
   ): void => {
-    ApplicationMenu.popupAppIconMenu({ showAboutDialog }, win, bounds)
+    ApplicationMenu.popupAppIconMenu(
+      { showAboutDialog, checkForUpdates },
+      win,
+      bounds
+    )
   }
 
   const desktopIpcDeps: DesktopIpc.RegisterDesktopIpcDeps = {
@@ -388,6 +431,7 @@ export function createDesktopMainController(ctx: DesktopAppContext) {
     popupApplicationMenuSection,
     popupAppIconMenu,
     lastMcpSnapshots,
+    windows,
     getCloudAuth: ctx.getCloudAuth,
     getCloudAgentServers: ctx.getCloudAgentServers,
     getLaunchAtLoginStatus,
@@ -446,6 +490,9 @@ export function createDesktopMainController(ctx: DesktopAppContext) {
 
   return {
     broadcastCloudAuthState(next: CloudAuthState): void {
+      if (next.status === `signed-out`) {
+        forgetCloudServersOnSignOut()
+      }
       for (const win of windows) {
         if (!win.isDestroyed()) {
           win.webContents.send(`desktop:cloud-auth-state-changed`, next)
@@ -472,6 +519,7 @@ export function createDesktopMainController(ctx: DesktopAppContext) {
     syncLaunchAtLoginSetting,
     connectConfiguredServers,
     startDiscoveryLoop: localDiscovery.startDiscoveryLoop,
+    initializeUpdater: updater.initialize,
     quitApp,
   }
 }

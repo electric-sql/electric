@@ -27,7 +27,7 @@ export function CloudServerPicker({
   disabled,
   style,
 }: {
-  onConnect: (url: string) => Promise<void> | void
+  onConnect: (url: string, server: CloudAgentServer) => Promise<void> | void
   disabled?: boolean
   style?: StyleProp<ViewStyle>
 }): React.ReactElement | null {
@@ -42,7 +42,7 @@ export function CloudServerPicker({
     if (connectingKey) return
     setConnectingKey(server.id)
     try {
-      await onConnect(cloudAgentServerUrl(server.id))
+      await onConnect(cloudAgentServerUrl(server.id), server)
     } finally {
       setConnectingKey(null)
     }

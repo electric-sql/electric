@@ -388,6 +388,7 @@ describe(`ElectricAgentsManager.forkSubtree`, () => {
       ...(parent ? { parent } : {}),
       created_at: Date.now(),
       updated_at: Date.now(),
+      created_by: `/principal/user%3Aoriginal-owner`,
     } as const
   }
 
@@ -414,6 +415,7 @@ describe(`ElectricAgentsManager.forkSubtree`, () => {
       }),
       deleteEntity: vi.fn(),
       replaceEntityManifestSource: vi.fn(),
+      replaceSharedStateLink: vi.fn(),
     }
 
     const streamClient = {
@@ -478,14 +480,17 @@ describe(`ElectricAgentsManager.forkSubtree`, () => {
     const result = await manager.forkSubtree(root.url, {
       rootInstanceId: `root-copy`,
       waitTimeoutMs: 0,
+      createdBy: `/principal/user%3Aforker`,
     })
 
     expect(result.root.url).toBe(`/manager/root-copy`)
+    expect(result.root.created_by).toBe(`/principal/user%3Aforker`)
     expect(result.entities).toHaveLength(2)
     const forkedChild = result.entities.find(
       (entity) => entity.type === `worker`
     )
     expect(forkedChild?.parent).toBe(`/manager/root-copy`)
+    expect(forkedChild?.created_by).toBe(`/principal/user%3Aforker`)
 
     const firstEntityWrite = calls.findIndex((call) =>
       call.startsWith(`entity:`)
@@ -597,6 +602,7 @@ describe(`ElectricAgentsManager.forkSubtree`, () => {
         }),
         deleteEntity: vi.fn(),
         replaceEntityManifestSource: vi.fn(),
+        replaceSharedStateLink: vi.fn(),
       } as any,
       streamClient: streamClient as any,
       validator: {} as any,
@@ -655,6 +661,7 @@ describe(`ElectricAgentsManager.forkSubtree`, () => {
         createEntity: vi.fn(),
         deleteEntity: vi.fn(),
         replaceEntityManifestSource: vi.fn(),
+        replaceSharedStateLink: vi.fn(),
       } as any,
       streamClient: streamClient as any,
       validator: {} as any,

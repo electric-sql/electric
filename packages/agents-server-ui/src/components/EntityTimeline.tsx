@@ -10,7 +10,7 @@ import {
 } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useLiveQuery } from '@tanstack/react-db'
-import { eq, inArray } from '@durable-streams/state'
+import { eq, inArray } from '@durable-streams/state/db'
 import {
   measureElement as defaultMeasureElement,
   useVirtualizer,
@@ -41,9 +41,10 @@ import {
   sandboxDisplayLabel,
 } from '../lib/entityRuntime'
 import { warmMarkdownRenderCache } from '../lib/markdownRenderCache'
+import { useCurrentPrincipal } from '../hooks/useCurrentPrincipal'
 import { Icon, IconButton, ScrollArea, Stack, Text, Tooltip } from '../ui'
 import { UserMessage } from './UserMessage'
-import type { UserMessageAttachment } from './UserMessage'
+import type { ForkFromHereAction, UserMessageAttachment } from './UserMessage'
 import { AgentResponseLive } from './AgentResponse'
 import { InlineEventCard } from './InlineEventCard'
 import { InlineStatusBadge } from './InlineStatusBadge'
@@ -56,6 +57,7 @@ import {
   formatChatTimestamp,
 } from '../lib/formatTime'
 import styles from './EntityTimeline.module.css'
+import type { ElectricUser } from '../lib/ElectricAgentsProvider'
 import type {
   EntityTimelineSection,
   EntityTimelineQueryRow,
@@ -74,12 +76,27 @@ function renderRowKey(row: RenderTimelineRow): string {
   return row.$key
 }
 
-function readInboxText(payload: unknown): string {
-  if (payload && typeof payload === `object`) {
+function stringifyPayload(payload: unknown, spaces?: number): string {
+  if (payload == null) return ``
+  if (typeof payload === `string`) return payload
+  if (typeof payload === `object`) {
     const text = (payload as { text?: unknown }).text
     if (typeof text === `string`) return text
+    try {
+      return JSON.stringify(payload, null, spaces) ?? String(payload)
+    } catch {
+      return String(payload)
+    }
   }
-  return typeof payload === `string` ? payload : ``
+  return String(payload)
+}
+
+function readInboxText(payload: unknown): string {
+  return stringifyPayload(payload)
+}
+
+function readInboxPayloadDisplay(payload: unknown): string {
+  return stringifyPayload(payload, 2)
 }
 
 function stringifySearchPayload(value: unknown): string {
@@ -251,6 +268,7 @@ function timelineRowSearchText(
 }
 
 function timelineRowLabel(row: RenderTimelineRow): string {
+  if (row.inbox?.from_agent) return `Agent message`
   if (row.inbox) return `User message`
   if (row.wake) return `Wake`
   if (row.signal) return `Signal`
@@ -282,11 +300,7 @@ function wakeSelfSendMessage(
 ): string | null {
   const change = firstSelfSendWakeChange(section, entityUrl)
   if (!change) return null
-  const payload = change.payload
-  if (payload == null) return ``
-  return typeof payload === `string`
-    ? payload
-    : JSON.stringify(payload, null, 2)
+  return readInboxPayloadDisplay(change.payload)
 }
 
 function wakeReason(section: WakeSection, entityUrl?: string | null): string {
@@ -356,6 +370,51 @@ function WakeTimelineRow({
   )
 }
 
+function AgentInboxMessageRow({
+  inbox,
+  entityUrl,
+}: {
+  inbox: NonNullable<RenderTimelineRow[`inbox`]>
+  entityUrl?: string | null
+}): React.ReactElement {
+  const parsed = Date.parse(inbox.timestamp)
+  const timestamp = Number.isFinite(parsed) ? parsed : Date.now()
+  const fromAgent = inbox.from_agent
+  const isSelfSend = Boolean(fromAgent && fromAgent === entityUrl)
+  const payloadText = readInboxPayloadDisplay(inbox.payload)
+  const details = [
+    { label: `From agent`, value: fromAgent ?? `unknown` },
+    { label: `From principal`, value: inbox.from_principal ?? inbox.from },
+    {
+      label: `Time`,
+      value: formatAbsoluteDateTimeVerbose(timestamp),
+    },
+  ]
+  return (
+    <div className={styles.manifestRow}>
+      <InlineEventCard
+        icon={Radio}
+        title={isSelfSend ? `sent to itself` : `agent message`}
+        summary={`${isSelfSend ? `self-send` : fromAgent} · ${formatChatTimestamp(timestamp)}`}
+        defaultExpanded={false}
+        headerSurface
+      >
+        <div className={styles.manifestDetails}>
+          {details.map((detail) => (
+            <div key={detail.label} className={styles.manifestDetail}>
+              <span>{detail.label}</span>
+              <strong>{detail.value}</strong>
+            </div>
+          ))}
+        </div>
+        {payloadText ? (
+          <pre className={styles.manifestJson}>{payloadText}</pre>
+        ) : null}
+      </InlineEventCard>
+    </div>
+  )
+}
+
 function SignalTimelineRow({
   signal,
 }: {
@@ -419,7 +478,11 @@ function wakeDetails(
   if (selfSendChange) {
     details.push({
       label: `From`,
-      value: selfSendChange.from ?? payload.source,
+      value:
+        selfSendChange.from_agent ??
+        selfSendChange.from_principal ??
+        selfSendChange.from ??
+        payload.source,
     })
     const message = wakeSelfSendMessage(section, entityUrl)
     if (message) {
@@ -845,6 +908,8 @@ const TimelineRow = memo(function TimelineRow({
   tileId,
   attachmentsByInboxKey,
   entityStatusByUrl,
+  currentPrincipal,
+  usersById,
   stopUserMessageKey,
   stopPending,
   onStopGeneration,
@@ -861,15 +926,20 @@ const TimelineRow = memo(function TimelineRow({
   tileId: string | null
   attachmentsByInboxKey: Map<string, Array<UserMessageAttachment>>
   entityStatusByUrl: Map<string, EntityStatus>
+  currentPrincipal: string
+  usersById: Map<string, ElectricUser>
   stopUserMessageKey: string | null
   stopPending: boolean
   onStopGeneration?: () => void
   /** When set on a user-message row, enables the "Fork from here" hover
    * button. Caller pre-resolved the pointer; we just invoke. */
-  onForkFromHere?: () => void
+  onForkFromHere?: ForkFromHereAction
   onRunSearchTextChange: (rowKey: string, text: string) => void
 }): React.ReactElement {
   if (row.inbox) {
+    if (row.inbox.from_agent) {
+      return <AgentInboxMessageRow inbox={row.inbox} entityUrl={entityUrl} />
+    }
     const timestamp = Date.parse(row.inbox.timestamp)
     return (
       <UserMessage
@@ -881,12 +951,14 @@ const TimelineRow = memo(function TimelineRow({
           isInitial: isInitialUserMessage,
         }}
         attachments={attachmentsByInboxKey.get(row.inbox.key)}
+        currentPrincipal={currentPrincipal}
+        usersById={usersById}
         showStop={
           stopUserMessageKey !== null && row.$key === stopUserMessageKey
         }
         stopPending={stopPending}
         onStop={onStopGeneration}
-        onForkFromHere={onForkFromHere}
+        forkFromHere={onForkFromHere}
       />
     )
   }
@@ -968,9 +1040,10 @@ export function EntityTimeline({
    * the prop is omitted) get no fork affordance. The caller resolves
    * the fork pointer and runs the fork → navigate flow.
    */
-  forkFromHereByInboxKey?: Map<string, () => void>
+  forkFromHereByInboxKey?: Map<string, ForkFromHereAction>
 }): React.ReactElement {
-  const { entitiesCollection, runnersCollection } = useElectricAgents()
+  const { entitiesCollection, runnersCollection, usersCollection } =
+    useElectricAgents()
   const referencedEntityUrlKey = useMemo(
     () => stableEntityUrlKey(entities.map((entity) => entity.url)),
     [entities]
@@ -1018,6 +1091,18 @@ export function EntityTimeline({
     },
     [runnersCollection]
   )
+  const { data: users = [] } = useLiveQuery(
+    (q) => {
+      if (!usersCollection) return undefined
+      return q.from({ user: usersCollection })
+    },
+    [usersCollection]
+  )
+  const usersById = useMemo(
+    () => new Map(users.map((user) => [user.id, user])),
+    [users]
+  )
+  const { principal: currentPrincipal } = useCurrentPrincipal()
   const sandboxLabel = sandboxProfileName
     ? (sandboxDisplayLabel(
         resolveSandboxProfile(runners, sandboxProfileName),
@@ -1653,6 +1738,8 @@ export function EntityTimeline({
                         tileId={tileId ?? null}
                         attachmentsByInboxKey={attachmentsByInboxKey}
                         entityStatusByUrl={entityStatusByUrl}
+                        currentPrincipal={currentPrincipal}
+                        usersById={usersById}
                         stopUserMessageKey={stopUserMessageKey}
                         stopPending={stopPending}
                         onStopGeneration={onStopGeneration}

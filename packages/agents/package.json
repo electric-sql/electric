@@ -51,7 +51,7 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@durable-streams/state": "^0.2.9",
+    "@durable-streams/state": "^0.3.1",
     "@electric-ax/agents-mcp": "workspace:*",
     "@electric-ax/agents-runtime": "workspace:*",
     "@mariozechner/pi-agent-core": "^0.70.2",
@@ -62,6 +62,7 @@
     "pino": "^10.3.1",
     "pino-pretty": "^13.0.0",
     "sqlite-vec": "^0.1.9",
+    "undici": "^7.24.7",
     "zod": "^4.3.6"
   },
   "devDependencies": {

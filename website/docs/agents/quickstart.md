@@ -4,15 +4,23 @@ titleTemplate: "... - Electric Agents"
 description: >-
   Run the Electric Agents runtime and the built-in Horton assistant with a single CLI command, then connect from the web UI or define your own entities.
 outline: [2, 3]
+prev:
+  text: 'Overview'
+  link: '/docs/agents/'
+next:
+  text: 'Walkthrough'
+  link: '/docs/agents/walkthrough'
 ---
 
 # Quickstart
 
-One command starts the Electric Agents runtime, the web UI, and a local [Horton](./entities/agents/horton) assistant you can chat with right away. From there, define your own [entities](./usage/defining-entities) in your own app.
+Get started with the Electric Agents runtime, the web UI, and a local [Horton](./entities/agents/horton) assistant you can chat with right away:
 
 ```sh
 npx electric-ax agents quickstart
 ```
+
+Or see the [Walkthrough guide](./walkthrough) for a step-by-step guide to defining your own entities and building a multi-agent system from scratch.
 
 ## What you'll need
 
@@ -76,11 +84,14 @@ npx electric-ax agents observe /horton/onboarding
 
 See the [CLI reference](./reference/cli) for the full command surface.
 
-## Define your own entity types
+## Define your own entities
 
-Once you're chatting with Horton, the next step is to define your own entity types in your own app. Your app is just a process that registers entity types with the runtime server and receives webhook callbacks when they wake.
+Define your own entity types and register them with the runtime server.
 
-### 1. Install the runtime SDK
+> [!Tip] See the Walkthrough guide
+> See the [Walkthrough](./walkthrough) for a step-by-step guide on how to go from a web or mobile app to a <span class="no-wrap">multi-agent</span> system with Electric Agents.
+
+Install the runtime SDK:
 
 ```sh
 mkdir my-agents-app && cd my-agents-app
@@ -88,8 +99,6 @@ npm init -y
 npm install @electric-ax/agents-runtime
 npm install --save-dev tsx
 ```
-
-### 2. Create a server
 
 Create `server.ts`:
 
@@ -140,28 +149,20 @@ server.listen(PORT, async () => {
 })
 ```
 
-This does four things:
+This:
 
-1. **Defines an entity type** called `assistant` with a handler that configures and runs an LLM agent.
-2. **Creates a runtime handler** that connects to the runtime server.
-3. **Starts an HTTP server** to receive webhook callbacks from the runtime.
-4. **Registers entity types** with the runtime server on startup.
+1. **defines an entity type** called `assistant`
+2. **creates a runtime handler** that connects to the runtime server
+3. **starts an HTTP server** to receive webhook callbacks from the runtime
+4. **registers entity types** with the runtime server on startup
 
-See [App setup](./usage/app-setup) for the full `createRuntimeHandler` configuration.
-
-### 3. Run your app
-
-With the runtime server already running (from `electric agents quickstart` or `electric agents start`), start your app:
+Make sure `ANTHROPIC_API_KEY` is exported in this shell (or copy your `.env` into `my-agents-app`). Then, with the runtime server already running (from `electric agents quickstart` or `electric agents start`), start your app:
 
 ```sh
 npx tsx server.ts
 ```
 
-Your handler calls `ctx.useAgent()` in this process, so make sure `ANTHROPIC_API_KEY` is exported in this shell (or copy your `.env` into `my-agents-app`).
-
-### 4. Interact with your entity
-
-Spawn an instance, send it a message, and observe the timeline:
+You can now interact with your custom entity through the [CLI](/docs/agents/reference/cli). For example, to spawn an instance, send it a message, and observe the timeline:
 
 ```sh
 npx electric-ax agents spawn /assistant/my-assistant
@@ -169,7 +170,9 @@ npx electric-ax agents send /assistant/my-assistant 'Hello!'
 npx electric-ax agents observe /assistant/my-assistant
 ```
 
-Or open the web UI at `http://localhost:4437` and pick `/assistant/my-assistant` from the entity list.
+Or open the web UI at [localhost:4437](http://localhost:4437) and create a new session, choosing your assistant type from the entity list.
+
+See the [Walkthrough](./walkthrough) guide and [App setup](./usage/app-setup) docs for more details.
 
 ## Stop the dev environment
 
@@ -193,6 +196,7 @@ See the [CLI reference](./reference/cli#start) for the full set of commands.
 
 ## Next steps
 
+- [Walkthrough](./walkthrough) — go from a web or mobile app to a <span class="no-wrap">multi-agent</span> system
 - [Overview](./) — the mental model behind entities, handlers, and wakes.
 - [Usage overview](./usage/overview) — the full developer surface on one page.
 - [Defining entities](./usage/defining-entities) — entity types, schemas, and configuration.

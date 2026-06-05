@@ -39,6 +39,11 @@
   background: var(--ds-bg-hover);
 }
 
+.submenuTrigger[data-disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .submenuChevron {
   margin-left: auto;
   margin-right: 5px;

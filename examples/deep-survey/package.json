@@ -11,13 +11,13 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@durable-streams/state": "^0.2.9",
+    "@durable-streams/state": "^0.3.1",
     "@electric-ax/agents-runtime": "workspace:*",
     "@mariozechner/pi-agent-core": "^0.70.2",
     "@radix-ui/themes": "^3.3.0",
     "@sinclair/typebox": "^0.34.0",
     "@tanstack/db": "^0.6.6",
-    "@tanstack/react-db": "^0.1.78",
+    "@tanstack/react-db": "^0.1.85",
     "d3-force": "^3.0.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",

@@ -34,6 +34,10 @@ import { StatusDot } from '../components/StatusDot'
 import { TopBarIconButton } from '../components/TopBarIconButton'
 import { useAgents } from '../lib/AgentsProvider'
 import { getEntityDisplayTitle } from '../lib/agentsClient'
+import {
+  useEntityPermissions,
+  type EntityPermission,
+} from '../lib/useEntityPermissions'
 import { useTokens } from '../lib/ThemeProvider'
 import { fontSize, lineHeight, radii, spacing } from '../lib/theme'
 import type { Tokens } from '../lib/theme'
@@ -47,6 +51,7 @@ const COMPOSER_INPUT_MIN_HEIGHT = 40
 const COMPOSER_INPUT_MAX_HEIGHT = 200
 const COMPOSER_MIN_CARD_HEIGHT = 48
 const INLINE_QUEUED_TIMEOUT_MS = 15_000
+const SESSION_PERMISSIONS: ReadonlyArray<EntityPermission> = [`write`, `signal`]
 
 type EntityStreamState = ReturnType<typeof useEntityTimeline>
 type EntityStreamDB = EntityStreamState[`db`]
@@ -161,6 +166,9 @@ export function SessionScreen({
     [entitiesCollection, entityUrl]
   )
   const entity = matches.at(0) ?? null
+  const permissions = useEntityPermissions(entity, SESSION_PERMISSIONS)
+  const canWrite = permissions.write
+  const canSignal = permissions.signal
   const streamEntityUrl =
     view === `chat` && entity?.status !== `spawning` ? entityUrl : null
   const { timelineRows, pendingInbox, db, generationActive } =
@@ -292,6 +300,7 @@ export function SessionScreen({
       opts: { stopPending?: boolean } = {}
     ): Promise<void> => {
       if (!entity) return
+      if (!canSignal) return
       if (opts.stopPending) setStopPending(true)
       setSignalError(null)
       try {
@@ -301,18 +310,19 @@ export function SessionScreen({
         setSignalError(err instanceof Error ? err.message : String(err))
       }
     },
-    [entity, entityUrl, signalEntity]
+    [canSignal, entity, entityUrl, signalEntity]
   )
 
   const stopGeneration = useCallback((): void => {
-    if (!generationActive || stopPending) return
+    if (!canSignal || !generationActive || stopPending) return
     void sendSignal(`SIGINT`, `Stopped from mobile chat UI`, {
       stopPending: true,
     })
-  }, [generationActive, sendSignal, stopPending])
+  }, [canSignal, generationActive, sendSignal, stopPending])
 
   const stopImmediately = useCallback(async (): Promise<void> => {
     if (!entity) return
+    if (!canSignal) return
     setSignalError(null)
     try {
       await signalEntity({
@@ -328,13 +338,14 @@ export function SessionScreen({
     } catch (err) {
       setSignalError(err instanceof Error ? err.message : String(err))
     }
-  }, [entity, entityUrl, signalEntity])
+  }, [canSignal, entity, entityUrl, signalEntity])
 
   const sendMenuSignal = useCallback(
     (signal: EntitySignal): void => {
+      if (!canSignal) return
       void sendSignal(signal, `Sent from mobile session menu`)
     },
-    [sendSignal]
+    [canSignal, sendSignal]
   )
 
   const title = entity
@@ -373,6 +384,8 @@ export function SessionScreen({
           generationActive={generationActive}
           stopPending={stopPending}
           onStop={stopGeneration}
+          writeDisabled={!canWrite}
+          stopDisabled={!canSignal}
           disabled={
             !db ||
             entity?.status === `stopped` ||
@@ -388,7 +401,9 @@ export function SessionScreen({
                   ? `Starting...`
                   : !db
                     ? `Connecting...`
-                    : `Send a message...`
+                    : !canWrite
+                      ? `Read-only`
+                      : `Send a message...`
           }
         />
       )}
@@ -402,6 +417,7 @@ export function SessionScreen({
         signalError={signalError}
         onSignal={sendMenuSignal}
         onStopImmediately={() => void stopImmediately()}
+        signalDisabled={!canSignal}
       />
     </Screen>
   )
@@ -422,6 +438,8 @@ function NativeMessageComposer({
   generationActive,
   stopPending,
   onStop,
+  writeDisabled,
+  stopDisabled,
   disabled,
   placeholder,
 }: {
@@ -439,6 +457,8 @@ function NativeMessageComposer({
   generationActive: boolean
   stopPending: boolean
   onStop: () => void
+  writeDisabled: boolean
+  stopDisabled: boolean
   disabled: boolean
   placeholder: string
 }): React.ReactElement {
@@ -483,8 +503,10 @@ function NativeMessageComposer({
   }, [db, serverUrl, entityUrl])
   const showStop =
     generationActive && text.length === 0 && !disabled && !editingMessage
-  const canStop = showStop && !stopPending
-  const canSend = text.length > 0 && !disabled && !sending
+  const canStop = showStop && !stopPending && !stopDisabled
+  const canSend = text.length > 0 && !disabled && !writeDisabled && !sending
+  const inputDisabled = disabled || writeDisabled || sending
+  const composerDisabled = disabled || (writeDisabled && !showStop)
   const setMeasuredInputHeight = (height: number): void => {
     const nextHeight = Math.min(
       COMPOSER_INPUT_MAX_HEIGHT,
@@ -570,6 +592,7 @@ function NativeMessageComposer({
 
   const startEditing = useCallback(
     (message: PendingInboxMessage): void => {
+      if (disabled || writeDisabled) return
       const queuedText = readTextPayload(message.payload)
       setError(null)
       updateAction?.({
@@ -582,7 +605,7 @@ function NativeMessageComposer({
       setEditingMessage({ key: message.key })
       setValue(queuedText)
     },
-    [updateAction]
+    [disabled, updateAction, writeDisabled]
   )
 
   const cancelEditing = useCallback((): void => {
@@ -602,17 +625,19 @@ function NativeMessageComposer({
 
   const deleteMessage = useCallback(
     (key: string): void => {
+      if (disabled || writeDisabled) return
       setError(null)
       deleteAction?.({ key }).isPersisted.promise.catch((err: Error) => {
         setError(err.message)
       })
       if (editingMessage?.key === key) cancelEditing()
     },
-    [cancelEditing, deleteAction, editingMessage?.key]
+    [cancelEditing, deleteAction, disabled, editingMessage?.key, writeDisabled]
   )
 
   const steerMessage = useCallback(
     (key: string): void => {
+      if (disabled || writeDisabled) return
       setError(null)
       steerAction?.({ key }).isPersisted.promise.catch((err: Error) => {
         setError(err.message)
@@ -620,11 +645,19 @@ function NativeMessageComposer({
       if (editingMessage?.key === key) cancelEditing()
       onSendMessage?.()
     },
-    [cancelEditing, editingMessage?.key, onSendMessage, steerAction]
+    [
+      cancelEditing,
+      disabled,
+      editingMessage?.key,
+      onSendMessage,
+      steerAction,
+      writeDisabled,
+    ]
   )
 
   const reorderMessage = useCallback(
     (key: string, position: string): void => {
+      if (disabled || writeDisabled) return
       setError(null)
       updateAction?.({ key, position }).isPersisted.promise.catch(
         (err: Error) => {
@@ -632,7 +665,7 @@ function NativeMessageComposer({
         }
       )
     },
-    [updateAction]
+    [disabled, updateAction, writeDisabled]
   )
 
   return (
@@ -659,6 +692,7 @@ function NativeMessageComposer({
           onReorderPending={reorderMessage}
           onOpenEntity={onOpenEntity}
           onOpenStateSource={onOpenStateSource}
+          pendingActionsDisabled={disabled || writeDisabled}
         />
       )}
       {editingMessage && (
@@ -674,11 +708,13 @@ function NativeMessageComposer({
           </Pressable>
         </View>
       )}
-      <View style={[styles.composer, disabled ? styles.disabled : null]}>
+      <View
+        style={[styles.composer, composerDisabled ? styles.disabled : null]}
+      >
         <TextInput
           value={value}
           onChangeText={handleChangeText}
-          editable={!disabled && !sending}
+          editable={!inputDisabled}
           multiline
           placeholder={placeholder}
           placeholderTextColor={tokens.text4}
@@ -697,10 +733,10 @@ function NativeMessageComposer({
           accessibilityLabel={showStop ? `Stop generating` : `Send message`}
           style={({ pressed }) => [
             styles.sendButton,
-            canSend || showStop ? styles.sendButtonActive : null,
+            canSend || canStop ? styles.sendButtonActive : null,
             showStop ? styles.stopButton : null,
             showStop && stopPending ? styles.stopButtonPending : null,
-            pressed && (canSend || showStop) ? styles.sendButtonPressed : null,
+            pressed && (canSend || canStop) ? styles.sendButtonPressed : null,
           ]}
         >
           {sending && !showStop ? (
@@ -709,7 +745,7 @@ function NativeMessageComposer({
             <Icon
               name={showStop ? `square` : `arrow-up`}
               size={showStop ? 14 : 18}
-              color={canSend || showStop ? tokens.textOnAccent : tokens.text4}
+              color={canSend || canStop ? tokens.textOnAccent : tokens.text4}
               strokeWidth={2.4}
             />
           )}
@@ -757,6 +793,7 @@ function NativeEntityContextDrawer({
   onReorderPending,
   onOpenEntity,
   onOpenStateSource,
+  pendingActionsDisabled,
 }: {
   entity: ElectricEntity
   pendingMessages: Array<PendingInboxMessage>
@@ -768,6 +805,7 @@ function NativeEntityContextDrawer({
   onReorderPending: (key: string, position: string) => void
   onOpenEntity?: (entityUrl: string) => void
   onOpenStateSource?: (sourceId: string) => void
+  pendingActionsDisabled: boolean
 }): React.ReactElement | null {
   const { entitiesCollection } = useAgents()
   const tokens = useTokens()
@@ -881,6 +919,7 @@ function NativeEntityContextDrawer({
               onDelete={onDeletePending}
               onSteer={onSteerPending}
               onReorder={onReorderPending}
+              actionsDisabled={pendingActionsDisabled}
               styles={styles}
               tokens={tokens}
             />
@@ -958,6 +997,7 @@ function QueuedMessageRow({
   onDelete,
   onSteer,
   onReorder,
+  actionsDisabled,
   styles,
   tokens,
 }: {
@@ -969,6 +1009,7 @@ function QueuedMessageRow({
   onDelete: (key: string) => void
   onSteer: (key: string) => void
   onReorder: (key: string, position: string) => void
+  actionsDisabled: boolean
   styles: ReturnType<typeof createDrawerStyles>
   tokens: Tokens
 }): React.ReactElement {
@@ -1001,7 +1042,7 @@ function QueuedMessageRow({
       <View style={styles.rowActions}>
         <SmallActionButton
           label="Move queued message up"
-          disabled={index === 0}
+          disabled={actionsDisabled || index === 0}
           onPress={() => move(-1)}
           styles={styles}
         >
@@ -1009,7 +1050,7 @@ function QueuedMessageRow({
         </SmallActionButton>
         <SmallActionButton
           label="Move queued message down"
-          disabled={index === messages.length - 1}
+          disabled={actionsDisabled || index === messages.length - 1}
           onPress={() => move(1)}
           styles={styles}
         >
@@ -1017,6 +1058,7 @@ function QueuedMessageRow({
         </SmallActionButton>
         <SmallActionButton
           label="Edit queued message"
+          disabled={actionsDisabled}
           onPress={() => onEdit(message)}
           styles={styles}
         >
@@ -1024,6 +1066,7 @@ function QueuedMessageRow({
         </SmallActionButton>
         <SmallActionButton
           label="Steer now"
+          disabled={actionsDisabled}
           onPress={() => onSteer(message.key)}
           styles={styles}
         >
@@ -1031,6 +1074,7 @@ function QueuedMessageRow({
         </SmallActionButton>
         <SmallActionButton
           label="Delete queued message"
+          disabled={actionsDisabled}
           onPress={() => onDelete(message.key)}
           styles={styles}
         >

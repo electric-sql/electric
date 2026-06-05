@@ -56,7 +56,8 @@ async function ensureEntitiesMembershipStream(
 ): Promise<Response> {
   const parsed = routeBody<EnsureEntitiesMembershipStreamBody>(request)
   const result = await ctx.entityManager.ensureEntitiesMembershipStream(
-    parsed.tags ?? {}
+    parsed.tags ?? {},
+    ctx.principal
   )
   return json(result)
 }

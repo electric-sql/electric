@@ -6,6 +6,7 @@ import type { CloudAgentServers } from '../cloud/cloud-agent-servers'
 import type { CloudAuthState } from '../cloud/cloud-auth'
 import type {
   ConnectServerOptions,
+  DesktopMcpSnapshot,
   DesktopSettings,
   DesktopState,
   RegistrySnapshot,
@@ -20,7 +21,7 @@ export function createRuntimeController(deps: {
   runtimeEntries: Map<string, RuntimeEntry>
   windowSelections: Map<number, string | null>
   windows: Set<BrowserWindow>
-  lastMcpSnapshots: Map<string, RegistrySnapshot>
+  lastMcpSnapshots: Map<string, DesktopMcpSnapshot>
   findServer: (serverId: string | null | undefined) => ServerConfig | null
   ensureRuntimeEntry: (server: ServerConfig) => RuntimeEntry
   saveSettings: () => Promise<void>
@@ -39,8 +40,12 @@ export function createRuntimeController(deps: {
     serverId: string,
     snapshot: RegistrySnapshot
   ): void => {
-    McpRuntime.broadcastMcpSnapshot(
-      { snapshots: deps.lastMcpSnapshots, windows: deps.windows },
+    McpRuntime.broadcastEnrichedSnapshot(
+      {
+        snapshots: deps.lastMcpSnapshots,
+        windows: deps.windows,
+        settings: deps.settings,
+      },
       serverId,
       snapshot
     )

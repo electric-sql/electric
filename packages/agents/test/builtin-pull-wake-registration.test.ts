@@ -104,6 +104,44 @@ describe(`BuiltinAgentsServer pull-wake registration`, () => {
     ).toBe(false)
   })
 
+  it(`grants all users default built-in entity type permissions`, async () => {
+    agentsServer = await startRecordingAgentsServer()
+    builtinServer = new BuiltinAgentsServer({
+      agentServerUrl: agentsServer.url,
+      mockStreamFn,
+      pullWake: { runnerId: `test-runner` },
+    })
+
+    await builtinServer.start()
+
+    const horton = agentsServer.entityTypeBodies.find(
+      (body) => body.name === `horton`
+    )
+    const worker = agentsServer.entityTypeBodies.find(
+      (body) => body.name === `worker`
+    )
+    expect(horton?.permission_grants).toContainEqual({
+      subject_kind: `principal_kind`,
+      subject_value: `user`,
+      permission: `spawn`,
+    })
+    expect(horton?.permission_grants).toContainEqual({
+      subject_kind: `principal_kind`,
+      subject_value: `user`,
+      permission: `manage`,
+    })
+    expect(worker?.permission_grants).toContainEqual({
+      subject_kind: `principal_kind`,
+      subject_value: `user`,
+      permission: `spawn`,
+    })
+    expect(worker?.permission_grants).toContainEqual({
+      subject_kind: `principal_kind`,
+      subject_value: `user`,
+      permission: `manage`,
+    })
+  })
+
   it(`registers through tenant path-prefixed server URLs`, async () => {
     agentsServer = await startRecordingAgentsServer()
     builtinServer = new BuiltinAgentsServer({

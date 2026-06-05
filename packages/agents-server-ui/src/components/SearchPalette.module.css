@@ -100,6 +100,16 @@
   background: var(--ds-bg-hover);
 }
 
+.row[data-disabled='true'] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.row[data-disabled='true'][data-active='true'],
+.row[data-disabled='true']:hover {
+  background: transparent;
+}
+
 .rowTitle {
   flex: 1;
   min-width: 0;

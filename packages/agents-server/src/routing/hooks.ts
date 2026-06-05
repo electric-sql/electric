@@ -85,6 +85,7 @@ export function applyCors(
       `content-type`,
       `authorization`,
       `electric-claim-token`,
+      `electric-owner-entity`,
       ELECTRIC_PRINCIPAL_HEADER,
       `ngrok-skip-browser-warning`,
     ].join(`, `)

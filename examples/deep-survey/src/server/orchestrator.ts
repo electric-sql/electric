@@ -4,7 +4,7 @@ import type {
   SharedStateHandle,
 } from '@electric-ax/agents-runtime'
 import { db } from '@electric-ax/agents-runtime'
-import { queryOnce } from '@durable-streams/state'
+import { queryOnce } from '@durable-streams/state/db'
 import { Type } from '@sinclair/typebox'
 import { exec, execFile } from 'node:child_process'
 import type { AgentTool } from '@mariozechner/pi-agent-core'
@@ -162,7 +162,7 @@ function createExploreCorpusTool(
 
         await ctx.spawn(SURVEY_WORKER_ENTITY_TYPE, childId, args, {
           initialMessage: `Explore your assigned topic and write a wiki entry.`,
-          wake: `runFinished`,
+          wake: { on: `runFinished`, includeResponse: true },
           tags: {
             swarm_id: swarmId,
             topic: topic.slice(0, 50),

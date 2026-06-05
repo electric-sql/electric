@@ -105,6 +105,10 @@ vi.mock(`../src/entity-registry`, () => ({
       return Promise.resolve()
     }
 
+    replaceSharedStateLink(): Promise<void> {
+      return Promise.resolve()
+    }
+
     releaseTagOutboxClaims(): Promise<void> {
       return Promise.resolve()
     }

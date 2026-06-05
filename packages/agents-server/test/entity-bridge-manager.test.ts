@@ -76,6 +76,9 @@ vi.mock(`@durable-streams/client`, () => ({
   },
 }))
 
+const PRINCIPAL_URL = `/principal/user%3Aowner`
+const PRINCIPAL_KIND = `user`
+
 describe(`EntityBridgeManager`, () => {
   beforeEach(() => {
     mockState.liveCallback = null
@@ -149,7 +152,11 @@ describe(`EntityBridgeManager`, () => {
       `http://electric.test`
     )
 
-    const registerPromise = manager.register({ demo: `x` })
+    const registerPromise = manager.register(
+      { demo: `x` },
+      PRINCIPAL_URL,
+      PRINCIPAL_KIND
+    )
     await vi.waitFor(() => {
       expect(mockState.liveCallback).not.toBeNull()
     })
@@ -323,6 +330,63 @@ describe(`EntityBridgeManager`, () => {
     )
   })
 
+  it(`scopes entity membership streams by principal`, async () => {
+    const registry = {
+      upsertEntityBridge: vi
+        .fn()
+        .mockImplementation(async (row: Record<string, unknown>) => row),
+      touchEntityBridge: vi.fn().mockResolvedValue(undefined),
+      updateEntityBridgeCursor: vi.fn().mockResolvedValue(undefined),
+      clearEntityBridgeCursor: vi.fn().mockResolvedValue(undefined),
+    }
+    const streamClient = {
+      baseUrl: `http://streams.test`,
+      exists: vi.fn().mockResolvedValue(true),
+      create: vi.fn().mockResolvedValue(undefined),
+      readJson: vi.fn().mockResolvedValue([]),
+    }
+    const manager = new EntityBridgeManager(
+      registry as never,
+      streamClient as never,
+      `http://electric.test`
+    )
+
+    const firstPromise = manager.register(
+      { demo: `x` },
+      `/principal/user%3Aone`,
+      `user`
+    )
+    await vi.waitFor(() => expect(mockState.liveCallback).not.toBeNull())
+    await mockState.liveCallback?.([{ headers: { control: `up-to-date` } }])
+    const first = await firstPromise
+
+    const secondPromise = manager.register(
+      { demo: `x` },
+      `/principal/user%3Atwo`,
+      `user`
+    )
+    await vi.waitFor(() => expect(mockState.liveCallbacks).toHaveLength(2))
+    await mockState.liveCallbacks[1]?.([{ headers: { control: `up-to-date` } }])
+    const second = await secondPromise
+
+    expect(first.sourceRef).not.toBe(second.sourceRef)
+    expect(first.streamUrl).not.toBe(second.streamUrl)
+    expect(registry.upsertEntityBridge).toHaveBeenCalledWith(
+      expect.objectContaining({
+        principalUrl: `/principal/user%3Aone`,
+        principalKind: `user`,
+      })
+    )
+    expect(registry.upsertEntityBridge).toHaveBeenCalledWith(
+      expect.objectContaining({
+        principalUrl: `/principal/user%3Atwo`,
+        principalKind: `user`,
+      })
+    )
+
+    await manager.stop()
+  })
+
   it(`reuses a persisted shape cursor when one is available`, async () => {
     const registry = {
       upsertEntityBridge: vi.fn().mockImplementation(async () => ({
@@ -350,7 +414,7 @@ describe(`EntityBridgeManager`, () => {
       `http://electric.test`
     )
 
-    await manager.register({ demo: `x` })
+    await manager.register({ demo: `x` }, PRINCIPAL_URL, PRINCIPAL_KIND)
 
     expect(mockState.lastConstructedOptions).toMatchObject({
       offset: `5_0`,
@@ -382,7 +446,11 @@ describe(`EntityBridgeManager`, () => {
       `http://electric.test`
     )
 
-    const registerPromise = manager.register({ demo: `x` })
+    const registerPromise = manager.register(
+      { demo: `x` },
+      PRINCIPAL_URL,
+      PRINCIPAL_KIND
+    )
     await vi.waitFor(() => {
       expect(mockState.liveCallback).not.toBeNull()
     })
@@ -495,8 +563,16 @@ describe(`EntityBridgeManager`, () => {
       `http://electric.test`
     )
 
-    const firstPromise = manager.register({ demo: `x` })
-    const secondPromise = manager.register({ demo: `x` })
+    const firstPromise = manager.register(
+      { demo: `x` },
+      PRINCIPAL_URL,
+      PRINCIPAL_KIND
+    )
+    const secondPromise = manager.register(
+      { demo: `x` },
+      PRINCIPAL_URL,
+      PRINCIPAL_KIND
+    )
     await vi.waitFor(() => {
       expect(mockState.liveCallback).not.toBeNull()
     })
