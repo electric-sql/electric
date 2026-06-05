@@ -1,5 +1,76 @@
 # @electric-ax/agents-server-ui
 
+## 0.4.16
+
+### Patch Changes
+
+- 9fdf96a: Track agent-originated sends with `from_agent` / `from_principal` inbox metadata and render agent/self-send inbox messages with JSON payload fallbacks.
+- f222d39: Add a form-based **Add / Edit / Remove** flow for MCP servers in the
+  desktop's Settings → MCP Servers page. Before this, the only way to
+  register a server was to hand-edit `settings.json` or a workspace
+  `mcp.json`. The dialog supports both `http` and `stdio` transports, all
+  four auth modes, and writes through to the global `settings.json
+mcp.servers` block.
+
+  The MCP page also gains provenance + shadowing awareness:
+  - Entries from a workspace `mcp.json` render a "from mcp.json" badge
+    and are read-only (no Edit/Remove). Lifecycle verbs still apply.
+  - When a name in `settings.json` collides with one in workspace
+    `mcp.json`, the workspace still wins (existing rule); the shadowed
+    settings entry is rendered grayed-out next to the running workspace
+    twin so the user can see what's been overridden.
+
+  `BuiltinAgentsServer` gains a public `setExtraMcpServers(extras)` so
+  the desktop can push add/edit/remove changes to the live MCP registry
+  without restarting. Workspace `mcp.json` continues to win on name
+  collision through the same merge path used by the file watcher.
+
+- 312f5ec: Typecheck against agents-runtime's built types for the package index instead of
+  its source, so the UI no longer pulls node-only sandbox code into its program.
+  The browser-safe `client` entry stays source-mapped (matching the vite alias).
+- 4f88e6d: Dedupe `@tanstack/db` to a single instance.
+
+  `@tanstack/db` is effectively a singleton (collections/transactions/live
+  queries use `instanceof` checks and module-level state), but the lockfile had
+  drifted to several `0.6.x` copies, breaking StreamDB collections. Adds a root
+  `pnpm.overrides` entry collapsing the `0.6.x` line to `0.6.7`, scoped to
+  `>=0.6.0 <0.7.0` so the legacy example starters pinned to `0.0.x`/`0.5.8` are
+  untouched. Stopgap until `@durable-streams/state` ships `@tanstack/db` as a
+  peer dependency.
+
+  Also raises the `agents-mobile` iOS minimum deployment target to 16.4 (via
+  `expo-build-properties`). The chat renders in an Expo DOM WebView whose markdown
+  stack ships regex lookbehind, which JavaScriptCore only parses on iOS 16.4+;
+  below that the whole DOM bundle fails to parse and the chat renders blank.
+
+- b2bf806: Upgrade `@durable-streams/state` to `0.3.1` and drop the `@tanstack/db` pnpm override.
+
+  `@durable-streams/state@0.3.x` makes `@tanstack/db` an optional peer dependency (it was a direct `^0.6.0` dependency) and splits its tsdb-coupled tools into a `@durable-streams/state/db` subpath. tsdb-specific imports (`createStreamDB`, `queryOnce`, `createTransaction`, query operators, etc.) now come from `@durable-streams/state/db`; the bare entry keeps only the tsdb-free types and helpers.
+
+  Because state no longer pulls its own `@tanstack/db` copy, the root `pnpm.overrides` collapsing `@tanstack/db@>=0.6.0 <0.7.0` to `0.6.7` is removed. To keep a single `0.6.7` instance without it, `@tanstack/react-db` is raised to `^0.1.85` and `@tanstack/electric-db-collection` to `^0.3.5` (both pin `@tanstack/db@0.6.7`), and `@durable-streams/server` to `^0.3.7` (depends on `state@0.3.1`, removing the lingering transitive `state@0.2.9`).
+
+- 6e9e4a7: Show elapsed time while an agent is responding. While a turn is
+  streaming, the meta row now ticks `Thinking · 12s` (or just `12s` once
+  tokens start flowing). When a turn settles, the bare `✓ done` becomes
+  `✓ done in 1m 5s` for turns completed in-session. Historical turns
+  (already complete on page load) keep the bare label, since the client
+  has no reliable completion timestamp for those — only the user message
+  time, and subtracting `now()` would lie about the duration.
+- d14d9a9: Remove the unused per-entity agents error stream. Entities now expose only their main stream; spawn, fork, registry lookup, terminal signal handling, UI/runtime types, client helpers, and conformance tests no longer create or require an entity-level error stream.
+- 889fa20: Expose tenant-scoped users as an Electric shape and add a chat sharing dialog that grants user principals or all workspace users view, chat, or manage permissions over an entity. View/chat sharing includes fork access, forked chats are owned by the principal that creates the fork, shared chats can be identified and filtered by creator in the sidebar, and Cloud requests now inject the signed-in user as the Electric principal.
+
+  Mobile now syncs the users and effective-permissions shapes, marks and filters shared chats by creator, disables native chat and signal controls when the current principal lacks permission, and shows the signed-in user principal on the Account screen for debugging.
+
+- Updated dependencies [9fdf96a]
+- Updated dependencies [312f5ec]
+- Updated dependencies [6434774]
+- Updated dependencies [4f88e6d]
+- Updated dependencies [b2bf806]
+- Updated dependencies [74d2341]
+- Updated dependencies [d14d9a9]
+- Updated dependencies [7c62024]
+  - @electric-ax/agents-runtime@0.3.9
+
 ## 0.4.15
 
 ### Patch Changes
