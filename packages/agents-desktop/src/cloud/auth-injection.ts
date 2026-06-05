@@ -7,7 +7,6 @@ import {
   buildSavedServerHeaders,
   type CloudAuthHeaderInjectionDeps,
 } from './auth-headers'
-import { logPostInjectionHeaders } from './auth-debug'
 export type { CloudAuthHeaderInjectionDeps } from './auth-headers'
 
 /**
@@ -24,22 +23,10 @@ export function installCloudAuthHeaderInjection(
       buildCloudAuthHeaders(deps, details.url) ?? undefined
     )
     if (!extra) {
-      logPostInjectionHeaders({
-        transport: `webRequest`,
-        method: details.method,
-        url: details.url,
-        headers: details.requestHeaders,
-      })
       callback({ requestHeaders: details.requestHeaders })
       return
     }
     const requestHeaders = { ...details.requestHeaders, ...extra }
-    logPostInjectionHeaders({
-      transport: `webRequest`,
-      method: details.method,
-      url: details.url,
-      headers: requestHeaders,
-    })
     callback({
       requestHeaders,
     })
@@ -59,12 +46,6 @@ function installCloudAuthUndiciInterceptor(
         if (!fullUrl) return dispatch(opts, handler)
         const extra = buildCloudAuthHeaders(deps, fullUrl)
         if (!extra) {
-          logPostInjectionHeaders({
-            transport: `undici`,
-            method: opts.method,
-            url: fullUrl,
-            headers: mergeUndiciHeaders(opts.headers, {}),
-          })
           return dispatch(opts, handler)
         }
         const lowered: Record<string, string> = {}
@@ -72,12 +53,6 @@ function installCloudAuthUndiciInterceptor(
           lowered[key.toLowerCase()] = value
         }
         const headers = mergeUndiciHeaders(opts.headers, lowered)
-        logPostInjectionHeaders({
-          transport: `undici`,
-          method: opts.method,
-          url: fullUrl,
-          headers,
-        })
         return dispatch({ ...opts, headers }, handler)
       }
   )

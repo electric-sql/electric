@@ -67,7 +67,7 @@ describe(`server utils`, () => {
     )
   })
 
-  it(`tenant-scopes users shapes and exposes profile columns`, () => {
+  it(`tenant-scopes users shapes and exposes only display columns`, () => {
     const target = shapeTarget(
       `table=users&where=${encodeURIComponent(`email ILIKE '%@example.com'`)}`
     )
@@ -77,7 +77,10 @@ describe(`server utils`, () => {
     expect(columns).toContain(`"display_name"`)
     expect(columns).toContain(`"email"`)
     expect(columns).toContain(`"avatar_url"`)
-    expect(columns).toContain(`"profile"`)
+    expect(columns).not.toContain(`"auth_provider"`)
+    expect(columns).not.toContain(`"auth_subject"`)
+    expect(columns).not.toContain(`"profile"`)
+    expect(columns).not.toContain(`"metadata"`)
     expect(target.searchParams.get(`where`)).toBe(
       `tenant_id = 'tenant-test' AND (email ILIKE '%@example.com')`
     )

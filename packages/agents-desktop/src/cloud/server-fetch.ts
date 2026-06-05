@@ -13,7 +13,6 @@ import {
   buildSavedServerHeaders,
   type CloudAuthHeaderInjectionDeps,
 } from './auth-headers'
-import { logPostInjectionHeaders } from './auth-debug'
 import { findSavedServerForUrl } from './server-matching'
 
 export type DesktopServerFetchDeps = CloudAuthHeaderInjectionDeps
@@ -83,12 +82,6 @@ export async function desktopServerFetch(
     cloudHeaders ?? undefined
   )
   if (!headers) throw new Error(`No headers available for desktop server fetch`)
-  logPostInjectionHeaders({
-    transport: `desktop-server-fetch`,
-    method: checked.method,
-    url: checked.url,
-    headers,
-  })
   const response = await fetch(checked.url, {
     method: checked.method,
     headers,

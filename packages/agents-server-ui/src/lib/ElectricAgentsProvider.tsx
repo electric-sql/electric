@@ -155,10 +155,6 @@ const userSchema = z.object({
   display_name: z.string().nullable(),
   email: z.string().nullable(),
   avatar_url: z.string().nullable(),
-  auth_provider: z.string().nullable(),
-  auth_subject: z.string().nullable(),
-  profile: z.record(z.unknown()).default({}),
-  metadata: z.record(z.unknown()).default({}),
   created_at: z.string(),
   updated_at: z.string(),
 })

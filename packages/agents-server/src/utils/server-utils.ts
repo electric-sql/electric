@@ -157,7 +157,7 @@ export function buildElectricProxyTarget(options: {
   } else if (table === `users`) {
     target.searchParams.set(
       `columns`,
-      `"tenant_id","id","display_name","email","avatar_url","auth_provider","auth_subject","profile","metadata","created_at","updated_at"`
+      `"tenant_id","id","display_name","email","avatar_url","created_at","updated_at"`
     )
     applyTenantShapeWhere(target, options.tenantId)
   } else if (table === `entity_effective_permissions`) {
