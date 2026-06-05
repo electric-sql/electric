@@ -85,7 +85,7 @@ Inspect the payload to distinguish the sub-kind:
 
 | Sub-kind            | Producer                                                                    | Payload marker                                                                            |
 | ------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| Child finished      | `ctx.spawn(..., { wake: 'runFinished' })` when the child completes or fails | `payload.finished_child` is set (with `run_status` and optional `response`)               |
+| Child finished      | `ctx.spawn(..., { wake: { on: 'runFinished', includeResponse: true } })` when the child completes or fails | `payload.finished_child` is set (with `run_status` and optional `response`)               |
 | Observed change     | `ctx.observe(..., { wake: { on: 'change' } })` or `observe(db(...))`        | `payload.changes` is non-empty                                                            |
 | Shared-state change | `await ctx.observe(db(...), { wake: { on: 'change' } })`                    | `payload.changes` is non-empty, `payload.source` identifies the shared-state stream       |
 | Cron fired          | A cron schedule entry on the entity's manifest                              | `payload.source` identifies the schedule; `payload.changes` is empty                      |

@@ -210,7 +210,7 @@ async handler(ctx, wake) {
 
 ## recordRun
 
-Call `ctx.recordRun()` when a handler does work without `ctx.agent.run()` but still needs to publish run lifecycle events. This is how non-LLM entities can wake parents observing them with `wake: "runFinished"`.
+Call `ctx.recordRun()` when a handler does work without `ctx.agent.run()` but still needs to publish run lifecycle events. This is how non-LLM entities can wake parents observing them with `wake: { on: "runFinished", includeResponse: true }`.
 
 ```ts
 async handler(ctx) {

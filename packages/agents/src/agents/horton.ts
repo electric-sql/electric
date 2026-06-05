@@ -9,6 +9,7 @@ import {
   modelChoiceValues,
   REASONING_EFFORT_VALUES,
   resolveBuiltinModelConfig,
+  resolveBuiltinModelSourceBudget,
   type BuiltinAgentModelConfig,
   type BuiltinModelCatalog,
 } from '../model-catalog'
@@ -460,6 +461,7 @@ function createAssistantHandler(options: {
   ): Promise<void> {
     const readSet = new Set<string>()
     const modelConfig = resolveBuiltinModelConfig(modelCatalog, ctx.args)
+    const sourceBudget = resolveBuiltinModelSourceBudget(modelConfig)
     // The sandbox's own working directory is the single source of truth for
     // where the agent operates — `/work` in a remote VM, or the host project
     // root for a local sandbox (the local profile derives that from
@@ -529,7 +531,7 @@ function createAssistantHandler(options: {
 
     if (docsSupport) {
       ctx.useContext({
-        sourceBudget: 100_000,
+        sourceBudget,
         sources: {
           docs_toc: {
             content: () => docsSupport.renderCompressedToc(),
@@ -572,7 +574,7 @@ function createAssistantHandler(options: {
       })
     } else if (skillsRegistry && skillsRegistry.catalog.size > 0) {
       ctx.useContext({
-        sourceBudget: 100_000,
+        sourceBudget,
         sources: {
           skills_catalog: {
             content: () => skillsRegistry.renderCatalog(2_000),
@@ -596,7 +598,7 @@ function createAssistantHandler(options: {
       })
     } else if (agentsMd) {
       ctx.useContext({
-        sourceBudget: 100_000,
+        sourceBudget,
         sources: {
           conversation: {
             content: () => ctx.timelineMessages(),

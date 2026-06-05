@@ -600,23 +600,6 @@ export async function processWake(
       handleSignalEvent(event)
       return
     }
-    if (event.type === `child_status` && result) {
-      const spawnHandles = result.wakeSession.getSpawnHandles()
-      const val = event.value as
-        | { entity_url?: string; status?: string }
-        | undefined
-      if (val?.entity_url && spawnHandles.size > 0) {
-        if (
-          val.status === `idle` ||
-          val.status === `completed` ||
-          val.status === `stopped`
-        ) {
-          for (const [, spawnHandle] of spawnHandles) {
-            spawnHandle.resolveRun()
-          }
-        }
-      }
-    }
   }
 
   function handleLatestSignalEvents(events: Array<ChangeEvent>): void {
@@ -1244,6 +1227,7 @@ export async function processWake(
           payload: send.payload,
           type: send.type,
           afterMs: send.afterMs,
+          fromAgent: entityUrl,
         })
         .then(() => ({ sent: true as const, targetUrl: send.targetUrl }))
 
@@ -1624,10 +1608,6 @@ export async function processWake(
           entityUrl,
           db,
           events: catchUpEvents,
-          run: Promise.resolve(),
-          text() {
-            return Promise.resolve([])
-          },
           send: (msg: unknown) => {
             return executeSend({ targetUrl: entityUrl, payload: msg })
           },

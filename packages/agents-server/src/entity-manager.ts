@@ -2137,6 +2137,7 @@ export class EntityManager {
       {
         entityUrl: targetUrl,
         from: senderUrl,
+        from_agent: senderUrl,
         payload: manifest.payload,
         key: `scheduled-${producerId}`,
         type:
@@ -2203,7 +2204,7 @@ export class EntityManager {
       `msg-in-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
     const value: Record<string, unknown> = {
-      from: req.from,
+      from: req.from_principal ?? req.from,
       payload: req.payload,
       timestamp: now,
       mode: req.mode ?? `immediate`,
@@ -2211,6 +2212,12 @@ export class EntityManager {
         req.mode === `queued` || req.mode === `paused`
           ? `pending`
           : `processed`,
+    }
+    if (req.from_principal) {
+      value.from_principal = req.from_principal
+    }
+    if (req.from_agent) {
+      value.from_agent = req.from_agent
     }
     if (req.type) {
       value.message_type = req.type
@@ -2969,6 +2976,8 @@ export class EntityManager {
       {
         entityUrl,
         from: req.from,
+        from_principal: req.from_principal,
+        from_agent: req.from_agent,
         payload: req.payload,
         key: req.key,
         type: req.type,

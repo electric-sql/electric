@@ -550,6 +550,8 @@ export interface TypedSpawnRequest {
 
 export interface SendRequest {
   from?: string
+  from_principal?: string
+  from_agent?: string
   payload?: unknown
   key?: string
   type?: string

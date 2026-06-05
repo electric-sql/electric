@@ -187,20 +187,19 @@ function createDispatchTool(ctx: HandlerContext): AgentTool {
         { systemPrompt },
         {
           initialMessage: task,
-          wake: "runFinished",
+          wake: { on: "runFinished", includeResponse: true },
         }
       )
-      const text = (await child.text()).join("\n\n")
       return {
-        content: [{ type: "text", text }],
-        details: {},
+        content: [{ type: "text", text: `Started ${child.entityUrl}; I will continue when it finishes.` }],
+        details: { childUrl: child.entityUrl },
       }
     },
   }
 }
 ```
 
-`ctx.spawn` returns an `EntityHandle`. Passing `wake: 'runFinished'` means the parent will be woken when the child's agent run completes. `child.text()` returns all text outputs from the child's stream.
+`ctx.spawn` returns an `EntityHandle`. Passing `wake: { on: 'runFinished', includeResponse: true }` means the parent will be woken later when the child's agent run completes, with the child's text response included in the wake payload. Tools should start child work and return; continuation happens in the later handler wake.
 
 ## Wiring tools together
 

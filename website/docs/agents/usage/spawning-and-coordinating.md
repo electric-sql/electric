@@ -46,35 +46,51 @@ Returned by `spawn` and `observe`:
 interface EntityHandle {
   entityUrl: string
   type?: string
-  db: EntityStreamDB // Read-only TanStack DB
+  db: EntityStreamDB // TanStack DB for the observed entity stream
   events: ChangeEvent[]
-  run: Promise<void> // Resolves when child's run completes
-  text(): Promise<string[]> // Get completed text outputs
-  send(msg: unknown): void // Send follow-up message
+  send(msg: unknown): Promise<SendResult> // Send follow-up message
   status(): ChildStatus | undefined
 }
 ```
 
 `status()` returns a `ChildStatus` object (or `undefined` if no status is known yet) with `.status`, `.entity_url`, `.entity_type`, and `.key`.
 
-## Waiting for children
+## Continuing after children finish
 
-Wait for a single child:
-
-```ts
-await child.run
-const output = (await child.text()).join("\n\n")
-```
-
-Wait for multiple children in parallel:
+Do not wait for child output inside the same wake. Instead, spawn or observe the child with a wake condition, persist enough metadata to correlate the child, and return.
 
 ```ts
-const results = await Promise.all(
-  children.map(async ({ handle }) => ({
-    text: (await handle.text()).join("\n\n"),
-  }))
-)
+async handler(ctx, wake) {
+  if (ctx.firstWake) {
+    const child = await ctx.spawn(
+      "worker",
+      "analyst",
+      { systemPrompt: "Analyze this input", tools: ["read"] },
+      {
+        initialMessage: "Initial task.",
+        wake: { on: "runFinished", includeResponse: true },
+      }
+    )
+
+    ctx.state.children.insert({
+      key: "analyst",
+      url: child.entityUrl,
+      status: "running",
+    })
+    return
+  }
+
+  const finished = wake.payload?.finished_child
+  if (finished) {
+    ctx.state.children.update(finished.url, (draft) => {
+      draft.status = finished.run_status
+      draft.response = finished.response ?? ""
+    })
+  }
+}
 ```
+
+Use `includeResponse: true` for simple text handoff. For structured or large outputs, have children write to shared state and use the `runFinished` wake as the continuation signal.
 
 ## observe
 
@@ -122,7 +138,7 @@ async handler(ctx) {
       { systemPrompt: "...", tools: ["read"] },
       {
         initialMessage: "Initial task.",
-        wake: "runFinished",
+        wake: { on: "runFinished", includeResponse: true },
       }
     )
   }
@@ -157,7 +173,7 @@ await ctx.spawn(
   { systemPrompt: "Summarise this data.", tools: ["read"] },
   {
     initialMessage: JSON.stringify(data),
-    wake: "runFinished",
+    wake: { on: "runFinished", includeResponse: true },
   }
 )
 ```

@@ -285,7 +285,7 @@ registry.define("orchestrator", {
         { topic, sharedStateId },
         {
           initialMessage: "Explore this topic and write a wiki entry.",
-          wake: "runFinished",
+          wake: { on: "runFinished", includeResponse: true },
           tags: { swarm_id: swarmId, topic },
         }
       )
