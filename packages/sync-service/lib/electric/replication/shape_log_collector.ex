@@ -492,9 +492,8 @@ defmodule Electric.Replication.ShapeLogCollector do
   end
 
   defp put_wall_clock_duration_if_commit(%TransactionFragment{
-         commit: %{tx_started_at: tx_started_at}
-       })
-       when is_integer(tx_started_at) do
+         commit: %Changes.Commit{tx_started_at: tx_started_at}
+       }) do
     OpenTelemetry.add_span_attributes(
       total_processing_time:
         System.convert_time_unit(System.monotonic_time() - tx_started_at, :native, :millisecond)

@@ -484,7 +484,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         lsn: lsn,
         last_log_offset: LogOffset.new(lsn, 2),
         has_begin?: false,
-        commit: %Commit{},
+        commit: %Commit{tx_started_at: System.monotonic_time()},
         changes: [
           %Changes.NewRecord{
             relation: {"public", "test_table"},
@@ -537,7 +537,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         lsn: lsn,
         last_log_offset: LogOffset.new(lsn, 2),
         has_begin?: true,
-        commit: %Commit{},
+        commit: %Commit{tx_started_at: System.monotonic_time()},
         changes: [
           %Changes.NewRecord{
             relation: {"public", "test_table"},
@@ -1314,7 +1314,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         lsn: lsn,
         last_log_offset: LogOffset.new(lsn, 5),
         has_begin?: false,
-        commit: %Changes.Commit{},
+        commit: %Changes.Commit{tx_started_at: System.monotonic_time()},
         changes: [
           %Changes.NewRecord{
             relation: {"public", "test_table"},
@@ -1357,7 +1357,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       lsn: lsn,
       last_log_offset: last_log_offset,
       has_begin?: true,
-      commit: %Commit{},
+      commit: %Commit{tx_started_at: System.monotonic_time()},
       changes: changes,
       affected_relations: MapSet.new(changes, & &1.relation)
     }

@@ -44,7 +44,10 @@ defmodule Support.TestUtils do
       lsn: lsn,
       last_log_offset: last_log_offset,
       has_begin?: Keyword.get(opts, :has_begin?, false),
-      commit: if(Keyword.get(opts, :has_commit?, false), do: %Changes.Commit{}),
+      commit:
+        if(Keyword.get(opts, :has_commit?, false),
+          do: %Changes.Commit{tx_started_at: System.monotonic_time()}
+        ),
       changes: changes,
       change_count: length(changes),
       affected_relations: MapSet.new(changes, & &1.relation)
