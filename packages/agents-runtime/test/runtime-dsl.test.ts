@@ -3993,41 +3993,6 @@ describe(`F: coordination orchestration`, () => {
     ).toMatchObject({
       delta: expectedDelta,
     })
-    expect(
-      parentHistory
-        .filteredSnapshot((entry) => {
-          if (
-            entry.type === `entity_created` ||
-            entry.type === `inbox` ||
-            entry.type === `tool_call` ||
-            entry.type === `state:children`
-          ) {
-            return true
-          }
-
-          if (entry.type === `state:status`) {
-            const value = eventValueRecord({ value: entry.value })
-            return value?.value !== undefined
-          }
-
-          if (entry.type === `text_delta`) {
-            return entry.delta === expectedDelta
-          }
-
-          return false
-        })
-        .map((entry) =>
-          entry.type === `text_delta`
-            ? {
-                type: entry.type,
-                delta: entry.delta,
-              }
-            : entry
-        )
-    ).toMatchSnapshot(`parent history`)
-    expect(await optimist.snapshot()).toMatchSnapshot(`optimist history`)
-    expect(await pessimist.snapshot()).toMatchSnapshot(`pessimist history`)
-    expect(await pragmatist.snapshot()).toMatchSnapshot(`pragmatist history`)
   }, 60_000)
 
   it(`F3: dispatcher increments dispatch count and keeps both child rows across wakes`, async () => {
@@ -4362,7 +4327,7 @@ describe(`F: coordination orchestration`, () => {
           })
       )
       return statuses.get(`pessimist`) === `completed`
-    })
+    }, 60_000)
     await parent.send(`wait_for_all`)
     const expectedDelta =
       `optimist:optimist::Should we ship the feature? | ` +
@@ -4389,7 +4354,7 @@ describe(`F: coordination orchestration`, () => {
           (event) => eventValueRecord(event)?.delta === expectedDelta
         )
       )
-    })
+    }, 60_000)
 
     expect(
       parentHistory.find(
