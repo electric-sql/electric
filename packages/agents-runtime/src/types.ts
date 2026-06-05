@@ -49,6 +49,10 @@ import type {
   WakeEntry,
 } from './entity-schema'
 import type {
+  SlashCommandDefinition,
+  SlashCommandHelpers,
+} from './composer-input'
+import type {
   EventSourceContract,
   EventSourceSubscription,
   EventSourceSubscriptionInput,
@@ -357,7 +361,13 @@ export interface AttachmentsApi {
 }
 
 export type TimelineItem =
-  | { kind: `inbox`; at: number; key: string; payload: unknown }
+  | {
+      kind: `inbox`
+      at: number
+      key: string
+      payload: unknown
+      messageType?: string
+    }
   | { kind: `wake`; at: number; payload: unknown }
   | { kind: `signal`; at: number; signal: EntitySignalEntry }
   | {
@@ -528,6 +538,7 @@ export interface RuntimeContext {
     args?: Record<string, unknown>,
     opts?: {
       initialMessage?: unknown
+      initialMessageType?: string
       tags?: Record<string, string>
       observe?: boolean
       sandbox?: SpawnSandboxOption
@@ -838,6 +849,27 @@ export type WakeEvent = {
   fullRef?: string
 }
 
+export type HandlerWake = InboxHandlerWake | OtherHandlerWake
+
+export type InboxHandlerWake = {
+  type: `inbox`
+  source: string
+  raw: WakeEvent
+  message: {
+    type: string
+    payload: unknown
+    from?: string
+  }
+}
+
+export type OtherHandlerWake = {
+  type: `other`
+  wakeType: string
+  source: string
+  payload?: unknown
+  raw: WakeEvent
+}
+
 export type AgentRunResult = {
   result?: unknown
   writes: Array<ChangeEvent>
@@ -929,6 +961,8 @@ export interface HandlerContext<
   TDb extends EntityStreamDBWithActions = EntityStreamDBWithActions,
 > {
   firstWake: boolean
+  wake: HandlerWake
+  slashCommands: SlashCommandHelpers
   tags: Readonly<EntityTags>
   principal?: RuntimePrincipal
   entityUrl: string
@@ -971,6 +1005,7 @@ export interface HandlerContext<
     args?: Record<string, unknown>,
     opts?: {
       initialMessage?: unknown
+      initialMessageType?: string
       wake?: Wake
       tags?: Record<string, string>
       /**
@@ -1050,6 +1085,7 @@ export interface EntityDefinition<
   inboxSchemas?: Record<string, StandardJSONSchemaV1>
   stateSchemas?: Record<string, StandardJSONSchemaV1>
   permissionGrants?: ReadonlyArray<EntityTypePermissionGrantDefinition>
+  slashCommands?: Array<SlashCommandDefinition>
 
   handler: (
     ctx: HandlerContext<

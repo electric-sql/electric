@@ -633,6 +633,7 @@ export class PostgresRegistry {
         creationSchema: et.creation_schema ?? null,
         inboxSchemas: et.inbox_schemas ?? null,
         stateSchemas: et.state_schemas ?? null,
+        slashCommands: et.slash_commands ?? null,
         serveEndpoint: et.serve_endpoint ?? null,
         defaultDispatchPolicy: et.default_dispatch_policy ?? null,
         revision: et.revision,
@@ -646,6 +647,7 @@ export class PostgresRegistry {
           creationSchema: et.creation_schema ?? null,
           inboxSchemas: et.inbox_schemas ?? null,
           stateSchemas: et.state_schemas ?? null,
+          slashCommands: et.slash_commands ?? null,
           serveEndpoint: et.serve_endpoint ?? null,
           defaultDispatchPolicy: et.default_dispatch_policy ?? null,
           revision: et.revision,
@@ -668,6 +670,7 @@ export class PostgresRegistry {
         creationSchema: et.creation_schema ?? null,
         inboxSchemas: et.inbox_schemas ?? null,
         stateSchemas: et.state_schemas ?? null,
+        slashCommands: et.slash_commands ?? null,
         serveEndpoint: et.serve_endpoint ?? null,
         defaultDispatchPolicy: et.default_dispatch_policy ?? null,
         revision: et.revision,
@@ -709,6 +712,7 @@ export class PostgresRegistry {
         creationSchema: et.creation_schema ?? null,
         inboxSchemas: et.inbox_schemas ?? null,
         stateSchemas: et.state_schemas ?? null,
+        slashCommands: et.slash_commands ?? null,
         serveEndpoint: et.serve_endpoint ?? null,
         defaultDispatchPolicy: et.default_dispatch_policy ?? null,
         revision: et.revision,
@@ -1829,6 +1833,9 @@ export class PostgresRegistry {
       state_schemas: row.stateSchemas as
         | Record<string, Record<string, unknown>>
         | undefined,
+      slash_commands:
+        (row.slashCommands as ElectricAgentsEntityType[`slash_commands`]) ??
+        undefined,
       serve_endpoint: row.serveEndpoint ?? undefined,
       default_dispatch_policy:
         (row.defaultDispatchPolicy as ElectricAgentsEntityType[`default_dispatch_policy`]) ??

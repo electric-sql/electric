@@ -4,6 +4,7 @@
 
 import type {
   PullWakeRunnerHealth,
+  SlashCommandDefinition,
   WebhookNotification,
 } from '@electric-ax/agents-runtime'
 import type { Principal } from './principal.js'
@@ -499,6 +500,7 @@ export interface ElectricAgentsEntityType {
   creation_schema?: Record<string, unknown>
   inbox_schemas?: Record<string, Record<string, unknown>>
   state_schemas?: Record<string, Record<string, unknown>>
+  slash_commands?: Array<SlashCommandDefinition>
   serve_endpoint?: string
   default_dispatch_policy?: DispatchPolicy
   revision: number
@@ -512,6 +514,7 @@ export interface RegisterEntityTypeRequest {
   creation_schema?: Record<string, unknown>
   inbox_schemas?: Record<string, Record<string, unknown>>
   state_schemas?: Record<string, Record<string, unknown>>
+  slash_commands?: Array<SlashCommandDefinition>
   serve_endpoint?: string
   default_dispatch_policy?: DispatchPolicy
   permission_grants?: Array<EntityTypePermissionGrantInput>
@@ -530,6 +533,7 @@ export interface TypedSpawnRequest {
    */
   sandbox?: SandboxChoice
   initialMessage?: unknown
+  initialMessageType?: string
   created_by?: string
   wake?: {
     subscriberUrl: string

@@ -56,6 +56,7 @@ import {
   formatAbsoluteDateTimeVerbose,
   formatChatTimestamp,
 } from '../lib/formatTime'
+import { readTextPayload } from '../lib/sendMessage'
 import styles from './EntityTimeline.module.css'
 import type { ElectricUser } from '../lib/ElectricAgentsProvider'
 import type {
@@ -80,8 +81,8 @@ function stringifyPayload(payload: unknown, spaces?: number): string {
   if (payload == null) return ``
   if (typeof payload === `string`) return payload
   if (typeof payload === `object`) {
-    const text = (payload as { text?: unknown }).text
-    if (typeof text === `string`) return text
+    const text = readTextPayload(payload)
+    if (text) return text
     try {
       return JSON.stringify(payload, null, spaces) ?? String(payload)
     } catch {
@@ -92,7 +93,8 @@ function stringifyPayload(payload: unknown, spaces?: number): string {
 }
 
 function readInboxText(payload: unknown): string {
-  return stringifyPayload(payload)
+  const text = readTextPayload(payload)
+  return text || stringifyPayload(payload)
 }
 
 function readInboxPayloadDisplay(payload: unknown): string {

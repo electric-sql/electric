@@ -62,6 +62,7 @@ export interface WiringConfig {
     parentUrl: string,
     opts?: {
       initialMessage?: unknown
+      initialMessageType?: string
       wake?: Wake
       tags?: Record<string, string>
       sandbox?: SpawnSandboxOption
@@ -125,6 +126,7 @@ export interface SetupContextResult {
     args?: Record<string, unknown>,
     opts?: {
       initialMessage?: unknown
+      initialMessageType?: string
       wake?: Wake
       tags?: Record<string, string>
       observe?: boolean
@@ -879,6 +881,7 @@ export function createSetupContext(
       spawnArgs?: Record<string, unknown>,
       opts?: {
         initialMessage?: unknown
+        initialMessageType?: string
         wake?: Wake
         tags?: Record<string, string>
         observe?: boolean
@@ -971,6 +974,7 @@ export function createSetupContext(
               entityUrl,
               {
                 initialMessage: opts?.initialMessage,
+                initialMessageType: opts?.initialMessageType,
                 wake: opts?.wake,
                 tags: opts?.tags,
                 sandbox: opts?.sandbox,

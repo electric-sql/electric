@@ -1,13 +1,7 @@
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowUp, Cpu, Sparkles } from 'lucide-react'
 import { eq, not, useLiveQuery } from '@tanstack/react-db'
+import { COMPOSER_INPUT_MESSAGE_TYPE } from '@electric-ax/agents-runtime/client'
 import { nanoid } from 'nanoid'
 import { useElectricAgents } from '../../lib/ElectricAgentsProvider'
 import { useWorkspace } from '../../hooks/useWorkspace'
@@ -35,12 +29,18 @@ import {
   isModelProperty,
   schemaModelSupportsImageInput,
 } from '../../lib/modelCapabilities'
+import { ComposerEditor, serializeComposerInput } from '../ComposerEditor'
+import { ComposerShell } from '../ComposerShell'
 import styles from '../NewSessionPage.module.css'
 import type {
   ElectricEntityType,
   ElectricRunner,
   ElectricSandboxProfile,
 } from '../../lib/ElectricAgentsProvider'
+import type {
+  ComposerInputPayload,
+  SlashCommandRow,
+} from '@electric-ax/agents-runtime/client'
 import type { StandaloneViewProps } from '../../lib/workspace/viewRegistry'
 
 /**
@@ -154,24 +154,26 @@ export function NewSessionView({
     () => recentDirs[0] ?? null
   )
 
-  const { data: entityTypes = [] } = useLiveQuery(
-    (query) => {
-      if (!entityTypesCollection) return undefined
-      return query
-        .from({ t: entityTypesCollection })
-        .where(({ t }) => not(eq(t.name, `worker`)))
-        .where(({ t }) => not(eq(t.name, `principal`)))
-        .orderBy(({ t }) => t.name, `asc`)
-    },
-    [entityTypesCollection]
-  )
+  const { data: entityTypes = [], isLoading: entityTypesLoading } =
+    useLiveQuery(
+      (query) => {
+        if (!entityTypesCollection) return undefined
+        return query
+          .from({ t: entityTypesCollection })
+          .where(({ t }) => not(eq(t.name, `worker`)))
+          .where(({ t }) => not(eq(t.name, `principal`)))
+          .orderBy(({ t }) => t.name, `asc`)
+      },
+      [entityTypesCollection]
+    )
 
-  const { data: enabledRunners = [] } = useLiveQuery(
+  const { data: enabledRunners = [], isLoading: runnersLoading } = useLiveQuery(
     (query) => {
       if (!runnersCollection) return undefined
       return query
         .from({ r: runnersCollection })
         .where(({ r }) => eq(r.admin_status, `enabled`))
+        .orderBy(({ r }) => r.updated_at, `desc`)
         .orderBy(({ r }) => r.label, `asc`)
     },
     [runnersCollection]
@@ -182,16 +184,20 @@ export function NewSessionView({
   // selection (preserves the old desktop behaviour of routing wakes to
   // the bundled local runtime). `null` outside Electron / before the
   // first state fetch.
+  const isDesktop = typeof window !== `undefined` && Boolean(window.electronAPI)
   const [desktopRunnerId, setDesktopRunnerId] = useState<string | null>(null)
+  const [desktopRunnerLoaded, setDesktopRunnerLoaded] = useState(!isDesktop)
   useEffect(() => {
     let cancelled = false
     void loadDesktopState().then((s) => {
       if (cancelled) return
       setDesktopRunnerId(s?.pullWakeRunnerId?.trim() || null)
+      setDesktopRunnerLoaded(true)
     })
-    const off = onDesktopStateChanged((s) =>
+    const off = onDesktopStateChanged((s) => {
       setDesktopRunnerId(s?.pullWakeRunnerId?.trim() || null)
-    )
+      setDesktopRunnerLoaded(true)
+    })
     return () => {
       cancelled = true
       off?.()
@@ -204,6 +210,19 @@ export function NewSessionView({
     userSelectedRunnerRef.current = true
     setSelectedRunnerId(id)
   }, [])
+  const selectedRunnerStillExists =
+    selectedRunnerId !== null &&
+    enabledRunners.some((r) => r.id === selectedRunnerId)
+  const desktopRunnerStillExists =
+    desktopRunnerId !== null &&
+    enabledRunners.some((r) => r.id === desktopRunnerId)
+  const effectiveRunnerId =
+    !userSelectedRunnerRef.current && desktopRunnerStillExists
+      ? desktopRunnerId
+      : selectedRunnerStillExists
+        ? selectedRunnerId
+        : (enabledRunners[0]?.id ?? null)
+
   // Re-evaluate the default whenever the list of runners or the desktop's
   // runner id changes. An explicit user choice (tracked via
   // `userSelectedRunnerRef`) wins while it still exists; otherwise prefer the
@@ -215,16 +234,9 @@ export function NewSessionView({
       return
     }
 
-    const selectedRunnerStillExists =
-      selectedRunnerId !== null &&
-      enabledRunners.some((r) => r.id === selectedRunnerId)
     if (!selectedRunnerStillExists) {
       userSelectedRunnerRef.current = false
     }
-
-    const desktopRunnerStillExists =
-      desktopRunnerId !== null &&
-      enabledRunners.some((r) => r.id === desktopRunnerId)
 
     const preferredRunnerId =
       !userSelectedRunnerRef.current && desktopRunnerStillExists
@@ -236,14 +248,20 @@ export function NewSessionView({
     if (selectedRunnerId !== preferredRunnerId) {
       setSelectedRunnerId(preferredRunnerId)
     }
-  }, [enabledRunners, desktopRunnerId, selectedRunnerId])
+  }, [
+    desktopRunnerId,
+    desktopRunnerStillExists,
+    enabledRunners,
+    selectedRunnerId,
+    selectedRunnerStillExists,
+  ])
 
   // Sandbox profiles ride alongside the runner row. Read the advertised
   // list off whichever runner the spawn will dispatch to, preserving the
   // runtime's advertised order (default profile first).
   const allSandboxProfiles = useMemo<Array<ElectricSandboxProfile>>(() => {
-    if (!selectedRunnerId) return []
-    const runner = enabledRunners.find((r) => r.id === selectedRunnerId)
+    if (!effectiveRunnerId) return []
+    const runner = enabledRunners.find((r) => r.id === effectiveRunnerId)
     if (!runner) return []
     // A runner row may sync before its sandbox_profiles are populated (or
     // predate the column), so guard against a missing/non-array value.
@@ -255,7 +273,7 @@ export function NewSessionView({
     // label put "Docker" ahead of "Local", defaulting new sessions to Docker
     // wherever the daemon is reachable.
     return [...(runner.sandbox_profiles ?? [])]
-  }, [selectedRunnerId, enabledRunners])
+  }, [effectiveRunnerId, enabledRunners])
 
   const defaultAgent = useMemo(
     () => entityTypes.find((t) => t.name === DEFAULT_AGENT_NAME) ?? null,
@@ -275,7 +293,8 @@ export function NewSessionView({
     async (
       typeName: string,
       args?: Record<string, unknown>,
-      initialUserText?: string,
+      initialMessage?: unknown,
+      initialMessageType?: string,
       initialAttachments?: Array<File>,
       sandboxProfile?: string | null
     ): Promise<boolean> => {
@@ -284,16 +303,24 @@ export function NewSessionView({
       const name = nanoid(10)
       const hasInitialAttachments =
         initialAttachments !== undefined && initialAttachments.length > 0
-      const initialText = initialUserText?.trim() ?? ``
+      const initialText =
+        typeof initialMessage === `string`
+          ? initialMessage.trim()
+          : initialMessage &&
+              typeof initialMessage === `object` &&
+              typeof (initialMessage as { source?: unknown }).source ===
+                `string`
+            ? (initialMessage as { source: string }).source.trim()
+            : ``
       const tx = spawnEntity({
         type: typeName,
         name,
         args,
-        ...(selectedRunnerId
+        ...(effectiveRunnerId
           ? {
               dispatch_policy: {
                 targets: [
-                  { type: `runner` as const, runnerId: selectedRunnerId },
+                  { type: `runner` as const, runnerId: effectiveRunnerId },
                 ],
               },
             }
@@ -308,9 +335,10 @@ export function NewSessionView({
               },
             }
           : {}),
-        ...(initialText && !hasInitialAttachments
-          ? { initialMessage: initialText }
+        ...(initialMessage !== undefined && !hasInitialAttachments
+          ? { initialMessage }
           : {}),
+        ...(initialMessageType ? { initialMessageType } : {}),
       })
       const entityUrl = `/${typeName}/${name}`
       try {
@@ -335,7 +363,7 @@ export function NewSessionView({
         return false
       }
     },
-    [baseUrl, helpers, selectedRunnerId, spawnEntity, tileId]
+    [baseUrl, effectiveRunnerId, helpers, spawnEntity, tileId]
   )
 
   const handleSelectType = useCallback(
@@ -376,7 +404,7 @@ export function NewSessionView({
 
   const handleStartDefault = useCallback(
     async (
-      text: string,
+      input: string | ComposerInputPayload,
       args: Record<string, unknown>,
       attachments: Array<File>,
       sandboxProfile: string | null
@@ -395,16 +423,36 @@ export function NewSessionView({
       const includeWorkingDir = workingDirectory !== null && !profileIsRemote
       const augmented = includeWorkingDir ? { ...args, workingDirectory } : args
       if (includeWorkingDir) addRecentDir(workingDirectory)
+      const hasAttachments = attachments.length > 0
+      const initialMessage =
+        typeof input === `string`
+          ? input
+          : hasAttachments
+            ? input.source
+            : input
+      const initialMessageType =
+        typeof input === `string` || hasAttachments
+          ? undefined
+          : COMPOSER_INPUT_MESSAGE_TYPE
       return await doSpawn(
         defaultAgent.name,
         augmented,
-        text,
+        initialMessage,
+        initialMessageType,
         attachments,
         sandboxProfile
       )
     },
     [defaultAgent, doSpawn, workingDirectory, addRecentDir, allSandboxProfiles]
   )
+
+  const defaultComposerReady =
+    Boolean(spawnEntity) &&
+    !entityTypesLoading &&
+    !runnersLoading &&
+    desktopRunnerLoaded &&
+    (!isDesktop || desktopRunnerId === null || desktopRunnerStillExists) &&
+    effectiveRunnerId !== null
 
   return (
     <div className={styles.body}>
@@ -420,6 +468,7 @@ export function NewSessionView({
                 args,
                 undefined,
                 undefined,
+                undefined,
                 sandboxProfile
               )
             }
@@ -433,11 +482,12 @@ export function NewSessionView({
             onSelectType={handleSelectType}
             onStartDefault={handleStartDefault}
             spawnReady={Boolean(spawnEntity)}
+            defaultComposerReady={defaultComposerReady}
             error={error}
             workingDirectory={workingDirectory}
             onChangeWorkingDirectory={setWorkingDirectory}
             runners={enabledRunners}
-            selectedRunnerId={selectedRunnerId}
+            selectedRunnerId={effectiveRunnerId}
             onChangeSelectedRunner={handleChangeSelectedRunner}
           />
         )}
@@ -453,6 +503,7 @@ function Picker({
   onSelectType,
   onStartDefault,
   spawnReady,
+  defaultComposerReady,
   error,
   workingDirectory,
   onChangeWorkingDirectory,
@@ -465,12 +516,13 @@ function Picker({
   defaultAgentSandboxProfiles: Array<ElectricSandboxProfile>
   onSelectType: (t: ElectricEntityType) => void
   onStartDefault: (
-    text: string,
+    input: string | ComposerInputPayload,
     args: Record<string, unknown>,
     attachments: Array<File>,
     sandboxProfile: string | null
   ) => Promise<boolean>
   spawnReady: boolean
+  defaultComposerReady: boolean
   error: string | null
   workingDirectory: string | null
   onChangeWorkingDirectory: (path: string | null) => void
@@ -503,7 +555,7 @@ function Picker({
           agent={defaultAgent}
           sandboxProfiles={defaultAgentSandboxProfiles}
           onSubmit={onStartDefault}
-          disabled={!spawnReady}
+          disabled={!defaultComposerReady}
           workingDirectory={workingDirectory}
           onChangeWorkingDirectory={onChangeWorkingDirectory}
           runners={runners}
@@ -849,7 +901,7 @@ function DefaultAgentComposer({
   agent: ElectricEntityType
   sandboxProfiles: ReadonlyArray<ElectricSandboxProfile>
   onSubmit: (
-    text: string,
+    input: string | ComposerInputPayload,
     args: Record<string, unknown>,
     attachments: Array<File>,
     sandboxProfile: string | null
@@ -873,10 +925,20 @@ function DefaultAgentComposer({
   )
   const [value, setValue] = useState(``)
   const [submitting, setSubmitting] = useState(false)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const composerFocusRef = useRef<{ focus: () => void } | null>(null)
   const inlineProps = useMemo(
     () => inlineSchemaProperties(agent.creation_schema),
     [agent.creation_schema]
+  )
+  const slashCommands = useMemo<Array<SlashCommandRow>>(
+    () =>
+      (agent.slash_commands ?? []).map((command) => ({
+        ...command,
+        key: `static:${command.name}`,
+        source: `static`,
+        updated_at: agent.updated_at,
+      })),
+    [agent.slash_commands, agent.updated_at]
   )
   const [args, setArgs] = useState<Record<string, unknown>>(() => {
     const init: Record<string, unknown> = {}
@@ -917,50 +979,55 @@ function DefaultAgentComposer({
   } = useAttachmentDrafts({
     policy: imageAttachmentDraftPolicy,
     disabled: disabled || submitting || !imageAttachmentsEnabled,
-    focusRef: textareaRef,
+    focusRef: composerFocusRef,
   })
 
   useEffect(() => {
     if (!imageAttachmentsEnabled) clearAttachments()
   }, [imageAttachmentsEnabled, clearAttachments])
 
-  useLayoutEffect(() => {
-    const el = textareaRef.current
-    if (!el) return
-    el.style.height = `auto`
-    el.style.height = `${el.scrollHeight}px`
-  }, [value])
-
-  const submit = useCallback(() => {
-    const trimmed = value.trim()
-    const files = imageAttachmentsEnabled ? attachments : []
-    if ((!trimmed && files.length === 0) || disabled || submitting) {
-      return
-    }
-    setSubmitting(true)
-    const cleaned: Record<string, unknown> = {}
-    for (const [k, v] of Object.entries(args)) {
-      if (v !== undefined && v !== ``) cleaned[k] = v
-    }
-    void onSubmit(trimmed, cleaned, files, selectedSandboxProfile)
-      .then((ok) => {
-        if (ok) clearAttachments()
-      })
-      .catch(() => undefined)
-      .finally(() => {
-        setSubmitting(false)
-      })
-  }, [
-    args,
-    attachments,
-    imageAttachmentsEnabled,
-    clearAttachments,
-    disabled,
-    onSubmit,
-    selectedSandboxProfile,
-    submitting,
-    value,
-  ])
+  const submit = useCallback(
+    (payload?: ComposerInputPayload) => {
+      const files = imageAttachmentsEnabled ? attachments : []
+      const nextPayload =
+        payload ?? serializeComposerInput(value, slashCommands)
+      const trimmed = nextPayload.source.trim()
+      if ((!trimmed && files.length === 0) || disabled || submitting) return
+      setSubmitting(true)
+      const cleaned: Record<string, unknown> = {}
+      for (const [k, v] of Object.entries(args)) {
+        if (v !== undefined && v !== ``) cleaned[k] = v
+      }
+      void onSubmit(
+        files.length > 0 ? trimmed : nextPayload,
+        cleaned,
+        files,
+        selectedSandboxProfile
+      )
+        .then((ok) => {
+          if (ok) {
+            clearAttachments()
+            setValue(``)
+          }
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          setSubmitting(false)
+        })
+    },
+    [
+      args,
+      attachments,
+      imageAttachmentsEnabled,
+      clearAttachments,
+      disabled,
+      onSubmit,
+      selectedSandboxProfile,
+      slashCommands,
+      submitting,
+      value,
+    ]
+  )
 
   const attachmentCount = imageAttachmentsEnabled ? attachments.length : 0
   const isActive = Boolean(
@@ -977,40 +1044,22 @@ function DefaultAgentComposer({
         .filter(Boolean)
         .join(` `)}
     >
-      <div
-        className={[
-          styles.composer,
-          dropActive ? styles.composerDropActive : null,
-        ]
-          .filter(Boolean)
-          .join(` `)}
-        {...dropZoneProps}
-      >
-        {imageAttachmentsEnabled && (
-          <AttachmentPreviewTray
-            attachments={attachments}
-            onRemove={removeAttachment}
-          />
-        )}
-        <textarea
-          ref={textareaRef}
-          autoFocus
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onPaste={handlePaste}
-          onKeyDown={(e) => {
-            if (e.key === `Enter` && !e.shiftKey) {
-              e.preventDefault()
-              submit()
-            }
-          }}
-          placeholder={placeholder}
-          disabled={disabled || submitting}
-          rows={1}
-          className={styles.composerTextarea}
-        />
-        <div className={styles.composerFooter}>
-          <div className={styles.composerControls}>
+      <ComposerShell
+        className={styles.spawnComposerShell}
+        disabled={disabled}
+        dropActive={dropActive}
+        onPaste={handlePaste}
+        dropZoneProps={dropZoneProps}
+        attachments={
+          imageAttachmentsEnabled ? (
+            <AttachmentPreviewTray
+              attachments={attachments}
+              onRemove={removeAttachment}
+            />
+          ) : null
+        }
+        controls={
+          <>
             {imageAttachmentsEnabled && (
               <AttachmentActionMenu
                 disabled={disabled || submitting}
@@ -1047,15 +1096,17 @@ function DefaultAgentComposer({
                 />
               ) : null
             )}
-          </div>
-          <div className={styles.composerSendCluster}>
+          </>
+        }
+        send={
+          <>
             {submitting && (
               <span className={styles.composerHint}>Starting…</span>
             )}
             <button
               type="button"
               aria-label={`Start ${agent.name} session`}
-              onClick={submit}
+              onClick={() => submit()}
               disabled={!isActive}
               className={[
                 styles.composerSend,
@@ -1066,9 +1117,18 @@ function DefaultAgentComposer({
             >
               <Icon icon={ArrowUp} size={3} />
             </button>
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      >
+        <ComposerEditor
+          value={value}
+          onChange={setValue}
+          onSubmit={submit}
+          slashCommands={slashCommands}
+          placeholder={placeholder}
+          disabled={disabled || submitting}
+        />
+      </ComposerShell>
       <div className={styles.composerMeta}>
         {runners.length > 0 && (
           <RunnerPickerPill

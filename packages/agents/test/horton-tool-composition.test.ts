@@ -54,6 +54,10 @@ async function captureAgentConfig(
         throw new Error(`ENOENT`)
       }),
     },
+    slashCommands: { replaceOwned: vi.fn() },
+    insertContext: vi.fn(),
+    removeContext: vi.fn(),
+    getContext: vi.fn(),
     useContext: vi.fn(),
     useAgent,
     agent: { run: vi.fn(async () => {}) },

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { generateTitle } from '../src/agents/horton'
+import { extractFirstUserMessage, generateTitle } from '../src/agents/horton'
 
 describe(`generateTitle`, () => {
   it(`uses the injected llmCall and returns its trimmed result`, async () => {
@@ -32,5 +32,32 @@ describe(`generateTitle`, () => {
       llmCall
     )
     expect(result).toBe(`Refactor Auth Middleware`)
+  })
+})
+
+describe(`extractFirstUserMessage`, () => {
+  it(`uses composer_input source text for title generation`, async () => {
+    const ctx = {
+      db: {
+        collections: {
+          inbox: {
+            toArray: [
+              {
+                from: `/principal/user%3A1`,
+                _seq: 1,
+                payload: {
+                  source: `Help me test composer titles`,
+                  nodes: [],
+                },
+              },
+            ],
+          },
+        },
+      },
+    }
+
+    await expect(extractFirstUserMessage(ctx as any)).resolves.toBe(
+      `Help me test composer titles`
+    )
   })
 })

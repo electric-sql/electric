@@ -303,6 +303,7 @@ export function createTestHandlerContext(
     writeEvent?: (event: ChangeEvent) => void
     wakeEvent?: WakeEvent
     hydratedEventSourceWake?: HydratedEventSourceWake | null
+    prepareAgentRun?: () => Promise<void>
   } = {}
 ) {
   const db = opts.db ?? buildStreamFixture([])
@@ -333,6 +334,7 @@ export function createTestHandlerContext(
       payload: `hi`,
     },
     hydratedEventSourceWake: opts.hydratedEventSourceWake,
+    prepareAgentRun: opts.prepareAgentRun,
     doObserve: vi.fn(),
     doSpawn: vi.fn(),
     doMkdb: vi.fn(),

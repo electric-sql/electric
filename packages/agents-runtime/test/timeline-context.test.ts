@@ -123,6 +123,55 @@ describe(`timeline context`, () => {
     ])
   })
 
+  it(`projects composer_input inbox payloads as source text`, () => {
+    expect(
+      buildTimelineMessages({
+        runs: [],
+        inbox: [
+          {
+            key: `msg-composer`,
+            order: order(1),
+            from: `user`,
+            message_type: `composer_input`,
+            payload: {
+              source: `/quickstart with auth`,
+              nodes: [
+                {
+                  kind: `slash_command`,
+                  start: 0,
+                  end: 11,
+                  raw: `/quickstart`,
+                  name: `quickstart`,
+                },
+              ],
+            },
+            timestamp: `2026-03-28T00:00:00.000Z`,
+          },
+        ],
+        wakes: [],
+      })
+    ).toEqual([{ role: `user`, content: `/quickstart with auth` }])
+  })
+
+  it(`projects edited composer_input payloads that lost source as plain text`, () => {
+    const result = buildTimelineMessages({
+      runs: [],
+      inbox: [
+        {
+          key: `msg-edited`,
+          order: order(1),
+          from: `user`,
+          message_type: `composer_input`,
+          payload: { text: `updated text` },
+          timestamp: `2026-03-28T00:00:00.000Z`,
+        },
+      ],
+      wakes: [],
+    })
+
+    expect(result).toEqual([{ role: `user`, content: `updated text` }])
+  })
+
   it(`buildTimelineMessages keeps pending tool calls without emitting tool results`, () => {
     expect(
       buildTimelineMessages({

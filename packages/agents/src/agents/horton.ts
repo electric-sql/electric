@@ -2,7 +2,6 @@ import path from 'node:path'
 import { z } from 'zod'
 import { serverLog } from '../log'
 import { createHortonDocsSupport } from '../docs/knowledge-base'
-import { createSkillTools } from '@electric-ax/agents-runtime'
 import { createSpawnWorkerTool } from '../tools/spawn-worker'
 import {
   modelInputSchemaDefs,
@@ -14,6 +13,11 @@ import {
   type BuiltinModelCatalog,
 } from '../model-catalog'
 import type { AgentTool, StreamFn } from '@mariozechner/pi-agent-core'
+import {
+  buildSkillSlashCommands,
+  createContextSkillLoader,
+  completeWithLowCostModel,
+} from '@electric-ax/agents-runtime'
 import type {
   EntityRegistry,
   HandlerContext,
@@ -29,7 +33,6 @@ import {
   createSendTool,
 } from '@electric-ax/agents-runtime/tools'
 import type { Sandbox } from '@electric-ax/agents-runtime/sandbox'
-import { completeWithLowCostModel } from '@electric-ax/agents-runtime'
 import { mcp } from '@electric-ax/agents-mcp'
 import type { SkillsRegistry } from '@electric-ax/agents-runtime'
 
@@ -38,9 +41,10 @@ export const HORTON_MODEL = `claude-sonnet-4-6`
 const TITLE_SYSTEM_PROMPT =
   `You generate concise chat session titles in 3-5 words. ` +
   `Respond with only the title, no quotes, no punctuation, no preamble.`
-
 const TITLE_USER_PROMPT = (userMessage: string): string =>
   `User request:\n${userMessage}`
+const TITLE_GENERATION_TIMEOUT_MS = 8_000
+const HORTON_SKILLS_SLASH_COMMAND_OWNER = `horton:skills`
 
 const TITLE_STOP_WORDS = new Set([
   `a`,
@@ -140,6 +144,23 @@ function createConfiguredTitleCall(
       prompt,
       maxTokens: 64,
     })
+}
+
+function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  description: string
+): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined
+  const timeoutPromise = new Promise<T>((_resolve, reject) => {
+    timeout = setTimeout(() => {
+      reject(new Error(`${description} timed out after ${ms}ms`))
+    }, ms)
+  })
+
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timeout) clearTimeout(timeout)
+  })
 }
 
 export async function generateTitle(
@@ -318,8 +339,12 @@ function payloadToTitleText(payload: unknown): string {
   if (typeof payload === `string`) return payload
   if (payload == null) return ``
   if (typeof payload === `object`) {
-    const text = (payload as Record<string, unknown>).text
-    return typeof text === `string` ? text : JSON.stringify(payload)
+    const record = payload as Record<string, unknown>
+    const text = record.text
+    if (typeof text === `string`) return text
+    const source = record.source
+    if (typeof source === `string`) return source
+    return JSON.stringify(payload)
   }
   return String(payload)
 }
@@ -453,12 +478,17 @@ function createAssistantHandler(options: {
     modelCatalog,
     docsUrl,
   } = options
-  const hasSkills = Boolean(skillsRegistry && skillsRegistry.catalog.size > 0)
+  const skillLoader = createContextSkillLoader(skillsRegistry, {
+    slashCommandOwner: HORTON_SKILLS_SLASH_COMMAND_OWNER,
+  })
+  const hasSkills = skillLoader.hasSkills
 
   return async function assistantHandler(
     ctx: HandlerContext,
     wake: WakeEvent
   ): Promise<void> {
+    const loadedSkills = await skillLoader.load(ctx)
+
     const readSet = new Set<string>()
     const modelConfig = resolveBuiltinModelConfig(modelCatalog, ctx.args)
     const sourceBudget = resolveBuiltinModelSourceBudget(modelConfig)
@@ -481,9 +511,7 @@ function createAssistantHandler(options: {
         modelCatalog,
         logPrefix: `[horton ${ctx.entityUrl}]`,
       }),
-      ...(skillsRegistry && skillsRegistry.catalog.size > 0
-        ? createSkillTools(skillsRegistry, ctx)
-        : []),
+      ...loadedSkills.tools,
       ...mcp.tools(),
     ]
     const hasEventSourceTools = tools.some(
@@ -499,11 +527,16 @@ function createAssistantHandler(options: {
           try {
             const result = await generateTitle(
               firstUserMessage,
-              createConfiguredTitleCall(
-                modelCatalog,
-                modelConfig,
-                `[horton ${ctx.entityUrl}]`
-              ),
+              (prompt) =>
+                withTimeout(
+                  createConfiguredTitleCall(
+                    modelCatalog,
+                    modelConfig,
+                    `[horton ${ctx.entityUrl}]`
+                  )(prompt),
+                  TITLE_GENERATION_TIMEOUT_MS,
+                  `title generation`
+                ),
               (reason) => {
                 serverLog.warn(
                   `[horton ${ctx.entityUrl}] title generation fell back to local title: ${reason}`
@@ -515,11 +548,16 @@ function createAssistantHandler(options: {
             serverLog.warn(
               `[horton ${ctx.entityUrl}] title generation failed: ${err instanceof Error ? err.message : String(err)}`
             )
+            title = buildFallbackTitle(firstUserMessage)
           }
 
           if (title !== null) {
             try {
-              await ctx.setTag(`title`, title)
+              await withTimeout(
+                ctx.setTag(`title`, title),
+                TITLE_GENERATION_TIMEOUT_MS,
+                `set title tag`
+              )
             } catch (err) {
               serverLog.warn(
                 `[horton ${ctx.entityUrl}] setTag failed: ${err instanceof Error ? err.message : String(err)}`
@@ -562,13 +600,7 @@ function createAssistantHandler(options: {
               }
             : {}),
           ...(skillsRegistry && skillsRegistry.catalog.size > 0
-            ? {
-                skills_catalog: {
-                  content: () => skillsRegistry.renderCatalog(2_000),
-                  max: 2_000,
-                  cache: `stable` as const,
-                },
-              }
+            ? loadedSkills.sources
             : {}),
         },
       })
@@ -576,11 +608,7 @@ function createAssistantHandler(options: {
       ctx.useContext({
         sourceBudget,
         sources: {
-          skills_catalog: {
-            content: () => skillsRegistry.renderCatalog(2_000),
-            max: 2_000,
-            cache: `stable` as const,
-          },
+          ...loadedSkills.sources,
           conversation: {
             content: () => ctx.timelineMessages(),
             cache: `volatile`,
@@ -719,6 +747,7 @@ export function registerHorton(
         permission: `manage`,
       },
     ],
+    slashCommands: buildSkillSlashCommands(skillsRegistry),
     handler: assistantHandler,
   })
 

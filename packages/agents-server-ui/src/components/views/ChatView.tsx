@@ -16,6 +16,7 @@ import type { ViewProps } from '../../lib/workspace/viewRegistry'
 import type { EntityTimelineQueryRow } from '@electric-ax/agents-runtime/client'
 import type { EventPointer } from '@electric-ax/agents-runtime'
 import type { OptimisticInboxMessage } from '../../lib/sendMessage'
+import type { SlashCommandRow } from '@electric-ax/agents-runtime/client'
 import type { ForkFromHereAction } from '../UserMessage'
 
 const CHAT_VIEW_PERMISSIONS: ReadonlyArray<EntityPermission> = [
@@ -249,6 +250,16 @@ function GenericChatBody({
   const drawerPendingInbox = inlinePendingInbox
     ? visiblePendingInbox.slice(1)
     : visiblePendingInbox
+  const fallbackSlashCommands = useMemo<Array<SlashCommandRow>>(
+    () =>
+      (matchingEntityTypes[0]?.slash_commands ?? []).map((command) => ({
+        ...command,
+        key: `static:${command.name}`,
+        source: `static`,
+        updated_at: matchingEntityTypes[0]?.updated_at ?? entity.updated_at,
+      })),
+    [entity.updated_at, matchingEntityTypes]
+  )
 
   // If the timeline subscription errors out for an entity that isn't
   // currently spawning (so the failure isn't transient), bounce back to
@@ -356,6 +367,7 @@ function GenericChatBody({
         baseUrl={baseUrl}
         entityUrl={entityUrl ?? ``}
         disabled={entityStopped || !db}
+        fallbackSlashCommands={fallbackSlashCommands}
         writeDisabled={!canWrite}
         stopDisabled={!canSignal}
         disabledPlaceholder={!canWrite ? `Read-only` : undefined}

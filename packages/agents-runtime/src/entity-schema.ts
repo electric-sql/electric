@@ -9,6 +9,7 @@ import type {
   StandardJSONSchemaV1,
   StandardSchemaV1,
 } from '@standard-schema/spec'
+import type { SlashCommandRow } from './composer-input'
 import type { JsonValue } from './types'
 
 // ============================================================================
@@ -74,6 +75,34 @@ type SignalOutcome =
 type TagEntryValue = {
   key?: string
   value: string
+}
+type SlashCommandValue = {
+  key?: string
+  name: string
+  description?: string
+  arguments?: Array<{
+    name: string
+    type: `string` | `number` | `boolean`
+    required?: boolean
+    description?: string
+  }>
+  source: `static` | `dynamic`
+  owner?: string
+  version?: string
+  updated_at: string
+  dynamic_layers?: Array<{
+    name: string
+    description?: string
+    arguments?: Array<{
+      name: string
+      type: `string` | `number` | `boolean`
+      required?: boolean
+      description?: string
+    }>
+    owner?: string
+    version?: string
+    updated_at: string
+  }>
 }
 type WakeChangeEntryValue = {
   collection: string
@@ -613,6 +642,50 @@ function createAttachmentMetaSchema(): Schema<Record<string, JsonValue>> {
     Record<string, JsonValue>
   >
 }
+
+function createSlashCommandSchema(): Schema<SlashCommandValue> {
+  return z.object({
+    key: z.string().optional(),
+    ...timelineOrderField,
+    name: z.string(),
+    description: z.string().optional(),
+    arguments: z
+      .array(
+        z.object({
+          name: z.string(),
+          type: z.enum([`string`, `number`, `boolean`]),
+          required: z.boolean().optional(),
+          description: z.string().optional(),
+        })
+      )
+      .optional(),
+    source: z.enum([`static`, `dynamic`]),
+    owner: z.string().optional(),
+    version: z.string().optional(),
+    updated_at: z.string(),
+    dynamic_layers: z
+      .array(
+        z.object({
+          name: z.string(),
+          description: z.string().optional(),
+          arguments: z
+            .array(
+              z.object({
+                name: z.string(),
+                type: z.enum([`string`, `number`, `boolean`]),
+                required: z.boolean().optional(),
+                description: z.string().optional(),
+              })
+            )
+            .optional(),
+          owner: z.string().optional(),
+          version: z.string().optional(),
+          updated_at: z.string(),
+        })
+      )
+      .optional(),
+  })
+}
 function createContextInsertedSchema(): Schema<ContextInsertedValue> {
   return z.object({
     key: z.string().optional(),
@@ -784,6 +857,8 @@ export type EntityStopped = SequencedPersistedRow<EntityStoppedValue>
 export type Signal = SequencedPersistedRow<SignalValue>
 export type ChildStatusEntry = SequencedPersistedRow<ChildStatusEntryValue>
 export type TagEntry = SequencedPersistedRow<TagEntryValue>
+export type SlashCommandEntry = SequencedPersistedRow<SlashCommandValue> &
+  SlashCommandRow
 export type ContextInserted = SequencedPersistedRow<ContextInsertedValue>
 export type ContextRemoved = SequencedPersistedRow<ContextRemovedValue>
 export type ContextEntryAttrs = ContextEntryAttrsValue
@@ -872,6 +947,7 @@ export const ENTITY_COLLECTIONS = {
   signals: `signals`,
   childStatus: `childStatus`,
   tags: `tags`,
+  slashCommands: `slashCommands`,
   manifests: `manifests`,
   contextInserted: `contextInserted`,
   contextRemoved: `contextRemoved`,
@@ -899,6 +975,8 @@ export const BUILT_IN_EVENT_SCHEMAS = {
   child_status:
     createChildStatusSchema() as unknown as BuiltInEntitySchema<ChildStatusEntry>,
   tags: createTagEntrySchema() as unknown as BuiltInEntitySchema<TagEntry>,
+  slash_command:
+    createSlashCommandSchema() as unknown as BuiltInEntitySchema<SlashCommandEntry>,
   context_inserted:
     createContextInsertedSchema() as unknown as BuiltInEntitySchema<ContextInserted>,
   context_removed:
@@ -928,6 +1006,7 @@ type EntityCollectionsDefinition = {
   signals: CollectionDefinition<Signal>
   childStatus: CollectionDefinition<ChildStatusEntry>
   tags: CollectionDefinition<TagEntry>
+  slashCommands: CollectionDefinition<SlashCommandEntry>
   manifests: CollectionDefinition<Manifest>
   contextInserted: CollectionDefinition<ContextInserted>
   contextRemoved: CollectionDefinition<ContextRemoved>
@@ -1012,6 +1091,12 @@ export const builtInCollections: EntityCollectionsDefinition = {
   tags: {
     schema: BUILT_IN_EVENT_SCHEMAS.tags as StandardSchemaV1<TagEntry>,
     type: `tags`,
+    primaryKey: `key`,
+  },
+  slashCommands: {
+    schema:
+      BUILT_IN_EVENT_SCHEMAS.slash_command as StandardSchemaV1<SlashCommandEntry>,
+    type: `slash_command`,
     primaryKey: `key`,
   },
   manifests: {
