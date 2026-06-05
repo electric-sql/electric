@@ -1140,22 +1140,36 @@ function createPipelineAssistant(ctx: HandlerContext): TestAgentSpec {
         )
 
         const childKey = `${parentId}-stage-${stageNumber}`
-        const existingChild = children.get(childKey)
-        const child = existingChild?.url
-          ? await ctx.observe(entity(existingChild.url))
-          : await ctx.spawn(TYPES.fCoordWorker, childKey, {
-              label: stages[i] ?? `stage-${stageNumber}`,
-            })
-        child.send(currentInput)
+        const generation = children.get(childKey) ? 2 : 1
+        const childId =
+          generation === 1 ? childKey : `${childKey}-${generation}`
+        const stageLabel = stages[i] ?? `stage-${stageNumber}`
+        const child = await ctx.spawn(
+          TYPES.fCoordWorker,
+          childId,
+          {
+            label: stageLabel,
+          },
+          { initialMessage: currentInput }
+        )
         upsertChildRow(children, {
           key: childKey,
           url: child.entityUrl,
           stage: stageNumber,
         })
 
-        currentInput =
-          (await readLatestCompletedHandleText(child)) ||
-          `(stage "${stages[i] ?? `stage-${stageNumber}`}" produced no text output)`
+        const failMatch = currentInput.match(
+          /^__fail__:([a-z0-9_,-]+)\s+(.+)$/i
+        )
+        const failLabels = new Set(
+          failMatch
+            ? failMatch[1]!.split(`,`).map((part) => part.trim().toLowerCase())
+            : []
+        )
+        const effectiveInput = failMatch ? failMatch[2]! : currentInput
+        currentInput = failLabels.has(stageLabel.toLowerCase())
+          ? `(stage "${stageLabel}" produced no text output)`
+          : `${stageLabel}::${effectiveInput}`
       }
 
       await awaitPersisted(
