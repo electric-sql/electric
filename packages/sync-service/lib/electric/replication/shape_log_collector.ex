@@ -489,18 +489,14 @@ defmodule Electric.Replication.ShapeLogCollector do
     )
   end
 
-  # On the commit fragment, surface the wall-clock time the whole transaction's
+  # On the commit fragment, surface the wall-clock time the transaction's
   # fragments spanned as received from Postgres (begin -> commit). Because the
-  # replication stream is consumed on demand, this can be far larger than the
-  # per-fragment processing time and is the signal for transactions whose
-  # fragments straddle a consumer's suspend threshold.
-  defp fragments_wall_duration_attrs(%TransactionFragment{commit: commit})
-       when not is_nil(commit) do
-    case commit.fragments_wall_duration_us do
-      nil -> []
-      us -> ["pg_txn.fragments_wall_duration_µs": us]
-    end
-  end
+  # replication stream is consumed on demand, this can far exceed the
+  # per-fragment processing time.
+  defp fragments_wall_duration_attrs(%TransactionFragment{
+         commit: %{fragments_wall_duration_us: us}
+       }),
+       do: ["pg_txn.fragments_wall_duration_µs": us]
 
   defp fragments_wall_duration_attrs(_txn_fragment), do: []
 
