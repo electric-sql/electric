@@ -608,7 +608,13 @@ defmodule Electric.Connection.Manager do
         } = state
       ) do
     Logger.warning(fn -> "Waiting for postgres lock to be acquired..." end)
-    tref = schedule_periodic_connection_status_check(:replication_lock, state.connection_status_check_interval)
+
+    tref =
+      schedule_periodic_connection_status_check(
+        :replication_lock,
+        state.connection_status_check_interval
+      )
+
     state = %{state | replication_lock_timer: tref}
     {:noreply, state, {:continue, :check_lock_not_abandoned}}
   end
@@ -632,7 +638,11 @@ defmodule Electric.Connection.Manager do
       dispatch_stack_event(:replication_slot_creation_blocked_by_pending_transactions, state)
     end
 
-    tref = schedule_periodic_connection_status_check(:replication_configuration, state.connection_status_check_interval)
+    tref =
+      schedule_periodic_connection_status_check(
+        :replication_configuration,
+        state.connection_status_check_interval
+      )
 
     state = %{
       state
@@ -724,7 +734,12 @@ defmodule Electric.Connection.Manager do
       ) do
     dispatch_stack_event(:waiting_for_connection_lock, state)
     state = mark_connection_succeeded(state)
-    tref = schedule_periodic_connection_status_check(:replication_lock, state.connection_status_check_interval)
+
+    tref =
+      schedule_periodic_connection_status_check(
+        :replication_lock,
+        state.connection_status_check_interval
+      )
 
     state = %{
       state
@@ -762,7 +777,12 @@ defmodule Electric.Connection.Manager do
       ) do
     Electric.StatusMonitor.mark_pg_lock_acquired(state.stack_id, state.replication_client_pid)
     dispatch_stack_event(:connection_lock_acquired, state)
-    tref = schedule_periodic_connection_status_check(:replication_configuration, state.connection_status_check_interval)
+
+    tref =
+      schedule_periodic_connection_status_check(
+        :replication_configuration,
+        state.connection_status_check_interval
+      )
 
     # Refresh shape metadata now that the lock is acquired and storage is
     # entirely within this service's control
