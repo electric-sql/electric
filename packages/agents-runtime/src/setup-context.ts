@@ -1060,14 +1060,13 @@ export function createSetupContext(
           if (spawnError) {
             throw spawnError
           }
-          const result = dispatchSend({
-            targetUrl: realEntityUrl,
-            payload: msg,
-          })
           runPromise = new Promise<void>((resolve) => {
             runResolve = resolve
           })
-          return result
+          return dispatchSend({
+            targetUrl: realEntityUrl,
+            payload: msg,
+          })
         },
         status: () => {
           const entries = db.collections.childStatus?.toArray as

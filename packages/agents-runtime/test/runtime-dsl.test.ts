@@ -357,15 +357,41 @@ function sortSnapshotEntriesByDebateSide(
 }
 
 async function readLatestCompletedHandleText(
-  handle: Pick<EntityHandle, `text`>
+  handle: Pick<EntityHandle, `text` | `db`>
 ): Promise<string> {
-  const runs = await Promise.race([
-    handle.text().catch(() => []),
-    new Promise<Array<string>>((resolve) =>
-      setTimeout(() => resolve([]), 2_000)
-    ),
-  ])
-  return runs.at(-1) ?? ``
+  const started = Date.now()
+  const initialRunCount = collectionRows<{ key: string; status: string }>(
+    handle.db.collections.runs
+  ).length
+
+  while (Date.now() - started < 8_000) {
+    const runs = collectionRows<{ key: string; status: string }>(
+      handle.db.collections.runs
+    )
+    const latestRun = runs.at(-1)
+    const sawNewRun = runs.length > initialRunCount
+
+    if (latestRun?.status === `failed`) {
+      return ``
+    }
+
+    if (
+      latestRun?.status === `completed` &&
+      (sawNewRun || Date.now() - started > 250)
+    ) {
+      const deltas = collectionRows<{ run_id: string; delta: string }>(
+        handle.db.collections.textDeltas
+      )
+      return deltas
+        .filter((delta) => delta.run_id === latestRun.key)
+        .map((delta) => delta.delta)
+        .join(``)
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  }
+
+  return ``
 }
 
 function upsertChildRow(
