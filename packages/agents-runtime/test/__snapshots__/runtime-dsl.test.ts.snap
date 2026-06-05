@@ -1173,6 +1173,18 @@ exports[`B: spawn mechanics > B1: spawn creates a child entity that can receive 
     "type": "inbox",
   },
   {
+    "key": "child:child-type-b1:c-1",
+    "manifest": {
+      "entityType": "child-type-b1",
+      "entityUrl": "/child-type-b1/c-1",
+      "id": "c-1",
+      "key": "child:child-type-b1:c-1",
+      "kind": "child",
+    },
+    "operation": "insert",
+    "type": "manifest",
+  },
+  {
     "key": "run-0",
     "operation": "insert",
     "status": "started",
@@ -1220,18 +1232,6 @@ exports[`B: spawn mechanics > B1: spawn creates a child entity that can receive 
     "status": "completed",
     "type": "run",
   },
-  {
-    "key": "child:child-type-b1:c-1",
-    "manifest": {
-      "entityType": "child-type-b1",
-      "entityUrl": "/child-type-b1/c-1",
-      "id": "c-1",
-      "key": "child:child-type-b1:c-1",
-      "kind": "child",
-    },
-    "operation": "insert",
-    "type": "manifest",
-  },
 ]
 `;
 
@@ -1266,6 +1266,18 @@ exports[`B: spawn mechanics > B2: spawn with initial message writes the child hi
     "operation": "insert",
     "payload": "go",
     "type": "inbox",
+  },
+  {
+    "key": "child:child-type2-b2:c-2",
+    "manifest": {
+      "entityType": "child-type2-b2",
+      "entityUrl": "/child-type2-b2/c-2",
+      "id": "c-2",
+      "key": "child:child-type2-b2:c-2",
+      "kind": "child",
+    },
+    "operation": "insert",
+    "type": "manifest",
   },
   {
     "key": "run-0",
@@ -1315,18 +1327,6 @@ exports[`B: spawn mechanics > B2: spawn with initial message writes the child hi
     "status": "completed",
     "type": "run",
   },
-  {
-    "key": "child:child-type2-b2:c-2",
-    "manifest": {
-      "entityType": "child-type2-b2",
-      "entityUrl": "/child-type2-b2/c-2",
-      "id": "c-2",
-      "key": "child:child-type2-b2:c-2",
-      "kind": "child",
-    },
-    "operation": "insert",
-    "type": "manifest",
-  },
 ]
 `;
 
@@ -1343,6 +1343,18 @@ exports[`B: spawn mechanics > B3: spawn manifest history includes the resolved e
     "operation": "insert",
     "payload": "go",
     "type": "inbox",
+  },
+  {
+    "key": "child:spawned-b3:sp-1",
+    "manifest": {
+      "entityType": "spawned-b3",
+      "entityUrl": "/spawned-b3/sp-1",
+      "id": "sp-1",
+      "key": "child:spawned-b3:sp-1",
+      "kind": "child",
+    },
+    "operation": "insert",
+    "type": "manifest",
   },
   {
     "key": "run-0",
@@ -1391,18 +1403,6 @@ exports[`B: spawn mechanics > B3: spawn manifest history includes the resolved e
     "operation": "update",
     "status": "completed",
     "type": "run",
-  },
-  {
-    "key": "child:spawned-b3:sp-1",
-    "manifest": {
-      "entityType": "spawned-b3",
-      "entityUrl": "/spawned-b3/sp-1",
-      "id": "sp-1",
-      "key": "child:spawned-b3:sp-1",
-      "kind": "child",
-    },
-    "operation": "insert",
-    "type": "manifest",
   },
 ]
 `;
@@ -1422,6 +1422,18 @@ exports[`B: spawn mechanics > B4: spawn marks the child manifest row as observed
     "type": "inbox",
   },
   {
+    "key": "child:obs-child-b4:oc-1",
+    "manifest": {
+      "entityType": "obs-child-b4",
+      "entityUrl": "/obs-child-b4/oc-1",
+      "id": "oc-1",
+      "key": "child:obs-child-b4:oc-1",
+      "kind": "child",
+    },
+    "operation": "insert",
+    "type": "manifest",
+  },
+  {
     "key": "run-0",
     "operation": "insert",
     "status": "started",
@@ -1468,18 +1480,6 @@ exports[`B: spawn mechanics > B4: spawn marks the child manifest row as observed
     "operation": "update",
     "status": "completed",
     "type": "run",
-  },
-  {
-    "key": "child:obs-child-b4:oc-1",
-    "manifest": {
-      "entityType": "obs-child-b4",
-      "entityUrl": "/obs-child-b4/oc-1",
-      "id": "oc-1",
-      "key": "child:obs-child-b4:oc-1",
-      "kind": "child",
-    },
-    "operation": "insert",
-    "type": "manifest",
   },
 ]
 `;
@@ -1721,6 +1721,23 @@ exports[`D: shared state > D1: mkdb produces entity history with a manifest entr
     "type": "inbox",
   },
   {
+    "key": "shared-state:ss-d1",
+    "manifest": {
+      "collections": {
+        "articles": {
+          "primaryKey": "key",
+          "type": "shared:article",
+        },
+      },
+      "id": "ss-d1",
+      "key": "shared-state:ss-d1",
+      "kind": "shared-state",
+      "mode": "create",
+    },
+    "operation": "insert",
+    "type": "manifest",
+  },
+  {
     "key": "run-0",
     "operation": "insert",
     "status": "started",
@@ -1767,23 +1784,6 @@ exports[`D: shared state > D1: mkdb produces entity history with a manifest entr
     "operation": "update",
     "status": "completed",
     "type": "run",
-  },
-  {
-    "key": "shared-state:ss-d1",
-    "manifest": {
-      "collections": {
-        "articles": {
-          "primaryKey": "key",
-          "type": "shared:article",
-        },
-      },
-      "id": "ss-d1",
-      "key": "shared-state:ss-d1",
-      "kind": "shared-state",
-      "mode": "create",
-    },
-    "operation": "insert",
-    "type": "manifest",
   },
 ]
 `;
@@ -1803,6 +1803,23 @@ exports[`D: shared state > D2: shared state stream exists even before any writes
     "type": "inbox",
   },
   {
+    "key": "shared-state:ss-d2",
+    "manifest": {
+      "collections": {
+        "articles": {
+          "primaryKey": "key",
+          "type": "shared:article",
+        },
+      },
+      "id": "ss-d2",
+      "key": "shared-state:ss-d2",
+      "kind": "shared-state",
+      "mode": "create",
+    },
+    "operation": "insert",
+    "type": "manifest",
+  },
+  {
     "key": "run-0",
     "operation": "insert",
     "status": "started",
@@ -1850,23 +1867,6 @@ exports[`D: shared state > D2: shared state stream exists even before any writes
     "status": "completed",
     "type": "run",
   },
-  {
-    "key": "shared-state:ss-d2",
-    "manifest": {
-      "collections": {
-        "articles": {
-          "primaryKey": "key",
-          "type": "shared:article",
-        },
-      },
-      "id": "ss-d2",
-      "key": "shared-state:ss-d2",
-      "kind": "shared-state",
-      "mode": "create",
-    },
-    "operation": "insert",
-    "type": "manifest",
-  },
 ]
 `;
 
@@ -1885,6 +1885,47 @@ exports[`D: shared state > D3: writes to shared state are reflected in both hist
     "operation": "insert",
     "payload": "write something",
     "type": "inbox",
+  },
+  {
+    "key": "shared-state:ss-d3",
+    "manifest": {
+      "collections": {
+        "articles": {
+          "primaryKey": "key",
+          "type": "shared:article",
+        },
+      },
+      "id": "ss-d3",
+      "key": "shared-state:ss-d3",
+      "kind": "shared-state",
+      "mode": "create",
+    },
+    "operation": "insert",
+    "type": "manifest",
+  },
+  {
+    "key": "source:db:ss-d3",
+    "manifest": {
+      "key": "source:db:ss-d3",
+      "kind": "source",
+      "value": {
+        "config": {
+          "collections": {
+            "articles": {
+              "primaryKey": "key",
+              "type": "shared:article",
+            },
+          },
+          "id": "ss-d3",
+        },
+        "key": "source:db:ss-d3",
+        "kind": "source",
+        "sourceRef": "ss-d3",
+        "sourceType": "db",
+      },
+    },
+    "operation": "insert",
+    "type": "manifest",
   },
   {
     "key": "run-0",
@@ -1934,47 +1975,6 @@ exports[`D: shared state > D3: writes to shared state are reflected in both hist
     "status": "completed",
     "type": "run",
   },
-  {
-    "key": "shared-state:ss-d3",
-    "manifest": {
-      "collections": {
-        "articles": {
-          "primaryKey": "key",
-          "type": "shared:article",
-        },
-      },
-      "id": "ss-d3",
-      "key": "shared-state:ss-d3",
-      "kind": "shared-state",
-      "mode": "create",
-    },
-    "operation": "insert",
-    "type": "manifest",
-  },
-  {
-    "key": "source:db:ss-d3",
-    "manifest": {
-      "key": "source:db:ss-d3",
-      "kind": "source",
-      "value": {
-        "config": {
-          "collections": {
-            "articles": {
-              "primaryKey": "key",
-              "type": "shared:article",
-            },
-          },
-          "id": "ss-d3",
-        },
-        "key": "source:db:ss-d3",
-        "kind": "source",
-        "sourceRef": "ss-d3",
-        "sourceType": "db",
-      },
-    },
-    "operation": "insert",
-    "type": "manifest",
-  },
 ]
 `;
 
@@ -2008,6 +2008,47 @@ exports[`D: shared state > D4: a second entity can connect to existing shared st
     "operation": "insert",
     "payload": "read art-1",
     "type": "inbox",
+  },
+  {
+    "key": "source:db:ss-d4",
+    "manifest": {
+      "key": "source:db:ss-d4",
+      "kind": "source",
+      "value": {
+        "config": {
+          "collections": {
+            "articles": {
+              "primaryKey": "key",
+              "type": "shared:article",
+            },
+          },
+          "id": "ss-d4",
+        },
+        "key": "source:db:ss-d4",
+        "kind": "source",
+        "sourceRef": "ss-d4",
+        "sourceType": "db",
+      },
+    },
+    "operation": "insert",
+    "type": "manifest",
+  },
+  {
+    "key": "shared-state:ss-d4",
+    "manifest": {
+      "collections": {
+        "articles": {
+          "primaryKey": "key",
+          "type": "shared:article",
+        },
+      },
+      "id": "ss-d4",
+      "key": "shared-state:ss-d4",
+      "kind": "shared-state",
+      "mode": "connect",
+    },
+    "operation": "insert",
+    "type": "manifest",
   },
   {
     "key": "run-0",
@@ -2057,47 +2098,6 @@ exports[`D: shared state > D4: a second entity can connect to existing shared st
     "status": "completed",
     "type": "run",
   },
-  {
-    "key": "source:db:ss-d4",
-    "manifest": {
-      "key": "source:db:ss-d4",
-      "kind": "source",
-      "value": {
-        "config": {
-          "collections": {
-            "articles": {
-              "primaryKey": "key",
-              "type": "shared:article",
-            },
-          },
-          "id": "ss-d4",
-        },
-        "key": "source:db:ss-d4",
-        "kind": "source",
-        "sourceRef": "ss-d4",
-        "sourceType": "db",
-      },
-    },
-    "operation": "insert",
-    "type": "manifest",
-  },
-  {
-    "key": "shared-state:ss-d4",
-    "manifest": {
-      "collections": {
-        "articles": {
-          "primaryKey": "key",
-          "type": "shared:article",
-        },
-      },
-      "id": "ss-d4",
-      "key": "shared-state:ss-d4",
-      "kind": "shared-state",
-      "mode": "connect",
-    },
-    "operation": "insert",
-    "type": "manifest",
-  },
 ]
 `;
 
@@ -2131,6 +2131,47 @@ exports[`D: shared state > D5: shared state update and delete events remain dura
     "operation": "insert",
     "payload": "read art-1",
     "type": "inbox",
+  },
+  {
+    "key": "source:db:ss-d5",
+    "manifest": {
+      "key": "source:db:ss-d5",
+      "kind": "source",
+      "value": {
+        "config": {
+          "collections": {
+            "articles": {
+              "primaryKey": "key",
+              "type": "shared:article",
+            },
+          },
+          "id": "ss-d5",
+        },
+        "key": "source:db:ss-d5",
+        "kind": "source",
+        "sourceRef": "ss-d5",
+        "sourceType": "db",
+      },
+    },
+    "operation": "insert",
+    "type": "manifest",
+  },
+  {
+    "key": "shared-state:ss-d5",
+    "manifest": {
+      "collections": {
+        "articles": {
+          "primaryKey": "key",
+          "type": "shared:article",
+        },
+      },
+      "id": "ss-d5",
+      "key": "shared-state:ss-d5",
+      "kind": "shared-state",
+      "mode": "connect",
+    },
+    "operation": "insert",
+    "type": "manifest",
   },
   {
     "key": "run-0",
@@ -2179,47 +2220,6 @@ exports[`D: shared state > D5: shared state update and delete events remain dura
     "operation": "update",
     "status": "completed",
     "type": "run",
-  },
-  {
-    "key": "source:db:ss-d5",
-    "manifest": {
-      "key": "source:db:ss-d5",
-      "kind": "source",
-      "value": {
-        "config": {
-          "collections": {
-            "articles": {
-              "primaryKey": "key",
-              "type": "shared:article",
-            },
-          },
-          "id": "ss-d5",
-        },
-        "key": "source:db:ss-d5",
-        "kind": "source",
-        "sourceRef": "ss-d5",
-        "sourceType": "db",
-      },
-    },
-    "operation": "insert",
-    "type": "manifest",
-  },
-  {
-    "key": "shared-state:ss-d5",
-    "manifest": {
-      "collections": {
-        "articles": {
-          "primaryKey": "key",
-          "type": "shared:article",
-        },
-      },
-      "id": "ss-d5",
-      "key": "shared-state:ss-d5",
-      "kind": "shared-state",
-      "mode": "connect",
-    },
-    "operation": "insert",
-    "type": "manifest",
   },
 ]
 `;
@@ -2271,54 +2271,6 @@ exports[`D: shared state > D6: multi-collection shared state stays consistent ac
     "type": "inbox",
   },
   {
-    "key": "run-0",
-    "operation": "insert",
-    "status": "started",
-    "type": "run",
-  },
-  {
-    "key": "step-0",
-    "operation": "insert",
-    "status": "started",
-    "stepNumber": 1,
-    "type": "step",
-  },
-  {
-    "key": "msg-0",
-    "operation": "insert",
-    "status": "streaming",
-    "type": "text",
-  },
-  {
-    "delta": "articles:1;comments:1;art-1:Alpha[Looks good]",
-    "key": "msg-0:0",
-    "operation": "insert",
-    "runId": "run-0",
-    "textId": "msg-0",
-    "type": "text_delta",
-  },
-  {
-    "key": "msg-0",
-    "operation": "update",
-    "status": "completed",
-    "type": "text",
-  },
-  {
-    "finishReason": "stop",
-    "key": "step-0",
-    "operation": "update",
-    "status": "completed",
-    "stepNumber": 1,
-    "type": "step",
-  },
-  {
-    "finishReason": "stop",
-    "key": "run-0",
-    "operation": "update",
-    "status": "completed",
-    "type": "run",
-  },
-  {
     "key": "source:db:ss-d6",
     "manifest": {
       "key": "source:db:ss-d6",
@@ -2367,6 +2319,54 @@ exports[`D: shared state > D6: multi-collection shared state stays consistent ac
     "operation": "insert",
     "type": "manifest",
   },
+  {
+    "key": "run-0",
+    "operation": "insert",
+    "status": "started",
+    "type": "run",
+  },
+  {
+    "key": "step-0",
+    "operation": "insert",
+    "status": "started",
+    "stepNumber": 1,
+    "type": "step",
+  },
+  {
+    "key": "msg-0",
+    "operation": "insert",
+    "status": "streaming",
+    "type": "text",
+  },
+  {
+    "delta": "articles:1;comments:1;art-1:Alpha[Looks good]",
+    "key": "msg-0:0",
+    "operation": "insert",
+    "runId": "run-0",
+    "textId": "msg-0",
+    "type": "text_delta",
+  },
+  {
+    "key": "msg-0",
+    "operation": "update",
+    "status": "completed",
+    "type": "text",
+  },
+  {
+    "finishReason": "stop",
+    "key": "step-0",
+    "operation": "update",
+    "status": "completed",
+    "stepNumber": 1,
+    "type": "step",
+  },
+  {
+    "finishReason": "stop",
+    "key": "run-0",
+    "operation": "update",
+    "status": "completed",
+    "type": "run",
+  },
 ]
 `;
 
@@ -2410,6 +2410,55 @@ exports[`D: shared state > D6: multi-collection shared state stays consistent ac
     "operation": "insert",
     "payload": "write_article art-1 Alpha|First body && write_comment c-1 art-1|Looks good",
     "type": "inbox",
+  },
+  {
+    "key": "shared-state:ss-d6",
+    "manifest": {
+      "collections": {
+        "articles": {
+          "primaryKey": "key",
+          "type": "shared:article",
+        },
+        "comments": {
+          "primaryKey": "key",
+          "type": "shared:comment",
+        },
+      },
+      "id": "ss-d6",
+      "key": "shared-state:ss-d6",
+      "kind": "shared-state",
+      "mode": "create",
+    },
+    "operation": "insert",
+    "type": "manifest",
+  },
+  {
+    "key": "source:db:ss-d6",
+    "manifest": {
+      "key": "source:db:ss-d6",
+      "kind": "source",
+      "value": {
+        "config": {
+          "collections": {
+            "articles": {
+              "primaryKey": "key",
+              "type": "shared:article",
+            },
+            "comments": {
+              "primaryKey": "key",
+              "type": "shared:comment",
+            },
+          },
+          "id": "ss-d6",
+        },
+        "key": "source:db:ss-d6",
+        "kind": "source",
+        "sourceRef": "ss-d6",
+        "sourceType": "db",
+      },
+    },
+    "operation": "insert",
+    "type": "manifest",
   },
   {
     "key": "run-0",
@@ -2459,55 +2508,6 @@ exports[`D: shared state > D6: multi-collection shared state stays consistent ac
     "status": "completed",
     "type": "run",
   },
-  {
-    "key": "shared-state:ss-d6",
-    "manifest": {
-      "collections": {
-        "articles": {
-          "primaryKey": "key",
-          "type": "shared:article",
-        },
-        "comments": {
-          "primaryKey": "key",
-          "type": "shared:comment",
-        },
-      },
-      "id": "ss-d6",
-      "key": "shared-state:ss-d6",
-      "kind": "shared-state",
-      "mode": "create",
-    },
-    "operation": "insert",
-    "type": "manifest",
-  },
-  {
-    "key": "source:db:ss-d6",
-    "manifest": {
-      "key": "source:db:ss-d6",
-      "kind": "source",
-      "value": {
-        "config": {
-          "collections": {
-            "articles": {
-              "primaryKey": "key",
-              "type": "shared:article",
-            },
-            "comments": {
-              "primaryKey": "key",
-              "type": "shared:comment",
-            },
-          },
-          "id": "ss-d6",
-        },
-        "key": "source:db:ss-d6",
-        "kind": "source",
-        "sourceRef": "ss-d6",
-        "sourceType": "db",
-      },
-    },
-    "operation": "insert",
-    "type": "manifest",
-  },
 ]
 `;
 
@@ -2526,6 +2526,47 @@ exports[`D: shared state > D7: multiple entities can contribute durable rows to 
     "operation": "insert",
     "payload": "count",
     "type": "inbox",
+  },
+  {
+    "key": "source:db:ss-d7",
+    "manifest": {
+      "key": "source:db:ss-d7",
+      "kind": "source",
+      "value": {
+        "config": {
+          "collections": {
+            "articles": {
+              "primaryKey": "key",
+              "type": "shared:article",
+            },
+          },
+          "id": "ss-d7",
+        },
+        "key": "source:db:ss-d7",
+        "kind": "source",
+        "sourceRef": "ss-d7",
+        "sourceType": "db",
+      },
+    },
+    "operation": "insert",
+    "type": "manifest",
+  },
+  {
+    "key": "shared-state:ss-d7",
+    "manifest": {
+      "collections": {
+        "articles": {
+          "primaryKey": "key",
+          "type": "shared:article",
+        },
+      },
+      "id": "ss-d7",
+      "key": "shared-state:ss-d7",
+      "kind": "shared-state",
+      "mode": "connect",
+    },
+    "operation": "insert",
+    "type": "manifest",
   },
   {
     "key": "run-0",
@@ -2575,47 +2616,6 @@ exports[`D: shared state > D7: multiple entities can contribute durable rows to 
     "status": "completed",
     "type": "run",
   },
-  {
-    "key": "source:db:ss-d7",
-    "manifest": {
-      "key": "source:db:ss-d7",
-      "kind": "source",
-      "value": {
-        "config": {
-          "collections": {
-            "articles": {
-              "primaryKey": "key",
-              "type": "shared:article",
-            },
-          },
-          "id": "ss-d7",
-        },
-        "key": "source:db:ss-d7",
-        "kind": "source",
-        "sourceRef": "ss-d7",
-        "sourceType": "db",
-      },
-    },
-    "operation": "insert",
-    "type": "manifest",
-  },
-  {
-    "key": "shared-state:ss-d7",
-    "manifest": {
-      "collections": {
-        "articles": {
-          "primaryKey": "key",
-          "type": "shared:article",
-        },
-      },
-      "id": "ss-d7",
-      "key": "shared-state:ss-d7",
-      "kind": "shared-state",
-      "mode": "connect",
-    },
-    "operation": "insert",
-    "type": "manifest",
-  },
 ]
 `;
 
@@ -2659,6 +2659,47 @@ exports[`D: shared state > D7: multiple entities can contribute durable rows to 
     "operation": "insert",
     "payload": "insert art-1 Alpha|First body",
     "type": "inbox",
+  },
+  {
+    "key": "shared-state:ss-d7",
+    "manifest": {
+      "collections": {
+        "articles": {
+          "primaryKey": "key",
+          "type": "shared:article",
+        },
+      },
+      "id": "ss-d7",
+      "key": "shared-state:ss-d7",
+      "kind": "shared-state",
+      "mode": "create",
+    },
+    "operation": "insert",
+    "type": "manifest",
+  },
+  {
+    "key": "source:db:ss-d7",
+    "manifest": {
+      "key": "source:db:ss-d7",
+      "kind": "source",
+      "value": {
+        "config": {
+          "collections": {
+            "articles": {
+              "primaryKey": "key",
+              "type": "shared:article",
+            },
+          },
+          "id": "ss-d7",
+        },
+        "key": "source:db:ss-d7",
+        "kind": "source",
+        "sourceRef": "ss-d7",
+        "sourceType": "db",
+      },
+    },
+    "operation": "insert",
+    "type": "manifest",
   },
   {
     "key": "run-0",
@@ -2708,6 +2749,25 @@ exports[`D: shared state > D7: multiple entities can contribute durable rows to 
     "status": "completed",
     "type": "run",
   },
+]
+`;
+
+exports[`D: shared state > D7: multiple entities can contribute durable rows to the same shared collection > writer B history 1`] = `
+[
+  {
+    "args": {
+      "sharedStateId": "ss-d7",
+    },
+    "entityType": "ss-creator-d4",
+    "operation": "insert",
+    "type": "entity_created",
+  },
+  {
+    "from": "/principal/system%3Aruntime-dsl-test",
+    "operation": "insert",
+    "payload": "insert art-2 Beta|Second body",
+    "type": "inbox",
+  },
   {
     "key": "shared-state:ss-d7",
     "manifest": {
@@ -2748,25 +2808,6 @@ exports[`D: shared state > D7: multiple entities can contribute durable rows to 
     },
     "operation": "insert",
     "type": "manifest",
-  },
-]
-`;
-
-exports[`D: shared state > D7: multiple entities can contribute durable rows to the same shared collection > writer B history 1`] = `
-[
-  {
-    "args": {
-      "sharedStateId": "ss-d7",
-    },
-    "entityType": "ss-creator-d4",
-    "operation": "insert",
-    "type": "entity_created",
-  },
-  {
-    "from": "/principal/system%3Aruntime-dsl-test",
-    "operation": "insert",
-    "payload": "insert art-2 Beta|Second body",
-    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -2816,47 +2857,6 @@ exports[`D: shared state > D7: multiple entities can contribute durable rows to 
     "status": "completed",
     "type": "run",
   },
-  {
-    "key": "shared-state:ss-d7",
-    "manifest": {
-      "collections": {
-        "articles": {
-          "primaryKey": "key",
-          "type": "shared:article",
-        },
-      },
-      "id": "ss-d7",
-      "key": "shared-state:ss-d7",
-      "kind": "shared-state",
-      "mode": "create",
-    },
-    "operation": "insert",
-    "type": "manifest",
-  },
-  {
-    "key": "source:db:ss-d7",
-    "manifest": {
-      "key": "source:db:ss-d7",
-      "kind": "source",
-      "value": {
-        "config": {
-          "collections": {
-            "articles": {
-              "primaryKey": "key",
-              "type": "shared:article",
-            },
-          },
-          "id": "ss-d7",
-        },
-        "key": "source:db:ss-d7",
-        "kind": "source",
-        "sourceRef": "ss-d7",
-        "sourceType": "db",
-      },
-    },
-    "operation": "insert",
-    "type": "manifest",
-  },
 ]
 `;
 
@@ -2875,6 +2875,47 @@ exports[`D: shared state > D8: a later writer can overwrite a shared row and a n
     "operation": "insert",
     "payload": "read art-1",
     "type": "inbox",
+  },
+  {
+    "key": "source:db:ss-d8",
+    "manifest": {
+      "key": "source:db:ss-d8",
+      "kind": "source",
+      "value": {
+        "config": {
+          "collections": {
+            "articles": {
+              "primaryKey": "key",
+              "type": "shared:article",
+            },
+          },
+          "id": "ss-d8",
+        },
+        "key": "source:db:ss-d8",
+        "kind": "source",
+        "sourceRef": "ss-d8",
+        "sourceType": "db",
+      },
+    },
+    "operation": "insert",
+    "type": "manifest",
+  },
+  {
+    "key": "shared-state:ss-d8",
+    "manifest": {
+      "collections": {
+        "articles": {
+          "primaryKey": "key",
+          "type": "shared:article",
+        },
+      },
+      "id": "ss-d8",
+      "key": "shared-state:ss-d8",
+      "kind": "shared-state",
+      "mode": "connect",
+    },
+    "operation": "insert",
+    "type": "manifest",
   },
   {
     "key": "run-0",
@@ -2924,47 +2965,6 @@ exports[`D: shared state > D8: a later writer can overwrite a shared row and a n
     "status": "completed",
     "type": "run",
   },
-  {
-    "key": "source:db:ss-d8",
-    "manifest": {
-      "key": "source:db:ss-d8",
-      "kind": "source",
-      "value": {
-        "config": {
-          "collections": {
-            "articles": {
-              "primaryKey": "key",
-              "type": "shared:article",
-            },
-          },
-          "id": "ss-d8",
-        },
-        "key": "source:db:ss-d8",
-        "kind": "source",
-        "sourceRef": "ss-d8",
-        "sourceType": "db",
-      },
-    },
-    "operation": "insert",
-    "type": "manifest",
-  },
-  {
-    "key": "shared-state:ss-d8",
-    "manifest": {
-      "collections": {
-        "articles": {
-          "primaryKey": "key",
-          "type": "shared:article",
-        },
-      },
-      "id": "ss-d8",
-      "key": "shared-state:ss-d8",
-      "kind": "shared-state",
-      "mode": "connect",
-    },
-    "operation": "insert",
-    "type": "manifest",
-  },
 ]
 `;
 
@@ -3008,6 +3008,47 @@ exports[`D: shared state > D8: a later writer can overwrite a shared row and a n
     "operation": "insert",
     "payload": "insert art-1 Alpha|First body",
     "type": "inbox",
+  },
+  {
+    "key": "shared-state:ss-d8",
+    "manifest": {
+      "collections": {
+        "articles": {
+          "primaryKey": "key",
+          "type": "shared:article",
+        },
+      },
+      "id": "ss-d8",
+      "key": "shared-state:ss-d8",
+      "kind": "shared-state",
+      "mode": "create",
+    },
+    "operation": "insert",
+    "type": "manifest",
+  },
+  {
+    "key": "source:db:ss-d8",
+    "manifest": {
+      "key": "source:db:ss-d8",
+      "kind": "source",
+      "value": {
+        "config": {
+          "collections": {
+            "articles": {
+              "primaryKey": "key",
+              "type": "shared:article",
+            },
+          },
+          "id": "ss-d8",
+        },
+        "key": "source:db:ss-d8",
+        "kind": "source",
+        "sourceRef": "ss-d8",
+        "sourceType": "db",
+      },
+    },
+    "operation": "insert",
+    "type": "manifest",
   },
   {
     "key": "run-0",
@@ -3057,6 +3098,25 @@ exports[`D: shared state > D8: a later writer can overwrite a shared row and a n
     "status": "completed",
     "type": "run",
   },
+]
+`;
+
+exports[`D: shared state > D8: a later writer can overwrite a shared row and a new reader sees the latest value > writer B history 1`] = `
+[
+  {
+    "args": {
+      "sharedStateId": "ss-d8",
+    },
+    "entityType": "ss-creator-d4",
+    "operation": "insert",
+    "type": "entity_created",
+  },
+  {
+    "from": "/principal/system%3Aruntime-dsl-test",
+    "operation": "insert",
+    "payload": "update art-1 Beta|Second body",
+    "type": "inbox",
+  },
   {
     "key": "shared-state:ss-d8",
     "manifest": {
@@ -3097,25 +3157,6 @@ exports[`D: shared state > D8: a later writer can overwrite a shared row and a n
     },
     "operation": "insert",
     "type": "manifest",
-  },
-]
-`;
-
-exports[`D: shared state > D8: a later writer can overwrite a shared row and a new reader sees the latest value > writer B history 1`] = `
-[
-  {
-    "args": {
-      "sharedStateId": "ss-d8",
-    },
-    "entityType": "ss-creator-d4",
-    "operation": "insert",
-    "type": "entity_created",
-  },
-  {
-    "from": "/principal/system%3Aruntime-dsl-test",
-    "operation": "insert",
-    "payload": "update art-1 Beta|Second body",
-    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -3165,47 +3206,6 @@ exports[`D: shared state > D8: a later writer can overwrite a shared row and a n
     "status": "completed",
     "type": "run",
   },
-  {
-    "key": "shared-state:ss-d8",
-    "manifest": {
-      "collections": {
-        "articles": {
-          "primaryKey": "key",
-          "type": "shared:article",
-        },
-      },
-      "id": "ss-d8",
-      "key": "shared-state:ss-d8",
-      "kind": "shared-state",
-      "mode": "create",
-    },
-    "operation": "insert",
-    "type": "manifest",
-  },
-  {
-    "key": "source:db:ss-d8",
-    "manifest": {
-      "key": "source:db:ss-d8",
-      "kind": "source",
-      "value": {
-        "config": {
-          "collections": {
-            "articles": {
-              "primaryKey": "key",
-              "type": "shared:article",
-            },
-          },
-          "id": "ss-d8",
-        },
-        "key": "source:db:ss-d8",
-        "kind": "source",
-        "sourceRef": "ss-d8",
-        "sourceType": "db",
-      },
-    },
-    "operation": "insert",
-    "type": "manifest",
-  },
 ]
 `;
 
@@ -3224,6 +3224,47 @@ exports[`D: shared state > D9: a setup-registered shared-state effect fires on t
     "operation": "insert",
     "payload": "insert art-1 Alpha|First body",
     "type": "inbox",
+  },
+  {
+    "key": "shared-state:ss-d9",
+    "manifest": {
+      "collections": {
+        "articles": {
+          "primaryKey": "key",
+          "type": "shared:article",
+        },
+      },
+      "id": "ss-d9",
+      "key": "shared-state:ss-d9",
+      "kind": "shared-state",
+      "mode": "create",
+    },
+    "operation": "insert",
+    "type": "manifest",
+  },
+  {
+    "key": "source:db:ss-d9",
+    "manifest": {
+      "key": "source:db:ss-d9",
+      "kind": "source",
+      "value": {
+        "config": {
+          "collections": {
+            "articles": {
+              "primaryKey": "key",
+              "type": "shared:article",
+            },
+          },
+          "id": "ss-d9",
+        },
+        "key": "source:db:ss-d9",
+        "kind": "source",
+        "sourceRef": "ss-d9",
+        "sourceType": "db",
+      },
+    },
+    "operation": "insert",
+    "type": "manifest",
   },
   {
     "key": "run-0",
@@ -3281,47 +3322,6 @@ exports[`D: shared state > D9: a setup-registered shared-state effect fires on t
       "key": "art-1",
       "text": "noticed:Alpha",
     },
-  },
-  {
-    "key": "shared-state:ss-d9",
-    "manifest": {
-      "collections": {
-        "articles": {
-          "primaryKey": "key",
-          "type": "shared:article",
-        },
-      },
-      "id": "ss-d9",
-      "key": "shared-state:ss-d9",
-      "kind": "shared-state",
-      "mode": "create",
-    },
-    "operation": "insert",
-    "type": "manifest",
-  },
-  {
-    "key": "source:db:ss-d9",
-    "manifest": {
-      "key": "source:db:ss-d9",
-      "kind": "source",
-      "value": {
-        "config": {
-          "collections": {
-            "articles": {
-              "primaryKey": "key",
-              "type": "shared:article",
-            },
-          },
-          "id": "ss-d9",
-        },
-        "key": "source:db:ss-d9",
-        "kind": "source",
-        "sourceRef": "ss-d9",
-        "sourceType": "db",
-      },
-    },
-    "operation": "insert",
-    "type": "manifest",
   },
   {
     "from": "/principal/system%3Aruntime-dsl-test",
@@ -3412,54 +3412,6 @@ exports[`D: shared state > D10: separate entities can contribute to different co
     "type": "inbox",
   },
   {
-    "key": "run-0",
-    "operation": "insert",
-    "status": "started",
-    "type": "run",
-  },
-  {
-    "key": "step-0",
-    "operation": "insert",
-    "status": "started",
-    "stepNumber": 1,
-    "type": "step",
-  },
-  {
-    "key": "msg-0",
-    "operation": "insert",
-    "status": "streaming",
-    "type": "text",
-  },
-  {
-    "delta": "articles:1;comments:1;art-1:Alpha[Looks good]",
-    "key": "msg-0:0",
-    "operation": "insert",
-    "runId": "run-0",
-    "textId": "msg-0",
-    "type": "text_delta",
-  },
-  {
-    "key": "msg-0",
-    "operation": "update",
-    "status": "completed",
-    "type": "text",
-  },
-  {
-    "finishReason": "stop",
-    "key": "step-0",
-    "operation": "update",
-    "status": "completed",
-    "stepNumber": 1,
-    "type": "step",
-  },
-  {
-    "finishReason": "stop",
-    "key": "run-0",
-    "operation": "update",
-    "status": "completed",
-    "type": "run",
-  },
-  {
     "key": "source:db:ss-d10",
     "manifest": {
       "key": "source:db:ss-d10",
@@ -3508,6 +3460,54 @@ exports[`D: shared state > D10: separate entities can contribute to different co
     "operation": "insert",
     "type": "manifest",
   },
+  {
+    "key": "run-0",
+    "operation": "insert",
+    "status": "started",
+    "type": "run",
+  },
+  {
+    "key": "step-0",
+    "operation": "insert",
+    "status": "started",
+    "stepNumber": 1,
+    "type": "step",
+  },
+  {
+    "key": "msg-0",
+    "operation": "insert",
+    "status": "streaming",
+    "type": "text",
+  },
+  {
+    "delta": "articles:1;comments:1;art-1:Alpha[Looks good]",
+    "key": "msg-0:0",
+    "operation": "insert",
+    "runId": "run-0",
+    "textId": "msg-0",
+    "type": "text_delta",
+  },
+  {
+    "key": "msg-0",
+    "operation": "update",
+    "status": "completed",
+    "type": "text",
+  },
+  {
+    "finishReason": "stop",
+    "key": "step-0",
+    "operation": "update",
+    "status": "completed",
+    "stepNumber": 1,
+    "type": "step",
+  },
+  {
+    "finishReason": "stop",
+    "key": "run-0",
+    "operation": "update",
+    "status": "completed",
+    "type": "run",
+  },
 ]
 `;
 
@@ -3551,6 +3551,55 @@ exports[`D: shared state > D10: separate entities can contribute to different co
     "operation": "insert",
     "payload": "write_article art-1 Alpha|First body",
     "type": "inbox",
+  },
+  {
+    "key": "shared-state:ss-d10",
+    "manifest": {
+      "collections": {
+        "articles": {
+          "primaryKey": "key",
+          "type": "shared:article",
+        },
+        "comments": {
+          "primaryKey": "key",
+          "type": "shared:comment",
+        },
+      },
+      "id": "ss-d10",
+      "key": "shared-state:ss-d10",
+      "kind": "shared-state",
+      "mode": "create",
+    },
+    "operation": "insert",
+    "type": "manifest",
+  },
+  {
+    "key": "source:db:ss-d10",
+    "manifest": {
+      "key": "source:db:ss-d10",
+      "kind": "source",
+      "value": {
+        "config": {
+          "collections": {
+            "articles": {
+              "primaryKey": "key",
+              "type": "shared:article",
+            },
+            "comments": {
+              "primaryKey": "key",
+              "type": "shared:comment",
+            },
+          },
+          "id": "ss-d10",
+        },
+        "key": "source:db:ss-d10",
+        "kind": "source",
+        "sourceRef": "ss-d10",
+        "sourceType": "db",
+      },
+    },
+    "operation": "insert",
+    "type": "manifest",
   },
   {
     "key": "run-0",
@@ -3600,6 +3649,25 @@ exports[`D: shared state > D10: separate entities can contribute to different co
     "status": "completed",
     "type": "run",
   },
+]
+`;
+
+exports[`D: shared state > D10: separate entities can contribute to different collections in one shared state > writer B history 1`] = `
+[
+  {
+    "args": {
+      "sharedStateId": "ss-d10",
+    },
+    "entityType": "ss-writer-d6",
+    "operation": "insert",
+    "type": "entity_created",
+  },
+  {
+    "from": "/principal/system%3Aruntime-dsl-test",
+    "operation": "insert",
+    "payload": "write_comment c-1 art-1|Looks good",
+    "type": "inbox",
+  },
   {
     "key": "shared-state:ss-d10",
     "manifest": {
@@ -3648,25 +3716,6 @@ exports[`D: shared state > D10: separate entities can contribute to different co
     },
     "operation": "insert",
     "type": "manifest",
-  },
-]
-`;
-
-exports[`D: shared state > D10: separate entities can contribute to different collections in one shared state > writer B history 1`] = `
-[
-  {
-    "args": {
-      "sharedStateId": "ss-d10",
-    },
-    "entityType": "ss-writer-d6",
-    "operation": "insert",
-    "type": "entity_created",
-  },
-  {
-    "from": "/principal/system%3Aruntime-dsl-test",
-    "operation": "insert",
-    "payload": "write_comment c-1 art-1|Looks good",
-    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -3715,55 +3764,6 @@ exports[`D: shared state > D10: separate entities can contribute to different co
     "operation": "update",
     "status": "completed",
     "type": "run",
-  },
-  {
-    "key": "shared-state:ss-d10",
-    "manifest": {
-      "collections": {
-        "articles": {
-          "primaryKey": "key",
-          "type": "shared:article",
-        },
-        "comments": {
-          "primaryKey": "key",
-          "type": "shared:comment",
-        },
-      },
-      "id": "ss-d10",
-      "key": "shared-state:ss-d10",
-      "kind": "shared-state",
-      "mode": "create",
-    },
-    "operation": "insert",
-    "type": "manifest",
-  },
-  {
-    "key": "source:db:ss-d10",
-    "manifest": {
-      "key": "source:db:ss-d10",
-      "kind": "source",
-      "value": {
-        "config": {
-          "collections": {
-            "articles": {
-              "primaryKey": "key",
-              "type": "shared:article",
-            },
-            "comments": {
-              "primaryKey": "key",
-              "type": "shared:comment",
-            },
-          },
-          "id": "ss-d10",
-        },
-        "key": "source:db:ss-d10",
-        "kind": "source",
-        "sourceRef": "ss-d10",
-        "sourceType": "db",
-      },
-    },
-    "operation": "insert",
-    "type": "manifest",
   },
 ]
 `;
@@ -4312,125 +4312,6 @@ exports[`F: coordination orchestration > F1: dispatcher routes to the requested 
 ]
 `;
 
-exports[`F: coordination orchestration > F1: dispatcher routes to the requested specialist type and records the child > parent history 1`] = `
-[
-  {
-    "args": {},
-    "entityType": "dispatcher-f1",
-    "operation": "insert",
-    "type": "entity_created",
-  },
-  {
-    "from": "/principal/system%3Aruntime-dsl-test",
-    "operation": "insert",
-    "payload": "dispatch assistant hello routing",
-    "type": "inbox",
-  },
-  {
-    "key": "run-0",
-    "operation": "insert",
-    "status": "started",
-    "type": "run",
-  },
-  {
-    "key": "step-0",
-    "operation": "insert",
-    "status": "started",
-    "stepNumber": 1,
-    "type": "step",
-  },
-  {
-    "args": {
-      "task": "hello routing",
-      "type": "assistant",
-    },
-    "key": "tc-0",
-    "operation": "insert",
-    "status": "started",
-    "toolName": "dispatch",
-    "type": "tool_call",
-  },
-  {
-    "key": "dispatchCount",
-    "operation": "insert",
-    "type": "state:counters",
-    "value": {
-      "key": "dispatchCount",
-      "value": 1,
-    },
-  },
-  {
-    "key": "dispatch-1-dispatch-1",
-    "operation": "insert",
-    "type": "state:children",
-    "value": {
-      "key": "dispatch-1-dispatch-1",
-      "kind": "assistant",
-      "url": "/dispatch-assistant-f1/dispatch-1-dispatch-1",
-    },
-  },
-  {
-    "args": {
-      "task": "hello routing",
-      "type": "assistant",
-    },
-    "key": "tc-0",
-    "operation": "update",
-    "result": "{"type":"assistant","childId":"dispatch-1-dispatch-1"}",
-    "status": "completed",
-    "toolName": "dispatch",
-    "type": "tool_call",
-  },
-  {
-    "key": "msg-0",
-    "operation": "insert",
-    "status": "streaming",
-    "type": "text",
-  },
-  {
-    "delta": "assistant::hello routing",
-    "key": "msg-0:0",
-    "operation": "insert",
-    "runId": "run-0",
-    "textId": "msg-0",
-    "type": "text_delta",
-  },
-  {
-    "key": "msg-0",
-    "operation": "update",
-    "status": "completed",
-    "type": "text",
-  },
-  {
-    "finishReason": "stop",
-    "key": "step-0",
-    "operation": "update",
-    "status": "completed",
-    "stepNumber": 1,
-    "type": "step",
-  },
-  {
-    "finishReason": "stop",
-    "key": "run-0",
-    "operation": "update",
-    "status": "completed",
-    "type": "run",
-  },
-  {
-    "key": "child:dispatch-assistant-f1:dispatch-1-dispatch-1",
-    "manifest": {
-      "entityType": "dispatch-assistant-f1",
-      "entityUrl": "/dispatch-assistant-f1/dispatch-1-dispatch-1",
-      "id": "dispatch-1-dispatch-1",
-      "key": "child:dispatch-assistant-f1:dispatch-1-dispatch-1",
-      "kind": "child",
-    },
-    "operation": "insert",
-    "type": "manifest",
-  },
-]
-`;
-
 exports[`F: coordination orchestration > F2: manager-worker spawns, observes, and later collects all perspectives in a stable order > optimist history 1`] = `
 [
   {
@@ -4496,146 +4377,6 @@ exports[`F: coordination orchestration > F2: manager-worker spawns, observes, an
     "operation": "update",
     "status": "completed",
     "type": "run",
-  },
-]
-`;
-
-exports[`F: coordination orchestration > F2: manager-worker spawns, observes, and later collects all perspectives in a stable order > parent history 1`] = `
-[
-  {
-    "args": {},
-    "entityType": "manager-f2",
-    "operation": "insert",
-    "type": "entity_created",
-  },
-  {
-    "from": "/principal/system%3Aruntime-dsl-test",
-    "operation": "insert",
-    "payload": "spawn_perspectives Should we ship the feature?",
-    "type": "inbox",
-  },
-  {
-    "key": "current",
-    "operation": "insert",
-    "type": "state:status",
-    "value": {
-      "key": "current",
-      "value": "idle",
-    },
-  },
-  {
-    "args": {
-      "question": "Should we ship the feature?",
-    },
-    "key": "tc-0",
-    "operation": "insert",
-    "status": "started",
-    "toolName": "spawn_perspectives",
-    "type": "tool_call",
-  },
-  {
-    "key": "current",
-    "operation": "update",
-    "type": "state:status",
-    "value": {
-      "key": "current",
-      "value": "spawning",
-    },
-  },
-  {
-    "key": "optimist",
-    "operation": "insert",
-    "type": "state:children",
-    "value": {
-      "key": "optimist",
-      "kind": "optimist",
-      "url": "/coord-worker-f/manager-1-optimist",
-    },
-  },
-  {
-    "key": "pessimist",
-    "operation": "insert",
-    "type": "state:children",
-    "value": {
-      "key": "pessimist",
-      "kind": "pessimist",
-      "url": "/coord-worker-f/manager-1-pessimist",
-    },
-  },
-  {
-    "key": "pragmatist",
-    "operation": "insert",
-    "type": "state:children",
-    "value": {
-      "key": "pragmatist",
-      "kind": "pragmatist",
-      "url": "/coord-worker-f/manager-1-pragmatist",
-    },
-  },
-  {
-    "args": {
-      "question": "Should we ship the feature?",
-    },
-    "key": "tc-0",
-    "operation": "update",
-    "result": "{"spawned":["optimist","pessimist","pragmatist"]}",
-    "status": "completed",
-    "toolName": "spawn_perspectives",
-    "type": "tool_call",
-  },
-  {
-    "key": "current",
-    "operation": "update",
-    "type": "state:status",
-    "value": {
-      "key": "current",
-      "value": "waiting",
-    },
-  },
-  {
-    "from": "/principal/system%3Aruntime-dsl-test",
-    "operation": "insert",
-    "payload": "wait_for_all",
-    "type": "inbox",
-  },
-  {
-    "args": {},
-    "key": "tc-1",
-    "operation": "insert",
-    "status": "started",
-    "toolName": "wait_for_all",
-    "type": "tool_call",
-  },
-  {
-    "args": {},
-    "key": "tc-1",
-    "operation": "update",
-    "result": "{"collected":3}",
-    "status": "completed",
-    "toolName": "wait_for_all",
-    "type": "tool_call",
-  },
-  {
-    "key": "current",
-    "operation": "update",
-    "type": "state:status",
-    "value": {
-      "key": "current",
-      "value": "synthesizing",
-    },
-  },
-  {
-    "delta": "optimist:optimist::Should we ship the feature? | pessimist:pessimist::Should we ship the feature? | pragmatist:pragmatist::Should we ship the feature?",
-    "type": "text_delta",
-  },
-  {
-    "key": "current",
-    "operation": "update",
-    "type": "state:status",
-    "value": {
-      "key": "current",
-      "value": "idle",
-    },
   },
 ]
 `;
@@ -4778,409 +4519,6 @@ exports[`F: coordination orchestration > F2: manager-worker spawns, observes, an
 ]
 `;
 
-exports[`G: map-reduce ordering > G1: map-reduce returns results in chunk order even when completions differ > chunk 1 history 1`] = `
-[
-  {
-    "args": {
-      "delayMs": 30,
-      "label": "chunk-1",
-    },
-    "entityType": "coord-worker-f",
-    "operation": "insert",
-    "parentUrl": "/map-reduce-g1/map-1",
-    "type": "entity_created",
-  },
-  {
-    "from": "/principal/system%3Aruntime-dsl-test",
-    "operation": "insert",
-    "payload": "summarize:alpha",
-    "type": "inbox",
-  },
-  {
-    "key": "run-0",
-    "operation": "insert",
-    "status": "started",
-    "type": "run",
-  },
-  {
-    "key": "step-0",
-    "operation": "insert",
-    "status": "started",
-    "stepNumber": 1,
-    "type": "step",
-  },
-  {
-    "key": "msg-0",
-    "operation": "insert",
-    "status": "streaming",
-    "type": "text",
-  },
-  {
-    "delta": "chunk-1::summarize:alpha",
-    "key": "msg-0:0",
-    "operation": "insert",
-    "runId": "run-0",
-    "textId": "msg-0",
-    "type": "text_delta",
-  },
-  {
-    "key": "msg-0",
-    "operation": "update",
-    "status": "completed",
-    "type": "text",
-  },
-  {
-    "finishReason": "stop",
-    "key": "step-0",
-    "operation": "update",
-    "status": "completed",
-    "stepNumber": 1,
-    "type": "step",
-  },
-  {
-    "finishReason": "stop",
-    "key": "run-0",
-    "operation": "update",
-    "status": "completed",
-    "type": "run",
-  },
-]
-`;
-
-exports[`G: map-reduce ordering > G1: map-reduce returns results in chunk order even when completions differ > chunk 2 history 1`] = `
-[
-  {
-    "args": {
-      "delayMs": 0,
-      "label": "chunk-2",
-    },
-    "entityType": "coord-worker-f",
-    "operation": "insert",
-    "parentUrl": "/map-reduce-g1/map-1",
-    "type": "entity_created",
-  },
-  {
-    "from": "/principal/system%3Aruntime-dsl-test",
-    "operation": "insert",
-    "payload": "summarize:beta",
-    "type": "inbox",
-  },
-  {
-    "key": "run-0",
-    "operation": "insert",
-    "status": "started",
-    "type": "run",
-  },
-  {
-    "key": "step-0",
-    "operation": "insert",
-    "status": "started",
-    "stepNumber": 1,
-    "type": "step",
-  },
-  {
-    "key": "msg-0",
-    "operation": "insert",
-    "status": "streaming",
-    "type": "text",
-  },
-  {
-    "delta": "chunk-2::summarize:beta",
-    "key": "msg-0:0",
-    "operation": "insert",
-    "runId": "run-0",
-    "textId": "msg-0",
-    "type": "text_delta",
-  },
-  {
-    "key": "msg-0",
-    "operation": "update",
-    "status": "completed",
-    "type": "text",
-  },
-  {
-    "finishReason": "stop",
-    "key": "step-0",
-    "operation": "update",
-    "status": "completed",
-    "stepNumber": 1,
-    "type": "step",
-  },
-  {
-    "finishReason": "stop",
-    "key": "run-0",
-    "operation": "update",
-    "status": "completed",
-    "type": "run",
-  },
-]
-`;
-
-exports[`G: map-reduce ordering > G1: map-reduce returns results in chunk order even when completions differ > chunk 3 history 1`] = `
-[
-  {
-    "args": {
-      "delayMs": 10,
-      "label": "chunk-3",
-    },
-    "entityType": "coord-worker-f",
-    "operation": "insert",
-    "parentUrl": "/map-reduce-g1/map-1",
-    "type": "entity_created",
-  },
-  {
-    "from": "/principal/system%3Aruntime-dsl-test",
-    "operation": "insert",
-    "payload": "summarize:gamma",
-    "type": "inbox",
-  },
-  {
-    "key": "run-0",
-    "operation": "insert",
-    "status": "started",
-    "type": "run",
-  },
-  {
-    "key": "step-0",
-    "operation": "insert",
-    "status": "started",
-    "stepNumber": 1,
-    "type": "step",
-  },
-  {
-    "key": "msg-0",
-    "operation": "insert",
-    "status": "streaming",
-    "type": "text",
-  },
-  {
-    "delta": "chunk-3::summarize:gamma",
-    "key": "msg-0:0",
-    "operation": "insert",
-    "runId": "run-0",
-    "textId": "msg-0",
-    "type": "text_delta",
-  },
-  {
-    "key": "msg-0",
-    "operation": "update",
-    "status": "completed",
-    "type": "text",
-  },
-  {
-    "finishReason": "stop",
-    "key": "step-0",
-    "operation": "update",
-    "status": "completed",
-    "stepNumber": 1,
-    "type": "step",
-  },
-  {
-    "finishReason": "stop",
-    "key": "run-0",
-    "operation": "update",
-    "status": "completed",
-    "type": "run",
-  },
-]
-`;
-
-exports[`G: map-reduce ordering > G1: map-reduce returns results in chunk order even when completions differ > parent history 1`] = `
-[
-  {
-    "args": {},
-    "entityType": "map-reduce-g1",
-    "operation": "insert",
-    "type": "entity_created",
-  },
-  {
-    "from": "/principal/system%3Aruntime-dsl-test",
-    "operation": "insert",
-    "payload": "map_chunks summarize :: alpha@30|beta@0|gamma@10",
-    "type": "inbox",
-  },
-  {
-    "key": "current",
-    "operation": "insert",
-    "type": "state:status",
-    "value": {
-      "key": "current",
-      "value": "idle",
-    },
-  },
-  {
-    "args": {
-      "chunkCount": 3,
-      "task": "summarize",
-    },
-    "key": "tc-0",
-    "operation": "insert",
-    "status": "started",
-    "toolName": "map_chunks",
-    "type": "tool_call",
-  },
-  {
-    "key": "current",
-    "operation": "update",
-    "type": "state:status",
-    "value": {
-      "key": "current",
-      "value": "mapping",
-    },
-  },
-  {
-    "key": "chunk-1",
-    "operation": "insert",
-    "type": "state:children",
-    "value": {
-      "chunk": 0,
-      "key": "chunk-1",
-      "url": "/coord-worker-f/map-1-chunk-1",
-    },
-  },
-  {
-    "key": "chunk-2",
-    "operation": "insert",
-    "type": "state:children",
-    "value": {
-      "chunk": 1,
-      "key": "chunk-2",
-      "url": "/coord-worker-f/map-1-chunk-2",
-    },
-  },
-  {
-    "key": "chunk-3",
-    "operation": "insert",
-    "type": "state:children",
-    "value": {
-      "chunk": 2,
-      "key": "chunk-3",
-      "url": "/coord-worker-f/map-1-chunk-3",
-    },
-  },
-  {
-    "key": "current",
-    "operation": "update",
-    "type": "state:status",
-    "value": {
-      "key": "current",
-      "value": "reducing",
-    },
-  },
-  {
-    "args": {
-      "chunkCount": 3,
-      "task": "summarize",
-    },
-    "key": "tc-0",
-    "operation": "update",
-    "result": "{"chunkCount":3}",
-    "status": "completed",
-    "toolName": "map_chunks",
-    "type": "tool_call",
-  },
-  {
-    "key": "current",
-    "operation": "update",
-    "type": "state:status",
-    "value": {
-      "key": "current",
-      "value": "idle",
-    },
-  },
-  {
-    "key": "child:coord-worker-f:map-1-chunk-1",
-    "manifest": {
-      "entityType": "coord-worker-f",
-      "entityUrl": "/coord-worker-f/map-1-chunk-1",
-      "id": "map-1-chunk-1",
-      "key": "child:coord-worker-f:map-1-chunk-1",
-      "kind": "child",
-    },
-    "operation": "insert",
-    "type": "manifest",
-  },
-  {
-    "key": "child:coord-worker-f:map-1-chunk-2",
-    "manifest": {
-      "entityType": "coord-worker-f",
-      "entityUrl": "/coord-worker-f/map-1-chunk-2",
-      "id": "map-1-chunk-2",
-      "key": "child:coord-worker-f:map-1-chunk-2",
-      "kind": "child",
-    },
-    "operation": "insert",
-    "type": "manifest",
-  },
-  {
-    "key": "child:coord-worker-f:map-1-chunk-3",
-    "manifest": {
-      "entityType": "coord-worker-f",
-      "entityUrl": "/coord-worker-f/map-1-chunk-3",
-      "id": "map-1-chunk-3",
-      "key": "child:coord-worker-f:map-1-chunk-3",
-      "kind": "child",
-    },
-    "operation": "insert",
-    "type": "manifest",
-  },
-  {
-    "key": "source:entity:/coord-worker-f/map-1-chunk-1",
-    "manifest": {
-      "key": "source:entity:/coord-worker-f/map-1-chunk-1",
-      "kind": "source",
-      "value": {
-        "config": {
-          "entityUrl": "/coord-worker-f/map-1-chunk-1",
-        },
-        "key": "source:entity:/coord-worker-f/map-1-chunk-1",
-        "kind": "source",
-        "sourceRef": "/coord-worker-f/map-1-chunk-1",
-        "sourceType": "entity",
-      },
-    },
-    "operation": "insert",
-    "type": "manifest",
-  },
-  {
-    "key": "source:entity:/coord-worker-f/map-1-chunk-2",
-    "manifest": {
-      "key": "source:entity:/coord-worker-f/map-1-chunk-2",
-      "kind": "source",
-      "value": {
-        "config": {
-          "entityUrl": "/coord-worker-f/map-1-chunk-2",
-        },
-        "key": "source:entity:/coord-worker-f/map-1-chunk-2",
-        "kind": "source",
-        "sourceRef": "/coord-worker-f/map-1-chunk-2",
-        "sourceType": "entity",
-      },
-    },
-    "operation": "insert",
-    "type": "manifest",
-  },
-  {
-    "key": "source:entity:/coord-worker-f/map-1-chunk-3",
-    "manifest": {
-      "key": "source:entity:/coord-worker-f/map-1-chunk-3",
-      "kind": "source",
-      "value": {
-        "config": {
-          "entityUrl": "/coord-worker-f/map-1-chunk-3",
-        },
-        "key": "source:entity:/coord-worker-f/map-1-chunk-3",
-        "kind": "source",
-        "sourceRef": "/coord-worker-f/map-1-chunk-3",
-        "sourceType": "entity",
-      },
-    },
-    "operation": "insert",
-    "type": "manifest",
-  },
-]
-`;
-
 exports[`H: pipeline sequencing > H1: pipeline writes its state row during the first wake before stage execution > entity history 1`] = `
 [
   {
@@ -5202,6 +4540,16 @@ exports[`H: pipeline sequencing > H1: pipeline writes its state row during the f
     "value": {
       "key": "current",
       "value": "idle",
+    },
+  },
+  {
+    "key": "state",
+    "operation": "insert",
+    "type": "state:pipeline",
+    "value": {
+      "currentInput": "",
+      "currentStage": 0,
+      "key": "state",
     },
   },
   {
@@ -5227,16 +4575,6 @@ exports[`H: pipeline sequencing > H1: pipeline writes its state row during the f
     "status": "started",
     "toolName": "run_pipeline",
     "type": "tool_call",
-  },
-  {
-    "key": "state",
-    "operation": "insert",
-    "type": "state:pipeline",
-    "value": {
-      "currentInput": "",
-      "currentStage": 0,
-      "key": "state",
-    },
   },
   {
     "key": "current",
@@ -5372,6 +4710,16 @@ exports[`H: pipeline sequencing > H2: pipeline feeds each stage the previous sta
     },
   },
   {
+    "key": "state",
+    "operation": "insert",
+    "type": "state:pipeline",
+    "value": {
+      "currentInput": "",
+      "currentStage": 0,
+      "key": "state",
+    },
+  },
+  {
     "key": "run-0",
     "operation": "insert",
     "status": "started",
@@ -5394,16 +4742,6 @@ exports[`H: pipeline sequencing > H2: pipeline feeds each stage the previous sta
     "status": "started",
     "toolName": "run_pipeline",
     "type": "tool_call",
-  },
-  {
-    "key": "state",
-    "operation": "insert",
-    "type": "state:pipeline",
-    "value": {
-      "currentInput": "",
-      "currentStage": 0,
-      "key": "state",
-    },
   },
   {
     "key": "current",
@@ -5822,6 +5160,47 @@ exports[`I: peer review coordination > I1: peer review aggregates three reviewer
     "type": "inbox",
   },
   {
+    "key": "source:db:review-review-1",
+    "manifest": {
+      "key": "source:db:review-review-1",
+      "kind": "source",
+      "value": {
+        "config": {
+          "collections": {
+            "reviews": {
+              "primaryKey": "key",
+              "type": "shared:review",
+            },
+          },
+          "id": "review-review-1",
+        },
+        "key": "source:db:review-review-1",
+        "kind": "source",
+        "sourceRef": "review-review-1",
+        "sourceType": "db",
+      },
+    },
+    "operation": "insert",
+    "type": "manifest",
+  },
+  {
+    "key": "shared-state:review-review-1",
+    "manifest": {
+      "collections": {
+        "reviews": {
+          "primaryKey": "key",
+          "type": "shared:review",
+        },
+      },
+      "id": "review-review-1",
+      "key": "shared-state:review-review-1",
+      "kind": "shared-state",
+      "mode": "connect",
+    },
+    "operation": "insert",
+    "type": "manifest",
+  },
+  {
     "key": "run-0",
     "operation": "insert",
     "status": "started",
@@ -5869,6 +5248,29 @@ exports[`I: peer review coordination > I1: peer review aggregates three reviewer
     "status": "completed",
     "type": "run",
   },
+]
+`;
+
+exports[`I: peer review coordination > I1: peer review aggregates three reviewer writes through shared state > completeness history 1`] = `
+[
+  {
+    "args": {
+      "feedback": "missing edge cases",
+      "reviewer": "completeness-reviewer",
+      "score": 7,
+      "sharedStateId": "review-review-1",
+    },
+    "entityType": "review-worker-i1",
+    "operation": "insert",
+    "parentUrl": "/peer-review-i1/review-1",
+    "type": "entity_created",
+  },
+  {
+    "from": "/principal/system%3Aruntime-dsl-test",
+    "operation": "insert",
+    "payload": "launch checklist",
+    "type": "inbox",
+  },
   {
     "key": "source:db:review-review-1",
     "manifest": {
@@ -5909,29 +5311,6 @@ exports[`I: peer review coordination > I1: peer review aggregates three reviewer
     },
     "operation": "insert",
     "type": "manifest",
-  },
-]
-`;
-
-exports[`I: peer review coordination > I1: peer review aggregates three reviewer writes through shared state > completeness history 1`] = `
-[
-  {
-    "args": {
-      "feedback": "missing edge cases",
-      "reviewer": "completeness-reviewer",
-      "score": 7,
-      "sharedStateId": "review-review-1",
-    },
-    "entityType": "review-worker-i1",
-    "operation": "insert",
-    "parentUrl": "/peer-review-i1/review-1",
-    "type": "entity_created",
-  },
-  {
-    "from": "/principal/system%3Aruntime-dsl-test",
-    "operation": "insert",
-    "payload": "launch checklist",
-    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -5981,6 +5360,29 @@ exports[`I: peer review coordination > I1: peer review aggregates three reviewer
     "status": "completed",
     "type": "run",
   },
+]
+`;
+
+exports[`I: peer review coordination > I1: peer review aggregates three reviewer writes through shared state > correctness history 1`] = `
+[
+  {
+    "args": {
+      "feedback": "technically sound",
+      "reviewer": "correctness-reviewer",
+      "score": 9,
+      "sharedStateId": "review-review-1",
+    },
+    "entityType": "review-worker-i1",
+    "operation": "insert",
+    "parentUrl": "/peer-review-i1/review-1",
+    "type": "entity_created",
+  },
+  {
+    "from": "/principal/system%3Aruntime-dsl-test",
+    "operation": "insert",
+    "payload": "launch checklist",
+    "type": "inbox",
+  },
   {
     "key": "source:db:review-review-1",
     "manifest": {
@@ -6021,29 +5423,6 @@ exports[`I: peer review coordination > I1: peer review aggregates three reviewer
     },
     "operation": "insert",
     "type": "manifest",
-  },
-]
-`;
-
-exports[`I: peer review coordination > I1: peer review aggregates three reviewer writes through shared state > correctness history 1`] = `
-[
-  {
-    "args": {
-      "feedback": "technically sound",
-      "reviewer": "correctness-reviewer",
-      "score": 9,
-      "sharedStateId": "review-review-1",
-    },
-    "entityType": "review-worker-i1",
-    "operation": "insert",
-    "parentUrl": "/peer-review-i1/review-1",
-    "type": "entity_created",
-  },
-  {
-    "from": "/principal/system%3Aruntime-dsl-test",
-    "operation": "insert",
-    "payload": "launch checklist",
-    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -6093,47 +5472,6 @@ exports[`I: peer review coordination > I1: peer review aggregates three reviewer
     "status": "completed",
     "type": "run",
   },
-  {
-    "key": "source:db:review-review-1",
-    "manifest": {
-      "key": "source:db:review-review-1",
-      "kind": "source",
-      "value": {
-        "config": {
-          "collections": {
-            "reviews": {
-              "primaryKey": "key",
-              "type": "shared:review",
-            },
-          },
-          "id": "review-review-1",
-        },
-        "key": "source:db:review-review-1",
-        "kind": "source",
-        "sourceRef": "review-review-1",
-        "sourceType": "db",
-      },
-    },
-    "operation": "insert",
-    "type": "manifest",
-  },
-  {
-    "key": "shared-state:review-review-1",
-    "manifest": {
-      "collections": {
-        "reviews": {
-          "primaryKey": "key",
-          "type": "shared:review",
-        },
-      },
-      "id": "review-review-1",
-      "key": "shared-state:review-review-1",
-      "kind": "shared-state",
-      "mode": "connect",
-    },
-    "operation": "insert",
-    "type": "manifest",
-  },
 ]
 `;
 
@@ -6159,6 +5497,47 @@ exports[`I: peer review coordination > I1: peer review aggregates three reviewer
       "key": "current",
       "value": "idle",
     },
+  },
+  {
+    "key": "shared-state:review-review-1",
+    "manifest": {
+      "collections": {
+        "reviews": {
+          "primaryKey": "key",
+          "type": "shared:review",
+        },
+      },
+      "id": "review-review-1",
+      "key": "shared-state:review-review-1",
+      "kind": "shared-state",
+      "mode": "create",
+    },
+    "operation": "insert",
+    "type": "manifest",
+  },
+  {
+    "key": "source:db:review-review-1",
+    "manifest": {
+      "key": "source:db:review-review-1",
+      "kind": "source",
+      "value": {
+        "config": {
+          "collections": {
+            "reviews": {
+              "primaryKey": "key",
+              "type": "shared:review",
+            },
+          },
+          "id": "review-review-1",
+        },
+        "key": "source:db:review-review-1",
+        "kind": "source",
+        "sourceRef": "review-review-1",
+        "sourceType": "db",
+      },
+    },
+    "operation": "insert",
+    "type": "manifest",
   },
   {
     "key": "run-0",
@@ -6267,47 +5646,6 @@ exports[`I: peer review coordination > I1: peer review aggregates three reviewer
     "operation": "update",
     "status": "completed",
     "type": "run",
-  },
-  {
-    "key": "shared-state:review-review-1",
-    "manifest": {
-      "collections": {
-        "reviews": {
-          "primaryKey": "key",
-          "type": "shared:review",
-        },
-      },
-      "id": "review-review-1",
-      "key": "shared-state:review-review-1",
-      "kind": "shared-state",
-      "mode": "create",
-    },
-    "operation": "insert",
-    "type": "manifest",
-  },
-  {
-    "key": "source:db:review-review-1",
-    "manifest": {
-      "key": "source:db:review-review-1",
-      "kind": "source",
-      "value": {
-        "config": {
-          "collections": {
-            "reviews": {
-              "primaryKey": "key",
-              "type": "shared:review",
-            },
-          },
-          "id": "review-review-1",
-        },
-        "key": "source:db:review-review-1",
-        "kind": "source",
-        "sourceRef": "review-review-1",
-        "sourceType": "db",
-      },
-    },
-    "operation": "insert",
-    "type": "manifest",
   },
   {
     "key": "child:review-worker-i1:review-1-clarity",
@@ -6495,6 +5833,47 @@ exports[`J: debate coordination > J1: debate parent reads both sides from shared
     "type": "inbox",
   },
   {
+    "key": "source:db:debate-debate-1",
+    "manifest": {
+      "key": "source:db:debate-debate-1",
+      "kind": "source",
+      "value": {
+        "config": {
+          "collections": {
+            "arguments": {
+              "primaryKey": "key",
+              "type": "shared:argument",
+            },
+          },
+          "id": "debate-debate-1",
+        },
+        "key": "source:db:debate-debate-1",
+        "kind": "source",
+        "sourceRef": "debate-debate-1",
+        "sourceType": "db",
+      },
+    },
+    "operation": "insert",
+    "type": "manifest",
+  },
+  {
+    "key": "shared-state:debate-debate-1",
+    "manifest": {
+      "collections": {
+        "arguments": {
+          "primaryKey": "key",
+          "type": "shared:argument",
+        },
+      },
+      "id": "debate-debate-1",
+      "key": "shared-state:debate-debate-1",
+      "kind": "shared-state",
+      "mode": "connect",
+    },
+    "operation": "insert",
+    "type": "manifest",
+  },
+  {
     "key": "run-0",
     "operation": "insert",
     "status": "started",
@@ -6542,6 +5921,28 @@ exports[`J: debate coordination > J1: debate parent reads both sides from shared
     "status": "completed",
     "type": "run",
   },
+]
+`;
+
+exports[`J: debate coordination > J1: debate parent reads both sides from shared state before issuing a ruling > pro history 1`] = `
+[
+  {
+    "args": {
+      "sharedStateId": "debate-debate-1",
+      "side": "pro",
+      "tone": "benefits outweigh risks",
+    },
+    "entityType": "debate-worker-j1",
+    "operation": "insert",
+    "parentUrl": "/debate-parent-j1/debate-1",
+    "type": "entity_created",
+  },
+  {
+    "from": "/principal/system%3Aruntime-dsl-test",
+    "operation": "insert",
+    "payload": "Should we refactor now?",
+    "type": "inbox",
+  },
   {
     "key": "source:db:debate-debate-1",
     "manifest": {
@@ -6582,28 +5983,6 @@ exports[`J: debate coordination > J1: debate parent reads both sides from shared
     },
     "operation": "insert",
     "type": "manifest",
-  },
-]
-`;
-
-exports[`J: debate coordination > J1: debate parent reads both sides from shared state before issuing a ruling > pro history 1`] = `
-[
-  {
-    "args": {
-      "sharedStateId": "debate-debate-1",
-      "side": "pro",
-      "tone": "benefits outweigh risks",
-    },
-    "entityType": "debate-worker-j1",
-    "operation": "insert",
-    "parentUrl": "/debate-parent-j1/debate-1",
-    "type": "entity_created",
-  },
-  {
-    "from": "/principal/system%3Aruntime-dsl-test",
-    "operation": "insert",
-    "payload": "Should we refactor now?",
-    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -6652,47 +6031,6 @@ exports[`J: debate coordination > J1: debate parent reads both sides from shared
     "operation": "update",
     "status": "completed",
     "type": "run",
-  },
-  {
-    "key": "source:db:debate-debate-1",
-    "manifest": {
-      "key": "source:db:debate-debate-1",
-      "kind": "source",
-      "value": {
-        "config": {
-          "collections": {
-            "arguments": {
-              "primaryKey": "key",
-              "type": "shared:argument",
-            },
-          },
-          "id": "debate-debate-1",
-        },
-        "key": "source:db:debate-debate-1",
-        "kind": "source",
-        "sourceRef": "debate-debate-1",
-        "sourceType": "db",
-      },
-    },
-    "operation": "insert",
-    "type": "manifest",
-  },
-  {
-    "key": "shared-state:debate-debate-1",
-    "manifest": {
-      "collections": {
-        "arguments": {
-          "primaryKey": "key",
-          "type": "shared:argument",
-        },
-      },
-      "id": "debate-debate-1",
-      "key": "shared-state:debate-debate-1",
-      "kind": "shared-state",
-      "mode": "connect",
-    },
-    "operation": "insert",
-    "type": "manifest",
   },
 ]
 `;
@@ -6743,6 +6081,47 @@ exports[`K: wiki coordination > K1: wiki specialists accumulate shared articles 
     "type": "inbox",
   },
   {
+    "key": "source:db:wiki-wiki-1",
+    "manifest": {
+      "key": "source:db:wiki-wiki-1",
+      "kind": "source",
+      "value": {
+        "config": {
+          "collections": {
+            "articles": {
+              "primaryKey": "key",
+              "type": "shared:wiki_article",
+            },
+          },
+          "id": "wiki-wiki-1",
+        },
+        "key": "source:db:wiki-wiki-1",
+        "kind": "source",
+        "sourceRef": "wiki-wiki-1",
+        "sourceType": "db",
+      },
+    },
+    "operation": "insert",
+    "type": "manifest",
+  },
+  {
+    "key": "shared-state:wiki-wiki-1",
+    "manifest": {
+      "collections": {
+        "articles": {
+          "primaryKey": "key",
+          "type": "shared:wiki_article",
+        },
+      },
+      "id": "wiki-wiki-1",
+      "key": "shared-state:wiki-wiki-1",
+      "kind": "shared-state",
+      "mode": "connect",
+    },
+    "operation": "insert",
+    "type": "manifest",
+  },
+  {
     "key": "run-0",
     "operation": "insert",
     "status": "started",
@@ -6790,6 +6169,27 @@ exports[`K: wiki coordination > K1: wiki specialists accumulate shared articles 
     "status": "completed",
     "type": "run",
   },
+]
+`;
+
+exports[`K: wiki coordination > K1: wiki specialists accumulate shared articles that a later query can read > history worker history 1`] = `
+[
+  {
+    "args": {
+      "sharedStateId": "wiki-wiki-1",
+      "subtopic": "History",
+    },
+    "entityType": "wiki-worker-k1",
+    "operation": "insert",
+    "parentUrl": "/wiki-parent-k1/wiki-1",
+    "type": "entity_created",
+  },
+  {
+    "from": "/principal/system%3Aruntime-dsl-test",
+    "operation": "insert",
+    "payload": "Durable Streams",
+    "type": "inbox",
+  },
   {
     "key": "source:db:wiki-wiki-1",
     "manifest": {
@@ -6830,27 +6230,6 @@ exports[`K: wiki coordination > K1: wiki specialists accumulate shared articles 
     },
     "operation": "insert",
     "type": "manifest",
-  },
-]
-`;
-
-exports[`K: wiki coordination > K1: wiki specialists accumulate shared articles that a later query can read > history worker history 1`] = `
-[
-  {
-    "args": {
-      "sharedStateId": "wiki-wiki-1",
-      "subtopic": "History",
-    },
-    "entityType": "wiki-worker-k1",
-    "operation": "insert",
-    "parentUrl": "/wiki-parent-k1/wiki-1",
-    "type": "entity_created",
-  },
-  {
-    "from": "/principal/system%3Aruntime-dsl-test",
-    "operation": "insert",
-    "payload": "Durable Streams",
-    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -6900,6 +6279,40 @@ exports[`K: wiki coordination > K1: wiki specialists accumulate shared articles 
     "status": "completed",
     "type": "run",
   },
+]
+`;
+
+exports[`K: wiki coordination > K1: wiki specialists accumulate shared articles that a later query can read > parent history 1`] = `
+[
+  {
+    "args": {},
+    "entityType": "wiki-parent-k1",
+    "operation": "insert",
+    "type": "entity_created",
+  },
+  {
+    "from": "/principal/system%3Aruntime-dsl-test",
+    "operation": "insert",
+    "payload": "create_wiki Durable Streams :: History|Applications",
+    "type": "inbox",
+  },
+  {
+    "key": "shared-state:wiki-wiki-1",
+    "manifest": {
+      "collections": {
+        "articles": {
+          "primaryKey": "key",
+          "type": "shared:wiki_article",
+        },
+      },
+      "id": "wiki-wiki-1",
+      "key": "shared-state:wiki-wiki-1",
+      "kind": "shared-state",
+      "mode": "create",
+    },
+    "operation": "insert",
+    "type": "manifest",
+  },
   {
     "key": "source:db:wiki-wiki-1",
     "manifest": {
@@ -6923,40 +6336,6 @@ exports[`K: wiki coordination > K1: wiki specialists accumulate shared articles 
     },
     "operation": "insert",
     "type": "manifest",
-  },
-  {
-    "key": "shared-state:wiki-wiki-1",
-    "manifest": {
-      "collections": {
-        "articles": {
-          "primaryKey": "key",
-          "type": "shared:wiki_article",
-        },
-      },
-      "id": "wiki-wiki-1",
-      "key": "shared-state:wiki-wiki-1",
-      "kind": "shared-state",
-      "mode": "connect",
-    },
-    "operation": "insert",
-    "type": "manifest",
-  },
-]
-`;
-
-exports[`K: wiki coordination > K1: wiki specialists accumulate shared articles that a later query can read > parent history 1`] = `
-[
-  {
-    "args": {},
-    "entityType": "wiki-parent-k1",
-    "operation": "insert",
-    "type": "entity_created",
-  },
-  {
-    "from": "/principal/system%3Aruntime-dsl-test",
-    "operation": "insert",
-    "payload": "create_wiki Durable Streams :: History|Applications",
-    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -7064,47 +6443,6 @@ exports[`K: wiki coordination > K1: wiki specialists accumulate shared articles 
     "operation": "update",
     "status": "completed",
     "type": "run",
-  },
-  {
-    "key": "shared-state:wiki-wiki-1",
-    "manifest": {
-      "collections": {
-        "articles": {
-          "primaryKey": "key",
-          "type": "shared:wiki_article",
-        },
-      },
-      "id": "wiki-wiki-1",
-      "key": "shared-state:wiki-wiki-1",
-      "kind": "shared-state",
-      "mode": "create",
-    },
-    "operation": "insert",
-    "type": "manifest",
-  },
-  {
-    "key": "source:db:wiki-wiki-1",
-    "manifest": {
-      "key": "source:db:wiki-wiki-1",
-      "kind": "source",
-      "value": {
-        "config": {
-          "collections": {
-            "articles": {
-              "primaryKey": "key",
-              "type": "shared:wiki_article",
-            },
-          },
-          "id": "wiki-wiki-1",
-        },
-        "key": "source:db:wiki-wiki-1",
-        "kind": "source",
-        "sourceRef": "wiki-wiki-1",
-        "sourceType": "db",
-      },
-    },
-    "operation": "insert",
-    "type": "manifest",
   },
   {
     "key": "child:wiki-worker-k1:wiki-1-history",
