@@ -2727,11 +2727,15 @@ t.define(TYPES.n1WakeTypeParent, {
           const trimmed = message.trim()
           if (trimmed.startsWith(`spawn_and_observe `)) {
             const childId = trimmed.slice(`spawn_and_observe `.length)
-            const child = await ctx.spawn(TYPES.n1WakeTypeChild, childId)
-            await ctx.observe(entity(child.entityUrl), {
-              wake: { on: `runFinished`, includeResponse: true },
-            })
-            child.send(`hello from parent`)
+            await ctx.spawn(
+              TYPES.n1WakeTypeChild,
+              childId,
+              {},
+              {
+                initialMessage: `hello from parent`,
+                wake: { on: `runFinished`, includeResponse: true },
+              }
+            )
             return `spawned:${childId}:wake.type=${wake.type}`
           }
           return `echo:${trimmed}:wake.type=${wake.type}`
