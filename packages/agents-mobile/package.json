@@ -1,7 +1,7 @@
 {
   "name": "@electric-ax/agents-mobile",
   "private": true,
-  "version": "0.0.11",
+  "version": "0.0.12",
   "main": "index.ts",
   "scripts": {
     "start": "expo start",

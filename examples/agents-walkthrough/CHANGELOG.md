@@ -1,5 +1,12 @@
 # @electric-ax/example-agents-walkthrough
 
+## 0.1.2
+
+### Patch Changes
+
+- Updated dependencies [3ecdade]
+  - @electric-ax/agents-runtime@0.3.10
+
 ## 0.1.1
 
 ### Patch Changes

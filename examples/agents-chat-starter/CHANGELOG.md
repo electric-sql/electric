@@ -1,5 +1,12 @@
 # @electric-ax/example-agents-chat-starter
 
+## 0.1.5
+
+### Patch Changes
+
+- Updated dependencies [3ecdade]
+  - @electric-ax/agents-runtime@0.3.10
+
 ## 0.1.4
 
 ### Patch Changes
