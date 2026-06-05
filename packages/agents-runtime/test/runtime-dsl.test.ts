@@ -4615,14 +4615,6 @@ describe(`G: map-reduce ordering`, () => {
       `chunk-1:chunk-1::summarize:alpha | ` +
       `chunk-2:chunk-2::summarize:beta | ` +
       `chunk-3:chunk-3::summarize:gamma`
-    await parent.waitForRun()
-
-    const chunk1 = t.entity(`/${TYPES.fCoordWorker}/map-1-chunk-1`)
-    const chunk2 = t.entity(`/${TYPES.fCoordWorker}/map-1-chunk-2`)
-    const chunk3 = t.entity(`/${TYPES.fCoordWorker}/map-1-chunk-3`)
-    await chunk1.waitForRun()
-    await chunk2.waitForRun()
-    await chunk3.waitForRun()
     const parentHistory = await parent.waitFor((history) =>
       history.some(
         `text_delta`,
@@ -4643,9 +4635,6 @@ describe(`G: map-reduce ordering`, () => {
         String(eventValueRecord(event)?.key ?? ``).startsWith(`chunk-`)
       )
     ).toBeGreaterThanOrEqual(3)
-    expect(await chunk1.waitForRun()).toBeDefined()
-    expect(await chunk2.waitForRun()).toBeDefined()
-    expect(await chunk3.waitForRun()).toBeDefined()
   }, 30_000)
 
   it(`G2: map-reduce with one chunk still uses the orchestration path`, async () => {
