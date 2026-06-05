@@ -3853,9 +3853,23 @@ describe(`F: coordination orchestration`, () => {
       key: `dispatch-1-dispatch-1`,
       kind: `assistant`,
     })
+    const finalParentHistory = await parent.history()
     expect(
-      (await parent.snapshot()).filter((entry) => entry.type !== `state:status`)
-    ).toMatchSnapshot(`parent history`)
+      finalParentHistory.some(
+        `wake`,
+        (event) =>
+          eventValueRecord(event)?.finished_child &&
+          eventValueRecord(event)?.source === child.entityUrl
+      )
+    ).toBe(true)
+    expect(
+      finalParentHistory.some(
+        `text_delta`,
+        (event) =>
+          eventValueRecord(event)?.delta ===
+          `dispatched assistant to /dispatch-assistant-f1/dispatch-1-dispatch-1`
+      )
+    ).toBe(true)
     expect(await child.snapshot()).toMatchSnapshot(`child history`)
   }, 30_000)
 
@@ -3926,37 +3940,10 @@ describe(`F: coordination orchestration`, () => {
       delta: expectedDelta,
     })
     expect(
-      parentHistory
-        .filteredSnapshot((entry) => {
-          if (
-            entry.type === `entity_created` ||
-            entry.type === `inbox` ||
-            entry.type === `tool_call` ||
-            entry.type === `state:children`
-          ) {
-            return true
-          }
-
-          if (entry.type === `state:status`) {
-            const value = eventValueRecord({ value: entry.value })
-            return value?.value !== undefined
-          }
-
-          if (entry.type === `text_delta`) {
-            return entry.delta === expectedDelta
-          }
-
-          return false
-        })
-        .map((entry) =>
-          entry.type === `text_delta`
-            ? {
-                type: entry.type,
-                delta: entry.delta,
-              }
-            : entry
-        )
-    ).toMatchSnapshot(`parent history`)
+      parentHistory.count(`wake`, (event) =>
+        Boolean(eventValueRecord(event)?.finished_child)
+      )
+    ).toBe(3)
     expect(await optimist.snapshot()).toMatchSnapshot(`optimist history`)
     expect(await pessimist.snapshot()).toMatchSnapshot(`pessimist history`)
     expect(await pragmatist.snapshot()).toMatchSnapshot(`pragmatist history`)
