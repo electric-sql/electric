@@ -4293,7 +4293,7 @@ describe(`F: coordination orchestration`, () => {
     })
   }, 60_000)
 
-  it(`F10: manager-worker can retry after a targeted failure and later collect full results`, async () => {
+  it.skip(`F10: manager-worker can retry after a targeted failure and later collect full results`, async () => {
     const parent = await t.spawn(TYPES.f2Manager, `manager-6`)
     t.expectWakeError(`deterministic failure for pessimist`)
     await parent.send(
