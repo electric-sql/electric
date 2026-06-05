@@ -119,7 +119,8 @@ defmodule Electric.Connection.Manager do
       # PIDs of the database connection pools
       pool_pids: %{admin: nil, snapshot: nil},
       validated_connection_opts: %{replication: nil, pool: nil},
-      drop_slot_requested: false
+      drop_slot_requested: false,
+      connection_status_check_interval: nil
     ]
   end
 
@@ -295,7 +296,9 @@ defmodule Electric.Connection.Manager do
         persistent_kv: Keyword.fetch!(opts, :persistent_kv),
         manual_table_publishing?: Keyword.get(opts, :manual_table_publishing?, false),
         max_shapes: Keyword.fetch!(opts, :max_shapes),
-        lock_breaker_guard: Keyword.get(opts, :lock_breaker_guard)
+        lock_breaker_guard: Keyword.get(opts, :lock_breaker_guard),
+        connection_status_check_interval:
+          Keyword.get(opts, :connection_status_check_interval, @connection_status_check_interval)
       }
       |> initialize_connection_opts(opts)
 
@@ -574,7 +577,7 @@ defmodule Electric.Connection.Manager do
         } = state
       ) do
     Logger.warning(fn -> "Waiting for postgres lock to be acquired..." end)
-    tref = schedule_periodic_connection_status_check(:replication_lock)
+    tref = schedule_periodic_connection_status_check(:replication_lock, state.connection_status_check_interval)
     state = %{state | replication_lock_timer: tref}
     {:noreply, state, {:continue, :check_lock_not_abandoned}}
   end
@@ -598,7 +601,7 @@ defmodule Electric.Connection.Manager do
       dispatch_stack_event(:replication_slot_creation_blocked_by_pending_transactions, state)
     end
 
-    tref = schedule_periodic_connection_status_check(:replication_configuration)
+    tref = schedule_periodic_connection_status_check(:replication_configuration, state.connection_status_check_interval)
 
     state = %{
       state
@@ -690,7 +693,7 @@ defmodule Electric.Connection.Manager do
       ) do
     dispatch_stack_event(:waiting_for_connection_lock, state)
     state = mark_connection_succeeded(state)
-    tref = schedule_periodic_connection_status_check(:replication_lock)
+    tref = schedule_periodic_connection_status_check(:replication_lock, state.connection_status_check_interval)
 
     state = %{
       state
@@ -728,7 +731,7 @@ defmodule Electric.Connection.Manager do
       ) do
     Electric.StatusMonitor.mark_pg_lock_acquired(state.stack_id, state.replication_client_pid)
     dispatch_stack_event(:connection_lock_acquired, state)
-    tref = schedule_periodic_connection_status_check(:replication_configuration)
+    tref = schedule_periodic_connection_status_check(:replication_configuration, state.connection_status_check_interval)
 
     # Refresh shape metadata now that the lock is acquired and storage is
     # entirely within this service's control
@@ -1279,8 +1282,8 @@ defmodule Electric.Connection.Manager do
       )
   end
 
-  defp schedule_periodic_connection_status_check(type) do
-    :erlang.start_timer(@connection_status_check_interval, self(), {:check_status, type})
+  defp schedule_periodic_connection_status_check(type, interval) do
+    :erlang.start_timer(interval, self(), {:check_status, type})
   end
 
   # It's possible that the exit signal received from an exiting process includes a

@@ -54,7 +54,8 @@ defmodule Electric.Connection.ConnectionManagerTest do
       max_shapes: nil,
       persistent_kv: ctx.persistent_kv,
       stack_events_registry: stack_events_registry,
-      lock_breaker_guard: ctx[:lock_breaker_guard]
+      lock_breaker_guard: ctx[:lock_breaker_guard],
+      connection_status_check_interval: Map.get(ctx, :connection_status_check_interval, 10_000)
     ]
 
     core_sup =
@@ -79,6 +80,16 @@ defmodule Electric.Connection.ConnectionManagerTest do
     {:ok, socket} = :gen_tcp.listen(0, [])
     {:ok, port} = :inet.port(socket)
     [unresponsive_port: port]
+  end
+
+  describe "connection status check interval" do
+    setup [:start_connection_manager]
+
+    @tag connection_status_check_interval: 50
+    test "is configurable via opts", %{stack_id: stack_id} do
+      manager = stack_id |> Connection.Manager.name() |> GenServer.whereis()
+      assert :sys.get_state(manager).connection_status_check_interval == 50
+    end
   end
 
   describe "status monitor" do
