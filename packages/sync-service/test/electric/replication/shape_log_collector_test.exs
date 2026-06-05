@@ -209,6 +209,84 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       xids = Support.TransactionConsumer.assert_consume([{1, consumer}], [txn])
       assert xids == [xmin]
     end
+
+    @tag restore_shapes: [{@shape_handle, @shape}, {@shape_handle <> "-2", @shape}],
+         inspector: @inspector
+    test "sets total_processing_time on the span exactly once for a multi-shape transaction",
+         ctx do
+      test_pid = self()
+
+      Repatch.patch(
+        Electric.Telemetry.OpenTelemetry,
+        :add_span_attributes,
+        [mode: :shared],
+        fn attrs ->
+          if Keyword.keyword?(attrs) and Keyword.has_key?(attrs, :total_processing_time) do
+            send(
+              test_pid,
+              {:total_processing_time, Keyword.fetch!(attrs, :total_processing_time)}
+            )
+          end
+
+          true
+        end
+      )
+
+      lsn = Lsn.from_string("0/10")
+
+      consumer1 =
+        start_link_supervised!(
+          {Support.TransactionConsumer,
+           id: 1,
+           stack_id: ctx.stack_id,
+           parent: test_pid,
+           shape: @shape,
+           shape_handle: @shape_handle,
+           action: :restore},
+          id: {:consumer, 1}
+        )
+
+      consumer2 =
+        start_link_supervised!(
+          {Support.TransactionConsumer,
+           id: 2,
+           stack_id: ctx.stack_id,
+           parent: test_pid,
+           shape: @shape,
+           shape_handle: @shape_handle <> "-2",
+           action: :restore},
+          id: {:consumer, 2}
+        )
+
+      :ok =
+        Electric.Shapes.ConsumerRegistry.register_consumer(consumer1, @shape_handle, ctx.stack_id)
+
+      :ok =
+        Electric.Shapes.ConsumerRegistry.register_consumer(
+          consumer2,
+          @shape_handle <> "-2",
+          ctx.stack_id
+        )
+
+      txn =
+        transaction(100, lsn, [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "2", "name" => "foo"},
+            log_offset: LogOffset.new(lsn, 0)
+          }
+        ])
+
+      assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
+
+      # The single incoming fragment is resliced to both shapes by the EventRouter...
+      Support.TransactionConsumer.assert_consume([{1, consumer1}, {2, consumer2}], [txn])
+
+      # ...but the wall-clock attribute is set once, on the original incoming commit fragment.
+      assert_receive {:total_processing_time, value}
+      assert is_integer(value) and value >= 0
+      refute_receive {:total_processing_time, _}
+    end
   end
 
   describe "lazy consumer initialization" do
