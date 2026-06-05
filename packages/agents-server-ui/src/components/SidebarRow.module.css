@@ -157,6 +157,22 @@
 .row:hover .type {
   color: var(--ds-text-2);
 }
+
+.sharedIcon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ds-text-3);
+  line-height: 1;
+  transform: translateY(1px);
+  transition: color 0.1s ease;
+}
+
+.row:hover .sharedIcon {
+  color: var(--ds-text-2);
+}
+
 /* On hover, fade the right edge of the type+count text so the
    chevron icon (positioned absolutely on top of the same area) has
    clean space around its glyph. The 22px transparent zone matches

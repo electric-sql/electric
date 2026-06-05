@@ -41,9 +41,10 @@ import {
   sandboxDisplayLabel,
 } from '../lib/entityRuntime'
 import { warmMarkdownRenderCache } from '../lib/markdownRenderCache'
+import { useCurrentPrincipal } from '../hooks/useCurrentPrincipal'
 import { Icon, IconButton, ScrollArea, Stack, Text, Tooltip } from '../ui'
 import { UserMessage } from './UserMessage'
-import type { UserMessageAttachment } from './UserMessage'
+import type { ForkFromHereAction, UserMessageAttachment } from './UserMessage'
 import { AgentResponseLive } from './AgentResponse'
 import { InlineEventCard } from './InlineEventCard'
 import { InlineStatusBadge } from './InlineStatusBadge'
@@ -56,6 +57,7 @@ import {
   formatChatTimestamp,
 } from '../lib/formatTime'
 import styles from './EntityTimeline.module.css'
+import type { ElectricUser } from '../lib/ElectricAgentsProvider'
 import type {
   EntityTimelineSection,
   EntityTimelineQueryRow,
@@ -906,6 +908,8 @@ const TimelineRow = memo(function TimelineRow({
   tileId,
   attachmentsByInboxKey,
   entityStatusByUrl,
+  currentPrincipal,
+  usersById,
   stopUserMessageKey,
   stopPending,
   onStopGeneration,
@@ -922,12 +926,14 @@ const TimelineRow = memo(function TimelineRow({
   tileId: string | null
   attachmentsByInboxKey: Map<string, Array<UserMessageAttachment>>
   entityStatusByUrl: Map<string, EntityStatus>
+  currentPrincipal: string
+  usersById: Map<string, ElectricUser>
   stopUserMessageKey: string | null
   stopPending: boolean
   onStopGeneration?: () => void
   /** When set on a user-message row, enables the "Fork from here" hover
    * button. Caller pre-resolved the pointer; we just invoke. */
-  onForkFromHere?: () => void
+  onForkFromHere?: ForkFromHereAction
   onRunSearchTextChange: (rowKey: string, text: string) => void
 }): React.ReactElement {
   if (row.inbox) {
@@ -945,12 +951,14 @@ const TimelineRow = memo(function TimelineRow({
           isInitial: isInitialUserMessage,
         }}
         attachments={attachmentsByInboxKey.get(row.inbox.key)}
+        currentPrincipal={currentPrincipal}
+        usersById={usersById}
         showStop={
           stopUserMessageKey !== null && row.$key === stopUserMessageKey
         }
         stopPending={stopPending}
         onStop={onStopGeneration}
-        onForkFromHere={onForkFromHere}
+        forkFromHere={onForkFromHere}
       />
     )
   }
@@ -1032,9 +1040,10 @@ export function EntityTimeline({
    * the prop is omitted) get no fork affordance. The caller resolves
    * the fork pointer and runs the fork → navigate flow.
    */
-  forkFromHereByInboxKey?: Map<string, () => void>
+  forkFromHereByInboxKey?: Map<string, ForkFromHereAction>
 }): React.ReactElement {
-  const { entitiesCollection, runnersCollection } = useElectricAgents()
+  const { entitiesCollection, runnersCollection, usersCollection } =
+    useElectricAgents()
   const referencedEntityUrlKey = useMemo(
     () => stableEntityUrlKey(entities.map((entity) => entity.url)),
     [entities]
@@ -1082,6 +1091,18 @@ export function EntityTimeline({
     },
     [runnersCollection]
   )
+  const { data: users = [] } = useLiveQuery(
+    (q) => {
+      if (!usersCollection) return undefined
+      return q.from({ user: usersCollection })
+    },
+    [usersCollection]
+  )
+  const usersById = useMemo(
+    () => new Map(users.map((user) => [user.id, user])),
+    [users]
+  )
+  const { principal: currentPrincipal } = useCurrentPrincipal()
   const sandboxLabel = sandboxProfileName
     ? (sandboxDisplayLabel(
         resolveSandboxProfile(runners, sandboxProfileName),
@@ -1717,6 +1738,8 @@ export function EntityTimeline({
                         tileId={tileId ?? null}
                         attachmentsByInboxKey={attachmentsByInboxKey}
                         entityStatusByUrl={entityStatusByUrl}
+                        currentPrincipal={currentPrincipal}
+                        usersById={usersById}
                         stopUserMessageKey={stopUserMessageKey}
                         stopPending={stopPending}
                         onStopGeneration={onStopGeneration}

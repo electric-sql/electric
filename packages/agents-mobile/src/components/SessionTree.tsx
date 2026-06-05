@@ -35,6 +35,7 @@ export const SessionTree = memo(function SessionTree({
   isLastSibling = true,
   parentTrunkX,
   onSelectEntity,
+  currentPrincipalUrl = null,
 }: {
   entity: ElectricEntity
   childrenByParent: Map<string, Array<ElectricEntity>>
@@ -47,6 +48,7 @@ export const SessionTree = memo(function SessionTree({
    */
   parentTrunkX?: number
   onSelectEntity: (url: string) => void
+  currentPrincipalUrl?: string | null
 }): React.ReactElement {
   const expanded = useIsExpanded(entity.url)
   const children = childrenByParent.get(entity.url) ?? []
@@ -66,6 +68,7 @@ export const SessionTree = memo(function SessionTree({
           hasChildren ? () => toggleExpanded(entity.url) : undefined
         }
         onPress={() => onSelectEntity(entity.url)}
+        currentPrincipalUrl={currentPrincipalUrl}
         connector={
           parentTrunkX !== undefined
             ? { trunkX: parentTrunkX, isLastSibling }
@@ -83,6 +86,7 @@ export const SessionTree = memo(function SessionTree({
               isLastSibling={idx === children.length - 1}
               parentTrunkX={myTrunkX}
               onSelectEntity={onSelectEntity}
+              currentPrincipalUrl={currentPrincipalUrl}
             />
           ))}
         </View>

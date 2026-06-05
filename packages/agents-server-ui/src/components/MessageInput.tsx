@@ -31,6 +31,9 @@ export function MessageInput({
   baseUrl,
   entityUrl,
   disabled,
+  writeDisabled = false,
+  stopDisabled = false,
+  disabledPlaceholder,
   generationActive = false,
   stopPending = false,
   imageAttachmentsEnabled = true,
@@ -45,6 +48,9 @@ export function MessageInput({
   baseUrl: string
   entityUrl: string
   disabled: boolean
+  writeDisabled?: boolean
+  stopDisabled?: boolean
+  disabledPlaceholder?: string
   generationActive?: boolean
   stopPending?: boolean
   imageAttachmentsEnabled?: boolean
@@ -67,6 +73,7 @@ export function MessageInput({
     onDelete: (key: string) => void
     onSteer: (key: string) => void
     onReorder: (key: string, position: string) => void
+    disabled: boolean
   }) => React.ReactNode
 }): React.ReactElement {
   const [value, setValue] = useState(``)
@@ -76,8 +83,9 @@ export function MessageInput({
     originalText: string
   } | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const inputDisabled = disabled || writeDisabled
   const attachmentsDisabled =
-    disabled || Boolean(editingMessage) || !imageAttachmentsEnabled
+    inputDisabled || Boolean(editingMessage) || !imageAttachmentsEnabled
   const {
     attachments,
     clearAttachments,
@@ -140,17 +148,18 @@ export function MessageInput({
   const inputText = value.trim()
   const attachmentCount = imageAttachmentsEnabled ? attachments.length : 0
   const canSubmit =
-    !disabled &&
+    !inputDisabled &&
     (editingMessage
       ? inputText.length > 0
       : inputText.length > 0 || attachmentCount > 0)
-  const canAttachFiles = !disabled && !editingMessage && imageAttachmentsEnabled
+  const canAttachFiles =
+    !inputDisabled && !editingMessage && imageAttachmentsEnabled
   const showStop =
     generationActive &&
     inputText.length === 0 &&
     attachmentCount === 0 &&
     !disabled
-  const canStop = showStop && !stopPending
+  const canStop = showStop && !stopPending && !stopDisabled
 
   const handleSubmit = useCallback(() => {
     if (!canSubmit) return
@@ -204,6 +213,7 @@ export function MessageInput({
 
   const startEditing = useCallback(
     (message: EntityTimelineData[`inbox`][number]) => {
+      if (inputDisabled) return
       const text = readTextPayload(message.payload)
       setError(null)
       clearAttachments()
@@ -218,7 +228,7 @@ export function MessageInput({
       setValue(text)
       textareaRef.current?.focus()
     },
-    [clearAttachments, updateAction]
+    [clearAttachments, inputDisabled, updateAction]
   )
 
   const cancelEditing = useCallback(() => {
@@ -239,6 +249,7 @@ export function MessageInput({
 
   const deleteMessage = useCallback(
     (key: string) => {
+      if (inputDisabled) return
       if (!deleteAction) return
       setError(null)
       deleteAction({ key }).isPersisted.promise.catch((err: Error) => {
@@ -246,11 +257,12 @@ export function MessageInput({
       })
       if (editingMessage?.key === key) cancelEditing()
     },
-    [deleteAction, editingMessage?.key, cancelEditing]
+    [deleteAction, inputDisabled, editingMessage?.key, cancelEditing]
   )
 
   const steerMessage = useCallback(
     (key: string) => {
+      if (inputDisabled) return
       if (!steerAction) return
       setError(null)
       steerAction({ key }).isPersisted.promise.catch((err: Error) => {
@@ -258,10 +270,11 @@ export function MessageInput({
       })
       if (editingMessage?.key === key) cancelEditing()
     },
-    [steerAction, editingMessage?.key, cancelEditing]
+    [steerAction, inputDisabled, editingMessage?.key, cancelEditing]
   )
   const reorderMessage = useCallback(
     (key: string, position: string) => {
+      if (inputDisabled) return
       if (!updateAction) return
       setError(null)
       updateAction({ key, position }).isPersisted.promise.catch(
@@ -270,10 +283,10 @@ export function MessageInput({
         }
       )
     },
-    [updateAction]
+    [inputDisabled, updateAction]
   )
 
-  const isButtonActive = canSubmit || showStop
+  const isButtonActive = canSubmit || (showStop && !stopDisabled)
 
   return (
     <Stack direction="column" gap={0} className={styles.root}>
@@ -284,6 +297,7 @@ export function MessageInput({
         onDelete: deleteMessage,
         onSteer: steerMessage,
         onReorder: reorderMessage,
+        disabled: inputDisabled,
       })}
       {error && (
         <Text size={1} tone="danger" className={styles.errorText}>
@@ -293,7 +307,7 @@ export function MessageInput({
       <div
         className={[
           styles.composer,
-          disabled ? styles.disabled : null,
+          inputDisabled ? styles.disabled : null,
           dropActive ? styles.composerDropActive : null,
         ]
           .filter(Boolean)
@@ -365,8 +379,12 @@ export function MessageInput({
                 handleSubmit()
               }
             }}
-            placeholder={disabled ? `Entity stopped` : `Send a message...`}
-            disabled={disabled}
+            placeholder={
+              disabled
+                ? (disabledPlaceholder ?? `Entity stopped`)
+                : `Send a message...`
+            }
+            disabled={inputDisabled}
             rows={1}
             data-agent-chat-input=""
             className={styles.textarea}
@@ -374,7 +392,13 @@ export function MessageInput({
           <button
             type="button"
             aria-label={showStop ? `Stop generating` : `Send message`}
-            title={showStop ? `Stop generating` : `Send message`}
+            title={
+              showStop
+                ? stopDisabled
+                  ? `Signal permission required`
+                  : `Stop generating`
+                : `Send message`
+            }
             // Keep the textarea focused when the user taps Send on a
             // touch device. Without this, tapping the button blurs the
             // textarea, dismisses the on-screen keyboard, and the
@@ -386,7 +410,7 @@ export function MessageInput({
               if (e.pointerType !== `mouse`) e.preventDefault()
             }}
             onClick={handleComposerAction}
-            disabled={showStop ? stopPending : !isButtonActive}
+            disabled={showStop ? !canStop : !isButtonActive}
             className={[
               styles.composerSend,
               isButtonActive ? styles.active : null,

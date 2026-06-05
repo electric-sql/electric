@@ -243,6 +243,36 @@ export function createDesktopMainController(ctx: DesktopAppContext) {
   const forgetServer = (serverId: string): Promise<void> =>
     runtime.forgetServer(serverId)
 
+  let forgetCloudServersOnSignOutPromise: Promise<void> | null = null
+  const forgetCloudServersOnSignOut = (): void => {
+    const cloudServerIds = settings.servers
+      .filter((server) => server.source === `electric-cloud`)
+      .map((server) => server.id)
+    if (cloudServerIds.length === 0 && !ctx.services.cloudAgentServers) return
+    if (forgetCloudServersOnSignOutPromise) return
+
+    forgetCloudServersOnSignOutPromise = (async () => {
+      for (const serverId of cloudServerIds) {
+        await forgetServer(serverId)
+      }
+      await ctx.getCloudAgentServers().forgetAllAgentsTokens()
+      if (cloudServerIds.length > 0) {
+        console.info(
+          `[agents-desktop] Removed ${cloudServerIds.length} saved Cloud server(s) after Cloud sign-out.`
+        )
+      }
+    })()
+      .catch((err) => {
+        console.warn(
+          `[agents-desktop] Failed to remove saved Cloud servers after sign-out:`,
+          err
+        )
+      })
+      .finally(() => {
+        forgetCloudServersOnSignOutPromise = null
+      })
+  }
+
   const setSelectedServerForWindow = (
     win: BrowserWindow | null,
     serverId: string | null
@@ -460,6 +490,9 @@ export function createDesktopMainController(ctx: DesktopAppContext) {
 
   return {
     broadcastCloudAuthState(next: CloudAuthState): void {
+      if (next.status === `signed-out`) {
+        forgetCloudServersOnSignOut()
+      }
       for (const win of windows) {
         if (!win.isDestroyed()) {
           win.webContents.send(`desktop:cloud-auth-state-changed`, next)

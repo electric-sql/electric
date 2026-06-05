@@ -1,17 +1,13 @@
 import { session } from 'electron'
 import * as undici from 'undici'
 import type { Dispatcher } from 'undici'
-import type { CloudAuthState } from './cloud-auth'
 import { mergeHeaders } from '../shared/headers'
-import type { ServerConfig } from '../shared/types'
-import { findCloudServerForUrl, findSavedServerForUrl } from './server-matching'
-
-export type CloudAuthHeaderInjectionDeps = {
-  getServers: () => Array<ServerConfig>
-  getAgentsToken: (tenantId: string) => string | null | undefined
-  getCloudAuthState: () => CloudAuthState | null | undefined
-  injectDevPrincipalHeaders: (server: ServerConfig) => ServerConfig
-}
+import {
+  buildCloudAuthHeaders,
+  buildSavedServerHeaders,
+  type CloudAuthHeaderInjectionDeps,
+} from './auth-headers'
+export type { CloudAuthHeaderInjectionDeps } from './auth-headers'
 
 /**
  * Decorate outgoing requests bound for saved agent servers with configured
@@ -30,49 +26,13 @@ export function installCloudAuthHeaderInjection(
       callback({ requestHeaders: details.requestHeaders })
       return
     }
+    const requestHeaders = { ...details.requestHeaders, ...extra }
     callback({
-      requestHeaders: { ...details.requestHeaders, ...extra },
+      requestHeaders,
     })
   })
 
   installCloudAuthUndiciInterceptor(deps)
-}
-
-export function buildSavedServerHeaders(
-  deps: CloudAuthHeaderInjectionDeps,
-  url: string
-): Record<string, string> | null {
-  const server = findSavedServerForUrl(deps.getServers(), url)
-  if (!server) return null
-  return mergeHeaders(deps.injectDevPrincipalHeaders(server).headers) ?? null
-}
-
-/**
- * Build the cloud-auth headers to inject on a request to `url`, or `null` if
- * the URL doesn't target a saved cloud agent server.
- */
-export function buildCloudAuthHeaders(
-  deps: CloudAuthHeaderInjectionDeps,
-  url: string
-): Record<string, string> | null {
-  const server = findCloudServerForUrl(deps.getServers(), url)
-  if (!server || !server.tenantId) return null
-  const token = deps.getAgentsToken(server.tenantId)
-  if (!token) return null
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${token}`,
-  }
-  const cloudAuthState = deps.getCloudAuthState()
-  if (cloudAuthState?.userId) {
-    headers[`x-electric-asserted-user-id`] = cloudAuthState.userId
-  }
-  if (cloudAuthState?.email) {
-    headers[`x-electric-asserted-email`] = cloudAuthState.email
-  }
-  if (cloudAuthState?.name) {
-    headers[`x-electric-asserted-name`] = cloudAuthState.name
-  }
-  return headers
 }
 
 function installCloudAuthUndiciInterceptor(
@@ -83,16 +43,17 @@ function installCloudAuthUndiciInterceptor(
     (dispatch): Dispatcher[`dispatch`] =>
       (opts, handler) => {
         const fullUrl = composeRequestUrl(opts.origin, opts.path)
-        const extra = fullUrl ? buildCloudAuthHeaders(deps, fullUrl) : null
-        if (!extra) return dispatch(opts, handler)
+        if (!fullUrl) return dispatch(opts, handler)
+        const extra = buildCloudAuthHeaders(deps, fullUrl)
+        if (!extra) {
+          return dispatch(opts, handler)
+        }
         const lowered: Record<string, string> = {}
         for (const [key, value] of Object.entries(extra)) {
           lowered[key.toLowerCase()] = value
         }
-        return dispatch(
-          { ...opts, headers: mergeUndiciHeaders(opts.headers, lowered) },
-          handler
-        )
+        const headers = mergeUndiciHeaders(opts.headers, lowered)
+        return dispatch({ ...opts, headers }, handler)
       }
   )
   undici.setGlobalDispatcher(composed)

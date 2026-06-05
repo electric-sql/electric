@@ -377,3 +377,7 @@ export function useServerConnection(): ServerConnectionState {
     )
   return ctx
 }
+
+export function useOptionalServerConnection(): ServerConnectionState | null {
+  return useContext(ServerConnectionContext)
+}

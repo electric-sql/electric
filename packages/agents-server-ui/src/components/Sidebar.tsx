@@ -15,9 +15,11 @@ import { getEntityRunnerId } from '../lib/entityRuntime'
 import { RUNNER_NONE, useSidebarView } from '../hooks/useSidebarView'
 import { useSidebarCollapsed } from '../hooks/useSidebarCollapsed'
 import { useNarrowViewport } from '../hooks/useNarrowViewport'
+import { useCurrentPrincipal } from '../hooks/useCurrentPrincipal'
 import { HoverCard, Icon, ScrollArea, Stack, Text } from '../ui'
 import { NewSessionKey } from '../lib/keyLabels'
 import { setWorkspaceDrag } from '../lib/workspace/dragPayload'
+import { normalizePrincipalUrl } from '../lib/principals'
 import { SidebarHeader } from './SidebarHeader'
 import { SidebarRowInfo } from './SidebarRow'
 import type { SidebarRowInfoPayload } from './SidebarRow'
@@ -206,6 +208,11 @@ export function Sidebar({
   )
 
   const view = useSidebarView()
+  const { principal: currentPrincipal } = useCurrentPrincipal()
+  const currentPrincipalUrl = useMemo(
+    () => normalizePrincipalUrl(currentPrincipal),
+    [currentPrincipal]
+  )
 
   const { data: visibleEntities = [] } = useLiveQuery(
     (query) => {
@@ -241,16 +248,24 @@ export function Sidebar({
     return map
   }, [runners])
 
+  const creatorFilteredEntities = useMemo(() => {
+    if (view.hiddenCreators.size === 0) return visibleEntities
+    return visibleEntities.filter((e) => {
+      const creator = normalizePrincipalUrl(e.created_by)
+      return !creator || !view.hiddenCreators.has(creator)
+    })
+  }, [visibleEntities, view.hiddenCreators])
+
   // The runner is derived from the entity's `dispatch_policy` (json), so it
   // can't ride the in-query `.where` filter that type/status use — apply it
   // client-side here. `RUNNER_NONE` hides entities with no pinned runner.
   const runnerFilteredEntities = useMemo(() => {
-    if (view.hiddenRunners.size === 0) return visibleEntities
-    return visibleEntities.filter((e) => {
+    if (view.hiddenRunners.size === 0) return creatorFilteredEntities
+    return creatorFilteredEntities.filter((e) => {
       const id = getEntityRunnerId(e) ?? RUNNER_NONE
       return !view.hiddenRunners.has(id)
     })
-  }, [visibleEntities, view.hiddenRunners])
+  }, [creatorFilteredEntities, view.hiddenRunners])
 
   const pinnedSet = useMemo(() => new Set(pinnedUrls), [pinnedUrls])
   const pinnedEntities = runnerFilteredEntities.filter((e) =>
@@ -259,7 +274,8 @@ export function Sidebar({
   const filtersActive =
     view.hiddenTypes.size > 0 ||
     view.hiddenStatuses.size > 0 ||
-    view.hiddenRunners.size > 0
+    view.hiddenRunners.size > 0 ||
+    view.hiddenCreators.size > 0
 
   const { roots, childrenByParent } = useMemo(
     () => buildEntityTree(runnerFilteredEntities),
@@ -324,6 +340,7 @@ export function Sidebar({
     onOpenEntityInSplit: wrappedOpenInSplit,
     pinnedUrls,
     onTogglePin,
+    currentPrincipalUrl,
     hoverHandle,
   }
 

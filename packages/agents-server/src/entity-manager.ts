@@ -163,6 +163,7 @@ type ForkSubtreeOptions = {
   rootInstanceId?: string
   waitTimeoutMs?: number
   waitPollMs?: number
+  createdBy?: string
   /**
    * Optional anchor pointing at an event on the source root's `main` stream.
    * When set: only events at or before the pointer are kept on the root's
@@ -1058,7 +1059,8 @@ export class EntityManager {
       const entityPlans = this.buildForkEntityPlans(
         effectiveSubtree,
         entityUrlMap,
-        stringMap
+        stringMap,
+        opts.createdBy
       )
 
       this.addForkLocks(
@@ -1739,7 +1741,8 @@ export class EntityManager {
   private buildForkEntityPlans(
     entitiesToFork: Array<ElectricAgentsEntity>,
     entityUrlMap: Map<string, string>,
-    stringMap: Map<string, string>
+    stringMap: Map<string, string>,
+    createdBy?: string
   ): Array<ForkEntityPlan> {
     const now = Date.now()
     return entitiesToFork.map((source) => {
@@ -1769,6 +1772,7 @@ export class EntityManager {
         write_token: randomUUID(),
         spawn_args: spawnArgs,
         parent,
+        created_by: createdBy ?? source.created_by,
         created_at: now,
         updated_at: now,
       }
