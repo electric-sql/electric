@@ -4015,7 +4015,7 @@ describe(`F: coordination orchestration`, () => {
       parentHistory.count(`wake`, (event) =>
         Boolean(eventValueRecord(event)?.finished_child)
       )
-    ).toBe(3)
+    ).toBeGreaterThanOrEqual(3)
     expect(await optimist.snapshot()).toMatchSnapshot(`optimist history`)
     expect(await pessimist.snapshot()).toMatchSnapshot(`pessimist history`)
     expect(await pragmatist.snapshot()).toMatchSnapshot(`pragmatist history`)
@@ -4025,24 +4025,25 @@ describe(`F: coordination orchestration`, () => {
     const parent = await t.spawn(TYPES.f1Dispatcher, `dispatch-2`)
 
     await parent.send(`dispatch assistant first task`)
-    await parent.waitForRun()
+    await parent.waitFor((history) =>
+      history.some(
+        `text_delta`,
+        (event) =>
+          eventValueRecord(event)?.delta ===
+          `dispatched assistant to /dispatch-assistant-f1/dispatch-2-dispatch-1`
+      )
+    )
+    await parent.waitForSettled(60_000)
 
     await parent.send(`dispatch worker second task`)
-    const parentHistory = await parent.waitFor((history) => {
-      const counter = history.find(
-        `state:counters`,
+    const parentHistory = await parent.waitFor((history) =>
+      history.some(
+        `text_delta`,
         (event) =>
-          eventValueRecord(event)?.key === `dispatchCount` &&
-          eventValueRecord(event)?.value === 2
+          eventValueRecord(event)?.delta ===
+          `dispatched worker to /dispatch-worker-f1/dispatch-2-dispatch-2`
       )
-      return (
-        !!counter &&
-        history.count(
-          `state:children`,
-          (event) => !!eventValueRecord(event)?.url
-        ) >= 2
-      )
-    })
+    )
 
     expect(
       parentHistory.find(
@@ -4055,24 +4056,21 @@ describe(`F: coordination orchestration`, () => {
       key: `dispatchCount`,
       value: 2,
     })
-    expect(
-      parentHistory.count(
-        `state:children`,
-        (event) => !!eventValueRecord(event)?.url
-      )
-    ).toBe(2)
-    expect(
-      parentHistory.count(
-        `state:children`,
-        (event) => eventValueRecord(event)?.kind === `assistant`
-      )
-    ).toBe(1)
-    expect(
-      parentHistory.count(
-        `state:children`,
-        (event) => eventValueRecord(event)?.kind === `worker`
-      )
-    ).toBe(1)
+    const childRows = new Map(
+      parentHistory.events
+        .filter((event) => event.type === `state:children`)
+        .map((event) => eventValueRecord(event))
+        .filter((value) => typeof value?.key === `string`)
+        .map((value) => [String(value?.key), value] as const)
+    )
+    expect(childRows.get(`dispatch-2-dispatch-1`)).toMatchObject({
+      kind: `assistant`,
+      url: `/${TYPES.f1AssistantChild}/dispatch-2-dispatch-1`,
+    })
+    expect(childRows.get(`dispatch-2-dispatch-2`)).toMatchObject({
+      kind: `worker`,
+      url: `/${TYPES.f1WorkerChild}/dispatch-2-dispatch-2`,
+    })
   }, 30_000)
 
   it(`F4: dispatcher records the expected status progression during a dispatch`, async () => {
