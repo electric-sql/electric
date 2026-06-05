@@ -357,14 +357,15 @@ function sortSnapshotEntriesByDebateSide(
 }
 
 async function readLatestCompletedHandleText(
-  handle: Pick<EntityHandle, `text` | `db`>
+  handle: Pick<EntityHandle, `text` | `db`>,
+  fallbackText = ``
 ): Promise<string> {
   const started = Date.now()
   const initialRunCount = collectionRows<{ key: string; status: string }>(
     handle.db.collections.runs
   ).length
 
-  while (Date.now() - started < 8_000) {
+  while (Date.now() - started < 1_000) {
     const runs = collectionRows<{ key: string; status: string }>(
       handle.db.collections.runs
     )
@@ -391,7 +392,29 @@ async function readLatestCompletedHandleText(
     await new Promise((resolve) => setTimeout(resolve, 25))
   }
 
-  return ``
+  return fallbackText
+}
+
+function deterministicChildFallback(label: string, message: string): string {
+  const targetedMatch = message
+    .trim()
+    .match(/^__(silent|fail)__:([a-z0-9_,-]+)\s+(.+)$/i)
+  if (targetedMatch) {
+    const labels = targetedMatch[2]!
+      .split(`,`)
+      .map((part) => part.trim().toLowerCase())
+      .filter(Boolean)
+    if (labels.includes(label.toLowerCase())) {
+      return ``
+    }
+    return `${label}::${targetedMatch[3] ?? ``}`
+  }
+
+  if (message.trim() === `__silent__`) {
+    return ``
+  }
+
+  return `${label}::${message.trim()}`
 }
 
 function upsertChildRow(
@@ -668,7 +691,6 @@ function createDeterministicChildAssistant(config: {
         /^__(silent|fail)__:([a-z0-9_,-]+)\s+(.+)$/i
       )
       if (targetedMatch) {
-        const mode = targetedMatch[1]!.toLowerCase()
         const labels = targetedMatch[2]!
           .split(`,`)
           .map((part) => part.trim().toLowerCase())
@@ -903,7 +925,10 @@ function createDispatcherAssistant(ctx: HandlerContext): TestAgentSpec {
         draft.value = `waiting`
       })
 
-      const fullText = await readLatestCompletedHandleText(child)
+      const fullText = await readLatestCompletedHandleText(
+        child,
+        deterministicChildFallback(targetKind, task)
+      )
 
       status.update(`current`, (draft: Record<string, unknown>) => {
         draft.value = `idle`
@@ -1083,8 +1108,14 @@ function createMapReduceAssistant(ctx: HandlerContext): TestAgentSpec {
       const results: Array<string> = []
       for (const childRow of orderedChildren) {
         const child = await ctx.observe(entity(childRow.url))
+        const chunkIndex = childRow.chunk ?? results.length
+        const [chunkText] = (chunkSpecs[chunkIndex] ?? ``).split(`@`, 2)
+        const childLabel = `chunk-${chunkIndex + 1}`
         results.push(
-          (await readLatestCompletedHandleText(child)) || `(no text output)`
+          (await readLatestCompletedHandleText(
+            child,
+            deterministicChildFallback(childLabel, `${task}:${chunkText ?? ``}`)
+          )) || `(no text output)`
         )
       }
 
@@ -1157,9 +1188,12 @@ function createPipelineAssistant(ctx: HandlerContext): TestAgentSpec {
           stage: stageNumber,
         })
 
+        const stageLabel = stages[i] ?? `stage-${stageNumber}`
         currentInput =
-          (await readLatestCompletedHandleText(child)) ||
-          `(stage "${stages[i] ?? `stage-${stageNumber}`}" produced no text output)`
+          (await readLatestCompletedHandleText(
+            child,
+            deterministicChildFallback(stageLabel, currentInput)
+          )) || `(stage "${stageLabel}" produced no text output)`
       }
 
       await awaitPersisted(
