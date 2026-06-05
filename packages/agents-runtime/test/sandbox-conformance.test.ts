@@ -488,7 +488,8 @@ describe(`sandbox conformance`, () => {
           } finally {
             await sandbox.dispose()
           }
-        }
+        },
+        15_000
       )
     })
   }

@@ -143,10 +143,12 @@ function createDispatchTool(ctx: HandlerContext): AgentTool {
         "worker",
         id,
         { systemPrompt, tools: ["read"] },
-        { initialMessage: task, wake: "runFinished" }
+        { initialMessage: task, wake: { on: "runFinished", includeResponse: true } }
       )
-      const text = (await child.text()).join("\n\n")
-      return { content: [{ type: "text", text }], details: {} }
+      return {
+        content: [{ type: "text", text: `Started ${child.entityUrl}; I will continue when it finishes.` }],
+        details: { childUrl: child.entityUrl },
+      }
     },
   }
 }
@@ -183,9 +185,8 @@ See [Managing state](/docs/agents/usage/managing-state).
 
 **EntityHandle** returned from spawn/observe:
 
-- `.entityUrl`, `.type`, `.db` (read-only TanStack DB)
-- `.run` -- Promise that resolves when child completes
-- `.text()` -- get all completed text output
+- `.entityUrl`, `.type` -- identify the entity
+- `.db` / `.events` -- inspect the observed entity stream
 - `.send(msg)` -- send follow-up message
 - `.status()` -- `ChildStatus | undefined` (object with `.status`, `.entity_url`, `.entity_type`)
 

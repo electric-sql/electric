@@ -1852,7 +1852,7 @@ describe(`entity includes query`, () => {
                 entity_type: `worker`,
                 entity_url: `/worker/writer-1`,
                 observed: true,
-                wake: `runFinished`,
+                wake: { on: `runFinished`, includeResponse: true },
               },
               {
                 key: `source:entity:/assistant/reviewer-1`,
@@ -1896,7 +1896,7 @@ describe(`entity includes query`, () => {
           type: `worker`,
           status: `idle`,
           observed: true,
-          wake: `runFinished`,
+          wake: { on: `runFinished`, includeResponse: true },
         },
         {
           key: `/assistant/reviewer-1`,
@@ -2109,7 +2109,7 @@ describe(`entity includes query`, () => {
                 sourceType: `entity`,
                 sourceRef: `/worker/writer-1`,
                 config: { entityUrl: `/worker/writer-1` },
-                wake: `runFinished`,
+                wake: { on: `runFinished`, includeResponse: true },
               },
             ],
             __electricRowOffsets: new Map([
@@ -2139,7 +2139,7 @@ describe(`entity includes query`, () => {
           type: `worker`,
           status: `running`,
           observed: true,
-          wake: `runFinished`,
+          wake: { on: `runFinished`, includeResponse: true },
         },
       ])
 
@@ -2164,7 +2164,7 @@ describe(`entity includes query`, () => {
         sourceType: `entity`,
         sourceRef: `/worker/writer-1`,
         config: { entityUrl: `/worker/writer-1` },
-        wake: `runFinished`,
+        wake: { on: `runFinished`, includeResponse: true },
       })
       sync.childStatus.insert({
         key: `/worker/writer-1`,
@@ -2183,7 +2183,7 @@ describe(`entity includes query`, () => {
           type: `worker`,
           status: `running`,
           observed: true,
-          wake: `runFinished`,
+          wake: { on: `runFinished`, includeResponse: true },
         },
       ])
     })

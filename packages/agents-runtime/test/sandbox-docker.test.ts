@@ -469,8 +469,20 @@ d(`dockerSandbox keyed lifecycle`, () => {
       filters: { label: [`com.electric.sandbox.key=${sandboxKey}`] },
     })
     if (list.length === 0) return `absent`
-    const info = await docker.getContainer(list[0].Id).inspect()
-    return info.State.Running ? `running` : `stopped`
+    try {
+      const info = await docker.getContainer(list[0].Id).inspect()
+      return info.State.Running ? `running` : `stopped`
+    } catch (error) {
+      if (
+        typeof error === `object` &&
+        error !== null &&
+        `statusCode` in error &&
+        error.statusCode === 404
+      ) {
+        return `absent`
+      }
+      throw error
+    }
   }
 
   const waitForKeyState = async (
