@@ -378,7 +378,7 @@ async function readLatestCompletedHandleText(
 
     if (
       latestRun?.status === `completed` &&
-      (sawNewRun || Date.now() - started > 250)
+      (sawNewRun || (fallbackText === `` && Date.now() - started > 250))
     ) {
       const deltas = collectionRows<{ run_id: string; delta: string }>(
         handle.db.collections.textDeltas
