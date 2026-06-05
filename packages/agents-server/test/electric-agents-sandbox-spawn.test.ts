@@ -201,7 +201,7 @@ describe(`EntityManager.spawn shared sandbox (key / inherit)`, () => {
       type: `horton`,
       status: `idle`,
       url: `/horton/parent`,
-      streams: { main: `/horton/parent/main`, error: `/horton/parent/error` },
+      streams: { main: `/horton/parent/main` },
       tags: {},
       dispatch_policy: runnerDispatch(runnerId),
       sandbox: { profile: `docker`, key: `session-1` },
@@ -259,7 +259,6 @@ describe(`EntityManager.spawn shared sandbox (key / inherit)`, () => {
           url: `/horton/parent`,
           streams: {
             main: `/horton/parent/main`,
-            error: `/horton/parent/error`,
           },
           tags: {},
           dispatch_policy: runnerDispatch(`runner-a`),
