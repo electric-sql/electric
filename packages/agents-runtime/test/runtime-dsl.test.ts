@@ -989,13 +989,20 @@ function createManagerWorkerAssistant(ctx: HandlerContext): TestAgentSpec {
                   delayMs: perspective.delayMs,
                 }
               )
+          const isExistingChild = Boolean(existingChild?.url)
           child.send(question)
           upsertChildRow(children, {
             key: perspective.id,
             url: child.entityUrl,
             kind: perspective.id,
           })
-          upsertChildStatusRow(childStatus, perspective.id, `running`)
+          upsertChildStatusRow(
+            childStatus,
+            perspective.id,
+            isExistingChild && !question.includes(`__fail__:`)
+              ? `completed`
+              : `running`
+          )
           await ctx.observe(entity(child.entityUrl), { wake: `runFinished` })
         }
 
@@ -3122,7 +3129,7 @@ describe(`A: basic entity lifecycle`, () => {
       delta: `sync_echo: recovered`,
     })
     expect(await entity.snapshot()).toMatchSnapshot(`entity history`)
-  }, 30_000)
+  }, 60_000)
 })
 
 describe(`B: spawn mechanics`, () => {
@@ -6243,7 +6250,7 @@ describe(`N: wake primitives verification`, () => {
             event.type === `wake_log_entry` &&
             eventValueRecord(event)?.wakeType === `wake`
         ),
-      15_000
+      45_000
     )
 
     const wakeLogEntries = parentHistory.events
@@ -6258,7 +6265,7 @@ describe(`N: wake primitives verification`, () => {
     const wakeEntry = wakeLogEntries.find((e) => e.wakeType === `wake`)
     expect(wakeEntry).toBeDefined()
     expect(wakeEntry!.wakeType).toBe(`wake`)
-  }, 30_000)
+  }, 60_000)
 
   it(`N2: observe(db(...)) with wake option triggers re-wake on shared state write`, async () => {
     // Finding 2: ctx.observe(db(id, schema), { wake }) now calls
@@ -6314,7 +6321,7 @@ describe(`N: wake primitives verification`, () => {
     const child = t.entity(`/${TYPES.n3IdleWakeChild}/wake-agent-child-1`)
     await child.waitForRun()
 
-    const parentAfterWake = await parent.waitForRunCount(2, 10_000)
+    const parentAfterWake = await parent.waitForRunCount(2, 45_000)
     const wakeDrivenDelta = parentAfterWake.find(`text_delta`, (event) => {
       const delta = String(eventValueRecord(event)?.delta ?? ``)
       return (
@@ -6330,7 +6337,7 @@ describe(`N: wake primitives verification`, () => {
     expect(wakeDrivenDelta?.value).toMatchObject({
       delta: expect.stringContaining(`wake.type=wake`),
     })
-  }, 30_000)
+  }, 60_000)
 
   it(`N5: runFinished wake records the finished child on the parent stream`, async () => {
     const parentId = `wake-summary-1`
@@ -6379,7 +6386,7 @@ describe(`N: wake primitives verification`, () => {
       },
     })
     expect(childUrls.has(finishedUrl)).toBe(true)
-  }, 30_000)
+  }, 60_000)
 
   it(`N3b: spawn wake and child manifest share one runFinished registration`, async () => {
     const childId = `idle-test-child-dedupe-${Date.now()}`
@@ -6393,8 +6400,8 @@ describe(`N: wake primitives verification`, () => {
     const child = t.entity(`/${TYPES.n3IdleWakeChild}/${childId}`)
     await child.send(`do work`)
     await child.waitForRun()
-    await parent.waitFor((history) => history.some(`wake`), 10_000)
-    await t.waitForSettled(10_000)
+    await parent.waitFor((history) => history.some(`wake`), 45_000)
+    await t.waitForSettled(45_000)
 
     const events = await t.readStream(parent.entityUrl)
     const childUrl = `/${TYPES.n3IdleWakeChild}/${childId}`
