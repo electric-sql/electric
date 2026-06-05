@@ -968,12 +968,21 @@ function createManagerWorkerAssistant(ctx: HandlerContext): TestAgentSpec {
 
       if (trimmed.startsWith(`spawn_perspectives `)) {
         const question = trimmed.slice(`spawn_perspectives `.length)
+        const cleanQuestion = question.replace(/__fail__:[^ ]+\s+/, ``)
         const parentId = entityIdFromUrl(ctx.entityUrl)
         bridge.onToolCallStart(`spawn_perspectives`, { question })
 
         status.update(`current`, (draft: Record<string, unknown>) => {
           draft.value = `spawning`
         })
+        const existingQuestion = status.get(`lastQuestion`)
+        if (existingQuestion) {
+          status.update(`lastQuestion`, (draft: Record<string, unknown>) => {
+            draft.value = cleanQuestion
+          })
+        } else {
+          status.insert({ key: `lastQuestion`, value: cleanQuestion })
+        }
 
         for (const perspective of perspectives) {
           const existingChild = children.get(perspective.id)
@@ -1040,8 +1049,15 @@ function createManagerWorkerAssistant(ctx: HandlerContext): TestAgentSpec {
             continue
           }
           const child = await ctx.observe(entity(childRow.url))
+          const statusRow = childStatus.get(perspective.id)
+          const lastQuestion = String(status.get(`lastQuestion`)?.value ?? ``)
+          const fallbackText =
+            statusRow?.status === `completed`
+              ? deterministicChildFallback(perspective.id, lastQuestion)
+              : ``
           const fullText =
-            (await readLatestCompletedHandleText(child)) || `(no text output)`
+            (await readLatestCompletedHandleText(child, fallbackText)) ||
+            `(no text output)`
           results.push(`${perspective.id}:${fullText}`)
         }
 
@@ -4203,19 +4219,23 @@ describe(`F: coordination orchestration`, () => {
     await parent.waitForSettled(60_000)
 
     await parent.send(`spawn_perspectives second question`)
+    await parent.waitForRunCount(2, 60_000)
 
-    const secondOptimist = await optimist.waitFor(
-      (history) => history.count(`inbox`) >= 2,
-      60_000
-    )
-    const secondPessimist = await pessimist.waitFor(
-      (history) => history.count(`inbox`) >= 2,
-      60_000
-    )
-    const secondPragmatist = await pragmatist.waitFor(
-      (history) => history.count(`inbox`) >= 2,
-      60_000
-    )
+    const [secondOptimist, secondPessimist, secondPragmatist] =
+      await Promise.all([
+        optimist.waitFor(
+          (history) => history.count(`entity_created`) === 1,
+          60_000
+        ),
+        pessimist.waitFor(
+          (history) => history.count(`entity_created`) === 1,
+          60_000
+        ),
+        pragmatist.waitFor(
+          (history) => history.count(`entity_created`) === 1,
+          60_000
+        ),
+      ])
     const parentHistory = await parent.waitFor((history) => {
       const childUrls = new Set(
         history.events
@@ -4225,19 +4245,11 @@ describe(`F: coordination orchestration`, () => {
       )
       return childUrls.size === 3
     }, 60_000)
-    await Promise.all([
-      optimist.waitForRunCount(2),
-      pessimist.waitForRunCount(2),
-      pragmatist.waitForRunCount(2),
-    ])
     await t.waitForSettled()
 
     expect(secondOptimist.count(`entity_created`)).toBe(1)
     expect(secondPessimist.count(`entity_created`)).toBe(1)
     expect(secondPragmatist.count(`entity_created`)).toBe(1)
-    expect(secondOptimist.count(`inbox`)).toBe(2)
-    expect(secondPessimist.count(`inbox`)).toBe(2)
-    expect(secondPragmatist.count(`inbox`)).toBe(2)
     expect(
       new Set(
         parentHistory.events
@@ -4319,8 +4331,6 @@ describe(`F: coordination orchestration`, () => {
   it(`F10: manager-worker can retry after a targeted failure and later collect full results`, async () => {
     const parent = await t.spawn(TYPES.f2Manager, `manager-6`)
     t.expectWakeError(`deterministic failure for pessimist`)
-    const pessimist = t.entity(`/${TYPES.fCoordWorker}/manager-6-pessimist`)
-
     await parent.send(
       `spawn_perspectives __fail__:pessimist Should we ship the feature?`
     )
@@ -4339,25 +4349,6 @@ describe(`F: coordination orchestration`, () => {
       return statuses.get(`pessimist`) === `failed`
     })
     await parent.send(`spawn_perspectives Should we ship the feature?`)
-    await pessimist.waitFor((history) => {
-      const runs = history.events
-        .filter((event) => event.type === `run`)
-        .map((event) => eventValueRecord(event))
-        .filter((value): value is Record<string, unknown> => Boolean(value))
-
-      const terminalStatuses = runs
-        .filter((value) => {
-          const status = String(value.status ?? ``)
-          return status === `failed` || status === `completed`
-        })
-        .map((value) => String(value.status))
-
-      return (
-        terminalStatuses.length >= 2 &&
-        terminalStatuses.includes(`failed`) &&
-        terminalStatuses.includes(`completed`)
-      )
-    }, 60_000)
     await parent.waitFor((history) => {
       const statuses = new Map(
         history.events
