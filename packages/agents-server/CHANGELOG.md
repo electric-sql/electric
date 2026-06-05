@@ -1,5 +1,13 @@
 # @electric-ax/agents-server
 
+## 0.4.17
+
+### Patch Changes
+
+- 3ecdade: Add structured composer input support, slash command registration, and proactive skill context loading.
+- Updated dependencies [3ecdade]
+  - @electric-ax/agents-runtime@0.3.10
+
 ## 0.4.16
 
 ### Patch Changes
