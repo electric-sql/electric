@@ -24,7 +24,7 @@ function entity(
     url: `/chat/${id}`,
     type: `chat`,
     status: `idle`,
-    streams: { main: `/chat/${id}/main`, error: `/chat/${id}/error` },
+    streams: { main: `/chat/${id}/main` },
     subscription_id: `chat-handler`,
     dispatch_policy: dispatchPolicy,
     write_token: `write-token`,
@@ -65,6 +65,8 @@ function buildContext(overrides: Partial<TenantContext> = {}): TenantContext {
           updated_at: new Date(0).toISOString(),
         })),
         getEntity: vi.fn(async () => null),
+        hasEntityPermission: vi.fn(async () => true),
+        hasEntityTypePermission: vi.fn(async () => true),
         updateEntityDispatchPolicy: vi.fn(async (_url, policy) =>
           entity(policy)
         ),
@@ -178,7 +180,7 @@ describe(`dispatch policy routing`, () => {
         streams: [`/chat/one/main`],
         webhook: {
           url: expect.stringMatching(
-            /^http:\/\/server\/_electric\/webhook-forward\/webhook%3A/
+            /^http:\/\/server\/_electric\/subscription-webhooks\/webhook%3A/
           ),
         },
       })

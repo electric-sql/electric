@@ -1,6 +1,9 @@
 import { createOptimisticAction } from '@tanstack/db'
 import { generateKeyBetween } from 'fractional-indexing'
-import { createPendingTimelineOrder } from '@electric-ax/agents-runtime/client'
+import {
+  COMPOSER_INPUT_MESSAGE_TYPE,
+  createPendingTimelineOrder,
+} from '@electric-ax/agents-runtime/client'
 import {
   getActivePrincipal,
   getConfiguredActivePrincipal,
@@ -10,6 +13,7 @@ import {
 import { entityApiUrl } from './entity-api'
 import { loadCloudAuthState } from './server-connection'
 import type { EntityStreamDBWithActions } from '@electric-ax/agents-runtime/client'
+import type { ComposerInputPayload } from '@electric-ax/agents-runtime/client'
 
 // Pending local rows do not have a server stream offset yet, so put them after
 // streamed rows until the real event with the same key arrives.
@@ -21,7 +25,9 @@ export type OptimisticInboxMessage = {
   key: string
   _timeline_order: string
   from: string
-  payload: { text: string }
+  from_principal?: string
+  payload: { text: string } | ComposerInputPayload
+  message_type?: string
   timestamp: string
   mode: `immediate` | `queued` | `paused` | `steer`
   status: `pending` | `processed` | `cancelled`
@@ -30,11 +36,13 @@ export type OptimisticInboxMessage = {
 }
 
 type SendMessageInput = {
-  text: string
+  payload: { text: string } | ComposerInputPayload
+  type?: string
   mode: `immediate` | `queued` | `paused` | `steer`
   key: string
   pendingOrderIndex: number
   position?: string
+  attachments?: Array<File>
 }
 
 type UpdateInboxMessageInput = {
@@ -51,6 +59,14 @@ type InboxMessageKeyInput = {
 
 function createOptimisticInboxKey(pendingOrderIndex: number): string {
   return `optimistic-${Date.now()}-${pendingOrderIndex}`
+}
+
+export function createClientInboxKey(): string {
+  return `client-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+}
+
+function createClientAttachmentId(): string {
+  return globalThis.crypto?.randomUUID?.() ?? createClientInboxKey()
 }
 
 function nextOptimisticInboxOrderIndex(): number {
@@ -142,10 +158,158 @@ function readSendError(status: number, body: string): Error {
   return new Error(message)
 }
 
+export async function uploadMessageAttachments({
+  baseUrl,
+  entityUrl,
+  key,
+  attachments,
+}: {
+  baseUrl: string
+  entityUrl: string
+  key: string
+  attachments: Array<File> | undefined
+}): Promise<Array<string>> {
+  if (!attachments || attachments.length === 0) return []
+
+  const uploadedIds: Array<string> = []
+  try {
+    for (const file of attachments) {
+      const id = createClientAttachmentId()
+      uploadedIds.push(id)
+      const form = new FormData()
+      form.set(`id`, id)
+      form.set(`file`, file, file.name || `attachment`)
+      form.set(
+        `subject`,
+        JSON.stringify({
+          type: `inbox`,
+          key,
+        })
+      )
+      form.set(`role`, `input`)
+      if (file.type) {
+        form.set(`mimeType`, file.type)
+      }
+      if (file.name) {
+        form.set(`filename`, file.name)
+      }
+
+      const res = await serverFetch(
+        entityApiUrl(baseUrl, entityUrl, `/attachments`),
+        {
+          method: `POST`,
+          body: form,
+        }
+      )
+      if (!res.ok) {
+        const body = await res.text().catch(() => ``)
+        throw readSendError(res.status, body)
+      }
+      const data = (await res.json()) as { attachment?: { id?: unknown } }
+      if (data.attachment?.id !== id) {
+        throw new Error(`Attachment upload returned an invalid response`)
+      }
+    }
+  } catch (error) {
+    await deleteUploadedAttachments({ baseUrl, entityUrl, ids: uploadedIds })
+    throw error
+  }
+
+  return uploadedIds
+}
+
+async function deleteUploadedAttachments({
+  baseUrl,
+  entityUrl,
+  ids,
+}: {
+  baseUrl: string
+  entityUrl: string
+  ids: Array<string>
+}): Promise<void> {
+  if (ids.length === 0) return
+  await Promise.allSettled(
+    ids.map((id) =>
+      serverFetch(
+        entityApiUrl(
+          baseUrl,
+          entityUrl,
+          `/attachments/${encodeURIComponent(id)}`
+        ),
+        { method: `DELETE` }
+      )
+    )
+  )
+}
+
+export async function sendEntityMessage({
+  baseUrl,
+  entityUrl,
+  text,
+  payload: explicitPayload,
+  type,
+  key = createClientInboxKey(),
+  mode = `queued`,
+  position,
+  attachments,
+  from,
+}: {
+  baseUrl: string
+  entityUrl: string
+  text?: string
+  payload?: { text: string } | ComposerInputPayload
+  type?: string
+  key?: string
+  mode?: `immediate` | `queued` | `paused` | `steer`
+  position?: string
+  attachments?: Array<File>
+  from?: string
+}): Promise<void> {
+  const url = entityApiUrl(baseUrl, entityUrl, `/send`)
+  const sender = await resolveSenderPrincipalUrl(
+    url,
+    from ?? getConfiguredActivePrincipal() ?? ``
+  )
+  const uploadedAttachmentIds = await uploadMessageAttachments({
+    baseUrl,
+    entityUrl,
+    key,
+    attachments,
+  })
+  const effectivePayload = explicitPayload ?? { text: text ?? `` }
+  try {
+    const res = await serverFetch(url, {
+      method: `POST`,
+      headers: { 'content-type': `application/json` },
+      body: JSON.stringify({
+        from: sender,
+        key,
+        payload: effectivePayload,
+        mode,
+        position,
+        type,
+      }),
+    })
+    if (!res.ok) {
+      const body = await res.text().catch(() => ``)
+      throw readSendError(res.status, body)
+    }
+  } catch (error) {
+    await deleteUploadedAttachments({
+      baseUrl,
+      entityUrl,
+      ids: uploadedAttachmentIds,
+    })
+    throw error
+  }
+}
+
 export function readTextPayload(payload: unknown): string {
   if (payload && typeof payload === `object`) {
     const text = (payload as { text?: unknown }).text
     if (typeof text === `string`) return text
+    const source = (payload as { source?: unknown }).source
+    if (typeof source === `string`) return source
   }
   return typeof payload === `string` ? payload : ``
 }
@@ -191,14 +355,16 @@ export function createSendMessageAction({
   onOptimisticMessage?: (message: OptimisticInboxMessage) => void
 }) {
   const action = createOptimisticAction<SendMessageInput>({
-    onMutate: ({ text, mode, key, pendingOrderIndex, position }) => {
+    onMutate: ({ payload, type, mode, key, pendingOrderIndex, position }) => {
       const sender = from ?? getActivePrincipal()
       const now = new Date().toISOString()
       const message: OptimisticInboxMessage = {
         key,
         _timeline_order: createPendingTimelineOrder(pendingOrderIndex),
         from: sender,
-        payload: { text },
+        from_principal: sender,
+        payload,
+        ...(type ? { message_type: type } : {}),
         timestamp: now,
         mode,
         status:
@@ -211,7 +377,21 @@ export function createSendMessageAction({
       onOptimisticMessage?.(message)
       db.collections.inbox.insert(message)
     },
-    mutationFn: async ({ text, key, mode, position }) => {
+    mutationFn: async ({ payload, type, key, mode, position, attachments }) => {
+      if (attachments && attachments.length > 0) {
+        await sendEntityMessage({
+          baseUrl,
+          entityUrl,
+          payload,
+          type,
+          key,
+          mode,
+          position,
+          attachments,
+          from,
+        })
+        return
+      }
       const url = entityApiUrl(baseUrl, entityUrl, `/send`)
       const sender = await resolveSenderPrincipalUrl(
         url,
@@ -223,8 +403,9 @@ export function createSendMessageAction({
         body: JSON.stringify({
           from: sender,
           key,
-          payload: { text },
+          payload,
           mode,
+          type,
           position,
         }),
       })
@@ -237,12 +418,18 @@ export function createSendMessageAction({
 
   return ({
     text,
+    payload,
+    type,
     mode = `queued`,
     position,
+    attachments,
   }: {
-    text: string
+    text?: string
+    payload?: { text: string } | ComposerInputPayload
+    type?: string
     mode?: `immediate` | `queued` | `paused` | `steer`
     position?: string
+    attachments?: Array<File>
   }) => {
     const pendingOrderIndex = nextOptimisticInboxOrderIndex()
     const effectivePosition =
@@ -250,14 +437,42 @@ export function createSendMessageAction({
       (mode === `queued` || mode === `paused`
         ? createInitialQueuePosition()
         : undefined)
+    const effectivePayload = payload ?? { text: text ?? `` }
     return action({
-      text,
+      payload: effectivePayload,
+      type,
       mode,
       key: createOptimisticInboxKey(pendingOrderIndex),
       pendingOrderIndex,
       position: effectivePosition,
+      attachments,
     })
   }
+}
+
+export function createSendComposerInputAction(args: {
+  db: EntityStreamDBWithActions
+  baseUrl: string
+  entityUrl: string
+  from?: string
+  onOptimisticMessage?: (message: OptimisticInboxMessage) => void
+}) {
+  const sendMessage = createSendMessageAction(args)
+  return ({
+    payload,
+    mode = `queued`,
+    attachments,
+  }: {
+    payload: ComposerInputPayload
+    mode?: `immediate` | `queued` | `paused` | `steer`
+    attachments?: Array<File>
+  }) =>
+    sendMessage({
+      payload,
+      type: COMPOSER_INPUT_MESSAGE_TYPE,
+      mode,
+      attachments,
+    })
 }
 
 export function createUpdateInboxMessageAction({

@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
-import { Animated, Easing, StyleSheet, Text, View } from 'react-native'
+import { useEffect, useState } from 'react'
+import { Animated, StyleSheet, Text, View } from 'react-native'
 import {
   BottomSheet,
   BottomSheetItem,
@@ -7,6 +7,7 @@ import {
   BottomSheetSeparator,
 } from './BottomSheet'
 import { Icon } from './Icon'
+import { useDrillTransition } from './useDrillTransition'
 import { useTokens } from '../lib/ThemeProvider'
 import type { ElectricEntity, EntitySignal } from '../lib/agentsClient'
 import type { EmbedViewId } from '../lib/embedView'
@@ -113,6 +114,7 @@ export function SessionMenu({
   signalError,
   onSignal,
   onStopImmediately,
+  signalDisabled = false,
 }: {
   open: boolean
   onClose: () => void
@@ -122,11 +124,15 @@ export function SessionMenu({
   signalError?: string | null
   onSignal?: (signal: EntitySignal) => void
   onStopImmediately?: () => void
+  signalDisabled?: boolean
 }): React.ReactElement {
   const tokens = useTokens()
   const [signalMenuOpen, setSignalMenuOpen] = useState(false)
-  const [drillDirection, setDrillDirection] = useState(1)
-  const drillProgress = useRef(new Animated.Value(1)).current
+  const {
+    style: drillPaneStyle,
+    drill,
+    reset: resetDrill,
+  } = useDrillTransition()
 
   const dotKey = entity ? (STATUS_DOT_COLORS[entity.status] ?? `gray`) : `gray`
   const dotColor =
@@ -144,21 +150,14 @@ export function SessionMenu({
   }
   const handleClose = (): void => {
     setSignalMenuOpen(false)
-    drillProgress.setValue(1)
+    resetDrill()
     onClose()
   }
   const transitionToMenu = (nextSignalMenuOpen: boolean): void => {
-    setDrillDirection(nextSignalMenuOpen ? 1 : -1)
-    drillProgress.setValue(0)
     setSignalMenuOpen(nextSignalMenuOpen)
-    Animated.timing(drillProgress, {
-      toValue: 1,
-      duration: 180,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start()
+    drill(nextSignalMenuOpen ? 1 : -1)
   }
-  const canSignal =
+  const canOpenSignalMenu =
     entity !== null &&
     entity.status !== `stopped` &&
     entity.status !== `killed` &&
@@ -166,6 +165,7 @@ export function SessionMenu({
   const handleSignalOption = (
     option: (typeof SIGNAL_OPTION_GROUPS)[number][number]
   ): void => {
+    if (signalDisabled) return
     if (option.composite === `stop-immediately`) {
       onStopImmediately?.()
     } else if (option.signal) {
@@ -177,21 +177,9 @@ export function SessionMenu({
   useEffect(() => {
     if (!open) {
       setSignalMenuOpen(false)
-      drillProgress.setValue(1)
+      resetDrill()
     }
-  }, [drillProgress, open])
-
-  const drillPaneStyle = {
-    opacity: drillProgress,
-    transform: [
-      {
-        translateX: drillProgress.interpolate({
-          inputRange: [0, 1],
-          outputRange: [drillDirection * 28, 0],
-        }),
-      },
-    ],
-  }
+  }, [open])
 
   return (
     <BottomSheet
@@ -330,7 +318,7 @@ export function SessionMenu({
                 onPress={() => handlePick(`state-explorer`)}
               />
             </BottomSheetSection>
-            {canSignal && (
+            {canOpenSignalMenu && (
               <>
                 <BottomSheetSeparator />
                 <BottomSheetSection>
@@ -352,6 +340,7 @@ export function SessionMenu({
                         strokeWidth={2}
                       />
                     }
+                    disabled={signalDisabled}
                     onPress={() => transitionToMenu(true)}
                   />
                 </BottomSheetSection>

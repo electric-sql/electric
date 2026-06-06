@@ -3,9 +3,11 @@ import { createCollection, createOptimisticAction } from '@tanstack/react-db'
 import { electricCollectionOptions } from '@tanstack/electric-db-collection'
 import { z } from 'zod'
 import { appendPathToUrl } from '@electric-ax/agents-runtime/client'
+import type { EventPointer } from '@electric-ax/agents-runtime'
 import type { ReactNode } from 'react'
 import { serverFetch } from './auth-fetch'
 import { entityApiUrl, entitySpawnApiUrl } from './entity-api'
+import { showToast } from './toast'
 
 type EntityStatus =
   | `spawning`
@@ -37,13 +39,38 @@ const ENTITY_STATUSES: [EntityStatus, ...Array<EntityStatus>] = [
   `killed`,
 ]
 
+// A dispatch policy pins an entity's wakes to a target. We only need the
+// `runner` target's id for display ("which runner runs this session"); other
+// target kinds (e.g. webhook) carry no runner. Kept permissive so an unknown
+// target shape syncs without tripping validation.
+const dispatchPolicySchema = z.object({
+  targets: z
+    .array(
+      z.object({
+        type: z.string(),
+        runnerId: z.string().optional(),
+        url: z.string().optional(),
+        subscription_id: z.string().optional(),
+      })
+    )
+    .default([]),
+})
+
+export type ElectricDispatchPolicy = z.infer<typeof dispatchPolicySchema>
+
 const entitySchema = z.object({
   url: z.string(),
   type: z.string(),
   status: z.enum(ENTITY_STATUSES),
   tags: z.record(z.string()).default({}),
   spawn_args: z.record(z.unknown()).default({}),
+  sandbox: z
+    .object({ profile: z.string(), key: z.string().optional() })
+    .nullable()
+    .optional(),
+  dispatch_policy: dispatchPolicySchema.nullable().optional(),
   parent: z.string().nullable(),
+  created_by: z.string().nullable().optional(),
   type_revision: z.coerce.number().nullable().optional(),
   inbox_schemas: z.record(z.unknown()).nullable().optional(),
   state_schemas: z.record(z.unknown()).nullable().optional(),
@@ -57,9 +84,37 @@ const entityTypeSchema = z.object({
   creation_schema: z.unknown().nullable(),
   inbox_schemas: z.record(z.unknown()).nullable(),
   state_schemas: z.record(z.unknown()).nullable(),
+  slash_commands: z
+    .array(
+      z.object({
+        name: z.string(),
+        description: z.string().optional(),
+        arguments: z
+          .array(
+            z.object({
+              name: z.string(),
+              type: z.enum([`string`, `number`, `boolean`]),
+              required: z.boolean().optional(),
+              description: z.string().optional(),
+            })
+          )
+          .optional(),
+      })
+    )
+    .nullable()
+    .optional(),
   serve_endpoint: z.string().nullable(),
   created_at: z.string(),
   updated_at: z.string(),
+})
+
+const sandboxProfileAdvertisementSchema = z.object({
+  name: z.string(),
+  label: z.string(),
+  description: z.string().optional(),
+  // True for off-host (remote-provider) sandboxes: the workspace lives in the
+  // provider VM, so a host working directory doesn't apply.
+  remote: z.boolean().optional(),
 })
 
 const runnerDiagnosticsSchema = z.object({
@@ -94,6 +149,12 @@ const runnerSchema = z.object({
   last_seen_at: z.string().nullable().optional(),
   liveness_lease_expires_at: z.string().nullable().optional(),
   diagnostics: runnerDiagnosticsSchema.nullable().optional(),
+  // Coerce a missing/null jsonb column to an empty list — `.default([])`
+  // covers `undefined` but not a Postgres NULL.
+  sandbox_profiles: z.preprocess(
+    (v) => (Array.isArray(v) ? v : []),
+    z.array(sandboxProfileAdvertisementSchema)
+  ),
   created_at: z.string(),
   updated_at: z.string(),
 })
@@ -108,11 +169,39 @@ const runnerRuntimeDiagnosticsSchema = z.object({
   updated_at: z.string(),
 })
 
+const userSchema = z.object({
+  id: z.string(),
+  display_name: z.string().nullable(),
+  email: z.string().nullable(),
+  avatar_url: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+})
+
+const entityEffectivePermissionSchema = z.object({
+  id: z.coerce.number(),
+  entity_url: z.string(),
+  source_entity_url: z.string(),
+  source_grant_id: z.coerce.number(),
+  permission: z.string(),
+  subject_kind: z.string(),
+  subject_value: z.string(),
+  expires_at: z.string().nullable().optional(),
+  created_at: z.string(),
+})
+
 export type ElectricEntity = z.infer<typeof entitySchema>
 export type ElectricEntityType = z.infer<typeof entityTypeSchema>
 export type ElectricRunner = z.infer<typeof runnerSchema>
+export type ElectricSandboxProfile = z.infer<
+  typeof sandboxProfileAdvertisementSchema
+>
 export type ElectricRunnerRuntimeDiagnostics = z.infer<
   typeof runnerRuntimeDiagnosticsSchema
+>
+export type ElectricUser = z.infer<typeof userSchema>
+export type ElectricEntityEffectivePermission = z.infer<
+  typeof entityEffectivePermissionSchema
 >
 
 // --- Collection factories ---
@@ -132,7 +221,10 @@ function createEntitiesCollection(baseUrl: string) {
             `status`,
             `tags`,
             `spawn_args`,
+            `sandbox`,
+            `dispatch_policy`,
             `parent`,
+            `created_by`,
             `type_revision`,
             `inbox_schemas`,
             `state_schemas`,
@@ -165,7 +257,7 @@ function createEntityTypesCollection(baseUrl: string) {
   )
 }
 
-function createRunnersCollection(baseUrl: string) {
+export function createRunnersCollection(baseUrl: string) {
   return createCollection(
     electricCollectionOptions({
       id: `runners`,
@@ -173,6 +265,36 @@ function createRunnersCollection(baseUrl: string) {
       shapeOptions: {
         url: appendPathToUrl(baseUrl, `/_electric/electric/v1/shape`),
         params: { table: `runners` },
+        fetchClient: serverFetch,
+      },
+      getKey: (item) => item.id,
+    })
+  )
+}
+
+export function createUsersCollection(baseUrl: string) {
+  return createCollection(
+    electricCollectionOptions({
+      id: `users`,
+      schema: userSchema,
+      shapeOptions: {
+        url: appendPathToUrl(baseUrl, `/_electric/electric/v1/shape`),
+        params: { table: `users` },
+        fetchClient: serverFetch,
+      },
+      getKey: (item) => item.id,
+    })
+  )
+}
+
+export function createEntityEffectivePermissionsCollection(baseUrl: string) {
+  return createCollection(
+    electricCollectionOptions({
+      id: `entity-effective-permissions`,
+      schema: entityEffectivePermissionSchema,
+      shapeOptions: {
+        url: appendPathToUrl(baseUrl, `/_electric/electric/v1/shape`),
+        params: { table: `entity_effective_permissions` },
         fetchClient: serverFetch,
       },
       getKey: (item) => item.id,
@@ -205,11 +327,17 @@ export function createRunnerRuntimeDiagnosticsCollection(
 type EntitiesCollection = ReturnType<typeof createEntitiesCollection>
 type EntityTypesCollection = ReturnType<typeof createEntityTypesCollection>
 type RunnersCollection = ReturnType<typeof createRunnersCollection>
+type UsersCollection = ReturnType<typeof createUsersCollection>
+type EntityEffectivePermissionsCollection = ReturnType<
+  typeof createEntityEffectivePermissionsCollection
+>
 
 type AppCollections = {
   entities: EntitiesCollection
   entityTypes: EntityTypesCollection
   runners: RunnersCollection
+  users: UsersCollection
+  entityEffectivePermissions: EntityEffectivePermissionsCollection
 }
 
 const appCollectionsCache = new Map<string, AppCollections>()
@@ -221,6 +349,9 @@ function getOrCreateAppCollections(baseUrl: string): AppCollections {
     entities: createEntitiesCollection(baseUrl),
     entityTypes: createEntityTypesCollection(baseUrl),
     runners: createRunnersCollection(baseUrl),
+    users: createUsersCollection(baseUrl),
+    entityEffectivePermissions:
+      createEntityEffectivePermissionsCollection(baseUrl),
   }
   appCollectionsCache.set(baseUrl, collections)
   return collections
@@ -232,6 +363,8 @@ function cleanupAppCollections(baseUrl: string): void {
   collections.entities.cleanup()
   collections.entityTypes.cleanup()
   collections.runners.cleanup()
+  collections.users.cleanup()
+  collections.entityEffectivePermissions.cleanup()
   appCollectionsCache.delete(baseUrl)
 }
 
@@ -249,6 +382,7 @@ export async function preloadAppCollections(
     collections.entities.preload(),
     collections.entityTypes.preload(),
     collections.runners.preload(),
+    collections.entityEffectivePermissions.preload(),
   ])
   return collections
 }
@@ -266,7 +400,9 @@ interface SpawnInput {
   tags?: Record<string, string>
   parent?: string
   initialMessage?: unknown
+  initialMessageType?: string
   dispatch_policy?: RunnerDispatchPolicy
+  sandbox?: { profile: string; key?: string }
 }
 
 export interface SignalInput {
@@ -276,18 +412,91 @@ export interface SignalInput {
   payload?: unknown
 }
 
+function parseErrorResponse(text: string): string | null {
+  if (!text) return null
+  try {
+    const data = JSON.parse(text) as {
+      error?: { message?: unknown }
+      message?: unknown
+    }
+    if (typeof data.error?.message === `string`) return data.error.message
+    if (typeof data.message === `string`) return data.message
+  } catch {
+    // Keep the raw response text below.
+  }
+  return text
+}
+
+function compactToastText(text: string): string {
+  const trimmed = text.trim()
+  return trimmed.length > 360 ? `${trimmed.slice(0, 357)}...` : trimmed
+}
+
+function showSignalFailureToast(input: {
+  action: `kill` | `signal`
+  entityUrl: string
+  signal: EntitySignal
+  status?: number
+  responseText?: string
+  error?: unknown
+}): void {
+  const title = input.action === `kill` ? `Kill failed` : `Signal failed`
+  const status = input.status ? ` (${input.status})` : ``
+  const parsed =
+    input.responseText !== undefined
+      ? parseErrorResponse(input.responseText)
+      : input.error instanceof Error
+        ? input.error.message
+        : input.error
+          ? String(input.error)
+          : null
+  const details = parsed ? compactToastText(parsed) : `No response details.`
+  showToast({
+    tone: `danger`,
+    title: `${title}${status}`,
+    description: `${input.signal} to ${input.entityUrl}: ${details}`,
+  })
+}
+
+function showForkFailureToast(input: {
+  entityUrl: string
+  status?: number
+  responseText?: string
+  error?: unknown
+}): void {
+  const status = input.status ? ` (${input.status})` : ``
+  const parsed =
+    input.responseText !== undefined
+      ? parseErrorResponse(input.responseText)
+      : input.error instanceof Error
+        ? input.error.message
+        : input.error
+          ? String(input.error)
+          : null
+  const details = parsed ? compactToastText(parsed) : `No response details.`
+  showToast({
+    tone: `danger`,
+    title: `Fork failed${status}`,
+    description: `${input.entityUrl}: ${details}`,
+  })
+}
+
 function createSpawnAction(
   baseUrl: string,
   entitiesCollection: EntitiesCollection
 ) {
   return createOptimisticAction<SpawnInput>({
-    onMutate: ({ type, name, tags, args }) => {
+    onMutate: ({ type, name, tags, args, sandbox, dispatch_policy }) => {
       entitiesCollection.insert({
         url: `/${type}/${name}`,
         type,
         status: `spawning`,
         tags: tags ?? {},
         spawn_args: args ?? {},
+        sandbox: sandbox ?? null,
+        // Mirror the pinned runner optimistically so the runner badge shows
+        // immediately on spawn rather than after the first server sync.
+        dispatch_policy: dispatch_policy ?? null,
         parent: null,
         created_at: Date.now(),
         updated_at: Date.now(),
@@ -300,14 +509,18 @@ function createSpawnAction(
       tags,
       parent,
       initialMessage,
+      initialMessageType,
       dispatch_policy,
+      sandbox,
     }) => {
       const body: Record<string, unknown> = {}
       if (args) body.args = args
       if (tags) body.tags = tags
       if (parent) body.parent = parent
       if (initialMessage) body.initialMessage = initialMessage
+      if (initialMessageType) body.initialMessageType = initialMessageType
       if (dispatch_policy) body.dispatch_policy = dispatch_policy
+      if (sandbox) body.sandbox = sandbox
 
       const res = await serverFetch(entitySpawnApiUrl(baseUrl, type, name), {
         method: `PUT`,
@@ -350,19 +563,35 @@ function createKillAction(
       })
     },
     mutationFn: async (entityUrl) => {
-      const res = await serverFetch(
-        entityApiUrl(baseUrl, entityUrl, `/signal`),
-        {
+      const url = entityApiUrl(baseUrl, entityUrl, `/signal`)
+      let res: Response
+      try {
+        res = await serverFetch(url, {
           method: `POST`,
           headers: { 'content-type': `application/json` },
           body: JSON.stringify({
             signal: `SIGKILL`,
             reason: `Killed from agents UI`,
           }),
-        }
-      )
+        })
+      } catch (err) {
+        showSignalFailureToast({
+          action: `kill`,
+          entityUrl,
+          signal: `SIGKILL`,
+          error: err,
+        })
+        throw err
+      }
       if (!res.ok) {
         const text = await res.text().catch(() => ``)
+        showSignalFailureToast({
+          action: `kill`,
+          entityUrl,
+          signal: `SIGKILL`,
+          status: res.status,
+          responseText: text,
+        })
         throw new Error(text || `Kill failed (${res.status})`)
       }
       const data = (await res.json()) as { txid: number }
@@ -413,16 +642,32 @@ function createSignalAction(
       if (reason !== undefined) body.reason = reason
       if (payload !== undefined) body.payload = payload
 
-      const res = await serverFetch(
-        entityApiUrl(baseUrl, entityUrl, `/signal`),
-        {
+      const url = entityApiUrl(baseUrl, entityUrl, `/signal`)
+      let res: Response
+      try {
+        res = await serverFetch(url, {
           method: `POST`,
           headers: { 'content-type': `application/json` },
           body: JSON.stringify(body),
-        }
-      )
+        })
+      } catch (err) {
+        showSignalFailureToast({
+          action: `signal`,
+          entityUrl,
+          signal,
+          error: err,
+        })
+        throw err
+      }
       if (!res.ok) {
         const text = await res.text().catch(() => ``)
+        showSignalFailureToast({
+          action: `signal`,
+          entityUrl,
+          signal,
+          status: res.status,
+          responseText: text,
+        })
         throw new Error(text || `Signal failed (${res.status})`)
       }
       const data = (await res.json()) as { txid: number }
@@ -432,29 +677,46 @@ function createSignalAction(
 }
 
 function createForkEntity(baseUrl: string) {
-  return async (entityUrl: string): Promise<{ url: string }> => {
-    const res = await serverFetch(entityApiUrl(baseUrl, entityUrl, `/fork`), {
-      method: `POST`,
-      headers: { 'content-type': `application/json` },
-      body: JSON.stringify({}),
-    })
+  return async (
+    entityUrl: string,
+    opts?: { pointer?: EventPointer }
+  ): Promise<{ url: string }> => {
+    // Wire convention is snake_case; in-code TS is camelCase.
+    const body = opts?.pointer
+      ? {
+          fork_pointer: {
+            offset: opts.pointer.offset,
+            sub_offset: opts.pointer.subOffset,
+          },
+        }
+      : {}
+    const url = entityApiUrl(baseUrl, entityUrl, `/fork`)
+    let res: Response
+    try {
+      res = await serverFetch(url, {
+        method: `POST`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify(body),
+      })
+    } catch (err) {
+      showForkFailureToast({ entityUrl, error: err })
+      throw err
+    }
     if (!res.ok) {
       const text = await res.text().catch(() => ``)
-      let message = text || `Fork failed (${res.status})`
-      try {
-        const data = JSON.parse(text) as {
-          error?: { message?: string }
-          message?: string
-        }
-        message = data.error?.message ?? data.message ?? message
-      } catch {
-        // Keep the raw response text.
-      }
+      showForkFailureToast({
+        entityUrl,
+        status: res.status,
+        responseText: text,
+      })
+      const message = parseErrorResponse(text) ?? `Fork failed (${res.status})`
       throw new Error(message)
     }
     const data = (await res.json()) as { root?: { url?: string } }
     if (!data.root?.url) {
-      throw new Error(`Fork returned an invalid response`)
+      const message = `Fork returned an invalid response`
+      showForkFailureToast({ entityUrl, error: message })
+      throw new Error(message)
     }
     return { url: data.root.url }
   }
@@ -466,6 +728,8 @@ interface ElectricAgentsState {
   entitiesCollection: EntitiesCollection | null
   entityTypesCollection: EntityTypesCollection | null
   runnersCollection: RunnersCollection | null
+  usersCollection: UsersCollection | null
+  entityEffectivePermissionsCollection: EntityEffectivePermissionsCollection | null
   spawnEntity: ReturnType<typeof createSpawnAction> | null
   signalEntity: ReturnType<typeof createSignalAction> | null
   killEntity: ReturnType<typeof createKillAction> | null
@@ -476,6 +740,8 @@ const ElectricAgentsContext = createContext<ElectricAgentsState>({
   entitiesCollection: null,
   entityTypesCollection: null,
   runnersCollection: null,
+  usersCollection: null,
+  entityEffectivePermissionsCollection: null,
   spawnEntity: null,
   signalEntity: null,
   killEntity: null,
@@ -500,12 +766,21 @@ export function ElectricAgentsProvider({
     if (!baseUrl) cleanupAppCollectionsExcept(null)
   }, [baseUrl])
 
+  useEffect(() => {
+    if (!baseUrl) return
+    void preloadAppCollections(baseUrl).catch((err) => {
+      console.error(`Failed to preload agents app collections`, err)
+    })
+  }, [baseUrl])
+
   const state = useMemo<ElectricAgentsState>(() => {
     if (!baseUrl) {
       return {
         entitiesCollection: null,
         entityTypesCollection: null,
         runnersCollection: null,
+        usersCollection: null,
+        entityEffectivePermissionsCollection: null,
         spawnEntity: null,
         signalEntity: null,
         killEntity: null,
@@ -513,12 +788,19 @@ export function ElectricAgentsProvider({
       }
     }
 
-    const { entities, entityTypes, runners } =
-      getOrCreateAppCollections(baseUrl)
+    const {
+      entities,
+      entityTypes,
+      runners,
+      users,
+      entityEffectivePermissions,
+    } = getOrCreateAppCollections(baseUrl)
     return {
       entitiesCollection: entities,
       entityTypesCollection: entityTypes,
       runnersCollection: runners,
+      usersCollection: users,
+      entityEffectivePermissionsCollection: entityEffectivePermissions,
       spawnEntity: createSpawnAction(baseUrl, entities),
       signalEntity: createSignalAction(baseUrl, entities),
       killEntity: createKillAction(baseUrl, entities),

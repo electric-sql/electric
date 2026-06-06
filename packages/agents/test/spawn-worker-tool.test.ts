@@ -29,6 +29,7 @@ describe(`spawn_worker tool`, () => {
     expect(opts).toEqual({
       initialMessage: `Please check the size of /tmp/foo and report back`,
       wake: { on: `runFinished`, includeResponse: true },
+      sandbox: `inherit`,
     })
 
     const text = (result.content[0] as { text: string }).text

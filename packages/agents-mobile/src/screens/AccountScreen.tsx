@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import * as Linking from 'expo-linking'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { Icon } from '../components/Icon'
 import { PrimaryButton } from '../components/PrimaryButton'
@@ -7,6 +8,8 @@ import { useTokens } from '../lib/ThemeProvider'
 import { useCloudAuth } from '../lib/CloudAuthContext'
 import { fontSize, lineHeight, radii, spacing } from '../lib/theme'
 import type { Tokens } from '../lib/theme'
+
+const DELETE_ACCOUNT_URL = `https://electric-sql.com/about/legal/delete-account`
 
 /**
  * Settings → Account screen. Mirrors the desktop's `AccountPage` —
@@ -58,58 +61,86 @@ export function AccountScreen({
         </View>
 
         {isSignedIn ? (
-          <View style={styles.card}>
-            <View style={styles.row}>
-              <Text style={styles.rowLabel}>Account</Text>
-              <View style={styles.rowValue}>
-                <Text style={styles.rowValueText} numberOfLines={2}>
-                  {state.name && state.email
-                    ? `${state.name} (${state.email})`
-                    : (state.name ?? state.email ?? `Signed in`)}
-                </Text>
-              </View>
-            </View>
-            <View style={styles.rowDivider} />
-            <View style={styles.row}>
-              <Text style={styles.rowLabel}>Workspaces</Text>
-              <View style={styles.rowValue}>
-                {workspaces === null ? (
-                  <Text style={[styles.rowValueText, styles.rowValueMuted]}>
-                    Loading…
+          <>
+            <View style={styles.card}>
+              <View style={styles.row}>
+                <Text style={styles.rowLabel}>Account</Text>
+                <View style={styles.rowValue}>
+                  <Text style={styles.rowValueText} numberOfLines={2}>
+                    {state.name && state.email
+                      ? `${state.name} (${state.email})`
+                      : (state.name ?? state.email ?? `Signed in`)}
                   </Text>
-                ) : workspaces.length === 0 ? (
-                  <Text style={[styles.rowValueText, styles.rowValueMuted]}>
-                    No workspaces yet
-                  </Text>
-                ) : (
-                  workspaces.map((w) => (
-                    <Text
-                      key={w.id}
-                      style={styles.rowValueText}
-                      numberOfLines={1}
-                    >
-                      {w.name}
+                  {state.userId ? (
+                    <Text style={styles.principalText} numberOfLines={1}>
+                      user:{state.userId}
                     </Text>
-                  ))
-                )}
+                  ) : null}
+                </View>
+              </View>
+              <View style={styles.rowDivider} />
+              <View style={styles.row}>
+                <Text style={styles.rowLabel}>Workspaces</Text>
+                <View style={styles.rowValue}>
+                  {workspaces === null ? (
+                    <Text style={[styles.rowValueText, styles.rowValueMuted]}>
+                      Loading…
+                    </Text>
+                  ) : workspaces.length === 0 ? (
+                    <Text style={[styles.rowValueText, styles.rowValueMuted]}>
+                      No workspaces yet
+                    </Text>
+                  ) : (
+                    workspaces.map((w) => (
+                      <Text
+                        key={w.id}
+                        style={styles.rowValueText}
+                        numberOfLines={1}
+                      >
+                        {w.name}
+                      </Text>
+                    ))
+                  )}
+                </View>
+              </View>
+              <View style={styles.actions}>
+                <PrimaryButton
+                  title="Open Electric Cloud dashboard"
+                  onPress={() => {
+                    void openDashboard()
+                  }}
+                />
+                <PrimaryButton
+                  title="Sign out"
+                  variant="soft"
+                  onPress={() => {
+                    void signOut()
+                  }}
+                />
               </View>
             </View>
-            <View style={styles.actions}>
-              <PrimaryButton
-                title="Open Electric Cloud dashboard"
-                onPress={() => {
-                  void openDashboard()
-                }}
-              />
-              <PrimaryButton
-                title="Sign out"
-                variant="soft"
-                onPress={() => {
-                  void signOut()
-                }}
-              />
+
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Delete account</Text>
+              <Text style={styles.sectionCopy}>
+                Tap below to open the account-deletion page in your browser.
+                Your account is not deleted by tapping the button — the page
+                explains what gets deleted, what we may retain, and how to email
+                support to start the request.
+              </Text>
             </View>
-          </View>
+            <View style={styles.card}>
+              <View style={styles.actions}>
+                <PrimaryButton
+                  title="Delete account…"
+                  variant="ghost"
+                  onPress={() => {
+                    void Linking.openURL(DELETE_ACCOUNT_URL)
+                  }}
+                />
+              </View>
+            </View>
+          </>
         ) : (
           <View style={styles.card}>
             {state.error && (
@@ -221,6 +252,11 @@ function createStyles(tokens: Tokens) {
     },
     rowValueMuted: {
       color: tokens.text3,
+    },
+    principalText: {
+      color: tokens.text3,
+      fontSize: fontSize.xs,
+      textAlign: `right`,
     },
     rowDivider: {
       height: StyleSheet.hairlineWidth,

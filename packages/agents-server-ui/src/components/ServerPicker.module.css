@@ -90,6 +90,16 @@
   color: var(--ds-text-3);
 }
 
+.kindIcon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ds-text-3);
+}
+
 .connectionBtn {
   margin-left: auto;
 }

@@ -4,15 +4,17 @@ import {
   createBashTool,
   braveSearchTool,
   createEditTool,
-  fetchUrlTool,
+  createFetchUrlTool,
   createReadFileTool,
   createWriteTool,
   createSendTool,
 } from '@electric-ax/agents-runtime/tools'
+import type { Sandbox } from '@electric-ax/agents-runtime/sandbox'
 import { WORKER_TOOL_NAMES, createSpawnWorkerTool } from '../tools/spawn-worker'
 import {
   REASONING_EFFORT_VALUES,
   resolveBuiltinModelConfig,
+  type BuiltinAgentModelConfig,
   type BuiltinModelCatalog,
 } from '../model-catalog'
 import type { WorkerToolName } from '../tools/spawn-worker'
@@ -114,30 +116,39 @@ function parseWorkerArgs(value: Readonly<Record<string, unknown>>): WorkerArgs {
 
 function buildToolsForWorker(
   tools: ReadonlyArray<WorkerToolName>,
-  workingDirectory: string,
+  sandbox: Sandbox,
   ctx: HandlerContext,
-  readSet: Set<string>
+  readSet: Set<string>,
+  opts: {
+    modelCatalog: BuiltinModelCatalog
+    modelConfig: BuiltinAgentModelConfig
+  }
 ): Array<AgentTool> {
   const out: Array<AgentTool> = []
   for (const name of tools) {
     switch (name) {
       case `bash`:
-        out.push(createBashTool(workingDirectory))
+        out.push(createBashTool(sandbox))
         break
       case `read`:
-        out.push(createReadFileTool(workingDirectory, readSet))
+        out.push(createReadFileTool(sandbox, readSet))
         break
       case `write`:
-        out.push(createWriteTool(workingDirectory, readSet))
+        out.push(createWriteTool(sandbox, readSet))
         break
       case `edit`:
-        out.push(createEditTool(workingDirectory, readSet))
+        out.push(createEditTool(sandbox, readSet))
         break
       case `web_search`:
         out.push(braveSearchTool)
         break
       case `fetch_url`:
-        out.push(fetchUrlTool)
+        out.push(
+          createFetchUrlTool(sandbox, {
+            catalog: opts.modelCatalog,
+            modelConfig: opts.modelConfig,
+          })
+        )
         break
       case `spawn_worker`:
         out.push(createSpawnWorkerTool(ctx))
@@ -288,21 +299,37 @@ export function registerWorker(
     modelCatalog: BuiltinModelCatalog
   }
 ): void {
-  const { workingDirectory, streamFn, modelCatalog } = options
+  const { streamFn, modelCatalog } = options
   registry.define(`worker`, {
     description: `Internal — generic worker spawned by other agents. Configure via spawn args (systemPrompt + tools + optional sharedDb).`,
+    permissionGrants: [
+      {
+        subject_kind: `principal_kind`,
+        subject_value: `user`,
+        permission: `spawn`,
+      },
+      {
+        subject_kind: `principal_kind`,
+        subject_value: `user`,
+        permission: `manage`,
+      },
+    ],
     async handler(ctx) {
       const args = parseWorkerArgs(ctx.args)
       const readSet = new Set<string>()
-      const builtinTools = buildToolsForWorker(
-        args.tools,
-        workingDirectory,
-        ctx,
-        readSet
-      )
+      // ctx.sandbox is provisioned and disposed by the runtime sandbox
+      // pool — subsequent wakes for the same worker reuse the same
+      // instance until idle-TTL eviction.
       const modelConfig = resolveBuiltinModelConfig(
         modelCatalog,
         args as unknown as Readonly<Record<string, unknown>>
+      )
+      const builtinTools = buildToolsForWorker(
+        args.tools,
+        ctx.sandbox,
+        ctx,
+        readSet,
+        { modelCatalog, modelConfig }
       )
 
       const sharedStateTools: Array<AgentTool> = []

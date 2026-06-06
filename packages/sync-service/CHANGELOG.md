@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 1.6.9
+
+### Patch Changes
+
+- 2d1615d: Allow for 0 values in Bandit memory tweak settings `fullsweep_after` and `max_requests`
+
 ## 1.6.8
 
 ### Patch Changes

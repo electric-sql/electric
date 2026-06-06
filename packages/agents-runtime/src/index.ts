@@ -1,5 +1,10 @@
 export type {
   LLMMessage,
+  LLMContentBlock,
+  LLMMessageContent,
+  AttachmentCreateInput,
+  AttachmentsApi,
+  ManifestAttachmentEntry,
   ManifestChildEntry,
   ManifestContextEntry,
   ManifestEntry,
@@ -21,6 +26,7 @@ export type {
   AgentConfig,
   AgentModel,
   EntityDefinition,
+  EntityTypePermissionGrantDefinition,
   EntityActionsFactory,
   EntityActionMap,
   EntityArgs,
@@ -45,6 +51,9 @@ export type {
   ClaimTokenHeader,
   HeadersProvider,
   HandlerContext,
+  HandlerWake,
+  InboxHandlerWake,
+  OtherHandlerWake,
   AgentRunResult,
   AgentHandle,
   AgentTool,
@@ -94,15 +103,58 @@ export type {
   Signal,
   ChildStatusEntry,
   TagEntry,
+  SlashCommandEntry,
   ContextInserted as ContextInsertedEvent,
   ContextRemoved as ContextRemovedEvent,
   Manifest,
+  ManifestAttachmentEntry as ManifestAttachmentEntryRow,
+  AttachmentRole,
+  AttachmentStatus,
+  AttachmentSubject,
+  AttachmentSubjectType,
   ManifestContextEntry as ManifestContextEntryRow,
   ReplayWatermark,
   WakeConfigValue,
 } from './entity-schema'
 
 export { createEntityStreamDB } from './entity-stream-db'
+export {
+  getEntityAttachmentStreamPath,
+  manifestAttachmentKey,
+} from './manifest-helpers'
+export {
+  COMPOSER_INPUT_MESSAGE_TYPE,
+  firstSlashCommand,
+  getSlashCommandNodes,
+  hasSlashCommand,
+  isKnownComposerNode,
+  knownNodes,
+  textAfterNode,
+  unknownNodes,
+  validateComposerInputPayload,
+  validateSlashCommandDefinitions,
+} from './composer-input'
+export type {
+  BaseComposerNode,
+  BranchComposerNode,
+  ComposerInputPayload,
+  ComposerInputValidationError,
+  ComposerInputValidationIssue,
+  ComposerNode,
+  ComposerNodeKind,
+  DynamicSlashCommandRegistration,
+  FileComposerNode,
+  KnownComposerNode,
+  SlashCommandHelpers,
+  SlashCommandComposerNode,
+  SlashCommandArgumentDefinition,
+  SlashCommandArgumentType,
+  SlashCommandDefinition,
+  SlashCommandRow,
+  SymbolComposerNode,
+  TextComposerNode,
+  WireComposerInputPayload,
+} from './composer-input'
 export {
   assertTags,
   buildTagsIndex,
@@ -119,6 +171,7 @@ export {
   createEntityIncludesQuery,
   createEntityTimelineQuery,
   createEntityErrorsQuery,
+  buildEntityTimelineData,
   createPendingTimelineOrder,
   getEntityState,
   normalizeEntityTimelineData,
@@ -238,7 +291,6 @@ export {
   entity,
   cron,
   entities,
-  tagged,
   db,
   canonicalPgSyncOptions,
   getPgSyncStreamPath,
@@ -254,7 +306,6 @@ export type {
   EntityObservationSource,
   CronObservationSource,
   EntitiesObservationSource,
-  TaggedObservationSource,
   DbObservationSource,
   WebhookObservationSource,
   WebhookEventRow,
@@ -274,9 +325,18 @@ export type { ProcessWakeConfig } from './types'
 // body (and any sibling reference docs) on demand.
 export { createSkillsRegistry } from './skills/registry'
 export { createSkillTools } from './skills/tools'
+export {
+  buildSkillSlashCommands,
+  createContextSkillLoader,
+} from './skills/context-loader'
 export type { SkillsRegistry, SkillMeta } from './skills/types'
+export type {
+  ContextSkillLoader,
+  ContextSkillLoaderOptions,
+  LoadedSkillContext,
+} from './skills/context-loader'
 
-export { DEFAULT_OUTPUT_SCHEMAS } from './default-output-schemas'
+export { DEFAULT_STATE_SCHEMAS } from './default-state-schemas'
 export { createContextEntriesApi } from './context-entries'
 export { assembleContext } from './context-assembly'
 export { approxTokens, sliceChars } from './token-budget'
@@ -293,6 +353,15 @@ export type {
   LowCostModelChoice,
   LowCostModelConfig,
 } from './model-runner'
+export {
+  MOONSHOT_API_BASE_URL,
+  MOONSHOT_API_KEY_ENV,
+  MOONSHOT_PROVIDER,
+  getMoonshotApiKey,
+  getMoonshotModel,
+  getMoonshotModels,
+} from './moonshot-models'
+export type { MoonshotModel, MoonshotProvider } from './moonshot-models'
 
 export { createRuntimeHandler, createRuntimeRouter } from './create-handler'
 export { verifyWebhookSignature } from './webhook-signature'
@@ -321,3 +390,11 @@ export type {
 
 export { registerToolProvider, unregisterToolProvider } from './tool-providers'
 export type { ToolProviderEntry } from './tool-providers'
+
+export {
+  comparePointers,
+  formatPointerOrderToken,
+  STREAM_START_POINTER,
+  STREAM_TOKEN_PREFIX,
+} from './event-pointer'
+export type { EventPointer } from './event-pointer'

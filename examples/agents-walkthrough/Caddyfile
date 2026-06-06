@@ -1,0 +1,16 @@
+{
+	log default {
+		level ERROR
+	}
+}
+
+localhost:4438 {
+	reverse_proxy localhost:4437 {
+		flush_interval -1
+	}
+	encode gzip
+	header {
+		Cache-Control "no-cache, no-transform"
+		X-Accel-Buffering "no"
+	}
+}

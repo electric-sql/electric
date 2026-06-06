@@ -1,5 +1,116 @@
 # @electric-ax/agents-server
 
+## 0.4.17
+
+### Patch Changes
+
+- 3ecdade: Add structured composer input support, slash command registration, and proactive skill context loading.
+- Updated dependencies [3ecdade]
+  - @electric-ax/agents-runtime@0.3.10
+
+## 0.4.16
+
+### Patch Changes
+
+- 9fdf96a: Track agent-originated sends with `from_agent` / `from_principal` inbox metadata and render agent/self-send inbox messages with JSON payload fallbacks.
+- 6434774: Add owner-default agents-server permissions with type-level spawn grants, entity grants, effective permission materialization, principal-scoped entity observation streams, shared-state access links, runtime registration permission grants, and default user spawn grants for built-in Horton and Worker types.
+
+  Existing entity observation bridges are rebuilt after upgrade because pre-permission bridge rows do not include principal attribution.
+
+  Entity `manage` grants participate in read visibility, entity-type `manage` grants participate in spawn visibility, and broad parented spawn-time grants require `manage` on the parent.
+
+- b2bf806: Upgrade `@durable-streams/state` to `0.3.1` and drop the `@tanstack/db` pnpm override.
+
+  `@durable-streams/state@0.3.x` makes `@tanstack/db` an optional peer dependency (it was a direct `^0.6.0` dependency) and splits its tsdb-coupled tools into a `@durable-streams/state/db` subpath. tsdb-specific imports (`createStreamDB`, `queryOnce`, `createTransaction`, query operators, etc.) now come from `@durable-streams/state/db`; the bare entry keeps only the tsdb-free types and helpers.
+
+  Because state no longer pulls its own `@tanstack/db` copy, the root `pnpm.overrides` collapsing `@tanstack/db@>=0.6.0 <0.7.0` to `0.6.7` is removed. To keep a single `0.6.7` instance without it, `@tanstack/react-db` is raised to `^0.1.85` and `@tanstack/electric-db-collection` to `^0.3.5` (both pin `@tanstack/db@0.6.7`), and `@durable-streams/server` to `^0.3.7` (depends on `state@0.3.1`, removing the lingering transitive `state@0.2.9`).
+
+- 5f96a15: Grant all users manage permission on the built-in Horton entity type by default, and backfill existing agents-server installations that already registered Horton without that grant.
+- 12f1d17: Mirror user principals into the tenant-scoped `users` table when principal entities are materialized, while preserving any profile fields enriched by host-specific identity sync.
+- d14d9a9: Remove the unused per-entity agents error stream. Entities now expose only their main stream; spawn, fork, registry lookup, terminal signal handling, UI/runtime types, client helpers, and conformance tests no longer create or require an entity-level error stream.
+- 7c62024: Remove the old child-handle result API (`EntityHandle.run` and `EntityHandle.text()`) and internal spawn run promise plumbing. Child coordination should use durable `runFinished` server wakes with `includeResponse` so parent handlers can return safely instead of waiting in-memory for child output.
+- 889fa20: Expose tenant-scoped users as an Electric shape and add a chat sharing dialog that grants user principals or all workspace users view, chat, or manage permissions over an entity. View/chat sharing includes fork access, forked chats are owned by the principal that creates the fork, shared chats can be identified and filtered by creator in the sidebar, and Cloud requests now inject the signed-in user as the Electric principal.
+
+  Mobile now syncs the users and effective-permissions shapes, marks and filters shared chats by creator, disables native chat and signal controls when the current principal lacks permission, and shows the signed-in user principal on the Account screen for debugging.
+
+- 048e2b6: Grant all users manage permission on the built-in Worker entity type by default, and backfill existing agents-server installations that already registered Worker without that grant.
+- Updated dependencies [9fdf96a]
+- Updated dependencies [312f5ec]
+- Updated dependencies [6434774]
+- Updated dependencies [4f88e6d]
+- Updated dependencies [b2bf806]
+- Updated dependencies [74d2341]
+- Updated dependencies [d14d9a9]
+- Updated dependencies [7c62024]
+  - @electric-ax/agents-runtime@0.3.9
+
+## 0.4.15
+
+### Patch Changes
+
+- 17b374f: Adds the `Sandbox` primitive (`@electric-ax/agents-runtime/sandbox`) for isolating LLM-driven tool calls. Three providers ship: `unrestrictedSandbox()` (explicit pass-through), `remoteSandbox({provider: 'e2b'})` (E2B as an optional peer dep), and `dockerSandbox()` (container isolation via `dockerode` as an optional peer dep).
+
+  Built-in entities (Horton, Worker) default to `unrestrictedSandbox` via the new `chooseDefaultSandbox(workingDirectory)` helper. Stronger isolation is opt-in by constructing `dockerSandbox` or `remoteSandbox` directly — `dockerSandbox` is the recommended path for multi-entity hosting.
+
+  Behavior changes folded in: bash no longer forwards `process.env` to children (removes the trivial `env`-dump leak of secrets like `$ANTHROPIC_API_KEY` — note the host-sharing `unrestricted` provider still can't fully contain secrets, e.g. via `/proc/<ppid>/environ`, so use `docker`/`remote` for untrusted or multi-tenant entities), tool descriptions corrected, and read/write/edit reject symlink escapes from the workspace.
+
+  Runtimes advertise named **sandbox profiles** (e.g. `local`, `docker`) to the agents-server; spawn requests pick a profile by name, the server validates the choice against the target runner's advertised set, and the new-session UI surfaces a picker. Internally, the built-in tool factories (`createBashTool`, `createFetchUrlTool`, etc.) now route their filesystem and network access through the active `Sandbox`.
+
+- d5708c7: Fork at an earlier message instead of only at HEAD. `POST /_electric/entities/<type>/<id>/fork` accepts an optional `fork_pointer: { offset, sub_offset }` (snake_case wire) that truncates the new entity's `main` stream up to and including the chosen event; shared-state streams still clone at HEAD; the root's manifest is filtered so descendants spawned after the pointer are dropped from the fork along with their subtrees. Pointer-forks skip the all-subtree-idle wait on the root (the historical read can't be torn by concurrent writes past the pointer), so the affordance works during the post-run keep-alive window. UI: hover-revealed "Fork from here" button on user-message bubbles in `ChatView`, anchored to the latest preceding completed `runs` row; suppressed on the first message and while a run is in flight.
+- f2d3d5e: Render self-send wake notifications with the sent message payload in the agent timeline.
+- Updated dependencies [17b374f]
+- Updated dependencies [1a7d72e]
+- Updated dependencies [d5708c7]
+- Updated dependencies [f2d3d5e]
+  - @electric-ax/agents-runtime@0.3.8
+
+## 0.4.14
+
+### Patch Changes
+
+- 9a92af5: Defer logger initialization to first use so packaged Electron apps (where cwd is `/`) no longer crash trying to `mkdir '/logs'`. Logger init is now wrapped in try-catch with stderr fallback so logging infrastructure never throws. Add `ELECTRIC_AGENTS_LOG_FILE=false` escape hatch to the agents package for parity with agents-server.
+- Updated dependencies [ae2d039]
+- Updated dependencies [9e01e58]
+  - @electric-sql/client@1.5.20
+  - @electric-ax/agents-runtime@0.3.7
+
+## 0.4.13
+
+### Patch Changes
+
+- 98b51d6: Update Electric Agents packages to depend on the stable Durable Streams
+  packages instead of pkg.pr builds. This pulls in `@durable-streams/client`
+  0.2.6, `@durable-streams/server` 0.3.5, and `@durable-streams/state` 0.2.9.
+  Examples now resolve `@electric-ax/agents-runtime` from the workspace so they
+  do not keep older registry runtime builds pinned in the lockfile.
+- 52a641f: Add manifest-backed attachments for agents.
+
+  Attachments are uploaded through entity routes, stored in private attachment streams, referenced by manifest entries, and exposed to runtime handlers through `ctx.attachments`. The server UI can attach image files to user messages, renders message attachments with authenticated preview/download actions, exposes image previews from attachment manifest rows, rolls back uploaded attachments when send fails, and hides image attachment controls for models whose registered pi-ai metadata does not include image input. Image hydration now has a simple newest-images byte/count guardrail. Horton title generation now also works when the first user message is sent after attachment upload, including image-only starts.
+
+- Updated dependencies [e9ea591]
+- Updated dependencies [98b51d6]
+- Updated dependencies [aed2189]
+- Updated dependencies [52a641f]
+  - @electric-ax/agents-runtime@0.3.6
+
+## 0.4.12
+
+## 0.4.11
+
+### Patch Changes
+
+- 265740e: Guard wake registry sync bootstrap against malformed shape messages without headers.
+- d344c32: Treat Electric Agents server URLs as opaque tenant-scoped base URLs rooted at `/t/<tenant-id>/v1`, migrate desktop and mobile Cloud clients to that URL shape, move observation stream ensure endpoints under `/_electric/observations/*/ensure-stream`, rename the pre-alpha entity/cron/schema/tag/docs APIs to their Electric Agents names, add a non-interactive `electric agents view` transcript command, and make Horton title extraction work with lightweight desktop inbox collection facades.
+
+  Send the done callback for completed wake checkpoints during graceful shutdown, preventing desktop reloads from leaving already completed DS subscription claims pending.
+
+- Updated dependencies [d344c32]
+- Updated dependencies [c1834f3]
+- Updated dependencies [319e405]
+  - @electric-ax/agents-runtime@0.3.5
+
+## 0.4.10
+
 ## 0.4.9
 
 ### Patch Changes

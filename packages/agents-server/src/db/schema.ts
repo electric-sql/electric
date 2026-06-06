@@ -24,6 +24,7 @@ export const entityTypes = pgTable(
     creationSchema: jsonb(`creation_schema`),
     inboxSchemas: jsonb(`inbox_schemas`),
     stateSchemas: jsonb(`state_schemas`),
+    slashCommands: jsonb(`slash_commands`),
     serveEndpoint: text(`serve_endpoint`),
     defaultDispatchPolicy: jsonb(`default_dispatch_policy`),
     revision: integer(`revision`).notNull().default(1),
@@ -49,6 +50,7 @@ export const entities = pgTable(
       .notNull()
       .default(sql`'{}'::text[]`),
     spawnArgs: jsonb(`spawn_args`).default({}),
+    sandbox: jsonb(`sandbox`),
     parent: text(`parent`),
     createdBy: text(`created_by`),
     typeRevision: integer(`type_revision`),
@@ -67,6 +69,197 @@ export const entities = pgTable(
     check(
       `chk_entities_status`,
       sql`${table.status} IN ('spawning', 'running', 'idle', 'paused', 'stopping', 'stopped', 'killed')`
+    ),
+  ]
+)
+
+export const entityTypePermissionGrants = pgTable(
+  `entity_type_permission_grants`,
+  {
+    id: bigserial(`id`, { mode: `number` }).primaryKey(),
+    tenantId: text(`tenant_id`).notNull().default(`default`),
+    entityType: text(`entity_type`).notNull(),
+    permission: text(`permission`).notNull(),
+    subjectKind: text(`subject_kind`).notNull(),
+    subjectValue: text(`subject_value`).notNull(),
+    createdBy: text(`created_by`),
+    expiresAt: timestamp(`expires_at`, { withTimezone: true }),
+    createdAt: timestamp(`created_at`, { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp(`updated_at`, { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index(`idx_type_permission_grants_lookup`).on(
+      table.tenantId,
+      table.entityType,
+      table.permission,
+      table.subjectKind,
+      table.subjectValue
+    ),
+    index(`idx_type_permission_grants_expiry`).on(
+      table.tenantId,
+      table.expiresAt
+    ),
+    check(
+      `chk_type_permission_grants_permission`,
+      sql`${table.permission} IN ('spawn', 'manage')`
+    ),
+    check(
+      `chk_type_permission_grants_subject_kind`,
+      sql`${table.subjectKind} IN ('principal', 'principal_kind')`
+    ),
+  ]
+)
+
+export const entityLineage = pgTable(
+  `entity_lineage`,
+  {
+    tenantId: text(`tenant_id`).notNull().default(`default`),
+    ancestorUrl: text(`ancestor_url`).notNull(),
+    descendantUrl: text(`descendant_url`).notNull(),
+    depth: integer(`depth`).notNull(),
+    createdAt: timestamp(`created_at`, { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.tenantId, table.ancestorUrl, table.descendantUrl],
+    }),
+    index(`idx_entity_lineage_descendant`).on(
+      table.tenantId,
+      table.descendantUrl
+    ),
+    check(`chk_entity_lineage_depth`, sql`${table.depth} >= 0`),
+  ]
+)
+
+export const entityPermissionGrants = pgTable(
+  `entity_permission_grants`,
+  {
+    id: bigserial(`id`, { mode: `number` }).primaryKey(),
+    tenantId: text(`tenant_id`).notNull().default(`default`),
+    entityUrl: text(`entity_url`).notNull(),
+    permission: text(`permission`).notNull(),
+    subjectKind: text(`subject_kind`).notNull(),
+    subjectValue: text(`subject_value`).notNull(),
+    propagation: text(`propagation`).notNull().default(`self`),
+    copyToChildren: boolean(`copy_to_children`).notNull().default(false),
+    createdBy: text(`created_by`),
+    expiresAt: timestamp(`expires_at`, { withTimezone: true }),
+    createdAt: timestamp(`created_at`, { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp(`updated_at`, { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index(`idx_entity_permission_grants_entity`).on(
+      table.tenantId,
+      table.entityUrl
+    ),
+    index(`idx_entity_permission_grants_subject`).on(
+      table.tenantId,
+      table.permission,
+      table.subjectKind,
+      table.subjectValue
+    ),
+    index(`idx_entity_permission_grants_expiry`).on(
+      table.tenantId,
+      table.expiresAt
+    ),
+    check(
+      `chk_entity_permission_grants_permission`,
+      sql`${table.permission} IN ('read', 'write', 'delete', 'signal', 'fork', 'schedule', 'spawn', 'manage')`
+    ),
+    check(
+      `chk_entity_permission_grants_subject_kind`,
+      sql`${table.subjectKind} IN ('principal', 'principal_kind')`
+    ),
+    check(
+      `chk_entity_permission_grants_propagation`,
+      sql`${table.propagation} IN ('self', 'descendants')`
+    ),
+  ]
+)
+
+export const entityEffectivePermissions = pgTable(
+  `entity_effective_permissions`,
+  {
+    id: bigserial(`id`, { mode: `number` }).primaryKey(),
+    tenantId: text(`tenant_id`).notNull().default(`default`),
+    entityUrl: text(`entity_url`).notNull(),
+    sourceEntityUrl: text(`source_entity_url`).notNull(),
+    sourceGrantId: bigint(`source_grant_id`, { mode: `number` }).notNull(),
+    permission: text(`permission`).notNull(),
+    subjectKind: text(`subject_kind`).notNull(),
+    subjectValue: text(`subject_value`).notNull(),
+    expiresAt: timestamp(`expires_at`, { withTimezone: true }),
+    createdAt: timestamp(`created_at`, { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    unique(`uq_entity_effective_permission`).on(
+      table.tenantId,
+      table.entityUrl,
+      table.sourceGrantId
+    ),
+    index(`idx_entity_effective_permissions_lookup`).on(
+      table.tenantId,
+      table.permission,
+      table.subjectKind,
+      table.subjectValue,
+      table.entityUrl
+    ),
+    index(`idx_entity_effective_permissions_entity`).on(
+      table.tenantId,
+      table.entityUrl
+    ),
+    index(`idx_entity_effective_permissions_expiry`).on(
+      table.tenantId,
+      table.expiresAt
+    ),
+    check(
+      `chk_entity_effective_permissions_permission`,
+      sql`${table.permission} IN ('read', 'write', 'delete', 'signal', 'fork', 'schedule', 'spawn', 'manage')`
+    ),
+    check(
+      `chk_entity_effective_permissions_subject_kind`,
+      sql`${table.subjectKind} IN ('principal', 'principal_kind')`
+    ),
+  ]
+)
+
+export const sharedStateLinks = pgTable(
+  `shared_state_links`,
+  {
+    tenantId: text(`tenant_id`).notNull().default(`default`),
+    sharedStateId: text(`shared_state_id`).notNull(),
+    ownerEntityUrl: text(`owner_entity_url`).notNull(),
+    manifestKey: text(`manifest_key`).notNull(),
+    createdAt: timestamp(`created_at`, { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp(`updated_at`, { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.tenantId, table.ownerEntityUrl, table.manifestKey],
+    }),
+    index(`idx_shared_state_links_shared_state`).on(
+      table.tenantId,
+      table.sharedStateId
+    ),
+    index(`idx_shared_state_links_owner`).on(
+      table.tenantId,
+      table.ownerEntityUrl
     ),
   ]
 )
@@ -111,6 +304,7 @@ export const runners = pgTable(
     kind: text(`kind`).notNull().default(`local`),
     adminStatus: text(`admin_status`).notNull().default(`enabled`),
     wakeStream: text(`wake_stream`).notNull(),
+    sandboxProfiles: jsonb(`sandbox_profiles`).notNull().default([]),
     createdAt: timestamp(`created_at`, { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -459,6 +653,8 @@ export const entityBridges = pgTable(
     sourceRef: text(`source_ref`).notNull(),
     tags: jsonb(`tags`).notNull(),
     streamUrl: text(`stream_url`).notNull(),
+    principalUrl: text(`principal_url`),
+    principalKind: text(`principal_kind`),
     shapeHandle: text(`shape_handle`),
     shapeOffset: text(`shape_offset`),
     lastObserverActivityAt: timestamp(`last_observer_activity_at`, {
@@ -476,6 +672,11 @@ export const entityBridges = pgTable(
   (table) => [
     primaryKey({ columns: [table.tenantId, table.sourceRef] }),
     unique(`uq_entity_bridges_stream_url`).on(table.tenantId, table.streamUrl),
+    index(`idx_entity_bridges_principal`).on(
+      table.tenantId,
+      table.principalKind,
+      table.principalUrl
+    ),
   ]
 )
 

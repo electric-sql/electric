@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createRuntimeServerClient } from '../src/runtime-server-client'
 import { createHandlerContext } from '../src/context-factory'
+import { testSandboxStub } from './helpers/context-test-helpers'
 
 describe(`runtime-server-client.setTag`, () => {
   it(`ensureStream creates an exact stream path with the requested content type`, async () => {
@@ -11,7 +12,7 @@ describe(`runtime-server-client.setTag`, () => {
     }) as unknown as typeof fetch
 
     const client = createRuntimeServerClient({
-      baseUrl: `http://test.example?service=tenant-a&secret=s1`,
+      baseUrl: `http://test.example/t/tenant-a/v1`,
       fetch: fakeFetch,
     })
 
@@ -21,7 +22,7 @@ describe(`runtime-server-client.setTag`, () => {
 
     expect(calls).toHaveLength(1)
     expect(calls[0]!.url).toBe(
-      `http://test.example/_webhooks/repo/prs/123?service=tenant-a&secret=s1`
+      `http://test.example/t/tenant-a/v1/_webhooks/repo/prs/123`
     )
     expect(calls[0]!.init?.method).toBe(`PUT`)
     expect(new Headers(calls[0]!.init?.headers).get(`content-type`)).toBe(
@@ -41,6 +42,26 @@ describe(`runtime-server-client.setTag`, () => {
     await expect(client.ensureStream(`/_webhooks/repo`)).resolves.toBe(
       `/_webhooks/repo`
     )
+  })
+
+  it(`ensureSharedStateStream sends the owner entity header`, async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = []
+    const fakeFetch = vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push({ url, init })
+      return new Response(null, { status: 201 })
+    }) as unknown as typeof fetch
+    const client = createRuntimeServerClient({
+      baseUrl: `http://test.example`,
+      fetch: fakeFetch,
+    })
+
+    await expect(
+      client.ensureSharedStateStream(`board-1`, `/task/owner`)
+    ).resolves.toBe(`/_electric/shared-state/board-1`)
+
+    const headers = new Headers(calls[0]!.init?.headers)
+    expect(headers.get(`content-type`)).toBe(`application/json`)
+    expect(headers.get(`electric-owner-entity`)).toBe(`/task/owner`)
   })
 
   it(`sends POST with bearer token and tag body`, async () => {
@@ -84,7 +105,7 @@ describe(`runtime-server-client.setTag`, () => {
     }) as unknown as typeof fetch
 
     const client = createRuntimeServerClient({
-      baseUrl: `http://test.example?secret=s1`,
+      baseUrl: `http://test.example/t/tenant-a/v1`,
       fetch: fakeFetch,
       headers: { authorization: `Bearer tenant-token` },
       writeTokenHeader: `electric-claim-token`,
@@ -93,7 +114,7 @@ describe(`runtime-server-client.setTag`, () => {
     await client.setTag(`/horton/abc`, `title`, `Refactor auth`, `wt-1234`)
 
     expect(calls[0]!.url).toBe(
-      `http://test.example/_electric/entities/horton/abc/tags/title?secret=s1`
+      `http://test.example/t/tenant-a/v1/_electric/entities/horton/abc/tags/title`
     )
     const headers = new Headers(calls[0]!.init?.headers)
     expect(headers.get(`authorization`)).toBe(`Bearer tenant-token`)
@@ -141,7 +162,7 @@ describe(`runtime-server-client event sources`, () => {
         )
     ) as unknown as typeof fetch
     const client = createRuntimeServerClient({
-      baseUrl: `http://test.example?service=tenant-a`,
+      baseUrl: `http://test.example/t/tenant-a/v1`,
       fetch: fakeFetch,
     })
 
@@ -149,7 +170,7 @@ describe(`runtime-server-client event sources`, () => {
       { sourceKey: `github-repo` },
     ])
     expect(fakeFetch).toHaveBeenCalledWith(
-      `http://test.example/_electric/event-sources?service=tenant-a`,
+      `http://test.example/t/tenant-a/v1/_electric/event-sources`,
       expect.objectContaining({ method: `GET` })
     )
   })
@@ -228,7 +249,7 @@ describe(`runtime-server-client event sources`, () => {
 })
 
 describe(`createHandlerContext: tags + tag mutations`, () => {
-  it(`exposes tags snapshot and forwards setTag/removeTag`, async () => {
+  it(`exposes tags snapshot and forwards setTag/deleteTag`, async () => {
     const calls: Array<Record<string, unknown>> = []
     const { ctx } = createHandlerContext({
       entityUrl: `/horton/x`,
@@ -242,6 +263,7 @@ describe(`createHandlerContext: tags + tag mutations`, () => {
       state: {},
       actions: {},
       electricTools: [],
+      sandbox: testSandboxStub,
       events: [],
       writeEvent: () => {},
       wakeSession: {} as any,
@@ -253,13 +275,13 @@ describe(`createHandlerContext: tags + tag mutations`, () => {
       doSetTag: async (key, value) => {
         calls.push({ key, value })
       },
-      doRemoveTag: async (key) => {
+      doDeleteTag: async (key) => {
         calls.push({ key, removed: true })
       },
     })
     expect(ctx.tags).toEqual({ title: `existing` })
     await ctx.setTag(`title`, `new`)
-    await ctx.removeTag(`title`)
+    await ctx.deleteTag(`title`)
     expect(calls).toEqual([
       { key: `title`, value: `new` },
       { key: `title`, removed: true },

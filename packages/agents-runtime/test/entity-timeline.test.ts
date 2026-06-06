@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import {
   createCollection,
   createLiveQueryCollection,
-} from '@durable-streams/state'
+} from '@durable-streams/state/db'
 import {
   buildEntityTimelineData,
   compareTimelineOrders,
@@ -15,6 +15,8 @@ import {
   buildSections,
   buildTimelineEntries,
 } from '../src/use-chat'
+import { formatPointerOrderToken } from '../src/event-pointer'
+import type { EventPointer } from '../src/event-pointer'
 import type {
   EntityTimelineContentItem,
   EntityTimelineData,
@@ -27,8 +29,11 @@ function order(index: number): string {
   return index.toString().padStart(20, `0`)
 }
 
-function offset(index: number): string {
-  return `0000000000000000_${index.toString().padStart(16, `0`)}`
+function offset(index: number): EventPointer {
+  return {
+    offset: `0000000000000000_${index.toString().padStart(16, `0`)}`,
+    subOffset: 1,
+  }
 }
 
 describe(`compareTimelineOrders`, () => {
@@ -517,7 +522,7 @@ describe(`entity includes query`, () => {
       expect(sections).toHaveLength(1)
       expect(sections[0]).toMatchObject({
         kind: `agent_response`,
-        error: `boom`,
+        error: `TOOL_FAILED: boom`,
       })
     })
 
@@ -644,7 +649,7 @@ describe(`entity includes query`, () => {
       expect(sections).toHaveLength(1)
       expect(sections[0]).toMatchObject({
         kind: `agent_response`,
-        error: `Run failed`,
+        error: `Run failed (no error details recorded)`,
       })
     })
 
@@ -672,7 +677,7 @@ describe(`entity includes query`, () => {
       expect(sections).toHaveLength(1)
       expect(sections[0]).toMatchObject({
         kind: `agent_response`,
-        error: `db connection lost`,
+        error: `TOOL_FAILED: db connection lost`,
       })
     })
 
@@ -1517,11 +1522,11 @@ describe(`entity includes query`, () => {
         string,
         unknown
       > & { key: string | number },
-    >(id: string, takeOffset: () => string) {
+    >(id: string, takeOffset: () => EventPointer) {
       let syncBegin: () => void
       let syncWrite: (msg: { type: string; value: T }) => void
       let syncCommit: () => void
-      const rowOffsets = new Map<string | number, string>()
+      const rowOffsets = new Map<string | number, EventPointer>()
 
       const collection = createCollection<T, string>({
         id,
@@ -1539,7 +1544,7 @@ describe(`entity includes query`, () => {
         gcTime: 0,
       })
       const collectionWithOffsets = collection as typeof collection & {
-        __electricRowOffsets?: Map<string | number, string>
+        __electricRowOffsets?: Map<string | number, EventPointer>
       }
       collectionWithOffsets.__electricRowOffsets = rowOffsets
 
@@ -1847,7 +1852,7 @@ describe(`entity includes query`, () => {
                 entity_type: `worker`,
                 entity_url: `/worker/writer-1`,
                 observed: true,
-                wake: `runFinished`,
+                wake: { on: `runFinished`, includeResponse: true },
               },
               {
                 key: `source:entity:/assistant/reviewer-1`,
@@ -1891,7 +1896,7 @@ describe(`entity includes query`, () => {
           type: `worker`,
           status: `idle`,
           observed: true,
-          wake: `runFinished`,
+          wake: { on: `runFinished`, includeResponse: true },
         },
         {
           key: `/assistant/reviewer-1`,
@@ -1911,15 +1916,11 @@ describe(`entity includes query`, () => {
         collections: {
           runs: {
             toArray: [{ key: `run-1`, status: `completed` }],
-            __electricRowOffsets: new Map([
-              [`run-1`, `0000000000000000_0000000000000002`],
-            ]),
+            __electricRowOffsets: new Map([[`run-1`, offset(2)]]),
           },
           texts: {
             toArray: [{ key: `text-1`, run_id: `run-1`, status: `completed` }],
-            __electricRowOffsets: new Map([
-              [`text-1`, `0000000000000000_0000000000000003`],
-            ]),
+            __electricRowOffsets: new Map([[`text-1`, offset(3)]]),
           },
           textDeltas: {
             toArray: [
@@ -1930,9 +1931,7 @@ describe(`entity includes query`, () => {
                 delta: `hello from Rome`,
               },
             ],
-            __electricRowOffsets: new Map([
-              [`delta-1`, `0000000000000000_0000000000000004`],
-            ]),
+            __electricRowOffsets: new Map([[`delta-1`, offset(4)]]),
           },
           toolCalls: { toArray: [], __electricRowOffsets: new Map() },
           steps: { toArray: [], __electricRowOffsets: new Map() },
@@ -1946,9 +1945,7 @@ describe(`entity includes query`, () => {
                 timestamp: `2026-03-31T10:00:00.000Z`,
               },
             ],
-            __electricRowOffsets: new Map([
-              [`msg-1`, `0000000000000000_0000000000000001`],
-            ]),
+            __electricRowOffsets: new Map([[`msg-1`, offset(1)]]),
           },
           wakes: { toArray: [], __electricRowOffsets: new Map() },
           signals: { toArray: [], __electricRowOffsets: new Map() },
@@ -2012,7 +2009,7 @@ describe(`entity includes query`, () => {
         {
           key: `context:search:a:1`,
           order: order(1),
-          historyOffset: offset(1),
+          historyOffset: formatPointerOrderToken(offset(1)),
           id: `search:a`,
           name: `search_results`,
           attrs: { query: `a` },
@@ -2024,7 +2021,7 @@ describe(`entity includes query`, () => {
         {
           key: `context:search:a:removed:2`,
           order: order(2),
-          historyOffset: offset(2),
+          historyOffset: formatPointerOrderToken(offset(2)),
           id: `search:a`,
           name: `search_results`,
           timestamp: `2026-04-13T00:01:00.000Z`,
@@ -2112,7 +2109,7 @@ describe(`entity includes query`, () => {
                 sourceType: `entity`,
                 sourceRef: `/worker/writer-1`,
                 config: { entityUrl: `/worker/writer-1` },
-                wake: `runFinished`,
+                wake: { on: `runFinished`, includeResponse: true },
               },
             ],
             __electricRowOffsets: new Map([
@@ -2142,7 +2139,7 @@ describe(`entity includes query`, () => {
           type: `worker`,
           status: `running`,
           observed: true,
-          wake: `runFinished`,
+          wake: { on: `runFinished`, includeResponse: true },
         },
       ])
 
@@ -2167,7 +2164,7 @@ describe(`entity includes query`, () => {
         sourceType: `entity`,
         sourceRef: `/worker/writer-1`,
         config: { entityUrl: `/worker/writer-1` },
-        wake: `runFinished`,
+        wake: { on: `runFinished`, includeResponse: true },
       })
       sync.childStatus.insert({
         key: `/worker/writer-1`,
@@ -2186,7 +2183,7 @@ describe(`entity includes query`, () => {
           type: `worker`,
           status: `running`,
           observed: true,
-          wake: `runFinished`,
+          wake: { on: `runFinished`, includeResponse: true },
         },
       ])
     })

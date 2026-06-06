@@ -4,7 +4,7 @@ import {
   isMcpToolsSentinel,
   type McpToolsSentinel,
 } from '@electric-ax/agents-mcp'
-import { registerHorton } from '../src/agents/horton'
+import { extractFirstUserMessage, registerHorton } from '../src/agents/horton'
 import { createBuiltinElectricTools } from '../src/bootstrap'
 import type { BuiltinModelCatalog } from '../src/model-catalog'
 
@@ -15,6 +15,7 @@ const modelCatalog: BuiltinModelCatalog = {
     label: `Anthropic Claude Sonnet 4.6`,
     value: `anthropic:claude-sonnet-4-6`,
     reasoning: true,
+    input: [`text`, `image`],
   },
   choices: [
     {
@@ -23,6 +24,7 @@ const modelCatalog: BuiltinModelCatalog = {
       label: `Anthropic Claude Sonnet 4.6`,
       value: `anthropic:claude-sonnet-4-6`,
       reasoning: true,
+      input: [`text`, `image`],
     },
   ],
 }
@@ -46,6 +48,16 @@ async function captureAgentConfig(
     firstWake: false,
     tags: {},
     db: { collections: { inbox: { toArray: [] } } },
+    sandbox: {
+      workingDirectory: `/work`,
+      readFile: vi.fn(async () => {
+        throw new Error(`ENOENT`)
+      }),
+    },
+    slashCommands: { replaceOwned: vi.fn() },
+    insertContext: vi.fn(),
+    removeContext: vi.fn(),
+    getContext: vi.fn(),
     useContext: vi.fn(),
     useAgent,
     agent: { run: vi.fn(async () => {}) },
@@ -103,6 +115,107 @@ function createElectricToolsContext() {
 }
 
 describe(`horton tool composition`, () => {
+  it(`extracts the first user message from lightweight inbox collection facades`, async () => {
+    const ctx = {
+      db: {
+        collections: {
+          inbox: {
+            toArray: [
+              { key: `m-2`, from: `user`, payload: `second`, _seq: 2 },
+              { key: `m-0`, from: `system`, payload: `ignored`, _seq: 0 },
+              { key: `m-1`, from: `user`, payload: { text: `first` }, _seq: 1 },
+            ],
+          },
+        },
+      },
+    } as any
+
+    await expect(extractFirstUserMessage(ctx)).resolves.toBe(`first`)
+  })
+
+  it(`orders title candidates with the _seq fallback convention`, async () => {
+    const ctx = {
+      db: {
+        collections: {
+          inbox: {
+            toArray: [
+              { key: `m-2`, from: `user`, payload: `second`, _seq: 2 },
+              { key: `m-unsequenced`, from: `user`, payload: `fallback` },
+              { key: `m-1`, from: `user`, payload: `first`, _seq: 1 },
+            ],
+          },
+        },
+      },
+    } as any
+
+    await expect(extractFirstUserMessage(ctx)).resolves.toBe(`fallback`)
+  })
+
+  it(`includes input attachments in the title source text`, async () => {
+    const ctx = {
+      db: {
+        collections: {
+          inbox: {
+            toArray: [
+              {
+                key: `m-1`,
+                from: `user`,
+                payload: { text: `Can you critique this UI?` },
+                _seq: 1,
+              },
+            ],
+          },
+          manifests: {
+            toArray: [
+              {
+                kind: `attachment`,
+                id: `att-1`,
+                subject: { type: `inbox`, key: `m-1` },
+                role: `input`,
+                mimeType: `image/png`,
+                filename: `screen.png`,
+              },
+            ],
+          },
+        },
+      },
+    } as any
+
+    await expect(extractFirstUserMessage(ctx)).resolves.toBe(
+      [`Can you critique this UI?`, `Attached image: screen.png`].join(`\n`)
+    )
+  })
+
+  it(`can title an image-only first message from its attachment metadata`, async () => {
+    const ctx = {
+      db: {
+        collections: {
+          inbox: {
+            toArray: [
+              { key: `m-1`, from: `user`, payload: { text: `` }, _seq: 1 },
+            ],
+          },
+          manifests: {
+            toArray: [
+              {
+                kind: `attachment`,
+                id: `att-1`,
+                subject: { type: `inbox`, key: `m-1` },
+                role: `input`,
+                mimeType: `image/png`,
+                filename: `screen.png`,
+              },
+            ],
+          },
+        },
+      },
+    } as any
+
+    await expect(extractFirstUserMessage(ctx)).resolves.toBe(
+      `Attached image: screen.png`
+    )
+  })
+
   it(`adds event source tools through the built-in electric tool factory`, async () => {
     const tools = await createBuiltinElectricTools()(
       createElectricToolsContext()

@@ -110,6 +110,7 @@ function Content({
   return (
     <BaseCombobox.Portal>
       <BaseCombobox.Positioner
+        className={popoverStyles.positioner}
         side={side}
         align={align}
         sideOffset={sideOffset}

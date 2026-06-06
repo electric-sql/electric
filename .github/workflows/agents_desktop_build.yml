@@ -254,15 +254,29 @@ jobs:
           if [[ "${{ inputs.sign }}" != "true" ]]; then
             builder_args+=("-c.mac.identity=-")
           fi
+          if [[ "${{ inputs.channel }}" == "canary" ]]; then
+            builder_args+=("-c.publish.channel=beta")
+            builder_args+=("-c.publish.url=https://github.com/electric-sql/electric/releases/download/agents-desktop-canary")
+          fi
 
           pnpm --filter @electric-ax/agents-desktop exec electron-builder "${builder_args[@]}" --publish never
 
       - name: Package desktop app
         if: ${{ matrix.id != 'macos' }}
+        shell: bash
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: ${{ inputs.sign && 'true' || 'false' }}
           GH_TOKEN: ${{ github.token }}
-        run: pnpm --filter @electric-ax/agents-desktop exec electron-builder ${{ matrix.builder_args }} --publish never
+        run: |
+          set -euo pipefail
+
+          builder_args=(${{ matrix.builder_args }})
+          if [[ "${{ inputs.channel }}" == "canary" ]]; then
+            builder_args+=("-c.publish.channel=beta")
+            builder_args+=("-c.publish.url=https://github.com/electric-sql/electric/releases/download/agents-desktop-canary")
+          fi
+
+          pnpm --filter @electric-ax/agents-desktop exec electron-builder "${builder_args[@]}" --publish never
 
       - name: Verify macOS app signatures
         if: ${{ matrix.id == 'macos' }}
@@ -539,6 +553,13 @@ jobs:
             exit 1
           }
 
+          # Always include the original artifacts + electron-updater metadata
+          # (latest*.yml / beta*.yml + .blockmap files). The updater expects
+          # the filenames referenced in the yml; renamed copies are added on
+          # top for canary so users get stable "latest canary" download URLs.
+          cp packages/agents-desktop/release/*.{dmg,zip,exe,AppImage,deb,blockmap,yml,yaml} \
+            packages/agents-desktop/publish-assets/ 2>/dev/null || true
+
           if [[ "$CHANNEL" == "canary" ]]; then
             case "$MATRIX_ID" in
               macos)
@@ -555,9 +576,6 @@ jobs:
                 copy_first "Electric-Agents-canary-linux-x64.deb" packages/agents-desktop/release/*.deb
                 ;;
             esac
-          else
-            cp packages/agents-desktop/release/*.{dmg,zip,exe,AppImage,deb,blockmap,yml,yaml} \
-              packages/agents-desktop/publish-assets/ 2>/dev/null || true
           fi
 
           assets=(packages/agents-desktop/publish-assets/*)

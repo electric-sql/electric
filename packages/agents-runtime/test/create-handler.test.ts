@@ -6,6 +6,7 @@ import {
   createRuntimeRouter,
 } from '../src/create-handler'
 import { clearRegistry, defineEntity } from '../src/define-entity'
+import { SandboxError } from '../src/sandbox/types'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { KeyObject } from 'node:crypto'
 import type {
@@ -148,7 +149,6 @@ describe(`createRuntimeHandler`, () => {
         url: `http://localhost:3000/test-agent/test-1`,
         streams: {
           main: `/streams/entity:test-1`,
-          error: `/streams/entity-error:test-1`,
         },
       },
     }
@@ -207,7 +207,6 @@ describe(`createRuntimeHandler`, () => {
         url: `http://localhost:3000/test-agent/test-1`,
         streams: {
           main: `/streams/entity:test-1`,
-          error: `/streams/entity-error:test-1`,
         },
       },
     }
@@ -269,7 +268,6 @@ describe(`createRuntimeHandler`, () => {
         url: `http://localhost:3000/test-agent/test-1`,
         streams: {
           main: `/streams/entity:test-1`,
-          error: `/streams/entity-error:test-1`,
         },
       },
     }
@@ -300,6 +298,74 @@ describe(`createRuntimeHandler`, () => {
       wakeErrorCount: 0,
       typeNames: [`test-agent`],
     })
+  })
+
+  it(`isolates a SandboxError('unavailable') wake without taking the runner down`, async () => {
+    // A wake whose sandbox profile was dropped by a runner re-registration race
+    // rejects with SandboxError('unavailable'). It must fail only that one wake:
+    // the handler keeps accepting and completing other wakes (the runner stays
+    // up), and the error is recorded for drain rather than thrown synchronously.
+    defineEntity(`test-agent`, { handler: async () => {} })
+    processWakeMock
+      .mockRejectedValueOnce(
+        new SandboxError(
+          `unavailable`,
+          `sandbox profile "docker" not registered`
+        )
+      )
+      .mockResolvedValueOnce(undefined)
+
+    const handler = createRuntimeHandler({
+      baseUrl: `http://localhost:3000`,
+      handlerUrl: `http://localhost:4000/electric-agents`,
+      webhookSignature: false,
+    })
+
+    const notification = (n: number) => ({
+      consumerId: `consumer-${n}`,
+      epoch: 1,
+      wakeId: `wake-${n}`,
+      streamPath: `/streams/entity:test-${n}`,
+      streams: [{ path: `/streams/entity:test-${n}`, offset: `0_0` }],
+      callback: `http://localhost:3000/_electric/wakes/wake-${n}`,
+      claimToken: `tok-${n}`,
+      entity: {
+        type: `test-agent`,
+        status: `active`,
+        url: `http://localhost:3000/test-agent/test-${n}`,
+        streams: {
+          main: `/streams/entity:test-${n}`,
+        },
+      },
+    })
+
+    const post = (n: number) =>
+      handler.handleWebhookRequest(
+        new Request(`http://localhost/electric-agents`, {
+          method: `POST`,
+          headers: { 'content-type': `application/json` },
+          body: JSON.stringify(notification(n)),
+        })
+      )
+
+    // The failing wake (1) is dispatched, then a healthy wake (2). Both are
+    // accepted (200) — the rejection doesn't propagate out of dispatch.
+    expect((await post(1)).status).toBe(200)
+    expect((await post(2)).status).toBe(200)
+    await flushAsyncWork()
+
+    // The healthy wake completed; exactly one error was recorded and isolated.
+    expect(handler.debugState()).toMatchObject({
+      pendingWakeCount: 0,
+      pendingWakeLabels: [],
+      wakeErrorCount: 1,
+      typeNames: [`test-agent`],
+    })
+    expect(processWakeMock).toHaveBeenCalledTimes(2)
+
+    // Drain surfaces the isolated error (so it's observable), then clears.
+    await expect(handler.waitForSettled()).rejects.toThrow(`not registered`)
+    expect(handler.debugState()).toMatchObject({ wakeErrorCount: 0 })
   })
 
   it(`returns 400 for invalid JSON`, async () => {
@@ -392,7 +458,6 @@ describe(`createRuntimeHandler`, () => {
         url: `/nonexistent-agent/test-1`,
         streams: {
           main: `/nonexistent-agent/test-1/main`,
-          error: `/nonexistent-agent/test-1/error`,
         },
       },
     }
@@ -436,7 +501,6 @@ describe(`createRuntimeHandler`, () => {
         url: `http://localhost:3000/test-agent/test-1`,
         streams: {
           main: `/streams/entity:test-1`,
-          error: `/streams/entity-error:test-1`,
         },
       },
     }
@@ -525,7 +589,6 @@ describe(`createRuntimeHandler`, () => {
         url: `http://localhost:3000/test-agent/test-1`,
         streams: {
           main: `/streams/entity:test-1`,
-          error: `/streams/entity-error:test-1`,
         },
       },
     }
@@ -588,7 +651,14 @@ describe(`createRuntimeHandler`, () => {
   it(`registers entity types with a webhook default dispatch policy`, async () => {
     defineEntity(`schema-agent`, {
       description: `Schema agent`,
-      outputSchemas: { custom: makeStandardSchema({ type: `object` }) },
+      stateSchemas: { custom: makeStandardSchema({ type: `object` }) },
+      permissionGrants: [
+        {
+          subject_kind: `principal_kind`,
+          subject_value: `user`,
+          permission: `spawn`,
+        },
+      ],
       handler: async () => {},
     })
 
@@ -628,7 +698,14 @@ describe(`createRuntimeHandler`, () => {
           },
         ],
       },
-      output_schemas: expect.objectContaining({
+      permission_grants: [
+        {
+          subject_kind: `principal_kind`,
+          subject_value: `user`,
+          permission: `spawn`,
+        },
+      ],
+      state_schemas: expect.objectContaining({
         custom: { type: `object` },
         run: expect.any(Object),
         manifest: expect.any(Object),
@@ -694,7 +771,7 @@ describe(`createRuntimeHandler`, () => {
     )
   })
 
-  it(`preserves base URL query params when registering types`, async () => {
+  it(`preserves tenant path prefixes when registering types`, async () => {
     defineEntity(`schema-agent`, { handler: async () => {} })
 
     const fetchMock = vi.spyOn(globalThis, `fetch`).mockResolvedValue(
@@ -705,14 +782,14 @@ describe(`createRuntimeHandler`, () => {
     )
 
     const handler = createRuntimeHandler({
-      baseUrl: `http://localhost:3000?service=tenant-a&secret=shared-secret`,
+      baseUrl: `http://localhost:3000/t/tenant-a/v1`,
       handlerUrl: `http://localhost:4000/electric-agents`,
     })
 
     await handler.registerTypes()
 
     expect(fetchMock).toHaveBeenCalledWith(
-      `http://localhost:3000/_electric/entity-types?service=tenant-a&secret=shared-secret`,
+      `http://localhost:3000/t/tenant-a/v1/_electric/entity-types`,
       expect.objectContaining({
         method: `POST`,
       })
@@ -747,7 +824,7 @@ describe(`createRuntimeHandler`, () => {
     expect(headers.get(`content-type`)).toBe(`application/json`)
   })
 
-  it(`registers custom state collections as output schemas`, async () => {
+  it(`registers custom state collections as state schemas`, async () => {
     defineEntity(`stateful-agent`, {
       state: {
         status: {
@@ -781,7 +858,7 @@ describe(`createRuntimeHandler`, () => {
 
     const [, options] = fetchMock.mock.calls[0]!
     const body = JSON.parse(options?.body as string) as Record<string, unknown>
-    expect(body.output_schemas).toEqual(
+    expect(body.state_schemas).toEqual(
       expect.objectContaining({
         'state:status': {
           type: `object`,
@@ -829,7 +906,7 @@ describe(`createRuntimeHandler`, () => {
 
     const [, options] = fetchMock.mock.calls[0]!
     const body = JSON.parse(options?.body as string) as Record<string, unknown>
-    expect(body.output_schemas).toEqual(
+    expect(body.state_schemas).toEqual(
       expect.objectContaining({
         'state:status': {
           type: `object`,
@@ -900,7 +977,7 @@ describe(`createRuntimeHandler`, () => {
     })
   })
 
-  it(`sends input_schemas when inboxSchemas is defined`, async () => {
+  it(`sends inbox_schemas when inboxSchemas is defined`, async () => {
     defineEntity(`inbox-agent`, {
       description: `Inbox agent`,
       inboxSchemas: {
@@ -928,12 +1005,12 @@ describe(`createRuntimeHandler`, () => {
 
     const [, options] = fetchMock.mock.calls[0]!
     const body = JSON.parse(options?.body as string) as Record<string, unknown>
-    expect(body.input_schemas).toEqual({
+    expect(body.inbox_schemas).toEqual({
       greet: { type: `object`, properties: { name: { type: `string` } } },
     })
   })
 
-  it(`omits creation_schema and input_schemas when neither is defined`, async () => {
+  it(`omits creation_schema and inbox_schemas when neither is defined`, async () => {
     defineEntity(`plain-agent`, {
       description: `Plain agent`,
       handler: async () => {},
@@ -956,7 +1033,7 @@ describe(`createRuntimeHandler`, () => {
     const [, options] = fetchMock.mock.calls[0]!
     const body = JSON.parse(options?.body as string) as Record<string, unknown>
     expect(body).not.toHaveProperty(`creation_schema`)
-    expect(body).not.toHaveProperty(`input_schemas`)
-    expect(body).toHaveProperty(`output_schemas`)
+    expect(body).not.toHaveProperty(`inbox_schemas`)
+    expect(body).toHaveProperty(`state_schemas`)
   })
 })

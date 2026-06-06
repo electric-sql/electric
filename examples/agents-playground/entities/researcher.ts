@@ -71,7 +71,10 @@ function createResearchWithSpecialistsTool(ctx: HandlerContext) {
           `worker`,
           childId,
           { systemPrompt: workerSystemPrompt, tools: [`bash`] },
-          { initialMessage: specialist.systemPrompt, wake: `runFinished` }
+          {
+            initialMessage: specialist.systemPrompt,
+            wake: { on: `runFinished`, includeResponse: true },
+          }
         )
         ctx.db.actions.children_insert({
           row: {

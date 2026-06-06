@@ -9,6 +9,7 @@ import type {
   StandardJSONSchemaV1,
   StandardSchemaV1,
 } from '@standard-schema/spec'
+import type { SlashCommandRow } from './composer-input'
 import type { JsonValue } from './types'
 
 // ============================================================================
@@ -75,12 +76,46 @@ type TagEntryValue = {
   key?: string
   value: string
 }
+type SlashCommandValue = {
+  key?: string
+  name: string
+  description?: string
+  arguments?: Array<{
+    name: string
+    type: `string` | `number` | `boolean`
+    required?: boolean
+    description?: string
+  }>
+  source: `static` | `dynamic`
+  owner?: string
+  version?: string
+  updated_at: string
+  dynamic_layers?: Array<{
+    name: string
+    description?: string
+    arguments?: Array<{
+      name: string
+      type: `string` | `number` | `boolean`
+      required?: boolean
+      description?: string
+    }>
+    owner?: string
+    version?: string
+    updated_at: string
+  }>
+}
 type WakeChangeEntryValue = {
   collection: string
   kind: `insert` | `update` | `delete`
   key: string
   value?: unknown
   oldValue?: unknown
+  from?: string
+  from_principal?: string
+  from_agent?: string
+  payload?: unknown
+  timestamp?: string
+  message_type?: string
 }
 type WakeFinishedChildEntryValue = {
   url: string
@@ -159,6 +194,8 @@ type ErrorEventValue = {
 type MessageReceivedValue = {
   key?: string
   from?: string
+  from_principal?: string
+  from_agent?: string
   payload?: unknown
   timestamp?: string
   message_type?: string
@@ -246,6 +283,35 @@ type ManifestEffectEntryValue = {
   id: string
   function_ref: string
   config: unknown
+}
+type AttachmentStatusValue = `pending` | `complete` | `failed`
+type AttachmentSubjectTypeValue =
+  | `inbox`
+  | `run`
+  | `text`
+  | `tool_call`
+  | `context`
+type AttachmentRoleValue = `input` | `output`
+type AttachmentSubjectValue = {
+  type: AttachmentSubjectTypeValue
+  key: string
+}
+type ManifestAttachmentEntryValue = {
+  key?: string
+  kind: `attachment`
+  id: string
+  streamPath: string
+  status: AttachmentStatusValue
+  subject: AttachmentSubjectValue
+  role: AttachmentRoleValue
+  mimeType: string
+  filename?: string
+  byteLength?: number
+  sha256?: string
+  createdAt: string
+  createdBy?: string
+  error?: string
+  meta?: Record<string, JsonValue>
 }
 type ContextEntryAttrsValue = Record<string, string | number | boolean>
 type ManifestContextEntryValue = {
@@ -345,6 +411,12 @@ function createWakeChangeSchema(): Schema<WakeChangeEntryValue> {
     key: z.string(),
     value: z.unknown().optional(),
     oldValue: z.unknown().optional(),
+    from: z.string().optional(),
+    from_principal: z.string().optional(),
+    from_agent: z.string().optional(),
+    payload: z.unknown().optional(),
+    timestamp: z.string().optional(),
+    message_type: z.string().optional(),
   })
 }
 
@@ -471,6 +543,8 @@ function createMessageReceivedSchema(): Schema<MessageReceivedValue> {
     key: z.string().optional(),
     ...timelineOrderField,
     from: z.string().optional(),
+    from_principal: z.string().optional(),
+    from_agent: z.string().optional(),
     payload: z.unknown().optional(),
     timestamp: z.string().optional(),
     message_type: z.string().optional(),
@@ -559,6 +633,63 @@ function createTagEntrySchema(): Schema<TagEntryValue> {
     value: z.string(),
   })
 }
+
+function createAttachmentSubjectSchema(): Schema<AttachmentSubjectValue> {
+  return z.object({
+    type: z.enum([`inbox`, `run`, `text`, `tool_call`, `context`]),
+    key: z.string(),
+  })
+}
+
+function createAttachmentMetaSchema(): Schema<Record<string, JsonValue>> {
+  return z.object({}).catchall(z.unknown()) as unknown as Schema<
+    Record<string, JsonValue>
+  >
+}
+
+function createSlashCommandSchema(): Schema<SlashCommandValue> {
+  return z.object({
+    key: z.string().optional(),
+    ...timelineOrderField,
+    name: z.string(),
+    description: z.string().optional(),
+    arguments: z
+      .array(
+        z.object({
+          name: z.string(),
+          type: z.enum([`string`, `number`, `boolean`]),
+          required: z.boolean().optional(),
+          description: z.string().optional(),
+        })
+      )
+      .optional(),
+    source: z.enum([`static`, `dynamic`]),
+    owner: z.string().optional(),
+    version: z.string().optional(),
+    updated_at: z.string(),
+    dynamic_layers: z
+      .array(
+        z.object({
+          name: z.string(),
+          description: z.string().optional(),
+          arguments: z
+            .array(
+              z.object({
+                name: z.string(),
+                type: z.enum([`string`, `number`, `boolean`]),
+                required: z.boolean().optional(),
+                description: z.string().optional(),
+              })
+            )
+            .optional(),
+          owner: z.string().optional(),
+          version: z.string().optional(),
+          updated_at: z.string(),
+        })
+      )
+      .optional(),
+  })
+}
 function createContextInsertedSchema(): Schema<ContextInsertedValue> {
   return z.object({
     key: z.string().optional(),
@@ -585,6 +716,7 @@ function createManifestSchema(): Schema<
   | ManifestSourceEntryValue
   | ManifestSharedStateEntryValue
   | ManifestEffectEntryValue
+  | ManifestAttachmentEntryValue
   | ManifestContextEntryValue
   | ManifestCronScheduleEntryValue
   | ManifestFutureSendScheduleEntryValue
@@ -635,6 +767,24 @@ function createManifestSchema(): Schema<
     z.object({
       key: z.string().optional(),
       ...timelineOrderField,
+      kind: z.literal(`attachment`),
+      id: z.string(),
+      streamPath: z.string(),
+      status: z.enum([`pending`, `complete`, `failed`]),
+      subject: createAttachmentSubjectSchema(),
+      role: z.enum([`input`, `output`]),
+      mimeType: z.string(),
+      filename: z.string().optional(),
+      byteLength: z.number().int().nonnegative().optional(),
+      sha256: z.string().optional(),
+      createdAt: z.string(),
+      createdBy: z.string().optional(),
+      error: z.string().optional(),
+      meta: createAttachmentMetaSchema().optional(),
+    }),
+    z.object({
+      key: z.string().optional(),
+      ...timelineOrderField,
       kind: z.literal(`context`),
       id: z.string(),
       name: z.string(),
@@ -677,6 +827,7 @@ function createManifestSchema(): Schema<
     | ManifestSourceEntryValue
     | ManifestSharedStateEntryValue
     | ManifestEffectEntryValue
+    | ManifestAttachmentEntryValue
     | ManifestContextEntryValue
     | ManifestCronScheduleEntryValue
     | ManifestFutureSendScheduleEntryValue
@@ -710,6 +861,8 @@ export type EntityStopped = SequencedPersistedRow<EntityStoppedValue>
 export type Signal = SequencedPersistedRow<SignalValue>
 export type ChildStatusEntry = SequencedPersistedRow<ChildStatusEntryValue>
 export type TagEntry = SequencedPersistedRow<TagEntryValue>
+export type SlashCommandEntry = SequencedPersistedRow<SlashCommandValue> &
+  SlashCommandRow
 export type ContextInserted = SequencedPersistedRow<ContextInsertedValue>
 export type ContextRemoved = SequencedPersistedRow<ContextRemovedValue>
 export type ContextEntryAttrs = ContextEntryAttrsValue
@@ -720,6 +873,12 @@ export type ManifestSharedStateEntry =
   SequencedPersistedRow<ManifestSharedStateEntryValue>
 export type ManifestEffectEntry =
   SequencedPersistedRow<ManifestEffectEntryValue>
+export type AttachmentStatus = AttachmentStatusValue
+export type AttachmentSubjectType = AttachmentSubjectTypeValue
+export type AttachmentRole = AttachmentRoleValue
+export type AttachmentSubject = AttachmentSubjectValue
+export type ManifestAttachmentEntry =
+  SequencedPersistedRow<ManifestAttachmentEntryValue>
 export type ManifestContextEntry =
   SequencedPersistedRow<ManifestContextEntryValue>
 export type ManifestCronScheduleEntry =
@@ -731,6 +890,7 @@ type ManifestUnion =
   | ManifestSourceEntry
   | ManifestSharedStateEntry
   | ManifestEffectEntry
+  | ManifestAttachmentEntry
   | ManifestContextEntry
   | ManifestCronScheduleEntry
   | ManifestFutureSendScheduleEntry
@@ -743,6 +903,17 @@ export type Manifest = ManifestUnion & {
   sourceType?: string
   sourceRef?: string
   config?: unknown
+  streamPath?: string
+  subject?: AttachmentSubject
+  role?: AttachmentRoleValue
+  mimeType?: string
+  filename?: string
+  byteLength?: number
+  sha256?: string
+  createdAt?: string
+  createdBy?: string
+  error?: string
+  meta?: Record<string, JsonValue>
   name?: string
   attrs?: ContextEntryAttrs
   content?: string
@@ -754,7 +925,7 @@ export type Manifest = ManifestUnion & {
   targetUrl?: string
   producerId?: string
   messageType?: string
-  status?: FutureSendScheduleStatus
+  status?: FutureSendScheduleStatus | AttachmentStatusValue
   sentAt?: string
   failedAt?: string
   lastError?: string
@@ -780,6 +951,7 @@ export const ENTITY_COLLECTIONS = {
   signals: `signals`,
   childStatus: `childStatus`,
   tags: `tags`,
+  slashCommands: `slashCommands`,
   manifests: `manifests`,
   contextInserted: `contextInserted`,
   contextRemoved: `contextRemoved`,
@@ -807,6 +979,8 @@ export const BUILT_IN_EVENT_SCHEMAS = {
   child_status:
     createChildStatusSchema() as unknown as BuiltInEntitySchema<ChildStatusEntry>,
   tags: createTagEntrySchema() as unknown as BuiltInEntitySchema<TagEntry>,
+  slash_command:
+    createSlashCommandSchema() as unknown as BuiltInEntitySchema<SlashCommandEntry>,
   context_inserted:
     createContextInsertedSchema() as unknown as BuiltInEntitySchema<ContextInserted>,
   context_removed:
@@ -836,6 +1010,7 @@ type EntityCollectionsDefinition = {
   signals: CollectionDefinition<Signal>
   childStatus: CollectionDefinition<ChildStatusEntry>
   tags: CollectionDefinition<TagEntry>
+  slashCommands: CollectionDefinition<SlashCommandEntry>
   manifests: CollectionDefinition<Manifest>
   contextInserted: CollectionDefinition<ContextInserted>
   contextRemoved: CollectionDefinition<ContextRemoved>
@@ -920,6 +1095,12 @@ export const builtInCollections: EntityCollectionsDefinition = {
   tags: {
     schema: BUILT_IN_EVENT_SCHEMAS.tags as StandardSchemaV1<TagEntry>,
     type: `tags`,
+    primaryKey: `key`,
+  },
+  slashCommands: {
+    schema:
+      BUILT_IN_EVENT_SCHEMAS.slash_command as StandardSchemaV1<SlashCommandEntry>,
+    type: `slash_command`,
     primaryKey: `key`,
   },
   manifests: {

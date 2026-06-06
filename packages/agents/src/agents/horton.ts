@@ -1,20 +1,24 @@
-import fs from 'node:fs'
 import path from 'node:path'
-import { eq, not, queryOnce } from '@durable-streams/state'
 import { z } from 'zod'
 import { serverLog } from '../log'
 import { createHortonDocsSupport } from '../docs/knowledge-base'
-import { createSkillTools } from '@electric-ax/agents-runtime'
 import { createSpawnWorkerTool } from '../tools/spawn-worker'
 import { createObservePgSyncTool } from '../tools/observe-pg-sync'
 import {
+  modelInputSchemaDefs,
   modelChoiceValues,
   REASONING_EFFORT_VALUES,
   resolveBuiltinModelConfig,
+  resolveBuiltinModelSourceBudget,
   type BuiltinAgentModelConfig,
   type BuiltinModelCatalog,
 } from '../model-catalog'
 import type { AgentTool, StreamFn } from '@mariozechner/pi-agent-core'
+import {
+  buildSkillSlashCommands,
+  createContextSkillLoader,
+  completeWithLowCostModel,
+} from '@electric-ax/agents-runtime'
 import type {
   EntityRegistry,
   HandlerContext,
@@ -27,11 +31,9 @@ import {
   createWriteTool,
   braveSearchTool,
   createFetchUrlTool,
-  fetchUrlTool,
   createSendTool,
 } from '@electric-ax/agents-runtime/tools'
-import { completeWithLowCostModel } from '@electric-ax/agents-runtime'
-import type { MessageReceived } from '@electric-ax/agents-runtime'
+import type { Sandbox } from '@electric-ax/agents-runtime/sandbox'
 import { mcp } from '@electric-ax/agents-mcp'
 import type { SkillsRegistry } from '@electric-ax/agents-runtime'
 
@@ -40,9 +42,10 @@ export const HORTON_MODEL = `claude-sonnet-4-6`
 const TITLE_SYSTEM_PROMPT =
   `You generate concise chat session titles in 3-5 words. ` +
   `Respond with only the title, no quotes, no punctuation, no preamble.`
-
 const TITLE_USER_PROMPT = (userMessage: string): string =>
   `User request:\n${userMessage}`
+const TITLE_GENERATION_TIMEOUT_MS = 8_000
+const HORTON_SKILLS_SLASH_COMMAND_OWNER = `horton:skills`
 
 const TITLE_STOP_WORDS = new Set([
   `a`,
@@ -144,6 +147,23 @@ function createConfiguredTitleCall(
     })
 }
 
+function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  description: string
+): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined
+  const timeoutPromise = new Promise<T>((_resolve, reject) => {
+    timeout = setTimeout(() => {
+      reject(new Error(`${description} timed out after ${ms}ms`))
+    }, ms)
+  })
+
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timeout) clearTimeout(timeout)
+  })
+}
+
 export async function generateTitle(
   userMessage: string,
   llmCall: (prompt: string) => Promise<string>,
@@ -173,7 +193,7 @@ export function buildHortonSystemPrompt(
   } = {}
 ): string {
   const docsTools = opts.hasDocsSupport
-    ? `\n- search_durable_agents_docs: hybrid search over the built-in Durable Agents docs index`
+    ? `\n- search_electric_agents_docs: hybrid search over the built-in Electric Agents docs index`
     : ``
   const eventSourceTools = opts.hasEventSourceTools
     ? `\n- list_event_sources: list external webhook/event feeds you can subscribe to, including available buckets and parameters\n- subscribe_event_source: subscribe yourself to one of those feeds or buckets so matching future events wake you\n- list_event_source_subscriptions: list your active event source subscriptions\n- unsubscribe_event_source: remove one of your event source subscriptions by id`
@@ -182,7 +202,7 @@ export function buildHortonSystemPrompt(
     ? `\n- use_skill: load a skill (knowledge, instructions, or a tutorial) into your context to help with the user's request\n- remove_skill: unload a skill from context when you're done with it`
     : ``
   const docsGuidance = opts.hasDocsSupport
-    ? `\n- For ANY question about Electric Agents, Durable Agents, or this framework, ALWAYS use search_durable_agents_docs FIRST. Do not use web_search or fetch_url for Electric Agents topics unless the docs search returns no useful results.\n- The search tool returns chunk content directly — you do not need to read the source files.\n- Use repo read/bash tools only for non-doc files or when you need to inspect exact implementation code in the workspace.`
+    ? `\n- For ANY question about Electric Agents or this framework, ALWAYS use search_electric_agents_docs FIRST. Do not use web_search or fetch_url for Electric Agents topics unless the docs search returns no useful results.\n- The search tool returns chunk content directly — you do not need to read the source files.\n- Use repo read/bash tools only for non-doc files or when you need to inspect exact implementation code in the workspace.`
     : ``
   const skillsGuidance = opts.hasSkills
     ? `\n# Skills\nYou have access to skills — specialized knowledge and guided workflows you can load on demand. Your context includes a skills catalog listing what's available. When the user's request matches a skill's description or keywords, load it with use_skill.
@@ -204,7 +224,7 @@ Do NOT load a skill and then ignore its instructions. The skill is there because
 When a user is new or asks how to get started with Electric Agents, **don't assume a single path**. Present the options and let them choose:
 
 - **Learn the concepts first** → Explain what Electric Agents is, answer questions, point to docs.
-  Use search_durable_agents_docs to look up answers. Only load the quickstart skill if the user explicitly asks for a hands-on guided tutorial.
+  Use search_electric_agents_docs to look up answers. Only load the quickstart skill if the user explicitly asks for a hands-on guided tutorial.
 
 - **Hands-on guided tutorial** → Load the quickstart skill (or tell them to type \`/quickstart\`).
   This is a step-by-step build that takes them from zero to a running app.
@@ -214,12 +234,12 @@ When a user is new or asks how to get started with Electric Agents, **don't assu
   This sets up project structure and orients them in the codebase.
 
 - **Have a specific question?** → Answer it directly.
-  Use search_durable_agents_docs first, then fall back to fetch_url or general knowledge if needed.
+  Use search_electric_agents_docs first, then fall back to fetch_url or general knowledge if needed.
 
 Don't force onboarding. If someone just wants to chat or code, let them. When in doubt, ask what they'd like to do rather than picking a path for them.`
   const docsUrlGuidance = opts.docsUrl
     ? `\n# Electric Agents documentation
-- ${opts.hasDocsSupport ? `If search_durable_agents_docs is available, use it first (faster, hybrid search).` : `Use fetch_url to look up documentation pages.`}
+- ${opts.hasDocsSupport ? `If search_electric_agents_docs is available, use it first (faster, hybrid search).` : `Use fetch_url to look up documentation pages.`}
 - The Electric Agents docs site is at ${opts.docsUrl}
 - The docs site covers: Usage (entity definition, handlers, tools, state, spawning, coordination, waking, shared state, client integration, app setup), Reference (handler context, entity definitions, configurations, tools, state proxies, wake events, registries), Entities (Horton, Worker), and Patterns (Manager-Worker, Pipeline, Map-Reduce, Dispatcher, Blackboard, Reactive Observers).
 - For general coding questions unrelated to Electric Agents, use web_search or your own knowledge.`
@@ -287,7 +307,7 @@ function getToolName(tool: unknown): string | null {
 }
 
 export function createHortonTools(
-  workingDirectory: string,
+  sandbox: Sandbox,
   ctx: HandlerContext,
   readSet: Set<string>,
   opts: {
@@ -298,21 +318,21 @@ export function createHortonTools(
   } = {}
 ): Array<AgentTool> {
   return [
-    createBashTool(workingDirectory),
-    createReadFileTool(workingDirectory, readSet),
-    createWriteTool(workingDirectory, readSet),
-    createEditTool(workingDirectory, readSet),
+    createBashTool(sandbox),
+    createReadFileTool(sandbox, readSet),
+    createWriteTool(sandbox, readSet),
+    createEditTool(sandbox, readSet),
     braveSearchTool,
     ...(opts.modelCatalog && opts.modelConfig
       ? [
-          createFetchUrlTool({
+          createFetchUrlTool(sandbox, {
             catalog: opts.modelCatalog,
             modelConfig: opts.modelConfig,
             log: (message) => serverLog.info(message),
             logPrefix: opts.logPrefix ?? `[horton]`,
           }),
         ]
-      : [fetchUrlTool]),
+      : [createFetchUrlTool(sandbox)]),
     createSpawnWorkerTool(ctx, opts.modelConfig),
     createSendTool(ctx.send),
     createObservePgSyncTool(ctx),
@@ -325,49 +345,130 @@ function payloadToTitleText(payload: unknown): string {
   if (typeof payload === `string`) return payload
   if (payload == null) return ``
   if (typeof payload === `object`) {
-    const text = (payload as Record<string, unknown>).text
-    return typeof text === `string` ? text : JSON.stringify(payload)
+    const record = payload as Record<string, unknown>
+    const text = record.text
+    if (typeof text === `string`) return text
+    const source = record.source
+    if (typeof source === `string`) return source
+    return JSON.stringify(payload)
   }
   return String(payload)
+}
+
+type InboxTitleMessage = {
+  key?: unknown
+  from?: unknown
+  payload: unknown
+  _seq?: unknown
+}
+
+type TitleAttachment = {
+  kind?: unknown
+  subject?: unknown
+  role?: unknown
+  mimeType?: unknown
+  filename?: unknown
+  id?: unknown
+}
+
+function attachmentTitleText(attachment: TitleAttachment): string | null {
+  const mimeType =
+    typeof attachment.mimeType === `string` ? attachment.mimeType : ``
+  const filename =
+    typeof attachment.filename === `string` && attachment.filename.trim()
+      ? attachment.filename.trim()
+      : typeof attachment.id === `string`
+        ? attachment.id
+        : `attachment`
+  const kind = mimeType.startsWith(`image/`) ? `image` : `file`
+
+  return `Attached ${kind}: ${filename}`
+}
+
+function attachmentsForInboxMessage(
+  ctx: HandlerContext,
+  inboxKey: string
+): Array<TitleAttachment> {
+  const manifests = (
+    ctx.db.collections as {
+      manifests?: { toArray?: Array<unknown> }
+    }
+  ).manifests?.toArray
+  if (!Array.isArray(manifests)) return []
+
+  return manifests.filter((entry): entry is TitleAttachment => {
+    if (!entry || typeof entry !== `object`) return false
+    const attachment = entry as TitleAttachment
+    if (attachment.kind !== `attachment`) return false
+    if (attachment.role !== `input`) return false
+    const subject = attachment.subject
+    return (
+      subject !== null &&
+      typeof subject === `object` &&
+      !Array.isArray(subject) &&
+      (subject as { type?: unknown }).type === `inbox` &&
+      (subject as { key?: unknown }).key === inboxKey
+    )
+  })
+}
+
+function messageTitleText(
+  ctx: HandlerContext,
+  message: InboxTitleMessage
+): string {
+  const pieces: Array<string> = []
+  const text = payloadToTitleText(message.payload).trim()
+  if (text) pieces.push(text)
+
+  const key = typeof message.key === `string` ? message.key : null
+  const attachments = key ? attachmentsForInboxMessage(ctx, key) : []
+  for (const attachment of attachments) {
+    const attachmentText = attachmentTitleText(attachment)
+    if (attachmentText) pieces.push(attachmentText)
+  }
+
+  return pieces.join(`\n`)
 }
 
 export async function extractFirstUserMessage(
   ctx: HandlerContext
 ): Promise<string | null> {
-  const firstMessage = await queryOnce((q) =>
-    q
-      .from({ inbox: ctx.db.collections.inbox })
-      .where(({ inbox }) => not(eq(inbox.from, `system`)))
-      .orderBy(({ inbox }) => inbox._seq, `asc`)
-      .findOne()
+  const firstMessage = (
+    ctx.db.collections.inbox.toArray as Array<InboxTitleMessage>
   )
+    .filter((message) => message.from !== `system`)
+    .sort((left, right) => messageSeq(left) - messageSeq(right))[0]
 
   if (!firstMessage) return null
-  const text = payloadToTitleText((firstMessage as MessageReceived).payload)
+  const text = messageTitleText(ctx, firstMessage)
   return text.length > 0 ? text : null
+}
+
+function messageSeq(message: { _seq?: unknown }): number {
+  return typeof message._seq === `number` ? message._seq : -1
 }
 
 type HortonDocsSupport = NonNullable<ReturnType<typeof createHortonDocsSupport>>
 
-function readAgentsMd(workingDirectory: string): string | null {
-  const agentsMdPath = path.join(workingDirectory, `AGENTS.md`)
+async function readAgentsMd(sandbox: Sandbox): Promise<string | null> {
+  // Read through the sandbox, not the host fs, so the path and contents match
+  // where the agent's tools actually operate — the remote VM's working
+  // directory for a remote sandbox, the host project root for a local one.
+  const agentsMdPath = path.posix.join(sandbox.workingDirectory, `AGENTS.md`)
   try {
-    if (!fs.existsSync(agentsMdPath) || !fs.statSync(agentsMdPath).isFile()) {
-      return null
-    }
-    const content = fs.readFileSync(agentsMdPath, `utf8`)
+    const content = (await sandbox.readFile(agentsMdPath)).toString(`utf8`)
     return [
       `<context_file kind="instructions" path="${agentsMdPath}">`,
       content,
       `</context_file>`,
     ].join(`\n`)
   } catch {
+    // Missing, unreadable, or outside the sandbox's read policy — no context.
     return null
   }
 }
 
 function createAssistantHandler(options: {
-  workingDirectory: string
   streamFn?: StreamFn
   docsSupport: HortonDocsSupport | null
   docsSearchTool?: AgentTool
@@ -376,7 +477,6 @@ function createAssistantHandler(options: {
   docsUrl?: string
 }) {
   const {
-    workingDirectory,
     streamFn,
     docsSupport,
     docsSearchTool,
@@ -384,83 +484,98 @@ function createAssistantHandler(options: {
     modelCatalog,
     docsUrl,
   } = options
-  const hasSkills = Boolean(skillsRegistry && skillsRegistry.catalog.size > 0)
+  const skillLoader = createContextSkillLoader(skillsRegistry, {
+    slashCommandOwner: HORTON_SKILLS_SLASH_COMMAND_OWNER,
+  })
+  const hasSkills = skillLoader.hasSkills
 
   return async function assistantHandler(
     ctx: HandlerContext,
     wake: WakeEvent
   ): Promise<void> {
+    const loadedSkills = await skillLoader.load(ctx)
+
     const readSet = new Set<string>()
-    // `workingDirectory` may be overridden per-spawn — used by the
-    // desktop UI's directory picker so each Horton session can run
-    // against its own project root without restarting the runtime.
-    const effectiveCwd =
-      typeof ctx.args.workingDirectory === `string` &&
-      ctx.args.workingDirectory.trim().length > 0
-        ? ctx.args.workingDirectory
-        : workingDirectory
     const modelConfig = resolveBuiltinModelConfig(modelCatalog, ctx.args)
-    const agentsMd = readAgentsMd(effectiveCwd)
+    const sourceBudget = resolveBuiltinModelSourceBudget(modelConfig)
+    // The sandbox's own working directory is the single source of truth for
+    // where the agent operates — `/work` in a remote VM, or the host project
+    // root for a local sandbox (the local profile derives that from
+    // `args.workingDirectory`, so the desktop directory picker still applies).
+    // Report it in the prompt and read AGENTS.md from it so the model never
+    // sees a host path it can't actually reach.
+    const sandboxCwd = ctx.sandbox.workingDirectory
+    const agentsMd = await readAgentsMd(ctx.sandbox)
+    // `ctx.sandbox` is constructed by the runtime at wake-session
+    // start from the profile named on `entity.sandbox.profile` (set at
+    // spawn time) and disposed when the wake-session ends.
     const tools = [
       ...ctx.electricTools,
-      ...createHortonTools(effectiveCwd, ctx, readSet, {
+      ...createHortonTools(ctx.sandbox, ctx, readSet, {
         docsSearchTool,
         modelConfig,
         modelCatalog,
         logPrefix: `[horton ${ctx.entityUrl}]`,
       }),
-      ...(skillsRegistry && skillsRegistry.catalog.size > 0
-        ? createSkillTools(skillsRegistry, ctx)
-        : []),
+      ...loadedSkills.tools,
       ...mcp.tools(),
     ]
     const hasEventSourceTools = tools.some(
       (tool) => getToolName(tool) === `list_event_sources`
     )
 
-    const titlePromise =
-      ctx.firstWake && !ctx.tags.title
-        ? (async () => {
-            const firstUserMessage = await extractFirstUserMessage(ctx)
-            if (!firstUserMessage) return
+    const titlePromise = !ctx.tags.title
+      ? (async () => {
+          const firstUserMessage = await extractFirstUserMessage(ctx)
+          if (!firstUserMessage) return
 
-            let title: string | null = null
-            try {
-              const result = await generateTitle(
-                firstUserMessage,
-                createConfiguredTitleCall(
-                  modelCatalog,
-                  modelConfig,
-                  `[horton ${ctx.entityUrl}]`
+          let title: string | null = null
+          try {
+            const result = await generateTitle(
+              firstUserMessage,
+              (prompt) =>
+                withTimeout(
+                  createConfiguredTitleCall(
+                    modelCatalog,
+                    modelConfig,
+                    `[horton ${ctx.entityUrl}]`
+                  )(prompt),
+                  TITLE_GENERATION_TIMEOUT_MS,
+                  `title generation`
                 ),
-                (reason) => {
-                  serverLog.warn(
-                    `[horton ${ctx.entityUrl}] title generation fell back to local title: ${reason}`
-                  )
-                }
-              )
-              if (result.length > 0) title = result
-            } catch (err) {
-              serverLog.warn(
-                `[horton ${ctx.entityUrl}] title generation failed: ${err instanceof Error ? err.message : String(err)}`
-              )
-            }
-
-            if (title !== null) {
-              try {
-                await ctx.setTag(`title`, title)
-              } catch (err) {
+              (reason) => {
                 serverLog.warn(
-                  `[horton ${ctx.entityUrl}] setTag failed: ${err instanceof Error ? err.message : String(err)}`
+                  `[horton ${ctx.entityUrl}] title generation fell back to local title: ${reason}`
                 )
               }
+            )
+            if (result.length > 0) title = result
+          } catch (err) {
+            serverLog.warn(
+              `[horton ${ctx.entityUrl}] title generation failed: ${err instanceof Error ? err.message : String(err)}`
+            )
+            title = buildFallbackTitle(firstUserMessage)
+          }
+
+          if (title !== null) {
+            try {
+              await withTimeout(
+                ctx.setTag(`title`, title),
+                TITLE_GENERATION_TIMEOUT_MS,
+                `set title tag`
+              )
+            } catch (err) {
+              serverLog.warn(
+                `[horton ${ctx.entityUrl}] setTag failed: ${err instanceof Error ? err.message : String(err)}`
+              )
             }
-          })()
-        : Promise.resolve()
+          }
+        })()
+      : Promise.resolve()
 
     if (docsSupport) {
       ctx.useContext({
-        sourceBudget: 100_000,
+        sourceBudget,
         sources: {
           docs_toc: {
             content: () => docsSupport.renderCompressedToc(),
@@ -491,25 +606,15 @@ function createAssistantHandler(options: {
               }
             : {}),
           ...(skillsRegistry && skillsRegistry.catalog.size > 0
-            ? {
-                skills_catalog: {
-                  content: () => skillsRegistry.renderCatalog(2_000),
-                  max: 2_000,
-                  cache: `stable` as const,
-                },
-              }
+            ? loadedSkills.sources
             : {}),
         },
       })
     } else if (skillsRegistry && skillsRegistry.catalog.size > 0) {
       ctx.useContext({
-        sourceBudget: 100_000,
+        sourceBudget,
         sources: {
-          skills_catalog: {
-            content: () => skillsRegistry.renderCatalog(2_000),
-            max: 2_000,
-            cache: `stable` as const,
-          },
+          ...loadedSkills.sources,
           conversation: {
             content: () => ctx.timelineMessages(),
             cache: `volatile`,
@@ -527,7 +632,7 @@ function createAssistantHandler(options: {
       })
     } else if (agentsMd) {
       ctx.useContext({
-        sourceBudget: 100_000,
+        sourceBudget,
         sources: {
           conversation: {
             content: () => ctx.timelineMessages(),
@@ -543,7 +648,7 @@ function createAssistantHandler(options: {
     }
 
     ctx.useAgent({
-      systemPrompt: buildHortonSystemPrompt(effectiveCwd, {
+      systemPrompt: buildHortonSystemPrompt(sandboxCwd, {
         hasDocsSupport: Boolean(docsSupport),
         hasSkills,
         docsUrl,
@@ -603,7 +708,6 @@ export function registerHorton(
   })
 
   const assistantHandler = createAssistantHandler({
-    workingDirectory,
     streamFn,
     docsSupport,
     docsSearchTool,
@@ -612,38 +716,46 @@ export function registerHorton(
     docsUrl,
   })
 
-  const hortonCreationSchema = z.object({
-    model: z
-      .enum(modelChoiceValues(modelCatalog))
-      .default(modelCatalog.defaultChoice.value),
-    reasoningEffort: z
-      .enum(REASONING_EFFORT_VALUES)
-      .default(`auto`)
-      .describe(
-        `Reasoning effort for compatible reasoning models. Auto uses a safe provider default.`
-      ),
-    workingDirectory: z
-      .string()
-      .optional()
-      .describe(
-        `Working directory for file operations. Defaults to the server's configured cwd.`
-      ),
-  })
+  const hortonCreationSchema = z
+    .object({
+      model: z
+        .enum(modelChoiceValues(modelCatalog))
+        .default(modelCatalog.defaultChoice.value),
+      reasoningEffort: z
+        .enum(REASONING_EFFORT_VALUES)
+        .default(`auto`)
+        .describe(
+          `Reasoning effort for compatible reasoning models. Auto uses a safe provider default.`
+        ),
+      workingDirectory: z
+        .string()
+        .optional()
+        .describe(
+          `Working directory for file operations. Defaults to the server's configured cwd.`
+        ),
+    })
+    .meta({
+      $defs: modelInputSchemaDefs(modelCatalog),
+    })
 
   registry.define(`horton`, {
     description: `Friendly capable assistant — chat, code, research, dispatch`,
     creationSchema: hortonCreationSchema,
+    permissionGrants: [
+      {
+        subject_kind: `principal_kind`,
+        subject_value: `user`,
+        permission: `spawn`,
+      },
+      {
+        subject_kind: `principal_kind`,
+        subject_value: `user`,
+        permission: `manage`,
+      },
+    ],
+    slashCommands: buildSkillSlashCommands(skillsRegistry),
     handler: assistantHandler,
   })
 
-  const typeNames = [`horton`]
-  if (streamFn) {
-    registry.define(`chat`, {
-      description: `Compatibility alias for the built-in assistant type.`,
-      handler: assistantHandler,
-    })
-    typeNames.push(`chat`)
-  }
-
-  return typeNames
+  return [`horton`]
 }

@@ -1,6 +1,6 @@
 {
   "name": "@electric-ax/agents",
-  "version": "0.4.8",
+  "version": "0.4.14",
   "description": "Built-in Electric Agents runtimes such as Horton and worker",
   "repository": {
     "type": "git",
@@ -51,7 +51,7 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@durable-streams/state": "https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@5d5c217",
+    "@durable-streams/state": "^0.3.1",
     "@electric-ax/agents-mcp": "workspace:*",
     "@electric-ax/agents-runtime": "workspace:*",
     "@mariozechner/pi-agent-core": "^0.70.2",
@@ -62,6 +62,7 @@
     "pino": "^10.3.1",
     "pino-pretty": "^13.0.0",
     "sqlite-vec": "^0.1.9",
+    "undici": "^7.24.7",
     "zod": "^4.3.6"
   },
   "devDependencies": {
@@ -71,7 +72,7 @@
     "cross-env": "^10.1.0",
     "tsdown": "^0.9.0",
     "tsx": "^4.19.0",
-    "typescript": "^5.0.0",
+    "typescript": "^5.9.3",
     "vitest": "^4.1.0"
   },
   "files": [

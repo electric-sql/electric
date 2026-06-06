@@ -6,7 +6,8 @@ import {
   Text,
   View,
 } from 'react-native'
-import { useLiveQuery } from '@tanstack/react-db'
+import { eq, not, useLiveQuery } from '@tanstack/react-db'
+import { normalizePrincipalUrl } from '@electric-ax/agents-server-ui/src/lib/principals'
 import { Fab } from '../components/Fab'
 import { Header } from '../components/Header'
 import { HomeMenu, type ServerHealth } from '../components/HomeMenu'
@@ -28,6 +29,7 @@ import {
   type SessionGroup,
 } from '../lib/sessionBuckets'
 import { useSidebarPrefs } from '../lib/sidebarPrefs'
+import { useCurrentPrincipal } from '../lib/useCurrentPrincipal'
 import { useTokens } from '../lib/ThemeProvider'
 import { fontSize, spacing } from '../lib/theme'
 import type { Tokens } from '../lib/theme'
@@ -71,6 +73,11 @@ export function SessionListScreen({
   const tokens = useTokens()
   const styles = useMemo(() => createStyles(tokens), [tokens])
   const prefs = useSidebarPrefs()
+  const { principal } = useCurrentPrincipal()
+  const currentPrincipalUrl = useMemo(
+    () => normalizePrincipalUrl(principal),
+    [principal]
+  )
 
   const [searchOpen, setSearchOpen] = useState(false)
   const [query, setQuery] = useState(``)
@@ -80,6 +87,7 @@ export function SessionListScreen({
     (q) =>
       q
         .from({ entity: entitiesCollection })
+        .where(({ entity }) => not(eq(entity.type, `principal`)))
         .orderBy(({ entity }) => entity.updated_at, `desc`),
     [entitiesCollection]
   )
@@ -89,15 +97,22 @@ export function SessionListScreen({
   // children of a hidden parent reparent to the root level instead,
   // matching the web sidebar's filtering convention.
   const visibleEntities = useMemo(() => {
-    if (prefs.hiddenTypes.size === 0 && prefs.hiddenStatuses.size === 0) {
+    if (
+      prefs.hiddenTypes.size === 0 &&
+      prefs.hiddenStatuses.size === 0 &&
+      prefs.hiddenCreators.size === 0
+    ) {
       return entities
     }
-    return entities.filter(
-      (entity) =>
+    return entities.filter((entity) => {
+      const creator = normalizePrincipalUrl(entity.created_by)
+      return (
         !prefs.hiddenTypes.has(entity.type) &&
-        !prefs.hiddenStatuses.has(entity.status)
-    )
-  }, [entities, prefs.hiddenTypes, prefs.hiddenStatuses])
+        !prefs.hiddenStatuses.has(entity.status) &&
+        (creator === null || !prefs.hiddenCreators.has(creator))
+      )
+    })
+  }, [entities, prefs.hiddenTypes, prefs.hiddenStatuses, prefs.hiddenCreators])
 
   // Build the parent → children map once per filtered set; the
   // grouping below operates on the resulting roots only so a child
@@ -246,6 +261,7 @@ export function SessionListScreen({
                     entity={entity}
                     depth={0}
                     onPress={() => onOpenSession(entity.url)}
+                    currentPrincipalUrl={currentPrincipalUrl}
                   />
                 ))
               : // Default mode — every group item is a tree root. The
@@ -257,6 +273,7 @@ export function SessionListScreen({
                     entity={root}
                     childrenByParent={childrenByParent}
                     onSelectEntity={onOpenSession}
+                    currentPrincipalUrl={currentPrincipalUrl}
                   />
                 ))}
           </View>

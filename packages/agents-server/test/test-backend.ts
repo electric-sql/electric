@@ -126,6 +126,9 @@ async function ensureExpectedSchema(postgresUrl: string): Promise<void> {
       hasOutboxDeadLetteredAt,
       hasEntityManifestSources,
       hasEntitiesCreatedBy,
+      hasEntityEffectivePermissions,
+      hasSharedStateLinks,
+      hasEntityBridgePrincipal,
       hasLegacyEntitiesMetadata,
     ] = await Promise.all([
       hasColumn(postgresUrl, `entities`, `tags`),
@@ -133,6 +136,9 @@ async function ensureExpectedSchema(postgresUrl: string): Promise<void> {
       hasColumn(postgresUrl, `tag_stream_outbox`, `dead_lettered_at`),
       hasTable(postgresUrl, `entity_manifest_sources`),
       hasColumn(postgresUrl, `entities`, `created_by`),
+      hasTable(postgresUrl, `entity_effective_permissions`),
+      hasTable(postgresUrl, `shared_state_links`),
+      hasColumn(postgresUrl, `entity_bridges`, `principal_url`),
       hasColumn(postgresUrl, `entities`, `metadata`),
     ])
 
@@ -142,6 +148,9 @@ async function ensureExpectedSchema(postgresUrl: string): Promise<void> {
       hasOutboxDeadLetteredAt &&
       hasEntityManifestSources &&
       hasEntitiesCreatedBy &&
+      hasEntityEffectivePermissions &&
+      hasSharedStateLinks &&
+      hasEntityBridgePrincipal &&
       !hasLegacyEntitiesMetadata
     )
   }
@@ -162,7 +171,7 @@ async function ensureExpectedSchema(postgresUrl: string): Promise<void> {
 
   const composeProject = getElectricAgentsComposeProject()
   throw new Error(
-    `ElectricAgents test backend schema is stale: expected current tags/manifest/outbox/principals schema and no legacy entities.metadata column. Reset the matching backend with "docker compose -p ${composeProject} -f ${ELECTRIC_AGENTS_COMPOSE_FILE} down -v" and rerun the relevant Vitest project.`
+    `ElectricAgents test backend schema is stale: expected current tags/manifest/outbox/principals/permissions schema and no legacy entities.metadata column. Reset the matching backend with "docker compose -p ${composeProject} -f ${ELECTRIC_AGENTS_COMPOSE_FILE} down -v" and rerun the relevant Vitest project.`
   )
 }
 export async function ensureElectricAgentsTestBackend(): Promise<void> {

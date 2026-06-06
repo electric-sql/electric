@@ -46,6 +46,7 @@ describe(`ElectricAgentsManager entity type persistence`, () => {
       creation_schema: { type: `object` },
       inbox_schemas: undefined,
       state_schemas: { message: { type: `object` } },
+      slash_commands: [{ name: `quickstart`, description: `Get started` }],
       serve_endpoint: `http://runtime.test/webhook`,
       revision: 1,
       created_at: `2026-01-01T00:00:00.000Z`,
@@ -57,6 +58,7 @@ describe(`ElectricAgentsManager entity type persistence`, () => {
       description: `chat entity`,
       creation_schema: { type: `object` },
       state_schemas: { message: { type: `object` } },
+      slash_commands: [{ name: `quickstart`, description: `Get started` }],
       serve_endpoint: `http://runtime.test/webhook`,
     })
 
@@ -66,7 +68,31 @@ describe(`ElectricAgentsManager entity type persistence`, () => {
       name: `chat`,
       revision: 1,
       serve_endpoint: `http://runtime.test/webhook`,
+      slash_commands: [{ name: `quickstart`, description: `Get started` }],
     })
+  })
+
+  it(`rejects invalid slash command definitions`, async () => {
+    const { manager, registry } = createManager()
+
+    await expect(
+      manager.registerEntityType({
+        name: `chat`,
+        description: `chat entity`,
+        slash_commands: [{ name: `QuickStart` }],
+      })
+    ).rejects.toMatchObject({
+      code: `SCHEMA_VALIDATION_FAILED`,
+      status: 422,
+      details: [
+        {
+          path: `/slash_commands/0/name`,
+          message: `must be a lowercase kebab-case command name`,
+        },
+      ],
+    })
+
+    expect(registry.createEntityType).not.toHaveBeenCalled()
   })
 
   it(`rejects built-in principal entity type registration and amendment`, async () => {

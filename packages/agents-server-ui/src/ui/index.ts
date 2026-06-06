@@ -48,6 +48,7 @@ export { Textarea } from './Textarea'
 export { Field } from './Field'
 
 export { Dialog } from './Dialog'
+export { ConfirmDialog } from './ConfirmDialog'
 
 export { Popover } from './Popover'
 export { HoverCard } from './HoverCard'
@@ -57,6 +58,8 @@ export { Tooltip, TooltipProvider } from './Tooltip'
 
 export { Select } from './Select'
 export type { SelectSize } from './Select'
+
+export { Switch } from './Switch'
 
 export { Combobox } from './Combobox'
 

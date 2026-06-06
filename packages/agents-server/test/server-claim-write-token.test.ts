@@ -141,7 +141,7 @@ describe(`Claim-scoped write tokens`, () => {
     writeToken?: string
   }> {
     const claimRes = await fetch(
-      `${baseUrl}/_electric/callback-forward/${encodeURIComponent(opts.consumerId)}`,
+      `${baseUrl}/_electric/wake-callbacks/${encodeURIComponent(opts.consumerId)}`,
       {
         method: `POST`,
         headers: { 'content-type': `application/json` },
@@ -164,7 +164,7 @@ describe(`Claim-scoped write tokens`, () => {
     streamPath: string
   }): Promise<Response> {
     return await fetch(
-      `${baseUrl}/_electric/callback-forward/${encodeURIComponent(opts.consumerId)}`,
+      `${baseUrl}/_electric/wake-callbacks/${encodeURIComponent(opts.consumerId)}`,
       {
         method: `POST`,
         headers: { 'content-type': `application/json` },
@@ -513,7 +513,7 @@ describe(`Claim-scoped write tokens`, () => {
   it(`claim-scoped writes validate state schemas and unknown event types`, async () => {
     const typeName = `claim-write-schemas-${Date.now()}`
     const entity = await createEntity(typeName, `owner`, {
-      output_schemas: {
+      state_schemas: {
         result: {
           type: `object`,
           properties: { value: { type: `number` } },

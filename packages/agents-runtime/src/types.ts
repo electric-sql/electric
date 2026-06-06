@@ -4,11 +4,11 @@ import type {
   StandardTypedV1,
 } from '@standard-schema/spec'
 import type {
-  StreamDB as BaseStreamDB,
   ChangeEvent,
   CollectionDefinition as StateCollectionDefinition,
   StateEvent,
 } from '@durable-streams/state'
+import type { StreamDB as BaseStreamDB } from '@durable-streams/state/db'
 import type { EntityRegistry } from './define-entity'
 import type {
   Collection as TanStackCollection,
@@ -23,15 +23,13 @@ import type {
   AgentTool as PiAgentTool,
   StreamFn,
 } from '@mariozechner/pi-agent-core'
-import type {
-  KnownProvider,
-  Model,
-  SimpleStreamOptions,
-} from '@mariozechner/pi-ai'
+import type { Model, Provider, SimpleStreamOptions } from '@mariozechner/pi-ai'
 import type {
   EntityStreamDB as RuntimeEntityStreamDB,
   EntityStreamDBWithActions as RuntimeEntityStreamDBWithActions,
 } from './entity-stream-db'
+import type { Sandbox, SandboxProfile } from './sandbox/types'
+import type { SandboxSelectionConfig } from './sandbox/identity'
 import type {
   ChildStatusEntry,
   ContextEntryAttrs as EntityContextEntryAttrs,
@@ -39,6 +37,7 @@ import type {
   ContextRemoved as EntityContextRemoved,
   EntitySignal,
   Manifest as EntityManifest,
+  ManifestAttachmentEntry as EntityManifestAttachmentEntry,
   ManifestChildEntry as EntityManifestChildEntry,
   ManifestContextEntry as EntityManifestContextEntry,
   ManifestCronScheduleEntry as EntityManifestCronScheduleEntry,
@@ -49,6 +48,10 @@ import type {
   Signal as EntitySignalEntry,
   WakeEntry,
 } from './entity-schema'
+import type {
+  SlashCommandDefinition,
+  SlashCommandHelpers,
+} from './composer-input'
 import type {
   EventSourceContract,
   EventSourceSubscription,
@@ -227,8 +230,19 @@ export type LLMMessage =
   | LLMToolCallMessage
   | LLMToolResultMessage
 
+export type LLMContentBlock =
+  | { type: `text`; text: string }
+  | { type: `image`; data: string; mimeType: string }
+  | {
+      type: `attachment`
+      id: string
+      detail?: `low` | `high` | `auto`
+    }
+
+export type LLMMessageContent = string | Array<LLMContentBlock>
+
 interface LLMMessageBase {
-  content: string
+  content: LLMMessageContent
 }
 
 export interface LLMUserMessage extends LLMMessageBase {
@@ -300,6 +314,7 @@ export interface UseContextConfig {
 }
 
 export type ManifestEntry = EntityManifest
+export type ManifestAttachmentEntry = EntityManifestAttachmentEntry
 export type ManifestChildEntry = EntityManifestChildEntry
 export type ManifestContextEntry = EntityManifestContextEntry
 export type ManifestCronScheduleEntry = EntityManifestCronScheduleEntry
@@ -323,8 +338,36 @@ export interface ContextEntry extends ContextEntryInput {
   insertedAt: number
 }
 
+export type AttachmentCreateInput = {
+  bytes: Uint8Array | ArrayBuffer | Blob
+  mimeType?: string
+  filename?: string
+  subject: {
+    type: `inbox` | `run` | `text` | `tool_call` | `context`
+    key: string
+  }
+  role?: `input` | `output`
+  meta?: Record<string, JsonValue>
+}
+
+export interface AttachmentsApi {
+  list(filter?: {
+    subject?: AttachmentCreateInput[`subject`]
+    role?: `input` | `output`
+  }): Array<ManifestAttachmentEntry>
+  get(id: string): ManifestAttachmentEntry | undefined
+  read(id: string): Promise<Uint8Array>
+  create(input: AttachmentCreateInput): Promise<ManifestAttachmentEntry>
+}
+
 export type TimelineItem =
-  | { kind: `inbox`; at: number; payload: unknown }
+  | {
+      kind: `inbox`
+      at: number
+      key: string
+      payload: unknown
+      messageType?: string
+    }
   | { kind: `wake`; at: number; payload: unknown }
   | { kind: `signal`; at: number; signal: EntitySignalEntry }
   | {
@@ -378,6 +421,13 @@ export interface EntityCreated {
   timestamp: string
   args: JsonValue
   parent_url?: string
+}
+
+export type EntityTypePermissionGrantDefinition = {
+  subject_kind: `principal` | `principal_kind`
+  subject_value: string
+  permission: `spawn` | `manage`
+  expires_at?: string
 }
 
 export interface PendingSend {
@@ -488,8 +538,10 @@ export interface RuntimeContext {
     args?: Record<string, unknown>,
     opts?: {
       initialMessage?: unknown
+      initialMessageType?: string
       tags?: Record<string, string>
       observe?: boolean
+      sandbox?: SpawnSandboxOption
     }
   ) => Promise<EntityHandle>
   observe: ((
@@ -513,6 +565,7 @@ export interface RuntimeContext {
     payload: unknown,
     opts?: { type?: string; afterMs?: number }
   ) => Promise<SendResult>
+  attachments: AttachmentsApi
   createEffect: (functionRef: string, key: string, config: JsonValue) => boolean
 }
 
@@ -529,8 +582,6 @@ export interface EntityHandle extends ObservationHandle {
   type?: string
   db: EntityStreamDB
   events: Array<ChangeEvent>
-  run: Promise<void>
-  text: () => Promise<Array<string>>
   send: (msg: unknown) => Promise<SendResult>
   status: () => ChildStatus | undefined
 }
@@ -615,9 +666,24 @@ export interface WebhookNotification {
     type?: string
     status: string
     url: string
-    streams: { main: string; error: string }
+    streams: { main: string }
     tags?: Record<string, string>
     spawnArgs?: Record<string, unknown>
+    sandbox?: {
+      profile: string
+      /** Explicit cross-entity key (set directly or adopted via `inherit`). */
+      key?: string
+      /** Per-entity (default) or per-wake identity when no explicit `key`. */
+      scope?: `entity` | `wake`
+      /** Idle-teardown durability; defaults by scope when unset. */
+      persistent?: boolean
+      /**
+       * Whether this entity owns the sandbox (create + attach + govern
+       * teardown) or only attaches to an owner's. Defaults to owner; an
+       * `inherit` spawn stores `false`.
+       */
+      owner?: boolean
+    } | null
     createdBy?: string
   }
   principal?: RuntimePrincipal
@@ -682,6 +748,15 @@ export interface ProcessWakeConfig {
   idleTimeout?: number
   /** Heartbeat interval in ms (default: 10_000) */
   heartbeatInterval?: number
+  /**
+   * Sandbox profiles registered on this runtime, indexed by profile
+   * name. Built by `createRuntimeRouter` from the `sandboxProfiles`
+   * option. processWake looks up the profile named on
+   * `entity.sandbox.profile` at wake-session start. When the entity
+   * has no profile set, processWake falls back to an in-process
+   * unrestricted sandbox at the host's cwd.
+   */
+  sandboxProfiles?: ReadonlyMap<string, SandboxProfile>
 }
 
 export type WakePhase = `setup` | `active` | `closing` | `closed`
@@ -722,8 +797,6 @@ export interface SharedStateHandleInfo {
  */
 export interface SpawnHandleInfo {
   wireDb: (db: EntityStreamDBWithActions) => void | Promise<void>
-  resolveRun: () => void
-  rejectRun: (reason: Error) => void
   /** Update the handle's entityUrl after learning the server-assigned URL. */
   updateEntityUrl: (realUrl: string) => void
 }
@@ -740,6 +813,17 @@ export interface SetupCompleteResult {
 }
 
 // ── Wake Primitives ──────────────────────────────────────────────
+
+/**
+ * Sandbox selection when spawning a child entity.
+ * - `'inherit'` — adopt the parent wake's resolved sandbox (profile + resolved
+ *   key + persistent); gracefully yields none if the parent has no sandbox.
+ * - object form — pick a `profile`, optionally with `scope` / `persistent`,
+ *   join an explicit shared `key`, or `inherit: true`.
+ */
+export type SpawnSandboxOption =
+  | `inherit`
+  | (SandboxSelectionConfig & { profile?: string; inherit?: boolean })
 
 export type Wake =
   | `runFinished`
@@ -765,6 +849,27 @@ export type WakeEvent = {
   fullRef?: string
 }
 
+export type HandlerWake = InboxHandlerWake | OtherHandlerWake
+
+export type InboxHandlerWake = {
+  type: `inbox`
+  source: string
+  raw: WakeEvent
+  message: {
+    type: string
+    payload: unknown
+    from?: string
+  }
+}
+
+export type OtherHandlerWake = {
+  type: `other`
+  wakeType: string
+  source: string
+  payload?: unknown
+  raw: WakeEvent
+}
+
 export type AgentRunResult = {
   result?: unknown
   writes: Array<ChangeEvent>
@@ -778,7 +883,7 @@ export type AgentModel = string | Model<any>
 export interface AgentConfig {
   systemPrompt: string
   model: AgentModel
-  provider?: KnownProvider
+  provider?: Provider
   tools: Array<AgentTool>
   streamFn?: StreamFn
   getApiKey?: (
@@ -856,6 +961,8 @@ export interface HandlerContext<
   TDb extends EntityStreamDBWithActions = EntityStreamDBWithActions,
 > {
   firstWake: boolean
+  wake: HandlerWake
+  slashCommands: SlashCommandHelpers
   tags: Readonly<EntityTags>
   principal?: RuntimePrincipal
   entityUrl: string
@@ -872,6 +979,18 @@ export interface HandlerContext<
    * cancellable work such as fetches or subprocesses.
    */
   signal: AbortSignal
+  /**
+   * Sandbox for this wake. Provisioned by the runtime from the
+   * sandbox profile named on `entity.sandbox.profile` (or an
+   * unrestricted-at-cwd fallback if nothing was selected) at the
+   * start of each wake-session, and disposed in `processWake`'s
+   * outer `finally`. A single wake-session that drains multiple
+   * queued wakes for the same entity reuses one sandbox; across
+   * wake-sessions a new sandbox is constructed and inter-wake state
+   * preservation is the provider's responsibility. Handlers must NOT
+   * call `sandbox.dispose()` — `processWake` owns disposal.
+   */
+  sandbox: Sandbox
   useAgent: (config: AgentConfig) => AgentHandle
   useContext: (config: UseContextConfig) => void
   timelineMessages: (opts?: TimelineProjectionOpts) => Array<TimestampedMessage>
@@ -886,15 +1005,16 @@ export interface HandlerContext<
     args?: Record<string, unknown>,
     opts?: {
       initialMessage?: unknown
+      initialMessageType?: string
       wake?: Wake
       tags?: Record<string, string>
       /**
        * When false, the parent does not subscribe to the child's stream. The
-       * spawned EntityHandle is fire-and-forget: `.run`, `.text`, and
-       * `.status` throw if accessed. Use for high-fanout patterns where the
-       * parent never awaits child completion.
+       * spawned EntityHandle is fire-and-forget: `.status` throws if accessed.
+       * Use for high-fanout patterns where the parent never observes child state.
        */
       observe?: boolean
+      sandbox?: SpawnSandboxOption
     }
   ) => Promise<EntityHandle>
   observe: ((
@@ -918,6 +1038,7 @@ export interface HandlerContext<
     payload: unknown,
     opts?: { type?: string; afterMs?: number }
   ) => Promise<SendResult>
+  attachments: AttachmentsApi
   /**
    * Register a handler for lifecycle signals delivered while this wake is active.
    * Runtime/server-controlled signals are not delivered here: SIGINT aborts the
@@ -942,7 +1063,7 @@ export interface HandlerContext<
   recordRun: () => RunHandle
   sleep: () => void
   setTag: (key: string, value: string) => Promise<void>
-  removeTag: (key: string) => Promise<void>
+  deleteTag: (key: string) => Promise<void>
 }
 
 export type EntityActionsFactory<
@@ -962,7 +1083,9 @@ export interface EntityDefinition<
   actions?: EntityActionsFactory<TState, TActions>
   creationSchema?: TCreationSchema
   inboxSchemas?: Record<string, StandardJSONSchemaV1>
-  outputSchemas?: Record<string, StandardJSONSchemaV1>
+  stateSchemas?: Record<string, StandardJSONSchemaV1>
+  permissionGrants?: ReadonlyArray<EntityTypePermissionGrantDefinition>
+  slashCommands?: Array<SlashCommandDefinition>
 
   handler: (
     ctx: HandlerContext<

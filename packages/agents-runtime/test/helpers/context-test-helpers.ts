@@ -1,10 +1,12 @@
 import { vi } from 'vitest'
+import { tmpdir } from 'node:os'
 import { createHandlerContext } from '../../src/context-factory'
 import { assembleContext } from '../../src/context-assembly'
 import { ENTITY_COLLECTIONS, builtInCollections } from '../../src/entity-schema'
 import { timelineToMessages } from '../../src/timeline-context'
 import { createLocalOnlyTestCollection } from './local-only'
 import type { ChangeEvent } from '@durable-streams/state'
+import type { EventPointer } from '../../src/event-pointer'
 import type {
   ContextEntry,
   HandlerContext,
@@ -15,6 +17,27 @@ import type {
   WakeSession,
 } from '../../src/types'
 import type { HydratedEventSourceWake } from '../../src/event-sources'
+import type { Sandbox } from '../../src/sandbox/types'
+
+// Minimal sandbox stub for tests that exercise HandlerContext shape but
+// don't actually call sandbox methods. Production wakes get a real
+// sandbox from the runner's sandbox profile registry, selected by name.
+export const testSandboxStub: Sandbox = {
+  name: `test-stub`,
+  workingDirectory: tmpdir(),
+  exec: async () => {
+    throw new Error(`test sandbox stub: exec not implemented`)
+  },
+  readFile: async () => Buffer.alloc(0),
+  writeFile: async () => {},
+  mkdir: async () => {},
+  readdir: async () => [],
+  exists: async () => false,
+  remove: async () => {},
+  stat: async () => ({ type: `file`, size: 0, mtimeMs: 0 }),
+  fetch: async () => new Response(``),
+  dispose: async () => {},
+}
 
 type DebugContext = {
   __debug: {
@@ -40,8 +63,11 @@ type FixtureEvent = {
   value?: Record<string, unknown>
 }
 
-function offset(at: number): string {
-  return `0000000000000000_${at.toString().padStart(16, `0`)}`
+function offset(at: number): EventPointer {
+  return {
+    offset: `0000000000000000_${at.toString().padStart(16, `0`)}`,
+    subOffset: 1,
+  }
 }
 
 function rowForFixture(item: FixtureEvent): {
@@ -150,7 +176,7 @@ function rowForFixture(item: FixtureEvent): {
 
 export function buildStreamFixture(items: Array<FixtureEvent>) {
   const rowsByCollection = new Map<string, Array<Record<string, unknown>>>()
-  const offsetsByCollection = new Map<string, Map<string, string>>()
+  const offsetsByCollection = new Map<string, Map<string, EventPointer>>()
 
   for (const [, name] of Object.entries(ENTITY_COLLECTIONS)) {
     rowsByCollection.set(name, [])
@@ -277,6 +303,7 @@ export function createTestHandlerContext(
     writeEvent?: (event: ChangeEvent) => void
     wakeEvent?: WakeEvent
     hydratedEventSourceWake?: HydratedEventSourceWake | null
+    prepareAgentRun?: () => Promise<void>
   } = {}
 ) {
   const db = opts.db ?? buildStreamFixture([])
@@ -295,6 +322,7 @@ export function createTestHandlerContext(
     actions: {},
     electricTools: [],
     events: [],
+    sandbox: testSandboxStub,
     writeEvent,
     wakeSession: createFakeWakeSession(db),
     wakeEvent: opts.wakeEvent ?? {
@@ -306,12 +334,13 @@ export function createTestHandlerContext(
       payload: `hi`,
     },
     hydratedEventSourceWake: opts.hydratedEventSourceWake,
+    prepareAgentRun: opts.prepareAgentRun,
     doObserve: vi.fn(),
     doSpawn: vi.fn(),
     doMkdb: vi.fn(),
     executeSend: vi.fn(),
     doSetTag: vi.fn(async () => undefined),
-    doRemoveTag: vi.fn(async () => undefined),
+    doDeleteTag: vi.fn(async () => undefined),
   })
 }
 

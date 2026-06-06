@@ -1,4 +1,30 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type {
+  ApiKeys,
+  ApiKeysStatus,
+  CodexAuthSource,
+  CodexStatus,
+  ConnectServerOptions,
+  DesktopAppearance,
+  DesktopCommand,
+  DesktopContextMenuRequest,
+  DesktopMenuPopupBounds,
+  DesktopMenuSection,
+  DesktopMenuState,
+  DesktopNavigationState,
+  DesktopServerFetchRequest,
+  DesktopServerFetchResponse,
+  DesktopState,
+  DiscoveredServer,
+  ElectricCliStatus,
+  LaunchAtLoginStatus,
+  McpServerConfig,
+  OnboardingState,
+  PreventAppSuspensionPreference,
+  ServerConfig,
+} from './shared/types'
+import type { CloudAgentServersState } from './cloud/cloud-agent-servers'
+import type { CloudAuthProvider, CloudAuthState } from './cloud/cloud-auth'
 
 // The Vite desktop build already stamps `<html data-electric-desktop="true">`
 // into the index, so CSS that targets desktop broadly matches from the first
@@ -33,183 +59,6 @@ try {
   )
 } catch {
   // Non-fatal — the static attribute in index.html is the source of truth.
-}
-
-type ServerConfig = {
-  id: string
-  name: string
-  url: string
-  source: `manual` | `local-discovery` | `electric-cloud`
-  desiredState: `connected` | `disconnected`
-  localRuntimeEnabled: boolean
-  headers?: Record<string, string>
-  tenantId?: string
-}
-
-type DesktopRuntimeStatus = `stopped` | `starting` | `running` | `error`
-type LocalRuntimeStatus =
-  | `disabled`
-  | `stopped`
-  | `starting`
-  | `running`
-  | `error`
-type ServerConnectionStatus =
-  | `disconnected`
-  | `connecting`
-  | `connected`
-  | `reconnecting`
-  | `offline`
-  | `error`
-
-type DiscoveredServer = {
-  url: string
-  port: number
-  lastSeen: number
-}
-
-type DesktopState = {
-  servers: Array<ServerConfig>
-  selectedServerId: string | null
-  connections: Array<ServerConnectionState>
-  runtimeStatus: DesktopRuntimeStatus
-  runtimeUrl: string | null
-  activeServer: ServerConfig | null
-  workingDirectory: string | null
-  error: string | null
-  discoveredServers: Array<DiscoveredServer>
-  pullWakeRunnerId: string | null
-}
-
-type DesktopServerFetchRequest = {
-  url: string
-  method: string
-  headers: Record<string, string>
-  body: string | null
-}
-
-type DesktopServerFetchResponse = {
-  url: string
-  status: number
-  statusText: string
-  headers: Record<string, string>
-  body: string
-}
-
-type ServerConnectionState = {
-  serverId: string
-  status: ServerConnectionStatus
-  localRuntimeStatus: LocalRuntimeStatus
-  runtimeUrl: string | null
-  runtimeError: string | null
-  lastError: string | null
-  reconnectAttempt: number
-  lastConnectedAt: number | null
-}
-
-type ApiKeys = {
-  anthropic: string | null
-  openai: string | null
-  deepseek: string | null
-  brave: string | null
-}
-
-type ApiKeysStatus = {
-  hasAnyKey: boolean
-  saved: ApiKeys
-  suggested: ApiKeys
-}
-
-type OnboardingState = {
-  dismissed: boolean
-  hasAnyKey: boolean
-  signedIn: boolean
-}
-
-// Mirror of `DesktopCommand` in main.ts. Kept as a string union here so
-// the preload bundle has zero runtime cost; main is the source of
-// truth for which commands actually fire.
-type DesktopCommand =
-  | `new-chat`
-  | `close-tile`
-  | `toggle-sidebar`
-  | `open-settings`
-  | `open-servers-settings`
-  | `open-search`
-  | `open-find`
-  | `find-next`
-  | `find-previous`
-  | `split-right`
-  | `split-down`
-  | `cycle-tile`
-
-type DesktopMenuSection = `File` | `Edit` | `View` | `Window` | `Help`
-
-type DesktopMenuPopupBounds = {
-  x: number
-  y: number
-  width: number
-  height: number
-}
-
-type DesktopMenuState = {
-  hasActiveTile: boolean
-  canCloseTile: boolean
-  canSplitTile: boolean
-  canCycleTile: boolean
-}
-
-type DesktopNavigationState = {
-  canGoBack: boolean
-  canGoForward: boolean
-}
-
-type DesktopAppearance = `light` | `dark` | `system`
-
-type DesktopContextMenuRequest = {
-  kind: `selection`
-  selectionText: string
-}
-
-// Mirror of `cloud-auth.ts` types — kept inline here so the preload
-// bundle stays self-contained (no shared workspace type imports).
-type CloudAuthProvider = `github` | `google`
-type CloudAuthStatus = `signed-out` | `signing-in` | `signed-in` | `error`
-type CloudAuthWorkspace = {
-  id: string
-  name: string
-}
-type CloudAuthState = {
-  status: CloudAuthStatus
-  email: string | null
-  name: string | null
-  userId: string | null
-  workspaces: ReadonlyArray<CloudAuthWorkspace> | null
-  error: string | null
-}
-
-type CloudAgentServersStatus =
-  | `idle`
-  | `loading`
-  | `ready`
-  | `unauthorized`
-  | `error`
-
-type CloudAgentServer = {
-  id: string
-  name: string
-  workspaceId: string | null
-  workspaceName: string | null
-  projectId: string | null
-  projectName: string | null
-  environmentId: string | null
-  environmentName: string | null
-  updatedAt: string | null
-}
-
-type CloudAgentServersState = {
-  status: CloudAgentServersStatus
-  servers: ReadonlyArray<CloudAgentServer>
-  error: string | null
 }
 
 function isEditableElement(target: EventTarget | null): boolean {
@@ -289,10 +138,15 @@ const api = {
     ipcRenderer.invoke(`desktop:set-active-server`, server),
   setSelectedServer: (serverId: string | null): Promise<void> =>
     ipcRenderer.invoke(`desktop:set-selected-server`, serverId),
-  connectServer: (serverId: string): Promise<void> =>
-    ipcRenderer.invoke(`desktop:connect-server`, serverId),
+  connectServer: (
+    serverId: string,
+    options?: ConnectServerOptions
+  ): Promise<void> =>
+    ipcRenderer.invoke(`desktop:connect-server`, serverId, options),
   disconnectServer: (serverId: string): Promise<void> =>
     ipcRenderer.invoke(`desktop:disconnect-server`, serverId),
+  forgetServer: (serverId: string): Promise<void> =>
+    ipcRenderer.invoke(`desktop:forget-server`, serverId),
   restartRuntime: (): Promise<void> =>
     ipcRenderer.invoke(`desktop:restart-runtime`),
   restartServerRuntime: (serverId: string): Promise<void> =>
@@ -306,10 +160,36 @@ const api = {
     ipcRenderer.invoke(`desktop:get-api-keys-status`),
   saveApiKeys: (keys: ApiKeys): Promise<void> =>
     ipcRenderer.invoke(`desktop:save-api-keys`, keys),
+  saveEnabledModels: (values: Array<string>): Promise<void> =>
+    ipcRenderer.invoke(`desktop:save-enabled-models`, values),
+  codexSignIn: (): Promise<CodexStatus> =>
+    ipcRenderer.invoke(`desktop:codex-sign-in`),
+  codexEnableSource: (source: CodexAuthSource): Promise<CodexStatus> =>
+    ipcRenderer.invoke(`desktop:codex-enable-source`, source),
+  codexDisable: (): Promise<CodexStatus> =>
+    ipcRenderer.invoke(`desktop:codex-disable`),
+  restartLocalRuntimes: (): Promise<void> =>
+    ipcRenderer.invoke(`desktop:restart-local-runtimes`),
+  getCliStatus: (): Promise<ElectricCliStatus> =>
+    ipcRenderer.invoke(`desktop:get-cli-status`),
+  installCli: (): Promise<ElectricCliStatus> =>
+    ipcRenderer.invoke(`desktop:install-cli`),
+  uninstallCli: (): Promise<ElectricCliStatus> =>
+    ipcRenderer.invoke(`desktop:uninstall-cli`),
+  clearAllLocalData: (): Promise<void> =>
+    ipcRenderer.invoke(`desktop:clear-all-local-data`),
+  getLaunchAtLoginStatus: (): Promise<LaunchAtLoginStatus> =>
+    ipcRenderer.invoke(`desktop:get-launch-at-login`),
+  setLaunchAtLogin: (enabled: boolean): Promise<LaunchAtLoginStatus> =>
+    ipcRenderer.invoke(`desktop:set-launch-at-login`, enabled),
   getOnboardingState: (): Promise<OnboardingState> =>
     ipcRenderer.invoke(`desktop:get-onboarding-state`),
   setOnboardingDismissed: (dismissed: boolean): Promise<void> =>
     ipcRenderer.invoke(`desktop:set-onboarding-dismissed`, dismissed),
+  getPreventAppSuspension: (): Promise<PreventAppSuspensionPreference> =>
+    ipcRenderer.invoke(`desktop:get-prevent-app-suspension`),
+  setPreventAppSuspension: (enabled: boolean): Promise<void> =>
+    ipcRenderer.invoke(`desktop:set-prevent-app-suspension`, enabled),
   getWorkingDirectory: (): Promise<string | null> =>
     ipcRenderer.invoke(`desktop:get-working-directory`),
   chooseWorkingDirectory: (): Promise<string | null> =>
@@ -397,6 +277,10 @@ const api = {
       ipcRenderer.invoke(`desktop:mcp-disable`, name, serverId),
     enable: (name: string, serverId?: string): Promise<void> =>
       ipcRenderer.invoke(`desktop:mcp-enable`, name, serverId),
+    upsert: (cfg: McpServerConfig): Promise<void> =>
+      ipcRenderer.invoke(`desktop:mcp-upsert`, cfg),
+    remove: (name: string): Promise<void> =>
+      ipcRenderer.invoke(`desktop:mcp-remove`, name),
   },
   // ── Electric Cloud auth surface ────────────────────────────────
   // Sign-in opens a child BrowserWindow that intercepts the
@@ -411,6 +295,8 @@ const api = {
       ipcRenderer.invoke(`desktop:cloud-auth-sign-out`),
     openDashboard: (): Promise<void> =>
       ipcRenderer.invoke(`desktop:cloud-auth-open-dashboard`),
+    openCreateAgentsServer: (): Promise<void> =>
+      ipcRenderer.invoke(`desktop:cloud-auth-open-create-agents-server`),
     onStateChanged: (
       callback: (state: CloudAuthState) => void
     ): (() => void) => {
@@ -442,11 +328,11 @@ const api = {
         )
     },
     prepareConnection: (
-      serviceId: string
+      tenantId: string
     ): Promise<{ url: string; tenantId: string }> =>
       ipcRenderer.invoke(
         `desktop:cloud-agent-server-prepare-connection`,
-        serviceId
+        tenantId
       ),
   },
 }

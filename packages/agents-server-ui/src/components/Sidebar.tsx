@@ -6,16 +6,20 @@ import { useNavigate } from '@tanstack/react-router'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
 import {
   bucketEntities,
+  groupByRunner,
   groupByStatus,
   groupByType,
   groupByWorkingDirectory,
 } from '../lib/sessionGroups'
-import { useSidebarView } from '../hooks/useSidebarView'
+import { getEntityRunnerId } from '../lib/entityRuntime'
+import { RUNNER_NONE, useSidebarView } from '../hooks/useSidebarView'
 import { useSidebarCollapsed } from '../hooks/useSidebarCollapsed'
 import { useNarrowViewport } from '../hooks/useNarrowViewport'
+import { useCurrentPrincipal } from '../hooks/useCurrentPrincipal'
 import { HoverCard, Icon, ScrollArea, Stack, Text } from '../ui'
 import { NewSessionKey } from '../lib/keyLabels'
 import { setWorkspaceDrag } from '../lib/workspace/dragPayload'
+import { normalizePrincipalUrl } from '../lib/principals'
 import { SidebarHeader } from './SidebarHeader'
 import { SidebarRowInfo } from './SidebarRow'
 import type { SidebarRowInfoPayload } from './SidebarRow'
@@ -134,7 +138,7 @@ export function Sidebar({
   pinnedUrls: Array<string>
   onTogglePin: (url: string) => void
 }): React.ReactElement {
-  const { entitiesCollection } = useElectricAgents()
+  const { entitiesCollection, runnersCollection } = useElectricAgents()
   const navigate = useNavigate()
   const [width, setWidth] = useSidebarWidth()
   const [resizeHandleHover, setResizeHandleHover] = useState(false)
@@ -204,6 +208,11 @@ export function Sidebar({
   )
 
   const view = useSidebarView()
+  const { principal: currentPrincipal } = useCurrentPrincipal()
+  const currentPrincipalUrl = useMemo(
+    () => normalizePrincipalUrl(currentPrincipal),
+    [currentPrincipal]
+  )
 
   const { data: visibleEntities = [] } = useLiveQuery(
     (query) => {
@@ -224,14 +233,53 @@ export function Sidebar({
     [entitiesCollection, view.hiddenTypes, view.hiddenStatuses]
   )
 
+  // Runner id → display label, for both the runner grouping and the
+  // "Show > Runner" filter. Resolved from the runners collection.
+  const { data: runners = [] } = useLiveQuery(
+    (q) => {
+      if (!runnersCollection) return undefined
+      return q.from({ r: runnersCollection })
+    },
+    [runnersCollection]
+  )
+  const runnerLabelById = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const r of runners) map.set(r.id, r.label || r.id)
+    return map
+  }, [runners])
+
+  const creatorFilteredEntities = useMemo(() => {
+    if (view.hiddenCreators.size === 0) return visibleEntities
+    return visibleEntities.filter((e) => {
+      const creator = normalizePrincipalUrl(e.created_by)
+      return !creator || !view.hiddenCreators.has(creator)
+    })
+  }, [visibleEntities, view.hiddenCreators])
+
+  // The runner is derived from the entity's `dispatch_policy` (json), so it
+  // can't ride the in-query `.where` filter that type/status use — apply it
+  // client-side here. `RUNNER_NONE` hides entities with no pinned runner.
+  const runnerFilteredEntities = useMemo(() => {
+    if (view.hiddenRunners.size === 0) return creatorFilteredEntities
+    return creatorFilteredEntities.filter((e) => {
+      const id = getEntityRunnerId(e) ?? RUNNER_NONE
+      return !view.hiddenRunners.has(id)
+    })
+  }, [creatorFilteredEntities, view.hiddenRunners])
+
   const pinnedSet = useMemo(() => new Set(pinnedUrls), [pinnedUrls])
-  const pinnedEntities = visibleEntities.filter((e) => pinnedSet.has(e.url))
+  const pinnedEntities = runnerFilteredEntities.filter((e) =>
+    pinnedSet.has(e.url)
+  )
   const filtersActive =
-    view.hiddenTypes.size > 0 || view.hiddenStatuses.size > 0
+    view.hiddenTypes.size > 0 ||
+    view.hiddenStatuses.size > 0 ||
+    view.hiddenRunners.size > 0 ||
+    view.hiddenCreators.size > 0
 
   const { roots, childrenByParent } = useMemo(
-    () => buildEntityTree(visibleEntities),
-    [visibleEntities]
+    () => buildEntityTree(runnerFilteredEntities),
+    [runnerFilteredEntities]
   )
 
   const unpinnedRoots = useMemo(
@@ -247,11 +295,13 @@ export function Sidebar({
         return groupByStatus(unpinnedRoots)
       case `workingDir`:
         return groupByWorkingDirectory(unpinnedRoots)
+      case `runner`:
+        return groupByRunner(unpinnedRoots, runnerLabelById)
       case `date`:
       default:
         return bucketEntities(unpinnedRoots)
     }
-  }, [unpinnedRoots, view.groupBy])
+  }, [unpinnedRoots, view.groupBy, runnerLabelById])
 
   const handleNewSession = useCallback(() => {
     navigate({ to: `/` })
@@ -290,6 +340,7 @@ export function Sidebar({
     onOpenEntityInSplit: wrappedOpenInSplit,
     pinnedUrls,
     onTogglePin,
+    currentPrincipalUrl,
     hoverHandle,
   }
 
@@ -398,7 +449,7 @@ export function Sidebar({
               </div>
             ))}
 
-            {visibleEntities.length === 0 && (
+            {runnerFilteredEntities.length === 0 && (
               <Text
                 size={1}
                 tone="muted"

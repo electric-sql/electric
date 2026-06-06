@@ -1,0 +1,34 @@
+name: Agents Mobile iOS Simulator
+
+on:
+  workflow_dispatch:
+    inputs:
+      git_ref:
+        description: Git ref to build
+        required: false
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.git_ref || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  actions: read
+  contents: read
+  # Declared so the reusable `agents_mobile_build.yml` job can load. Its
+  # PR-commenting steps are skipped for this channel, but GitHub validates the
+  # reusable job's declared permissions before evaluating those conditions.
+  issues: write
+  pull-requests: write
+
+jobs:
+  build:
+    uses: ./.github/workflows/agents_mobile_build.yml
+    secrets: inherit
+    with:
+      channel: ios-simulator
+      version: ios-simulator-${{ github.run_number }}-${{ inputs.git_ref || github.sha }}
+      git_ref: ${{ inputs.git_ref || github.sha }}
+      platform: ios
+      profile: preview-ios-simulator
+      submit: false

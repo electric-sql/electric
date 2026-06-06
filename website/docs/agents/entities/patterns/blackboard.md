@@ -81,7 +81,7 @@ const proWorker = await ctx.spawn(
     systemPrompt: PRO_WORKER_PROMPT,
     sharedDb: { id: `debate-${ctx.entityUrl}`, schema: debateSchema },
   },
-  { initialMessage: proInitialMessage, wake: `runFinished` }
+  { initialMessage: proInitialMessage, wake: { on: `runFinished`, includeResponse: true } }
 )
 ```
 

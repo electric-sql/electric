@@ -22,7 +22,13 @@ async function routeResponse(
   method: string,
   path: string,
   body?: unknown,
-  rawBody = false
+  rawBody = false,
+  principal = {
+    kind: `system`,
+    id: `dev-local`,
+    key: `system:dev-local`,
+    url: `/principal/system:dev-local`,
+  }
 ): Promise<Response> {
   const result = await globalRouter.fetch(
     createRequest(method, path, body, rawBody),
@@ -30,12 +36,7 @@ async function routeResponse(
       service: `test`,
       entityManager: manager,
       isShuttingDown: () => false,
-      principal: {
-        kind: `system`,
-        id: `dev-local`,
-        key: `system:dev-local`,
-        url: `/principal/system:dev-local`,
-      },
+      principal,
     } as unknown as TenantContext
   )
   expect(result).toBeInstanceOf(Response)
@@ -245,8 +246,8 @@ describe(`ElectricAgentsRoutes schedule endpoints`, () => {
   })
 })
 
-describe(`ElectricAgentsRoutes cron registration endpoint`, () => {
-  it(`rejects cron registrations without an expression in the schema layer`, async () => {
+describe(`ElectricAgentsRoutes cron stream ensure endpoint`, () => {
+  it(`rejects cron ensure requests without an expression in the schema layer`, async () => {
     const manager = {
       getOrCreateCronStream: vi.fn(),
     } as any
@@ -254,7 +255,7 @@ describe(`ElectricAgentsRoutes cron registration endpoint`, () => {
     const response = await routeResponse(
       manager,
       `POST`,
-      `/_electric/cron/register`,
+      `/_electric/observations/cron/ensure-stream`,
       {}
     )
 
@@ -286,6 +287,12 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
         createRequest(`PUT`, `/_electric/shared-state/board-1`),
         {
           service: `test`,
+          principal: {
+            kind: `system`,
+            id: `dev-local`,
+            key: `system:dev-local`,
+            url: `/principal/system:dev-local`,
+          },
           durableStreamsUrl: `http://durable.local/custom/ds-prefix`,
           isShuttingDown: () => false,
         } as unknown as TenantContext
@@ -494,7 +501,7 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
         }),
         {
           service: `tenant-a`,
-          publicUrl: `http://agents.local`,
+          publicUrl: `http://agents.local/t/tenant-a/v1`,
           durableStreamsUrl: `http://durable.local/v1/stream/tenant-a`,
           pgDb: db.db,
           isShuttingDown: () => false,
@@ -510,7 +517,7 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
         type: `webhook`,
         pattern: `horton/**`,
         webhook: {
-          url: `http://agents.local/_electric/webhook-forward/horton-handler`,
+          url: `http://agents.local/t/tenant-a/v1/_electric/subscription-webhooks/horton-handler`,
         },
       })
       expect(db.values).toHaveBeenCalledWith({
@@ -531,7 +538,7 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
           subscription_id: `horton-handler`,
           type: `webhook`,
           webhook: {
-            url: `http://agents.local/_electric/webhook-forward/horton-handler`,
+            url: `http://agents.local/_electric/subscription-webhooks/horton-handler`,
             signing: {
               alg: `ed25519`,
               kid: `ds_durable`,
@@ -557,7 +564,7 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
         }),
         {
           service: `tenant-a`,
-          publicUrl: `http://agents.local`,
+          publicUrl: `http://agents.local/t/tenant-a/v1`,
           durableStreamsUrl: `http://durable.local/v1/stream/tenant-a`,
           webhookSigner,
           pgDb: db.db,
@@ -571,7 +578,7 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
           signing: {
             alg: `ed25519`,
             kid: `ds_test`,
-            jwks_url: `http://agents.local/__ds/jwks.json`,
+            jwks_url: `http://agents.local/t/tenant-a/v1/__ds/jwks.json`,
           },
         },
       })
@@ -743,6 +750,119 @@ describe(`ElectricAgentsRoutes send endpoint`, () => {
     })
   })
 
+  it(`rejects spoofed from_agent values`, async () => {
+    const manager = {
+      registry: {
+        getEntity: vi.fn().mockResolvedValue({
+          url: `/chat/test`,
+          created_by: `/principal/agent%3Achat%2Ftest`,
+        }),
+        getEntityType: vi.fn(),
+      },
+      ensurePrincipal: vi.fn().mockResolvedValue(undefined),
+      send: vi.fn().mockResolvedValue(undefined),
+    } as any
+
+    const response = await routeResponse(
+      manager,
+      `POST`,
+      `/_electric/entities/chat/test/send`,
+      {
+        payload: { text: `hi` },
+        from_agent: `/chat/other`,
+      },
+      false,
+      {
+        kind: `agent`,
+        id: `chat/test`,
+        key: `agent:chat/test`,
+        url: `/principal/agent%3Achat%2Ftest`,
+      }
+    )
+
+    expect(manager.send).not.toHaveBeenCalled()
+    expect(response.status).toBe(400)
+    expect(await responseJson(response)).toEqual({
+      error: {
+        code: `INVALID_REQUEST`,
+        message: `Request from_agent must match authenticated agent principal`,
+      },
+    })
+  })
+
+  it(`allows matching from_agent values for agent principals`, async () => {
+    const manager = {
+      registry: {
+        getEntity: vi.fn().mockResolvedValue({
+          url: `/chat/test`,
+          created_by: `/principal/agent%3Achat%2Ftest`,
+        }),
+        getEntityType: vi.fn(),
+      },
+      ensurePrincipal: vi.fn().mockResolvedValue(undefined),
+      send: vi.fn().mockResolvedValue(undefined),
+    } as any
+
+    const response = await routeResponse(
+      manager,
+      `POST`,
+      `/_electric/entities/chat/test/send`,
+      {
+        payload: { text: `hi` },
+        from_agent: `/chat/test`,
+      },
+      false,
+      {
+        kind: `agent`,
+        id: `chat/test`,
+        key: `agent:chat/test`,
+        url: `/principal/agent%3Achat%2Ftest`,
+      }
+    )
+
+    expect(response.status).toBe(204)
+    expect(manager.send).toHaveBeenCalledWith(`/chat/test`, {
+      from: `/principal/agent%3Achat%2Ftest`,
+      from_principal: `/principal/agent%3Achat%2Ftest`,
+      from_agent: `/chat/test`,
+      payload: { text: `hi` },
+      key: undefined,
+      type: undefined,
+      mode: undefined,
+      position: undefined,
+    })
+  })
+
+  it(`rejects mismatched from_principal values`, async () => {
+    const manager = {
+      registry: {
+        getEntity: vi.fn().mockResolvedValue({ url: `/chat/test` }),
+        getEntityType: vi.fn(),
+      },
+      ensurePrincipal: vi.fn().mockResolvedValue(undefined),
+      send: vi.fn().mockResolvedValue(undefined),
+    } as any
+
+    const response = await routeResponse(
+      manager,
+      `POST`,
+      `/_electric/entities/chat/test/send`,
+      {
+        payload: { text: `hi` },
+        from_principal: `/principal/user%3Aother`,
+      }
+    )
+
+    expect(manager.send).not.toHaveBeenCalled()
+    expect(response.status).toBe(400)
+    expect(await responseJson(response)).toEqual({
+      error: {
+        code: `INVALID_REQUEST`,
+        message: `Request from_principal must match Electric-Principal`,
+      },
+    })
+  })
+
   it(`returns validation errors from delayed sends before enqueueing`, async () => {
     const manager = {
       registry: {
@@ -851,7 +971,7 @@ describe(`ElectricAgentsRoutes signal endpoint`, () => {
       registry: {
         getEntity: vi.fn().mockResolvedValue({
           url: `/chat/test`,
-          streams: { main: `/chat/test/main`, error: `/chat/test/error` },
+          streams: { main: `/chat/test/main` },
         }),
         getEntityType: vi.fn(),
       },
@@ -883,7 +1003,7 @@ describe(`ElectricAgentsRoutes signal endpoint`, () => {
       registry: {
         getEntity: vi.fn().mockResolvedValue({
           url: `/chat/test`,
-          streams: { main: `/chat/test/main`, error: `/chat/test/error` },
+          streams: { main: `/chat/test/main` },
         }),
         getEntityType: vi.fn(),
       },
@@ -912,7 +1032,6 @@ describe(`ElectricAgentsRoutes signal endpoint`, () => {
           type: `principal`,
           streams: {
             main: `/principal/user%3Aalice%40example.com/main`,
-            error: `/principal/user%3Aalice%40example.com/error`,
           },
         }),
         getEntityType: vi.fn(),
@@ -945,7 +1064,6 @@ describe(`ElectricAgentsRoutes fork endpoint`, () => {
       status: `idle`,
       streams: {
         main: `/chat/root-copy/main`,
-        error: `/chat/root-copy/error`,
       },
       subscription_id: `chat-handler`,
       write_token: `secret-token`,
@@ -977,6 +1095,7 @@ describe(`ElectricAgentsRoutes fork endpoint`, () => {
     expect(manager.forkSubtree).toHaveBeenCalledWith(`/chat/root`, {
       rootInstanceId: undefined,
       waitTimeoutMs: 5000,
+      createdBy: `/principal/system:dev-local`,
     })
     expect(response.status).toBe(201)
     expect(response.headers.get(`content-type`)).toContain(`application/json`)

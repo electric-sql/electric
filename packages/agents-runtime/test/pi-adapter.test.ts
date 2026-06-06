@@ -301,6 +301,18 @@ describe(`resolvePiModel`, () => {
     expect(model.id).toBe(`gpt-4o-mini`)
   })
 
+  it(`resolves Moonshot string model ids to OpenAI-compatible models`, () => {
+    const model = resolvePiModel({
+      provider: `moonshot`,
+      model: `kimi-k2.6`,
+    })
+
+    expect(model.provider).toBe(`moonshot`)
+    expect(model.id).toBe(`kimi-k2.6`)
+    expect(model.api).toBe(`openai-completions`)
+    expect(model.baseUrl).toBe(`https://api.moonshot.ai/v1`)
+  })
+
   it(`accepts custom Model objects directly`, () => {
     const customModel: Model<`openai-completions`> = {
       id: `deepseek-v4-flash`,
@@ -415,6 +427,23 @@ describe(`toAgentHistory`, () => {
     >
     expect(first?.role).toBe(`user`)
     expect(second?.role).toBe(`assistant`)
+  })
+
+  it(`merges adjacent assistant text messages into one text block`, () => {
+    const messages: Array<LLMMessage> = [
+      { role: `user`, content: `Question` },
+      { role: `assistant`, content: `First chunk.` },
+      { role: `assistant`, content: ` Second chunk.` },
+    ]
+
+    const history = toAgentHistory(messages)
+
+    expect(history).toHaveLength(2)
+    const assistant = history[1] as AssistantMessage
+    expect(assistant.role).toBe(`assistant`)
+    expect(assistant.content).toEqual([
+      { type: `text`, text: `First chunk. Second chunk.` },
+    ])
   })
 
   it(`merges assistant text and tool_call into a single assistant message`, () => {

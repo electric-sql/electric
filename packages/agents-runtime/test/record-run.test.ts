@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { createHandlerContext } from '../src/context-factory'
 import { ENTITY_COLLECTIONS } from '../src/entity-schema'
 import { createLocalOnlyTestCollection } from './helpers/local-only'
+import { testSandboxStub } from './helpers/context-test-helpers'
 import type { EntityStreamDBWithActions } from '../src/types'
 import type { ChangeEvent } from '@durable-streams/state'
 
@@ -52,6 +53,7 @@ function buildHarness(opts?: { existingRunKeys?: Array<string> }): {
     state: {},
     actions: {},
     electricTools: [],
+    sandbox: testSandboxStub,
     events: [] as Array<ChangeEvent>,
     writeEvent,
     wakeSession: {
@@ -91,7 +93,7 @@ function buildHarness(opts?: { existingRunKeys?: Array<string> }): {
     executeSend: vi.fn(),
     tags: {},
     doSetTag: vi.fn().mockResolvedValue(undefined),
-    doRemoveTag: vi.fn().mockResolvedValue(undefined),
+    doDeleteTag: vi.fn().mockResolvedValue(undefined),
   })
 
   return { ctx, writeEvent }

@@ -1,7 +1,8 @@
-import { queryOnce } from '@durable-streams/state'
+import { queryOnce } from '@durable-streams/state/db'
 import { assembleContext } from './context-assembly'
 import { createContextEntriesApi } from './context-entries'
 import { entityStateSchema } from './entity-schema'
+import { formatPointerOrderToken } from './event-pointer'
 import { createOutboundBridge, loadOutboundIdSeed } from './outbound-bridge'
 import { createPiAgentAdapter } from './pi-adapter'
 import {
@@ -14,19 +15,32 @@ import { sliceChars } from './token-budget'
 import { createContextTools } from './tools/context-tools'
 import { CACHE_TIERS } from './types'
 import { composeToolsWithProviders } from './tool-providers'
+import { validateSlashCommandDefinitions } from './composer-input'
 import type { HydratedEventSourceWake } from './event-sources'
 import type { ChangeEvent } from '@durable-streams/state'
+import type { Sandbox } from './sandbox/types'
+import type {
+  DynamicSlashCommandRegistration,
+  SlashCommandDefinition,
+  SlashCommandHelpers,
+  SlashCommandRow,
+} from './composer-input'
 import type {
   AgentConfig,
   AgentHandle,
   AgentModel,
   AgentRunResult,
   AgentTool,
+  AttachmentCreateInput,
+  AttachmentsApi,
   EntitySignal,
   EntityHandle,
   EntityStreamDBWithActions,
   HandlerContext,
+  LLMContentBlock,
+  HandlerWake,
   LLMMessage,
+  ManifestAttachmentEntry,
   ObservationHandle,
   ObservationSource,
   RunHandle,
@@ -51,6 +65,9 @@ function agentModelProvider(config: AgentConfig): string {
     : config.model.provider
 }
 
+const MAX_HYDRATED_IMAGE_ATTACHMENTS = 4
+const MAX_HYDRATED_IMAGE_ATTACHMENT_BYTES = 10 * 1024 * 1024
+
 export interface HandlerContextConfig<TState extends StateProxy = StateProxy> {
   entityUrl: string
   entityType: string
@@ -63,7 +80,9 @@ export interface HandlerContextConfig<TState extends StateProxy = StateProxy> {
   db: EntityStreamDBWithActions
   state: TState
   actions: Record<string, (...args: Array<unknown>) => unknown>
+  staticSlashCommands?: Array<SlashCommandDefinition>
   electricTools: Array<AgentTool>
+  sandbox: Sandbox
   events: Array<ChangeEvent>
   writeEvent: (event: ChangeEvent) => void
   wakeSession: WakeSession
@@ -87,6 +106,7 @@ export interface HandlerContextConfig<TState extends StateProxy = StateProxy> {
     args?: Record<string, unknown>,
     opts?: {
       initialMessage?: unknown
+      initialMessageType?: string
       wake?: Wake
       tags?: Record<string, string>
       observe?: boolean
@@ -96,6 +116,10 @@ export interface HandlerContextConfig<TState extends StateProxy = StateProxy> {
     id: string,
     schema: TSchema
   ) => SharedStateHandle<TSchema>
+  doCreateAttachment?: (
+    input: AttachmentCreateInput
+  ) => Promise<ManifestAttachmentEntry>
+  doReadAttachment?: (id: string) => Promise<Uint8Array>
   prepareAgentRun?: () => Promise<void>
   executeSend: (send: {
     targetUrl: string
@@ -104,7 +128,7 @@ export interface HandlerContextConfig<TState extends StateProxy = StateProxy> {
     afterMs?: number
   }) => Promise<SendResult>
   doSetTag: (key: string, value: string) => Promise<void>
-  doRemoveTag: (key: string) => Promise<void>
+  doDeleteTag: (key: string) => Promise<void>
 }
 
 export interface HandlerContextResult<TState extends StateProxy = StateProxy> {
@@ -219,6 +243,199 @@ function getTriggerMessageText(
   })
 }
 
+function toHandlerWake(wakeEvent: WakeEvent): HandlerWake {
+  if (wakeEvent.type === `inbox`) {
+    return {
+      type: `inbox`,
+      source: wakeEvent.source,
+      raw: wakeEvent,
+      message: {
+        type: wakeEvent.summary ?? `message`,
+        payload: wakeEvent.payload,
+        from: wakeEvent.source,
+      },
+    }
+  }
+
+  return {
+    type: `other`,
+    wakeType: wakeEvent.type,
+    source: wakeEvent.source,
+    payload: wakeEvent.payload,
+    raw: wakeEvent,
+  }
+}
+
+function createSlashCommandHelpers(
+  config: Pick<
+    HandlerContextConfig,
+    `db` | `writeEvent` | `staticSlashCommands`
+  >
+): SlashCommandHelpers {
+  type DynamicLayer = DynamicSlashCommandRegistration & { updated_at: string }
+  const staticCommands = new Map(
+    (config.staticSlashCommands ?? []).map((command) => [command.name, command])
+  )
+  const slashCommandsCollection = config.db.collections.slashCommands
+  const rows = new Map(
+    ((slashCommandsCollection?.toArray ?? []) as Array<SlashCommandRow>).map(
+      (row) => [row.name, row]
+    )
+  )
+  const dynamicLayers = new Map<string, Array<DynamicLayer>>()
+
+  for (const row of rows.values()) {
+    const layers =
+      row.dynamic_layers ??
+      (row.source === `dynamic`
+        ? [
+            {
+              name: row.name,
+              description: row.description,
+              arguments: row.arguments,
+              owner: row.owner,
+              version: row.version,
+              updated_at: row.updated_at,
+            },
+          ]
+        : [])
+    if (layers.length > 0) {
+      dynamicLayers.set(row.name, [...layers])
+    }
+  }
+
+  const listRows = (): Array<SlashCommandRow> => Array.from(rows.values())
+
+  const getRow = (name: string): SlashCommandRow | undefined => {
+    return rows.get(name)
+  }
+
+  const writeRow = (row: SlashCommandRow): void => {
+    const existing = getRow(row.name)
+    rows.set(row.name, row)
+    const helper = existing
+      ? entityStateSchema.slashCommands.update
+      : entityStateSchema.slashCommands.insert
+
+    config.writeEvent(
+      helper({
+        key: row.name,
+        value: row,
+      } as never) as ChangeEvent
+    )
+  }
+
+  const deleteRow = (name: string): void => {
+    rows.delete(name)
+    config.writeEvent(
+      entityStateSchema.slashCommands.delete({
+        key: name,
+      } as never) as ChangeEvent
+    )
+  }
+
+  const writeEffectiveRow = (name: string): void => {
+    const layers = dynamicLayers.get(name) ?? []
+    const topLayer = layers.at(-1)
+    if (topLayer) {
+      writeRow({
+        ...topLayer,
+        key: name,
+        source: `dynamic`,
+        dynamic_layers: layers,
+      })
+      return
+    }
+
+    const staticCommand = staticCommands.get(name)
+    if (!staticCommand) {
+      deleteRow(name)
+      return
+    }
+
+    writeRow({
+      ...staticCommand,
+      key: staticCommand.name,
+      source: `static`,
+      updated_at: new Date().toISOString(),
+    })
+  }
+
+  const assertValid = (commands: Array<SlashCommandDefinition>): void => {
+    const validation = validateSlashCommandDefinitions(commands)
+    if (validation) {
+      throw new Error(
+        `[agent-runtime] invalid slash command definition: ${validation.details
+          .map((issue) => `${issue.path} ${issue.message}`)
+          .join(`; `)}`
+      )
+    }
+  }
+
+  const register = (command: DynamicSlashCommandRegistration): void => {
+    assertValid([command])
+    const owner = command.owner ?? `handler`
+    const now = new Date().toISOString()
+    const nextLayer = {
+      ...command,
+      owner,
+      updated_at: now,
+    }
+    const existingLayers = dynamicLayers.get(command.name) ?? []
+    dynamicLayers.set(command.name, [
+      ...existingLayers.filter((layer) => layer.owner !== owner),
+      nextLayer,
+    ])
+    writeEffectiveRow(command.name)
+  }
+
+  return {
+    get: getRow,
+    list: listRows,
+    register,
+    unregister(name, opts): void {
+      const existing = getRow(name)
+      const layers = dynamicLayers.get(name) ?? []
+      if (opts?.owner) {
+        if (!layers.some((layer) => layer.owner === opts.owner)) {
+          return
+        }
+      } else if (existing?.source !== `dynamic`) {
+        return
+      }
+      const owner = opts?.owner ?? existing?.owner
+      dynamicLayers.set(
+        name,
+        owner ? layers.filter((layer) => layer.owner !== owner) : []
+      )
+      writeEffectiveRow(name)
+    },
+    replaceOwned(owner, commands): void {
+      const ownedCommands = commands.map((command) => ({ ...command, owner }))
+      assertValid(ownedCommands)
+
+      const nextNames = new Set(ownedCommands.map((command) => command.name))
+      for (const [name, layers] of [...dynamicLayers.entries()]) {
+        if (!layers.some((layer) => layer.owner === owner)) {
+          continue
+        }
+        if (nextNames.has(name)) {
+          continue
+        }
+        dynamicLayers.set(
+          name,
+          layers.filter((layer) => layer.owner !== owner)
+        )
+        writeEffectiveRow(name)
+      }
+
+      for (const command of ownedCommands) {
+        register(command)
+      }
+    },
+  }
+}
+
 export function createHandlerContext<TState extends StateProxy = StateProxy>(
   config: HandlerContextConfig<TState>
 ): HandlerContextResult<TState> {
@@ -253,6 +470,44 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
     wakeSession: config.wakeSession,
   })
 
+  const listAttachments: AttachmentsApi[`list`] = (filter) => {
+    const attachments = config.db.collections.manifests.toArray
+      .filter((entry) => entry.kind === `attachment`)
+      .map((entry) => entry as unknown as ManifestAttachmentEntry)
+    return attachments.filter((attachment) => {
+      if (filter?.role && attachment.role !== filter.role) return false
+      if (
+        filter?.subject &&
+        (attachment.subject.type !== filter.subject.type ||
+          attachment.subject.key !== filter.subject.key)
+      ) {
+        return false
+      }
+      return true
+    })
+  }
+
+  const attachmentsApi: AttachmentsApi = {
+    list: listAttachments,
+    get(id) {
+      return listAttachments().find((attachment) => attachment.id === id)
+    },
+    async read(id) {
+      if (!config.doReadAttachment) {
+        throw new Error(`[agent-runtime] attachments.read() is not configured`)
+      }
+      return await config.doReadAttachment(id)
+    },
+    async create(input) {
+      if (!config.doCreateAttachment) {
+        throw new Error(
+          `[agent-runtime] attachments.create() is not configured`
+        )
+      }
+      return await config.doCreateAttachment(input)
+    },
+  }
+
   function structuralHash(nextConfig: UseContextConfig): string {
     const sources = Object.entries(nextConfig.sources)
       .sort(([leftName], [rightName]) => leftName.localeCompare(rightName))
@@ -265,11 +520,136 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
     })
   }
 
+  function bytesToBase64(bytes: Uint8Array): string {
+    const chunkSize = 0x8000
+    let binary = ``
+    for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+      const chunk = bytes.subarray(offset, offset + chunkSize)
+      binary += String.fromCharCode(...chunk)
+    }
+    return btoa(binary)
+  }
+
+  function attachmentDescriptor(attachment: ManifestAttachmentEntry): string {
+    return `${attachment.filename ?? attachment.id}, type=${attachment.mimeType}, size=${attachment.byteLength ?? `unknown`}`
+  }
+
+  function selectHydratableImageAttachmentIds(
+    messages: Array<LLMMessage>
+  ): Set<string> {
+    const selected = new Set<string>()
+    let selectedBytes = 0
+
+    for (
+      let messageIndex = messages.length - 1;
+      messageIndex >= 0;
+      messageIndex--
+    ) {
+      const message = messages[messageIndex]
+      if (!message || typeof message.content === `string`) continue
+
+      for (
+        let blockIndex = message.content.length - 1;
+        blockIndex >= 0;
+        blockIndex--
+      ) {
+        const block = message.content[blockIndex]
+        if (!block || block.type !== `attachment` || selected.has(block.id)) {
+          continue
+        }
+
+        const attachment = attachmentsApi.get(block.id)
+        if (
+          !attachment ||
+          attachment.status !== `complete` ||
+          !attachment.mimeType.startsWith(`image/`)
+        ) {
+          continue
+        }
+
+        const byteLength = attachment.byteLength ?? 0
+        if (
+          selected.size >= MAX_HYDRATED_IMAGE_ATTACHMENTS ||
+          selectedBytes + byteLength > MAX_HYDRATED_IMAGE_ATTACHMENT_BYTES
+        ) {
+          continue
+        }
+
+        selected.add(block.id)
+        selectedBytes += byteLength
+      }
+    }
+
+    return selected
+  }
+
+  async function hydrateAttachmentBlocks(
+    messages: Array<LLMMessage>
+  ): Promise<Array<LLMMessage>> {
+    const hydratableImageAttachmentIds =
+      selectHydratableImageAttachmentIds(messages)
+
+    return await Promise.all(
+      messages.map(async (message) => {
+        if (typeof message.content === `string`) {
+          return message
+        }
+        const content = await Promise.all(
+          message.content.map(async (block): Promise<LLMContentBlock> => {
+            if (block.type !== `attachment`) {
+              return block
+            }
+            const attachment = attachmentsApi.get(block.id)
+            if (!attachment) {
+              return {
+                type: `text`,
+                text: `[attachment missing: id=${block.id}]`,
+              }
+            }
+            if (
+              attachment.status !== `complete` ||
+              !attachment.mimeType.startsWith(`image/`)
+            ) {
+              return {
+                type: `text`,
+                text: `[attachment: ${attachmentDescriptor(attachment)}]`,
+              }
+            }
+            if (!hydratableImageAttachmentIds.has(block.id)) {
+              return {
+                type: `text`,
+                text: `[attachment not sent to model: ${attachmentDescriptor(attachment)}, reason=image attachment prompt limit]`,
+              }
+            }
+            try {
+              const bytes = await attachmentsApi.read(block.id)
+              return {
+                type: `image`,
+                data: bytesToBase64(bytes),
+                mimeType: attachment.mimeType,
+              }
+            } catch (error) {
+              return {
+                type: `text`,
+                text: `[attachment unreadable: id=${block.id}, error=${error instanceof Error ? error.message : String(error)}]`,
+              }
+            }
+          })
+        )
+        return { ...message, content }
+      })
+    )
+  }
+
   function readContextHistoryOffset(row: { key: string }): string | undefined {
     const contextInserted = config.db.collections.contextInserted
-    const rowOffset = contextInserted.__electricRowOffsets?.get(row.key)
-    if (typeof rowOffset === `string`) {
-      return rowOffset
+    const pointer = contextInserted.__electricRowOffsets?.get(row.key)
+    if (pointer) {
+      // Format the pointer as a stable, sortable string. Matches the
+      // `_timeline_order` produced by `entity-stream-db` so that
+      // `loadContextHistory(id, offset)` can round-trip lookups
+      // against the same row.
+      return formatPointerOrderToken(pointer)
     }
 
     const seq = Reflect.get(row, `_seq`)
@@ -516,15 +896,19 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
             )
           },
         })
-        return runAgent(messages, autoTools)
+        return runAgent(await hydrateAttachmentBlocks(messages), autoTools)
       }
 
-      return runAgent(timelineToMessages(config.db))
+      return runAgent(
+        await hydrateAttachmentBlocks(timelineToMessages(config.db))
+      )
     },
   }
 
   const ctx: DebugHandlerContext<TState> = {
     firstWake: config.firstWake,
+    wake: toHandlerWake(config.wakeEvent),
+    slashCommands: createSlashCommandHelpers(config),
     tags: config.tags,
     principal: config.principal,
     entityUrl: config.entityUrl,
@@ -536,6 +920,7 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
     actions: config.actions,
     electricTools: config.electricTools,
     signal: config.runSignal ?? new AbortController().signal,
+    sandbox: config.sandbox,
     useAgent(cfg) {
       agentConfig = cfg
       return agent
@@ -596,6 +981,7 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         afterMs: opts?.afterMs,
       })
     },
+    attachments: attachmentsApi,
     onSignal(handler): void {
       config.registerSignalHandler?.(handler)
     },
@@ -644,8 +1030,8 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
     setTag(key: string, value: string): Promise<void> {
       return config.doSetTag(key, value)
     },
-    removeTag(key: string): Promise<void> {
-      return config.doRemoveTag(key)
+    deleteTag(key: string): Promise<void> {
+      return config.doDeleteTag(key)
     },
   }
 

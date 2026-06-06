@@ -10,6 +10,7 @@
 import { Agent } from '@mariozechner/pi-agent-core'
 import { getModel } from '@mariozechner/pi-ai'
 import { createOutboundBridge } from './outbound-bridge'
+import { MOONSHOT_PROVIDER, getMoonshotModel } from './moonshot-models'
 import { runtimeLog } from './log'
 import type { OutboundIdSeed } from './outbound-bridge'
 import type { ChangeEvent } from '@durable-streams/state'
@@ -22,9 +23,10 @@ import type {
 import type {
   KnownProvider,
   Model,
+  Provider,
   SimpleStreamOptions,
 } from '@mariozechner/pi-ai'
-import type { LLMMessage } from './types'
+import type { LLMContentBlock, LLMMessage, LLMMessageContent } from './types'
 
 // ============================================================================
 // Options
@@ -33,7 +35,7 @@ import type { LLMMessage } from './types'
 export interface PiAdapterOptions {
   systemPrompt: string
   model: string | Model<any>
-  provider?: KnownProvider
+  provider?: Provider
   tools: Array<AgentTool>
   streamFn?: StreamFn
   getApiKey?: (
@@ -62,14 +64,20 @@ type PiAgentAdapterFactory = (config: PiAgentAdapterConfig) => PiAgentHandle
 
 export function resolvePiModel(opts: {
   model: string | Model<any>
-  provider?: KnownProvider
+  provider?: Provider
 }): Model<any> {
   if (typeof opts.model !== `string`) {
     return opts.model
   }
 
   const provider = opts.provider ?? `anthropic`
-  const model = getModel(provider, opts.model as Parameters<typeof getModel>[1])
+  const model =
+    provider === MOONSHOT_PROVIDER
+      ? getMoonshotModel(opts.model)
+      : getModel(
+          provider as KnownProvider,
+          opts.model as Parameters<typeof getModel>[1]
+        )
 
   if (!model) {
     throw new Error(
@@ -83,6 +91,27 @@ export function resolvePiModel(opts: {
 // ============================================================================
 // Context Translation
 // ============================================================================
+
+function toAgentContentBlock(block: LLMContentBlock): unknown {
+  if (block.type === `text`) {
+    return { type: `text`, text: block.text }
+  }
+  if (block.type === `image`) {
+    return { type: `image`, data: block.data, mimeType: block.mimeType }
+  }
+
+  return {
+    type: `text`,
+    text: `[attachment omitted: id=${block.id}]`,
+  }
+}
+
+function toAgentContent(content: LLMMessageContent): Array<unknown> {
+  if (typeof content === `string`) {
+    return [{ type: `text`, text: content }]
+  }
+  return content.map(toAgentContentBlock)
+}
 
 export function toAgentHistory(
   messages: Array<LLMMessage>
@@ -100,22 +129,36 @@ export function toAgentHistory(
       case `user`:
         history.push({
           role: `user`,
-          content: [{ type: `text`, text: message.content }],
+          content: toAgentContent(message.content),
           timestamp: Date.now(),
         } as AgentMessage)
         break
 
       case `assistant`: {
         const prev = lastAssistant()
+        const content = toAgentContent(message.content) as Array<{
+          type: string
+          text?: string
+        }>
+
         if (prev) {
-          ;(prev.content as Array<unknown>).push({
-            type: `text`,
-            text: message.content,
-          })
+          const prevContent = prev.content as Array<{
+            type: string
+            text?: string
+          }>
+          const lastBlock = prevContent[prevContent.length - 1]
+          const firstBlock = content[0]
+
+          if (lastBlock?.type === `text` && firstBlock?.type === `text`) {
+            lastBlock.text = `${lastBlock.text ?? ``}${firstBlock.text ?? ``}`
+            prevContent.push(...content.slice(1))
+          } else {
+            prevContent.push(...content)
+          }
         } else {
           history.push({
             role: `assistant`,
-            content: [{ type: `text`, text: message.content }],
+            content,
             timestamp: Date.now(),
           } as AgentMessage)
         }
@@ -149,7 +192,7 @@ export function toAgentHistory(
           role: `toolResult`,
           toolCallId: message.toolCallId,
           toolName: toolNamesById.get(message.toolCallId) ?? ``,
-          content: [{ type: `text`, text: message.content }],
+          content: toAgentContent(message.content),
           isError: message.isError,
           timestamp: Date.now(),
         } as AgentMessage)

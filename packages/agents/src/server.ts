@@ -1,4 +1,5 @@
 import path from 'node:path'
+import { installDurableStreamsFetchCache } from './durable-streams-cache.js'
 import { serverLog } from './log.js'
 import {
   createBuiltinAgentHandler,
@@ -19,8 +20,8 @@ import type {
   Registry as McpRegistry,
 } from '@electric-ax/agents-mcp'
 import {
-  createPullWakeRunner,
   appendPathToUrl,
+  createPullWakeRunner,
   registerToolProvider,
   unregisterToolProvider,
 } from '@electric-ax/agents-runtime'
@@ -29,12 +30,19 @@ import type {
   PullWakeRunner,
   PullWakeRunnerConfig,
 } from '@electric-ax/agents-runtime'
+import type { DurableStreamsFetchCacheOptions } from './durable-streams-cache.js'
 import type { StreamFn } from '@mariozechner/pi-agent-core'
 
 export interface BuiltinAgentsServerOptions {
   agentServerUrl: string
   workingDirectory?: string
   mockStreamFn?: StreamFn
+  /**
+   * Configure the process-wide HTTP cache used by Undici-backed fetch calls.
+   * Defaults to a 100 MiB in-memory cache. Pass `false` to leave the global
+   * dispatcher unchanged.
+   */
+  durableStreamsFetchCache?: DurableStreamsFetchCacheOptions
   /** Pull-wake runner configuration for built-in agents. */
   pullWake: {
     runnerId: string
@@ -74,6 +82,8 @@ export interface BuiltinAgentsServerOptions {
   loadProjectMcpConfig?: boolean
   /** Override for the built-in skills directory; required when embedders bundle this package. */
   baseSkillsDir?: string
+  /** Restrict the model values exposed by built-in agent creation schemas. */
+  enabledModelValues?: ReadonlyArray<string> | null
   createElectricTools?: NonNullable<ProcessWakeConfig[`createElectricTools`]>
 }
 
@@ -86,6 +96,11 @@ export class BuiltinAgentsServer {
   private mcpToolProviderName: string | null = null
   private mcpApplyInFlight: Set<Promise<void>> = new Set()
   private mcpStopping = false
+  // Live extras list — mutated by `setExtraMcpServers` and re-merged with
+  // `mcpLastJsonConfig` on every apply. Workspace `mcp.json` still wins
+  // on name collision (same rule as boot-time merge).
+  private mcpExtras: ReadonlyArray<McpServerConfig> = []
+  private mcpLastJsonConfig: McpConfig | null = null
   private pullWakeRunner: PullWakeRunner | null = null
   readonly options: BuiltinAgentsServerOptions
 
@@ -98,10 +113,79 @@ export class BuiltinAgentsServer {
     return this._mcpRegistry
   }
 
+  /**
+   * Replace the in-memory `extras` list and re-apply the merged config
+   * against the last-known workspace `mcp.json` state. Workspace
+   * `mcp.json` still wins on name collision. No-op once `stop()` has
+   * latched `mcpStopping`.
+   */
+  async setExtraMcpServers(
+    extras: ReadonlyArray<McpServerConfig>
+  ): Promise<void> {
+    if (!this._mcpRegistry || this.mcpStopping) return
+    this.mcpExtras = extras
+    await this.applyMerged(this.mcpLastJsonConfig)
+  }
+
+  private async wirePersistence(cfg: McpConfig): Promise<McpConfig> {
+    const servers: McpServerConfig[] = []
+    for (const s of cfg.servers) {
+      if (s.transport === `http` && s.auth?.mode === `authorizationCode`) {
+        const persist = await keychainPersistence({ server: s.name })
+        servers.push({
+          ...s,
+          auth: { ...s.auth, ...persist },
+        })
+      } else {
+        servers.push(s)
+      }
+    }
+    return { ...cfg, servers }
+  }
+
+  // On name conflict between extras and mcp.json, mcp.json wins.
+  private mergeMcp(jsonCfg: McpConfig | null): McpConfig {
+    const jsonServers = jsonCfg?.servers ?? []
+    const jsonNames = new Set(jsonServers.map((s) => s.name))
+    const filteredExtras = this.mcpExtras.filter((s) => !jsonNames.has(s.name))
+    return {
+      servers: [...filteredExtras, ...jsonServers],
+      raw: jsonCfg?.raw,
+    }
+  }
+
+  private async runApply(jsonCfg: McpConfig | null): Promise<void> {
+    if (this.mcpStopping) return
+    const registry = this._mcpRegistry
+    if (!registry) return
+    try {
+      const wired = await this.wirePersistence(this.mergeMcp(jsonCfg))
+      if (this.mcpStopping) return
+      await registry.applyConfig(wired)
+    } catch (e) {
+      serverLog.error(`[mcp] applyConfig:`, e)
+      try {
+        this.options.onConfigError?.(e)
+      } catch (cbErr) {
+        serverLog.error(`[mcp] onConfigError callback failed:`, cbErr)
+      }
+    }
+  }
+
+  private applyMerged(jsonCfg: McpConfig | null): Promise<void> {
+    this.mcpLastJsonConfig = jsonCfg
+    const p = this.runApply(jsonCfg)
+    this.mcpApplyInFlight.add(p)
+    void p.finally(() => this.mcpApplyInFlight.delete(p))
+    return p
+  }
+
   async start(): Promise<string> {
     if (this.bootstrap || this.pullWakeRunner) {
       throw new Error(`Builtin agents runtime already started`)
     }
+
+    installDurableStreamsFetchCache(this.options.durableStreamsFetchCache)
 
     const pullWake = this.options.pullWake
     if (!pullWake?.runnerId) {
@@ -123,91 +207,41 @@ export class BuiltinAgentsServer {
             `mcp.json`
           )
         : null
-      const extras = this.options.extraMcpServers ?? []
-
-      const wirePersistence = async (cfg: McpConfig): Promise<McpConfig> => {
-        const servers: McpServerConfig[] = []
-        for (const s of cfg.servers) {
-          if (s.transport === `http` && s.auth?.mode === `authorizationCode`) {
-            const persist = await keychainPersistence({ server: s.name })
-            servers.push({
-              ...s,
-              auth: { ...s.auth, ...persist },
-            })
-          } else {
-            servers.push(s)
-          }
-        }
-        return { ...cfg, servers }
-      }
-
-      // On name conflict between extras and mcp.json, mcp.json wins.
-      const merge = (jsonCfg: McpConfig | null): McpConfig => {
-        const jsonServers = jsonCfg?.servers ?? []
-        const jsonNames = new Set(jsonServers.map((s) => s.name))
-        const filteredExtras = extras.filter((s) => !jsonNames.has(s.name))
-        return {
-          servers: [...filteredExtras, ...jsonServers],
-          raw: jsonCfg?.raw,
-        }
-      }
-
-      const onConfigError = this.options.onConfigError
-      const runApply = async (jsonCfg: McpConfig | null): Promise<void> => {
-        if (this.mcpStopping) return
-        try {
-          const wired = await wirePersistence(merge(jsonCfg))
-          if (this.mcpStopping) return
-          await mcpRegistry.applyConfig(wired)
-        } catch (e) {
-          serverLog.error(`[mcp] applyConfig:`, e)
-          try {
-            onConfigError?.(e)
-          } catch (cbErr) {
-            serverLog.error(`[mcp] onConfigError callback failed:`, cbErr)
-          }
-        }
-      }
-      const applyMerged = (jsonCfg: McpConfig | null): Promise<void> => {
-        const p = runApply(jsonCfg)
-        this.mcpApplyInFlight.add(p)
-        void p.finally(() => this.mcpApplyInFlight.delete(p))
-        return p
-      }
+      this.mcpExtras = this.options.extraMcpServers ?? []
 
       if (mcpConfigPath) {
         try {
           const cfg = await loadMcpConfig(mcpConfigPath, process.env)
-          void applyMerged(cfg)
+          void this.applyMerged(cfg)
         } catch (err) {
           if ((err as NodeJS.ErrnoException).code !== `ENOENT`) throw err
-          if (extras.length === 0) {
+          if (this.mcpExtras.length === 0) {
             serverLog.info(
               `[mcp] no ${mcpConfigPath} — starting with no servers`
             )
           } else {
             serverLog.info(
-              `[mcp] no ${mcpConfigPath} — starting with ${extras.length} server(s) from extras`
+              `[mcp] no ${mcpConfigPath} — starting with ${this.mcpExtras.length} server(s) from extras`
             )
           }
-          void applyMerged(null)
+          void this.applyMerged(null)
         }
 
         try {
           this.mcpWatcherCloser = await watchMcpConfig(mcpConfigPath, {
-            onChange: (cfg) => void applyMerged(cfg),
+            onChange: (cfg) => void this.applyMerged(cfg),
             onError: (e) => serverLog.error(`[mcp] config error:`, e),
           })
         } catch (e) {
           serverLog.error(`[mcp] config watcher failed to start:`, e)
         }
       } else {
-        if (extras.length > 0) {
+        if (this.mcpExtras.length > 0) {
           serverLog.info(
-            `[mcp] starting with ${extras.length} server(s) from extras`
+            `[mcp] starting with ${this.mcpExtras.length} server(s) from extras`
           )
         }
-        void applyMerged(null)
+        void this.applyMerged(null)
       }
 
       this.mcpToolProviderName = `mcp`
@@ -273,11 +307,12 @@ export class BuiltinAgentsServer {
         publicUrl,
         runtimeName: `builtin-agents`,
         baseSkillsDir: this.options.baseSkillsDir,
+        enabledModelValues: this.options.enabledModelValues,
         serverHeaders: pullWake.headers,
       })
       if (!this.bootstrap) {
         throw new Error(
-          `ANTHROPIC_API_KEY or OPENAI_API_KEY must be set before starting builtin agents`
+          `ANTHROPIC_API_KEY, OPENAI_API_KEY, DEEPSEEK_API_KEY, or MOONSHOT_API_KEY must be set before starting builtin agents`
         )
       }
 
@@ -375,6 +410,7 @@ export class BuiltinAgentsServer {
         : pullWake.headers
     )
     headers.set(`content-type`, `application/json`)
+    const profiles = this.bootstrap?.runtime.sandboxProfileDescriptors ?? []
     const response = await fetch(
       appendPathToUrl(this.options.agentServerUrl, `/_electric/runners`),
       {
@@ -386,6 +422,7 @@ export class BuiltinAgentsServer {
           label: pullWake.label ?? `Built-in agents`,
           kind: `local`,
           admin_status: `enabled`,
+          sandbox_profiles: profiles,
         }),
       }
     )

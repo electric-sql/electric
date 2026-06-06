@@ -138,7 +138,7 @@ describe(`PostgresRegistry tag outbox lifecycle`, () => {
       url: `/task/concurrent-tag-test`,
       type: `test`,
       status: `running`,
-      streams: { main: `/s/main`, error: `/s/error` },
+      streams: { main: `/s/main` },
       subscription_id: `sub-1`,
       write_token: `wt-1`,
       tags: {},

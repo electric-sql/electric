@@ -224,84 +224,88 @@
 
 /* Default-agent quick-start composer -----------------------------
  *
- * Same trick as `.typeGrid` above: the composer extends outward by
- * its inner horizontal padding so the textarea content (placeholder,
- * typed text) lines up with the page title and subtitle above. */
-
-.composer {
+ * Same trick as `.typeGrid` above: the wrap (composer + meta row)
+ * extends outward by its inner horizontal padding so the textarea
+ * content (placeholder, typed text) lines up with the page title and
+ * subtitle above.
+ *
+ * Layout is split into two rows so the working-directory and runner
+ * pickers can sit on their own row *outside* the bordered input
+ * surface (mirrors the chat screen's `<EntityContextDrawer>` pattern,
+ * just flipped — drawer-above-composer there, meta-below-composer
+ * here):
+ *
+ *   .composerWrap                        ← outdented column
+ *     .composer       (bordered card)    ← textarea + inline pills
+ *     .composerMeta   (tray under)       ← cwd / runner pickers
+ *
+ * The meta row tucks UNDER the composer via a `-20px` top margin and
+ * matching `padding-top`, with the composer z-indexed above so its
+ * curved bottom edge visually overlaps the tray. Same geometry as
+ * `EntityContextDrawer.module.css → .drawer`. */
+.composerWrap {
   display: flex;
   flex-direction: column;
-  gap: var(--ds-space-2);
-  padding: var(--ds-space-3) var(--ds-space-4);
-  background: var(--ds-input-bg);
+  /* No flex gap — the meta row's negative top margin handles the
+     overlap. Any gap here would just leave a visible seam. */
+  gap: 0;
+  margin: 0 calc(-1 * var(--ds-space-4));
+}
+/* Variant tuning for the shared `<ComposerShell>` on the spawn page.
+   Inherits the shell's default geometry (16px sides, 8px footer
+   bottom inset, -8px cluster negatives so chip labels line up with
+   the editor text column). The first-prompt input wants a roomier
+   typing surface than chat, so we raise the editor's min-content
+   height. */
+.spawnComposerShell {
+  --composer-editor-min-h: 72px;
+}
+
+.composerDisabled {
+  opacity: 0.6;
+}
+
+/* Meta row beneath the input — a "session context" tray so the
+ * working-directory and runner pickers read as deliberate session
+ * metadata tucked behind the composer rather than two loose chips
+ * floating below it.
+ *
+ * Mirrors `EntityContextDrawer.module.css → .drawer` (the drawer that
+ * docks ABOVE the chat composer), just flipped: where the chat
+ * drawer hides its bottom 20px behind the composer above it, this
+ * tray hides its top 20px behind the composer above it. Same border,
+ * radius, shadow, and 12px horizontal inset so the two patterns read
+ * as the same system element. The fill is one step *below* the page
+ * bg (`--ds-bg-subtle`) so the tray reads as a recessed surface the
+ * composer sits forward of, and so the picker pills (chip-bg = the
+ * raised surface white) pop on top instead of disappearing into it.
+ *
+ * Inner padding is `7px` (12px outer radius − 1px border − 4px pill
+ * radius) so the picker pills sit *concentrically* inside the tray —
+ * the gap between every pill edge and the tray edge is identical on
+ * all sides, just like the chat drawer's rows sit 3px from its 12px
+ * outer corner. The top adds the 20px composer overlap on top of
+ * that, for a 27px hidden-+-visible top padding. */
+.composerMeta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  background: var(--ds-bg-subtle);
   border: 1px solid var(--ds-gray-a4);
   border-radius: var(--ds-radius-5);
   box-shadow:
     0 1px 3px rgba(15, 15, 30, 0.04),
     0 1px 1px rgba(15, 15, 30, 0.02);
-  transition: border-color 0.15s ease;
-  margin: 0 calc(-1 * var(--ds-space-4));
-}
-.composer:focus-within {
-  border-color: var(--ds-accent-a6);
-}
-.composerDisabled {
-  opacity: 0.6;
-}
-
-/* Auto-grow is driven by inline `height = scrollHeight` from
-   NewSessionPage.tsx (mirrors `MessageInput.tsx`). `min-height`
-   floors the resting state at ~3 lines so the empty composer reads
-   as a generous "tell me what to do" input rather than a single
-   line. `max-height` caps growth and `overflow: auto` then takes
-   over for very long prompts. The browser clamps the inline height
-   against both bounds so the JS auto-resize stays a one-liner. */
-.composerTextarea {
-  border: none;
-  outline: none;
-  background: transparent;
-  font-size: var(--ds-chat-text);
-  line-height: var(--ds-chat-text-lh);
-  color: var(--ds-text-1);
-  font-family: var(--ds-font-body);
-  resize: none;
-  overflow: auto;
-  min-height: 72px;
-  max-height: 280px;
-  width: 100%;
-  padding: 0;
-}
-.composerTextarea::placeholder {
-  color: var(--ds-text-3);
+  padding: 27px 7px 7px;
+  /* Horizontal inset matches the chat drawer's 12px so the tray
+     visually nests inside the composer's border radius. -20px top
+     overlap is the composer overlap. */
+  margin: -20px 12px 0;
+  position: relative;
+  z-index: 0;
 }
 
-.composerFooter {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--ds-space-3);
-  flex-wrap: wrap;
-}
-.composerControls {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-wrap: wrap;
-  min-width: 0;
-  /* Pill triggers have 8px inline padding. Shift the overlay left by
-     that amount so the first pill's label aligns with the textarea
-     text column, then drop it 4px so the chip edge has the same
-     8px inset from the composer bottom as it has from the side. */
-  margin-left: -8px;
-  transform: translateY(4px);
-}
-.composerSendCluster {
-  display: flex;
-  align-items: center;
-  gap: var(--ds-space-3);
-  margin-left: auto;
-  margin-right: -4px;
-}
 .composerHint {
   font-size: var(--ds-text-xs);
   color: var(--ds-text-3);
@@ -381,6 +385,40 @@
 }
 .composerSendActive:hover {
   background: var(--ds-accent-10);
+}
+
+/* Detected local-Codex-login opt-in prompt ----------------------- *
+ *
+ * Sits under the composer with the same outdent so its content lines
+ * up with the textarea text column above. Subtle accent tint so it
+ * reads as a soft suggestion rather than an alert. */
+.codexPrompt {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+  flex-wrap: wrap;
+  margin: 0 calc(-1 * var(--ds-space-4));
+  padding: var(--ds-space-2) var(--ds-space-3);
+  border: 1px solid var(--ds-border-1);
+  border-radius: var(--ds-radius-3);
+  background: var(--ds-accent-a2);
+  color: var(--ds-text-2);
+  font-size: var(--ds-text-sm);
+}
+.codexPromptText {
+  flex: 1;
+  min-width: 0;
+}
+.codexPromptActions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+  flex-shrink: 0;
+}
+.codexPromptError {
+  flex-basis: 100%;
+  font-size: var(--ds-text-xs);
+  color: var(--ds-red-11);
 }
 
 /* Other-agents section under the composer ----------------------- */

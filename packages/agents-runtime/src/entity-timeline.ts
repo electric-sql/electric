@@ -10,7 +10,7 @@ import {
   localOnlyCollectionOptions,
   or,
   toArray,
-} from '@durable-streams/state'
+} from '@durable-streams/state/db'
 import { caseWhen } from '@tanstack/db'
 import type {
   Collection,
@@ -18,6 +18,7 @@ import type {
   QueryBuilder,
 } from '@tanstack/db'
 import type { EntityStreamDB } from './entity-stream-db'
+import { formatPointerOrderToken, type EventPointer } from './event-pointer'
 import type { ChildStatusEntry, MessageReceived, Signal } from './entity-schema'
 import type { ManifestEntry, Wake, WakeMessage } from './types'
 
@@ -39,6 +40,7 @@ export type EntityTimelineContentItem =
       args: Record<string, unknown>
       status: `started` | `args_complete` | `executing` | `completed` | `failed`
       result?: string
+      error?: string
       isError: boolean
     }
 
@@ -499,7 +501,7 @@ function readRequiredOrderToken<TRow extends { key: string | number }>(
   collection: {
     id?: string
     toArray: Array<TRow>
-    __electricRowOffsets?: Map<string | number, string>
+    __electricRowOffsets?: Map<string | number, EventPointer>
   },
   row: TRow,
   index: number
@@ -509,9 +511,9 @@ function readRequiredOrderToken<TRow extends { key: string | number }>(
     return timelineOrder
   }
 
-  const offset = collection.__electricRowOffsets?.get(row.key)
-  if (offset) {
-    return `offset:${offset}`
+  const pointer = collection.__electricRowOffsets?.get(row.key)
+  if (pointer) {
+    return formatPointerOrderToken(pointer)
   }
 
   const inlineSeq = readInlineSeq(row)
@@ -525,7 +527,7 @@ function readRequiredOrderToken<TRow extends { key: string | number }>(
 function readOptionalOrderToken<TRow extends { key: string | number }>(
   collection: {
     toArray: Array<TRow>
-    __electricRowOffsets?: Map<string | number, string>
+    __electricRowOffsets?: Map<string | number, EventPointer>
   },
   row: TRow
 ): string | undefined {
@@ -534,9 +536,9 @@ function readOptionalOrderToken<TRow extends { key: string | number }>(
     return timelineOrder
   }
 
-  const offset = collection.__electricRowOffsets?.get(row.key)
-  if (offset) {
-    return `offset:${offset}`
+  const pointer = collection.__electricRowOffsets?.get(row.key)
+  if (pointer) {
+    return formatPointerOrderToken(pointer)
   }
 
   const inlineSeq = readInlineSeq(row)
@@ -546,7 +548,7 @@ function readOptionalOrderToken<TRow extends { key: string | number }>(
 function withOrderToken<TRow extends { key: string | number }>(collection: {
   id?: string
   toArray: Array<TRow>
-  __electricRowOffsets?: Map<string | number, string>
+  __electricRowOffsets?: Map<string | number, EventPointer>
 }): Array<OrderedRow<TRow>> {
   return collection.toArray.map((row, index) => ({
     ...row,
@@ -558,7 +560,7 @@ function withOptionalOrderToken<
   TRow extends { key: string | number },
 >(collection: {
   toArray: Array<TRow>
-  __electricRowOffsets?: Map<string | number, string>
+  __electricRowOffsets?: Map<string | number, EventPointer>
 }): Array<TRow & { _orderToken?: string }> {
   return collection.toArray.map((row) => {
     const orderToken = readOptionalOrderToken(collection, row)
@@ -573,14 +575,14 @@ function getOrderableCollection<TRow extends { key: string | number }>(
     | {
         id?: string
         toArray: Array<TRow>
-        __electricRowOffsets?: Map<string | number, string>
+        __electricRowOffsets?: Map<string | number, EventPointer>
       }
     | undefined,
   id: string
 ): {
   id?: string
   toArray: Array<TRow>
-  __electricRowOffsets?: Map<string | number, string>
+  __electricRowOffsets?: Map<string | number, EventPointer>
 } {
   if (!collection) {
     throw new Error(
@@ -616,9 +618,12 @@ function withoutOrderToken<TRow extends object & { _orderToken?: string }>(
 }
 
 function orderTokenToHistoryOffset(orderToken: string): string {
-  return orderToken.startsWith(`offset:`)
-    ? orderToken.slice(`offset:`.length)
-    : orderToken
+  // The order token is already a stable, sortable string representation
+  // of an `EventPointer` (or a `_seq` / `pending` fallback). Round-trip
+  // semantics are maintained as long as every callsite that produces
+  // a historyOffset goes through the same formatter — see
+  // `readContextHistoryOffset` in `context-factory.ts`.
+  return orderToken
 }
 
 function withOrderFromOrderIndex<TRow extends object & { _orderToken: string }>(
@@ -972,7 +977,7 @@ export function buildEntityTimelineData(
         | {
             id?: string
             toArray: Array<ContextInsertedValueRow>
-            __electricRowOffsets?: Map<string | number, string>
+            __electricRowOffsets?: Map<string | number, EventPointer>
           }
         | undefined,
       `contextInserted`
@@ -984,7 +989,7 @@ export function buildEntityTimelineData(
         | {
             id?: string
             toArray: Array<ContextRemovedValueRow>
-            __electricRowOffsets?: Map<string | number, string>
+            __electricRowOffsets?: Map<string | number, EventPointer>
           }
         | undefined,
       `contextRemoved`
@@ -1235,6 +1240,8 @@ function buildEntityTimelineQuery(
     order: coalesce(inbox._timeline_order, `~`),
     key: inbox.key,
     from: coalesce(inbox.from, `unknown`),
+    from_principal: inbox.from_principal,
+    from_agent: inbox.from_agent,
     payload: inbox.payload,
     timestamp: coalesce(inbox.timestamp, ``),
     mode: coalesce(inbox.mode, `immediate`),

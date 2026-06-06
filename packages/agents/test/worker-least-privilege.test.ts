@@ -1,14 +1,16 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createEntityRegistry } from '@electric-ax/agents-runtime'
 import { registerWorker } from '../src/agents/worker'
+import type { BuiltinModelCatalog } from '../src/model-catalog'
 
-const modelCatalog = {
+const modelCatalog: BuiltinModelCatalog = {
   defaultChoice: {
     provider: `anthropic` as const,
     id: `claude-sonnet-4-6`,
     label: `Anthropic Claude Sonnet 4.6`,
     value: `anthropic:claude-sonnet-4-6`,
     reasoning: true,
+    input: [`text`, `image`],
   },
   choices: [
     {
@@ -17,6 +19,7 @@ const modelCatalog = {
       label: `Anthropic Claude Sonnet 4.6`,
       value: `anthropic:claude-sonnet-4-6`,
       reasoning: true,
+      input: [`text`, `image`],
     },
   ],
 }

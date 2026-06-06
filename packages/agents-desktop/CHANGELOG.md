@@ -1,5 +1,123 @@
 # @electric-ax/agents-desktop
 
+## 0.1.14
+
+### Patch Changes
+
+- 7709c9a: Seed `@playwright/mcp` into the desktop's `settings.json mcp.servers`
+  block on first launch — gives every new install browser automation
+  out of the box. The default is opt-out friendly: after the seed runs,
+  the entry behaves like any other settings.json MCP server (Edit,
+  Remove, Disable all work normally), and removing it sticks across
+  restarts thanks to a per-name `seededDefaultMcpServerNames` flag.
+  Future built-in defaults can be added to `DEFAULT_MCP_SERVERS` in
+  `settings/mcp-defaults.ts`; existing installs will pick them up on
+  the next launch as long as the name isn't already recorded as seeded.
+- f222d39: Add a form-based **Add / Edit / Remove** flow for MCP servers in the
+  desktop's Settings → MCP Servers page. Before this, the only way to
+  register a server was to hand-edit `settings.json` or a workspace
+  `mcp.json`. The dialog supports both `http` and `stdio` transports, all
+  four auth modes, and writes through to the global `settings.json
+mcp.servers` block.
+
+  The MCP page also gains provenance + shadowing awareness:
+  - Entries from a workspace `mcp.json` render a "from mcp.json" badge
+    and are read-only (no Edit/Remove). Lifecycle verbs still apply.
+  - When a name in `settings.json` collides with one in workspace
+    `mcp.json`, the workspace still wins (existing rule); the shadowed
+    settings entry is rendered grayed-out next to the running workspace
+    twin so the user can see what's been overridden.
+
+  `BuiltinAgentsServer` gains a public `setExtraMcpServers(extras)` so
+  the desktop can push add/edit/remove changes to the live MCP registry
+  without restarting. Workspace `mcp.json` continues to win on name
+  collision through the same merge path used by the file watcher.
+
+- bbf52b6: Wire `electron-updater` so the desktop app can detect new releases. Phase
+  one of two:
+  - Adds a working **Check for Updates…** menu item (Electric Agents menu
+    on macOS, Help menu on Windows/Linux, plus the in-window app-icon
+    menu) and a quiet background check ~10s after launch.
+  - On Windows/Linux, signed-platform flow is wired end-to-end: downloads
+    in the background with a dock/taskbar progress bar, then prompts
+    "Restart now" to apply via `quitAndInstall()`.
+  - On macOS, ships as **notify-only** until Developer ID signing lands —
+    Squirrel.Mac can't swap an unsigned bundle, so we skip the download
+    entirely and prompt to open the GitHub releases page instead.
+  - Switches the publish provider from `github` to `generic` pointed at
+    the moving `agents-desktop-latest` tag, because the repo's overall
+    "latest" release is shared across packages and the GitHub provider
+    was picking the wrong one.
+  - Adds channel separation so canary builds publish to the `beta`
+    channel against an `agents-desktop-canary` URL — stable users never
+    auto-update to canaries.
+
+- 6e9e4a7: Show elapsed time while an agent is responding. While a turn is
+  streaming, the meta row now ticks `Thinking · 12s` (or just `12s` once
+  tokens start flowing). When a turn settles, the bare `✓ done` becomes
+  `✓ done in 1m 5s` for turns completed in-session. Historical turns
+  (already complete on page load) keep the bare label, since the client
+  has no reliable completion timestamp for those — only the user message
+  time, and subtracting `now()` would lie about the duration.
+- 74d2341: Fix Codex auth for low-cost tool calls by passing fresh access tokens to URL extraction and worker tools.
+- 9da7b8f: Install an Undici HTTP cache dispatcher for the built-in agents local Node runner so Durable Streams catch-up reads can use server cache headers. Electric Agents Desktop uses an on-disk SQLite cache so runtime restarts can reuse cached catch-up responses.
+- 889fa20: Expose tenant-scoped users as an Electric shape and add a chat sharing dialog that grants user principals or all workspace users view, chat, or manage permissions over an entity. View/chat sharing includes fork access, forked chats are owned by the principal that creates the fork, shared chats can be identified and filtered by creator in the sidebar, and Cloud requests now inject the signed-in user as the Electric principal.
+
+  Mobile now syncs the users and effective-permissions shapes, marks and filters shared chats by creator, disables native chat and signal controls when the current principal lacks permission, and shows the signed-in user principal on the Account screen for debugging.
+
+## 0.1.13
+
+### Patch Changes
+
+- 17b374f: Adds the `Sandbox` primitive (`@electric-ax/agents-runtime/sandbox`) for isolating LLM-driven tool calls. Three providers ship: `unrestrictedSandbox()` (explicit pass-through), `remoteSandbox({provider: 'e2b'})` (E2B as an optional peer dep), and `dockerSandbox()` (container isolation via `dockerode` as an optional peer dep).
+
+  Built-in entities (Horton, Worker) default to `unrestrictedSandbox` via the new `chooseDefaultSandbox(workingDirectory)` helper. Stronger isolation is opt-in by constructing `dockerSandbox` or `remoteSandbox` directly — `dockerSandbox` is the recommended path for multi-entity hosting.
+
+  Behavior changes folded in: bash no longer forwards `process.env` to children (removes the trivial `env`-dump leak of secrets like `$ANTHROPIC_API_KEY` — note the host-sharing `unrestricted` provider still can't fully contain secrets, e.g. via `/proc/<ppid>/environ`, so use `docker`/`remote` for untrusted or multi-tenant entities), tool descriptions corrected, and read/write/edit reject symlink escapes from the workspace.
+
+  Runtimes advertise named **sandbox profiles** (e.g. `local`, `docker`) to the agents-server; spawn requests pick a profile by name, the server validates the choice against the target runner's advertised set, and the new-session UI surfaces a picker. Internally, the built-in tool factories (`createBashTool`, `createFetchUrlTool`, etc.) now route their filesystem and network access through the active `Sandbox`.
+
+- 831c623: Clear stale Codex auth in the desktop app when no usable access token can be produced, preventing the UI from showing Codex as enabled while runs cannot authenticate.
+
+## 0.1.12
+
+### Patch Changes
+
+- 7d029a9: Keep Electric Agents Desktop awake while the local runtime is active, with controls in Settings, onboarding, and the tray menu.
+- Updated dependencies [ae2d039]
+  - @electric-sql/client@1.5.20
+
+## 0.1.11
+
+### Patch Changes
+
+- 0a15a47: Bundle the Electric CLI with the desktop app and add managed install/status UI.
+- d921a9f: Allow desktop users to choose which configured provider models appear in Horton's model picker, and group model dropdown entries by provider.
+- aed2189: Add Kimi / Moonshot API support for local Horton runtimes, including model catalog entries, runtime provider resolution, desktop credential persistence, and UI credential inputs.
+- 7001f8f: Add a launch-at-login preference for Electric Agents Desktop, including background startup handling, settings/onboarding controls, and a shared Base UI switch control.
+
+## 0.1.10
+
+### Patch Changes
+
+- 226cf15: Refactor the desktop main process into focused modules so Electron bootstrap, app state, credentials, runtime lifecycle, IPC, cloud auth, and UI shell responsibilities are easier to maintain.
+
+## 0.1.9
+
+### Patch Changes
+
+- d344c32: Treat Electric Agents server URLs as opaque tenant-scoped base URLs rooted at `/t/<tenant-id>/v1`, migrate desktop and mobile Cloud clients to that URL shape, move observation stream ensure endpoints under `/_electric/observations/*/ensure-stream`, rename the pre-alpha entity/cron/schema/tag/docs APIs to their Electric Agents names, add a non-interactive `electric agents view` transcript command, and make Horton title extraction work with lightweight desktop inbox collection facades.
+
+  Send the done callback for completed wake checkpoints during graceful shutdown, preventing desktop reloads from leaving already completed DS subscription claims pending.
+
+- 319e405: Explicit ChatGPT / Codex opt-in with native PKCE OAuth sign-in (opened in the user's default browser to avoid Cloudflare bot detection), per-source consent for detected Codex CLI / OpenCode logins, an inline "Use this login?" prompt under the new-session composer, and a "Restart local runtime" banner gated on credential changes. The runtime no longer reads `~/.codex/auth.json` implicitly — it now requires `ELECTRIC_CODEX_ACCESS_TOKEN` and honours `ELECTRIC_CODEX_REQUIRE_OPT_IN=1`.
+
+## 0.1.8
+
+### Patch Changes
+
+- ac21b9a: Refine desktop agents onboarding and settings server management.
+
 ## 0.1.7
 
 ### Patch Changes

@@ -1,16 +1,22 @@
-import { and, desc, eq, lt, ne, sql } from 'drizzle-orm'
+import { and, desc, eq, inArray, lt, ne, sql } from 'drizzle-orm'
 import { buildTagsIndex, normalizeTags } from '@electric-ax/agents-runtime'
 import {
   consumerClaims,
   entities,
+  entityEffectivePermissions,
   entityBridges,
   entityDispatchState,
   entityManifestSources,
+  entityLineage,
+  entityPermissionGrants,
   entityTypes,
   pgSyncBridges,
+  entityTypePermissionGrants,
   runnerRuntimeDiagnostics,
   runners,
+  sharedStateLinks,
   tagStreamOutbox,
+  users,
 } from './db/schema.js'
 import {
   assertEntityStatus,
@@ -27,11 +33,19 @@ import type {
   EntityStatus,
   RunnerAdminStatus,
   RunnerKind,
+  SandboxProfileAdvertisement,
   SourceStreamOffset,
   ConsumerClaim,
   DispatchPolicy,
+  EntityPermission,
+  EntityPermissionGrant,
+  EntityPermissionPropagation,
+  EntityTypePermission,
+  EntityTypePermissionGrant,
+  PermissionSubjectKind,
 } from './electric-agents-types.js'
 import type { EntityTags, PgSyncOptions } from '@electric-ax/agents-runtime'
+import type { Principal } from './principal.js'
 
 export class EntityAlreadyExistsError extends Error {
   constructor(public readonly url: string) {
@@ -51,6 +65,8 @@ export interface EntityBridgeRow {
   sourceRef: string
   tags: EntityTags
   streamUrl: string
+  principalUrl?: string
+  principalKind?: string
   shapeHandle?: string
   shapeOffset?: string
   lastObserverActivityAt: Date
@@ -93,6 +109,13 @@ export interface RegisterRunnerInput {
   kind?: RunnerKind
   adminStatus?: RunnerAdminStatus
   wakeStream?: string
+  /**
+   * Full-set replacement: provide the complete list of profiles the
+   * runner currently exposes. Existing rows for the runner are
+   * removed and the supplied set is inserted in one transaction.
+   * Omit (or pass undefined) to leave the existing set untouched.
+   */
+  sandboxProfiles?: ReadonlyArray<SandboxProfileAdvertisement>
 }
 
 export interface HeartbeatRunnerInput {
@@ -140,13 +163,43 @@ export interface MaterializeReleasedClaimInput {
   releasedAt?: Date
 }
 
+export interface CreateEntityTypePermissionGrantInput {
+  entityType: string
+  permission: EntityTypePermission
+  subjectKind: PermissionSubjectKind
+  subjectValue: string
+  createdBy?: string
+  expiresAt?: Date
+}
+
+export interface CreateEntityPermissionGrantInput {
+  entityUrl: string
+  permission: EntityPermission
+  subjectKind: PermissionSubjectKind
+  subjectValue: string
+  propagation?: EntityPermissionPropagation
+  copyToChildren?: boolean
+  createdBy?: string
+  expiresAt?: Date
+}
+
 const DEFAULT_RUNNER_LEASE_MS = 30_000
+const PERMISSION_PRUNE_INTERVAL_MS = 30_000
+
+type RegistryTransaction = Parameters<
+  Parameters<DrizzleDB[`transaction`]>[0]
+>[0]
 
 export function runnerWakeStream(runnerId: string): string {
   return `/runners/${runnerId}/wake`
 }
 
 export class PostgresRegistry {
+  // Electric predicates cannot depend on now(), so expired effective rows need a
+  // server-side sweep. Debounce it to keep read/auth paths from writing on every request.
+  private lastPermissionPruneStartedAt = 0
+  private permissionPrunePromise: Promise<void> | null = null
+
   constructor(
     private db: DrizzleDB,
     readonly tenantId: string = DEFAULT_TENANT_ID
@@ -156,11 +209,34 @@ export class PostgresRegistry {
 
   close(): void {}
 
+  async ensureUserForPrincipal(principal: Principal): Promise<void> {
+    if (principal.kind !== `user`) return
+
+    await this.db
+      .insert(users)
+      .values({
+        tenantId: this.tenantId,
+        id: principal.id,
+      })
+      .onConflictDoNothing()
+  }
+
   async createRunner(
     input: RegisterRunnerInput
   ): Promise<ElectricAgentsRunner> {
     const now = new Date()
     const wakeStream = input.wakeStream ?? runnerWakeStream(input.id)
+    // Full-set replace: when the caller provides a profile list it
+    // overwrites whatever the runner previously advertised. Omitting
+    // the field on a re-registration preserves the existing value.
+    const sandboxProfilesValue = input.sandboxProfiles
+      ? input.sandboxProfiles.map((p) => ({
+          name: p.name,
+          label: p.label,
+          ...(p.description !== undefined && { description: p.description }),
+          ...(p.remote !== undefined && { remote: p.remote }),
+        }))
+      : undefined
 
     await this.db
       .insert(runners)
@@ -172,6 +248,9 @@ export class PostgresRegistry {
         kind: input.kind ?? `local`,
         adminStatus: input.adminStatus ?? `enabled`,
         wakeStream,
+        ...(sandboxProfilesValue !== undefined && {
+          sandboxProfiles: sandboxProfilesValue,
+        }),
         updatedAt: now,
       })
       .onConflictDoUpdate({
@@ -182,6 +261,9 @@ export class PostgresRegistry {
           kind: input.kind ?? `local`,
           adminStatus: input.adminStatus ?? `enabled`,
           wakeStream,
+          ...(sandboxProfilesValue !== undefined && {
+            sandboxProfiles: sandboxProfilesValue,
+          }),
           updatedAt: now,
         },
       })
@@ -191,6 +273,44 @@ export class PostgresRegistry {
       throw new Error(`Failed to read back runner "${input.id}"`)
     }
     return runner
+  }
+
+  /**
+   * Every sandbox profile advertised by a runner in this tenant (one entry
+   * per runner that advertises it — names may repeat across runners). Used by
+   * spawn validation for unpinned dispatch to learn whether a chosen profile
+   * is remote (so a shared sandbox can skip the single-runner guard).
+   */
+  async listSandboxProfiles(): Promise<Array<SandboxProfileAdvertisement>> {
+    const rows = await this.db
+      .select({ sandboxProfiles: runners.sandboxProfiles })
+      .from(runners)
+      .where(eq(runners.tenantId, this.tenantId))
+    const profiles: Array<SandboxProfileAdvertisement> = []
+    for (const row of rows) {
+      const list = row.sandboxProfiles as
+        | Array<{
+            name?: unknown
+            label?: unknown
+            description?: unknown
+            remote?: unknown
+          }>
+        | null
+        | undefined
+      if (!Array.isArray(list)) continue
+      for (const entry of list) {
+        if (!entry || typeof entry.name !== `string`) continue
+        profiles.push({
+          name: entry.name,
+          label: typeof entry.label === `string` ? entry.label : entry.name,
+          ...(typeof entry.description === `string` && {
+            description: entry.description,
+          }),
+          ...(typeof entry.remote === `boolean` && { remote: entry.remote }),
+        })
+      }
+    }
+    return profiles
   }
 
   async getRunner(id: string): Promise<ElectricAgentsRunner | null> {
@@ -533,6 +653,7 @@ export class PostgresRegistry {
         creationSchema: et.creation_schema ?? null,
         inboxSchemas: et.inbox_schemas ?? null,
         stateSchemas: et.state_schemas ?? null,
+        slashCommands: et.slash_commands ?? null,
         serveEndpoint: et.serve_endpoint ?? null,
         defaultDispatchPolicy: et.default_dispatch_policy ?? null,
         revision: et.revision,
@@ -546,6 +667,7 @@ export class PostgresRegistry {
           creationSchema: et.creation_schema ?? null,
           inboxSchemas: et.inbox_schemas ?? null,
           stateSchemas: et.state_schemas ?? null,
+          slashCommands: et.slash_commands ?? null,
           serveEndpoint: et.serve_endpoint ?? null,
           defaultDispatchPolicy: et.default_dispatch_policy ?? null,
           revision: et.revision,
@@ -568,6 +690,7 @@ export class PostgresRegistry {
         creationSchema: et.creation_schema ?? null,
         inboxSchemas: et.inbox_schemas ?? null,
         stateSchemas: et.state_schemas ?? null,
+        slashCommands: et.slash_commands ?? null,
         serveEndpoint: et.serve_endpoint ?? null,
         defaultDispatchPolicy: et.default_dispatch_policy ?? null,
         revision: et.revision,
@@ -609,6 +732,7 @@ export class PostgresRegistry {
         creationSchema: et.creation_schema ?? null,
         inboxSchemas: et.inbox_schemas ?? null,
         stateSchemas: et.state_schemas ?? null,
+        slashCommands: et.slash_commands ?? null,
         serveEndpoint: et.serve_endpoint ?? null,
         defaultDispatchPolicy: et.default_dispatch_policy ?? null,
         revision: et.revision,
@@ -633,6 +757,7 @@ export class PostgresRegistry {
             tags: normalizeTags(entity.tags),
             tagsIndex: buildTagsIndex(entity.tags),
             spawnArgs: entity.spawn_args ?? {},
+            sandbox: entity.sandbox ?? null,
             parent: entity.parent ?? null,
             createdBy: entity.created_by ?? null,
             typeRevision: entity.type_revision ?? null,
@@ -654,6 +779,67 @@ export class PostgresRegistry {
             updatedAt: new Date(),
           })
           .onConflictDoNothing()
+
+        await tx
+          .insert(entityLineage)
+          .values({
+            tenantId: this.tenantId,
+            ancestorUrl: entity.url,
+            descendantUrl: entity.url,
+            depth: 0,
+          })
+          .onConflictDoNothing()
+
+        if (entity.parent) {
+          await tx.execute(sql`
+            INSERT INTO ${entityLineage} (
+              tenant_id,
+              ancestor_url,
+              descendant_url,
+              depth
+            )
+            SELECT
+              ${this.tenantId},
+              ancestor_url,
+              ${entity.url},
+              depth + 1
+            FROM ${entityLineage}
+            WHERE tenant_id = ${this.tenantId}
+              AND descendant_url = ${entity.parent}
+            ON CONFLICT DO NOTHING
+          `)
+        }
+
+        await tx.execute(sql`
+          INSERT INTO ${entityEffectivePermissions} (
+            tenant_id,
+            entity_url,
+            source_entity_url,
+            source_grant_id,
+            permission,
+            subject_kind,
+            subject_value,
+            expires_at
+          )
+          SELECT
+            ${this.tenantId},
+            ${entity.url},
+            grants.entity_url,
+            grants.id,
+            grants.permission,
+            grants.subject_kind,
+            grants.subject_value,
+            grants.expires_at
+          FROM ${entityPermissionGrants} grants
+          JOIN ${entityLineage} lineage
+            ON lineage.tenant_id = grants.tenant_id
+           AND lineage.ancestor_url = grants.entity_url
+           AND lineage.descendant_url = ${entity.url}
+          WHERE grants.tenant_id = ${this.tenantId}
+            AND grants.propagation = 'descendants'
+            AND (grants.expires_at IS NULL OR grants.expires_at > now())
+          ON CONFLICT DO NOTHING
+        `)
 
         return parseInt(result[0]!.txid)
       })
@@ -691,12 +877,9 @@ export class PostgresRegistry {
     streamPath: string
   ): Promise<ElectricAgentsEntity | null> {
     const mainSuffix = `/main`
-    const errorSuffix = `/error`
     let entityUrl: string | null = null
     if (streamPath.endsWith(mainSuffix)) {
       entityUrl = streamPath.slice(0, -mainSuffix.length)
-    } else if (streamPath.endsWith(errorSuffix)) {
-      entityUrl = streamPath.slice(0, -errorSuffix.length)
     }
     if (!entityUrl) return null
     return this.getEntity(entityUrl)
@@ -709,6 +892,11 @@ export class PostgresRegistry {
     limit?: number
     offset?: number
     created_by?: string
+    readableBy?: {
+      principalUrl: string
+      principalKind: string
+      bypass?: boolean
+    }
   }): Promise<{ entities: Array<ElectricAgentsEntity>; total: number }> {
     const conditions = [eq(entities.tenantId, this.tenantId)]
     if (filter?.type) conditions.push(eq(entities.type, filter.type))
@@ -716,6 +904,25 @@ export class PostgresRegistry {
     if (filter?.parent) conditions.push(eq(entities.parent, filter.parent))
     if (filter?.created_by)
       conditions.push(eq(entities.createdBy, filter.created_by))
+    if (filter?.readableBy && !filter.readableBy.bypass) {
+      conditions.push(sql`(
+        ${entities.createdBy} = ${filter.readableBy.principalUrl}
+        OR ${entities.url} IN (
+          SELECT ${entityEffectivePermissions.entityUrl}
+          FROM ${entityEffectivePermissions}
+          WHERE ${entityEffectivePermissions.tenantId} = ${this.tenantId}
+            AND ${entityEffectivePermissions.permission} IN ('read', 'manage')
+            AND (${entityEffectivePermissions.expiresAt} IS NULL OR ${entityEffectivePermissions.expiresAt} > now())
+            AND (
+              (${entityEffectivePermissions.subjectKind} = 'principal'
+                AND ${entityEffectivePermissions.subjectValue} = ${filter.readableBy.principalUrl})
+              OR
+              (${entityEffectivePermissions.subjectKind} = 'principal_kind'
+                AND ${entityEffectivePermissions.subjectValue} = ${filter.readableBy.principalKind})
+            )
+        )
+      )`)
+    }
 
     const whereClause = and(...conditions)
 
@@ -744,6 +951,431 @@ export class PostgresRegistry {
       entities: rows.map((row) => this.rowToEntity(row)),
       total,
     }
+  }
+
+  async createEntityTypePermissionGrant(
+    input: CreateEntityTypePermissionGrantInput
+  ): Promise<EntityTypePermissionGrant> {
+    const [row] = await this.db
+      .insert(entityTypePermissionGrants)
+      .values({
+        tenantId: this.tenantId,
+        entityType: input.entityType,
+        permission: input.permission,
+        subjectKind: input.subjectKind,
+        subjectValue: input.subjectValue,
+        createdBy: input.createdBy ?? null,
+        expiresAt: input.expiresAt ?? null,
+      })
+      .returning()
+    return this.rowToEntityTypePermissionGrant(row!)
+  }
+
+  async ensureEntityTypePermissionGrant(
+    input: CreateEntityTypePermissionGrantInput
+  ): Promise<EntityTypePermissionGrant> {
+    const [existing] = await this.db
+      .select()
+      .from(entityTypePermissionGrants)
+      .where(
+        and(
+          eq(entityTypePermissionGrants.tenantId, this.tenantId),
+          eq(entityTypePermissionGrants.entityType, input.entityType),
+          eq(entityTypePermissionGrants.permission, input.permission),
+          eq(entityTypePermissionGrants.subjectKind, input.subjectKind),
+          eq(entityTypePermissionGrants.subjectValue, input.subjectValue),
+          input.expiresAt
+            ? eq(entityTypePermissionGrants.expiresAt, input.expiresAt)
+            : sql`${entityTypePermissionGrants.expiresAt} IS NULL`
+        )
+      )
+      .limit(1)
+    if (existing) return this.rowToEntityTypePermissionGrant(existing)
+
+    return await this.createEntityTypePermissionGrant(input)
+  }
+
+  async listEntityTypePermissionGrants(
+    entityType: string
+  ): Promise<Array<EntityTypePermissionGrant>> {
+    const rows = await this.db
+      .select()
+      .from(entityTypePermissionGrants)
+      .where(
+        and(
+          eq(entityTypePermissionGrants.tenantId, this.tenantId),
+          eq(entityTypePermissionGrants.entityType, entityType)
+        )
+      )
+      .orderBy(entityTypePermissionGrants.id)
+    return rows.map((row) => this.rowToEntityTypePermissionGrant(row))
+  }
+
+  async deleteEntityTypePermissionGrant(
+    entityType: string,
+    grantId: number
+  ): Promise<boolean> {
+    const rows = await this.db
+      .delete(entityTypePermissionGrants)
+      .where(
+        and(
+          eq(entityTypePermissionGrants.tenantId, this.tenantId),
+          eq(entityTypePermissionGrants.entityType, entityType),
+          eq(entityTypePermissionGrants.id, grantId)
+        )
+      )
+      .returning({ id: entityTypePermissionGrants.id })
+    return rows.length > 0
+  }
+
+  async hasEntityTypePermission(
+    entityType: string,
+    permission: EntityTypePermission,
+    subject: { principalUrl: string; principalKind: string }
+  ): Promise<boolean> {
+    const permissions = [permission, `manage`] as const
+    const rows = await this.db
+      .select({ id: entityTypePermissionGrants.id })
+      .from(entityTypePermissionGrants)
+      .where(
+        and(
+          eq(entityTypePermissionGrants.tenantId, this.tenantId),
+          eq(entityTypePermissionGrants.entityType, entityType),
+          inArray(entityTypePermissionGrants.permission, [...permissions]),
+          sql`(${entityTypePermissionGrants.expiresAt} IS NULL OR ${entityTypePermissionGrants.expiresAt} > now())`,
+          sql`(
+            (${entityTypePermissionGrants.subjectKind} = 'principal'
+              AND ${entityTypePermissionGrants.subjectValue} = ${subject.principalUrl})
+            OR
+            (${entityTypePermissionGrants.subjectKind} = 'principal_kind'
+              AND ${entityTypePermissionGrants.subjectValue} = ${subject.principalKind})
+          )`
+        )
+      )
+      .limit(1)
+    return rows.length > 0
+  }
+
+  async createEntityPermissionGrant(
+    input: CreateEntityPermissionGrantInput
+  ): Promise<EntityPermissionGrant> {
+    return await this.db.transaction(async (tx) => {
+      const [row] = await tx
+        .insert(entityPermissionGrants)
+        .values({
+          tenantId: this.tenantId,
+          entityUrl: input.entityUrl,
+          permission: input.permission,
+          subjectKind: input.subjectKind,
+          subjectValue: input.subjectValue,
+          propagation: input.propagation ?? `self`,
+          copyToChildren: input.copyToChildren ?? false,
+          createdBy: input.createdBy ?? null,
+          expiresAt: input.expiresAt ?? null,
+        })
+        .returning()
+      await this.materializeEntityPermissionGrant(tx, row!)
+      return this.rowToEntityPermissionGrant(row!)
+    })
+  }
+
+  async listEntityPermissionGrants(
+    entityUrl: string
+  ): Promise<Array<EntityPermissionGrant>> {
+    const rows = await this.db
+      .select()
+      .from(entityPermissionGrants)
+      .where(
+        and(
+          eq(entityPermissionGrants.tenantId, this.tenantId),
+          eq(entityPermissionGrants.entityUrl, entityUrl)
+        )
+      )
+      .orderBy(entityPermissionGrants.id)
+    return rows.map((row) => this.rowToEntityPermissionGrant(row))
+  }
+
+  async deleteEntityPermissionGrant(
+    entityUrl: string,
+    grantId: number
+  ): Promise<boolean> {
+    return await this.db.transaction(async (tx) => {
+      await tx
+        .delete(entityEffectivePermissions)
+        .where(
+          and(
+            eq(entityEffectivePermissions.tenantId, this.tenantId),
+            eq(entityEffectivePermissions.sourceGrantId, grantId)
+          )
+        )
+      const rows = await tx
+        .delete(entityPermissionGrants)
+        .where(
+          and(
+            eq(entityPermissionGrants.tenantId, this.tenantId),
+            eq(entityPermissionGrants.entityUrl, entityUrl),
+            eq(entityPermissionGrants.id, grantId)
+          )
+        )
+        .returning({ id: entityPermissionGrants.id })
+      return rows.length > 0
+    })
+  }
+
+  async copyEntityPermissionGrantsForSpawn(
+    parentEntityUrl: string,
+    childEntityUrl: string,
+    createdBy?: string
+  ): Promise<Array<EntityPermissionGrant>> {
+    const parentGrants = await this.db
+      .select()
+      .from(entityPermissionGrants)
+      .where(
+        and(
+          eq(entityPermissionGrants.tenantId, this.tenantId),
+          eq(entityPermissionGrants.entityUrl, parentEntityUrl),
+          eq(entityPermissionGrants.copyToChildren, true),
+          sql`(${entityPermissionGrants.expiresAt} IS NULL OR ${entityPermissionGrants.expiresAt} > now())`
+        )
+      )
+
+    const copied: Array<EntityPermissionGrant> = []
+    for (const grant of parentGrants) {
+      copied.push(
+        await this.createEntityPermissionGrant({
+          entityUrl: childEntityUrl,
+          permission: grant.permission as EntityPermission,
+          subjectKind: grant.subjectKind as PermissionSubjectKind,
+          subjectValue: grant.subjectValue,
+          propagation: `self`,
+          copyToChildren: grant.copyToChildren,
+          createdBy,
+          expiresAt: grant.expiresAt ?? undefined,
+        })
+      )
+    }
+    return copied
+  }
+
+  async hasEntityPermission(
+    entityUrl: string,
+    permission: EntityPermission,
+    subject: { principalUrl: string; principalKind: string }
+  ): Promise<boolean> {
+    const permissions = [permission, `manage`] as const
+    const rows = await this.db
+      .select({ id: entityEffectivePermissions.id })
+      .from(entityEffectivePermissions)
+      .where(
+        and(
+          eq(entityEffectivePermissions.tenantId, this.tenantId),
+          eq(entityEffectivePermissions.entityUrl, entityUrl),
+          inArray(entityEffectivePermissions.permission, [...permissions]),
+          sql`(${entityEffectivePermissions.expiresAt} IS NULL OR ${entityEffectivePermissions.expiresAt} > now())`,
+          sql`(
+            (${entityEffectivePermissions.subjectKind} = 'principal'
+              AND ${entityEffectivePermissions.subjectValue} = ${subject.principalUrl})
+            OR
+            (${entityEffectivePermissions.subjectKind} = 'principal_kind'
+              AND ${entityEffectivePermissions.subjectValue} = ${subject.principalKind})
+          )`
+        )
+      )
+      .limit(1)
+    return rows.length > 0
+  }
+
+  async replaceSharedStateLink(
+    ownerEntityUrl: string,
+    manifestKey: string,
+    sharedStateId?: string
+  ): Promise<void> {
+    await this.db
+      .delete(sharedStateLinks)
+      .where(
+        and(
+          eq(sharedStateLinks.tenantId, this.tenantId),
+          eq(sharedStateLinks.ownerEntityUrl, ownerEntityUrl),
+          eq(sharedStateLinks.manifestKey, manifestKey)
+        )
+      )
+
+    if (!sharedStateId) return
+
+    await this.db
+      .insert(sharedStateLinks)
+      .values({
+        tenantId: this.tenantId,
+        ownerEntityUrl,
+        manifestKey,
+        sharedStateId,
+      })
+      .onConflictDoUpdate({
+        target: [
+          sharedStateLinks.tenantId,
+          sharedStateLinks.ownerEntityUrl,
+          sharedStateLinks.manifestKey,
+        ],
+        set: {
+          sharedStateId,
+          updatedAt: new Date(),
+        },
+      })
+  }
+
+  async listSharedStateLinkedEntityUrls(
+    sharedStateId: string
+  ): Promise<Array<string>> {
+    const rows = await this.db
+      .selectDistinct({ ownerEntityUrl: sharedStateLinks.ownerEntityUrl })
+      .from(sharedStateLinks)
+      .where(
+        and(
+          eq(sharedStateLinks.tenantId, this.tenantId),
+          eq(sharedStateLinks.sharedStateId, sharedStateId)
+        )
+      )
+    return rows.map((row) => row.ownerEntityUrl)
+  }
+
+  async pruneExpiredPermissionGrants(
+    now: Date = new Date(),
+    options: { force?: boolean } = {}
+  ): Promise<void> {
+    if (this.permissionPrunePromise) return await this.permissionPrunePromise
+
+    const startedAt = Date.now()
+    if (
+      !options.force &&
+      startedAt - this.lastPermissionPruneStartedAt <
+        PERMISSION_PRUNE_INTERVAL_MS
+    ) {
+      return
+    }
+
+    this.lastPermissionPruneStartedAt = startedAt
+    const promise = this.pruneExpiredPermissionGrantsNow(now)
+    this.permissionPrunePromise = promise
+    try {
+      await promise
+    } catch (error) {
+      this.lastPermissionPruneStartedAt = 0
+      throw error
+    } finally {
+      if (this.permissionPrunePromise === promise) {
+        this.permissionPrunePromise = null
+      }
+    }
+  }
+
+  private async pruneExpiredPermissionGrantsNow(now: Date): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      const expiredEntityGrantIds = await tx
+        .select({ id: entityPermissionGrants.id })
+        .from(entityPermissionGrants)
+        .where(
+          and(
+            eq(entityPermissionGrants.tenantId, this.tenantId),
+            sql`${entityPermissionGrants.expiresAt} IS NOT NULL`,
+            lt(entityPermissionGrants.expiresAt, now)
+          )
+        )
+      const ids = expiredEntityGrantIds.map((row) => row.id)
+      if (ids.length > 0) {
+        await tx
+          .delete(entityEffectivePermissions)
+          .where(
+            and(
+              eq(entityEffectivePermissions.tenantId, this.tenantId),
+              inArray(entityEffectivePermissions.sourceGrantId, ids)
+            )
+          )
+        await tx
+          .delete(entityPermissionGrants)
+          .where(
+            and(
+              eq(entityPermissionGrants.tenantId, this.tenantId),
+              inArray(entityPermissionGrants.id, ids)
+            )
+          )
+      }
+
+      await tx
+        .delete(entityEffectivePermissions)
+        .where(
+          and(
+            eq(entityEffectivePermissions.tenantId, this.tenantId),
+            sql`${entityEffectivePermissions.expiresAt} IS NOT NULL`,
+            lt(entityEffectivePermissions.expiresAt, now)
+          )
+        )
+      await tx
+        .delete(entityTypePermissionGrants)
+        .where(
+          and(
+            eq(entityTypePermissionGrants.tenantId, this.tenantId),
+            sql`${entityTypePermissionGrants.expiresAt} IS NOT NULL`,
+            lt(entityTypePermissionGrants.expiresAt, now)
+          )
+        )
+    })
+  }
+
+  private async materializeEntityPermissionGrant(
+    tx: RegistryTransaction,
+    grant: typeof entityPermissionGrants.$inferSelect
+  ): Promise<void> {
+    await tx
+      .delete(entityEffectivePermissions)
+      .where(
+        and(
+          eq(entityEffectivePermissions.tenantId, this.tenantId),
+          eq(entityEffectivePermissions.sourceGrantId, grant.id)
+        )
+      )
+
+    if (grant.propagation === `descendants`) {
+      await tx.execute(sql`
+        INSERT INTO ${entityEffectivePermissions} (
+          tenant_id,
+          entity_url,
+          source_entity_url,
+          source_grant_id,
+          permission,
+          subject_kind,
+          subject_value,
+          expires_at
+        )
+        SELECT
+          ${this.tenantId},
+          descendant_url,
+          ${grant.entityUrl},
+          ${grant.id},
+          ${grant.permission},
+          ${grant.subjectKind},
+          ${grant.subjectValue},
+          ${grant.expiresAt}
+        FROM ${entityLineage}
+        WHERE tenant_id = ${this.tenantId}
+          AND ancestor_url = ${grant.entityUrl}
+        ON CONFLICT DO NOTHING
+      `)
+      return
+    }
+
+    await tx
+      .insert(entityEffectivePermissions)
+      .values({
+        tenantId: this.tenantId,
+        entityUrl: grant.entityUrl,
+        sourceEntityUrl: grant.entityUrl,
+        sourceGrantId: grant.id,
+        permission: grant.permission,
+        subjectKind: grant.subjectKind,
+        subjectValue: grant.subjectValue,
+        expiresAt: grant.expiresAt,
+      })
+      .onConflictDoNothing()
   }
 
   async updateStatus(entityUrl: string, status: EntityStatus): Promise<void> {
@@ -987,6 +1619,8 @@ export class PostgresRegistry {
     sourceRef: string
     tags: EntityTags
     streamUrl: string
+    principalUrl: string
+    principalKind: string
   }): Promise<EntityBridgeRow> {
     await this.db
       .insert(entityBridges)
@@ -995,6 +1629,8 @@ export class PostgresRegistry {
         sourceRef: row.sourceRef,
         tags: normalizeTags(row.tags),
         streamUrl: row.streamUrl,
+        principalUrl: row.principalUrl,
+        principalKind: row.principalKind,
       })
       .onConflictDoNothing()
 
@@ -1295,6 +1931,9 @@ export class PostgresRegistry {
       state_schemas: row.stateSchemas as
         | Record<string, Record<string, unknown>>
         | undefined,
+      slash_commands:
+        (row.slashCommands as ElectricAgentsEntityType[`slash_commands`]) ??
+        undefined,
       serve_endpoint: row.serveEndpoint ?? undefined,
       default_dispatch_policy:
         (row.defaultDispatchPolicy as ElectricAgentsEntityType[`default_dispatch_policy`]) ??
@@ -1305,6 +1944,40 @@ export class PostgresRegistry {
     }
   }
 
+  private rowToEntityTypePermissionGrant(
+    row: typeof entityTypePermissionGrants.$inferSelect
+  ): EntityTypePermissionGrant {
+    return {
+      id: row.id,
+      entity_type: row.entityType,
+      permission: row.permission as EntityTypePermission,
+      subject_kind: row.subjectKind as PermissionSubjectKind,
+      subject_value: row.subjectValue,
+      created_by: row.createdBy ?? undefined,
+      expires_at: row.expiresAt?.toISOString(),
+      created_at: row.createdAt.toISOString(),
+      updated_at: row.updatedAt.toISOString(),
+    }
+  }
+
+  private rowToEntityPermissionGrant(
+    row: typeof entityPermissionGrants.$inferSelect
+  ): EntityPermissionGrant {
+    return {
+      id: row.id,
+      entity_url: row.entityUrl,
+      permission: row.permission as EntityPermission,
+      subject_kind: row.subjectKind as PermissionSubjectKind,
+      subject_value: row.subjectValue,
+      propagation: row.propagation as EntityPermissionPropagation,
+      copy_to_children: row.copyToChildren,
+      created_by: row.createdBy ?? undefined,
+      expires_at: row.expiresAt?.toISOString(),
+      created_at: row.createdAt.toISOString(),
+      updated_at: row.updatedAt.toISOString(),
+    }
+  }
+
   private rowToEntity(row: typeof entities.$inferSelect): ElectricAgentsEntity {
     return {
       url: row.url,
@@ -1312,7 +1985,6 @@ export class PostgresRegistry {
       status: assertEntityStatus(row.status),
       streams: {
         main: `${row.url}/main`,
-        error: `${row.url}/error`,
       },
       subscription_id: row.subscriptionId,
       dispatch_policy:
@@ -1321,6 +1993,8 @@ export class PostgresRegistry {
       write_token: row.writeToken,
       tags: (row.tags as EntityTags | null | undefined) ?? {},
       spawn_args: row.spawnArgs as Record<string, unknown> | undefined,
+      sandbox:
+        (row.sandbox as ElectricAgentsEntity[`sandbox`] | null) ?? undefined,
       parent: row.parent ?? undefined,
       created_by: row.createdBy ?? undefined,
       type_revision: row.typeRevision ?? undefined,
@@ -1359,6 +2033,8 @@ export class PostgresRegistry {
       sourceRef: row.sourceRef,
       tags: (row.tags as EntityTags | null | undefined) ?? {},
       streamUrl: row.streamUrl,
+      principalUrl: row.principalUrl ?? undefined,
+      principalKind: row.principalKind ?? undefined,
       shapeHandle: row.shapeHandle ?? undefined,
       shapeOffset: row.shapeOffset ?? undefined,
       lastObserverActivityAt: row.lastObserverActivityAt,
@@ -1409,6 +2085,13 @@ export class PostgresRegistry {
       kind: assertRunnerKind(row.kind),
       admin_status: assertRunnerAdminStatus(row.adminStatus),
       wake_stream: row.wakeStream,
+      sandbox_profiles:
+        (row.sandboxProfiles as Array<{
+          name: string
+          label: string
+          description?: string
+          remote?: boolean
+        }> | null) ?? [],
       created_at: row.createdAt.toISOString(),
       updated_at: row.updatedAt.toISOString(),
     }

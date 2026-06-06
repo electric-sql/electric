@@ -1,6 +1,6 @@
 {
   "name": "@electric-ax/agents-server-conformance-tests",
-  "version": "0.1.7",
+  "version": "0.1.11",
   "description": "Conformance test suite for Electric Agents server implementations",
   "author": "Durable Stream contributors",
   "license": "Apache-2.0",
@@ -41,8 +41,8 @@
     "stylecheck": "eslint . --quiet"
   },
   "dependencies": {
-    "@durable-streams/client": "https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@5d5c217",
-    "@electric-sql/client": "^1.5.19",
+    "@durable-streams/client": "^0.2.6",
+    "@electric-sql/client": "^1.5.20",
     "fast-check": "^4.6.0",
     "vitest": "^4.1.0"
   },

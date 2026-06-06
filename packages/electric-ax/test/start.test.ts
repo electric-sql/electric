@@ -182,4 +182,21 @@ describe(`waitForElectricAgentsServer`, () => {
       })
     )
   })
+
+  it(`checks health below tenant path prefixes`, async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(null, { status: 200 }))
+
+    await waitForElectricAgentsServer(`http://agents.test/t/svc-123/v1`, {
+      fetchImpl,
+      timeoutMs: 100,
+      intervalMs: 0,
+    })
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      `http://agents.test/t/svc-123/v1/_electric/health`,
+      expect.any(Object)
+    )
+  })
 })

@@ -2,12 +2,16 @@ import { createContext, useContext, useMemo, type ReactNode } from 'react'
 import {
   createEntitiesCollection,
   createEntityTypesCollection,
+  createEntityEffectivePermissionsCollection,
   createRunnersCollection,
+  createUsersCollection,
   signalEntity,
   type EntitiesCollection,
+  type EntityEffectivePermissionsCollection,
   type EntityTypesCollection,
   type EntitySignal,
   type RunnersCollection,
+  type UsersCollection,
 } from './agentsClient'
 
 type AgentsContextValue = {
@@ -15,6 +19,8 @@ type AgentsContextValue = {
   entitiesCollection: EntitiesCollection
   entityTypesCollection: EntityTypesCollection
   runnersCollection: RunnersCollection
+  usersCollection: UsersCollection
+  entityEffectivePermissionsCollection: EntityEffectivePermissionsCollection
   signalEntity: (input: {
     entityUrl: string
     signal: EntitySignal
@@ -38,6 +44,9 @@ export function AgentsProvider({
       entitiesCollection: createEntitiesCollection(serverUrl),
       entityTypesCollection: createEntityTypesCollection(serverUrl),
       runnersCollection: createRunnersCollection(serverUrl),
+      usersCollection: createUsersCollection(serverUrl),
+      entityEffectivePermissionsCollection:
+        createEntityEffectivePermissionsCollection(serverUrl),
       signalEntity: (input) => signalEntity({ baseUrl: serverUrl, ...input }),
     }
   }, [serverUrl])

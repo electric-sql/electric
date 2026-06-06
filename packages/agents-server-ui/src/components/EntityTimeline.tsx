@@ -10,7 +10,7 @@ import {
 } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useLiveQuery } from '@tanstack/react-db'
-import { inArray } from '@durable-streams/state'
+import { eq, inArray } from '@durable-streams/state/db'
 import {
   measureElement as defaultMeasureElement,
   useVirtualizer,
@@ -31,9 +31,20 @@ import {
 import { usePaneFindAdapterRegistration } from '../hooks/usePaneFind'
 import { useOptionalWorkspace } from '../hooks/useWorkspace'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
+import {
+  attachmentDisplayName,
+  attachmentDownloadUrl,
+  isAttachmentManifest,
+} from '../lib/attachments'
+import {
+  resolveSandboxProfile,
+  sandboxDisplayLabel,
+} from '../lib/entityRuntime'
 import { warmMarkdownRenderCache } from '../lib/markdownRenderCache'
+import { useCurrentPrincipal } from '../hooks/useCurrentPrincipal'
 import { Icon, IconButton, ScrollArea, Stack, Text, Tooltip } from '../ui'
 import { UserMessage } from './UserMessage'
+import type { ForkFromHereAction, UserMessageAttachment } from './UserMessage'
 import { AgentResponseLive } from './AgentResponse'
 import { InlineEventCard } from './InlineEventCard'
 import { InlineStatusBadge } from './InlineStatusBadge'
@@ -45,7 +56,9 @@ import {
   formatAbsoluteDateTimeVerbose,
   formatChatTimestamp,
 } from '../lib/formatTime'
+import { readTextPayload } from '../lib/sendMessage'
 import styles from './EntityTimeline.module.css'
+import type { ElectricUser } from '../lib/ElectricAgentsProvider'
 import type {
   EntityTimelineSection,
   EntityTimelineQueryRow,
@@ -64,12 +77,28 @@ function renderRowKey(row: RenderTimelineRow): string {
   return row.$key
 }
 
-function readInboxText(payload: unknown): string {
-  if (payload && typeof payload === `object`) {
-    const text = (payload as { text?: unknown }).text
-    if (typeof text === `string`) return text
+function stringifyPayload(payload: unknown, spaces?: number): string {
+  if (payload == null) return ``
+  if (typeof payload === `string`) return payload
+  if (typeof payload === `object`) {
+    const text = readTextPayload(payload)
+    if (text) return text
+    try {
+      return JSON.stringify(payload, null, spaces) ?? String(payload)
+    } catch {
+      return String(payload)
+    }
   }
-  return typeof payload === `string` ? payload : ``
+  return String(payload)
+}
+
+function readInboxText(payload: unknown): string {
+  const text = readTextPayload(payload)
+  return text || stringifyPayload(payload)
+}
+
+function readInboxPayloadDisplay(payload: unknown): string {
+  return stringifyPayload(payload, 2)
 }
 
 function stringifySearchPayload(value: unknown): string {
@@ -241,6 +270,7 @@ function timelineRowSearchText(
 }
 
 function timelineRowLabel(row: RenderTimelineRow): string {
+  if (row.inbox?.from_agent) return `Agent message`
   if (row.inbox) return `User message`
   if (row.wake) return `Wake`
   if (row.signal) return `Signal`
@@ -248,8 +278,36 @@ function timelineRowLabel(row: RenderTimelineRow): string {
   return `Agent response`
 }
 
-function wakeReason(section: WakeSection): string {
+function firstSelfSendWakeChange(
+  section: WakeSection,
+  entityUrl?: string | null
+): WakeSection[`payload`][`changes`][number] | null {
+  if (!entityUrl || section.payload.source !== entityUrl) return null
+  return (
+    section.payload.changes.find((change) => change.collection === `inbox`) ??
+    null
+  )
+}
+
+function isSelfSendWake(
+  section: WakeSection,
+  entityUrl?: string | null
+): boolean {
+  return firstSelfSendWakeChange(section, entityUrl) !== null
+}
+
+function wakeSelfSendMessage(
+  section: WakeSection,
+  entityUrl?: string | null
+): string | null {
+  const change = firstSelfSendWakeChange(section, entityUrl)
+  if (!change) return null
+  return readInboxPayloadDisplay(change.payload)
+}
+
+function wakeReason(section: WakeSection, entityUrl?: string | null): string {
   const { payload } = section
+  if (isSelfSendWake(section, entityUrl)) return `sent to itself`
   if (payload.timeout) return `timeout`
   if (payload.finished_child) {
     return `child ${payload.finished_child.run_status}`
@@ -263,10 +321,13 @@ function wakeReason(section: WakeSection): string {
   return payload.source
 }
 
-function wakeSectionText(section: WakeSection): string {
+function wakeSectionText(
+  section: WakeSection,
+  entityUrl?: string | null
+): string {
   return [
     `woke`,
-    wakeReason(section),
+    wakeReason(section, entityUrl),
     section.payload.source,
     ...wakeDetails(section).map((detail) => `${detail.label} ${detail.value}`),
   ].join(` `)
@@ -274,12 +335,15 @@ function wakeSectionText(section: WakeSection): string {
 
 function WakeTimelineRow({
   section,
+  entityUrl,
 }: {
   section: WakeSection
+  entityUrl?: string | null
 }): React.ReactElement {
-  const reason = wakeReason(section)
-  const details = wakeDetails(section)
+  const reason = wakeReason(section, entityUrl)
+  const details = wakeDetails(section, entityUrl)
   const childOutput = wakeChildOutput(section)
+  const selfSendMessage = wakeSelfSendMessage(section, entityUrl)
   return (
     <div className={styles.manifestRow}>
       <InlineEventCard
@@ -297,8 +361,56 @@ function WakeTimelineRow({
             </div>
           ))}
         </div>
+        {selfSendMessage ? (
+          <pre className={styles.manifestJson}>{selfSendMessage}</pre>
+        ) : null}
         {childOutput ? (
           <pre className={styles.manifestJson}>{childOutput.value}</pre>
+        ) : null}
+      </InlineEventCard>
+    </div>
+  )
+}
+
+function AgentInboxMessageRow({
+  inbox,
+  entityUrl,
+}: {
+  inbox: NonNullable<RenderTimelineRow[`inbox`]>
+  entityUrl?: string | null
+}): React.ReactElement {
+  const parsed = Date.parse(inbox.timestamp)
+  const timestamp = Number.isFinite(parsed) ? parsed : Date.now()
+  const fromAgent = inbox.from_agent
+  const isSelfSend = Boolean(fromAgent && fromAgent === entityUrl)
+  const payloadText = readInboxPayloadDisplay(inbox.payload)
+  const details = [
+    { label: `From agent`, value: fromAgent ?? `unknown` },
+    { label: `From principal`, value: inbox.from_principal ?? inbox.from },
+    {
+      label: `Time`,
+      value: formatAbsoluteDateTimeVerbose(timestamp),
+    },
+  ]
+  return (
+    <div className={styles.manifestRow}>
+      <InlineEventCard
+        icon={Radio}
+        title={isSelfSend ? `sent to itself` : `agent message`}
+        summary={`${isSelfSend ? `self-send` : fromAgent} · ${formatChatTimestamp(timestamp)}`}
+        defaultExpanded={false}
+        headerSurface
+      >
+        <div className={styles.manifestDetails}>
+          {details.map((detail) => (
+            <div key={detail.label} className={styles.manifestDetail}>
+              <span>{detail.label}</span>
+              <strong>{detail.value}</strong>
+            </div>
+          ))}
+        </div>
+        {payloadText ? (
+          <pre className={styles.manifestJson}>{payloadText}</pre>
         ) : null}
       </InlineEventCard>
     </div>
@@ -354,14 +466,31 @@ function signalSummary(
 }
 
 function wakeDetails(
-  section: WakeSection
+  section: WakeSection,
+  entityUrl?: string | null
 ): Array<{ label: string; value: string }> {
   const { payload } = section
+  const selfSendChange = firstSelfSendWakeChange(section, entityUrl)
   const details = [
     { label: `Source`, value: payload.source },
-    { label: `Trigger`, value: wakeReason(section) },
+    { label: `Trigger`, value: wakeReason(section, entityUrl) },
     { label: `Time`, value: formatAbsoluteDateTimeVerbose(section.timestamp) },
   ]
+
+  if (selfSendChange) {
+    details.push({
+      label: `From`,
+      value:
+        selfSendChange.from_agent ??
+        selfSendChange.from_principal ??
+        selfSendChange.from ??
+        payload.source,
+    })
+    const message = wakeSelfSendMessage(section, entityUrl)
+    if (message) {
+      details.push({ label: `Message`, value: message })
+    }
+  }
 
   if (payload.changes.length > 0) {
     details.push({
@@ -595,6 +724,8 @@ function manifestKindLabel(manifest: Manifest): string {
       return `Shared state`
     case `effect`:
       return `Effect`
+    case `attachment`:
+      return `Attachment`
     case `context`:
       return `Context`
     case `schedule`:
@@ -610,6 +741,7 @@ function manifestTitle(manifest: Manifest): string {
       return manifest.sourceRef
     case `shared-state`:
     case `effect`:
+    case `attachment`:
     case `context`:
     case `schedule`:
       return manifest.id
@@ -626,6 +758,8 @@ function manifestMeta(manifest: Manifest): string {
       return `${manifest.mode} · ${Object.keys(manifest.collections).join(`, `)}`
     case `effect`:
       return manifest.function_ref
+    case `attachment`:
+      return `${manifest.mimeType} · ${manifest.status}`
     case `context`:
       return `${Object.keys(manifest.attrs).length} attrs`
     case `schedule`:
@@ -665,6 +799,15 @@ function manifestDetails(
         { label: `Function`, value: manifest.function_ref },
         { label: `Config`, value: shortJson(manifest.config) },
       ]
+    case `attachment`:
+      return [
+        { label: `File`, value: attachmentDisplayName(manifest) },
+        { label: `MIME`, value: manifest.mimeType },
+        {
+          label: `Subject`,
+          value: `${manifest.subject.type}:${manifest.subject.key}`,
+        },
+      ]
     case `context`:
       return [
         { label: `Name`, value: manifest.name },
@@ -688,6 +831,7 @@ function manifestIcon(manifest: Manifest) {
   if (getManifestStateSourceId(manifest)) return Database
   if (getManifestEntityUrl(manifest)) return GitBranch
   if (manifest.kind === `schedule`) return Radio
+  if (manifest.kind === `attachment`) return FileJson
   return FileJson
 }
 
@@ -764,10 +908,14 @@ const TimelineRow = memo(function TimelineRow({
   renderWidth,
   entityUrl,
   tileId,
+  attachmentsByInboxKey,
   entityStatusByUrl,
+  currentPrincipal,
+  usersById,
   stopUserMessageKey,
   stopPending,
   onStopGeneration,
+  onForkFromHere,
   onRunSearchTextChange,
 }: {
   row: RenderTimelineRow
@@ -778,13 +926,22 @@ const TimelineRow = memo(function TimelineRow({
   renderWidth: number
   entityUrl: string | null
   tileId: string | null
+  attachmentsByInboxKey: Map<string, Array<UserMessageAttachment>>
   entityStatusByUrl: Map<string, EntityStatus>
+  currentPrincipal: string
+  usersById: Map<string, ElectricUser>
   stopUserMessageKey: string | null
   stopPending: boolean
   onStopGeneration?: () => void
+  /** When set on a user-message row, enables the "Fork from here" hover
+   * button. Caller pre-resolved the pointer; we just invoke. */
+  onForkFromHere?: ForkFromHereAction
   onRunSearchTextChange: (rowKey: string, text: string) => void
 }): React.ReactElement {
   if (row.inbox) {
+    if (row.inbox.from_agent) {
+      return <AgentInboxMessageRow inbox={row.inbox} entityUrl={entityUrl} />
+    }
     const timestamp = Date.parse(row.inbox.timestamp)
     return (
       <UserMessage
@@ -795,11 +952,15 @@ const TimelineRow = memo(function TimelineRow({
           timestamp: Number.isFinite(timestamp) ? timestamp : Date.now(),
           isInitial: isInitialUserMessage,
         }}
+        attachments={attachmentsByInboxKey.get(row.inbox.key)}
+        currentPrincipal={currentPrincipal}
+        usersById={usersById}
         showStop={
           stopUserMessageKey !== null && row.$key === stopUserMessageKey
         }
         stopPending={stopPending}
         onStop={onStopGeneration}
+        forkFromHere={onForkFromHere}
       />
     )
   }
@@ -812,6 +973,7 @@ const TimelineRow = memo(function TimelineRow({
           payload: row.wake.payload,
           timestamp: Date.parse(row.wake.payload.timestamp),
         }}
+        entityUrl={entityUrl}
       />
     )
   }
@@ -852,6 +1014,7 @@ export function EntityTimeline({
   loading,
   error,
   entityStopped,
+  baseUrl,
   cacheKey,
   tileId,
   entityUrl = null,
@@ -859,11 +1022,13 @@ export function EntityTimeline({
   scrollToBottomSignal = 0,
   stopPending = false,
   onStopGeneration,
+  forkFromHereByInboxKey,
 }: {
   rows: Array<EntityTimelineQueryRow>
   loading: boolean
   error: string | null
   entityStopped: boolean
+  baseUrl: string
   cacheKey?: string | null
   tileId?: string | null
   entityUrl?: string | null
@@ -871,8 +1036,16 @@ export function EntityTimeline({
   scrollToBottomSignal?: number
   stopPending?: boolean
   onStopGeneration?: () => void
+  /**
+   * Per-inbox-row click handlers for the "Fork from here" hover button.
+   * The map is keyed by the row's `$key`; rows not in the map (or when
+   * the prop is omitted) get no fork affordance. The caller resolves
+   * the fork pointer and runs the fork → navigate flow.
+   */
+  forkFromHereByInboxKey?: Map<string, ForkFromHereAction>
 }): React.ReactElement {
-  const { entitiesCollection } = useElectricAgents()
+  const { entitiesCollection, runnersCollection, usersCollection } =
+    useElectricAgents()
   const referencedEntityUrlKey = useMemo(
     () => stableEntityUrlKey(entities.map((entity) => entity.url)),
     [entities]
@@ -896,6 +1069,48 @@ export function EntityTimeline({
     },
     [entitiesCollection, referencedEntityUrlKey]
   )
+  // Pull the sandbox profile name for the currently-focused entity so
+  // we can surface it as a read-only badge next to the spawned marker.
+  // The sandbox choice is set at spawn time and immutable for the
+  // entity's lifetime, so a single read here is sufficient.
+  const { data: focusedEntity = [] } = useLiveQuery(
+    (q) => {
+      if (!entitiesCollection || !entityUrl) return undefined
+      return q
+        .from({ e: entitiesCollection as any })
+        .where(({ e }: any) => eq(e.url, entityUrl))
+        .select(({ e }: any) => ({ sandbox: e.sandbox }))
+    },
+    [entitiesCollection, entityUrl]
+  )
+  const sandboxProfileName = focusedEntity[0]?.sandbox?.profile ?? null
+  // Resolve the profile's advertised label (e.g. "Docker") rather than the raw
+  // profile name, matching how the header/sidebar badges render it.
+  const { data: runners = [] } = useLiveQuery(
+    (q) => {
+      if (!runnersCollection) return undefined
+      return q.from({ r: runnersCollection })
+    },
+    [runnersCollection]
+  )
+  const { data: users = [] } = useLiveQuery(
+    (q) => {
+      if (!usersCollection) return undefined
+      return q.from({ user: usersCollection })
+    },
+    [usersCollection]
+  )
+  const usersById = useMemo(
+    () => new Map(users.map((user) => [user.id, user])),
+    [users]
+  )
+  const { principal: currentPrincipal } = useCurrentPrincipal()
+  const sandboxLabel = sandboxProfileName
+    ? (sandboxDisplayLabel(
+        resolveSandboxProfile(runners, sandboxProfileName),
+        sandboxProfileName
+      ) ?? sandboxProfileName)
+    : null
   const entityStatusByUrl = useMemo(() => {
     const statusByUrl = new Map<string, EntityStatus>()
     for (const entity of entities) {
@@ -927,48 +1142,77 @@ export function EntityTimeline({
   const handledScrollSignalRef = useRef(scrollToBottomSignal)
   const previousStreamingAgentKeyRef = useRef<string | null>(null)
   const textColumnWidth = Math.max(0, contentWidth - CHAT_SURFACE_GUTTER)
+  const displayRows = useMemo(
+    () => rows.filter((row) => !isAttachmentManifest(row.manifest)),
+    [rows]
+  )
+  const attachmentsByInboxKey = useMemo(() => {
+    const byKey = new Map<string, Array<UserMessageAttachment>>()
+    if (!entityUrl) return byKey
+    for (const row of rows) {
+      const manifest = row.manifest
+      if (
+        !isAttachmentManifest(manifest) ||
+        manifest.subject.type !== `inbox`
+      ) {
+        continue
+      }
+      const entry: UserMessageAttachment = {
+        id: manifest.id,
+        name: attachmentDisplayName(manifest),
+        mimeType: manifest.mimeType,
+        byteLength: manifest.byteLength,
+        status: manifest.status,
+        url: attachmentDownloadUrl(baseUrl, entityUrl, manifest.id),
+      }
+      const existing = byKey.get(manifest.subject.key) ?? []
+      existing.push(entry)
+      byKey.set(manifest.subject.key, existing)
+    }
+    return byKey
+  }, [baseUrl, entityUrl, rows])
 
   const spawnTime = useMemo(() => {
-    for (const row of rows) {
+    for (const row of displayRows) {
       if (!row.inbox) continue
       const timestamp = Date.parse(row.inbox.timestamp)
       return Number.isFinite(timestamp) ? timestamp : null
     }
     return null
-  }, [rows])
+  }, [displayRows])
 
   const lastStreamingAgentKey = useMemo(() => {
-    for (let index = rows.length - 1; index >= 0; index--) {
-      const row = rows[index]
+    for (let index = displayRows.length - 1; index >= 0; index--) {
+      const row = displayRows[index]
       if (row.run) {
         return row.run.status === `started` ? row.$key : null
       }
     }
     return null
-  }, [rows])
+  }, [displayRows])
 
   const stopUserMessageKey = useMemo(() => {
     if (!lastStreamingAgentKey) return null
-    const streamingIndex = rows.findIndex(
+    const streamingIndex = displayRows.findIndex(
       (row) => row.$key === lastStreamingAgentKey
     )
     if (streamingIndex < 0) return null
     for (let index = streamingIndex - 1; index >= 0; index--) {
-      const row = rows[index]
+      const row = displayRows[index]
       if (row?.inbox) {
         return row.$key
       }
     }
     return null
-  }, [lastStreamingAgentKey, rows])
+  }, [displayRows, lastStreamingAgentKey])
   const firstInboxRowKey = useMemo(
-    () => rows.find((row) => row.inbox)?.$key ?? null,
-    [rows]
+    () => displayRows.find((row) => row.inbox)?.$key ?? null,
+    [displayRows]
   )
   const responseTimestampByRowKey = useMemo(() => {
     const timestampByRowKey = new Map<string, number | null>()
     let lastUserTimestamp: number | null = null
-    for (const row of rows) {
+    for (const row of displayRows) {
       if (row.inbox) {
         const timestamp = Date.parse(row.inbox.timestamp)
         lastUserTimestamp = Number.isFinite(timestamp) ? timestamp : null
@@ -977,7 +1221,7 @@ export function EntityTimeline({
       }
     }
     return timestampByRowKey
-  }, [rows])
+  }, [displayRows])
   const updateRunSearchText = useCallback((rowKey: string, text: string) => {
     setRunSearchTextByKey((current) => {
       if (text.length === 0) {
@@ -1059,17 +1303,18 @@ export function EntityTimeline({
   )
 
   const rowVirtualizer = useVirtualizer({
-    count: rows.length,
+    count: displayRows.length,
     getScrollElement: () => viewport,
     estimateSize: (index) =>
       cachedSizeMapRef.current.get(
-        rows[index] ? renderRowKey(rows[index]!) : ``
-      ) ?? estimateRowHeight(rows[index], textColumnWidth),
-    getItemKey: (index) => (rows[index] ? renderRowKey(rows[index]!) : index),
+        displayRows[index] ? renderRowKey(displayRows[index]!) : ``
+      ) ?? estimateRowHeight(displayRows[index], textColumnWidth),
+    getItemKey: (index) =>
+      displayRows[index] ? renderRowKey(displayRows[index]!) : index,
     gap: 0,
     overscan: 6,
     measureElement: measureRowElement,
-    enabled: rows.length > 0,
+    enabled: displayRows.length > 0,
   })
 
   const paneFindAdapter = useMemo<PaneFindAdapter>(() => {
@@ -1085,7 +1330,7 @@ export function EntityTimeline({
         const matches: Array<TimelinePaneFindMatch> = []
         if (!query.trim()) return matches
 
-        rows.forEach((row, rowIndex) => {
+        displayRows.forEach((row, rowIndex) => {
           const rowKey = renderRowKey(row)
           const text = timelineRowSearchText(row, runSearchTextByKey)
           const starts = getTextMatchStarts(text, query)
@@ -1118,7 +1363,7 @@ export function EntityTimeline({
         return getCurrentMatchIndexInRoot(root, query, match)
       },
     }
-  }, [contentElement, rowVirtualizer, rows, runSearchTextByKey])
+  }, [contentElement, displayRows, rowVirtualizer, runSearchTextByKey])
 
   usePaneFindAdapterRegistration(tileId ?? null, paneFindAdapter)
 
@@ -1128,9 +1373,9 @@ export function EntityTimeline({
 
   const scrollToTimelineEnd = useCallback(
     (opts?: { force?: boolean }) => {
-      if (!viewport || rows.length === 0) return
+      if (!viewport || displayRows.length === 0) return
       const force = opts?.force ?? false
-      rowVirtualizer.scrollToIndex(rows.length - 1, { align: `end` })
+      rowVirtualizer.scrollToIndex(displayRows.length - 1, { align: `end` })
 
       // The stopped/status footer sits outside the virtual list, so make sure the
       // physical scroll container is also flush with its full content height.
@@ -1139,7 +1384,7 @@ export function EntityTimeline({
         viewport.scrollTop = viewport.scrollHeight
       })
     },
-    [rowVirtualizer, rows.length, viewport]
+    [displayRows.length, rowVirtualizer, viewport]
   )
 
   const scrollAreaRef = useCallback((node: HTMLDivElement | null) => {
@@ -1295,7 +1540,7 @@ export function EntityTimeline({
   }, [viewport])
 
   useLayoutEffect(() => {
-    if (!viewport || rows.length === 0) return
+    if (!viewport || displayRows.length === 0) return
     if (!isNearBottom.current) return
 
     const frame = requestAnimationFrame(() => {
@@ -1303,7 +1548,7 @@ export function EntityTimeline({
     })
 
     return () => cancelAnimationFrame(frame)
-  }, [rows, scrollToTimelineEnd, viewport])
+  }, [displayRows, scrollToTimelineEnd, viewport])
 
   useLayoutEffect(() => {
     if (!contentElement || !viewport) return
@@ -1346,13 +1591,13 @@ export function EntityTimeline({
     isNearBottom.current = true
     setShowJumpToBottom(false)
 
-    if (!viewport || rows.length === 0) return
+    if (!viewport || displayRows.length === 0) return
     const frame = requestAnimationFrame(() => {
       scrollToTimelineEnd({ force: true })
     })
 
     return () => cancelAnimationFrame(frame)
-  }, [rows.length, scrollToBottomSignal, scrollToTimelineEnd, viewport])
+  }, [displayRows.length, scrollToBottomSignal, scrollToTimelineEnd, viewport])
 
   useEffect(
     () => () => {
@@ -1364,12 +1609,12 @@ export function EntityTimeline({
   )
 
   const jumpToBottom = useCallback(() => {
-    if (rows.length > 0) {
+    if (displayRows.length > 0) {
       isNearBottom.current = true
       setShowJumpToBottom(false)
       scrollToTimelineEnd({ force: true })
     }
-  }, [rows.length, scrollToTimelineEnd])
+  }, [displayRows.length, scrollToTimelineEnd])
 
   if (loading) {
     return (
@@ -1408,7 +1653,7 @@ export function EntityTimeline({
           ref={contentRef}
           className={`${styles.content} mobile-chat-content`}
         >
-          <Stack>
+          <Stack gap={2} direction="row">
             {spawnTime ? (
               <Tooltip content={formatAbsoluteDateTimeVerbose(spawnTime)}>
                 <span ref={spawnMarkerRef} className={styles.statusPill}>
@@ -1430,9 +1675,18 @@ export function EntityTimeline({
                 </Text>
               </span>
             )}
+            {sandboxLabel && (
+              <Tooltip content={`Sandbox: ${sandboxLabel}`}>
+                <span className={styles.statusPill}>
+                  <Text size={1} tone="muted" className={styles.statusText}>
+                    {`sandbox · ${sandboxLabel}`}
+                  </Text>
+                </span>
+              </Tooltip>
+            )}
           </Stack>
 
-          {rows.length === 0 ? (
+          {displayRows.length === 0 ? (
             <Stack justify="center" py={6}>
               <Text tone="muted" size={2} className={styles.emptyState}>
                 Waiting for events...
@@ -1447,7 +1701,7 @@ export function EntityTimeline({
               }}
             >
               {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                const row = rows[virtualRow.index]
+                const row = displayRows[virtualRow.index]
                 const rowKey = renderRowKey(row)
 
                 // Stable row key. The previous implementation appended
@@ -1484,10 +1738,14 @@ export function EntityTimeline({
                         renderWidth={textColumnWidth}
                         entityUrl={entityUrl}
                         tileId={tileId ?? null}
+                        attachmentsByInboxKey={attachmentsByInboxKey}
                         entityStatusByUrl={entityStatusByUrl}
+                        currentPrincipal={currentPrincipal}
+                        usersById={usersById}
                         stopUserMessageKey={stopUserMessageKey}
                         stopPending={stopPending}
                         onStopGeneration={onStopGeneration}
+                        onForkFromHere={forkFromHereByInboxKey?.get(rowKey)}
                         onRunSearchTextChange={updateRunSearchText}
                       />
                     </TimelineRowErrorBoundary>

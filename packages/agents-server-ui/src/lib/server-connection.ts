@@ -39,6 +39,17 @@ export interface DesktopState {
   error: string | null
   discoveredServers: Array<DiscoveredServer>
   pullWakeRunnerId: string | null
+  /**
+   * `true` when API keys or Codex credentials have changed since the
+   * local runtime was last started — the renderer surfaces this as a
+   * "Restart local runtime to apply changes" banner on the Credentials
+   * settings page. Clears once any local runtime is restarted.
+   */
+  credentialsRestartPending: boolean
+}
+
+export interface ConnectServerOptions {
+  localRuntimeEnabled?: boolean
 }
 
 export interface DesktopServerFetchRequest {
@@ -74,13 +85,15 @@ export interface ServerConnectionState {
  * `null` means "not set". The renderer never reads these from
  * `process.env` directly — that only exists in main.
  *
- * - `anthropic` / `openai` / `deepseek`: LLM provider keys. At least
- *   one is required for the local Horton runtime to be useful; the
- *   first-launch dialog auto-opens until one is set.
+ * - `anthropic` / `openai` / `deepseek` / `moonshot`: LLM provider
+ *   keys. At least one is required for the local Horton runtime to be
+ *   useful; the first-launch dialog auto-opens until one is set.
  * - `brave`: optional search-tool auxiliary. Mirrored to
  *   `BRAVE_SEARCH_API_KEY` to enable Horton's `brave_search` tool;
  *   without it, web search falls back to Anthropic's built-in search.
  *   Does NOT count toward "has any LLM key" on its own.
+ * - `e2b`: optional. Mirrored to `E2B_API_KEY` to enable the remote
+ *   sandbox profile; without it the e2b profile isn't offered.
  */
 export interface ApiKeys {
   anthropic: string | null
@@ -94,7 +107,54 @@ export interface ApiKeys {
    * counts toward that check.
    */
   deepseek: string | null
+  /**
+   * Optional. Mirrored to `MOONSHOT_API_KEY` so the runtime can use
+   * Kimi / Moonshot models. Treated as a peer LLM provider alongside
+   * `anthropic`, `openai`, and `deepseek`.
+   */
+  moonshot: string | null
   brave: string | null
+  e2b: string | null
+}
+
+export type CodexAuthSource = `desktop-oauth` | `codex-cli` | `opencode`
+
+export type ModelProvider =
+  | `anthropic`
+  | `openai`
+  | `openai-codex`
+  | `deepseek`
+  | `moonshot`
+
+export interface ModelPickerChoice {
+  provider: ModelProvider
+  providerLabel: string
+  id: string
+  label: string
+  value: string
+}
+
+export interface ModelPickerStatus {
+  choices: Array<ModelPickerChoice>
+  enabled: Array<string>
+}
+
+export type CodexDetectedSource = {
+  source: CodexAuthSource
+  label: string
+  accountId: string | null
+  email: string | null
+  expiresAt: number | null
+}
+
+export type CodexStatus = {
+  enabled: boolean
+  source: CodexAuthSource | null
+  availableSources: Array<CodexDetectedSource>
+  accountId: string | null
+  email: string | null
+  expiresAt: number | null
+  error: string | null
 }
 
 export interface ApiKeysStatus {
@@ -104,10 +164,13 @@ export interface ApiKeysStatus {
   /**
    * Per-slot ENV-derived suggestions: a value is provided only for
    * slots that are NOT already saved, so the dialog can pre-fill
-   * empty inputs from `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` without
-   * overwriting the user's saved choice.
+   * empty inputs from `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` /
+   * `DEEPSEEK_API_KEY` / `MOONSHOT_API_KEY` without overwriting the
+   * user's saved choice.
    */
   suggested: ApiKeys
+  codex: CodexStatus
+  modelPicker: ModelPickerStatus
 }
 
 /**
@@ -125,6 +188,33 @@ export interface OnboardingState {
   dismissed: boolean
   hasAnyKey: boolean
   signedIn: boolean
+}
+
+export interface LaunchAtLoginStatus {
+  supported: boolean
+  enabled: boolean
+  reason: string | null
+}
+
+export type PreventAppSuspensionPreference = boolean
+
+export type ElectricCliInstallKind =
+  | `not-installed`
+  | `managed`
+  | `manual`
+  | `shadowed`
+  | `broken`
+
+export interface ElectricCliStatus {
+  kind: ElectricCliInstallKind
+  command: `electric`
+  path: string | null
+  version: string | null
+  bundledVersion: string
+  managedPath: string | null
+  installDir: string
+  installDirOnPath: boolean
+  error: string | null
 }
 
 /**
@@ -258,8 +348,12 @@ declare global {
       setNativeAppearance?: (appearance: DesktopAppearance) => Promise<void>
       setActiveServer?: (server: ServerConfig | null) => Promise<void>
       setSelectedServer?: (serverId: string | null) => Promise<void>
-      connectServer?: (serverId: string) => Promise<void>
+      connectServer?: (
+        serverId: string,
+        options?: ConnectServerOptions
+      ) => Promise<void>
       disconnectServer?: (serverId: string) => Promise<void>
+      forgetServer?: (serverId: string) => Promise<void>
       restartRuntime?: () => Promise<void>
       restartServerRuntime?: (serverId: string) => Promise<void>
       stopRuntime?: () => Promise<void>
@@ -267,8 +361,21 @@ declare global {
       rescanServers?: () => Promise<Array<DiscoveredServer>>
       getApiKeysStatus?: () => Promise<ApiKeysStatus>
       saveApiKeys?: (keys: ApiKeys) => Promise<void>
+      saveEnabledModels?: (values: Array<string>) => Promise<void>
+      codexSignIn?: () => Promise<CodexStatus>
+      codexEnableSource?: (source: CodexAuthSource) => Promise<CodexStatus>
+      codexDisable?: () => Promise<CodexStatus>
+      restartLocalRuntimes?: () => Promise<void>
+      getCliStatus?: () => Promise<ElectricCliStatus>
+      installCli?: () => Promise<ElectricCliStatus>
+      uninstallCli?: () => Promise<ElectricCliStatus>
+      clearAllLocalData?: () => Promise<void>
+      getLaunchAtLoginStatus?: () => Promise<LaunchAtLoginStatus>
+      setLaunchAtLogin?: (enabled: boolean) => Promise<LaunchAtLoginStatus>
       getOnboardingState?: () => Promise<OnboardingState>
       setOnboardingDismissed?: (dismissed: boolean) => Promise<void>
+      getPreventAppSuspension?: () => Promise<PreventAppSuspensionPreference>
+      setPreventAppSuspension?: (enabled: boolean) => Promise<void>
       getWorkingDirectory?: () => Promise<string | null>
       chooseWorkingDirectory?: () => Promise<string | null>
       /**
@@ -329,6 +436,15 @@ declare global {
         reconnect: (name: string, serverId?: string) => Promise<void>
         disable: (name: string, serverId?: string) => Promise<void>
         enable: (name: string, serverId?: string) => Promise<void>
+        /**
+         * Add (when the name is new) or edit (when it already exists in
+         * settings.json) an MCP server in the desktop's global config.
+         * Writes settings.json, pushes the new extras list to every
+         * live runtime, and re-broadcasts the enriched snapshot.
+         */
+        upsert: (cfg: unknown) => Promise<void>
+        /** Remove an MCP server from the desktop's global config. */
+        remove: (name: string) => Promise<void>
       }
       /**
        * Electric Cloud sign-in surface. The Electron main process owns
@@ -340,6 +456,7 @@ declare global {
         signIn: (provider: CloudAuthProvider) => Promise<void>
         signOut: () => Promise<void>
         openDashboard: () => Promise<void>
+        openCreateAgentsServer: () => Promise<void>
         onStateChanged: (
           callback: (state: CloudAuthState) => void
         ) => () => void
@@ -350,7 +467,7 @@ declare global {
           callback: (state: CloudAgentServersState) => void
         ) => () => void
         prepareConnection: (
-          serviceId: string
+          tenantId: string
         ) => Promise<{ url: string; tenantId: string }>
       }
     }
@@ -429,12 +546,19 @@ export async function saveSelectedServer(
   await window.electronAPI?.setSelectedServer?.(serverId)
 }
 
-export async function connectServer(serverId: string): Promise<void> {
-  await window.electronAPI?.connectServer?.(serverId)
+export async function connectServer(
+  serverId: string,
+  options?: ConnectServerOptions
+): Promise<void> {
+  await window.electronAPI?.connectServer?.(serverId, options)
 }
 
 export async function disconnectServer(serverId: string): Promise<void> {
   await window.electronAPI?.disconnectServer?.(serverId)
+}
+
+export async function forgetServer(serverId: string): Promise<void> {
+  await window.electronAPI?.forgetServer?.(serverId)
 }
 
 export function onDesktopStateChanged(
@@ -463,6 +587,54 @@ export async function saveApiKeys(keys: ApiKeys): Promise<void> {
   await window.electronAPI?.saveApiKeys?.(keys)
 }
 
+export async function saveEnabledModels(values: Array<string>): Promise<void> {
+  await window.electronAPI?.saveEnabledModels?.(values)
+}
+
+export async function codexSignIn(): Promise<CodexStatus | null> {
+  return (await window.electronAPI?.codexSignIn?.()) ?? null
+}
+
+export async function codexEnableSource(
+  source: CodexAuthSource
+): Promise<CodexStatus | null> {
+  return (await window.electronAPI?.codexEnableSource?.(source)) ?? null
+}
+
+export async function codexDisable(): Promise<CodexStatus | null> {
+  return (await window.electronAPI?.codexDisable?.()) ?? null
+}
+
+export async function restartLocalRuntimes(): Promise<void> {
+  await window.electronAPI?.restartLocalRuntimes?.()
+}
+
+export async function loadCliStatus(): Promise<ElectricCliStatus | null> {
+  return (await window.electronAPI?.getCliStatus?.()) ?? null
+}
+
+export async function installCli(): Promise<ElectricCliStatus | null> {
+  return (await window.electronAPI?.installCli?.()) ?? null
+}
+
+export async function uninstallCli(): Promise<ElectricCliStatus | null> {
+  return (await window.electronAPI?.uninstallCli?.()) ?? null
+}
+
+export async function clearAllLocalData(): Promise<void> {
+  await window.electronAPI?.clearAllLocalData?.()
+}
+
+export async function loadLaunchAtLoginStatus(): Promise<LaunchAtLoginStatus | null> {
+  return (await window.electronAPI?.getLaunchAtLoginStatus?.()) ?? null
+}
+
+export async function setLaunchAtLogin(
+  enabled: boolean
+): Promise<LaunchAtLoginStatus | null> {
+  return (await window.electronAPI?.setLaunchAtLogin?.(enabled)) ?? null
+}
+
 export async function loadOnboardingState(): Promise<OnboardingState | null> {
   return (await window.electronAPI?.getOnboardingState?.()) ?? null
 }
@@ -471,6 +643,16 @@ export async function setOnboardingDismissed(
   dismissed: boolean
 ): Promise<void> {
   await window.electronAPI?.setOnboardingDismissed?.(dismissed)
+}
+
+export async function loadPreventAppSuspensionPreference(): Promise<PreventAppSuspensionPreference | null> {
+  return (await window.electronAPI?.getPreventAppSuspension?.()) ?? null
+}
+
+export async function savePreventAppSuspensionPreference(
+  enabled: boolean
+): Promise<void> {
+  await window.electronAPI?.setPreventAppSuspension?.(enabled)
 }
 
 export async function loadCloudAuthState(): Promise<CloudAuthState | null> {
@@ -487,6 +669,10 @@ export async function cloudSignOut(): Promise<void> {
 
 export async function cloudOpenDashboard(): Promise<void> {
   await window.electronAPI?.cloudAuth?.openDashboard?.()
+}
+
+export async function cloudOpenCreateAgentsServer(): Promise<void> {
+  await window.electronAPI?.cloudAuth?.openCreateAgentsServer?.()
 }
 
 export function onCloudAuthStateChanged(
@@ -508,11 +694,11 @@ export function onCloudAgentServersStateChanged(
 }
 
 export async function prepareCloudAgentServerConnection(
-  serviceId: string
+  tenantId: string
 ): Promise<{ url: string; tenantId: string } | null> {
   return (
     (await window.electronAPI?.cloudAgentServers?.prepareConnection?.(
-      serviceId
+      tenantId
     )) ?? null
   )
 }

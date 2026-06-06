@@ -313,8 +313,6 @@ export async function assembleContext(
     }
   }
 
-  volatileMessages.sort((left, right) => left.at - right.at)
-
   const remainingBudget = Math.max(0, config.sourceBudget - budgetUsed)
   const accepted: Array<VolatileMessage> = []
   const droppedOffsets: Array<number> = []
@@ -369,7 +367,10 @@ export async function assembleContext(
     messages.push(marker)
     overflowLog.push({
       scope: `sourceBudget`,
-      detail: marker.content,
+      detail:
+        typeof marker.content === `string`
+          ? marker.content
+          : JSON.stringify(marker.content),
     })
   }
 

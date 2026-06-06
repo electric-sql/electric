@@ -6,7 +6,7 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
-  padding: 16px;
+  padding: 12px 16px;
 }
 
 .tile {

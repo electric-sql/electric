@@ -33,7 +33,10 @@ function createAnalyzeTool(ctx: HandlerContext) {
           `worker`,
           childId,
           { systemPrompt: p.systemPrompt, tools: [`bash`] },
-          { initialMessage: question, wake: `runFinished` }
+          {
+            initialMessage: question,
+            wake: { on: `runFinished`, includeResponse: true },
+          }
         )
         ctx.db.actions.children_insert({
           row: { key: p.id, url: `/worker/${childId}` },

@@ -19,6 +19,7 @@ import {
   fetchShapeRows,
 } from './electric-agents-dsl'
 import { cliTest } from './cli-dsl'
+import { appendPathToUrl } from './url'
 import type {
   ElectricAgentsAction,
   ElectricAgentsWorldModel,
@@ -38,7 +39,7 @@ async function electricAgentsFetch(
   path: string,
   opts: RequestInit = {}
 ): Promise<Response> {
-  return fetch(`${baseUrl}${routeControlPlanePath(path)}`, {
+  return fetch(appendPathToUrl(baseUrl, routeControlPlanePath(path)), {
     ...opts,
     headers: {
       'content-type': `application/json`,
@@ -72,7 +73,9 @@ async function pollEntityStatus(
   const deadline = Date.now() + timeoutMs
 
   while (Date.now() < deadline) {
-    const res = await fetch(`${baseUrl}${routeControlPlanePath(entityUrl)}`)
+    const res = await fetch(
+      appendPathToUrl(baseUrl, routeControlPlanePath(entityUrl))
+    )
     expect(res.status).toBe(200)
     const entity = (await res.json()) as Record<string, unknown>
     if (statuses.includes(String(entity.status))) {
@@ -107,16 +110,10 @@ export function runElectricAgentsConformanceTests(
         .expectStatus(`running`)
         .custom(async (ctx) => {
           const mainRes = await fetch(
-            `${ctx.baseUrl}${ctx.currentEntityStreams!.main}`,
+            appendPathToUrl(ctx.baseUrl, ctx.currentEntityStreams!.main),
             { method: `HEAD` }
           )
           expect(mainRes.status).toBe(200)
-
-          const errorRes = await fetch(
-            `${ctx.baseUrl}${ctx.currentEntityStreams!.error}`,
-            { method: `HEAD` }
-          )
-          expect(errorRes.status).toBe(200)
         })
         .run())
 
@@ -125,7 +122,10 @@ export function runElectricAgentsConformanceTests(
       electricAgents(config.baseUrl)
         .custom(async (ctx) => {
           const res = await fetch(
-            `${ctx.baseUrl}${routeControlPlanePath(`/unregistered/entity-1`)}`,
+            appendPathToUrl(
+              ctx.baseUrl,
+              routeControlPlanePath(`/unregistered/entity-1`)
+            ),
             {
               method: `PUT`,
               headers: { 'content-type': `application/json` },
@@ -228,9 +228,10 @@ export function runElectricAgentsConformanceTests(
       electricAgents(config.baseUrl)
         .custom(async (ctx) => {
           const res = await fetch(
-            `${ctx.baseUrl}${routeControlPlanePath(
-              `/nonexistent-type/nonexistent-id/send`
-            )}`,
+            appendPathToUrl(
+              ctx.baseUrl,
+              routeControlPlanePath(`/nonexistent-type/nonexistent-id/send`)
+            ),
             {
               method: `POST`,
               headers: { 'content-type': `application/json` },
@@ -520,14 +521,14 @@ export function runElectricAgentsConformanceTests(
             type: `object`,
             properties: { name: { type: `string` } },
           },
-          input_schemas: {
+          inbox_schemas: {
             query: {
               type: `object`,
               properties: { text: { type: `string` } },
               required: [`text`],
             },
           },
-          output_schemas: {
+          state_schemas: {
             result: {
               type: `object`,
               properties: { answer: { type: `string` } },
@@ -579,7 +580,7 @@ export function runElectricAgentsConformanceTests(
             type: `object`,
             properties: { x: { type: `number` } },
           },
-          input_schemas: {
+          inbox_schemas: {
             ping: {
               type: `object`,
               properties: { msg: { type: `string` } },
@@ -620,15 +621,18 @@ export function runElectricAgentsConformanceTests(
           creation_schema: { type: `object` },
         })
         .custom(async (ctx) => {
-          const res = await fetch(`${ctx.baseUrl}/_electric/entity-types`, {
-            method: `POST`,
-            headers: { 'content-type': `application/json` },
-            body: JSON.stringify({
-              name: typeName,
-              description: `Duplicate registration`,
-              creation_schema: { type: `object` },
-            }),
-          })
+          const res = await fetch(
+            appendPathToUrl(ctx.baseUrl, `/_electric/entity-types`),
+            {
+              method: `POST`,
+              headers: { 'content-type': `application/json` },
+              body: JSON.stringify({
+                name: typeName,
+                description: `Duplicate registration`,
+                creation_schema: { type: `object` },
+              }),
+            }
+          )
           expect(res.status).toBe(201)
           const body = (await res.json()) as {
             name: string
@@ -646,11 +650,14 @@ export function runElectricAgentsConformanceTests(
       electricAgents(config.baseUrl)
         .custom(async (ctx) => {
           // Missing name, description, and creation_schema
-          const res = await fetch(`${ctx.baseUrl}/_electric/entity-types`, {
-            method: `POST`,
-            headers: { 'content-type': `application/json` },
-            body: JSON.stringify({}),
-          })
+          const res = await fetch(
+            appendPathToUrl(ctx.baseUrl, `/_electric/entity-types`),
+            {
+              method: `POST`,
+              headers: { 'content-type': `application/json` },
+              body: JSON.stringify({}),
+            }
+          )
           expect([400, 422]).toContain(res.status)
         })
         .skipInvariants()
@@ -722,9 +729,10 @@ export function runElectricAgentsConformanceTests(
       electricAgents(config.baseUrl)
         .custom(async (ctx) => {
           const res = await fetch(
-            `${ctx.baseUrl}${routeControlPlanePath(
-              `/nonexistent/should-fail`
-            )}`,
+            appendPathToUrl(
+              ctx.baseUrl,
+              routeControlPlanePath(`/nonexistent/should-fail`)
+            ),
             {
               method: `PUT`,
               headers: { 'content-type': `application/json` },
@@ -754,9 +762,10 @@ export function runElectricAgentsConformanceTests(
         })
         .custom(async (ctx) => {
           const res = await fetch(
-            `${ctx.baseUrl}${routeControlPlanePath(
-              `/${typeName}/child-entity`
-            )}`,
+            appendPathToUrl(
+              ctx.baseUrl,
+              routeControlPlanePath(`/${typeName}/child-entity`)
+            ),
             {
               method: `PUT`,
               headers: { 'content-type': `application/json` },
@@ -770,7 +779,6 @@ export function runElectricAgentsConformanceTests(
           ctx.currentEntityUrl = entity.url as string
           ctx.currentEntityStreams = entity.streams as {
             main: string
-            error: string
           }
           ctx.currentWriteToken = null
           ctx.history.push({
@@ -778,7 +786,7 @@ export function runElectricAgentsConformanceTests(
             entityUrl: entity.url as string,
             entityType: typeName,
             status: entity.status as string,
-            streams: entity.streams as { main: string; error: string },
+            streams: entity.streams as { main: string },
             parent: parentUrl!,
           })
         })
@@ -797,9 +805,10 @@ export function runElectricAgentsConformanceTests(
         })
         .custom(async (ctx) => {
           const res = await fetch(
-            `${ctx.baseUrl}${routeControlPlanePath(
-              `/${typeName}/orphan-entity`
-            )}`,
+            appendPathToUrl(
+              ctx.baseUrl,
+              routeControlPlanePath(`/${typeName}/orphan-entity`)
+            ),
             {
               method: `PUT`,
               headers: { 'content-type': `application/json` },
@@ -826,7 +835,10 @@ export function runElectricAgentsConformanceTests(
         })
         .custom(async (ctx) => {
           const res = await fetch(
-            `${ctx.baseUrl}${routeControlPlanePath(ctx.currentEntityUrl!)}`
+            appendPathToUrl(
+              ctx.baseUrl,
+              routeControlPlanePath(ctx.currentEntityUrl!)
+            )
           )
           const entity = (await res.json()) as Record<string, unknown>
           const tags = entity.tags as Record<string, string>
@@ -847,9 +859,10 @@ export function runElectricAgentsConformanceTests(
         })
         .custom(async (ctx) => {
           const res = await fetch(
-            `${ctx.baseUrl}${routeControlPlanePath(
-              `/${typeName}/should-fail`
-            )}`,
+            appendPathToUrl(
+              ctx.baseUrl,
+              routeControlPlanePath(`/${typeName}/should-fail`)
+            ),
             {
               method: `PUT`,
               headers: { 'content-type': `application/json` },
@@ -872,7 +885,10 @@ export function runElectricAgentsConformanceTests(
         .spawn(typeName, `entity-1`)
         .custom(async (ctx) => {
           const res = await fetch(
-            `${ctx.baseUrl}${routeControlPlanePath(ctx.currentEntityUrl!)}`
+            appendPathToUrl(
+              ctx.baseUrl,
+              routeControlPlanePath(ctx.currentEntityUrl!)
+            )
           )
           const entity = (await res.json()) as { tags: Record<string, string> }
           expect(entity.tags).toEqual({})
@@ -888,15 +904,15 @@ export function runElectricAgentsConformanceTests(
   describe(`Electric Agents Schema Validation Gates`, () => {
     // --- Send Schema Validation ---
 
-    test(`send validates input_schemas (C11)`, () => {
+    test(`send validates inbox_schemas (C11)`, () => {
       const typeName = `send-schema-valid-${Date.now()}`
       return electricAgents(config.baseUrl)
         .subscription(`/${typeName}/**`, `send-schema-sub`)
         .registerType({
           name: typeName,
-          description: `Type with input schemas`,
+          description: `Type with inbox schemas`,
           creation_schema: { type: `object` },
-          input_schemas: {
+          inbox_schemas: {
             query: {
               type: `object`,
               properties: { text: { type: `string` } },
@@ -917,9 +933,9 @@ export function runElectricAgentsConformanceTests(
         .subscription(`/${typeName}/**`, `send-schema-inv-sub`)
         .registerType({
           name: typeName,
-          description: `Type with strict input schemas`,
+          description: `Type with strict inbox schemas`,
           creation_schema: { type: `object` },
-          input_schemas: {
+          inbox_schemas: {
             query: {
               type: `object`,
               properties: { text: { type: `string` } },
@@ -938,9 +954,9 @@ export function runElectricAgentsConformanceTests(
         .subscription(`/${typeName}/**`, `send-unknown-sub`)
         .registerType({
           name: typeName,
-          description: `Type with defined input schemas`,
+          description: `Type with defined inbox schemas`,
           creation_schema: { type: `object` },
-          input_schemas: {
+          inbox_schemas: {
             query: {
               type: `object`,
               properties: { text: { type: `string` } },
@@ -953,13 +969,13 @@ export function runElectricAgentsConformanceTests(
         .run()
     })
 
-    test(`send without type when no input_schemas accepts any`, () => {
+    test(`send without type when no inbox_schemas accepts any`, () => {
       const typeName = `send-no-schemas-${Date.now()}`
       return electricAgents(config.baseUrl)
         .subscription(`/${typeName}/**`, `send-noschema-sub`)
         .registerType({
           name: typeName,
-          description: `Type without input schemas`,
+          description: `Type without inbox schemas`,
           creation_schema: { type: `object` },
         })
         .spawn(typeName, `entity-1`)
@@ -969,15 +985,15 @@ export function runElectricAgentsConformanceTests(
         .run()
     })
 
-    test(`send with empty input_schemas rejects all`, () => {
+    test(`send with empty inbox_schemas rejects all`, () => {
       const typeName = `send-empty-schemas-${Date.now()}`
       return electricAgents(config.baseUrl)
         .subscription(`/${typeName}/**`, `send-empty-sub`)
         .registerType({
           name: typeName,
-          description: `Type with empty input schemas`,
+          description: `Type with empty inbox schemas`,
           creation_schema: { type: `object` },
-          input_schemas: {},
+          inbox_schemas: {},
         })
         .spawn(typeName, `entity-1`)
         .expectSendUnknownType({ text: `anything` }, { type: `some_type` })
@@ -994,7 +1010,7 @@ export function runElectricAgentsConformanceTests(
           name: typeName,
           description: `Type for write test`,
           creation_schema: { type: `object` },
-          output_schemas: {
+          state_schemas: {
             research_result: {
               type: `object`,
               properties: {
@@ -1013,15 +1029,15 @@ export function runElectricAgentsConformanceTests(
         .run()
     })
 
-    test.skip(`write validates output_schemas (C12)`, () => {
+    test.skip(`write validates state_schemas (C12)`, () => {
       const typeName = `write-schema-inv-${Date.now()}`
       return electricAgents(config.baseUrl)
         .subscription(`/${typeName}/**`, `write-schema-sub`)
         .registerType({
           name: typeName,
-          description: `Type with strict output schemas`,
+          description: `Type with strict state schemas`,
           creation_schema: { type: `object` },
-          output_schemas: {
+          state_schemas: {
             result: {
               type: `object`,
               properties: { value: { type: `number` } },
@@ -1040,9 +1056,9 @@ export function runElectricAgentsConformanceTests(
         .subscription(`/${typeName}/**`, `write-unknown-sub`)
         .registerType({
           name: typeName,
-          description: `Type with defined output schemas`,
+          description: `Type with defined state schemas`,
           creation_schema: { type: `object` },
-          output_schemas: {
+          state_schemas: {
             result: {
               type: `object`,
               properties: { value: { type: `number` } },
@@ -1054,13 +1070,13 @@ export function runElectricAgentsConformanceTests(
         .run()
     })
 
-    test.skip(`write without type when no output_schemas accepts any`, () => {
+    test.skip(`write without type when no state_schemas accepts any`, () => {
       const typeName = `write-no-schemas-${Date.now()}`
       return electricAgents(config.baseUrl)
         .subscription(`/${typeName}/**`, `write-noschema-sub`)
         .registerType({
           name: typeName,
-          description: `Type without output schemas`,
+          description: `Type without state schemas`,
           creation_schema: { type: `object` },
         })
         .spawn(typeName, `entity-1`)
@@ -1087,7 +1103,7 @@ export function runElectricAgentsConformanceTests(
             writeHeaders[`authorization`] = `Bearer ${ctx.currentWriteToken}`
           }
           const res = await fetch(
-            `${ctx.baseUrl}${ctx.currentEntityUrl!}/main`,
+            appendPathToUrl(ctx.baseUrl, `${ctx.currentEntityUrl!}/main`),
             {
               method: `POST`,
               headers: writeHeaders,
@@ -1168,9 +1184,10 @@ export function runElectricAgentsConformanceTests(
             tagHeaders[`authorization`] = `Bearer ${ctx.currentWriteToken}`
           }
           const res = await fetch(
-            `${ctx.baseUrl}${routeControlPlanePath(
-              `${ctx.currentEntityUrl!}/tags/owner`
-            )}`,
+            appendPathToUrl(
+              ctx.baseUrl,
+              routeControlPlanePath(`${ctx.currentEntityUrl!}/tags/owner`)
+            ),
             {
               method: `POST`,
               headers: tagHeaders,
@@ -1199,9 +1216,10 @@ export function runElectricAgentsConformanceTests(
             tagHeaders.authorization = `Bearer ${ctx.currentWriteToken}`
           }
           const res = await fetch(
-            `${ctx.baseUrl}${routeControlPlanePath(
-              `${ctx.currentEntityUrl!}/tags/priority`
-            )}`,
+            appendPathToUrl(
+              ctx.baseUrl,
+              routeControlPlanePath(`${ctx.currentEntityUrl!}/tags/priority`)
+            ),
             {
               method: `DELETE`,
               headers: tagHeaders,
@@ -1243,7 +1261,7 @@ export function runElectricAgentsConformanceTests(
           name: typeName,
           description: `Type for schema amendment`,
           creation_schema: { type: `object` },
-          input_schemas: {
+          inbox_schemas: {
             query: {
               type: `object`,
               properties: { text: { type: `string` } },
@@ -1252,7 +1270,7 @@ export function runElectricAgentsConformanceTests(
           },
         })
         .amendSchemas(typeName, {
-          input_schemas: {
+          inbox_schemas: {
             command: {
               type: `object`,
               properties: { action: { type: `string` } },
@@ -1275,7 +1293,7 @@ export function runElectricAgentsConformanceTests(
           name: typeName,
           description: `Type for schema conflict test`,
           creation_schema: { type: `object` },
-          input_schemas: {
+          inbox_schemas: {
             query: {
               type: `object`,
               properties: { text: { type: `string` } },
@@ -1285,7 +1303,10 @@ export function runElectricAgentsConformanceTests(
         })
         .custom(async (ctx) => {
           const res = await fetch(
-            `${ctx.baseUrl}/_electric/entity-types/${typeName}/schemas`,
+            appendPathToUrl(
+              ctx.baseUrl,
+              `/_electric/entity-types/${typeName}/schemas`
+            ),
             {
               method: `PATCH`,
               headers: { 'content-type': `application/json` },
@@ -1313,7 +1334,7 @@ export function runElectricAgentsConformanceTests(
           name: typeName,
           description: `Type for revision pinning test`,
           creation_schema: { type: `object` },
-          input_schemas: {
+          inbox_schemas: {
             query: {
               type: `object`,
               properties: { text: { type: `string` } },
@@ -1325,7 +1346,10 @@ export function runElectricAgentsConformanceTests(
         .custom(async (ctx) => {
           // Amend schemas to add a new key after entity is spawned
           const res = await fetch(
-            `${ctx.baseUrl}/_electric/entity-types/${typeName}/schemas`,
+            appendPathToUrl(
+              ctx.baseUrl,
+              `/_electric/entity-types/${typeName}/schemas`
+            ),
             {
               method: `PATCH`,
               headers: { 'content-type': `application/json` },
@@ -1344,9 +1368,10 @@ export function runElectricAgentsConformanceTests(
         .custom(async (ctx) => {
           // Existing entities pick up newly added schema keys.
           const res = await fetch(
-            `${ctx.baseUrl}${routeControlPlanePath(
-              `${ctx.currentEntityUrl!}/send`
-            )}`,
+            appendPathToUrl(
+              ctx.baseUrl,
+              routeControlPlanePath(`${ctx.currentEntityUrl!}/send`)
+            ),
             {
               method: `POST`,
               headers: { 'content-type': `application/json` },
@@ -1393,14 +1418,17 @@ export function runElectricAgentsConformanceTests(
           await receiver.start(manifest)
 
           try {
-            const res = await fetch(`${ctx.baseUrl}/_electric/entity-types`, {
-              method: `POST`,
-              headers: { 'content-type': `application/json` },
-              body: JSON.stringify({
-                name: `bar`,
-                serve_endpoint: receiver.url,
-              }),
-            })
+            const res = await fetch(
+              appendPathToUrl(ctx.baseUrl, `/_electric/entity-types`),
+              {
+                method: `POST`,
+                headers: { 'content-type': `application/json` },
+                body: JSON.stringify({
+                  name: `bar`,
+                  serve_endpoint: receiver.url,
+                }),
+              }
+            )
             // The server should reject due to name mismatch
             expect([400, 409, 422]).toContain(res.status)
           } finally {
@@ -1852,31 +1880,59 @@ export function runElectricAgentsConformanceTests(
       return block?.type === `text` && block.text ? block.text : ``
     }
 
+    async function makeSandbox(workingDirectory: string) {
+      const { unrestrictedSandbox } = await import(
+        `../../agents-runtime/src/sandbox/unrestricted`
+      )
+      return unrestrictedSandbox({ workingDirectory })
+    }
+
     test(`bash tool captures stdout and stderr`, async () => {
       const { createBashTool } = await import(`../../agents-runtime/src/tools`)
-      const tool = createBashTool(`/tmp`)
-      const result = await tool.execute(`test-tc`, {
-        command: `echo "hello" && echo "error" >&2`,
-      })
-      expect(firstText(result)).toContain(`hello`)
-      expect(firstText(result)).toContain(`error`)
-      expect(result.details.exitCode).toBe(0)
+      const sandbox = await makeSandbox(`/tmp`)
+      try {
+        const tool = createBashTool(sandbox)
+        const result = await tool.execute(`test-tc`, {
+          command: `echo "hello" && echo "error" >&2`,
+        })
+        expect(firstText(result)).toContain(`hello`)
+        expect(firstText(result)).toContain(`error`)
+        expect(result.details.exitCode).toBe(0)
+      } finally {
+        await sandbox.dispose()
+      }
     })
 
     test(`bash tool enforces timeout`, async () => {
       const { createBashTool } = await import(`../../agents-runtime/src/tools`)
-      const tool = createBashTool(`/tmp`)
-      const result = await tool.execute(`test-tc`, { command: `sleep 60` })
-      expect(result.details.timedOut).toBe(true)
+      const sandbox = await makeSandbox(`/tmp`)
+      try {
+        const tool = createBashTool(sandbox)
+        const result = await tool.execute(`test-tc`, { command: `sleep 60` })
+        expect(result.details.timedOut).toBe(true)
+      } finally {
+        await sandbox.dispose()
+      }
     }, 35_000)
 
     test(`read_file rejects paths outside working directory`, async () => {
       const { createReadFileTool } = await import(
         `../../agents-runtime/src/tools`
       )
-      const tool = createReadFileTool(`/tmp/test-workdir`)
-      const result = await tool.execute(`test-tc`, { path: `../../etc/passwd` })
-      expect(firstText(result)).toContain(`outside the working directory`)
+      const fs = await import(`node:fs/promises`)
+      const dir = `/tmp/test-workdir-${Date.now()}`
+      await fs.mkdir(dir, { recursive: true })
+      const sandbox = await makeSandbox(dir)
+      try {
+        const tool = createReadFileTool(sandbox)
+        const result = await tool.execute(`test-tc`, {
+          path: `../../etc/passwd`,
+        })
+        expect(firstText(result)).toContain(`outside the working directory`)
+      } finally {
+        await sandbox.dispose()
+        await fs.rm(dir, { recursive: true, force: true })
+      }
     })
 
     test(`read_file rejects binary files`, async () => {
@@ -1892,11 +1948,15 @@ export function runElectricAgentsConformanceTests(
       const binPath = path.join(dir, `test.bin`)
       await fs.writeFile(binPath, Buffer.from([0x00, 0x01, 0x02, 0xff]))
 
-      const tool = createReadFileTool(dir)
-      const result = await tool.execute(`test-tc`, { path: `test.bin` })
-      expect(firstText(result)).toContain(`binary file`)
-
-      await fs.rm(dir, { recursive: true })
+      const sandbox = await makeSandbox(dir)
+      try {
+        const tool = createReadFileTool(sandbox)
+        const result = await tool.execute(`test-tc`, { path: `test.bin` })
+        expect(firstText(result)).toContain(`binary file`)
+      } finally {
+        await sandbox.dispose()
+        await fs.rm(dir, { recursive: true })
+      }
     })
 
     test(`read_file rejects oversized files`, async () => {
@@ -1912,11 +1972,15 @@ export function runElectricAgentsConformanceTests(
       // Write 600KB file (over 512KB limit)
       await fs.writeFile(bigPath, `x`.repeat(600 * 1024))
 
-      const tool = createReadFileTool(dir)
-      const result = await tool.execute(`test-tc`, { path: `big.txt` })
-      expect(firstText(result)).toContain(`too large`)
-
-      await fs.rm(dir, { recursive: true })
+      const sandbox = await makeSandbox(dir)
+      try {
+        const tool = createReadFileTool(sandbox)
+        const result = await tool.execute(`test-tc`, { path: `big.txt` })
+        expect(firstText(result)).toContain(`too large`)
+      } finally {
+        await sandbox.dispose()
+        await fs.rm(dir, { recursive: true })
+      }
     })
 
     test(`web_search tool has correct interface`, async () => {
@@ -1926,9 +1990,17 @@ export function runElectricAgentsConformanceTests(
     })
 
     test(`fetch_url tool has correct interface`, async () => {
-      const { fetchUrlTool } = await import(`../../agents-runtime/src/tools`)
-      expect(fetchUrlTool.name).toBe(`fetch_url`)
-      expect(typeof fetchUrlTool.execute).toBe(`function`)
+      const { createFetchUrlTool } = await import(
+        `../../agents-runtime/src/tools`
+      )
+      const sandbox = await makeSandbox(`/tmp`)
+      try {
+        const tool = createFetchUrlTool(sandbox)
+        expect(tool.name).toBe(`fetch_url`)
+        expect(typeof tool.execute).toBe(`function`)
+      } finally {
+        await sandbox.dispose()
+      }
     })
   })
 
@@ -2235,7 +2307,7 @@ export function runElectricAgentsConformanceTests(
           name: `rev-multi-agent-${id}`,
           description: `Test multi-revision pinning`,
           creation_schema: { type: `object` },
-          input_schemas: {
+          inbox_schemas: {
             greet: {
               type: `object`,
               properties: { name: { type: `string` } },
@@ -2315,7 +2387,7 @@ export function runElectricAgentsConformanceTests(
             {
               method: `PATCH`,
               body: JSON.stringify({
-                input_schemas: {
+                inbox_schemas: {
                   msg: { type: `object` },
                 },
               }),
@@ -2459,7 +2531,7 @@ export function runElectricAgentsConformanceTests(
         .spawn(`auth-notoken-agent-${id}`, `entity-1`)
         .custom(async (ctx) => {
           const res = await fetch(
-            `${ctx.baseUrl}${ctx.currentEntityUrl!}/main`,
+            appendPathToUrl(ctx.baseUrl, `${ctx.currentEntityUrl!}/main`),
             {
               method: `POST`,
               headers: { 'content-type': `application/json` },
@@ -2491,7 +2563,7 @@ export function runElectricAgentsConformanceTests(
         .spawn(`auth-wrongtoken-agent-${id}`, `entity-1`)
         .custom(async (ctx) => {
           const res = await fetch(
-            `${ctx.baseUrl}${ctx.currentEntityUrl!}/main`,
+            appendPathToUrl(ctx.baseUrl, `${ctx.currentEntityUrl!}/main`),
             {
               method: `POST`,
               headers: {
@@ -2545,9 +2617,10 @@ export function runElectricAgentsConformanceTests(
         .spawn(`auth-meta-notoken-agent-${id}`, `entity-1`)
         .custom(async (ctx) => {
           const res = await fetch(
-            `${ctx.baseUrl}${routeControlPlanePath(
-              `${ctx.currentEntityUrl!}/tags/key`
-            )}`,
+            appendPathToUrl(
+              ctx.baseUrl,
+              routeControlPlanePath(`${ctx.currentEntityUrl!}/tags/key`)
+            ),
             {
               method: `POST`,
               headers: { 'content-type': `application/json` },
@@ -2593,9 +2666,10 @@ export function runElectricAgentsConformanceTests(
         .spawn(`auth-send-noauth-agent-${id}`, `entity-1`)
         .custom(async (ctx) => {
           const res = await fetch(
-            `${ctx.baseUrl}${routeControlPlanePath(
-              `${ctx.currentEntityUrl!}/send`
-            )}`,
+            appendPathToUrl(
+              ctx.baseUrl,
+              routeControlPlanePath(`${ctx.currentEntityUrl!}/send`)
+            ),
             {
               method: `POST`,
               headers: { 'content-type': `application/json` },
@@ -2621,7 +2695,10 @@ export function runElectricAgentsConformanceTests(
         .spawn(`auth-noleak-agent-${id}`, `entity-1`)
         .custom(async (ctx) => {
           const res = await fetch(
-            `${ctx.baseUrl}${routeControlPlanePath(ctx.currentEntityUrl!)}`
+            appendPathToUrl(
+              ctx.baseUrl,
+              routeControlPlanePath(ctx.currentEntityUrl!)
+            )
           )
           expect(res.status).toBe(200)
           const entity = await res.json()
@@ -2758,7 +2835,10 @@ export function runCliConformanceTests(config: CliTestOptions): void {
         // Verify via API that the entity actually exists
         .verifyApi(async (baseUrl) => {
           const res = await fetch(
-            `${baseUrl}${routeControlPlanePath(`/cli-spawn-type/${id}`)}`
+            appendPathToUrl(
+              baseUrl,
+              routeControlPlanePath(`/cli-spawn-type/${id}`)
+            )
           )
           expect(res.status).toBe(200)
           const entity = (await res.json()) as Record<string, unknown>
@@ -2846,13 +2926,19 @@ export function runCliConformanceTests(config: CliTestOptions): void {
         // Verify the message actually landed in the stream via API
         .verifyApi(async (baseUrl) => {
           const res = await fetch(
-            `${baseUrl}${routeControlPlanePath(`/cli-send-type/${id}`)}`
+            appendPathToUrl(
+              baseUrl,
+              routeControlPlanePath(`/cli-send-type/${id}`)
+            )
           )
           expect(res.status).toBe(200)
           const entity = (await res.json()) as Record<string, unknown>
           const streams = entity.streams as { main: string }
           const streamRes = await fetch(
-            `${baseUrl}${streams.main}?offset=0000000000000000_0000000000000000`
+            appendPathToUrl(
+              baseUrl,
+              `${streams.main}?offset=0000000000000000_0000000000000000`
+            )
           )
           const events = (await streamRes.json()) as Array<
             Record<string, unknown>
@@ -2896,7 +2982,10 @@ export function runCliConformanceTests(config: CliTestOptions): void {
         // Verify API agrees with CLI output
         .verifyApi(async (baseUrl) => {
           const res = await fetch(
-            `${baseUrl}${routeControlPlanePath(`/cli-inspect-etype/${id}`)}`
+            appendPathToUrl(
+              baseUrl,
+              routeControlPlanePath(`/cli-inspect-etype/${id}`)
+            )
           )
           expect(res.status).toBe(200)
           const entity = (await res.json()) as Record<string, unknown>
@@ -2963,7 +3052,10 @@ export function runCliConformanceTests(config: CliTestOptions): void {
         .expectStdout(/Spawned/)
         .verifyApi(async (baseUrl) => {
           const res = await fetch(
-            `${baseUrl}${routeControlPlanePath(`/cli-lifecycle-type/${id}`)}`
+            appendPathToUrl(
+              baseUrl,
+              routeControlPlanePath(`/cli-lifecycle-type/${id}`)
+            )
           )
           expect(res.status, `entity should exist after spawn`).toBe(200)
           const entity = (await res.json()) as Record<string, unknown>
@@ -3050,9 +3142,12 @@ export function runMockAgentTests(config: MockAgentTestOptions): void {
     instanceId: string
   ): Promise<Record<string, unknown>> {
     const res = await fetch(
-      `${baseUrl}${routeControlPlanePath(
-        `/${encodeURIComponent(typeName)}/${encodeURIComponent(instanceId)}`
-      )}`,
+      appendPathToUrl(
+        baseUrl,
+        routeControlPlanePath(
+          `/${encodeURIComponent(typeName)}/${encodeURIComponent(instanceId)}`
+        )
+      ),
       {
         method: `PUT`,
         headers: { 'content-type': `application/json` },
@@ -3069,7 +3164,7 @@ export function runMockAgentTests(config: MockAgentTestOptions): void {
     text: string
   ): Promise<void> {
     const res = await fetch(
-      `${baseUrl}${routeControlPlanePath(`${entityUrl}/send`)}`,
+      appendPathToUrl(baseUrl, routeControlPlanePath(`${entityUrl}/send`)),
       {
         method: `POST`,
         headers: { 'content-type': `application/json` },
@@ -3090,14 +3185,17 @@ export function runMockAgentTests(config: MockAgentTestOptions): void {
     const start = Date.now()
     while (Date.now() - start < timeoutMs) {
       const entityRes = await fetch(
-        `${baseUrl}${routeControlPlanePath(entityUrl)}`
+        appendPathToUrl(baseUrl, routeControlPlanePath(entityUrl))
       )
       if (!entityRes.ok) throw new Error(`Entity ${entityUrl} not found`)
       const entity = (await entityRes.json()) as Record<string, unknown>
 
       const streams = entity.streams as { main: string }
       const streamRes = await fetch(
-        `${baseUrl}${streams.main}?offset=0000000000000000_0000000000000000`
+        appendPathToUrl(
+          baseUrl,
+          `${streams.main}?offset=0000000000000000_0000000000000000`
+        )
       )
       const events = (await streamRes.json()) as Array<Record<string, unknown>>
 
@@ -3200,14 +3298,17 @@ export function runMockAgentCliTests(config: MockAgentCliTestOptions): void {
         .wait(3000)
         .verifyApi(async (baseUrl) => {
           const res = await fetch(
-            `${baseUrl}${routeControlPlanePath(`/chat/${id}`)}`
+            appendPathToUrl(baseUrl, routeControlPlanePath(`/chat/${id}`))
           )
           expect(res.status, `entity should exist`).toBe(200)
           const entity = (await res.json()) as Record<string, unknown>
 
           const streams = entity.streams as { main: string }
           const streamRes = await fetch(
-            `${baseUrl}${streams.main}?offset=0000000000000000_0000000000000000`
+            appendPathToUrl(
+              baseUrl,
+              `${streams.main}?offset=0000000000000000_0000000000000000`
+            )
           )
           const events = (await streamRes.json()) as Array<
             Record<string, unknown>
@@ -3242,14 +3343,17 @@ export function runMockAgentCliTests(config: MockAgentCliTestOptions): void {
         .expectStdout(/running|idle/)
         .verifyApi(async (baseUrl) => {
           const res = await fetch(
-            `${baseUrl}${routeControlPlanePath(`/chat/${id}`)}`
+            appendPathToUrl(baseUrl, routeControlPlanePath(`/chat/${id}`))
           )
           expect(res.status).toBe(200)
           const entity = (await res.json()) as Record<string, unknown>
 
           const streams = entity.streams as { main: string }
           const streamRes = await fetch(
-            `${baseUrl}${streams.main}?offset=0000000000000000_0000000000000000`
+            appendPathToUrl(
+              baseUrl,
+              `${streams.main}?offset=0000000000000000_0000000000000000`
+            )
           )
           const events = (await streamRes.json()) as Array<
             Record<string, unknown>

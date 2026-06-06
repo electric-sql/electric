@@ -56,7 +56,7 @@ The handler is **not** a long-running process. It wakes, does its work (usually 
 
 ### Spawning Children
 
-Any entity can spawn child entities. When a child finishes (and the parent registered `wake: "runFinished"`), the parent's handler runs again. The wake event includes the child's response and the status of sibling children.
+Any entity can spawn child entities. When a child finishes (and the parent registered `wake: { on: "runFinished", includeResponse: true }`), the parent's handler runs again. The wake event includes the child's response and the status of sibling children.
 
 ### The Worker Entity
 
@@ -100,7 +100,7 @@ IMPORTANT: Never write files until the user explicitly confirms. "Ask to write" 
 
 - **Continue building** — add an HTTP API route and a React frontend to this app so users can interact with the analyzer from the browser.
 - **Start a new app** — use the `agents-chat-starter` template for a full multi-agent chat app with rooms, agent spawning, and a Slack-style UI. Load the init skill or tell them to type `/init`.
-- **Explore the docs** — read about other coordination patterns (blackboard, pipeline, map-reduce), dive into the API reference, or learn about shared state, context assembly, and other advanced features. Use `search_durable_agents_docs` to look things up.
+- **Explore the docs** — read about other coordination patterns (blackboard, pipeline, map-reduce), dive into the API reference, or learn about shared state, context assembly, and other advanced features. Use `search_electric_agents_docs` to look things up.
 
 Wait for the user to choose. Only proceed to Step 4 if they want to continue building.
 
@@ -116,7 +116,7 @@ Wait for the user to choose. Only proceed to Step 4 if they want to continue bui
 - `server.ts` is at the working directory root. Entity files go in `entities/`.
 - Worker spawn args MUST include `tools` array (at least one tool, e.g. `tools: ["bash"]`).
 - Use `edit` tool for small changes (like updating server.ts). Use `write` for full entity file updates.
-- If the user asks a question about Electric Agents concepts, APIs, or patterns between steps, use the `search_durable_agents_docs` tool to look up the answer in the built-in documentation before guessing or searching the web.
+- If the user asks a question about Electric Agents concepts, APIs, or patterns between steps, use the `search_electric_agents_docs` tool to look up the answer in the built-in documentation before guessing or searching the web.
 
 ---
 
@@ -184,7 +184,10 @@ function createAnalyzeTool(ctx: HandlerContext) {
             'You are an optimist analyst. Provide an enthusiastic, positive analysis focusing on opportunities and benefits.',
           tools: ['bash', 'read'],
         },
-        { initialMessage: question, wake: 'runFinished' }
+        {
+          initialMessage: question,
+          wake: { on: 'runFinished', includeResponse: true },
+        }
       )
       return {
         content: [
@@ -257,7 +260,10 @@ function createAnalyzeTool(ctx: HandlerContext) {
           'worker',
           childId,
           { systemPrompt: p.systemPrompt, tools: ['bash'] },
-          { initialMessage: question, wake: 'runFinished' }
+          {
+            initialMessage: question,
+            wake: { on: 'runFinished', includeResponse: true },
+          }
         )
         ctx.db.actions.children_insert({
           row: { key: p.id, url: `/worker/${childId}` },
@@ -524,13 +530,13 @@ After explaining, tell the user to restart with `npm run dev:all` (starts both s
 
 ## What you learned
 
-| Step | Concept                 | API                                                         |
-| ---- | ----------------------- | ----------------------------------------------------------- |
-| 1    | Entity types & handlers | `registry.define()`, `ctx.useAgent()`, `ctx.agent.run()`    |
-| 2    | Spawning children       | `ctx.spawn()`, `wake: 'runFinished'`                        |
-| 3    | State collections       | `state: { children: { primaryKey: 'key' } }`                |
-| 4    | Server routes           | `createRuntimeServerClient()`, `client.spawnEntity()`       |
-| 5    | Live frontend           | `createAgentsClient`, `entity()`, `useChat`, streaming text |
+| Step | Concept                 | API                                                                 |
+| ---- | ----------------------- | ------------------------------------------------------------------- |
+| 1    | Entity types & handlers | `registry.define()`, `ctx.useAgent()`, `ctx.agent.run()`            |
+| 2    | Spawning children       | `ctx.spawn()`, `wake: { on: 'runFinished', includeResponse: true }` |
+| 3    | State collections       | `state: { children: { primaryKey: 'key' } }`                        |
+| 4    | Server routes           | `createRuntimeServerClient()`, `client.spawnEntity()`               |
+| 5    | Live frontend           | `createAgentsClient`, `entity()`, `useChat`, streaming text         |
 
 For a complete multi-agent chat app with rooms, agent spawning, and a Slack-style UI, see the [agents-chat-starter](https://github.com/electric-sql/electric/tree/main/examples/agents-chat-starter) example.
 

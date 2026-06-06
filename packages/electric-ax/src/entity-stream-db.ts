@@ -7,7 +7,7 @@
  * so we feed them directly to StreamDB without transformation.
  */
 
-import { createStreamDB } from '@durable-streams/state'
+import { createStreamDB } from '@durable-streams/state/db'
 import { appendPathToUrl, entityStateSchema } from '@electric-ax/agents-runtime'
 import { entityApiUrl } from './entity-api.js'
 import type { EntityStreamDB } from '@electric-ax/agents-runtime'
@@ -33,10 +33,6 @@ export async function createEntityStreamDB(opts: {
 }): Promise<{ db: EntityStreamDB; close: () => void }> {
   const { baseUrl, entityUrl, initialOffset, headers: serverHeaders } = opts
 
-  console.log(
-    `[createEntityStreamDB] Creating entity stream DB for ${baseUrl}${entityUrl}`
-  )
-
   const requestHeaders = {
     'content-type': `application/json`,
     ...serverHeaders,
@@ -56,7 +52,7 @@ export async function createEntityStreamDB(opts: {
     throw new Error(`Failed to fetch entity at ${entityUrl}: ${res.statusText}`)
   }
   const entity = (await res.json()) as {
-    streams?: { main: string; error: string }
+    streams?: { main: string }
   }
   const streamPath = getMainStreamPath(entityUrl, entity)
   const streamUrl = appendPathToUrl(baseUrl, streamPath)

@@ -10,6 +10,7 @@ const modelCatalog: BuiltinModelCatalog = {
     label: `Anthropic Claude Sonnet 4.6`,
     value: `anthropic:claude-sonnet-4-6`,
     reasoning: true,
+    input: [`text`, `image`],
   },
   choices: [
     {
@@ -18,6 +19,7 @@ const modelCatalog: BuiltinModelCatalog = {
       label: `Anthropic Claude Sonnet 4.6`,
       value: `anthropic:claude-sonnet-4-6`,
       reasoning: true,
+      input: [`text`, `image`],
     },
     {
       provider: `openai`,
@@ -25,6 +27,7 @@ const modelCatalog: BuiltinModelCatalog = {
       label: `OpenAI GPT-4.1`,
       value: `openai:gpt-4.1`,
       reasoning: false,
+      input: [`text`],
     },
   ],
 }
@@ -48,6 +51,11 @@ describe(`horton model selection`, () => {
         model?: { enum?: Array<string> }
         reasoningEffort?: { enum?: Array<string>; default?: string }
       }
+      $defs?: {
+        electricModelInputs?: {
+          properties?: Record<string, { default?: Array<string> }>
+        }
+      }
     }
 
     expect(jsonSchema.properties?.model?.enum).toEqual([
@@ -62,6 +70,15 @@ describe(`horton model selection`, () => {
       `high`,
     ])
     expect(jsonSchema.properties?.reasoningEffort?.default).toBe(`auto`)
+    expect(
+      jsonSchema.$defs?.electricModelInputs?.properties?.[
+        `anthropic:claude-sonnet-4-6`
+      ]?.default
+    ).toEqual([`text`, `image`])
+    expect(
+      jsonSchema.$defs?.electricModelInputs?.properties?.[`openai:gpt-4.1`]
+        ?.default
+    ).toEqual([`text`])
   })
 
   it(`uses the selected model when running Horton`, async () => {
@@ -81,6 +98,16 @@ describe(`horton model selection`, () => {
       firstWake: false,
       tags: {},
       db: { collections: { inbox: { toArray: [] } } },
+      sandbox: {
+        workingDirectory: `/work`,
+        readFile: vi.fn(async () => {
+          throw new Error(`ENOENT`)
+        }),
+      },
+      slashCommands: { replaceOwned: vi.fn() },
+      insertContext: vi.fn(),
+      removeContext: vi.fn(),
+      getContext: vi.fn(),
       useContext: vi.fn(),
       useAgent,
       agent: { run },

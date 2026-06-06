@@ -1,5 +1,98 @@
 # @electric-ax/agents-runtime
 
+## 0.3.10
+
+### Patch Changes
+
+- 3ecdade: Add structured composer input support, slash command registration, and proactive skill context loading.
+
+## 0.3.9
+
+### Patch Changes
+
+- 9fdf96a: Track agent-originated sends with `from_agent` / `from_principal` inbox metadata and render agent/self-send inbox messages with JSON payload fallbacks.
+- 312f5ec: Promote `skills/types` to a first-class tsdown entry so its `.d.ts` is a stable
+  named output, avoiding an intermittent dts generation failure under CI's
+  parallel build.
+- 6434774: Add owner-default agents-server permissions with type-level spawn grants, entity grants, effective permission materialization, principal-scoped entity observation streams, shared-state access links, runtime registration permission grants, and default user spawn grants for built-in Horton and Worker types.
+
+  Existing entity observation bridges are rebuilt after upgrade because pre-permission bridge rows do not include principal attribution.
+
+  Entity `manage` grants participate in read visibility, entity-type `manage` grants participate in spawn visibility, and broad parented spawn-time grants require `manage` on the parent.
+
+- 4f88e6d: Dedupe `@tanstack/db` to a single instance.
+
+  `@tanstack/db` is effectively a singleton (collections/transactions/live
+  queries use `instanceof` checks and module-level state), but the lockfile had
+  drifted to several `0.6.x` copies, breaking StreamDB collections. Adds a root
+  `pnpm.overrides` entry collapsing the `0.6.x` line to `0.6.7`, scoped to
+  `>=0.6.0 <0.7.0` so the legacy example starters pinned to `0.0.x`/`0.5.8` are
+  untouched. Stopgap until `@durable-streams/state` ships `@tanstack/db` as a
+  peer dependency.
+
+  Also raises the `agents-mobile` iOS minimum deployment target to 16.4 (via
+  `expo-build-properties`). The chat renders in an Expo DOM WebView whose markdown
+  stack ships regex lookbehind, which JavaScriptCore only parses on iOS 16.4+;
+  below that the whole DOM bundle fails to parse and the chat renders blank.
+
+- b2bf806: Upgrade `@durable-streams/state` to `0.3.1` and drop the `@tanstack/db` pnpm override.
+
+  `@durable-streams/state@0.3.x` makes `@tanstack/db` an optional peer dependency (it was a direct `^0.6.0` dependency) and splits its tsdb-coupled tools into a `@durable-streams/state/db` subpath. tsdb-specific imports (`createStreamDB`, `queryOnce`, `createTransaction`, query operators, etc.) now come from `@durable-streams/state/db`; the bare entry keeps only the tsdb-free types and helpers.
+
+  Because state no longer pulls its own `@tanstack/db` copy, the root `pnpm.overrides` collapsing `@tanstack/db@>=0.6.0 <0.7.0` to `0.6.7` is removed. To keep a single `0.6.7` instance without it, `@tanstack/react-db` is raised to `^0.1.85` and `@tanstack/electric-db-collection` to `^0.3.5` (both pin `@tanstack/db@0.6.7`), and `@durable-streams/server` to `^0.3.7` (depends on `state@0.3.1`, removing the lingering transitive `state@0.2.9`).
+
+- 74d2341: Fix Codex auth for low-cost tool calls by passing fresh access tokens to URL extraction and worker tools.
+- d14d9a9: Remove the unused per-entity agents error stream. Entities now expose only their main stream; spawn, fork, registry lookup, terminal signal handling, UI/runtime types, client helpers, and conformance tests no longer create or require an entity-level error stream.
+- 7c62024: Remove the old child-handle result API (`EntityHandle.run` and `EntityHandle.text()`) and internal spawn run promise plumbing. Child coordination should use durable `runFinished` server wakes with `includeResponse` so parent handlers can return safely instead of waiting in-memory for child output.
+
+## 0.3.8
+
+### Patch Changes
+
+- 17b374f: Adds the `Sandbox` primitive (`@electric-ax/agents-runtime/sandbox`) for isolating LLM-driven tool calls. Three providers ship: `unrestrictedSandbox()` (explicit pass-through), `remoteSandbox({provider: 'e2b'})` (E2B as an optional peer dep), and `dockerSandbox()` (container isolation via `dockerode` as an optional peer dep).
+
+  Built-in entities (Horton, Worker) default to `unrestrictedSandbox` via the new `chooseDefaultSandbox(workingDirectory)` helper. Stronger isolation is opt-in by constructing `dockerSandbox` or `remoteSandbox` directly — `dockerSandbox` is the recommended path for multi-entity hosting.
+
+  Behavior changes folded in: bash no longer forwards `process.env` to children (removes the trivial `env`-dump leak of secrets like `$ANTHROPIC_API_KEY` — note the host-sharing `unrestricted` provider still can't fully contain secrets, e.g. via `/proc/<ppid>/environ`, so use `docker`/`remote` for untrusted or multi-tenant entities), tool descriptions corrected, and read/write/edit reject symlink escapes from the workspace.
+
+  Runtimes advertise named **sandbox profiles** (e.g. `local`, `docker`) to the agents-server; spawn requests pick a profile by name, the server validates the choice against the target runner's advertised set, and the new-session UI surfaces a picker. Internally, the built-in tool factories (`createBashTool`, `createFetchUrlTool`, etc.) now route their filesystem and network access through the active `Sandbox`.
+
+- 1a7d72e: Preserve volatile context source order in `assembleContext()` instead of globally sorting by `at` timestamp. Fixes a bug where the SIGINT reordering performed by `reorderInterruptedRuns()` was undone by a downstream sort, causing interrupted run output to appear after the interrupt marker in the model transcript.
+- d5708c7: Add `EventPointer { offset, subOffset }` for addressing single events on a durable stream. Widen `__electricRowOffsets` side-tables on `EntityStreamDB` collections from `Map<key, string>` to `Map<key, EventPointer>`, with pointers minted along log-entry boundaries (grouped by each item's `headers.offset`) so they round-trip cleanly through `Stream-Fork-Sub-Offset` regardless of how a live read is chunked.
+- f2d3d5e: Render self-send wake notifications with the sent message payload in the agent timeline.
+
+## 0.3.7
+
+### Patch Changes
+
+- 9e01e58: Preserve and surface detailed run failure information from the Pi adapter so failed runs can render actionable error details instead of a generic failure message.
+
+## 0.3.6
+
+### Patch Changes
+
+- e9ea591: Show detailed agent run failure information in the timeline instead of the generic `Run failed` fallback. Run errors now include their error code, failed tool calls preserve and render their error text, and failed runs fall back to tool errors or finish reasons when no run error row is available.
+- 98b51d6: Update Electric Agents packages to depend on the stable Durable Streams
+  packages instead of pkg.pr builds. This pulls in `@durable-streams/client`
+  0.2.6, `@durable-streams/server` 0.3.5, and `@durable-streams/state` 0.2.9.
+  Examples now resolve `@electric-ax/agents-runtime` from the workspace so they
+  do not keep older registry runtime builds pinned in the lockfile.
+- aed2189: Add Kimi / Moonshot API support for local Horton runtimes, including model catalog entries, runtime provider resolution, desktop credential persistence, and UI credential inputs.
+- 52a641f: Add manifest-backed attachments for agents.
+
+  Attachments are uploaded through entity routes, stored in private attachment streams, referenced by manifest entries, and exposed to runtime handlers through `ctx.attachments`. The server UI can attach image files to user messages, renders message attachments with authenticated preview/download actions, exposes image previews from attachment manifest rows, rolls back uploaded attachments when send fails, and hides image attachment controls for models whose registered pi-ai metadata does not include image input. Image hydration now has a simple newest-images byte/count guardrail. Horton title generation now also works when the first user message is sent after attachment upload, including image-only starts.
+
+## 0.3.5
+
+### Patch Changes
+
+- d344c32: Treat Electric Agents server URLs as opaque tenant-scoped base URLs rooted at `/t/<tenant-id>/v1`, migrate desktop and mobile Cloud clients to that URL shape, move observation stream ensure endpoints under `/_electric/observations/*/ensure-stream`, rename the pre-alpha entity/cron/schema/tag/docs APIs to their Electric Agents names, add a non-interactive `electric agents view` transcript command, and make Horton title extraction work with lightweight desktop inbox collection facades.
+
+  Send the done callback for completed wake checkpoints during graceful shutdown, preventing desktop reloads from leaving already completed DS subscription claims pending.
+
+- c1834f3: Prepare the mobile app for Expo EAS builds and CI. Adds dynamic Expo config, EAS build profiles, mobile CI/export scripts, and aligns shared React/TypeScript dependency resolution so the Expo DOM embed typechecks and passes `expo-doctor`.
+- 319e405: Explicit ChatGPT / Codex opt-in with native PKCE OAuth sign-in (opened in the user's default browser to avoid Cloudflare bot detection), per-source consent for detected Codex CLI / OpenCode logins, an inline "Use this login?" prompt under the new-session composer, and a "Restart local runtime" banner gated on credential changes. The runtime no longer reads `~/.codex/auth.json` implicitly — it now requires `ELECTRIC_CODEX_ACCESS_TOKEN` and honours `ELECTRIC_CODEX_REQUIRE_OPT_IN=1`.
+
 ## 0.3.4
 
 ### Patch Changes

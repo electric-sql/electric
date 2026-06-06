@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Box, Newline, Text, render, useInput } from 'ink'
 import { useLiveQuery } from '@tanstack/react-db'
-import { createOptimisticAction } from '@durable-streams/state'
+import { createOptimisticAction } from '@durable-streams/state/db'
 import {
   buildSections,
   createEntityIncludesQuery,
@@ -412,10 +412,11 @@ function ObserveView({
 
   const typedRuns = timelineData.runs
   const typedInbox = timelineData.inbox
+  const typedWakes = timelineData.wakes
 
   const timeline = useMemo(
-    () => buildSections(typedRuns, typedInbox),
-    [typedRuns, typedInbox]
+    () => buildSections(typedRuns, typedInbox, typedWakes),
+    [typedRuns, typedInbox, typedWakes]
   )
 
   const { data: stopped = [] } = useLiveQuery(

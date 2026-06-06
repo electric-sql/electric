@@ -1,4 +1,4 @@
-import { createStreamDB } from '@durable-streams/state'
+import { createStreamDB } from '@durable-streams/state/db'
 import { createEntityStreamDB } from './entity-stream-db'
 import { normalizeObservationSchema } from './observation-schema'
 import { createRuntimeServerClient } from './runtime-server-client'
@@ -47,7 +47,7 @@ export function createAgentsClient(config: AgentsClientConfig): AgentsClient {
       }),
     async observe(source) {
       if (source.sourceType === `entity`) {
-        const info = await serverClient.getEntityInfo(
+        const info = await serverClient.getEntity(
           (source as EntityObservationSource).entityUrl
         )
         const db = createEntityStreamDB(
@@ -64,9 +64,14 @@ export function createAgentsClient(config: AgentsClientConfig): AgentsClient {
       }
 
       if (source.sourceType === `entities`) {
-        await serverClient.registerEntitiesSource(
+        const ensured = await serverClient.ensureEntitiesMembershipStream(
           (source as EntitiesObservationSource).tags
         )
+        source = {
+          ...source,
+          sourceRef: ensured.sourceRef,
+          streamUrl: ensured.streamUrl,
+        }
       }
 
       if (source.sourceType === `pgSync`) {

@@ -1,6 +1,7 @@
 .DS_store
 .vscode
 **/*.vitest-temp.json
+**/.playwright-mcp/
 **/dist/**
 /packages/sync-service/state/
 /website/.netlify

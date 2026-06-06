@@ -15,7 +15,7 @@
     "@radix-ui/themes": "^3.3.0",
     "@sinclair/typebox": "^0.34.49",
     "@tanstack/db": "^0.6.0",
-    "@tanstack/react-db": "^0.1.78",
+    "@tanstack/react-db": "^0.1.85",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "streamdown": "^2.5.0"

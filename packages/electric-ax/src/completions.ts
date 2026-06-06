@@ -14,6 +14,7 @@ const AGENTS_COMMANDS = [
   `spawn`,
   `send`,
   `observe`,
+  `view`,
   `inspect`,
   `ps`,
   `signal`,
@@ -32,6 +33,7 @@ const COMMAND_FLAGS: Record<string, Array<string>> = {
   spawn: [`--args`],
   send: [`--type`, `--json`],
   observe: [`--from`],
+  view: [`--from`],
   signal: [`--reason`, `--payload`],
   ps: [`--type`, `--status`, `--parent`],
   'start-builtin': [`--anthropic-api-key`],
@@ -87,6 +89,7 @@ export function fetchEntityUrls(env: ElectricCliEnv): Promise<Array<string>> {
 const ENTITY_URL_COMMANDS = new Set([
   `send`,
   `observe`,
+  `view`,
   `inspect`,
   `signal`,
   `kill`,

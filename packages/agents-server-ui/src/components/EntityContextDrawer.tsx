@@ -3,6 +3,7 @@ import {
   ArrowUp,
   ChevronDown,
   ChevronRight,
+  ExternalLink,
   GripVertical,
   Pencil,
   SplitSquareHorizontal,
@@ -14,8 +15,17 @@ import { useElectricAgents } from '../lib/ElectricAgentsProvider'
 import { Icon, IconButton, Text, Tooltip } from '../ui'
 import { StatusDot } from './StatusDot'
 import { JsonInspectDialog } from './JsonInspectDialog'
+import {
+  AttachmentImagePreviewDialog,
+  type AttachmentImagePreviewItem,
+} from './AttachmentImagePreviewDialog'
 import { getEntityDisplayTitle } from '../lib/entityDisplay'
 import { createQueuePositionBetween, readTextPayload } from '../lib/sendMessage'
+import {
+  attachmentDisplayName,
+  attachmentDownloadUrl,
+  isAttachmentManifest,
+} from '../lib/attachments'
 import styles from './EntityContextDrawer.module.css'
 import type {
   EntityStreamDBWithActions,
@@ -96,9 +106,11 @@ function entityUrlsFromKey(key: string): Array<string> {
 export function EntityContextDrawer({
   entity,
   db,
+  baseUrl,
   tileId,
   pendingMessages = [],
   pendingEditingKey = null,
+  pendingActionsDisabled = false,
   onEditPending,
   onDeletePending,
   onSteerPending,
@@ -106,9 +118,11 @@ export function EntityContextDrawer({
 }: {
   entity: ElectricEntity
   db: EntityStreamDBWithActions | null
+  baseUrl: string
   tileId: string
   pendingMessages?: EntityTimelineData[`inbox`]
   pendingEditingKey?: string | null
+  pendingActionsDisabled?: boolean
   onEditPending?: (message: EntityTimelineData[`inbox`][number]) => void
   onDeletePending?: (key: string) => void
   onSteerPending?: (key: string) => void
@@ -117,6 +131,8 @@ export function EntityContextDrawer({
   const { entitiesCollection } = useElectricAgents()
   const { helpers } = useWorkspace()
   const [inspectTarget, setInspectTarget] = useState<InspectTarget | null>(null)
+  const [previewAttachment, setPreviewAttachment] =
+    useState<AttachmentImagePreviewItem | null>(null)
 
   const parentUrl = entity.parent
 
@@ -231,17 +247,30 @@ export function EntityContextDrawer({
             onDelete={onDeletePending}
             onSteer={onSteerPending}
             onReorder={onReorderPending}
+            disabled={pendingActionsDisabled}
           />
         )}
         {groups.map((group) => (
           <ManifestSection
             key={group.key}
             group={group}
+            baseUrl={baseUrl}
+            entityUrl={entity.url}
             onSelect={handleEntry}
             onOpenSide={handleSide}
+            onPreviewAttachment={setPreviewAttachment}
           />
         ))}
       </div>
+      {previewAttachment && (
+        <AttachmentImagePreviewDialog
+          attachment={previewAttachment}
+          open={previewAttachment !== null}
+          onOpenChange={(open) => {
+            if (!open) setPreviewAttachment(null)
+          }}
+        />
+      )}
       <JsonInspectDialog
         open={inspectTarget !== null}
         onOpenChange={(open) => {
@@ -261,6 +290,7 @@ function PendingInboxSection({
   onDelete,
   onSteer,
   onReorder,
+  disabled,
 }: {
   messages: EntityTimelineData[`inbox`]
   editingKey: string | null
@@ -268,6 +298,7 @@ function PendingInboxSection({
   onDelete: (key: string) => void
   onSteer: (key: string) => void
   onReorder: (key: string, position: string) => void
+  disabled: boolean
 }): React.ReactElement {
   const [expanded, setExpanded] = useState(true)
   const [draggingKey, setDraggingKey] = useState<string | null>(null)
@@ -294,6 +325,7 @@ function PendingInboxSection({
     targetKey: string,
     placement: `before` | `after`
   ): void => {
+    if (disabled) return
     const fromIndex = messages.findIndex(
       (message) => message.key === draggedKey
     )
@@ -365,13 +397,15 @@ function PendingInboxSection({
             ]
               .filter(Boolean)
               .join(` `)}
-            draggable
+            draggable={!disabled}
             onDragStart={(event) => {
+              if (disabled) return
               setDraggingKey(message.key)
               event.dataTransfer.effectAllowed = `move`
               event.dataTransfer.setData(`text/plain`, message.key)
             }}
             onDragOver={(event) => {
+              if (disabled) return
               if (!draggingKey || draggingKey === message.key) return
               event.preventDefault()
               event.dataTransfer.dropEffect = `move`
@@ -386,6 +420,7 @@ function PendingInboxSection({
               )
             }}
             onDrop={(event) => {
+              if (disabled) return
               event.preventDefault()
               const draggedKey =
                 event.dataTransfer.getData(`text/plain`) || draggingKey
@@ -428,6 +463,7 @@ function PendingInboxSection({
                 tone="neutral"
                 className={styles.pendingActionButton}
                 aria-label="Edit queued message"
+                disabled={disabled}
                 onClick={() => onEdit(message)}
               >
                 <Icon icon={Pencil} size={1} />
@@ -439,6 +475,7 @@ function PendingInboxSection({
                 tone="neutral"
                 className={styles.pendingActionButton}
                 aria-label="Steer now"
+                disabled={disabled}
                 onClick={() => onSteer(message.key)}
               >
                 <Icon icon={ArrowUp} size={1} />
@@ -450,6 +487,7 @@ function PendingInboxSection({
                 tone="neutral"
                 className={styles.pendingActionButton}
                 aria-label="Delete queued message"
+                disabled={disabled}
                 onClick={() => onDelete(message.key)}
               >
                 <Icon icon={Trash2} size={1} />
@@ -525,6 +563,8 @@ function manifestKindLabel(manifest: Manifest): string {
       return `Shared state`
     case `effect`:
       return `Effect`
+    case `attachment`:
+      return `Attachment`
     case `context`:
       return `Context`
     case `schedule`:
@@ -630,6 +670,18 @@ function createManifestEntry(
         entity: null,
       }
 
+    case `attachment`:
+      return {
+        key: manifest.key,
+        groupKey: `attachment`,
+        groupLabel: `Attachments`,
+        title: attachmentDisplayName(manifest),
+        meta: `${manifest.mimeType} · ${manifest.status}`,
+        manifest,
+        action: { kind: `inspect` },
+        entity: null,
+      }
+
     case `context`:
       return {
         key: manifest.key,
@@ -695,12 +747,18 @@ function titleCase(value: string): string {
 
 function ManifestSection({
   group,
+  baseUrl,
+  entityUrl,
   onSelect,
   onOpenSide,
+  onPreviewAttachment,
 }: {
   group: DrawerGroup
+  baseUrl: string
+  entityUrl: string
   onSelect: (entry: DrawerEntry) => void
   onOpenSide: (entry: DrawerEntry) => void
+  onPreviewAttachment: (attachment: AttachmentImagePreviewItem) => void
 }): React.ReactElement {
   const [expanded, setExpanded] = useState(false)
   const Chevron = expanded ? ChevronDown : ChevronRight
@@ -728,9 +786,12 @@ function ManifestSection({
           <ManifestRow
             key={entry.key}
             entry={entry}
+            baseUrl={baseUrl}
+            entityUrl={entityUrl}
             canOpenSide={canOpenSide && entry.action.kind !== `inspect`}
             onSelect={onSelect}
             onOpenSide={onOpenSide}
+            onPreviewAttachment={onPreviewAttachment}
           />
         ))}
     </div>
@@ -739,15 +800,27 @@ function ManifestSection({
 
 function ManifestRow({
   entry,
+  baseUrl,
+  entityUrl,
   canOpenSide,
   onSelect,
   onOpenSide,
+  onPreviewAttachment,
 }: {
   entry: DrawerEntry
+  baseUrl: string
+  entityUrl: string
   canOpenSide: boolean
   onSelect: (entry: DrawerEntry) => void
   onOpenSide: (entry: DrawerEntry) => void
+  onPreviewAttachment: (attachment: AttachmentImagePreviewItem) => void
 }): React.ReactElement {
+  const previewAttachment = createAttachmentPreviewItem(
+    entry,
+    baseUrl,
+    entityUrl
+  )
+
   return (
     <div className={styles.rowShell}>
       <button
@@ -786,6 +859,45 @@ function ManifestRow({
           </IconButton>
         </Tooltip>
       )}
+      {previewAttachment && (
+        <Tooltip content="Preview attachment">
+          <IconButton
+            type="button"
+            size={1}
+            variant="ghost"
+            tone="neutral"
+            className={styles.sideButton}
+            aria-label={`Preview ${entry.title}`}
+            onClick={(e) => {
+              e.stopPropagation()
+              onPreviewAttachment(previewAttachment)
+            }}
+          >
+            <Icon icon={ExternalLink} size={1} />
+          </IconButton>
+        </Tooltip>
+      )}
     </div>
   )
+}
+
+function createAttachmentPreviewItem(
+  entry: DrawerEntry,
+  baseUrl: string,
+  entityUrl: string
+): AttachmentImagePreviewItem | null {
+  if (!entry.manifest || !isAttachmentManifest(entry.manifest)) return null
+  const attachment = entry.manifest
+  if (
+    attachment.status !== `complete` ||
+    !attachment.mimeType.startsWith(`image/`)
+  ) {
+    return null
+  }
+  return {
+    name: attachmentDisplayName(attachment),
+    mimeType: attachment.mimeType,
+    byteLength: attachment.byteLength,
+    url: attachmentDownloadUrl(baseUrl, entityUrl, attachment.id),
+  }
 }

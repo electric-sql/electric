@@ -18,6 +18,9 @@ interface ContentProps {
   align?: Align
   sideOffset?: number
   alignOffset?: number
+  anchor?: React.ComponentProps<typeof BasePopover.Positioner>[`anchor`]
+  initialFocus?: React.ComponentProps<typeof BasePopover.Popup>[`initialFocus`]
+  finalFocus?: React.ComponentProps<typeof BasePopover.Popup>[`finalFocus`]
   className?: string
   style?: CSSProperties
   children?: ReactNode
@@ -49,6 +52,9 @@ function Content({
   align = `center`,
   sideOffset = 6,
   alignOffset,
+  anchor,
+  initialFocus,
+  finalFocus,
   className,
   style,
   padded = true,
@@ -60,12 +66,19 @@ function Content({
   return (
     <BasePopover.Portal>
       <BasePopover.Positioner
+        className={styles.positioner}
         side={side}
         align={align}
         sideOffset={sideOffset}
         alignOffset={alignOffset}
+        anchor={anchor}
       >
-        <BasePopover.Popup className={cls} style={style}>
+        <BasePopover.Popup
+          className={cls}
+          style={style}
+          initialFocus={initialFocus}
+          finalFocus={finalFocus}
+        >
           {children}
         </BasePopover.Popup>
       </BasePopover.Positioner>

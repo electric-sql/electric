@@ -18,6 +18,7 @@
 import { createServer as createHttpServer } from 'node:http'
 import { Shape, ShapeStream } from '@electric-sql/client'
 import { expect } from 'vitest'
+import { appendPathToUrl } from './url'
 import type { IncomingMessage, Server, ServerResponse } from 'node:http'
 import type { ElectricAgentsEntityRow } from '../../agents-server/src/electric-agents-types.js'
 
@@ -37,7 +38,7 @@ export type HistoryEvent =
       entityUrl: string
       entityType?: string
       status: string
-      streams: { main: string; error: string }
+      streams: { main: string }
       parent?: string
     }
   | {
@@ -153,7 +154,7 @@ interface WebhookEntityContext {
   type?: string
   status: string
   url: string
-  streams: { main: string; error: string }
+  streams: { main: string }
   tags?: Record<string, string>
 }
 
@@ -161,8 +162,6 @@ export interface EntityTypeRegistration {
   name: string
   description: string
   creation_schema?: Record<string, unknown>
-  input_schemas?: Record<string, Record<string, unknown>>
-  output_schemas?: Record<string, Record<string, unknown>>
   inbox_schemas?: Record<string, Record<string, unknown>>
   state_schemas?: Record<string, Record<string, unknown>>
   metadata_schema?: Record<string, unknown>
@@ -188,7 +187,7 @@ export async function fetchShapeRows<T = Record<string, unknown>>(
   table: string
 ): Promise<Array<T>> {
   const stream = new ShapeStream({
-    url: `${baseUrl}/_electric/electric/v1/shape`,
+    url: appendPathToUrl(baseUrl, `/_electric/electric/v1/shape`),
     params: { table },
     subscribe: false,
   })
@@ -236,14 +235,11 @@ function toServerEntityTypeRegistration(
     }),
   }
 
-  const inboxSchemas = registration.inbox_schemas ?? registration.input_schemas
-  const stateSchemas = registration.state_schemas ?? registration.output_schemas
-
-  if (inboxSchemas) {
-    body.inbox_schemas = inboxSchemas
+  if (registration.inbox_schemas) {
+    body.inbox_schemas = registration.inbox_schemas
   }
-  if (stateSchemas) {
-    body.state_schemas = stateSchemas
+  if (registration.state_schemas) {
+    body.state_schemas = registration.state_schemas
   }
 
   return body
@@ -469,7 +465,7 @@ async function electricAgentsFetch(
   path: string,
   opts: RequestInit = {}
 ): Promise<Response> {
-  return fetch(`${baseUrl}${routeControlPlanePath(path)}`, {
+  return fetch(appendPathToUrl(baseUrl, routeControlPlanePath(path)), {
     ...opts,
     headers: {
       'content-type': `application/json`,
@@ -495,7 +491,10 @@ function isEntityStreamPath(pathname: string): boolean {
 }
 
 function subscriptionEndpoint(baseUrl: string, id: string): string {
-  return `${baseUrl}/__ds/subscriptions/${encodeURIComponent(id)}`
+  return appendPathToUrl(
+    baseUrl,
+    `/__ds/subscriptions/${encodeURIComponent(id)}`
+  )
 }
 
 function subscriptionPattern(pattern: string): string {
@@ -523,7 +522,7 @@ type Step =
   | { kind: `kill` }
   | { kind: `killUrl`; url: string }
   | { kind: `expectStreamContains`; messageType: string }
-  | { kind: `readStream`; stream?: `main` | `error` }
+  | { kind: `readStream` }
   | {
       kind: `list`
       filter?: {
@@ -549,8 +548,8 @@ type Step =
   | {
       kind: `amendSchemas`
       name: string
-      input_schemas?: Record<string, Record<string, unknown>>
-      output_schemas?: Record<string, Record<string, unknown>>
+      inbox_schemas?: Record<string, Record<string, unknown>>
+      state_schemas?: Record<string, Record<string, unknown>>
     }
   | { kind: `listTypes` }
   | { kind: `registerTypeViaServe`; registration: EntityTypeRegistration }
@@ -652,7 +651,7 @@ export interface RunContext {
 
   // Current entity
   currentEntityUrl: string | null
-  currentEntityStreams: { main: string; error: string } | null
+  currentEntityStreams: { main: string } | null
   currentWriteToken: string | null
 
   // Current webhook notification
@@ -785,8 +784,8 @@ export class ElectricAgentsScenario {
     return this
   }
 
-  readStream(stream?: `main` | `error`): this {
-    this.steps.push({ kind: `readStream`, stream })
+  readStream(): this {
+    this.steps.push({ kind: `readStream` })
     return this
   }
 
@@ -841,15 +840,15 @@ export class ElectricAgentsScenario {
   amendSchemas(
     name: string,
     schemas: {
-      input_schemas?: Record<string, Record<string, unknown>>
-      output_schemas?: Record<string, Record<string, unknown>>
+      inbox_schemas?: Record<string, Record<string, unknown>>
+      state_schemas?: Record<string, Record<string, unknown>>
     }
   ): this {
     this.steps.push({
       kind: `amendSchemas`,
       name,
-      input_schemas: schemas.input_schemas,
-      output_schemas: schemas.output_schemas,
+      inbox_schemas: schemas.inbox_schemas,
+      state_schemas: schemas.state_schemas,
     })
     return this
   }
@@ -924,7 +923,7 @@ export class ElectricAgentsScenario {
       typeName,
       instanceId,
       args: opts?.args,
-      code: `SCHEMA_VALIDATION_ERROR`,
+      code: `SCHEMA_VALIDATION_FAILED`,
       status: 422,
     })
     return this
@@ -938,7 +937,7 @@ export class ElectricAgentsScenario {
       kind: `expectSendSchemaError`,
       payload,
       messageType: opts?.type ?? `default`,
-      code: `SCHEMA_VALIDATION_ERROR`,
+      code: `SCHEMA_VALIDATION_FAILED`,
       status: 422,
     })
     return this
@@ -949,7 +948,7 @@ export class ElectricAgentsScenario {
       kind: `expectWriteSchemaError`,
       payload,
       eventType: opts?.type ?? `default`,
-      code: `SCHEMA_VALIDATION_ERROR`,
+      code: `SCHEMA_VALIDATION_FAILED`,
       status: 422,
     })
     return this
@@ -1187,7 +1186,6 @@ async function executeStep(ctx: RunContext, step: Step): Promise<void> {
       ).toBeDefined()
       expect(entity!.url).toBeTruthy()
       expect(entity!.streams.main).toBeTruthy()
-      expect(entity!.streams.error).toBeTruthy()
 
       if (step.checks?.url) {
         expect(entity!.url).toBe(step.checks.url)
@@ -1253,13 +1251,13 @@ async function executeStep(ctx: RunContext, step: Step): Promise<void> {
     case `readStream`: {
       if (!ctx.currentEntityStreams)
         throw new Error(`No current entity streams`)
-      const streamPath =
-        step.stream === `error`
-          ? ctx.currentEntityStreams.error
-          : ctx.currentEntityStreams.main
+      const streamPath = ctx.currentEntityStreams.main
 
       const res = await fetch(
-        `${ctx.baseUrl}${streamPath}?offset=0000000000000000_0000000000000000`
+        appendPathToUrl(
+          ctx.baseUrl,
+          `${streamPath}?offset=0000000000000000_0000000000000000`
+        )
       )
 
       if (res.status === 200) {
@@ -1473,8 +1471,8 @@ async function executeStep(ctx: RunContext, step: Step): Promise<void> {
 
     case `amendSchemas`: {
       const body: Record<string, unknown> = {}
-      if (step.input_schemas) body.inbox_schemas = step.input_schemas
-      if (step.output_schemas) body.state_schemas = step.output_schemas
+      if (step.inbox_schemas) body.inbox_schemas = step.inbox_schemas
+      if (step.state_schemas) body.state_schemas = step.state_schemas
 
       const res = await electricAgentsFetch(
         ctx.baseUrl,
@@ -1554,7 +1552,6 @@ async function executeStep(ctx: RunContext, step: Step): Promise<void> {
       ctx.currentEntityUrl = entity.url as string
       ctx.currentEntityStreams = entity.streams as {
         main: string
-        error: string
       }
       ctx.currentWriteToken = null
 
@@ -1563,7 +1560,7 @@ async function executeStep(ctx: RunContext, step: Step): Promise<void> {
         entityUrl: entity.url as string,
         entityType: step.typeName,
         status: entity.status as string,
-        streams: entity.streams as { main: string; error: string },
+        streams: entity.streams as { main: string },
         parent: step.parent,
       })
       break
@@ -2021,14 +2018,13 @@ function checkEntityContextOnWebhook(history: Array<HistoryEvent>): void {
 }
 
 /**
- * Spec S5 — Structural: stream paths must match {entity.url}/main and {entity.url}/error.
+ * Spec S5 — Structural: stream path must match {entity.url}/main.
  * Soundness: Sound | Completeness: Complete (within trace)
  */
 function checkStreamPathsMatchEntityUrl(history: Array<HistoryEvent>): void {
   for (const event of history) {
     if (event.type === `entity_spawned`) {
       expect(event.streams.main).toBe(`${event.entityUrl}/main`)
-      expect(event.streams.error).toBe(`${event.entityUrl}/error`)
     }
   }
 }
@@ -2132,8 +2128,8 @@ function checkAdditiveSchemaEvolution(history: Array<HistoryEvent>): void {
 
 /**
  * Spec R4 — Registry stream consistency: every entity_spawned must refer to an
- * entity that has not already been killed, and stream URLs must follow the
- * convention {entity.url}/main and {entity.url}/error.
+ * entity that has not already been killed, and stream URL must follow the
+ * convention {entity.url}/main.
  * Soundness: Sound | Completeness: Complete (within trace)
  */
 function checkRegistryStreamConsistency(history: Array<HistoryEvent>): void {
@@ -2153,11 +2149,6 @@ function checkRegistryStreamConsistency(history: Array<HistoryEvent>): void {
         event.streams.main,
         `Registry consistency: entity ${event.entityUrl} streams.main must be ${event.entityUrl}/main`
       ).toBe(`${event.entityUrl}/main`)
-
-      expect(
-        event.streams.error,
-        `Registry consistency: entity ${event.entityUrl} streams.error must be ${event.entityUrl}/error`
-      ).toBe(`${event.entityUrl}/error`)
     }
   }
 }
@@ -2234,8 +2225,8 @@ export type ElectricAgentsAction =
 export interface EntityTypeModel {
   name: string
   hasCreationSchema: boolean
-  hasInputSchemas: boolean
-  hasOutputSchemas: boolean
+  hasInboxSchemas: boolean
+  hasStateSchemas: boolean
 }
 
 /**
@@ -2326,8 +2317,8 @@ export function applyElectricAgentsAction(
           {
             name: opts?.typeName ?? `prop-type-${typeNum}`,
             hasCreationSchema: false,
-            hasInputSchemas: false,
-            hasOutputSchemas: false,
+            hasInboxSchemas: false,
+            hasStateSchemas: false,
           },
         ],
       }

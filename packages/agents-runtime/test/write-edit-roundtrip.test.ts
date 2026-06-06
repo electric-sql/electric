@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createEditTool } from '../src/tools/edit'
 import { createWriteTool } from '../src/tools/write'
+import { unrestrictedSandbox } from '../src/sandbox/unrestricted'
 
 describe(`write→edit roundtrip in same wake`, () => {
   let cwd: string
@@ -17,9 +18,10 @@ describe(`write→edit roundtrip in same wake`, () => {
   })
 
   it(`edit succeeds on a freshly-written file (write populates readSet)`, async () => {
+    const sandbox = await unrestrictedSandbox({ workingDirectory: cwd })
     const readSet = new Set<string>()
-    const write = createWriteTool(cwd, readSet)
-    const edit = createEditTool(cwd, readSet)
+    const write = createWriteTool(sandbox, readSet)
+    const edit = createEditTool(sandbox, readSet)
 
     await write.execute(`w`, {
       path: `r.txt`,
@@ -34,5 +36,6 @@ describe(`write→edit roundtrip in same wake`, () => {
       /Edited|Replaced/
     )
     expect(await readFile(join(cwd, `r.txt`), `utf-8`)).toBe(`modified content`)
+    await sandbox.dispose()
   })
 })

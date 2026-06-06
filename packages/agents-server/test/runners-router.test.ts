@@ -21,6 +21,7 @@ function runner(overrides: Record<string, unknown> = {}) {
     admin_status: `enabled` as const,
     liveness: `offline` as const,
     wake_stream: `/runners/runner-1/wake`,
+    sandbox_profiles: [],
     created_at: new Date(0).toISOString(),
     updated_at: new Date(0).toISOString(),
     ...overrides,
@@ -138,6 +139,33 @@ describe(`runner routes`, () => {
     expect(ctx.streamClient.ensure).toHaveBeenCalledWith(
       `/runners/runner-1/wake`,
       { contentType: `application/json` }
+    )
+  })
+
+  it(`forwards advertised sandbox profiles including the remote flag`, async () => {
+    const ctx = buildContext()
+
+    const response = await globalRouter.fetch(
+      request(`POST`, `/_electric/runners`, {
+        id: `runner-1`,
+        owner_principal: `/principal/user%3Aowner%40example.com`,
+        label: `Local runner`,
+        sandbox_profiles: [
+          { name: `local`, label: `Local` },
+          { name: `e2b`, label: `E2B`, remote: true },
+        ],
+      }),
+      ctx
+    )
+
+    expect(response.status).toBe(201)
+    expect(ctx.entityManager.registry.createRunner).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sandboxProfiles: [
+          { name: `local`, label: `Local` },
+          { name: `e2b`, label: `E2B`, remote: true },
+        ],
+      })
     )
   })
 
@@ -457,7 +485,7 @@ describe(`runner routes`, () => {
       url: `/chat/one`,
       type: `chat`,
       status: `idle`,
-      streams: { main: `/chat/one/main`, error: `/chat/one/error` },
+      streams: { main: `/chat/one/main` },
       subscription_id: `runner:runner-1`,
       write_token: `entity-token`,
       tags: {},
@@ -482,7 +510,7 @@ describe(`runner routes`, () => {
       epoch: 7,
       wakeId: `wake-1`,
       streamPath: `/chat/one/main`,
-      callback: `http://server/_electric/callback-forward/wake-1`,
+      callback: `http://server/_electric/wake-callbacks/wake-1`,
       claimToken: `claim-token`,
     })
     expect(body.streams).toEqual([{ path: `/chat/one/main`, offset: `12` }])
@@ -505,7 +533,7 @@ describe(`runner routes`, () => {
       url: `/chat/paused`,
       type: `chat`,
       status: `paused`,
-      streams: { main: `/chat/paused/main`, error: `/chat/paused/error` },
+      streams: { main: `/chat/paused/main` },
       subscription_id: `runner:runner-1`,
       write_token: `entity-token`,
       tags: {},
@@ -675,7 +703,7 @@ describe(`runner routes`, () => {
       url: `/chat/new`,
       type: `chat`,
       status: `idle`,
-      streams: { main: `/chat/new/main`, error: `/chat/new/error` },
+      streams: { main: `/chat/new/main` },
       subscription_id: `runner:runner-1`,
       write_token: `entity-token`,
       tags: {},

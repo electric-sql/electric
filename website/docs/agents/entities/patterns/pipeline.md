@@ -39,7 +39,7 @@ export function registerPipeline(registry: EntityRegistry) {
 The pipeline agent exposes a `run_stage` tool. The LLM drives the pipeline one stage at a time:
 
 1. The LLM calls `run_stage` with an instruction and input for the current stage.
-2. The tool spawns a worker with the instruction as its system prompt and the input as `initialMessage`, using `wake: 'runFinished'`.
+2. The tool spawns a worker with the instruction as its system prompt and the input as `initialMessage`, using `wake: { on: 'runFinished', includeResponse: true }`.
 3. The tool returns immediately. The pipeline entity is re-invoked when the worker finishes.
 4. On each re-invocation, the wake event contains `finished_child.response` with the stage's output. The LLM then calls `run_stage` again with the next stage's instruction and the previous output as input.
 5. This repeats until all stages are complete.
@@ -74,7 +74,7 @@ function createRunStageTool(ctx: HandlerContext): AgentTool {
         `worker`,
         id,
         { systemPrompt: instruction, tools: [`read`] },
-        { initialMessage: input, wake: `runFinished` }
+        { initialMessage: input, wake: { on: `runFinished`, includeResponse: true } }
       )
       ctx.db.actions.children_insert({
         row: { key: id, url: child.entityUrl, stage: stageCount },
@@ -84,7 +84,7 @@ function createRunStageTool(ctx: HandlerContext): AgentTool {
         content: [
           {
             type: `text` as const,
-            text: `Stage ${stageCount} spawned. You will be woken when it finishes.`,
+            text: `Stage ${stageCount} spawned. The pipeline will continue when it finishes.`,
           },
         ],
         details: { stage: stageCount },

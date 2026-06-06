@@ -1,5 +1,168 @@
 # @electric-ax/agents-server-ui
 
+## 0.4.17
+
+### Patch Changes
+
+- 3ecdade: Add structured composer input support, slash command registration, and proactive skill context loading.
+- Updated dependencies [3ecdade]
+  - @electric-ax/agents-runtime@0.3.10
+
+## 0.4.16
+
+### Patch Changes
+
+- 9fdf96a: Track agent-originated sends with `from_agent` / `from_principal` inbox metadata and render agent/self-send inbox messages with JSON payload fallbacks.
+- f222d39: Add a form-based **Add / Edit / Remove** flow for MCP servers in the
+  desktop's Settings → MCP Servers page. Before this, the only way to
+  register a server was to hand-edit `settings.json` or a workspace
+  `mcp.json`. The dialog supports both `http` and `stdio` transports, all
+  four auth modes, and writes through to the global `settings.json
+mcp.servers` block.
+
+  The MCP page also gains provenance + shadowing awareness:
+  - Entries from a workspace `mcp.json` render a "from mcp.json" badge
+    and are read-only (no Edit/Remove). Lifecycle verbs still apply.
+  - When a name in `settings.json` collides with one in workspace
+    `mcp.json`, the workspace still wins (existing rule); the shadowed
+    settings entry is rendered grayed-out next to the running workspace
+    twin so the user can see what's been overridden.
+
+  `BuiltinAgentsServer` gains a public `setExtraMcpServers(extras)` so
+  the desktop can push add/edit/remove changes to the live MCP registry
+  without restarting. Workspace `mcp.json` continues to win on name
+  collision through the same merge path used by the file watcher.
+
+- 312f5ec: Typecheck against agents-runtime's built types for the package index instead of
+  its source, so the UI no longer pulls node-only sandbox code into its program.
+  The browser-safe `client` entry stays source-mapped (matching the vite alias).
+- 4f88e6d: Dedupe `@tanstack/db` to a single instance.
+
+  `@tanstack/db` is effectively a singleton (collections/transactions/live
+  queries use `instanceof` checks and module-level state), but the lockfile had
+  drifted to several `0.6.x` copies, breaking StreamDB collections. Adds a root
+  `pnpm.overrides` entry collapsing the `0.6.x` line to `0.6.7`, scoped to
+  `>=0.6.0 <0.7.0` so the legacy example starters pinned to `0.0.x`/`0.5.8` are
+  untouched. Stopgap until `@durable-streams/state` ships `@tanstack/db` as a
+  peer dependency.
+
+  Also raises the `agents-mobile` iOS minimum deployment target to 16.4 (via
+  `expo-build-properties`). The chat renders in an Expo DOM WebView whose markdown
+  stack ships regex lookbehind, which JavaScriptCore only parses on iOS 16.4+;
+  below that the whole DOM bundle fails to parse and the chat renders blank.
+
+- b2bf806: Upgrade `@durable-streams/state` to `0.3.1` and drop the `@tanstack/db` pnpm override.
+
+  `@durable-streams/state@0.3.x` makes `@tanstack/db` an optional peer dependency (it was a direct `^0.6.0` dependency) and splits its tsdb-coupled tools into a `@durable-streams/state/db` subpath. tsdb-specific imports (`createStreamDB`, `queryOnce`, `createTransaction`, query operators, etc.) now come from `@durable-streams/state/db`; the bare entry keeps only the tsdb-free types and helpers.
+
+  Because state no longer pulls its own `@tanstack/db` copy, the root `pnpm.overrides` collapsing `@tanstack/db@>=0.6.0 <0.7.0` to `0.6.7` is removed. To keep a single `0.6.7` instance without it, `@tanstack/react-db` is raised to `^0.1.85` and `@tanstack/electric-db-collection` to `^0.3.5` (both pin `@tanstack/db@0.6.7`), and `@durable-streams/server` to `^0.3.7` (depends on `state@0.3.1`, removing the lingering transitive `state@0.2.9`).
+
+- 6e9e4a7: Show elapsed time while an agent is responding. While a turn is
+  streaming, the meta row now ticks `Thinking · 12s` (or just `12s` once
+  tokens start flowing). When a turn settles, the bare `✓ done` becomes
+  `✓ done in 1m 5s` for turns completed in-session. Historical turns
+  (already complete on page load) keep the bare label, since the client
+  has no reliable completion timestamp for those — only the user message
+  time, and subtracting `now()` would lie about the duration.
+- d14d9a9: Remove the unused per-entity agents error stream. Entities now expose only their main stream; spawn, fork, registry lookup, terminal signal handling, UI/runtime types, client helpers, and conformance tests no longer create or require an entity-level error stream.
+- 889fa20: Expose tenant-scoped users as an Electric shape and add a chat sharing dialog that grants user principals or all workspace users view, chat, or manage permissions over an entity. View/chat sharing includes fork access, forked chats are owned by the principal that creates the fork, shared chats can be identified and filtered by creator in the sidebar, and Cloud requests now inject the signed-in user as the Electric principal.
+
+  Mobile now syncs the users and effective-permissions shapes, marks and filters shared chats by creator, disables native chat and signal controls when the current principal lacks permission, and shows the signed-in user principal on the Account screen for debugging.
+
+- Updated dependencies [9fdf96a]
+- Updated dependencies [312f5ec]
+- Updated dependencies [6434774]
+- Updated dependencies [4f88e6d]
+- Updated dependencies [b2bf806]
+- Updated dependencies [74d2341]
+- Updated dependencies [d14d9a9]
+- Updated dependencies [7c62024]
+  - @electric-ax/agents-runtime@0.3.9
+
+## 0.4.15
+
+### Patch Changes
+
+- 17b374f: Adds the `Sandbox` primitive (`@electric-ax/agents-runtime/sandbox`) for isolating LLM-driven tool calls. Three providers ship: `unrestrictedSandbox()` (explicit pass-through), `remoteSandbox({provider: 'e2b'})` (E2B as an optional peer dep), and `dockerSandbox()` (container isolation via `dockerode` as an optional peer dep).
+
+  Built-in entities (Horton, Worker) default to `unrestrictedSandbox` via the new `chooseDefaultSandbox(workingDirectory)` helper. Stronger isolation is opt-in by constructing `dockerSandbox` or `remoteSandbox` directly — `dockerSandbox` is the recommended path for multi-entity hosting.
+
+  Behavior changes folded in: bash no longer forwards `process.env` to children (removes the trivial `env`-dump leak of secrets like `$ANTHROPIC_API_KEY` — note the host-sharing `unrestricted` provider still can't fully contain secrets, e.g. via `/proc/<ppid>/environ`, so use `docker`/`remote` for untrusted or multi-tenant entities), tool descriptions corrected, and read/write/edit reject symlink escapes from the workspace.
+
+  Runtimes advertise named **sandbox profiles** (e.g. `local`, `docker`) to the agents-server; spawn requests pick a profile by name, the server validates the choice against the target runner's advertised set, and the new-session UI surfaces a picker. Internally, the built-in tool factories (`createBashTool`, `createFetchUrlTool`, etc.) now route their filesystem and network access through the active `Sandbox`.
+
+- f73d64a: Keep shared dropdown overlays clickable when they overlap desktop pane titlebar regions.
+- d5708c7: Fork at an earlier message instead of only at HEAD. `POST /_electric/entities/<type>/<id>/fork` accepts an optional `fork_pointer: { offset, sub_offset }` (snake_case wire) that truncates the new entity's `main` stream up to and including the chosen event; shared-state streams still clone at HEAD; the root's manifest is filtered so descendants spawned after the pointer are dropped from the fork along with their subtrees. Pointer-forks skip the all-subtree-idle wait on the root (the historical read can't be torn by concurrent writes past the pointer), so the affordance works during the post-run keep-alive window. UI: hover-revealed "Fork from here" button on user-message bubbles in `ChatView`, anchored to the latest preceding completed `runs` row; suppressed on the first message and while a run is in flight.
+- 4e2cc22: Make the "Fork from here" affordance work in the mobile Expo DOM embed. Two pieces: (1) wire the fork-anchor map in `ChatLogView` (the view the mobile embed mounts) so `EntityTimeline` actually receives the per-row callbacks; (2) add a `:global(html[data-electric-mobile-dom='true']) .forkButton { opacity: 1 }` rule in `UserMessage.module.css` so the button is visible without a hover/tap (touch devices don't fire `:hover`). The fork POST and post-fork navigation already route through the existing `serverFetch` + `onRequestOpenEntity` callback, so no changes to the mobile package itself.
+- 2896820: Render lightweight markdown links and formatting in inbox messages.
+- f2d3d5e: Render self-send wake notifications with the sent message payload in the agent timeline.
+- Updated dependencies [17b374f]
+- Updated dependencies [1a7d72e]
+- Updated dependencies [d5708c7]
+- Updated dependencies [f2d3d5e]
+  - @electric-ax/agents-runtime@0.3.8
+
+## 0.4.14
+
+### Patch Changes
+
+- 7d029a9: Keep Electric Agents Desktop awake while the local runtime is active, with controls in Settings, onboarding, and the tray menu.
+- Updated dependencies [9e01e58]
+  - @electric-ax/agents-runtime@0.3.7
+
+## 0.4.13
+
+### Patch Changes
+
+- e9ea591: Show detailed agent run failure information in the timeline instead of the generic `Run failed` fallback. Run errors now include their error code, failed tool calls preserve and render their error text, and failed runs fall back to tool errors or finish reasons when no run error row is available.
+- 86643d5: Prefer live Electric Cloud server metadata when rendering saved Cloud servers so project, environment, and workspace names stay up to date in the desktop server picker.
+- 0a15a47: Bundle the Electric CLI with the desktop app and add managed install/status UI.
+- d921a9f: Allow desktop users to choose which configured provider models appear in Horton's model picker, and group model dropdown entries by provider.
+- 98b51d6: Update Electric Agents packages to depend on the stable Durable Streams
+  packages instead of pkg.pr builds. This pulls in `@durable-streams/client`
+  0.2.6, `@durable-streams/server` 0.3.5, and `@durable-streams/state` 0.2.9.
+  Examples now resolve `@electric-ax/agents-runtime` from the workspace so they
+  do not keep older registry runtime builds pinned in the lockfile.
+- aed2189: Add Kimi / Moonshot API support for local Horton runtimes, including model catalog entries, runtime provider resolution, desktop credential persistence, and UI credential inputs.
+- 52a641f: Add manifest-backed attachments for agents.
+
+  Attachments are uploaded through entity routes, stored in private attachment streams, referenced by manifest entries, and exposed to runtime handlers through `ctx.attachments`. The server UI can attach image files to user messages, renders message attachments with authenticated preview/download actions, exposes image previews from attachment manifest rows, rolls back uploaded attachments when send fails, and hides image attachment controls for models whose registered pi-ai metadata does not include image input. Image hydration now has a simple newest-images byte/count guardrail. Horton title generation now also works when the first user message is sent after attachment upload, including image-only starts.
+
+- c89aac8: Surface failed signal and kill requests in the UI with toast notifications instead of silently swallowing persistence failures.
+- 7001f8f: Add a launch-at-login preference for Electric Agents Desktop, including background startup handling, settings/onboarding controls, and a shared Base UI switch control.
+- Updated dependencies [e9ea591]
+- Updated dependencies [98b51d6]
+- Updated dependencies [aed2189]
+- Updated dependencies [52a641f]
+  - @electric-ax/agents-runtime@0.3.6
+
+## 0.4.12
+
+### Patch Changes
+
+- 0ba0a43: Refactor the new-session prompt form. Move the working-directory and runner pickers out of the composer's inline pill row into a "session context" tray that tucks under the composer's curved bottom edge (mirrors the chat screen's `<EntityContextDrawer>` pattern, just flipped). Give the runner picker visual parity with the working-directory picker via a new optional leading-icon slot on `Select.Trigger`, and reword the working-directory "None" option to "Don't work in a directory".
+
+## 0.4.11
+
+### Patch Changes
+
+- d344c32: Treat Electric Agents server URLs as opaque tenant-scoped base URLs rooted at `/t/<tenant-id>/v1`, migrate desktop and mobile Cloud clients to that URL shape, move observation stream ensure endpoints under `/_electric/observations/*/ensure-stream`, rename the pre-alpha entity/cron/schema/tag/docs APIs to their Electric Agents names, add a non-interactive `electric agents view` transcript command, and make Horton title extraction work with lightweight desktop inbox collection facades.
+
+  Send the done callback for completed wake checkpoints during graceful shutdown, preventing desktop reloads from leaving already completed DS subscription claims pending.
+
+- c1834f3: Prepare the mobile app for Expo EAS builds and CI. Adds dynamic Expo config, EAS build profiles, mobile CI/export scripts, and aligns shared React/TypeScript dependency resolution so the Expo DOM embed typechecks and passes `expo-doctor`.
+- 319e405: Explicit ChatGPT / Codex opt-in with native PKCE OAuth sign-in (opened in the user's default browser to avoid Cloudflare bot detection), per-source consent for detected Codex CLI / OpenCode logins, an inline "Use this login?" prompt under the new-session composer, and a "Restart local runtime" banner gated on credential changes. The runtime no longer reads `~/.codex/auth.json` implicitly — it now requires `ELECTRIC_CODEX_ACCESS_TOKEN` and honours `ELECTRIC_CODEX_REQUIRE_OPT_IN=1`.
+- Updated dependencies [d344c32]
+- Updated dependencies [c1834f3]
+- Updated dependencies [319e405]
+  - @electric-ax/agents-runtime@0.3.5
+
+## 0.4.10
+
+### Patch Changes
+
+- ac21b9a: Refine desktop agents onboarding and settings server management.
+
 ## 0.4.9
 
 ### Patch Changes

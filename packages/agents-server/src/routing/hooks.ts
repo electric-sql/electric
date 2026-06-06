@@ -85,6 +85,7 @@ export function applyCors(
       `content-type`,
       `authorization`,
       `electric-claim-token`,
+      `electric-owner-entity`,
       ELECTRIC_PRINCIPAL_HEADER,
       `ngrok-skip-browser-warning`,
     ].join(`, `)
@@ -121,7 +122,7 @@ export function rejectIfShuttingDown(
 ): Response | undefined {
   if (!ctx.isShuttingDown()) return undefined
   const path = new URL(req.url).pathname
-  if (!path.startsWith(`/_electric/webhook-forward/`)) return undefined
+  if (!path.startsWith(`/_electric/subscription-webhooks/`)) return undefined
   return apiError(503, `SERVER_STOPPING`, `Server is shutting down`)
 }
 

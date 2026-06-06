@@ -19,6 +19,22 @@
   color: var(--ds-text-2);
 }
 
+.secretInput {
+  position: relative;
+  width: 100%;
+}
+
+.secretInputControl {
+  padding-right: 34px;
+}
+
+.secretInputToggle {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+}
+
 .actions {
   margin-top: var(--ds-space-2);
 }

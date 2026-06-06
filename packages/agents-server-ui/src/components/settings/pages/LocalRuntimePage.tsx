@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useSearch } from '@tanstack/react-router'
 import { eq, useLiveQuery } from '@tanstack/react-db'
 import { appendPathToUrl } from '@electric-ax/agents-runtime/client'
 import { Play, RefreshCw, Square } from 'lucide-react'
@@ -6,30 +7,41 @@ import {
   loadDesktopState,
   onDesktopStateChanged,
   type DesktopState,
+  type LocalRuntimeStatus,
 } from '../../../lib/server-connection'
 import {
+  createRunnersCollection,
   createRunnerRuntimeDiagnosticsCollection,
   useElectricAgents,
   type ElectricRunner,
   type ElectricRunnerRuntimeDiagnostics,
 } from '../../../lib/ElectricAgentsProvider'
 import { formatRelativeTime } from '../../../lib/formatTime'
-import { Badge, Button, Icon, Stack, Text } from '../../../ui'
-import { SettingsRow, SettingsScreen, SettingsSection } from '../SettingsScreen'
+import { Button, Icon, Select, Stack, Text } from '../../../ui'
+import {
+  SettingsPanel,
+  SettingsRow,
+  SettingsScreen,
+  SettingsSection,
+  SettingsStatusBadge,
+  type SettingsStatusTone,
+} from '../SettingsScreen'
+import type { ServerConfig } from '../../../lib/types'
 
 const STATUS_TONES: Record<
-  DesktopState[`runtimeStatus`],
-  { label: string; tone: `success` | `warning` | `danger` | `info` }
+  LocalRuntimeStatus,
+  { label: string; tone: SettingsStatusTone }
 > = {
   running: { label: `Running`, tone: `success` },
   starting: { label: `Starting`, tone: `info` },
   stopped: { label: `Stopped`, tone: `warning` },
   error: { label: `Error`, tone: `danger` },
+  disabled: { label: `Disabled`, tone: `neutral` },
 }
 
 const RUNNER_HEALTH_TONES: Record<
   `healthy` | `degraded` | `unhealthy` | `unknown`,
-  { label: string; tone: `success` | `warning` | `danger` | `neutral` }
+  { label: string; tone: SettingsStatusTone }
 > = {
   healthy: { label: `Healthy`, tone: `success` },
   degraded: { label: `Degraded`, tone: `warning` },
@@ -136,9 +148,42 @@ function runnerHealthEndpoint(
  */
 export function LocalRuntimePage(): React.ReactElement {
   const isDesktop = typeof window !== `undefined` && Boolean(window.electronAPI)
+  const search = useSearch({ strict: false }) as { serverId?: string }
+  const requestedServerId = search.serverId ?? null
   const [state, setState] = useState<DesktopState | null>(null)
+  const [selectedServerId, setSelectedServerId] = useState<string | null>(null)
   const [now, setNow] = useState(() => Date.now())
-  const { runnersCollection } = useElectricAgents()
+  const { runnersCollection: activeRunnersCollection } = useElectricAgents()
+  const runtimeServers = useMemo(
+    () =>
+      (state?.servers ?? []).filter(
+        (server) => server.localRuntimeEnabled !== false
+      ),
+    [state?.servers]
+  )
+  const selectedServer =
+    runtimeServers.find((server) => server.id === selectedServerId) ?? null
+  const connectionByServerId = useMemo(
+    () =>
+      new Map(
+        (state?.connections ?? []).map((entry) => [entry.serverId, entry])
+      ),
+    [state?.connections]
+  )
+  const selectedConnection = selectedServer
+    ? (connectionByServerId.get(selectedServer.id) ?? null)
+    : null
+  const selectedRuntimeStatus: LocalRuntimeStatus =
+    selectedConnection?.localRuntimeStatus ??
+    (selectedServer?.localRuntimeEnabled === false ? `disabled` : `stopped`)
+  const selectedServerIsActive = selectedServer?.id === state?.activeServer?.id
+  const selectedServerRunnersCollection = useMemo(() => {
+    if (!selectedServer?.url || selectedServerIsActive) return null
+    return createRunnersCollection(selectedServer.url)
+  }, [selectedServer?.url, selectedServerIsActive])
+  const runnersCollection = selectedServerIsActive
+    ? activeRunnersCollection
+    : selectedServerRunnersCollection
   const runnerId = state?.pullWakeRunnerId ?? null
   const { data: runnerRows = [] } = useLiveQuery(
     (query) => {
@@ -150,17 +195,14 @@ export function LocalRuntimePage(): React.ReactElement {
     [runnersCollection, runnerId]
   )
   const runner = runnerRows[0] ?? null
-  const healthEndpoint = runnerHealthEndpoint(
-    state?.activeServer?.url,
-    runnerId
-  )
+  const healthEndpoint = runnerHealthEndpoint(selectedServer?.url, runnerId)
   const diagnosticsCollection = useMemo(() => {
-    if (!state?.activeServer?.url || !runnerId) return null
+    if (!selectedServer?.url || !runnerId) return null
     return createRunnerRuntimeDiagnosticsCollection(
-      state.activeServer.url,
+      selectedServer.url,
       runnerId
     )
-  }, [state?.activeServer?.url, runnerId])
+  }, [selectedServer?.url, runnerId])
   const { data: runtimeDiagnosticsRows = [] } = useLiveQuery(
     (query) => {
       if (!diagnosticsCollection) return undefined
@@ -187,6 +229,12 @@ export function LocalRuntimePage(): React.ReactElement {
   }, [diagnosticsCollection])
 
   useEffect(() => {
+    return () => {
+      selectedServerRunnersCollection?.cleanup()
+    }
+  }, [selectedServerRunnersCollection])
+
+  useEffect(() => {
     if (!isDesktop) return
     let cancelled = false
     void loadDesktopState().then((s) => {
@@ -200,6 +248,27 @@ export function LocalRuntimePage(): React.ReactElement {
     }
   }, [isDesktop])
 
+  useEffect(() => {
+    if (!state) return
+    const requestedRuntimeServer = runtimeServers.find(
+      (server) => server.id === requestedServerId
+    )
+    if (requestedRuntimeServer && selectedServerId !== requestedServerId) {
+      setSelectedServerId(requestedServerId)
+      return
+    }
+    const currentStillExists = runtimeServers.some(
+      (server) => server.id === selectedServerId
+    )
+    if (currentStillExists) return
+    const activeRuntimeServer = runtimeServers.find(
+      (server) => server.id === state.activeServer?.id
+    )
+    setSelectedServerId(
+      activeRuntimeServer?.id ?? runtimeServers[0]?.id ?? null
+    )
+  }, [requestedServerId, runtimeServers, selectedServerId, state])
+
   if (!isDesktop) {
     return (
       <SettingsScreen title="Local Runtime">
@@ -207,25 +276,34 @@ export function LocalRuntimePage(): React.ReactElement {
           title="About"
           description="The local runtime is bundled with the Electric Agents desktop app. The web build connects to a remote agents-server instead."
         >
-          <div style={{ padding: `16px` }}>
+          <SettingsPanel>
             <Text size={2} tone="muted">
               Run Electric Agents on your machine to manage the bundled local
               Horton runtime here.
             </Text>
-          </div>
+          </SettingsPanel>
         </SettingsSection>
       </SettingsScreen>
     )
   }
 
-  const status = state?.runtimeStatus ?? `stopped`
-  const statusInfo = STATUS_TONES[status]
-  const isRunning = status === `running`
-  const isStarting = status === `starting`
+  const statusInfo = STATUS_TONES[selectedRuntimeStatus]
+  const isRunning = selectedRuntimeStatus === `running`
+  const isStarting = selectedRuntimeStatus === `starting`
+  const isDisabled = selectedRuntimeStatus === `disabled`
   const canStart = !isRunning && !isStarting
 
   return (
-    <SettingsScreen title="Local Runtime">
+    <SettingsScreen
+      title="Local Runtime"
+      action={
+        <RuntimeServerSelect
+          servers={runtimeServers}
+          value={selectedServerId}
+          onValueChange={setSelectedServerId}
+        />
+      }
+    >
       <SettingsSection
         title="Status"
         description="The Electron app starts a local Horton runtime in-process so the desktop UI works without an external agents-server."
@@ -233,23 +311,27 @@ export function LocalRuntimePage(): React.ReactElement {
         <SettingsRow
           label="Runtime"
           description={`The bundled Horton runtime is currently ${statusInfo.label.toLowerCase()}.`}
-          control={<Badge tone={statusInfo.tone}>{statusInfo.label}</Badge>}
+          control={
+            <SettingsStatusBadge tone={statusInfo.tone}>
+              {statusInfo.label}
+            </SettingsStatusBadge>
+          }
         />
         <SettingsRow
           label="Connection"
           description="The runtime connects to the selected agents-server and receives wake events over pull-wake."
           control={
             <Text size={1} family={`mono`} tone={`muted`}>
-              {runtimeConnectionLabel(state?.runtimeUrl)}
+              {runtimeConnectionLabel(selectedConnection?.runtimeUrl)}
             </Text>
           }
         />
-        {state?.error && (
+        {selectedConnection?.runtimeError && (
           <SettingsRow
             label="Error"
             control={
               <Text size={1} tone={`danger`}>
-                {state.error}
+                {selectedConnection.runtimeError}
               </Text>
             }
           />
@@ -274,11 +356,17 @@ export function LocalRuntimePage(): React.ReactElement {
           description={
             health.issues.length > 0 ? health.issues.join(`, `) : `No issues`
           }
-          control={<Badge tone={healthTone.tone}>{healthTone.label}</Badge>}
+          control={
+            <SettingsStatusBadge tone={healthTone.tone}>
+              {healthTone.label}
+            </SettingsStatusBadge>
+          }
         />
         <SettingsRow
           label="Health endpoint"
           description="GET endpoint on the selected agents-server for runner diagnostics."
+          wrapControlValue
+          splitLayout
           control={
             <Text size={1} family="mono" tone="muted">
               {healthEndpoint ?? `-`}
@@ -289,7 +377,7 @@ export function LocalRuntimePage(): React.ReactElement {
           label="Stream"
           description={`Offset ${runnerTelemetry?.wake_stream_offset ?? runner?.wake_stream_offset ?? `-`}`}
           control={
-            <Badge
+            <SettingsStatusBadge
               tone={
                 diagnostics?.stream_connected === false
                   ? `warning`
@@ -303,7 +391,7 @@ export function LocalRuntimePage(): React.ReactElement {
                 : diagnostics?.stream_connected === true
                   ? `Connected`
                   : `Unknown`}
-            </Badge>
+            </SettingsStatusBadge>
           }
         />
         <SettingsRow
@@ -328,9 +416,11 @@ export function LocalRuntimePage(): React.ReactElement {
           label="Claims"
           description={`Succeeded ${countLabel(diagnostics?.claims_succeeded)} · skipped ${countLabel(diagnostics?.claims_skipped)} · failed ${countLabel(diagnostics?.claims_failed)}`}
           control={
-            <Badge tone={diagnostics?.claims_failed ? `danger` : `neutral`}>
+            <SettingsStatusBadge
+              tone={diagnostics?.claims_failed ? `danger` : `neutral`}
+            >
               {diagnostics?.last_claim_result ?? `none`}
-            </Badge>
+            </SettingsStatusBadge>
           }
         />
         {diagnostics?.last_error && (
@@ -349,14 +439,21 @@ export function LocalRuntimePage(): React.ReactElement {
       <SettingsSection
         title="Controls"
         description="Restart picks up new API keys or other environment changes; stop frees the port if you'd rather connect to a different server."
-      >
-        <div style={{ padding: `16px` }}>
-          <Stack gap={2}>
+        actionAlign="description"
+        action={
+          <Stack direction="row" gap={2}>
             {canStart ? (
               <Button
                 variant="solid"
                 tone="accent"
-                onClick={() => void window.electronAPI?.restartRuntime?.()}
+                onClick={() =>
+                  selectedServer
+                    ? void window.electronAPI?.restartServerRuntime?.(
+                        selectedServer.id
+                      )
+                    : undefined
+                }
+                disabled={!selectedServer || isDisabled}
               >
                 <Icon icon={Play} size={2} /> Start runtime
               </Button>
@@ -364,8 +461,14 @@ export function LocalRuntimePage(): React.ReactElement {
               <Button
                 variant="soft"
                 tone="neutral"
-                onClick={() => void window.electronAPI?.restartRuntime?.()}
-                disabled={isStarting}
+                onClick={() =>
+                  selectedServer
+                    ? void window.electronAPI?.restartServerRuntime?.(
+                        selectedServer.id
+                      )
+                    : undefined
+                }
+                disabled={!selectedServer || isStarting || isDisabled}
               >
                 <Icon icon={RefreshCw} size={2} /> Restart runtime
               </Button>
@@ -373,14 +476,53 @@ export function LocalRuntimePage(): React.ReactElement {
             <Button
               variant="soft"
               tone="neutral"
-              onClick={() => void window.electronAPI?.stopRuntime?.()}
-              disabled={!isRunning && !isStarting}
+              onClick={() =>
+                selectedServer
+                  ? void window.electronAPI?.stopServerRuntime?.(
+                      selectedServer.id
+                    )
+                  : undefined
+              }
+              disabled={!selectedServer || (!isRunning && !isStarting)}
             >
               <Icon icon={Square} size={2} /> Stop runtime
             </Button>
           </Stack>
-        </div>
-      </SettingsSection>
+        }
+      />
     </SettingsScreen>
+  )
+}
+
+function RuntimeServerSelect({
+  servers,
+  value,
+  onValueChange,
+}: {
+  servers: Array<ServerConfig>
+  value: string | null
+  onValueChange: (value: string | null) => void
+}): React.ReactElement {
+  const labelById = useMemo(
+    () => new Map(servers.map((server) => [server.id, server.name])),
+    [servers]
+  )
+  return (
+    <Select.Root value={value} onValueChange={onValueChange}>
+      <Select.Trigger
+        placeholder="No local runtimes"
+        renderValue={(selected) =>
+          selected ? (labelById.get(selected) ?? selected) : `No local runtimes`
+        }
+        style={{ minWidth: 220 }}
+      />
+      <Select.Content>
+        {servers.map((server) => (
+          <Select.Item key={server.id} value={server.id}>
+            {server.name}
+          </Select.Item>
+        ))}
+      </Select.Content>
+    </Select.Root>
   )
 }

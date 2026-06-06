@@ -9,19 +9,31 @@ type AgentModelConfig = Pick<
   `model` | `provider` | `getApiKey` | `onPayload`
 >
 
+function getUsableEnv(name: string): string | undefined {
+  const value = process.env[name]?.trim()
+  if (!value || value.includes(`...`)) return undefined
+  return value
+}
+
 function hasEnv(name: string): boolean {
-  return (process.env[name]?.trim().length ?? 0) > 0
+  return getUsableEnv(name) !== undefined
 }
 
 function sonnetConfig(): AgentModelConfig {
+  const apiKey = getUsableEnv(`ANTHROPIC_API_KEY`)
+  if (!apiKey) {
+    throw new Error(`ANTHROPIC_API_KEY must be set to use ${SONNET_MODEL}`)
+  }
+
   return {
     provider: `anthropic`,
     model: SONNET_MODEL,
+    getApiKey: (provider) => (provider === `anthropic` ? apiKey : undefined),
   }
 }
 
 function kimiConfig(): AgentModelConfig {
-  const apiKey = process.env.MOONSHOT_API_KEY?.trim()
+  const apiKey = getUsableEnv(`MOONSHOT_API_KEY`)
   if (!apiKey) {
     throw new Error(`MOONSHOT_API_KEY must be set to use ${KIMI_MODEL}`)
   }

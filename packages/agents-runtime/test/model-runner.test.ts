@@ -16,11 +16,17 @@ const originalEnv = { ...process.env }
 describe(`completeWithLowCostModel`, () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    process.env = { ...originalEnv }
+    delete process.env.MOONSHOT_API_KEY
     completeSimple.mockResolvedValue({
       content: [{ type: `text`, text: `ok` }],
       stopReason: `stop`,
       errorMessage: undefined,
     })
+  })
+
+  afterEach(() => {
+    process.env = { ...originalEnv }
   })
 
   test(`passes required system prompt`, async () => {
@@ -41,6 +47,56 @@ describe(`completeWithLowCostModel`, () => {
       `Custom instructions`
     )
   })
+
+  test(`passes fresh ELECTRIC_CODEX_ACCESS_TOKEN for openai-codex low-cost models without modelConfig`, async () => {
+    process.env.ELECTRIC_CODEX_ACCESS_TOKEN = `codex-token`
+
+    await completeWithLowCostModel({
+      catalog: {
+        choices: [
+          { provider: `openai-codex`, id: `gpt-5.4-mini`, reasoning: false },
+        ],
+      },
+      purpose: `URL extraction`,
+      systemPrompt: `Custom instructions`,
+      prompt: `Extract the title`,
+      maxTokens: 128,
+    })
+
+    expect(completeSimple).toHaveBeenCalledOnce()
+    expect(completeSimple.mock.calls[0][2]).toMatchObject({
+      apiKey: `codex-token`,
+    })
+  })
+
+  test(`passes MOONSHOT_API_KEY for moonshot low-cost models`, async () => {
+    process.env.MOONSHOT_API_KEY = `moonshot-key`
+
+    await completeWithLowCostModel({
+      catalog: {
+        choices: [{ provider: `moonshot`, id: `kimi-k2.6`, reasoning: false }],
+        defaultChoice: {
+          provider: `moonshot`,
+          id: `kimi-k2.6`,
+          reasoning: false,
+        },
+      },
+      purpose: `URL extraction`,
+      systemPrompt: `Custom instructions`,
+      prompt: `Extract the title`,
+      maxTokens: 128,
+    })
+
+    expect(completeSimple).toHaveBeenCalledOnce()
+    expect(completeSimple.mock.calls[0][0]).toMatchObject({
+      provider: `moonshot`,
+      id: `kimi-k2.6`,
+      baseUrl: `https://api.moonshot.ai/v1`,
+    })
+    expect(completeSimple.mock.calls[0][2]).toMatchObject({
+      apiKey: `moonshot-key`,
+    })
+  })
 })
 
 describe(`detectAvailableProviders`, () => {
@@ -49,6 +105,7 @@ describe(`detectAvailableProviders`, () => {
     delete process.env.ANTHROPIC_API_KEY
     delete process.env.OPENAI_API_KEY
     delete process.env.DEEPSEEK_API_KEY
+    delete process.env.MOONSHOT_API_KEY
     process.env.CODEX_AUTH_PATH = `/nonexistent/auth.json`
   })
 
@@ -65,12 +122,23 @@ describe(`detectAvailableProviders`, () => {
     expect(detectAvailableProviders()).not.toContain(`deepseek`)
   })
 
+  test(`detects moonshot when MOONSHOT_API_KEY is set`, () => {
+    process.env.MOONSHOT_API_KEY = `test-key`
+    expect(detectAvailableProviders()).toContain(`moonshot`)
+  })
+
+  test(`does not include moonshot when MOONSHOT_API_KEY is absent`, () => {
+    expect(detectAvailableProviders()).not.toContain(`moonshot`)
+  })
+
   test(`detects multiple providers simultaneously`, () => {
     process.env.ANTHROPIC_API_KEY = `ant-key`
     process.env.DEEPSEEK_API_KEY = `ds-key`
+    process.env.MOONSHOT_API_KEY = `moonshot-key`
     const providers = detectAvailableProviders()
     expect(providers).toContain(`anthropic`)
     expect(providers).toContain(`deepseek`)
+    expect(providers).toContain(`moonshot`)
   })
 })
 
@@ -93,5 +161,27 @@ describe(`selectLowCostModelChoice with deepseek`, () => {
     })
     expect(choice.provider).toBe(`deepseek`)
     expect(choice.id).toBe(`deepseek-v4-flash`)
+  })
+})
+
+describe(`selectLowCostModelChoice with moonshot`, () => {
+  test(`selects kimi-k2.6 as preferred moonshot low-cost model`, () => {
+    const catalog = {
+      choices: [
+        { provider: `moonshot`, id: `kimi-k2.5`, reasoning: true },
+        { provider: `moonshot`, id: `kimi-k2.6`, reasoning: true },
+      ],
+      defaultChoice: {
+        provider: `moonshot`,
+        id: `kimi-k2.5`,
+        reasoning: true,
+      },
+    }
+    const choice = selectLowCostModelChoice(catalog, {
+      provider: `moonshot`,
+      model: `kimi-k2.5`,
+    })
+    expect(choice.provider).toBe(`moonshot`)
+    expect(choice.id).toBe(`kimi-k2.6`)
   })
 })

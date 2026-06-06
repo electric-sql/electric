@@ -136,7 +136,11 @@ export function __resetSectionCachesForTesting(): void {
  * sorted-by-order arrays, so the fingerprint string is deterministic.
  */
 function fingerprintRun(run: IncludesRun): string {
-  let fp = `${run.status}|e:${run.errors.length}|t:${run.texts.length}`
+  let fp = `${run.status}|f:${run.finish_reason ?? ``}|e:${run.errors.length}`
+  for (const e of run.errors) {
+    fp += `:${e.key}.${e.error_code}.${e.message.length}`
+  }
+  fp += `|t:${run.texts.length}`
   for (const t of run.texts) {
     fp += `:${t.key}.${t.text.length}.${t.status}`
   }
@@ -295,7 +299,8 @@ function buildAgentSection(run: IncludesRun): AgentResponseSection {
       toolName: tc.tool_name,
       args: parseToolArgs(tc.args),
       status: tc.status,
-      isError: tc.status === `failed`,
+      isError: tc.status === `failed` || Boolean(tc.error),
+      ...(tc.error != null && { error: tc.error }),
       ...(tc.result != null && {
         result:
           typeof tc.result === `string` ? tc.result : JSON.stringify(tc.result),
@@ -305,9 +310,21 @@ function buildAgentSection(run: IncludesRun): AgentResponseSection {
 
   let errorText: string | undefined
   if (run.errors.length > 0) {
-    errorText = run.errors.map((e) => e.message).join(`; `)
+    errorText = run.errors
+      .map((e) => (e.error_code ? `${e.error_code}: ${e.message}` : e.message))
+      .join(`; `)
   } else if (run.status === `failed`) {
-    errorText = `Run failed`
+    const failedTool = run.toolCalls.find(
+      (tc) => tc.status === `failed` && typeof tc.error === `string`
+    )
+    const failedToolText = failedTool
+      ? `${failedTool.tool_name} failed: ${failedTool.error}`
+      : undefined
+    const finishReason = run.finish_reason
+      ? `finish_reason=${run.finish_reason}`
+      : undefined
+    errorText =
+      failedToolText ?? finishReason ?? `Run failed (no error details recorded)`
   }
 
   const section: AgentResponseSection = {

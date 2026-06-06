@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createBuiltinModelCatalog,
   resolveBuiltinModelConfig,
+  resolveBuiltinModelContextWindow,
+  resolveBuiltinModelSourceBudget,
 } from '../src/model-catalog'
 
 const originalEnv = { ...process.env }
@@ -19,6 +21,8 @@ describe(`model catalog`, () => {
     )
     process.env = { ...originalEnv }
     delete process.env.ANTHROPIC_API_KEY
+    delete process.env.DEEPSEEK_API_KEY
+    delete process.env.MOONSHOT_API_KEY
     process.env.OPENAI_API_KEY = `test-openai-key`
     process.env.CODEX_AUTH_PATH = `/nonexistent/auth.json`
   })
@@ -49,6 +53,59 @@ describe(`model catalog`, () => {
       provider: `openai`,
       model: `gpt-4.1`,
     })
+  })
+
+  it(`resolves model context windows and source budgets from known model metadata`, () => {
+    expect(
+      resolveBuiltinModelContextWindow({
+        provider: `openai`,
+        model: `gpt-4.1`,
+      })
+    ).toBe(1_047_576)
+    expect(
+      resolveBuiltinModelSourceBudget({
+        provider: `anthropic`,
+        model: `claude-sonnet-4-6`,
+      })
+    ).toBe(1_000_000)
+    expect(
+      resolveBuiltinModelSourceBudget({
+        provider: `moonshot`,
+        model: `moonshot-v1-8k`,
+      })
+    ).toBe(8_192)
+  })
+
+  it(`falls back to the previous source budget for unknown model metadata`, () => {
+    expect(
+      resolveBuiltinModelSourceBudget({
+        provider: `openai`,
+        model: `unknown-model`,
+      })
+    ).toBe(100_000)
+  })
+
+  it(`filters choices to enabled model values`, async () => {
+    const catalog = await createBuiltinModelCatalog({
+      enabledModelValues: [`openai:gpt-5`],
+    })
+
+    expect(catalog).not.toBeNull()
+    expect(catalog!.choices.map((choice) => choice.value)).toEqual([
+      `openai:gpt-5`,
+    ])
+    expect(catalog!.defaultChoice.value).toBe(`openai:gpt-5`)
+  })
+
+  it(`falls back to available choices when enabled model values are stale`, async () => {
+    const catalog = await createBuiltinModelCatalog({
+      enabledModelValues: [`deepseek:missing`],
+    })
+
+    expect(catalog).not.toBeNull()
+    expect(catalog!.choices.map((choice) => choice.value)).toContain(
+      `openai:gpt-4.1`
+    )
   })
 
   it(`sets a valid reasoning effort for OpenAI reasoning models`, async () => {
@@ -167,5 +224,64 @@ describe(`model catalog`, () => {
       provider: `deepseek`,
       model: `deepseek-v4-flash`,
     })
+  })
+
+  it(`lists Kimi / Moonshot models when MOONSHOT_API_KEY is set`, async () => {
+    delete process.env.OPENAI_API_KEY
+    process.env.MOONSHOT_API_KEY = `test-moonshot-key`
+    vi.stubGlobal(
+      `fetch`,
+      vi.fn(async (url: string) => {
+        if (String(url).includes(`api.moonshot.ai`)) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              data: [{ id: `kimi-k2.6` }, { id: `moonshot-v1-8k` }],
+            }),
+          }
+        }
+        return { ok: false, status: 401, json: async () => ({}) }
+      })
+    )
+
+    const catalog = await createBuiltinModelCatalog()
+
+    expect(catalog).not.toBeNull()
+    expect(catalog!.choices.map((c) => c.provider)).toContain(`moonshot`)
+    expect(catalog!.choices.map((c) => c.value)).toContain(`moonshot:kimi-k2.6`)
+    expect(catalog!.choices.map((c) => c.value)).toContain(
+      `moonshot:moonshot-v1-8k`
+    )
+  })
+
+  it(`resolves Kimi / Moonshot model config with a runtime API key hook`, async () => {
+    delete process.env.OPENAI_API_KEY
+    process.env.MOONSHOT_API_KEY = `test-moonshot-key`
+    vi.stubGlobal(
+      `fetch`,
+      vi.fn(async (url: string) => {
+        if (String(url).includes(`api.moonshot.ai`)) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ data: [{ id: `kimi-k2.6` }] }),
+          }
+        }
+        return { ok: false, status: 401, json: async () => ({}) }
+      })
+    )
+
+    const catalog = await createBuiltinModelCatalog()
+    const config = resolveBuiltinModelConfig(catalog!, {
+      model: `moonshot:kimi-k2.6`,
+    })
+
+    expect(config).toMatchObject({
+      provider: `moonshot`,
+      model: `kimi-k2.6`,
+    })
+    expect(config.getApiKey).toBeTypeOf(`function`)
+    expect(await config.getApiKey?.(`moonshot`)).toBe(`test-moonshot-key`)
   })
 })

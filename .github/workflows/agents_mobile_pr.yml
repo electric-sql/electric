@@ -1,0 +1,174 @@
+name: Agents Mobile PR
+
+on:
+  pull_request:
+    # `labeled` so adding `mobile-eas-build` triggers a build immediately.
+    # `paths` applies to label events too, so the label only acts on PRs that touch these paths.
+    types: [opened, synchronize, reopened, labeled]
+    paths:
+      - 'packages/agents-mobile/**'
+      - 'packages/agents-server-ui/**'
+      - 'packages/agents-runtime/**'
+      - '.github/workflows/agents_mobile_*.yml'
+      - 'scripts/ci/mobile-affected.mjs'
+      - '.npmrc'
+      - '.tool-versions'
+      - 'package.json'
+      - 'patches/**'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'tsconfig.base.json'
+      - 'tsconfig.build.json'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.number || github.ref }}
+  # Don't let a label change cancel an in-progress build/checks run; only new pushes supersede.
+  cancel-in-progress: ${{ !(github.event_name == 'pull_request' && github.event.action == 'labeled') }}
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  detect:
+    name: Detect mobile impact
+    # Skip label events unless it's `mobile-eas-build`, so unrelated labels don't re-run checks.
+    if: ${{ github.event_name != 'pull_request' || github.event.action != 'labeled' || github.event.label.name == 'mobile-eas-build' }}
+    runs-on: ubuntu-latest
+    outputs:
+      should_build: ${{ steps.detect.outputs.should_build }}
+      reason: ${{ steps.detect.outputs.reason }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.tool-versions'
+
+      - name: Detect mobile impact
+        id: detect
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: node scripts/ci/mobile-affected.mjs
+
+  local-checks:
+    name: Mobile local checks
+    needs: detect
+    if: ${{ needs.detect.outputs.should_build == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5.0.0
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.tool-versions'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm --filter @electric-ax/agents-mobile... install --frozen-lockfile
+
+      - name: Build mobile dependencies
+        run: pnpm -r --filter @electric-ax/agents-mobile^... --if-present run build
+
+      - name: Run mobile CI checks
+        run: pnpm --filter @electric-ax/agents-mobile run ci:check
+
+      - name: Run iOS export check
+        run: pnpm --filter @electric-ax/agents-mobile run export:ios
+
+  eas-preview:
+    name: EAS Android preview
+    needs:
+      - detect
+      - local-checks
+    # PRs build only with the `mobile-eas-build` label (and not from a fork, so secrets exist); workflow_dispatch always builds.
+    if: ${{ needs.detect.outputs.should_build == 'true' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && contains(github.event.pull_request.labels.*.name, 'mobile-eas-build'))) }}
+    uses: ./.github/workflows/agents_mobile_build.yml
+    secrets: inherit
+    with:
+      channel: pr
+      version: pr-${{ github.event.pull_request.number || github.run_number }}-${{ github.sha }}
+      git_ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      platform: android
+      profile: preview
+      submit: false
+
+  eas-preview-skipped:
+    name: EAS preview skipped
+    needs:
+      - detect
+      - local-checks
+    # Build was relevant but skipped: fork PR (no secrets) or no `mobile-eas-build` label.
+    if: ${{ needs.detect.outputs.should_build == 'true' && github.event_name == 'pull_request' && !(github.event.pull_request.head.repo.full_name == github.repository && contains(github.event.pull_request.labels.*.name, 'mobile-eas-build')) }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comment that the EAS build was skipped
+        uses: actions/github-script@v7
+        continue-on-error: true
+        env:
+          IS_FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+          BUILD_LABEL: mobile-eas-build
+        with:
+          script: |
+            const marker = '<!-- electric-agents-mobile-pr-build -->'
+            const { owner, repo } = context.repo
+            const issue_number = context.payload.pull_request.number
+            const sha = context.payload.pull_request.head.sha
+            const shortSha = sha.slice(0, 7)
+            const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`
+            const isFork = process.env.IS_FORK === 'true'
+            const label = process.env.BUILD_LABEL
+            const reason = isFork
+              ? 'The EAS Android preview build was skipped because this PR comes from a fork and repository secrets are unavailable.\nA maintainer can run the workflow manually from a trusted branch to produce an installable preview build.'
+              : `The EAS Android preview build was skipped because the \`${label}\` label is not present.\nAdd the \`${label}\` label to this PR to produce an installable preview build.`
+            const body = [
+              marker,
+              '## Electric Agents Mobile Build',
+              '',
+              `Local mobile checks ran for commit \`${shortSha}\`.`,
+              '',
+              reason,
+              '',
+              `[Workflow run](${runUrl})`,
+            ].join('\n')
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            })
+            const existing = comments.find((comment) => comment.body?.includes(marker))
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body,
+              })
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body,
+              })
+            }

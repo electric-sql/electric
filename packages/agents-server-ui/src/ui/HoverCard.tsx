@@ -122,6 +122,7 @@ function Content({
   return (
     <BasePreviewCard.Portal>
       <BasePreviewCard.Positioner
+        className={popoverStyles.positioner}
         side={side}
         align={align}
         sideOffset={sideOffset}

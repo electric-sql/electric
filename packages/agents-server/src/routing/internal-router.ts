@@ -16,7 +16,7 @@ import {
 } from '../electric-agents-http.js'
 import { consumerCallbacks, subscriptionWebhooks } from '../db/schema.js'
 import {
-  ErrCodeCallbackNotFound,
+  ErrCodeWakeCallbackNotFound,
   ErrCodeForkInProgress,
   ErrCodeSubscriptionNotFound,
   ErrCodeUnauthorized,
@@ -26,13 +26,13 @@ import { decodeJsonObject } from '../utils/server-utils.js'
 import { serverLog } from '../utils/log.js'
 import { applyDurableStreamsBearer } from '../stream-client.js'
 import { getDefaultWebhookSigner } from '../webhook-signing.js'
-import { cronRouter } from './cron-router.js'
 import { resolveDurableStreamsRoutingAdapter } from './durable-streams-routing-adapter.js'
 import { electricProxyRouter } from './electric-proxy-router.js'
 import { entitiesRouter } from './entities-router.js'
 import { entityTypesRouter } from './entity-types-router.js'
 import { pgSyncRouter } from './pg-sync-router.js'
 import { getRequestSpan } from './hooks.js'
+import { observationsRouter } from './observations-router.js'
 import { runnersRouter } from './runners-router.js'
 import { routeBody, validateOptionalJsonBody, withSchema } from './schema.js'
 import { withLeadingSlash } from './tenant-stream-paths.js'
@@ -70,7 +70,7 @@ const wakeRegistrationBodySchema = Type.Object({
   manifestKey: Type.Optional(Type.String()),
 })
 
-const webhookForwardBodySchema = Type.Object(
+const subscriptionWebhookBodySchema = Type.Object(
   {
     subscription_id: Type.Optional(Type.String()),
     wake_id: Type.Optional(Type.String()),
@@ -88,7 +88,7 @@ const webhookForwardBodySchema = Type.Object(
   { additionalProperties: true }
 )
 
-const callbackForwardBodySchema = Type.Object(
+const wakeCallbackBodySchema = Type.Object(
   {
     epoch: Type.Optional(Type.Number()),
     generation: Type.Optional(Type.Number()),
@@ -101,8 +101,8 @@ const callbackForwardBodySchema = Type.Object(
 )
 
 type WakeRegistrationBody = Static<typeof wakeRegistrationBodySchema>
-type WebhookForwardBody = Static<typeof webhookForwardBodySchema>
-type CallbackForwardBody = Static<typeof callbackForwardBodySchema>
+type SubscriptionWebhookBody = Static<typeof subscriptionWebhookBodySchema>
+type WakeCallbackBody = Static<typeof wakeCallbackBodySchema>
 
 const DS_SUBSCRIPTION_CALLBACK_PREFIX = `ds-subscription:`
 
@@ -127,14 +127,17 @@ internalRouter.post(
   withSchema(wakeRegistrationBodySchema),
   registerWake
 )
-internalRouter.post(`/webhook-forward/:subscriptionId`, webhookForward)
-internalRouter.post(`/callback-forward/:consumerId`, callbackForward)
+internalRouter.post(
+  `/subscription-webhooks/:subscriptionId`,
+  subscriptionWebhook
+)
+internalRouter.post(`/wake-callbacks/:consumerId`, wakeCallback)
 internalRouter.all(`/runners`, runnersRouter.fetch)
 internalRouter.all(`/runners/*`, runnersRouter.fetch)
 internalRouter.all(`/entities/*`, entitiesRouter.fetch)
 internalRouter.all(`/entity-types/*`, entityTypesRouter.fetch)
 internalRouter.all(`/pg-sync/*`, pgSyncRouter.fetch)
-internalRouter.all(`/cron/*`, cronRouter.fetch)
+internalRouter.all(`/observations/*`, observationsRouter.fetch)
 internalRouter.get(`/electric/*`, electricProxyRouter.fetch)
 internalRouter.all(`*`, () => status(404))
 
@@ -185,7 +188,7 @@ function resolveWebhookSigner(ctx: TenantContext): WebhookSigner {
 
 function durableStreamsWebhookJwksUrl(ctx: TenantContext): string {
   if (!ctx.durableStreamsRouting) {
-    return appendPathToUrl(ctx.durableStreamsUrl, `/__ds/jwks.json`)
+    return appendPathToBackendUrl(ctx.durableStreamsUrl, `/__ds/jwks.json`)
   }
 
   return resolveDurableStreamsRoutingAdapter(
@@ -198,6 +201,28 @@ function durableStreamsWebhookJwksUrl(ctx: TenantContext): string {
       requestUrl: appendPathToUrl(ctx.publicUrl, `/__ds/jwks.json`),
     })
     .toString()
+}
+
+function appendPathToBackendUrl(baseUrl: string, path: string): string {
+  const base = new URL(baseUrl)
+  const pathUrl = new URL(path, `http://electric-agents.local`)
+  const basePath =
+    base.pathname === `/` ? `` : base.pathname.replace(/\/+$/, ``)
+  const suffix = pathUrl.pathname.startsWith(`/`)
+    ? pathUrl.pathname
+    : `/${pathUrl.pathname}`
+  const target = new URL(base)
+
+  target.pathname = `${basePath}${suffix}`
+  target.search = ``
+  target.hash = pathUrl.hash
+  base.searchParams.forEach((value, key) => {
+    target.searchParams.append(key, value)
+  })
+  pathUrl.searchParams.forEach((value, key) => {
+    target.searchParams.append(key, value)
+  })
+  return target.toString()
 }
 
 function durableStreamsJwksFetchClient(ctx: TenantContext): typeof fetch {
@@ -271,7 +296,7 @@ function claimTokenFromRequest(request: IRequest): string | undefined {
   )
 }
 
-function newWebhookPayload(body: WebhookForwardBody | undefined): {
+function newWebhookPayload(body: SubscriptionWebhookBody | undefined): {
   wakeId: string
   generation: number
   primaryStream: string
@@ -355,13 +380,13 @@ function isAgentVisibleEventSource(source: EventSourceContract): boolean {
   return source.agentVisible === true && source.status === `active`
 }
 
-async function webhookForward(
+async function subscriptionWebhook(
   request: IRequest,
   ctx: TenantContext
 ): Promise<Response> {
   const subscriptionId = routeParam(request, `subscriptionId`)
   const rootSpan = getRequestSpan(request)
-  rootSpan?.updateName(`webhook-forward`)
+  rootSpan?.updateName(`subscription-webhook`)
   rootSpan?.setAttribute(
     `electric_agents.webhook.subscription_id`,
     subscriptionId
@@ -400,7 +425,7 @@ async function webhookForward(
     )
   }
   const parsedBodyResult = validateOptionalJsonBody(
-    webhookForwardBodySchema,
+    subscriptionWebhookBodySchema,
     body,
     request.headers.get(`content-type`)
   )
@@ -408,7 +433,9 @@ async function webhookForward(
 
   let forwardBody = body
   let runningEntityUrl: string | null = null
-  const parsedBody = parsedBodyResult.value as WebhookForwardBody | undefined
+  const parsedBody = parsedBodyResult.value as
+    | SubscriptionWebhookBody
+    | undefined
   const newWebhook = newWebhookPayload(parsedBody)
   const routingAdapter = resolveDurableStreamsRoutingAdapter(
     ctx.durableStreamsRouting,
@@ -487,7 +514,7 @@ async function webhookForward(
               })
               .catch((err) => {
                 serverLog.warn(
-                  `[webhook-forward] consumerCallbacks upsert failed (non-fatal): ${
+                  `[subscription-webhook] consumerCallbacks upsert failed (non-fatal): ${
                     err instanceof Error ? err.message : String(err)
                   }`
                 )
@@ -535,7 +562,7 @@ async function webhookForward(
       if (consumerId && callbackUrl) {
         const callback = appendPathToUrl(
           ctx.publicUrl,
-          `/_electric/callback-forward/${encodeURIComponent(consumerId)}`
+          `/_electric/wake-callbacks/${encodeURIComponent(consumerId)}`
         )
         enriched.callback = callback
         if (newWebhook) {
@@ -584,7 +611,7 @@ async function webhookForward(
     }
     return apiError(
       502,
-      `WEBHOOK_FORWARD_FAILED`,
+      `SUBSCRIPTION_WEBHOOK_FAILED`,
       err instanceof Error ? err.message : String(err)
     )
   }
@@ -595,7 +622,7 @@ async function webhookForward(
   return responseFromUpstream(upstream, responseBytes)
 }
 
-async function callbackForward(
+async function wakeCallback(
   request: IRequest,
   ctx: TenantContext
 ): Promise<Response> {
@@ -620,19 +647,19 @@ async function callbackForward(
   if (!target) {
     return apiError(
       404,
-      ErrCodeCallbackNotFound,
-      `Unknown callback-forward consumer`
+      ErrCodeWakeCallbackNotFound,
+      `Unknown wake-callback consumer`
     )
   }
 
   const body = await readRequestBody(request as Request)
   const parsedBodyResult = validateOptionalJsonBody(
-    callbackForwardBodySchema,
+    wakeCallbackBodySchema,
     body,
     request.headers.get(`content-type`)
   )
   if (!parsedBodyResult.ok) return parsedBodyResult.response
-  const requestBody = parsedBodyResult.value as CallbackForwardBody | undefined
+  const requestBody = parsedBodyResult.value as WakeCallbackBody | undefined
   const isClaimRequest =
     requestBody?.wakeId !== undefined || requestBody?.wake_id !== undefined
   const isDoneRequest = requestBody?.done === true
@@ -655,7 +682,7 @@ async function callbackForward(
     return json(responseBody)
   }
 
-  const upstreamBody = encodeCallbackForwardBody(
+  const upstreamBody = encodeWakeCallbackBody(
     ctx.service,
     consumerId,
     requestBody,
@@ -675,7 +702,7 @@ async function callbackForward(
       if (!token) {
         return apiError(401, `UNAUTHORIZED`, `Missing claim token`)
       }
-      const upstreamPayload = encodeCallbackForwardPayload(
+      const upstreamPayload = encodeWakeCallbackPayload(
         consumerId,
         requestBody,
         (stream) => stream.replace(/^\/+/, ``)
@@ -696,7 +723,7 @@ async function callbackForward(
   } catch (err) {
     return apiError(
       502,
-      `CALLBACK_FORWARD_FAILED`,
+      `WAKE_CALLBACK_FAILED`,
       err instanceof Error ? err.message : String(err)
     )
   }
@@ -735,7 +762,7 @@ async function callbackForward(
     }
     if (upstream.ok && isDoneRequest && target.primaryStream) {
       serverLog.info(
-        `[callback-forward] done received for stream=${target.primaryStream} consumer=${consumerId}`
+        `[wake-callback] done received for stream=${target.primaryStream} consumer=${consumerId}`
       )
       const stillOwnsClaim = ctx.runtime.claimWriteTokens.owns(
         ctx.service,
@@ -790,11 +817,11 @@ async function callbackForward(
         )
         await ctx.entityBridgeManager.onEntityChanged(entity.url)
         serverLog.info(
-          `[callback-forward] status updated after done for ${entity.url}`
+          `[wake-callback] status updated after done for ${entity.url}`
         )
       } else if (!entity) {
         serverLog.warn(
-          `[callback-forward] done received but no entity found for stream=${target.primaryStream}`
+          `[wake-callback] done received but no entity found for stream=${target.primaryStream}`
         )
       }
 
@@ -808,19 +835,19 @@ async function callbackForward(
         )
       } else if (entity) {
         serverLog.info(
-          `[callback-forward] done arrived after in-memory token evicted (stream=${target.primaryStream} consumer=${consumerId})`
+          `[wake-callback] done arrived after in-memory token evicted (stream=${target.primaryStream} consumer=${consumerId})`
         )
       }
     } else if (requestBody?.done === true) {
       serverLog.warn(
-        `[callback-forward] done received but skipped: upstream.ok=${upstream.ok} primaryStream=${
+        `[wake-callback] done received but skipped: upstream.ok=${upstream.ok} primaryStream=${
           target.primaryStream ?? `null`
         } consumer=${consumerId}`
       )
     }
   } catch (err) {
     serverLog.error(
-      `[callback-forward] error processing done for consumer=${consumerId}: ${
+      `[wake-callback] error processing done for consumer=${consumerId}: ${
         err instanceof Error ? err.message : String(err)
       }`
     )
@@ -840,21 +867,21 @@ async function mintClaimWriteToken(
   return ctx.runtime.claimWriteTokens.mint(ctx.service, streamPath, consumerId)
 }
 
-function encodeCallbackForwardBody(
+function encodeWakeCallbackBody(
   service: string,
   consumerId: string,
-  body: CallbackForwardBody | undefined,
+  body: WakeCallbackBody | undefined,
   routingAdapter: DurableStreamsRoutingAdapter
 ): Uint8Array {
-  const payload = encodeCallbackForwardPayload(consumerId, body, (stream) =>
+  const payload = encodeWakeCallbackPayload(consumerId, body, (stream) =>
     routingAdapter.toBackendStreamPath(service, stream)
   )
   return new TextEncoder().encode(JSON.stringify(payload))
 }
 
-function encodeCallbackForwardPayload(
+function encodeWakeCallbackPayload(
   consumerId: string,
-  body: CallbackForwardBody | undefined,
+  body: WakeCallbackBody | undefined,
   mapStream: (stream: string) => string
 ): Record<string, unknown> {
   if (!body) return {}

@@ -1,0 +1,15 @@
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-4);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--ds-space-2);
+}
+
+.error {
+  margin-top: calc(var(--ds-space-2) * -1);
+}

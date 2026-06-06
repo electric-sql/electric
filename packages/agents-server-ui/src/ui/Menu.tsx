@@ -64,6 +64,7 @@ function Content({
   return (
     <BaseMenu.Portal>
       <BaseMenu.Positioner
+        className={popoverStyles.positioner}
         side={side}
         align={align}
         sideOffset={sideOffset}

@@ -23,6 +23,8 @@ jobs:
       agent_server_release_tag: ${{ steps.agent_server_release_tag.outputs.tag }}
       desktop_release_version: ${{ steps.desktop_release.outputs.version }}
       desktop_release_tag: ${{ steps.desktop_release.outputs.tag }}
+      mobile_release_version: ${{ steps.mobile_release.outputs.version }}
+      mobile_release_tag: ${{ steps.mobile_release.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -31,7 +33,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: '.tool-versions'
-          cache: pnpm
       - uses: erlef/setup-beam@v1
         with:
           version-type: strict
@@ -74,6 +75,16 @@ jobs:
           if [ -n "$VERSION" ]; then
             echo "version=$VERSION" >> "$GITHUB_OUTPUT"
             echo "tag=@electric-ax/agents-desktop@$VERSION" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Capture the new agents-mobile release as an output (if any)
+        id: mobile_release
+        if: steps.changesets.outputs.published == 'true'
+        run: |
+          PUBLISHED_PACKAGES='${{ steps.changesets.outputs.publishedPackages }}'
+          VERSION=$(echo "$PUBLISHED_PACKAGES" | jq -r '.[] | select(.name == "@electric-ax/agents-mobile") | .version' | head -n 1)
+          if [ -n "$VERSION" ]; then
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+            echo "tag=@electric-ax/agents-mobile@$VERSION" >> "$GITHUB_OUTPUT"
           fi
       - name: Add latest tag to published packages
         if: steps.changesets.outputs.published == 'true'
@@ -142,6 +153,29 @@ jobs:
       sign: false
       release_tag: ${{ needs.changesets.outputs.desktop_release_tag }}
       release_name: Electric Agents Desktop v${{ needs.changesets.outputs.desktop_release_version }}
+
+  publish-agents-mobile:
+    needs: changesets
+    if: ${{ needs.changesets.outputs.published == 'true' && needs.changesets.outputs.mobile_release_tag != '' }}
+    uses: ./.github/workflows/agents_mobile_build.yml
+    # The reusable workflow declares PR-comment permissions even when the stable
+    # release channel skips those steps. GitHub validates declared permissions
+    # before evaluating those conditions.
+    permissions:
+      actions: read
+      contents: read
+      issues: write
+      pull-requests: write
+    secrets: inherit
+    with:
+      channel: stable
+      version: ${{ needs.changesets.outputs.mobile_release_version }}
+      git_ref: ${{ needs.changesets.outputs.mobile_release_tag }}
+      platform: android
+      profile: production
+      submit: true
+      release_tag: ${{ needs.changesets.outputs.mobile_release_tag }}
+      release_name: Electric Agents Mobile v${{ needs.changesets.outputs.mobile_release_version }}
 
   update-cloud:
     name: Update Electric version used by Cloud

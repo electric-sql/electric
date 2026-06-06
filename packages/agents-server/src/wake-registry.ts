@@ -43,6 +43,12 @@ export interface WakeEvalResult {
       key: string
       value?: unknown
       oldValue?: unknown
+      from?: string
+      from_principal?: string
+      from_agent?: string
+      payload?: unknown
+      timestamp?: string
+      message_type?: string
     }>
   }
   runFinishedStatus?: `completed` | `failed`
@@ -231,7 +237,7 @@ export class WakeRegistry {
               await this.applyShapeMessage(message)
               if (
                 !settled &&
-                `control` in message.headers &&
+                isControlMessage(message) &&
                 message.headers.control === `up-to-date`
               ) {
                 settled = true
@@ -887,13 +893,7 @@ export class WakeRegistry {
     reg: WakeRegistration,
     event: Record<string, unknown>
   ): {
-    change: {
-      collection: string
-      kind: `insert` | `update` | `delete`
-      key: string
-      value?: unknown
-      oldValue?: unknown
-    }
+    change: WakeEvalResult[`wakeMessage`][`changes`][number]
     runFinishedStatus?: `completed` | `failed`
   } | null {
     if (reg.condition === `runFinished`) {
@@ -940,13 +940,7 @@ export class WakeRegistry {
     }
 
     const value = event.value as Record<string, unknown> | undefined
-    const change: {
-      collection: string
-      kind: `insert` | `update` | `delete`
-      key: string
-      value?: unknown
-      oldValue?: unknown
-    } = {
+    const change: WakeEvalResult[`wakeMessage`][`changes`][number] = {
       collection: eventType,
       kind,
       key: (event.key as string) || ``,
@@ -957,6 +951,22 @@ export class WakeRegistry {
     }
     if (value && `oldValue` in value) {
       change.oldValue = value.oldValue
+    }
+
+    if (eventType === `inbox`) {
+      if (typeof value?.from === `string`) change.from = value.from
+      if (typeof value?.from_principal === `string`) {
+        change.from_principal = value.from_principal
+      }
+      if (typeof value?.from_agent === `string`) {
+        change.from_agent = value.from_agent
+      }
+      if (`payload` in (value ?? {})) change.payload = value?.payload
+      if (typeof value?.timestamp === `string`)
+        change.timestamp = value.timestamp
+      if (typeof value?.message_type === `string`) {
+        change.message_type = value.message_type
+      }
     }
 
     return { change }

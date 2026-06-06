@@ -34,6 +34,13 @@ export type RunnersRoutes = RouterType<
   RunnersRouteResult
 >
 
+const sandboxProfileBodySchema = Type.Object({
+  name: Type.String(),
+  label: Type.String(),
+  description: Type.Optional(Type.String()),
+  remote: Type.Optional(Type.Boolean()),
+})
+
 const registerRunnerBodySchema = Type.Object({
   id: Type.String(),
   owner_principal: Type.Optional(Type.String()),
@@ -51,6 +58,7 @@ const registerRunnerBodySchema = Type.Object({
     Type.Union([Type.Literal(`enabled`), Type.Literal(`disabled`)])
   ),
   wake_stream: Type.Optional(Type.String()),
+  sandbox_profiles: Type.Optional(Type.Array(sandboxProfileBodySchema)),
 })
 
 const heartbeatBodySchema = Type.Object({
@@ -234,6 +242,7 @@ async function registerRunner(
     kind: parsed.kind,
     adminStatus: parsed.admin_status,
     wakeStream: parsed.wake_stream,
+    sandboxProfiles: parsed.sandbox_profiles,
   })
   await ctx.streamClient.ensure(runner.wake_stream, {
     contentType: `application/json`,
@@ -628,7 +637,7 @@ async function notificationFromClaim(
     streams,
     callback: appendPathToUrl(
       ctx.publicUrl,
-      `/_electric/callback-forward/${encodeURIComponent(input.claim.wake_id)}`
+      `/_electric/wake-callbacks/${encodeURIComponent(input.claim.wake_id)}`
     ),
     claimToken: input.claim.token,
     triggerEvent: `message_received`,
@@ -639,6 +648,7 @@ async function notificationFromClaim(
       streams: entity.streams,
       tags: entity.tags,
       spawnArgs: entity.spawn_args,
+      sandbox: entity.sandbox,
       createdBy: entity.created_by,
     },
     principal: principalFromCreatedBy(entity.created_by),

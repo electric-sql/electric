@@ -1,6 +1,11 @@
 import { getModels } from '@mariozechner/pi-ai'
 import {
+  MOONSHOT_API_BASE_URL,
+  MOONSHOT_PROVIDER,
   detectAvailableProviders,
+  getMoonshotApiKey,
+  getMoonshotModel,
+  getMoonshotModels,
   readCodexAccessToken,
 } from '@electric-ax/agents-runtime'
 import type {
@@ -9,6 +14,9 @@ import type {
 } from '@electric-ax/agents-runtime'
 
 export type BuiltinModelProvider = AvailableProvider
+export type BuiltinModelInput = `text` | `image`
+
+export const MODEL_INPUTS_SCHEMA_DEF = `electricModelInputs`
 
 export interface BuiltinModelChoice {
   provider: BuiltinModelProvider
@@ -16,11 +24,17 @@ export interface BuiltinModelChoice {
   label: string
   value: string
   reasoning: boolean
+  input: Array<BuiltinModelInput>
 }
 
 export interface BuiltinModelCatalog {
   choices: Array<BuiltinModelChoice>
   defaultChoice: BuiltinModelChoice
+}
+
+export interface BuiltinModelCatalogOptions {
+  allowMockFallback?: boolean
+  enabledModelValues?: ReadonlyArray<string> | null
 }
 
 export const REASONING_EFFORT_VALUES = [
@@ -49,15 +63,19 @@ const DEFAULT_ANTHROPIC_MODEL = `claude-sonnet-4-6`
 const DEFAULT_OPENAI_MODEL = `gpt-4.1`
 const DEFAULT_CODEX_MODEL = `gpt-5.4`
 const DEFAULT_DEEPSEEK_MODEL = `deepseek-v4-flash`
+const DEFAULT_MOONSHOT_MODEL = `kimi-k2.6`
 
 function modelValue(provider: BuiltinModelProvider, id: string): string {
   return `${provider}:${id}`
 }
 
-function providerLabel(provider: BuiltinModelProvider): string {
+export function builtinModelProviderLabel(
+  provider: BuiltinModelProvider
+): string {
   if (provider === `anthropic`) return `Anthropic`
   if (provider === `openai-codex`) return `OpenAI Codex`
   if (provider === `deepseek`) return `DeepSeek`
+  if (provider === MOONSHOT_PROVIDER) return `Kimi`
   return `OpenAI`
 }
 
@@ -66,12 +84,13 @@ function configuredProviders(): Array<BuiltinModelProvider> {
 }
 
 function mockFallbackCatalog(): BuiltinModelCatalog {
-  const fallback = {
+  const fallback: BuiltinModelChoice = {
     provider: `anthropic` as const,
     id: DEFAULT_ANTHROPIC_MODEL,
     label: `Anthropic ${DEFAULT_ANTHROPIC_MODEL}`,
     value: modelValue(`anthropic`, DEFAULT_ANTHROPIC_MODEL),
     reasoning: true,
+    input: [`text`, `image`],
   }
   return { choices: [fallback], defaultChoice: fallback }
 }
@@ -96,12 +115,19 @@ async function fetchAvailableModelIds(
               },
               signal: AbortSignal.timeout(3_000),
             })
-          : await fetch(`https://api.openai.com/v1/models`, {
-              headers: {
-                authorization: `Bearer ${process.env.OPENAI_API_KEY ?? ``}`,
-              },
-              signal: AbortSignal.timeout(3_000),
-            })
+          : provider === MOONSHOT_PROVIDER
+            ? await fetch(`${MOONSHOT_API_BASE_URL}/models`, {
+                headers: {
+                  authorization: `Bearer ${getMoonshotApiKey() ?? ``}`,
+                },
+                signal: AbortSignal.timeout(3_000),
+              })
+            : await fetch(`https://api.openai.com/v1/models`, {
+                headers: {
+                  authorization: `Bearer ${process.env.OPENAI_API_KEY ?? ``}`,
+                },
+                signal: AbortSignal.timeout(3_000),
+              })
 
     if (res.status === 401 || res.status === 403) return new Set()
     if (!res.ok) return null
@@ -119,34 +145,97 @@ async function fetchAvailableModelIds(
   }
 }
 
+function knownModelsForProvider(provider: BuiltinModelProvider) {
+  return provider === MOONSHOT_PROVIDER
+    ? getMoonshotModels()
+    : getModels(
+        provider as Exclude<BuiltinModelProvider, typeof MOONSHOT_PROVIDER>
+      )
+}
+
+export function resolveBuiltinModelContextWindow(
+  modelConfig: Pick<BuiltinAgentModelConfig, `model` | `provider`>
+): number | null {
+  const modelId = String(modelConfig.model)
+
+  if (modelConfig.provider === MOONSHOT_PROVIDER) {
+    return getMoonshotModel(modelId)?.contextWindow ?? null
+  }
+
+  if (!modelConfig.provider) return null
+
+  return (
+    knownModelsForProvider(modelConfig.provider as BuiltinModelProvider).find(
+      (model) => model.id === modelId
+    )?.contextWindow ?? null
+  )
+}
+
+export function resolveBuiltinModelSourceBudget(
+  modelConfig: Pick<BuiltinAgentModelConfig, `model` | `provider`>
+): number {
+  return resolveBuiltinModelContextWindow(modelConfig) ?? 100_000
+}
+
+function choiceForKnownModel(
+  provider: BuiltinModelProvider,
+  model: ReturnType<typeof knownModelsForProvider>[number]
+): BuiltinModelChoice {
+  return {
+    provider,
+    id: model.id,
+    label: `${builtinModelProviderLabel(provider)} ${model.name}`,
+    value: modelValue(provider, model.id),
+    reasoning: model.reasoning,
+    input: model.input,
+  }
+}
+
+export function listBuiltinModelChoices(
+  providers: ReadonlyArray<BuiltinModelProvider>
+): Array<BuiltinModelChoice> {
+  return providers.flatMap((provider) =>
+    knownModelsForProvider(provider).map((model) =>
+      choiceForKnownModel(provider, model)
+    )
+  )
+}
+
 async function choicesForProvider(
   provider: BuiltinModelProvider
 ): Promise<Array<BuiltinModelChoice>> {
-  const knownModels = getModels(provider)
+  const knownChoices = listBuiltinModelChoices([provider])
 
   if (provider === `openai-codex`) {
-    return knownModels.map((model) => ({
-      provider,
-      id: model.id,
-      label: `${providerLabel(provider)} ${model.name}`,
-      value: modelValue(provider, model.id),
-      reasoning: model.reasoning,
-    }))
+    return knownChoices
   }
 
   const availableIds = await fetchAvailableModelIds(provider)
-  const models =
-    availableIds === null
-      ? knownModels
-      : knownModels.filter((model) => availableIds.has(model.id))
+  return availableIds === null
+    ? knownChoices
+    : knownChoices.filter((choice) => availableIds.has(choice.id))
+}
 
-  return models.map((model) => ({
-    provider,
-    id: model.id,
-    label: `${providerLabel(provider)} ${model.name}`,
-    value: modelValue(provider, model.id),
-    reasoning: model.reasoning,
-  }))
+function enabledModelSet(
+  values: ReadonlyArray<string> | null | undefined
+): Set<string> | null {
+  if (!values) return null
+  const enabled = new Set<string>()
+  for (const value of values) {
+    const trimmed = value.trim()
+    if (trimmed) enabled.add(trimmed)
+  }
+  return enabled.size > 0 ? enabled : null
+}
+
+function filterChoicesByEnabledModels(
+  choices: Array<BuiltinModelChoice>,
+  values: ReadonlyArray<string> | null | undefined
+): Array<BuiltinModelChoice> {
+  const enabled = enabledModelSet(values)
+  if (!enabled) return choices
+  const filtered = choices.filter((choice) => enabled.has(choice.value))
+  return filtered.length > 0 ? filtered : choices
 }
 
 function withProviderPayloadDefaults(
@@ -197,9 +286,7 @@ function parseReasoningEffort(value: unknown): ExplicitReasoningEffort | null {
 }
 
 export async function createBuiltinModelCatalog(
-  options: {
-    allowMockFallback?: boolean
-  } = {}
+  options: BuiltinModelCatalogOptions = {}
 ): Promise<BuiltinModelCatalog | null> {
   const providers = configuredProviders()
 
@@ -207,9 +294,13 @@ export async function createBuiltinModelCatalog(
     return mockFallbackCatalog()
   }
 
-  const choices = (
+  const providerChoices = (
     await Promise.all(providers.map((provider) => choicesForProvider(provider)))
   ).flat()
+  const choices = filterChoicesByEnabledModels(
+    providerChoices,
+    options.enabledModelValues
+  )
 
   if (choices.length === 0) {
     return options.allowMockFallback ? mockFallbackCatalog() : null
@@ -231,6 +322,11 @@ export async function createBuiltinModelCatalog(
     choices.find(
       (choice) =>
         choice.provider === `deepseek` && choice.id === DEFAULT_DEEPSEEK_MODEL
+    ) ??
+    choices.find(
+      (choice) =>
+        choice.provider === MOONSHOT_PROVIDER &&
+        choice.id === DEFAULT_MOONSHOT_MODEL
     ) ??
     choices[0]!
 
@@ -261,6 +357,9 @@ export function resolveBuiltinModelConfig(
     ...(choice.provider === `openai-codex` && {
       getApiKey: () => readCodexAccessToken(),
     }),
+    ...(choice.provider === MOONSHOT_PROVIDER && {
+      getApiKey: () => getMoonshotApiKey(),
+    }),
   }
 
   return withProviderPayloadDefaults(config, choice, reasoningEffort)
@@ -273,4 +372,24 @@ export function modelChoiceValues(
     string,
     ...Array<string>,
   ]
+}
+
+export function modelInputSchemaDefs(
+  catalog: BuiltinModelCatalog
+): Record<string, unknown> {
+  return {
+    [MODEL_INPUTS_SCHEMA_DEF]: {
+      type: `object`,
+      properties: Object.fromEntries(
+        catalog.choices.map((choice) => [
+          choice.value,
+          {
+            type: `array`,
+            items: { enum: [`text`, `image`] },
+            default: choice.input,
+          },
+        ])
+      ),
+    },
+  }
 }

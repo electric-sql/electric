@@ -91,15 +91,18 @@ const server = http.createServer(async (req, res) => {
         title: message.trim().slice(0, 80),
       }
 
-      const putRes = await fetch(`${DARIX_URL}/orchestrator/${name}`, {
-        method: `PUT`,
-        headers: { 'Content-Type': `application/json` },
-        body: JSON.stringify({
-          args: {},
-          tags,
-          initialMessage: message,
-        }),
-      })
+      const putRes = await fetch(
+        `${DARIX_URL}/_electric/entities/orchestrator/${name}`,
+        {
+          method: `PUT`,
+          headers: { 'Content-Type': `application/json` },
+          body: JSON.stringify({
+            args: {},
+            tags,
+            initialMessage: message,
+          }),
+        }
+      )
 
       if (!putRes.ok) {
         const text = await putRes.text()

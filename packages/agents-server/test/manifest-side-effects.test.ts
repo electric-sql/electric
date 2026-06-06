@@ -15,7 +15,7 @@ describe(`manifest side effects`, () => {
         kind: `source`,
         sourceType: `entity`,
         sourceRef: `/worker/w1`,
-        wake: `runFinished`,
+        wake: { on: `runFinished`, includeResponse: true },
       },
       `source:entity:/worker/w1`
     )

@@ -5,10 +5,8 @@ import { useCloudAuth } from '../src/lib/CloudAuthContext'
 
 /**
  * First-launch onboarding route. The root layout redirects users here
- * when `onboardingDismissed` is false; the wizard either finishes
- * (server URL saved → dismissed → home) or is opted out of (footer
- * link / "Skip for now" → dismissed → either home or the existing
- * `/server-setup` redirect if no URL is set yet).
+ * while `onboardingDismissed` is false; the wizard is mandatory until
+ * a server connection is confirmed via `onComplete`.
  */
 export default function OnboardingRoute(): React.ReactElement {
   const router = useRouter()
@@ -25,13 +23,6 @@ export default function OnboardingRoute(): React.ReactElement {
       onComplete={async ({ serverUrl: nextUrl }) => {
         await saveServerUrl(nextUrl)
         await setOnboardingDismissed(true)
-        router.replace(`/`)
-      }}
-      onDismissForever={async () => {
-        await setOnboardingDismissed(true)
-        // If the user dismisses without configuring a server, the root
-        // layout's `!serverUrl` redirect picks them up and forces them
-        // onto `/server-setup` next render.
         router.replace(`/`)
       }}
     />

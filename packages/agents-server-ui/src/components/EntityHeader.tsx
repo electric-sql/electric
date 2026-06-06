@@ -5,6 +5,9 @@ import { Icon as UiIcon, IconButton, Text, Tooltip } from '../ui'
 import type { BadgeTone } from '../ui'
 import { MainHeader } from './MainHeader'
 import { InlineStatusBadge } from './InlineStatusBadge'
+import { EntityRuntimeBadges } from './EntityRuntimeBadges'
+import { ShareEntityDialog } from './ShareEntityDialog'
+import { useEntityPermission } from '../hooks/useEntityPermission'
 import { listViews, type ViewId } from '../lib/workspace/viewRegistry'
 import styles from './EntityHeader.module.css'
 import type { ElectricEntity } from '../lib/ElectricAgentsProvider'
@@ -159,6 +162,7 @@ function EntityActions({
   const availableViews = onSetView ? listViews(entity) : []
   const defaultViewId = availableViews[0]?.id
   const activeViewId = currentViewId ?? defaultViewId
+  const canManage = useEntityPermission(entity, `manage`)
   // Only show the inline view-switcher buttons when there's more than
   // one view available — otherwise the strip is just visual noise.
   const showViewStrip = onSetView && availableViews.length > 1
@@ -171,6 +175,10 @@ function EntityActions({
       >
         {entity.status}
       </InlineStatusBadge>
+
+      <span className={styles.runtimeBadges}>
+        <EntityRuntimeBadges entity={entity} />
+      </span>
 
       {showViewStrip &&
         availableViews.map((view) => {
@@ -192,6 +200,8 @@ function EntityActions({
             </Tooltip>
           )
         })}
+
+      {canManage && <ShareEntityDialog entity={entity} />}
 
       {menu}
     </span>

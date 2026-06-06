@@ -1,12 +1,23 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Brain, ChevronsUpDown, Plug, Server, Unplug } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import {
+  Brain,
+  ChevronsUpDown,
+  Cloud,
+  Laptop,
+  Plug,
+  Server,
+  Unplug,
+} from 'lucide-react'
 import { useNavigate } from '@tanstack/react-router'
+import {
+  useAvailableServers,
+  type AvailableServer,
+} from '../hooks/useAvailableServers'
 import { useServerConnection } from '../hooks/useServerConnection'
 import {
-  loadDesktopState,
-  onDesktopStateChanged,
+  prepareCloudAgentServerConnection,
   rescanDiscoveredServers,
-  type DiscoveredServer,
+  type ConnectServerOptions,
 } from '../lib/server-connection'
 import { Icon, IconButton, Menu, Text, Tooltip } from '../ui'
 import styles from './ServerPicker.module.css'
@@ -19,61 +30,26 @@ type ServerStatus = `ok` | `down` | `unset`
 /**
  * Footer-anchored server picker tile.
  *
- * Renders a single-line tile showing `[● status] [server name] [chevron]`
- * that opens a menu listing saved servers, quick connect controls,
- * discovered localhost hints, and a link to the full Servers settings.
+ * Renders a single-line tile showing `[status] [server name] [chevron]`
+ * that opens one deduped list of saved, cloud, and local servers.
  */
 export function ServerPicker(): React.ReactElement {
   const {
-    servers,
     activeServer,
     connected,
     connection,
+    addServer,
     setActiveServer,
     connectServer,
     disconnectServer,
   } = useServerConnection()
+  const { servers } = useAvailableServers()
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
-  const [discovered, setDiscovered] = useState<Array<DiscoveredServer>>([])
   const isDesktop = typeof window !== `undefined` && Boolean(window.electronAPI)
 
-  // Mirror the main process's discovered-server set into local state
-  // via the same desktop-state broadcast channel the rest of the
-  // desktop UI listens on. Web mode never receives a payload here.
-  useEffect(() => {
-    if (!isDesktop) return
-    void loadDesktopState().then((s) => {
-      if (s?.discoveredServers) setDiscovered(s.discoveredServers)
-    })
-    const unsubscribe = onDesktopStateChanged((s) =>
-      setDiscovered(s.discoveredServers ?? [])
-    )
-    return () => {
-      unsubscribe?.()
-    }
-  }, [isDesktop])
-
-  // Hide URLs the user has already saved — the saved-servers list
-  // covers them. Sort by port for a stable display order.
-  const savedUrls = useMemo(() => new Set(servers.map((s) => s.url)), [servers])
-  const newDiscovered = useMemo(
-    () =>
-      discovered
-        .filter((entry) => !savedUrls.has(entry.url))
-        .sort((a, b) => a.port - b.port),
-    [discovered, savedUrls]
-  )
-
   // While the menu is open, re-probe localhost on a 5-second cadence
-  // so newly-started agents servers appear (and stopped ones drop)
-  // without a manual refresh button. Background discovery in the
-  // main process still runs every 30s when the menu is closed —
-  // this loop just tightens the cadence for the moment the user
-  // is actively looking at the list. Probe results are broadcast
-  // via `desktop:state-changed`, so our existing subscription
-  // updates `discovered` automatically; we don't need the return
-  // value here.
+  // so newly-started agents servers appear without a manual refresh.
   useEffect(() => {
     if (!isDesktop || !menuOpen) return
     let cancelled = false
@@ -91,6 +67,46 @@ export function ServerPicker(): React.ReactElement {
       clearInterval(interval)
     }
   }, [isDesktop, menuOpen])
+
+  const connectAvailableServer = async (
+    item: AvailableServer,
+    options: ConnectServerOptions
+  ): Promise<void> => {
+    if (item.server) {
+      connectServer(item.server.id, options)
+      return
+    }
+    if (item.cloudServer) {
+      const result = await prepareCloudAgentServerConnection(
+        item.cloudServer.id
+      )
+      if (!result) return
+      addServer(
+        {
+          name: item.cloudServer.name,
+          url: result.url,
+          source: `electric-cloud`,
+          desiredState: `connected`,
+          localRuntimeEnabled: options.localRuntimeEnabled !== false,
+          tenantId: result.tenantId,
+        },
+        options
+      )
+      return
+    }
+    if (item.discoveredServer) {
+      addServer(
+        {
+          name: item.name,
+          url: item.discoveredServer.url,
+          source: `local-discovery`,
+          desiredState: `connected`,
+          localRuntimeEnabled: options.localRuntimeEnabled !== false,
+        },
+        options
+      )
+    }
+  }
 
   const status: ServerStatus = !activeServer
     ? `unset`
@@ -122,94 +138,27 @@ export function ServerPicker(): React.ReactElement {
         }
       />
       <Menu.Content side="top" align="start">
-        {servers.map((server, i) => {
-          const itemStatus: ServerStatus =
-            server.id === activeServer?.id
-              ? status
-              : server.desiredState === `connected`
-                ? `down`
-                : `unset`
-          const isConnected = server.desiredState === `connected`
-          return (
-            <Menu.Item
-              key={`${server.url}-${i}`}
-              onSelect={() => setActiveServer(server)}
-            >
-              <span className={styles.menuRow}>
-                <span className={styles.dot} data-state={itemStatus} />
-                <Text size={2} className={styles.menuRowName}>
-                  {server.name}
-                </Text>
-                {isDesktop && server.localRuntimeEnabled !== false && (
-                  <Tooltip
-                    content="Local runtime enabled for this server"
-                    side="right"
-                  >
-                    <span
-                      className={styles.runtimeBadge}
-                      aria-label="Local runtime enabled for this server"
-                    >
-                      <Icon icon={Brain} size={1} />
-                    </span>
-                  </Tooltip>
-                )}
-                <Tooltip
-                  content={
-                    isConnected
-                      ? `Disconnect ${server.name}`
-                      : `Connect ${server.name}`
-                  }
-                  side="right"
-                >
-                  <IconButton
-                    size={1}
-                    variant="ghost"
-                    tone="neutral"
-                    className={styles.connectionBtn}
-                    data-state={isConnected ? `connected` : `disconnected`}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      e.preventDefault()
-                      if (isConnected) disconnectServer(server.id)
-                      else connectServer(server.id)
-                    }}
-                    aria-label={
-                      isConnected
-                        ? `Disconnect ${server.name}`
-                        : `Connect ${server.name}`
-                    }
-                  >
-                    <Icon icon={isConnected ? Plug : Unplug} size={1} />
-                  </IconButton>
-                </Tooltip>
-              </span>
-            </Menu.Item>
-          )
-        })}
-        {isDesktop && newDiscovered.length > 0 && (
-          <>
-            {servers.length > 0 && <Menu.Separator />}
-            {newDiscovered.map((entry) => (
-              <Menu.Item
-                key={entry.url}
-                onSelect={() => {
-                  navigate({
-                    to: `/settings/$category`,
-                    params: { category: `servers` },
-                  })
-                }}
-              >
-                <span className={styles.menuRow}>
-                  <span className={styles.dot} data-state="unset" />
-                  <Text size={2} className={styles.menuRowName}>
-                    localhost:{entry.port}
-                  </Text>
-                </span>
-              </Menu.Item>
-            ))}
-          </>
-        )}
-        <Menu.Separator />
+        {servers.map((item) => (
+          <ServerMenuItem
+            key={item.key}
+            item={item}
+            onSelect={() => {
+              if (item.server) setActiveServer(item.server)
+              else
+                void connectAvailableServer(item, {
+                  localRuntimeEnabled: true,
+                })
+            }}
+            onConnect={(options) => {
+              void connectAvailableServer(item, options)
+            }}
+            onDisconnect={() => {
+              if (item.server) disconnectServer(item.server.id)
+            }}
+            isDesktop={isDesktop}
+          />
+        ))}
+        {servers.length > 0 && <Menu.Separator />}
         <Menu.Item
           onSelect={() =>
             navigate({
@@ -219,9 +168,104 @@ export function ServerPicker(): React.ReactElement {
           }
         >
           <Icon icon={Server} size={2} />
-          <Text size={2}>Servers…</Text>
+          <Text size={2}>Servers...</Text>
         </Menu.Item>
       </Menu.Content>
     </Menu.Root>
+  )
+}
+
+function ServerMenuItem({
+  item,
+  onSelect,
+  onConnect,
+  onDisconnect,
+  isDesktop,
+}: {
+  item: AvailableServer
+  onSelect: () => void
+  onConnect: (options: ConnectServerOptions) => void
+  onDisconnect: () => void
+  isDesktop: boolean
+}): React.ReactElement {
+  const isConnected = item.server?.desiredState === `connected`
+  const itemStatus: ServerStatus =
+    item.status === `connected` ||
+    item.status === `connecting` ||
+    item.status === `reconnecting`
+      ? `ok`
+      : item.status === `offline` || item.status === `error`
+        ? `down`
+        : `unset`
+
+  return (
+    <Menu.Item onSelect={onSelect}>
+      <span className={styles.menuRow}>
+        <span className={styles.dot} data-state={itemStatus} />
+        <ServerKindIcon item={item} />
+        <Text size={2} className={styles.menuRowName}>
+          {item.name}
+        </Text>
+        {isDesktop &&
+          isConnected &&
+          item.server?.localRuntimeEnabled !== false && (
+            <Tooltip content="Local runtime enabled" side="right">
+              <span
+                className={styles.runtimeBadge}
+                aria-label="Local runtime enabled"
+              >
+                <Icon icon={Brain} size={1} />
+              </span>
+            </Tooltip>
+          )}
+        {isDesktop && (
+          <Tooltip
+            content={
+              isConnected ? `Disconnect ${item.name}` : `Connect ${item.name}`
+            }
+            side="right"
+          >
+            <IconButton
+              size={1}
+              variant="ghost"
+              tone="neutral"
+              className={styles.connectionBtn}
+              data-state={isConnected ? `connected` : `disconnected`}
+              onClick={(e) => {
+                e.stopPropagation()
+                e.preventDefault()
+                if (isConnected) onDisconnect()
+                else onConnect({ localRuntimeEnabled: true })
+              }}
+              aria-label={
+                isConnected ? `Disconnect ${item.name}` : `Connect ${item.name}`
+              }
+            >
+              <Icon icon={isConnected ? Plug : Unplug} size={1} />
+            </IconButton>
+          </Tooltip>
+        )}
+      </span>
+    </Menu.Item>
+  )
+}
+
+function ServerKindIcon({
+  item,
+}: {
+  item: AvailableServer
+}): React.ReactElement {
+  const icon = item.isCloud ? Cloud : item.isLocal ? Laptop : Server
+  const label = item.isCloud
+    ? `Cloud server`
+    : item.isLocal
+      ? `Local server`
+      : `Self-hosted server`
+  return (
+    <Tooltip content={label} side="right">
+      <span className={styles.kindIcon} aria-label={label}>
+        <Icon icon={icon} size={1} />
+      </span>
+    </Tooltip>
   )
 }

@@ -4,6 +4,7 @@
 
 import type {
   PullWakeRunnerHealth,
+  SlashCommandDefinition,
   WebhookNotification,
 } from '@electric-ax/agents-runtime'
 import type { Principal } from './principal.js'
@@ -66,6 +67,78 @@ export interface DispatchPolicy {
 export type RunnerKind = `local` | `cloud-worker` | `sandbox` | `ci` | `server`
 export type RunnerAdminStatus = `enabled` | `disabled`
 export type RunnerLiveness = `online` | `offline`
+
+export type PermissionSubjectKind = `principal` | `principal_kind`
+export type PermissionSubject = {
+  subject_kind: PermissionSubjectKind
+  subject_value: string
+}
+export type EntityPermission =
+  | `read`
+  | `write`
+  | `delete`
+  | `signal`
+  | `fork`
+  | `schedule`
+  | `spawn`
+  | `manage`
+export type EntityTypePermission = `spawn` | `manage`
+export type EntityPermissionPropagation = `self` | `descendants`
+
+export interface EntityPermissionGrant extends PermissionSubject {
+  id: number
+  entity_url: string
+  permission: EntityPermission
+  propagation: EntityPermissionPropagation
+  copy_to_children: boolean
+  created_by?: string
+  expires_at?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface EntityTypePermissionGrant extends PermissionSubject {
+  id: number
+  entity_type: string
+  permission: EntityTypePermission
+  created_by?: string
+  expires_at?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface EntityTypePermissionGrantInput extends PermissionSubject {
+  permission: EntityTypePermission
+  expires_at?: string
+}
+
+export type AuthorizationResource =
+  | { kind: `entity`; entity: ElectricAgentsEntity }
+  | { kind: `entity_type`; entityType: ElectricAgentsEntityType }
+  | { kind: `entity_type_registration`; entityTypeName: string }
+  | {
+      kind: `shared_state`
+      sharedStateId: string
+      linkedEntityUrls: Array<string>
+    }
+
+export type AuthorizationDecision = {
+  decision: `allow` | `deny`
+  expires_at?: string
+}
+
+export type AuthorizeRequest = (input: {
+  tenant: string
+  principal: Principal
+  verb: EntityPermission | EntityTypePermission
+  resource: AuthorizationResource
+  request?: {
+    method: string
+    url: string
+    headers: Record<string, string>
+  }
+  builtInAllowed: boolean
+}) => Promise<AuthorizationDecision> | AuthorizationDecision
 
 const VALID_RUNNER_KINDS = new Set<string>([
   `local`,
@@ -130,6 +203,19 @@ export interface RunnerActiveClaim {
   leaseExpiresAt?: string
 }
 
+export interface SandboxProfileAdvertisement {
+  name: string
+  label: string
+  description?: string
+  /**
+   * True for off-host (remote-provider) profiles, reachable from any runner.
+   * Absent/false means the sandbox is host-local, so a shared sandbox on this
+   * profile requires its collaborators to be pinned to a single runner. Set
+   * by the runtime per profile (see SandboxProfile.remote).
+   */
+  remote?: boolean
+}
+
 export interface ElectricAgentsRunner {
   id: string
   owner_principal: string
@@ -143,6 +229,7 @@ export interface ElectricAgentsRunner {
   wake_stream: string
   wake_stream_offset?: string
   diagnostics?: Record<string, unknown>
+  sandbox_profiles: Array<SandboxProfileAdvertisement>
   created_at: string
   updated_at: string
 }
@@ -295,19 +382,67 @@ export function expectedSignalStatus(
   }
 }
 
+/**
+ * Resolved sandbox selection stored on an entity and replayed to the runtime at
+ * wake. Only an explicit / inherited cross-entity `key` is persisted here;
+ * `scope`-derived keys are computed at wake time (and so left unstored, keeping
+ * the co-location guard keyed on genuine cross-entity sharing). `persistent`
+ * defaults by scope at wake time when unset.
+ */
+export interface EntitySandboxSelection {
+  profile: string
+  key?: string
+  scope?: `entity` | `wake`
+  persistent?: boolean
+  /**
+   * Whether the entity owns the sandbox (create + govern teardown) or only
+   * attaches to an owner's. Stored as `false` for an attacher (e.g. an
+   * `inherit` spawn); omitted ⇒ owner (the default).
+   */
+  owner?: boolean
+}
+
+/**
+ * Spawn-time sandbox CHOICE — the request input, before resolution. Resolved
+ * into an {@link EntitySandboxSelection} by the spawn path. The wire schema for
+ * this shape lives in `sandbox-choice-schema.ts` (mirrors how `DispatchPolicy`
+ * pairs with `dispatch-policy-schema.ts`).
+ */
+export interface SandboxChoice {
+  /** Profile name advertised by the target runner. */
+  profile?: string
+  /** Explicit cross-entity key to join (or start) a shared sandbox. */
+  key?: string
+  /** Identity scope when no explicit `key`: per-entity (default) or per-wake. */
+  scope?: `entity` | `wake`
+  /** Idle-teardown durability; defaults by scope when unset. */
+  persistent?: boolean
+  /** Whether this entity owns the sandbox (default) or only attaches to one. */
+  owner?: boolean
+  /** Reuse the parent entity's resolved sandbox (attach-only). */
+  inherit?: boolean
+}
+
 export interface ElectricAgentsEntity {
   url: string
   type: string
   status: EntityStatus
   streams: {
     main: string
-    error: string
   }
   subscription_id: string
   dispatch_policy?: DispatchPolicy
   write_token: string
   tags: Record<string, string>
   spawn_args?: Record<string, unknown>
+  /**
+   * Resolved sandbox selection. An explicit `key` lets entities collaborate on
+   * one workspace and is the only key form persisted (it's cross-entity, so the
+   * co-location guard applies); a `scope` ('entity' default / 'wake') instead
+   * derives the key at wake time, so it's left unstored. `persistent` chooses
+   * idle durability.
+   */
+  sandbox?: EntitySandboxSelection
   parent?: string
   type_revision?: number
   inbox_schemas?: Record<string, Record<string, unknown>>
@@ -322,10 +457,11 @@ export interface PublicElectricAgentsEntity {
   url: string
   type: string
   status: EntityStatus
-  streams: { main: string; error: string }
+  streams: { main: string }
   dispatch_policy?: DispatchPolicy
   tags: Record<string, string>
   spawn_args?: Record<string, unknown>
+  sandbox?: EntitySandboxSelection
   parent?: string
   created_by?: string
   created_at: number
@@ -350,6 +486,7 @@ export function toPublicEntity(
     dispatch_policy: entity.dispatch_policy,
     tags: entity.tags,
     spawn_args: entity.spawn_args,
+    sandbox: entity.sandbox,
     parent: entity.parent,
     created_by: entity.created_by,
     created_at: entity.created_at,
@@ -363,6 +500,7 @@ export interface ElectricAgentsEntityType {
   creation_schema?: Record<string, unknown>
   inbox_schemas?: Record<string, Record<string, unknown>>
   state_schemas?: Record<string, Record<string, unknown>>
+  slash_commands?: Array<SlashCommandDefinition>
   serve_endpoint?: string
   default_dispatch_policy?: DispatchPolicy
   revision: number
@@ -376,8 +514,10 @@ export interface RegisterEntityTypeRequest {
   creation_schema?: Record<string, unknown>
   inbox_schemas?: Record<string, Record<string, unknown>>
   state_schemas?: Record<string, Record<string, unknown>>
+  slash_commands?: Array<SlashCommandDefinition>
   serve_endpoint?: string
   default_dispatch_policy?: DispatchPolicy
+  permission_grants?: Array<EntityTypePermissionGrantInput>
 }
 
 export interface TypedSpawnRequest {
@@ -386,7 +526,14 @@ export interface TypedSpawnRequest {
   tags?: Record<string, string>
   parent?: string
   dispatch_policy?: DispatchPolicy
+  /**
+   * Sandbox selection: `profile` for a sandbox (optionally with `scope` /
+   * `persistent`), `key` to join (or start) an explicit shared one, or
+   * `inherit: true` to reuse the parent's resolved sandbox.
+   */
+  sandbox?: SandboxChoice
   initialMessage?: unknown
+  initialMessageType?: string
   created_by?: string
   wake?: {
     subscriberUrl: string
@@ -406,6 +553,8 @@ export interface TypedSpawnRequest {
 
 export interface SendRequest {
   from?: string
+  from_principal?: string
+  from_agent?: string
   payload?: unknown
   key?: string
   type?: string
@@ -457,4 +606,4 @@ export const ErrCodeForkWaitTimeout = `FORK_WAIT_TIMEOUT`
 export const ErrCodeEntityPersistFailed = `ENTITY_PERSIST_FAILED`
 export const ErrCodeAgentUiNotFound = `AGENT_UI_NOT_FOUND`
 export const ErrCodeSubscriptionNotFound = `SUBSCRIPTION_NOT_FOUND`
-export const ErrCodeCallbackNotFound = `CALLBACK_NOT_FOUND`
+export const ErrCodeWakeCallbackNotFound = `WAKE_CALLBACK_NOT_FOUND`

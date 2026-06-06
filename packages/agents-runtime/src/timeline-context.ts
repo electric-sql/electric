@@ -13,13 +13,15 @@ import type {
   TimelineOrder,
 } from './entity-timeline'
 import type { EntityStreamDB } from './entity-stream-db'
-import type { Signal } from './entity-schema'
+import type { ManifestAttachmentEntry, Signal } from './entity-schema'
 import type {
+  LLMContentBlock,
   LLMMessage,
   TimelineItem,
   TimelineProjectionOpts,
   TimestampedMessage,
 } from './types'
+import { COMPOSER_INPUT_MESSAGE_TYPE } from './composer-input'
 
 function asString(value: unknown, fallback = ``): string {
   if (typeof value === `string`) {
@@ -31,6 +33,26 @@ function asString(value: unknown, fallback = ``): string {
   }
 
   return JSON.stringify(value)
+}
+
+function projectInboxPayload(item: {
+  payload: unknown
+  messageType?: string
+}): string {
+  if (
+    item.messageType === COMPOSER_INPUT_MESSAGE_TYPE &&
+    typeof item.payload === `object` &&
+    item.payload !== null
+  ) {
+    if (`source` in item.payload && typeof item.payload.source === `string`) {
+      return item.payload.source
+    }
+    if (`text` in item.payload && typeof item.payload.text === `string`) {
+      return item.payload.text
+    }
+  }
+
+  return asString(item.payload)
 }
 
 function orderToOffset(order: TimelineOrder): number {
@@ -177,7 +199,7 @@ export function defaultProjection(
 ): Array<LLMMessage> | null {
   switch (item.kind) {
     case `inbox`:
-      return [{ role: `user`, content: asString(item.payload) }]
+      return [{ role: `user`, content: projectInboxPayload(item) }]
 
     case `wake`:
       return [{ role: `user`, content: asString(item.payload) }]
@@ -388,7 +410,9 @@ export function materializeTimeline(
         return {
           kind: `inbox`,
           at: orderToOffset(entry.order),
+          key: entry.item.key,
           payload: entry.item.payload,
+          messageType: entry.item.message_type,
         }
 
       case `wake`:
@@ -441,6 +465,7 @@ export function timelineMessages(
   const projection = opts.projection ?? defaultProjection
   const since = opts.since ?? Number.NEGATIVE_INFINITY
   const items = materializeTimeline(buildEntityTimelineData(db))
+  const attachmentsByInboxKey = attachmentsBySubjectInboxKey(db)
   const messages: Array<TimestampedMessage> = []
 
   for (const item of items) {
@@ -449,7 +474,10 @@ export function timelineMessages(
     }
 
     for (const message of projection(item) ?? []) {
-      messages.push({ ...message, at: item.at })
+      messages.push({
+        ...withInboxAttachments(message, item, attachmentsByInboxKey),
+        at: item.at,
+      })
     }
   }
 
@@ -460,4 +488,68 @@ export function timelineToMessages(db: EntityStreamDB): Array<LLMMessage> {
   return timelineMessages(db).map(
     ({ at: _at, ...message }) => message as LLMMessage
   )
+}
+
+function isAttachmentManifest(
+  value: unknown
+): value is ManifestAttachmentEntry {
+  return (
+    typeof value === `object` &&
+    value !== null &&
+    `kind` in value &&
+    value.kind === `attachment` &&
+    `id` in value &&
+    typeof value.id === `string` &&
+    `subject` in value &&
+    typeof value.subject === `object` &&
+    value.subject !== null
+  )
+}
+
+function attachmentsBySubjectInboxKey(
+  db: EntityStreamDB
+): Map<string, Array<ManifestAttachmentEntry>> {
+  const byKey = new Map<string, Array<ManifestAttachmentEntry>>()
+  for (const value of db.collections.manifests.toArray) {
+    if (
+      !isAttachmentManifest(value) ||
+      value.role !== `input` ||
+      value.status !== `complete` ||
+      value.subject.type !== `inbox`
+    ) {
+      continue
+    }
+    const existing = byKey.get(value.subject.key) ?? []
+    existing.push(value)
+    byKey.set(value.subject.key, existing)
+  }
+  return byKey
+}
+
+function withInboxAttachments(
+  message: LLMMessage,
+  item: TimelineItem,
+  attachmentsByInboxKey: Map<string, Array<ManifestAttachmentEntry>>
+): LLMMessage {
+  if (item.kind !== `inbox` || message.role !== `user`) {
+    return message
+  }
+  const attachments = attachmentsByInboxKey.get(item.key)
+  if (!attachments || attachments.length === 0) {
+    return message
+  }
+  const content: Array<LLMContentBlock> =
+    typeof message.content === `string`
+      ? [{ type: `text`, text: message.content }]
+      : [...message.content]
+  content.push(
+    ...attachments.map((attachment) => ({
+      type: `attachment` as const,
+      id: attachment.id,
+    }))
+  )
+  return {
+    ...message,
+    content,
+  }
 }

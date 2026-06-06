@@ -19,3 +19,6 @@ android
 
 # Misc
 .DS_Store
+
+# Generated per-build versioning info (see app.config.ts).
+.build-info.json

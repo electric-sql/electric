@@ -1,6 +1,6 @@
 {
   "name": "@electric-ax/agents-runtime",
-  "version": "0.3.4",
+  "version": "0.3.10",
   "description": "Electric agent runtime — behavioral stack for agent entities over durable streams",
   "keywords": [
     "tanstack-intent"
@@ -64,10 +64,32 @@
         "default": "./dist/tools.cjs"
       }
     },
+    "./sandbox": {
+      "import": {
+        "types": "./dist/sandbox.d.ts",
+        "default": "./dist/sandbox.js"
+      },
+      "require": {
+        "types": "./dist/sandbox.d.cts",
+        "default": "./dist/sandbox.cjs"
+      }
+    },
+    "./sandbox/docker": {
+      "import": {
+        "types": "./dist/sandbox-docker.d.ts",
+        "default": "./dist/sandbox-docker.js"
+      },
+      "require": {
+        "types": "./dist/sandbox-docker.d.cts",
+        "default": "./dist/sandbox-docker.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "peerDependencies": {
     "@tanstack/react-db": ">=0.1.78",
+    "dockerode": ">=5.0.0",
+    "e2b": ">=2.0.0",
     "react": ">=18"
   },
   "peerDependenciesMeta": {
@@ -76,12 +98,18 @@
     },
     "@tanstack/react-db": {
       "optional": true
+    },
+    "dockerode": {
+      "optional": true
+    },
+    "e2b": {
+      "optional": true
     }
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
-    "@durable-streams/client": "https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@5d5c217",
-    "@durable-streams/state": "https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@5d5c217",
+    "@durable-streams/client": "^0.2.6",
+    "@durable-streams/state": "^0.3.1",
     "@electric-ax/agents-mcp": "workspace:*",
     "@mariozechner/pi-agent-core": "^0.70.2",
     "@mariozechner/pi-ai": "^0.70.2",
@@ -101,13 +129,16 @@
     "zod-to-json-schema": "^3.25.2"
   },
   "devDependencies": {
-    "@durable-streams/server": "https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/server@eac712f",
+    "@durable-streams/server": "^0.3.7",
+    "@tanstack/react-db": "^0.1.85",
+    "@types/dockerode": "^4.0.1",
     "@types/jsdom": "^27.0.0",
     "@types/node": "^22.19.15",
     "@types/turndown": "^5.0.6",
     "@vitest/coverage-v8": "^3.2.4",
+    "dockerode": "^5.0.0",
     "tsdown": "^0.9.0",
-    "typescript": "^5.7.0",
+    "typescript": "^5.9.3",
     "vitest": "^3.2.4"
   },
   "files": [

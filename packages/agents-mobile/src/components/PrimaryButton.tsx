@@ -4,8 +4,10 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  View,
   type PressableProps,
 } from 'react-native'
+import { Icon, type IconName } from './Icon'
 import { useTokens } from '../lib/ThemeProvider'
 import { fontSize, radii, rowHeight, spacing } from '../lib/theme'
 import type { Tokens } from '../lib/theme'
@@ -17,11 +19,15 @@ export function PrimaryButton({
   loading,
   disabled,
   variant = `solid`,
+  leadingIcon,
+  trailingIcon,
   ...props
 }: PressableProps & {
   title: string
   loading?: boolean
   variant?: Variant
+  leadingIcon?: IconName
+  trailingIcon?: IconName
 }): React.ReactElement {
   const tokens = useTokens()
   const styles = useMemo(() => createStyles(tokens), [tokens])
@@ -38,8 +44,12 @@ export function PrimaryButton({
       : variant === `soft`
         ? styles.softText
         : styles.ghostText
-  const indicatorColor =
-    variant === `solid` ? tokens.textOnAccent : tokens.text1
+  const foreground =
+    variant === `solid`
+      ? tokens.textOnAccent
+      : variant === `soft`
+        ? tokens.accent11
+        : tokens.text1
 
   return (
     <Pressable
@@ -53,9 +63,27 @@ export function PrimaryButton({
       ]}
     >
       {loading ? (
-        <ActivityIndicator color={indicatorColor} />
+        <ActivityIndicator color={foreground} />
       ) : (
-        <Text style={[styles.text, variantText]}>{title}</Text>
+        <View style={styles.content}>
+          {leadingIcon && (
+            <Icon
+              name={leadingIcon}
+              size={16}
+              color={foreground}
+              strokeWidth={1.75}
+            />
+          )}
+          <Text style={[styles.text, variantText]}>{title}</Text>
+          {trailingIcon && (
+            <Icon
+              name={trailingIcon}
+              size={16}
+              color={foreground}
+              strokeWidth={1.75}
+            />
+          )}
+        </View>
       )}
     </Pressable>
   )
@@ -86,6 +114,11 @@ function createStyles(tokens: Tokens) {
     },
     pressed: {
       opacity: 0.85,
+    },
+    content: {
+      flexDirection: `row`,
+      alignItems: `center`,
+      gap: spacing.sm,
     },
     text: {
       fontSize: fontSize.sm,

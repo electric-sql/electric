@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createTransaction } from '@durable-streams/state'
+import { createTransaction } from '@durable-streams/state/db'
 import { createAssistantMessageEventStream } from '@mariozechner/pi-ai'
 import { getCronSourceRef } from '../src/cron-utils'
 import {
@@ -92,7 +92,7 @@ const mockStreamResponse = {
 
 mockDurableStreamStream.mockResolvedValue(mockStreamResponse)
 
-vi.mock(`@durable-streams/state`, async (importOriginal) => {
+vi.mock(`@durable-streams/state/db`, async (importOriginal) => {
   const actual = await importOriginal<any>()
   return {
     ...actual,
@@ -377,7 +377,6 @@ function makeNotification(
       url: `http://localhost:3000/test-agent/agent-1`,
       streams: {
         main: `/streams/entity:agent-1`,
-        error: `/streams/entity-error:agent-1`,
       },
     },
     ...overrides,
@@ -645,7 +644,7 @@ describe(`processWake`, () => {
     expect(body.done).toBe(true)
   })
 
-  it(`skips done callback when shutdown is requested`, async () => {
+  it(`sends done callback when shutdown is requested after checkpoint`, async () => {
     const shutdownController = new AbortController()
 
     defineEntity(`test-agent`, {
@@ -667,7 +666,13 @@ describe(`processWake`, () => {
         (opts?.body as string | undefined)?.includes(`"done":true`)
     )
 
-    expect(doneCalls).toHaveLength(0)
+    expect(doneCalls).toHaveLength(1)
+    const body = JSON.parse(doneCalls[0]![1]!.body as string) as {
+      acks: Array<{ path: string; offset: string }>
+    }
+    expect(body.acks).toEqual([
+      { path: `/streams/entity:agent-1`, offset: `10_100` },
+    ])
   })
 
   it(`closes immediately for SIGSTOP when there is no handler pass to checkpoint`, async () => {
@@ -1385,6 +1390,7 @@ describe(`processWake`, () => {
     expect(String(sendUrl)).toContain(`target-entity-2/send`)
     const body = JSON.parse(sendOpts!.body as string) as Record<string, unknown>
     expect(body.from).toBeUndefined()
+    expect(body.from_agent).toBe(`http://localhost:3000/test-agent/agent-1`)
     expect((sendOpts!.headers as Headers).get(`electric-principal`)).toBe(
       `entity:test-agent/agent-1`
     )
@@ -1433,7 +1439,7 @@ describe(`processWake`, () => {
     expect((body.payload as Record<string, unknown>).action).toBe(`later`)
   })
 
-  it(`cron observe registers wake and cron source with server`, async () => {
+  it(`cron observe registers wake and ensures cron stream with server`, async () => {
     const { cron } = await import(`../src/observation-sources`)
 
     defineEntity(`test-agent`, {
@@ -1444,9 +1450,9 @@ describe(`processWake`, () => {
 
     await processWake(makeNotification(), BASE_CONFIG)
 
-    // Should have registered the cron source
+    // Should have ensured the cron stream
     const cronCalls = fetchMock.mock.calls.filter(([url]) =>
-      String(url).includes(`/_electric/cron/register`)
+      String(url).includes(`/_electric/observations/cron/ensure-stream`)
     )
     expect(cronCalls.length).toBe(1)
     const cronBody = JSON.parse(cronCalls[0]![1]!.body as string) as Record<
