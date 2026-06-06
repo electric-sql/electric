@@ -48,6 +48,8 @@ The client exports a `ShapeStream` class for getting updates to shapes on a row-
 ```tsx
 import { ShapeStream } from '@electric-sql/client'
 
+const BASE_URL = 'http://localhost:3000'
+
 // Passes subscribers rows as they're inserted, updated, or deleted
 const stream = new ShapeStream({
   url: `${BASE_URL}/v1/shape`,
@@ -80,11 +82,13 @@ stream.subscribe((messages) => {
 ```tsx
 import { ShapeStream, Shape } from '@electric-sql/client'
 
+const BASE_URL = 'http://localhost:3000'
+
 const stream = new ShapeStream({
   url: `${BASE_URL}/v1/shape`,
   params: {
-    table: `foo`
-  }
+    table: `foo`,
+  },
 })
 const shape = new Shape(stream)
 
@@ -94,7 +98,7 @@ await shape.rows
 // passes subscribers shape data when the shape updates
 shape.subscribe(({ rows }) => {
   // rows is an array of the latest value of each row in a shape.
-}
+})
 ```
 
 ### Error Handling
@@ -105,7 +109,13 @@ The ShapeStream provides robust error handling with automatic retry support:
 
 The `onError` handler gives you full control over error recovery:
 
-```typescript
+```typescript group=readme
+import { ShapeStream, FetchError } from '@electric-sql/client'
+
+const BASE_URL = 'http://localhost:3000'
+const getRefreshedToken = () => 'refreshed-token'
+const fallbackUserId = 'fallback-user-id'
+
 const stream = new ShapeStream({
   url: `${BASE_URL}/v1/shape`,
   params: { table: `foo` },
@@ -158,15 +168,22 @@ const stream = new ShapeStream({
 The handler supports async operations:
 
 ```typescript
-onError: async (error) => {
-  if (error instanceof FetchError && error.status === 401) {
-    // Perform async token refresh
-    const newToken = await refreshAuthToken()
-    return {
-      headers: { Authorization: `Bearer ${newToken}` },
+import { FetchError } from '@electric-sql/client'
+
+const refreshAuthToken = async () => 'refreshed-token'
+
+const options = {
+  onError: async (error: Error) => {
+    if (error instanceof FetchError && error.status === 401) {
+      // Perform async token refresh
+      const newToken = await refreshAuthToken()
+      return {
+        headers: { Authorization: `Bearer ${newToken}` },
+      }
     }
-  }
-  return {} // Retry other errors
+
+    return {} // Retry other errors
+  },
 }
 ```
 
@@ -178,7 +195,7 @@ onError: async (error) => {
 
 Individual subscribers can handle errors specific to their subscription:
 
-```typescript
+```typescript group=readme
 stream.subscribe(
   (messages) => {
     // Handle messages

@@ -65,7 +65,7 @@ const MyComponent = () => {
 
 For development, you can connect directly to Electric:
 
-```tsx
+```tsx group=react
 // ⚠️ Development only - exposes database structure
 import { useShape } from '@electric-sql/react'
 
@@ -93,7 +93,7 @@ const MyComponent = () => {
 
 You can also include additional PostgreSQL-specific parameters:
 
-```tsx
+```tsx group=react
 const MyFilteredComponent = () => {
   const { isLoading, data } = useShape<{ id: number; title: string }>({
     url: `http://localhost:3000/v1/shape`,

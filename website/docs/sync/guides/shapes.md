@@ -126,13 +126,14 @@ Electric has preview support for subqueries in where clauses, allowing you to fi
 
 For example, you can sync only users who belong to a specific organization:
 
-```ts
+```ts group=shapes-1
 import { electricCollectionOptions } from '@tanstack/electric-db-collection'
 import { createCollection } from '@tanstack/react-db'
 
 const usersCollection = createCollection(
   electricCollectionOptions({
     id: 'org-users',
+    getKey: (row: { id: string }) => row.id,
     shapeOptions: {
       url: 'http://localhost:3000/v1/shape',
       params: {
@@ -147,10 +148,11 @@ const usersCollection = createCollection(
 
 Or combine subqueries with boolean logic to express more realistic access rules:
 
-```ts
+```ts group=shapes-1
 const documentsCollection = createCollection(
   electricCollectionOptions({
     id: 'visible-documents',
+    getKey: (row: { id: string }) => row.id,
     shapeOptions: {
       url: 'http://localhost:3000/v1/shape',
       params: {
@@ -283,7 +285,7 @@ npm i @electric-sql/client
 
 Instantiate a `ShapeStream` and materialise into a `Shape`:
 
-```ts
+```ts group=shapes-2
 import { ShapeStream, Shape } from '@electric-sql/client'
 
 const stream = new ShapeStream({
@@ -300,7 +302,7 @@ await shape.rows
 
 You can register a callback to be notified whenever the shape data changes:
 
-```ts
+```ts group=shapes-2
 shape.subscribe(({ rows }) => {
   // rows is an array of the latest value of each row in a shape.
 })
@@ -314,13 +316,14 @@ See the [Quickstart](/docs/sync/quickstart) and [HTTP API](/docs/sync/api/http) 
 
 Or with [TanStack DB](/sync/tanstack-db), you can sync shapes into collections:
 
-```ts
+```ts group=shapes-3
 import { electricCollectionOptions } from '@tanstack/electric-db-collection'
 import { createCollection } from '@tanstack/react-db'
 
 const todosCollection = createCollection(
   electricCollectionOptions({
     id: 'todos',
+    getKey: (row: { id: string }) => row.id,
     shapeOptions: {
       url: 'http://localhost:3000/v1/shape',
       params: {
@@ -333,7 +336,7 @@ const todosCollection = createCollection(
 
 Then query your collections with live queries:
 
-```tsx
+```tsx group=shapes-3
 import { useLiveQuery, eq } from '@tanstack/react-db'
 
 const Todos = () => {
@@ -413,13 +416,14 @@ See the [TypeScript client docs](/docs/sync/api/clients/typescript#requesting-su
 
 Or with [TanStack DB](/sync/tanstack-db), you can use [query-driven sync](https://tanstack.com/blog/tanstack-db-0.5-query-driven-sync) where your live queries define what data to sync:
 
-```ts
+```ts group=shapes-4
 import { electricCollectionOptions } from '@tanstack/electric-db-collection'
 import { createCollection } from '@tanstack/react-db'
 
 const itemsCollection = createCollection(
   electricCollectionOptions({
     id: 'items',
+    getKey: (row: { id: string }) => row.id,
     shapeOptions: {
       url: 'http://localhost:3000/v1/shape',
       params: {
@@ -433,7 +437,7 @@ const itemsCollection = createCollection(
 
 Then query data progressively with live queries:
 
-```tsx
+```tsx group=shapes-4
 import { useLiveQuery, eq } from '@tanstack/react-db'
 
 const ItemsList = ({ priority }: { priority: string }) => {
