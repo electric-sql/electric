@@ -16,7 +16,10 @@ import { DEFAULT_TENANT_ID } from './tenant.js'
 import type { DrizzleDB } from './db/index.js'
 import { PgSyncBridgeManager } from './pg-sync-bridge-manager.js'
 import type { EntityBridgeCoordinator } from './entity-bridge-manager.js'
-import type { PgSyncBridgeCoordinator } from './pg-sync-bridge-manager.js'
+import type {
+  PgSyncBridgeCoordinator,
+  PgSyncBridgeManagerOptions,
+} from './pg-sync-bridge-manager.js'
 import type { DurableStreamsBearerProvider } from './stream-client.js'
 import type {
   CronTickPayload,
@@ -43,6 +46,7 @@ export interface ElectricAgentsTenantRuntimeOptions {
   scheduler: SchedulerClient
   entityBridgeManager: EntityBridgeCoordinator
   pgSyncBridgeManager?: PgSyncBridgeCoordinator
+  pgSync?: PgSyncBridgeManagerOptions
   claimWriteTokens?: ClaimWriteTokenStore
   stopWakeRegistryOnShutdown?: boolean
 }
@@ -101,7 +105,8 @@ export class ElectricAgentsTenantRuntime {
       new PgSyncBridgeManager(
         this.streamClient,
         (sourceUrl, event) => this.manager.evaluateWakes(sourceUrl, event),
-        this.registry
+        this.registry,
+        options.pgSync
       )
   }
 

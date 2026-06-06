@@ -541,3 +541,98 @@ describe(`external review red tests`, () => {
     ).toBeNull()
   })
 })
+
+describe(`pg-sync production hardening`, () => {
+  it(`uses configured shape URL and secret server-side`, async () => {
+    const manager = new PgSyncBridgeManager(
+      {
+        baseUrl: `http://durable`,
+        ensure: vi.fn(async () => undefined),
+      } as any,
+      undefined,
+      undefined,
+      {
+        shapeUrl: `https://electric.example/v1/shape`,
+        secret: `server-secret`,
+        retry: { initialDelayMs: 0, maxDelayMs: 0 },
+      }
+    )
+
+    await manager.register({ table: `todos` })
+
+    expect(mockState.constructedOptions[0]).toMatchObject({
+      url: `https://electric.example/v1/shape`,
+      params: { table: `todos`, replica: `default`, secret: `server-secret` },
+    })
+  })
+
+  it(`enforces an allowed table policy before registering`, async () => {
+    const manager = new PgSyncBridgeManager(
+      {
+        baseUrl: `http://durable`,
+        ensure: vi.fn(async () => undefined),
+      } as any,
+      undefined,
+      undefined,
+      { allowedTables: [`todos`], retry: { initialDelayMs: 0, maxDelayMs: 0 } }
+    )
+
+    await expect(manager.register({ table: `secrets` })).rejects.toThrow(
+      /not authorized/
+    )
+    expect(mockState.constructedOptions).toEqual([])
+  })
+
+  it(`requires an explicit pg-sync policy in production`, async () => {
+    const previous = process.env.NODE_ENV
+    process.env.NODE_ENV = `production`
+    try {
+      const manager = new PgSyncBridgeManager(
+        {
+          baseUrl: `http://durable`,
+          ensure: vi.fn(async () => undefined),
+        } as any,
+        undefined,
+        undefined,
+        { retry: { initialDelayMs: 0, maxDelayMs: 0 } }
+      )
+
+      await expect(manager.register({ table: `todos` })).rejects.toThrow(
+        /requires an authorize hook/
+      )
+    } finally {
+      process.env.NODE_ENV = previous
+    }
+  })
+
+  it(`backs off before recovery retries`, async () => {
+    const sleeps: number[] = []
+    const manager = new PgSyncBridgeManager(
+      {
+        baseUrl: `http://durable`,
+        ensure: vi.fn(async () => undefined),
+      } as any,
+      undefined,
+      undefined,
+      {
+        retry: {
+          initialDelayMs: 10,
+          maxDelayMs: 10,
+          random: () => 0,
+          sleep: async (ms) => {
+            sleeps.push(ms)
+          },
+        },
+      }
+    )
+
+    await manager.register({ table: `todos` })
+    await mockState.callbacks[0]!([{ headers: { control: `up-to-date` } }])
+    mockState.appendError = new Error(`append failed`)
+    await mockState.callbacks[0]!([
+      { headers: { operation: `insert`, offset: `1_0` }, value: { id: 1 } },
+    ])
+
+    expect(sleeps).toEqual([10])
+  })
+})

@@ -11,7 +11,10 @@ import { WakeRegistry } from './wake-registry.js'
 import type { DrizzleDB, PgClient } from './db/index.js'
 import type { EntityManager } from './entity-manager.js'
 import type { EntityBridgeCoordinator } from './entity-bridge-manager.js'
-import type { PgSyncBridgeCoordinator } from './pg-sync-bridge-manager.js'
+import type {
+  PgSyncBridgeCoordinator,
+  PgSyncBridgeManagerOptions,
+} from './pg-sync-bridge-manager.js'
 import type { CronTickPayload, DelayedSendPayload } from './scheduler.js'
 import type { DurableStreamsBearerProvider } from './stream-client.js'
 
@@ -35,6 +38,7 @@ export interface StandaloneAgentsRuntimeOptions {
   rehydrateOnStart?: boolean
   entityBridgeManager?: EntityBridgeCoordinator
   pgSyncBridgeManager?: PgSyncBridgeCoordinator
+  pgSync?: PgSyncBridgeManagerOptions
 }
 
 export interface StartedStandaloneAgentsRuntime {
@@ -109,6 +113,7 @@ export async function startStandaloneAgentsRuntime(
     scheduler,
     entityBridgeManager,
     pgSyncBridgeManager: options.pgSyncBridgeManager,
+    pgSync: options.pgSync,
     stopWakeRegistryOnShutdown: options.wakeRegistry ? false : true,
   })
 

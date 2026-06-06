@@ -77,7 +77,8 @@ async function registerPgSync(
 
   try {
     const result = await ctx.pgSyncBridgeManager.register(
-      options as PgSyncOptions
+      options as PgSyncOptions,
+      { tenantId: ctx.service, principalKey: ctx.principal.key }
     )
 
     return json(result)

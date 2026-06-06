@@ -26,6 +26,37 @@ type WakeEvaluator = (
   event: Record<string, unknown>
 ) => Promise<void> | void
 
+export type PgSyncRegistrationContext = {
+  tenantId?: string
+  principalKey?: string
+}
+
+export type PgSyncResolvedSource = {
+  shapeUrl: string
+  secret?: string
+}
+
+export type PgSyncAuthorize = (
+  options: CanonicalPgSyncConfig,
+  context: PgSyncRegistrationContext
+) => Promise<void | PgSyncResolvedSource> | void | PgSyncResolvedSource
+
+export interface PgSyncBridgeManagerOptions {
+  shapeUrl?: string
+  secret?: string
+  authorize?: PgSyncAuthorize
+  allowedTables?: Array<string>
+  retry?: {
+    initialDelayMs?: number
+    maxDelayMs?: number
+    random?: () => number
+    sleep?: (ms: number) => Promise<void>
+  }
+}
+
+const DEFAULT_RETRY_INITIAL_DELAY_MS = 1_000
+const DEFAULT_RETRY_MAX_DELAY_MS = 30_000
+
 type PgSyncChangeMessage = {
   headers: Record<string, unknown> & {
     operation?: PgSyncOperation | string
@@ -47,7 +78,8 @@ type PgSyncCursor = {
 export interface PgSyncBridgeCoordinator {
   start?(): Promise<void>
   register(
-    options: PgSyncOptions
+    options: PgSyncOptions,
+    context?: PgSyncRegistrationContext
   ): Promise<{ sourceRef: string; streamUrl: string }>
   stop(): Promise<void>
 }
@@ -189,11 +221,14 @@ class PgSyncBridge {
   private skipChangesUntilUpToDate = false
   private recovering = false
   private committedCursor?: PgSyncCursor
+  private retryAttempt = 0
 
   constructor(
     readonly sourceRef: string,
     readonly streamUrl: string,
     private options: CanonicalPgSyncConfig,
+    private resolvedSource: PgSyncResolvedSource,
+    private retry: Required<NonNullable<PgSyncBridgeManagerOptions[`retry`]>>,
     private streamClient: StreamClient,
     private registry?: PostgresRegistry,
     private evaluateWakes?: WakeEvaluator,
@@ -251,8 +286,13 @@ class PgSyncBridge {
     this.abortController = new AbortController()
     const stream: ShapeStreamInterface<Record<string, unknown>> =
       new ShapeStream({
-        url: PG_SYNC_ELECTRIC_SHAPE_URL,
-        params: buildElectricShapeParams(this.options) as never,
+        url: this.resolvedSource.shapeUrl,
+        params: {
+          ...buildElectricShapeParams(this.options),
+          ...(this.resolvedSource.secret
+            ? { secret: this.resolvedSource.secret }
+            : {}),
+        } as never,
         offset,
         ...(handle ? { handle } : {}),
         signal: this.abortController.signal,
@@ -287,6 +327,7 @@ class PgSyncBridge {
               }
             }
             await this.persistCursor(stream)
+            this.retryAttempt = 0
           }
         } catch (error) {
           serverLog.warn(
@@ -311,6 +352,15 @@ class PgSyncBridge {
     if (this.recovering) return
     this.recovering = true
     try {
+      const attempt = this.retryAttempt++
+      const baseDelay = Math.min(
+        this.retry.initialDelayMs * 2 ** attempt,
+        this.retry.maxDelayMs
+      )
+      const jitter = Math.floor(baseDelay * 0.2 * this.retry.random())
+      const delay = baseDelay + jitter
+      if (delay > 0) await this.retry.sleep(delay)
+
       const offset = this.committedCursor
         ? parseElectricOffset(this.committedCursor.offset)
         : null
@@ -354,11 +404,40 @@ export class PgSyncBridgeManager implements PgSyncBridgeCoordinator {
   private bridges = new Map<string, PgSyncBridge>()
   private starting = new Map<string, Promise<void>>()
 
+  private readonly shapeUrl: string
+  private readonly secret?: string
+  private readonly authorize?: PgSyncAuthorize
+  private readonly allowedTables?: Set<string>
+  private readonly retry: Required<
+    NonNullable<PgSyncBridgeManagerOptions[`retry`]>
+  >
+
   constructor(
     private streamClient: StreamClient,
     private evaluateWakes?: WakeEvaluator,
-    private registry?: PostgresRegistry
-  ) {}
+    private registry?: PostgresRegistry,
+    options: PgSyncBridgeManagerOptions = {}
+  ) {
+    const allowedTables =
+      options.allowedTables ??
+      process.env.ELECTRIC_AGENTS_PG_SYNC_ALLOWED_TABLES?.split(`,`)
+        .map((table) => table.trim())
+        .filter(Boolean)
+    this.shapeUrl = options.shapeUrl ?? PG_SYNC_ELECTRIC_SHAPE_URL
+    this.secret = options.secret ?? process.env.ELECTRIC_AGENTS_PG_SYNC_SECRET
+    this.authorize = options.authorize
+    this.allowedTables = allowedTables ? new Set(allowedTables) : undefined
+    this.retry = {
+      initialDelayMs:
+        options.retry?.initialDelayMs ?? DEFAULT_RETRY_INITIAL_DELAY_MS,
+      maxDelayMs: options.retry?.maxDelayMs ?? DEFAULT_RETRY_MAX_DELAY_MS,
+      random: options.retry?.random ?? Math.random,
+      sleep:
+        options.retry?.sleep ??
+        ((ms: number) =>
+          new Promise<void>((resolve) => setTimeout(resolve, ms))),
+    }
+  }
 
   async start(): Promise<void> {
     const rows = await this.registry?.listPgSyncBridges?.()
@@ -376,9 +455,11 @@ export class PgSyncBridgeManager implements PgSyncBridgeCoordinator {
   }
 
   async register(
-    options: PgSyncOptions
+    options: PgSyncOptions,
+    context: PgSyncRegistrationContext = {}
   ): Promise<{ sourceRef: string; streamUrl: string }> {
     const canonicalOptions = canonicalPgSyncOptions(options)
+    const resolvedSource = await this.resolveSource(canonicalOptions, context)
     const sourceRef = sourceRefForPgSync(canonicalOptions)
     const streamUrl = getPgSyncStreamPath(sourceRef, this.registry?.tenantId)
     const row = await this.registry?.upsertPgSyncBridge({
@@ -397,6 +478,8 @@ export class PgSyncBridgeManager implements PgSyncBridgeCoordinator {
             sourceRef,
             streamUrl,
             canonicalOptions,
+            resolvedSource,
+            this.retry,
             this.streamClient,
             this.registry,
             this.evaluateWakes,
@@ -420,10 +503,16 @@ export class PgSyncBridgeManager implements PgSyncBridgeCoordinator {
         await this.streamClient.ensure(row.streamUrl, {
           contentType: `application/json`,
         })
+        const canonicalOptions = canonicalPgSyncOptions(row.options)
+        const resolvedSource = await this.resolveSource(canonicalOptions, {
+          tenantId: row.tenantId,
+        })
         const bridge = new PgSyncBridge(
           row.sourceRef,
           row.streamUrl,
-          canonicalPgSyncOptions(row.options),
+          canonicalOptions,
+          resolvedSource,
+          this.retry,
           this.streamClient,
           this.registry,
           this.evaluateWakes,
@@ -435,6 +524,34 @@ export class PgSyncBridgeManager implements PgSyncBridgeCoordinator {
       this.starting.set(row.sourceRef, start)
     }
     await start
+  }
+
+  private async resolveSource(
+    options: CanonicalPgSyncConfig,
+    context: PgSyncRegistrationContext
+  ): Promise<PgSyncResolvedSource> {
+    if (this.authorize) {
+      const resolved = await this.authorize(options, context)
+      return {
+        shapeUrl: resolved?.shapeUrl ?? this.shapeUrl,
+        secret: resolved?.secret ?? this.secret,
+      }
+    }
+
+    if (this.allowedTables) {
+      if (!this.allowedTables.has(options.table)) {
+        throw new Error(`pgSync table is not authorized: ${options.table}`)
+      }
+      return { shapeUrl: this.shapeUrl, secret: this.secret }
+    }
+
+    if (process.env.NODE_ENV === `production`) {
+      throw new Error(
+        `pgSync requires an authorize hook or ELECTRIC_AGENTS_PG_SYNC_ALLOWED_TABLES in production`
+      )
+    }
+
+    return { shapeUrl: this.shapeUrl, secret: this.secret }
   }
 
   async stop(): Promise<void> {
