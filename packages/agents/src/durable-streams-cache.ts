@@ -1,4 +1,9 @@
-import { Agent, cacheStores, interceptors, setGlobalDispatcher } from 'undici'
+import {
+  cacheStores,
+  getGlobalDispatcher,
+  interceptors,
+  setGlobalDispatcher,
+} from 'undici'
 
 const MEMORY_CACHE_SIZE_BYTES = 100 * 1024 * 1024
 
@@ -25,8 +30,13 @@ export function installDurableStreamsFetchCache(
           maxSize: MEMORY_CACHE_SIZE_BYTES,
         })
 
+  // Compose on top of the current global dispatcher instead of replacing it.
+  // Electric Agents Desktop installs its Cloud auth injector as a global
+  // dispatcher interceptor before starting the built-in agents runtime; using a
+  // fresh Agent() here drops that auth injector and Cloud requests start
+  // failing with 401 Missing bearer token.
   setGlobalDispatcher(
-    new Agent().compose(
+    getGlobalDispatcher().compose(
       interceptors.cache({
         store,
       })
