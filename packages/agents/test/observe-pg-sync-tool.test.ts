@@ -117,7 +117,7 @@ describe(`observe_pg_sync tool`, () => {
 
   it(`is included in Horton's tool list`, () => {
     const tools = createHortonTools(
-      `/tmp`,
+      { workingDirectory: `/tmp` } as any,
       { send: vi.fn(), observe: vi.fn() } as any,
       new Set()
     )
