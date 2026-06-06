@@ -26,26 +26,14 @@ type WakeEvaluator = (
   event: Record<string, unknown>
 ) => Promise<void> | void
 
-export type PgSyncRegistrationContext = {
-  tenantId?: string
-  principalKey?: string
-}
-
 export type PgSyncResolvedSource = {
   shapeUrl: string
   secret?: string
 }
 
-export type PgSyncAuthorize = (
-  options: CanonicalPgSyncConfig,
-  context: PgSyncRegistrationContext
-) => Promise<void | PgSyncResolvedSource> | void | PgSyncResolvedSource
-
 export interface PgSyncBridgeManagerOptions {
   shapeUrl?: string
   secret?: string
-  authorize?: PgSyncAuthorize
-  allowedTables?: Array<string>
   retry?: {
     initialDelayMs?: number
     maxDelayMs?: number
@@ -78,8 +66,7 @@ type PgSyncCursor = {
 export interface PgSyncBridgeCoordinator {
   start?(): Promise<void>
   register(
-    options: PgSyncOptions,
-    context?: PgSyncRegistrationContext
+    options: PgSyncOptions
   ): Promise<{ sourceRef: string; streamUrl: string }>
   stop(): Promise<void>
 }
@@ -406,8 +393,6 @@ export class PgSyncBridgeManager implements PgSyncBridgeCoordinator {
 
   private readonly shapeUrl: string
   private readonly secret?: string
-  private readonly authorize?: PgSyncAuthorize
-  private readonly allowedTables?: Set<string>
   private readonly retry: Required<
     NonNullable<PgSyncBridgeManagerOptions[`retry`]>
   >
@@ -418,15 +403,8 @@ export class PgSyncBridgeManager implements PgSyncBridgeCoordinator {
     private registry?: PostgresRegistry,
     options: PgSyncBridgeManagerOptions = {}
   ) {
-    const allowedTables =
-      options.allowedTables ??
-      process.env.ELECTRIC_AGENTS_PG_SYNC_ALLOWED_TABLES?.split(`,`)
-        .map((table) => table.trim())
-        .filter(Boolean)
     this.shapeUrl = options.shapeUrl ?? PG_SYNC_ELECTRIC_SHAPE_URL
     this.secret = options.secret ?? process.env.ELECTRIC_AGENTS_PG_SYNC_SECRET
-    this.authorize = options.authorize
-    this.allowedTables = allowedTables ? new Set(allowedTables) : undefined
     this.retry = {
       initialDelayMs:
         options.retry?.initialDelayMs ?? DEFAULT_RETRY_INITIAL_DELAY_MS,
@@ -455,11 +433,10 @@ export class PgSyncBridgeManager implements PgSyncBridgeCoordinator {
   }
 
   async register(
-    options: PgSyncOptions,
-    context: PgSyncRegistrationContext = {}
+    options: PgSyncOptions
   ): Promise<{ sourceRef: string; streamUrl: string }> {
     const canonicalOptions = canonicalPgSyncOptions(options)
-    const resolvedSource = await this.resolveSource(canonicalOptions, context)
+    const resolvedSource = this.resolveSource()
     const sourceRef = sourceRefForPgSync(canonicalOptions)
     const streamUrl = getPgSyncStreamPath(sourceRef, this.registry?.tenantId)
     const row = await this.registry?.upsertPgSyncBridge({
@@ -504,9 +481,7 @@ export class PgSyncBridgeManager implements PgSyncBridgeCoordinator {
           contentType: `application/json`,
         })
         const canonicalOptions = canonicalPgSyncOptions(row.options)
-        const resolvedSource = await this.resolveSource(canonicalOptions, {
-          tenantId: row.tenantId,
-        })
+        const resolvedSource = this.resolveSource()
         const bridge = new PgSyncBridge(
           row.sourceRef,
           row.streamUrl,
@@ -526,31 +501,7 @@ export class PgSyncBridgeManager implements PgSyncBridgeCoordinator {
     await start
   }
 
-  private async resolveSource(
-    options: CanonicalPgSyncConfig,
-    context: PgSyncRegistrationContext
-  ): Promise<PgSyncResolvedSource> {
-    if (this.authorize) {
-      const resolved = await this.authorize(options, context)
-      return {
-        shapeUrl: resolved?.shapeUrl ?? this.shapeUrl,
-        secret: resolved?.secret ?? this.secret,
-      }
-    }
-
-    if (this.allowedTables) {
-      if (!this.allowedTables.has(options.table)) {
-        throw new Error(`pgSync table is not authorized: ${options.table}`)
-      }
-      return { shapeUrl: this.shapeUrl, secret: this.secret }
-    }
-
-    if (process.env.NODE_ENV === `production`) {
-      throw new Error(
-        `pgSync requires an authorize hook or ELECTRIC_AGENTS_PG_SYNC_ALLOWED_TABLES in production`
-      )
-    }
-
+  private resolveSource(): PgSyncResolvedSource {
     return { shapeUrl: this.shapeUrl, secret: this.secret }
   }
 

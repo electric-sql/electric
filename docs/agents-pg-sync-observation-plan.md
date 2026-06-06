@@ -585,7 +585,7 @@ Manual restart test:
 
 Horton can set up pgSync observations from chat for the demo.
 
-For an LLM-facing integration, this tool is the authorization/proxy boundary: do not expose raw `ShapeStreamOptions` or arbitrary Electric credentials to the model. The tool schema and server-side registration route must constrain which Electric source, table, columns, WHERE clauses, params, and operations the model can request. Production deployments should treat `observe_pg_sync` as privileged and only enable it with an allowlist or policy hook for the shapes the agent is allowed to observe.
+For an LLM-facing integration, the agent/tool code is the boundary: users control what tools their agents expose, so `observe_pg_sync` should present only the shape controls the agent author wants the model to use. Do not expose Electric credentials to the model. If an application needs stricter table/tenant authorization than the tool code provides, route pg-sync through an application-owned Electric proxy that enforces those controls before forwarding shape requests.
 
 ### Changes
 

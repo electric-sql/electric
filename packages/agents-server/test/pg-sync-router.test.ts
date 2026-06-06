@@ -65,10 +65,9 @@ describe(`pg-sync routes`, () => {
       sourceRef: expectedSourceRef,
       streamUrl: expectedStreamUrl,
     })
-    expect(ctx.pgSyncBridgeManager!.register).toHaveBeenCalledWith(
-      { table: `todos` },
-      { tenantId: `tenant-test`, principalKey: `user:owner@example.com` }
-    )
+    expect(ctx.pgSyncBridgeManager!.register).toHaveBeenCalledWith({
+      table: `todos`,
+    })
   })
 
   it(`rejects an empty table`, async () => {

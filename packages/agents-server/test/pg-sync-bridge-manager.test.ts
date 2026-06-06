@@ -566,45 +566,6 @@ describe(`pg-sync production hardening`, () => {
     })
   })
 
-  it(`enforces an allowed table policy before registering`, async () => {
-    const manager = new PgSyncBridgeManager(
-      {
-        baseUrl: `http://durable`,
-        ensure: vi.fn(async () => undefined),
-      } as any,
-      undefined,
-      undefined,
-      { allowedTables: [`todos`], retry: { initialDelayMs: 0, maxDelayMs: 0 } }
-    )
-
-    await expect(manager.register({ table: `secrets` })).rejects.toThrow(
-      /not authorized/
-    )
-    expect(mockState.constructedOptions).toEqual([])
-  })
-
-  it(`requires an explicit pg-sync policy in production`, async () => {
-    const previous = process.env.NODE_ENV
-    process.env.NODE_ENV = `production`
-    try {
-      const manager = new PgSyncBridgeManager(
-        {
-          baseUrl: `http://durable`,
-          ensure: vi.fn(async () => undefined),
-        } as any,
-        undefined,
-        undefined,
-        { retry: { initialDelayMs: 0, maxDelayMs: 0 } }
-      )
-
-      await expect(manager.register({ table: `todos` })).rejects.toThrow(
-        /requires an authorize hook/
-      )
-    } finally {
-      process.env.NODE_ENV = previous
-    }
-  })
-
   it(`backs off before recovery retries`, async () => {
     const sleeps: number[] = []
     const manager = new PgSyncBridgeManager(
