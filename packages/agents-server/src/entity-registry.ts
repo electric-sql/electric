@@ -81,6 +81,7 @@ export interface PgSyncBridgeRow {
   streamUrl: string
   shapeHandle?: string
   shapeOffset?: string
+  initialSnapshotComplete: boolean
   lastTouchedAt: Date
   createdAt: Date
   updatedAt: Date
@@ -1557,6 +1558,7 @@ export class PostgresRegistry {
         set: {
           options: row.options,
           streamUrl: row.streamUrl,
+          initialSnapshotComplete: false,
           lastTouchedAt: new Date(),
           updatedAt: new Date(),
         },
@@ -1600,18 +1602,31 @@ export class PostgresRegistry {
   async updatePgSyncBridgeCursor(
     sourceRef: string,
     shapeHandle: string,
-    shapeOffset: string
+    shapeOffset: string,
+    initialSnapshotComplete?: boolean
   ): Promise<void> {
     await this.db
       .update(pgSyncBridges)
-      .set({ shapeHandle, shapeOffset, updatedAt: new Date() })
+      .set({
+        shapeHandle,
+        shapeOffset,
+        ...(initialSnapshotComplete !== undefined
+          ? { initialSnapshotComplete }
+          : {}),
+        updatedAt: new Date(),
+      })
       .where(this.pgSyncBridgeWhere(sourceRef))
   }
 
   async clearPgSyncBridgeCursor(sourceRef: string): Promise<void> {
     await this.db
       .update(pgSyncBridges)
-      .set({ shapeHandle: null, shapeOffset: null, updatedAt: new Date() })
+      .set({
+        shapeHandle: null,
+        shapeOffset: null,
+        initialSnapshotComplete: false,
+        updatedAt: new Date(),
+      })
       .where(this.pgSyncBridgeWhere(sourceRef))
   }
 
@@ -2019,6 +2034,7 @@ export class PostgresRegistry {
       streamUrl: row.streamUrl,
       shapeHandle: row.shapeHandle ?? undefined,
       shapeOffset: row.shapeOffset ?? undefined,
+      initialSnapshotComplete: row.initialSnapshotComplete,
       lastTouchedAt: row.lastTouchedAt,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,

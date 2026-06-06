@@ -630,6 +630,9 @@ export const pgSyncBridges = pgTable(
     streamUrl: text(`stream_url`).notNull(),
     shapeHandle: text(`shape_handle`),
     shapeOffset: text(`shape_offset`),
+    initialSnapshotComplete: boolean(`initial_snapshot_complete`)
+      .notNull()
+      .default(false),
     lastTouchedAt: timestamp(`last_touched_at`, { withTimezone: true })
       .notNull()
       .defaultNow(),

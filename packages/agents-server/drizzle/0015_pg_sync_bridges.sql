@@ -5,6 +5,7 @@ CREATE TABLE "pg_sync_bridges" (
 	"stream_url" text NOT NULL,
 	"shape_handle" text,
 	"shape_offset" text,
+	"initial_snapshot_complete" boolean DEFAULT false NOT NULL,
 	"last_touched_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,

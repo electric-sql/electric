@@ -114,39 +114,32 @@ describe(`pg-sync bridge helpers`, () => {
     expect(del.value.rowKey).toBe(`1`)
   })
 
-  it(`falls back to message.key when offset is absent`, () => {
+  it(`rejects messages without stable string offsets`, () => {
     const options = { table: `todos` }
-    const event = pgSyncMessageToDurableEvent(
-      {
-        key: `shape-key-1`,
-        headers: { operation: `insert` },
-        value: { id: 1 },
-      } as any,
-      options
-    )!
 
-    expect(event.key).toBe(`${sourceRefForPgSync(options)}:insert:shape-key-1`)
-    expect(event.key).not.toContain(`undefined`)
-  })
-
-  it(`falls back to a UUID when offset and message.key are absent`, () => {
-    const options = { table: `todos` }
-    const event = pgSyncMessageToDurableEvent(
-      { headers: { operation: `insert` }, value: { id: 1 } } as any,
-      options
-    )!
-
-    expect(event.key).toMatch(
-      new RegExp(`^${sourceRefForPgSync(options)}:insert:[0-9a-f-]{36}$`)
-    )
-    expect(event.key).not.toContain(`undefined`)
+    expect(
+      pgSyncMessageToDurableEvent(
+        {
+          key: `shape-key-1`,
+          headers: { operation: `insert` },
+          value: { id: 1 },
+        } as any,
+        options
+      )
+    ).toBeNull()
+    expect(
+      pgSyncMessageToDurableEvent(
+        { headers: { operation: `insert` }, value: { id: 1 } } as any,
+        options
+      )
+    ).toBeNull()
   })
 
   it(`converts BigInt values to strings so durable events are JSON serializable`, () => {
     const options = { table: `entities` }
     const event = pgSyncMessageToDurableEvent(
       {
-        headers: { operation: `insert`, offset: 12n },
+        headers: { operation: `insert`, offset: `12_0` },
         value: { id: 1n, nested: { count: 2n } },
         old_value: { id: 0n },
       } as any,
@@ -156,7 +149,7 @@ describe(`pg-sync bridge helpers`, () => {
     expect(JSON.stringify(event)).toContain(`"1"`)
     expect(event.value.value).toEqual({ id: `1`, nested: { count: `2` } })
     expect(event.value.oldValue).toEqual({ id: `0` })
-    expect(event.value.headers).toEqual({ operation: `insert`, offset: `12` })
+    expect(event.value.headers).toEqual({ operation: `insert`, offset: `12_0` })
   })
 })
 
@@ -307,7 +300,8 @@ describe(`PgSyncBridgeManager`, () => {
     expect(registry.updatePgSyncBridgeCursor).toHaveBeenCalledWith(
       sourceRef,
       `shape-handle`,
-      `7_0`
+      `7_0`,
+      true
     )
   })
 
@@ -441,5 +435,109 @@ describe(`PgSyncBridgeManager`, () => {
 
     expect(mockState.constructedOptions).toHaveLength(2)
     expect(mockState.constructedOptions[1]!.offset).toBe(`-1`)
+  })
+})
+
+describe(`external review red tests`, () => {
+  it(`continues skipping bootstrap snapshot rows after restart before up-to-date`, async () => {
+    const registryRows = new Map<string, any>()
+    const registry = {
+      tenantId: `default`,
+      upsertPgSyncBridge: vi.fn(async (row) => {
+        const existing = registryRows.get(row.sourceRef)
+        const next = { ...existing, ...row }
+        registryRows.set(row.sourceRef, next)
+        return next
+      }),
+      clearPgSyncBridgeCursor: vi.fn(async (sourceRef) => {
+        const row = registryRows.get(sourceRef)
+        if (row) {
+          row.shapeHandle = undefined
+          row.shapeOffset = undefined
+        }
+      }),
+      updatePgSyncBridgeCursor: vi.fn(
+        async (sourceRef, shapeHandle, shapeOffset) => {
+          const row = registryRows.get(sourceRef)
+          if (row) {
+            row.shapeHandle = shapeHandle
+            row.shapeOffset = shapeOffset
+          }
+        }
+      ),
+      listPgSyncBridges: vi.fn(async () => [...registryRows.values()]),
+    }
+    const streamClient = {
+      baseUrl: `http://durable`,
+      ensure: vi.fn(async () => undefined),
+    }
+
+    const first = new PgSyncBridgeManager(
+      streamClient as any,
+      undefined,
+      registry as any
+    )
+    await first.register({ table: `todos` })
+    mockState.streams[0]!.shapeHandle = `shape-a`
+    mockState.streams[0]!.lastOffset = `1_0`
+    await mockState.callbacks[0]!([
+      { headers: { operation: `insert`, offset: `1_0` }, value: { id: 1 } },
+    ])
+    expect(mockState.appends).toEqual([])
+    await first.stop()
+
+    const second = new PgSyncBridgeManager(
+      streamClient as any,
+      undefined,
+      registry as any
+    )
+    await second.start()
+    await mockState.callbacks[1]!([
+      { headers: { operation: `insert`, offset: `2_0` }, value: { id: 2 } },
+      { headers: { control: `up-to-date` } },
+    ])
+
+    expect(mockState.appends).toEqual([])
+  })
+
+  it(`recovers from append failure using last committed cursor, not received stream offset`, async () => {
+    const registry = {
+      tenantId: `default`,
+      upsertPgSyncBridge: vi.fn(async (row) => ({ ...row })),
+      clearPgSyncBridgeCursor: vi.fn(async () => undefined),
+      updatePgSyncBridgeCursor: vi.fn(async () => undefined),
+    }
+    const streamClient = {
+      baseUrl: `http://durable`,
+      ensure: vi.fn(async () => undefined),
+    }
+    const manager = new PgSyncBridgeManager(
+      streamClient as any,
+      undefined,
+      registry as any
+    )
+
+    await manager.register({ table: `todos` })
+    await mockState.callbacks[0]!([{ headers: { control: `up-to-date` } }])
+    mockState.streams[0]!.shapeHandle = `shape-a`
+    mockState.streams[0]!.lastOffset = `2_0`
+    mockState.appendError = new Error(`append failed`)
+    await mockState.callbacks[0]!([
+      { headers: { operation: `insert`, offset: `1_0` }, value: { id: 1 } },
+      { headers: { operation: `insert`, offset: `2_0` }, value: { id: 2 } },
+    ])
+
+    expect(mockState.constructedOptions.at(-1)).toMatchObject({
+      offset: `1_0`,
+    })
+  })
+
+  it(`rejects pg-sync change messages without a stable per-change offset`, () => {
+    expect(
+      pgSyncMessageToDurableEvent(
+        { headers: { operation: `insert` }, value: { id: 1 } } as any,
+        { table: `todos` }
+      )
+    ).toBeNull()
   })
 })

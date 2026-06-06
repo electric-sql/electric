@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto'
 import { DurableStream, IdempotentProducer } from '@durable-streams/client'
 import {
   canonicalPgSyncOptions,
@@ -39,7 +38,11 @@ type PgSyncChangeMessage = {
   old_value?: Record<string, unknown>
 }
 
-type PgSyncCursor = { handle: string; offset: string }
+type PgSyncCursor = {
+  handle: string
+  offset: string
+  initialSnapshotComplete: boolean
+}
 
 export interface PgSyncBridgeCoordinator {
   start?(): Promise<void>
@@ -132,15 +135,8 @@ export function pgSyncMessageToDurableEvent(
       : sourceRefForPgSync(optionsOrSourceRef)
   const rowKey = rowKeyForMessage(message)
   const offset = message.headers.offset
-  const explicitMessageKey = message.key
-  let messageKeyPart: string
-  if (offset !== undefined) {
-    messageKeyPart = typeof offset === `string` ? offset : stableJson(offset)
-  } else if (explicitMessageKey !== undefined) {
-    messageKeyPart = explicitMessageKey
-  } else {
-    messageKeyPart = randomUUID()
-  }
+  if (typeof offset !== `string` || offset.length === 0) return null
+  const messageKeyPart = offset
   const messageKey = `${sourceRef}:${operation}:${messageKeyPart}`
   const timestamp = new Date().toISOString()
   const oldValue = message.old_value
@@ -170,10 +166,19 @@ export function pgSyncMessageToDurableEvent(
 }
 
 function cursorFromRow(
-  row: Pick<PgSyncBridgeRow, `shapeHandle` | `shapeOffset`> | undefined
+  row:
+    | Pick<
+        PgSyncBridgeRow,
+        `shapeHandle` | `shapeOffset` | `initialSnapshotComplete`
+      >
+    | undefined
 ): PgSyncCursor | undefined {
   return row?.shapeHandle && row.shapeOffset
-    ? { handle: row.shapeHandle, offset: row.shapeOffset }
+    ? {
+        handle: row.shapeHandle,
+        offset: row.shapeOffset,
+        initialSnapshotComplete: row.initialSnapshotComplete,
+      }
     : undefined
 }
 
@@ -183,6 +188,7 @@ class PgSyncBridge {
   private abortController: AbortController | null = null
   private skipChangesUntilUpToDate = false
   private recovering = false
+  private committedCursor?: PgSyncCursor
 
   constructor(
     readonly sourceRef: string,
@@ -192,7 +198,9 @@ class PgSyncBridge {
     private registry?: PostgresRegistry,
     private evaluateWakes?: WakeEvaluator,
     private initialCursor?: PgSyncCursor
-  ) {}
+  ) {
+    this.committedCursor = initialCursor
+  }
 
   async start(): Promise<void> {
     if (!this.producer) {
@@ -207,7 +215,11 @@ class PgSyncBridge {
     if (this.initialCursor) {
       const offset = parseElectricOffset(this.initialCursor.offset)
       if (offset) {
-        this.startStream(offset, this.initialCursor.handle, false)
+        this.startStream(
+          offset,
+          this.initialCursor.handle,
+          !this.initialCursor.initialSnapshotComplete
+        )
         return
       }
     }
@@ -257,6 +269,8 @@ class PgSyncBridge {
               }
               if (message.headers.control === `up-to-date`) {
                 this.skipChangesUntilUpToDate = false
+                await this.persistCursor(stream, true)
+                continue
               }
               await this.persistCursor(stream)
               continue
@@ -279,7 +293,7 @@ class PgSyncBridge {
             `[pg-sync-bridge] subscription callback failed for ${this.sourceRef}:`,
             error
           )
-          await this.recoverStream(stream)
+          await this.recoverStream()
         }
       },
       (error) => {
@@ -288,25 +302,23 @@ class PgSyncBridge {
           `[pg-sync-bridge] subscription failed for ${this.sourceRef}:`,
           error
         )
-        void this.recoverStream(stream)
+        void this.recoverStream()
       }
     )
   }
 
-  private async recoverStream(
-    stream: ShapeStreamInterface<Record<string, unknown>>
-  ): Promise<void> {
+  private async recoverStream(): Promise<void> {
     if (this.recovering) return
     this.recovering = true
     try {
-      const offset = stream.lastOffset
-        ? parseElectricOffset(stream.lastOffset)
+      const offset = this.committedCursor
+        ? parseElectricOffset(this.committedCursor.offset)
         : null
-      if (offset && stream.shapeHandle) {
+      if (offset && this.committedCursor) {
         this.startStream(
           offset,
-          stream.shapeHandle,
-          this.skipChangesUntilUpToDate
+          this.committedCursor.handle,
+          !this.committedCursor.initialSnapshotComplete
         )
       } else {
         await this.registry?.clearPgSyncBridgeCursor(this.sourceRef)
@@ -318,7 +330,8 @@ class PgSyncBridge {
   }
 
   private async persistCursor(
-    stream: ShapeStreamInterface<Record<string, unknown>>
+    stream: ShapeStreamInterface<Record<string, unknown>>,
+    initialSnapshotComplete = !this.skipChangesUntilUpToDate
   ): Promise<void> {
     const shapeHandle = stream.shapeHandle
     const shapeOffset = stream.lastOffset
@@ -326,8 +339,14 @@ class PgSyncBridge {
     await this.registry?.updatePgSyncBridgeCursor(
       this.sourceRef,
       shapeHandle,
-      shapeOffset
+      shapeOffset,
+      initialSnapshotComplete
     )
+    this.committedCursor = {
+      handle: shapeHandle,
+      offset: shapeOffset,
+      initialSnapshotComplete,
+    }
   }
 }
 
