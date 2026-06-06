@@ -1656,10 +1656,16 @@ export async function processWake(
         }
       }
 
+      let registeredPgSync: { streamUrl: string; sourceRef: string } | undefined
       if (source.sourceType === `pgSync`) {
-        await serverClient.registerPgSyncSource(
+        registeredPgSync = await serverClient.registerPgSyncSource(
           (source as PgSyncObservationSource).options
         )
+        observedSource = {
+          ...source,
+          sourceRef: registeredPgSync.sourceRef,
+          streamUrl: registeredPgSync.streamUrl,
+        }
       }
 
       if (effectiveWake) {
@@ -1668,6 +1674,7 @@ export async function processWake(
         })
 
         const sourceUrl =
+          registeredPgSync?.streamUrl ??
           sourceWakeConfig?.sourceUrl ??
           (observedSource.sourceType === `entity`
             ? (observedSource as EntityObservationSource).entityUrl

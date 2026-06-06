@@ -29,7 +29,7 @@ observe_pg_sync({
 
 Prototype simplifications:
 
-- No URL argument. The server assumes Electric is at `http://localhost:3000/v1/shape`.
+- No URL argument. The server assumes Electric is at `http://localhost:3000/v1/shape`. Production pg-sync sources may point at arbitrary Electric servers; the bridge is not limited to the Electric instance used by Agents itself.
 - No enablement env flags.
 - No URL/table allowlists yet.
 - No auth/secret injection yet.
@@ -584,6 +584,8 @@ Manual restart test:
 ### Goal
 
 Horton can set up pgSync observations from chat for the demo.
+
+For an LLM-facing integration, this tool is the authorization/proxy boundary: do not expose raw `ShapeStreamOptions` or arbitrary Electric credentials to the model. The tool schema and server-side registration route must constrain which Electric source, table, columns, WHERE clauses, params, and operations the model can request. Production deployments should treat `observe_pg_sync` as privileged and only enable it with an allowlist or policy hook for the shapes the agent is allowed to observe.
 
 ### Changes
 

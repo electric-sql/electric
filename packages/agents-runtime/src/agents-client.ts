@@ -75,9 +75,14 @@ export function createAgentsClient(config: AgentsClientConfig): AgentsClient {
       }
 
       if (source.sourceType === `pgSync`) {
-        await serverClient.registerPgSyncSource(
+        const registered = await serverClient.registerPgSyncSource(
           (source as PgSyncObservationSource).options
         )
+        source = {
+          ...source,
+          sourceRef: registered.sourceRef,
+          streamUrl: registered.streamUrl,
+        }
       }
 
       if (!source.streamUrl || !source.schema) {

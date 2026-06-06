@@ -240,6 +240,35 @@ describe(`PgSyncBridgeManager`, () => {
     )
   })
 
+  it(`namespaces pg-sync stream paths by tenant to avoid cross-tenant sharing`, async () => {
+    const registry = {
+      tenantId: `tenant-a`,
+      upsertPgSyncBridge: vi.fn(async (row) => ({ ...row })),
+      clearPgSyncBridgeCursor: vi.fn(async () => undefined),
+      updatePgSyncBridgeCursor: vi.fn(async () => undefined),
+    }
+    const manager = new PgSyncBridgeManager(
+      {
+        baseUrl: `http://durable`,
+        ensure: vi.fn(async () => undefined),
+      } as any,
+      undefined,
+      registry as any
+    )
+    const options = { table: `todos` }
+    const sourceRef = sourceRefForPgSync(options)
+
+    const result = await manager.register(options)
+
+    expect(result.streamUrl).toBe(getPgSyncStreamPath(sourceRef, `tenant-a`))
+    expect(registry.upsertPgSyncBridge).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceRef,
+        streamUrl: getPgSyncStreamPath(sourceRef, `tenant-a`),
+      })
+    )
+  })
+
   it(`persists registration with canonical options and updates cursor after messages`, async () => {
     const registry = {
       upsertPgSyncBridge: vi.fn(async (row) => ({ ...row })),

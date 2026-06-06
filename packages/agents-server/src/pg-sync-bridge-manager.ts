@@ -361,7 +361,7 @@ export class PgSyncBridgeManager implements PgSyncBridgeCoordinator {
   ): Promise<{ sourceRef: string; streamUrl: string }> {
     const canonicalOptions = canonicalPgSyncOptions(options)
     const sourceRef = sourceRefForPgSync(canonicalOptions)
-    const streamUrl = getPgSyncStreamPath(sourceRef)
+    const streamUrl = getPgSyncStreamPath(sourceRef, this.registry?.tenantId)
     const row = await this.registry?.upsertPgSyncBridge({
       sourceRef,
       options: canonicalOptions,

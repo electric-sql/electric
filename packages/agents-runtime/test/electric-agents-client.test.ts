@@ -50,7 +50,7 @@ describe(`createAgentsClient`, () => {
     })
     mockState.registerPgSyncSource = vi.fn().mockResolvedValue({
       sourceRef: `pg-source-1`,
-      streamUrl: `/_electric/pg-sync/pg-source-1`,
+      streamUrl: `/_electric/pg-sync/default/pg-source-1`,
     })
     mockState.ensureStream = vi.fn().mockResolvedValue(`/_webhooks/repo`)
     mockState.createStreamDB = vi.fn()
@@ -125,7 +125,7 @@ describe(`createAgentsClient`, () => {
     expect(mockState.registerPgSyncSource).toHaveBeenCalledWith(source.options)
     expect(mockState.createStreamDB).toHaveBeenCalledWith({
       streamOptions: {
-        url: `http://electric-agents.test${source.streamUrl}`,
+        url: `http://electric-agents.test/_electric/pg-sync/default/pg-source-1`,
         contentType: `application/json`,
       },
       state: expect.objectContaining({

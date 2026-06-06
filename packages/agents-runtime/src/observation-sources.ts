@@ -43,8 +43,13 @@ export const pgSyncObservationCollections = {
   },
 }
 
-export function getPgSyncStreamPath(sourceRef: string): string {
-  return `/_electric/pg-sync/${sourceRef}`
+export function getPgSyncStreamPath(
+  sourceRef: string,
+  namespace?: string
+): string {
+  return namespace
+    ? `/_electric/pg-sync/${encodeURIComponent(namespace)}/${sourceRef}`
+    : `/_electric/pg-sync/${sourceRef}`
 }
 
 export type CanonicalPgSyncConfig = {
@@ -357,13 +362,6 @@ export function pgSync(options: PgSyncOptions): PgSyncObservationSource {
       }
     },
   }
-}
-
-export function tagged(query: TaggedQuery): TaggedObservationSource {
-  return entities({
-    tags: query.match,
-    select: query.select,
-  })
 }
 
 function assertWebhookEndpointKey(endpointKey: string): void {

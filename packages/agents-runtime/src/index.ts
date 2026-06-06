@@ -313,7 +313,6 @@ export type {
   CanonicalPgSyncConfig,
   PgSyncObservationSource,
   PgSyncOptions,
-  TaggedQuery,
 } from './observation-sources'
 
 export { processWake } from './process-wake'

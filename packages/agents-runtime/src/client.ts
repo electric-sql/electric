@@ -20,7 +20,6 @@ export {
   pgSync,
   pgSyncObservationCollections,
   sourceRefForPgSync,
-  tagged,
   webhook,
   getWebhookStreamPath,
   webhookObservationCollections,
@@ -69,8 +68,6 @@ export type {
   CanonicalPgSyncConfig,
   PgSyncObservationSource,
   PgSyncOptions,
-  TaggedObservationSource,
-  TaggedQuery,
 } from './observation-sources'
 export type {
   EntityTimelineContentItem,

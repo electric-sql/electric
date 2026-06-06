@@ -461,6 +461,17 @@ describe(`processWake`, () => {
       .mockImplementation((url, opts) => {
         const urlStr = String(url)
         const method = opts?.method ?? `GET`
+        if (urlStr.includes(`/_electric/pg-sync/register`)) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                sourceRef: `pg-source-1`,
+                streamUrl: `/_electric/pg-sync/default/pg-source-1`,
+              }),
+              { status: 200, headers: { 'content-type': `application/json` } }
+            )
+          )
+        }
         if (method === `PUT` && !urlStr.includes(`subscription=`)) {
           return Promise.resolve(
             new Response(
@@ -1615,7 +1626,7 @@ describe(`processWake`, () => {
     expect(mockCreateStreamDB).toHaveBeenCalledWith(
       expect.objectContaining({
         streamOptions: expect.objectContaining({
-          url: source.streamUrl,
+          url: `/_electric/pg-sync/default/pg-source-1`,
           contentType: `application/json`,
         }),
         state: expect.objectContaining({
