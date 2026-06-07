@@ -1,4 +1,4 @@
-import { Check, Copy } from 'lucide-react'
+import { Check, Copy, GitFork } from 'lucide-react'
 import {
   memo,
   useEffect,
@@ -28,6 +28,7 @@ import { ThinkingIndicator } from './ThinkingIndicator'
 import { ElapsedTime } from './ElapsedTime'
 import { formatElapsedDuration, toMillis } from '../lib/formatTime'
 import styles from './AgentResponse.module.css'
+import type { ForkFromHereAction } from './UserMessage'
 import type {
   EntityTimelineContentItem,
   EntityTimelineRunRow,
@@ -383,6 +384,7 @@ export const AgentResponseLive = memo(function AgentResponseLive({
   isStreaming,
   timestamp,
   renderWidth = 0,
+  forkFromHere,
   onSearchTextChange,
 }: {
   rowKey: string
@@ -390,6 +392,7 @@ export const AgentResponseLive = memo(function AgentResponseLive({
   isStreaming: boolean
   timestamp?: number | null
   renderWidth?: number
+  forkFromHere?: ForkFromHereAction
   onSearchTextChange?: (rowKey: string, text: string) => void
 }): React.ReactElement {
   const { data: items = [] } = useLiveQuery(
@@ -433,6 +436,7 @@ export const AgentResponseLive = memo(function AgentResponseLive({
     isStreaming && !done && !failureText && !lastTextHasContent
   const showTimestamp = timestamp != null && !isStreaming
   const hasLeadingMeta = showThinking || done || Boolean(failureText)
+  const showCopyAction = Boolean((done || failureText) && copyText)
   const [copied, setCopied] = useState(false)
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -542,39 +546,88 @@ export const AgentResponseLive = memo(function AgentResponseLive({
             <TimeText ts={timestamp} className={styles.timeText} />
           </>
         )}
-        {(done || failureText) && copyText && (
-          <Tooltip content={copied ? `Copied!` : `Copy response`} side="top">
-            <IconButton
-              size={1}
-              variant="ghost"
-              tone="neutral"
-              className={styles.copyButton}
-              onClick={() => void copyResponseText()}
-              aria-label="Copy response text"
-            >
-              {copied ? (
-                <Icon icon={Check} size={1} />
-              ) : (
-                <Icon icon={Copy} size={1} />
-              )}
-            </IconButton>
-          </Tooltip>
-        )}
+        <ResponseMetaActions
+          showCopy={showCopyAction}
+          copied={copied}
+          onCopy={() => void copyResponseText()}
+          forkFromHere={done ? forkFromHere : undefined}
+        />
       </Stack>
     </Stack>
   )
 })
+
+function ResponseMetaActions({
+  showCopy,
+  copied,
+  onCopy,
+  forkFromHere,
+}: {
+  showCopy: boolean
+  copied: boolean
+  onCopy: () => void
+  forkFromHere?: ForkFromHereAction
+}): React.ReactElement | null {
+  const showFork = forkFromHere !== undefined
+  if (!showCopy && !showFork) return null
+
+  const forkDisabled = forkFromHere?.disabled === true || !forkFromHere?.onFork
+  const forkLabel = forkDisabled ? `Fork permission required` : `Fork from here`
+
+  return (
+    <span className={styles.metaActions}>
+      {showFork && (
+        <Tooltip content={forkLabel} side="top">
+          <span className={styles.tooltipTrigger}>
+            <IconButton
+              size={1}
+              variant="ghost"
+              tone="neutral"
+              className={styles.metaActionButton}
+              disabled={forkDisabled}
+              onClick={forkFromHere?.onFork}
+              aria-label="Fork from here"
+              title={forkLabel}
+            >
+              <Icon icon={GitFork} size={1} />
+            </IconButton>
+          </span>
+        </Tooltip>
+      )}
+      {showCopy && (
+        <Tooltip content={copied ? `Copied!` : `Copy response`} side="top">
+          <IconButton
+            size={1}
+            variant="ghost"
+            tone="neutral"
+            className={styles.metaActionButton}
+            onClick={onCopy}
+            aria-label="Copy response text"
+          >
+            {copied ? (
+              <Icon icon={Check} size={1} />
+            ) : (
+              <Icon icon={Copy} size={1} />
+            )}
+          </IconButton>
+        </Tooltip>
+      )}
+    </span>
+  )
+}
 
 export const AgentResponse = memo(function AgentResponse({
   section,
   isStreaming,
   timestamp,
   renderWidth = 0,
+  forkFromHere,
 }: {
   section: AgentResponseSection
   isStreaming: boolean
   timestamp?: number | null
   renderWidth?: number
+  forkFromHere?: ForkFromHereAction
 }): React.ReactElement {
   const canCache = !isStreaming && section.done === true
   const [copied, setCopied] = useState(false)
@@ -616,6 +669,7 @@ export const AgentResponse = memo(function AgentResponse({
     isStreaming && !section.done && !section.error && !lastTextHasContent
   const showTimestamp = timestamp != null && !isStreaming
   const hasLeadingMeta = showThinking || section.done || Boolean(section.error)
+  const showCopyAction = Boolean(section.done && copyText)
 
   // Mirror of the `sawStreamingRef` / `finalDurationMs` capture from
   // `AgentResponseLive` — see the comment there for why we only
@@ -696,36 +750,12 @@ export const AgentResponse = memo(function AgentResponse({
             <TimeText ts={timestamp} className={styles.timeText} />
           </>
         )}
-        {section.done && copyText && (
-          <Tooltip content={copied ? `Copied!` : `Copy response`} side="top">
-            <IconButton
-              size={1}
-              variant="ghost"
-              tone="neutral"
-              className={styles.copyButton}
-              onClick={() => void copyResponseText()}
-              aria-label="Copy response text"
-            >
-              {copied ? (
-                <Icon icon={Check} size={1} />
-              ) : (
-                <Icon icon={Copy} size={1} />
-              )}
-            </IconButton>
-          </Tooltip>
-        )}
-        {section.done && copyText && (
-          <button
-            type="button"
-            className={styles.copyButton}
-            onClick={() => void copyResponseText()}
-            aria-label="Copy response text"
-            title={copied ? `Copied` : `Copy all response text`}
-          >
-            {copied ? <Check size={12} /> : <Copy size={12} />}
-            <span>{copied ? `Copied` : `Copy`}</span>
-          </button>
-        )}
+        <ResponseMetaActions
+          showCopy={showCopyAction}
+          copied={copied}
+          onCopy={() => void copyResponseText()}
+          forkFromHere={section.done ? forkFromHere : undefined}
+        />
       </Stack>
     </Stack>
   )

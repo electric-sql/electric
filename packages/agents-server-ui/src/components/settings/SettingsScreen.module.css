@@ -10,13 +10,13 @@
   z-index: 1;
   border-left: 1px solid var(--ds-border-1);
   background: var(--ds-bg);
-  box-shadow: -1px 0 2px color-mix(in oklab, var(--ds-gray-12) 5%, transparent);
+  box-shadow: none;
   overflow: hidden;
   transition: border-top-left-radius 180ms cubic-bezier(0.32, 0.72, 0, 1);
 }
 
-:global(html[data-theme='dark']) .root {
-  box-shadow: -1px 0 2px color-mix(in oklab, #000000 32%, transparent);
+:global(html[data-theme='light']) .root {
+  box-shadow: -1px 0 2px color-mix(in oklab, var(--ds-gray-12) 5%, transparent);
 }
 
 :global(

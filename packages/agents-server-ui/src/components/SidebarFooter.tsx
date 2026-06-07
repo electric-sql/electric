@@ -17,7 +17,7 @@ import styles from './SidebarFooter.module.css'
  */
 export function SidebarFooter(): React.ReactElement {
   return (
-    <div className={styles.footer}>
+    <div className={styles.footer} data-sidebar-control-surface="true">
       <ServerPicker />
       <SidebarViewMenu />
       <SettingsMenu />

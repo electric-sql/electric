@@ -6,6 +6,24 @@
   align-items: center;
   gap: 4px;
   padding: 8px;
-  border-top: 1px solid var(--ds-divider);
+  border-top: 1px solid var(--ds-sidebar-divider);
   flex-shrink: 0;
+}
+
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .footer {
+  border-top-color: transparent;
+}
+
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .footer::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  pointer-events: none;
+  background: var(--ds-sidebar-divider);
+  mix-blend-mode: var(--ds-sidebar-divider-blend-mode);
 }
