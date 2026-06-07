@@ -3,7 +3,6 @@ import { Streamdown } from 'streamdown'
 import {
   Download,
   File as FileIcon,
-  GitFork,
   Image as ImageIcon,
   Square,
 } from 'lucide-react'
@@ -50,7 +49,6 @@ export const UserMessage = memo(function UserMessage({
   currentPrincipal,
   usersById,
   onStop,
-  forkFromHere,
 }: {
   section: UserMessageSection
   attachments?: Array<UserMessageAttachment>
@@ -59,17 +57,8 @@ export const UserMessage = memo(function UserMessage({
   currentPrincipal?: string
   usersById?: Map<string, ElectricUser>
   onStop?: () => void
-  /**
-   * When provided, renders a hover-revealed "Fork from here" button on
-   * the bubble. The caller is responsible for eligibility — pass
-   * `undefined` for messages where no preceding completed run anchors a
-   * fork.
-   */
-  forkFromHere?: ForkFromHereAction
 }): React.ReactElement {
   const sender = formatSender(section.from, { currentPrincipal, usersById })
-  const showFork = !showStop && forkFromHere !== undefined
-  const forkDisabled = forkFromHere?.disabled === true || !forkFromHere?.onFork
 
   return (
     <Stack
@@ -100,22 +89,6 @@ export const UserMessage = memo(function UserMessage({
             onClick={onStop}
           >
             <Icon icon={Square} size={2} fill="currentColor" strokeWidth={0} />
-          </button>
-        )}
-        {showFork && (
-          <button
-            type="button"
-            aria-label="Fork from here"
-            title={
-              forkDisabled
-                ? `Fork permission required`
-                : `Fork from here — re-roll the conversation starting at this message`
-            }
-            className={styles.forkButton}
-            disabled={forkDisabled}
-            onClick={forkFromHere?.onFork}
-          >
-            <Icon icon={GitFork} size={2} />
           </button>
         )}
         {attachments.length > 0 && (

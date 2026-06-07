@@ -29,12 +29,18 @@
   width: 100%;
 }
 
-.copyButton {
+.metaActions {
   margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.metaActionButton {
   color: var(--ds-text-4);
   opacity: 0.7;
 }
 
-.copyButton:hover {
+.metaActionButton:hover {
   opacity: 1;
 }
