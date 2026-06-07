@@ -8,7 +8,10 @@ import {
   createEntityRegistry,
   createRuntimeHandler,
 } from '@electric-ax/agents-runtime'
-import { createEventSourceTools } from '@electric-ax/agents-runtime/tools'
+import {
+  createEventSourceTools,
+  createScheduleTools,
+} from '@electric-ax/agents-runtime/tools'
 import {
   chooseDefaultSandbox,
   isE2BAvailable,
@@ -85,7 +88,10 @@ export function createBuiltinElectricTools(
   custom?: BuiltinElectricToolsFactory
 ): BuiltinElectricToolsFactory {
   return async (context) => {
-    const builtinTools = createEventSourceTools(context)
+    const builtinTools = [
+      ...createEventSourceTools(context),
+      ...createScheduleTools(context),
+    ]
     const customTools = custom ? await custom(context) : []
     return dedupeToolsByName([...builtinTools, ...customTools])
   }

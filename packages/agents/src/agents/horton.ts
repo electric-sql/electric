@@ -185,6 +185,7 @@ export function buildHortonSystemPrompt(
   opts: {
     hasDocsSupport?: boolean
     hasEventSourceTools?: boolean
+    hasScheduleTools?: boolean
     hasSkills?: boolean
     docsUrl?: string
     modelProvider?: string
@@ -196,6 +197,9 @@ export function buildHortonSystemPrompt(
     : ``
   const eventSourceTools = opts.hasEventSourceTools
     ? `\n- list_event_sources: list external webhook/event feeds you can subscribe to, including available buckets and parameters\n- subscribe_event_source: subscribe yourself to one of those feeds or buckets so matching future events wake you\n- list_event_source_subscriptions: list your active event source subscriptions\n- unsubscribe_event_source: remove one of your event source subscriptions by id`
+    : ``
+  const scheduleTools = opts.hasScheduleTools
+    ? `\n- upsert_cron_schedule: create or update a recurring cron wake for yourself. Always include payload with the concrete instruction/message you should receive when the cron fires.\n- delete_schedule: delete one of your cron or future-send schedules by stable id\n- list_schedules: list your manifest-backed cron and future-send schedules`
     : ``
   const skillsTools = opts.hasSkills
     ? `\n- use_skill: load a skill (knowledge, instructions, or a tutorial) into your context to help with the user's request\n- remove_skill: unload a skill from context when you're done with it`
@@ -262,7 +266,7 @@ When a user opens with a greeting ("hi", "hello", "hey", etc.) or a broad statem
 - fetch_url: fetch and convert a URL to markdown
 - spawn_worker: dispatch a subagent for an isolated task
 - send: send a message to an Electric Agent/entity. To schedule future work for yourself, call send with self: true and afterMs.
-${eventSourceTools}${docsTools}${skillsTools}
+${eventSourceTools}${scheduleTools}${docsTools}${skillsTools}
 
 # Working with files
 - Prefer edit over write when modifying existing files.
@@ -517,6 +521,9 @@ function createAssistantHandler(options: {
     const hasEventSourceTools = tools.some(
       (tool) => getToolName(tool) === `list_event_sources`
     )
+    const hasScheduleTools = tools.some(
+      (tool) => getToolName(tool) === `upsert_cron_schedule`
+    )
 
     const titlePromise = !ctx.tags.title
       ? (async () => {
@@ -649,6 +656,7 @@ function createAssistantHandler(options: {
         modelProvider: modelConfig.provider,
         modelId: String(modelConfig.model),
         hasEventSourceTools,
+        hasScheduleTools,
       }),
       ...modelConfig,
       // mcp.tools() inserts sentinel objects that the runtime's
