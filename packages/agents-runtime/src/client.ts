@@ -4,6 +4,7 @@ export {
   compareTimelineOrders,
   buildEntityTimelineData,
   createPendingTimelineOrder,
+  TIMELINE_ORDER_FALLBACK,
   createEntityErrorsQuery,
   createEntityIncludesQuery,
   createEntityTimelineQuery,
@@ -44,6 +45,9 @@ export type {
   AttachmentStatus,
   AttachmentSubject,
   AttachmentSubjectType,
+  Comment,
+  CommentSnapshot,
+  CommentTarget,
   Manifest,
   ManifestAttachmentEntry,
 } from './entity-schema'
@@ -64,6 +68,7 @@ export type {
 export type {
   EntityTimelineContentItem,
   EntityTimelineData,
+  EntityTimelineCommentRow,
   EntityTimelineInboxMode,
   EntityTimelineQueryOptions,
   EntityTimelineQueryRow,

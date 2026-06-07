@@ -167,6 +167,54 @@ const sendBodySchema = Type.Object({
   from_agent: Type.Optional(Type.String()),
 })
 
+const commentTargetSchema = Type.Union([
+  Type.Object(
+    {
+      kind: Type.Literal(`comment`),
+      key: Type.String(),
+    },
+    { additionalProperties: false }
+  ),
+  Type.Object(
+    {
+      kind: Type.Literal(`timeline`),
+      collection: Type.Union([
+        Type.Literal(`inbox`),
+        Type.Literal(`run`),
+        Type.Literal(`text`),
+        Type.Literal(`tool_call`),
+        Type.Literal(`wake`),
+        Type.Literal(`signal`),
+        Type.Literal(`manifest`),
+      ]),
+      key: Type.String(),
+      run_id: Type.Optional(Type.String()),
+    },
+    { additionalProperties: false }
+  ),
+])
+
+const commentSnapshotSchema = Type.Object(
+  {
+    label: Type.String(),
+    text: Type.Optional(Type.String()),
+    from: Type.Optional(Type.String()),
+    timestamp: Type.Optional(Type.String()),
+    collection: Type.Optional(Type.String()),
+  },
+  { additionalProperties: false }
+)
+
+const createCommentBodySchema = Type.Object(
+  {
+    key: Type.Optional(Type.String()),
+    body: Type.String(),
+    reply_to: Type.Optional(commentTargetSchema),
+    target_snapshot: Type.Optional(commentSnapshotSchema),
+  },
+  { additionalProperties: false }
+)
+
 function agentUrlForPrincipal(principal: {
   kind: string
   id: string
@@ -293,6 +341,7 @@ const eventSourceSubscriptionBodySchema = Type.Object({
 
 type SpawnBody = Static<typeof spawnBodySchema>
 type SendBody = Static<typeof sendBodySchema>
+type CreateCommentBody = Static<typeof createCommentBodySchema>
 type InboxMessageBody = Static<typeof inboxMessageBodySchema>
 type ForkBody = Static<typeof forkBodySchema>
 type SetTagBody = Static<typeof setTagBodySchema>
@@ -371,6 +420,13 @@ entitiesRouter.post(
   withSchema(sendBodySchema),
   withEntityPermission(`write`),
   sendEntity
+)
+entitiesRouter.post(
+  `/:type/:instanceId/comments`,
+  withExistingEntity,
+  withSchema(createCommentBodySchema),
+  withEntityPermission(`write`),
+  createComment
 )
 entitiesRouter.post(
   `/:type/:instanceId/attachments`,
@@ -1196,6 +1252,23 @@ async function sendEntity(
   }
 
   return status(204)
+}
+
+async function createComment(
+  request: AgentsRouteRequest,
+  ctx: TenantContext
+): Promise<Response> {
+  const parsed = routeBody<CreateCommentBody>(request)
+  await ctx.entityManager.ensurePrincipal(ctx.principal)
+  const { entityUrl } = requireExistingEntityRoute(request)
+  const result = await ctx.entityManager.createComment(entityUrl, {
+    key: parsed.key,
+    body: parsed.body,
+    fromPrincipal: ctx.principal.url,
+    replyTo: parsed.reply_to,
+    targetSnapshot: parsed.target_snapshot,
+  })
+  return json(result, { status: 201 })
 }
 
 async function createAttachment(

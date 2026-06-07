@@ -19,7 +19,12 @@ import type {
 } from '@tanstack/db'
 import type { EntityStreamDB } from './entity-stream-db'
 import { formatPointerOrderToken, type EventPointer } from './event-pointer'
-import type { ChildStatusEntry, MessageReceived, Signal } from './entity-schema'
+import type {
+  ChildStatusEntry,
+  Comment,
+  MessageReceived,
+  Signal,
+} from './entity-schema'
 import type { ManifestEntry, Wake, WakeMessage } from './types'
 
 export type EntityTimelineState =
@@ -30,6 +35,8 @@ export type EntityTimelineState =
   | `error`
 
 export type TimelineOrder = string | number
+export const TIMELINE_ORDER_FALLBACK = `zzzz:timeline-end`
+const PENDING_TIMELINE_ORDER_PREFIX = `zzzz:pending:`
 
 export type EntityTimelineContentItem =
   | { kind: `text`; text: string }
@@ -248,6 +255,12 @@ export interface EntityTimelineRunRow {
 }
 
 export type EntityTimelineInboxRow = IncludesInboxMessage
+export type EntityTimelineCommentRow = Omit<
+  Comment,
+  `_seq` | `_timeline_order`
+> & {
+  order: TimelineOrder
+}
 export type EntityTimelineWakeRow = IncludesWakeMessage
 export type EntityTimelineSignalRow = IncludesSignal
 
@@ -256,6 +269,7 @@ export type EntityTimelineQueryRow =
       $key: string
       inbox: EntityTimelineInboxRow
       run?: undefined
+      comment?: undefined
       wake?: undefined
       signal?: undefined
       manifest?: undefined
@@ -264,6 +278,7 @@ export type EntityTimelineQueryRow =
       $key: string
       inbox?: undefined
       run: EntityTimelineRunRow
+      comment?: undefined
       wake?: undefined
       signal?: undefined
       manifest?: undefined
@@ -272,6 +287,16 @@ export type EntityTimelineQueryRow =
       $key: string
       inbox?: undefined
       run?: undefined
+      comment: EntityTimelineCommentRow
+      wake?: undefined
+      signal?: undefined
+      manifest?: undefined
+    }
+  | {
+      $key: string
+      inbox?: undefined
+      run?: undefined
+      comment?: undefined
       wake: EntityTimelineWakeRow
       signal?: undefined
       manifest?: undefined
@@ -280,6 +305,7 @@ export type EntityTimelineQueryRow =
       $key: string
       inbox?: undefined
       run?: undefined
+      comment?: undefined
       wake?: undefined
       signal: EntityTimelineSignalRow
       manifest?: undefined
@@ -288,6 +314,7 @@ export type EntityTimelineQueryRow =
       $key: string
       inbox?: undefined
       run?: undefined
+      comment?: undefined
       wake?: undefined
       signal?: undefined
       manifest: ManifestEntry
@@ -462,7 +489,7 @@ function readTimelineOrder(row: object): string | undefined {
 }
 
 export function createPendingTimelineOrder(index: number): string {
-  return `~pending:${index.toString().padStart(12, `0`)}`
+  return `${PENDING_TIMELINE_ORDER_PREFIX}${index.toString().padStart(12, `0`)}`
 }
 
 function toSeqOrderToken(seq: number): string {
@@ -632,7 +659,7 @@ function withOrderFromOrderIndex<TRow extends object & { _orderToken: string }>(
 ): Array<OrderedValue<WithoutOrderToken<TRow>>> {
   return rows.map((row) => ({
     ...withoutOrderToken(row),
-    order: orderIndex.get(row._orderToken) ?? `~`,
+    order: orderIndex.get(row._orderToken) ?? TIMELINE_ORDER_FALLBACK,
   }))
 }
 
@@ -644,7 +671,7 @@ function withOrderAndHistoryOffsetFromOrderIndex<
 ): Array<OrderedValue<WithoutOrderToken<TRow>> & { historyOffset: string }> {
   return rows.map((row) => ({
     ...withoutOrderToken(row),
-    order: orderIndex.get(row._orderToken) ?? `~`,
+    order: orderIndex.get(row._orderToken) ?? TIMELINE_ORDER_FALLBACK,
     historyOffset: orderTokenToHistoryOffset(row._orderToken),
   }))
 }
@@ -661,7 +688,7 @@ function withOptionalOrderFromOrderIndex<
       ? { ...value }
       : {
           ...value,
-          order: orderIndex.get(row._orderToken) ?? `~`,
+          order: orderIndex.get(row._orderToken) ?? TIMELINE_ORDER_FALLBACK,
         }
   })
 }
@@ -1230,14 +1257,20 @@ function buildEntityTimelineQuery(
         and(
           eq(inbox.$synced, false),
           eq(coalesce(inbox.status, `pending`), `pending`),
-          like(coalesce(inbox._timeline_order, ``), `~pending:%`)
+          or(
+            like(
+              coalesce(inbox._timeline_order, ``),
+              `${PENDING_TIMELINE_ORDER_PREFIX}%`
+            ),
+            like(coalesce(inbox._timeline_order, ``), `~pending:%`)
+          )
         )
       )
     )
   }
 
   const inboxSource = inbox.select(({ inbox }) => ({
-    order: coalesce(inbox._timeline_order, `~`),
+    order: coalesce(inbox._timeline_order, TIMELINE_ORDER_FALLBACK),
     key: inbox.key,
     from: coalesce(inbox.from, `unknown`),
     from_principal: inbox.from_principal,
@@ -1251,11 +1284,26 @@ function buildEntityTimelineQuery(
     cancelled_at: inbox.cancelled_at,
   }))
 
+  const commentSource = q
+    .from({ comment: db.collections.comments })
+    .select(({ comment }) => ({
+      order: coalesce(comment._timeline_order, TIMELINE_ORDER_FALLBACK),
+      key: comment.key,
+      body: comment.body,
+      from_principal: comment.from_principal,
+      timestamp: comment.timestamp,
+      reply_to: comment.reply_to,
+      target_snapshot: comment.target_snapshot,
+      edited_at: comment.edited_at,
+      deleted_at: comment.deleted_at,
+      deleted_by: comment.deleted_by,
+    }))
+
   const wakeSource = q
     .from({ wake: db.collections.wakes })
     .select(({ wake }) => ({
       key: wake.key,
-      order: coalesce(wake._timeline_order, `~`),
+      order: coalesce(wake._timeline_order, TIMELINE_ORDER_FALLBACK),
       payload: {
         type: `wake` as const,
         timestamp: wake.timestamp,
@@ -1271,7 +1319,7 @@ function buildEntityTimelineQuery(
     .from({ signal: db.collections.signals })
     .select(({ signal }) => ({
       key: signal.key,
-      order: coalesce(signal._timeline_order, `~`),
+      order: coalesce(signal._timeline_order, TIMELINE_ORDER_FALLBACK),
       signal: signal.signal,
       status: signal.status,
       sender: signal.sender,
@@ -1291,12 +1339,16 @@ function buildEntityTimelineQuery(
       toolCall: db.collections.toolCalls,
     })
     .select(({ text, toolCall }) => ({
-      order: coalesce(text._timeline_order, toolCall._timeline_order, `~`),
+      order: coalesce(
+        text._timeline_order,
+        toolCall._timeline_order,
+        TIMELINE_ORDER_FALLBACK
+      ),
       run_id: coalesce(text.run_id, toolCall.run_id, ``),
       text: caseWhen(text.key, {
         key: text.key,
         run_id: text.run_id,
-        order: coalesce(text._timeline_order, `~`),
+        order: coalesce(text._timeline_order, TIMELINE_ORDER_FALLBACK),
         status: text.status,
       }),
       textContent: concat(
@@ -1304,7 +1356,9 @@ function buildEntityTimelineQuery(
           q
             .from({ chunk: db.collections.textDeltas })
             .where(({ chunk }) => eq(chunk.text_id, text.key))
-            .orderBy(({ chunk }) => coalesce(chunk._timeline_order, `~`))
+            .orderBy(({ chunk }) =>
+              coalesce(chunk._timeline_order, TIMELINE_ORDER_FALLBACK)
+            )
             .orderBy(({ chunk }) => chunk.key)
             .select(({ chunk }) => chunk.delta)
         )
@@ -1312,7 +1366,7 @@ function buildEntityTimelineQuery(
       toolCall: caseWhen(toolCall.key, {
         key: toolCall.key,
         run_id: toolCall.run_id,
-        order: coalesce(toolCall._timeline_order, `~`),
+        order: coalesce(toolCall._timeline_order, TIMELINE_ORDER_FALLBACK),
         tool_call_id: toolCall.tool_call_id,
         tool_name: toolCall.tool_name,
         status: toolCall.status,
@@ -1324,7 +1378,7 @@ function buildEntityTimelineQuery(
 
   const runSource = q.from({ run: db.collections.runs }).select(({ run }) => ({
     key: run.key,
-    order: coalesce(run._timeline_order, `~`),
+    order: coalesce(run._timeline_order, TIMELINE_ORDER_FALLBACK),
     status: run.status,
     finish_reason: run.finish_reason,
     items: q
@@ -1353,12 +1407,14 @@ function buildEntityTimelineQuery(
       .from({ step: db.collections.steps })
       .where(({ step }) => eq(step.run_id, run.key))
       .orderBy(({ step }) => step.step_number)
-      .orderBy(({ step }) => coalesce(step._timeline_order, `~`))
+      .orderBy(({ step }) =>
+        coalesce(step._timeline_order, TIMELINE_ORDER_FALLBACK)
+      )
       .orderBy(({ step }) => step.key)
       .select(({ step }) => ({
         key: step.key,
         run_id: step.run_id,
-        order: coalesce(step._timeline_order, `~`),
+        order: coalesce(step._timeline_order, TIMELINE_ORDER_FALLBACK),
         step_number: step.step_number,
         status: step.status,
         model_id: step.model_id,
@@ -1380,32 +1436,43 @@ function buildEntityTimelineQuery(
     .unionAll({
       inbox: inboxSource,
       run: runSource,
+      comment: commentSource,
       wake: wakeSource,
       signal: signalSource,
       manifest: db.collections.manifests,
     })
-    .orderBy(({ inbox, run, wake, signal, manifest }) =>
+    .orderBy(({ inbox, run, comment, wake, signal, manifest }) =>
       coalesce(
         inbox.order,
         run.order,
+        comment.order,
         wake.order,
         signal.order,
         manifest._timeline_order,
-        `~`
+        TIMELINE_ORDER_FALLBACK
       )
     )
-    .orderBy(({ inbox, run, wake, signal, manifest }) =>
+    .orderBy(({ inbox, run, comment, wake, signal, manifest }) =>
       coalesce(
         caseWhen(inbox.key, `inbox`),
         caseWhen(run.key, `run`),
+        caseWhen(comment.key, `comment`),
         caseWhen(wake.key, `wake`),
         caseWhen(signal.key, `signal`),
         caseWhen(manifest.key, `manifest`),
         ``
       )
     )
-    .orderBy(({ inbox, run, wake, signal, manifest }) =>
-      coalesce(inbox.key, run.key, wake.key, signal.key, manifest.key, ``)
+    .orderBy(({ inbox, run, comment, wake, signal, manifest }) =>
+      coalesce(
+        inbox.key,
+        run.key,
+        comment.key,
+        wake.key,
+        signal.key,
+        manifest.key,
+        ``
+      )
     )
 }
 
