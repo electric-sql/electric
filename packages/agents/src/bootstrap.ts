@@ -90,7 +90,7 @@ export function createBuiltinElectricTools(
   return async (context) => {
     const builtinTools = [
       ...createEventSourceTools(context),
-      ...createScheduleTools(context),
+      ...createScheduleTools({ ...context, db: context.db as any }),
     ]
     const customTools = custom ? await custom(context) : []
     return dedupeToolsByName([...builtinTools, ...customTools])
