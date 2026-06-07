@@ -578,18 +578,20 @@ function ResponseMetaActions({
     <span className={styles.metaActions}>
       {showFork && (
         <Tooltip content={forkLabel} side="top">
-          <IconButton
-            size={1}
-            variant="ghost"
-            tone="neutral"
-            className={styles.metaActionButton}
-            disabled={forkDisabled}
-            onClick={forkFromHere?.onFork}
-            aria-label="Fork from here"
-            title={forkLabel}
-          >
-            <Icon icon={GitFork} size={1} />
-          </IconButton>
+          <span className={styles.tooltipTrigger}>
+            <IconButton
+              size={1}
+              variant="ghost"
+              tone="neutral"
+              className={styles.metaActionButton}
+              disabled={forkDisabled}
+              onClick={forkFromHere?.onFork}
+              aria-label="Fork from here"
+              title={forkLabel}
+            >
+              <Icon icon={GitFork} size={1} />
+            </IconButton>
+          </span>
         </Tooltip>
       )}
       {showCopy && (

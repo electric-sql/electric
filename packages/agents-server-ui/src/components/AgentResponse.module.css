@@ -36,6 +36,10 @@
   gap: 2px;
 }
 
+.tooltipTrigger {
+  display: inline-flex;
+}
+
 .metaActionButton {
   color: var(--ds-text-4);
   opacity: 0.7;
