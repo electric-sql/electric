@@ -4,20 +4,30 @@ import { EditorState } from '@codemirror/state'
 import { EditorView, basicSetup } from 'codemirror'
 import { keymap } from '@codemirror/view'
 import { YjsProvider } from '@durable-streams/y-durable-streams'
+import { Plug, TriangleAlert, Unplug } from 'lucide-react'
 import { yCollab, yUndoManagerKeymap } from 'y-codemirror.next'
 import { Awareness, removeAwarenessStates } from 'y-protocols/awareness'
 import * as Y from 'yjs'
 import { useCurrentPrincipal } from '../../hooks/useCurrentPrincipal'
 import { getConfiguredServerHeaders, serverFetch } from '../../lib/auth-fetch'
 import { principalKeyFromInput } from '../../lib/principals'
+import { Icon, ScrollArea } from '../../ui'
 import styles from './MarkdownDocumentView.module.css'
 import type { EntityViewProps } from '../../lib/workspace/viewRegistry'
 import type { ManifestDocumentEntry } from '@electric-ax/agents-runtime/client'
+import type { LucideIcon } from 'lucide-react'
 
 type DocumentResponse = {
   document: ManifestDocumentEntry
   content: string
 }
+
+type DocumentConnectionStatus =
+  | `loading`
+  | `connecting`
+  | `connected`
+  | `disconnected`
+  | `error`
 
 type RemoteUser = {
   name: string
@@ -57,6 +67,34 @@ function providerBaseUrl(baseUrl: string, streamPath: string): string {
   return url.toString().replace(/\/+$/, ``)
 }
 
+function connectionStatusLabel(status: DocumentConnectionStatus): string {
+  switch (status) {
+    case `loading`:
+      return `Loading document`
+    case `connecting`:
+      return `Connecting`
+    case `connected`:
+      return `Connected`
+    case `disconnected`:
+      return `Disconnected`
+    case `error`:
+      return `Connection error`
+  }
+}
+
+function connectionStatusIcon(status: DocumentConnectionStatus): LucideIcon {
+  switch (status) {
+    case `error`:
+      return TriangleAlert
+    case `disconnected`:
+      return Unplug
+    case `loading`:
+    case `connecting`:
+    case `connected`:
+      return Plug
+  }
+}
+
 export function markdownDocumentConnectionConfig(
   baseUrl: string,
   documentEntry: ManifestDocumentEntry
@@ -87,9 +125,7 @@ export function MarkdownDocumentView({
   const remoteStateFirstSeenRef = useRef<Map<number, number>>(new Map())
   const [documentEntry, setDocumentEntry] =
     useState<ManifestDocumentEntry | null>(null)
-  const [status, setStatus] = useState<
-    `loading` | `connecting` | `connected` | `disconnected` | `error`
-  >(`loading`)
+  const [status, setStatus] = useState<DocumentConnectionStatus>(`loading`)
   const [remoteUsers, setRemoteUsers] = useState<Array<RemoteUser>>([])
   const { principal } = useCurrentPrincipal()
 
@@ -213,7 +249,8 @@ export function MarkdownDocumentView({
       }
       setRemoteUsers(users)
     }
-    const statusHandler = (next: typeof status): void => setStatus(next)
+    const statusHandler = (next: DocumentConnectionStatus): void =>
+      setStatus(next)
     provider.on(`status`, statusHandler)
     awareness.on(`change`, updateRemoteUsers)
     const stalePresenceInterval = window.setInterval(updateRemoteUsers, 1_000)
@@ -243,7 +280,14 @@ export function MarkdownDocumentView({
           {documentEntry?.title ?? `Markdown document`}
         </div>
         <div className={styles.presence}>
-          <span className={styles.status}>{status}</span>
+          <span
+            className={styles.connectionStatus}
+            data-status={status}
+            aria-label={connectionStatusLabel(status)}
+            title={connectionStatusLabel(status)}
+          >
+            <Icon icon={connectionStatusIcon(status)} size={1} />
+          </span>
           {remoteUsers.slice(0, 3).map((user) => {
             const color = user.color ?? colorFor(user.name).color
             return (
@@ -263,7 +307,13 @@ export function MarkdownDocumentView({
       {status === `error` ? (
         <div className={styles.empty}>Document could not be opened.</div>
       ) : (
-        <div ref={editorRef} className={styles.editor} />
+        <ScrollArea
+          className={styles.editorScrollArea}
+          viewportClassName={styles.editorViewport}
+          scrollbars="vertical"
+        >
+          <div ref={editorRef} className={styles.editor} />
+        </ScrollArea>
       )}
     </div>
   )
