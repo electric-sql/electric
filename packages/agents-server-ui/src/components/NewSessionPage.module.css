@@ -362,6 +362,109 @@
 .pillButtonActive:hover {
   background: var(--ds-accent-a4);
 }
+
+.modelSettingsTrigger {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: min(320px, 100%);
+  height: 24px;
+  padding: 0 8px;
+  border-radius: var(--ds-radius-2);
+  font-size: var(--ds-text-xs);
+  line-height: 1.35;
+  font-family: var(--ds-font-body);
+  background: var(--ds-chip-bg);
+  color: var(--ds-text-1);
+  cursor: pointer;
+  outline: none;
+  box-sizing: border-box;
+  transition:
+    background 100ms ease,
+    color 100ms ease;
+}
+.modelSettingsTrigger:hover:not(:disabled),
+.modelSettingsTrigger[data-popup-open] {
+  background: var(--ds-bg-hover);
+}
+.modelSettingsTrigger:focus-visible {
+  box-shadow: 0 0 0 1px var(--ds-accent-9);
+}
+.modelSettingsTrigger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.modelSettingsTriggerModel,
+.modelSettingsTriggerMeta {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.35;
+}
+.modelSettingsTriggerModel {
+  flex: 1 1 auto;
+  color: var(--ds-text-1);
+}
+.modelSettingsTriggerMeta {
+  flex: 0 0 auto;
+  max-width: 80px;
+  color: var(--ds-text-3);
+}
+.modelSettingsMenu {
+  min-width: 220px;
+}
+.modelSettingsModelMenu {
+  min-width: 260px;
+  max-height: min(60vh, 360px);
+  overflow: auto;
+}
+.modelSettingsSubmenuTrigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--ds-row-height-md);
+  padding: 3px 3px 3px 8px;
+  border-radius: var(--ds-radius-item);
+  font-size: var(--ds-text-sm);
+  line-height: 1.3;
+  font-family: var(--ds-font-body);
+  color: var(--ds-text-1);
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+  text-align: start;
+  width: 100%;
+  box-sizing: border-box;
+}
+.modelSettingsSubmenuTrigger[data-highlighted] {
+  background: var(--ds-bg-hover);
+}
+.modelSettingsSubmenuValue {
+  min-width: 0;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-left: auto;
+  color: var(--ds-text-3);
+}
+.modelSettingsChevron {
+  flex-shrink: 0;
+  color: var(--ds-text-3);
+}
+.modelSettingsItemLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.modelSettingsActiveMark {
+  margin-left: auto;
+  margin-right: 5px;
+  color: var(--ds-text-2);
+}
 .composerSend {
   all: unset;
   display: inline-flex;

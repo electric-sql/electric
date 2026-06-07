@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowUp, Cpu, Sparkles } from 'lucide-react'
+import {
+  ArrowUp,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Cpu,
+  Sparkles,
+} from 'lucide-react'
 import { eq, not, useLiveQuery } from '@tanstack/react-db'
 import { COMPOSER_INPUT_MESSAGE_TYPE } from '@electric-ax/agents-runtime/client'
 import { nanoid } from 'nanoid'
@@ -16,7 +23,7 @@ import {
   type CodexAuthSource,
 } from '../../lib/server-connection'
 import { sendEntityMessage } from '../../lib/sendMessage'
-import { Button, Icon, Select, Stack, Text } from '../../ui'
+import { Button, Icon, Menu, Select, Stack, Text } from '../../ui'
 import { SchemaForm, hasSchemaProperties, isObjectSchema } from '../SchemaForm'
 import { WorkingDirectoryPicker } from '../WorkingDirectoryPicker'
 import {
@@ -120,6 +127,8 @@ interface SchemaProperty {
   title?: string
   description?: string
 }
+
+type InlineSchemaProperty = { key: string; prop: SchemaProperty }
 
 /**
  * Standalone view: the new-session picker.
@@ -871,11 +880,9 @@ function SandboxProfileRow({
   )
 }
 
-function inlineSchemaProperties(
-  schema: unknown
-): Array<{ key: string; prop: SchemaProperty }> {
+function inlineSchemaProperties(schema: unknown): Array<InlineSchemaProperty> {
   if (!isObjectSchema(schema)) return []
-  const out: Array<{ key: string; prop: SchemaProperty }> = []
+  const out: Array<InlineSchemaProperty> = []
   for (const [key, raw] of Object.entries(schema.properties)) {
     const prop = raw as SchemaProperty
     if (prop.enum && prop.enum.length > 0) {
@@ -885,6 +892,31 @@ function inlineSchemaProperties(
     }
   }
   return out
+}
+
+function normalizedSchemaKey(key: string): string {
+  return key.replace(/[\s_-]/g, ``).toLowerCase()
+}
+
+function isReasoningProperty(key: string): boolean {
+  const normalized = normalizedSchemaKey(key)
+  return (
+    normalized === `reasoningeffort` ||
+    normalized === `reasoninglevel` ||
+    normalized === `thinkingeffort` ||
+    normalized === `thinkinglevel`
+  )
+}
+
+function isSpeedProperty(key: string): boolean {
+  const normalized = normalizedSchemaKey(key)
+  return (
+    normalized === `speed` ||
+    normalized === `speedlevel` ||
+    normalized === `speedmode` ||
+    normalized === `servicetier` ||
+    normalized === `latencytier`
+  )
 }
 
 function DefaultAgentComposer({
@@ -930,6 +962,28 @@ function DefaultAgentComposer({
     () => inlineSchemaProperties(agent.creation_schema),
     [agent.creation_schema]
   )
+  const modelSettingsProps = useMemo(() => {
+    const model = inlineProps.find(
+      ({ key, prop }) => isModelProperty(key) && prop.enum?.length
+    )
+    const reasoning = inlineProps.find(
+      ({ key, prop }) => isReasoningProperty(key) && prop.enum?.length
+    )
+    if (!model || !reasoning) return null
+    const speed = inlineProps.find(
+      ({ key, prop }) => isSpeedProperty(key) && prop.enum?.length
+    )
+    return { model, reasoning, speed }
+  }, [inlineProps])
+  const standaloneInlineProps = useMemo(() => {
+    if (!modelSettingsProps) return inlineProps
+    const combinedKeys = new Set([
+      modelSettingsProps.model.key,
+      modelSettingsProps.reasoning.key,
+      ...(modelSettingsProps.speed ? [modelSettingsProps.speed.key] : []),
+    ])
+    return inlineProps.filter(({ key }) => !combinedKeys.has(key))
+  }, [inlineProps, modelSettingsProps])
   const slashCommands = useMemo<Array<SlashCommandRow>>(
     () =>
       (agent.slash_commands ?? []).map((command) => ({
@@ -962,6 +1016,14 @@ function DefaultAgentComposer({
     }
     return init
   })
+  const setEnumArg = useCallback(
+    (key: string, prop: SchemaProperty, next: string) => {
+      const original = prop.enum?.find((v) => String(v) === next)
+      if (isModelProperty(key)) persistLastPickedModel(next)
+      setArgs((prev) => ({ ...prev, [key]: original ?? next }))
+    },
+    []
+  )
   const imageAttachmentsEnabled = schemaModelSupportsImageInput(
     agent.creation_schema,
     args
@@ -1069,7 +1131,17 @@ function DefaultAgentComposer({
                 onAttach={openAttachmentPicker}
               />
             )}
-            {inlineProps.map(({ key, prop }) =>
+            {modelSettingsProps && (
+              <ModelSettingsMenu
+                model={modelSettingsProps.model}
+                reasoning={modelSettingsProps.reasoning}
+                speed={modelSettingsProps.speed}
+                args={args}
+                onChange={setEnumArg}
+                disabled={submitting || disabled}
+              />
+            )}
+            {standaloneInlineProps.map(({ key, prop }) =>
               prop.enum ? (
                 <PillSelect
                   key={key}
@@ -1077,11 +1149,7 @@ function DefaultAgentComposer({
                   value={String(args[key] ?? ``)}
                   options={prop.enum.map((v) => String(v))}
                   groupByProvider={isModelProperty(key)}
-                  onChange={(next) => {
-                    const original = prop.enum!.find((v) => String(v) === next)
-                    if (isModelProperty(key)) persistLastPickedModel(next)
-                    setArgs((prev) => ({ ...prev, [key]: original ?? next }))
-                  }}
+                  onChange={(next) => setEnumArg(key, prop, next)}
                   disabled={submitting || disabled}
                 />
               ) : prop.type === `boolean` ? (
@@ -1258,6 +1326,214 @@ function groupedModelOptions(
     group.options.push(option)
   }
   return groups
+}
+
+function enumOptions(prop: SchemaProperty): Array<string> {
+  return (prop.enum ?? []).map((v) => String(v))
+}
+
+function selectedEnumValue(
+  item: InlineSchemaProperty,
+  args: Readonly<Record<string, unknown>>
+): string {
+  const current = args[item.key]
+  if (current !== undefined && current !== null && current !== ``) {
+    return String(current)
+  }
+  if (item.prop.default !== undefined && item.prop.default !== null) {
+    return String(item.prop.default)
+  }
+  const first = item.prop.enum?.[0]
+  return first !== undefined && first !== null ? String(first) : ``
+}
+
+function enumOptionLabel(value: string): string {
+  return value
+    .split(/[\s_-]+/g)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(` `)
+}
+
+function ModelSettingsMenu({
+  model,
+  reasoning,
+  speed,
+  args,
+  onChange,
+  disabled,
+}: {
+  model: InlineSchemaProperty
+  reasoning: InlineSchemaProperty
+  speed?: InlineSchemaProperty
+  args: Readonly<Record<string, unknown>>
+  onChange: (key: string, prop: SchemaProperty, value: string) => void
+  disabled?: boolean
+}): React.ReactElement {
+  const modelValue = selectedEnumValue(model, args)
+  const reasoningValue = selectedEnumValue(reasoning, args)
+  const speedValue = speed ? selectedEnumValue(speed, args) : ``
+  const modelLabel = modelValue ? modelOptionLabel(modelValue) : `Model`
+  const reasoningLabel = reasoningValue
+    ? enumOptionLabel(reasoningValue)
+    : `Auto`
+  const speedLabel = speedValue ? enumOptionLabel(speedValue) : `Speed`
+  const modelGroups = groupedModelOptions(enumOptions(model.prop))
+
+  return (
+    <Menu.Root>
+      <Menu.Trigger
+        render={
+          <button
+            type="button"
+            className={styles.modelSettingsTrigger}
+            aria-label="Model and reasoning"
+            title="Model and reasoning"
+            disabled={disabled}
+          >
+            <span className={styles.modelSettingsTriggerModel}>
+              {modelLabel}
+            </span>
+            <span className={styles.modelSettingsTriggerMeta}>
+              {reasoningLabel}
+            </span>
+            <Icon
+              icon={ChevronDown}
+              size={1}
+              className={styles.modelSettingsChevron}
+            />
+          </button>
+        }
+      />
+      <Menu.Content
+        side="top"
+        align="start"
+        sideOffset={8}
+        className={styles.modelSettingsMenu}
+      >
+        <Menu.SubmenuRoot>
+          <Menu.SubmenuTrigger className={styles.modelSettingsSubmenuTrigger}>
+            <span>Model</span>
+            <span className={styles.modelSettingsSubmenuValue}>
+              {modelLabel}
+            </span>
+            <Icon
+              icon={ChevronRight}
+              size={2}
+              className={styles.modelSettingsChevron}
+            />
+          </Menu.SubmenuTrigger>
+          <Menu.Content
+            side="right"
+            align="start"
+            className={styles.modelSettingsModelMenu}
+          >
+            {modelGroups.map((group) => (
+              <Menu.Group key={group.provider}>
+                <Menu.Label>{group.label}</Menu.Label>
+                {group.options.map((option) => {
+                  const active = option === modelValue
+                  return (
+                    <Menu.Item
+                      key={option}
+                      onSelect={() => onChange(model.key, model.prop, option)}
+                    >
+                      <span className={styles.modelSettingsItemLabel}>
+                        {modelOptionLabel(option)}
+                      </span>
+                      {active && (
+                        <Icon
+                          icon={Check}
+                          size={2}
+                          className={styles.modelSettingsActiveMark}
+                        />
+                      )}
+                    </Menu.Item>
+                  )
+                })}
+              </Menu.Group>
+            ))}
+          </Menu.Content>
+        </Menu.SubmenuRoot>
+
+        <Menu.SubmenuRoot>
+          <Menu.SubmenuTrigger className={styles.modelSettingsSubmenuTrigger}>
+            <span>Reasoning</span>
+            <span className={styles.modelSettingsSubmenuValue}>
+              {reasoningLabel}
+            </span>
+            <Icon
+              icon={ChevronRight}
+              size={2}
+              className={styles.modelSettingsChevron}
+            />
+          </Menu.SubmenuTrigger>
+          <Menu.Content side="right" align="start">
+            {enumOptions(reasoning.prop).map((option) => {
+              const active = option === reasoningValue
+              return (
+                <Menu.Item
+                  key={option}
+                  onSelect={() =>
+                    onChange(reasoning.key, reasoning.prop, option)
+                  }
+                >
+                  <span className={styles.modelSettingsItemLabel}>
+                    {enumOptionLabel(option)}
+                  </span>
+                  {active && (
+                    <Icon
+                      icon={Check}
+                      size={2}
+                      className={styles.modelSettingsActiveMark}
+                    />
+                  )}
+                </Menu.Item>
+              )
+            })}
+          </Menu.Content>
+        </Menu.SubmenuRoot>
+
+        {speed && (
+          <Menu.SubmenuRoot>
+            <Menu.SubmenuTrigger className={styles.modelSettingsSubmenuTrigger}>
+              <span>Speed</span>
+              <span className={styles.modelSettingsSubmenuValue}>
+                {speedLabel}
+              </span>
+              <Icon
+                icon={ChevronRight}
+                size={2}
+                className={styles.modelSettingsChevron}
+              />
+            </Menu.SubmenuTrigger>
+            <Menu.Content side="right" align="start">
+              {enumOptions(speed.prop).map((option) => {
+                const active = option === speedValue
+                return (
+                  <Menu.Item
+                    key={option}
+                    onSelect={() => onChange(speed.key, speed.prop, option)}
+                  >
+                    <span className={styles.modelSettingsItemLabel}>
+                      {enumOptionLabel(option)}
+                    </span>
+                    {active && (
+                      <Icon
+                        icon={Check}
+                        size={2}
+                        className={styles.modelSettingsActiveMark}
+                      />
+                    )}
+                  </Menu.Item>
+                )
+              })}
+            </Menu.Content>
+          </Menu.SubmenuRoot>
+        )}
+      </Menu.Content>
+    </Menu.Root>
+  )
 }
 
 function PillSelect({

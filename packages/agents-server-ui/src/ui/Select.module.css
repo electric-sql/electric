@@ -7,7 +7,7 @@
   height: 32px;
   min-width: 120px;
   font-size: var(--ds-text-sm);
-  line-height: 1;
+  line-height: var(--ds-text-sm-lh);
   font-family: var(--ds-font-body);
   color: var(--ds-text-1);
   background: var(--ds-input-bg);
@@ -47,7 +47,7 @@
   height: 24px;
   padding: 0 8px;
   font-size: var(--ds-text-xs);
-  line-height: 1;
+  line-height: 1.35;
   font-family: var(--ds-font-body);
   color: var(--ds-text-2);
   /* Solid chip surface (matches inline pills, project picker pill,
