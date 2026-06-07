@@ -39,6 +39,24 @@ describe(`buildHortonSystemPrompt`, () => {
     expect(prompt).not.toContain(`subscribe_event_source`)
   })
 
+  it(`describes collaborative markdown docs when document tools are available`, () => {
+    const prompt = buildHortonSystemPrompt(`/tmp/test`, {
+      hasMarkdownDocumentTools: true,
+      hasSkills: true,
+    })
+
+    expect(prompt).toContain(`create_markdown_doc`)
+    expect(prompt).toContain(`Collaborative Markdown Docs`)
+    expect(prompt).toContain(`Do not use filesystem write`)
+    expect(prompt).toContain(`markdown-docs skill`)
+  })
+
+  it(`omits collaborative markdown docs when document tools are unavailable`, () => {
+    const prompt = buildHortonSystemPrompt(`/tmp/test`)
+    expect(prompt).not.toContain(`create_markdown_doc`)
+    expect(prompt).not.toContain(`Collaborative Markdown Docs`)
+  })
+
   it(`includes docs URL guidance alongside local docs support`, () => {
     const prompt = buildHortonSystemPrompt(`/tmp/test`, {
       hasDocsSupport: true,

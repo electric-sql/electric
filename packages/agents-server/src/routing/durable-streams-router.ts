@@ -13,7 +13,9 @@ import {
 } from '../electric-agents-http.js'
 import { subscriptionWebhooks } from '../db/schema.js'
 import {
+  ErrCodeInvalidRequest,
   ErrCodeNotFound,
+  ErrCodeNotRunning,
   ErrCodeUnauthorized,
 } from '../electric-agents-types.js'
 import {
@@ -29,6 +31,13 @@ import {
   webhookSigningMetadata,
 } from '../webhook-signing.js'
 import { resolveDurableStreamsRoutingAdapter } from './durable-streams-routing-adapter.js'
+import {
+  getMarkdownDocumentAwarenessStreamPath,
+  getMarkdownDocumentUpdateStreamPath,
+  parseMarkdownDocumentDocPath,
+  parseMarkdownDocumentStreamPath,
+  parseYjsDocumentRoutePath,
+} from '../markdown-documents.js'
 import type { IRequest, RouterType } from 'itty-router'
 import type { TenantContext } from './context.js'
 import type { DurableStreamsRoutingAdapter } from './durable-streams-routing-adapter.js'
@@ -100,6 +109,7 @@ for (const action of subscriptionControlActions) {
 durableStreamsRouter.get(`/__ds/jwks.json`, webhookJwks)
 durableStreamsRouter.all(`/__ds`, controlPassThrough)
 durableStreamsRouter.all(`/__ds/*`, controlPassThrough)
+durableStreamsRouter.all(`/v1/yjs/:service/docs/:docPath+`, yjsDocumentRoute)
 durableStreamsRouter.post(`*`, streamAppend)
 durableStreamsRouter.all(`*`, proxyPassThrough)
 
@@ -617,6 +627,111 @@ async function streamAppend(
   )
 }
 
+async function yjsDocumentRoute(
+  request: IRequest,
+  ctx: TenantContext
+): Promise<Response> {
+  const url = new URL(request.url)
+  const route = parseYjsDocumentRoutePath(url.pathname)
+  if (!route || route.service !== ctx.service) {
+    return apiError(400, ErrCodeInvalidRequest, `Invalid Yjs document path`)
+  }
+  const parsed = parseMarkdownDocumentDocPath(route.docPath)
+  if (!parsed) {
+    return apiError(
+      400,
+      ErrCodeInvalidRequest,
+      `Invalid markdown document path`
+    )
+  }
+  const entity = await ctx.entityManager.registry.getEntity(parsed.entityUrl)
+  if (!entity) {
+    return apiError(404, ErrCodeNotFound, `Entity not found`)
+  }
+
+  const method = request.method.toUpperCase()
+  const awarenessName = url.searchParams.get(`awareness`)
+  const isAwareness = awarenessName !== null
+  const permission =
+    method === `GET` || method === `HEAD` || isAwareness ? `read` : `write`
+  if (!(await canAccessEntity(ctx, entity, permission, request as Request))) {
+    return apiError(
+      401,
+      ErrCodeUnauthorized,
+      `Principal is not allowed to ${permission} ${entity.url}`
+    )
+  }
+
+  if (
+    !isAwareness &&
+    (method === `PUT` || method === `POST` || method === `DELETE`) &&
+    ctx.entityManager.isForkWorkLockedEntity(entity.url)
+  ) {
+    return apiError(409, ErrCodeNotRunning, `Entity subtree is being forked`)
+  }
+
+  if (!isAwareness && url.searchParams.get(`offset`) === `snapshot`) {
+    const redirect = new URL(request.url)
+    redirect.searchParams.set(`offset`, `-1`)
+    return new Response(null, {
+      status: 307,
+      headers: {
+        location: `${redirect.pathname}${redirect.search}`,
+        'cache-control': `private, max-age=5`,
+      },
+    })
+  }
+
+  const offset = url.searchParams.get(`offset`)
+  if (!isAwareness && offset?.endsWith(`_snapshot`)) {
+    return apiError(404, ErrCodeNotFound, `Snapshot not found`)
+  }
+
+  const streamPath = isAwareness
+    ? getMarkdownDocumentAwarenessStreamPath(
+        ctx.service,
+        route.docPath,
+        awarenessName || `default`
+      )
+    : getMarkdownDocumentUpdateStreamPath(ctx.service, route.docPath)
+
+  if (method === `PUT`) {
+    const upstream = await forwardToDurableStreams(
+      ctx,
+      request,
+      undefined,
+      `stream`,
+      rewriteRequestUrlPath(request.url, streamPath)
+    )
+    if (!isAwareness && (upstream.ok || upstream.status === 409)) {
+      await ctx.streamClient
+        .create(
+          getMarkdownDocumentAwarenessStreamPath(
+            ctx.service,
+            route.docPath,
+            `default`
+          ),
+          { contentType: `application/octet-stream` }
+        )
+        .catch(() => undefined)
+    }
+    return responseFromUpstream(upstream)
+  }
+
+  if (method === `GET` || method === `HEAD` || method === `POST`) {
+    const upstream = await forwardToDurableStreams(
+      ctx,
+      request,
+      undefined,
+      `stream`,
+      rewriteRequestUrlPath(request.url, streamPath)
+    )
+    return responseFromUpstream(upstream)
+  }
+
+  return apiError(400, ErrCodeInvalidRequest, `Unsupported Yjs document method`)
+}
+
 async function proxyPassThrough(
   request: IRequest,
   ctx: TenantContext
@@ -638,6 +753,12 @@ async function proxyPassThrough(
   } finally {
     await endTrackedRead?.()
   }
+}
+
+function rewriteRequestUrlPath(requestUrl: string, path: string): string {
+  const url = new URL(requestUrl)
+  url.pathname = path
+  return url.toString()
 }
 
 async function authorizeDurableStreamAccess(
@@ -685,6 +806,37 @@ async function authorizeDurableStreamAccess(
   }
 
   const sharedStateId = sharedStateIdFromPath(streamPath)
+  const markdownDocumentStream = parseMarkdownDocumentStreamPath(streamPath)
+  if (markdownDocumentStream) {
+    if (markdownDocumentStream.service !== ctx.service) {
+      return apiError(404, ErrCodeNotFound, `Document stream not found`)
+    }
+    const entity = await ctx.entityManager.registry.getEntity(
+      markdownDocumentStream.entityUrl
+    )
+    if (!entity) {
+      return apiError(404, ErrCodeNotFound, `Entity not found`)
+    }
+    const permission = method === `GET` || method === `HEAD` ? `read` : `write`
+    if (await canAccessEntity(ctx, entity, permission, request as Request)) {
+      if (
+        permission === `write` &&
+        ctx.entityManager.isForkWorkLockedEntity(entity.url)
+      ) {
+        return apiError(
+          409,
+          ErrCodeNotRunning,
+          `Entity subtree is being forked`
+        )
+      }
+      return undefined
+    }
+    return apiError(
+      401,
+      ErrCodeUnauthorized,
+      `Principal is not allowed to ${permission} ${entity.url}`
+    )
+  }
   if (!sharedStateId) {
     // Durable Streams also hosts non-Agents utility streams. Entity streams,
     // attachment streams, and shared-state streams are guarded above; paths that

@@ -23,7 +23,10 @@ export {
 export { appendPathToUrl } from './url'
 export {
   getEntityAttachmentStreamPath,
+  getEntityMarkdownDocumentPath,
+  getEntityMarkdownDocumentUrlPath,
   manifestAttachmentKey,
+  manifestMarkdownDocumentKey,
 } from './manifest-helpers'
 export { buildSections, buildTimelineEntries } from './use-chat'
 export { COMPOSER_INPUT_MESSAGE_TYPE } from './composer-input'
@@ -46,6 +49,7 @@ export type {
   AttachmentSubjectType,
   Manifest,
   ManifestAttachmentEntry,
+  ManifestDocumentEntry,
 } from './entity-schema'
 export type {
   AttachmentCreateInput,

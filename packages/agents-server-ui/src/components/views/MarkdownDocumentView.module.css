@@ -1,0 +1,94 @@
+.root {
+  display: flex;
+  min-height: 0;
+  height: 100%;
+  flex-direction: column;
+  background: var(--color-panel, #fff);
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-border, #d7dce2);
+  background: var(--color-bg-subtle, #f7f8fa);
+}
+
+.title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.status {
+  flex: 0 0 auto;
+  color: var(--color-text-muted, #67717f);
+  font-size: 12px;
+}
+
+.editor {
+  min-height: 0;
+  flex: 1;
+}
+
+.editor :global(.cm-editor) {
+  height: 100%;
+  font-size: 14px;
+}
+
+.editor :global(.cm-scroller) {
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
+    'Courier New', monospace;
+}
+
+.presence {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.presenceDot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+}
+
+.empty {
+  padding: 16px;
+  color: var(--color-text-muted, #67717f);
+  font-size: 13px;
+}
+
+:global(.yRemoteSelection) {
+  opacity: 0.35;
+}
+
+:global(.yRemoteSelectionHead) {
+  position: absolute;
+  box-sizing: border-box;
+  height: 1.2em;
+  border-left: 2px solid;
+}
+
+:global(.yRemoteSelectionHead)::after {
+  position: absolute;
+  top: -1.05em;
+  left: -2px;
+  z-index: 10;
+  padding: 1px 4px;
+  border-radius: 3px;
+  color: white;
+  content: attr(data-user-name);
+  font-family: system-ui, sans-serif;
+  font-size: 10px;
+  line-height: 1.2;
+  white-space: nowrap;
+}

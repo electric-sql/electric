@@ -185,6 +185,7 @@ export function buildHortonSystemPrompt(
   opts: {
     hasDocsSupport?: boolean
     hasEventSourceTools?: boolean
+    hasMarkdownDocumentTools?: boolean
     hasSkills?: boolean
     docsUrl?: string
     modelProvider?: string
@@ -197,8 +198,14 @@ export function buildHortonSystemPrompt(
   const eventSourceTools = opts.hasEventSourceTools
     ? `\n- list_event_sources: list external webhook/event feeds you can subscribe to, including available buckets and parameters\n- subscribe_event_source: subscribe yourself to one of those feeds or buckets so matching future events wake you\n- list_event_source_subscriptions: list your active event source subscriptions\n- unsubscribe_event_source: remove one of your event source subscriptions by id`
     : ``
+  const markdownDocumentTools = opts.hasMarkdownDocumentTools
+    ? `\n- create_markdown_doc: create a collaborative markdown document that appears in this entity's manifest and opens in the workspace editor\n- read_markdown_doc: read a collaborative markdown document\n- write_markdown_doc: replace a collaborative markdown document's full content\n- edit_markdown_doc: targeted string replacement in a collaborative markdown document`
+    : ``
   const skillsTools = opts.hasSkills
     ? `\n- use_skill: load a skill (knowledge, instructions, or a tutorial) into your context to help with the user's request\n- remove_skill: unload a skill from context when you're done with it`
+    : ``
+  const markdownDocumentGuidance = opts.hasMarkdownDocumentTools
+    ? `\n# Collaborative Markdown Docs\n- If the user asks you to create a markdown doc, notes, draft, brief, plan, report, or any document they should open/edit in the app UI, use create_markdown_doc. Do not use filesystem write unless they ask for a file path or repo/workspace file.\n- For larger document workflows, load the markdown-docs skill first with use_skill, then use the markdown document tools.\n- After creating a collaborative doc, mention that it is available from this entity's manifest/timeline.`
     : ``
   const docsGuidance = opts.hasDocsSupport
     ? `\n- For ANY question about Electric Agents or this framework, ALWAYS use search_electric_agents_docs FIRST. Do not use web_search or fetch_url for Electric Agents topics unless the docs search returns no useful results.\n- The search tool returns chunk content directly — you do not need to read the source files.\n- Use repo read/bash tools only for non-doc files or when you need to inspect exact implementation code in the workspace.`
@@ -262,13 +269,13 @@ When a user opens with a greeting ("hi", "hello", "hey", etc.) or a broad statem
 - fetch_url: fetch and convert a URL to markdown
 - spawn_worker: dispatch a subagent for an isolated task
 - send: send a message to an Electric Agent/entity. To schedule future work for yourself, call send with self: true and afterMs.
-${eventSourceTools}${docsTools}${skillsTools}
+${eventSourceTools}${markdownDocumentTools}${docsTools}${skillsTools}
 
 # Working with files
 - Prefer edit over write when modifying existing files.
 - You must read a file before you can edit it.
 - Use absolute paths or paths relative to the current working directory.
-${modelGuidance}${docsGuidance}${skillsGuidance}${onboardingGuidance}${docsUrlGuidance}
+${markdownDocumentGuidance}${modelGuidance}${docsGuidance}${skillsGuidance}${onboardingGuidance}${docsUrlGuidance}
 
 # Risky actions
 Pause and confirm with the user before:
@@ -517,6 +524,9 @@ function createAssistantHandler(options: {
     const hasEventSourceTools = tools.some(
       (tool) => getToolName(tool) === `list_event_sources`
     )
+    const hasMarkdownDocumentTools = tools.some(
+      (tool) => getToolName(tool) === `create_markdown_doc`
+    )
 
     const titlePromise = !ctx.tags.title
       ? (async () => {
@@ -649,6 +659,7 @@ function createAssistantHandler(options: {
         modelProvider: modelConfig.provider,
         modelId: String(modelConfig.model),
         hasEventSourceTools,
+        hasMarkdownDocumentTools,
       }),
       ...modelConfig,
       // mcp.tools() inserts sentinel objects that the runtime's

@@ -19,6 +19,7 @@ import type {
   AgentTool,
   EntityStreamDBWithActions,
   HeadersProvider,
+  ManifestDocumentEntry,
   ProcessWakeConfig,
   WakeNotification,
   WebhookNotification,
@@ -98,6 +99,30 @@ export interface RuntimeRouterConfig {
     unsubscribeFromEventSource: (opts: {
       id: string
     }) => Promise<{ txid: string }>
+    createMarkdownDocument: (opts: {
+      id?: string
+      title: string
+      content?: string
+      meta?: Record<string, unknown>
+    }) => Promise<{ txid: string; document: ManifestDocumentEntry }>
+    readMarkdownDocument: (opts: {
+      id: string
+    }) => Promise<{ document: ManifestDocumentEntry; content: string }>
+    writeMarkdownDocument: (opts: { id: string; content: string }) => Promise<{
+      txid: string
+      document: ManifestDocumentEntry
+      content: string
+    }>
+    editMarkdownDocument: (opts: {
+      id: string
+      oldString: string
+      newString: string
+      replaceAll?: boolean
+    }) => Promise<{
+      txid: string
+      document: ManifestDocumentEntry
+      content: string
+    }>
   }) => Array<AgentTool> | Promise<Array<AgentTool>>
   /**
    * Optional observer for background wake failures. Return true to mark the

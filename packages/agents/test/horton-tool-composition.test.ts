@@ -216,7 +216,7 @@ describe(`horton tool composition`, () => {
     )
   })
 
-  it(`adds event source tools through the built-in electric tool factory`, async () => {
+  it(`adds event source and markdown document tools through the built-in electric tool factory`, async () => {
     const tools = await createBuiltinElectricTools()(
       createElectricToolsContext()
     )
@@ -228,6 +228,10 @@ describe(`horton tool composition`, () => {
         `subscribe_event_source`,
         `list_event_source_subscriptions`,
         `unsubscribe_event_source`,
+        `create_markdown_doc`,
+        `read_markdown_doc`,
+        `write_markdown_doc`,
+        `edit_markdown_doc`,
       ])
     )
     expect(
@@ -240,9 +244,12 @@ describe(`horton tool composition`, () => {
       tools.find((tool) => tool.name === `list_event_source_subscriptions`)
         ?.description
     ).not.toContain(`manifest-backed`)
+    expect(
+      tools.find((tool) => tool.name === `create_markdown_doc`)?.description
+    ).toContain(`not a filesystem file`)
   })
 
-  it(`includes event source electric tools in Horton and describes them in the prompt`, async () => {
+  it(`includes electric tools in Horton and describes them in the prompt`, async () => {
     const electricTools = await createBuiltinElectricTools()(
       createElectricToolsContext()
     )
@@ -253,8 +260,12 @@ describe(`horton tool composition`, () => {
 
     expect(names).toContain(`list_event_sources`)
     expect(names).toContain(`subscribe_event_source`)
+    expect(names).toContain(`create_markdown_doc`)
+    expect(names).toContain(`edit_markdown_doc`)
     expect(cfg.systemPrompt).toContain(`list_event_sources`)
     expect(cfg.systemPrompt).toContain(`subscribe_event_source`)
+    expect(cfg.systemPrompt).toContain(`create_markdown_doc`)
+    expect(cfg.systemPrompt).toContain(`Collaborative Markdown Docs`)
   })
 
   it(`includes the default built-in toolset`, async () => {

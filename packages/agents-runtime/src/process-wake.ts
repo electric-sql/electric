@@ -1981,6 +1981,26 @@ export async function processWake(
                 entityUrl,
                 ...opts,
               }),
+            createMarkdownDocument: (opts) =>
+              serverClient.createMarkdownDocument({
+                entityUrl,
+                ...opts,
+              }),
+            readMarkdownDocument: (opts) =>
+              serverClient.readMarkdownDocument({
+                entityUrl,
+                ...opts,
+              }),
+            writeMarkdownDocument: (opts) =>
+              serverClient.writeMarkdownDocument({
+                entityUrl,
+                ...opts,
+              }),
+            editMarkdownDocument: (opts) =>
+              serverClient.editMarkdownDocument({
+                entityUrl,
+                ...opts,
+              }),
           })
         : []
 

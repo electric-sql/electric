@@ -40,6 +40,7 @@ import type {
   ManifestAttachmentEntry as EntityManifestAttachmentEntry,
   ManifestChildEntry as EntityManifestChildEntry,
   ManifestContextEntry as EntityManifestContextEntry,
+  ManifestDocumentEntry as EntityManifestDocumentEntry,
   ManifestCronScheduleEntry as EntityManifestCronScheduleEntry,
   ManifestEffectEntry as EntityManifestEffectEntry,
   ManifestFutureSendScheduleEntry as EntityManifestFutureSendScheduleEntry,
@@ -317,6 +318,7 @@ export type ManifestEntry = EntityManifest
 export type ManifestAttachmentEntry = EntityManifestAttachmentEntry
 export type ManifestChildEntry = EntityManifestChildEntry
 export type ManifestContextEntry = EntityManifestContextEntry
+export type ManifestDocumentEntry = EntityManifestDocumentEntry
 export type ManifestCronScheduleEntry = EntityManifestCronScheduleEntry
 export type ManifestEffectEntry = EntityManifestEffectEntry
 export type ManifestFutureSendScheduleEntry =
@@ -741,6 +743,30 @@ export interface ProcessWakeConfig {
     unsubscribeFromEventSource: (opts: {
       id: string
     }) => Promise<{ txid: string }>
+    createMarkdownDocument: (opts: {
+      id?: string
+      title: string
+      content?: string
+      meta?: Record<string, unknown>
+    }) => Promise<{ txid: string; document: ManifestDocumentEntry }>
+    readMarkdownDocument: (opts: {
+      id: string
+    }) => Promise<{ document: ManifestDocumentEntry; content: string }>
+    writeMarkdownDocument: (opts: { id: string; content: string }) => Promise<{
+      txid: string
+      document: ManifestDocumentEntry
+      content: string
+    }>
+    editMarkdownDocument: (opts: {
+      id: string
+      oldString: string
+      newString: string
+      replaceAll?: boolean
+    }) => Promise<{
+      txid: string
+      document: ManifestDocumentEntry
+      content: string
+    }>
   }) => Array<AgentTool> | Promise<Array<AgentTool>>
   /** Optional shutdown signal to end idle waits during host teardown. */
   shutdownSignal?: AbortSignal

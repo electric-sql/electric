@@ -6,6 +6,7 @@ import type {
   ClaimTokenHeader,
   HeadersProvider,
   ManifestAttachmentEntry,
+  ManifestDocumentEntry,
 } from './types'
 import type { EntitySignal } from './entity-schema'
 import type {
@@ -124,6 +125,37 @@ export interface RuntimeServerClient {
     entityUrl: string
     id: string
   }) => Promise<Uint8Array>
+  createMarkdownDocument: (options: {
+    entityUrl: string
+    id?: string
+    title: string
+    content?: string
+    meta?: Record<string, unknown>
+  }) => Promise<{ txid: string; document: ManifestDocumentEntry }>
+  readMarkdownDocument: (options: {
+    entityUrl: string
+    id: string
+  }) => Promise<{ document: ManifestDocumentEntry; content: string }>
+  writeMarkdownDocument: (options: {
+    entityUrl: string
+    id: string
+    content: string
+  }) => Promise<{
+    txid: string
+    document: ManifestDocumentEntry
+    content: string
+  }>
+  editMarkdownDocument: (options: {
+    entityUrl: string
+    id: string
+    oldString: string
+    newString: string
+    replaceAll?: boolean
+  }) => Promise<{
+    txid: string
+    document: ManifestDocumentEntry
+    content: string
+  }>
   spawnEntity: (options: SpawnEntityOptions) => Promise<RuntimeEntityInfo>
   getEntity: (entityUrl: string) => Promise<RuntimeEntityInfo>
   ensureSharedStateStream: (
@@ -395,6 +427,127 @@ export function createRuntimeServerClient(
       )
     }
     return new Uint8Array(await response.arrayBuffer())
+  }
+
+  const createMarkdownDocument = async ({
+    entityUrl,
+    id,
+    title,
+    content,
+    meta,
+  }: {
+    entityUrl: string
+    id?: string
+    title: string
+    content?: string
+    meta?: Record<string, unknown>
+  }): Promise<{ txid: string; document: ManifestDocumentEntry }> => {
+    const response = await request(`${entityRpcPath(entityUrl)}/documents`, {
+      method: `POST`,
+      headers: { 'content-type': `application/json` },
+      body: JSON.stringify({ id, title, content, meta }),
+    })
+    if (!response.ok) {
+      throw new Error(
+        `create markdown document on ${entityUrl} failed (${response.status}): ${await readErrorText(response)}`
+      )
+    }
+    return (await response.json()) as {
+      txid: string
+      document: ManifestDocumentEntry
+    }
+  }
+
+  const readMarkdownDocument = async ({
+    entityUrl,
+    id,
+  }: {
+    entityUrl: string
+    id: string
+  }): Promise<{ document: ManifestDocumentEntry; content: string }> => {
+    const response = await request(
+      `${entityRpcPath(entityUrl)}/documents/${encodeURIComponent(id)}`,
+      { method: `GET` }
+    )
+    if (!response.ok) {
+      throw new Error(
+        `read markdown document ${id} on ${entityUrl} failed (${response.status}): ${await readErrorText(response)}`
+      )
+    }
+    return (await response.json()) as {
+      document: ManifestDocumentEntry
+      content: string
+    }
+  }
+
+  const writeMarkdownDocument = async ({
+    entityUrl,
+    id,
+    content,
+  }: {
+    entityUrl: string
+    id: string
+    content: string
+  }): Promise<{
+    txid: string
+    document: ManifestDocumentEntry
+    content: string
+  }> => {
+    const response = await request(
+      `${entityRpcPath(entityUrl)}/documents/${encodeURIComponent(id)}`,
+      {
+        method: `PUT`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({ content }),
+      }
+    )
+    if (!response.ok) {
+      throw new Error(
+        `write markdown document ${id} on ${entityUrl} failed (${response.status}): ${await readErrorText(response)}`
+      )
+    }
+    return (await response.json()) as {
+      txid: string
+      document: ManifestDocumentEntry
+      content: string
+    }
+  }
+
+  const editMarkdownDocument = async ({
+    entityUrl,
+    id,
+    oldString,
+    newString,
+    replaceAll,
+  }: {
+    entityUrl: string
+    id: string
+    oldString: string
+    newString: string
+    replaceAll?: boolean
+  }): Promise<{
+    txid: string
+    document: ManifestDocumentEntry
+    content: string
+  }> => {
+    const response = await request(
+      `${entityRpcPath(entityUrl)}/documents/${encodeURIComponent(id)}`,
+      {
+        method: `PATCH`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({ oldString, newString, replaceAll }),
+      }
+    )
+    if (!response.ok) {
+      throw new Error(
+        `edit markdown document ${id} on ${entityUrl} failed (${response.status}): ${await readErrorText(response)}`
+      )
+    }
+    return (await response.json()) as {
+      txid: string
+      document: ManifestDocumentEntry
+      content: string
+    }
   }
 
   const getEntity = async (entityUrl: string): Promise<RuntimeEntityInfo> => {
@@ -798,6 +951,10 @@ export function createRuntimeServerClient(
     sendEntityMessage,
     createAttachment,
     readAttachment,
+    createMarkdownDocument,
+    readMarkdownDocument,
+    writeMarkdownDocument,
+    editMarkdownDocument,
     spawnEntity,
     getEntity,
     ensureSharedStateStream,
