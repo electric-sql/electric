@@ -8,7 +8,7 @@
  */
 
 import { Agent } from '@mariozechner/pi-agent-core'
-import { getModel } from '@mariozechner/pi-ai'
+import { getModel, streamSimple } from '@mariozechner/pi-ai'
 import { createOutboundBridge } from './outbound-bridge'
 import { MOONSHOT_PROVIDER, getMoonshotModel } from './moonshot-models'
 import { runtimeLog } from './log'
@@ -52,20 +52,6 @@ export interface PiAdapterOptions {
 
 const DEFAULT_MODEL_TIMEOUT_MS = 30_000
 const DEFAULT_MODEL_MAX_RETRIES = 0
-
-function readPositiveIntEnv(name: string): number | undefined {
-  const raw = process.env[name]
-  if (!raw) return undefined
-  const parsed = Number(raw)
-  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : undefined
-}
-
-function readNonNegativeIntEnv(name: string): number | undefined {
-  const raw = process.env[name]
-  if (!raw) return undefined
-  const parsed = Number(raw)
-  return Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : undefined
-}
 
 interface PiAgentAdapterConfig {
   entityUrl: string
@@ -250,14 +236,16 @@ export function createPiAgentAdapter(
       model: opts.model,
       ...(opts.provider && { provider: opts.provider }),
     })
-    const modelTimeoutMs =
-      opts.modelTimeoutMs ??
-      readPositiveIntEnv(`ELECTRIC_AGENTS_MODEL_TIMEOUT_MS`) ??
-      DEFAULT_MODEL_TIMEOUT_MS
-    const modelMaxRetries =
-      opts.modelMaxRetries ??
-      readNonNegativeIntEnv(`ELECTRIC_AGENTS_MODEL_MAX_RETRIES`) ??
-      DEFAULT_MODEL_MAX_RETRIES
+    const modelTimeoutMs = opts.modelTimeoutMs ?? DEFAULT_MODEL_TIMEOUT_MS
+    const modelMaxRetries = opts.modelMaxRetries ?? DEFAULT_MODEL_MAX_RETRIES
+
+    const baseStreamFn = opts.streamFn ?? streamSimple
+    const streamFn: StreamFn = (streamModel, context, streamOptions) =>
+      baseStreamFn(streamModel, context, {
+        ...streamOptions,
+        timeoutMs: modelTimeoutMs,
+        maxRetries: modelMaxRetries,
+      })
 
     const agentOptions = {
       initialState: {
@@ -266,16 +254,9 @@ export function createPiAgentAdapter(
         messages: history as Array<never>,
         model,
       },
-      ...(opts.streamFn && { streamFn: opts.streamFn }),
+      streamFn,
       ...(opts.getApiKey && { getApiKey: opts.getApiKey }),
       ...(opts.onPayload && { onPayload: opts.onPayload }),
-      // Pi forwards these options to provider stream calls in current releases.
-      // Keep them as a top-level passthrough so unreachable providers settle
-      // even when the caller did not provide a custom stream function. Older
-      // type definitions don't expose them yet, so keep our timeout fallback
-      // below as the hard guarantee.
-      timeoutMs: modelTimeoutMs,
-      maxRetries: modelMaxRetries,
     }
 
     const agent = new Agent(
@@ -433,6 +414,20 @@ export function createPiAgentAdapter(
               }
 
               case `agent_end`: {
+                const messages = (event as Record<string, unknown>).messages as
+                  | Array<{ stopReason?: string; errorMessage?: string }>
+                  | undefined
+                const errorMessage = messages?.find(
+                  (message) =>
+                    message.stopReason === `error` && !!message.errorMessage
+                )?.errorMessage
+                if (errorMessage) {
+                  throw toModelProviderError(
+                    new Error(`pi-agent agent_end error: ${errorMessage}`),
+                    { provider: model.provider, model: model.id }
+                  )
+                }
+
                 bridge.onRunEnd({
                   finishReason: abortedRun ? `aborted` : `stop`,
                 })
@@ -482,22 +477,15 @@ export function createPiAgentAdapter(
           let settled = false
           let unsubscribe = (): void => {}
           let abortFallback: ReturnType<typeof setTimeout> | null = null
-          let modelTimeout: ReturnType<typeof setTimeout> | null = null
           const clearAbortFallback = (): void => {
             if (!abortFallback) return
             clearTimeout(abortFallback)
             abortFallback = null
           }
-          const clearModelTimeout = (): void => {
-            if (!modelTimeout) return
-            clearTimeout(modelTimeout)
-            modelTimeout = null
-          }
           const finish = (finishReason: `stop` | `aborted` | `error`): void => {
             if (settled) return
             settled = true
             clearAbortFallback()
-            clearModelTimeout()
             running = false
             abortSignal?.removeEventListener(`abort`, abortRun)
             unsubscribe()
@@ -546,17 +534,6 @@ export function createPiAgentAdapter(
           )
 
           abortSignal?.addEventListener(`abort`, abortRun, { once: true })
-          modelTimeout = setTimeout(() => {
-            if (settled) return
-            const providerError = failWithProviderError(
-              new Error(
-                `model provider request timed out after ${modelTimeoutMs}ms`
-              )
-            )
-            agent.abort()
-            finish(`error`)
-            reject(providerError)
-          }, modelTimeoutMs)
           const runPromise =
             input !== undefined ? agent.prompt(input) : agent.continue()
           if (abortSignal?.aborted) {
