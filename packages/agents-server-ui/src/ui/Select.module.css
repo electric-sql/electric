@@ -94,6 +94,7 @@
 }
 
 .popup {
+  box-sizing: border-box;
   padding: 3px;
   min-width: var(--anchor-width, 8rem);
   max-height: min(60vh, 360px);
