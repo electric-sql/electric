@@ -8,9 +8,10 @@ function createRequest(
   method: string,
   path: string,
   body?: unknown,
-  rawBody = false
+  rawBody = false,
+  headers?: HeadersInit
 ): Request {
-  const init: RequestInit = { method }
+  const init: RequestInit = { method, headers }
   if (body !== undefined) {
     init.body = rawBody ? String(body) : JSON.stringify(body)
   }
@@ -28,10 +29,11 @@ async function routeResponse(
     id: `dev-local`,
     key: `system:dev-local`,
     url: `/principal/system:dev-local`,
-  }
+  },
+  headers?: HeadersInit
 ): Promise<Response> {
   const result = await globalRouter.fetch(
-    createRequest(method, path, body, rawBody),
+    createRequest(method, path, body, rawBody, headers),
     {
       service: `test`,
       entityManager: manager,
@@ -787,6 +789,61 @@ describe(`ElectricAgentsRoutes send endpoint`, () => {
         code: `INVALID_REQUEST`,
         message: `Request from_agent must match authenticated agent principal`,
       },
+    })
+  })
+
+  it(`allows from_agent values with a valid active agent write token`, async () => {
+    const targetEntity = { url: `/chat/test` }
+    const agentEntity = { url: `/horton/current`, write_token: `entity-token` }
+    const manager = {
+      registry: {
+        getEntity: vi.fn(async (url: string) => {
+          if (url === `/chat/test`) return targetEntity
+          if (url === `/horton/current`) return agentEntity
+          return null
+        }),
+        getEntityType: vi.fn(),
+      },
+      isValidWriteToken: vi.fn(
+        (entity, token) => entity === agentEntity && token === `claim-token`
+      ),
+      ensurePrincipal: vi.fn().mockResolvedValue(undefined),
+      send: vi.fn().mockResolvedValue(undefined),
+    } as any
+
+    const response = await routeResponse(
+      manager,
+      `POST`,
+      `/_electric/entities/chat/test/send`,
+      {
+        payload: { text: `hi` },
+        from_principal: `/principal/system:dev-local`,
+        from_agent: `/horton/current`,
+      },
+      false,
+      {
+        kind: `system`,
+        id: `dev-local`,
+        key: `system:dev-local`,
+        url: `/principal/system:dev-local`,
+      },
+      { 'electric-claim-token': `claim-token` }
+    )
+
+    expect(response.status).toBe(204)
+    expect(manager.isValidWriteToken).toHaveBeenCalledWith(
+      agentEntity,
+      `claim-token`
+    )
+    expect(manager.send).toHaveBeenCalledWith(`/chat/test`, {
+      from: `/principal/system:dev-local`,
+      from_principal: `/principal/system:dev-local`,
+      from_agent: `/horton/current`,
+      payload: { text: `hi` },
+      key: undefined,
+      type: undefined,
+      mode: undefined,
+      position: undefined,
     })
   })
 

@@ -86,7 +86,9 @@ export interface SendEntityMessageOptions {
   afterMs?: number
   mode?: `immediate` | `queued` | `paused` | `steer`
   position?: string
+  fromPrincipal?: string
   fromAgent?: string
+  writeToken?: string
 }
 
 export interface RegisterWakeOptions {
@@ -290,18 +292,30 @@ export function createRuntimeServerClient(
     afterMs,
     mode,
     position,
+    fromPrincipal,
     fromAgent,
+    writeToken,
   }: SendEntityMessageOptions): Promise<void> => {
     const body: Record<string, unknown> = { payload }
     if (type !== undefined) body.type = type
     if (afterMs !== undefined) body.afterMs = afterMs
     if (mode !== undefined) body.mode = mode
     if (position !== undefined) body.position = position
+    if (fromPrincipal !== undefined) body.from_principal = fromPrincipal
     if (fromAgent !== undefined) body.from_agent = fromAgent
+
+    const headers = new Headers({ 'content-type': `application/json` })
+    if (writeToken) {
+      applyTokenHeader(
+        headers,
+        config.writeTokenHeader ?? `authorization`,
+        writeToken
+      )
+    }
 
     const response = await request(`${entityRpcPath(targetUrl)}/send`, {
       method: `POST`,
-      headers: { 'content-type': `application/json` },
+      headers,
       body: JSON.stringify(body),
     })
 

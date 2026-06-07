@@ -1227,7 +1227,9 @@ export async function processWake(
           payload: send.payload,
           type: send.type,
           afterMs: send.afterMs,
+          fromPrincipal: notification.principal?.url,
           fromAgent: entityUrl,
+          writeToken,
         })
         .then(() => ({ sent: true as const, targetUrl: send.targetUrl }))
 
