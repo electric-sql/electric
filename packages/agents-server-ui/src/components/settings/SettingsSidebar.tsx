@@ -156,7 +156,7 @@ export function SettingsSidebar({
         data-state={overlayState}
         className={`${styles.root} ${narrow ? styles.overlay : ``}`}
       >
-        <div className={styles.header}>
+        <div className={styles.header} data-sidebar-control-surface="true">
           <button
             type="button"
             onClick={() => {

@@ -12,6 +12,17 @@
   display: none;
 }
 
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .root::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: transparent;
+  -webkit-backdrop-filter: var(--ds-chrome-backdrop-filter);
+  backdrop-filter: var(--ds-chrome-backdrop-filter);
+}
+
 .root[data-resizing='true'] {
   transition: none;
 }
@@ -204,10 +215,15 @@
   left: 0;
   right: 0;
   height: 1px;
-  background: var(--ds-divider);
+  background: var(--ds-sidebar-divider);
 }
 .topDivider[data-visible='true'] {
   opacity: 1;
+}
+
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .topDivider::before {
+  mix-blend-mode: var(--ds-sidebar-divider-blend-mode);
 }
 
 /* Inner column wrapping the new-session row + session list.
@@ -265,6 +281,52 @@
 .newSessionRowSelected,
 .newSessionRowSelected:hover {
   background: var(--ds-accent-a3);
+}
+
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .newSessionRow {
+  overflow: hidden;
+}
+
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .newSessionRow::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  transition: opacity 0.08s ease;
+}
+
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .newSessionRow:hover,
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .newSessionRowSelected,
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .newSessionRowSelected:hover {
+  background: transparent;
+}
+
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .newSessionRow:hover::before {
+  opacity: 1;
+  background: var(--ds-sidebar-item-hover-bg);
+  -webkit-backdrop-filter: var(--ds-sidebar-item-hover-backdrop-filter);
+  backdrop-filter: var(--ds-sidebar-item-hover-backdrop-filter);
+}
+
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .newSessionRowSelected::before,
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .newSessionRowSelected:hover::before {
+  opacity: 1;
+  background: var(--ds-sidebar-item-active-bg);
+  -webkit-backdrop-filter: var(--ds-sidebar-item-active-backdrop-filter);
+  backdrop-filter: var(--ds-sidebar-item-active-backdrop-filter);
 }
 /* Same 22px slot, same 16px glyph and the SAME `--ds-text-1` colour
    as the sidebar/search IconButtons in SidebarHeader so the three

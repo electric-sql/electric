@@ -9,6 +9,17 @@
   position: relative;
 }
 
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .root::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: transparent;
+  -webkit-backdrop-filter: var(--ds-chrome-backdrop-filter);
+  backdrop-filter: var(--ds-chrome-backdrop-filter);
+}
+
 /* Narrow-viewport overlay mode — see `useNarrowViewport` and the
    matching rules in `Sidebar.module.css`. Slide/fade transitions
    are driven by `data-state` toggled in SettingsSidebar.tsx
@@ -143,6 +154,7 @@
    row in the main sidebar. */
 .row {
   all: unset;
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -151,6 +163,7 @@
   border-radius: var(--ds-radius-item);
   cursor: pointer;
   color: var(--ds-text-1);
+  background: transparent;
   transition: background 0.08s ease;
 }
 .row:hover {
@@ -164,6 +177,52 @@
 .rowActive:hover {
   background: var(--ds-accent-a3);
   color: var(--ds-text-1);
+}
+
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .row {
+  overflow: hidden;
+}
+
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .row::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  transition: opacity 0.08s ease;
+}
+
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .row:hover,
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .rowActive,
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .rowActive:hover {
+  background: transparent;
+}
+
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .row:hover::before {
+  opacity: 1;
+  background: var(--ds-sidebar-item-hover-bg);
+  -webkit-backdrop-filter: var(--ds-sidebar-item-hover-backdrop-filter);
+  backdrop-filter: var(--ds-sidebar-item-hover-backdrop-filter);
+}
+
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .rowActive::before,
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .rowActive:hover::before {
+  opacity: 1;
+  background: var(--ds-sidebar-item-active-bg);
+  -webkit-backdrop-filter: var(--ds-sidebar-item-active-backdrop-filter);
+  backdrop-filter: var(--ds-sidebar-item-active-backdrop-filter);
 }
 
 .iconSlot {
