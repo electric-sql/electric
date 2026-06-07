@@ -1,0 +1,141 @@
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { createCollection, localOnlyCollectionOptions } from '@tanstack/db'
+import { compareTimelineOrders } from '@electric-ax/agents-runtime/client'
+import { registerActiveServerHeaders } from './auth-fetch'
+import { createSendCommentAction } from './comments'
+import type {
+  CommentSnapshot,
+  CommentTarget,
+  EntityStreamDBWithActions,
+} from '@electric-ax/agents-runtime/client'
+import type { OptimisticComment } from './comments'
+
+function createCommentsDb() {
+  const comments = createCollection(
+    localOnlyCollectionOptions({
+      id: `test-comments-${Math.random().toString(36).slice(2)}`,
+      getKey: (comment: OptimisticComment) => comment.key,
+    })
+  )
+  return {
+    db: {
+      collections: {
+        comments,
+      },
+    } as unknown as EntityStreamDBWithActions,
+    comments,
+  }
+}
+
+describe(`createSendCommentAction`, () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    registerActiveServerHeaders(null)
+  })
+
+  it(`inserts optimistic comments at increasing pending timeline orders`, async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, `fetch`)
+      .mockResolvedValue(new Response(`{}`, { status: 201 }))
+    const { db } = createCommentsDb()
+    const optimistic: Array<OptimisticComment> = []
+    const sendComment = createSendCommentAction({
+      db,
+      baseUrl: `http://localhost:4437`,
+      entityUrl: `/chat/test`,
+      from: `/principal/user%3Ame`,
+      onOptimisticComment: (comment) => optimistic.push(comment),
+    })
+
+    const firstTx = sendComment({ body: `first` })
+    const secondTx = sendComment({ body: `second` })
+    await Promise.all([
+      firstTx.isPersisted.promise,
+      secondTx.isPersisted.promise,
+    ])
+
+    expect(optimistic).toHaveLength(2)
+    expect(optimistic[0]?._timeline_order).toMatch(/^zzzz:pending:/)
+    expect(optimistic[1]?._timeline_order).toMatch(/^zzzz:pending:/)
+    expect(
+      compareTimelineOrders(
+        optimistic[0]!._timeline_order,
+        optimistic[1]!._timeline_order
+      )
+    ).toBeLessThan(0)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it(`posts reply metadata with the same key as the optimistic row`, async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, `fetch`)
+      .mockResolvedValue(new Response(`{}`, { status: 201 }))
+    const { db } = createCommentsDb()
+    const optimistic: Array<OptimisticComment> = []
+    const replyTo: CommentTarget = {
+      kind: `timeline`,
+      collection: `run`,
+      key: `run-1`,
+    }
+    const targetSnapshot: CommentSnapshot = {
+      label: `Assistant response`,
+      text: `Draft reply`,
+      collection: `run`,
+    }
+    const sendComment = createSendCommentAction({
+      db,
+      baseUrl: `http://localhost:4437`,
+      entityUrl: `/chat/test`,
+      from: `/principal/user%3Ame`,
+      onOptimisticComment: (comment) => optimistic.push(comment),
+    })
+
+    const tx = sendComment({
+      body: `looks right`,
+      replyTo,
+      targetSnapshot,
+    })
+    await tx.isPersisted.promise
+
+    expect(optimistic).toHaveLength(1)
+    expect(optimistic[0]).toMatchObject({
+      body: `looks right`,
+      from_principal: `/principal/user%3Ame`,
+      reply_to: replyTo,
+      target_snapshot: targetSnapshot,
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const [url, init] = fetchMock.mock.calls[0]!
+    expect(url).toBe(
+      `http://localhost:4437/_electric/entities/chat/test/comments`
+    )
+    expect(init?.method).toBe(`POST`)
+    expect(new Headers(init?.headers).get(`content-type`)).toBe(
+      `application/json`
+    )
+    expect(JSON.parse(String(init?.body))).toEqual({
+      key: optimistic[0]!.key,
+      body: `looks right`,
+      reply_to: replyTo,
+      target_snapshot: targetSnapshot,
+    })
+  })
+
+  it(`rejects the persistence promise when the server rejects the comment`, async () => {
+    vi.spyOn(globalThis, `fetch`).mockResolvedValue(
+      new Response(JSON.stringify({ message: `No write access` }), {
+        status: 403,
+      })
+    )
+    const { db } = createCommentsDb()
+    const sendComment = createSendCommentAction({
+      db,
+      baseUrl: `http://localhost:4437`,
+      entityUrl: `/chat/test`,
+    })
+
+    const tx = sendComment({ body: `blocked` })
+
+    await expect(tx.isPersisted.promise).rejects.toThrow(`No write access`)
+  })
+})

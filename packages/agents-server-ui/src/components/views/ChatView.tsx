@@ -41,11 +41,11 @@ const COMMENT_TARGET_COLLECTIONS = new Set<string>([
   `manifest`,
 ])
 
-function encodeCommentTargetParam(target: CommentTarget): string {
+export function encodeCommentTargetParam(target: CommentTarget): string {
   return encodeURIComponent(JSON.stringify(target))
 }
 
-function decodeCommentTargetParam(
+export function decodeCommentTargetParam(
   value: string | undefined
 ): CommentTarget | null {
   if (!value) return null
@@ -56,6 +56,12 @@ function decodeCommentTargetParam(
   } catch {
     return null
   }
+}
+
+export function commentFocusViewParams(
+  target: CommentTarget
+): Record<string, string> {
+  return { [COMMENT_FOCUS_PARAM]: encodeCommentTargetParam(target) }
 }
 
 function isCommentTarget(value: unknown): value is CommentTarget {
@@ -75,6 +81,43 @@ function isCommentTarget(value: unknown): value is CommentTarget {
     (timelineTarget.run_id === undefined ||
       typeof timelineTarget.run_id === `string`)
   )
+}
+
+export function buildCommentsTimeline(
+  timelineRows: Array<EntityTimelineQueryRow>
+): {
+  rows: Array<EntityTimelineQueryRow>
+  adjacency: Array<TimelineRowAdjacency>
+} {
+  const rows: Array<EntityTimelineQueryRow> = []
+  const adjacency: Array<TimelineRowAdjacency> = []
+  let previousRenderableRow: EntityTimelineQueryRow | undefined
+  let pendingCommentAdjacencyIndex: number | null = null
+
+  for (const row of timelineRows) {
+    if (isAttachmentManifest(row.manifest)) continue
+
+    if (pendingCommentAdjacencyIndex !== null) {
+      const pendingAdjacency = adjacency[pendingCommentAdjacencyIndex]!
+      adjacency[pendingCommentAdjacencyIndex] = {
+        ...pendingAdjacency,
+        nextRow: row,
+      }
+      pendingCommentAdjacencyIndex = null
+    }
+
+    if (row.comment) {
+      rows.push(row)
+      adjacency.push({
+        previousRow: previousRenderableRow,
+      })
+      pendingCommentAdjacencyIndex = adjacency.length - 1
+    }
+
+    previousRenderableRow = row
+  }
+
+  return { rows, adjacency }
 }
 
 /**
@@ -244,26 +287,10 @@ export function CommentsView({
   const [sentCommentSignal, setSentCommentSignal] = useState(0)
   const [selectedCommentTarget, setSelectedCommentTarget] =
     useState<SelectedCommentTarget | null>(null)
-  const commentsTimeline = useMemo<{
-    rows: Array<EntityTimelineQueryRow>
-    adjacency: Array<TimelineRowAdjacency>
-  }>(() => {
-    const renderableRows = timelineRows.filter(
-      (row) => !isAttachmentManifest(row.manifest)
-    )
-    const rows: Array<EntityTimelineQueryRow> = []
-    const adjacency: Array<TimelineRowAdjacency> = []
-    for (let index = 0; index < renderableRows.length; index++) {
-      const row = renderableRows[index]!
-      if (!row.comment) continue
-      rows.push(row)
-      adjacency.push({
-        previousRow: renderableRows[index - 1],
-        nextRow: renderableRows[index + 1],
-      })
-    }
-    return { rows, adjacency }
-  }, [timelineRows])
+  const commentsTimeline = useMemo(
+    () => buildCommentsTimeline(timelineRows),
+    [timelineRows]
+  )
 
   useEffect(() => {
     if (error && !isSpawning) {
@@ -278,9 +305,7 @@ export function CommentsView({
   const openFullTimelineTarget = useCallback(
     (target: CommentTarget) => {
       helpers.setTileView(tileId, `chat`, {
-        viewParams: {
-          [COMMENT_FOCUS_PARAM]: encodeCommentTargetParam(target),
-        },
+        viewParams: commentFocusViewParams(target),
       })
     },
     [helpers, tileId]

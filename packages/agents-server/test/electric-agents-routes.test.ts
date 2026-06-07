@@ -959,6 +959,58 @@ describe(`ElectricAgentsRoutes send endpoint`, () => {
   })
 })
 
+describe(`ElectricAgentsRoutes comments endpoint`, () => {
+  it(`routes comment creation to the manager with the authenticated principal`, async () => {
+    const replyTo = {
+      kind: `timeline`,
+      collection: `tool_call`,
+      key: `tool-call-1`,
+      run_id: `run-1`,
+    }
+    const targetSnapshot = {
+      label: `Tool call`,
+      text: `bash pwd`,
+      collection: `tool_call`,
+    }
+    const manager = {
+      registry: {
+        getEntity: vi.fn().mockResolvedValue({ url: `/chat/test` }),
+        getEntityType: vi.fn(),
+      },
+      ensurePrincipal: vi.fn().mockResolvedValue(undefined),
+      createComment: vi.fn().mockResolvedValue({ key: `comment-1` }),
+    } as any
+
+    const response = await routeResponse(
+      manager,
+      `POST`,
+      `/_electric/entities/chat/test/comments`,
+      {
+        key: `client-comment-1`,
+        body: ` Reply body `,
+        reply_to: replyTo,
+        target_snapshot: targetSnapshot,
+      }
+    )
+
+    expect(response.status).toBe(201)
+    expect(await responseJson(response)).toEqual({ key: `comment-1` })
+    expect(manager.ensurePrincipal).toHaveBeenCalledWith({
+      kind: `system`,
+      id: `dev-local`,
+      key: `system:dev-local`,
+      url: `/principal/system:dev-local`,
+    })
+    expect(manager.createComment).toHaveBeenCalledWith(`/chat/test`, {
+      key: `client-comment-1`,
+      body: ` Reply body `,
+      fromPrincipal: `/principal/system:dev-local`,
+      replyTo,
+      targetSnapshot,
+    })
+  })
+})
+
 describe(`ElectricAgentsRoutes spawn endpoint request validation`, () => {
   it(`rejects malformed JSON before spawning`, async () => {
     const manager = {

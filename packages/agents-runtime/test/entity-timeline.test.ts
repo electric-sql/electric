@@ -7,6 +7,8 @@ import {
   buildEntityTimelineData,
   compareTimelineOrders,
   createEntityIncludesQuery,
+  createEntityTimelineQuery,
+  createPendingTimelineOrder,
   getEntityState,
   normalizeEntityTimelineData,
 } from '../src/entity-timeline'
@@ -20,6 +22,7 @@ import type { EventPointer } from '../src/event-pointer'
 import type {
   EntityTimelineContentItem,
   EntityTimelineData,
+  EntityTimelineQueryRow,
   IncludesInboxMessage,
   IncludesRun,
   IncludesWakeMessage,
@@ -1592,6 +1595,7 @@ describe(`entity includes query`, () => {
       const steps = createSyncCollection(`test-steps`, takeOffset)
       const errors = createSyncCollection(`test-errors`, takeOffset)
       const inbox = createSyncCollection(`test-inbox`, takeOffset)
+      const comments = createSyncCollection(`test-comments`, takeOffset)
       const wakes = createSyncCollection(`test-wakes`, takeOffset)
       const signals = createSyncCollection(`test-signals`, takeOffset)
       const contextInserted = createSyncCollection(
@@ -1613,6 +1617,7 @@ describe(`entity includes query`, () => {
           steps: steps.collection,
           errors: errors.collection,
           inbox: inbox.collection,
+          comments: comments.collection,
           wakes: wakes.collection,
           signals: signals.collection,
           contextInserted: contextInserted.collection,
@@ -1628,6 +1633,7 @@ describe(`entity includes query`, () => {
           steps: withSeqInjection(steps, takeSeq),
           errors: withSeqInjection(errors, takeSeq),
           inbox: withSeqInjection(inbox, takeSeq),
+          comments: withSeqInjection(comments, takeSeq),
           wakes: withSeqInjection(wakes, takeSeq),
           signals: withSeqInjection(signals, takeSeq),
           contextInserted: withSeqInjection(contextInserted, takeSeq),
@@ -1645,6 +1651,15 @@ describe(`entity includes query`, () => {
     function getTimelineData(liveQuery: any): EntityTimelineData | undefined {
       const data = getData(liveQuery)[0] as EntityTimelineData | undefined
       return data ? normalizeEntityTimelineData(data) : undefined
+    }
+
+    function timelineRowLabel(row: EntityTimelineQueryRow): string {
+      if (row.inbox) return `inbox:${row.inbox.key}`
+      if (row.run) return `run:${row.run.key}`
+      if (row.comment) return `comment:${row.comment.key}`
+      if (row.wake) return `wake:${row.wake.key}`
+      if (row.signal) return `signal:${row.signal.key}`
+      return `manifest:${row.manifest.key}`
     }
 
     function trackChanges(collection: any) {
@@ -1789,6 +1804,55 @@ describe(`entity includes query`, () => {
         kind: `user_message`,
         text: `now write an RFC`,
       })
+    })
+
+    it(`interleaves comments by timeline order and keeps pending comments at the end`, async () => {
+      const { collections, sync } = createEntityCollections()
+      const liveQuery = createLiveQueryCollection({
+        query: createEntityTimelineQuery({ collections } as any),
+        startSync: true,
+      })
+      await liveQuery.preload()
+
+      sync.inbox.insert({
+        key: `msg-1`,
+        _timeline_order: order(1),
+        from: `user`,
+        payload: `start`,
+        timestamp: `2026-04-15T18:00:00.000Z`,
+        status: `processed`,
+      })
+      sync.comments.insert({
+        key: `comment-1`,
+        _timeline_order: order(2),
+        body: `between prompt and wake`,
+        from_principal: `/principal/user%3Ame`,
+        timestamp: `2026-04-15T18:00:05.000Z`,
+      })
+      sync.wakes.insert({
+        key: `wake-1`,
+        _timeline_order: order(3),
+        timestamp: `2026-04-15T18:00:10.000Z`,
+        source: `/chat/test`,
+        timeout: false,
+        changes: [],
+      })
+      sync.comments.insert({
+        key: `comment-2`,
+        _timeline_order: createPendingTimelineOrder(1),
+        body: `pending tail comment`,
+        from_principal: `/principal/user%3Ame`,
+        timestamp: `2026-04-15T18:00:15.000Z`,
+      })
+      await new Promise((r) => setTimeout(r, 50))
+
+      const rows = getData(liveQuery) as Array<EntityTimelineQueryRow>
+      expect(rows.map(timelineRowLabel)).toEqual([
+        `inbox:msg-1`,
+        `comment:comment-1`,
+        `wake:wake-1`,
+        `comment:comment-2`,
+      ])
     })
 
     it(`reacts to toolCall updates`, async () => {
