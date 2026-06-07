@@ -1,5 +1,6 @@
 import * as decoding from 'lib0/decoding'
 import * as encoding from 'lib0/encoding'
+import { applyAwarenessUpdate } from 'y-protocols/awareness'
 import * as Y from 'yjs'
 import type { ElectricAgentsEntity } from './electric-agents-types.js'
 import type { StreamClient } from './stream-client.js'
@@ -8,6 +9,7 @@ export const MARKDOWN_DOCUMENT_TRANSPORT_MIME =
   `application/vnd.electric-agents.markdown-yjs` as const
 export const MARKDOWN_DOCUMENT_CONTENT_MIME = `text/markdown` as const
 export const MARKDOWN_DOCUMENT_TEXT_NAME = `markdown` as const
+export const MARKDOWN_DOCUMENT_PROVIDER = `y-durable-streams` as const
 
 export interface ParsedMarkdownDocumentPath {
   entityType: string
@@ -114,6 +116,21 @@ export function applyFramedYjsUpdates(doc: Y.Doc, data: Uint8Array): void {
   const decoder = decoding.createDecoder(data)
   while (decoding.hasContent(decoder)) {
     Y.applyUpdate(doc, decoding.readVarUint8Array(decoder), `server`)
+  }
+}
+
+export function applyFramedAwarenessUpdates(
+  awareness: Parameters<typeof applyAwarenessUpdate>[0],
+  data: Uint8Array
+): void {
+  if (data.length === 0) return
+  const decoder = decoding.createDecoder(data)
+  while (decoding.hasContent(decoder)) {
+    applyAwarenessUpdate(
+      awareness,
+      decoding.readVarUint8Array(decoder),
+      `server`
+    )
   }
 }
 

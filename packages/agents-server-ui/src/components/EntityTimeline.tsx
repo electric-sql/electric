@@ -871,6 +871,10 @@ function manifestDetails(
       return [
         { label: `Title`, value: manifest.title },
         { label: `MIME`, value: manifest.contentMimeType },
+        { label: `Transport`, value: manifest.transportMimeType },
+        { label: `Provider`, value: manifest.provider },
+        { label: `Y.Text`, value: manifest.yTextName },
+        { label: `Doc ID`, value: manifest.docId },
         { label: `Path`, value: manifest.docPath },
       ]
     case `context`:

@@ -315,10 +315,13 @@ type ManifestDocumentEntryValue = {
   key?: string
   kind: `document`
   id: string
+  provider: `y-durable-streams`
+  docId: string
   docPath: string
   streamPath: string
-  mimeType: `application/vnd.electric-agents.markdown-yjs`
+  transportMimeType: `application/vnd.electric-agents.markdown-yjs`
   contentMimeType: `text/markdown`
+  yTextName: `markdown`
   title: string
   createdAt: string
   createdBy?: string
@@ -798,10 +801,15 @@ function createManifestSchema(): Schema<
       ...timelineOrderField,
       kind: z.literal(`document`),
       id: z.string(),
+      provider: z.literal(`y-durable-streams`),
+      docId: z.string(),
       docPath: z.string(),
       streamPath: z.string(),
-      mimeType: z.literal(`application/vnd.electric-agents.markdown-yjs`),
+      transportMimeType: z.literal(
+        `application/vnd.electric-agents.markdown-yjs`
+      ),
       contentMimeType: z.literal(`text/markdown`),
+      yTextName: z.literal(`markdown`),
       title: z.string(),
       createdAt: z.string(),
       createdBy: z.string().optional(),
@@ -944,8 +952,12 @@ export type Manifest = ManifestUnion & {
   createdBy?: string
   error?: string
   meta?: Record<string, JsonValue>
+  provider?: `y-durable-streams`
+  docId?: string
   docPath?: string
+  transportMimeType?: `application/vnd.electric-agents.markdown-yjs`
   contentMimeType?: `text/markdown`
+  yTextName?: `markdown`
   title?: string
   updatedAt?: string
   name?: string

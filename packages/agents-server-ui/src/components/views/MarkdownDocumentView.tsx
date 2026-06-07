@@ -5,7 +5,7 @@ import { EditorView, basicSetup } from 'codemirror'
 import { keymap } from '@codemirror/view'
 import { YjsProvider } from '@durable-streams/y-durable-streams'
 import { yCollab, yUndoManagerKeymap } from 'y-codemirror.next'
-import { Awareness } from 'y-protocols/awareness'
+import { Awareness, removeAwarenessStates } from 'y-protocols/awareness'
 import * as Y from 'yjs'
 import { useCurrentPrincipal } from '../../hooks/useCurrentPrincipal'
 import { getConfiguredServerHeaders, serverFetch } from '../../lib/auth-fetch'
@@ -17,6 +17,13 @@ import type { ManifestDocumentEntry } from '@electric-ax/agents-runtime/client'
 type DocumentResponse = {
   document: ManifestDocumentEntry
   content: string
+}
+
+type RemoteUser = {
+  name: string
+  status?: string
+  color?: string
+  expiresAt?: number
 }
 
 function entityApiUrl(baseUrl: string, entityUrl: string, suffix: string): URL {
@@ -50,6 +57,25 @@ function providerBaseUrl(baseUrl: string, streamPath: string): string {
   return url.toString().replace(/\/+$/, ``)
 }
 
+export function markdownDocumentConnectionConfig(
+  baseUrl: string,
+  documentEntry: ManifestDocumentEntry
+): {
+  providerUrl: string
+  docUrl: URL
+  docId: string
+  yTextName: string
+} {
+  const providerUrl = providerBaseUrl(baseUrl, documentEntry.streamPath)
+  const docId = documentEntry.docId
+  return {
+    providerUrl,
+    docId,
+    yTextName: documentEntry.yTextName,
+    docUrl: new URL(`${providerUrl}/docs/${docId}`),
+  }
+}
+
 export function MarkdownDocumentView({
   baseUrl,
   entityUrl,
@@ -58,12 +84,13 @@ export function MarkdownDocumentView({
   const documentId = viewParams?.doc ?? null
   const editorRef = useRef<HTMLDivElement | null>(null)
   const editorViewRef = useRef<EditorView | null>(null)
+  const remoteStateFirstSeenRef = useRef<Map<number, number>>(new Map())
   const [documentEntry, setDocumentEntry] =
     useState<ManifestDocumentEntry | null>(null)
   const [status, setStatus] = useState<
     `loading` | `connecting` | `connected` | `disconnected` | `error`
   >(`loading`)
-  const [remoteUsers, setRemoteUsers] = useState<Array<string>>([])
+  const [remoteUsers, setRemoteUsers] = useState<Array<RemoteUser>>([])
   const { principal } = useCurrentPrincipal()
 
   useEffect(() => {
@@ -111,18 +138,17 @@ export function MarkdownDocumentView({
       colorLight: userColor.light,
     })
 
-    const docUrl = new URL(
-      `${providerBaseUrl(baseUrl, documentEntry.streamPath)}/docs/${documentEntry.docPath}`
-    )
+    const { providerUrl, docUrl, docId, yTextName } =
+      markdownDocumentConnectionConfig(baseUrl, documentEntry)
     const provider = new YjsProvider({
       doc: ydoc,
-      baseUrl: providerBaseUrl(baseUrl, documentEntry.streamPath),
-      docId: documentEntry.docPath,
+      baseUrl: providerUrl,
+      docId,
       awareness,
       headers: getConfiguredServerHeaders(docUrl),
       liveMode: `sse`,
     })
-    const ytext = ydoc.getText(`markdown`)
+    const ytext = ydoc.getText(yTextName)
     const state = EditorState.create({
       doc: ytext.toString(),
       extensions: [
@@ -137,21 +163,65 @@ export function MarkdownDocumentView({
     editorViewRef.current = view
 
     const updateRemoteUsers = (): void => {
-      const names: Array<string> = []
+      const users: Array<RemoteUser> = []
+      const staleClients: Array<number> = []
+      const seenClients = new Set<number>()
+      const now = Date.now()
       awareness.getStates().forEach((state, clientId) => {
         if (clientId === awareness.clientID) return
-        const user = (state as { user?: { name?: string } }).user
-        if (user?.name) names.push(user.name)
+        seenClients.add(clientId)
+        const user = (
+          state as {
+            user?: {
+              name?: string
+              status?: string
+              color?: string
+              role?: string
+              expiresAt?: number
+            }
+          }
+        ).user
+        const firstSeen =
+          remoteStateFirstSeenRef.current.get(clientId) ?? Date.now()
+        remoteStateFirstSeenRef.current.set(clientId, firstSeen)
+        const isExpired =
+          typeof user?.expiresAt === `number`
+            ? user.expiresAt <= now
+            : user?.role === `agent` &&
+              user.status === `editing` &&
+              now - firstSeen > 5_000
+        if (isExpired) {
+          staleClients.push(clientId)
+          return
+        }
+        if (user?.name) {
+          users.push({
+            name: user.name,
+            status: user.status,
+            color: user.color,
+            expiresAt: user.expiresAt,
+          })
+        }
       })
-      setRemoteUsers(names)
+      for (const clientId of remoteStateFirstSeenRef.current.keys()) {
+        if (!seenClients.has(clientId)) {
+          remoteStateFirstSeenRef.current.delete(clientId)
+        }
+      }
+      if (staleClients.length > 0) {
+        removeAwarenessStates(awareness, staleClients, `stale-agent-presence`)
+      }
+      setRemoteUsers(users)
     }
     const statusHandler = (next: typeof status): void => setStatus(next)
     provider.on(`status`, statusHandler)
     awareness.on(`change`, updateRemoteUsers)
+    const stalePresenceInterval = window.setInterval(updateRemoteUsers, 1_000)
     provider.connect()
     setStatus(`connecting`)
 
     return () => {
+      window.clearInterval(stalePresenceInterval)
       provider.off(`status`, statusHandler)
       awareness.off(`change`, updateRemoteUsers)
       provider.destroy()
@@ -174,15 +244,17 @@ export function MarkdownDocumentView({
         </div>
         <div className={styles.presence}>
           <span className={styles.status}>{status}</span>
-          {remoteUsers.slice(0, 3).map((name) => {
-            const color = colorFor(name)
+          {remoteUsers.slice(0, 3).map((user) => {
+            const color = user.color ?? colorFor(user.name).color
             return (
-              <span key={name} className={styles.presence}>
+              <span key={user.name} className={styles.presence}>
                 <span
                   className={styles.presenceDot}
-                  style={{ backgroundColor: color.color }}
+                  style={{ backgroundColor: color }}
                 />
-                <span className={styles.status}>{name}</span>
+                <span className={styles.status}>
+                  {user.status ? `${user.name} · ${user.status}` : user.name}
+                </span>
               </span>
             )
           })}

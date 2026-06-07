@@ -1,9 +1,15 @@
 import { describe, expect, it, vi } from 'vitest'
+import { Awareness } from 'y-protocols/awareness'
+import * as Y from 'yjs'
 import { EntityManager } from '../src/entity-manager'
 import { SchemaValidator } from '../src/electric-agents/schema-validator'
 import {
   MARKDOWN_DOCUMENT_CONTENT_MIME,
+  MARKDOWN_DOCUMENT_PROVIDER,
+  MARKDOWN_DOCUMENT_TEXT_NAME,
   MARKDOWN_DOCUMENT_TRANSPORT_MIME,
+  applyFramedAwarenessUpdates,
+  getMarkdownDocumentAwarenessStreamPath,
 } from '../src/markdown-documents'
 
 const observedItemSchema = {
@@ -154,7 +160,30 @@ function createMarkdownDocumentManager() {
       } as any,
     }),
     streamClient,
+    binaryStreams,
   }
+}
+
+function collectAwarenessStates(frames: Array<Uint8Array>) {
+  const doc = new Y.Doc()
+  const awareness = new Awareness(doc)
+  const states: Array<{
+    user: Record<string, unknown>
+    cursor?: { anchor?: unknown; head?: unknown }
+  }> = []
+  for (const frame of frames) {
+    applyFramedAwarenessUpdates(awareness, frame)
+    for (const state of awareness.getStates().values()) {
+      const entry = state as {
+        user?: Record<string, unknown>
+        cursor?: { anchor?: unknown; head?: unknown }
+      }
+      if (entry.user) {
+        states.push({ user: entry.user, cursor: entry.cursor })
+      }
+    }
+  }
+  return states
 }
 
 describe(`ElectricAgentsManager.validateWriteEvent`, () => {
@@ -205,25 +234,29 @@ describe(`ElectricAgentsManager.validateWriteEvent`, () => {
 
 describe(`ElectricAgentsManager markdown documents`, () => {
   it(`stores markdown as framed Yjs updates and exposes a manifest document entry`, async () => {
-    const { manager, streamClient } = createMarkdownDocumentManager()
+    const { manager, streamClient, binaryStreams } =
+      createMarkdownDocumentManager()
 
     const created = await manager.createMarkdownDocument(`/chat/session-1`, {
       id: `notes`,
       title: `Session notes`,
       content: `# Notes\n\nDraft`,
-      createdBy: `/principal/user:u1`,
+      createdBy: `/principal/agent:horton`,
     })
 
     expect(created.document).toMatchObject({
       key: `document:notes`,
       kind: `document`,
       id: `notes`,
+      provider: MARKDOWN_DOCUMENT_PROVIDER,
+      docId: `agents/chat/session-1/documents/notes`,
       docPath: `agents/chat/session-1/documents/notes`,
       streamPath: `/v1/yjs/default/docs/agents/chat/session-1/documents/notes`,
-      mimeType: MARKDOWN_DOCUMENT_TRANSPORT_MIME,
+      transportMimeType: MARKDOWN_DOCUMENT_TRANSPORT_MIME,
       contentMimeType: MARKDOWN_DOCUMENT_CONTENT_MIME,
+      yTextName: MARKDOWN_DOCUMENT_TEXT_NAME,
       title: `Session notes`,
-      createdBy: `/principal/user:u1`,
+      createdBy: `/principal/agent:horton`,
     })
     expect(streamClient.create).toHaveBeenCalledWith(
       `/yjs/default/docs/agents/chat/session-1/documents/notes/.updates`,
@@ -240,6 +273,7 @@ describe(`ElectricAgentsManager markdown documents`, () => {
     await manager.editMarkdownDocument(`/chat/session-1`, `notes`, {
       oldString: `Draft`,
       newString: `Ready`,
+      updatedBy: `/principal/agent:horton`,
     })
 
     await expect(
@@ -247,6 +281,33 @@ describe(`ElectricAgentsManager markdown documents`, () => {
     ).resolves.toMatchObject({
       content: `# Notes\n\nReady`,
     })
+
+    const awarenessPath = getMarkdownDocumentAwarenessStreamPath(
+      `default`,
+      `agents/chat/session-1/documents/notes`,
+      `default`
+    )
+    const states = collectAwarenessStates(
+      binaryStreams.get(awarenessPath) ?? []
+    )
+    expect(states.map((state) => state.user)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: `horton`,
+          role: `agent`,
+          status: `editing`,
+          principalUrl: `/principal/agent:horton`,
+        }),
+      ])
+    )
+    expect(states.every((state) => state.user.status === `editing`)).toBe(true)
+    expect(
+      states.every(
+        (state) =>
+          JSON.stringify(state.cursor?.anchor) ===
+          JSON.stringify(state.cursor?.head)
+      )
+    ).toBe(true)
   })
 })
 

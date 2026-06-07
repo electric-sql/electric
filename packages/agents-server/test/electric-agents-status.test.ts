@@ -446,6 +446,25 @@ describe(`ElectricAgentsManager.forkSubtree`, () => {
               },
             },
           },
+          {
+            type: `manifest`,
+            key: `document:notes`,
+            headers: { operation: `insert` },
+            value: {
+              key: `document:notes`,
+              kind: `document`,
+              id: `notes`,
+              provider: `y-durable-streams`,
+              docId: `agents/manager/root/documents/notes`,
+              docPath: `agents/manager/root/documents/notes`,
+              streamPath: `/v1/yjs/default/docs/agents/manager/root/documents/notes`,
+              transportMimeType: `application/vnd.electric-agents.markdown-yjs`,
+              contentMimeType: `text/markdown`,
+              yTextName: `markdown`,
+              title: `Notes`,
+              createdAt: `2026-01-01T00:00:00.000Z`,
+            },
+          },
         ]
       }),
       exists: vi.fn().mockResolvedValue(false),
@@ -501,13 +520,19 @@ describe(`ElectricAgentsManager.forkSubtree`, () => {
       expect.stringMatching(/^\/_electric\/shared-state\/board-fork-/),
       `/_electric/shared-state/board`
     )
+    expect(streamClient.fork).toHaveBeenCalledWith(
+      `/yjs/default/docs/agents/manager/root-copy/documents/notes/.updates`,
+      `/yjs/default/docs/agents/manager/root/documents/notes/.updates`
+    )
 
-    const manifestInserts = appendedEvents.filter(
+    const manifestWrites = appendedEvents.filter(
       (event) =>
         event.type === `manifest` &&
-        (event.headers as Record<string, unknown>).operation === `insert`
+        [`insert`, `update`].includes(
+          String((event.headers as Record<string, unknown>).operation)
+        )
     )
-    expect(manifestInserts).toEqual(
+    expect(manifestWrites).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           value: expect.objectContaining({
@@ -519,6 +544,15 @@ describe(`ElectricAgentsManager.forkSubtree`, () => {
           value: expect.objectContaining({
             kind: `shared-state`,
             id: expect.stringMatching(/^board-fork-/),
+          }),
+        }),
+        expect.objectContaining({
+          value: expect.objectContaining({
+            kind: `document`,
+            id: `notes`,
+            docId: `agents/manager/root-copy/documents/notes`,
+            docPath: `agents/manager/root-copy/documents/notes`,
+            streamPath: `/v1/yjs/default/docs/agents/manager/root-copy/documents/notes`,
           }),
         }),
       ])

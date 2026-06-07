@@ -163,7 +163,8 @@ Tasks:
 Acceptance:
 
 - Entity state can contain a `manifest` event with `kind: 'document'`.
-- Existing manifest consumers continue to parse older entries.
+- Document manifest entries use the strict shape above; older draft document
+  manifest shapes are not supported.
 
 ### 2. Server Document API
 
@@ -458,7 +459,7 @@ Tasks:
 ```ts
 workspace.helpers.openEntity(entityUrl, {
   viewId: 'markdown-doc',
-  viewParams: { docId: manifest.id },
+  viewParams: { doc: manifest.id },
 })
 ```
 
@@ -489,7 +490,7 @@ registerView({
 })
 ```
 
-- Resolve `docId` from `viewParams`.
+- Resolve `doc` from `viewParams`.
 - Find document manifest from entity DB.
 - Construct `Y.Doc`, `Awareness`, and `YjsProvider`.
 - Use `baseUrl` pointing at the agents server durable-stream proxy.
@@ -670,7 +671,7 @@ Tasks:
 
 - Add document manifest row rendering.
 - Add open action using `viewId: 'markdown-doc'` and
-  `viewParams: { docId }`.
+  `viewParams: { doc }`.
 - Register the `markdown-doc` entity view.
 - Add CodeMirror markdown editor bound to `ydoc.getText('markdown')`.
 - Pass auth/principal headers to `YjsProvider`.
@@ -712,7 +713,7 @@ Tasks:
   - user edits it.
   - agent edits it with exact replacement.
   - two windows/tiles see concurrent updates and presence.
-  - forked entity receives an independent document.
+- forked entity receives an independent document.
 
 Suggested commands after `pnpm install` from repo root:
 
@@ -727,3 +728,43 @@ pnpm --filter @electric-ax/agents-server-ui typecheck
 
 Streaming edits should be a later design/implementation after the single PR
 lands and the non-streaming collaborative document workflow is stable.
+
+## Current Implementation Status
+
+Implemented in `samwillis/agents-markdown-docs`:
+
+- Strict document manifest metadata:
+  - `provider: 'y-durable-streams'`
+  - `docId`
+  - `docPath`
+  - `streamPath`
+  - `transportMimeType: 'application/vnd.electric-agents.markdown-yjs'`
+  - `contentMimeType: 'text/markdown'`
+  - `yTextName: 'markdown'`
+- Server-mediated create/read/write/edit document API backed by framed Yjs
+  updates.
+- Runtime markdown document tools with file-like read-before-edit behavior and
+  diff details.
+- Public Yjs document routes and private backing stream routes guarded by entity
+  permissions, including awareness streams.
+- Fork handling for document update streams and remapped `docPath`, `docId`,
+  and `streamPath` manifest fields.
+- CodeMirror markdown editor view backed by `YjsProvider` and `Y.Text`.
+- Manifest and context-drawer open/split-right actions for document entries.
+- User awareness in the editor and server-published agent awareness around
+  create/write/edit tools, including status and cursor/edit range.
+- Focused runtime, server, and UI tests plus package typechecks for the touched
+  packages.
+
+Deferred:
+
+- Snapshot discovery/compaction implementation beyond the current MVP redirect
+  behavior.
+- Token-by-token/streaming document edits.
+
+Manual verification note:
+
+- Automated tests cover the new server, runtime, fork, auth, and UI helper
+  behavior. A full desktop two-window/two-tile manual pass still needs a running
+  agents server plus desktop UI; the in-app browser check against the only
+  detected local UI port was blocked by browser policy after the tab crashed.

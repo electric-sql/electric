@@ -65,6 +65,7 @@
     "pino-pretty": "^13.0.0",
     "postgres": "^3.4.0",
     "undici": "^7.24.7",
+    "y-protocols": "^1.0.6",
     "yjs": "^13.6.26"
   },
   "devDependencies": {
