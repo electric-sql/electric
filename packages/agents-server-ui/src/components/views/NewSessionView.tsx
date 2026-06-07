@@ -23,7 +23,7 @@ import {
   type CodexAuthSource,
 } from '../../lib/server-connection'
 import { sendEntityMessage } from '../../lib/sendMessage'
-import { Button, Icon, Menu, Select, Stack, Text } from '../../ui'
+import { Button, Icon, Menu, Select, Stack, Text, Tooltip } from '../../ui'
 import { SchemaForm, hasSchemaProperties, isObjectSchema } from '../SchemaForm'
 import { WorkingDirectoryPicker } from '../WorkingDirectoryPicker'
 import {
@@ -846,6 +846,10 @@ function isSandboxProfileRemote(
   return name != null && profiles.some((p) => p.name === name && p.remote)
 }
 
+function sandboxProfileLabel(profile: ElectricSandboxProfile): string {
+  return profile.name === `local` ? `No sandbox` : profile.label
+}
+
 function SandboxProfileRow({
   profiles,
   value,
@@ -871,7 +875,7 @@ function SandboxProfileRow({
         <Select.Content>
           {profiles.map((p) => (
             <Select.Item key={p.name} value={p.name}>
-              {p.label}
+              {sandboxProfileLabel(p)}
             </Select.Item>
           ))}
         </Select.Content>
@@ -1096,6 +1100,9 @@ function DefaultAgentComposer({
     (value.trim() || attachmentCount > 0) && !disabled && !submitting
   )
   const placeholder = disabled ? `Connecting…` : `Ask ${agent.name} anything…`
+  const sendTooltip = submitting
+    ? `Starting ${agent.name} session`
+    : `Start ${agent.name} session`
 
   return (
     <div
@@ -1171,20 +1178,24 @@ function DefaultAgentComposer({
             {submitting && (
               <span className={styles.composerHint}>Starting…</span>
             )}
-            <button
-              type="button"
-              aria-label={`Start ${agent.name} session`}
-              onClick={() => submit()}
-              disabled={!isActive}
-              className={[
-                styles.composerSend,
-                isActive ? styles.composerSendActive : null,
-              ]
-                .filter(Boolean)
-                .join(` `)}
-            >
-              <Icon icon={ArrowUp} size={3} />
-            </button>
+            <Tooltip content={sendTooltip} side="top">
+              <span className={styles.tooltipTrigger}>
+                <button
+                  type="button"
+                  aria-label={`Start ${agent.name} session`}
+                  onClick={() => submit()}
+                  disabled={!isActive}
+                  className={[
+                    styles.composerSend,
+                    isActive ? styles.composerSendActive : null,
+                  ]
+                    .filter(Boolean)
+                    .join(` `)}
+                >
+                  <Icon icon={ArrowUp} size={3} />
+                </button>
+              </span>
+            </Tooltip>
           </>
         }
       >
@@ -1212,7 +1223,7 @@ function DefaultAgentComposer({
             value={selectedSandboxProfile ?? ``}
             options={sandboxProfiles.map((p) => p.name)}
             optionLabels={Object.fromEntries(
-              sandboxProfiles.map((p) => [p.name, p.label])
+              sandboxProfiles.map((p) => [p.name, sandboxProfileLabel(p)])
             )}
             onChange={(next) => setSandboxProfile(next)}
             disabled={submitting || disabled}
@@ -1264,7 +1275,7 @@ function RunnerPickerPill({
       <Select.Trigger
         size="pill"
         aria-label="Runner"
-        title="Pull-wake runner that will handle this session"
+        tooltip="Runner that will handle this session"
         placeholder="Pick runner"
         icon={Cpu}
         renderValue={renderValue}
@@ -1383,27 +1394,32 @@ function ModelSettingsMenu({
   return (
     <Menu.Root>
       <Menu.Trigger
-        render={
-          <button
-            type="button"
-            className={styles.modelSettingsTrigger}
-            aria-label="Model and reasoning"
-            title="Model and reasoning"
-            disabled={disabled}
-          >
-            <span className={styles.modelSettingsTriggerModel}>
-              {modelLabel}
-            </span>
-            <span className={styles.modelSettingsTriggerMeta}>
-              {reasoningLabel}
-            </span>
-            <Icon
-              icon={ChevronDown}
-              size={1}
-              className={styles.modelSettingsChevron}
-            />
-          </button>
-        }
+        disabled={disabled}
+        render={(triggerProps) => (
+          <Tooltip content="Model" side="top" align="start">
+            <button
+              {...triggerProps}
+              type="button"
+              className={[triggerProps.className, styles.modelSettingsTrigger]
+                .filter(Boolean)
+                .join(` `)}
+              aria-label="Model and reasoning"
+              disabled={disabled}
+            >
+              <span className={styles.modelSettingsTriggerModel}>
+                {modelLabel}
+              </span>
+              <span className={styles.modelSettingsTriggerMeta}>
+                {reasoningLabel}
+              </span>
+              <Icon
+                icon={ChevronDown}
+                size={1}
+                className={styles.modelSettingsChevron}
+              />
+            </button>
+          </Tooltip>
+        )}
       />
       <Menu.Content
         side="top"
@@ -1565,7 +1581,7 @@ function PillSelect({
       <Select.Trigger
         size="pill"
         aria-label={label}
-        title={label}
+        tooltip={label}
         renderValue={
           groupByProvider
             ? (current) => (current ? modelOptionLabel(current) : label)

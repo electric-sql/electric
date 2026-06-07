@@ -465,6 +465,11 @@
   margin-right: 5px;
   color: var(--ds-text-2);
 }
+
+.tooltipTrigger {
+  display: inline-flex;
+}
+
 .composerSend {
   all: unset;
   display: inline-flex;

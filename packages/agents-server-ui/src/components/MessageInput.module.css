@@ -359,6 +359,10 @@
   line-height: var(--ds-text-xs-lh);
 }
 
+.tooltipTrigger {
+  display: inline-flex;
+}
+
 .composerSend {
   all: unset;
   display: inline-flex;

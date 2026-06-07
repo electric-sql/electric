@@ -78,6 +78,10 @@
   cursor: not-allowed;
 }
 
+.tooltipTrigger {
+  display: inline-flex;
+}
+
 .icon {
   display: inline-flex;
   color: var(--ds-text-3);

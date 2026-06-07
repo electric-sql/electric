@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
 import { Check, Folder, FolderOpen, Home, X } from 'lucide-react'
-import { Combobox, Icon, IconButton } from '../ui'
+import { Combobox, Icon, IconButton, Tooltip } from '../ui'
 import { useRecentWorkingDirectories } from '../hooks/useRecentWorkingDirectories'
 import { detectHomeDir, tildifyPath } from '../lib/pathDisplay'
 import styles from './WorkingDirectoryPicker.module.css'
@@ -115,20 +115,30 @@ export function WorkingDirectoryPicker({
       disabled={disabled}
     >
       <Combobox.Trigger
-        render={
-          <button
-            type="button"
-            className={styles.trigger}
-            data-empty={value === null ? `true` : undefined}
-            aria-label={
-              value ? `Working directory: ${value}` : `Set working directory`
+        render={(triggerProps) => (
+          <Tooltip
+            content={
+              value ? `Working directory: ${value}` : `Working directory`
             }
-            title={value ?? `Don’t work in a directory`}
+            side="top"
+            align="start"
           >
-            <Icon icon={Folder} size={1} className={styles.triggerIcon} />
-            <span className={styles.triggerLabel}>{triggerLabel}</span>
-          </button>
-        }
+            <button
+              {...triggerProps}
+              type="button"
+              className={[triggerProps.className, styles.trigger]
+                .filter(Boolean)
+                .join(` `)}
+              data-empty={value === null ? `true` : undefined}
+              aria-label={
+                value ? `Working directory: ${value}` : `Set working directory`
+              }
+            >
+              <Icon icon={Folder} size={1} className={styles.triggerIcon} />
+              <span className={styles.triggerLabel}>{triggerLabel}</span>
+            </button>
+          </Tooltip>
+        )}
       />
       <Combobox.Content side="bottom" align="start" className={styles.popup}>
         <Combobox.Input
