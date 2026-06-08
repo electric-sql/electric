@@ -1224,10 +1224,14 @@ defmodule Electric.Connection.Manager do
 
     user_message =
       "Replication slot creation is blocked by a pending transaction. Electric might not be able to " <>
-        "automatically unblock it as soon as the transction commits/rolls back #{reason_prose}. " <>
+        "automatically unblock it as soon as the transaction commits/rolls back #{reason_prose}. " <>
         "Manually restarting the source may be needed once the offending transaction is no longer active."
 
-    dispatch_stack_event({:replication_slot_unblock_unavailable, user_message}, state)
+    # Also log it: stack events are only seen by external subscribers (e.g. the cloud
+    # control plane), so a self-hosted operator watching logs needs this signal too.
+    # Gated once via slot_unblock_notice_sent (see the head clause above).
+    Logger.warning(user_message)
+    dispatch_stack_event({:replication_slot_unblock_unavailable, %{message: user_message}}, state)
     %{state | slot_unblock_notice_sent: true}
   end
 

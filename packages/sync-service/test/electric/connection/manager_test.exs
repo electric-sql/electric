@@ -140,14 +140,25 @@ defmodule Electric.Connection.ConnectionManagerTest do
 
       start_connection_manager(ctx)
 
+      # Connection bring-up + lock acquisition is the slow, load-sensitive part. Wait for
+      # it via StatusMonitor (the source sits at conn: :starting while blocked on slot
+      # creation) rather than a multi-second assert_receive, so the assertions below can
+      # use short, reliable timeouts.
+      wait_until_conn_starting(stack_id)
+
       assert_receive {:stack_status, _,
-                      :replication_slot_creation_blocked_by_pending_transactions}
+                      :replication_slot_creation_blocked_by_pending_transactions},
+                     2_000
 
       # The notice fires once despite many timer ticks (interval = 50 ms).
       assert_receive {:stack_status, _,
                       {:replication_slot_unblock_unavailable,
-                       "Replication slot creation is blocked by a pending transaction. " <>
-                         "Electric might not be able to automatically unblock it" <> _}}
+                       %{
+                         message:
+                           "Replication slot creation is blocked by a pending transaction. " <>
+                             "Electric might not be able to automatically unblock it" <> _
+                       }}},
+                     2_000
 
       refute_receive {:stack_status, _, {:replication_slot_unblock_unavailable, _}}, 200
 
@@ -721,6 +732,23 @@ defmodule Electric.Connection.ConnectionManagerTest do
     |> Electric.Postgres.ReplicationClient.name()
     |> GenServer.whereis()
     |> Process.monitor()
+  end
+
+  # Polls until the source has acquired its lock and reached the configuring stage
+  # (conn: :starting). StatusMonitor.wait_until/3 only supports :read_only/:active,
+  # which a slot-creation-blocked source never reaches, so we poll the status here.
+  defp wait_until_conn_starting(stack_id, attempts \\ 200)
+
+  defp wait_until_conn_starting(_stack_id, 0),
+    do: flunk("source did not reach conn: :starting in time")
+
+  defp wait_until_conn_starting(stack_id, attempts) do
+    if StatusMonitor.status(stack_id).conn == :starting do
+      :ok
+    else
+      Process.sleep(25)
+      wait_until_conn_starting(stack_id, attempts - 1)
+    end
   end
 
   defp wait_for_pg_backend_pid(manager_pid, attempts \\ 100) do
