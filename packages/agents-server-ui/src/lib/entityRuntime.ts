@@ -13,7 +13,13 @@ import type {
  * have no associated runner. The sandbox profile name lives on `entity.sandbox`;
  * its human label / description / `remote` flag are resolved against the
  * runner-advertised profile list.
+ *
+ * Runner params are typed against the structural subset of fields actually
+ * read so callers that sync a narrower runners shape (the mobile app's
+ * `agentsClient.ts`) can reuse these helpers without casts.
  */
+
+type RunnerLike = Pick<ElectricRunner, `id` | `label` | `sandbox_profiles`>
 
 /** The pinned runner id from the entity's dispatch policy, if any. */
 export function getEntityRunnerId(
@@ -35,10 +41,10 @@ export function getEntitySandboxProfileName(
 }
 
 /** Look up a runner by id from a runners list. */
-export function resolveRunner(
-  runners: ReadonlyArray<ElectricRunner>,
+export function resolveRunner<R extends RunnerLike>(
+  runners: ReadonlyArray<R>,
   id: string | null
-): ElectricRunner | null {
+): R | null {
   if (!id) return null
   return runners.find((r) => r.id === id) ?? null
 }
@@ -49,9 +55,9 @@ export function resolveRunner(
  * back to the first match across all runners.
  */
 export function resolveSandboxProfile(
-  runners: ReadonlyArray<ElectricRunner>,
+  runners: ReadonlyArray<RunnerLike>,
   name: string | null,
-  preferredRunner?: ElectricRunner | null
+  preferredRunner?: RunnerLike | null
 ): ElectricSandboxProfile | null {
   if (!name) return null
   const fromPreferred = preferredRunner?.sandbox_profiles?.find(
@@ -75,7 +81,7 @@ export function shortenId(id: string): string {
  * shortened form of the id, else a generic fallback.
  */
 export function runnerDisplayLabel(
-  runner: ElectricRunner | null,
+  runner: Pick<ElectricRunner, `id` | `label`> | null,
   id: string | null
 ): string {
   if (runner) return runner.label || shortenId(runner.id)
@@ -116,9 +122,9 @@ export interface EffectiveSandbox {
 }
 
 export function resolveEffectiveSandbox(
-  runners: ReadonlyArray<ElectricRunner>,
+  runners: ReadonlyArray<RunnerLike>,
   entity: ElectricEntity,
-  runner?: ElectricRunner | null
+  runner?: RunnerLike | null
 ): EffectiveSandbox {
   const explicit = getEntitySandboxProfileName(entity)
   if (explicit) {
