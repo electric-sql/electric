@@ -4,6 +4,7 @@ import {
   Animated,
   Easing,
   Keyboard,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -713,7 +714,12 @@ function NativeMessageComposer({
         styles.root,
         {
           paddingBottom: bottomPadding,
-          transform: [{ translateY: keyboardTranslateY }],
+          // Android's default `resize` mode already lifts this bottom-anchored
+          // card above the keyboard, so translating it again would double the
+          // offset. iOS doesn't resize, so there the translate does the work.
+          transform: [
+            { translateY: Platform.OS === `android` ? 0 : keyboardTranslateY },
+          ],
         },
       ]}
     >
