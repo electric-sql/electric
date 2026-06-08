@@ -143,12 +143,11 @@ defmodule Electric.Connection.ConnectionManagerTest do
       # Connection bring-up + lock acquisition is the slow, load-sensitive part. Wait for
       # it via StatusMonitor (the source sits at conn: :starting while blocked on slot
       # creation) rather than a multi-second assert_receive, so the assertions below can
-      # use short, reliable timeouts.
+      # use short, default timeouts.
       wait_until_conn_starting(stack_id)
 
       assert_receive {:stack_status, _,
-                      :replication_slot_creation_blocked_by_pending_transactions},
-                     2_000
+                      :replication_slot_creation_blocked_by_pending_transactions}
 
       # The notice fires once despite many timer ticks (interval = 50 ms).
       assert_receive {:stack_status, _,
@@ -158,9 +157,9 @@ defmodule Electric.Connection.ConnectionManagerTest do
                            "Replication slot creation is blocked by a pending transaction. " <>
                              "Electric might not be able to automatically unblock it" <> _
                        }}},
-                     2_000
+                     200
 
-      refute_receive {:stack_status, _, {:replication_slot_unblock_unavailable, _}}, 200
+      refute_receive {:stack_status, _, {:replication_slot_unblock_unavailable, _}}, 400
 
       Postgrex.query!(blocker, "COMMIT", [])
     end
