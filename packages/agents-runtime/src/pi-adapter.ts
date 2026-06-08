@@ -351,22 +351,48 @@ export function createPiAgentAdapter(
                     : hasToolCalls
                       ? `tool_calls`
                       : `stop`
-                // pi-ai's `Usage` declares `input`/`output` as required
-                // numbers, but we still pick them up defensively (a
-                // future provider might omit a side). We deliberately
-                // do NOT coerce a missing side to `0` — doing so would
-                // surface as "0 input / N output" in the meta row,
-                // indistinguishable from a real zero-token step. Sides
-                // that don't arrive as `number` are forwarded as
-                // `undefined` so `onStepEnd` skips the column entirely
-                // and the query-layer aggregate's `count(...)` treats
-                // them as absent.
+                // pi-ai's `Usage` splits the input side across three
+                // counters: `input` (new uncached tokens this turn),
+                // `cacheRead` (prompt-cache hits — typically the
+                // system prompt + prior history once the cache is
+                // warm) and `cacheWrite` (tokens added to the cache
+                // this turn). What the user wants in the meta row is
+                // the total prompt volume the model actually saw, so
+                // we sum every side that arrived as a number. Reading
+                // only `usage.input` undercounts massively on second+
+                // turns where most of the prompt hits the cache and
+                // `usage.input` collapses to a handful of tokens.
+                //
+                // `inputTokens` / `outputTokens` are legacy flat
+                // aliases (kept as a fallback for non-pi-ai providers
+                // that don't split the cache columns). We deliberately
+                // do NOT coerce a missing side to `0` — doing so
+                // would be indistinguishable from a real zero-token
+                // step in the meta row, and the query-layer
+                // `count(...)` aggregate would mark the side as
+                // present when it really isn't.
+                const sumPresentNumbers = (
+                  parts: Array<unknown>
+                ): number | undefined => {
+                  let total = 0
+                  let saw = false
+                  for (const part of parts) {
+                    if (typeof part === `number`) {
+                      total += part
+                      saw = true
+                    }
+                  }
+                  return saw ? total : undefined
+                }
                 const usageInput =
-                  typeof usage?.input === `number`
-                    ? usage.input
-                    : typeof usage?.inputTokens === `number`
-                      ? usage.inputTokens
-                      : undefined
+                  sumPresentNumbers([
+                    usage?.input,
+                    usage?.cacheRead,
+                    usage?.cacheWrite,
+                  ]) ??
+                  (typeof usage?.inputTokens === `number`
+                    ? usage.inputTokens
+                    : undefined)
                 const usageOutput =
                   typeof usage?.output === `number`
                     ? usage.output

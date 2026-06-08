@@ -605,6 +605,24 @@ describe(`toAgentHistory`, () => {
       expect(stepValue?.output_tokens).toBe(567)
     })
 
+    it(`sums input + cacheRead + cacheWrite into the input token total`, async () => {
+      // Anthropic + other prompt-cache providers split input across
+      // three counters; reading only `usage.input` would surface
+      // tiny "3 input" labels on cache-warm turns. The adapter sums
+      // all three so the meta row reflects the real prompt volume.
+      const events = await runOnce(
+        makeCompletedMessage({
+          input: 50,
+          cacheRead: 1200,
+          cacheWrite: 100,
+          output: 80,
+        })
+      )
+      const stepValue = findStepUpdate(events)
+      expect(stepValue?.input_tokens).toBe(1350)
+      expect(stepValue?.output_tokens).toBe(80)
+    })
+
     it(`omits a side from the step event when usage doesn't report it`, async () => {
       // Build a usage payload missing `output` to simulate a future
       // provider (or a partial pi-ai response). The adapter should
