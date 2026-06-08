@@ -148,14 +148,12 @@ function fingerprintRun(run: IncludesRun): string {
   for (const tc of run.toolCalls) {
     fp += `:${tc.key}.${tc.status}${payloadSniff(`a`, tc.args)}${payloadSniff(`r`, tc.result)}`
   }
-  // Steps participate in the fingerprint because the section now
-  // surfaces summed token counts from them — without this, a step
-  // landing its `input_tokens` / `output_tokens` after the run
-  // already settled would not invalidate the cached section.
-  fp += `|s:${run.steps.length}`
-  for (const s of run.steps) {
-    fp += `:${s.key}.${s.status}.${s.input_tokens ?? `-`}.${s.output_tokens ?? `-`}`
-  }
+  // Token totals participate in the fingerprint because the section
+  // surfaces them — a late `onStepEnd` landing its usage data after
+  // the run already settled would otherwise not invalidate the cached
+  // section. We fingerprint the resolved `run.tokens` (already summed
+  // by the query layer) rather than each individual step.
+  fp += `|tk:${run.tokens?.input ?? `-`}.${run.tokens?.output ?? `-`}`
   return fp
 }
 
@@ -335,39 +333,17 @@ function buildAgentSection(run: IncludesRun): AgentResponseSection {
       failedToolText ?? finishReason ?? `Run failed (no error details recorded)`
   }
 
-  // Token totals across this run's steps. We accumulate per side and
-  // only attach `tokens` to the section if at least one step reported
-  // a number — that way a run whose provider never emitted usage data
-  // (older events, test fixtures, future providers without `usage`)
-  // continues to render with no token row instead of "0 / 0".
-  let tokenInputSum = 0
-  let tokenOutputSum = 0
-  let sawTokenInput = false
-  let sawTokenOutput = false
-  for (const step of run.steps) {
-    if (typeof step.input_tokens === `number`) {
-      tokenInputSum += step.input_tokens
-      sawTokenInput = true
-    }
-    if (typeof step.output_tokens === `number`) {
-      tokenOutputSum += step.output_tokens
-      sawTokenOutput = true
-    }
-  }
-  const tokens =
-    sawTokenInput || sawTokenOutput
-      ? {
-          ...(sawTokenInput && { input: tokenInputSum }),
-          ...(sawTokenOutput && { output: tokenOutputSum }),
-        }
-      : undefined
-
+  // Token totals come pre-aggregated on `run.tokens` from the query
+  // layer (`createEntityIncludesQuery` / `buildIncludesRuns`), so we
+  // surface them as-is. A run whose provider never emitted usage data
+  // has `run.tokens` left undefined and renders with no token row
+  // instead of "0 / 0".
   const section: AgentResponseSection = {
     kind: `agent_response`,
     items: contentItems,
     ...(run.status === `completed` && { done: true as const }),
     ...(errorText && { error: errorText }),
-    ...(tokens && { tokens }),
+    ...(run.tokens && { tokens: run.tokens }),
   }
   // Always cache (terminal or in-flight). Fingerprint check above
   // guarantees we never serve a stale streaming section — text growth

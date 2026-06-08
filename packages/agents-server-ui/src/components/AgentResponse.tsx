@@ -404,39 +404,22 @@ export const AgentResponseLive = memo(function AgentResponseLive({
     (q) => (run.errors ? q.from({ error: run.errors }) : undefined),
     [run.errors]
   )
-  // Live token aggregation: subscribe to this run's step rows and
-  // sum `input_tokens` / `output_tokens` across them. Steps land
-  // their token counts on `onStepEnd`, so for a single-turn LLM call
-  // this updates once; for a tool-using run with N model calls it
-  // jumps N times as each step settles.
-  const { data: stepRows = [] } = useLiveQuery(
-    (q) => (run.steps ? q.from({ step: run.steps }) : undefined),
-    [run.steps]
-  )
+  // Token totals are aggregated in the query layer
+  // (`createEntityTimelineQuery`) — see the `runTokensSource`
+  // leftJoin in `entity-timeline.ts`. The query sums each step's
+  // `input_tokens` / `output_tokens` and surfaces a single
+  // `{ input?, output? } | undefined` row that updates at step
+  // boundaries (the LLM SDK only emits `usage` at end-of-step). We
+  // coerce `null` (TanStack DB's "no value" for a side whose
+  // `count` was zero) to `undefined` so `TokenUsage` can use a
+  // single `!= null` check.
   const liveTokens = useMemo(() => {
-    let inSum = 0
-    let outSum = 0
-    let sawIn = false
-    let sawOut = false
-    for (const s of stepRows as Array<{
-      input_tokens?: number
-      output_tokens?: number
-    }>) {
-      if (typeof s.input_tokens === `number`) {
-        inSum += s.input_tokens
-        sawIn = true
-      }
-      if (typeof s.output_tokens === `number`) {
-        outSum += s.output_tokens
-        sawOut = true
-      }
-    }
-    if (!sawIn && !sawOut) return null
-    return {
-      input: sawIn ? inSum : undefined,
-      output: sawOut ? outSum : undefined,
-    }
-  }, [stepRows])
+    if (!run.tokens) return null
+    const input = run.tokens.input ?? undefined
+    const output = run.tokens.output ?? undefined
+    if (input === undefined && output === undefined) return null
+    return { input, output }
+  }, [run.tokens])
   const sortedItems = useMemo(
     () => [...items].sort(compareLiveRunItems),
     [items]

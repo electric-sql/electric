@@ -2257,5 +2257,227 @@ describe(`entity includes query`, () => {
       expect(liveEntity?.type).toBeUndefined()
       expect(liveEntity?.status).toBeUndefined()
     })
+
+    it(`aggregates per-run token totals from steps`, async () => {
+      const { collections, sync } = createEntityCollections()
+      const queryFn = createEntityIncludesQuery({ collections } as any)
+      const liveQuery = createLiveQueryCollection({
+        query: queryFn,
+        startSync: true,
+      })
+      await liveQuery.preload()
+
+      sync.runs.insert({ key: `run-1`, status: `started` })
+      sync.steps.insert({
+        key: `step-1`,
+        run_id: `run-1`,
+        step_number: 1,
+        status: `completed`,
+        input_tokens: 100,
+        output_tokens: 40,
+      })
+      sync.steps.insert({
+        key: `step-2`,
+        run_id: `run-1`,
+        step_number: 2,
+        status: `completed`,
+        input_tokens: 150,
+        output_tokens: 60,
+      })
+      await new Promise((r) => setTimeout(r, 50))
+
+      expect(getTimelineData(liveQuery)?.runs[0]?.tokens).toEqual({
+        input: 250,
+        output: 100,
+      })
+    })
+
+    it(`leaves tokens undefined when no step reports either side`, async () => {
+      const { collections, sync } = createEntityCollections()
+      const queryFn = createEntityIncludesQuery({ collections } as any)
+      const liveQuery = createLiveQueryCollection({
+        query: queryFn,
+        startSync: true,
+      })
+      await liveQuery.preload()
+
+      sync.runs.insert({ key: `run-1`, status: `completed` })
+      sync.steps.insert({
+        key: `step-1`,
+        run_id: `run-1`,
+        step_number: 1,
+        status: `completed`,
+        // no input_tokens / output_tokens — older events recorded
+        // before usage was persisted
+      })
+      await new Promise((r) => setTimeout(r, 50))
+
+      // TanStack DB's `caseWhen` with no default surfaces a SQL-style
+      // null at runtime; the TS contract types it as
+      // `{...} | undefined`, but consumers check `if (run.tokens)`
+      // which handles both — we mirror that here with `!= null`.
+      expect(getTimelineData(liveQuery)?.runs[0]?.tokens ?? undefined).toBe(
+        undefined
+      )
+    })
+
+    it(`surfaces only the present side when one side is missing`, async () => {
+      const { collections, sync } = createEntityCollections()
+      const queryFn = createEntityIncludesQuery({ collections } as any)
+      const liveQuery = createLiveQueryCollection({
+        query: queryFn,
+        startSync: true,
+      })
+      await liveQuery.preload()
+
+      sync.runs.insert({ key: `run-1`, status: `completed` })
+      sync.steps.insert({
+        key: `step-1`,
+        run_id: `run-1`,
+        step_number: 1,
+        status: `completed`,
+        input_tokens: 200,
+        // output_tokens omitted
+      })
+      await new Promise((r) => setTimeout(r, 50))
+
+      const tokens = getTimelineData(liveQuery)?.runs[0]?.tokens
+      expect(tokens?.input).toBe(200)
+      expect(tokens?.output ?? undefined).toBeUndefined()
+    })
+  })
+})
+
+describe(`buildEntityTimelineData token aggregation`, () => {
+  it(`sums input_tokens and output_tokens across a run's steps`, () => {
+    const timeline = buildEntityTimelineData({
+      collections: {
+        runs: {
+          toArray: [{ key: `run-1`, status: `completed`, _seq: 1 }],
+        },
+        texts: { toArray: [] },
+        textDeltas: { toArray: [] },
+        toolCalls: { toArray: [] },
+        steps: {
+          toArray: [
+            {
+              key: `step-1`,
+              run_id: `run-1`,
+              step_number: 1,
+              status: `completed`,
+              input_tokens: 100,
+              output_tokens: 40,
+              _seq: 2,
+            },
+            {
+              key: `step-2`,
+              run_id: `run-1`,
+              step_number: 2,
+              status: `completed`,
+              input_tokens: 150,
+              output_tokens: 60,
+              _seq: 3,
+            },
+          ],
+        },
+        errors: { toArray: [] },
+        inbox: { toArray: [] },
+        wakes: { toArray: [] },
+        signals: { toArray: [] },
+        contextInserted: { toArray: [], __electricRowOffsets: new Map() },
+        contextRemoved: { toArray: [], __electricRowOffsets: new Map() },
+        manifests: { toArray: [], __electricRowOffsets: new Map() },
+        childStatus: { toArray: [], __electricRowOffsets: new Map() },
+      },
+    } as any)
+
+    expect(timeline.runs[0]?.tokens).toEqual({ input: 250, output: 100 })
+  })
+
+  it(`omits tokens when no step reported a value`, () => {
+    const timeline = buildEntityTimelineData({
+      collections: {
+        runs: {
+          toArray: [{ key: `run-1`, status: `completed`, _seq: 1 }],
+        },
+        texts: { toArray: [] },
+        textDeltas: { toArray: [] },
+        toolCalls: { toArray: [] },
+        steps: {
+          toArray: [
+            {
+              key: `step-1`,
+              run_id: `run-1`,
+              step_number: 1,
+              status: `completed`,
+              _seq: 2,
+            },
+          ],
+        },
+        errors: { toArray: [] },
+        inbox: { toArray: [] },
+        wakes: { toArray: [] },
+        signals: { toArray: [] },
+        contextInserted: { toArray: [], __electricRowOffsets: new Map() },
+        contextRemoved: { toArray: [], __electricRowOffsets: new Map() },
+        manifests: { toArray: [], __electricRowOffsets: new Map() },
+        childStatus: { toArray: [], __electricRowOffsets: new Map() },
+      },
+    } as any)
+
+    expect(timeline.runs[0]?.tokens).toBeUndefined()
+  })
+})
+
+describe(`buildAgentSection token plumbing`, () => {
+  beforeEach(() => {
+    __resetSectionCachesForTesting()
+  })
+
+  it(`reads tokens directly off run.tokens without re-aggregating steps`, () => {
+    const runs: Array<IncludesRun> = [
+      {
+        key: `run-with-tokens`,
+        order: order(1),
+        status: `completed`,
+        texts: [],
+        toolCalls: [],
+        // steps deliberately don't carry token values here — the
+        // section should pick up `run.tokens` as-is.
+        steps: [
+          {
+            key: `step-1`,
+            run_id: `run-with-tokens`,
+            order: order(2),
+            step_number: 1,
+            status: `completed`,
+          },
+        ],
+        errors: [],
+        tokens: { input: 1234, output: 567 },
+      },
+    ]
+    const sections = buildSections(runs, [])
+    expect(sections[0]).toMatchObject({
+      kind: `agent_response`,
+      tokens: { input: 1234, output: 567 },
+    })
+  })
+
+  it(`omits section.tokens when run.tokens is undefined`, () => {
+    const runs: Array<IncludesRun> = [
+      {
+        key: `run-no-tokens`,
+        order: order(1),
+        status: `completed`,
+        texts: [],
+        toolCalls: [],
+        steps: [],
+        errors: [],
+      },
+    ]
+    const sections = buildSections(runs, [])
+    expect(sections[0]).toMatchObject({ kind: `agent_response` })
+    expect((sections[0] as any).tokens).toBeUndefined()
   })
 })
