@@ -40,4 +40,10 @@ Implementation:
 
 Providers without reasoning emit nothing → no reasoning section
 rendered. Historical responses recorded before this PR have no
-reasoning rows → no closure cue, same as today.
+closure cue, same as today.
+
+Anthropic extended thinking is now always-on for reasoning-capable
+models: `reasoningEffort: auto` maps to the minimal budget
+(1024 tokens), matching the OpenAI branch where `auto` already
+defaulted to `minimal`. Explicit `low`/`medium`/`high` scale the
+budget as before.

@@ -7,6 +7,7 @@ import {
   buildEntityTimelineData,
   compareTimelineOrders,
   createEntityIncludesQuery,
+  createEntityTimelineQuery,
   getEntityState,
   normalizeEntityTimelineData,
 } from '../src/entity-timeline'
@@ -2256,6 +2257,140 @@ describe(`entity includes query`, () => {
       })
       expect(liveEntity?.type).toBeUndefined()
       expect(liveEntity?.status).toBeUndefined()
+    })
+
+    function createTimelineCollections() {
+      let nextOffset = 1
+      let nextSeq = 1
+      const takeOffset = () => offset(nextOffset++)
+      const takeSeq = () => nextSeq++
+      const runs = createSyncCollection(`tl-runs`, takeOffset)
+      const texts = createSyncCollection(`tl-texts`, takeOffset)
+      const textDeltas = createSyncCollection(`tl-textDeltas`, takeOffset)
+      const toolCalls = createSyncCollection(`tl-toolCalls`, takeOffset)
+      const steps = createSyncCollection(`tl-steps`, takeOffset)
+      const errors = createSyncCollection(`tl-errors`, takeOffset)
+      const inbox = createSyncCollection(`tl-inbox`, takeOffset)
+      const wakes = createSyncCollection(`tl-wakes`, takeOffset)
+      const signals = createSyncCollection(`tl-signals`, takeOffset)
+      const contextInserted = createSyncCollection(
+        `tl-context-inserted`,
+        takeOffset
+      )
+      const contextRemoved = createSyncCollection(
+        `tl-context-removed`,
+        takeOffset
+      )
+      const manifests = createSyncCollection(`tl-manifests`, takeOffset)
+      const childStatus = createSyncCollection(`tl-child-status`, takeOffset)
+      const reasoning = createSyncCollection(`tl-reasoning`, takeOffset)
+      const reasoningDeltas = createSyncCollection(
+        `tl-reasoningDeltas`,
+        takeOffset
+      )
+      return {
+        collections: {
+          runs: runs.collection,
+          texts: texts.collection,
+          textDeltas: textDeltas.collection,
+          toolCalls: toolCalls.collection,
+          steps: steps.collection,
+          errors: errors.collection,
+          inbox: inbox.collection,
+          wakes: wakes.collection,
+          signals: signals.collection,
+          contextInserted: contextInserted.collection,
+          contextRemoved: contextRemoved.collection,
+          manifests: manifests.collection,
+          childStatus: childStatus.collection,
+          reasoning: reasoning.collection,
+          reasoningDeltas: reasoningDeltas.collection,
+        },
+        sync: {
+          runs: withSeqInjection(runs, takeSeq),
+          texts: withSeqInjection(texts, takeSeq),
+          textDeltas: withSeqInjection(textDeltas, takeSeq),
+          toolCalls: withSeqInjection(toolCalls, takeSeq),
+          steps: withSeqInjection(steps, takeSeq),
+          errors: withSeqInjection(errors, takeSeq),
+          inbox: withSeqInjection(inbox, takeSeq),
+          wakes: withSeqInjection(wakes, takeSeq),
+          signals: withSeqInjection(signals, takeSeq),
+          contextInserted: withSeqInjection(contextInserted, takeSeq),
+          contextRemoved: withSeqInjection(contextRemoved, takeSeq),
+          manifests: withSeqInjection(manifests, takeSeq),
+          childStatus: withSeqInjection(childStatus, takeSeq),
+          reasoning: withSeqInjection(reasoning, takeSeq),
+          reasoningDeltas: withSeqInjection(reasoningDeltas, takeSeq),
+        },
+      }
+    }
+
+    function getRows(liveQuery: any): Array<any> {
+      return Array.from(liveQuery.entries()).map(([, v]: any) => v)
+    }
+
+    it(`live items.text.content streams in even alongside reasoning (alias-collision regression)`, async () => {
+      // Regression: the text-content correlated sub-query inside
+      // `items.select(...)` and the reasoning-content sub-query both
+      // used `chunk` as their `from({...})` alias. The collision broke
+      // the items text-content join silently — `content` came back as
+      // an empty string even though the deltas were in the local DB.
+      // The fix is to use distinct aliases (`textChunk` vs `chunk`).
+      const { collections, sync } = createTimelineCollections()
+      const liveQuery = createLiveQueryCollection({
+        query: createEntityTimelineQuery({ collections } as any),
+        startSync: true,
+      })
+      await liveQuery.preload()
+
+      sync.runs.insert({ key: `run-0`, status: `started` })
+      sync.texts.insert({
+        key: `msg-0`,
+        run_id: `run-0`,
+        status: `streaming`,
+      })
+      sync.textDeltas.insert({
+        key: `msg-0:0`,
+        text_id: `msg-0`,
+        run_id: `run-0`,
+        delta: `Hello`,
+      })
+      sync.textDeltas.insert({
+        key: `msg-0:1`,
+        text_id: `msg-0`,
+        run_id: `run-0`,
+        delta: ` world`,
+      })
+      // Insert a reasoning row alongside the text row so the items
+      // text-content sub-query and the reasoning sub-query are both
+      // active in the same live projection — that's the configuration
+      // that surfaced the collision.
+      sync.reasoning.insert({
+        key: `reasoning-0`,
+        run_id: `run-0`,
+        status: `streaming`,
+      })
+      sync.texts.update({
+        key: `msg-0`,
+        run_id: `run-0`,
+        status: `completed`,
+      })
+      sync.runs.update({
+        key: `run-0`,
+        status: `completed`,
+        finish_reason: `stop`,
+      })
+      await new Promise((r) => setTimeout(r, 50))
+
+      const rows = getRows(liveQuery)
+      const runRow = rows.find((r) => r.run?.key === `run-0`)
+      expect(runRow).toBeTruthy()
+      const items = Array.from(runRow.run.items.toArray) as Array<any>
+      expect(items).toHaveLength(1)
+      const item = items[0]
+      expect(item.text?.key).toBe(`msg-0`)
+      expect(item.text?.content).toBe(`Hello world`)
     })
   })
 })

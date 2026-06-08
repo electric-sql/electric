@@ -271,21 +271,21 @@ function withProviderPayloadDefaults(
   }
 
   if (choice.provider === `anthropic`) {
-    // Anthropic extended thinking is opt-in per request — only enable
-    // when the user explicitly picks an effort level. `auto` leaves
-    // the standard (no-thinking) code path untouched so default
-    // sessions don't silently incur the extra reasoning tokens.
-    if (reasoningEffort === null) return config
-    const budgetTokens = ANTHROPIC_THINKING_BUDGET_BY_EFFORT[reasoningEffort]
+    // `auto` maps to the minimal budget so extended thinking is always
+    // on for reasoning-capable Anthropic models, matching the OpenAI
+    // branch above (where `auto` falls through to a `minimal` default).
+    const effectiveEffort = reasoningEffort ?? `minimal`
+    const budgetTokens = ANTHROPIC_THINKING_BUDGET_BY_EFFORT[effectiveEffort]
 
     return {
       ...config,
       onPayload: (payload) => {
         if (typeof payload !== `object` || payload === null) return undefined
         const body = payload as Record<string, unknown>
-        // Pass through any existing `thinking` so a caller-supplied
-        // payload (test fixtures, future overrides) can still set
-        // `type: "disabled"` explicitly without us clobbering it.
+        // pi-ai writes `thinking: { type: "disabled" }` into the payload
+        // by default. Merge our enabled-thinking values last so they win
+        // — otherwise the API rejects `budget_tokens` for a disabled
+        // `thinking` block.
         const existingThinking =
           typeof body.thinking === `object` && body.thinking !== null
             ? (body.thinking as Record<string, unknown>)
@@ -293,9 +293,9 @@ function withProviderPayloadDefaults(
         return {
           ...body,
           thinking: {
+            ...existingThinking,
             type: `enabled`,
             budget_tokens: budgetTokens,
-            ...existingThinking,
           },
         }
       },
