@@ -89,6 +89,7 @@ function buildHarness(opts?: { existingRunKeys?: Array<string> }): {
     },
     doObserve: vi.fn(),
     doSpawn: vi.fn(),
+    doFork: vi.fn(),
     doMkdb: vi.fn(),
     executeSend: vi.fn(),
     tags: {},

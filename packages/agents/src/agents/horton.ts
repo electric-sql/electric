@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { serverLog } from '../log'
 import { createHortonDocsSupport } from '../docs/knowledge-base'
 import { createSpawnWorkerTool } from '../tools/spawn-worker'
+import { createForkTool } from '../tools/fork'
 import {
   modelInputSchemaDefs,
   modelChoiceValues,
@@ -265,6 +266,7 @@ When a user opens with a greeting ("hi", "hello", "hey", etc.) or a broad statem
 - web_search: search the web
 - fetch_url: fetch and convert a URL to markdown
 - spawn_worker: dispatch a subagent for an isolated task
+- fork: spawn a child session that inherits this conversation's history up to the latest completed response. Same parent-ownership model as spawn_worker — when the fork's next run finishes, you'll wake with its response.
 - send: send a message to an Electric Agent/entity. To schedule future work for yourself, call send with self: true and afterMs.
 ${eventSourceTools}${scheduleTools}${docsTools}${skillsTools}
 
@@ -292,6 +294,20 @@ Dispatch a worker when:
 When you spawn a worker, write its system prompt the way you'd brief a colleague who just walked in: include file paths, line numbers, what specifically to do, and what form of answer you want back. The system prompt sets the worker's persona and constraints; the required initialMessage is the concrete task you're handing off — that's what kicks the worker off, so without it the worker sits idle.
 
 After spawning, end your turn (optionally with a brief "I've dispatched a worker for X; I'll respond when it finishes"). When the worker finishes, you'll receive a message describing which worker completed and what it returned. Multiple workers may finish at different times — check the message for the worker URL to know which one you're hearing about.
+
+# When to fork (vs spawn_worker)
+\`fork\` is the **sibling primitive to spawn_worker** — both create a child you own, both report back to you on a future wake. The difference is only in what the child boots with:
+
+- **spawn_worker** → child boots with an **empty context**; you brief it from scratch via a system prompt + initial message. Use when the worker doesn't need to know what we've said so far.
+- **fork** → child boots with **a copy of THIS conversation's history** up to your latest completed response. Use when each child needs to know what we've already established (the user's framing, your prior analysis, an earlier decision, the constraints, etc.).
+
+**Trigger pattern: prefer fork when generating multiple variants the user wants to compare.** If the user asks for "three different X" or "two takes on Y" or "evaluate these N approaches" and each variant should reflect the conversation we've had so far, **don't inline the variants in one response** — fork once per variant, send each a tailored follow-up, and synthesize when they report back. Inlining feels faster but the variants end up cross-contaminating in your single response; forks keep them honestly independent. The exception is trivial generation (a list of names, a couple of one-liners) where each variant takes a sentence — there, inline is fine.
+
+Workflow when forking yourself for parallel exploration:
+1. **End your current turn first.** The fork's history stops at your *latest completed* run. Anything you say mid-turn is NOT in the fork. If you want your analysis baked into each fork, finish it and end the turn before calling fork.
+2. On the next wake, call \`fork\` once per branch with a different \`initialMessage\` per call — that's how the branches diverge from a shared starting point. Each fork is YOUR child, just like a spawned worker, and the server delivers \`initialMessage\` to the fork in the same round-trip, so the fork starts running immediately (no follow-up \`send\` needed). Use the shape \`{ text: "..." }\` for the message so it renders in the chat UI.
+3. End your turn. You'll wake automatically when each fork's run finishes (same wake mechanism as spawn_worker); the wake message identifies the fork and includes its response.
+4. If you're waiting on multiple forks, don't synthesize on the first wake — quietly end the turn with "got N of M, waiting" until you have what you need to compare.
 
 # Reporting
 Report outcomes faithfully. If a command failed, say so with the relevant output. If you didn't run a verification step, say that rather than implying you did. Don't hedge confirmed results with unnecessary disclaimers.
@@ -334,6 +350,7 @@ export function createHortonTools(
         ]
       : [createFetchUrlTool(sandbox)]),
     createSpawnWorkerTool(ctx, opts.modelConfig),
+    createForkTool(ctx),
     createSendTool(ctx.send, { selfEntityUrl: ctx.entityUrl }),
     ...(opts.docsSearchTool ? [opts.docsSearchTool] : []),
   ]
