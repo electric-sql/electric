@@ -33,7 +33,9 @@ const ENTITY_STATUSES: [EntityStatus, ...Array<EntityStatus>] = [
 
 // Mirrors `dispatchPolicySchema` in agents-server-ui's
 // `ElectricAgentsProvider.tsx` — permissive so unknown target shapes
-// still sync; only the `runner` target's id is read (for display).
+// still sync. We read the `runner` target's id ("which runner runs this
+// session") for display and to derive per-runner recents; other target
+// kinds (e.g. webhook) carry no runner.
 const dispatchPolicySchema = z.object({
   targets: z
     .array(
@@ -78,7 +80,7 @@ export const entityTypeSchema = z.object({
   updated_at: z.string(),
 })
 
-const sandboxProfileAdvertisementSchema = z.object({
+export const sandboxProfileSchema = z.object({
   name: z.string(),
   label: z.string(),
   description: z.string().optional(),
@@ -89,8 +91,9 @@ const sandboxProfileAdvertisementSchema = z.object({
 
 // Minimal subset of the runners shape — the columns the mobile picker
 // needs to identify a runner and pass it as the dispatch target on
-// spawn, plus `sandbox_profiles` so the session-row info sheet can
-// resolve sandbox labels like the desktop hover card does.
+// spawn, plus `sandbox_profiles` to offer its advertised profiles and
+// let the session-row info sheet resolve sandbox labels like the desktop
+// hover card does.
 export const runnerSchema = z.object({
   id: z.string(),
   owner_principal: z.string(),
@@ -102,7 +105,7 @@ export const runnerSchema = z.object({
   // covers `undefined` but not a Postgres NULL.
   sandbox_profiles: z.preprocess(
     (v) => (Array.isArray(v) ? v : []),
-    z.array(sandboxProfileAdvertisementSchema)
+    z.array(sandboxProfileSchema)
   ),
 })
 
@@ -130,6 +133,7 @@ export const entityEffectivePermissionSchema = z.object({
 export type ElectricEntity = z.infer<typeof entitySchema>
 export type ElectricEntityType = z.infer<typeof entityTypeSchema>
 export type ElectricRunner = z.infer<typeof runnerSchema>
+export type ElectricSandboxProfile = z.infer<typeof sandboxProfileSchema>
 export type ElectricUser = z.infer<typeof userSchema>
 export type ElectricEntityEffectivePermission = z.infer<
   typeof entityEffectivePermissionSchema
@@ -288,6 +292,8 @@ export async function spawnEntity({
   type,
   initialMessage,
   runnerId,
+  sandboxProfile,
+  workingDirectory,
 }: {
   baseUrl: string
   type: string
@@ -298,6 +304,12 @@ export async function spawnEntity({
   // webhook to a local serveEndpoint, which the cloud server can't
   // reach.
   runnerId?: string
+  // Sandbox profile advertised by the target runner. Required for
+  // `workingDirectory` to take effect — the runtime only resolves the
+  // working-directory arg through a profile's sandbox factory; with no
+  // profile it falls back to its own process cwd.
+  sandboxProfile?: string
+  workingDirectory?: string
 }): Promise<string> {
   const name = makeEntityName()
   const entityUrl = `/${type}/${name}`
@@ -314,6 +326,14 @@ export async function spawnEntity({
     body.dispatch_policy = {
       targets: [{ type: `runner`, runnerId }],
     }
+  }
+  if (sandboxProfile) {
+    // Key by the session URL for a persistent, shared workspace: files
+    // survive across wakes and spawned subagents share the container.
+    body.sandbox = { profile: sandboxProfile, key: entityUrl }
+  }
+  if (workingDirectory) {
+    body.args = { workingDirectory }
   }
   const spawnRes = await serverFetch(
     appendPathToUrl(

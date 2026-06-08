@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import {
   KeyboardAvoidingView,
   Platform,
@@ -11,6 +11,15 @@ import {
 } from 'react-native'
 import { useLiveQuery } from '@tanstack/react-db'
 import { eq } from '@tanstack/db'
+import {
+  detectHomeDir,
+  tildifyPath,
+} from '@electric-ax/agents-server-ui/src/lib/pathDisplay'
+import { recentWorkingDirsForRunner } from '@electric-ax/agents-server-ui/src/lib/recentWorkingDirectories'
+import {
+  isSandboxProfileRemote,
+  useSandboxProfileSelection,
+} from '@electric-ax/agents-server-ui/src/lib/sandboxProfiles'
 import { Header, HeaderBackButton } from '../components/Header'
 import { PrimaryButton } from '../components/PrimaryButton'
 import { Screen } from '../components/Screen'
@@ -19,6 +28,7 @@ import {
   spawnEntity,
   type ElectricEntityType,
   type ElectricRunner,
+  type ElectricSandboxProfile,
 } from '../lib/agentsClient'
 import { useTokens } from '../lib/ThemeProvider'
 import { fontSize, lineHeight, radii, spacing } from '../lib/theme'
@@ -33,12 +43,20 @@ export function NewSessionScreen({
   onBack: () => void
   onOpenSession: (entityUrl: string) => void
 }): React.ReactElement {
-  const { entityTypesCollection, runnersCollection, serverUrl } = useAgents()
+  const {
+    entitiesCollection,
+    entityTypesCollection,
+    runnersCollection,
+    serverUrl,
+  } = useAgents()
   const tokens = useTokens()
   const styles = useMemo(() => createStyles(tokens), [tokens])
   const [message, setMessage] = useState(``)
   const [selectedType, setSelectedType] = useState<string | null>(null)
   const [selectedRunner, setSelectedRunner] = useState<string | null>(null)
+  // Working-directory choice as free text; tapping a recent card fills it,
+  // empty means the runner's default.
+  const [dirInput, setDirInput] = useState(``)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -77,6 +95,51 @@ export function NewSessionScreen({
     selectedRunner ??
     (enabledRunners.length === 1 ? enabledRunners[0]!.id : null)
 
+  // Sandbox profiles ride alongside the runner row. Preserve the runtime's
+  // advertised order — the first profile is the default (see the matching
+  // comment in agents-server-ui's NewSessionView).
+  const sandboxProfiles = useMemo<Array<ElectricSandboxProfile>>(() => {
+    if (!activeRunnerId) return []
+    const runner = enabledRunners.find((r) => r.id === activeRunnerId)
+    return [...(runner?.sandbox_profiles ?? [])]
+  }, [activeRunnerId, enabledRunners])
+  const [sandboxProfile, setSandboxProfile] =
+    useSandboxProfileSelection(sandboxProfiles)
+  // A remote sandbox runs in the provider VM, so a host working directory
+  // doesn't apply — hide the section and skip the spawn arg.
+  const profileIsRemote = isSandboxProfileRemote(
+    sandboxProfiles,
+    sandboxProfile
+  )
+
+  // Recent working directories are derived from the synced sessions
+  // dispatched to the selected runner — the same per-runner list the
+  // desktop picker shows, with no local storage.
+  const { data: allEntities = [] } = useLiveQuery(
+    (query) => query.from({ entity: entitiesCollection }),
+    [entitiesCollection]
+  )
+  const recentDirs = useMemo(
+    () =>
+      activeRunnerId
+        ? recentWorkingDirsForRunner(allEntities, activeRunnerId)
+        : [],
+    [allEntities, activeRunnerId]
+  )
+  const homeDir = useMemo(() => detectHomeDir(recentDirs), [recentDirs])
+
+  const handleSelectRunner = useCallback((id: string) => {
+    setSelectedRunner(id)
+    // Paths from one machine may not exist on another.
+    setDirInput(``)
+  }, [])
+
+  const workingDirectory = dirInput.trim() || null
+  // Only the default agent's schema is known to accept `workingDirectory` —
+  // other agent types have their own creation schemas and may reject unknown
+  // args (mirrors the desktop composer, which injects it for horton only).
+  const workingDirSupported = activeTypeName === DEFAULT_AGENT_NAME
+
   const start = async () => {
     if (!activeTypeName || loading) return
     if (!activeRunnerId) {
@@ -95,6 +158,13 @@ export function NewSessionScreen({
         type: activeTypeName,
         initialMessage: message,
         runnerId: activeRunnerId,
+        ...(sandboxProfile ? { sandboxProfile } : {}),
+        ...(workingDirectory &&
+        workingDirSupported &&
+        sandboxProfile &&
+        !profileIsRemote
+          ? { workingDirectory }
+          : {}),
       })
       onOpenSession(entityUrl)
     } catch (err) {
@@ -122,9 +192,6 @@ export function NewSessionScreen({
         >
           <View style={styles.intro}>
             <Text style={styles.title}>What should we work on?</Text>
-            <Text style={styles.copy}>
-              Mobile uses the server default working directory for now.
-            </Text>
           </View>
 
           <View style={styles.composerWrap}>
@@ -175,11 +242,73 @@ export function NewSessionScreen({
                   runner={runner}
                   tokens={tokens}
                   selected={runner.id === activeRunnerId}
-                  onPress={() => setSelectedRunner(runner.id)}
+                  onPress={() => handleSelectRunner(runner.id)}
                 />
               ))}
             </View>
           )}
+
+          {sandboxProfiles.length > 0 && (
+            <>
+              <Text style={styles.sectionLabel}>Sandbox</Text>
+              <View style={styles.typeList}>
+                {sandboxProfiles.map((profile) => (
+                  <OptionCard
+                    key={profile.name}
+                    label={profile.label || profile.name}
+                    description={profile.description}
+                    tokens={tokens}
+                    selected={profile.name === sandboxProfile}
+                    onPress={() => setSandboxProfile(profile.name)}
+                  />
+                ))}
+              </View>
+            </>
+          )}
+
+          {/* A working directory only takes effect through a sandbox-profile
+              factory, so hide the section when the runner advertises no
+              profiles (or a remote one, where a host path doesn't apply). */}
+          {workingDirSupported &&
+            sandboxProfile !== null &&
+            !profileIsRemote && (
+              <>
+                <Text style={styles.sectionLabel}>Working directory</Text>
+                <View style={styles.typeList}>
+                  <OptionCard
+                    label="Runner default"
+                    description="Run in the runner's configured directory."
+                    tokens={tokens}
+                    selected={workingDirectory === null}
+                    onPress={() => setDirInput(``)}
+                  />
+                  {recentDirs.map((dir) => (
+                    <OptionCard
+                      key={dir}
+                      // Tildify only — head ellipsizing clips at the rendered
+                      // width (adapting to device and font scale), keeping the
+                      // tail where paths differ. The full label is also what
+                      // screen readers announce; visual clipping is render-only.
+                      label={tildifyPath(dir, homeDir)}
+                      ellipsizeMode="head"
+                      tokens={tokens}
+                      selected={workingDirectory === dir}
+                      onPress={() => setDirInput(dir)}
+                    />
+                  ))}
+                </View>
+                <TextInput
+                  value={dirInput}
+                  onChangeText={setDirInput}
+                  accessibilityLabel="Working directory path"
+                  placeholder="Or type an absolute path on the runner…"
+                  placeholderTextColor={tokens.text3}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  style={styles.pathInput}
+                />
+              </>
+            )}
 
           {error && (
             <View style={styles.errorRow}>
@@ -253,6 +382,47 @@ function RunnerCard({
   )
 }
 
+/** Generic selectable card for the sandbox and working-directory sections. */
+function OptionCard({
+  label,
+  description,
+  ellipsizeMode,
+  tokens,
+  selected,
+  onPress,
+}: {
+  label: string
+  description?: string
+  ellipsizeMode?: `head` | `tail`
+  tokens: Tokens
+  selected: boolean
+  onPress: () => void
+}): React.ReactElement {
+  const styles = useMemo(() => createStyles(tokens), [tokens])
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      accessibilityLabel={label}
+      style={[styles.typeCard, selected ? styles.typeCardSelected : null]}
+    >
+      <Text
+        numberOfLines={1}
+        ellipsizeMode={ellipsizeMode}
+        style={styles.typeName}
+      >
+        {label}
+      </Text>
+      {description ? (
+        <Text numberOfLines={2} style={styles.typeDescription}>
+          {description}
+        </Text>
+      ) : null}
+    </TouchableOpacity>
+  )
+}
+
 function createStyles(tokens: Tokens) {
   return StyleSheet.create({
     keyboard: {
@@ -271,11 +441,6 @@ function createStyles(tokens: Tokens) {
       fontSize: fontSize.xxxl,
       fontWeight: `400`,
       lineHeight: lineHeight.xxxl,
-    },
-    copy: {
-      color: tokens.text2,
-      fontSize: fontSize.base,
-      lineHeight: lineHeight.base,
     },
     composerWrap: {
       borderWidth: 1,
@@ -327,6 +492,16 @@ function createStyles(tokens: Tokens) {
     empty: {
       color: tokens.text3,
       fontSize: fontSize.sm,
+    },
+    pathInput: {
+      borderWidth: 1,
+      borderColor: tokens.border1,
+      borderRadius: radii.md,
+      backgroundColor: tokens.surface,
+      color: tokens.text1,
+      fontSize: fontSize.sm,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
     },
     errorRow: {
       borderRadius: radii.sm,

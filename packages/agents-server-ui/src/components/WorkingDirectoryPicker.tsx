@@ -1,13 +1,14 @@
 import { useCallback, useMemo, useState } from 'react'
-import { Check, Folder, FolderOpen, Home, X } from 'lucide-react'
-import { Combobox, Icon, IconButton, Tooltip } from '../ui'
-import { useRecentWorkingDirectories } from '../hooks/useRecentWorkingDirectories'
+import { Check, Folder, FolderOpen, Home } from 'lucide-react'
+import { Combobox, Icon, Tooltip } from '../ui'
 import { detectHomeDir, tildifyPath } from '../lib/pathDisplay'
 import styles from './WorkingDirectoryPicker.module.css'
 
 type WorkingDirectoryPickerProps = {
   value: string | null
   onChange: (path: string | null) => void
+  /** Per-runner recents derived from synced sessions — see `recentWorkingDirsForRunner`. */
+  recents: ReadonlyArray<string>
   /** Optional default path the native picker should start in. */
   defaultPath?: string | null
   disabled?: boolean
@@ -33,21 +34,15 @@ const BROWSE_VALUE = `__browse__`
  * the app. Selecting "None" clears the spawn arg (the agent runs in
  * the server's configured cwd); selecting "Open folder…" shells out
  * to the native folder picker (Electron only).
- *
- * Per-row trailing affordance:
- *   - Resting + selected            → ✓ check
- *   - Hovered / kbd-highlighted     → ✕ remove (recents only)
- * Both icons share the same trailing slot so swapping them never
- * shifts the row's layout.
  */
 export function WorkingDirectoryPicker({
   value,
   onChange,
+  recents,
   defaultPath,
   disabled,
 }: WorkingDirectoryPickerProps): React.ReactElement {
   const [inputValue, setInputValue] = useState(``)
-  const { recents, addRecent, removeRecent } = useRecentWorkingDirectories()
 
   const isDesktop =
     typeof window !== `undefined` && Boolean(window.electronAPI?.pickDirectory)
@@ -75,11 +70,9 @@ export function WorkingDirectoryPicker({
 
   const commit = useCallback(
     (path: string | null) => {
-      const trimmed = path?.trim() || null
-      onChange(trimmed)
-      if (trimmed) addRecent(trimmed)
+      onChange(path?.trim() || null)
     },
-    [onChange, addRecent]
+    [onChange]
   )
 
   const handleBrowse = useCallback(async () => {
@@ -147,14 +140,8 @@ export function WorkingDirectoryPicker({
         />
         <Combobox.List>
           {/* Every row uses the same `.menuRow` inner wrapper as
-              ServerPicker's saved-server rows. The wrapper is what
-              carries `min-height: 24px` (sized to match an inline
-              `IconButton size={1}`). The item class trims vertical
-              padding to 2px so rows with a trailing control and rows
-              without one stay on the shared 28px dropdown row pitch.
-              Mirrors the trick
-              `ServerPicker.module.css → .menuRow` uses to stop the
-              menu jumping between saved and discovered groups. */}
+              ServerPicker's saved-server rows so all rows share the
+              28px dropdown row pitch. */}
           <Combobox.Item value={NONE_VALUE} className={styles.pathItem}>
             <span className={styles.menuRow}>
               <Icon icon={Home} size={2} className={styles.menuRowIcon} />
@@ -178,45 +165,19 @@ export function WorkingDirectoryPicker({
                 key={path}
                 value={path}
                 title={path}
-                className={[styles.pathItem, styles.recentItem].join(` `)}
+                className={styles.pathItem}
               >
                 <span className={styles.menuRow}>
                   <Icon icon={Folder} size={2} className={styles.menuRowIcon} />
                   <span className={styles.menuRowLabel}>
                     {tildifyPath(path, homeDir)}
                   </span>
-                  {/* Trailing slot is a 24×24 box (matching
-                      IconButton size={1}) with the check and the
-                      remove IconButton stacked via absolute
-                      positioning. Opacity-only swap on row hover /
-                      kbd-highlight keeps the row pitch identical to
-                      every other row in the popup. */}
                   <span className={styles.trailing}>
                     {isSelected && (
                       <span className={styles.trailingCheck}>
                         <Icon icon={Check} size={2} />
                       </span>
                     )}
-                    <IconButton
-                      size={1}
-                      variant="ghost"
-                      tone="neutral"
-                      className={styles.trailingRemove}
-                      onClick={(e) => {
-                        // Stop the click from bubbling up to the
-                        // Combobox.Item's selection handler —
-                        // without this, removing a recent would
-                        // also commit it.
-                        e.stopPropagation()
-                        e.preventDefault()
-                        removeRecent(path)
-                      }}
-                      onPointerDown={(e) => e.stopPropagation()}
-                      aria-label={`Remove ${path} from recents`}
-                      title="Remove from recents"
-                    >
-                      <Icon icon={X} size={2} />
-                    </IconButton>
                   </span>
                 </span>
               </Combobox.Item>
