@@ -65,7 +65,6 @@ export type {
   EntityTimelineRunItem,
   EntityTimelineSection,
   EntityTimelineState,
-  EntityTimelineReasoningDeltaItem,
   EntityTimelineTextChunk,
   EntityTimelineTextItem,
   EntityTimelineToolCallItem,

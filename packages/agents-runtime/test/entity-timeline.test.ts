@@ -2393,26 +2393,6 @@ describe(`entity includes query`, () => {
       expect(item.text?.content).toBe(`Hello world`)
     })
 
-    it(`legacy reasoning sub-query: returns content even after status flip + post-status updates (currently skipped — sub-query goes stale; see #TODO)`, async () => {
-      // This test reproduces a staleness symptom we saw in the running
-      // app where the reasoning sub-collection's `content` field
-      // (built via `concat(toArray(<correlated delta-join>))`) returned
-      // `null` after the row's status flipped to `completed`. The
-      // current production code doesn't read that field anymore — the
-      // UI assembles content from `run.reasoningDeltas` instead — but
-      // this test is left in place as a placeholder for when we
-      // investigate / fix the underlying TanStack DB correlated
-      // sub-query behavior.
-      //
-      // Skipped by default until the projection is restored.
-      //
-      // To debug: remove the `.skip` and add a `content` field back to
-      // the reasoning sub-collection select in
-      // `entity-timeline.ts:buildEntityTimelineQuery`, then iterate
-      // with very small change-sets between assertions until you find
-      // the trigger.
-    })
-
     it(`reasoning content survives multiple run-row updates in sequence`, async () => {
       // Even closer to production: the run row gets updated MULTIPLE
       // times (each delta + status flip), which may invalidate the
@@ -2480,15 +2460,7 @@ describe(`entity includes query`, () => {
       expect(runRow).toBeTruthy()
       const reasoning = Array.from(runRow.run.reasoning.toArray) as Array<any>
       expect(reasoning).toHaveLength(1)
-      const deltas = Array.from(runRow.run.reasoningDeltas.toArray) as Array<{
-        reasoning_id: string
-        delta: string
-      }>
-      const content = deltas
-        .filter((d) => d.reasoning_id === `reasoning-0`)
-        .map((d) => d.delta)
-        .join(``)
-      expect(content).toBe(`AB`)
+      expect(reasoning[0].content).toBe(`AB`)
     })
 
     it(`reasoning content populates even when text deltas are also present`, async () => {
@@ -2559,14 +2531,7 @@ describe(`entity includes query`, () => {
       expect(runRow).toBeTruthy()
       const reasoning = Array.from(runRow.run.reasoning.toArray) as Array<any>
       expect(reasoning).toHaveLength(1)
-      const reasoningDeltas = Array.from(
-        runRow.run.reasoningDeltas.toArray
-      ) as Array<{ reasoning_id: string; delta: string }>
-      const reasoningContent = reasoningDeltas
-        .filter((d) => d.reasoning_id === `reasoning-0`)
-        .map((d) => d.delta)
-        .join(``)
-      expect(reasoningContent).toBe(`Thinking part 1. Thinking part 2.`)
+      expect(reasoning[0].content).toBe(`Thinking part 1. Thinking part 2.`)
       const items = Array.from(runRow.run.items.toArray) as Array<any>
       expect(items).toHaveLength(1)
       expect(items[0].text?.content).toBe(`Answer part 1. Answer part 2.`)
@@ -2624,14 +2589,9 @@ describe(`entity includes query`, () => {
       expect(reasoning).toHaveLength(1)
       expect(reasoning[0].key).toBe(`reasoning-0`)
       expect(reasoning[0].status).toBe(`completed`)
-      const reasoningDeltas = Array.from(
-        runRow.run.reasoningDeltas.toArray
-      ) as Array<{ reasoning_id: string; delta: string }>
-      const content = reasoningDeltas
-        .filter((d) => d.reasoning_id === `reasoning-0`)
-        .map((d) => d.delta)
-        .join(``)
-      expect(content).toBe(`First thinking step. Second thinking step.`)
+      expect(reasoning[0].content).toBe(
+        `First thinking step. Second thinking step.`
+      )
     })
   })
 })

@@ -401,54 +401,25 @@ export const AgentResponseLive = memo(function AgentResponseLive({
     (q) => (run.errors ? q.from({ error: run.errors }) : undefined),
     [run.errors]
   )
-  // Subscribe to the run's reasoning rows + deltas. We assemble
-  // `content` client-side from the deltas rather than reading it
-  // off the projected `reasoning.content`, because the correlated
-  // sub-query that produced that field went stale (returning `null`)
-  // after the row's status flipped to `completed`. Client-side
-  // concat is reliable and effectively free at this scale.
+  // Subscribe to the run's reasoning rows so the section ticks as
+  // each `reasoning_delta` arrives. Empty array for runs without
+  // any reasoning content (most non-extended-thinking models).
   const { data: reasoningRows = [] } = useLiveQuery(
     (q) => (run.reasoning ? q.from({ reasoning: run.reasoning }) : undefined),
     [run.reasoning]
   )
-  const { data: reasoningDeltaRows = [] } = useLiveQuery(
-    (q) =>
-      run.reasoningDeltas ? q.from({ delta: run.reasoningDeltas }) : undefined,
-    [run.reasoningDeltas]
-  )
-  const reasoningEntries = useMemo<Array<ReasoningEntry>>(() => {
-    const contentByReasoningId = new Map<string, string>()
-    for (const delta of reasoningDeltaRows as Array<{
-      reasoning_id: string
-      delta: string
-    }>) {
-      contentByReasoningId.set(
-        delta.reasoning_id,
-        (contentByReasoningId.get(delta.reasoning_id) ?? ``) + delta.delta
-      )
-    }
-    return (
-      (
-        reasoningRows as Array<
-          Omit<ReasoningEntry, `content`> & { order?: unknown }
-        >
-      )
+  const reasoningEntries = useMemo<Array<ReasoningEntry>>(
+    () =>
+      (reasoningRows as Array<ReasoningEntry & { order?: unknown }>)
         .slice()
         // The live query already orders by `_timeline_order` then key,
         // but TanStack's projection isn't guaranteed stable across
         // re-mounts — sort by `key` here as a cheap deterministic
         // tiebreaker so the section doesn't visibly reflow between
         // renders if two rows share an order.
-        .sort((a, b) => a.key.localeCompare(b.key))
-        .map<ReasoningEntry>((row) => ({
-          key: row.key,
-          status: row.status,
-          summary_title: row.summary_title,
-          encrypted: row.encrypted,
-          content: contentByReasoningId.get(row.key) ?? ``,
-        }))
-    )
-  }, [reasoningRows, reasoningDeltaRows])
+        .sort((a, b) => a.key.localeCompare(b.key)),
+    [reasoningRows]
+  )
   const sortedItems = useMemo(
     () => [...items].sort(compareLiveRunItems),
     [items]
