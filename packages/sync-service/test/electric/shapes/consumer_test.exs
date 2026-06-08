@@ -1498,7 +1498,7 @@ defmodule Electric.Shapes.ConsumerTest do
       # pending the consumer must hibernate rather than suspend, so it survives to
       # receive the rest of the transaction. Suspending here would drop pending_txn
       # and crash on the next fragment (issue #4501).
-      refute_receive {:DOWN, ^ref, :process, ^consumer_pid, {:shutdown, :suspend}}, 100
+      refute_receive {:DOWN, ^ref, :process, ^consumer_pid, {:shutdown, :suspend}}, 400
 
       assert {:current_function, {:gen_server, :loop_hibernate, 4}} =
                Process.info(consumer_pid, :current_function)
@@ -1526,7 +1526,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       assert_receive {:flush_boundary_updated, 300}, 1_000
 
-      assert_receive {:DOWN, ^ref, :process, ^consumer_pid, {:shutdown, :suspend}}, 1_000
+      assert_receive {:DOWN, ^ref, :process, ^consumer_pid, {:shutdown, :suspend}}
 
       refute Consumer.whereis(ctx.stack_id, shape_handle)
     end
