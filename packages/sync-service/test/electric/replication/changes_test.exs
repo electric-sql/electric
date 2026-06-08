@@ -48,10 +48,10 @@ defmodule Electric.Replication.ChangesTest do
         initial_receive_lag: initial_lag
       }
 
-      current_mono =
+      timestamp =
         received_at + System.convert_time_unit(elapsed_ms, :millisecond, :native)
 
-      lag = Commit.calculate_final_receive_lag(commit, current_mono)
+      lag = Commit.calculate_final_receive_lag(commit, timestamp)
 
       assert lag == initial_lag + elapsed_ms
     end

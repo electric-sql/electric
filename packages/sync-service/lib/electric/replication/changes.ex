@@ -84,10 +84,10 @@ defmodule Electric.Replication.Changes do
     end-to-end lag from Postgres commit to acknowledgement.
     """
     @spec calculate_final_receive_lag(t(), integer()) :: non_neg_integer()
-    def calculate_final_receive_lag(%__MODULE__{} = commit, current_mono) do
+    def calculate_final_receive_lag(%__MODULE__{} = commit, timestamp) do
       elapsed_in_electric =
         System.convert_time_unit(
-          current_mono - commit.received_at,
+          timestamp - commit.received_at,
           :native,
           :millisecond
         )
