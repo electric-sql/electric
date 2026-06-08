@@ -1,7 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
 import fastq from 'fastq'
-import { Awareness, encodeAwarenessUpdate } from 'y-protocols/awareness'
-import * as Y from 'yjs'
 import {
   COMPOSER_INPUT_MESSAGE_TYPE,
   assertTags,
@@ -62,13 +60,8 @@ import {
   MARKDOWN_DOCUMENT_TEXT_NAME,
   MARKDOWN_DOCUMENT_TRANSPORT_MIME,
   assertMarkdownDocumentMatchesEntity,
-  frameYjsUpdate,
-  getMarkdownDocumentAwarenessStreamPath,
   getMarkdownDocumentDocPath,
   getMarkdownDocumentUpdateStreamPath,
-  markdownText,
-  readMarkdownYDoc,
-  replaceMarkdownText,
 } from './markdown-documents.js'
 import type { queueAsPromised } from 'fastq'
 import type { SchedulerClient } from './scheduler.js'
@@ -178,23 +171,8 @@ type ManifestAttachmentEntry = {
 export interface CreateMarkdownDocumentRequest {
   id?: string
   title: string
-  content?: string
   createdBy?: string
   meta?: Record<string, unknown>
-}
-
-export interface UpdateMarkdownDocumentRequest {
-  content: string
-  updatedBy?: string
-  presenceBefore?: { anchor: number; head: number }
-  presenceAfter?: { anchor: number; head: number }
-}
-
-export interface EditMarkdownDocumentRequest {
-  oldString: string
-  newString: string
-  replaceAll?: boolean
-  updatedBy?: string
 }
 
 export type ManifestMarkdownDocumentEntry = {
@@ -282,74 +260,6 @@ function validateMarkdownDocumentId(id: string): void {
       400
     )
   }
-}
-
-function principalDisplayName(principalUrl: string): string {
-  const raw = principalUrl.split(`/principal/`).at(-1) ?? principalUrl
-  let decoded = raw
-  try {
-    decoded = decodeURIComponent(raw)
-  } catch {
-    // Fall back to the raw key when the principal URL is not URI encoded.
-  }
-  const withoutPrefix = decoded.replace(/^(user|agent|entity|system):/, ``)
-  return withoutPrefix || decoded || principalUrl
-}
-
-function principalRole(principalUrl: string): `agent` | `user` | `system` {
-  const raw = principalUrl.split(`/principal/`).at(-1) ?? principalUrl
-  let decoded = raw
-  try {
-    decoded = decodeURIComponent(raw)
-  } catch {
-    // Fall back to the raw key when the principal URL is not URI encoded.
-  }
-  if (decoded.startsWith(`user:`)) return `user`
-  if (decoded.startsWith(`system:`)) return `system`
-  return `agent`
-}
-
-function principalColor(principalUrl: string): {
-  color: string
-  colorLight: string
-} {
-  const colors = [
-    [`#2563eb`, `#2563eb33`],
-    [`#059669`, `#05966933`],
-    [`#dc2626`, `#dc262633`],
-    [`#7c3aed`, `#7c3aed33`],
-    [`#c2410c`, `#c2410c33`],
-    [`#0f766e`, `#0f766e33`],
-  ] as const
-  let hash = 0
-  for (let i = 0; i < principalUrl.length; i += 1) {
-    hash = (hash * 31 + principalUrl.charCodeAt(i)) >>> 0
-  }
-  const [color, colorLight] = colors[hash % colors.length]!
-  return { color, colorLight }
-}
-
-function markdownDocumentPresenceClientId(
-  docPath: string,
-  principalUrl: string
-): number {
-  const digest = createHash(`sha256`)
-    .update(`${docPath}\0${principalUrl}`)
-    .digest()
-  const id = digest.readUInt32BE(0)
-  return id === 0 ? 1 : id
-}
-
-function createMarkdownDocumentAwareness(
-  docPath: string,
-  principalUrl: string | undefined
-): Awareness {
-  const awarenessDoc = new Y.Doc()
-  if (principalUrl) {
-    ;(awarenessDoc as { clientID: number }).clientID =
-      markdownDocumentPresenceClientId(docPath, principalUrl)
-  }
-  return new Awareness(awarenessDoc)
 }
 
 function getEntityAttachmentStreamPath(
@@ -2755,93 +2665,6 @@ export class EntityManager {
     )
   }
 
-  private async publishMarkdownDocumentPresence(
-    docPath: string,
-    doc: Y.Doc,
-    awareness: Awareness,
-    principalUrl: string | undefined,
-    status: `editing`,
-    anchor: number,
-    head: number,
-    seq: number
-  ): Promise<void> {
-    if (!principalUrl) return
-    const awarenessPath = getMarkdownDocumentAwarenessStreamPath(
-      this.tenantId,
-      docPath,
-      `default`
-    )
-    const text = markdownText(doc)
-    const boundedAnchor = Math.max(0, Math.min(anchor, text.length))
-    const boundedHead = Math.max(0, Math.min(head, text.length))
-    const colors = principalColor(principalUrl)
-    const now = Date.now()
-    awareness.setLocalState({
-      user: {
-        name: principalDisplayName(principalUrl),
-        principalUrl,
-        role: principalRole(principalUrl),
-        status,
-        updatedAt: now,
-        expiresAt: now + 5_000,
-        color: colors.color,
-        colorLight: colors.colorLight,
-      },
-      cursor: {
-        anchor: Y.createRelativePositionFromTypeIndex(text, boundedAnchor),
-        head: Y.createRelativePositionFromTypeIndex(text, boundedHead),
-      },
-    })
-    await this.streamClient
-      .create(awarenessPath, { contentType: `application/octet-stream` })
-      .catch((error) => {
-        if (!isStreamCreateConflict(error)) throw error
-      })
-    await this.streamClient.appendBytes(
-      awarenessPath,
-      frameYjsUpdate(encodeAwarenessUpdate(awareness, [awareness.clientID])),
-      {
-        producerId: `agent-doc-presence-${docPath}`,
-        epoch: Date.now(),
-        seq,
-      }
-    )
-  }
-
-  private async clearMarkdownDocumentPresence(
-    docPath: string,
-    awareness: Awareness,
-    principalUrl: string | undefined,
-    seq: number
-  ): Promise<void> {
-    if (!principalUrl) return
-    const awarenessPath = getMarkdownDocumentAwarenessStreamPath(
-      this.tenantId,
-      docPath,
-      `default`
-    )
-    awareness.setLocalState(null)
-    await this.streamClient
-      .appendBytes(
-        awarenessPath,
-        frameYjsUpdate(encodeAwarenessUpdate(awareness, [awareness.clientID])),
-        {
-          producerId: `agent-doc-presence-${docPath}`,
-          epoch: Date.now(),
-          seq,
-        }
-      )
-      .catch(() => undefined)
-  }
-
-  private async bestEffortMarkdownDocumentPresence(
-    action: () => Promise<void>
-  ): Promise<void> {
-    await action().catch((error) => {
-      serverLog.warn(`[agent-server] markdown document presence failed:`, error)
-    })
-  }
-
   async createMarkdownDocument(
     entityUrl: string,
     req: CreateMarkdownDocumentRequest
@@ -2898,56 +2721,6 @@ export class EntityManager {
         contentType: `application/octet-stream`,
       })
       streamCreated = true
-      const content = req.content
-      if (content) {
-        const doc = new Y.Doc()
-        const awareness = createMarkdownDocumentAwareness(
-          docPath,
-          req.createdBy
-        )
-        await this.bestEffortMarkdownDocumentPresence(() =>
-          this.publishMarkdownDocumentPresence(
-            docPath,
-            doc,
-            awareness,
-            req.createdBy,
-            `editing`,
-            0,
-            0,
-            0
-          )
-        )
-        const update = replaceMarkdownText(doc, content)
-        await this.streamClient.appendBytes(
-          updateStreamPath,
-          frameYjsUpdate(update),
-          {
-            producerId: `agent-doc-create-${id}`,
-            epoch: 0,
-            seq: 0,
-          }
-        )
-        await this.bestEffortMarkdownDocumentPresence(() =>
-          this.publishMarkdownDocumentPresence(
-            docPath,
-            doc,
-            awareness,
-            req.createdBy,
-            `editing`,
-            content.length,
-            content.length,
-            1
-          )
-        )
-        await this.bestEffortMarkdownDocumentPresence(() =>
-          this.clearMarkdownDocumentPresence(
-            docPath,
-            awareness,
-            req.createdBy,
-            2
-          )
-        )
-      }
       await this.writeManifestEntry(
         entityUrl,
         document.key,
@@ -2990,171 +2763,6 @@ export class EntityManager {
     if (!manifest || manifest.kind !== `document`) return null
     assertMarkdownDocumentMatchesEntity(entity, manifest.docPath as string)
     return manifest as unknown as ManifestMarkdownDocumentEntry
-  }
-
-  async readMarkdownDocument(
-    entityUrl: string,
-    id: string
-  ): Promise<{
-    document: ManifestMarkdownDocumentEntry
-    content: string
-  }> {
-    const document = await this.getMarkdownDocument(entityUrl, id)
-    if (!document) {
-      throw new ElectricAgentsError(ErrCodeNotFound, `Document not found`, 404)
-    }
-    const doc = await readMarkdownYDoc(
-      this.streamClient,
-      getMarkdownDocumentUpdateStreamPath(this.tenantId, document.docPath)
-    )
-    return { document, content: markdownText(doc).toString() }
-  }
-
-  async writeMarkdownDocument(
-    entityUrl: string,
-    id: string,
-    req: UpdateMarkdownDocumentRequest
-  ): Promise<{
-    txid: string
-    document: ManifestMarkdownDocumentEntry
-    content: string
-  }> {
-    const entity = await this.registry.getEntity(entityUrl)
-    if (!entity) {
-      throw new ElectricAgentsError(ErrCodeNotFound, `Entity not found`, 404)
-    }
-    if (rejectsNormalWrites(entity.status)) {
-      throw new ElectricAgentsError(
-        ErrCodeNotRunning,
-        `Entity is not accepting writes`,
-        409
-      )
-    }
-    if (this.isForkWorkLockedEntity(entityUrl)) {
-      this.assertEntityNotForkWorkLocked(entityUrl)
-    }
-    const current = await this.readMarkdownDocument(entityUrl, id)
-    const updateStreamPath = getMarkdownDocumentUpdateStreamPath(
-      this.tenantId,
-      current.document.docPath
-    )
-    const doc = await readMarkdownYDoc(this.streamClient, updateStreamPath)
-    const awareness = createMarkdownDocumentAwareness(
-      current.document.docPath,
-      req.updatedBy
-    )
-    await this.bestEffortMarkdownDocumentPresence(() =>
-      this.publishMarkdownDocumentPresence(
-        current.document.docPath,
-        doc,
-        awareness,
-        req.updatedBy,
-        `editing`,
-        req.presenceBefore?.anchor ?? current.content.length,
-        req.presenceBefore?.head ?? current.content.length,
-        0
-      )
-    )
-    try {
-      const update = replaceMarkdownText(doc, req.content)
-      await this.streamClient.appendBytes(
-        updateStreamPath,
-        frameYjsUpdate(update),
-        {
-          producerId: `agent-doc-write-${id}`,
-          epoch: Date.now(),
-          seq: 0,
-        }
-      )
-      await this.bestEffortMarkdownDocumentPresence(() =>
-        this.publishMarkdownDocumentPresence(
-          current.document.docPath,
-          doc,
-          awareness,
-          req.updatedBy,
-          `editing`,
-          req.presenceAfter?.anchor ?? req.content.length,
-          req.presenceAfter?.head ?? req.content.length,
-          1
-        )
-      )
-    } finally {
-      await this.bestEffortMarkdownDocumentPresence(() =>
-        this.clearMarkdownDocumentPresence(
-          current.document.docPath,
-          awareness,
-          req.updatedBy,
-          2
-        )
-      )
-    }
-    const txid = randomUUID()
-    const nextDocument: ManifestMarkdownDocumentEntry = {
-      ...current.document,
-      updatedAt: new Date().toISOString(),
-    }
-    await this.writeManifestEntry(
-      entityUrl,
-      nextDocument.key,
-      `upsert`,
-      nextDocument as unknown as Record<string, unknown>,
-      { txid }
-    )
-    return { txid, document: nextDocument, content: req.content }
-  }
-
-  async editMarkdownDocument(
-    entityUrl: string,
-    id: string,
-    req: EditMarkdownDocumentRequest
-  ): Promise<{
-    txid: string
-    document: ManifestMarkdownDocumentEntry
-    content: string
-  }> {
-    if (req.oldString === ``) {
-      throw new ElectricAgentsError(
-        ErrCodeInvalidRequest,
-        `oldString must not be empty`,
-        400
-      )
-    }
-    const current = await this.readMarkdownDocument(entityUrl, id)
-    const matches = current.content.split(req.oldString).length - 1
-    if (matches === 0) {
-      throw new ElectricAgentsError(
-        ErrCodeInvalidRequest,
-        `oldString was not found in document`,
-        400
-      )
-    }
-    if (!req.replaceAll && matches > 1) {
-      throw new ElectricAgentsError(
-        ErrCodeInvalidRequest,
-        `oldString appears multiple times; set replaceAll to replace all matches`,
-        400
-      )
-    }
-    const content = req.replaceAll
-      ? current.content.split(req.oldString).join(req.newString)
-      : current.content.replace(req.oldString, req.newString)
-    const index = current.content.indexOf(req.oldString)
-    const finalIndex =
-      req.replaceAll && req.newString.length > 0
-        ? content.lastIndexOf(req.newString) + req.newString.length
-        : index + req.newString.length
-    return await this.writeMarkdownDocument(entityUrl, id, {
-      content,
-      updatedBy: req.updatedBy,
-      presenceBefore: {
-        anchor: index,
-        head: index,
-      },
-      presenceAfter: {
-        anchor: finalIndex,
-        head: finalIndex,
-      },
-    })
   }
 
   // ==========================================================================

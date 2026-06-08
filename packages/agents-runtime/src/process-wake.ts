@@ -1952,6 +1952,7 @@ export async function processWake(
         ? await config.createElectricTools({
             entityUrl,
             entityType: typeName,
+            principal: notification.principal,
             args: entityArgs,
             db,
             events: currentWakeEvents,
@@ -1986,21 +1987,12 @@ export async function processWake(
                 entityUrl,
                 ...opts,
               }),
-            readMarkdownDocument: (opts) =>
-              serverClient.readMarkdownDocument({
-                entityUrl,
-                ...opts,
-              }),
-            writeMarkdownDocument: (opts) =>
-              serverClient.writeMarkdownDocument({
-                entityUrl,
-                ...opts,
-              }),
-            editMarkdownDocument: (opts) =>
-              serverClient.editMarkdownDocument({
-                entityUrl,
-                ...opts,
-              }),
+            readMarkdownDocumentStream: (streamPath, opts) =>
+              serverClient.readMarkdownDocumentStream(streamPath, opts),
+            appendMarkdownDocumentUpdate: (streamPath, update) =>
+              serverClient.appendMarkdownDocumentUpdate(streamPath, update),
+            appendMarkdownDocumentAwareness: (streamPath, update) =>
+              serverClient.appendMarkdownDocumentAwareness(streamPath, update),
           })
         : []
 

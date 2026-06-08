@@ -121,10 +121,13 @@
     "cron-parser": "^5.5.0",
     "diff": "^9.0.0",
     "jsdom": "^28.1.0",
+    "lib0": "^0.2.99",
     "pino": "^10.3.1",
     "pino-pretty": "^13.0.0",
     "turndown": "^7.2.2",
     "turndown-plugin-gfm": "^1.0.2",
+    "y-protocols": "^1.0.6",
+    "yjs": "^13.6.26",
     "zod": "^4.3.6",
     "zod-to-json-schema": "^3.25.2"
   },

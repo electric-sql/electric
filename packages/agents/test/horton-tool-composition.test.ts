@@ -80,9 +80,24 @@ async function captureToolset(args: Record<string, unknown> = {}) {
 }
 
 function createElectricToolsContext() {
+  const document = {
+    key: `document:notes`,
+    kind: `document`,
+    id: `notes`,
+    provider: `y-durable-streams`,
+    docId: `agents/horton/smoke/documents/notes`,
+    docPath: `agents/horton/smoke/documents/notes`,
+    streamPath: `/v1/yjs/default/docs/agents/horton/smoke/documents/notes`,
+    transportMimeType: `application/vnd.electric-agents.markdown-yjs`,
+    contentMimeType: `text/markdown`,
+    yTextName: `markdown`,
+    title: `Notes`,
+    createdAt: new Date(0).toISOString(),
+  }
   return {
     entityUrl: `/horton/smoke/main`,
     entityType: `horton`,
+    principal: { url: `/principal/agent:horton`, kind: `agent` },
     args: {},
     db: {
       collections: { manifests: { toArray: [] } },
@@ -111,6 +126,15 @@ function createElectricToolsContext() {
       },
     })),
     unsubscribeFromEventSource: vi.fn(async () => ({ txid: `tx-unsubscribe` })),
+    createMarkdownDocument: vi.fn(async () => ({
+      txid: `tx-create-doc`,
+      document,
+    })),
+    readMarkdownDocumentStream: vi.fn(async () => ({
+      bytes: new Uint8Array(),
+    })),
+    appendMarkdownDocumentUpdate: vi.fn(async () => ({})),
+    appendMarkdownDocumentAwareness: vi.fn(async () => ({})),
   } as any
 }
 
@@ -229,6 +253,8 @@ describe(`horton tool composition`, () => {
         `list_event_source_subscriptions`,
         `unsubscribe_event_source`,
         `create_markdown_doc`,
+        `set_markdown_doc_cursor`,
+        `insert_markdown_doc`,
         `read_markdown_doc`,
         `write_markdown_doc`,
         `edit_markdown_doc`,
@@ -261,10 +287,14 @@ describe(`horton tool composition`, () => {
     expect(names).toContain(`list_event_sources`)
     expect(names).toContain(`subscribe_event_source`)
     expect(names).toContain(`create_markdown_doc`)
+    expect(names).toContain(`set_markdown_doc_cursor`)
+    expect(names).toContain(`insert_markdown_doc`)
     expect(names).toContain(`edit_markdown_doc`)
     expect(cfg.systemPrompt).toContain(`list_event_sources`)
     expect(cfg.systemPrompt).toContain(`subscribe_event_source`)
     expect(cfg.systemPrompt).toContain(`create_markdown_doc`)
+    expect(cfg.systemPrompt).toContain(`set_markdown_doc_cursor`)
+    expect(cfg.systemPrompt).toContain(`insert_markdown_doc`)
     expect(cfg.systemPrompt).toContain(`Collaborative Markdown Docs`)
   })
 

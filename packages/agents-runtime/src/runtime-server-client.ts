@@ -18,6 +18,13 @@ export type { EntitySignal } from './entity-schema'
 
 const ELECTRIC_PRINCIPAL_HEADER = `electric-principal`
 
+function bytesBody(bytes: Uint8Array): ArrayBuffer {
+  return bytes.buffer.slice(
+    bytes.byteOffset,
+    bytes.byteOffset + bytes.byteLength
+  ) as ArrayBuffer
+}
+
 export interface RuntimeServerClientConfig {
   baseUrl: string
   fetch?: typeof globalThis.fetch
@@ -129,33 +136,20 @@ export interface RuntimeServerClient {
     entityUrl: string
     id?: string
     title: string
-    content?: string
     meta?: Record<string, unknown>
   }) => Promise<{ txid: string; document: ManifestDocumentEntry }>
-  readMarkdownDocument: (options: {
-    entityUrl: string
-    id: string
-  }) => Promise<{ document: ManifestDocumentEntry; content: string }>
-  writeMarkdownDocument: (options: {
-    entityUrl: string
-    id: string
-    content: string
-  }) => Promise<{
-    txid: string
-    document: ManifestDocumentEntry
-    content: string
-  }>
-  editMarkdownDocument: (options: {
-    entityUrl: string
-    id: string
-    oldString: string
-    newString: string
-    replaceAll?: boolean
-  }) => Promise<{
-    txid: string
-    document: ManifestDocumentEntry
-    content: string
-  }>
+  readMarkdownDocumentStream: (
+    streamPath: string,
+    opts?: { offset?: string }
+  ) => Promise<{ bytes: Uint8Array; offset?: string }>
+  appendMarkdownDocumentUpdate: (
+    streamPath: string,
+    update: Uint8Array
+  ) => Promise<{ offset?: string }>
+  appendMarkdownDocumentAwareness: (
+    streamPath: string,
+    update: Uint8Array
+  ) => Promise<{ offset?: string }>
   spawnEntity: (options: SpawnEntityOptions) => Promise<RuntimeEntityInfo>
   getEntity: (entityUrl: string) => Promise<RuntimeEntityInfo>
   ensureSharedStateStream: (
@@ -433,19 +427,17 @@ export function createRuntimeServerClient(
     entityUrl,
     id,
     title,
-    content,
     meta,
   }: {
     entityUrl: string
     id?: string
     title: string
-    content?: string
     meta?: Record<string, unknown>
   }): Promise<{ txid: string; document: ManifestDocumentEntry }> => {
     const response = await request(`${entityRpcPath(entityUrl)}/documents`, {
       method: `POST`,
       headers: { 'content-type': `application/json` },
-      body: JSON.stringify({ id, title, content, meta }),
+      body: JSON.stringify({ id, title, meta }),
     })
     if (!response.ok) {
       throw new Error(
@@ -458,95 +450,73 @@ export function createRuntimeServerClient(
     }
   }
 
-  const readMarkdownDocument = async ({
-    entityUrl,
-    id,
-  }: {
-    entityUrl: string
-    id: string
-  }): Promise<{ document: ManifestDocumentEntry; content: string }> => {
-    const response = await request(
-      `${entityRpcPath(entityUrl)}/documents/${encodeURIComponent(id)}`,
-      { method: `GET` }
-    )
+  const readMarkdownDocumentStream = async (
+    streamPath: string,
+    opts?: { offset?: string }
+  ): Promise<{ bytes: Uint8Array; offset?: string }> => {
+    const url = new URL(streamPath, `http://agent-runtime.local`)
+    if (opts?.offset !== undefined) {
+      url.searchParams.set(`offset`, opts.offset)
+    }
+    const path = `${url.pathname}${url.search}`
+    const response = await request(path, { method: `GET` })
     if (!response.ok) {
       throw new Error(
-        `read markdown document ${id} on ${entityUrl} failed (${response.status}): ${await readErrorText(response)}`
+        `read markdown document stream ${path} failed (${response.status}): ${await readErrorText(response)}`
       )
     }
-    return (await response.json()) as {
-      document: ManifestDocumentEntry
-      content: string
+    return {
+      bytes: new Uint8Array(await response.arrayBuffer()),
+      offset: response.headers.get(`stream-next-offset`) ?? undefined,
     }
   }
 
-  const writeMarkdownDocument = async ({
-    entityUrl,
-    id,
-    content,
-  }: {
-    entityUrl: string
-    id: string
-    content: string
-  }): Promise<{
-    txid: string
-    document: ManifestDocumentEntry
-    content: string
-  }> => {
-    const response = await request(
-      `${entityRpcPath(entityUrl)}/documents/${encodeURIComponent(id)}`,
-      {
+  const appendMarkdownDocumentUpdate = async (
+    streamPath: string,
+    update: Uint8Array
+  ): Promise<{ offset?: string }> => {
+    const response = await request(streamPath, {
+      method: `POST`,
+      headers: { 'content-type': `application/octet-stream` },
+      body: bytesBody(update),
+    })
+    if (!response.ok) {
+      throw new Error(
+        `append markdown document update ${streamPath} failed (${response.status}): ${await readErrorText(response)}`
+      )
+    }
+    return {
+      offset: response.headers.get(`stream-next-offset`) ?? undefined,
+    }
+  }
+
+  const appendMarkdownDocumentAwareness = async (
+    streamPath: string,
+    update: Uint8Array
+  ): Promise<{ offset?: string }> => {
+    const awarenessPath = `${streamPath}?awareness=default`
+    const append = () =>
+      request(awarenessPath, {
+        method: `POST`,
+        headers: { 'content-type': `application/octet-stream` },
+        body: bytesBody(update),
+      })
+    let response = await append()
+    if (response.status === 404) {
+      response = await request(awarenessPath, {
         method: `PUT`,
-        headers: { 'content-type': `application/json` },
-        body: JSON.stringify({ content }),
-      }
-    )
+        headers: { 'content-type': `application/octet-stream` },
+        body: bytesBody(update),
+      })
+      if (response.status === 409) response = await append()
+    }
     if (!response.ok) {
       throw new Error(
-        `write markdown document ${id} on ${entityUrl} failed (${response.status}): ${await readErrorText(response)}`
+        `append markdown document awareness ${streamPath} failed (${response.status}): ${await readErrorText(response)}`
       )
     }
-    return (await response.json()) as {
-      txid: string
-      document: ManifestDocumentEntry
-      content: string
-    }
-  }
-
-  const editMarkdownDocument = async ({
-    entityUrl,
-    id,
-    oldString,
-    newString,
-    replaceAll,
-  }: {
-    entityUrl: string
-    id: string
-    oldString: string
-    newString: string
-    replaceAll?: boolean
-  }): Promise<{
-    txid: string
-    document: ManifestDocumentEntry
-    content: string
-  }> => {
-    const response = await request(
-      `${entityRpcPath(entityUrl)}/documents/${encodeURIComponent(id)}`,
-      {
-        method: `PATCH`,
-        headers: { 'content-type': `application/json` },
-        body: JSON.stringify({ oldString, newString, replaceAll }),
-      }
-    )
-    if (!response.ok) {
-      throw new Error(
-        `edit markdown document ${id} on ${entityUrl} failed (${response.status}): ${await readErrorText(response)}`
-      )
-    }
-    return (await response.json()) as {
-      txid: string
-      document: ManifestDocumentEntry
-      content: string
+    return {
+      offset: response.headers.get(`stream-next-offset`) ?? undefined,
     }
   }
 
@@ -952,9 +922,9 @@ export function createRuntimeServerClient(
     createAttachment,
     readAttachment,
     createMarkdownDocument,
-    readMarkdownDocument,
-    writeMarkdownDocument,
-    editMarkdownDocument,
+    readMarkdownDocumentStream,
+    appendMarkdownDocumentUpdate,
+    appendMarkdownDocumentAwareness,
     spawnEntity,
     getEntity,
     ensureSharedStateStream,

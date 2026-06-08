@@ -38,7 +38,13 @@ export type EntityTimelineContentItem =
       toolCallId: string
       toolName: string
       args: Record<string, unknown>
-      status: `started` | `args_complete` | `executing` | `completed` | `failed`
+      status:
+        | `started`
+        | `args_streaming`
+        | `args_complete`
+        | `executing`
+        | `completed`
+        | `failed`
       result?: string
       error?: string
       isError: boolean
@@ -89,7 +95,13 @@ export interface IncludesToolCall {
   run_id: string
   order: TimelineOrder
   tool_name: string
-  status: `started` | `args_complete` | `executing` | `completed` | `failed`
+  status:
+    | `started`
+    | `args_streaming`
+    | `args_complete`
+    | `executing`
+    | `completed`
+    | `failed`
   args?: unknown
   result?: unknown
   error?: string
@@ -202,7 +214,13 @@ export interface EntityTimelineToolCallItem {
   order: TimelineOrder
   tool_call_id?: string
   tool_name: string
-  status: `started` | `args_complete` | `executing` | `completed` | `failed`
+  status:
+    | `started`
+    | `args_streaming`
+    | `args_complete`
+    | `executing`
+    | `completed`
+    | `failed`
   args?: unknown
   result?: unknown
   error?: string

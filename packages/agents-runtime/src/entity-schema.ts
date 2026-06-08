@@ -171,11 +171,27 @@ type ToolCallValue = {
   run_id?: string
   tool_call_id?: string
   tool_name: string
-  status: `started` | `args_complete` | `executing` | `completed` | `failed`
+  status:
+    | `started`
+    | `args_streaming`
+    | `args_complete`
+    | `executing`
+    | `completed`
+    | `failed`
   args?: unknown
+  args_preview?: unknown
   result?: unknown
   error?: string
   duration_ms?: number
+}
+type ToolArgDeltaValue = {
+  key?: string
+  tool_call_key: string
+  tool_call_id?: string
+  run_id?: string
+  seq: number
+  delta: string
+  content_index?: number
 }
 type ReasoningValue = {
   key?: string
@@ -519,15 +535,30 @@ function createToolCallSchema(): Schema<ToolCallValue> {
     tool_name: z.string(),
     status: z.enum([
       `started`,
+      `args_streaming`,
       `args_complete`,
       `executing`,
       `completed`,
       `failed`,
     ]),
     args: z.unknown().optional(),
+    args_preview: z.unknown().optional(),
     result: z.unknown().optional(),
     error: z.string().optional(),
     duration_ms: z.number().int().optional(),
+  })
+}
+
+function createToolArgDeltaSchema(): Schema<ToolArgDeltaValue> {
+  return z.object({
+    key: z.string().optional(),
+    ...timelineOrderField,
+    tool_call_key: z.string(),
+    tool_call_id: z.string().optional(),
+    run_id: z.string().optional(),
+    seq: z.number().int(),
+    delta: z.string(),
+    content_index: z.number().int().optional(),
   })
 }
 
@@ -887,6 +918,7 @@ export type Step = SequencedPersistedRow<StepValue>
 export type Text = SequencedPersistedRow<TextValue>
 export type TextDelta = SequencedPersistedRow<TextDeltaValue>
 export type ToolCall = SequencedPersistedRow<ToolCallValue>
+export type ToolArgDelta = SequencedPersistedRow<ToolArgDeltaValue>
 export type Reasoning = SequencedPersistedRow<ReasoningValue>
 export type ErrorEvent = SequencedPersistedRow<ErrorEventValue>
 export type MessageReceived = SequencedPersistedRow<MessageReceivedValue>
@@ -1011,6 +1043,8 @@ export const BUILT_IN_EVENT_SCHEMAS = {
   text_delta:
     createTextDeltaSchema() as unknown as BuiltInEntitySchema<TextDelta>,
   tool_call: createToolCallSchema() as unknown as BuiltInEntitySchema<ToolCall>,
+  tool_arg_delta:
+    createToolArgDeltaSchema() as unknown as BuiltInEntitySchema<ToolArgDelta>,
   reasoning:
     createReasoningSchema() as unknown as BuiltInEntitySchema<Reasoning>,
   error: createErrorEventSchema() as unknown as BuiltInEntitySchema<ErrorEvent>,
@@ -1047,6 +1081,7 @@ type EntityCollectionsDefinition = {
   texts: CollectionDefinition<Text>
   textDeltas: CollectionDefinition<TextDelta>
   toolCalls: CollectionDefinition<ToolCall>
+  toolArgDeltas: CollectionDefinition<ToolArgDelta>
   reasoning: CollectionDefinition<Reasoning>
   errors: CollectionDefinition<ErrorEvent>
   inbox: CollectionDefinition<MessageReceived>
@@ -1093,6 +1128,12 @@ export const builtInCollections: EntityCollectionsDefinition = {
   toolCalls: {
     schema: BUILT_IN_EVENT_SCHEMAS.tool_call as StandardSchemaV1<ToolCall>,
     type: `tool_call`,
+    primaryKey: `key`,
+  },
+  toolArgDeltas: {
+    schema:
+      BUILT_IN_EVENT_SCHEMAS.tool_arg_delta as StandardSchemaV1<ToolArgDelta>,
+    type: `tool_arg_delta`,
     primaryKey: `key`,
   },
   reasoning: {

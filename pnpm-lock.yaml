@@ -1849,6 +1849,9 @@ importers:
       jsdom:
         specifier: ^28.1.0
         version: 28.1.0(@noble/hashes@2.0.1)
+      lib0:
+        specifier: ^0.2.99
+        version: 0.2.99
       pino:
         specifier: ^10.3.1
         version: 10.3.1
@@ -1864,6 +1867,12 @@ importers:
       turndown-plugin-gfm:
         specifier: ^1.0.2
         version: 1.0.2
+      y-protocols:
+        specifier: ^1.0.6
+        version: 1.0.6(yjs@13.6.26)
+      yjs:
+        specifier: ^13.6.26
+        version: 13.6.26
       zod:
         specifier: ^4.3.6
         version: 4.3.6

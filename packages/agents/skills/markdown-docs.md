@@ -23,7 +23,8 @@ Agents UI and can be opened, edited, and watched live.
 
 Collaborative markdown docs are not filesystem files.
 
-- Use `create_markdown_doc`, `read_markdown_doc`, `write_markdown_doc`, and
+- Use `create_markdown_doc`, `set_markdown_doc_cursor`,
+  `insert_markdown_doc`, `read_markdown_doc`, `write_markdown_doc`, and
   `edit_markdown_doc` for docs the user should open in the workspace UI.
 - Use filesystem `write`/`edit` only when the user asks for an actual file path
   in the workspace or repo, such as `docs/foo.md`, `README.md`, or
@@ -74,11 +75,27 @@ For small edits:
 3. If the target text appears multiple times, make `old_string` more specific or
    set `replace_all` only when replacing every occurrence is clearly intended.
 
+The markdown tools materialize the collaborative Yjs document from its durable
+stream during the wake. `write_markdown_doc`, `edit_markdown_doc`, and
+`insert_markdown_doc` append binary Yjs updates to that stream; do not write
+markdown documents to the local filesystem unless the user explicitly asks for a
+filesystem file.
+
 For broad rewrites:
 
 1. Use `read_markdown_doc` first unless you just created or wrote the doc in the
    same wake.
 2. Use `write_markdown_doc` with the full replacement markdown.
+
+For adding new long content to an existing doc:
+
+1. Use `read_markdown_doc` if you need to inspect the target location.
+2. Use `set_markdown_doc_cursor` with `index`, `before`, or `after` when the
+   insertion belongs at a specific location.
+3. Use `insert_markdown_doc`.
+4. Pass `id` and optional `index` before `content` in the tool arguments. If
+   `index` is omitted, the saved Yjs-relative cursor is used; if no cursor is
+   set, the content is appended to the current document.
 
 Both write and edit tool results include diffs. Use those diffs to summarize
 what changed.

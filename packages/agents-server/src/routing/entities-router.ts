@@ -242,24 +242,7 @@ const markdownDocumentCreateBodySchema = Type.Object(
   {
     id: Type.Optional(Type.String()),
     title: Type.String(),
-    content: Type.Optional(Type.String()),
     meta: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
-  },
-  { additionalProperties: false }
-)
-
-const markdownDocumentWriteBodySchema = Type.Object(
-  {
-    content: Type.String(),
-  },
-  { additionalProperties: false }
-)
-
-const markdownDocumentEditBodySchema = Type.Object(
-  {
-    oldString: Type.String(),
-    newString: Type.String(),
-    replaceAll: Type.Optional(Type.Boolean()),
   },
   { additionalProperties: false }
 )
@@ -325,8 +308,6 @@ type SetTagBody = Static<typeof setTagBodySchema>
 type MarkdownDocumentCreateBody = Static<
   typeof markdownDocumentCreateBodySchema
 >
-type MarkdownDocumentWriteBody = Static<typeof markdownDocumentWriteBodySchema>
-type MarkdownDocumentEditBody = Static<typeof markdownDocumentEditBodySchema>
 type SignalBody = Static<typeof signalBodySchema>
 type ScheduleBody = Static<typeof scheduleBodySchema>
 type EventSourceSubscriptionBody = Static<
@@ -433,20 +414,6 @@ entitiesRouter.get(
   withExistingEntity,
   withEntityPermission(`read`),
   readMarkdownDocument
-)
-entitiesRouter.put(
-  `/:type/:instanceId/documents/:documentId`,
-  withExistingEntity,
-  withSchema(markdownDocumentWriteBodySchema),
-  withEntityPermission(`write`),
-  writeMarkdownDocument
-)
-entitiesRouter.patch(
-  `/:type/:instanceId/documents/:documentId`,
-  withExistingEntity,
-  withSchema(markdownDocumentEditBodySchema),
-  withEntityPermission(`write`),
-  editMarkdownDocument
 )
 entitiesRouter.patch(
   `/:type/:instanceId/inbox/:messageKey`,
@@ -1337,7 +1304,6 @@ async function createMarkdownDocument(
   const result = await ctx.entityManager.createMarkdownDocument(entityUrl, {
     id: parsed.id,
     title: parsed.title,
-    content: parsed.content,
     createdBy: ctx.principal.url,
     meta: parsed.meta,
   })
@@ -1349,61 +1315,22 @@ async function readMarkdownDocument(
   ctx: TenantContext
 ): Promise<Response> {
   const { entityUrl } = requireExistingEntityRoute(request)
-  const result = await ctx.entityManager.readMarkdownDocument(
+  const document = await ctx.entityManager.getMarkdownDocument(
     entityUrl,
     decodeURIComponent(request.params.documentId)
   )
-  return json(result, {
-    headers: {
-      'content-type': `application/json; charset=utf-8`,
-      'cache-control': `no-store`,
-    },
-  })
-}
-
-async function writeMarkdownDocument(
-  request: AgentsRouteRequest,
-  ctx: TenantContext
-): Promise<Response> {
-  const principalMutationError = rejectPrincipalEntityMutation(
-    request,
-    `given documents`
-  )
-  if (principalMutationError) return principalMutationError
-
-  const parsed = routeBody<MarkdownDocumentWriteBody>(request)
-  const { entityUrl } = requireExistingEntityRoute(request)
-  const result = await ctx.entityManager.writeMarkdownDocument(
-    entityUrl,
-    decodeURIComponent(request.params.documentId),
-    { content: parsed.content, updatedBy: ctx.principal.url }
-  )
-  return json(result)
-}
-
-async function editMarkdownDocument(
-  request: AgentsRouteRequest,
-  ctx: TenantContext
-): Promise<Response> {
-  const principalMutationError = rejectPrincipalEntityMutation(
-    request,
-    `given documents`
-  )
-  if (principalMutationError) return principalMutationError
-
-  const parsed = routeBody<MarkdownDocumentEditBody>(request)
-  const { entityUrl } = requireExistingEntityRoute(request)
-  const result = await ctx.entityManager.editMarkdownDocument(
-    entityUrl,
-    decodeURIComponent(request.params.documentId),
+  if (!document) {
+    throw new ElectricAgentsError(ErrCodeNotFound, `Document not found`, 404)
+  }
+  return json(
+    { document },
     {
-      oldString: parsed.oldString,
-      newString: parsed.newString,
-      replaceAll: parsed.replaceAll,
-      updatedBy: ctx.principal.url,
+      headers: {
+        'content-type': `application/json; charset=utf-8`,
+        'cache-control': `no-store`,
+      },
     }
   )
-  return json(result)
 }
 
 async function updateInboxMessage(

@@ -1,6 +1,4 @@
 import { describe, expect, it, vi } from 'vitest'
-import { Awareness } from 'y-protocols/awareness'
-import * as Y from 'yjs'
 import { EntityManager } from '../src/entity-manager'
 import { SchemaValidator } from '../src/electric-agents/schema-validator'
 import {
@@ -8,8 +6,6 @@ import {
   MARKDOWN_DOCUMENT_PROVIDER,
   MARKDOWN_DOCUMENT_TEXT_NAME,
   MARKDOWN_DOCUMENT_TRANSPORT_MIME,
-  applyFramedAwarenessUpdates,
-  getMarkdownDocumentAwarenessStreamPath,
 } from '../src/markdown-documents'
 
 const observedItemSchema = {
@@ -160,30 +156,7 @@ function createMarkdownDocumentManager() {
       } as any,
     }),
     streamClient,
-    binaryStreams,
   }
-}
-
-function collectAwarenessStates(frames: Array<Uint8Array>) {
-  const doc = new Y.Doc()
-  const awareness = new Awareness(doc)
-  const states: Array<{
-    user: Record<string, unknown>
-    cursor?: { anchor?: unknown; head?: unknown }
-  }> = []
-  for (const frame of frames) {
-    applyFramedAwarenessUpdates(awareness, frame)
-    for (const state of awareness.getStates().values()) {
-      const entry = state as {
-        user?: Record<string, unknown>
-        cursor?: { anchor?: unknown; head?: unknown }
-      }
-      if (entry.user) {
-        states.push({ user: entry.user, cursor: entry.cursor })
-      }
-    }
-  }
-  return states
 }
 
 describe(`ElectricAgentsManager.validateWriteEvent`, () => {
@@ -233,14 +206,12 @@ describe(`ElectricAgentsManager.validateWriteEvent`, () => {
 })
 
 describe(`ElectricAgentsManager markdown documents`, () => {
-  it(`stores markdown as framed Yjs updates and exposes a manifest document entry`, async () => {
-    const { manager, streamClient, binaryStreams } =
-      createMarkdownDocumentManager()
+  it(`creates an empty Yjs update stream and exposes a manifest document entry`, async () => {
+    const { manager, streamClient } = createMarkdownDocumentManager()
 
     const created = await manager.createMarkdownDocument(`/chat/session-1`, {
       id: `notes`,
       title: `Session notes`,
-      content: `# Notes\n\nDraft`,
       createdBy: `/principal/agent:horton`,
     })
 
@@ -262,52 +233,13 @@ describe(`ElectricAgentsManager markdown documents`, () => {
       `/yjs/default/docs/agents/chat/session-1/documents/notes/.updates`,
       { contentType: `application/octet-stream` }
     )
-
+    expect(streamClient.appendBytes).not.toHaveBeenCalled()
     await expect(
-      manager.readMarkdownDocument(`/chat/session-1`, `notes`)
+      manager.getMarkdownDocument(`/chat/session-1`, `notes`)
     ).resolves.toMatchObject({
-      document: expect.objectContaining({ id: `notes` }),
-      content: `# Notes\n\nDraft`,
+      id: `notes`,
+      title: `Session notes`,
     })
-
-    await manager.editMarkdownDocument(`/chat/session-1`, `notes`, {
-      oldString: `Draft`,
-      newString: `Ready`,
-      updatedBy: `/principal/agent:horton`,
-    })
-
-    await expect(
-      manager.readMarkdownDocument(`/chat/session-1`, `notes`)
-    ).resolves.toMatchObject({
-      content: `# Notes\n\nReady`,
-    })
-
-    const awarenessPath = getMarkdownDocumentAwarenessStreamPath(
-      `default`,
-      `agents/chat/session-1/documents/notes`,
-      `default`
-    )
-    const states = collectAwarenessStates(
-      binaryStreams.get(awarenessPath) ?? []
-    )
-    expect(states.map((state) => state.user)).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          name: `horton`,
-          role: `agent`,
-          status: `editing`,
-          principalUrl: `/principal/agent:horton`,
-        }),
-      ])
-    )
-    expect(states.every((state) => state.user.status === `editing`)).toBe(true)
-    expect(
-      states.every(
-        (state) =>
-          JSON.stringify(state.cursor?.anchor) ===
-          JSON.stringify(state.cursor?.head)
-      )
-    ).toBe(true)
   })
 })
 

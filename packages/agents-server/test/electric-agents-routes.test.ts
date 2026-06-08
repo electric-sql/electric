@@ -251,7 +251,7 @@ describe(`ElectricAgentsRoutes schedule endpoints`, () => {
 })
 
 describe(`ElectricAgentsRoutes markdown document endpoints`, () => {
-  it(`routes document create, read, write, and edit requests to the manager`, async () => {
+  it(`routes document create and metadata read requests to the manager`, async () => {
     const document = {
       key: `document:notes`,
       kind: `document`,
@@ -274,28 +274,19 @@ describe(`ElectricAgentsRoutes markdown document endpoints`, () => {
       createMarkdownDocument: vi
         .fn()
         .mockResolvedValue({ txid: `tx-create`, document }),
-      readMarkdownDocument: vi
-        .fn()
-        .mockResolvedValue({ document, content: `# Notes` }),
-      writeMarkdownDocument: vi
-        .fn()
-        .mockResolvedValue({ txid: `tx-write`, document, content: `# Ready` }),
-      editMarkdownDocument: vi
-        .fn()
-        .mockResolvedValue({ txid: `tx-edit`, document, content: `# Done` }),
+      getMarkdownDocument: vi.fn().mockResolvedValue(document),
     } as any
 
     const createResponse = await routeResponse(
       manager,
       `POST`,
       `/_electric/entities/chat/test/documents`,
-      { id: `notes`, title: `Notes`, content: `# Notes` }
+      { id: `notes`, title: `Notes` }
     )
     expect(createResponse.status).toBe(201)
     expect(manager.createMarkdownDocument).toHaveBeenCalledWith(`/chat/test`, {
       id: `notes`,
       title: `Notes`,
-      content: `# Notes`,
       createdBy: `/principal/system:dev-local`,
       meta: undefined,
     })
@@ -307,37 +298,36 @@ describe(`ElectricAgentsRoutes markdown document endpoints`, () => {
     )
     expect(await responseJson(readResponse)).toEqual({
       document,
-      content: `# Notes`,
     })
+    expect(manager.getMarkdownDocument).toHaveBeenCalledWith(
+      `/chat/test`,
+      `notes`
+    )
+  })
 
-    await routeResponse(
+  it(`does not expose semantic markdown document write or edit endpoints`, async () => {
+    const manager = {
+      registry: {
+        getEntity: vi.fn().mockResolvedValue({ url: `/chat/test` }),
+        getEntityType: vi.fn(),
+      },
+    } as any
+
+    const putResponse = await routeResponse(
       manager,
       `PUT`,
       `/_electric/entities/chat/test/documents/notes`,
       { content: `# Ready` }
     )
-    expect(manager.writeMarkdownDocument).toHaveBeenCalledWith(
-      `/chat/test`,
-      `notes`,
-      { content: `# Ready`, updatedBy: `/principal/system:dev-local` }
-    )
+    expect(putResponse.status).toBe(404)
 
-    await routeResponse(
+    const patchResponse = await routeResponse(
       manager,
       `PATCH`,
       `/_electric/entities/chat/test/documents/notes`,
       { oldString: `Ready`, newString: `Done`, replaceAll: true }
     )
-    expect(manager.editMarkdownDocument).toHaveBeenCalledWith(
-      `/chat/test`,
-      `notes`,
-      {
-        oldString: `Ready`,
-        newString: `Done`,
-        replaceAll: true,
-        updatedBy: `/principal/system:dev-local`,
-      }
-    )
+    expect(patchResponse.status).toBe(404)
   })
 
   it(`guards public Yjs document routes and forwards authorized document streams`, async () => {

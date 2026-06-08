@@ -387,6 +387,7 @@ export type TimelineItem =
             error: string | null
             status:
               | `started`
+              | `args_streaming`
               | `args_complete`
               | `executing`
               | `completed`
@@ -717,6 +718,7 @@ export interface ProcessWakeConfig {
   createElectricTools?: (context: {
     entityUrl: string
     entityType: string
+    principal?: RuntimePrincipal
     args: Readonly<Record<string, unknown>>
     db: EntityStreamDBWithActions
     events: Array<ChangeEvent>
@@ -746,27 +748,20 @@ export interface ProcessWakeConfig {
     createMarkdownDocument: (opts: {
       id?: string
       title: string
-      content?: string
       meta?: Record<string, unknown>
     }) => Promise<{ txid: string; document: ManifestDocumentEntry }>
-    readMarkdownDocument: (opts: {
-      id: string
-    }) => Promise<{ document: ManifestDocumentEntry; content: string }>
-    writeMarkdownDocument: (opts: { id: string; content: string }) => Promise<{
-      txid: string
-      document: ManifestDocumentEntry
-      content: string
-    }>
-    editMarkdownDocument: (opts: {
-      id: string
-      oldString: string
-      newString: string
-      replaceAll?: boolean
-    }) => Promise<{
-      txid: string
-      document: ManifestDocumentEntry
-      content: string
-    }>
+    readMarkdownDocumentStream: (
+      streamPath: string,
+      opts?: { offset?: string }
+    ) => Promise<{ bytes: Uint8Array; offset?: string }>
+    appendMarkdownDocumentUpdate: (
+      streamPath: string,
+      update: Uint8Array
+    ) => Promise<{ offset?: string }>
+    appendMarkdownDocumentAwareness: (
+      streamPath: string,
+      update: Uint8Array
+    ) => Promise<{ offset?: string }>
   }) => Array<AgentTool> | Promise<Array<AgentTool>>
   /** Optional shutdown signal to end idle waits during host teardown. */
   shutdownSignal?: AbortSignal
@@ -903,7 +898,20 @@ export type AgentRunResult = {
   usage: { tokens: number; duration: number }
 }
 
-export type AgentTool = PiAgentTool
+export interface ToolArgumentDeltaContext {
+  toolCallId: string
+  toolName: string
+  contentIndex?: number
+  delta: string
+  argsPreview?: unknown
+}
+
+export type AgentTool = PiAgentTool & {
+  onArgsDelta?: (
+    context: ToolArgumentDeltaContext,
+    signal?: AbortSignal
+  ) => Promise<void> | void
+}
 export type AgentModel = string | Model<any>
 
 export interface AgentConfig {

@@ -19,7 +19,6 @@ import type { LucideIcon } from 'lucide-react'
 
 type DocumentResponse = {
   document: ManifestDocumentEntry
-  content: string
 }
 
 type DocumentConnectionStatus =
