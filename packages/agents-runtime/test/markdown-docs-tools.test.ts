@@ -303,6 +303,88 @@ describe(`markdown document tools`, () => {
     expect(context.appendMarkdownDocumentUpdate).toHaveBeenCalledTimes(2)
   })
 
+  it(`replaces a markdown range with one delete update and one insert update`, async () => {
+    const { context, getContent } = createToolContext()
+    const replace = createMarkdownDocumentTools(context).find(
+      (tool) => tool.name === `replace_markdown_doc_range`
+    )!
+
+    const result = await replace.execute(`tool-replace`, {
+      id: `notes`,
+      old_string: `First line`,
+      content: `Replacement line`,
+    })
+
+    expect(getContent()).toBe(`# Notes\n\nReplacement line\n`)
+    expect(context.appendMarkdownDocumentUpdate).toHaveBeenCalledTimes(2)
+    expect(context.appendMarkdownDocumentAwareness).toHaveBeenCalledTimes(4)
+    expect(result.details).toMatchObject({
+      replaced: true,
+      deleted: `First line`,
+      streamed: false,
+    })
+  })
+
+  it(`streams replace_markdown_doc_range replacement content at the deleted range`, async () => {
+    const { context, getContent, getDoc, getAwarenessFrames } =
+      createToolContext()
+    const replace = createMarkdownDocumentTools(context).find(
+      (tool) => tool.name === `replace_markdown_doc_range`
+    )!
+
+    await replace.onArgsDelta?.({
+      toolCallId: `tool-stream-replace`,
+      toolName: `replace_markdown_doc_range`,
+      delta: `"Replacement`,
+      argsPreview: {
+        id: `notes`,
+        old_string: `First line`,
+        content: `Replacement`,
+      },
+    })
+    await waitForCondition(
+      () => context.appendMarkdownDocumentAwareness.mock.calls.length === 3,
+      `expected replacement delete and first streamed insert presence updates`
+    )
+    expect(getContent()).toBe(`# Notes\n\nReplacement\n`)
+    expect(
+      cursorHeadIndexFromAwarenessFrame(getDoc(), getAwarenessFrames().at(-1)!)
+    ).toBe(getContent().length - 1)
+
+    await replace.onArgsDelta?.({
+      toolCallId: `tool-stream-replace`,
+      toolName: `replace_markdown_doc_range`,
+      delta: ` line"`,
+      argsPreview: {
+        id: `notes`,
+        old_string: `First line`,
+        content: `Replacement line`,
+      },
+    })
+    await waitForCondition(
+      () => context.appendMarkdownDocumentAwareness.mock.calls.length === 4,
+      `expected second streamed replacement presence update`
+    )
+    expect(getContent()).toBe(`# Notes\n\nReplacement line\n`)
+    expect(
+      cursorHeadIndexFromAwarenessFrame(getDoc(), getAwarenessFrames().at(-1)!)
+    ).toBe(getContent().length - 1)
+
+    const result = await replace.execute(`tool-stream-replace`, {
+      id: `notes`,
+      old_string: `First line`,
+      content: `Replacement line`,
+    })
+
+    expect(context.appendMarkdownDocumentUpdate).toHaveBeenCalledTimes(3)
+    expect(context.appendMarkdownDocumentAwareness).toHaveBeenCalledTimes(5)
+    expect(result.details).toMatchObject({
+      replaced: true,
+      streamed: true,
+      deleted: `First line`,
+    })
+  })
+
   it(`refreshes a cached Yjs document from the stream before editing`, async () => {
     const { context, getContent, appendExternalText } = createToolContext()
     const tools = createMarkdownDocumentTools(context)

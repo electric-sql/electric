@@ -48,6 +48,7 @@ describe(`buildHortonSystemPrompt`, () => {
     expect(prompt).toContain(`create_markdown_doc`)
     expect(prompt).toContain(`set_markdown_doc_cursor`)
     expect(prompt).toContain(`insert_markdown_doc`)
+    expect(prompt).toContain(`replace_markdown_doc_range`)
     expect(prompt).toContain(`Collaborative Markdown Docs`)
     expect(prompt).toContain(`Do not use filesystem write`)
     expect(prompt).toContain(`markdown-docs skill`)

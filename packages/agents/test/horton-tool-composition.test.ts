@@ -255,6 +255,7 @@ describe(`horton tool composition`, () => {
         `create_markdown_doc`,
         `set_markdown_doc_cursor`,
         `insert_markdown_doc`,
+        `replace_markdown_doc_range`,
         `read_markdown_doc`,
         `write_markdown_doc`,
         `edit_markdown_doc`,
@@ -288,6 +289,7 @@ describe(`horton tool composition`, () => {
     expect(names).toContain(`subscribe_event_source`)
     expect(names).toContain(`create_markdown_doc`)
     expect(names).toContain(`set_markdown_doc_cursor`)
+    expect(names).toContain(`replace_markdown_doc_range`)
     expect(names).toContain(`insert_markdown_doc`)
     expect(names).toContain(`edit_markdown_doc`)
     expect(cfg.systemPrompt).toContain(`list_event_sources`)

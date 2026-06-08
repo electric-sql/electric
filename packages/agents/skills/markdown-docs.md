@@ -24,8 +24,9 @@ Agents UI and can be opened, edited, and watched live.
 Collaborative markdown docs are not filesystem files.
 
 - Use `create_markdown_doc`, `set_markdown_doc_cursor`,
-  `insert_markdown_doc`, `read_markdown_doc`, `write_markdown_doc`, and
-  `edit_markdown_doc` for docs the user should open in the workspace UI.
+  `insert_markdown_doc`, `replace_markdown_doc_range`, `read_markdown_doc`,
+  `write_markdown_doc`, and `edit_markdown_doc` for docs the user should open
+  in the workspace UI.
 - Use filesystem `write`/`edit` only when the user asks for an actual file path
   in the workspace or repo, such as `docs/foo.md`, `README.md`, or
   `/tmp/report.md`.
@@ -75,11 +76,21 @@ For small edits:
 3. If the target text appears multiple times, make `old_string` more specific or
    set `replace_all` only when replacing every occurrence is clearly intended.
 
+For replacing a section with new long content that should appear live:
+
+1. Use `read_markdown_doc` if you need to inspect or disambiguate the target.
+2. Use `replace_markdown_doc_range` with a unique `old_string`, or with
+   `old_string` plus `occurrence` for repeated text.
+3. For exact offsets, use `index` plus `length` instead of `old_string`.
+4. Put the range selector before `content` in the tool arguments so the range is
+   deleted once and replacement content can stream into that Yjs-relative
+   position.
+
 The markdown tools materialize the collaborative Yjs document from its durable
-stream during the wake. `write_markdown_doc`, `edit_markdown_doc`, and
-`insert_markdown_doc` append binary Yjs updates to that stream; do not write
-markdown documents to the local filesystem unless the user explicitly asks for a
-filesystem file.
+stream during the wake. `write_markdown_doc`, `edit_markdown_doc`,
+`insert_markdown_doc`, and `replace_markdown_doc_range` append binary Yjs
+updates to that stream; do not write markdown documents to the local filesystem
+unless the user explicitly asks for a filesystem file.
 
 For broad rewrites:
 

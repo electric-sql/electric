@@ -136,6 +136,37 @@ export function insertMarkdownText(
   }
 }
 
+export function deleteMarkdownTextRange(
+  doc: Y.Doc,
+  index: number,
+  length: number,
+  textName: string = MARKDOWN_DOCUMENT_TEXT_NAME
+): {
+  update: Uint8Array
+  index: number
+  length: number
+  position: Y.RelativePosition
+} {
+  const text = markdownText(doc, textName)
+  const boundedIndex = Math.max(0, Math.min(index, text.length))
+  const boundedLength = Math.max(
+    0,
+    Math.min(length, text.length - boundedIndex)
+  )
+  const before = Y.encodeStateVector(doc)
+  if (boundedLength > 0) {
+    doc.transact(() => {
+      text.delete(boundedIndex, boundedLength)
+    }, `agent`)
+  }
+  return {
+    update: Y.encodeStateAsUpdate(doc, before),
+    index: boundedIndex,
+    length: boundedLength,
+    position: Y.createRelativePositionFromTypeIndex(text, boundedIndex),
+  }
+}
+
 export function relativePositionAtMarkdownIndex(
   doc: Y.Doc,
   index: number,

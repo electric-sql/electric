@@ -3,6 +3,7 @@ import { Type } from '@sinclair/typebox'
 import {
   applyFramedYjsUpdates,
   createMarkdownYDoc,
+  deleteMarkdownTextRange,
   editMarkdownText,
   encodeMarkdownAwarenessUpdate,
   frameYjsUpdate,
@@ -30,6 +31,15 @@ type InsertMarkdownArgs = {
   index?: number
 }
 
+type ReplaceMarkdownArgs = {
+  id: string
+  content: string
+  old_string?: string
+  occurrence?: number
+  index?: number
+  length?: number
+}
+
 type SetCursorArgs = {
   id: string
   index?: number
@@ -47,6 +57,14 @@ type InsertSession = {
   streamed: boolean
   pending: Promise<void>
   error?: unknown
+}
+
+type ReplaceSession = InsertSession & {
+  prepared?: boolean
+  deleted?: string
+  deleteIndex?: number
+  deleteLength?: number
+  beforeContent?: string
 }
 
 type MaterializedMarkdownDocument = {
@@ -87,11 +105,34 @@ function asInsertArgs(value: unknown): Partial<InsertMarkdownArgs> {
   }
 }
 
+function asReplaceArgs(value: unknown): Partial<ReplaceMarkdownArgs> {
+  if (!value || typeof value !== `object`) return {}
+  const input = value as Record<string, unknown>
+  return {
+    ...(typeof input.id === `string` && { id: input.id }),
+    ...(typeof input.content === `string` && { content: input.content }),
+    ...(typeof input.old_string === `string` && {
+      old_string: input.old_string,
+    }),
+    ...(typeof input.occurrence === `number` &&
+    Number.isFinite(input.occurrence)
+      ? { occurrence: input.occurrence }
+      : {}),
+    ...(typeof input.index === `number` && Number.isFinite(input.index)
+      ? { index: input.index }
+      : {}),
+    ...(typeof input.length === `number` && Number.isFinite(input.length)
+      ? { length: input.length }
+      : {}),
+  }
+}
+
 export function createMarkdownDocumentTools(
   context: ElectricToolContext
 ): Array<AgentTool> {
   const readDocs = new Map<string, string>()
   const insertSessions = new Map<string, InsertSession>()
+  const replaceSessions = new Map<string, ReplaceSession>()
   const materializedDocs = new Map<string, MaterializedMarkdownDocument>()
   const cursorPositions = new Map<string, Y.RelativePosition>()
 
@@ -295,6 +336,124 @@ export function createMarkdownDocumentTools(
     return { index: args.after !== undefined ? found + needle.length : found }
   }
 
+  const resolveReplaceRange = (
+    content: string,
+    args: Omit<ReplaceMarkdownArgs, `content`>
+  ): { index?: number; length?: number; deleted?: string; error?: string } => {
+    const hasOldString = args.old_string !== undefined
+    const hasRange = args.index !== undefined || args.length !== undefined
+    if (hasOldString && hasRange) {
+      return { error: `Pass either old_string or index/length, not both.` }
+    }
+    if (!hasOldString && !hasRange) {
+      return { error: `Pass old_string or index/length to choose a range.` }
+    }
+    if (hasOldString) {
+      const oldString = args.old_string!
+      if (oldString.length === 0) {
+        return { error: `old_string must not be empty.` }
+      }
+      const occurrence =
+        args.occurrence === undefined
+          ? undefined
+          : Math.max(1, Math.floor(args.occurrence))
+      let from = 0
+      let found = -1
+      let count = 0
+      while (true) {
+        const index = content.indexOf(oldString, from)
+        if (index < 0) break
+        count += 1
+        if (occurrence === undefined || count === occurrence) {
+          found = index
+          if (occurrence !== undefined) break
+        }
+        from = index + oldString.length
+      }
+      if (found < 0) {
+        return {
+          error:
+            occurrence === undefined
+              ? `old_string not found.`
+              : `Could not find occurrence ${occurrence} of old_string.`,
+        }
+      }
+      if (occurrence === undefined && count > 1) {
+        return {
+          error: `found ${count} matches for old_string; pass occurrence to choose one or provide a more specific old_string.`,
+        }
+      }
+      return {
+        index: found,
+        length: oldString.length,
+        deleted: oldString,
+      }
+    }
+
+    if (args.index === undefined || args.length === undefined) {
+      return { error: `Pass both index and length for explicit ranges.` }
+    }
+    const index = Math.max(0, Math.min(Math.floor(args.index), content.length))
+    const length = Math.max(
+      0,
+      Math.min(Math.floor(args.length), content.length - index)
+    )
+    if (length === 0) {
+      return { error: `Replacement range length must be greater than zero.` }
+    }
+    return {
+      index,
+      length,
+      deleted: content.slice(index, index + length),
+    }
+  }
+
+  const prepareReplaceSession = async (
+    session: ReplaceSession,
+    args: Omit<ReplaceMarkdownArgs, `content`>
+  ): Promise<MaterializedMarkdownDocument> => {
+    const materialized = await materializeDocument(args.id)
+    if (session.prepared) return materialized
+
+    const before = contentOf(materialized)
+    const range = resolveReplaceRange(before, args)
+    if (
+      range.error ||
+      range.index === undefined ||
+      range.length === undefined
+    ) {
+      throw new Error(range.error ?? `Could not resolve replacement range.`)
+    }
+
+    await appendPresence(materialized, {
+      anchor: range.index,
+      head: range.index + range.length,
+    })
+    const deletion = deleteMarkdownTextRange(
+      materialized.doc,
+      range.index,
+      range.length,
+      materialized.textName
+    )
+    await appendDocumentUpdate(args.id, materialized, deletion.update)
+    await appendPresence(materialized, {
+      anchor: deletion.index,
+      head: deletion.index,
+    })
+
+    session.id = args.id
+    session.nextIndex = deletion.index
+    session.nextPosition = deletion.position
+    session.prepared = true
+    session.deleted =
+      range.deleted ?? before.slice(range.index, range.index + range.length)
+    session.deleteIndex = deletion.index
+    session.deleteLength = deletion.length
+    session.beforeContent = before
+    cursorPositions.set(args.id, deletion.position)
+    return materialized
+  }
+
   const enqueueInsert = (
     toolCallId: string,
     action: (session: InsertSession) => Promise<void>
@@ -319,6 +478,36 @@ export function createMarkdownDocumentTools(
     toolCallId: string
   ): Promise<InsertSession | undefined> => {
     const session = insertSessions.get(toolCallId)
+    if (!session) return undefined
+    await session.pending
+    if (session.error) throw session.error
+    return session
+  }
+
+  const enqueueReplace = (
+    toolCallId: string,
+    action: (session: ReplaceSession) => Promise<void>
+  ): void => {
+    const session =
+      replaceSessions.get(toolCallId) ??
+      ({
+        inserted: ``,
+        seq: 0,
+        streamed: false,
+        pending: Promise.resolve(),
+      } satisfies ReplaceSession)
+    replaceSessions.set(toolCallId, session)
+    session.pending = session.pending
+      .then(() => action(session))
+      .catch((error) => {
+        session.error = error
+      })
+  }
+
+  const awaitReplaceSession = async (
+    toolCallId: string
+  ): Promise<ReplaceSession | undefined> => {
+    const session = replaceSessions.get(toolCallId)
     if (!session) return undefined
     await session.pending
     if (session.error) throw session.error
@@ -525,6 +714,166 @@ export function createMarkdownDocumentTools(
             streamed,
             insertedBytes: new TextEncoder().encode(content).length,
             nextIndex,
+          },
+        }
+      },
+      executionMode: `sequential`,
+    },
+    {
+      name: `replace_markdown_doc_range`,
+      label: `Replace Markdown Doc Range`,
+      description: `Delete one range from a collaborative app markdown document, then stream or insert replacement markdown at that location. Use old_string for a unique literal match, old_string plus occurrence for repeated text, or index plus length for an explicit UTF-16 range. The agent cursor follows the end of streamed replacement text.`,
+      parameters: Type.Object({
+        id: Type.String({ description: `Document id.` }),
+        old_string: Type.Optional(
+          Type.String({
+            description: `Literal markdown text to replace. Must be unique unless occurrence is provided.`,
+          })
+        ),
+        occurrence: Type.Optional(
+          Type.Number({
+            description: `1-based occurrence to replace when old_string appears multiple times.`,
+          })
+        ),
+        index: Type.Optional(
+          Type.Number({
+            description: `Optional UTF-16 start offset for an explicit replacement range.`,
+          })
+        ),
+        length: Type.Optional(
+          Type.Number({
+            description: `UTF-16 length for an explicit replacement range. Required when index is used.`,
+          })
+        ),
+        content: Type.String({
+          description: `Replacement markdown content to stream into the deleted range.`,
+        }),
+      }),
+      onArgsDelta: ({ toolCallId, argsPreview }) => {
+        const args = asReplaceArgs(argsPreview)
+        if (!args.id || typeof args.content !== `string`) return
+        if (
+          args.old_string === undefined &&
+          (args.index === undefined || args.length === undefined)
+        ) {
+          return
+        }
+        enqueueReplace(toolCallId, async (session) => {
+          await prepareReplaceSession(session, {
+            id: args.id!,
+            old_string: args.old_string,
+            occurrence: args.occurrence,
+            index: args.index,
+            length: args.length,
+          })
+          if (!args.content!.startsWith(session.inserted)) return
+          const chunk = args.content!.slice(session.inserted.length)
+          if (chunk.length === 0) return
+          session.inserted = args.content!
+          await applyInsertChunk(args.id!, chunk, session)
+          session.seq++
+        })
+      },
+      execute: async (toolCallId, params) => {
+        const args = params as ReplaceMarkdownArgs
+        const session =
+          (await awaitReplaceSession(toolCallId)) ??
+          ({
+            inserted: ``,
+            seq: 0,
+            streamed: false,
+            pending: Promise.resolve(),
+          } satisfies ReplaceSession)
+
+        try {
+          await prepareReplaceSession(session, {
+            id: args.id,
+            old_string: args.old_string,
+            occurrence: args.occurrence,
+            index: args.index,
+            length: args.length,
+          })
+        } catch (error) {
+          replaceSessions.delete(toolCallId)
+          return {
+            content: [
+              {
+                type: `text` as const,
+                text: `Error: ${error instanceof Error ? error.message : `could not prepare replacement`}`,
+              },
+            ],
+            details: { replaced: false },
+          }
+        }
+
+        let inserted = session.inserted
+        let streamed = session.streamed
+        let nextIndex = session.nextIndex
+        if (args.content !== inserted) {
+          if (inserted.length === 0 || args.content.startsWith(inserted)) {
+            const remaining =
+              inserted.length === 0
+                ? args.content
+                : args.content.slice(inserted.length)
+            if (remaining.length > 0) {
+              await applyInsertChunk(args.id, remaining, session)
+              nextIndex = session.nextIndex
+              inserted = args.content
+              streamed = streamed || remaining.length !== args.content.length
+            }
+          } else {
+            const materialized = materializedDocs.get(args.id)
+            if (materialized) {
+              await appendPresence(materialized, { clear: true })
+            }
+            replaceSessions.delete(toolCallId)
+            return {
+              content: [
+                {
+                  type: `text` as const,
+                  text: `Error: streamed replacement content diverged from final content; no final reconciliation was applied.`,
+                },
+              ],
+              details: {
+                replaced: false,
+                inserted: inserted.length,
+                expected: args.content.length,
+              },
+            }
+          }
+        }
+
+        const materialized = await materializeDocument(args.id)
+        await appendPresence(materialized, { clear: true })
+        const finalContent = contentOf(materialized)
+        readDocs.set(args.id, finalContent)
+        replaceSessions.delete(toolCallId)
+        const diff = createTwoFilesPatch(
+          docLabel(args.id),
+          docLabel(args.id),
+          session.beforeContent ?? finalContent,
+          finalContent,
+          undefined,
+          undefined,
+          { context: 3 }
+        )
+        return {
+          content: [
+            {
+              type: `text` as const,
+              text: `Replaced ${session.deleteLength ?? 0} characters in markdown document ${args.id}`,
+            },
+          ],
+          details: {
+            document: materialized.document,
+            replaced: true,
+            deleted: session.deleted,
+            deleteIndex: session.deleteIndex,
+            deleteLength: session.deleteLength,
+            streamed,
+            insertedBytes: new TextEncoder().encode(args.content).length,
+            nextIndex,
+            diff,
           },
         }
       },
