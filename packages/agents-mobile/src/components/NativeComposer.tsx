@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import {
   Pressable,
   ScrollView,
@@ -18,7 +18,6 @@ import {
   buildSlashCommandInsertion,
   filterSlashCommands,
   type ComposerInsertion,
-  type Selection,
 } from '../lib/slashAutocomplete'
 import { useTokens } from '../lib/ThemeProvider'
 import { fontSize, lineHeight, radii, spacing } from '../lib/theme'
@@ -40,11 +39,18 @@ export type SlashAutocomplete = {
 }
 
 /**
- * Drives native slash-command autocomplete on a plain `TextInput`: tracks the
- * caret, derives the trigger via the shared {@link detectSlashCommandTrigger}
- * grammar, filters the list, and produces the spliced value on selection.
- * Everything is plain React state — no WebView, no caret coordinates — which is
- * what lets the popover ({@link SlashCommandMenu}) be native.
+ * Drives native slash-command autocomplete on a plain `TextInput`: derives the
+ * trigger via the shared {@link detectSlashCommandTrigger} grammar, filters the
+ * list, and produces the spliced value on selection. Everything is plain React
+ * state — no WebView, no caret coordinates — which is what lets the popover
+ * ({@link SlashCommandMenu}) be native.
+ *
+ * The caret defaults to the end of the text so the menu opens on the first `/`
+ * without waiting for `onSelectionChange` — RN delivers that a render after
+ * `onChangeText`, so a selection-driven caret trails the value (and can leave
+ * the menu stuck closed). A reported caret is trusted only while it still
+ * matches the current value, which also enables mid-text triggers and
+ * suppresses the menu during a range selection.
  */
 export function useSlashAutocomplete(
   value: string,
@@ -52,25 +58,40 @@ export function useSlashAutocomplete(
   options: { enabled?: boolean } = {}
 ): SlashAutocomplete {
   const enabled = options.enabled ?? true
-  const [selection, setSelection] = useState<Selection>({ start: 0, end: 0 })
+  const valueRef = useRef(value)
+  valueRef.current = value
+  const [reported, setReported] = useState<{
+    caret: number | null
+    value: string
+  }>({ caret: null, value: `` })
 
   const onSelectionChange = useCallback(
     (event: NativeSyntheticEvent<TextInputSelectionChangeEventData>): void => {
-      setSelection(event.nativeEvent.selection)
+      const { start, end } = event.nativeEvent.selection
+      // A `null` caret marks a range selection — no single insertion point.
+      setReported({
+        caret: start === end ? start : null,
+        value: valueRef.current,
+      })
     },
     []
   )
 
   const reset = useCallback((): void => {
-    setSelection({ start: 0, end: 0 })
+    setReported({ caret: null, value: `` })
   }, [])
 
-  // A trigger only exists when the caret is collapsed at the end of a `/token`.
-  const trigger = useMemo(() => {
-    if (!enabled) return null
-    if (selection.start !== selection.end) return null
-    return detectSlashCommandTrigger(value, selection.start)
-  }, [enabled, selection.start, selection.end, value])
+  const fresh = reported.value === value
+  const caret = fresh && reported.caret !== null ? reported.caret : value.length
+  const rangeSelected = fresh && reported.caret === null
+
+  const trigger = useMemo(
+    () =>
+      enabled && !rangeSelected
+        ? detectSlashCommandTrigger(value, caret)
+        : null,
+    [enabled, rangeSelected, caret, value]
+  )
 
   const items = useMemo(
     () => (trigger ? filterSlashCommands(slashCommands, trigger.query) : []),
@@ -79,10 +100,10 @@ export function useSlashAutocomplete(
 
   const applyCommand = useCallback(
     (command: SlashCommandRow): ComposerInsertion => {
-      const range = trigger ?? { from: selection.start, to: selection.start }
+      const range = trigger ?? { from: value.length, to: value.length }
       return buildSlashCommandInsertion(value, range, command)
     },
-    [selection.start, trigger, value]
+    [trigger, value]
   )
 
   return {
