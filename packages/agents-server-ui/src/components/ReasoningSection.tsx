@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Streamdown } from 'streamdown'
 import {
   streamdownComponents,
@@ -58,6 +58,18 @@ export function ReasoningSection({
   isStreaming: boolean
   timestamp?: number | null
 }): React.ReactElement | null {
+  // Owned here rather than inside `ReasoningEntryView` so the user's
+  // expand/collapse choice survives the entry view being unmounted and
+  // remounted — e.g. when the reasoning row briefly disappears from
+  // the live query while another part of the run updates, or when a
+  // virtualizer measurement pass replaces the subtree.
+  const [expandedByKey, setExpandedByKey] = useState<Record<string, boolean>>(
+    {}
+  )
+  const toggleExpanded = useCallback((key: string) => {
+    setExpandedByKey((prev) => ({ ...prev, [key]: !prev[key] }))
+  }, [])
+
   if (entries.length === 0) return null
   return (
     <Stack direction="column" gap={2} className={styles.root}>
@@ -67,6 +79,8 @@ export function ReasoningSection({
           entry={entry}
           isStreaming={isStreaming}
           timestamp={timestamp}
+          expanded={Boolean(expandedByKey[entry.key])}
+          onToggle={toggleExpanded}
         />
       ))}
     </Stack>
@@ -77,13 +91,20 @@ function ReasoningEntryView({
   entry,
   isStreaming,
   timestamp,
+  expanded,
+  onToggle,
 }: {
   entry: ReasoningEntry
   isStreaming: boolean
   timestamp?: number | null
+  expanded: boolean
+  onToggle: (key: string) => void
 }): React.ReactElement {
   const isLive = isStreaming && entry.status === `streaming`
-  const [expanded, setExpanded] = useState(false)
+  const handleToggle = useMemo(
+    () => () => onToggle(entry.key),
+    [entry.key, onToggle]
+  )
 
   // Snapshot the elapsed duration at the moment streaming flips to
   // `completed`, the same `sawStreamingRef` trick used for "done in
@@ -167,7 +188,7 @@ function ReasoningEntryView({
       <button
         type="button"
         className={styles.toggle}
-        onClick={() => setExpanded((v) => !v)}
+        onClick={handleToggle}
         aria-expanded={expanded}
       >
         <Text size={1} tone="muted">

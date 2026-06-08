@@ -225,15 +225,19 @@ export interface EntityTimelineReasoningItem {
   run_id?: string
   order: TimelineOrder
   status: `streaming` | `completed`
-  // Concatenated content from all `reasoning_delta` rows for this row,
-  // built live by the query (mirrors `EntityTimelineTextItem.content`).
-  content: string
   // Optional bolded title parsed at write time — only OpenAI Responses
   // emits these; null for Anthropic / DeepSeek / Moonshot.
   summary_title?: string
   // Anthropic redacted-thinking opaque payload. Persist verbatim so we
   // can echo it back on the next turn; the UI shows a placeholder.
   encrypted?: string
+}
+
+export interface EntityTimelineReasoningDeltaItem {
+  key: string
+  reasoning_id: string
+  delta: string
+  order: TimelineOrder
 }
 
 export interface EntityTimelineStepItem {
@@ -260,6 +264,7 @@ export interface EntityTimelineRunRow {
   finish_reason?: string
   items: Collection<EntityTimelineRunItem>
   reasoning: Collection<EntityTimelineReasoningItem>
+  reasoningDeltas: Collection<EntityTimelineReasoningDeltaItem>
   steps: Collection<EntityTimelineStepItem>
   errors: Collection<EntityTimelineErrorItem>
 }
@@ -1384,22 +1389,27 @@ function buildEntityTimelineQuery(
         run_id: reasoning.run_id,
         order: coalesce(reasoning._timeline_order, `~`),
         status: reasoning.status,
-        // Same delta-join pattern as `items.text.textContent` above —
-        // we concatenate every `reasoning_delta` row scoped to this
-        // reasoning row's key in `_timeline_order` then `key` order.
-        // Live: re-runs as each delta arrives; settled: stable.
-        content: concat(
-          toArray(
-            q
-              .from({ chunk: db.collections.reasoningDeltas })
-              .where(({ chunk }) => eq(chunk.reasoning_id, reasoning.key))
-              .orderBy(({ chunk }) => coalesce(chunk._timeline_order, `~`))
-              .orderBy(({ chunk }) => chunk.key)
-              .select(({ chunk }) => chunk.delta)
-          )
-        ),
+        // `content` intentionally left undefined here — the previous
+        // `concat(toArray(...))` correlated sub-query went stale
+        // (returning `null` even though deltas were present) after the
+        // row's status flipped to `completed`. The UI assembles
+        // content client-side from `run.reasoningDeltas` below, which
+        // is a plain non-correlated query and stays reactive.
         summary_title: reasoning.summary_title,
         encrypted: reasoning.encrypted,
+      })),
+    reasoningDeltas: q
+      .from({ reasoningDelta: db.collections.reasoningDeltas })
+      .where(({ reasoningDelta }) => eq(reasoningDelta.run_id, run.key))
+      .orderBy(({ reasoningDelta }) =>
+        coalesce(reasoningDelta._timeline_order, `~`)
+      )
+      .orderBy(({ reasoningDelta }) => reasoningDelta.key)
+      .select(({ reasoningDelta }) => ({
+        key: reasoningDelta.key,
+        reasoning_id: reasoningDelta.reasoning_id,
+        delta: reasoningDelta.delta,
+        order: coalesce(reasoningDelta._timeline_order, `~`),
       })),
     steps: q
       .from({ step: db.collections.steps })

@@ -2392,5 +2392,226 @@ describe(`entity includes query`, () => {
       expect(item.text?.key).toBe(`msg-0`)
       expect(item.text?.content).toBe(`Hello world`)
     })
+
+    it(`reasoning content survives multiple run-row updates in sequence`, async () => {
+      // Even closer to production: the run row gets updated MULTIPLE
+      // times (each delta + status flip), which may invalidate the
+      // child sub-collection between evaluations.
+      const { collections, sync } = createTimelineCollections()
+      const liveQuery = createLiveQueryCollection({
+        query: createEntityTimelineQuery({ collections } as any),
+        startSync: true,
+      })
+      await liveQuery.preload()
+
+      sync.runs.insert({ key: `run-0`, status: `started` })
+      sync.reasoning.insert({
+        key: `reasoning-0`,
+        run_id: `run-0`,
+        status: `streaming`,
+      })
+      sync.reasoningDeltas.insert({
+        key: `reasoning-0:0`,
+        reasoning_id: `reasoning-0`,
+        run_id: `run-0`,
+        delta: `A`,
+      })
+      sync.reasoningDeltas.insert({
+        key: `reasoning-0:1`,
+        reasoning_id: `reasoning-0`,
+        run_id: `run-0`,
+        delta: `B`,
+      })
+      sync.reasoning.update({
+        key: `reasoning-0`,
+        run_id: `run-0`,
+        status: `completed`,
+      })
+      // Then several text rows / deltas (each triggers run updates
+      // through derived projections).
+      sync.texts.insert({
+        key: `msg-0`,
+        run_id: `run-0`,
+        status: `streaming`,
+      })
+      for (let i = 0; i < 5; i++) {
+        sync.textDeltas.insert({
+          key: `msg-0:${i}`,
+          text_id: `msg-0`,
+          run_id: `run-0`,
+          delta: `t${i}`,
+        })
+      }
+      sync.texts.update({
+        key: `msg-0`,
+        run_id: `run-0`,
+        status: `completed`,
+      })
+      // Finally the run row update — the moment the bug surfaces.
+      sync.runs.update({
+        key: `run-0`,
+        status: `completed`,
+        finish_reason: `stop`,
+      })
+      await new Promise((r) => setTimeout(r, 100))
+
+      const rows = getRows(liveQuery)
+      const runRow = rows.find((r) => r.run?.key === `run-0`)
+      expect(runRow).toBeTruthy()
+      const reasoning = Array.from(runRow.run.reasoning.toArray) as Array<any>
+      expect(reasoning).toHaveLength(1)
+      const deltas = Array.from(runRow.run.reasoningDeltas.toArray) as Array<{
+        reasoning_id: string
+        delta: string
+      }>
+      const content = deltas
+        .filter((d) => d.reasoning_id === `reasoning-0`)
+        .map((d) => d.delta)
+        .join(``)
+      expect(content).toBe(`AB`)
+    })
+
+    it(`reasoning content populates even when text deltas are also present`, async () => {
+      // Production scenario: a run has BOTH text deltas and reasoning
+      // deltas. The reasoning sub-query was returning `content: null`
+      // in the running app even though the deltas were in the local DB.
+      const { collections, sync } = createTimelineCollections()
+      const liveQuery = createLiveQueryCollection({
+        query: createEntityTimelineQuery({ collections } as any),
+        startSync: true,
+      })
+      await liveQuery.preload()
+
+      sync.runs.insert({ key: `run-0`, status: `started` })
+      sync.reasoning.insert({
+        key: `reasoning-0`,
+        run_id: `run-0`,
+        status: `streaming`,
+      })
+      sync.reasoningDeltas.insert({
+        key: `reasoning-0:0`,
+        reasoning_id: `reasoning-0`,
+        run_id: `run-0`,
+        delta: `Thinking part 1. `,
+      })
+      sync.reasoningDeltas.insert({
+        key: `reasoning-0:1`,
+        reasoning_id: `reasoning-0`,
+        run_id: `run-0`,
+        delta: `Thinking part 2.`,
+      })
+      sync.reasoning.update({
+        key: `reasoning-0`,
+        run_id: `run-0`,
+        status: `completed`,
+      })
+      sync.texts.insert({
+        key: `msg-0`,
+        run_id: `run-0`,
+        status: `streaming`,
+      })
+      sync.textDeltas.insert({
+        key: `msg-0:0`,
+        text_id: `msg-0`,
+        run_id: `run-0`,
+        delta: `Answer part 1. `,
+      })
+      sync.textDeltas.insert({
+        key: `msg-0:1`,
+        text_id: `msg-0`,
+        run_id: `run-0`,
+        delta: `Answer part 2.`,
+      })
+      sync.texts.update({
+        key: `msg-0`,
+        run_id: `run-0`,
+        status: `completed`,
+      })
+      sync.runs.update({
+        key: `run-0`,
+        status: `completed`,
+        finish_reason: `stop`,
+      })
+      await new Promise((r) => setTimeout(r, 50))
+
+      const rows = getRows(liveQuery)
+      const runRow = rows.find((r) => r.run?.key === `run-0`)
+      expect(runRow).toBeTruthy()
+      const reasoning = Array.from(runRow.run.reasoning.toArray) as Array<any>
+      expect(reasoning).toHaveLength(1)
+      const reasoningDeltas = Array.from(
+        runRow.run.reasoningDeltas.toArray
+      ) as Array<{ reasoning_id: string; delta: string }>
+      const reasoningContent = reasoningDeltas
+        .filter((d) => d.reasoning_id === `reasoning-0`)
+        .map((d) => d.delta)
+        .join(``)
+      expect(reasoningContent).toBe(`Thinking part 1. Thinking part 2.`)
+      const items = Array.from(runRow.run.items.toArray) as Array<any>
+      expect(items).toHaveLength(1)
+      expect(items[0].text?.content).toBe(`Answer part 1. Answer part 2.`)
+    })
+
+    it(`reasoning content remains populated after status flips to completed`, async () => {
+      // Reproduces the bug where the reasoning row's `content` field
+      // came back as `undefined` (not even `""`) once the row's status
+      // transitioned to `completed`, even though the deltas were still
+      // present in the local DB. This made the "Thought for Ns"
+      // expanded view render an empty body.
+      const { collections, sync } = createTimelineCollections()
+      const liveQuery = createLiveQueryCollection({
+        query: createEntityTimelineQuery({ collections } as any),
+        startSync: true,
+      })
+      await liveQuery.preload()
+
+      sync.runs.insert({ key: `run-0`, status: `started` })
+      sync.reasoning.insert({
+        key: `reasoning-0`,
+        run_id: `run-0`,
+        status: `streaming`,
+      })
+      sync.reasoningDeltas.insert({
+        key: `reasoning-0:0`,
+        reasoning_id: `reasoning-0`,
+        run_id: `run-0`,
+        delta: `First thinking step. `,
+      })
+      sync.reasoningDeltas.insert({
+        key: `reasoning-0:1`,
+        reasoning_id: `reasoning-0`,
+        run_id: `run-0`,
+        delta: `Second thinking step.`,
+      })
+      // Now flip the row to completed — this is the transition that
+      // caused content to vanish in the running app.
+      sync.reasoning.update({
+        key: `reasoning-0`,
+        run_id: `run-0`,
+        status: `completed`,
+      })
+      sync.runs.update({
+        key: `run-0`,
+        status: `completed`,
+        finish_reason: `stop`,
+      })
+      await new Promise((r) => setTimeout(r, 50))
+
+      const rows = getRows(liveQuery)
+      const runRow = rows.find((r) => r.run?.key === `run-0`)
+      expect(runRow).toBeTruthy()
+      const reasoning = Array.from(runRow.run.reasoning.toArray) as Array<any>
+      expect(reasoning).toHaveLength(1)
+      expect(reasoning[0].key).toBe(`reasoning-0`)
+      expect(reasoning[0].status).toBe(`completed`)
+      const reasoningDeltas = Array.from(
+        runRow.run.reasoningDeltas.toArray
+      ) as Array<{ reasoning_id: string; delta: string }>
+      const content = reasoningDeltas
+        .filter((d) => d.reasoning_id === `reasoning-0`)
+        .map((d) => d.delta)
+        .join(``)
+      expect(content).toBe(`First thinking step. Second thinking step.`)
+    })
   })
 })
