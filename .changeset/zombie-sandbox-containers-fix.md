@@ -3,22 +3,23 @@
 '@electric-ax/agents': patch
 ---
 
-Fix Docker sandbox containers (`electric-sbx-*`) accumulating as zombies, and
-stop creating containers for wakes that never use their sandbox:
+Fix leftover Docker sandbox containers (`electric-sbx-*`) piling up.
 
-- The boot sweep now reclaims RUNNING orphans whose owning process died
-  (owner-pid label + in-container adoption marker), instead of only exited
-  ephemeral leftovers — previously crash/quit leftovers were never cleaned up.
-- Runtime shutdown flushes the debounced idle teardowns (stop persistent /
-  remove ephemeral) instead of letting the unref'd timers die with the
-  process, which leaked a running container on every quit.
-- A failed post-start init no longer leaves a running, untracked container
-  behind, and a 409 from inside creation is no longer misread as a name
-  conflict (which "reattached" to a removed container).
-- Sandbox creation is now lazy: the container is only created/started when a
-  wake actually uses its sandbox, so backlog bursts of trivial wakes (cron
-  ticks, bookkeeping) on runner reconnect no longer spin up containers.
-  Terminal reclaim and spawn-`inherit` still work for never-used sandboxes,
-  and concurrent container creations are capped to smooth real bursts.
-- All sandbox containers carry `com.docker.compose.project=electric-sandboxes`
-  so Docker GUIs group them and they can be stopped/removed together.
+Sandbox containers are meant to be short-lived, but several gaps let them
+outlive the work they were created for — opening the desktop app could leave
+15+ containers running that were never explicitly started. This closes those
+gaps so a container only exists while something is actually using it:
+
+- **Created only when used.** A container now starts the first time an agent
+  actually uses its sandbox (runs a command, reads/writes a file), so trivial
+  wakes (scheduled ticks, bookkeeping) no longer spin one up.
+- **Cleaned up on quit.** Shutdown now tears down idle containers immediately
+  instead of leaving their delayed-teardown timers to die with the process.
+- **Leftovers reclaimed at startup.** Containers are tagged with the process
+  that created them; at startup, those whose owner is gone are reclaimed
+  (throwaway ones removed, reusable ones stopped so their files survive), while
+  containers a live process is still using are left untouched.
+
+Also: a failed container setup step no longer strands an untracked container,
+and all sandboxes are grouped under one `electric-sandboxes` entry in Docker
+Desktop so they can be stopped/removed together.
