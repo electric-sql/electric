@@ -14,8 +14,17 @@ verified against the current tree.
 - **PR2 — native in-session slash composer:** done. `NativeComposer.tsx` +
   `lib/slashAutocomplete.ts` (pure, tested) drive a native keyboard-docked
   autocomplete on the existing `SessionScreen` `TextInput`, sending
-  `composer_input`. Scope deviations are noted below (in-session only; no static
-  fallback; edit matches desktop's flatten).
+  `composer_input`. (Remaining deviation: the in-session composer has no static
+  fallback, so a purely-static command set is empty until the live collection
+  syncs; edit matches desktop's flatten.)
+- **PR2.5 — new-session spawn parity:** done. The same autocomplete runs on
+  `NewSessionScreen` (sourced from the selected type's `slash_commands`), and
+  spawn sends `initialMessage = serializeComposerInput(...)` with
+  `initialMessageType = composer_input`. No server change — the spawn endpoint
+  already accepts a structured `initialMessage` + `initialMessageType` + an
+  `args` record; only the mobile `spawnEntity` wrapper was widened, and its
+  `args` generalized so future schema-form / model / attachment work is
+  additive.
 - **PR3 — inline live-markdown pills:** deferred. Depends on a physical-device
   spike (worklets / `react-native-live-markdown` on Expo 54 / RN 0.81 / React 19)
   that can't be run in a headless environment; the parity win ships without it.
@@ -204,10 +213,13 @@ spike and never block the parity win.
   `TextInput` emitting `composer_input`, `/`-trigger detection, native
   keyboard-docked autocomplete on the **existing** keyboard plumbing,
   `useLiveQuery(db.collections.slashCommands)`. This delivers the in-session
-  feature/experience parity. `NewSessionScreen` spawn parity is **deferred** (a
-  follow-up): the mobile spawn endpoint takes a plain-string `initialMessage`
-  with no `initialMessageType`, so a structured `composer_input` spawn needs
-  server/`spawnEntity` plumbing that is out of v1 scope.
+  feature/experience parity.
+- **PR2.5 — new-session spawn parity.** Same autocomplete on `NewSessionScreen`
+  (sourced from the type's static `slash_commands`) + a `composer_input` spawn.
+  No server change: the spawn endpoint already accepts a structured
+  `initialMessage` + `initialMessageType` + `args`; the mobile `spawnEntity`
+  wrapper was widened to pass them, with `args` generalized to a pass-through so
+  future schema-form / model / attachment work is additive, not a re-plumb.
 - **PR3 — inline `/command` pills (gated on the spike).** Add
   `react-native-live-markdown` + `react-native-worklets` and a worklet parser
   styling `/command` ranges. Drop if the spike fails — parity is already shipped.
