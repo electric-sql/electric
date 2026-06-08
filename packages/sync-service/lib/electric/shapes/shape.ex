@@ -233,18 +233,17 @@ defmodule Electric.Shapes.Shape do
          {:ok, {oid, table} = relation} <- validate_relation(opts, inspector),
          {:ok, column_info, pk_cols} <- load_column_info(relation, inspector),
          {:ok, supported_features} <- load_supported_features(inspector),
-         {:ok, stored_queryable_columns, effective_queryable_columns} <-
-           validate_queryable_columns(column_info, pk_cols, opts),
+         {:ok, queryable_columns} <- validate_queryable_columns(column_info, pk_cols, opts),
          {:ok, selected_columns, explicitly_selected_columns} <-
            validate_selected_columns(
              column_info,
              pk_cols,
              supported_features,
-             Map.put(opts, :queryable_columns, effective_queryable_columns)
+             Map.put(opts, :queryable_columns, queryable_columns)
            ),
          refs =
            column_info
-           |> filter_columns(effective_queryable_columns)
+           |> filter_columns(queryable_columns)
            |> Inspector.columns_to_expr(),
          {:ok, where, shape_dependencies} <-
            validate_where_clause(Map.get(opts, :where), opts, refs) do
@@ -273,7 +272,7 @@ defmodule Electric.Shapes.Shape do
          where: where,
          selected_columns: selected_columns,
          explicitly_selected_columns: explicitly_selected_columns,
-         queryable_columns: stored_queryable_columns,
+         queryable_columns: queryable_columns,
          replica: Map.get(opts, :replica, :default),
          storage: Map.get(opts, :storage) || %{compaction: :disabled},
          shape_dependencies: shape_dependencies,
@@ -479,7 +478,7 @@ defmodule Electric.Shapes.Shape do
     missing_pk_cols = pk_cols -- columns_to_select
     queryable_columns = Map.fetch!(opts, :queryable_columns)
     invalid_cols = columns_to_select -- Enum.map(column_info, & &1.name)
-    not_queryable_cols = columns_to_select -- queryable_columns
+    not_queryable_cols = non_queryable_columns(columns_to_select, queryable_columns)
     generated_cols = Enum.filter(column_info, &(&1.is_generated and &1.name in columns_to_select))
 
     err_msg =
@@ -522,11 +521,11 @@ defmodule Electric.Shapes.Shape do
          %{supports_generated_column_replication: supports_generated_column_replication},
          opts
        ) do
-    queryable_columns = Map.fetch!(opts, :queryable_columns)
-    generated_cols = Enum.filter(column_info, &(&1.is_generated and &1.name in queryable_columns))
+    columns_to_select = Map.fetch!(opts, :queryable_columns) || Enum.map(column_info, & &1.name)
+    generated_cols = Enum.filter(column_info, &(&1.is_generated and &1.name in columns_to_select))
 
     if generated_cols == [] or supports_generated_column_replication do
-      all_columns = Enum.sort(queryable_columns)
+      all_columns = Enum.sort(columns_to_select)
       {:ok, all_columns, all_columns}
     else
       err_msg =
@@ -539,13 +538,24 @@ defmodule Electric.Shapes.Shape do
     end
   end
 
-  defp validate_queryable_columns(column_info, pk_cols, opts) do
-    all_column_names = Enum.map(column_info, & &1.name)
-    requested_queryable_columns = Map.get(opts, :queryable_columns)
-    effective_queryable_columns = requested_queryable_columns || all_column_names
+  defp non_queryable_columns(_columns_to_select, nil), do: []
 
-    missing_pk_cols = pk_cols -- effective_queryable_columns
-    invalid_cols = effective_queryable_columns -- all_column_names
+  defp non_queryable_columns(columns_to_select, queryable_columns),
+    do: columns_to_select -- queryable_columns
+
+  defp validate_queryable_columns(column_info, pk_cols, opts) when is_map(opts) do
+    case Map.get(opts, :queryable_columns) do
+      nil -> {:ok, nil}
+      queryable_columns -> validate_queryable_columns(column_info, pk_cols, queryable_columns)
+    end
+  end
+
+  defp validate_queryable_columns(column_info, pk_cols, queryable_columns)
+       when is_list(queryable_columns) do
+    all_column_names = Enum.map(column_info, & &1.name)
+
+    missing_pk_cols = pk_cols -- queryable_columns
+    invalid_cols = queryable_columns -- all_column_names
 
     err_msg =
       cond do
@@ -557,7 +567,7 @@ defmodule Electric.Shapes.Shape do
           "The following queryable columns are not found on the table: " <>
             Enum.join(invalid_cols, ", ")
 
-        effective_queryable_columns == [] ->
+        queryable_columns == [] ->
           "The list of queryable columns must not be empty"
 
         true ->
@@ -565,16 +575,13 @@ defmodule Electric.Shapes.Shape do
       end
 
     if is_nil(err_msg) do
-      stored_queryable_columns =
-        if is_nil(requested_queryable_columns),
-          do: nil,
-          else: Enum.sort(requested_queryable_columns)
-
-      {:ok, stored_queryable_columns, Enum.sort(effective_queryable_columns)}
+      {:ok, Enum.sort(queryable_columns)}
     else
       {:error, {:queryable_columns, [err_msg]}}
     end
   end
+
+  defp filter_columns(column_info, nil), do: column_info
 
   defp filter_columns(column_info, column_names) do
     Enum.filter(column_info, &(&1.name in column_names))

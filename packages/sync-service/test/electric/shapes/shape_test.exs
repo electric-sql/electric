@@ -621,6 +621,26 @@ defmodule Electric.Shapes.ShapeTest do
     @tag with_sql: [
            "CREATE TABLE IF NOT EXISTS col_table (id INT PRIMARY KEY, value1 TEXT, value2 TEXT)"
          ]
+    test "does not restrict selected columns or where clauses when queryable columns are omitted",
+         %{
+           inspector: inspector
+         } do
+      assert {:ok,
+              %Shape{
+                selected_columns: ["id", "value1"],
+                queryable_columns: nil,
+                where: %{query: "value2 = 'allowed'"}
+              }} =
+               Shape.new("col_table",
+                 inspector: inspector,
+                 columns: ["id", "value1"],
+                 where: "value2 = 'allowed'"
+               )
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE IF NOT EXISTS col_table (id INT PRIMARY KEY, value1 TEXT, value2 TEXT)"
+         ]
     test "builds a shape with queryable columns and narrower synced columns", %{
       inspector: inspector
     } do
