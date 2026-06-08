@@ -1223,6 +1223,7 @@ describe(`ElectricAgentsRoutes fork endpoint`, () => {
       parent: `/chat/parent`,
       wake,
       tags: { experiment: `ecosystem-maturity` },
+      createdBy: `/principal/system:dev-local`,
     })
     // initialMessage is NOT passed into forkSubtree — it's delivered
     // via entityManager.send after linkEntityDispatchSubscription, the

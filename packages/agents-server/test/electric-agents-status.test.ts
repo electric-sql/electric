@@ -938,14 +938,11 @@ describe(`ElectricAgentsManager.forkSubtree`, () => {
       })
     ).rejects.toThrow(`wake register boom`)
 
-    // The new root fork entity was created then deleted; both of its
-    // streams were forked then deleted; the source root is untouched.
+    // The new root fork entity was created then deleted; its main
+    // stream was forked then deleted; the source root is untouched.
     expect(deletedEntities).toContain(`/chat/rollback-fork`)
     expect(deleted).toEqual(
-      expect.arrayContaining([
-        `/chat/rollback-fork/main`,
-        `/chat/rollback-fork/error`,
-      ])
+      expect.arrayContaining([`/chat/rollback-fork/main`])
     )
     expect(deletedEntities).not.toContain(root.url)
   })

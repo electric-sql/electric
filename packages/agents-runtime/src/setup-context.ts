@@ -170,13 +170,11 @@ export interface SetupContextResult {
   ) => Promise<EntityHandle>
   /**
    * Fork a source entity at its latest completed run. Returns an
-   * EntityHandle for the new fork — same shape spawn returns — so the
-   * caller can `await fork.run` etc. The fork is created as a CHILD
-   * of this setup-context's entity (parent = entityUrl) unless
-   * `observe: false`. Mirrors spawn's flow: builds the handle, wires a
-   * spawn handle on wakeSession to resolve the run promise on
-   * runFinished, then calls `wiring.forkEntity` to do the server-side
-   * fork.
+   * EntityHandle for the new fork — same shape spawn returns. The
+   * fork is created as a CHILD of this setup-context's entity
+   * (parent = entityUrl) unless `observe: false`. Mirrors spawn's
+   * flow: builds the handle, registers a spawn handle on wakeSession,
+   * then calls `wiring.forkEntity` to do the server-side fork.
    */
   fork: (
     sourceEntityUrl: string,
@@ -1107,11 +1105,7 @@ export function createSetupContext(
         ...(opts?.wake ? { wake: opts.wake } : {}),
       })
 
-      let runResolve: () => void
       let forkError: Error | null = null
-      let runPromise = new Promise<void>((resolve) => {
-        runResolve = resolve
-      })
 
       // The server constructs the fork URL as `/<sourceType>/<id>` when
       // `instance_id` is supplied (current code path), so we know it up
@@ -1129,33 +1123,6 @@ export function createSetupContext(
         type,
         db: null as unknown as EntityStreamDB,
         events: [],
-        get run(): Promise<void> {
-          if (inSetup) {
-            throw new Error(
-              `fork.run cannot be called during setup() — use it in effects instead`
-            )
-          }
-          if (!observeChild) {
-            return Promise.reject(
-              new Error(
-                `fork.run is unavailable — fork(..., { observe: false }) opted out of child observation`
-              )
-            )
-          }
-          if (forkError) {
-            return Promise.reject(forkError)
-          }
-          return runPromise
-        },
-        async text(): Promise<Array<string>> {
-          if (!observeChild) {
-            throw new Error(
-              `fork.text is unavailable — fork(..., { observe: false }) opted out of child observation`
-            )
-          }
-          await this.run
-          return readCompletedRunTexts(this.db)
-        },
         send: (msg: unknown) => {
           if (inSetup) {
             throw new Error(
@@ -1165,14 +1132,10 @@ export function createSetupContext(
           if (forkError) {
             throw forkError
           }
-          const result = dispatchSend({
+          return dispatchSend({
             targetUrl: realEntityUrl,
             payload: msg,
           })
-          runPromise = new Promise<void>((resolve) => {
-            runResolve = resolve
-          })
-          return result
         },
         status: () => {
           const entries = db.collections.childStatus?.toArray as
@@ -1188,17 +1151,10 @@ export function createSetupContext(
 
       // ---- Inline wiring (production path) ----
       if (wiring) {
-        // Mirror spawn's order: register the spawn handle first so the
-        // runFinished wake can find it on the back-edge; then create
-        // the server-side fork.
+        // Mirror spawn's order: register the spawn handle first, then
+        // create the server-side fork.
         wakeSession.registerSpawnHandle(id, {
           wireDb: () => {},
-          resolveRun: () => {
-            runResolve!()
-          },
-          rejectRun: (reason: Error) => {
-            forkError = reason
-          },
           updateEntityUrl: (newUrl: string) => {
             realEntityUrl = newUrl
             if (observeChild) {
@@ -1239,33 +1195,9 @@ export function createSetupContext(
             const childDb = await wiring.createChildDb(
               `${config.serverBaseUrl}${streamPath}`,
               type,
-              (event) => {
-                if (
-                  event.type === `run` &&
-                  event.headers.operation === `update`
-                ) {
-                  const val = event.value as { status?: string } | undefined
-                  if (val?.status === `completed` || val?.status === `failed`) {
-                    runResolve!()
-                  }
-                }
-              }
+              () => {}
             )
             handle.db = childDb
-
-            const runs = childDb.collections.runs?.toArray as
-              | Array<{ key: string; status: string }>
-              | undefined
-            if (runs) {
-              const latestRun = runs[runs.length - 1]
-              if (
-                latestRun &&
-                (latestRun.status === `completed` ||
-                  latestRun.status === `failed`)
-              ) {
-                runResolve!()
-              }
-            }
           }
         } catch (err) {
           forkError = err instanceof Error ? err : new Error(String(err))
@@ -1278,18 +1210,11 @@ export function createSetupContext(
       }
 
       // ---- Deferred wiring (unit test path) ---- same shape as spawn.
-      const dbReady = new Promise<void>((resolveDb, rejectDb) => {
+      const dbReady = new Promise<void>((resolveDb, _rejectDb) => {
         wakeSession.registerSpawnHandle(id, {
           wireDb: (childDb: EntityStreamDBWithActions) => {
             handle.db = childDb
             resolveDb()
-          },
-          resolveRun: () => {
-            runResolve!()
-          },
-          rejectRun: (reason: Error) => {
-            forkError = reason
-            rejectDb(reason)
           },
           updateEntityUrl: (newUrl: string) => {
             realEntityUrl = newUrl
