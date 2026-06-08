@@ -31,12 +31,16 @@ defmodule Support.TestUtils do
   Build a transaction fragment that may or may not have begin and commit parts.
   """
   def txn_fragment(xid, lsn, changes, opts) do
-    [%{log_offset: last_log_offset} | _] = Enum.reverse(changes)
-
     lsn =
       case lsn do
         %Electric.Postgres.Lsn{} -> lsn
         num when is_integer(num) -> Electric.Postgres.Lsn.from_integer(num)
+      end
+
+    last_log_offset =
+      case Enum.reverse(changes) do
+        [%{log_offset: offset} | _] -> offset
+        [] -> LogOffset.new(lsn, 0)
       end
 
     %TransactionFragment{
