@@ -1065,12 +1065,12 @@ defmodule Electric.Plug.RouterTest do
            "CREATE TABLE queryable_users (id BIGINT PRIMARY KEY, name TEXT NOT NULL, secret_token TEXT NOT NULL)",
            "INSERT INTO queryable_users VALUES (1, 'Alice', 'supersecret123')"
          ]
-    test "GET allows where clauses on queryable columns that are not selected", %{opts: opts} do
+    test "GET allows main where clauses outside queryable_columns", %{opts: opts} do
       conn =
         conn("GET", "/v1/shape", %{
           table: "queryable_users",
           offset: "-1",
-          queryable_columns: "id,name,secret_token",
+          queryable_columns: "id,name",
           columns: "id,name",
           where: "secret_token LIKE 'super%'"
         })
@@ -1091,21 +1091,7 @@ defmodule Electric.Plug.RouterTest do
            "CREATE TABLE queryable_users (id BIGINT PRIMARY KEY, name TEXT NOT NULL, secret_token TEXT NOT NULL)",
            "INSERT INTO queryable_users VALUES (1, 'Alice', 'supersecret123')"
          ]
-    test "GET rejects where clauses and selected columns outside queryable_columns", %{opts: opts} do
-      conn =
-        conn("GET", "/v1/shape", %{
-          table: "queryable_users",
-          offset: "-1",
-          queryable_columns: "id,name",
-          columns: "id,name",
-          where: "secret_token LIKE 'super%'"
-        })
-        |> Router.call(opts)
-
-      assert %{status: 400} = conn
-      assert %{"errors" => %{"where" => [message]}} = Jason.decode!(conn.resp_body)
-      assert message =~ "unknown reference secret_token"
-
+    test "GET rejects selected columns outside queryable_columns", %{opts: opts} do
       conn =
         conn("GET", "/v1/shape", %{
           table: "queryable_users",
@@ -3612,6 +3598,29 @@ defmodule Electric.Plug.RouterTest do
       assert %{status: 400} = conn
 
       assert %{"errors" => %{"subset" => %{"where" => [message]}}} =
+               Jason.decode!(conn.resp_body)
+
+      assert message =~ "unknown reference secret_token"
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE queryable_users (id BIGINT PRIMARY KEY, name TEXT NOT NULL, secret_token TEXT NOT NULL)",
+           "INSERT INTO queryable_users VALUES (1, 'Alice', 'supersecret123')"
+         ]
+    test "subset snapshots reject subset__order_by outside queryable_columns", ctx do
+      conn =
+        conn("GET", "/v1/shape", %{
+          "table" => "queryable_users",
+          "offset" => "-1",
+          "queryable_columns" => "id,name",
+          "columns" => "id,name",
+          "subset__order_by" => "secret_token ASC"
+        })
+        |> Router.call(ctx.opts)
+
+      assert %{status: 400} = conn
+
+      assert %{"errors" => %{"subset" => %{"order_by" => [message]}}} =
                Jason.decode!(conn.resp_body)
 
       assert message =~ "unknown reference secret_token"
