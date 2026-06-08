@@ -484,3 +484,118 @@ function hasStringField(
     typeof (value as unknown as Record<string, unknown>)[field] === `string`
   )
 }
+
+// ============================================================================
+// Composer source parsing (slash-command grammar shared by all UIs)
+// ============================================================================
+//
+// These are the single source of truth for the slash-command grammar across
+// every composer surface (desktop ProseMirror, mobile native TextInput). The
+// inline highlight, the autocomplete trigger, and the emitted payload nodes all
+// derive from the patterns below so they cannot silently disagree.
+
+/**
+ * Matches a complete slash-command token at a word boundary (e.g. `/pr-review`).
+ * Returns a fresh instance per call because the `g` flag is stateful
+ * (`lastIndex`) and the same grammar is iterated from multiple call sites.
+ */
+export const createSlashCommandTokenRegex = (): RegExp =>
+  /(^|\s)\/([a-z][a-z0-9]*(?:-[a-z0-9]+)*)(?=\s|$)/g
+
+/**
+ * Matches an in-progress slash-command trigger immediately before the cursor
+ * (e.g. the user has typed `/pr-rev`). Drives autocomplete. Intentionally more
+ * permissive than the token regex (case-insensitive, allows a bare `/`) so the
+ * menu can open before a valid command name has been completed. Has no `g` flag,
+ * so it is safe to share as a constant.
+ */
+export const SLASH_COMMAND_TRIGGER_REGEX = /(^|\s)\/([a-z0-9_-]*)$/i
+
+/**
+ * An in-progress slash-command trigger: the active query and the source range it
+ * occupies (`from` is the offset of the leading `/`, `to` is the cursor).
+ */
+export interface SlashCommandTrigger {
+  from: number
+  to: number
+  query: string
+}
+
+/**
+ * Detect an in-progress slash-command trigger in the text immediately before the
+ * cursor. `cursor` is the absolute UTF-16 offset into `text`. Returns null when
+ * the cursor is not parked at the end of a slash trigger.
+ */
+export function detectSlashCommandTrigger(
+  text: string,
+  cursor: number
+): SlashCommandTrigger | null {
+  const textBeforeCursor = text.slice(0, cursor)
+  const match = SLASH_COMMAND_TRIGGER_REGEX.exec(textBeforeCursor)
+  if (!match) return null
+  const query = match[2] ?? ``
+  return { from: cursor - query.length - 1, to: cursor, query }
+}
+
+/** Strip a leading `/` from a command name, if present. */
+export const normalizeCommandName = (name: string): string =>
+  name.startsWith(`/`) ? name.slice(1) : name
+
+/**
+ * Render a slash command's arguments as a single-line hint for an autocomplete
+ * row (e.g. `number: number [include_tests]: boolean`). Required arguments are
+ * bare, optional ones are wrapped in brackets, and non-string types are
+ * annotated. Returns an empty string for commands without arguments.
+ */
+export function formatSlashCommandArgumentHint(
+  command: SlashCommandRow
+): string {
+  if (command.arguments && command.arguments.length > 0) {
+    return command.arguments
+      .map((arg) => {
+        const label = arg.required ? arg.name : `[${arg.name}]`
+        return arg.type === `string` ? label : `${label}: ${arg.type}`
+      })
+      .join(` `)
+  }
+
+  return ``
+}
+
+/**
+ * Parse a raw composer source string into a {@link ComposerInputPayload},
+ * emitting one `slash_command` node per recognized token. Commands not present
+ * in `slashCommands` are still emitted but flagged `unknown` for handler-side
+ * interpretation. This is the regex-based producer used by the mobile native
+ * composer and as the desktop fallback; the desktop ProseMirror composer also
+ * derives nodes from its document and merges the two.
+ */
+export function serializeComposerInput(
+  source: string,
+  slashCommands: Array<SlashCommandRow> = []
+): ComposerInputPayload {
+  const knownNames = new Set(
+    slashCommands.map((command) => normalizeCommandName(command.name))
+  )
+  const nodes: ComposerInputPayload[`nodes`] = []
+  const commandPattern = createSlashCommandTokenRegex()
+  let match: RegExpExecArray | null
+
+  while ((match = commandPattern.exec(source)) !== null) {
+    const prefix = match[1] ?? ``
+    const raw = `/${match[2]}`
+    const start = match.index + prefix.length
+    const name = match[2]
+
+    nodes.push({
+      kind: `slash_command`,
+      start,
+      end: start + raw.length,
+      raw,
+      name,
+      ...(knownNames.has(name) ? {} : { unknown: true }),
+    })
+  }
+
+  return nodes.length > 0 ? { source, nodes } : { source }
+}
