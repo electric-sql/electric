@@ -141,15 +141,17 @@ defmodule Electric.Connection.ConnectionManagerTest do
       start_connection_manager(ctx)
 
       assert_receive {:stack_status, _,
-                      :replication_slot_creation_blocked_by_pending_transactions},
-                     5_000
+                      :replication_slot_creation_blocked_by_pending_transactions}
 
       # The notice fires once despite many timer ticks (interval = 50 ms).
-      assert_receive {:stack_status, _, :replication_slot_unblock_unavailable}, 5_000
-      refute_receive {:stack_status, _, :replication_slot_unblock_unavailable}, 500
+      assert_receive {:stack_status, _,
+                      {:replication_slot_unblock_unavailable,
+                       "Replication slot creation is blocked by a pending transaction. " <>
+                         "Electric might not be able to automatically unblock it" <> _}}
+
+      refute_receive {:stack_status, _, {:replication_slot_unblock_unavailable, _}}, 200
 
       Postgrex.query!(blocker, "COMMIT", [])
-      GenServer.stop(blocker)
     end
   end
 
