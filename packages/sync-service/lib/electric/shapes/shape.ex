@@ -477,8 +477,8 @@ defmodule Electric.Shapes.Shape do
 
     missing_pk_cols = pk_cols -- columns_to_select
     queryable_columns = Map.fetch!(opts, :queryable_columns)
-    invalid_cols = columns_to_select -- Enum.map(column_info, & &1.name)
-    not_queryable_cols = non_queryable_columns(columns_to_select, queryable_columns)
+    selectable_column_names = queryable_columns || Enum.map(column_info, & &1.name)
+    invalid_cols = columns_to_select -- selectable_column_names
     generated_cols = Enum.filter(column_info, &(&1.is_generated and &1.name in columns_to_select))
 
     err_msg =
@@ -489,9 +489,6 @@ defmodule Electric.Shapes.Shape do
 
         invalid_cols != [] ->
           "The following columns are not found on the table: " <> Enum.join(invalid_cols, ", ")
-
-        not_queryable_cols != [] ->
-          "The following columns are not queryable: " <> Enum.join(not_queryable_cols, ", ")
 
         generated_cols != [] and not supports_generated_column_replication ->
           "The following columns are generated and cannot be included in the shape: " <>
@@ -537,11 +534,6 @@ defmodule Electric.Shapes.Shape do
       {:error, {:columns, [err_msg]}}
     end
   end
-
-  defp non_queryable_columns(_columns_to_select, nil), do: []
-
-  defp non_queryable_columns(columns_to_select, queryable_columns),
-    do: columns_to_select -- queryable_columns
 
   defp validate_queryable_columns(column_info, pk_cols, opts) when is_map(opts) do
     case Map.get(opts, :queryable_columns) do

@@ -1119,7 +1119,7 @@ defmodule Electric.Plug.RouterTest do
 
       assert %{
                "errors" => %{
-                 "columns" => ["The following columns are not queryable: secret_token"]
+                 "columns" => ["The following columns are not found on the table: secret_token"]
                }
              } = Jason.decode!(conn.resp_body)
     end

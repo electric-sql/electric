@@ -684,7 +684,7 @@ defmodule Electric.Shapes.ShapeTest do
     test "validates selected columns and where clauses against queryable columns", %{
       inspector: inspector
     } do
-      assert {:error, {:columns, ["The following columns are not queryable: value2"]}} =
+      assert {:error, {:columns, ["The following columns are not found on the table: value2"]}} =
                Shape.new("col_table",
                  inspector: inspector,
                  queryable_columns: ["id", "value1"],
