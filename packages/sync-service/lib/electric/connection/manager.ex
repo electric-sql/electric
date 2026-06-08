@@ -584,6 +584,11 @@ defmodule Electric.Connection.Manager do
     end
   end
 
+  # Defensive no-op: the only dispatcher of this continue is gated on the
+  # :configuring_connection step, but keep crash-safety if a future caller ever
+  # dispatches it from a different step.
+  def handle_continue(:unblock_slot_creation, state), do: {:noreply, state}
+
   @impl true
   def handle_info(
         {:timeout, tref, {:check_status, :replication_lock}},
