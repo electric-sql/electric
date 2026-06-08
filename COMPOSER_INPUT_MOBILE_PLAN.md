@@ -14,9 +14,10 @@ verified against the current tree.
 - **PR2 — native in-session slash composer:** done. `NativeComposer.tsx` +
   `lib/slashAutocomplete.ts` (pure, tested) drive a native keyboard-docked
   autocomplete on the existing `SessionScreen` `TextInput`, sending
-  `composer_input`. (Remaining deviation: the in-session composer has no static
-  fallback, so a purely-static command set is empty until the live collection
-  syncs; edit matches desktop's flatten.)
+  `composer_input`. Discovery falls back to the entity type's static
+  `slash_commands` when the live collection is empty (static commands are never
+  materialised into it), matching desktop. (Remaining deviation: editing a
+  queued message flattens to `{text}` — same as desktop.)
 - **PR2.5 — new-session spawn parity:** done. The same autocomplete runs on
   `NewSessionScreen` (sourced from the selected type's `slash_commands`), and
   spawn sends `initialMessage = serializeComposerInput(...)` with
