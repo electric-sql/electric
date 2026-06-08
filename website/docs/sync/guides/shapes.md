@@ -238,7 +238,7 @@ If you need an operator that isn't supported yet, please [raise a feature reques
 
 ### Columns
 
-This is an optional list of columns to sync to the client. It is a projection setting for reducing the amount of data sent over the wire. When specified, only the listed columns are synced. When not specified, all columns are synced, unless [`queryable_columns`](#queryable-columns) is set, in which case the synced columns default to the queryable columns.
+This is an optional list of columns to select. When specified, only the columns listed are synced. When not specified all columns are synced, unless [`queryable_columns`](#queryable-columns) is set, in which case the synced columns default to the queryable columns.
 
 For example:
 

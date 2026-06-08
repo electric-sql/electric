@@ -334,8 +334,8 @@ The proxy must set these **shape definition parameters** server-side — they de
 | Parameter | Where | Security Consideration |
 |-----------|-------|------------------------|
 | `table` | URL | **Must be set server-side.** Letting clients specify the table allows access to any table. |
-| `queryable_columns` | URL | **Should be set server-side.** This is the column allow-list for WHERE clauses, subset filters, ordering, and synced projections. |
-| `columns` | URL | Optional sync projection. If clients can choose it, `queryable_columns` must also be set server-side so clients cannot sync columns outside the allow-list. |
+| `columns` | URL | Optional sync projection. If clients can choose it, use `queryable_columns` to restrict which columns they can sync. |
+| `queryable_columns` | URL | **Should be set server-side.** Column allow-list for WHERE clauses, subset filters, ordering, and synced projections. |
 | `where` | URL | **Must be set server-side.** This is your authorization filter — the main shape WHERE that restricts all queries. |
 | `secret` | URL | **Must be set server-side.** Never expose the API secret to clients. |
 
@@ -358,7 +358,7 @@ These parameters are safe because they either can't widen data access or are nee
 | `order_by` | POST body | Sorting for pagination |
 
 :::tip Key Principle
-Your proxy is an **authorization layer** that controls the **shape definition** (table, queryable columns, main WHERE). Clients can freely use subset parameters to filter and paginate within that shape — Electric ensures they can only narrow results and can only reference queryable columns.
+Your proxy is an **authorization layer** that controls the **shape definition** (table, queryable columns, main WHERE). Clients can freely use subset parameters to filter and paginate within that shape — Electric ensures they can never escape the main WHERE clause and can only reference queryable columns.
 :::
 
 ##### Implementing POST support in your proxy
