@@ -351,12 +351,34 @@ export function createPiAgentAdapter(
                     : hasToolCalls
                       ? `tool_calls`
                       : `stop`
+                // pi-ai's `Usage` declares `input`/`output` as required
+                // numbers, but we still pick them up defensively (a
+                // future provider might omit a side). We deliberately
+                // do NOT coerce a missing side to `0` — doing so would
+                // surface as "0 input / N output" in the meta row,
+                // indistinguishable from a real zero-token step. Sides
+                // that don't arrive as `number` are forwarded as
+                // `undefined` so `onStepEnd` skips the column entirely
+                // and the query-layer aggregate's `count(...)` treats
+                // them as absent.
+                const usageInput =
+                  typeof usage?.input === `number`
+                    ? usage.input
+                    : typeof usage?.inputTokens === `number`
+                      ? usage.inputTokens
+                      : undefined
+                const usageOutput =
+                  typeof usage?.output === `number`
+                    ? usage.output
+                    : typeof usage?.outputTokens === `number`
+                      ? usage.outputTokens
+                      : undefined
                 bridge.onStepEnd({
                   finishReason,
                   durationMs: Date.now() - stepStartTime,
-                  ...(usage && {
-                    tokenInput: usage.input ?? usage.inputTokens ?? 0,
-                    tokenOutput: usage.output ?? usage.outputTokens ?? 0,
+                  ...(usageInput !== undefined && { tokenInput: usageInput }),
+                  ...(usageOutput !== undefined && {
+                    tokenOutput: usageOutput,
                   }),
                 })
 

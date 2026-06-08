@@ -525,4 +525,99 @@ describe(`toAgentHistory`, () => {
       }
     }
   })
+
+  describe(`token usage plumbing`, () => {
+    function makeCompletedMessage(
+      usage: Partial<AssistantMessage[`usage`]>
+    ): AssistantMessage {
+      return {
+        role: `assistant`,
+        content: [{ type: `text`, text: `hello` }],
+        api: `anthropic-messages`,
+        provider: `anthropic`,
+        model: `claude-sonnet-4-5-20250929`,
+        usage: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 0,
+          cost: {
+            input: 0,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+            total: 0,
+          },
+          ...usage,
+        },
+        stopReason: `stop`,
+        timestamp: Date.now(),
+      }
+    }
+
+    function findStepUpdate(
+      events: Array<ChangeEvent>
+    ): Record<string, unknown> | undefined {
+      const step = [...events]
+        .reverse()
+        .find((e) => e.type === `step` && e.headers.operation === `update`)
+      return step?.value as Record<string, unknown> | undefined
+    }
+
+    async function runOnce(
+      message: AssistantMessage
+    ): Promise<Array<ChangeEvent>> {
+      const events: Array<ChangeEvent> = []
+      const factory = createPiAgentAdapter({
+        systemPrompt: `Test system prompt`,
+        model: `claude-sonnet-4-5-20250929`,
+        tools: [],
+        streamFn: () => {
+          const stream = createAssistantMessageEventStream()
+          // pi-ai's stream resolves the run when we call `end()`
+          // with a terminal `AssistantMessage`; the adapter
+          // synthesizes `message_start` / `message_end` from it
+          // and routes the `usage` payload through to `onStepEnd`.
+          queueMicrotask(() => stream.end(message))
+          return stream
+        },
+      })
+      const handle = factory({
+        entityUrl: `test/entity-1`,
+        epoch: 1,
+        messages: [],
+        outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0 },
+        writeEvent: (e: ChangeEvent) => {
+          events.push(e)
+        },
+      })
+      await handle.run(`hello`, new AbortController().signal)
+      return events
+    }
+
+    it(`forwards numeric usage onto the step update event`, async () => {
+      const events = await runOnce(
+        makeCompletedMessage({ input: 1234, output: 567 })
+      )
+      const stepValue = findStepUpdate(events)
+      expect(stepValue?.input_tokens).toBe(1234)
+      expect(stepValue?.output_tokens).toBe(567)
+    })
+
+    it(`omits a side from the step event when usage doesn't report it`, async () => {
+      // Build a usage payload missing `output` to simulate a future
+      // provider (or a partial pi-ai response). The adapter should
+      // NOT fabricate a 0 — the column must stay absent so the
+      // query-layer `count(output_tokens)` reads as zero and the
+      // display row says "input only" instead of "input + 0 output".
+      const message = makeCompletedMessage({ input: 100 })
+      delete (message.usage as Partial<typeof message.usage>).output
+
+      const events = await runOnce(message)
+      const stepValue = findStepUpdate(events)
+      expect(stepValue?.input_tokens).toBe(100)
+      expect(`output_tokens` in (stepValue ?? {})).toBe(false)
+    })
+  })
 })
