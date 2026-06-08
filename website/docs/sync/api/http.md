@@ -77,6 +77,8 @@ When you make an initial sync request, with `offset=-1`, you're telling the serv
 
 When a shape is first requested, Electric queries Postgres for the data and populates the log by turning the query results into insert operations. This allows you to sync shapes without having to pre-define them. Electric then streams out the log data in the response.
 
+The `columns` query parameter controls which columns are synced in the response. The `queryable_columns` query parameter controls which columns may be referenced by the shape `where` clause, subset filters, subset ordering, and the `columns` projection. If `queryable_columns` is set and `columns` is omitted, Electric syncs the queryable columns by default.
+
 Sometimes a log can fit in a single response. Sometimes it's too big and requires multiple requests. In this case, the first request will return a batch of data and an `electric-offset` header. An HTTP client should then continue to make requests setting the `offset` parameter to this header value. This allows the client to paginate through the shape log until it has received all of the current data.
 
 ### Control messages
@@ -238,6 +240,8 @@ The POST body accepts these parameters:
 - `offset` - Number of rows to skip (for pagination)
 - `order_by` - ORDER BY clause (required when using limit/offset)
 
+Subset `where` and `order_by` expressions may only reference columns allowed by `queryable_columns` when it is set.
+
 #### Using GET (legacy)
 
 GET requests are still supported for backwards compatibility, using `subset__*` query parameters:
@@ -253,6 +257,8 @@ The query parameters include:
 - `subset__limit` - Maximum number of rows to return
 - `subset__offset` - Number of rows to skip (for pagination)
 - `subset__order_by` - ORDER BY clause (required when using limit/offset)
+
+Subset `where` and `order_by` expressions may only reference columns allowed by `queryable_columns` when it is set.
 
 #### Response format
 

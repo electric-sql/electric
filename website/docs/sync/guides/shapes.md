@@ -47,6 +47,7 @@ Shapes are defined by:
 - a [table](#table), such as `items`
 - an optional [where clause](#where-clause) to filter which rows are included in the shape
 - an optional [columns](#columns) clause to select which columns are included
+- an optional [queryable columns](#queryable-columns) clause to restrict which columns may be queried or synced
 
 A shape contains all of the rows in the table that match the where clause, if provided. If a columns clause is provided, the synced rows will only contain those selected columns.
 
@@ -237,7 +238,7 @@ If you need an operator that isn't supported yet, please [raise a feature reques
 
 ### Columns
 
-This is an optional list of columns to select. When specified, only the columns listed are synced. When not specified all columns are synced.
+This is an optional list of columns to sync to the client. It is a projection setting for reducing the amount of data sent over the wire. When specified, only the listed columns are synced. When not specified, all columns are synced, unless [`queryable_columns`](#queryable-columns) is set, in which case the synced columns default to the queryable columns.
 
 For example:
 
@@ -245,6 +246,18 @@ For example:
 - `columns=id,"Status-Check"` - only include `id` and `Status-Check` columns, quoting the identifiers where necessary
 
 The specified columns must always include the primary key column(s), and should be formed as a comma separated list of column names &mdash; exactly as they are in the database schema. If the identifier was defined as case sensitive and/or with special characters, then you must quote it.
+
+### Queryable columns
+
+This is an optional list of columns that may be referenced by shape `where` clauses, subset `where` clauses, subset `order_by` clauses, and the `columns` projection. It is an allow-list for what a request may query or sync; it does not force every listed column to be synced.
+
+For example, this shape can filter by `org_id` without syncing `org_id` to the client:
+
+```http
+/v1/shape?table=projects&queryable_columns=id,title,org_id&columns=id,title&where=org_id=$1&params[1]=org_123
+```
+
+The specified queryable columns must include the primary key column(s). If `queryable_columns` is set and `columns` is omitted, Electric syncs the queryable columns by default.
 
 ## Subscribing to shapes
 
