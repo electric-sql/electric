@@ -74,6 +74,14 @@ type MaterializedMarkdownDocument = {
   streamOffset?: string
 }
 
+function injectedMarkdownDocuments(
+  args: Readonly<Record<string, unknown>>
+): Array<ManifestDocumentEntry> {
+  const docs = args.markdownDocs
+  if (!Array.isArray(docs)) return []
+  return docs.filter(isManifestDocumentEntry)
+}
+
 function isManifestDocumentEntry(
   value: unknown
 ): value is ManifestDocumentEntry {
@@ -142,9 +150,15 @@ export function createMarkdownDocumentTools(
     const manifests = context.db.collections.manifests?.toArray as
       | Array<unknown>
       | undefined
-    return manifests?.find(
-      (entry): entry is ManifestDocumentEntry =>
-        isManifestDocumentEntry(entry) && entry.id === id
+    return (
+      manifests?.find(
+        (entry): entry is ManifestDocumentEntry =>
+          isManifestDocumentEntry(entry) && entry.id === id
+      ) ??
+      injectedMarkdownDocuments(context.args).find(
+        (entry): entry is ManifestDocumentEntry =>
+          isManifestDocumentEntry(entry) && entry.id === id
+      )
     )
   }
 
@@ -178,7 +192,7 @@ export function createMarkdownDocumentTools(
       throw new Error(
         `Markdown document ${JSON.stringify(
           id
-        )} is not in this entity's manifest. Create it with create_markdown_doc first.`
+        )} is not in this entity's manifest or injected document refs. Create it with create_markdown_doc first or pass the document ref to this worker.`
       )
     }
     const result = await context.readMarkdownDocumentStream(document.streamPath)
@@ -245,6 +259,7 @@ export function createMarkdownDocumentTools(
           doc: materialized.doc,
           docPath: materialized.document.docPath,
           principalUrl,
+          clientKey: `${principalUrl}\0${context.entityUrl}`,
           name: principalDisplayName(principalUrl),
           role: principalRole(principalUrl),
           status: `editing`,

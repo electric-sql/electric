@@ -4,6 +4,7 @@ import { Awareness, applyAwarenessUpdate } from 'y-protocols/awareness'
 import * as Y from 'yjs'
 import {
   createMarkdownYDoc,
+  encodeMarkdownAwarenessUpdate,
   frameYjsUpdate,
   markdownText,
 } from '../src/markdown-yjs'
@@ -76,7 +77,14 @@ function cursorHeadIndexFromAwarenessFrame(
   return undefined
 }
 
-function createToolContext() {
+function createToolContext(
+  opts: {
+    manifestDocuments?: Array<unknown>
+    markdownDocs?: Array<unknown>
+    entityUrl?: string
+    principalUrl?: string
+  } = {}
+) {
   const document = {
     key: `document:notes`,
     kind: `document`,
@@ -95,11 +103,20 @@ function createToolContext() {
   const awarenessFrames: Array<Uint8Array> = []
   return {
     context: {
-      entityUrl: `/chat/session`,
+      entityUrl: opts.entityUrl ?? `/chat/session`,
       entityType: `chat`,
-      principal: { url: `/principal/agent:horton`, kind: `agent` },
-      args: {},
-      db: { collections: { manifests: { toArray: [document] } } },
+      principal: {
+        url: opts.principalUrl ?? `/principal/agent:horton`,
+        kind: `agent`,
+      },
+      args: {
+        ...(opts.markdownDocs ? { markdownDocs: opts.markdownDocs } : {}),
+      },
+      db: {
+        collections: {
+          manifests: { toArray: opts.manifestDocuments ?? [document] },
+        },
+      },
       events: [],
       createMarkdownDocument: vi.fn(
         async (opts: { id?: string; title: string }) => {
@@ -155,10 +172,49 @@ function createToolContext() {
       yText.insert(yText.length, text)
       streamFrames.push(frameYjsUpdate(Y.encodeStateAsUpdate(doc, before)))
     },
+    document,
   }
 }
 
 describe(`markdown document tools`, () => {
+  it(`uses the optional awareness client key to distinguish same-principal editors`, () => {
+    const doc = new Y.Doc()
+    markdownText(doc).insert(0, `hello`)
+    const awareness = new Awareness(new Y.Doc())
+
+    applyFramedAwarenessUpdate(
+      awareness,
+      encodeMarkdownAwarenessUpdate({
+        doc,
+        docPath: `agents/chat/session/documents/notes`,
+        principalUrl: `/principal/agent:horton`,
+        clientKey: `/principal/agent:horton\0/chat/session`,
+        name: `horton`,
+        role: `agent`,
+        color: `#000000`,
+        colorLight: `#00000033`,
+      })
+    )
+    applyFramedAwarenessUpdate(
+      awareness,
+      encodeMarkdownAwarenessUpdate({
+        doc,
+        docPath: `agents/chat/session/documents/notes`,
+        principalUrl: `/principal/agent:horton`,
+        clientKey: `/principal/agent:horton\0/worker/one`,
+        name: `worker`,
+        role: `agent`,
+        color: `#111111`,
+        colorLight: `#11111133`,
+      })
+    )
+
+    const remoteStates = Array.from(awareness.getStates()).filter(
+      ([clientId]) => clientId !== awareness.clientID
+    )
+    expect(remoteStates).toHaveLength(2)
+  })
+
   it(`creates the server document empty and appends initial content as a Yjs update`, async () => {
     const { context, getContent } = createToolContext()
     const create = createMarkdownDocumentTools(context).find(
@@ -195,6 +251,25 @@ describe(`markdown document tools`, () => {
     expect(context.appendMarkdownDocumentAwareness).toHaveBeenCalled()
     expect(getContent()).toContain(`Second line`)
     expect(result.details).toMatchObject({ replacements: 1 })
+  })
+
+  it(`reads injected markdown document refs without a local manifest entry`, async () => {
+    const base = createToolContext()
+    const { context } = createToolContext({
+      manifestDocuments: [],
+      markdownDocs: [base.document],
+      entityUrl: `/worker/subagent`,
+    })
+    const read = createMarkdownDocumentTools(context).find(
+      (tool) => tool.name === `read_markdown_doc`
+    )!
+
+    const result = await read.execute(`tool-read-injected`, { id: `notes` })
+
+    expect(context.readMarkdownDocumentStream).toHaveBeenCalledWith(
+      base.document.streamPath
+    )
+    expect((result.content[0] as { text: string }).text).toContain(`# Notes`)
   })
 
   it(`edits a read document and returns a diff`, async () => {

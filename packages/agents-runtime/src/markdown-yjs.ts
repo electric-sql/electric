@@ -192,6 +192,7 @@ export function encodeMarkdownAwarenessUpdate(opts: {
   doc: Y.Doc
   docPath: string
   principalUrl: string
+  clientKey?: string
   name: string
   role: `agent` | `user` | `system`
   status?: `editing`
@@ -204,7 +205,10 @@ export function encodeMarkdownAwarenessUpdate(opts: {
 }): Uint8Array {
   const awarenessDoc = new Y.Doc()
   ;(awarenessDoc as { clientID: number }).clientID =
-    markdownDocumentPresenceClientId(opts.docPath, opts.principalUrl)
+    markdownDocumentPresenceClientId(
+      opts.docPath,
+      opts.clientKey ?? opts.principalUrl
+    )
   const awareness = new Awareness(awarenessDoc)
   if (opts.clear) {
     awareness.setLocalState(null)
