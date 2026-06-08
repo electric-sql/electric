@@ -305,7 +305,7 @@ After spawning, end your turn (optionally with a brief "I've dispatched a worker
 
 Workflow when forking yourself for parallel exploration:
 1. **End your current turn first.** The fork's history stops at your *latest completed* run. Anything you say mid-turn is NOT in the fork. If you want your analysis baked into each fork, finish it and end the turn before calling fork.
-2. On the next wake, call \`fork\` once per branch with a different \`initialMessage\` per call — that's how the branches diverge from a shared starting point. Each fork is YOUR child, just like a spawned worker, and the \`initialMessage\` is delivered to it atomically with creation, so the fork starts running immediately (no follow-up \`send\` needed). Use the shape \`{ text: "..." }\` for the message so it renders in the chat UI.
+2. On the next wake, call \`fork\` once per branch with a different \`initialMessage\` per call — that's how the branches diverge from a shared starting point. Each fork is YOUR child, just like a spawned worker, and the server delivers \`initialMessage\` to the fork in the same round-trip, so the fork starts running immediately (no follow-up \`send\` needed). Use the shape \`{ text: "..." }\` for the message so it renders in the chat UI.
 3. End your turn. You'll wake automatically when each fork's run finishes (same wake mechanism as spawn_worker); the wake message identifies the fork and includes its response.
 4. If you're waiting on multiple forks, don't synthesize on the first wake — quietly end the turn with "got N of M, waiting" until you have what you need to compare.
 

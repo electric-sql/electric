@@ -135,8 +135,9 @@ export interface RuntimeServerClient {
    * - `wake` registers a subscription at fork time (reply delivery
    *   uses the parent's manifest-anchored wake when paired with a
    *   manifest entry on the parent — same model as `spawn`).
-   * - `initialMessage` delivers an inbox message to the new fork
-   *   atomically with creation, folding fork+send into one round-trip.
+   * - `initialMessage` folds fork+send into one round-trip. Not
+   *   atomic: sent after fork creation and dispatch linking, so a
+   *   partial failure can leave an idle dispatched fork.
    * - `tags` stamps tags onto the new fork in addition to those
    *   copied from the source.
    */

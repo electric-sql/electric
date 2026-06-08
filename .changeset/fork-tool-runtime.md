@@ -7,7 +7,7 @@ Add `ctx.fork(opts?)` to `HandlerContext`, with an opts shape that mirrors `ctx.
 ```ts
 ctx.fork(opts?: {
   targetEntityUrl?: string  // omit for self-fork
-  initialMessage?: unknown  // delivered atomically with creation
+  initialMessage?: unknown  // server delivers to the fork in the same round-trip (not atomic with creation)
   wake?: Wake               // overrides the default runFinished + includeResponse
   tags?: Record<string, string>
   observe?: boolean         // `false` = fire-and-forget (no parent, no wake, no manifest entry)

@@ -258,11 +258,11 @@ const forkBodySchema = Type.Object({
       manifestKey: Type.Optional(Type.String()),
     })
   ),
-  // Optional initial inbox message delivered to the new root fork
-  // immediately after creation. Atomic with the fork RPC — folds the
-  // common "fork then send" pattern into a single round-trip and means
-  // a partial failure can't leave an idle fork on the parent's
-  // manifest. Mirrors spawn's `initialMessage` field.
+  // Optional initial inbox message for the new root fork. Folds
+  // fork+send into one round-trip for the caller. Not atomic with
+  // fork creation: the server sends it after the fork is created
+  // and dispatch-linked (see the `entityManager.send` call below),
+  // so a failed send can leave an idle dispatched fork.
   initialMessage: Type.Optional(Type.Unknown()),
   // Optional tags stamped on the new root fork entity in addition to
   // those copied from the source. Mirrors spawn's `tags`.

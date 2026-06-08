@@ -28,7 +28,7 @@ Omit 'entityUrl' to fork your own session. Pass a different session's URL to for
       ),
       initialMessage: Type.Optional(
         Type.Any({
-          description: `Initial inbox message delivered to the fork atomically with creation — the fork wakes and starts running immediately. Use the shape \`{ "text": "..." }\` for chat-rendered prompts. Omit to leave the fork idle (then call 'send' separately).`,
+          description: `Initial inbox message delivered to the fork by the server in the same round-trip — the fork wakes and starts running immediately, no follow-up 'send' needed. Use the shape \`{ "text": "..." }\` for chat-rendered prompts. Omit to leave the fork idle (then call 'send' separately).`,
         })
       ),
       tags: Type.Optional(

@@ -841,7 +841,11 @@ export type Wake =
  * opts shape where the semantics map.
  */
 export interface ForkOptions {
-  /** Inbox message delivered to the new fork atomically with creation. */
+  /**
+   * Inbox message for the new fork. Folds fork+send into one
+   * round-trip. Not atomic: sent after fork creation and dispatch
+   * linking, so a partial failure can leave an idle dispatched fork.
+   */
   initialMessage?: unknown
   /**
    * Wake subscription registered on the new fork. Defaults to
@@ -1060,8 +1064,9 @@ export interface HandlerContext<
    *   model layer generate this via `nanoid` — see `createForkTool`.
    *
    * Options mirror `spawn` where the semantics map:
-   * - `initialMessage` is delivered to the fork's inbox atomically
-   *   with creation, folding the fork+send pattern into one call.
+   * - `initialMessage` folds fork+send into one call. Not atomic:
+   *   sent after fork creation and dispatch linking, so a partial
+   *   failure can leave an idle dispatched fork.
    * - `wake` overrides the default `runFinished + includeResponse`
    *   subscription (e.g. to set debounce for high-fanout forking).
    * - `tags` are stamped on top of the tags copied from the source.
