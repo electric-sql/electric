@@ -154,6 +154,36 @@ describe(`lazySandbox`, () => {
     expect(factoryCalls).toBe(0)
   })
 
+  it(`dispose({reclaim}) during an in-flight factory that then fails runs the reclaim callback`, async () => {
+    // dispose is called while materialization is still pending; when that
+    // factory rejects there is nothing live to dispose, so a requested reclaim
+    // must still wipe the provider-side state via the callback.
+    let rejectFactory!: (err: unknown) => void
+    let factoryCalls = 0
+    const reclaims: Array<true> = []
+    const sandbox = lazySandbox({
+      workingDirectory: `/work`,
+      factory: () => {
+        factoryCalls += 1
+        return new Promise<Sandbox>((_, rej) => {
+          rejectFactory = rej
+        })
+      },
+      reclaim: async () => {
+        reclaims.push(true)
+      },
+    })
+    // Kick off materialization (now in-flight), then dispose before it settles.
+    const pendingUse = sandbox.exec({ command: `x` })
+    pendingUse.catch(() => {}) // the use itself rejects; we assert on dispose
+    const disposed = sandbox.dispose({ reclaim: true })
+    rejectFactory(new Error(`daemon hiccup`))
+    await disposed
+    await expect(pendingUse).rejects.toThrow(`daemon hiccup`)
+    expect(factoryCalls).toBe(1)
+    expect(reclaims).toEqual([true])
+  })
+
   it(`dispose after use forwards to the inner sandbox (reclaim included)`, async () => {
     const h = harness()
     await h.sandbox.exec({ command: `x` })

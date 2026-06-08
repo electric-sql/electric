@@ -365,9 +365,12 @@ export class BuiltinAgentsServer {
         }),
         new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
       ])
-      // Tear down this process's live sandbox containers NOW — their debounced
-      // idle teardowns die with the process and would leave them running.
-      // Bounded like the drain above so a hung daemon can't block quit.
+      // Tear down this process's idle sandbox containers NOW — their debounced
+      // idle teardowns die with the process and would leave them running. Runs
+      // AFTER the drain above on purpose: this flush only reclaims idle,
+      // lease-free containers, so the drained wakes must release their leases
+      // first. Bounded by its own 5s so a hung daemon can't block quit — worst
+      // case shutdown is the two bounds back to back.
       if (this.bootstrap.shutdownSandboxes) {
         await Promise.race([
           this.bootstrap.shutdownSandboxes().catch((err) => {

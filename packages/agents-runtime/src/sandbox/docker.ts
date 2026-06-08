@@ -745,42 +745,48 @@ export async function sweepOrphanedDockerSandboxes(opts?: {
     return []
   }
 
-  const reclaimed: Array<string> = []
-  for (const c of listed) {
-    const name = c.Names?.[0]?.replace(/^\//, ``) ?? c.Id
-    // Held by this very process right now — its lifecycle is already managed.
-    if (sandboxContainers.has(name)) continue
-    const persistent = c.Labels?.[SANDBOX_PERSISTENT_LABEL] === `true`
-    try {
-      if (c.State === `running`) {
-        const ownerPid = Number(c.Labels?.[SANDBOX_OWNER_PID_LABEL])
-        // No (or unparsable) owner label, or the owner is alive ⇒ possibly a
-        // live peer's in-use sandbox — never touch it.
-        if (!Number.isInteger(ownerPid) || isPidAlive(ownerPid)) continue
-        // The creator is gone, but a live sibling process may have since
-        // ADOPTED the container (reattached by key) — labels are immutable, so
-        // adoption is recorded in an in-container marker. Probe it before
-        // reclaiming.
-        const adopter = await readOwnerMarker(docker.getContainer(c.Id))
-        if (adopter !== null && isPidAlive(adopter)) continue
-        if (persistent) {
-          // `t: 0` → straight to SIGKILL (PID 1 ignores SIGTERM); the writable
-          // layer survives for a later reattach by key.
-          await docker.getContainer(c.Id).stop({ t: 0 })
-        } else {
-          await docker.getContainer(c.Id).remove({ force: true, v: true })
+  // Probe + reclaim every leftover concurrently. The running-orphan path runs an
+  // exec round-trip (readOwnerMarker) and the whole sweep is awaited at boot, so
+  // a sequential loop would serialize one exec per leftover — and the motivating
+  // case is "15+ leftovers". Each container is independent (distinct name, no
+  // shared lock), so fanning out keeps boot latency flat as leftovers pile up.
+  const reclaimed = await Promise.all(
+    listed.map(async (c): Promise<string | null> => {
+      const name = c.Names?.[0]?.replace(/^\//, ``) ?? c.Id
+      // Held by this very process right now — its lifecycle is already managed.
+      if (sandboxContainers.has(name)) return null
+      const persistent = c.Labels?.[SANDBOX_PERSISTENT_LABEL] === `true`
+      try {
+        if (c.State === `running`) {
+          const ownerPid = Number(c.Labels?.[SANDBOX_OWNER_PID_LABEL])
+          // No (or unparsable) owner label, or the owner is alive ⇒ possibly a
+          // live peer's in-use sandbox — never touch it.
+          if (!Number.isInteger(ownerPid) || isPidAlive(ownerPid)) return null
+          // The creator is gone, but a live sibling process may have since
+          // ADOPTED the container (reattached by key) — labels are immutable, so
+          // adoption is recorded in an in-container marker. Probe it before
+          // reclaiming.
+          const adopter = await readOwnerMarker(docker.getContainer(c.Id))
+          if (adopter !== null && isPidAlive(adopter)) return null
+          if (persistent) {
+            // `t: 0` → straight to SIGKILL (PID 1 ignores SIGTERM); the writable
+            // layer survives for a later reattach by key.
+            await docker.getContainer(c.Id).stop({ t: 0 })
+          } else {
+            await docker.getContainer(c.Id).remove({ force: true, v: true })
+          }
+          return name
         }
-        reclaimed.push(name)
-        continue
+        if (persistent) return null
+        await docker.getContainer(c.Id).remove({ force: true, v: true })
+        return name
+      } catch {
+        /* already gone */
+        return null
       }
-      if (persistent) continue
-      await docker.getContainer(c.Id).remove({ force: true, v: true })
-      reclaimed.push(name)
-    } catch {
-      /* already gone */
-    }
-  }
-  return reclaimed
+    })
+  )
+  return reclaimed.filter((n): n is string => n !== null)
 }
 
 /**
@@ -791,7 +797,10 @@ export async function sweepOrphanedDockerSandboxes(opts?: {
  * hold the container, it is only MARKED reclaimed — the last lease draining
  * wipes it (matching an owner's `dispose({ reclaim: true })`). A container
  * that exists with no registry entry (left from a previous process) is removed
- * directly; absent containers are a no-op.
+ * directly; absent containers are a no-op. Best-effort: an unreachable daemon
+ * (like any failed remove) is swallowed — a surviving container is then left to
+ * a later boot sweep (which preserves a persistent workspace; a manual labelled
+ * prune reclaims one whose entity is already terminal).
  */
 export async function reclaimDockerSandboxByKey(
   sandboxKey: string,
@@ -834,6 +843,9 @@ export async function reclaimDockerSandboxByKey(
  * down (or to a wake whose drain timed out). Their own dispose tears them
  * down; if the process exits first, the boot sweep reclaims them by dead
  * owner pid.
+ *
+ * Best-effort: if the daemon is unreachable each teardown throws and is
+ * swallowed, leaving those containers for the next process's boot sweep.
  */
 export async function shutdownAllDockerSandboxes(): Promise<void> {
   await Promise.all(
