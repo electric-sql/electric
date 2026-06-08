@@ -2,10 +2,23 @@
 
 ## Status
 
-Proposed — for iteration. Not yet started. This extends
+Partially implemented on this branch. This extends
 [COMPOSER_INPUT_PLAN.md](./COMPOSER_INPUT_PLAN.md) (the desktop/runtime composer
 work) to the React Native (Expo) mobile app. All file/line references below were
 verified against the current tree.
+
+- **PR1 — shared grammar extraction:** done. Serializer + grammar live in
+  `agents-runtime/src/composer-input.ts`, exported via `/client`, with a shared
+  `detectSlashCommandTrigger` helper; desktop call sites repointed; tests moved
+  to the runtime suite.
+- **PR2 — native in-session slash composer:** done. `NativeComposer.tsx` +
+  `lib/slashAutocomplete.ts` (pure, tested) drive a native keyboard-docked
+  autocomplete on the existing `SessionScreen` `TextInput`, sending
+  `composer_input`. Scope deviations are noted below (in-session only; no static
+  fallback; edit matches desktop's flatten).
+- **PR3 — inline live-markdown pills:** deferred. Depends on a physical-device
+  spike (worklets / `react-native-live-markdown` on Expo 54 / RN 0.81 / React 19)
+  that can't be run in a headless environment; the parity win ships without it.
 
 ## Summary
 
