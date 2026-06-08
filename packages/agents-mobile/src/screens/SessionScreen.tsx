@@ -470,7 +470,7 @@ function NativeMessageComposer({
   disabled: boolean
   placeholder: string
 }): React.ReactElement {
-  const { serverUrl } = useAgents()
+  const { serverUrl, entityTypesCollection } = useAgents()
   const tokens = useTokens()
   const insets = useSafeAreaInsets()
   const styles = useMemo(() => createComposerStyles(tokens), [tokens])
@@ -484,10 +484,10 @@ function NativeMessageComposer({
   const [inputHeight, setInputHeight] = useState(COMPOSER_INPUT_MIN_HEIGHT)
   const text = value.trim()
   const bottomPadding = keyboardVisible ? 4 : Math.max(insets.bottom, 8)
-  // Built-in entity-stream collection materialising the entity's static and
-  // dynamic slash commands; the same source the desktop composer reads. No
-  // static fallback on mobile yet (the entity-type schema here doesn't carry
-  // `slash_commands`), so autocomplete is empty until the collection syncs.
+  // The per-entity slashCommands collection only carries dynamically-registered
+  // commands — statically-declared ones are never materialised into it. So, like
+  // the desktop composer (ChatView -> MessageInput), fall back to the entity
+  // type's declarations when the live collection is empty.
   const { data: liveSlashCommands = [] } = useLiveQuery(
     (q) =>
       db
@@ -497,7 +497,26 @@ function NativeMessageComposer({
         : undefined,
     [db]
   )
-  const slashCommands = liveSlashCommands as Array<SlashCommandRow>
+  const { data: matchingTypes = [] } = useLiveQuery(
+    (q) =>
+      entity
+        ? q
+            .from({ type: entityTypesCollection })
+            .where(({ type }) => eq(type.name, entity.type))
+        : undefined,
+    [entityTypesCollection, entity?.type]
+  )
+  const slashCommands = useMemo<Array<SlashCommandRow>>(() => {
+    if (liveSlashCommands.length > 0) {
+      return liveSlashCommands as Array<SlashCommandRow>
+    }
+    return (matchingTypes[0]?.slash_commands ?? []).map((command) => ({
+      ...command,
+      key: `static:${command.name}`,
+      source: `static`,
+      updated_at: matchingTypes[0]?.updated_at ?? ``,
+    }))
+  }, [liveSlashCommands, matchingTypes])
   const sendAction = useMemo(() => {
     if (!db) return null
     return createSendComposerInputAction({
