@@ -1,0 +1,204 @@
+import { useCallback, useMemo, useState } from 'react'
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  type NativeSyntheticEvent,
+  type TextInputSelectionChangeEventData,
+} from 'react-native'
+import {
+  detectSlashCommandTrigger,
+  formatSlashCommandArgumentHint,
+  normalizeCommandName,
+  type SlashCommandRow,
+} from '@electric-ax/agents-runtime/client'
+import {
+  buildSlashCommandInsertion,
+  filterSlashCommands,
+  type ComposerInsertion,
+  type Selection,
+} from '../lib/slashAutocomplete'
+import { useTokens } from '../lib/ThemeProvider'
+import { fontSize, lineHeight, radii, spacing } from '../lib/theme'
+import type { Tokens } from '../lib/theme'
+
+export type SlashAutocomplete = {
+  /** Whether the suggestion menu should be shown. */
+  open: boolean
+  /** Commands matching the active query, capped (see `filterSlashCommands`). */
+  items: Array<SlashCommandRow>
+  /** Wire to `TextInput.onSelectionChange` so the caret drives the trigger. */
+  onSelectionChange: (
+    event: NativeSyntheticEvent<TextInputSelectionChangeEventData>
+  ) => void
+  /** Splice a chosen command into the value at the active trigger range. */
+  applyCommand: (command: SlashCommandRow) => ComposerInsertion
+  /** Clear caret state, e.g. after submit clears the value. */
+  reset: () => void
+}
+
+/**
+ * Drives a native slash-command autocomplete on a plain `TextInput`: it tracks
+ * the caret, derives the in-progress trigger from the value via the shared
+ * {@link detectSlashCommandTrigger} grammar, filters the command list, and
+ * produces the spliced value when one is chosen. No WebView, no caret
+ * coordinates — everything is plain React state in the RN tree, which is what
+ * lets the popover be native (see {@link SlashCommandMenu}).
+ *
+ * The trigger+splice mechanics are deliberately generic so future composer node
+ * kinds (file, symbol, branch) can reuse the same spine with a different
+ * trigger and inserted text.
+ */
+export function useSlashAutocomplete(
+  value: string,
+  slashCommands: Array<SlashCommandRow>,
+  options: { enabled?: boolean } = {}
+): SlashAutocomplete {
+  const enabled = options.enabled ?? true
+  const [selection, setSelection] = useState<Selection>({ start: 0, end: 0 })
+
+  const onSelectionChange = useCallback(
+    (event: NativeSyntheticEvent<TextInputSelectionChangeEventData>): void => {
+      setSelection(event.nativeEvent.selection)
+    },
+    []
+  )
+
+  const reset = useCallback((): void => {
+    setSelection({ start: 0, end: 0 })
+  }, [])
+
+  // A trigger only exists when the caret is collapsed at the end of a `/token`.
+  const trigger = useMemo(() => {
+    if (!enabled) return null
+    if (selection.start !== selection.end) return null
+    return detectSlashCommandTrigger(value, selection.start)
+  }, [enabled, selection.start, selection.end, value])
+
+  const items = useMemo(
+    () => (trigger ? filterSlashCommands(slashCommands, trigger.query) : []),
+    [slashCommands, trigger]
+  )
+
+  const applyCommand = useCallback(
+    (command: SlashCommandRow): ComposerInsertion => {
+      const range = trigger ?? { from: selection.start, to: selection.start }
+      return buildSlashCommandInsertion(value, range, command)
+    },
+    [selection.start, trigger, value]
+  )
+
+  return {
+    open: trigger != null && items.length > 0,
+    items,
+    onSelectionChange,
+    applyCommand,
+    reset,
+  }
+}
+
+/**
+ * Native suggestion popover, docked above the composer input (the
+ * Slack/Discord/iMessage pattern). Because the whole composer card is anchored
+ * above the keyboard, rendering this in flow just above the input row places it
+ * above the keyboard with no caret math.
+ */
+export function SlashCommandMenu({
+  items,
+  onSelect,
+}: {
+  items: Array<SlashCommandRow>
+  onSelect: (command: SlashCommandRow) => void
+}): React.ReactElement {
+  const tokens = useTokens()
+  const styles = useMemo(() => createMenuStyles(tokens), [tokens])
+
+  return (
+    <View style={styles.menu}>
+      <ScrollView
+        style={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+        nestedScrollEnabled
+      >
+        {items.map((command) => {
+          const name = normalizeCommandName(command.name)
+          const hint = formatSlashCommandArgumentHint(command)
+          return (
+            <Pressable
+              key={command.key ?? name}
+              onPress={() => onSelect(command)}
+              accessibilityRole="button"
+              accessibilityLabel={`Insert /${name} command`}
+              style={({ pressed }) => [
+                styles.row,
+                pressed ? styles.rowPressed : null,
+              ]}
+            >
+              <Text style={styles.rowName} numberOfLines={1}>
+                <Text style={styles.rowSlash}>/</Text>
+                {name}
+                {hint ? (
+                  <Text style={styles.rowHint}>{`  ${hint}`}</Text>
+                ) : null}
+              </Text>
+              {command.description ? (
+                <Text style={styles.rowDescription} numberOfLines={1}>
+                  {command.description}
+                </Text>
+              ) : null}
+            </Pressable>
+          )
+        })}
+      </ScrollView>
+    </View>
+  )
+}
+
+function createMenuStyles(tokens: Tokens) {
+  return StyleSheet.create({
+    menu: {
+      marginBottom: spacing.xs,
+      borderWidth: 1,
+      borderColor: tokens.border1,
+      borderRadius: radii.lg,
+      backgroundColor: tokens.surfaceRaised,
+      overflow: `hidden`,
+      shadowColor: `#000`,
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: tokens.scheme === `dark` ? 0.35 : 0.08,
+      shadowRadius: 3,
+      elevation: 2,
+    },
+    scroll: {
+      maxHeight: 220,
+    },
+    row: {
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      gap: 2,
+    },
+    rowPressed: {
+      backgroundColor: tokens.bgHover,
+    },
+    rowName: {
+      color: tokens.text1,
+      fontSize: fontSize.base,
+      lineHeight: lineHeight.base,
+      fontWeight: `600`,
+    },
+    rowSlash: {
+      color: tokens.text3,
+    },
+    rowHint: {
+      color: tokens.text3,
+      fontWeight: `400`,
+    },
+    rowDescription: {
+      color: tokens.text3,
+      fontSize: fontSize.xs,
+      lineHeight: lineHeight.xs,
+    },
+  })
+}

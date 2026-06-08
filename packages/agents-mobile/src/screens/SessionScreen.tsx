@@ -19,13 +19,21 @@ import { useEntityTimeline } from '@electric-ax/agents-server-ui/src/hooks/useEn
 import {
   createDeleteInboxMessageAction,
   createQueuePositionBetween,
-  createSendMessageAction,
+  createSendComposerInputAction,
   createSteerInboxMessageAction,
   createUpdateInboxMessageAction,
   readTextPayload,
 } from '@electric-ax/agents-server-ui/src/lib/sendMessage'
 import type { OptimisticInboxMessage } from '@electric-ax/agents-server-ui/src/lib/sendMessage'
-import type { EntityTimelineQueryRow } from '@electric-ax/agents-runtime/client'
+import { serializeComposerInput } from '@electric-ax/agents-runtime/client'
+import type {
+  EntityTimelineQueryRow,
+  SlashCommandRow,
+} from '@electric-ax/agents-runtime/client'
+import {
+  SlashCommandMenu,
+  useSlashAutocomplete,
+} from '../components/NativeComposer'
 import { Header, HeaderBackButton } from '../components/Header'
 import { Icon } from '../components/Icon'
 import { Screen } from '../components/Screen'
@@ -476,9 +484,23 @@ function NativeMessageComposer({
   const [inputHeight, setInputHeight] = useState(COMPOSER_INPUT_MIN_HEIGHT)
   const text = value.trim()
   const bottomPadding = keyboardVisible ? 4 : Math.max(insets.bottom, 8)
+  // Built-in entity-stream collection materialising the entity's static and
+  // dynamic slash commands; the same source the desktop composer reads. No
+  // static fallback on mobile yet (the entity-type schema here doesn't carry
+  // `slash_commands`), so autocomplete is empty until the collection syncs.
+  const { data: liveSlashCommands = [] } = useLiveQuery(
+    (q) =>
+      db
+        ? q
+            .from({ slashCommand: db.collections.slashCommands as any })
+            .orderBy(({ slashCommand }: any) => slashCommand.name, `asc`)
+        : undefined,
+    [db]
+  )
+  const slashCommands = liveSlashCommands as Array<SlashCommandRow>
   const sendAction = useMemo(() => {
     if (!db) return null
-    return createSendMessageAction({
+    return createSendComposerInputAction({
       db,
       baseUrl: serverUrl,
       entityUrl,
@@ -507,6 +529,15 @@ function NativeMessageComposer({
   const canSend = text.length > 0 && !disabled && !writeDisabled && !sending
   const inputDisabled = disabled || writeDisabled || sending
   const composerDisabled = disabled || (writeDisabled && !showStop)
+  const slash = useSlashAutocomplete(value, slashCommands, {
+    enabled: !inputDisabled,
+  })
+  // Controls the caret for one render after a programmatic command insert, then
+  // releases back to uncontrolled so normal typing isn't fought.
+  const [pendingSelection, setPendingSelection] = useState<{
+    start: number
+    end: number
+  } | null>(null)
   const setMeasuredInputHeight = (height: number): void => {
     const nextHeight = Math.min(
       COMPOSER_INPUT_MAX_HEIGHT,
@@ -524,6 +555,12 @@ function NativeMessageComposer({
     if (explicitLines > 1) {
       setMeasuredInputHeight(explicitLines * lineHeight.lg + spacing.lg)
     }
+  }
+
+  const insertSlashCommand = (command: SlashCommandRow): void => {
+    const insertion = slash.applyCommand(command)
+    handleChangeText(insertion.value)
+    setPendingSelection(insertion.selection)
   }
 
   useEffect(() => {
@@ -564,19 +601,26 @@ function NativeMessageComposer({
       }
 
       setValue(``)
+      setPendingSelection(null)
+      slash.reset()
       setEditingMessage(null)
       onSendMessage?.()
       finishPersistedAction(tx.isPersisted.promise)
       return
     }
 
-    const tx = sendAction?.({ text, mode: `queued` })
+    const tx = sendAction?.({
+      payload: serializeComposerInput(text, slashCommands),
+      mode: `queued`,
+    })
     if (!tx) {
       setSending(false)
       return
     }
 
     setValue(``)
+    setPendingSelection(null)
+    slash.reset()
     setEditingMessage(null)
     onSendMessage?.()
     finishPersistedAction(tx.isPersisted.promise)
@@ -708,12 +752,20 @@ function NativeMessageComposer({
           </Pressable>
         </View>
       )}
+      {slash.open && (
+        <SlashCommandMenu items={slash.items} onSelect={insertSlashCommand} />
+      )}
       <View
         style={[styles.composer, composerDisabled ? styles.disabled : null]}
       >
         <TextInput
           value={value}
           onChangeText={handleChangeText}
+          onSelectionChange={(event) => {
+            slash.onSelectionChange(event)
+            if (pendingSelection) setPendingSelection(null)
+          }}
+          selection={pendingSelection ?? undefined}
           editable={!inputDisabled}
           multiline
           placeholder={placeholder}
