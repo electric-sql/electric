@@ -560,10 +560,9 @@ defmodule Electric.Connection.Manager do
     if lock_breaker_allowed and
          state.current_step == {:start_replication_client, :acquiring_lock} and
          not is_nil(pg_backend_pid) do
-      pool = pool_name(state.stack_id, :admin)
       lock_name = Keyword.fetch!(state.replication_opts, :slot_name)
       database = replication_connection_opts(state)[:database]
-      execute_lock_breaker_query(pool, lock_name, pg_backend_pid, database)
+      execute_lock_breaker_query(admin_pool(state.stack_id), lock_name, pg_backend_pid, database)
     else
       if not lock_breaker_allowed do
         Logger.notice(
@@ -578,25 +577,12 @@ defmodule Electric.Connection.Manager do
   def handle_continue(
         :unblock_slot_creation,
         %State{current_step: {:start_replication_client, :configuring_connection}} = state
-      )
-      when admin_pool_available(state) do
-    if is_integer(state.pg_version) and
-         state.pg_version >= @force_standby_snapshot_min_pg_version do
-      pool = pool_name(state.stack_id, :admin)
-
-      case execute_force_standby_snapshot_query(pool) do
-        :ok ->
-          {:noreply, state}
-
-        {:unavailable, reason} ->
-          {:noreply, notify_slot_unblock_unavailable(state, reason)}
-      end
-    else
-      {:noreply, notify_slot_unblock_unavailable(state, :pg_version_too_old)}
+      ) do
+    case execute_force_standby_snapshot_query(state) do
+      :ok -> {:noreply, state}
+      {:unavailable, reason} -> {:noreply, notify_slot_unblock_unavailable(state, reason)}
     end
   end
-
-  def handle_continue(:unblock_slot_creation, state), do: {:noreply, state}
 
   @impl true
   def handle_info(
@@ -1186,11 +1172,16 @@ defmodule Electric.Connection.Manager do
 
   # Forces Postgres to emit an XLOG_RUNNING_XACTS record so that a logical slot
   # creation that is waiting for a consistent snapshot can proceed as soon as the
-  # blocking transaction(s) have ended. Returns :ok on success or transient
-  # failure (we'll retry on the next tick), or {:unavailable, code} when the
-  # function cannot be run at all (missing privilege or function).
-  defp execute_force_standby_snapshot_query(pool) do
-    case Postgrex.query(pool, "SELECT pg_log_standby_snapshot()", [], timeout: 5_000) do
+  # blocking transaction(s) have ended.
+  defp execute_force_standby_snapshot_query(state)
+       when not is_integer(state.pg_version) or
+              state.pg_version < @force_standby_snapshot_min_pg_version,
+       do: {:unavailable, :pg_version_too_old}
+
+  defp execute_force_standby_snapshot_query(state) when admin_pool_available(state) do
+    case Postgrex.query(admin_pool(state.stack_id), "SELECT pg_log_standby_snapshot()", [],
+           timeout: 5_000
+         ) do
       {:ok, _result} ->
         Logger.debug("Forced a standby snapshot to unblock replication slot creation")
         :ok
@@ -1204,6 +1195,7 @@ defmodule Electric.Connection.Manager do
         :ok
     end
   catch
+    # Guard against potential named process non-existence, checkout timeout or process crashes.
     kind, error ->
       Logger.warning(
         "Failed to force a standby snapshot: #{Exception.format(kind, error, __STACKTRACE__)}"
@@ -1212,17 +1204,30 @@ defmodule Electric.Connection.Manager do
       :ok
   end
 
+  defp execute_force_standby_snapshot_query(_state), do: :ok
+
   defp notify_slot_unblock_unavailable(%State{slot_unblock_notice_sent: true} = state, _reason),
     do: state
 
   defp notify_slot_unblock_unavailable(state, reason) do
-    Logger.warning(
-      "Replication slot creation is blocked by a pending transaction and Electric cannot " <>
-        "automatically unblock it (#{reason}). Grant EXECUTE ON FUNCTION pg_log_standby_snapshot() " <>
-        "to Electric's database role (PostgreSQL 14+) so the source can recover without a manual restart."
-    )
+    reason_prose =
+      case reason do
+        :insufficient_privilege ->
+          "due to the missing EXECUTE ON FUNCTION pg_log_standby_snapshot() privilege"
 
-    dispatch_stack_event(:replication_slot_unblock_unavailable, state)
+        :undefined_function ->
+          "because pg_log_standby_snapshot() is undefined"
+
+        :pg_version_too_old ->
+          "because pg_log_standby_snapshot() is not available in the current PG version"
+      end
+
+    user_message =
+      "Replication slot creation is blocked by a pending transaction. Electric might not be able to " <>
+        "automatically unblock it as soon as the transction commits/rolls back #{reason_prose}. " <>
+        "Manually restarting the source may be needed once the offending transaction is no longer active."
+
+    dispatch_stack_event({:replication_slot_unblock_unavailable, user_message}, state)
     %{state | slot_unblock_notice_sent: true}
   end
 
@@ -1319,9 +1324,12 @@ defmodule Electric.Connection.Manager do
   end
 
   defp drop_publication(state) do
-    pool = pool_name(state.stack_id, :admin)
     publication_name = Keyword.fetch!(state.replication_opts, :publication_name)
-    execute_and_log_errors(pool, "DROP PUBLICATION IF EXISTS #{publication_name}")
+
+    execute_and_log_errors(
+      admin_pool(state.stack_id),
+      "DROP PUBLICATION IF EXISTS #{publication_name}"
+    )
   end
 
   defp drop_slot(state) when not admin_pool_available(state) do
@@ -1329,12 +1337,14 @@ defmodule Electric.Connection.Manager do
   end
 
   defp drop_slot(state) do
-    pool = pool_name(state.stack_id, :admin)
     slot_name = Keyword.fetch!(state.replication_opts, :slot_name)
     slot_temporary? = Keyword.fetch!(state.replication_opts, :slot_temporary?)
 
     if not slot_temporary? do
-      execute_and_log_errors(pool, "SELECT pg_drop_replication_slot('#{slot_name}');")
+      execute_and_log_errors(
+        admin_pool(state.stack_id),
+        "SELECT pg_drop_replication_slot('#{slot_name}');"
+      )
     end
   end
 
@@ -1349,8 +1359,11 @@ defmodule Electric.Connection.Manager do
   end
 
   defp kill_replication_backend(%State{replication_pg_backend_pid: pg_backend_pid} = state) do
-    pool = pool_name(state.stack_id, :admin)
-    execute_and_log_errors(pool, "SELECT pg_terminate_backend(#{pg_backend_pid});")
+    execute_and_log_errors(
+      admin_pool(state.stack_id),
+      "SELECT pg_terminate_backend(#{pg_backend_pid});"
+    )
+
     %{state | replication_pg_backend_pid: nil}
   end
 
