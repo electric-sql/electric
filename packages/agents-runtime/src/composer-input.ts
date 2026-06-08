@@ -511,21 +511,14 @@ export const createSlashCommandTokenRegex = (): RegExp =>
  */
 export const SLASH_COMMAND_TRIGGER_REGEX = /(^|\s)\/([a-z0-9_-]*)$/i
 
-/**
- * An in-progress slash-command trigger: the active query and the source range it
- * occupies (`from` is the offset of the leading `/`, `to` is the cursor).
- */
+/** An in-progress slash trigger: the query and its source range (`from` is the leading `/`, `to` is the cursor). */
 export interface SlashCommandTrigger {
   from: number
   to: number
   query: string
 }
 
-/**
- * Detect an in-progress slash-command trigger in the text immediately before the
- * cursor. `cursor` is the absolute UTF-16 offset into `text`. Returns null when
- * the cursor is not parked at the end of a slash trigger.
- */
+/** Detect an in-progress slash trigger ending at `cursor` (a UTF-16 offset into `text`); null if none. */
 export function detectSlashCommandTrigger(
   text: string,
   cursor: number

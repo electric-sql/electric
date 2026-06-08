@@ -203,9 +203,11 @@ spike and never block the parity win.
 - **PR2 — the parity win (no new native deps).** `NativeComposer.tsx`: plain
   `TextInput` emitting `composer_input`, `/`-trigger detection, native
   keyboard-docked autocomplete on the **existing** keyboard plumbing,
-  `useLiveQuery(db.collections.slashCommands)` + fallback. This alone delivers
-  feature/experience parity. `NewSessionScreen` spawn parity
-  (`initialMessageType=composer_input`) reuses the same component.
+  `useLiveQuery(db.collections.slashCommands)`. This delivers the in-session
+  feature/experience parity. `NewSessionScreen` spawn parity is **deferred** (a
+  follow-up): the mobile spawn endpoint takes a plain-string `initialMessage`
+  with no `initialMessageType`, so a structured `composer_input` spawn needs
+  server/`spawnEntity` plumbing that is out of v1 scope.
 - **PR3 — inline `/command` pills (gated on the spike).** Add
   `react-native-live-markdown` + `react-native-worklets` and a worklet parser
   styling `/command` ranges. Drop if the spike fails — parity is already shipped.

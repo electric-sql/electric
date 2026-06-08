@@ -40,16 +40,11 @@ export type SlashAutocomplete = {
 }
 
 /**
- * Drives a native slash-command autocomplete on a plain `TextInput`: it tracks
- * the caret, derives the in-progress trigger from the value via the shared
- * {@link detectSlashCommandTrigger} grammar, filters the command list, and
- * produces the spliced value when one is chosen. No WebView, no caret
- * coordinates — everything is plain React state in the RN tree, which is what
- * lets the popover be native (see {@link SlashCommandMenu}).
- *
- * The trigger+splice mechanics are deliberately generic so future composer node
- * kinds (file, symbol, branch) can reuse the same spine with a different
- * trigger and inserted text.
+ * Drives native slash-command autocomplete on a plain `TextInput`: tracks the
+ * caret, derives the trigger via the shared {@link detectSlashCommandTrigger}
+ * grammar, filters the list, and produces the spliced value on selection.
+ * Everything is plain React state — no WebView, no caret coordinates — which is
+ * what lets the popover ({@link SlashCommandMenu}) be native.
  */
 export function useSlashAutocomplete(
   value: string,
@@ -100,10 +95,9 @@ export function useSlashAutocomplete(
 }
 
 /**
- * Native suggestion popover, docked above the composer input (the
- * Slack/Discord/iMessage pattern). Because the whole composer card is anchored
- * above the keyboard, rendering this in flow just above the input row places it
- * above the keyboard with no caret math.
+ * Native suggestion popover docked above the composer input. The composer card
+ * is anchored above the keyboard, so rendering this in flow just above the input
+ * row places it above the keyboard with no caret math.
  */
 export function SlashCommandMenu({
   items,
@@ -113,7 +107,7 @@ export function SlashCommandMenu({
   onSelect: (command: SlashCommandRow) => void
 }): React.ReactElement {
   const tokens = useTokens()
-  const styles = useMemo(() => createMenuStyles(tokens), [tokens])
+  const styles = useMemo(() => createStyles(tokens), [tokens])
 
   return (
     <View style={styles.menu}>
@@ -127,7 +121,7 @@ export function SlashCommandMenu({
           const hint = formatSlashCommandArgumentHint(command)
           return (
             <Pressable
-              key={command.key ?? name}
+              key={command.key ?? `${command.source}:${name}`}
               onPress={() => onSelect(command)}
               accessibilityRole="button"
               accessibilityLabel={`Insert /${name} command`}
@@ -156,7 +150,7 @@ export function SlashCommandMenu({
   )
 }
 
-function createMenuStyles(tokens: Tokens) {
+function createStyles(tokens: Tokens) {
   return StyleSheet.create({
     menu: {
       marginBottom: spacing.xs,

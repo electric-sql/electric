@@ -30,12 +30,12 @@ import type {
   EntityTimelineQueryRow,
   SlashCommandRow,
 } from '@electric-ax/agents-runtime/client'
+import { Header, HeaderBackButton } from '../components/Header'
+import { Icon } from '../components/Icon'
 import {
   SlashCommandMenu,
   useSlashAutocomplete,
 } from '../components/NativeComposer'
-import { Header, HeaderBackButton } from '../components/Header'
-import { Icon } from '../components/Icon'
 import { Screen } from '../components/Screen'
 import { SessionMenu } from '../components/SessionMenu'
 import { StatusDot } from '../components/StatusDot'
@@ -648,8 +648,10 @@ function NativeMessageComposer({
       })
       setEditingMessage({ key: message.key })
       setValue(queuedText)
+      setPendingSelection(null)
+      slash.reset()
     },
-    [disabled, updateAction, writeDisabled]
+    [disabled, slash.reset, updateAction, writeDisabled]
   )
 
   const cancelEditing = useCallback((): void => {
@@ -665,7 +667,9 @@ function NativeMessageComposer({
     }
     setEditingMessage(null)
     setValue(``)
-  }, [editingMessage, updateAction])
+    setPendingSelection(null)
+    slash.reset()
+  }, [editingMessage, slash.reset, updateAction])
 
   const deleteMessage = useCallback(
     (key: string): void => {

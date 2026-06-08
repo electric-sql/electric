@@ -35,10 +35,8 @@ export function filterSlashCommands(
 }
 
 /**
- * Splice a chosen command into `value` over the active trigger `range`. A
- * trailing space keeps the caret out of the token so the user types arguments
- * or prose inline. The generic shape (a `[from, to]` range plus inserted text)
- * is what lets future composer node kinds reuse this spine.
+ * Splice a chosen command into `value` over the active trigger `range`, with a
+ * trailing space so the caret lands past the token for inline arguments/prose.
  */
 export function buildSlashCommandInsertion(
   value: string,
