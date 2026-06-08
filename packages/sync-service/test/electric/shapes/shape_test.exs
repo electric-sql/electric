@@ -621,6 +621,90 @@ defmodule Electric.Shapes.ShapeTest do
     @tag with_sql: [
            "CREATE TABLE IF NOT EXISTS col_table (id INT PRIMARY KEY, value1 TEXT, value2 TEXT)"
          ]
+    test "does not restrict selected columns or where clauses when queryable columns are omitted",
+         %{
+           inspector: inspector
+         } do
+      assert {:ok,
+              %Shape{
+                selected_columns: ["id", "value1"],
+                queryable_columns: nil,
+                where: %{query: "value2 = 'allowed'"}
+              }} =
+               Shape.new("col_table",
+                 inspector: inspector,
+                 columns: ["id", "value1"],
+                 where: "value2 = 'allowed'"
+               )
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE IF NOT EXISTS col_table (id INT PRIMARY KEY, value1 TEXT, value2 TEXT)"
+         ]
+    test "builds a shape with queryable columns and narrower selected columns", %{
+      inspector: inspector
+    } do
+      assert {:ok,
+              %Shape{
+                selected_columns: ["id", "value1"],
+                queryable_columns: ["id", "value1", "value2"],
+                where: %{query: "value2 = 'allowed'"}
+              }} =
+               Shape.new("col_table",
+                 inspector: inspector,
+                 queryable_columns: ["id", "value1", "value2"],
+                 columns: ["id", "value1"],
+                 where: "value2 = 'allowed'"
+               )
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE IF NOT EXISTS col_table (id INT PRIMARY KEY, value1 TEXT, value2 TEXT)"
+         ]
+    test "defaults selected columns to queryable columns when columns are omitted", %{
+      inspector: inspector
+    } do
+      assert {:ok,
+              %Shape{
+                selected_columns: ["id", "value1"],
+                queryable_columns: ["id", "value1"],
+                flags: flags
+              }} =
+               Shape.new("col_table",
+                 inspector: inspector,
+                 queryable_columns: ["id", "value1"]
+               )
+
+      refute Map.get(flags, :selects_all_columns)
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE IF NOT EXISTS col_table (id INT PRIMARY KEY, value1 TEXT, value2 TEXT)"
+         ]
+    test "validates selected columns and where clauses against queryable columns", %{
+      inspector: inspector
+    } do
+      assert {:error, {:columns, ["The following columns are not found on the table: value2"]}} =
+               Shape.new("col_table",
+                 inspector: inspector,
+                 queryable_columns: ["id", "value1"],
+                 columns: ["id", "value2"]
+               )
+
+      assert {:error, {:where, message}} =
+               Shape.new("col_table",
+                 inspector: inspector,
+                 queryable_columns: ["id", "value1"],
+                 columns: ["id", "value1"],
+                 where: "value2 = 'blocked'"
+               )
+
+      assert message =~ "unknown reference value2"
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE IF NOT EXISTS col_table (id INT PRIMARY KEY, value1 TEXT, value2 TEXT)"
+         ]
     test "validates selected columns for invalid columns", %{inspector: inspector} do
       assert {:error, {:columns, ["The following columns are not found on the table: invalid"]}} =
                Shape.new("col_table", inspector: inspector, columns: ["id", "invalid"])
@@ -1026,6 +1110,7 @@ defmodule Electric.Shapes.ShapeTest do
           root_pk: ["first", "second", "third"],
           root_column_count: 4,
           selected_columns: ["first", "second", "third", "fourth"],
+          queryable_columns: nil,
           flags: %{selects_all_columns: true},
           where: nil
         }

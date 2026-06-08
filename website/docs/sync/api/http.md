@@ -238,6 +238,8 @@ The POST body accepts these parameters:
 - `offset` - Number of rows to skip (for pagination)
 - `order_by` - ORDER BY clause (required when using limit/offset)
 
+Subset `where` and `order_by` expressions may only reference columns allowed by `queryable_columns` when it is set.
+
 #### Using GET (legacy)
 
 GET requests are still supported for backwards compatibility, using `subset__*` query parameters:
@@ -253,6 +255,8 @@ The query parameters include:
 - `subset__limit` - Maximum number of rows to return
 - `subset__offset` - Number of rows to skip (for pagination)
 - `subset__order_by` - ORDER BY clause (required when using limit/offset)
+
+Subset `where` and `order_by` expressions may only reference columns allowed by `queryable_columns` when it is set.
 
 #### Response format
 
