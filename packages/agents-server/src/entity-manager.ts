@@ -61,6 +61,7 @@ import {
   MARKDOWN_DOCUMENT_TRANSPORT_MIME,
   assertMarkdownDocumentMatchesEntity,
   getMarkdownDocumentDocPath,
+  getMarkdownDocumentAwarenessStreamPath,
   getMarkdownDocumentUpdateStreamPath,
 } from './markdown-documents.js'
 import type { queueAsPromised } from 'fastq'
@@ -2692,6 +2693,11 @@ export class EntityManager {
       this.tenantId,
       docPath
     )
+    const awarenessStreamPath = getMarkdownDocumentAwarenessStreamPath(
+      this.tenantId,
+      docPath,
+      `default`
+    )
     const now = new Date().toISOString()
     const txid = randomUUID()
     const document: ManifestMarkdownDocumentEntry = {
@@ -2716,11 +2722,16 @@ export class EntityManager {
     }
 
     let streamCreated = false
+    let awarenessStreamCreated = false
     try {
       await this.streamClient.create(updateStreamPath, {
         contentType: `application/octet-stream`,
       })
       streamCreated = true
+      await this.streamClient.create(awarenessStreamPath, {
+        contentType: `application/octet-stream`,
+      })
+      awarenessStreamCreated = true
       await this.writeManifestEntry(
         entityUrl,
         document.key,
@@ -2729,6 +2740,11 @@ export class EntityManager {
         { txid }
       )
     } catch (error) {
+      if (awarenessStreamCreated) {
+        await this.streamClient
+          .delete(awarenessStreamPath)
+          .catch(() => undefined)
+      }
       if (streamCreated) {
         await this.streamClient.delete(updateStreamPath).catch(() => undefined)
       }

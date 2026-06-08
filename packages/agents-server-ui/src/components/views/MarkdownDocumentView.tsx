@@ -6,7 +6,13 @@ import { keymap } from '@codemirror/view'
 import { YjsProvider } from '@durable-streams/y-durable-streams'
 import { Plug, TriangleAlert, Unplug } from 'lucide-react'
 import { yCollab, yUndoManagerKeymap } from 'y-codemirror.next'
-import { Awareness, removeAwarenessStates } from 'y-protocols/awareness'
+import * as decoding from 'lib0/decoding'
+import {
+  Awareness,
+  applyAwarenessUpdate,
+  encodeAwarenessUpdate,
+  removeAwarenessStates,
+} from 'y-protocols/awareness'
 import * as Y from 'yjs'
 import { useCurrentPrincipal } from '../../hooks/useCurrentPrincipal'
 import { getConfiguredServerHeaders, serverFetch } from '../../lib/auth-fetch'
@@ -94,6 +100,68 @@ function connectionStatusIcon(status: DocumentConnectionStatus): LucideIcon {
   }
 }
 
+export function applyMarkdownAwarenessFrames(
+  awareness: Awareness,
+  data: Uint8Array
+): void {
+  if (data.length === 0) return
+  const decoder = decoding.createDecoder(data)
+  while (decoding.hasContent(decoder)) {
+    applyAwarenessUpdate(
+      awareness,
+      decoding.readVarUint8Array(decoder),
+      `server`
+    )
+  }
+}
+
+async function primeMarkdownAwareness(
+  awareness: Awareness,
+  docUrl: URL,
+  signal: AbortSignal
+): Promise<void> {
+  const awarenessUrl = new URL(docUrl)
+  awarenessUrl.searchParams.set(`awareness`, `default`)
+  awarenessUrl.searchParams.set(`offset`, `-1`)
+  const response = await serverFetch(awarenessUrl, {
+    method: `GET`,
+    headers: getConfiguredServerHeaders(awarenessUrl),
+    signal,
+  })
+  if (signal.aborted) return
+  if (response.status === 404) return
+  if (!response.ok) return
+  const bytes = new Uint8Array(await response.arrayBuffer())
+  if (signal.aborted) return
+
+  const snapshot = new Awareness(new Y.Doc())
+  applyMarkdownAwarenessFrames(snapshot, bytes)
+  const now = Date.now()
+  const activeAgents = Array.from(snapshot.getStates())
+    .filter(([, state]) => {
+      const user = (
+        state as {
+          user?: { role?: string; status?: string; expiresAt?: number }
+        }
+      ).user
+      return (
+        user?.role === `agent` &&
+        user.status === `editing` &&
+        typeof user.expiresAt === `number` &&
+        user.expiresAt > now
+      )
+    })
+    .map(([clientId]) => clientId)
+  if (activeAgents.length > 0) {
+    applyAwarenessUpdate(
+      awareness,
+      encodeAwarenessUpdate(snapshot, activeAgents),
+      `server`
+    )
+  }
+  snapshot.destroy()
+}
+
 export function markdownDocumentConnectionConfig(
   baseUrl: string,
   documentEntry: ManifestDocumentEntry
@@ -175,6 +243,12 @@ export function MarkdownDocumentView({
 
     const { providerUrl, docUrl, docId, yTextName } =
       markdownDocumentConnectionConfig(baseUrl, documentEntry)
+    const awarenessPrimeController = new AbortController()
+    void primeMarkdownAwareness(
+      awareness,
+      docUrl,
+      awarenessPrimeController.signal
+    ).catch(() => undefined)
     const provider = new YjsProvider({
       doc: ydoc,
       baseUrl: providerUrl,
@@ -257,6 +331,7 @@ export function MarkdownDocumentView({
     setStatus(`connecting`)
 
     return () => {
+      awarenessPrimeController.abort()
       window.clearInterval(stalePresenceInterval)
       provider.off(`status`, statusHandler)
       awareness.off(`change`, updateRemoteUsers)

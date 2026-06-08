@@ -206,7 +206,7 @@ describe(`ElectricAgentsManager.validateWriteEvent`, () => {
 })
 
 describe(`ElectricAgentsManager markdown documents`, () => {
-  it(`creates an empty Yjs update stream and exposes a manifest document entry`, async () => {
+  it(`creates Yjs update and awareness streams and exposes a manifest document entry`, async () => {
     const { manager, streamClient } = createMarkdownDocumentManager()
 
     const created = await manager.createMarkdownDocument(`/chat/session-1`, {
@@ -231,6 +231,10 @@ describe(`ElectricAgentsManager markdown documents`, () => {
     })
     expect(streamClient.create).toHaveBeenCalledWith(
       `/yjs/default/docs/agents/chat/session-1/documents/notes/.updates`,
+      { contentType: `application/octet-stream` }
+    )
+    expect(streamClient.create).toHaveBeenCalledWith(
+      `/yjs/default/docs/agents/chat/session-1/documents/notes/.awareness/default`,
       { contentType: `application/octet-stream` }
     )
     expect(streamClient.appendBytes).not.toHaveBeenCalled()

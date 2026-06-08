@@ -1,6 +1,22 @@
 import { describe, expect, it } from 'vitest'
-import { markdownDocumentConnectionConfig } from './MarkdownDocumentView'
+import * as encoding from 'lib0/encoding'
+import {
+  Awareness,
+  encodeAwarenessUpdate,
+  type Awareness as AwarenessType,
+} from 'y-protocols/awareness'
+import * as Y from 'yjs'
+import {
+  applyMarkdownAwarenessFrames,
+  markdownDocumentConnectionConfig,
+} from './MarkdownDocumentView'
 import type { ManifestDocumentEntry } from '@electric-ax/agents-runtime/client'
+
+function frame(update: Uint8Array): Uint8Array {
+  const encoder = encoding.createEncoder()
+  encoding.writeVarUint8Array(encoder, update)
+  return encoding.toUint8Array(encoder)
+}
 
 describe(`markdownDocumentConnectionConfig`, () => {
   it(`uses explicit provider doc metadata for editor connections`, () => {
@@ -30,5 +46,28 @@ describe(`markdownDocumentConnectionConfig`, () => {
     expect(config.docUrl.toString()).toBe(
       `http://localhost:4437/app/v1/yjs/default/docs/agents/chat/session/documents/notes`
     )
+  })
+})
+
+describe(`applyMarkdownAwarenessFrames`, () => {
+  it(`applies lib0-framed awareness updates`, () => {
+    const sourceDoc = new Y.Doc()
+    const source = new Awareness(sourceDoc)
+    source.setLocalState({
+      user: { name: `horton`, role: `agent`, status: `editing` },
+      cursor: { anchor: 4, head: 4 },
+    })
+
+    const target = new Awareness(new Y.Doc()) as AwarenessType
+    applyMarkdownAwarenessFrames(
+      target,
+      frame(encodeAwarenessUpdate(source, [source.clientID]))
+    )
+
+    const remoteState = target.getStates().get(source.clientID)
+    expect(remoteState).toMatchObject({
+      user: { name: `horton`, role: `agent`, status: `editing` },
+      cursor: { anchor: 4, head: 4 },
+    })
   })
 })

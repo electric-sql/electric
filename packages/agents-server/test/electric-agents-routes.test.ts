@@ -387,6 +387,48 @@ describe(`ElectricAgentsRoutes markdown document endpoints`, () => {
     }
   })
 
+  it(`forwards Yjs awareness document routes to the awareness stream`, async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, `fetch`)
+      .mockResolvedValue(new Response(null, { status: 204 }))
+    const manager = {
+      registry: {
+        getEntity: vi.fn().mockResolvedValue({
+          url: `/chat/test`,
+          created_by: `/principal/user:owner`,
+        }),
+        hasEntityPermission: vi.fn().mockResolvedValue(false),
+        pruneExpiredPermissionGrants: vi.fn(),
+      },
+      isForkWorkLockedEntity: vi.fn().mockReturnValue(false),
+    } as any
+
+    try {
+      const allowed = await routeResponse(
+        manager,
+        `GET`,
+        `/v1/yjs/test/docs/agents/chat/test/documents/notes?awareness=default&offset=-1`,
+        undefined,
+        false,
+        undefined,
+        undefined,
+        {
+          durableStreamsUrl: `http://durable.local`,
+        }
+      )
+      expect(allowed.status).toBe(204)
+      expect(fetchSpy).toHaveBeenCalledOnce()
+      const [url, init] = fetchSpy.mock.calls[0]!
+      expect(String(url)).toContain(
+        `/yjs/test/docs/agents/chat/test/documents/notes/.awareness/default?offset=-1`
+      )
+      expect(String(url)).not.toContain(`awareness=`)
+      expect(init).toMatchObject({ method: `GET` })
+    } finally {
+      fetchSpy.mockRestore()
+    }
+  })
+
   it(`guards private Yjs document streams and forwards authorized awareness streams`, async () => {
     const fetchSpy = vi
       .spyOn(globalThis, `fetch`)

@@ -701,7 +701,7 @@ async function yjsDocumentRoute(
       request,
       undefined,
       `stream`,
-      rewriteRequestUrlPath(request.url, streamPath)
+      rewriteYjsDocumentStreamUrl(request.url, streamPath)
     )
     if (!isAwareness && (upstream.ok || upstream.status === 409)) {
       await ctx.streamClient
@@ -724,7 +724,7 @@ async function yjsDocumentRoute(
       request,
       undefined,
       `stream`,
-      rewriteRequestUrlPath(request.url, streamPath)
+      rewriteYjsDocumentStreamUrl(request.url, streamPath)
     )
     return responseFromUpstream(upstream)
   }
@@ -755,9 +755,10 @@ async function proxyPassThrough(
   }
 }
 
-function rewriteRequestUrlPath(requestUrl: string, path: string): string {
+function rewriteYjsDocumentStreamUrl(requestUrl: string, path: string): string {
   const url = new URL(requestUrl)
   url.pathname = path
+  url.searchParams.delete(`awareness`)
   return url.toString()
 }
 
