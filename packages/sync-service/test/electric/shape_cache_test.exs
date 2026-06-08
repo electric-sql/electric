@@ -1530,7 +1530,7 @@ defmodule Electric.ShapeCacheTest do
       lsn: lsn,
       last_log_offset: last_log_offset,
       has_begin?: true,
-      commit: %Changes.Commit{},
+      commit: %Changes.Commit{tx_started_at: System.monotonic_time()},
       changes: changes,
       affected_relations: MapSet.new(changes, & &1.relation)
     }
