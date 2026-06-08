@@ -334,7 +334,6 @@ The proxy must set these **shape definition parameters** server-side — they de
 | Parameter | Where | Security Consideration |
 |-----------|-------|------------------------|
 | `table` | URL | **Must be set server-side.** Letting clients specify the table allows access to any table. |
-| `columns` | URL | Optional sync projection. If clients can choose it, use `queryable_columns` to restrict which columns they can sync. |
 | `queryable_columns` | URL | **Must be set server-side if the table has sensitive columns.** Column allow-list for WHERE clauses, subset filters, ordering, and synced projections. |
 | `where` | URL | **Must be set server-side.** This is your authorization filter — the main shape WHERE that restricts all queries. |
 | `secret` | URL | **Must be set server-side.** Never expose the API secret to clients. |
