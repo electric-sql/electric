@@ -33,6 +33,7 @@ import type {
 import { Header, HeaderBackButton } from '../components/Header'
 import { Icon } from '../components/Icon'
 import {
+  renderComposerHighlights,
   SlashCommandMenu,
   useSlashAutocomplete,
 } from '../components/NativeComposer'
@@ -57,7 +58,6 @@ export const CHAT_COMPOSER_OVERLAP = 20
 
 const COMPOSER_INPUT_MIN_HEIGHT = 40
 const COMPOSER_INPUT_MAX_HEIGHT = 200
-const COMPOSER_MIN_CARD_HEIGHT = 48
 const INLINE_QUEUED_TIMEOUT_MS = 15_000
 const SESSION_PERMISSIONS: ReadonlyArray<EntityPermission> = [`write`, `signal`]
 
@@ -481,7 +481,6 @@ function NativeMessageComposer({
   const [editingMessage, setEditingMessage] = useState<{
     key: string
   } | null>(null)
-  const [inputHeight, setInputHeight] = useState(COMPOSER_INPUT_MIN_HEIGHT)
   const text = value.trim()
   const bottomPadding = keyboardVisible ? 4 : Math.max(insets.bottom, 8)
   // The per-entity slashCommands collection only carries dynamically-registered
@@ -557,39 +556,11 @@ function NativeMessageComposer({
     start: number
     end: number
   } | null>(null)
-  const setMeasuredInputHeight = (height: number): void => {
-    const nextHeight = Math.min(
-      COMPOSER_INPUT_MAX_HEIGHT,
-      Math.max(COMPOSER_INPUT_MIN_HEIGHT, Math.ceil(height))
-    )
-    setInputHeight((current) => (current === nextHeight ? current : nextHeight))
-  }
-
-  const handleChangeText = (nextValue: string): void => {
-    setValue(nextValue)
-
-    // `onContentSizeChange` is the source of truth for wrapped lines, but
-    // explicit newlines can be reflected immediately while RN catches up.
-    const explicitLines = nextValue.split(/\r\n|\r|\n/).length
-    if (explicitLines > 1) {
-      setMeasuredInputHeight(explicitLines * lineHeight.lg + spacing.lg)
-    }
-  }
-
   const insertSlashCommand = (command: SlashCommandRow): void => {
     const insertion = slash.applyCommand(command)
-    handleChangeText(insertion.value)
+    setValue(insertion.value)
     setPendingSelection(insertion.selection)
   }
-
-  useEffect(() => {
-    const cardHeight = Math.max(
-      COMPOSER_MIN_CARD_HEIGHT,
-      inputHeight + spacing.sm * 2
-    )
-    const errorHeight = error ? lineHeight.xs + spacing.xs : 0
-    onHeightChange?.(cardHeight + bottomPadding + errorHeight)
-  }, [bottomPadding, error, inputHeight, onHeightChange])
 
   const finishPersistedAction = (promise: Promise<unknown>): void => {
     promise
@@ -782,8 +753,7 @@ function NativeMessageComposer({
         style={[styles.composer, composerDisabled ? styles.disabled : null]}
       >
         <TextInput
-          value={value}
-          onChangeText={handleChangeText}
+          onChangeText={setValue}
           onSelectionChange={(event) => {
             slash.onSelectionChange(event)
             if (pendingSelection) setPendingSelection(null)
@@ -793,13 +763,20 @@ function NativeMessageComposer({
           multiline
           placeholder={placeholder}
           placeholderTextColor={tokens.text4}
-          scrollEnabled={inputHeight >= COMPOSER_INPUT_MAX_HEIGHT}
-          onContentSizeChange={(event) => {
-            setMeasuredInputHeight(event.nativeEvent.contentSize.height)
-          }}
-          style={[styles.input, { height: inputHeight }]}
+          // Size to content intrinsically (within the style's min/maxHeight)
+          // rather than via onContentSizeChange — that callback never fires when
+          // the text is supplied as child <Text> instead of `value` (RN #13732),
+          // so the input wouldn't grow on iOS. The root onLayout reports the
+          // resulting card height to the timeline embed.
+          style={styles.input}
           returnKeyType="default"
-        />
+        >
+          {renderComposerHighlights(value, slashCommands, {
+            base: styles.baseText,
+            command: styles.commandToken,
+            arg: styles.argToken,
+          })}
+        </TextInput>
         <Pressable
           onPress={handleComposerAction}
           disabled={showStop ? stopPending : !canSend}
@@ -1563,10 +1540,26 @@ function createComposerStyles(tokens: Tokens) {
       maxHeight: COMPOSER_INPUT_MAX_HEIGHT,
       minHeight: COMPOSER_INPUT_MIN_HEIGHT,
       paddingVertical: 0,
-      color: tokens.text1,
       fontSize: fontSize.lg,
       lineHeight: lineHeight.lg,
       textAlignVertical: `top`,
+    },
+    // Base text colour lives on the rendered child spans, not the input, so the
+    // command spans can override it (a nested colour is ignored when the
+    // TextInput sets its own `color`).
+    baseText: {
+      color: tokens.text1,
+    },
+    commandToken: {
+      color: tokens.accent11,
+      backgroundColor: tokens.accentA2,
+      fontWeight: `600`,
+    },
+    // Arguments share the command's subtle background but regular weight (vs the
+    // command's bold), so the value reads as the "slot" within the badge.
+    argToken: {
+      color: tokens.accent11,
+      backgroundColor: tokens.accentA2,
     },
     sendButton: {
       width: 34,

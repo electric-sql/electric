@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildSlashCommandInsertion,
+  computeHighlightRanges,
   filterSlashCommands,
 } from './slashAutocomplete'
 import type { SlashCommandRow } from '@electric-ax/agents-runtime/client'
@@ -37,6 +38,50 @@ describe(`filterSlashCommands`, () => {
     expect(
       filterSlashCommands([command(`/quickstart`)], `quick`).map((c) => c.name)
     ).toEqual([`/quickstart`])
+  })
+})
+
+describe(`computeHighlightRanges`, () => {
+  const initCommand: SlashCommandRow = {
+    key: `init`,
+    name: `init`,
+    source: `static`,
+    updated_at: `2026-01-01T00:00:00.000Z`,
+    arguments: [{ name: `project`, type: `string`, required: true }],
+  }
+
+  it(`highlights a recognized command with no arguments`, () => {
+    expect(computeHighlightRanges(`go /quickstart now`, commands)).toEqual([
+      { start: 3, commandEnd: 14, end: 14 },
+    ])
+  })
+
+  it(`extends the highlight over a declared argument word`, () => {
+    // "/init my-project" — the command + its one arg word as a single unit,
+    // with the command/arg boundary marked at commandEnd.
+    const value = `/init my-project`
+    expect(computeHighlightRanges(value, [initCommand])).toEqual([
+      { start: 0, commandEnd: 5, end: value.length },
+    ])
+  })
+
+  it(`stops after the declared number of argument words`, () => {
+    // Only one declared arg, so "extra" stays outside the highlight.
+    expect(computeHighlightRanges(`/init proj extra`, [initCommand])).toEqual([
+      { start: 0, commandEnd: 5, end: 10 },
+    ])
+  })
+
+  it(`covers just the command when no argument is typed yet`, () => {
+    expect(computeHighlightRanges(`/init `, [initCommand])).toEqual([
+      { start: 0, commandEnd: 5, end: 5 },
+    ])
+  })
+
+  it(`ignores unknown commands`, () => {
+    expect(
+      computeHighlightRanges(`/not-a-command here`, [initCommand])
+    ).toEqual([])
   })
 })
 

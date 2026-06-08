@@ -6,7 +6,9 @@ import {
   Text,
   View,
   type NativeSyntheticEvent,
+  type StyleProp,
   type TextInputSelectionChangeEventData,
+  type TextStyle,
 } from 'react-native'
 import {
   detectSlashCommandTrigger,
@@ -16,6 +18,7 @@ import {
 } from '@electric-ax/agents-runtime/client'
 import {
   buildSlashCommandInsertion,
+  computeHighlightRanges,
   filterSlashCommands,
   type ComposerInsertion,
 } from '../lib/slashAutocomplete'
@@ -113,6 +116,65 @@ export function useSlashAutocomplete(
     applyCommand,
     reset,
   }
+}
+
+export type ComposerHighlightStyles = {
+  base: StyleProp<TextStyle>
+  command: StyleProp<TextStyle>
+  arg: StyleProp<TextStyle>
+}
+
+/**
+ * Render `value` as `TextInput` children with recognized command "badges"
+ * (command + its declared argument words, via {@link computeHighlightRanges})
+ * styled — the command and its arguments get distinct styles while sharing a
+ * background so they read as one unit. EVERY segment is wrapped in a styled
+ * `<Text>` because a nested child's colour only takes effect when the
+ * `TextInput` itself sets no `color`, so the base text is coloured here rather
+ * than on the input. Returns null for an empty value so the placeholder shows.
+ */
+export function renderComposerHighlights(
+  value: string,
+  slashCommands: Array<SlashCommandRow>,
+  styles: ComposerHighlightStyles
+): React.ReactNode {
+  if (value.length === 0) return null
+  const ranges = computeHighlightRanges(value, slashCommands)
+  if (ranges.length === 0) return <Text style={styles.base}>{value}</Text>
+
+  const parts: Array<React.ReactNode> = []
+  let cursor = 0
+  let key = 0
+  for (const range of ranges) {
+    if (range.start > cursor) {
+      parts.push(
+        <Text key={key++} style={styles.base}>
+          {value.slice(cursor, range.start)}
+        </Text>
+      )
+    }
+    parts.push(
+      <Text key={key++} style={styles.command}>
+        {value.slice(range.start, range.commandEnd)}
+      </Text>
+    )
+    if (range.end > range.commandEnd) {
+      parts.push(
+        <Text key={key++} style={styles.arg}>
+          {value.slice(range.commandEnd, range.end)}
+        </Text>
+      )
+    }
+    cursor = range.end
+  }
+  if (cursor < value.length) {
+    parts.push(
+      <Text key={key++} style={styles.base}>
+        {value.slice(cursor)}
+      </Text>
+    )
+  }
+  return parts
 }
 
 /**

@@ -1,5 +1,6 @@
 import {
   normalizeCommandName,
+  serializeComposerInput,
   type SlashCommandRow,
   type SlashCommandTrigger,
 } from '@electric-ax/agents-runtime/client'
@@ -32,6 +33,49 @@ export function filterSlashCommands(
         .startsWith(normalizedQuery)
     )
     .slice(0, limit)
+}
+
+/**
+ * A command "badge" range: the `/command` token spans `[start, commandEnd)` and
+ * its argument words span `[commandEnd, end)`, so the two can be styled
+ * distinctly while reading as one unit.
+ */
+export type HighlightRange = { start: number; commandEnd: number; end: number }
+
+/**
+ * Source ranges to visually highlight as command "badges": each recognized
+ * command token, extended over up to its declared number of argument words on
+ * the same line (so `/init my-project` highlights as one unit, mirroring the
+ * desktop badge's argument slots). Only commands present in `slashCommands` are
+ * highlighted; unknown `/tokens` are left plain.
+ */
+export function computeHighlightRanges(
+  value: string,
+  slashCommands: Array<SlashCommandRow>
+): Array<HighlightRange> {
+  const known = new Map(
+    slashCommands.map((command) => [
+      normalizeCommandName(command.name),
+      command,
+    ])
+  )
+  const ranges: Array<HighlightRange> = []
+  for (const node of serializeComposerInput(value, slashCommands).nodes ?? []) {
+    if (node.kind !== `slash_command`) continue
+    const command = known.get(node.name)
+    if (!command) continue
+
+    let end = node.end
+    let i = node.end
+    for (let arg = 0; arg < (command.arguments?.length ?? 0); arg++) {
+      while (i < value.length && (value[i] === ` ` || value[i] === `\t`)) i++
+      if (i >= value.length || value[i] === `\n`) break
+      while (i < value.length && !/\s/.test(value[i]!)) i++
+      end = i
+    }
+    ranges.push({ start: node.start, commandEnd: node.end, end })
+  }
+  return ranges
 }
 
 /**

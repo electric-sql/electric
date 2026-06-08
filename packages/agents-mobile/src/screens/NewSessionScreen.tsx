@@ -27,6 +27,7 @@ import {
 import type { SlashCommandRow } from '@electric-ax/agents-runtime/client'
 import { Header, HeaderBackButton } from '../components/Header'
 import {
+  renderComposerHighlights,
   SlashCommandMenu,
   useSlashAutocomplete,
 } from '../components/NativeComposer'
@@ -242,7 +243,6 @@ export function NewSessionScreen({
           <View style={styles.composerWrap}>
             <TextInput
               multiline
-              value={message}
               onChangeText={setMessage}
               onSelectionChange={(event) => {
                 slash.onSelectionChange(event)
@@ -256,7 +256,13 @@ export function NewSessionScreen({
               }
               placeholderTextColor={tokens.text3}
               style={styles.composer}
-            />
+            >
+              {renderComposerHighlights(message, slashCommands, {
+                base: styles.baseText,
+                command: styles.commandToken,
+                arg: styles.argToken,
+              })}
+            </TextInput>
           </View>
           {slash.open && (
             <SlashCommandMenu items={slash.items} onSelect={insertCommand} />
@@ -503,11 +509,27 @@ function createStyles(tokens: Tokens) {
     },
     composer: {
       minHeight: 132,
-      color: tokens.text1,
       fontSize: fontSize.sm,
       lineHeight: lineHeight.base,
       padding: spacing.md,
       textAlignVertical: `top`,
+    },
+    // Base text colour lives on the rendered child spans, not the input, so the
+    // command spans can override it (a nested colour is ignored when the
+    // TextInput sets its own `color`).
+    baseText: {
+      color: tokens.text1,
+    },
+    commandToken: {
+      color: tokens.accent11,
+      backgroundColor: tokens.accentA2,
+      fontWeight: `600`,
+    },
+    // Arguments share the command's subtle background but regular weight (vs the
+    // command's bold), so the value reads as the "slot" within the badge.
+    argToken: {
+      color: tokens.accent11,
+      backgroundColor: tokens.accentA2,
     },
     sectionLabel: {
       marginTop: spacing.sm,
