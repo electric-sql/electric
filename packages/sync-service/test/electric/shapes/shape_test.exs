@@ -641,7 +641,7 @@ defmodule Electric.Shapes.ShapeTest do
     @tag with_sql: [
            "CREATE TABLE IF NOT EXISTS col_table (id INT PRIMARY KEY, value1 TEXT, value2 TEXT)"
          ]
-    test "builds a shape with queryable columns and narrower synced columns", %{
+    test "builds a shape with queryable columns and narrower selected columns", %{
       inspector: inspector
     } do
       assert {:ok,
@@ -661,7 +661,7 @@ defmodule Electric.Shapes.ShapeTest do
     @tag with_sql: [
            "CREATE TABLE IF NOT EXISTS col_table (id INT PRIMARY KEY, value1 TEXT, value2 TEXT)"
          ]
-    test "defaults synced columns to queryable columns when columns are omitted", %{
+    test "defaults selected columns to queryable columns when columns are omitted", %{
       inspector: inspector
     } do
       assert {:ok,

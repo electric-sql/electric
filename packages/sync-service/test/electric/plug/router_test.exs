@@ -1065,7 +1065,7 @@ defmodule Electric.Plug.RouterTest do
            "CREATE TABLE queryable_users (id BIGINT PRIMARY KEY, name TEXT NOT NULL, secret_token TEXT NOT NULL)",
            "INSERT INTO queryable_users VALUES (1, 'Alice', 'supersecret123')"
          ]
-    test "GET allows where clauses on queryable columns that are not synced", %{opts: opts} do
+    test "GET allows where clauses on queryable columns that are not selected", %{opts: opts} do
       conn =
         conn("GET", "/v1/shape", %{
           table: "queryable_users",
@@ -1091,7 +1091,7 @@ defmodule Electric.Plug.RouterTest do
            "CREATE TABLE queryable_users (id BIGINT PRIMARY KEY, name TEXT NOT NULL, secret_token TEXT NOT NULL)",
            "INSERT INTO queryable_users VALUES (1, 'Alice', 'supersecret123')"
          ]
-    test "GET rejects where clauses and synced columns outside queryable_columns", %{opts: opts} do
+    test "GET rejects where clauses and selected columns outside queryable_columns", %{opts: opts} do
       conn =
         conn("GET", "/v1/shape", %{
           table: "queryable_users",
@@ -1128,7 +1128,7 @@ defmodule Electric.Plug.RouterTest do
            "CREATE TABLE queryable_users (id BIGINT PRIMARY KEY, name TEXT NOT NULL, secret_token TEXT NOT NULL)",
            "INSERT INTO queryable_users VALUES (1, 'Alice', 'supersecret123')"
          ]
-    test "GET defaults synced columns to queryable_columns when columns are omitted", %{
+    test "GET defaults selected columns to queryable_columns when columns are omitted", %{
       opts: opts
     } do
       conn =
@@ -3571,7 +3571,7 @@ defmodule Electric.Plug.RouterTest do
            "INSERT INTO queryable_users VALUES (1, 'Alice', 'supersecret123')",
            "INSERT INTO queryable_users VALUES (2, 'Bob', 'public')"
          ]
-    test "subset snapshots allow subset__where on queryable columns that are not synced", ctx do
+    test "subset snapshots allow subset__where on queryable columns that are not selected", ctx do
       conn =
         conn("GET", "/v1/shape", %{
           "table" => "queryable_users",
