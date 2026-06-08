@@ -234,10 +234,6 @@ export function createMarkdownDocumentTools(
         (index === undefined ? cursorPositions.get(id) : undefined),
       textName: materialized.textName,
     })
-    await appendPresence(materialized, {
-      anchor: result.index,
-      head: result.index,
-    })
     await appendDocumentUpdate(id, materialized, result.update)
     await appendPresence(materialized, {
       anchor: result.nextIndex,

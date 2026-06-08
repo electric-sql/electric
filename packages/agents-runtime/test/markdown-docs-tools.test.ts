@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
+import * as decoding from 'lib0/decoding'
+import { Awareness, applyAwarenessUpdate } from 'y-protocols/awareness'
 import * as Y from 'yjs'
 import {
   createMarkdownYDoc,
@@ -31,6 +33,49 @@ function contentFromStream(streamBytes: Uint8Array): string {
   return markdownText(createMarkdownYDoc(streamBytes)).toString()
 }
 
+async function waitForCondition(
+  predicate: () => boolean,
+  message: string
+): Promise<void> {
+  for (let i = 0; i < 20; i += 1) {
+    if (predicate()) return
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  }
+  throw new Error(message)
+}
+
+function applyFramedAwarenessUpdate(
+  awareness: Awareness,
+  data: Uint8Array
+): void {
+  const decoder = decoding.createDecoder(data)
+  while (decoding.hasContent(decoder)) {
+    applyAwarenessUpdate(awareness, decoding.readVarUint8Array(decoder), `test`)
+  }
+}
+
+function cursorHeadIndexFromAwarenessFrame(
+  doc: Y.Doc,
+  frame: Uint8Array
+): number | undefined {
+  const awareness = new Awareness(new Y.Doc())
+  applyFramedAwarenessUpdate(awareness, frame)
+  for (const state of awareness.getStates().values()) {
+    const cursor = (
+      state as {
+        cursor?: { head?: Y.RelativePosition; anchor?: Y.RelativePosition }
+      }
+    ).cursor
+    if (!cursor?.head) continue
+    const absolute = Y.createAbsolutePositionFromRelativePosition(
+      cursor.head,
+      doc
+    )
+    return absolute?.index
+  }
+  return undefined
+}
+
 function createToolContext() {
   const document = {
     key: `document:notes`,
@@ -47,6 +92,7 @@ function createToolContext() {
     createdAt: `2026-06-07T00:00:00.000Z`,
   } as const
   let streamFrames = [streamBytesFromContent(`# Notes\n\nFirst line\n`)]
+  const awarenessFrames: Array<Uint8Array> = []
   return {
     context: {
       entityUrl: `/chat/session`,
@@ -85,7 +131,12 @@ function createToolContext() {
           return { offset: String(streamFrames.length) }
         }
       ),
-      appendMarkdownDocumentAwareness: vi.fn(async () => ({})),
+      appendMarkdownDocumentAwareness: vi.fn(
+        async (_streamPath: string, update: Uint8Array) => {
+          awarenessFrames.push(update)
+          return {}
+        }
+      ),
       upsertCronSchedule: vi.fn(),
       upsertFutureSendSchedule: vi.fn(),
       deleteSchedule: vi.fn(),
@@ -94,6 +145,8 @@ function createToolContext() {
       unsubscribeFromEventSource: vi.fn(),
     } as any,
     getContent: () => contentFromStream(concatFrames(streamFrames)),
+    getDoc: () => createMarkdownYDoc(concatFrames(streamFrames)),
+    getAwarenessFrames: () => awarenessFrames,
     appendExternalText: (text: string) => {
       const streamBytes = concatFrames(streamFrames)
       const doc = createMarkdownYDoc(streamBytes)
@@ -164,7 +217,8 @@ describe(`markdown document tools`, () => {
   })
 
   it(`streams insert_markdown_doc content deltas before final execution`, async () => {
-    const { context, getContent } = createToolContext()
+    const { context, getContent, getDoc, getAwarenessFrames } =
+      createToolContext()
     const insert = createMarkdownDocumentTools(context).find(
       (tool) => tool.name === `insert_markdown_doc`
     )!
@@ -175,12 +229,29 @@ describe(`markdown document tools`, () => {
       delta: `"Hello`,
       argsPreview: { id: `notes`, content: `Hello` },
     })
+    await waitForCondition(
+      () => context.appendMarkdownDocumentAwareness.mock.calls.length === 1,
+      `expected first streamed insert presence update`
+    )
+    expect(context.appendMarkdownDocumentAwareness).toHaveBeenCalledTimes(1)
+    expect(
+      cursorHeadIndexFromAwarenessFrame(getDoc(), getAwarenessFrames().at(-1)!)
+    ).toBe(getContent().length)
+
     await insert.onArgsDelta?.({
       toolCallId: `tool-insert`,
       toolName: `insert_markdown_doc`,
       delta: ` world"`,
       argsPreview: { id: `notes`, content: `Hello world` },
     })
+    await waitForCondition(
+      () => context.appendMarkdownDocumentAwareness.mock.calls.length === 2,
+      `expected second streamed insert presence update`
+    )
+    expect(context.appendMarkdownDocumentAwareness).toHaveBeenCalledTimes(2)
+    expect(
+      cursorHeadIndexFromAwarenessFrame(getDoc(), getAwarenessFrames().at(-1)!)
+    ).toBe(getContent().length)
 
     const result = await insert.execute(`tool-insert`, {
       id: `notes`,
@@ -188,7 +259,7 @@ describe(`markdown document tools`, () => {
     })
 
     expect(context.appendMarkdownDocumentUpdate).toHaveBeenCalledTimes(2)
-    expect(context.appendMarkdownDocumentAwareness).toHaveBeenCalled()
+    expect(context.appendMarkdownDocumentAwareness).toHaveBeenCalledTimes(3)
     expect(getContent()).toContain(`Hello world`)
     expect(result.details).toMatchObject({ streamed: true })
   })
