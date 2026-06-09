@@ -112,7 +112,8 @@ defmodule Electric.Shapes.Consumer do
 
   def start_link(%{stack_id: stack_id, shape_handle: shape_handle} = _config) do
     GenServer.start_link(__MODULE__, %{stack_id: stack_id, shape_handle: shape_handle},
-      name: name(stack_id, shape_handle)
+      name: name(stack_id, shape_handle),
+      spawn_opt: Electric.StackConfig.spawn_opts(stack_id, :consumer)
     )
   end
 

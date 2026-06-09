@@ -2652,6 +2652,77 @@ defmodule Electric.Shapes.ConsumerTest do
     )
   end
 
+  describe "process gc configuration" do
+    setup [
+      :with_registry,
+      :with_in_memory_storage,
+      :with_shape_status,
+      :with_lsn_tracker,
+      :with_persistent_kv,
+      :with_status_monitor,
+      :with_dynamic_consumer_supervisor,
+      :with_noop_publication_manager,
+      :with_shape_cleaner
+    ]
+
+    setup ctx do
+      start_link_supervised!({
+        ShapeLogCollector.Supervisor,
+        stack_id: ctx.stack_id, persistent_kv: ctx.persistent_kv, inspector: @base_inspector
+      })
+
+      ShapeLogCollector.mark_as_ready(ctx.stack_id)
+      [shape_position: @shape_position]
+    end
+
+    @tag process_spawn_opts: %{consumer: [fullsweep_after: 4, priority: :high]}
+    test "spawn_opts are correctly passed to consumer process", ctx do
+      support_test_storage_wrap(ctx, @shape_handle1, @shape1)
+
+      {:ok, consumer} =
+        start_supervised(
+          {Consumer,
+           %{
+             shape_handle: @shape_handle1,
+             stack_id: ctx.stack_id
+           }},
+          id: {Consumer, @shape_handle1}
+        )
+
+      Consumer.initialize_shape(consumer, @shape1, %{action: :create})
+      assert_receive {Support.TestStorage, :init_writer!, @shape_handle1, @shape1}
+      :started = Consumer.await_snapshot_start(ctx.stack_id, @shape_handle1)
+
+      pid = Consumer.name(ctx.stack_id, @shape_handle1) |> GenServer.whereis()
+      info = Process.info(pid)
+
+      assert info[:priority] == :high
+      assert info[:garbage_collection][:fullsweep_after] == 4
+    end
+  end
+
+  defp support_test_storage_wrap(ctx, shape_handle, shape) do
+    %{snapshot_xmin: xmin} = shape_status(shape_handle, ctx)
+    shapes = %{shape_handle => shape}
+
+    storage =
+      Support.TestStorage.wrap(ctx.storage, %{
+        shape_handle => [
+          {:mark_snapshot_as_started, []},
+          {:set_pg_snapshot, [%{xmin: xmin, xmax: xmin + 1, xip_list: [xmin]}]}
+        ]
+      })
+
+    Electric.StackConfig.put(ctx.stack_id, Electric.ShapeCache.Storage, storage)
+    Electric.StackConfig.put(ctx.stack_id, :inspector, @base_inspector)
+
+    patch_shape_status(fetch_shape_by_handle: fn _, sh -> Map.fetch(shapes, sh) end)
+
+    Support.TestUtils.activate_mocks_for_descendant_procs(Consumer)
+    Support.TestUtils.activate_mocks_for_descendant_procs(Electric.ShapeCache.ShapeCleaner)
+    :ok
+  end
+
   defp get_log_items_from_storage(offset, shape_storage) do
     Storage.get_log_stream(offset, shape_storage) |> Enum.map(&Jason.decode!/1)
   end

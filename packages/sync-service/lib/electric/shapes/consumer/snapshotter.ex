@@ -20,7 +20,10 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
   end
 
   def start_link(config) when is_map(config) do
-    GenServer.start_link(__MODULE__, config, name: name(config))
+    GenServer.start_link(__MODULE__, config,
+      name: name(config),
+      spawn_opt: Electric.StackConfig.spawn_opts(config.stack_id, :consumer_snapshotter)
+    )
   end
 
   def init(config) do

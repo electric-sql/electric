@@ -111,7 +111,10 @@ defmodule Electric.Shapes.Consumer.Materializer do
     do: subscribe(%{stack_id: stack_id, shape_handle: shape_handle})
 
   def start_link(opts) do
-    GenServer.start_link(__MODULE__, opts, name: name(opts))
+    GenServer.start_link(__MODULE__, opts,
+      name: name(opts),
+      spawn_opt: Electric.StackConfig.spawn_opts(opts.stack_id, :consumer_materializer)
+    )
   end
 
   def init(opts) do
