@@ -132,15 +132,19 @@ defmodule Electric.Shapes.Consumer do
     # Guard against a stack dying between enumeration and the put: if the
     # StackConfig ETS table vanishes, StackConfig.put/3 raises ArgumentError.
     # We skip such stale entries rather than crashing the operator call.
-    Enum.each(stack_ids, fn stack_id ->
-      try do
-        set_gc_heap_threshold(stack_id, threshold_bytes)
-      rescue
-        ArgumentError -> :ok
-      end
-    end)
+    # Only successfully-written stacks are counted so the returned value
+    # reflects reality even when stacks die mid-iteration.
+    count =
+      Enum.reduce(stack_ids, 0, fn stack_id, acc ->
+        try do
+          set_gc_heap_threshold(stack_id, threshold_bytes)
+          acc + 1
+        rescue
+          ArgumentError -> acc
+        end
+      end)
 
-    {:ok, length(stack_ids)}
+    {:ok, count}
   end
 
   # Enumerate live stacks by scanning ETS tables whose names match the
