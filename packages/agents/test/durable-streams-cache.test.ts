@@ -51,11 +51,14 @@ describe(`installDurableStreamsFetchCache`, () => {
     const { installDurableStreamsFetchCache } = await import(
       `../src/durable-streams-cache.js`
     )
+    const warnSpy = vi.spyOn(console, `warn`).mockImplementation(() => {})
 
     installDurableStreamsFetchCache()
     installDurableStreamsFetchCache()
     installDurableStreamsFetchCache()
 
     expect(setGlobalDispatcher).toHaveBeenCalledTimes(1)
+    expect(warnSpy).toHaveBeenCalledTimes(2)
+    warnSpy.mockRestore()
   })
 })

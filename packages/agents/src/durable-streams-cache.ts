@@ -21,7 +21,12 @@ export function installDurableStreamsFetchCache(
   options: DurableStreamsFetchCacheOptions = {}
 ): void {
   if (options === false) return
-  if (installed) return
+  if (installed) {
+    console.warn(
+      `[agents] installDurableStreamsFetchCache called more than once; ignoring`
+    )
+    return
+  }
   installed = true
 
   const store =
