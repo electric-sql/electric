@@ -47,7 +47,10 @@ defmodule Electric.Shapes.Consumer.State do
     # as any message arrives (activity), so at most one is ever live at a time.
     suspend_timer: nil,
     # How long after hibernation to suspend (in ms)
-    suspend_after: nil
+    suspend_after: nil,
+    # Monotonic millisecond timestamp of the last consumer-forced GC (nil if never).
+    # Used by hysteresis logic in maybe_garbage_collect/1 to cap forced-GC frequency.
+    last_forced_gc_at: nil
   ]
 
   @type pg_snapshot() :: SnapshotQuery.pg_snapshot()

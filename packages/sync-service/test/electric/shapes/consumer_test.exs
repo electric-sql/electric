@@ -2741,6 +2741,44 @@ defmodule Electric.Shapes.ConsumerTest do
     end
   end
 
+  describe "should_force_gc?/5" do
+    # All tests pass explicit now_ms / last_gc_at / min_interval_ms so they are
+    # fully deterministic and do not depend on wall-clock time.
+
+    test "false when threshold is nil (adaptive GC disabled)" do
+      refute Electric.Shapes.Consumer.should_force_gc?(1_000_000, nil, nil, 5_000, 1_000)
+    end
+
+    test "true when heap over threshold and consumer has never forced a GC (last_gc_at nil)" do
+      # 1 000 words * 8 bytes/word = 8 000 bytes > threshold of 1 byte
+      assert Electric.Shapes.Consumer.should_force_gc?(1_000, 1, nil, 5_000, 1_000)
+    end
+
+    test "false when heap over threshold but interval has not elapsed" do
+      # last_gc_at=4_500, now=5_000 → delta=500 < min_interval=1_000 → no GC
+      refute Electric.Shapes.Consumer.should_force_gc?(1_000, 1, 4_500, 5_000, 1_000)
+    end
+
+    test "true when heap over threshold and interval has elapsed" do
+      # last_gc_at=3_000, now=5_000 → delta=2_000 >= min_interval=1_000 → GC
+      assert Electric.Shapes.Consumer.should_force_gc?(1_000, 1, 3_000, 5_000, 1_000)
+    end
+
+    test "true at exactly the min interval boundary" do
+      # last_gc_at=4_000, now=5_000 → delta=1_000 == min_interval=1_000 → GC
+      assert Electric.Shapes.Consumer.should_force_gc?(1_000, 1, 4_000, 5_000, 1_000)
+    end
+
+    test "false when heap is under threshold regardless of timing" do
+      # heap_words=1 * wordsize (8) = 8 bytes; threshold=1_000 bytes → under
+      refute Electric.Shapes.Consumer.should_force_gc?(1, 1_000, nil, 5_000, 1_000)
+    end
+
+    test "false when heap is under threshold even if interval would have elapsed" do
+      refute Electric.Shapes.Consumer.should_force_gc?(1, 1_000, 0, 5_000, 1_000)
+    end
+  end
+
   describe "adaptive GC after fragment processing" do
     @describetag :tmp_dir
 

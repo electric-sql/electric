@@ -40,6 +40,14 @@ defmodule Electric.Shapes.Consumer do
   @stop_and_clean_reason ShapeCleaner.consumer_cleanup_reason()
   @word_size :erlang.system_info(:wordsize)
 
+  # Minimum wall-clock interval (ms) between consumer-forced full GC sweeps.
+  # Prevents GC-thrashing on the replication critical path: the ShapeLogCollector
+  # blocks until every consumer replies, so a forced GC on every fragment (e.g.
+  # during a buffered-fragment drain) would add publish latency proportional to
+  # the number of fragments. Hysteresis caps the worst-case frequency to at most
+  # one forced sweep per @gc_min_interval_ms regardless of fragment rate.
+  @gc_min_interval_ms 1_000
+
   @type initialize_shape_opts() :: %{
           :action => :create | :restore,
           optional(:otel_ctx) => OpenTelemetry.otel_ctx() | nil,
@@ -114,7 +122,16 @@ defmodule Electric.Shapes.Consumer do
   @doc """
   Set the adaptive-GC heap threshold (bytes, or nil to disable) for a single stack.
   Takes effect immediately for that stack's consumers — safe to call from IEx.
+
+  **Critical-path note**: this GC runs synchronously on the replication path —
+  the ShapeLogCollector blocks until every consumer replies. Prefer a conservative
+  (high) threshold to minimise added publish latency. The per-process
+  `fullsweep_after` spawn-opt (configured via `ELECTRIC_PROCESS_SPAWN_OPTS`) is
+  the lower-risk lever for steady-state heap bounding; this adaptive GC is a
+  targeted, runtime-tunable backstop. Forced-GC frequency is capped to at most
+  once per `@gc_min_interval_ms` (see `should_force_gc?/5`).
   """
+  @spec set_gc_heap_threshold(Electric.stack_id(), non_neg_integer() | nil) :: :ok
   def set_gc_heap_threshold(stack_id, threshold_bytes)
       when is_nil(threshold_bytes) or (is_integer(threshold_bytes) and threshold_bytes >= 0) do
     Electric.StackConfig.put(stack_id, :consumer_gc_heap_threshold, threshold_bytes)
@@ -126,6 +143,7 @@ defmodule Electric.Shapes.Consumer do
   Returns `{:ok, number_of_stacks_updated}`. Pass nil to disable everywhere.
   Intended for live experimentation from an IEx shell.
   """
+  @spec set_gc_heap_threshold_all_stacks(non_neg_integer() | nil) :: {:ok, non_neg_integer()}
   def set_gc_heap_threshold_all_stacks(threshold_bytes) do
     stack_ids = list_stack_ids()
 
@@ -590,24 +608,75 @@ defmodule Electric.Shapes.Consumer do
     |> maybe_garbage_collect()
   end
 
+  # NOTE: this runs synchronously on the replication critical path — the
+  # ShapeLogCollector blocks until every consumer replies. A forced
+  # :erlang.garbage_collect() can add measurable publish latency, especially
+  # during a buffered-fragment drain where maybe_garbage_collect/1 is called
+  # for every queued fragment in a tight loop.
+  #
+  # Two safeguards limit the impact:
+  #   1. The nil fast-path exits immediately when no threshold is configured.
+  #   2. Hysteresis (@gc_min_interval_ms) prevents back-to-back full sweeps even
+  #      when the consumer sits just above the threshold across many fragments.
+  #
+  # Operators should prefer a CONSERVATIVE (high) threshold. For steady-state
+  # heap bounding the per-process `fullsweep_after` spawn-opt (set via
+  # ELECTRIC_PROCESS_SPAWN_OPTS) is a lower-risk alternative; this adaptive GC
+  # is a targeted, runtime-tunable backstop.
   defp maybe_garbage_collect(%State{stack_id: stack_id} = state) do
     case Electric.StackConfig.lookup(stack_id, :consumer_gc_heap_threshold, nil) do
       nil ->
+        # Fast path: adaptive GC is disabled — skip all process_info/time calls.
         state
 
       threshold ->
         {:total_heap_size, heap_words} = :erlang.process_info(self(), :total_heap_size)
-        if over_heap_threshold?(heap_words, threshold), do: :erlang.garbage_collect()
-        state
+        now = System.monotonic_time(:millisecond)
+
+        if should_force_gc?(heap_words, threshold, state.last_forced_gc_at, now) do
+          :erlang.garbage_collect()
+          %{state | last_forced_gc_at: now}
+        else
+          state
+        end
     end
   end
 
   @doc false
   # heap_words: process total_heap_size in words; threshold_bytes: configured byte threshold (or nil)
+  @spec over_heap_threshold?(non_neg_integer(), non_neg_integer() | nil) :: boolean()
   def over_heap_threshold?(_heap_words, nil), do: false
 
   def over_heap_threshold?(heap_words, threshold_bytes) when is_integer(threshold_bytes) do
     heap_words * @word_size > threshold_bytes
+  end
+
+  @doc false
+  # Decide whether to force a full GC sweep: heap must be over the threshold AND
+  # at least @gc_min_interval_ms must have elapsed since the last forced GC.
+  # last_gc_at / now_ms are monotonic milliseconds; last_gc_at is nil if this
+  # consumer has never forced a GC (always fire on first over-threshold event).
+  # Passing explicit min_interval_ms enables deterministic unit tests.
+  @spec should_force_gc?(
+          non_neg_integer(),
+          non_neg_integer() | nil,
+          integer() | nil,
+          integer(),
+          non_neg_integer()
+        ) :: boolean()
+  def should_force_gc?(
+        heap_words,
+        threshold_bytes,
+        last_gc_at,
+        now_ms,
+        min_interval_ms \\ @gc_min_interval_ms
+      )
+
+  def should_force_gc?(_heap_words, nil, _last_gc_at, _now_ms, _min_interval_ms), do: false
+
+  def should_force_gc?(heap_words, threshold_bytes, last_gc_at, now_ms, min_interval_ms) do
+    over_heap_threshold?(heap_words, threshold_bytes) and
+      (is_nil(last_gc_at) or now_ms - last_gc_at >= min_interval_ms)
   end
 
   # A consumer process starts with buffering?=true before it has PG snapshot info (xmin, xmax, xip_list).
