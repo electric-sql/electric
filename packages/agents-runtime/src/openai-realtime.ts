@@ -30,6 +30,8 @@ type OpenAIRealtimeWebSocketConstructor = new (
   init?: unknown
 ) => OpenAIRealtimeSocket
 
+const DEFAULT_OPENAI_REALTIME_MODEL = `gpt-realtime`
+
 export interface OpenAIRealtimeProviderOptions {
   apiKey: string | (() => MaybePromise<string>)
   model?: string
@@ -44,15 +46,18 @@ type OpenAIRealtimeEvent = Record<string, any> & { type?: string }
 
 class AsyncEventQueue<T> implements AsyncIterable<T> {
   private values: Array<T> = []
-  private resolvers: Array<(value: IteratorResult<T>) => void> = []
+  private resolvers: Array<{
+    resolve: (value: IteratorResult<T>) => void
+    reject: (error: unknown) => void
+  }> = []
   private closed = false
   private error: unknown
 
   push(value: T): void {
     if (this.closed) return
-    const resolve = this.resolvers.shift()
-    if (resolve) {
-      resolve({ value, done: false })
+    const resolver = this.resolvers.shift()
+    if (resolver) {
+      resolver.resolve({ value, done: false })
       return
     }
     this.values.push(value)
@@ -61,14 +66,18 @@ class AsyncEventQueue<T> implements AsyncIterable<T> {
   close(): void {
     if (this.closed) return
     this.closed = true
-    for (const resolve of this.resolvers.splice(0)) {
-      resolve({ value: undefined as T, done: true })
+    for (const resolver of this.resolvers.splice(0)) {
+      resolver.resolve({ value: undefined as T, done: true })
     }
   }
 
   fail(error: unknown): void {
+    if (this.closed) return
     this.error = error
-    this.close()
+    this.closed = true
+    for (const resolver of this.resolvers.splice(0)) {
+      resolver.reject(error)
+    }
   }
 
   [Symbol.asyncIterator](): AsyncIterator<T> {
@@ -83,8 +92,8 @@ class AsyncEventQueue<T> implements AsyncIterable<T> {
         if (this.closed) {
           return Promise.resolve({ value: undefined as T, done: true })
         }
-        return new Promise<IteratorResult<T>>((resolve) => {
-          this.resolvers.push(resolve)
+        return new Promise<IteratorResult<T>>((resolve, reject) => {
+          this.resolvers.push({ resolve, reject })
         })
       },
     }
@@ -121,6 +130,48 @@ function socketMessageData(args: Array<any>): unknown {
     return (first as { data: unknown }).data
   }
   return first
+}
+
+function socketCloseDetails(args: Array<any>): {
+  code?: number
+  reason?: string
+  wasClean?: boolean
+} {
+  const [first, second] = args
+  if (typeof first === `number`) {
+    return {
+      code: first,
+      reason: second === undefined ? undefined : dataToString(second),
+    }
+  }
+  if (!first || typeof first !== `object`) return {}
+  const event = first as {
+    code?: unknown
+    reason?: unknown
+    wasClean?: unknown
+  }
+  return {
+    code: typeof event.code === `number` ? event.code : undefined,
+    reason:
+      typeof event.reason === `string`
+        ? event.reason
+        : event.reason === undefined
+          ? undefined
+          : dataToString(event.reason),
+    wasClean: typeof event.wasClean === `boolean` ? event.wasClean : undefined,
+  }
+}
+
+function socketCloseError(details: {
+  code?: number
+  reason?: string
+  wasClean?: boolean
+}): string {
+  const parts = [`OpenAI realtime WebSocket closed before client stop`]
+  if (details.code !== undefined) parts.push(`code=${details.code}`)
+  if (details.reason) parts.push(`reason=${details.reason}`)
+  if (details.wasClean !== undefined) parts.push(`clean=${details.wasClean}`)
+  return parts.join(` `)
 }
 
 function dataToString(data: unknown): string {
@@ -235,7 +286,7 @@ function buildSessionUpdate(
     type: `session.update`,
     session: {
       type: `realtime`,
-      model: opts.model ?? `gpt-realtime-2`,
+      model: opts.model ?? DEFAULT_OPENAI_REALTIME_MODEL,
       instructions: input.systemPrompt,
       output_modalities: outputFormat ? [`audio`] : [`text`],
       tool_choice: input.tools.length > 0 ? `auto` : `none`,
@@ -456,7 +507,7 @@ function mapOpenAIEvent(
 export function createOpenAIRealtimeProvider(
   opts: OpenAIRealtimeProviderOptions
 ): RealtimeProviderConfig {
-  const model = opts.model ?? `gpt-realtime-2`
+  const model = opts.model ?? DEFAULT_OPENAI_REALTIME_MODEL
 
   return {
     id: `openai`,
@@ -486,6 +537,7 @@ export function createOpenAIRealtimeProvider(
       )
       let socketOpen = false
       let socketClosed = false
+      let clientCloseRequested = false
       let rejectOpen: ((error: Error) => void) | undefined
 
       const closeQueue = (reason?: string): void => {
@@ -500,6 +552,7 @@ export function createOpenAIRealtimeProvider(
         const error = new Error(
           `[agent-runtime] OpenAI realtime WebSocket aborted`
         )
+        clientCloseRequested = true
         closeQueue(`aborted`)
         ws.close?.(1000, `aborted`)
         if (!socketOpen) rejectOpen?.(error)
@@ -612,8 +665,18 @@ export function createOpenAIRealtimeProvider(
           queue.fail(error)
         }
       })
-      onSocket(ws, `close`, () => {
-        closeQueue()
+      onSocket(ws, `close`, (...args) => {
+        const details = socketCloseDetails(args)
+        if (clientCloseRequested || input.signal?.aborted) {
+          closeQueue(details.reason || undefined)
+          return
+        }
+        queue.push({
+          type: `session.error`,
+          code: `websocket_closed`,
+          error: socketCloseError(details),
+        })
+        closeQueue(details.reason || `websocket_closed`)
       })
 
       if (input.signal?.aborted) {
@@ -664,6 +727,7 @@ export function createOpenAIRealtimeProvider(
           })
         },
         close: async (reason) => {
+          clientCloseRequested = true
           closeQueue(reason)
           ws.close?.(1000, reason)
         },

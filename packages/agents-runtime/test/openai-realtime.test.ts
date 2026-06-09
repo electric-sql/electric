@@ -76,7 +76,7 @@ describe(`createOpenAIRealtimeProvider`, () => {
 
     const socket = FakeWebSocket.instances[0]!
     expect(socket.url).toBe(
-      `wss://api.openai.com/v1/realtime?model=gpt-realtime-2`
+      `wss://api.openai.com/v1/realtime?model=gpt-realtime`
     )
     expect(socket.init).toEqual({
       headers: {
@@ -88,7 +88,7 @@ describe(`createOpenAIRealtimeProvider`, () => {
       type: `session.update`,
       session: {
         type: `realtime`,
-        model: `gpt-realtime-2`,
+        model: `gpt-realtime`,
         instructions: `You are Horton.`,
         output_modalities: [`audio`],
         tool_choice: `auto`,
@@ -171,6 +171,32 @@ describe(`createOpenAIRealtimeProvider`, () => {
     await expect(nextEvent(iterator)).resolves.toEqual({
       type: `session.closed`,
       reason: `aborted`,
+    })
+  })
+
+  it(`surfaces unexpected WebSocket closes as provider errors`, async () => {
+    FakeWebSocket.instances = []
+    const provider = createOpenAIRealtimeProvider({
+      apiKey: `sk-test`,
+      WebSocket: FakeWebSocket,
+    })
+
+    const session = await provider.connect({
+      systemPrompt: `Talk`,
+      messages: [],
+      tools: [],
+    })
+    const socket = FakeWebSocket.instances[0]!
+    const iterator = session.events[Symbol.asyncIterator]()
+
+    socket.emit(`close`, { code: 1008, reason: `invalid model` })
+
+    await expect(nextEvent(iterator)).resolves.toEqual({
+      type: `session.error`,
+      code: `websocket_closed`,
+      error:
+        `OpenAI realtime WebSocket closed before client stop ` +
+        `code=1008 reason=invalid model`,
     })
   })
 

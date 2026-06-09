@@ -61,7 +61,7 @@ describe(`createAgentsClient`, () => {
       sessionId: `rt-1`,
       entityUrl: `/horton/demo`,
       provider: `openai`,
-      model: `gpt-realtime-2`,
+      model: `gpt-realtime`,
       status: `requested`,
       startedAt: `2026-06-09T10:00:00.000Z`,
       streams: {
@@ -216,7 +216,7 @@ describe(`createAgentsClient`, () => {
       client.startRealtimeSession({
         entityUrl: `/horton/demo`,
         provider: `openai`,
-        model: `gpt-realtime-2`,
+        model: `gpt-realtime`,
       })
     ).resolves.toMatchObject({
       sessionId: `rt-1`,
@@ -228,7 +228,7 @@ describe(`createAgentsClient`, () => {
     expect(mockState.startRealtimeSession).toHaveBeenCalledWith({
       entityUrl: `/horton/demo`,
       provider: `openai`,
-      model: `gpt-realtime-2`,
+      model: `gpt-realtime`,
     })
   })
 

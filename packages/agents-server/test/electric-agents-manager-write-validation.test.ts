@@ -158,7 +158,7 @@ describe(`ElectricAgentsManager realtime sessions`, () => {
     const result = await manager.createRealtimeSession(`/chat/session-1`, {
       id: `rt-1`,
       provider: `openai`,
-      model: `gpt-realtime-2`,
+      model: `gpt-realtime`,
       inputAudio: { codec: `pcm16`, sampleRate: 16_000, channels: 1 },
       outputAudio: { codec: `pcm16`, sampleRate: 24_000, channels: 1 },
       meta: { source: `test` },
@@ -203,7 +203,7 @@ describe(`ElectricAgentsManager realtime sessions`, () => {
         kind: `realtime-session`,
         id: `rt-1`,
         provider: `openai`,
-        model: `gpt-realtime-2`,
+        model: `gpt-realtime`,
         status: `requested`,
         streams: result.streams,
         retention: `forever`,
@@ -216,7 +216,7 @@ describe(`ElectricAgentsManager realtime sessions`, () => {
       value: {
         session_id: `rt-1`,
         provider: `openai`,
-        model: `gpt-realtime-2`,
+        model: `gpt-realtime`,
         status: `requested`,
         streams: result.streams,
       },

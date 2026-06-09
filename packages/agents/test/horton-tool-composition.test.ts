@@ -179,7 +179,7 @@ describe(`horton tool composition`, () => {
           kind: `realtime-session`,
           id: `rt-1`,
           provider: `openai`,
-          model: `gpt-realtime-2`,
+          model: `gpt-realtime`,
           status: `active`,
           startedAt: `2026-06-09T12:00:00.000Z`,
           retention: `forever`,
@@ -220,7 +220,7 @@ describe(`horton tool composition`, () => {
     )[0]![0]
     expect(realtimeConfig.provider).toMatchObject({
       id: `openai`,
-      model: `gpt-realtime-2`,
+      model: `gpt-realtime`,
     })
     expect(realtimeConfig.toolPolicy.direct).toEqual(
       expect.arrayContaining([
