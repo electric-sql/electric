@@ -209,6 +209,33 @@ describe(`ctx.useRealtime()`, () => {
     ])
   })
 
+  it(`does not fail the run when OpenAI reports a stale output audio truncate`, async () => {
+    const { ctx } = createTestHandlerContext()
+
+    const realtime = ctx.useRealtime({
+      systemPrompt: `You are realtime.`,
+      provider: createTestRealtimeProvider({
+        events: [
+          { type: `session.started` },
+          {
+            type: `session.error`,
+            code: `invalid_value`,
+            error: `Audio content of 6350ms is already shorter than 8160ms`,
+          },
+          { type: `session.closed` },
+        ],
+      }),
+      tools: [],
+    })
+
+    await expect(realtime.run()).resolves.toMatchObject({
+      usage: { tokens: 0 },
+    })
+    expect(ctx.db.collections.runs.toArray).toMatchObject([
+      { status: `completed`, finish_reason: `stop` },
+    ])
+  })
+
   it(`persists provider audio and control output to realtime durable streams`, async () => {
     const { ctx } = createTestHandlerContext({
       realtimeStreams: {

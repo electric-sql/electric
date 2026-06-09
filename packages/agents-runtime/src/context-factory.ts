@@ -1374,6 +1374,17 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
               )
               break
             }
+            if (
+              event.code === `invalid_value` &&
+              event.error.includes(`Audio content`) &&
+              event.error.includes(`already shorter than`)
+            ) {
+              runtimeLog.warn(
+                `[agent-runtime]`,
+                `realtime provider ignored stale output audio truncate: ${event.error}`
+              )
+              break
+            }
             throw new Error(
               `[agent-runtime] realtime provider error${event.code ? ` ${event.code}` : ``}: ${event.error}`
             )

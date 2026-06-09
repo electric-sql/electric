@@ -28,6 +28,8 @@ type RealtimeControlOutput =
   | { type: string; [key: string]: unknown }
 
 const REALTIME_SAMPLE_RATE = 24_000
+const BYTES_PER_PCM16_SAMPLE = 2
+const TRUNCATE_SAFETY_MS = 80
 
 function realtimeUrl(baseUrl: string): string {
   return appendPathToUrl(baseUrl, `/_electric/realtime/sessions`)
@@ -49,6 +51,21 @@ function pcm16Bytes(input: Float32Array): Uint8Array {
     )
   }
   return bytes
+}
+
+function pcm16DurationMs(byteLength: number): number {
+  return (byteLength / BYTES_PER_PCM16_SAMPLE / REALTIME_SAMPLE_RATE) * 1000
+}
+
+function audioLevel(input: Float32Array): number {
+  if (input.length === 0) return 0
+  let sumSquares = 0
+  for (let index = 0; index < input.length; index += 1) {
+    const sample = input[index] ?? 0
+    sumSquares += sample * sample
+  }
+  const rms = Math.sqrt(sumSquares / input.length)
+  return Math.max(0, Math.min(1, rms * 8))
 }
 
 function pcm16Floats(bytes: Uint8Array): Float32Array {
@@ -117,9 +134,11 @@ async function createRealtimeSession(
 export async function startRealtimeAudioSession({
   baseUrl,
   entityUrl,
+  onInputLevel,
 }: {
   baseUrl: string
   entityUrl: string
+  onInputLevel?: (level: number) => void
 }): Promise<RealtimeAudioSession> {
   const abort = new AbortController()
   const micContext = createAudioContext()
@@ -140,6 +159,7 @@ export async function startRealtimeAudioSession({
   let nextPlaybackTime = playbackContext.currentTime
   let currentOutputItemId: string | null = null
   let currentOutputStartedAt: number | null = null
+  let currentOutputReceivedMs = 0
   let micChunks = 0
   let playbackChunks = 0
   let controlEvents = 0
@@ -162,11 +182,21 @@ export async function startRealtimeAudioSession({
     currentOutputStartedAt = null
   }
 
+  const setCurrentOutputItem = (itemId: string): void => {
+    if (currentOutputItemId === itemId) return
+    currentOutputItemId = itemId
+    currentOutputStartedAt = null
+    currentOutputReceivedMs = 0
+  }
+
   const interruptPlayback = (): void => {
     const itemId = currentOutputItemId
-    if (!itemId) return
+    if (!itemId) {
+      stopScheduledPlayback()
+      return
+    }
 
-    const audioEndMs =
+    const playedMs =
       currentOutputStartedAt === null
         ? 0
         : Math.max(
@@ -175,7 +205,14 @@ export async function startRealtimeAudioSession({
               (playbackContext.currentTime - currentOutputStartedAt) * 1000
             )
           )
+    const maxGeneratedMs = Math.max(
+      0,
+      Math.floor(currentOutputReceivedMs - TRUNCATE_SAFETY_MS)
+    )
+    const audioEndMs = Math.min(playedMs, maxGeneratedMs)
     stopScheduledPlayback()
+    if (audioEndMs <= 0) return
+
     void appendControl({
       type: `output_audio.truncate`,
       itemId,
@@ -190,6 +227,7 @@ export async function startRealtimeAudioSession({
     processor?.disconnect()
     silentOutput?.disconnect()
     source?.disconnect()
+    onInputLevel?.(0)
     for (const track of media?.getTracks() ?? []) track.stop()
     stopScheduledPlayback()
     await appendQueue.catch(() => undefined)
@@ -247,6 +285,7 @@ export async function startRealtimeAudioSession({
       if (abort.signal.aborted) return
       const input = event.inputBuffer.getChannelData(0)
       const bytes = pcm16Bytes(input)
+      onInputLevel?.(audioLevel(input))
       micChunks += 1
       if (micChunks === 1) {
         console.info(
@@ -296,7 +335,7 @@ export async function startRealtimeAudioSession({
             playbackContext.currentTime,
             nextPlaybackTime
           )
-          if (currentOutputStartedAt === null) {
+          if (currentOutputItemId && currentOutputStartedAt === null) {
             currentOutputStartedAt = startAt
           }
           node.start(startAt)
@@ -333,7 +372,10 @@ export async function startRealtimeAudioSession({
             event.type === `output_audio.delta` &&
             typeof event.itemId === `string`
           ) {
-            currentOutputItemId = event.itemId
+            setCurrentOutputItem(event.itemId)
+            if (typeof event.byteLength === `number`) {
+              currentOutputReceivedMs += pcm16DurationMs(event.byteLength)
+            }
           } else if (event.type === `input_audio.speech_started`) {
             interruptPlayback()
           }

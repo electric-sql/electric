@@ -123,6 +123,7 @@ export function MessageInput({
   } | null>(null)
   const [realtimePending, setRealtimePending] = useState(false)
   const [realtimeActive, setRealtimeActive] = useState(false)
+  const [realtimeInputLevel, setRealtimeInputLevel] = useState(0)
   const realtimeSessionRef = useRef<RealtimeAudioSession | null>(null)
   const composerFocusRef = useRef<{ focus: () => void } | null>(null)
   const inputDisabled = disabled || writeDisabled
@@ -356,19 +357,25 @@ export function MessageInput({
         .catch((err: Error) => setError(err.message))
         .finally(() => {
           setRealtimeActive(false)
+          setRealtimeInputLevel(0)
           setRealtimePending(false)
         })
       return
     }
     if (!canUseRealtime) return
     setRealtimePending(true)
-    startRealtimeAudioSession({ baseUrl, entityUrl })
+    startRealtimeAudioSession({
+      baseUrl,
+      entityUrl,
+      onInputLevel: setRealtimeInputLevel,
+    })
       .then((session) => {
         realtimeSessionRef.current = session
         setRealtimeActive(true)
       })
       .catch((err: Error) => {
         setError(err.message)
+        setRealtimeInputLevel(0)
       })
       .finally(() => {
         setRealtimePending(false)
@@ -451,6 +458,12 @@ export function MessageInput({
   )
 
   const isButtonActive = canSubmit || (showStop && !stopDisabled)
+  const voiceLevel = realtimeActive ? realtimeInputLevel : 0
+  const voiceBars = [
+    Math.max(0.18, Math.min(1, 0.24 + voiceLevel * 0.76)),
+    Math.max(0.24, Math.min(1, 0.34 + voiceLevel * 0.9)),
+    Math.max(0.16, Math.min(1, 0.2 + voiceLevel * 0.82)),
+  ]
   const sendTooltip = showStop
     ? stopDisabled
       ? `Signal permission required`
@@ -531,31 +544,53 @@ export function MessageInput({
         controls={
           <>
             {!isCommentMode ? (
-              <Tooltip
-                content={
-                  realtimeActive ? `Stop voice mode` : `Start voice mode`
-                }
-                side="top"
-              >
-                <span className={styles.tooltipTrigger}>
-                  <button
-                    type="button"
-                    aria-label={
-                      realtimeActive ? `Stop voice mode` : `Start voice mode`
-                    }
-                    onClick={handleRealtimeToggle}
-                    disabled={!canUseRealtime || realtimePending}
-                    className={[
-                      styles.inlineIconButton,
-                      realtimeActive ? styles.voiceActive : null,
-                    ]
-                      .filter(Boolean)
-                      .join(` `)}
-                  >
-                    <Icon icon={realtimeActive ? MicOff : Mic} size={2} />
-                  </button>
-                </span>
-              </Tooltip>
+              <>
+                <Tooltip
+                  content={
+                    realtimeActive ? `Stop voice mode` : `Start voice mode`
+                  }
+                  side="top"
+                >
+                  <span className={styles.tooltipTrigger}>
+                    <button
+                      type="button"
+                      aria-label={
+                        realtimeActive ? `Stop voice mode` : `Start voice mode`
+                      }
+                      onClick={handleRealtimeToggle}
+                      disabled={!canUseRealtime || realtimePending}
+                      className={[
+                        styles.inlineIconButton,
+                        realtimeActive ? styles.voiceActive : null,
+                      ]
+                        .filter(Boolean)
+                        .join(` `)}
+                    >
+                      <Icon icon={realtimeActive ? MicOff : Mic} size={2} />
+                    </button>
+                  </span>
+                </Tooltip>
+                <div
+                  className={styles.voiceMeter}
+                  data-active={
+                    realtimeActive || realtimePending ? `true` : `false`
+                  }
+                  aria-hidden="true"
+                >
+                  {voiceBars.map((scale, index) => (
+                    <span
+                      key={index}
+                      className={styles.voiceMeterBar}
+                      style={{
+                        opacity: realtimeActive
+                          ? Math.max(0.38, Math.min(1, scale + 0.12))
+                          : 0.28,
+                        transform: `scaleY(${scale})`,
+                      }}
+                    />
+                  ))}
+                </div>
+              </>
             ) : null}
             {imageAttachmentsEnabled && !isCommentMode ? (
               <AttachmentActionMenu
