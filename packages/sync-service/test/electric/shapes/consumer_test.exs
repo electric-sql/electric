@@ -120,8 +120,7 @@ defmodule Electric.Shapes.ConsumerTest do
   end
 
   # Repeatedly evaluate `fun` until it returns `{:ok, value}` (returning value)
-  # or `timeout` ms elapse (failing the test). The 1ms tick is the only sleep
-  # involved and it ends the moment the condition holds.
+  # or `timeout` ms elapse (failing the test).
   defp poll_until(timeout, fun) do
     deadline = System.monotonic_time(:millisecond) + timeout
     do_poll_until(deadline, fun)
@@ -134,7 +133,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       :retry ->
         if System.monotonic_time(:millisecond) < deadline do
-          Process.sleep(1)
+          Process.sleep(50)
           do_poll_until(deadline, fun)
         else
           flunk("poll_until/2 timed out waiting for condition")

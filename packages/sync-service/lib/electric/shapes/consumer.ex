@@ -176,8 +176,7 @@ defmodule Electric.Shapes.Consumer do
 
   @impl GenServer
   # Any incoming message counts as activity: cancel the pending suspend timer (if
-  # any) before dispatching to the real clause, which we reach by recursing with a
-  # cleared timer so this guard no longer matches.
+  # any) and recurse for actual handling of the call.
   def handle_call(msg, from, %{suspend_timer: ref} = state) when not is_nil(ref) do
     handle_call(msg, from, cancel_suspend_timer(state))
   end
@@ -222,7 +221,7 @@ defmodule Electric.Shapes.Consumer do
   end
 
   @impl GenServer
-  # See the handle_call/3 interceptor above - cancel the suspend timer on activity.
+  # Cancel the suspend timer on activity, then recurse for the actual handling of the cast.
   def handle_cast(msg, %{suspend_timer: ref} = state) when not is_nil(ref) do
     handle_cast(msg, cancel_suspend_timer(state))
   end
@@ -264,8 +263,6 @@ defmodule Electric.Shapes.Consumer do
   end
 
   @impl GenServer
-  # Genuine suspend timer: it is still the armed timer (suspend_timer is set), which
-  # means no activity cancelled it since it was scheduled. Suspend if still eligible.
   def handle_info(:suspend_timeout, %{suspend_timer: ref} = state) when not is_nil(ref) do
     state = %{state | suspend_timer: nil}
 
@@ -278,15 +275,13 @@ defmodule Electric.Shapes.Consumer do
     end
   end
 
-  # Stale suspend timer: activity already cancelled it (suspend_timer is nil), but the
-  # timer had fired and enqueued this message before the cancellation. Ignore it.
+  # Timer already cancelled. Ignore the trigger.
   def handle_info(:suspend_timeout, state) do
     {:noreply, state, state.hibernate_after}
   end
 
   # Any incoming message counts as activity: cancel the pending suspend timer (if any)
-  # before dispatching to the real clause. The :suspend_timeout clauses above are
-  # matched first, so this never intercepts the timer message itself.
+  # and recurse for the actual handling of the message.
   def handle_info(msg, %{suspend_timer: ref} = state) when not is_nil(ref) do
     handle_info(msg, cancel_suspend_timer(state))
   end
