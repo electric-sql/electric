@@ -13,9 +13,23 @@ export type {
   ManifestSourceEntry,
   ManifestSharedStateEntry,
   RealtimeAudioSpan,
+  RealtimeAudioConfig,
+  RealtimeAudioFormat,
+  RealtimeConfig,
+  RealtimeContextConfig,
+  RealtimeHandle,
+  RealtimeHelpers,
+  RealtimeProviderConfig,
+  RealtimeProviderConnectInput,
+  RealtimeProviderEvent,
+  RealtimeProviderSession,
+  RealtimeRunResult,
   RealtimeSession,
+  RealtimeSessionPolicy,
   RealtimeSessionStatus,
   RealtimeSessionStreamRefs,
+  RealtimeToolPolicy,
+  RealtimeToolResult,
   RealtimeTranscript,
   PendingSend,
   EffectConfig,
@@ -134,6 +148,8 @@ export type {
 } from './entity-schema'
 
 export { createEntityStreamDB } from './entity-stream-db'
+export { createTestRealtimeProvider } from './realtime'
+export type { TestRealtimeProviderOptions } from './realtime'
 export {
   getEntityAttachmentStreamPath,
   manifestAttachmentKey,

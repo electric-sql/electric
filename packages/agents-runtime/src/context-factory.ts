@@ -47,8 +47,14 @@ import type {
   HandlerWake,
   LLMMessage,
   ManifestAttachmentEntry,
+  ManifestRealtimeSessionEntry,
   ObservationHandle,
   ObservationSource,
+  RealtimeConfig,
+  RealtimeHandle,
+  RealtimeProviderEvent,
+  RealtimeProviderSession,
+  RealtimeRunResult,
   RunHandle,
   SendResult,
   SharedStateHandle,
@@ -69,6 +75,41 @@ function agentModelProvider(config: AgentConfig): string {
   return typeof config.model === `string`
     ? (config.provider ?? `anthropic`)
     : config.model.provider
+}
+
+function isRealtimeSessionManifest(
+  entry: unknown
+): entry is ManifestRealtimeSessionEntry {
+  return (
+    typeof entry === `object` &&
+    entry !== null &&
+    (entry as { kind?: unknown }).kind === `realtime-session` &&
+    typeof (entry as { id?: unknown }).id === `string`
+  )
+}
+
+function realtimeManifestIsActive(
+  entry: ManifestRealtimeSessionEntry
+): boolean {
+  return entry.status === `requested` || entry.status === `active`
+}
+
+function getToolName(tool: AgentTool): string | null {
+  const name = (tool as { name?: unknown }).name
+  return typeof name === `string` ? name : null
+}
+
+function applyRealtimeToolPolicy(
+  tools: Array<AgentTool>,
+  policy: RealtimeConfig[`toolPolicy`]
+): Array<AgentTool> {
+  if (!policy) return tools
+  const allowed = new Set([...(policy.direct ?? []), ...(policy.confirm ?? [])])
+  if (allowed.size === 0) return []
+  return tools.filter((tool) => {
+    const name = getToolName(tool)
+    return name != null && allowed.has(name)
+  })
 }
 
 const MAX_HYDRATED_IMAGE_ATTACHMENTS = 4
@@ -476,6 +517,8 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
 ): HandlerContextResult<TState> {
   let sleepRequested = false
   let agentConfig: AgentConfig | null = null
+  let realtimeConfig: RealtimeConfig | null = null
+  let activeRealtimeProviderSession: RealtimeProviderSession | null = null
   let useContextConfig: UseContextConfig | null = null
   let useContextHash = ``
   let useContextRegistrations = 0
@@ -540,6 +583,20 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
       }
       return await config.doCreateAttachment(input)
     },
+  }
+
+  function realtimeSessions(): Array<ManifestRealtimeSessionEntry> {
+    const sessions: Array<ManifestRealtimeSessionEntry> = []
+    for (const entry of config.db.collections.manifests.toArray) {
+      if (isRealtimeSessionManifest(entry)) {
+        sessions.push(entry)
+      }
+    }
+    return sessions.sort((a, b) => a.startedAt.localeCompare(b.startedAt))
+  }
+
+  function activeRealtimeSession(): ManifestRealtimeSessionEntry | undefined {
+    return realtimeSessions().filter(realtimeManifestIsActive).at(-1)
   }
 
   function structuralHash(nextConfig: UseContextConfig): string {
@@ -950,6 +1007,219 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
     },
   }
 
+  const realtimeHandle: RealtimeHandle = {
+    async run(): Promise<RealtimeRunResult> {
+      if (!realtimeConfig) {
+        throw new Error(
+          `[agent-runtime] realtime.run() called without useRealtime().`
+        )
+      }
+
+      if (config.prepareAgentRun) {
+        await config.prepareAgentRun()
+      }
+
+      const activeRealtimeConfig = realtimeConfig
+      const bridge = createOutboundBridge(
+        await loadOutboundIdSeed(config.db),
+        config.writeEvent
+      )
+      const startedAt = Date.now()
+      let textStarted = false
+      let currentToolCall:
+        | { toolCallId: string; name: string; args: unknown }
+        | undefined
+
+      const endText = (): void => {
+        if (!textStarted) return
+        bridge.onTextEnd()
+        textStarted = false
+      }
+
+      const emitText = (delta: string): void => {
+        if (delta.length === 0) return
+        if (!textStarted) {
+          bridge.onTextStart()
+          textStarted = true
+        }
+        bridge.onTextDelta(delta)
+      }
+
+      const composedTools = (await composeToolsWithProviders(
+        activeRealtimeConfig.tools ?? []
+      )) as Array<AgentTool>
+      const providerTools = applyRealtimeToolPolicy(
+        composedTools,
+        activeRealtimeConfig.toolPolicy
+      )
+      const messages = await hydrateAttachmentBlocks(
+        timelineToMessages(config.db)
+      )
+
+      async function handleProviderEvent(
+        event: RealtimeProviderEvent
+      ): Promise<void> {
+        switch (event.type) {
+          case `session.started`:
+          case `session.updated`:
+          case `input_audio.speech_started`:
+          case `input_audio.speech_stopped`:
+          case `input_transcript.delta`:
+          case `input_transcript.completed`:
+          case `output_audio.delta`:
+          case `output_audio.completed`:
+          case `response.started`:
+          case `response.cancelled`:
+            break
+
+          case `session.closed`:
+          case `response.completed`:
+            endText()
+            break
+
+          case `session.error`:
+            throw new Error(
+              `[agent-runtime] realtime provider error${event.code ? ` ${event.code}` : ``}: ${event.error}`
+            )
+
+          case `output_transcript.delta`:
+            emitText(event.delta)
+            break
+
+          case `output_transcript.completed`:
+            if (!textStarted && event.text) {
+              emitText(event.text)
+            }
+            endText()
+            break
+
+          case `tool_call.started`:
+            currentToolCall = {
+              toolCallId: event.toolCallId,
+              name: event.name,
+              args: event.args,
+            }
+            if (event.args !== undefined) {
+              bridge.onToolCallStart(event.toolCallId, event.name, event.args)
+            }
+            break
+
+          case `tool_call.arguments_delta`:
+            break
+
+          case `tool_call.arguments_completed`:
+            currentToolCall = {
+              toolCallId: event.toolCallId,
+              name: event.name,
+              args: event.args,
+            }
+            bridge.onToolCallStart(event.toolCallId, event.name, event.args)
+            break
+
+          case `tool_call.completed`: {
+            if (currentToolCall?.toolCallId !== event.toolCallId) {
+              bridge.onToolCallStart(event.toolCallId, event.name, undefined)
+            }
+            bridge.onToolCallEnd(
+              event.toolCallId,
+              event.name,
+              event.result,
+              event.isError ?? false
+            )
+            break
+          }
+        }
+      }
+
+      try {
+        bridge.onRunStart()
+        bridge.onStepStart({
+          modelProvider: activeRealtimeConfig.provider.id,
+          modelId: activeRealtimeConfig.provider.model,
+        })
+
+        if (activeRealtimeConfig.testResponses) {
+          const messageText = getTriggerMessageText(
+            config.db,
+            config.wakeEvent,
+            config.events,
+            config.wakeOffset,
+            config.hydratedEventSourceWake
+          )
+          const responses = activeRealtimeConfig.testResponses
+          if (Array.isArray(responses)) {
+            const priorRunCount = (
+              await queryOnce((q) =>
+                q.from({ runs: config.db.collections.runs })
+              )
+            ).length
+            emitText(
+              responses[priorRunCount % Math.max(responses.length, 1)] ?? ``
+            )
+          } else {
+            const response = await responses(messageText, bridge)
+            if (response !== undefined) emitText(response)
+          }
+          endText()
+        } else {
+          activeRealtimeProviderSession =
+            await activeRealtimeConfig.provider.connect({
+              systemPrompt: activeRealtimeConfig.systemPrompt,
+              messages,
+              tools: providerTools,
+              audio: activeRealtimeConfig.audio,
+              session: activeRealtimeSession(),
+              signal: config.runSignal,
+            })
+
+          for await (const event of activeRealtimeProviderSession.events) {
+            if (config.runSignal?.aborted) {
+              break
+            }
+            await handleProviderEvent(event)
+          }
+        }
+
+        endText()
+        bridge.onStepEnd({
+          finishReason: config.runSignal?.aborted ? `aborted` : `stop`,
+          durationMs: Date.now() - startedAt,
+        })
+        bridge.onRunEnd({
+          finishReason: config.runSignal?.aborted ? `aborted` : `stop`,
+        })
+      } catch (error) {
+        endText()
+        bridge.onStepEnd({
+          finishReason: `error`,
+          durationMs: Date.now() - startedAt,
+        })
+        bridge.onRunEnd({ finishReason: `error` })
+        throw error
+      } finally {
+        activeRealtimeProviderSession = null
+      }
+
+      return {
+        writes: [],
+        toolCalls: [],
+        usage: { tokens: 0, duration: Date.now() - startedAt },
+      }
+    },
+    async close(reason?: string): Promise<void> {
+      await activeRealtimeProviderSession?.close?.(reason)
+    },
+    async stop(reason?: string): Promise<void> {
+      await this.close(reason)
+    },
+    async cancelResponse(): Promise<void> {
+      await activeRealtimeProviderSession?.cancelResponse?.()
+    },
+    async sendText(text: string): Promise<void> {
+      await activeRealtimeProviderSession?.sendText?.(text)
+    },
+  }
+
   const ctx: DebugHandlerContext<TState> = {
     firstWake: config.firstWake,
     wake: toHandlerWake(config.wakeEvent),
@@ -969,6 +1239,10 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
     useAgent(cfg) {
       agentConfig = cfg
       return agent
+    },
+    useRealtime(cfg) {
+      realtimeConfig = cfg
+      return realtimeHandle
     },
     useContext(nextConfig) {
       assertValidUseContextConfig(nextConfig)
@@ -995,6 +1269,10 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
       useContextRegistrations: () => useContextRegistrations,
     },
     agent,
+    realtime: {
+      activeSession: activeRealtimeSession,
+      sessions: realtimeSessions,
+    },
     observe: ((source: ObservationSource, opts?: { wake?: Wake }) => {
       return config.doObserve(source, opts?.wake) as Promise<
         ObservationHandle & EntityHandle & SharedStateHandle

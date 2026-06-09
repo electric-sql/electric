@@ -988,6 +988,152 @@ export interface AgentConfig {
   testResponses?: TestResponses
 }
 
+export type RealtimeAudioCodec = `pcm16`
+
+export interface RealtimeAudioFormat {
+  codec: RealtimeAudioCodec
+  sampleRate: number
+  channels: number
+}
+
+export interface RealtimeAudioConfig {
+  inputFormat?: RealtimeAudioFormat
+  outputFormat?: RealtimeAudioFormat
+}
+
+export interface RealtimeToolPolicy {
+  direct?: Array<string>
+  confirm?: Array<string>
+  delegate?: Array<string>
+}
+
+export interface RealtimeSessionPolicy {
+  textDuringSession?: `route-to-realtime`
+  retention?: `forever`
+}
+
+export interface RealtimeContextConfig {
+  includeTimeline?: boolean
+}
+
+export type RealtimeProviderEvent =
+  | { type: `session.started`; sessionId?: string }
+  | { type: `session.updated` }
+  | { type: `session.closed`; reason?: string }
+  | { type: `session.error`; error: string; code?: string }
+  | { type: `input_audio.speech_started`; audioOffset?: string }
+  | { type: `input_audio.speech_stopped`; audioOffset?: string }
+  | { type: `input_transcript.delta`; delta: string; turnId?: string }
+  | { type: `input_transcript.completed`; text: string; turnId?: string }
+  | {
+      type: `output_audio.delta`
+      audio: Uint8Array
+      responseId?: string
+      itemId?: string
+    }
+  | { type: `output_audio.completed`; responseId?: string; itemId?: string }
+  | { type: `output_transcript.delta`; delta: string; responseId?: string }
+  | {
+      type: `output_transcript.completed`
+      text?: string
+      responseId?: string
+    }
+  | { type: `response.started`; responseId?: string }
+  | { type: `response.completed`; responseId?: string }
+  | { type: `response.cancelled`; responseId?: string }
+  | {
+      type: `tool_call.started`
+      toolCallId: string
+      name: string
+      args?: unknown
+    }
+  | {
+      type: `tool_call.arguments_delta`
+      toolCallId: string
+      delta: string
+    }
+  | {
+      type: `tool_call.arguments_completed`
+      toolCallId: string
+      name: string
+      args: unknown
+    }
+  | {
+      type: `tool_call.completed`
+      toolCallId: string
+      name: string
+      result: unknown
+      isError?: boolean
+    }
+
+export interface RealtimeProviderConnectInput {
+  systemPrompt: string
+  messages: Array<LLMMessage>
+  tools: Array<AgentTool>
+  audio?: RealtimeAudioConfig
+  session?: ManifestRealtimeSessionEntry
+  signal?: AbortSignal
+}
+
+export interface RealtimeToolResult {
+  toolCallId: string
+  name: string
+  result: unknown
+  isError?: boolean
+}
+
+export interface RealtimeProviderSession {
+  events: AsyncIterable<RealtimeProviderEvent>
+  updateSession?: (update: unknown) => Promise<void>
+  appendInputAudio?: (
+    chunk: Uint8Array,
+    meta?: Record<string, unknown>
+  ) => Promise<void>
+  commitInputAudio?: () => Promise<void>
+  sendText?: (text: string) => Promise<void>
+  sendToolResult?: (result: RealtimeToolResult) => Promise<void>
+  cancelResponse?: () => Promise<void>
+  truncateOutputAudio?: (opts: {
+    itemId: string
+    audioEndMs: number
+  }) => Promise<void>
+  close?: (reason?: string) => Promise<void>
+}
+
+export interface RealtimeProviderConfig {
+  id: string
+  model: string
+  connect: (
+    input: RealtimeProviderConnectInput
+  ) => Promise<RealtimeProviderSession>
+}
+
+export interface RealtimeConfig {
+  systemPrompt: string
+  provider: RealtimeProviderConfig
+  tools?: Array<AgentTool>
+  audio?: RealtimeAudioConfig
+  toolPolicy?: RealtimeToolPolicy
+  context?: RealtimeContextConfig
+  session?: RealtimeSessionPolicy
+  testResponses?: TestResponses
+}
+
+export type RealtimeRunResult = AgentRunResult
+
+export interface RealtimeHandle {
+  run: () => Promise<RealtimeRunResult>
+  close: (reason?: string) => Promise<void>
+  stop: (reason?: string) => Promise<void>
+  cancelResponse: (opts?: { truncateAudio?: boolean }) => Promise<void>
+  sendText: (text: string) => Promise<void>
+}
+
+export interface RealtimeHelpers {
+  activeSession: () => ManifestRealtimeSessionEntry | undefined
+  sessions: () => Array<ManifestRealtimeSessionEntry>
+}
+
 export type TestResponses = Array<string> | TestResponseFn
 
 export type TestResponseFn = (
@@ -1087,6 +1233,7 @@ export interface HandlerContext<
    */
   sandbox: Sandbox
   useAgent: (config: AgentConfig) => AgentHandle
+  useRealtime: (config: RealtimeConfig) => RealtimeHandle
   useContext: (config: UseContextConfig) => void
   timelineMessages: (opts?: TimelineProjectionOpts) => Array<TimestampedMessage>
   insertContext: (id: string, entry: ContextEntryInput) => void
@@ -1102,6 +1249,7 @@ export interface HandlerContext<
     opts?: { status?: GoalEntry[`status`] }
   ) => GoalEntry | undefined
   agent: AgentHandle
+  realtime: RealtimeHelpers
   spawn: (
     type: string,
     id: string,
