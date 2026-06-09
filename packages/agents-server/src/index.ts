@@ -2,6 +2,10 @@ export { createDb, runMigrations } from './db/index.js'
 export type { DrizzleDB, PgClient } from './db/index.js'
 export { AgentsHost } from './host.js'
 export type {
+  RealtimeSessionCreateRequest,
+  RealtimeSessionCreateResult,
+} from './entity-manager.js'
+export type {
   AgentsHostOptions,
   AgentsHostTenantConfig,
   AgentsHostTenantRuntime,

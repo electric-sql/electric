@@ -115,6 +115,35 @@ type ServerSignalEvent = {
     txid: string
   }
 }
+type RealtimeAudioRequest = {
+  codec?: `pcm16`
+  sampleRate?: number
+  channels?: number
+}
+
+export type RealtimeSessionCreateRequest = {
+  id?: string
+  provider: string
+  model: string
+  inputAudio?: RealtimeAudioRequest
+  outputAudio?: RealtimeAudioRequest
+  meta?: Record<string, unknown>
+}
+
+export type RealtimeSessionCreateResult = {
+  sessionId: string
+  entityUrl: string
+  provider: string
+  model: string
+  status: `requested`
+  startedAt: string
+  streams: {
+    audio_in: string
+    audio_out: string
+    control_in: string
+    control_out: string
+  }
+}
 type AttachmentSubjectType = `inbox` | `run` | `text` | `tool_call` | `context`
 type AttachmentRole = `input` | `output`
 
@@ -272,6 +301,19 @@ function getEntityAttachmentStreamPath(
   return `${entityUrl.replace(/\/+$/, ``)}/attachments/${attachmentId}`
 }
 
+function getRealtimeSessionBasePath(
+  entityUrl: string,
+  sessionId: string
+): string {
+  return `${entityUrl.replace(/\/+$/, ``)}/realtime/${sessionId}`
+}
+
+function realtimeAudioContentType(audio?: RealtimeAudioRequest): string {
+  const sampleRate = audio?.sampleRate ?? 24_000
+  const channels = audio?.channels ?? 1
+  return `audio/pcm; rate=${sampleRate}; channels=${channels}`
+}
+
 function isStreamCreateConflict(error: unknown): boolean {
   return (
     !!error &&
@@ -299,6 +341,16 @@ function validateAttachmentId(id: string): void {
     throw new ElectricAgentsError(
       ErrCodeInvalidRequest,
       `attachment id must not be empty, start with ".", or contain forward slashes`,
+      400
+    )
+  }
+}
+
+function validateRealtimeSessionId(id: string): void {
+  if (!id || id.includes(`/`) || id.startsWith(`.`)) {
+    throw new ElectricAgentsError(
+      ErrCodeInvalidRequest,
+      `realtime session id must not be empty, start with ".", or contain forward slashes`,
       400
     )
   }
@@ -2633,6 +2685,132 @@ export class EntityManager {
       this.encodeChangeEvent(envelope as Record<string, unknown>)
     )
     return { txid }
+  }
+
+  async createRealtimeSession(
+    entityUrl: string,
+    req: RealtimeSessionCreateRequest
+  ): Promise<RealtimeSessionCreateResult> {
+    const entity = await this.registry.getEntity(entityUrl)
+    if (!entity) {
+      throw new ElectricAgentsError(ErrCodeNotFound, `Entity not found`, 404)
+    }
+    if (rejectsNormalWrites(entity.status)) {
+      throw new ElectricAgentsError(
+        ErrCodeNotRunning,
+        `Entity is not accepting writes`,
+        409
+      )
+    }
+    if (this.isForkWorkLockedEntity(entityUrl)) {
+      this.assertEntityNotForkWorkLocked(entityUrl)
+    }
+
+    const provider = req.provider.trim()
+    const model = req.model.trim()
+    if (!provider || !model) {
+      throw new ElectricAgentsError(
+        ErrCodeInvalidRequest,
+        `provider and model are required`,
+        400
+      )
+    }
+
+    const sessionId = req.id ?? `rt-${randomUUID()}`
+    validateRealtimeSessionId(sessionId)
+
+    const basePath = getRealtimeSessionBasePath(entityUrl, sessionId)
+    const streams = {
+      audio_in: `${basePath}/audio/in`,
+      audio_out: `${basePath}/audio/out`,
+      control_in: `${basePath}/control/in`,
+      control_out: `${basePath}/control/out`,
+    }
+    const startedAt = new Date().toISOString()
+    const manifestKey = `realtime-session:${sessionId}`
+    const txid = randomUUID()
+    const createdStreams: Array<string> = []
+
+    try {
+      for (const [path, contentType] of [
+        [streams.audio_in, realtimeAudioContentType(req.inputAudio)],
+        [streams.audio_out, realtimeAudioContentType(req.outputAudio)],
+        [streams.control_in, `application/json`],
+        [streams.control_out, `application/json`],
+      ] as const) {
+        await this.streamClient.create(path, { contentType })
+        createdStreams.push(path)
+      }
+
+      await this.writeManifestEntry(
+        entityUrl,
+        manifestKey,
+        `upsert`,
+        {
+          kind: `realtime-session`,
+          id: sessionId,
+          provider,
+          model,
+          status: `requested`,
+          startedAt,
+          endedAt: null,
+          streams,
+          retention: `forever`,
+          ...(req.meta ? { meta: req.meta } : {}),
+        },
+        { txid }
+      )
+
+      const sessionEvent = entityStateSchema.realtimeSessions.insert({
+        key: manifestKey,
+        value: {
+          session_id: sessionId,
+          provider,
+          model,
+          status: `requested`,
+          started_at: startedAt,
+          streams,
+          ...(req.meta ? { meta: req.meta } : {}),
+        },
+      } as never)
+      await this.streamClient.append(
+        entity.streams.main,
+        this.encodeChangeEvent(sessionEvent as Record<string, unknown>)
+      )
+
+      await this.send(entityUrl, {
+        from: SERVER_SIGNAL_SENDER,
+        payload: {
+          type: `realtime_session.started`,
+          sessionId,
+          provider,
+          model,
+          streams,
+        },
+      })
+    } catch (error) {
+      await Promise.allSettled(
+        createdStreams.map((path) => this.streamClient.delete(path))
+      )
+      if (isStreamCreateConflict(error)) {
+        throw new ElectricAgentsError(
+          ErrCodeInvalidRequest,
+          `Realtime session already exists at id "${sessionId}"`,
+          409
+        )
+      }
+      throw error
+    }
+
+    return {
+      sessionId,
+      entityUrl,
+      provider,
+      model,
+      status: `requested`,
+      startedAt,
+      streams,
+    }
   }
 
   // ==========================================================================
