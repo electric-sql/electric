@@ -424,7 +424,12 @@ function parseErrorResponse(text: string): string | null {
       error?: { message?: unknown }
       message?: unknown
     }
-    if (typeof data.error?.message === `string`) return data.error.message
+    if (typeof data.error?.message === `string`) {
+      const code = (data.error as Record<string, unknown>).code
+      return typeof code === `string`
+        ? `${code}: ${data.error.message}`
+        : data.error.message
+    }
     if (typeof data.message === `string`) return data.message
   } catch {
     // Keep the raw response text below.
