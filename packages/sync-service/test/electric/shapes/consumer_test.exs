@@ -2796,7 +2796,46 @@ defmodule Electric.Shapes.ConsumerTest do
       xid = 11
       lsn = Lsn.from_integer(10)
 
-      {:total_heap_size, heap_before} = :erlang.process_info(consumer_pid, :total_heap_size)
+      # Inflate the consumer's heap by sending a large binary payload
+      large_binary = :binary.copy(<<0>>, 200_000)
+
+      txn =
+        complete_txn_fragment(xid, lsn, [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "1", "value" => large_binary},
+            log_offset: LogOffset.new(lsn, 0)
+          }
+        ])
+
+      assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
+
+      # Wait for the consumer to process the fragment
+      assert_receive {^ref, :new_changes, _}, @receive_timeout
+
+      {:total_heap_size, heap_after} = :erlang.process_info(consumer_pid, :total_heap_size)
+
+      # threshold=1 forces a full GC after this fragment. Because the ~200 KB payload is
+      # transient garbage (not live state), the post-GC heap must be far below the payload
+      # size. Without GC the heap grows ~185x (observed), so this assertion fails loudly.
+      payload_words = div(200_000, :erlang.system_info(:wordsize))
+
+      assert heap_after < payload_words,
+             "heap_after (#{heap_after} words) should be far below payload (#{payload_words} words) after GC"
+    end
+
+    test "GC does not run when threshold is very large", ctx do
+      # 1 GB threshold — the consumer heap will never reach this, so GC must NOT fire.
+      Electric.StackConfig.put(ctx.stack_id, :consumer_gc_heap_threshold, 1_000_000_000)
+
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape1, ctx.stack_id)
+      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
+
+      consumer_pid = Consumer.whereis(ctx.stack_id, shape_handle)
+      ref = Shapes.Consumer.register_for_changes(ctx.stack_id, shape_handle)
+
+      xid = 11
+      lsn = Lsn.from_integer(10)
 
       # Inflate the consumer's heap by sending a large binary payload
       large_binary = :binary.copy(<<0>>, 200_000)
@@ -2817,13 +2856,12 @@ defmodule Electric.Shapes.ConsumerTest do
 
       {:total_heap_size, heap_after} = :erlang.process_info(consumer_pid, :total_heap_size)
 
-      # GC should have run (heap_after <= heap_before is the indicator),
-      # or at minimum the heap hasn't grown unboundedly relative to what we sent.
-      # Since threshold=1 forces GC on every fragment, the heap post-GC should
-      # be well below the inflated size. We verify the GC fired by checking that
-      # the post-fragment heap is not larger than the pre-fragment heap (i.e., GC ran).
-      assert heap_after <= heap_before * 2,
-             "Expected GC to reclaim heap after large fragment (before=#{heap_before} words, after=#{heap_after} words)"
+      # GC was NOT triggered (threshold too high), so the heap still reflects
+      # the retained payload — it must be >= payload_words.
+      payload_words = div(200_000, :erlang.system_info(:wordsize))
+
+      assert heap_after >= payload_words,
+             "heap_after (#{heap_after} words) should be >= payload (#{payload_words} words) when GC is skipped"
     end
 
     test "no GC by default (threshold=nil)", ctx do

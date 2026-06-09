@@ -38,6 +38,7 @@ defmodule Electric.Shapes.Consumer do
   @default_snapshot_timeout 45_000
   @stop_and_clean_timeout 30_000
   @stop_and_clean_reason ShapeCleaner.consumer_cleanup_reason()
+  @word_size :erlang.system_info(:wordsize)
 
   @type initialize_shape_opts() :: %{
           :action => :create | :restore,
@@ -525,17 +526,15 @@ defmodule Electric.Shapes.Consumer do
   end
 
   defp maybe_garbage_collect(%State{stack_id: stack_id} = state) do
-    threshold = Electric.StackConfig.lookup(stack_id, :consumer_gc_heap_threshold, nil)
+    case Electric.StackConfig.lookup(stack_id, :consumer_gc_heap_threshold, nil) do
+      nil ->
+        state
 
-    if not is_nil(threshold) do
-      {:total_heap_size, heap_words} = :erlang.process_info(self(), :total_heap_size)
-
-      if over_heap_threshold?(heap_words, threshold) do
-        :erlang.garbage_collect()
-      end
+      threshold ->
+        {:total_heap_size, heap_words} = :erlang.process_info(self(), :total_heap_size)
+        if over_heap_threshold?(heap_words, threshold), do: :erlang.garbage_collect()
+        state
     end
-
-    state
   end
 
   @doc false
@@ -543,7 +542,7 @@ defmodule Electric.Shapes.Consumer do
   def over_heap_threshold?(_heap_words, nil), do: false
 
   def over_heap_threshold?(heap_words, threshold_bytes) when is_integer(threshold_bytes) do
-    heap_words * :erlang.system_info(:wordsize) > threshold_bytes
+    heap_words * @word_size > threshold_bytes
   end
 
   # A consumer process starts with buffering?=true before it has PG snapshot info (xmin, xmax, xip_list).
