@@ -79,8 +79,14 @@ describe(`runtime-server-client.setTag`, () => {
       fetch: fakeFetch,
     })
 
-    await client.setTag(`/horton/abc`, `title`, `Refactor auth`, `wt-1234`)
+    const result = await client.setTag(
+      `/horton/abc`,
+      `title`,
+      `Refactor auth`,
+      `wt-1234`
+    )
 
+    expect(result).toEqual({})
     expect(calls).toHaveLength(1)
     expect(calls[0]!.url).toBe(
       `http://test.example/_electric/entities/horton/abc/tags/title`
@@ -92,6 +98,24 @@ describe(`runtime-server-client.setTag`, () => {
     expect(JSON.parse(calls[0]!.init!.body as string)).toEqual({
       value: `Refactor auth`,
     })
+  })
+
+  it(`returns txid from tag response when present`, async () => {
+    const fakeFetch = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ txid: `tx-title` }), {
+          status: 200,
+          headers: { 'content-type': `application/json` },
+        })
+    ) as unknown as typeof fetch
+    const client = createRuntimeServerClient({
+      baseUrl: `http://test.example`,
+      fetch: fakeFetch,
+    })
+
+    await expect(
+      client.setTag(`/horton/abc`, `title`, `Refactor auth`, `wt-1234`)
+    ).resolves.toEqual({ txid: `tx-title` })
   })
 
   it(`can keep server authorization while sending write token separately`, async () => {

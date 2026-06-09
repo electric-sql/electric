@@ -10,7 +10,10 @@ import { ShareEntityDialog } from './ShareEntityDialog'
 import { useEntityPermission } from '../hooks/useEntityPermission'
 import { listViews, type ViewId } from '../lib/workspace/viewRegistry'
 import styles from './EntityHeader.module.css'
-import type { ElectricEntity } from '../lib/ElectricAgentsProvider'
+import {
+  useElectricAgents,
+  type ElectricEntity,
+} from '../lib/ElectricAgentsProvider'
 
 const STATUS_TONE: Record<string, BadgeTone> = {
   active: `info`,
@@ -94,6 +97,7 @@ function EntityTitle({
 }: {
   entity: ElectricEntity
 }): React.ReactElement {
+  const { setEntityTitle } = useElectricAgents()
   const { title } = getEntityDisplayTitle(entity)
   // The session id is the URL minus the leading slash (e.g.
   // `horton/gpt5-verify-1777802612`). The type is encoded in the path
@@ -101,13 +105,24 @@ function EntityTitle({
   const sessionId = entity.url.replace(/^\//, ``)
   const decoded = decodeURIComponent(entity.url)
   const [copied, setCopied] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [draftTitle, setDraftTitle] = useState(title)
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const inputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
     return () => {
       if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current)
     }
   }, [])
+
+  useEffect(() => {
+    if (!editing) setDraftTitle(title)
+  }, [editing, title])
+
+  useEffect(() => {
+    if (editing) inputRef.current?.focus()
+  }, [editing])
 
   const copy = () => {
     void navigator.clipboard.writeText(sessionId)
@@ -116,17 +131,68 @@ function EntityTitle({
     copiedTimerRef.current = setTimeout(() => setCopied(false), 1200)
   }
 
+  const cancelEdit = () => {
+    setDraftTitle(title)
+    setEditing(false)
+  }
+
+  const saveEdit = () => {
+    const nextTitle = draftTitle.trim()
+    if (!nextTitle) {
+      cancelEdit()
+      return
+    }
+    setEditing(false)
+    setDraftTitle(nextTitle)
+    if (nextTitle === title || !setEntityTitle) return
+    const tx = setEntityTitle({ entityUrl: entity.url, title: nextTitle })
+    void tx.isPersisted.promise.catch(() => {
+      setDraftTitle(title)
+    })
+  }
+
   return (
     <span className={styles.title}>
-      <Text size={2} className={styles.titleName} title={decoded}>
-        {title}
-      </Text>
+      {editing ? (
+        <input
+          ref={inputRef}
+          className={styles.titleInput}
+          value={draftTitle}
+          title={decoded}
+          aria-label="Entity title"
+          data-no-drag
+          onChange={(event) => setDraftTitle(event.currentTarget.value)}
+          onBlur={saveEdit}
+          onKeyDown={(event) => {
+            if (event.key === `Enter`) {
+              event.preventDefault()
+              saveEdit()
+            } else if (event.key === `Escape`) {
+              event.preventDefault()
+              cancelEdit()
+            }
+          }}
+        />
+      ) : (
+        <button
+          type="button"
+          className={styles.titleNameButton}
+          title={`${decoded} — click to edit title`}
+          onClick={() => setEditing(true)}
+          data-no-drag
+        >
+          <Text size={2} className={styles.titleName}>
+            {title}
+          </Text>
+        </button>
+      )}
       <span className={styles.idGroup} data-copied={copied ? `` : undefined}>
         <button
           type="button"
           className={styles.subtitle}
           title={copied ? `Copied` : `${decoded} — click to copy`}
           onClick={copy}
+          data-no-drag
         >
           {sessionId}
         </button>

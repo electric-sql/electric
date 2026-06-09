@@ -52,6 +52,8 @@ import type { Signal } from './entity-schema'
 import type { JsonBatch } from '@durable-streams/client'
 import type { ChangeEvent, StateEvent } from '@durable-streams/state'
 
+const TAG_TXID_TIMEOUT_MS = 20_000
+
 interface WakeResult {
   manifest: Array<ManifestEntry>
   wakeSession: WakeSession
@@ -2110,10 +2112,25 @@ export async function processWake(
           await flushProducedWrites()
         },
         executeSend: (send) => executeSend(send),
-        doSetTag: (key, value) =>
-          serverClient.setTag(entityUrl, key, value, writeToken),
-        doDeleteTag: (key) =>
-          serverClient.deleteTag(entityUrl, key, writeToken),
+        doSetTag: async (key, value) => {
+          const result = await serverClient.setTag(
+            entityUrl,
+            key,
+            value,
+            writeToken
+          )
+          if (result.txid)
+            await db.utils.awaitTxId(result.txid, TAG_TXID_TIMEOUT_MS)
+        },
+        doDeleteTag: async (key) => {
+          const result = await serverClient.deleteTag(
+            entityUrl,
+            key,
+            writeToken
+          )
+          if (result.txid)
+            await db.utils.awaitTxId(result.txid, TAG_TXID_TIMEOUT_MS)
+        },
       })
 
       let sleepRequested = false

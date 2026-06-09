@@ -36,7 +36,8 @@ const modelCatalog: BuiltinModelCatalog = {
 // expectation change.
 async function captureAgentConfig(
   args: Record<string, unknown> = {},
-  electricTools: Array<any> = []
+  electricTools: Array<any> = [],
+  ctxOverrides: Record<string, unknown> = {}
 ) {
   const registry = createEntityRegistry()
   registerHorton(registry, { workingDirectory: `/tmp`, modelCatalog })
@@ -61,6 +62,8 @@ async function captureAgentConfig(
     useContext: vi.fn(),
     useAgent,
     agent: { run: vi.fn(async () => {}) },
+    setTag: vi.fn(async () => {}),
+    ...ctxOverrides,
   } as any
   await registry
     .get(`horton`)!
@@ -280,9 +283,39 @@ describe(`horton tool composition`, () => {
         `web_search`,
         `fetch_url`,
         `spawn_worker`,
+        `set_title`,
         `send`,
       ])
     )
+  })
+
+  it(`executes set_title with trimmed non-empty title`, async () => {
+    const setTag = vi.fn(async () => {})
+    const cfg = await captureAgentConfig({}, [], { setTag })
+    const tool = cfg.tools.find(
+      (t) =>
+        !isMcpToolsSentinel(t) && (t as { name?: string }).name === `set_title`
+    ) as { execute: (id: string, params: unknown) => Promise<any> }
+
+    const result = await tool.execute(`call-1`, { title: `  Better title  ` })
+
+    expect(setTag).toHaveBeenCalledWith(`title`, `Better title`)
+    expect(result.details).toEqual({ updated: true, title: `Better title` })
+  })
+
+  it(`rejects empty set_title input`, async () => {
+    const setTag = vi.fn(async () => {})
+    const cfg = await captureAgentConfig({}, [], { setTag })
+    const tool = cfg.tools.find(
+      (t) =>
+        !isMcpToolsSentinel(t) && (t as { name?: string }).name === `set_title`
+    ) as { execute: (id: string, params: unknown) => Promise<any> }
+
+    const result = await tool.execute(`call-1`, { title: `   ` })
+
+    expect(setTag).not.toHaveBeenCalled()
+    expect(result.details).toEqual({ updated: false })
+    expect(result.content[0].text).toContain(`non-empty`)
   })
 
   it(`appends an unconditional MCP tools sentinel with no allowlist`, async () => {

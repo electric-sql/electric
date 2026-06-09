@@ -412,6 +412,11 @@ export interface SignalInput {
   payload?: unknown
 }
 
+export interface SetEntityTitleInput {
+  entityUrl: string
+  title: string
+}
+
 function parseErrorResponse(text: string): string | null {
   if (!text) return null
   try {
@@ -547,6 +552,7 @@ function createSpawnAction(
         throw new Error(message)
       }
       const data = (await res.json()) as { txid: number }
+      await entitiesCollection.utils.awaitTxId(data.txid, 10_000)
       return { txid: data.txid }
     },
   })
@@ -595,6 +601,7 @@ function createKillAction(
         throw new Error(text || `Kill failed (${res.status})`)
       }
       const data = (await res.json()) as { txid: number }
+      await entitiesCollection.utils.awaitTxId(data.txid, 10_000)
       return { txid: data.txid }
     },
   })
@@ -621,6 +628,37 @@ function optimisticStatusForSignal(
     case `SIGUSR`:
       return null
   }
+}
+
+function createSetEntityTitleAction(
+  baseUrl: string,
+  entitiesCollection: EntitiesCollection
+) {
+  return createOptimisticAction<SetEntityTitleInput>({
+    onMutate: ({ entityUrl, title }) => {
+      entitiesCollection.update(entityUrl, (draft) => {
+        draft.tags = { ...draft.tags, title }
+        draft.updated_at = Date.now()
+      })
+    },
+    mutationFn: async ({ entityUrl, title }) => {
+      const res = await serverFetch(
+        entityApiUrl(baseUrl, entityUrl, `/tags/title`),
+        {
+          method: `POST`,
+          headers: { 'content-type': `application/json` },
+          body: JSON.stringify({ title }),
+        }
+      )
+      if (!res.ok) {
+        const text = await res.text().catch(() => ``)
+        throw new Error(text || `Set title failed (${res.status})`)
+      }
+      const data = (await res.json()) as { txid: number }
+      await entitiesCollection.utils.awaitTxId(data.txid, 10_000)
+      return { txid: data.txid }
+    },
+  })
 }
 
 function createSignalAction(
@@ -671,6 +709,7 @@ function createSignalAction(
         throw new Error(text || `Signal failed (${res.status})`)
       }
       const data = (await res.json()) as { txid: number }
+      await entitiesCollection.utils.awaitTxId(data.txid, 10_000)
       return { txid: data.txid }
     },
   })
@@ -732,6 +771,7 @@ interface ElectricAgentsState {
   entityEffectivePermissionsCollection: EntityEffectivePermissionsCollection | null
   spawnEntity: ReturnType<typeof createSpawnAction> | null
   signalEntity: ReturnType<typeof createSignalAction> | null
+  setEntityTitle: ReturnType<typeof createSetEntityTitleAction> | null
   killEntity: ReturnType<typeof createKillAction> | null
   forkEntity: ReturnType<typeof createForkEntity> | null
 }
@@ -744,6 +784,7 @@ const ElectricAgentsContext = createContext<ElectricAgentsState>({
   entityEffectivePermissionsCollection: null,
   spawnEntity: null,
   signalEntity: null,
+  setEntityTitle: null,
   killEntity: null,
   forkEntity: null,
 })
@@ -783,6 +824,7 @@ export function ElectricAgentsProvider({
         entityEffectivePermissionsCollection: null,
         spawnEntity: null,
         signalEntity: null,
+        setEntityTitle: null,
         killEntity: null,
         forkEntity: null,
       }
@@ -803,6 +845,7 @@ export function ElectricAgentsProvider({
       entityEffectivePermissionsCollection: entityEffectivePermissions,
       spawnEntity: createSpawnAction(baseUrl, entities),
       signalEntity: createSignalAction(baseUrl, entities),
+      setEntityTitle: createSetEntityTitleAction(baseUrl, entities),
       killEntity: createKillAction(baseUrl, entities),
       forkEntity: createForkEntity(baseUrl),
     }

@@ -1102,7 +1102,10 @@ async function setTag(
     { value: parsed.value },
     token
   )
-  return json(toPublicEntity(updated))
+  return json({
+    ...toPublicEntity(updated),
+    ...(updated.txid !== undefined ? { txid: updated.txid } : {}),
+  })
 }
 
 async function deleteTag(
@@ -1122,7 +1125,10 @@ async function deleteTag(
     decodeURIComponent(request.params.tagKey),
     token
   )
-  return json(toPublicEntity(updated))
+  return json({
+    ...toPublicEntity(updated),
+    ...(updated.txid !== undefined ? { txid: updated.txid } : {}),
+  })
 }
 
 async function forkEntity(
@@ -1289,11 +1295,11 @@ async function sendEntity(
       sendReq,
       new Date(Date.now() + parsed.afterMs)
     )
-  } else {
-    await ctx.entityManager.send(entityUrl, sendReq)
+    return status(204)
   }
 
-  return status(204)
+  const result = await ctx.entityManager.send(entityUrl, sendReq)
+  return json(result)
 }
 
 async function createAttachment(
@@ -1368,12 +1374,12 @@ async function updateInboxMessage(
 ): Promise<Response> {
   const parsed = routeBody<InboxMessageBody>(request)
   const { entityUrl } = requireExistingEntityRoute(request)
-  await ctx.entityManager.updateInboxMessage(
+  const result = await ctx.entityManager.updateInboxMessage(
     entityUrl,
     decodeURIComponent(request.params.messageKey),
     parsed
   )
-  return status(204)
+  return json(result)
 }
 
 async function deleteInboxMessage(
@@ -1381,11 +1387,11 @@ async function deleteInboxMessage(
   ctx: TenantContext
 ): Promise<Response> {
   const { entityUrl } = requireExistingEntityRoute(request)
-  await ctx.entityManager.deleteInboxMessage(
+  const result = await ctx.entityManager.deleteInboxMessage(
     entityUrl,
     decodeURIComponent(request.params.messageKey)
   )
-  return status(204)
+  return json(result)
 }
 
 async function spawnEntity(
