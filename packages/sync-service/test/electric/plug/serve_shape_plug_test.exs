@@ -86,7 +86,8 @@ defmodule Electric.Plug.ServeShapePlugTest do
       sse_timeout: sse_timeout(ctx),
       max_age: max_age(ctx),
       stale_age: stale_age(ctx),
-      max_concurrent_requests: %{initial: 300, existing: 10_000}
+      max_concurrent_requests:
+        Access.get(ctx, :max_concurrent_requests, %{initial: 300, existing: 10_000})
     )
   end
 
@@ -1040,6 +1041,101 @@ defmodule Electric.Plug.ServeShapePlugTest do
                         _measurements, %{stack_id: ^stack_id} = metadata}
 
         assert metadata.root_table == nil
+      after
+        :telemetry.detach(handler_id)
+      end
+    end
+
+    test "[:electric, :plug, :serve_shape] tags a successful response with known_error: false",
+         ctx do
+      expect_shape_cache(
+        get_or_create_shape_handle: fn @test_shape, _stack_id, _opts ->
+          {@test_shape_handle, @test_offset}
+        end,
+        await_snapshot_start: fn @test_shape_handle, _ -> :started end
+      )
+
+      patch_shape_cache(has_shape?: fn @test_shape_handle, _opts -> true end)
+
+      next_offset = LogOffset.increment(@first_offset)
+
+      expect_storage(
+        get_chunk_end_log_offset: fn @before_all_offset, _ ->
+          @first_offset
+        end,
+        get_log_stream: fn @before_all_offset, @first_offset, @test_opts ->
+          [Jason.encode!(%{key: "log", value: "foo", headers: %{}, offset: next_offset})]
+        end
+      )
+
+      test_pid = self()
+      ref = make_ref()
+      handler_id = "test-serve-shape-known-error-false-#{inspect(ref)}"
+
+      :telemetry.attach(
+        handler_id,
+        [:electric, :plug, :serve_shape],
+        fn event, measurements, metadata, _config ->
+          send(test_pid, {:telemetry_serve_shape, event, measurements, metadata})
+        end,
+        nil
+      )
+
+      stack_id = ctx.stack_id
+
+      try do
+        conn =
+          ctx
+          |> conn(:get, %{"table" => "public.users"}, "?offset=-1")
+          |> call_serve_shape_plug(ctx)
+
+        assert conn.status == 200
+
+        assert_receive {:telemetry_serve_shape, [:electric, :plug, :serve_shape], _measurements,
+                        %{stack_id: ^stack_id} = metadata}
+
+        assert metadata.status == 200
+        assert metadata.known_error == false
+      after
+        :telemetry.detach(handler_id)
+      end
+    end
+
+    test "[:electric, :plug, :serve_shape] tags an admission-rejected 503 with known_error: true",
+         ctx do
+      # Force the load-shedding path: with a zero concurrency limit, check_admission
+      # rejects immediately with a 503 carrying the `electric-internal-known-error`
+      # header.
+      ctx = Map.put(ctx, :max_concurrent_requests, %{initial: 0, existing: 0})
+
+      test_pid = self()
+      ref = make_ref()
+      handler_id = "test-serve-shape-known-error-true-#{inspect(ref)}"
+
+      :telemetry.attach(
+        handler_id,
+        [:electric, :plug, :serve_shape],
+        fn event, measurements, metadata, _config ->
+          send(test_pid, {:telemetry_serve_shape, event, measurements, metadata})
+        end,
+        nil
+      )
+
+      stack_id = ctx.stack_id
+
+      try do
+        conn =
+          ctx
+          |> conn(:get, %{"table" => "public.users"}, "?offset=-1")
+          |> call_serve_shape_plug(ctx)
+
+        assert conn.status == 503
+
+        assert_receive {:telemetry_serve_shape, [:electric, :plug, :serve_shape], _measurements,
+                        %{stack_id: ^stack_id} = metadata}
+
+        assert metadata.status == 503
+        assert metadata.known_error == true
       after
         :telemetry.detach(handler_id)
       end
