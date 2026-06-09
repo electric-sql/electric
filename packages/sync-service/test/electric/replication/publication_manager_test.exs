@@ -334,6 +334,41 @@ defmodule Electric.Replication.PublicationManagerTest do
       assert_receive {:configure_cast, second_filters}, 500
       assert MapSet.size(second_filters) == 2
     end
+
+    @tag update_debounce_timeout: 0
+    test "re-issues a configure cast after a per-relation configuration error", ctx do
+      test_pid = self()
+
+      Repatch.patch(
+        PublicationManager.Configurator,
+        :configure_publication,
+        [mode: :shared],
+        fn _stack_id, _filters -> send(test_pid, :configure_cast) end
+      )
+
+      relation_tracker = PublicationManager.RelationTracker.name(ctx.stack_id)
+      oid_rel = ctx.relation_with_oid
+
+      shape1 = generate_shape(ctx.relation_with_oid, @where_clause_1)
+      run_async(fn -> PublicationManager.add_shape(ctx.stack_id, @shape_handle_1, shape1) end)
+
+      # First submission is now in flight.
+      assert_receive :configure_cast
+
+      # Simulate the in-flight chain reporting a per-relation error for the
+      # relation it was configuring.
+      GenServer.cast(
+        relation_tracker,
+        {:relation_configuration_result, oid_rel, {:error, %RuntimeError{message: "boom"}}}
+      )
+
+      # A subsequent add on the SAME relation (no change to prepared filters)
+      # must re-arm the retry path and issue a fresh cast.
+      shape2 = generate_shape(ctx.relation_with_oid, @where_clause_2)
+      run_async(fn -> PublicationManager.add_shape(ctx.stack_id, @shape_handle_2, shape2) end)
+
+      assert_receive :configure_cast, 500
+    end
   end
 
   describe "remove_shape/2" do
