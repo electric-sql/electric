@@ -306,8 +306,8 @@ Electric separates parameters by purpose:
 - `table` — Root table name (required)
 - `offset` — Shape log position (required, e.g., `-1` for initial sync)
 - `handle` — Shape handle for continuation requests
-- `queryable_columns` — Column allow-list for subset filtering, subset ordering, and synced projections
-- `columns` — Synced column projection
+- `columns` — Columns to sync on the table (if not set, defaults to all columns)
+- `queryable_columns` — Column allow-list for subset filtering, subset ordering, and which columns are synced
 - `where` — Main shape WHERE clause (for non-subset queries)
 - `replica`, `log`, `live`, `live_sse` — Protocol options
 - `secret` / `api_secret` — API authentication
@@ -334,7 +334,7 @@ The proxy must set these **shape definition parameters** server-side — they de
 | Parameter | Where | Security Consideration |
 |-----------|-------|------------------------|
 | `table` | URL | **Must be set server-side.** Letting clients specify the table allows access to any table. |
-| `queryable_columns` | URL | **Must be set server-side if the table has sensitive columns.** Column allow-list for subset filters, subset ordering, and synced projections. It does not restrict the main shape WHERE clause. |
+| `queryable_columns` | URL | **Must be set server-side if the table has sensitive columns.** Column allow-list for subset filters, subset ordering, and which columns are synced. It does not restrict the main shape WHERE clause. |
 | `where` | URL | **Must be set server-side.** This is your authorization filter — the main shape WHERE that restricts all queries. |
 | `secret` | URL | **Must be set server-side.** Never expose the API secret to clients. |
 
