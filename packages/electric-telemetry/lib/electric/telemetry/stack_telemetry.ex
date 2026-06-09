@@ -93,6 +93,11 @@ defmodule ElectricTelemetry.StackTelemetry do
         unit: :byte,
         keep: fn metadata -> metadata[:live] != true end
       ),
+      counter("electric.plug.serve_shape.requests.count",
+        event_name: [:electric, :plug, :serve_shape],
+        measurement: :count,
+        tags: [:status, :known_error, :live]
+      ),
       distribution("electric.shape.response_size.bytes",
         unit: :byte,
         tags: [:root_table, :is_live, :stack_id]

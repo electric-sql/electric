@@ -305,13 +305,20 @@ export async function sendEntityMessage({
 }
 
 export function readTextPayload(payload: unknown): string {
+  if (typeof payload === `string`) return payload
   if (payload && typeof payload === `object`) {
-    const text = (payload as { text?: unknown }).text
-    if (typeof text === `string`) return text
-    const source = (payload as { source?: unknown }).source
-    if (typeof source === `string`) return source
+    // Prefer the canonical `text` key (what the chat input emits and what
+    // the `send` tool's description recommends), then fall back to
+    // `message` / `content` / `source` since agents sometimes emit those
+    // when the shape guidance isn't internalised. Keeps casually-shaped
+    // agent-to-agent sends visible in the chat instead of rendering blank.
+    const candidates = [`text`, `message`, `content`, `source`] as const
+    for (const key of candidates) {
+      const value = (payload as Record<string, unknown>)[key]
+      if (typeof value === `string`) return value
+    }
   }
-  return typeof payload === `string` ? payload : ``
+  return ``
 }
 
 function principalUrl(principalKey: string): string {

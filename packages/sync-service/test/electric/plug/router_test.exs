@@ -1061,6 +1061,81 @@ defmodule Electric.Plug.RouterTest do
       assert [%{"key" => ^key, "value" => ^value}, _] = Jason.decode!(conn.resp_body)
     end
 
+    @tag with_sql: [
+           "CREATE TABLE queryable_users (id BIGINT PRIMARY KEY, name TEXT NOT NULL, secret_token TEXT NOT NULL)",
+           "INSERT INTO queryable_users VALUES (1, 'Alice', 'supersecret123')"
+         ]
+    test "GET allows main where clauses outside queryable_columns", %{opts: opts} do
+      conn =
+        conn("GET", "/v1/shape", %{
+          table: "queryable_users",
+          offset: "-1",
+          queryable_columns: "id,name",
+          columns: "id,name",
+          where: "secret_token LIKE 'super%'"
+        })
+        |> Router.call(opts)
+
+      assert %{status: 200} = conn
+
+      assert [
+               %{
+                 "headers" => %{"operation" => "insert"},
+                 "value" => %{"id" => "1", "name" => "Alice"}
+               },
+               %{"headers" => %{"control" => "snapshot-end"}}
+             ] = Jason.decode!(conn.resp_body)
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE queryable_users (id BIGINT PRIMARY KEY, name TEXT NOT NULL, secret_token TEXT NOT NULL)",
+           "INSERT INTO queryable_users VALUES (1, 'Alice', 'supersecret123')"
+         ]
+    test "GET rejects selected columns outside queryable_columns", %{opts: opts} do
+      conn =
+        conn("GET", "/v1/shape", %{
+          table: "queryable_users",
+          offset: "-1",
+          queryable_columns: "id,name",
+          columns: "id,name,secret_token"
+        })
+        |> Router.call(opts)
+
+      assert %{status: 400} = conn
+
+      assert %{
+               "errors" => %{
+                 "columns" => ["The following columns are not found on the table: secret_token"]
+               }
+             } = Jason.decode!(conn.resp_body)
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE queryable_users (id BIGINT PRIMARY KEY, name TEXT NOT NULL, secret_token TEXT NOT NULL)",
+           "INSERT INTO queryable_users VALUES (1, 'Alice', 'supersecret123')"
+         ]
+    test "GET defaults selected columns to queryable_columns when columns are omitted", %{
+      opts: opts
+    } do
+      conn =
+        conn("GET", "/v1/shape", %{
+          table: "queryable_users",
+          offset: "-1",
+          queryable_columns: "id,name"
+        })
+        |> Router.call(opts)
+
+      assert %{status: 200} = conn
+
+      assert [
+               %{
+                 "headers" => %{"operation" => "insert"},
+                 "value" => %{"id" => "1", "name" => "Alice"}
+               },
+               %{"headers" => %{"control" => "snapshot-end"}}
+             ] = Jason.decode!(conn.resp_body)
+    end
+
     test "GET works when there are changes not related to the shape in the same txn", %{
       opts: opts,
       db_conn: db_conn
@@ -3475,6 +3550,80 @@ defmodule Electric.Plug.RouterTest do
                shape_req(req, ctx.opts,
                  subset: %{where: "value ILIKE $1", params: %{"1" => "%2"}}
                )
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE queryable_users (id BIGINT PRIMARY KEY, name TEXT NOT NULL, secret_token TEXT NOT NULL)",
+           "INSERT INTO queryable_users VALUES (1, 'Alice', 'supersecret123')",
+           "INSERT INTO queryable_users VALUES (2, 'Bob', 'public')"
+         ]
+    test "subset snapshots allow subset__where on queryable columns that are not selected", ctx do
+      conn =
+        conn("GET", "/v1/shape", %{
+          "table" => "queryable_users",
+          "offset" => "-1",
+          "queryable_columns" => "id,name,secret_token",
+          "columns" => "id,name",
+          "subset__where" => "secret_token = 'supersecret123'"
+        })
+        |> Router.call(ctx.opts)
+
+      assert %{status: 200} = conn
+
+      assert %{
+               "metadata" => _,
+               "data" => [
+                 %{
+                   "value" => %{"id" => "1", "name" => "Alice"}
+                 }
+               ]
+             } = Jason.decode!(conn.resp_body)
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE queryable_users (id BIGINT PRIMARY KEY, name TEXT NOT NULL, secret_token TEXT NOT NULL)",
+           "INSERT INTO queryable_users VALUES (1, 'Alice', 'supersecret123')"
+         ]
+    test "subset snapshots reject subset__where clauses outside queryable_columns", ctx do
+      conn =
+        conn("GET", "/v1/shape", %{
+          "table" => "queryable_users",
+          "offset" => "-1",
+          "queryable_columns" => "id,name",
+          "columns" => "id,name",
+          "subset__where" => "secret_token = 'supersecret123'"
+        })
+        |> Router.call(ctx.opts)
+
+      assert %{status: 400} = conn
+
+      assert %{"errors" => %{"subset" => %{"where" => [message]}}} =
+               Jason.decode!(conn.resp_body)
+
+      assert message =~ "unknown reference secret_token"
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE queryable_users (id BIGINT PRIMARY KEY, name TEXT NOT NULL, secret_token TEXT NOT NULL)",
+           "INSERT INTO queryable_users VALUES (1, 'Alice', 'supersecret123')"
+         ]
+    test "subset snapshots reject subset__order_by outside queryable_columns", ctx do
+      conn =
+        conn("GET", "/v1/shape", %{
+          "table" => "queryable_users",
+          "offset" => "-1",
+          "queryable_columns" => "id,name",
+          "columns" => "id,name",
+          "subset__order_by" => "secret_token ASC"
+        })
+        |> Router.call(ctx.opts)
+
+      assert %{status: 400} = conn
+
+      assert %{"errors" => %{"subset" => %{"order_by" => [message]}}} =
+               Jason.decode!(conn.resp_body)
+
+      assert message =~ "unknown reference secret_token"
     end
 
     @tag with_sql: [

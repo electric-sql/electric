@@ -15,6 +15,7 @@ export interface Dockerode {
     filters?: Record<string, ReadonlyArray<string>>
   }): Promise<ReadonlyArray<{ Id: string; Names?: ReadonlyArray<string> }>>
   pull(image: string, opts?: unknown): Promise<NodeJS.ReadableStream>
+  getImage(name: string): { inspect(): Promise<unknown> }
   modem: {
     followProgress(
       stream: NodeJS.ReadableStream,

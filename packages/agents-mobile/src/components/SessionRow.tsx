@@ -59,6 +59,7 @@ export const SessionRow = memo(function SessionRow({
   expanded = false,
   onToggleExpand,
   onPress,
+  onLongPress,
   connector = null,
   currentPrincipalUrl = null,
 }: {
@@ -68,6 +69,7 @@ export const SessionRow = memo(function SessionRow({
   expanded?: boolean
   onToggleExpand?: () => void
   onPress: () => void
+  onLongPress?: () => void
   connector?: SessionRowConnector | null
   currentPrincipalUrl?: string | null
 }): React.ReactElement {
@@ -93,7 +95,16 @@ export const SessionRow = memo(function SessionRow({
         />
       ) : null}
 
-      <Pressable style={[styles.rowMain, { paddingLeft }]} onPress={onPress}>
+      <Pressable
+        style={[styles.rowMain, { paddingLeft }]}
+        onPress={onPress}
+        onLongPress={onLongPress}
+        // 350ms; RN's 500ms default feels unresponsive for a context menu.
+        delayLongPress={350}
+        accessibilityHint={
+          onLongPress ? `Long press for session options` : undefined
+        }
+      >
         {({ pressed }) => (
           <>
             <View

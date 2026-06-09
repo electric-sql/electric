@@ -11,7 +11,7 @@ import {
 } from '../lib/sendMessage'
 import { ComposerEditor, serializeComposerInput } from './ComposerEditor'
 import { ComposerShell } from './ComposerShell'
-import { Icon, Stack, Text } from '../ui'
+import { Icon, Stack, Text, Tooltip } from '../ui'
 import {
   AttachmentActionMenu,
   AttachmentPreviewTray,
@@ -295,7 +295,11 @@ export function MessageInput({
   )
 
   const isButtonActive = canSubmit || (showStop && !stopDisabled)
-
+  const sendTooltip = showStop
+    ? stopDisabled
+      ? `Signal permission required`
+      : `Stop generating`
+    : `Send message`
   return (
     <Stack direction="column" gap={0} className={styles.root}>
       {drawer?.({
@@ -355,43 +359,42 @@ export function MessageInput({
           ) : null
         }
         send={
-          <button
-            type="button"
-            aria-label={showStop ? `Stop generating` : `Send message`}
-            title={
-              showStop
-                ? stopDisabled
-                  ? `Signal permission required`
-                  : `Stop generating`
-                : `Send message`
-            }
-            // Keep the textarea focused when the user taps Send on a
-            // touch device. Without this, tapping the button blurs the
-            // textarea, dismisses the on-screen keyboard, and the
-            // viewport reflows between pointerdown and pointerup — the
-            // resulting `click` lands on a different element and the
-            // send never fires. `preventDefault` here skips the implicit
-            // focus transfer; the `click` still dispatches normally.
-            onPointerDown={(e) => {
-              if (e.pointerType !== `mouse`) e.preventDefault()
-            }}
-            onClick={handleComposerAction}
-            disabled={showStop ? !canStop : !isButtonActive}
-            className={[
-              styles.composerSend,
-              isButtonActive ? styles.active : null,
-              showStop ? styles.stop : null,
-              stopPending && showStop ? styles.stopPending : null,
-            ]
-              .filter(Boolean)
-              .join(` `)}
-          >
-            <Icon
-              icon={showStop ? Square : ArrowUp}
-              size={showStop ? 2 : 3}
-              {...(showStop ? { fill: `currentColor`, strokeWidth: 0 } : {})}
-            />
-          </button>
+          <Tooltip content={sendTooltip} side="top">
+            <span className={styles.tooltipTrigger}>
+              <button
+                type="button"
+                aria-label={showStop ? `Stop generating` : `Send message`}
+                // Keep the textarea focused when the user taps Send on a
+                // touch device. Without this, tapping the button blurs the
+                // textarea, dismisses the on-screen keyboard, and the
+                // viewport reflows between pointerdown and pointerup — the
+                // resulting `click` lands on a different element and the
+                // send never fires. `preventDefault` here skips the implicit
+                // focus transfer; the `click` still dispatches normally.
+                onPointerDown={(e) => {
+                  if (e.pointerType !== `mouse`) e.preventDefault()
+                }}
+                onClick={handleComposerAction}
+                disabled={showStop ? !canStop : !isButtonActive}
+                className={[
+                  styles.composerSend,
+                  isButtonActive ? styles.active : null,
+                  showStop ? styles.stop : null,
+                  stopPending && showStop ? styles.stopPending : null,
+                ]
+                  .filter(Boolean)
+                  .join(` `)}
+              >
+                <Icon
+                  icon={showStop ? Square : ArrowUp}
+                  size={showStop ? 2 : 3}
+                  {...(showStop
+                    ? { fill: `currentColor`, strokeWidth: 0 }
+                    : {})}
+                />
+              </button>
+            </span>
+          </Tooltip>
         }
       >
         <ComposerEditor

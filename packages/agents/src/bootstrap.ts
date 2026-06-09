@@ -8,10 +8,14 @@ import {
   createEntityRegistry,
   createRuntimeHandler,
 } from '@electric-ax/agents-runtime'
-import { createEventSourceTools } from '@electric-ax/agents-runtime/tools'
+import {
+  createEventSourceTools,
+  createScheduleTools,
+} from '@electric-ax/agents-runtime/tools'
 import {
   chooseDefaultSandbox,
   isE2BAvailable,
+  lazySandbox,
   remoteSandbox,
   type SandboxProfile,
 } from '@electric-ax/agents-runtime/sandbox'
@@ -40,6 +44,13 @@ export interface AgentHandlerResult {
   registry: EntityRegistry
   typeNames: Array<string>
   skillsRegistry: SkillsRegistry | null
+  /**
+   * Immediately tears down the idle sandboxes this process created (set when
+   * a provider with host-local state — docker — is registered). MUST be called
+   * on shutdown, after wakes drain: the providers' debounced idle teardowns
+   * die with the process, which would leave containers running.
+   */
+  shutdownSandboxes: (() => Promise<void>) | null
 }
 
 export type BuiltinElectricToolsFactory = NonNullable<
@@ -85,7 +96,10 @@ export function createBuiltinElectricTools(
   custom?: BuiltinElectricToolsFactory
 ): BuiltinElectricToolsFactory {
   return async (context) => {
-    const builtinTools = createEventSourceTools(context)
+    const builtinTools = [
+      ...createEventSourceTools(context),
+      ...createScheduleTools({ ...context, db: context.db as any }),
+    ]
     const customTools = custom ? await custom(context) : []
     return dedupeToolsByName([...builtinTools, ...customTools])
   }
@@ -154,7 +168,8 @@ export async function createBuiltinAgentHandler(
   registerWorker(registry, { workingDirectory: cwd, streamFn, modelCatalog })
   typeNames.push(`worker`)
 
-  const sandboxProfiles = await buildBuiltinSandboxProfiles(cwd)
+  const { profiles: sandboxProfiles, shutdownSandboxes } =
+    await buildBuiltinSandboxProfiles(cwd)
 
   const runtime = createRuntimeHandler({
     baseUrl: agentServerUrl,
@@ -176,6 +191,7 @@ export async function createBuiltinAgentHandler(
     registry,
     typeNames,
     skillsRegistry,
+    shutdownSandboxes,
   }
 }
 
@@ -211,7 +227,7 @@ export const registerAgentTypes = registerBuiltinAgentTypes
  * Guard so repeated `buildBuiltinSandboxProfiles` calls in one process don't
  * re-run the boot sweep.
  */
-let dockerSweptOnBoot = false
+let dockerBootSweep: Promise<void> | null = null
 
 type SweepOrphanedDockerSandboxes =
   // eslint-disable-next-line quotes -- type-position import() requires a string literal
@@ -219,17 +235,15 @@ type SweepOrphanedDockerSandboxes =
 
 function sweepOrphanedDockerSandboxesOnce(
   sweep: SweepOrphanedDockerSandboxes
-): void {
-  if (dockerSweptOnBoot) return
-  dockerSweptOnBoot = true
-  // One-shot, at boot: reclaim any sandbox containers a previous (crashed)
-  // process left behind. Fire-and-forget — nothing is acquired yet, and within
-  // a live process shared containers are stopped (not removed) when idle.
-  sweep()
-    .then((removed) => {
-      if (removed.length > 0) {
+): Promise<void> {
+  // One-shot, at boot: reclaim any sandbox containers a previous (crashed or
+  // quit) process left behind. Awaited by the caller — the sweep can stop
+  // running orphans, so it must finish before any wake reattaches by key.
+  dockerBootSweep ??= sweep()
+    .then((reclaimed) => {
+      if (reclaimed.length > 0) {
         serverLog.info(
-          `[builtin-agents] docker sandbox boot sweep removed ${removed.length} leftover container(s)`
+          `[builtin-agents] docker sandbox boot sweep reclaimed ${reclaimed.length} leftover container(s)`
         )
       }
     })
@@ -238,16 +252,23 @@ function sweepOrphanedDockerSandboxesOnce(
         `[builtin-agents] docker sandbox boot sweep error: ${err instanceof Error ? err.message : String(err)}`
       )
     )
+  return dockerBootSweep
 }
 
 /**
  * Built-in sandbox profiles. `local` is always available. `docker` is
  * gated on Docker being reachable so a user without Docker installed
  * sees only what works — the UI never offers a non-functional choice.
+ *
+ * Also returns `shutdownSandboxes` when a host-local provider registered: an
+ * immediate teardown of this process's live containers that the embedding
+ * server must run on shutdown (the providers' debounced idle teardowns die
+ * with the process).
  */
-async function buildBuiltinSandboxProfiles(
-  workingDirectory: string
-): Promise<Array<SandboxProfile>> {
+async function buildBuiltinSandboxProfiles(workingDirectory: string): Promise<{
+  profiles: Array<SandboxProfile>
+  shutdownSandboxes: (() => Promise<void>) | null
+}> {
   const profiles: Array<SandboxProfile> = [
     {
       name: `local`,
@@ -257,25 +278,32 @@ async function buildBuiltinSandboxProfiles(
         chooseDefaultSandbox(resolveCwd(args, workingDirectory)),
     },
   ]
+  let shutdownSandboxes: (() => Promise<void>) | null = null
 
   try {
     const { isDockerAvailable } = await import(
       `@electric-ax/agents-runtime/sandbox/docker`
     )
     if (await isDockerAvailable()) {
-      const { dockerSandbox, sweepOrphanedDockerSandboxes } = await import(
-        `@electric-ax/agents-runtime/sandbox/docker`
-      )
-      // Reclaim containers a previous crashed process may have left running.
-      // No periodic reaper: within a live process, shared containers stop
-      // themselves a short while after their last lease disposes (debounced
-      // idle-stop), and ephemeral ones are killed on dispose.
-      sweepOrphanedDockerSandboxesOnce(sweepOrphanedDockerSandboxes)
+      const {
+        dockerSandbox,
+        reclaimDockerSandboxByKey,
+        shutdownAllDockerSandboxes,
+        sweepOrphanedDockerSandboxes,
+      } = await import(`@electric-ax/agents-runtime/sandbox/docker`)
+      // Reclaim containers a previous process (crash, force-quit, or a
+      // shutdown that raced the debounced teardowns) left behind. No periodic
+      // reaper: within a live process, shared containers stop themselves a
+      // short while after their last lease disposes (debounced idle-stop),
+      // ephemeral ones are killed on dispose, and the rest are flushed by
+      // `shutdownSandboxes` on clean shutdown.
+      await sweepOrphanedDockerSandboxesOnce(sweepOrphanedDockerSandboxes)
+      shutdownSandboxes = shutdownAllDockerSandboxes
       profiles.push({
         name: `docker`,
         label: `Docker`,
         description: `Runs in a hardened Docker container: dropped capabilities, no privilege escalation, and CPU/memory/process limits. The chosen working directory is mounted read-write and, by default, network egress is unrestricted (allow-all).`,
-        factory: ({
+        factory: async ({
           args,
           sandboxKey,
           persistent,
@@ -284,25 +312,41 @@ async function buildBuiltinSandboxProfiles(
           entityUrl,
         }) => {
           const cwd = readWorkingDirectoryArg(args)
-          return dockerSandbox({
-            // Default to open egress for local development. Network policy is a
-            // capability of this profile, not a separate profile: like the
-            // working directory above, it can be made a per-spawn arg later so a
-            // single `docker` profile spans permissive → fully-isolated rather
-            // than splitting into `docker-permissive` / `docker-isolated`.
-            initialNetworkPolicy: { mode: `allow-all` },
-            extraMounts: cwd
-              ? [{ hostPath: cwd, containerPath: `/work`, readOnly: false }]
+          // Lazy: the container is only created/started when the wake actually
+          // USES the sandbox, so trivial wakes (cron ticks, bookkeeping) don't
+          // spin one up. `/work` is the container cwd dockerSandbox defaults to.
+          return lazySandbox({
+            name: `docker`,
+            workingDirectory: `/work`,
+            factory: () =>
+              dockerSandbox({
+                // Default to open egress for local development. Network policy
+                // is a capability of this profile, not a separate profile: like
+                // the working directory above, it can be made a per-spawn arg
+                // later so a single `docker` profile spans permissive →
+                // fully-isolated rather than splitting into `docker-permissive`
+                // / `docker-isolated`.
+                initialNetworkPolicy: { mode: `allow-all` },
+                extraMounts: cwd
+                  ? [{ hostPath: cwd, containerPath: `/work`, readOnly: false }]
+                  : undefined,
+                // The container is always named-by-key and reattachable;
+                // `persistent` chooses idle teardown (stop vs remove) and
+                // `owner` gates creation (an attacher reattaches only). All
+                // resolved upstream from config.
+                sandboxKey,
+                persistent,
+                owner,
+                // Observability: tag the container/labels with who spawned it.
+                entityType,
+                entityUrl,
+              }),
+            // A terminal entity whose final wake never used the sandbox must
+            // still wipe the persistent workspace earlier wakes created. Owner
+            // leases only — an attacher can never reclaim the owner's sandbox.
+            reclaim: owner
+              ? () => reclaimDockerSandboxByKey(sandboxKey)
               : undefined,
-            // The container is always named-by-key and reattachable; `persistent`
-            // chooses idle teardown (stop vs remove) and `owner` gates creation
-            // (an attacher reattaches only). All resolved upstream from config.
-            sandboxKey,
-            persistent,
-            owner,
-            // Observability: tag the container/labels with who spawned it.
-            entityType,
-            entityUrl,
           })
         },
       })
@@ -354,7 +398,7 @@ async function buildBuiltinSandboxProfiles(
   console.log(
     `[builtin-agents] sandbox profiles advertised: ${profiles.map((p) => p.name).join(`, `)}`
   )
-  return profiles
+  return { profiles, shutdownSandboxes }
 }
 
 function readWorkingDirectoryArg(

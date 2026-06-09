@@ -156,9 +156,34 @@ const SANDBOX_ENTITY_LABEL = `com.electric.sandbox.entity`
  * key) and only reclaims ephemeral leftovers.
  */
 const SANDBOX_PERSISTENT_LABEL = `com.electric.sandbox.persistent`
+/**
+ * PID of the process that created the container. The boot sweep probes it
+ * (same host as the daemon's clients) to tell a live sibling's container from
+ * a crash/quit leftover — the keepalive loop never exits on its own, so a dead
+ * owner's container stays RUNNING forever without this.
+ */
+const SANDBOX_OWNER_PID_LABEL = `com.electric.sandbox.owner-pid`
+/**
+ * Compose-style grouping labels. Docker Desktop (and other GUI clients) group
+ * containers by compose project, so every sandbox shows up under one
+ * collapsible `electric-sandboxes` entry and can be stopped / deleted together
+ * — also via `docker compose -p electric-sandboxes down`.
+ */
+const COMPOSE_PROJECT_LABEL = `com.docker.compose.project`
+const COMPOSE_SERVICE_LABEL = `com.docker.compose.service`
+const COMPOSE_PROJECT_NAME = `electric-sandboxes`
 
 /** Common prefix for every container name this module assigns. */
 const NAME_PREFIX = `electric-sbx`
+
+/**
+ * In-container record of the process that most recently ADOPTED the container
+ * (reattached by key after its creator exited). Labels are immutable, so the
+ * creation-time owner pid goes stale on reattach; the boot sweep probes this
+ * marker before reclaiming a running container whose labelled owner is dead.
+ * Lives on the /tmp tmpfs, so a stop wipes it along with any stale adoption.
+ */
+const OWNER_MARKER_PATH = `/tmp/.electric-sbx-owner-pid`
 
 /** Default warm window before an idle container is torn down (stop/remove). */
 const DEFAULT_IDLE_GRACE_MS = 2 * 60 * 1000
@@ -207,6 +232,33 @@ function withKeyLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
     )
   )
   return run
+}
+
+/**
+ * Bound on concurrent container CREATIONS (image resolve + create + start +
+ * init), so a burst of wakes materializing sandboxes at once — e.g. a backlog
+ * replay when a runner reconnects — queues against the daemon instead of
+ * stampeding it. Reattaches and execs are not limited; total creations are
+ * unbounded, only their concurrency.
+ */
+const MAX_CONCURRENT_CREATIONS = 4
+let creationSlots = MAX_CONCURRENT_CREATIONS
+const creationQueue: Array<() => void> = []
+async function withCreationSlot<T>(fn: () => Promise<T>): Promise<T> {
+  if (creationSlots > 0) {
+    creationSlots -= 1
+  } else {
+    await new Promise<void>((release) => creationQueue.push(release))
+  }
+  try {
+    return await fn()
+  } finally {
+    // Hand the slot directly to the next waiter (no decrement on their side),
+    // so a new caller can't race in between release and re-acquire.
+    const next = creationQueue.shift()
+    if (next) next()
+    else creationSlots += 1
+  }
 }
 
 /** Lowercase, DNS-safe slug from an arbitrary identity string (≤24 chars). */
@@ -421,6 +473,9 @@ export async function dockerSandbox(
     [SANDBOX_LABEL]: `1`,
     [SANDBOX_KEY_LABEL]: sandboxKey,
     [SANDBOX_PERSISTENT_LABEL]: persistent ? `true` : `false`,
+    [SANDBOX_OWNER_PID_LABEL]: String(process.pid),
+    [COMPOSE_PROJECT_LABEL]: COMPOSE_PROJECT_NAME,
+    [COMPOSE_SERVICE_LABEL]: opts.entityType ?? `sandbox`,
     ...(opts.entityType
       ? { [SANDBOX_ENTITY_TYPE_LABEL]: opts.entityType }
       : {}),
@@ -429,39 +484,59 @@ export async function dockerSandbox(
   }
 
   // Create-and-start a fresh container. Image is pulled here only (skipped
-  // entirely when reattaching to an existing container).
-  const createStarted = async (): Promise<DockerodeContainer> => {
-    const image = resolveImage(opts)
-    await ensureImage(docker, image, opts)
-    const c = await docker.createContainer({
-      // Spread (rather than a literal `name:`) so the `name` query param —
-      // which dockerode accepts but doesn't declare on its create-opts type —
-      // doesn't trip excess-property checking.
-      ...{ name: containerName },
-      Image: image,
-      Cmd: [`sh`, `-c`, `while true; do sleep 3600; done`],
-      WorkingDir: containerCwd,
-      Env: Object.entries(baseEnv).map(([k, v]) => `${k}=${v}`),
-      Labels: labels,
-      ExposedPorts: exposedPorts,
-      HostConfig,
+  // entirely when reattaching to an existing container). Creation concurrency
+  // is bounded process-wide (see withCreationSlot).
+  const createStarted = (): Promise<DockerodeContainer> =>
+    withCreationSlot(async (): Promise<DockerodeContainer> => {
+      const image = resolveImage(opts)
+      await ensureImage(docker, image, opts)
+      const c = await docker.createContainer({
+        // Spread (rather than a literal `name:`) so the `name` query param —
+        // which dockerode accepts but doesn't declare on its create-opts type —
+        // doesn't trip excess-property checking.
+        ...{ name: containerName },
+        Image: image,
+        Cmd: [`sh`, `-c`, `while true; do sleep 3600; done`],
+        WorkingDir: containerCwd,
+        Env: Object.entries(baseEnv).map(([k, v]) => `${k}=${v}`),
+        Labels: labels,
+        ExposedPorts: exposedPorts,
+        HostConfig,
+      })
+      try {
+        await c.start()
+      } catch (err) {
+        await c.remove({ force: true, v: true }).catch(() => {})
+        throw new SandboxError(
+          `runtime`,
+          `dockerSandbox: container start failed: ${
+            err instanceof Error ? err.message : String(err)
+          }`
+        )
+      }
+      // Tmpfs on `/work` is empty at start; ensure caller-supplied workingDir
+      // exists with sensible perms. If this post-start init fails — the exec
+      // call throws, or the mkdir can't run / exits non-zero (a null exit code
+      // means the exec never produced one, e.g. it couldn't spawn at all) —
+      // remove the already-started container before rethrowing: it isn't
+      // registered yet, so no dispose (and, while running, no sweep) would
+      // ever reclaim it.
+      try {
+        const init = await runOneOff(c, [`mkdir`, `-p`, containerCwd])
+        if (init.exitCode !== 0) {
+          throw new SandboxError(
+            `runtime`,
+            `dockerSandbox: post-start init failed: \`mkdir -p ${containerCwd}\` exited ${init.exitCode ?? `without a code`}${
+              init.stderr.length > 0 ? `: ${init.stderr.toString().trim()}` : ``
+            }`
+          )
+        }
+      } catch (err) {
+        await c.remove({ force: true, v: true }).catch(() => {})
+        throw err
+      }
+      return c
     })
-    try {
-      await c.start()
-    } catch (err) {
-      await c.remove({ force: true, v: true }).catch(() => {})
-      throw new SandboxError(
-        `runtime`,
-        `dockerSandbox: container start failed: ${
-          err instanceof Error ? err.message : String(err)
-        }`
-      )
-    }
-    // Tmpfs on `/work` is empty at start; ensure caller-supplied workingDir
-    // exists with sensible perms.
-    await runOneOff(c, [`mkdir`, `-p`, containerCwd])
-    return c
-  }
 
   // Serialize reattach + registration against the debounced idle teardown
   // (which holds the same per-key lock), so a re-acquire can't race a teardown
@@ -497,6 +572,23 @@ export async function dockerSandbox(
 }
 
 /**
+ * Best-effort: record this process as the container's current owner in the
+ * in-container marker (see {@link OWNER_MARKER_PATH}). Called on the reattach
+ * paths — where the immutable creation-time owner-pid label may belong to an
+ * exited process — so the boot sweep can tell an adopted container from a
+ * crash leftover.
+ */
+async function writeOwnerMarker(c: DockerodeContainer): Promise<void> {
+  await runOneOff(c, [
+    `sh`,
+    `-c`,
+    `echo ${process.pid} > ${OWNER_MARKER_PATH}`,
+  ]).catch(() => {
+    /* best-effort */
+  })
+}
+
+/**
  * Resolve a container by name: reattach to an existing one (starting it if a
  * persistent container had been stopped) or create it fresh. Handles the race
  * where a concurrent caller creates the named container first (409).
@@ -520,6 +612,7 @@ async function reattachOrCreate(
       // and exec/fs round-trips work again.
       await existing.start().catch(() => {})
     }
+    await writeOwnerMarker(existing)
     return existing
   }
   try {
@@ -560,34 +653,72 @@ async function reattachExisting(
     )
   }
   if (!running) await existing.start().catch(() => {})
+  await writeOwnerMarker(existing)
   return existing
 }
 
 function isNameConflict(err: unknown): boolean {
-  const status = (err as { statusCode?: number; status?: number })?.statusCode
-  if (status === 409) return true
-  return /already in use|Conflict/i.test(
+  // Match the daemon's name-conflict message, not bare HTTP 409 — the daemon
+  // also answers 409 for unrelated conflicts that can surface from inside
+  // `createStarted` (e.g. exec on a container that just exited), and treating
+  // those as a lost create race would "reattach" to a container that is gone.
+  return /already in use/i.test(
     err instanceof Error ? err.message : String(err)
   )
 }
 
 /**
- * One-shot startup cleanup of *ephemeral* sandbox leftovers from a previous
- * process (a crash or restart before disposes ran). Call once at runner boot.
+ * Same-host liveness probe for the pid recorded on a container at creation.
+ * `kill(pid, 0)` delivers no signal; EPERM means the pid exists but belongs to
+ * another user — still alive. A reused pid reads as alive (the orphan is then
+ * left for a later sweep), which errs on the safe side.
+ */
+function isPidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === `EPERM`
+  }
+}
+
+/**
+ * Read the adoption marker (see {@link OWNER_MARKER_PATH}) from a RUNNING
+ * container. `null` when absent or unreadable — the sweep then falls back to
+ * the creation-time owner-pid label alone.
+ */
+async function readOwnerMarker(c: DockerodeContainer): Promise<number | null> {
+  try {
+    const r = await runOneOff(c, [`cat`, OWNER_MARKER_PATH])
+    if (r.exitCode !== 0) return null
+    const pid = Number(r.stdout.toString().trim())
+    return Number.isInteger(pid) && pid > 0 ? pid : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * One-shot startup cleanup of sandbox leftovers from a previous process (a
+ * crash, force-quit, or shutdown before disposes ran). Call once at runner
+ * boot.
  *
- * Two containers are deliberately left untouched:
- *  - RUNNING containers — they may belong to a live sibling runner (or a
- *    concurrent test run) sharing this Docker daemon; force-removing those
- *    would wipe another process's in-use sandbox. Reboot/crash leftovers are
- *    `Exited` once the daemon restarts, so the common case is still reclaimed;
- *    a still-running ephemeral orphan is left for a manual labelled prune
- *    rather than risk a live peer.
- *  - PERSISTENT containers — `persistent: true` exists precisely so a restarted
- *    process can reattach to the warm workspace by key, so they must survive a
- *    boot (only ephemeral leftovers are reclaimed here; a manual labelled prune
- *    reclaims truly-abandoned persistent ones).
+ * The keepalive loop never exits on its own, so a leftover is usually still
+ * RUNNING — but so is a live sibling runner's container on the same daemon.
+ * The owner-pid label disambiguates (the sweep runs on the same host as the
+ * daemon's clients): owner alive ⇒ leave it; owner dead ⇒ check the
+ * in-container adoption marker (a live process that reattached after the
+ * creator exited) and, if no adopter is alive either, reclaim — REMOVE an
+ * ephemeral orphan, STOP a persistent one (its writable layer must survive so
+ * the next wake can reattach by key). A running container without the label
+ * (created before it existed) can't be probed and is left for a manual
+ * labelled prune.
  *
- * Returns the names removed.
+ * Non-running containers: ephemeral leftovers are removed; persistent ones are
+ * preserved — `persistent: true` exists precisely so a restarted process can
+ * reattach to the warm workspace by key.
+ *
+ * Returns the names reclaimed (removed or stopped).
  */
 export async function sweepOrphanedDockerSandboxes(opts?: {
   dockerSocket?: string
@@ -612,21 +743,128 @@ export async function sweepOrphanedDockerSandboxes(opts?: {
     return []
   }
 
-  const removed: Array<string> = []
-  for (const c of listed) {
-    const name = c.Names?.[0]?.replace(/^\//, ``) ?? c.Id
-    // Never touch a running container (possibly a live peer) or a persistent
-    // one (meant to be reattached by key). See the doc comment above.
-    if (c.State === `running`) continue
-    if (c.Labels?.[SANDBOX_PERSISTENT_LABEL] === `true`) continue
-    try {
-      await docker.getContainer(c.Id).remove({ force: true, v: true })
-      removed.push(name)
-    } catch {
-      /* already gone */
+  // Probe + reclaim every leftover concurrently. The running-orphan path runs an
+  // exec round-trip (readOwnerMarker) and the whole sweep is awaited at boot, so
+  // a sequential loop would serialize one exec per leftover — and the motivating
+  // case is "15+ leftovers". Each container is independent (distinct name, no
+  // shared lock), so fanning out keeps boot latency flat as leftovers pile up.
+  const reclaimed = await Promise.all(
+    listed.map(async (c): Promise<string | null> => {
+      const name = c.Names?.[0]?.replace(/^\//, ``) ?? c.Id
+      // Held by this very process right now — its lifecycle is already managed.
+      if (sandboxContainers.has(name)) return null
+      const persistent = c.Labels?.[SANDBOX_PERSISTENT_LABEL] === `true`
+      try {
+        if (c.State === `running`) {
+          const ownerPid = Number(c.Labels?.[SANDBOX_OWNER_PID_LABEL])
+          // No (or unparsable) owner label, or the owner is alive ⇒ possibly a
+          // live peer's in-use sandbox — never touch it.
+          if (!Number.isInteger(ownerPid) || isPidAlive(ownerPid)) return null
+          // The creator is gone, but a live sibling process may have since
+          // ADOPTED the container (reattached by key) — labels are immutable, so
+          // adoption is recorded in an in-container marker. Probe it before
+          // reclaiming.
+          const adopter = await readOwnerMarker(docker.getContainer(c.Id))
+          if (adopter !== null && isPidAlive(adopter)) return null
+          if (persistent) {
+            // `t: 0` → straight to SIGKILL (PID 1 ignores SIGTERM); the writable
+            // layer survives for a later reattach by key.
+            await docker.getContainer(c.Id).stop({ t: 0 })
+          } else {
+            await docker.getContainer(c.Id).remove({ force: true, v: true })
+          }
+          return name
+        }
+        if (persistent) return null
+        await docker.getContainer(c.Id).remove({ force: true, v: true })
+        return name
+      } catch {
+        /* already gone */
+        return null
+      }
+    })
+  )
+  return reclaimed.filter((n): n is string => n !== null)
+}
+
+/**
+ * Wipe the container for a resolved sandbox key WITHOUT creating one — the
+ * reclaim path for a lazy sandbox that was never materialized: a terminal
+ * entity's persistent workspace from an EARLIER wake must not survive just
+ * because the final wake never used its sandbox. If sibling leases currently
+ * hold the container, it is only MARKED reclaimed — the last lease draining
+ * wipes it (matching an owner's `dispose({ reclaim: true })`). A container
+ * that exists with no registry entry (left from a previous process) is removed
+ * directly; absent containers are a no-op. Best-effort: an unreachable daemon
+ * (like any failed remove) is swallowed — a surviving container is then left to
+ * a later boot sweep (which preserves a persistent workspace; a manual labelled
+ * prune reclaims one whose entity is already terminal).
+ */
+export async function reclaimDockerSandboxByKey(
+  sandboxKey: string,
+  opts?: { dockerSocket?: string }
+): Promise<void> {
+  const name = containerNameForKey(sandboxKey)
+  const Docker = await loadDockerode()
+  const docker: Dockerode = opts?.dockerSocket
+    ? new Docker({ socketPath: opts.dockerSocket })
+    : new Docker()
+  await withKeyLock(name, async () => {
+    const entry = sandboxContainers.get(name)
+    if (entry && entry.refs > 0) {
+      entry.reclaim = true
+      return
     }
-  }
-  return removed
+    if (entry?.idleTimer) clearTimeout(entry.idleTimer)
+    sandboxContainers.delete(name)
+    try {
+      await docker.getContainer(name).remove({ force: true, v: true })
+    } catch {
+      /* nothing to reclaim */
+    }
+  })
+}
+
+/**
+ * Immediate, lock-serialized teardown of every IDLE container this process
+ * tracks: pending debounced timers are cancelled and each entry's teardown
+ * action runs NOW — REMOVE for ephemeral/reclaimed containers, STOP for
+ * persistent ones (the workspace survives for the next process to reattach by
+ * key).
+ *
+ * Call on runtime shutdown. The debounced idle timers are unref'd and die with
+ * the process; without this flush every recently-used container is left
+ * RUNNING for the boot sweep of some future process to find.
+ *
+ * Entries with live leases (refs > 0) are left alone: the registry is shared
+ * process-wide, so they may belong to a sibling runtime that is not shutting
+ * down (or to a wake whose drain timed out). Their own dispose tears them
+ * down; if the process exits first, the boot sweep reclaims them by dead
+ * owner pid.
+ *
+ * Best-effort: if the daemon is unreachable each teardown throws and is
+ * swallowed, leaving those containers for the next process's boot sweep.
+ */
+export async function shutdownAllDockerSandboxes(): Promise<void> {
+  await Promise.all(
+    [...sandboxContainers.keys()].map((name) =>
+      withKeyLock(name, async () => {
+        const entry = sandboxContainers.get(name)
+        if (!entry || entry.refs > 0) return
+        if (entry.idleTimer) clearTimeout(entry.idleTimer)
+        try {
+          if (sandboxWipesOnDispose(entry.reclaim ?? false, entry.persistent)) {
+            await entry.container.remove({ force: true, v: true })
+          } else {
+            await entry.container.stop({ t: 0 })
+          }
+        } catch {
+          /* already stopped / removed / gone */
+        }
+        sandboxContainers.delete(name)
+      })
+    )
+  )
 }
 
 /** Test-only: drop the in-process container registry bookkeeping. */
@@ -649,16 +887,22 @@ function resolveImage(opts: DockerSandboxOpts): string {
   return image
 }
 
-async function ensureImage(
+export async function ensureImage(
   docker: Dockerode,
   image: string,
   opts: DockerSandboxOpts
 ): Promise<void> {
-  // Best-effort: try the daemon's inspection by relying on createContainer
-  // to surface the missing image as a 404. To keep the first-run experience
-  // smooth on dev machines, we proactively pull when allowed.
   if (opts.pullIfMissing === false) return
-  // dockerode's `pull` is idempotent; the daemon dedupes by digest.
+  // Pull only when the image isn't already on the daemon. `docker.pull`
+  // always round-trips to the registry — even for a digest that's fully
+  // cached — so pulling unconditionally made every container create hostage
+  // to registry reachability (and slower). `inspect` is a local-only check.
+  try {
+    await docker.getImage(image).inspect()
+    return
+  } catch {
+    // Absent (or inspect failed) — fall through and pull it.
+  }
   const stream = await docker.pull(image)
   await new Promise<void>((resolve, reject) => {
     docker.modem.followProgress(

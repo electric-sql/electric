@@ -1,11 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowUp, Cpu, Sparkles } from 'lucide-react'
+import {
+  ArrowUp,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Cpu,
+  Sparkles,
+} from 'lucide-react'
 import { eq, not, useLiveQuery } from '@tanstack/react-db'
 import { COMPOSER_INPUT_MESSAGE_TYPE } from '@electric-ax/agents-runtime/client'
 import { nanoid } from 'nanoid'
 import { useElectricAgents } from '../../lib/ElectricAgentsProvider'
 import { useWorkspace } from '../../hooks/useWorkspace'
-import { useRecentWorkingDirectories } from '../../hooks/useRecentWorkingDirectories'
+import { recentWorkingDirsForRunner } from '../../lib/recentWorkingDirectories'
+import {
+  isSandboxProfileRemote,
+  pickDefaultSandboxProfile,
+  useSandboxProfileSelection,
+} from '../../lib/sandboxProfiles'
 import {
   codexEnableSource,
   loadApiKeysStatus,
@@ -16,7 +28,7 @@ import {
   type CodexAuthSource,
 } from '../../lib/server-connection'
 import { sendEntityMessage } from '../../lib/sendMessage'
-import { Button, Icon, Select, Stack, Text } from '../../ui'
+import { Button, Icon, Menu, Select, Stack, Text, Tooltip } from '../../ui'
 import { SchemaForm, hasSchemaProperties, isObjectSchema } from '../SchemaForm'
 import { WorkingDirectoryPicker } from '../WorkingDirectoryPicker'
 import {
@@ -121,6 +133,8 @@ interface SchemaProperty {
   description?: string
 }
 
+type InlineSchemaProperty = { key: string; prop: SchemaProperty }
+
 /**
  * Standalone view: the new-session picker.
  *
@@ -138,21 +152,16 @@ export function NewSessionView({
   tileId,
   setToolbarTitle,
 }: StandaloneViewProps): React.ReactElement {
-  const { entityTypesCollection, runnersCollection, spawnEntity } =
-    useElectricAgents()
+  const {
+    entitiesCollection,
+    entityTypesCollection,
+    runnersCollection,
+    spawnEntity,
+  } = useElectricAgents()
   const { helpers } = useWorkspace()
   const [selected, setSelected] = useState<ElectricEntityType | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const { recents: recentDirs, addRecent: addRecentDir } =
-    useRecentWorkingDirectories()
-  // Default to the most-recently-used working directory so a user
-  // who keeps opening sessions against the same project root doesn't
-  // have to re-select it each time. Initialised lazily so subsequent
-  // additions to `recents` don't yank the picker out from under the
-  // user mid-edit.
-  const [workingDirectory, setWorkingDirectory] = useState<string | null>(
-    () => recentDirs[0] ?? null
-  )
+  const [workingDirectory, setWorkingDirectory] = useState<string | null>(null)
 
   const { data: entityTypes = [], isLoading: entityTypesLoading } =
     useLiveQuery(
@@ -255,6 +264,42 @@ export function NewSessionView({
     selectedRunnerId,
     selectedRunnerStillExists,
   ])
+
+  // Recent working directories are derived from the synced sessions
+  // dispatched to the selected runner (`spawn_args.workingDirectory`), so
+  // the same per-runner list appears on every device — no local storage.
+  const { data: allEntities = [] } = useLiveQuery(
+    (query) => {
+      if (!entitiesCollection) return undefined
+      return query.from({ e: entitiesCollection })
+    },
+    [entitiesCollection]
+  )
+  const recentDirs = useMemo(
+    () =>
+      selectedRunnerId
+        ? recentWorkingDirsForRunner(allEntities, selectedRunnerId)
+        : [],
+    [allEntities, selectedRunnerId]
+  )
+
+  // Default to the selected runner's most-recently-used directory so a user
+  // who keeps opening sessions against the same project root doesn't have to
+  // re-select it each time. An explicit pick wins until the runner changes —
+  // paths from one machine may not exist on another, so switching runner
+  // re-derives the default.
+  const userPickedDirRef = useRef(false)
+  const handleChangeWorkingDirectory = useCallback((path: string | null) => {
+    userPickedDirRef.current = true
+    setWorkingDirectory(path)
+  }, [])
+  useEffect(() => {
+    userPickedDirRef.current = false
+  }, [selectedRunnerId])
+  useEffect(() => {
+    if (userPickedDirRef.current) return
+    setWorkingDirectory(recentDirs[0] ?? null)
+  }, [recentDirs])
 
   // Sandbox profiles ride alongside the runner row. Read the advertised
   // list off whichever runner the spawn will dispatch to, preserving the
@@ -413,16 +458,18 @@ export function NewSessionView({
       // Inject the picker's choice into the spawn args for the composer flow
       // only — non-default agents have their own schemas and may not
       // understand `workingDirectory`. A remote sandbox runs in the provider
-      // VM, so a host working directory is meaningless there: skip it (and the
-      // recent-dirs bump) for remote profiles. Otherwise remember the chosen
-      // path so the next session opens with the same default.
+      // VM, so a host working directory is meaningless there: skip it for
+      // remote profiles. The spawned session itself becomes the newest
+      // synced recent for this runner.
       const profileIsRemote = isSandboxProfileRemote(
         allSandboxProfiles,
         sandboxProfile
       )
-      const includeWorkingDir = workingDirectory !== null && !profileIsRemote
+      // A working directory only takes effect through a sandbox-profile
+      // factory — require a (non-remote) profile or the arg is a no-op.
+      const includeWorkingDir =
+        workingDirectory !== null && sandboxProfile !== null && !profileIsRemote
       const augmented = includeWorkingDir ? { ...args, workingDirectory } : args
-      if (includeWorkingDir) addRecentDir(workingDirectory)
       const hasAttachments = attachments.length > 0
       const initialMessage =
         typeof input === `string`
@@ -443,7 +490,7 @@ export function NewSessionView({
         sandboxProfile
       )
     },
-    [defaultAgent, doSpawn, workingDirectory, addRecentDir, allSandboxProfiles]
+    [defaultAgent, doSpawn, workingDirectory, allSandboxProfiles]
   )
 
   const defaultComposerReady =
@@ -485,7 +532,8 @@ export function NewSessionView({
             defaultComposerReady={defaultComposerReady}
             error={error}
             workingDirectory={workingDirectory}
-            onChangeWorkingDirectory={setWorkingDirectory}
+            onChangeWorkingDirectory={handleChangeWorkingDirectory}
+            recentWorkingDirs={recentDirs}
             runners={enabledRunners}
             selectedRunnerId={effectiveRunnerId}
             onChangeSelectedRunner={handleChangeSelectedRunner}
@@ -507,6 +555,7 @@ function Picker({
   error,
   workingDirectory,
   onChangeWorkingDirectory,
+  recentWorkingDirs,
   runners,
   selectedRunnerId,
   onChangeSelectedRunner,
@@ -526,6 +575,7 @@ function Picker({
   error: string | null
   workingDirectory: string | null
   onChangeWorkingDirectory: (path: string | null) => void
+  recentWorkingDirs: ReadonlyArray<string>
   runners: Array<ElectricRunner>
   selectedRunnerId: string | null
   onChangeSelectedRunner: (id: string | null) => void
@@ -558,6 +608,7 @@ function Picker({
           disabled={!defaultComposerReady}
           workingDirectory={workingDirectory}
           onChangeWorkingDirectory={onChangeWorkingDirectory}
+          recentWorkingDirs={recentWorkingDirs}
           runners={runners}
           selectedRunnerId={selectedRunnerId}
           onChangeSelectedRunner={onChangeSelectedRunner}
@@ -792,49 +843,8 @@ function SelectedAgentForm({
   )
 }
 
-function pickDefaultSandboxProfile(
-  profiles: ReadonlyArray<ElectricSandboxProfile>
-): string | null {
-  return profiles.length === 0 ? null : profiles[0]!.name
-}
-
-/**
- * Picker selection that survives a live update to the advertised profile
- * list. When the user explicitly picks a profile we remember it and restore
- * it as soon as it's offered again — so a transient list change (e.g. a
- * runtime restart re-advertising its profiles, which briefly drops one)
- * can't silently downgrade an explicit choice to the default. Falls back to
- * the default only when the user hasn't chosen.
- */
-function useSandboxProfileSelection(
-  sandboxProfiles: ReadonlyArray<ElectricSandboxProfile>
-): readonly [string | null, (next: string) => void] {
-  const [sandboxProfile, setSandboxProfile] = useState<string | null>(() =>
-    pickDefaultSandboxProfile(sandboxProfiles)
-  )
-  const chosenRef = useRef<string | null>(null)
-  useEffect(() => {
-    setSandboxProfile((current) => {
-      const chosen = chosenRef.current
-      if (chosen && sandboxProfiles.some((p) => p.name === chosen))
-        return chosen
-      if (current && sandboxProfiles.some((p) => p.name === current))
-        return current
-      return pickDefaultSandboxProfile(sandboxProfiles)
-    })
-  }, [sandboxProfiles])
-  const choose = useCallback((next: string) => {
-    chosenRef.current = next
-    setSandboxProfile(next)
-  }, [])
-  return [sandboxProfile, choose] as const
-}
-
-function isSandboxProfileRemote(
-  profiles: ReadonlyArray<ElectricSandboxProfile>,
-  name: string | null
-): boolean {
-  return name != null && profiles.some((p) => p.name === name && p.remote)
+function sandboxProfileLabel(profile: ElectricSandboxProfile): string {
+  return profile.name === `local` ? `No sandbox` : profile.label
 }
 
 function SandboxProfileRow({
@@ -862,7 +872,7 @@ function SandboxProfileRow({
         <Select.Content>
           {profiles.map((p) => (
             <Select.Item key={p.name} value={p.name}>
-              {p.label}
+              {sandboxProfileLabel(p)}
             </Select.Item>
           ))}
         </Select.Content>
@@ -871,11 +881,9 @@ function SandboxProfileRow({
   )
 }
 
-function inlineSchemaProperties(
-  schema: unknown
-): Array<{ key: string; prop: SchemaProperty }> {
+function inlineSchemaProperties(schema: unknown): Array<InlineSchemaProperty> {
   if (!isObjectSchema(schema)) return []
-  const out: Array<{ key: string; prop: SchemaProperty }> = []
+  const out: Array<InlineSchemaProperty> = []
   for (const [key, raw] of Object.entries(schema.properties)) {
     const prop = raw as SchemaProperty
     if (prop.enum && prop.enum.length > 0) {
@@ -887,6 +895,31 @@ function inlineSchemaProperties(
   return out
 }
 
+function normalizedSchemaKey(key: string): string {
+  return key.replace(/[\s_-]/g, ``).toLowerCase()
+}
+
+function isReasoningProperty(key: string): boolean {
+  const normalized = normalizedSchemaKey(key)
+  return (
+    normalized === `reasoningeffort` ||
+    normalized === `reasoninglevel` ||
+    normalized === `thinkingeffort` ||
+    normalized === `thinkinglevel`
+  )
+}
+
+function isSpeedProperty(key: string): boolean {
+  const normalized = normalizedSchemaKey(key)
+  return (
+    normalized === `speed` ||
+    normalized === `speedlevel` ||
+    normalized === `speedmode` ||
+    normalized === `servicetier` ||
+    normalized === `latencytier`
+  )
+}
+
 function DefaultAgentComposer({
   agent,
   sandboxProfiles,
@@ -894,6 +927,7 @@ function DefaultAgentComposer({
   disabled,
   workingDirectory,
   onChangeWorkingDirectory,
+  recentWorkingDirs,
   runners,
   selectedRunnerId,
   onChangeSelectedRunner,
@@ -909,6 +943,7 @@ function DefaultAgentComposer({
   disabled?: boolean
   workingDirectory: string | null
   onChangeWorkingDirectory: (path: string | null) => void
+  recentWorkingDirs: ReadonlyArray<string>
   runners: Array<ElectricRunner>
   selectedRunnerId: string | null
   onChangeSelectedRunner: (id: string | null) => void
@@ -930,6 +965,28 @@ function DefaultAgentComposer({
     () => inlineSchemaProperties(agent.creation_schema),
     [agent.creation_schema]
   )
+  const modelSettingsProps = useMemo(() => {
+    const model = inlineProps.find(
+      ({ key, prop }) => isModelProperty(key) && prop.enum?.length
+    )
+    const reasoning = inlineProps.find(
+      ({ key, prop }) => isReasoningProperty(key) && prop.enum?.length
+    )
+    if (!model || !reasoning) return null
+    const speed = inlineProps.find(
+      ({ key, prop }) => isSpeedProperty(key) && prop.enum?.length
+    )
+    return { model, reasoning, speed }
+  }, [inlineProps])
+  const standaloneInlineProps = useMemo(() => {
+    if (!modelSettingsProps) return inlineProps
+    const combinedKeys = new Set([
+      modelSettingsProps.model.key,
+      modelSettingsProps.reasoning.key,
+      ...(modelSettingsProps.speed ? [modelSettingsProps.speed.key] : []),
+    ])
+    return inlineProps.filter(({ key }) => !combinedKeys.has(key))
+  }, [inlineProps, modelSettingsProps])
   const slashCommands = useMemo<Array<SlashCommandRow>>(
     () =>
       (agent.slash_commands ?? []).map((command) => ({
@@ -962,6 +1019,14 @@ function DefaultAgentComposer({
     }
     return init
   })
+  const setEnumArg = useCallback(
+    (key: string, prop: SchemaProperty, next: string) => {
+      const original = prop.enum?.find((v) => String(v) === next)
+      if (isModelProperty(key)) persistLastPickedModel(next)
+      setArgs((prev) => ({ ...prev, [key]: original ?? next }))
+    },
+    []
+  )
   const imageAttachmentsEnabled = schemaModelSupportsImageInput(
     agent.creation_schema,
     args
@@ -1034,6 +1099,9 @@ function DefaultAgentComposer({
     (value.trim() || attachmentCount > 0) && !disabled && !submitting
   )
   const placeholder = disabled ? `Connecting…` : `Ask ${agent.name} anything…`
+  const sendTooltip = submitting
+    ? `Starting ${agent.name} session`
+    : `Start ${agent.name} session`
 
   return (
     <div
@@ -1069,7 +1137,17 @@ function DefaultAgentComposer({
                 onAttach={openAttachmentPicker}
               />
             )}
-            {inlineProps.map(({ key, prop }) =>
+            {modelSettingsProps && (
+              <ModelSettingsMenu
+                model={modelSettingsProps.model}
+                reasoning={modelSettingsProps.reasoning}
+                speed={modelSettingsProps.speed}
+                args={args}
+                onChange={setEnumArg}
+                disabled={submitting || disabled}
+              />
+            )}
+            {standaloneInlineProps.map(({ key, prop }) =>
               prop.enum ? (
                 <PillSelect
                   key={key}
@@ -1077,11 +1155,7 @@ function DefaultAgentComposer({
                   value={String(args[key] ?? ``)}
                   options={prop.enum.map((v) => String(v))}
                   groupByProvider={isModelProperty(key)}
-                  onChange={(next) => {
-                    const original = prop.enum!.find((v) => String(v) === next)
-                    if (isModelProperty(key)) persistLastPickedModel(next)
-                    setArgs((prev) => ({ ...prev, [key]: original ?? next }))
-                  }}
+                  onChange={(next) => setEnumArg(key, prop, next)}
                   disabled={submitting || disabled}
                 />
               ) : prop.type === `boolean` ? (
@@ -1103,20 +1177,24 @@ function DefaultAgentComposer({
             {submitting && (
               <span className={styles.composerHint}>Starting…</span>
             )}
-            <button
-              type="button"
-              aria-label={`Start ${agent.name} session`}
-              onClick={() => submit()}
-              disabled={!isActive}
-              className={[
-                styles.composerSend,
-                isActive ? styles.composerSendActive : null,
-              ]
-                .filter(Boolean)
-                .join(` `)}
-            >
-              <Icon icon={ArrowUp} size={3} />
-            </button>
+            <Tooltip content={sendTooltip} side="top">
+              <span className={styles.tooltipTrigger}>
+                <button
+                  type="button"
+                  aria-label={`Start ${agent.name} session`}
+                  onClick={() => submit()}
+                  disabled={!isActive}
+                  className={[
+                    styles.composerSend,
+                    isActive ? styles.composerSendActive : null,
+                  ]
+                    .filter(Boolean)
+                    .join(` `)}
+                >
+                  <Icon icon={ArrowUp} size={3} />
+                </button>
+              </span>
+            </Tooltip>
           </>
         }
       >
@@ -1144,19 +1222,22 @@ function DefaultAgentComposer({
             value={selectedSandboxProfile ?? ``}
             options={sandboxProfiles.map((p) => p.name)}
             optionLabels={Object.fromEntries(
-              sandboxProfiles.map((p) => [p.name, p.label])
+              sandboxProfiles.map((p) => [p.name, sandboxProfileLabel(p)])
             )}
             onChange={(next) => setSandboxProfile(next)}
             disabled={submitting || disabled}
           />
         ) : null}
         {/* Working directory comes last: the chosen sandbox decides whether a
-            host directory is even relevant. A remote sandbox runs in the
-            provider VM, so the picker is hidden for those profiles. */}
-        {!selectedProfileIsRemote && (
+            host directory is even relevant. It only takes effect through a
+            sandbox-profile factory, so the picker is hidden when the runner
+            advertises no profiles — and for remote profiles, where the
+            workspace lives in the provider VM. */}
+        {selectedSandboxProfile !== null && !selectedProfileIsRemote && (
           <WorkingDirectoryPicker
             value={workingDirectory}
             onChange={onChangeWorkingDirectory}
+            recents={recentWorkingDirs}
             disabled={submitting || disabled}
           />
         )}
@@ -1196,7 +1277,7 @@ function RunnerPickerPill({
       <Select.Trigger
         size="pill"
         aria-label="Runner"
-        title="Pull-wake runner that will handle this session"
+        tooltip="Runner that will handle this session"
         placeholder="Pick runner"
         icon={Cpu}
         renderValue={renderValue}
@@ -1260,6 +1341,219 @@ function groupedModelOptions(
   return groups
 }
 
+function enumOptions(prop: SchemaProperty): Array<string> {
+  return (prop.enum ?? []).map((v) => String(v))
+}
+
+function selectedEnumValue(
+  item: InlineSchemaProperty,
+  args: Readonly<Record<string, unknown>>
+): string {
+  const current = args[item.key]
+  if (current !== undefined && current !== null && current !== ``) {
+    return String(current)
+  }
+  if (item.prop.default !== undefined && item.prop.default !== null) {
+    return String(item.prop.default)
+  }
+  const first = item.prop.enum?.[0]
+  return first !== undefined && first !== null ? String(first) : ``
+}
+
+function enumOptionLabel(value: string): string {
+  return value
+    .split(/[\s_-]+/g)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(` `)
+}
+
+function ModelSettingsMenu({
+  model,
+  reasoning,
+  speed,
+  args,
+  onChange,
+  disabled,
+}: {
+  model: InlineSchemaProperty
+  reasoning: InlineSchemaProperty
+  speed?: InlineSchemaProperty
+  args: Readonly<Record<string, unknown>>
+  onChange: (key: string, prop: SchemaProperty, value: string) => void
+  disabled?: boolean
+}): React.ReactElement {
+  const modelValue = selectedEnumValue(model, args)
+  const reasoningValue = selectedEnumValue(reasoning, args)
+  const speedValue = speed ? selectedEnumValue(speed, args) : ``
+  const modelLabel = modelValue ? modelOptionLabel(modelValue) : `Model`
+  const reasoningLabel = reasoningValue
+    ? enumOptionLabel(reasoningValue)
+    : `Auto`
+  const speedLabel = speedValue ? enumOptionLabel(speedValue) : `Speed`
+  const modelGroups = groupedModelOptions(enumOptions(model.prop))
+
+  return (
+    <Menu.Root>
+      <Menu.Trigger
+        disabled={disabled}
+        render={(triggerProps) => (
+          <Tooltip content="Model" side="top" align="start">
+            <button
+              {...triggerProps}
+              type="button"
+              className={[triggerProps.className, styles.modelSettingsTrigger]
+                .filter(Boolean)
+                .join(` `)}
+              aria-label="Model and reasoning"
+              disabled={disabled}
+            >
+              <span className={styles.modelSettingsTriggerModel}>
+                {modelLabel}
+              </span>
+              <span className={styles.modelSettingsTriggerMeta}>
+                {reasoningLabel}
+              </span>
+              <Icon
+                icon={ChevronDown}
+                size={1}
+                className={styles.modelSettingsChevron}
+              />
+            </button>
+          </Tooltip>
+        )}
+      />
+      <Menu.Content
+        side="top"
+        align="start"
+        sideOffset={8}
+        className={styles.modelSettingsMenu}
+      >
+        <Menu.SubmenuRoot>
+          <Menu.SubmenuTrigger className={styles.modelSettingsSubmenuTrigger}>
+            <span>Model</span>
+            <span className={styles.modelSettingsSubmenuValue}>
+              {modelLabel}
+            </span>
+            <Icon
+              icon={ChevronRight}
+              size={2}
+              className={styles.modelSettingsChevron}
+            />
+          </Menu.SubmenuTrigger>
+          <Menu.Content
+            side="right"
+            align="start"
+            className={styles.modelSettingsModelMenu}
+          >
+            {modelGroups.map((group) => (
+              <Menu.Group key={group.provider}>
+                <Menu.Label>{group.label}</Menu.Label>
+                {group.options.map((option) => {
+                  const active = option === modelValue
+                  return (
+                    <Menu.Item
+                      key={option}
+                      onSelect={() => onChange(model.key, model.prop, option)}
+                    >
+                      <span className={styles.modelSettingsItemLabel}>
+                        {modelOptionLabel(option)}
+                      </span>
+                      {active && (
+                        <Icon
+                          icon={Check}
+                          size={2}
+                          className={styles.modelSettingsActiveMark}
+                        />
+                      )}
+                    </Menu.Item>
+                  )
+                })}
+              </Menu.Group>
+            ))}
+          </Menu.Content>
+        </Menu.SubmenuRoot>
+
+        <Menu.SubmenuRoot>
+          <Menu.SubmenuTrigger className={styles.modelSettingsSubmenuTrigger}>
+            <span>Reasoning</span>
+            <span className={styles.modelSettingsSubmenuValue}>
+              {reasoningLabel}
+            </span>
+            <Icon
+              icon={ChevronRight}
+              size={2}
+              className={styles.modelSettingsChevron}
+            />
+          </Menu.SubmenuTrigger>
+          <Menu.Content side="right" align="start">
+            {enumOptions(reasoning.prop).map((option) => {
+              const active = option === reasoningValue
+              return (
+                <Menu.Item
+                  key={option}
+                  onSelect={() =>
+                    onChange(reasoning.key, reasoning.prop, option)
+                  }
+                >
+                  <span className={styles.modelSettingsItemLabel}>
+                    {enumOptionLabel(option)}
+                  </span>
+                  {active && (
+                    <Icon
+                      icon={Check}
+                      size={2}
+                      className={styles.modelSettingsActiveMark}
+                    />
+                  )}
+                </Menu.Item>
+              )
+            })}
+          </Menu.Content>
+        </Menu.SubmenuRoot>
+
+        {speed && (
+          <Menu.SubmenuRoot>
+            <Menu.SubmenuTrigger className={styles.modelSettingsSubmenuTrigger}>
+              <span>Speed</span>
+              <span className={styles.modelSettingsSubmenuValue}>
+                {speedLabel}
+              </span>
+              <Icon
+                icon={ChevronRight}
+                size={2}
+                className={styles.modelSettingsChevron}
+              />
+            </Menu.SubmenuTrigger>
+            <Menu.Content side="right" align="start">
+              {enumOptions(speed.prop).map((option) => {
+                const active = option === speedValue
+                return (
+                  <Menu.Item
+                    key={option}
+                    onSelect={() => onChange(speed.key, speed.prop, option)}
+                  >
+                    <span className={styles.modelSettingsItemLabel}>
+                      {enumOptionLabel(option)}
+                    </span>
+                    {active && (
+                      <Icon
+                        icon={Check}
+                        size={2}
+                        className={styles.modelSettingsActiveMark}
+                      />
+                    )}
+                  </Menu.Item>
+                )
+              })}
+            </Menu.Content>
+          </Menu.SubmenuRoot>
+        )}
+      </Menu.Content>
+    </Menu.Root>
+  )
+}
+
 function PillSelect({
   label,
   value,
@@ -1289,7 +1583,7 @@ function PillSelect({
       <Select.Trigger
         size="pill"
         aria-label={label}
-        title={label}
+        tooltip={label}
         renderValue={
           groupByProvider
             ? (current) => (current ? modelOptionLabel(current) : label)

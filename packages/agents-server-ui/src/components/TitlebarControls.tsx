@@ -18,7 +18,7 @@ export function TitlebarControls(): React.ReactElement {
   const search = useSearchPalette()
 
   return (
-    <div className={styles.controls}>
+    <div className={styles.controls} data-sidebar-control-surface="true">
       <Tooltip
         content={collapsed ? `Show sidebar` : `Hide sidebar`}
         shortcut={modKeyLabel(`b`)}

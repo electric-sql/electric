@@ -2125,6 +2125,7 @@ describe(`entity patterns`, () => {
       customStateNames: [],
       wiring: {
         createOrGetChild: vi.fn(),
+        forkEntity: vi.fn(),
         createChildDb,
         createSourceDb: vi.fn(),
         createSharedStateDb: vi.fn(),

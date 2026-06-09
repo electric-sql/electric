@@ -8,9 +8,10 @@ function createRequest(
   method: string,
   path: string,
   body?: unknown,
-  rawBody = false
+  rawBody = false,
+  headers?: HeadersInit
 ): Request {
-  const init: RequestInit = { method }
+  const init: RequestInit = { method, headers }
   if (body !== undefined) {
     init.body = rawBody ? String(body) : JSON.stringify(body)
   }
@@ -28,10 +29,11 @@ async function routeResponse(
     id: `dev-local`,
     key: `system:dev-local`,
     url: `/principal/system:dev-local`,
-  }
+  },
+  headers?: HeadersInit
 ): Promise<Response> {
   const result = await globalRouter.fetch(
-    createRequest(method, path, body, rawBody),
+    createRequest(method, path, body, rawBody, headers),
     {
       service: `test`,
       entityManager: manager,
@@ -790,6 +792,61 @@ describe(`ElectricAgentsRoutes send endpoint`, () => {
     })
   })
 
+  it(`allows from_agent values with a valid active agent write token`, async () => {
+    const targetEntity = { url: `/chat/test` }
+    const agentEntity = { url: `/horton/current`, write_token: `entity-token` }
+    const manager = {
+      registry: {
+        getEntity: vi.fn(async (url: string) => {
+          if (url === `/chat/test`) return targetEntity
+          if (url === `/horton/current`) return agentEntity
+          return null
+        }),
+        getEntityType: vi.fn(),
+      },
+      isValidWriteToken: vi.fn(
+        (entity, token) => entity === agentEntity && token === `claim-token`
+      ),
+      ensurePrincipal: vi.fn().mockResolvedValue(undefined),
+      send: vi.fn().mockResolvedValue(undefined),
+    } as any
+
+    const response = await routeResponse(
+      manager,
+      `POST`,
+      `/_electric/entities/chat/test/send`,
+      {
+        payload: { text: `hi` },
+        from_principal: `/principal/system:dev-local`,
+        from_agent: `/horton/current`,
+      },
+      false,
+      {
+        kind: `system`,
+        id: `dev-local`,
+        key: `system:dev-local`,
+        url: `/principal/system:dev-local`,
+      },
+      { 'electric-claim-token': `claim-token` }
+    )
+
+    expect(response.status).toBe(204)
+    expect(manager.isValidWriteToken).toHaveBeenCalledWith(
+      agentEntity,
+      `claim-token`
+    )
+    expect(manager.send).toHaveBeenCalledWith(`/chat/test`, {
+      from: `/principal/system:dev-local`,
+      from_principal: `/principal/system:dev-local`,
+      from_agent: `/horton/current`,
+      payload: { text: `hi` },
+      key: undefined,
+      type: undefined,
+      mode: undefined,
+      position: undefined,
+    })
+  })
+
   it(`allows matching from_agent values for agent principals`, async () => {
     const manager = {
       registry: {
@@ -1109,5 +1166,175 @@ describe(`ElectricAgentsRoutes fork endpoint`, () => {
     })
     expect(payload.root).not.toHaveProperty(`write_token`)
     expect(payload.root).not.toHaveProperty(`subscription_id`)
+  })
+
+  it(`forwards anchor, parent, wake, initialMessage, and tags through to forkSubtree (and sends the initial message)`, async () => {
+    const forkedRoot = {
+      url: `/chat/root-copy`,
+      type: `chat`,
+      status: `idle`,
+      streams: {
+        main: `/chat/root-copy/main`,
+        error: `/chat/root-copy/error`,
+      },
+      subscription_id: `chat-handler`,
+      write_token: `secret-token`,
+      tags: { experiment: `ecosystem-maturity` },
+      spawn_args: {},
+      created_at: 1,
+      updated_at: 1,
+    }
+    const manager = {
+      registry: {
+        getEntity: vi.fn().mockResolvedValue({ url: `/chat/root` }),
+        getEntityType: vi.fn(),
+      },
+      forkSubtree: vi.fn().mockResolvedValue({
+        root: forkedRoot,
+        entities: [forkedRoot],
+      }),
+      send: vi.fn().mockResolvedValue(undefined),
+    } as any
+
+    const wake = {
+      subscriberUrl: `/chat/parent`,
+      condition: `runFinished` as const,
+      includeResponse: true,
+    }
+
+    const response = await routeResponse(
+      manager,
+      `POST`,
+      `/_electric/entities/chat/root/fork`,
+      {
+        anchor: `latest_completed_run`,
+        parent: `/chat/parent`,
+        wake,
+        initialMessage: { text: `hello fork` },
+        tags: { experiment: `ecosystem-maturity` },
+      }
+    )
+
+    expect(response.status).toBe(201)
+    expect(manager.forkSubtree).toHaveBeenCalledWith(`/chat/root`, {
+      rootInstanceId: undefined,
+      waitTimeoutMs: undefined,
+      anchor: `latest_completed_run`,
+      parent: `/chat/parent`,
+      wake,
+      tags: { experiment: `ecosystem-maturity` },
+      createdBy: `/principal/system:dev-local`,
+    })
+    // initialMessage is NOT passed into forkSubtree — it's delivered
+    // via entityManager.send after linkEntityDispatchSubscription, the
+    // same ordering spawn uses. Verify the send happened against the
+    // new root fork with the parent as `from`.
+    expect(manager.send).toHaveBeenCalledWith(`/chat/root-copy`, {
+      from: `/chat/parent`,
+      payload: { text: `hello fork` },
+    })
+  })
+
+  it(`rejects when fork_pointer and anchor are both present`, async () => {
+    const manager = {
+      registry: {
+        getEntity: vi.fn().mockResolvedValue({ url: `/chat/root` }),
+        getEntityType: vi.fn(),
+      },
+      forkSubtree: vi.fn(),
+    } as any
+
+    const response = await routeResponse(
+      manager,
+      `POST`,
+      `/_electric/entities/chat/root/fork`,
+      {
+        anchor: `latest_completed_run`,
+        fork_pointer: { offset: `abc`, sub_offset: 1 },
+      }
+    )
+
+    expect(response.status).toBe(400)
+    expect(manager.forkSubtree).not.toHaveBeenCalled()
+  })
+
+  it(`rejects when parent is set but does not exist`, async () => {
+    // getEntity returns the source for the source-route lookup but
+    // null for the parent lookup. Differentiate by URL.
+    const getEntity = vi.fn(async (url: string) =>
+      url === `/chat/root` ? { url: `/chat/root` } : null
+    )
+    const manager = {
+      registry: { getEntity, getEntityType: vi.fn() },
+      forkSubtree: vi.fn(),
+    } as any
+
+    const response = await routeResponse(
+      manager,
+      `POST`,
+      `/_electric/entities/chat/root/fork`,
+      {
+        anchor: `latest_completed_run`,
+        parent: `/chat/missing-parent`,
+      }
+    )
+
+    expect(response.status).toBe(404)
+    expect(manager.forkSubtree).not.toHaveBeenCalled()
+  })
+
+  it(`rejects when wake is set without parent`, async () => {
+    const manager = {
+      registry: {
+        getEntity: vi.fn().mockResolvedValue({ url: `/chat/root` }),
+        getEntityType: vi.fn(),
+      },
+      forkSubtree: vi.fn(),
+    } as any
+
+    const response = await routeResponse(
+      manager,
+      `POST`,
+      `/_electric/entities/chat/root/fork`,
+      {
+        anchor: `latest_completed_run`,
+        wake: {
+          subscriberUrl: `/chat/stranger`,
+          condition: `runFinished`,
+          includeResponse: true,
+        },
+      }
+    )
+
+    expect(response.status).toBe(400)
+    expect(manager.forkSubtree).not.toHaveBeenCalled()
+  })
+
+  it(`rejects when wake.subscriberUrl does not match parent`, async () => {
+    const manager = {
+      registry: {
+        getEntity: vi.fn().mockResolvedValue({ url: `/chat/root` }),
+        getEntityType: vi.fn(),
+      },
+      forkSubtree: vi.fn(),
+    } as any
+
+    const response = await routeResponse(
+      manager,
+      `POST`,
+      `/_electric/entities/chat/root/fork`,
+      {
+        anchor: `latest_completed_run`,
+        parent: `/chat/parent`,
+        wake: {
+          subscriberUrl: `/chat/stranger`,
+          condition: `runFinished`,
+          includeResponse: true,
+        },
+      }
+    )
+
+    expect(response.status).toBe(401)
+    expect(manager.forkSubtree).not.toHaveBeenCalled()
   })
 })

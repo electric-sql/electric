@@ -14,6 +14,7 @@ import { HomeMenu, type ServerHealth } from '../components/HomeMenu'
 import { Screen } from '../components/Screen'
 import { SearchBar } from '../components/SearchBar'
 import { SessionRow } from '../components/SessionRow'
+import { SessionRowMenu } from '../components/SessionRowMenu'
 import { buildEntityTree, SessionTree } from '../components/SessionTree'
 import { TopBarIconButton } from '../components/TopBarIconButton'
 import { useAgents } from '../lib/AgentsProvider'
@@ -22,6 +23,7 @@ import {
   getEntityDisplayTitle,
   type ElectricEntity,
 } from '../lib/agentsClient'
+import { togglePin, usePinnedUrls } from '../lib/pinnedEntities'
 import {
   bucketEntities,
   groupByStatus,
@@ -41,6 +43,8 @@ import type { Tokens } from '../lib/theme'
  *   ┌──────────────────────────────────────────────┐
  *   │ Electric Agents          🔍  ⋯               │
  *   ├──────────────────────────────────────────────┤
+ *   │ PINNED                                       │
+ *   │   ● fav-agent                      horton ›  │
  *   │ TODAY                                        │
  *   │   ● horton-1                       horton ›  │
  *   │   ● horton-2                       horton ›  │
@@ -55,6 +59,12 @@ import type { Tokens } from '../lib/theme'
  * filtering — matches render as a flat list (no tree, no grouping)
  * since that reads better than pretending matches still belong to
  * time buckets or to a particular subtree.
+ *
+ * Long-pressing a root row — or any search hit — opens
+ * `SessionRowMenu` (entity info + a pin toggle). Pinned sessions
+ * render in the PINNED section above the groups and are removed
+ * from the groups below — the mobile mirror of the web sidebar's
+ * pinning.
  */
 export function SessionListScreen({
   onOpenSession,
@@ -83,6 +93,20 @@ export function SessionListScreen({
   const [query, setQuery] = useState(``)
   const [menuOpen, setMenuOpen] = useState(false)
 
+  // Long-pressed row whose context menu (info + pin) is open. The
+  // snapshot only identifies the row — the rendered entity is
+  // re-resolved from the live query below so the sheet tracks
+  // updates (status, title) while open, falling back to the
+  // snapshot if the entity leaves the collection.
+  const [menuSnapshot, setMenuSnapshot] = useState<ElectricEntity | null>(null)
+  const openRowMenu = useCallback(
+    (entity: ElectricEntity) => setMenuSnapshot(entity),
+    []
+  )
+
+  const pinnedUrls = usePinnedUrls()
+  const pinnedSet = useMemo(() => new Set(pinnedUrls), [pinnedUrls])
+
   const { data: entities = [] } = useLiveQuery(
     (q) =>
       q
@@ -91,6 +115,11 @@ export function SessionListScreen({
         .orderBy(({ entity }) => entity.updated_at, `desc`),
     [entitiesCollection]
   )
+
+  const menuEntity = useMemo(() => {
+    if (!menuSnapshot) return null
+    return entities.find((e) => e.url === menuSnapshot.url) ?? menuSnapshot
+  }, [entities, menuSnapshot])
 
   // Apply Show > Type / Show > Status filters before the tree build
   // so a hidden parent doesn't take its (visible) children with it —
@@ -122,6 +151,18 @@ export function SessionListScreen({
     [visibleEntities]
   )
 
+  // Pinned entities get their own section above the groups and are
+  // removed from the groups below (web-sidebar parity). Derived from
+  // `visibleEntities` so pins respect the type/status filters.
+  const pinnedEntities = useMemo(
+    () => visibleEntities.filter((entity) => pinnedSet.has(entity.url)),
+    [visibleEntities, pinnedSet]
+  )
+  const unpinnedRoots = useMemo(
+    () => roots.filter((root) => !pinnedSet.has(root.url)),
+    [roots, pinnedSet]
+  )
+
   // Search overrides bucketing AND tree structure: a flat hit list
   // matches every visible entity (any depth) whose title contains
   // the query. Filters and group-by are still applied because they
@@ -147,14 +188,26 @@ export function SessionListScreen({
     }
     switch (prefs.groupBy) {
       case `type`:
-        return groupByType(roots)
+        return groupByType(unpinnedRoots)
       case `status`:
-        return groupByStatus(roots)
+        return groupByStatus(unpinnedRoots)
       case `date`:
       default:
-        return bucketEntities(roots)
+        return bucketEntities(unpinnedRoots)
     }
-  }, [roots, prefs.groupBy, trimmedQuery, searchResults])
+  }, [unpinnedRoots, prefs.groupBy, trimmedQuery, searchResults])
+
+  // No Pinned section while searching — results are a flat hit list.
+  const showPinned = !trimmedQuery && pinnedEntities.length > 0
+
+  // Pinned-filtered, like the rendered subtree (and the web hover
+  // card), so the count matches the rows shown when expanded.
+  const menuChildCount = useMemo(() => {
+    if (!menuEntity) return 0
+    return (childrenByParent.get(menuEntity.url) ?? []).filter(
+      (child) => !pinnedSet.has(child.url)
+    ).length
+  }, [menuEntity, childrenByParent, pinnedSet])
 
   // Same connectivity ping the old footer used — feeds the green/red
   // dot in the home menu.
@@ -245,16 +298,41 @@ export function SessionListScreen({
           />
         }
       >
+        {showPinned && (
+          <View style={[styles.section, styles.sectionFirst]}>
+            <Text style={styles.sectionLabel}>Pinned</Text>
+            {pinnedEntities.map((root) => (
+              <SessionTree
+                // Prefixed so the key can't collide with the same
+                // entity rendered in a group below.
+                key={`pinned:${root.url}`}
+                entity={root}
+                childrenByParent={childrenByParent}
+                onSelectEntity={onOpenSession}
+                currentPrincipalUrl={currentPrincipalUrl}
+                onLongPressRoot={openRowMenu}
+                pinnedSet={pinnedSet}
+              />
+            ))}
+          </View>
+        )}
+
         {groups.map((group, idx) => (
           <View
             key={group.id}
-            style={[styles.section, idx === 0 ? styles.sectionFirst : null]}
+            style={[
+              styles.section,
+              // The Pinned section owns the tighter top margin when
+              // it's rendered; otherwise the first group does.
+              idx === 0 && !showPinned ? styles.sectionFirst : null,
+            ]}
           >
             <Text style={styles.sectionLabel}>{group.label}</Text>
             {trimmedQuery
               ? // Flat list when searching — no expand chevrons, no
-                // tree connectors, no child-count chips. The user is
-                // looking for a specific session by name.
+                // tree connectors, no child-count chips. Long-press
+                // still opens the context menu (any depth, like the
+                // desktop tile menu) so a found session can be pinned.
                 group.items.map((entity) => (
                   <SessionRow
                     key={entity.url}
@@ -262,6 +340,7 @@ export function SessionListScreen({
                     depth={0}
                     onPress={() => onOpenSession(entity.url)}
                     currentPrincipalUrl={currentPrincipalUrl}
+                    onLongPress={() => openRowMenu(entity)}
                   />
                 ))
               : // Default mode — every group item is a tree root. The
@@ -274,6 +353,8 @@ export function SessionListScreen({
                     childrenByParent={childrenByParent}
                     onSelectEntity={onOpenSession}
                     currentPrincipalUrl={currentPrincipalUrl}
+                    onLongPressRoot={openRowMenu}
+                    pinnedSet={pinnedSet}
                   />
                 ))}
           </View>
@@ -315,6 +396,17 @@ export function SessionListScreen({
         onChangeServer={onChangeServer}
         onOpenDiagnostics={onOpenDiagnostics}
         onOpenAccount={onOpenAccount}
+      />
+
+      <SessionRowMenu
+        open={menuEntity !== null}
+        onClose={() => setMenuSnapshot(null)}
+        entity={menuEntity}
+        childCount={menuChildCount}
+        pinned={menuEntity ? pinnedSet.has(menuEntity.url) : false}
+        onTogglePin={() => {
+          if (menuEntity) togglePin(menuEntity.url)
+        }}
       />
     </Screen>
   )

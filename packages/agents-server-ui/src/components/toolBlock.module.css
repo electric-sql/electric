@@ -126,6 +126,10 @@
   flex-shrink: 0;
 }
 
+.headerActions + .toggleArrow {
+  margin-left: 0;
+}
+
 /* Tool name is the only mono token in the row — it's an identifier,
    so reading it as code helps. Summary + everything else stays in the
    body font for legibility at small sizes. */

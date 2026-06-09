@@ -4,7 +4,6 @@ defmodule Electric.ShapeCacheTest do
 
   alias Electric.Replication.Changes
   alias Electric.Replication.LogOffset
-  alias Electric.Replication.Changes.TransactionFragment
   alias Electric.Replication.ShapeLogCollector
   alias Electric.ShapeCache
   alias Electric.ShapeCache.{Storage, ShapeStatus}
@@ -22,7 +21,8 @@ defmodule Electric.ShapeCacheTest do
       activate_mocks_for_descendant_procs: 1,
       assert_shape_cleanup: 1,
       patch_shape_status: 1,
-      patch_shape_cache: 1
+      patch_shape_cache: 1,
+      complete_txn_fragment: 3
     ]
 
   @stub_inspector Support.StubInspector.new(
@@ -1274,7 +1274,7 @@ defmodule Electric.ShapeCacheTest do
       ref = Shapes.Consumer.register_for_changes(ctx.stack_id, shape_handle)
 
       ShapeLogCollector.handle_event(
-        transaction(@xid, @lsn, [@change]),
+        complete_txn_fragment(@xid, @lsn, [@change]),
         ctx.stack_id
       )
 
@@ -1520,19 +1520,5 @@ defmodule Electric.ShapeCacheTest do
       assert_receive {:snapshot, ^handle, _snapshotter_pid}
       handle
     end)
-  end
-
-  defp transaction(xid, lsn, changes) do
-    [%{log_offset: last_log_offset} | _] = Enum.reverse(changes)
-
-    %TransactionFragment{
-      xid: xid,
-      lsn: lsn,
-      last_log_offset: last_log_offset,
-      has_begin?: true,
-      commit: %Changes.Commit{},
-      changes: changes,
-      affected_relations: MapSet.new(changes, & &1.relation)
-    }
   end
 end

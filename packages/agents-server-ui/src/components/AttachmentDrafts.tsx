@@ -7,7 +7,7 @@ import {
   X,
 } from 'lucide-react'
 import { formatAttachmentSize } from '../lib/attachments'
-import { Icon, Menu, Text } from '../ui'
+import { Icon, Menu, Text, Tooltip } from '../ui'
 import styles from './AttachmentDrafts.module.css'
 
 type Focusable = {
@@ -294,17 +294,22 @@ export function AttachmentActionMenu({
       />
       <Menu.Root>
         <Menu.Trigger
-          render={
-            <button
-              type="button"
-              aria-label="Message actions"
-              title="Message actions"
-              className={styles.addMenuTrigger}
-              disabled={disabled}
-            >
-              <Icon icon={Plus} size={2} />
-            </button>
-          }
+          disabled={disabled}
+          render={(triggerProps) => (
+            <Tooltip content="Attach files" side="top" align="start">
+              <button
+                {...triggerProps}
+                type="button"
+                aria-label="Message actions"
+                className={[triggerProps.className, styles.addMenuTrigger]
+                  .filter(Boolean)
+                  .join(` `)}
+                disabled={disabled}
+              >
+                <Icon icon={Plus} size={2} />
+              </button>
+            </Tooltip>
+          )}
         />
         <Menu.Content side="top" align="start" sideOffset={8}>
           <Menu.Item disabled={disabled} onSelect={onAttach}>

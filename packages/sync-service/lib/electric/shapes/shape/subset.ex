@@ -44,7 +44,7 @@ defmodule Electric.Shapes.Shape.Subset do
     end
   end
 
-  defp load_column_info(%{root_table_id: table_oid, root_table: table}, inspector) do
+  defp load_column_info(%{root_table_id: table_oid, root_table: table} = shape, inspector) do
     case Inspector.load_column_info(table_oid, inspector) do
       :table_not_found ->
         {:error,
@@ -53,7 +53,10 @@ defmodule Electric.Shapes.Shape.Subset do
             "If the table name contains capitals or special characters you must quote it."}}
 
       {:ok, columns} ->
-        {:ok, columns}
+        case shape.queryable_columns do
+          nil -> {:ok, columns}
+          queryable_columns -> {:ok, Enum.filter(columns, &(&1.name in queryable_columns))}
+        end
     end
   end
 

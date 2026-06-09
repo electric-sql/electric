@@ -31,12 +31,35 @@ const ENTITY_STATUSES: [EntityStatus, ...Array<EntityStatus>] = [
   `killed`,
 ]
 
+// Mirrors `dispatchPolicySchema` in agents-server-ui's
+// `ElectricAgentsProvider.tsx` — permissive so unknown target shapes
+// still sync. We read the `runner` target's id ("which runner runs this
+// session") for display and to derive per-runner recents; other target
+// kinds (e.g. webhook) carry no runner.
+const dispatchPolicySchema = z.object({
+  targets: z
+    .array(
+      z.object({
+        type: z.string(),
+        runnerId: z.string().optional(),
+        url: z.string().optional(),
+        subscription_id: z.string().optional(),
+      })
+    )
+    .default([]),
+})
+
 export const entitySchema = z.object({
   url: z.string(),
   type: z.string(),
   status: z.enum(ENTITY_STATUSES),
   tags: z.record(z.string(), z.string()).default({}),
   spawn_args: z.record(z.string(), z.unknown()).default({}),
+  sandbox: z
+    .object({ profile: z.string(), key: z.string().optional() })
+    .nullable()
+    .optional(),
+  dispatch_policy: dispatchPolicySchema.nullable().optional(),
   parent: z.string().nullable(),
   created_by: z.string().nullable().optional(),
   type_revision: z.coerce.number().nullable().optional(),
@@ -57,9 +80,20 @@ export const entityTypeSchema = z.object({
   updated_at: z.string(),
 })
 
-// Minimal subset of the runners shape — just the columns the mobile
-// picker needs to identify a runner and pass it as the dispatch
-// target on spawn.
+export const sandboxProfileSchema = z.object({
+  name: z.string(),
+  label: z.string(),
+  description: z.string().optional(),
+  // True for off-host (remote-provider) sandboxes: the workspace lives in the
+  // provider VM, so a host working directory doesn't apply.
+  remote: z.boolean().optional(),
+})
+
+// Minimal subset of the runners shape — the columns the mobile picker
+// needs to identify a runner and pass it as the dispatch target on
+// spawn, plus `sandbox_profiles` to offer its advertised profiles and
+// let the session-row info sheet resolve sandbox labels like the desktop
+// hover card does.
 export const runnerSchema = z.object({
   id: z.string(),
   owner_principal: z.string(),
@@ -67,6 +101,12 @@ export const runnerSchema = z.object({
   kind: z.string(),
   admin_status: z.enum([`enabled`, `disabled`]),
   last_seen_at: z.string().nullable().optional(),
+  // Coerce a missing/null jsonb column to an empty list — `.default([])`
+  // covers `undefined` but not a Postgres NULL.
+  sandbox_profiles: z.preprocess(
+    (v) => (Array.isArray(v) ? v : []),
+    z.array(sandboxProfileSchema)
+  ),
 })
 
 export const userSchema = z.object({
@@ -93,6 +133,7 @@ export const entityEffectivePermissionSchema = z.object({
 export type ElectricEntity = z.infer<typeof entitySchema>
 export type ElectricEntityType = z.infer<typeof entityTypeSchema>
 export type ElectricRunner = z.infer<typeof runnerSchema>
+export type ElectricSandboxProfile = z.infer<typeof sandboxProfileSchema>
 export type ElectricUser = z.infer<typeof userSchema>
 export type ElectricEntityEffectivePermission = z.infer<
   typeof entityEffectivePermissionSchema
@@ -145,6 +186,8 @@ export function createEntitiesCollection(baseUrl: string) {
             `status`,
             `tags`,
             `spawn_args`,
+            `sandbox`,
+            `dispatch_policy`,
             `parent`,
             `created_by`,
             `type_revision`,
@@ -195,6 +238,7 @@ export function createRunnersCollection(baseUrl: string) {
             `kind`,
             `admin_status`,
             `last_seen_at`,
+            `sandbox_profiles`,
           ],
         },
       },
@@ -248,6 +292,8 @@ export async function spawnEntity({
   type,
   initialMessage,
   runnerId,
+  sandboxProfile,
+  workingDirectory,
 }: {
   baseUrl: string
   type: string
@@ -258,6 +304,12 @@ export async function spawnEntity({
   // webhook to a local serveEndpoint, which the cloud server can't
   // reach.
   runnerId?: string
+  // Sandbox profile advertised by the target runner. Required for
+  // `workingDirectory` to take effect — the runtime only resolves the
+  // working-directory arg through a profile's sandbox factory; with no
+  // profile it falls back to its own process cwd.
+  sandboxProfile?: string
+  workingDirectory?: string
 }): Promise<string> {
   const name = makeEntityName()
   const entityUrl = `/${type}/${name}`
@@ -274,6 +326,14 @@ export async function spawnEntity({
     body.dispatch_policy = {
       targets: [{ type: `runner`, runnerId }],
     }
+  }
+  if (sandboxProfile) {
+    // Key by the session URL for a persistent, shared workspace: files
+    // survive across wakes and spawned subagents share the container.
+    body.sandbox = { profile: sandboxProfile, key: entityUrl }
+  }
+  if (workingDirectory) {
+    body.args = { workingDirectory }
   }
   const spawnRes = await serverFetch(
     appendPathToUrl(

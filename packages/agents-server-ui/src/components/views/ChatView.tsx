@@ -118,21 +118,22 @@ export function ChatLogView({
     }
   }, [error, navigate, isSpawning])
 
-  const forkFromHereByInboxKey = useMemo(() => {
+  const forkFromHereByRunKey = useMemo(() => {
     if (!forkEntity || !connectUrl || !db) return undefined
     const runOffsets = db.collections.runs.__electricRowOffsets
     if (!runOffsets) return undefined
     const map = new Map<string, ForkFromHereAction>()
-    let anchor: EventPointer | null = null
+    let anchor: { rowKey: string; pointer: EventPointer } | null = null
     for (const row of visibleRows) {
       if (row.run && row.run.status === `completed`) {
         const pointer = runOffsets.get(row.run.key)
-        if (pointer) anchor = pointer
+        anchor = pointer ? { rowKey: row.$key, pointer } : null
       }
       if (row.inbox && anchor) {
-        const capturedAnchor = anchor
+        const capturedAnchor = anchor.pointer
+        const capturedRunKey = anchor.rowKey
         map.set(
-          row.$key,
+          capturedRunKey,
           canFork
             ? {
                 onFork: () => {
@@ -165,7 +166,7 @@ export function ChatLogView({
       entityUrl={connectUrl}
       entities={entities}
       scrollToBottomSignal={scrollToBottomSignal}
-      forkFromHereByInboxKey={forkFromHereByInboxKey}
+      forkFromHereByRunKey={forkFromHereByRunKey}
     />
   )
 }
@@ -295,27 +296,28 @@ function GenericChatBody({
     })
   }, [canSignal, entityUrl, generationActive, signalEntity, stopPending])
 
-  // "Fork from here" anchor map. For each user-message inbox row, the
-  // anchor is the LATEST preceding completed `runs` row — its pointer
-  // identifies "fork up to and including this response, drop everything
-  // after." Rows without a preceding completed run (first message,
-  // in-flight run, etc.) get no entry, which suppresses the affordance
-  // in UserMessage.
-  const forkFromHereByInboxKey = useMemo(() => {
+  // "Fork from here" anchor map. For each completed `runs` row that is
+  // followed by a user-message inbox row, the run pointer identifies
+  // "fork up to and including this response, drop everything after."
+  // Completed runs without a following prompt (usually the current end
+  // of the conversation) get no entry, preserving the old "historic
+  // prompt" affordance while moving it to the response footer.
+  const forkFromHereByRunKey = useMemo(() => {
     if (!forkEntity || !entityUrl || !db) return undefined
     const runOffsets = db.collections.runs.__electricRowOffsets
     if (!runOffsets) return undefined
     const map = new Map<string, ForkFromHereAction>()
-    let anchor: EventPointer | null = null
+    let anchor: { rowKey: string; pointer: EventPointer } | null = null
     for (const row of timelineRowsWithInlinePending) {
       if (row.run && row.run.status === `completed`) {
         const pointer = runOffsets.get(row.run.key)
-        if (pointer) anchor = pointer
+        anchor = pointer ? { rowKey: row.$key, pointer } : null
       }
       if (row.inbox && anchor) {
-        const capturedAnchor = anchor
+        const capturedAnchor = anchor.pointer
+        const capturedRunKey = anchor.rowKey
         map.set(
-          row.$key,
+          capturedRunKey,
           canFork
             ? {
                 onFork: () => {
@@ -360,7 +362,7 @@ function GenericChatBody({
         scrollToBottomSignal={sentMessageSignal}
         onStopGeneration={stopGeneration}
         stopPending={stopPending}
-        forkFromHereByInboxKey={forkFromHereByInboxKey}
+        forkFromHereByRunKey={forkFromHereByRunKey}
       />
       <MessageInput
         db={db}

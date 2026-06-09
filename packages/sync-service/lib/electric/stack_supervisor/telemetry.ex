@@ -26,6 +26,52 @@ defmodule Electric.StackSupervisor.Telemetry do
     ]
   end
 
+  @doc """
+  The curated subset of stack-level metrics exported to the Prometheus `/metrics` endpoint.
+
+  These are emitted by the periodic measurements above (and, for `receive_lag`, by the
+  replication client) and are already exported to OTel/StatsD/Call-Home via
+  `ElectricTelemetry.StackTelemetry`. They are passed to `ApplicationTelemetry` as
+  `additional_prometheus_metrics` so they reach the single shared Prometheus aggregator
+  without being double-reported through the other reporters.
+
+  Note: these definitions carry no `stack_id` tag, so they assume a single stack per
+  instance. With multiple stacks the series would collide in the shared aggregator.
+  """
+  def prometheus_metrics do
+    [
+      # number of defined shapes
+      Telemetry.Metrics.last_value("electric.shapes.total_shapes.count"),
+      # number of active shapes
+      Telemetry.Metrics.last_value("electric.shapes.active_shapes.count"),
+      # retained WAL size (bytes Postgres is keeping for Electric's replication slot)
+      Telemetry.Metrics.last_value("electric.postgres.replication.slot_retained_wal_size",
+        unit: :byte
+      ),
+      # replication lag, byte-based: how far behind Postgres' WAL Electric is
+      Telemetry.Metrics.last_value("electric.postgres.replication.slot_confirmed_flush_lsn_lag",
+        unit: :byte
+      ),
+      # replication lag, time-based: wall-clock staleness of received transactions
+      Telemetry.Metrics.distribution(
+        "electric.postgres.replication.transaction_received.receive_lag",
+        unit: :millisecond
+      ),
+      # HTTP response status-code counts for the shape endpoint (200s, 409s, 50xs, ...).
+      # The event also carries :known_error and :live; we tag by :status only so the series
+      # are a plain per-code count.
+      Telemetry.Metrics.counter("electric.plug.serve_shape.requests.count",
+        event_name: [:electric, :plug, :serve_shape],
+        measurement: :count,
+        tags: [:status]
+      ),
+      # admission control: current in-flight concurrency per kind
+      Telemetry.Metrics.last_value("electric.admission_control.acquire.current", tags: [:kind]),
+      # admission control: number of rejected requests per kind
+      Telemetry.Metrics.sum("electric.admission_control.reject.count", tags: [:kind])
+    ]
+  end
+
   def count_shapes(stack_id, _telemetry_opts) do
     # Emit active_shapes first so that a failure in shape_counts (e.g. shape cache not yet
     # started during stack startup) doesn't drop this metric for the tick.

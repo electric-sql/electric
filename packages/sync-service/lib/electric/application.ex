@@ -43,7 +43,15 @@ defmodule Electric.Application do
     Logger.add_handlers(:electric)
 
     if Code.ensure_loaded?(Electric.Telemetry.Sentry) do
-      Electric.Telemetry.Sentry.add_logger_handler()
+      # Cap the Sentry transport sender backlog to shed load instead of letting
+      # queued Sentry events grow unbounded during error bursts. `sync_threshold:
+      # nil` disables the default sync-mode switch (which would block the logging
+      # process) so we rely solely on discard.
+      Electric.Telemetry.Sentry.add_logger_handler(
+        Electric.Telemetry.Sentry.default_handler_id(),
+        discard_threshold: 2000,
+        sync_threshold: nil
+      )
     end
 
     config = configuration()
@@ -405,6 +413,10 @@ defmodule Electric.Application do
           if(get_env(opts, :call_home_telemetry?), do: get_env(opts, :telemetry_url)),
         otel_metrics?: not is_nil(Application.get_env(:otel_metric_exporter, :otlp_endpoint))
       ],
+      # Export the key stack-level metrics (shapes, replication lag, retained WAL) to the
+      # Prometheus `/metrics` endpoint. They already reach the other reporters per-stack via
+      # StackTelemetry, so they go through this Prometheus-only seam to avoid double-reporting.
+      additional_prometheus_metrics: Electric.StackSupervisor.Telemetry.prometheus_metrics(),
       otel_opts: get_opts(opts, export_period: :otel_export_period)
     ]
   end

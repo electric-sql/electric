@@ -217,7 +217,12 @@ paths:
           schema:
             type: string
           description: |-
-            Optional list of columns to include in the rows from the `table`.
+            Optional list of columns to sync in the rows from the `table`.
+
+            This is a projection setting for reducing the data sent to the client.
+            If `queryable_columns` is set, `columns` may only include columns from
+            that allow-list. If `queryable_columns` is set and `columns` is omitted,
+            Electric syncs the queryable columns by default.
 
             They should always include the primary key columns, and should be formed
             as a comma separated list of column names exactly as they are in the database schema.
@@ -231,6 +236,25 @@ paths:
             select_columns_special:
               value: 'id,"Status-Check"'
               summary: Only include id and Status-Check columns, quoting the identifiers where necessary.
+        - name: queryable_columns
+          in: query
+          schema:
+            type: string
+          description: |-
+            Optional list of columns that may be referenced by subset WHERE clauses,
+            subset ORDER BY clauses, and the `columns` projection.
+
+            This is an allow-list for what client-controlled subset requests may query
+            or sync. It does not force every listed column to be synced, and it does
+            not restrict the main shape WHERE clause.
+
+            Queryable columns should always include the primary key columns, and should
+            be formed as a comma separated list of column names exactly as they are in
+            the database schema.
+          examples:
+            queryable_columns:
+              value: 'id,title,org_id'
+              summary: Allow filtering by org_id while syncing a narrower columns projection.
         - name: replica
           in: query
           schema:
@@ -872,7 +896,15 @@ paths:
           schema:
             type: string
           description: |-
-            Optional list of columns to include in the rows.
+            Optional list of columns to sync in the rows.
+        - name: queryable_columns
+          in: query
+          schema:
+            type: string
+          description: |-
+            Optional list of columns that may be referenced by subset filters,
+            subset ordering, and the columns projection. It does not restrict the
+            main shape WHERE clause.
         - name: replica
           in: query
           schema:

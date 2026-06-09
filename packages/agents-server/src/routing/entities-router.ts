@@ -187,6 +187,19 @@ function agentUrlPath(value: string): string {
   }
 }
 
+async function hasValidAgentWriteToken(
+  request: AgentsRouteRequest,
+  ctx: TenantContext,
+  fromAgent: string
+): Promise<boolean> {
+  const agentUrl = agentUrlPath(fromAgent)
+  const token = writeTokenFromRequest(request)
+  if (!token) return false
+  const agentEntity = await ctx.entityManager.registry.getEntity(agentUrl)
+  if (!agentEntity) return false
+  return ctx.entityManager.isValidWriteToken(agentEntity, token)
+}
+
 const inboxMessageBodySchema = Type.Object({
   payload: Type.Optional(Type.Unknown()),
   position: Type.Optional(Type.String()),
@@ -219,6 +232,41 @@ const forkBodySchema = Type.Object({
       sub_offset: Type.Number(),
     })
   ),
+  // Named server-resolved anchor. Resolves to a concrete fork pointer on
+  // the source root's `main` server-side, so callers don't need access
+  // to the source's per-row pointer side-table. Mutually exclusive with
+  // `fork_pointer`.
+  anchor: Type.Optional(Type.Literal(`latest_completed_run`)),
+  // Optional parent URL. When set, the new root fork is a CHILD of this
+  // URL (rather than inheriting the source's parent, which is `null`
+  // for the only allowed source — a top-level entity). Used by the
+  // agent `fork` tool to make a forking entity own its forks the same
+  // way a spawning entity owns its workers.
+  parent: Type.Optional(Type.String()),
+  // Optional wake subscription registered on the new root fork at fork
+  // time. Mirrors the `wake` field on spawn — the subscriber URL gets
+  // woken when the fork meets the named condition, with the response
+  // optionally inlined. Used to wire fork-as-child reply delivery
+  // through the same manifest-anchored mechanism spawn uses.
+  wake: Type.Optional(
+    Type.Object({
+      subscriberUrl: Type.String(),
+      condition: wakeConditionSchema,
+      debounceMs: Type.Optional(Type.Number()),
+      timeoutMs: Type.Optional(Type.Number()),
+      includeResponse: Type.Optional(Type.Boolean()),
+      manifestKey: Type.Optional(Type.String()),
+    })
+  ),
+  // Optional initial inbox message for the new root fork. Folds
+  // fork+send into one round-trip for the caller. Not atomic with
+  // fork creation: the server sends it after the fork is created
+  // and dispatch-linked (see the `entityManager.send` call below),
+  // so a failed send can leave an idle dispatched fork.
+  initialMessage: Type.Optional(Type.Unknown()),
+  // Optional tags stamped on the new root fork entity in addition to
+  // those copied from the source. Mirrors spawn's `tags`.
+  tags: Type.Optional(stringRecordSchema),
 })
 
 const setTagBodySchema = Type.Object({
@@ -1088,8 +1136,57 @@ async function forkEntity(
   if (principalMutationError) return principalMutationError
 
   const parsed = routeBody<ForkBody>(request)
+  if (parsed.fork_pointer && parsed.anchor) {
+    return apiError(
+      400,
+      ErrCodeInvalidRequest,
+      `fork_pointer and anchor are mutually exclusive`
+    )
+  }
   const { entityUrl, entity } = requireExistingEntityRoute(request)
   await assertDispatchPolicyAllowed(ctx, entity.dispatch_policy)
+
+  // Validate `parent` and `wake.subscriberUrl` before forking — mirrors
+  // the spawn route's parent-validation flow. Without these checks, a
+  // direct HTTP caller could attach a fork under an arbitrary parent or
+  // register a wake firing to an arbitrary subscriber.
+  if (parsed.parent !== undefined) {
+    const parent = await ctx.entityManager.registry.getEntity(parsed.parent)
+    if (!parent) {
+      return apiError(404, ErrCodeNotFound, `Parent entity not found`)
+    }
+    if (!(await canAccessEntity(ctx, parent, `spawn`, request as Request))) {
+      return apiError(
+        401,
+        ErrCodeUnauthorized,
+        `Principal is not allowed to spawn children from ${parent.url}`
+      )
+    }
+  }
+  if (parsed.wake !== undefined) {
+    // The only sensible target for a fork's wake is the new fork's
+    // parent (so the parent gets woken when the fork's run finishes
+    // — same model as spawn). Require parent + matching subscriber to
+    // prevent a caller from registering a wake firing to an entity
+    // they don't own. If subscriber-flexibility ever becomes a real
+    // use case, replace this with a proper canAccessEntity check on
+    // the subscriber.
+    if (parsed.parent === undefined) {
+      return apiError(
+        400,
+        ErrCodeInvalidRequest,
+        `wake requires parent (the fork's wake fires to its parent)`
+      )
+    }
+    if (parsed.wake.subscriberUrl !== parsed.parent) {
+      return apiError(
+        401,
+        ErrCodeUnauthorized,
+        `wake.subscriberUrl must match parent`
+      )
+    }
+  }
+
   const result = await ctx.entityManager.forkSubtree(entityUrl, {
     rootInstanceId: parsed.instance_id,
     waitTimeoutMs: parsed.waitTimeoutMs,
@@ -1100,9 +1197,23 @@ async function forkEntity(
         subOffset: parsed.fork_pointer.sub_offset,
       },
     }),
+    ...(parsed.anchor && { anchor: parsed.anchor }),
+    ...(parsed.parent !== undefined && { parent: parsed.parent }),
+    ...(parsed.wake !== undefined && { wake: parsed.wake }),
+    ...(parsed.tags !== undefined && { tags: parsed.tags }),
   })
   for (const forkedEntity of result.entities) {
     await linkEntityDispatchSubscription(ctx, forkedEntity)
+  }
+  // Deliver the initial message via entityManager.send AFTER the
+  // dispatch subscription is linked — same ordering spawn uses. Sending
+  // before linking would land the inbox row on the stream before the
+  // dispatcher is subscribed, and the dispatcher would never pick it up.
+  if (parsed.initialMessage !== undefined) {
+    await ctx.entityManager.send(result.root.url, {
+      from: parsed.parent ?? ctx.principal.url,
+      payload: parsed.initialMessage,
+    })
   }
   return json(
     {
@@ -1138,7 +1249,14 @@ async function sendEntity(
   }
   if (parsed.from_agent !== undefined) {
     const principalAgentUrl = agentUrlForPrincipal(principal)
-    if (agentUrlPath(parsed.from_agent) !== principalAgentUrl) {
+    const fromAgentUrl = agentUrlPath(parsed.from_agent)
+    const matchesPrincipalAgent = fromAgentUrl === principalAgentUrl
+    const hasAgentWriteToken = await hasValidAgentWriteToken(
+      request,
+      ctx,
+      parsed.from_agent
+    )
+    if (!matchesPrincipalAgent && !hasAgentWriteToken) {
       return apiError(
         400,
         ErrCodeInvalidRequest,

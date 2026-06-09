@@ -814,6 +814,33 @@ defmodule Electric.Shapes.FilterTest do
     end
 
     @tag :performance
+    test "relation changes collect shapes without walking nested where condition indexes" do
+      filter = Filter.new()
+
+      Enum.each(1..@shape_count, fn i ->
+        shape = Shape.new!("t1", where: "id = #{i} AND number = 11", inspector: @inspector)
+        Filter.add_shape(filter, i, shape)
+      end)
+
+      relation = %Relation{
+        schema: "public",
+        table: "t1",
+        id: :erlang.phash2({"public", "t1"}),
+        columns: ["id", "number", "an_array"],
+        affected_columns: []
+      }
+
+      assert Filter.affected_shapes(filter, relation) == MapSet.new()
+
+      affected_reductions =
+        reductions(fn ->
+          Filter.affected_shapes(filter, relation)
+        end)
+
+      assert affected_reductions < 100_000
+    end
+
+    @tag :performance
     test "where clause in the form `array_field @> const_array` is optimised" do
       # The optimisation for `@>` is less performant than the other optimisations,
       # however it performs well with lots of shapes. While it can't do

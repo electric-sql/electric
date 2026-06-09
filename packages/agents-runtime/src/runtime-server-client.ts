@@ -87,7 +87,9 @@ export interface SendEntityMessageOptions {
   afterMs?: number
   mode?: `immediate` | `queued` | `paused` | `steer`
   position?: string
+  fromPrincipal?: string
   fromAgent?: string
+  writeToken?: string
 }
 
 export interface RegisterWakeOptions {
@@ -124,6 +126,38 @@ export interface RuntimeServerClient {
     id: string
   }) => Promise<Uint8Array>
   spawnEntity: (options: SpawnEntityOptions) => Promise<RuntimeEntityInfo>
+  /**
+   * Fork an entity at the server-resolved `latest_completed_run` anchor.
+   * Resolves to the new root entity's info. Wraps the agents-server
+   * `POST /_electric/entities/<type>/<id>/fork` endpoint.
+   *
+   * Optional fields mirror `spawnEntity`:
+   * - `parent` makes the new fork a child of that URL.
+   * - `wake` registers a subscription at fork time (reply delivery
+   *   uses the parent's manifest-anchored wake when paired with a
+   *   manifest entry on the parent — same model as `spawn`).
+   * - `initialMessage` folds fork+send into one round-trip. Not
+   *   atomic: sent after fork creation and dispatch linking, so a
+   *   partial failure can leave an idle dispatched fork.
+   * - `tags` stamps tags onto the new fork in addition to those
+   *   copied from the source.
+   */
+  forkEntity: (options: {
+    sourceEntityUrl: string
+    /** Maps to the server's `instance_id` body field. */
+    instanceId?: string
+    parent?: string
+    wake?: {
+      subscriberUrl: string
+      condition: RegisterWakeOptions[`condition`]
+      debounceMs?: number
+      timeoutMs?: number
+      includeResponse?: boolean
+      manifestKey?: string
+    }
+    initialMessage?: unknown
+    tags?: Record<string, string>
+  }) => Promise<RuntimeEntityInfo>
   getEntity: (entityUrl: string) => Promise<RuntimeEntityInfo>
   ensureSharedStateStream: (
     sharedStateId: string,
@@ -295,18 +329,30 @@ export function createRuntimeServerClient(
     afterMs,
     mode,
     position,
+    fromPrincipal,
     fromAgent,
+    writeToken,
   }: SendEntityMessageOptions): Promise<void> => {
     const body: Record<string, unknown> = { payload }
     if (type !== undefined) body.type = type
     if (afterMs !== undefined) body.afterMs = afterMs
     if (mode !== undefined) body.mode = mode
     if (position !== undefined) body.position = position
+    if (fromPrincipal !== undefined) body.from_principal = fromPrincipal
     if (fromAgent !== undefined) body.from_agent = fromAgent
+
+    const headers = new Headers({ 'content-type': `application/json` })
+    if (writeToken) {
+      applyTokenHeader(
+        headers,
+        config.writeTokenHeader ?? `authorization`,
+        writeToken
+      )
+    }
 
     const response = await request(`${entityRpcPath(targetUrl)}/send`, {
       method: `POST`,
-      headers: { 'content-type': `application/json` },
+      headers,
       body: JSON.stringify(body),
     })
 
@@ -459,6 +505,53 @@ export function createRuntimeServerClient(
     }
 
     return entityInfo
+  }
+
+  const forkEntity = async ({
+    sourceEntityUrl,
+    instanceId,
+    parent,
+    wake,
+    initialMessage,
+    tags,
+  }: {
+    sourceEntityUrl: string
+    instanceId?: string
+    parent?: string
+    wake?: {
+      subscriberUrl: string
+      condition: RegisterWakeOptions[`condition`]
+      debounceMs?: number
+      timeoutMs?: number
+      includeResponse?: boolean
+      manifestKey?: string
+    }
+    initialMessage?: unknown
+    tags?: Record<string, string>
+  }): Promise<RuntimeEntityInfo> => {
+    const body: Record<string, unknown> = {
+      anchor: `latest_completed_run`,
+    }
+    if (instanceId !== undefined) body.instance_id = instanceId
+    if (parent !== undefined) body.parent = parent
+    if (wake !== undefined) body.wake = wake
+    if (initialMessage !== undefined) body.initialMessage = initialMessage
+    if (tags !== undefined) body.tags = tags
+    const response = await request(entityRpcPath(sourceEntityUrl, `/fork`), {
+      method: `POST`,
+      headers: { 'content-type': `application/json` },
+      body: JSON.stringify(body),
+    })
+    if (!response.ok) {
+      throw new Error(
+        `fork ${sourceEntityUrl} failed (${response.status}): ${await readErrorText(response)}`
+      )
+    }
+    const payload = (await response.json()) as { root?: RuntimeEntityResponse }
+    return requireEntityInfo(
+      payload.root,
+      `fork ${sourceEntityUrl} returned an invalid root payload`
+    )
   }
 
   const ensureSharedStateStream = async (
@@ -806,6 +899,7 @@ export function createRuntimeServerClient(
     createAttachment,
     readAttachment,
     spawnEntity,
+    forkEntity,
     getEntity,
     ensureSharedStateStream,
     signalEntity,

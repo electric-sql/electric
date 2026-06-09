@@ -39,14 +39,16 @@ defmodule Electric.Replication.Changes do
             commit_timestamp: DateTime.t() | nil,
             transaction_size: non_neg_integer(),
             txn_change_count: non_neg_integer(),
-            received_at_mono: integer() | nil,
-            initial_receive_lag: non_neg_integer() | nil
+            received_at: integer() | nil,
+            initial_receive_lag: non_neg_integer() | nil,
+            tx_started_at: integer() | nil
           }
 
     defstruct [
       :commit_timestamp,
-      :received_at_mono,
+      :received_at,
       :initial_receive_lag,
+      :tx_started_at,
       transaction_size: 0,
       txn_change_count: 0
     ]
@@ -82,10 +84,10 @@ defmodule Electric.Replication.Changes do
     end-to-end lag from Postgres commit to acknowledgement.
     """
     @spec calculate_final_receive_lag(t(), integer()) :: non_neg_integer()
-    def calculate_final_receive_lag(%__MODULE__{} = commit, current_mono) do
+    def calculate_final_receive_lag(%__MODULE__{} = commit, timestamp) do
       elapsed_in_electric =
         System.convert_time_unit(
-          current_mono - commit.received_at_mono,
+          timestamp - commit.received_at,
           :native,
           :millisecond
         )

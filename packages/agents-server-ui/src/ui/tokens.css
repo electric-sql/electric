@@ -100,6 +100,13 @@
   --ds-bg: #f7f7f5;
   --ds-bg-subtle: #f0efed;
   --ds-chrome-bg: var(--ds-bg-subtle);
+  --ds-chrome-backdrop-filter: none;
+  --ds-sidebar-item-hover-bg: transparent;
+  --ds-sidebar-item-active-bg: transparent;
+  --ds-sidebar-item-hover-backdrop-filter: none;
+  --ds-sidebar-item-active-backdrop-filter: none;
+  --ds-sidebar-divider: var(--ds-divider);
+  --ds-sidebar-divider-blend-mode: normal;
   --ds-surface: #ffffff;
   --ds-surface-raised: #ffffff;
   --ds-input-bg: var(--ds-surface-raised);
@@ -318,6 +325,13 @@
   --ds-bg: #111318;
   --ds-bg-subtle: #16181f;
   --ds-chrome-bg: var(--ds-bg-subtle);
+  --ds-chrome-backdrop-filter: none;
+  --ds-sidebar-item-hover-bg: transparent;
+  --ds-sidebar-item-active-bg: transparent;
+  --ds-sidebar-item-hover-backdrop-filter: none;
+  --ds-sidebar-item-active-backdrop-filter: none;
+  --ds-sidebar-divider: var(--ds-divider);
+  --ds-sidebar-divider-blend-mode: normal;
   --ds-surface: #1a1d27;
   --ds-surface-raised: #22252f;
   /* Solid raised fill — same value the marketing site uses for its

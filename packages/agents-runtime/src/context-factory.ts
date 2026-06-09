@@ -36,6 +36,7 @@ import type {
   EntitySignal,
   EntityHandle,
   EntityStreamDBWithActions,
+  ForkOptions,
   HandlerContext,
   LLMContentBlock,
   HandlerWake,
@@ -111,6 +112,11 @@ export interface HandlerContextConfig<TState extends StateProxy = StateProxy> {
       tags?: Record<string, string>
       observe?: boolean
     }
+  ) => Promise<EntityHandle>
+  doFork: (
+    sourceEntityUrl: string,
+    id: string,
+    opts: ForkOptions
   ) => Promise<EntityHandle>
   doMkdb: <TSchema extends SharedStateSchemaMap>(
     id: string,
@@ -962,6 +968,16 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
       }
     ): Promise<EntityHandle> {
       return config.doSpawn(type, id, args, opts)
+    },
+    fork(
+      sourceEntityUrl: string,
+      id: string,
+      opts?: ForkOptions
+    ): Promise<EntityHandle> {
+      return config.doFork(sourceEntityUrl, id, opts ?? {})
+    },
+    forkSelf(id: string, opts?: ForkOptions): Promise<EntityHandle> {
+      return config.doFork(config.entityUrl, id, opts ?? {})
     },
     mkdb<TSchema extends SharedStateSchemaMap>(
       id: string,

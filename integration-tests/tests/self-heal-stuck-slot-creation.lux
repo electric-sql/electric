@@ -1,0 +1,66 @@
+[doc Verify that Electric automatically unblocks a stuck replication slot creation by forcing a standby snapshot, recovering without a manual restart once the blocking transaction commits, even on an otherwise idle database]
+
+[include _macros.luxinc]
+
+[global pg_container_name=self-heal-stuck-slot__pg]
+
+###
+
+## Start a new Postgres cluster
+[invoke setup_pg]
+
+## Open a transaction that holds an xid, blocking logical slot creation
+[invoke start_psql]
+[shell psql]
+  !BEGIN;
+  ??BEGIN
+
+  !SELECT pg_current_xact_id();
+  ??pg_current_xact_id
+  ??(1 row)
+
+## Start Electric; it should block on slot creation
+[invoke setup_electric_shell_with_tenant "electric_1" "3000"]
+
+[shell electric_1]
+  # Prove replication does NOT start while the transaction is open.
+  -Starting replication from postgres|$fail_pattern
+
+  ??[debug] ReplicationClient step: create_slot
+
+  # This warning is only logged on the first configuration-check tick (~10s), so
+  # give the match enough headroom to avoid a risky-timer warning.
+  [timeout 30]
+  ??[warning] Waiting for the replication connection setup to complete...
+
+## Confirm the service reports "starting" (genuinely blocked, not yet active).
+## Poll rather than sleep+curl so a slow HTTP startup doesn't make this flaky.
+[shell client]
+  [invoke wait-for "curl -X GET http://localhost:3000/v1/health?database_id=integration_test_tenant" "\{\"status\":\"starting\"\}" 10 $PS1]
+
+## Commit the blocking transaction and then keep the database completely idle.
+## On a quiet database Postgres would not emit an XLOG_RUNNING_XACTS record for a
+## long time, so without intervention slot creation would stay stuck. Electric
+## must force a standby snapshot to recover promptly.
+[shell psql]
+  !COMMIT;
+  ??COMMIT
+
+## Verify Electric forced a standby snapshot and then started replicating.
+## The "Forced a standby snapshot" line only appears if the self-heal path ran,
+## so it is the proof of this feature (independent of organic recovery timing).
+[shell electric_1]
+  # Reset the failure pattern before the next match.
+  -$fail_pattern
+
+  # Allow time for the periodic unblock attempt (production check interval is 10s).
+  [timeout 30]
+  ??[debug] Forced a standby snapshot to unblock replication slot creation
+  ??[notice] Starting replication from postgres
+
+## The source becomes healthy and active.
+[shell client]
+  [invoke wait-for "curl -X GET http://localhost:3000/v1/health?database_id=integration_test_tenant" "\{\"status\":\"active\"\}" 10 $PS1]
+
+[cleanup]
+  [invoke teardown]

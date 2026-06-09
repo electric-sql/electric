@@ -17,7 +17,13 @@ import { useAgents } from '../lib/AgentsProvider'
 import { checkServerHealth } from '../lib/agentsClient'
 import { cloudAuth } from '../lib/cloudAuth'
 import { useColorSchemeMode, useTokens } from '../lib/ThemeProvider'
-import { fontSize, lineHeight, radii, spacing } from '../lib/theme'
+import {
+  fontSize,
+  lineHeight,
+  monoFontFamily,
+  radii,
+  spacing,
+} from '../lib/theme'
 import type { Tokens } from '../lib/theme'
 
 type HealthState =
@@ -281,7 +287,7 @@ function createStyles(tokens: Tokens) {
       lineHeight: lineHeight.sm,
     },
     fieldValueMono: {
-      fontFamily: Platform.OS === `ios` ? `Menlo` : `monospace`,
+      fontFamily: monoFontFamily,
     },
     actionRow: {
       flexDirection: `row`,
