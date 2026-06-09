@@ -140,6 +140,9 @@ export async function startRealtimeAudioSession({
   let nextPlaybackTime = playbackContext.currentTime
   let currentOutputItemId: string | null = null
   let currentOutputStartedAt: number | null = null
+  let micChunks = 0
+  let playbackChunks = 0
+  let controlEvents = 0
   const playbackNodes = new Set<AudioBufferSourceNode>()
 
   const appendControl = async (value: unknown): Promise<void> => {
@@ -212,6 +215,9 @@ export async function startRealtimeAudioSession({
     })
     await resumeAudioContexts
     session = await createRealtimeSession(baseUrl, entityUrl)
+    console.info(
+      `[realtime-audio] session started session=${session.sessionId} audioIn=${session.streams.audio_in} audioOut=${session.streams.audio_out}`
+    )
     const audioIn = streamHandle(
       baseUrl,
       session.streams.audio_in,
@@ -241,6 +247,12 @@ export async function startRealtimeAudioSession({
       if (abort.signal.aborted) return
       const input = event.inputBuffer.getChannelData(0)
       const bytes = pcm16Bytes(input)
+      micChunks += 1
+      if (micChunks === 1) {
+        console.info(
+          `[realtime-audio] microphone first chunk session=${session?.sessionId} bytes=${bytes.byteLength}`
+        )
+      }
       appendQueue = appendQueue
         .then(() => audioIn.append(bytes))
         .catch((error) => {
@@ -260,6 +272,12 @@ export async function startRealtimeAudioSession({
       try {
         for await (const chunk of response.bodyStream()) {
           if (abort.signal.aborted || chunk.byteLength === 0) continue
+          playbackChunks += 1
+          if (playbackChunks === 1) {
+            console.info(
+              `[realtime-audio] playback first chunk session=${session?.sessionId} bytes=${chunk.byteLength}`
+            )
+          }
           const samples = pcm16Floats(chunk)
           const buffer = playbackContext.createBuffer(
             1,
@@ -304,6 +322,12 @@ export async function startRealtimeAudioSession({
         for await (const event of response.jsonStream()) {
           if (abort.signal.aborted || !event || typeof event !== `object`) {
             continue
+          }
+          controlEvents += 1
+          if (controlEvents === 1) {
+            console.info(
+              `[realtime-audio] control first event session=${session?.sessionId} type=${event.type}`
+            )
           }
           if (
             event.type === `output_audio.delta` &&

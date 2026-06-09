@@ -193,7 +193,7 @@ describe(`ElectricAgentsManager realtime sessions`, () => {
     expect(append).toHaveBeenCalledTimes(3)
     const manifestEvent = decodeAppend(append.mock.calls[0]!)
     const sessionEvent = decodeAppend(append.mock.calls[1]!)
-    const inboxEvent = decodeAppend(append.mock.calls[2]!)
+    const wakeEvent = decodeAppend(append.mock.calls[2]!)
 
     expect(manifestEvent).toMatchObject({
       type: `manifest`,
@@ -221,18 +221,28 @@ describe(`ElectricAgentsManager realtime sessions`, () => {
         streams: result.streams,
       },
     })
-    expect(inboxEvent).toMatchObject({
-      type: `inbox`,
+    expect(wakeEvent).toMatchObject({
+      type: `wake`,
+      key: `wake-realtime-session-rt-1`,
       value: {
-        from: `/_electric/server`,
-        payload: {
-          type: `realtime_session.started`,
-          sessionId: `rt-1`,
-          streams: result.streams,
-        },
+        source: `/chat/session-1`,
+        timeout: false,
+        changes: [
+          {
+            collection: `realtimeSessions`,
+            kind: `insert`,
+            key: `realtime-session:rt-1`,
+            from: `/_electric/server`,
+            payload: {
+              type: `realtime_session.started`,
+              sessionId: `rt-1`,
+              streams: result.streams,
+            },
+            message_type: `realtime_session.started`,
+          },
+        ],
       },
     })
-    expect(inboxEvent.value).not.toHaveProperty(`message_type`)
   })
 
   it(`rejects non-OpenAI realtime providers in V1`, async () => {

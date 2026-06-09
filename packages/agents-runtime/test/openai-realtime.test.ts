@@ -227,6 +227,57 @@ describe(`createOpenAIRealtimeProvider`, () => {
     })
   })
 
+  it(`maps GA output audio and transcript events`, async () => {
+    FakeWebSocket.instances = []
+    const provider = createOpenAIRealtimeProvider({
+      apiKey: `sk-test`,
+      WebSocket: FakeWebSocket,
+    })
+
+    const session = await provider.connect({
+      systemPrompt: `Talk`,
+      messages: [],
+      tools: [],
+    })
+    const socket = FakeWebSocket.instances[0]!
+    const iterator = session.events[Symbol.asyncIterator]()
+
+    socket.emitMessage({
+      type: `response.output_audio.delta`,
+      response_id: `resp-1`,
+      item_id: `item-1`,
+      delta: `AQID`,
+    })
+    await expect(nextEvent(iterator)).resolves.toEqual({
+      type: `output_audio.delta`,
+      responseId: `resp-1`,
+      itemId: `item-1`,
+      audio: new Uint8Array([1, 2, 3]),
+    })
+
+    socket.emitMessage({
+      type: `response.output_audio_transcript.delta`,
+      response_id: `resp-1`,
+      delta: `hello`,
+    })
+    await expect(nextEvent(iterator)).resolves.toEqual({
+      type: `output_transcript.delta`,
+      responseId: `resp-1`,
+      delta: `hello`,
+    })
+
+    socket.emitMessage({
+      type: `response.output_audio.done`,
+      response_id: `resp-1`,
+      item_id: `item-1`,
+    })
+    await expect(nextEvent(iterator)).resolves.toEqual({
+      type: `output_audio.completed`,
+      responseId: `resp-1`,
+      itemId: `item-1`,
+    })
+  })
+
   it(`maps OpenAI events and executes function calls`, async () => {
     FakeWebSocket.instances = []
     const execute = vi.fn().mockResolvedValue({

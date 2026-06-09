@@ -177,6 +177,7 @@ function createRealtimeStreamIo(
 ): RealtimeStreamIo | undefined {
   if (!config.realtimeStreams || !session) return undefined
 
+  const logPrefix = `[agent-runtime]`
   const abort = new AbortController()
   const abortFromRun = (): void => abort.abort()
   if (config.runSignal?.aborted) {
@@ -206,6 +207,17 @@ function createRealtimeStreamIo(
     `application/json`
   )
   const tasks: Array<Promise<void>> = []
+  let audioInChunks = 0
+  let audioInBytes = 0
+  let controlInCommands = 0
+  let audioOutChunks = 0
+  let audioOutBytes = 0
+  let controlOutEvents = 0
+
+  runtimeLog.info(
+    logPrefix,
+    `realtime stream bridge starting session=${session.id} audioIn=${session.streams.audio_in} audioOut=${session.streams.audio_out}`
+  )
 
   if (providerSession.appendInputAudio) {
     tasks.push(
@@ -218,6 +230,14 @@ function createRealtimeStreamIo(
         try {
           for await (const chunk of response.bodyStream()) {
             if (abort.signal.aborted) break
+            audioInChunks += 1
+            audioInBytes += chunk.byteLength
+            if (audioInChunks === 1) {
+              runtimeLog.info(
+                logPrefix,
+                `realtime audio/in first chunk session=${session.id} bytes=${chunk.byteLength}`
+              )
+            }
             await providerSession.appendInputAudio?.(chunk)
           }
         } finally {
@@ -246,6 +266,13 @@ function createRealtimeStreamIo(
         for await (const command of response.jsonStream()) {
           if (abort.signal.aborted || !isRealtimeControlInput(command)) {
             continue
+          }
+          controlInCommands += 1
+          if (controlInCommands === 1) {
+            runtimeLog.info(
+              logPrefix,
+              `realtime control/in first command session=${session.id} type=${command.type}`
+            )
           }
           switch (command.type) {
             case `input_text`:
@@ -284,7 +311,22 @@ function createRealtimeStreamIo(
 
   return {
     async writeProviderEvent(event) {
+      controlOutEvents += 1
+      if (controlOutEvents === 1) {
+        runtimeLog.info(
+          logPrefix,
+          `realtime provider first event session=${session.id} type=${event.type}`
+        )
+      }
       if (event.type === `output_audio.delta`) {
+        audioOutChunks += 1
+        audioOutBytes += event.audio.byteLength
+        if (audioOutChunks === 1) {
+          runtimeLog.info(
+            logPrefix,
+            `realtime audio/out first chunk session=${session.id} bytes=${event.audio.byteLength}`
+          )
+        }
         await audioOut.append(event.audio)
       }
       await controlOut.append(jsonBytes(realtimeControlOutput(event)))
@@ -293,6 +335,10 @@ function createRealtimeStreamIo(
       abort.abort()
       config.runSignal?.removeEventListener(`abort`, abortFromRun)
       await Promise.allSettled(tasks)
+      runtimeLog.info(
+        logPrefix,
+        `realtime stream bridge closed session=${session.id} audioInChunks=${audioInChunks} audioInBytes=${audioInBytes} controlInCommands=${controlInCommands} providerEvents=${controlOutEvents} audioOutChunks=${audioOutChunks} audioOutBytes=${audioOutBytes}`
+      )
     },
   }
 }

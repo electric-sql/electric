@@ -409,6 +409,7 @@ function mapOpenAIEvent(
         },
       ]
     case `response.audio.delta`:
+    case `response.output_audio.delta`:
       return [
         {
           type: `output_audio.delta`,
@@ -421,6 +422,7 @@ function mapOpenAIEvent(
         },
       ]
     case `response.audio.done`:
+    case `response.output_audio.done`:
       return [
         {
           type: `output_audio.completed`,
@@ -432,6 +434,7 @@ function mapOpenAIEvent(
         },
       ]
     case `response.audio_transcript.delta`:
+    case `response.output_audio_transcript.delta`:
     case `response.output_text.delta`:
       return [
         {
@@ -444,6 +447,7 @@ function mapOpenAIEvent(
         },
       ]
     case `response.audio_transcript.done`:
+    case `response.output_audio_transcript.done`:
     case `response.output_text.done`:
       return [
         {

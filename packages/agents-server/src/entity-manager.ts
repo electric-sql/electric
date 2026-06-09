@@ -2779,22 +2779,41 @@ export class EntityManager {
           streams,
           ...(req.meta ? { meta: req.meta } : {}),
         },
-      } as never)
+      } as any)
       await this.streamClient.append(
         entity.streams.main,
         this.encodeChangeEvent(sessionEvent as Record<string, unknown>)
       )
 
-      await this.send(entityUrl, {
-        from: SERVER_SIGNAL_SENDER,
-        payload: {
-          type: `realtime_session.started`,
-          sessionId,
-          provider,
-          model,
-          streams,
+      const wakeEvent = entityStateSchema.wakes.insert({
+        key: `wake-realtime-session-${sessionId}`,
+        value: {
+          timestamp: startedAt,
+          source: entityUrl,
+          timeout: false,
+          changes: [
+            {
+              collection: `realtimeSessions`,
+              kind: `insert`,
+              key: manifestKey,
+              from: SERVER_SIGNAL_SENDER,
+              payload: {
+                type: `realtime_session.started`,
+                sessionId,
+                provider,
+                model,
+                streams,
+              },
+              timestamp: startedAt,
+              message_type: `realtime_session.started`,
+            },
+          ],
         },
-      })
+      } as any)
+      await this.streamClient.append(
+        entity.streams.main,
+        this.encodeChangeEvent(wakeEvent as Record<string, unknown>)
+      )
     } catch (error) {
       await Promise.allSettled(
         createdStreams.map((path) => this.streamClient.delete(path))

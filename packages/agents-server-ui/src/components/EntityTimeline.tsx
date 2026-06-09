@@ -110,6 +110,20 @@ function readInboxPayloadDisplay(payload: unknown): string {
   return stringifyPayload(payload, 2)
 }
 
+function isRealtimeSessionWake(row: RenderTimelineRow): boolean {
+  const changes = row.wake?.payload.changes
+  if (!Array.isArray(changes)) return false
+  return changes.some((change) => {
+    if (!change || typeof change !== `object`) return false
+    const payload = (change as { payload?: unknown }).payload
+    return (
+      !!payload &&
+      typeof payload === `object` &&
+      (payload as { type?: unknown }).type === `realtime_session.started`
+    )
+  })
+}
+
 function stringifySearchPayload(value: unknown): string {
   if (value == null) return ``
   if (typeof value === `string`) return value
@@ -1492,7 +1506,11 @@ export function EntityTimeline({
   const previousStreamingAgentKeyRef = useRef<string | null>(null)
   const textColumnWidth = Math.max(0, contentWidth - CHAT_SURFACE_GUTTER)
   const displayRows = useMemo(
-    () => rows.filter((row) => !isAttachmentManifest(row.manifest)),
+    () =>
+      rows.filter(
+        (row) =>
+          !isAttachmentManifest(row.manifest) && !isRealtimeSessionWake(row)
+      ),
     [rows]
   )
   const attachmentsByInboxKey = useMemo(() => {
