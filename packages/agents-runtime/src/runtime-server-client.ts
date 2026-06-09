@@ -313,7 +313,9 @@ export function createRuntimeServerClient(
   ): Promise<{ txid?: string }> => {
     try {
       const body = (await response.json()) as { txid?: unknown }
-      return typeof body.txid === `string` ? { txid: body.txid } : {}
+      if (typeof body.txid === `string`) return { txid: body.txid }
+      if (typeof body.txid === `number`) return { txid: String(body.txid) }
+      return {}
     } catch {
       return {}
     }

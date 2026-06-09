@@ -39,6 +39,7 @@ import type {
   ElectricAgentsEntity,
   ElectricAgentsEntityType,
   EntityPermission,
+  PublicElectricAgentsEntity,
   SendRequest,
 } from '../electric-agents-types.js'
 import type { JsonRouteRequest } from './schema.js'
@@ -1083,6 +1084,16 @@ async function deleteEventSourceSubscription(
   return json(result)
 }
 
+function tagResponseBody(
+  entity: ElectricAgentsEntity & { txid?: number }
+): PublicElectricAgentsEntity & { txid?: number } {
+  const publicEntity = toPublicEntity(entity)
+  if (entity.txid !== undefined) {
+    return { ...publicEntity, txid: entity.txid }
+  }
+  return publicEntity
+}
+
 async function setTag(
   request: AgentsRouteRequest,
   ctx: TenantContext
@@ -1102,10 +1113,7 @@ async function setTag(
     { value: parsed.value },
     token
   )
-  return json({
-    ...toPublicEntity(updated),
-    ...(updated.txid !== undefined ? { txid: updated.txid } : {}),
-  })
+  return json(tagResponseBody(updated))
 }
 
 async function deleteTag(
@@ -1125,10 +1133,7 @@ async function deleteTag(
     decodeURIComponent(request.params.tagKey),
     token
   )
-  return json({
-    ...toPublicEntity(updated),
-    ...(updated.txid !== undefined ? { txid: updated.txid } : {}),
-  })
+  return json(tagResponseBody(updated))
 }
 
 async function forkEntity(

@@ -318,6 +318,21 @@ describe(`horton tool composition`, () => {
     expect(result.content[0].text).toContain(`non-empty`)
   })
 
+  it(`returns structured error when setTag throws`, async () => {
+    const setTag = vi.fn().mockRejectedValue(new Error(`Network error`))
+    const cfg = await captureAgentConfig({}, [], { setTag })
+    const tool = cfg.tools.find(
+      (t) =>
+        !isMcpToolsSentinel(t) && (t as { name?: string }).name === `set_title`
+    ) as { execute: (id: string, params: unknown) => Promise<any> }
+
+    const result = await tool.execute(`call-1`, { title: `New title` })
+
+    expect(setTag).toHaveBeenCalledWith(`title`, `New title`)
+    expect(result.details).toEqual({ updated: false })
+    expect(result.content[0].text).toContain(`Network error`)
+  })
+
   it(`appends an unconditional MCP tools sentinel with no allowlist`, async () => {
     const tools = await captureToolset()
     const sentinels = tools.filter(isMcpToolsSentinel) as McpToolsSentinel[]

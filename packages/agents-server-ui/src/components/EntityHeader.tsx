@@ -166,7 +166,7 @@ function EntityTitle({
           onKeyDown={(event) => {
             if (event.key === `Enter`) {
               event.preventDefault()
-              saveEdit()
+              inputRef.current?.blur()
             } else if (event.key === `Escape`) {
               event.preventDefault()
               cancelEdit()

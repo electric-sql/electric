@@ -527,33 +527,42 @@ function createSpawnAction(
       if (dispatch_policy) body.dispatch_policy = dispatch_policy
       if (sandbox) body.sandbox = sandbox
 
-      const res = await serverFetch(entitySpawnApiUrl(baseUrl, type, name), {
-        method: `PUT`,
-        headers: { 'content-type': `application/json` },
-        body: JSON.stringify(body),
-      })
-      if (!res.ok) {
-        const text = await res.text().catch(() => ``)
-        let message = `Spawn failed (${res.status})`
-        try {
-          const data = JSON.parse(text) as Record<string, unknown>
-          if (data.message) {
-            message = String(data.message)
-          } else if (
-            typeof data.error === `object` &&
-            data.error !== null &&
-            `message` in data.error
-          ) {
-            message = String(data.error.message)
+      try {
+        const res = await serverFetch(entitySpawnApiUrl(baseUrl, type, name), {
+          method: `PUT`,
+          headers: { 'content-type': `application/json` },
+          body: JSON.stringify(body),
+        })
+        if (!res.ok) {
+          const text = await res.text().catch(() => ``)
+          let message = `Spawn failed (${res.status})`
+          try {
+            const data = JSON.parse(text) as Record<string, unknown>
+            if (data.message) {
+              message = String(data.message)
+            } else if (
+              typeof data.error === `object` &&
+              data.error !== null &&
+              `message` in data.error
+            ) {
+              message = String(data.error.message)
+            }
+          } catch {
+            if (text) message = text
           }
-        } catch {
-          if (text) message = text
+          throw new Error(message)
         }
-        throw new Error(message)
+        const data = (await res.json()) as { txid: number }
+        await entitiesCollection.utils.awaitTxId(data.txid, 10_000)
+        return { txid: data.txid }
+      } catch (err) {
+        showToast({
+          tone: `danger`,
+          title: `Spawn failed`,
+          description: err instanceof Error ? err.message : `Unknown error`,
+        })
+        throw err
       }
-      const data = (await res.json()) as { txid: number }
-      await entitiesCollection.utils.awaitTxId(data.txid, 10_000)
-      return { txid: data.txid }
     },
   })
 }
@@ -642,21 +651,30 @@ function createSetEntityTitleAction(
       })
     },
     mutationFn: async ({ entityUrl, title }) => {
-      const res = await serverFetch(
-        entityApiUrl(baseUrl, entityUrl, `/tags/title`),
-        {
-          method: `POST`,
-          headers: { 'content-type': `application/json` },
-          body: JSON.stringify({ title }),
+      try {
+        const res = await serverFetch(
+          entityApiUrl(baseUrl, entityUrl, `/tags/title`),
+          {
+            method: `POST`,
+            headers: { 'content-type': `application/json` },
+            body: JSON.stringify({ value: title }),
+          }
+        )
+        if (!res.ok) {
+          const text = await res.text().catch(() => ``)
+          throw new Error(text || `Set title failed (${res.status})`)
         }
-      )
-      if (!res.ok) {
-        const text = await res.text().catch(() => ``)
-        throw new Error(text || `Set title failed (${res.status})`)
+        const data = (await res.json()) as { txid: number }
+        await entitiesCollection.utils.awaitTxId(data.txid, 10_000)
+        return { txid: data.txid }
+      } catch (err) {
+        showToast({
+          tone: `danger`,
+          title: `Set title failed`,
+          description: err instanceof Error ? err.message : `Unknown error`,
+        })
+        throw err
       }
-      const data = (await res.json()) as { txid: number }
-      await entitiesCollection.utils.awaitTxId(data.txid, 10_000)
-      return { txid: data.txid }
     },
   })
 }

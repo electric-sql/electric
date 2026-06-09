@@ -336,6 +336,14 @@ function cloneRecord<T extends Record<string, unknown>>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
 }
 
+function withOptionalTxid<T>(
+  entity: T,
+  txid: number | undefined
+): T & { txid?: number } {
+  if (txid === undefined) return entity as T & { txid?: number }
+  return { ...entity, txid }
+}
+
 /**
  * Orchestrates the Electric Agents entity lifecycle: register types, spawn, send, kill.
  *
@@ -2746,10 +2754,7 @@ export class EntityManager {
       await this.entityBridgeManager.onEntityChanged(entityUrl)
     }
 
-    return {
-      ...updated,
-      ...(result.txid !== undefined ? { txid: result.txid } : {}),
-    }
+    return withOptionalTxid(updated, result.txid)
   }
 
   async deleteTag(
@@ -2791,10 +2796,7 @@ export class EntityManager {
       await this.entityBridgeManager.onEntityChanged(entityUrl)
     }
 
-    return {
-      ...updated,
-      ...(result.txid !== undefined ? { txid: result.txid } : {}),
-    }
+    return withOptionalTxid(updated, result.txid)
   }
 
   async ensureEntitiesMembershipStream(

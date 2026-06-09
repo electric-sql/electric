@@ -145,6 +145,13 @@ export function createQueuePositionBetween(
   return createInitialQueuePosition()
 }
 
+function readRequiredTxid(data: { txid?: unknown }, label: string): string {
+  if (typeof data.txid !== `string`) {
+    throw new Error(`${label} returned an invalid txid response`)
+  }
+  return data.txid
+}
+
 function readSendError(status: number, body: string): Error {
   let message = `Send failed (${status})`
   if (body) {
@@ -212,10 +219,7 @@ export async function uploadMessageAttachments({
         txid?: unknown
         attachment?: { id?: unknown }
       }
-      if (typeof data.txid !== `string`) {
-        throw new Error(`Attachment upload returned an invalid txid response`)
-      }
-      txids.push(data.txid)
+      txids.push(readRequiredTxid(data, `Attachment upload`))
       if (data.attachment?.id !== id) {
         throw new Error(`Attachment upload returned an invalid response`)
       }
@@ -305,10 +309,8 @@ export async function sendEntityMessage({
       throw readSendError(res.status, body)
     }
     const data = (await res.json()) as { txid?: unknown }
-    if (typeof data.txid !== `string`) {
-      throw new Error(`Send returned an invalid txid response`)
-    }
-    return { txid: data.txid, attachmentTxids: uploadedAttachments.txids }
+    const txid = readRequiredTxid(data, `Send`)
+    return { txid, attachmentTxids: uploadedAttachments.txids }
   } catch (error) {
     await deleteUploadedAttachments({
       baseUrl,
@@ -440,10 +442,7 @@ export function createSendMessageAction({
         throw readSendError(res.status, body)
       }
       const data = (await res.json()) as { txid?: unknown }
-      if (typeof data.txid !== `string`) {
-        throw new Error(`Send returned an invalid txid response`)
-      }
-      await db.utils.awaitTxId(data.txid, 10_000)
+      await db.utils.awaitTxId(readRequiredTxid(data, `Send`), 10_000)
     },
   })
 
@@ -564,10 +563,7 @@ export function createUpdateInboxMessageAction({
         throw readSendError(res.status, body)
       }
       const data = (await res.json()) as { txid?: unknown }
-      if (typeof data.txid !== `string`) {
-        throw new Error(`Inbox update returned an invalid txid response`)
-      }
-      await db.utils.awaitTxId(data.txid, 10_000)
+      await db.utils.awaitTxId(readRequiredTxid(data, `Inbox update`), 10_000)
     },
   })
 }
@@ -595,10 +591,7 @@ export function createDeleteInboxMessageAction({
         throw readSendError(res.status, body)
       }
       const data = (await res.json()) as { txid?: unknown }
-      if (typeof data.txid !== `string`) {
-        throw new Error(`Inbox delete returned an invalid txid response`)
-      }
-      await db.utils.awaitTxId(data.txid, 10_000)
+      await db.utils.awaitTxId(readRequiredTxid(data, `Inbox delete`), 10_000)
     },
   })
 }
@@ -635,10 +628,7 @@ export function createSteerInboxMessageAction({
         throw readSendError(res.status, body)
       }
       const data = (await res.json()) as { txid?: unknown }
-      if (typeof data.txid !== `string`) {
-        throw new Error(`Inbox steer returned an invalid txid response`)
-      }
-      await db.utils.awaitTxId(data.txid, 10_000)
+      await db.utils.awaitTxId(readRequiredTxid(data, `Inbox steer`), 10_000)
     },
   })
 }
