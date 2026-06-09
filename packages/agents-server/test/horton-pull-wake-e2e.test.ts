@@ -104,7 +104,7 @@ async function responseDiagnostic(
   }
 }
 
-async function expectNoContentWithDiagnostics(
+async function expectSuccessfulWriteWithDiagnostics(
   res: Response,
   opts: {
     phase: string
@@ -117,6 +117,13 @@ async function expectNoContentWithDiagnostics(
   }
 ): Promise<void> {
   if (res.status === 204) return
+  if (res.ok) {
+    const rawBody = (await res.text()).trim()
+    if (!rawBody) return
+    const parsed = JSON.parse(rawBody) as { txid?: unknown }
+    expect(parsed.txid).toEqual(expect.any(String))
+    return
+  }
 
   const body = truncateDiagnostic(await res.text())
   const subscriptionId = runnerEntitySubscriptionId(
@@ -147,7 +154,7 @@ async function expectNoContentWithDiagnostics(
 
   throw new Error(
     [
-      `${opts.phase} returned ${res.status} ${res.statusText}; expected 204`,
+      `${opts.phase} returned ${res.status} ${res.statusText}; expected successful write response`,
       `response body:\n${body}`,
       ...diagnostics,
     ].join(`\n\n`)
@@ -321,7 +328,7 @@ describe(`pull-wake Horton e2e with mocked LLM`, () => {
         payload: `Please answer via pull-wake.`,
       }),
     })
-    await expectNoContentWithDiagnostics(sendRes, {
+    await expectSuccessfulWriteWithDiagnostics(sendRes, {
       phase: `initial send`,
       baseUrl,
       streamBaseUrl,
@@ -364,7 +371,7 @@ describe(`pull-wake Horton e2e with mocked LLM`, () => {
         payload: `Please answer via pull-wake again after idle.`,
       }),
     })
-    await expectNoContentWithDiagnostics(secondSendRes, {
+    await expectSuccessfulWriteWithDiagnostics(secondSendRes, {
       phase: `second send`,
       baseUrl,
       streamBaseUrl,
