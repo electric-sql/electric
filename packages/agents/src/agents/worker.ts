@@ -313,6 +313,16 @@ export function registerWorker(
         subject_value: `user`,
         permission: `manage`,
       },
+      {
+        subject_kind: `principal_kind`,
+        subject_value: `service`,
+        permission: `spawn`,
+      },
+      {
+        subject_kind: `principal_kind`,
+        subject_value: `service`,
+        permission: `manage`,
+      },
     ],
     async handler(ctx) {
       const args = parseWorkerArgs(ctx.args)

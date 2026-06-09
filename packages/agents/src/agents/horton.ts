@@ -771,6 +771,16 @@ export function registerHorton(
         subject_value: `user`,
         permission: `manage`,
       },
+      {
+        subject_kind: `principal_kind`,
+        subject_value: `service`,
+        permission: `spawn`,
+      },
+      {
+        subject_kind: `principal_kind`,
+        subject_value: `service`,
+        permission: `manage`,
+      },
     ],
     slashCommands: buildSkillSlashCommands(skillsRegistry),
     handler: assistantHandler,
