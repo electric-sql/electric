@@ -17,7 +17,12 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
   alias Support.RepatchExt
 
   import Support.TestUtils,
-    only: [patch_calls: 3, expect_calls: 2, register_as_replication_client: 1]
+    only: [
+      patch_calls: 3,
+      expect_calls: 2,
+      register_as_replication_client: 1,
+      complete_txn_fragment: 3
+    ]
 
   import Support.ComponentSetup
 
@@ -141,7 +146,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         Electric.Shapes.ConsumerRegistry.register_consumer(consumer, @shape_handle, ctx.stack_id)
 
       txn =
-        transaction(xmin, lsn, [
+        complete_txn_fragment(xmin, lsn, [
           %Changes.NewRecord{
             relation: {"public", "test_table"},
             record: %{"id" => "2", "name" => "foo"},
@@ -196,7 +201,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       # Any root-table change should route to the shape via fallback,
       # even if the record wouldn't match the subquery membership.
       txn =
-        transaction(xmin, lsn, [
+        complete_txn_fragment(xmin, lsn, [
           %Changes.NewRecord{
             relation: {"public", "test_table"},
             record: %{"id" => "999"},
@@ -208,6 +213,84 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
       xids = Support.TransactionConsumer.assert_consume([{1, consumer}], [txn])
       assert xids == [xmin]
+    end
+
+    @tag restore_shapes: [{@shape_handle, @shape}, {@shape_handle <> "-2", @shape}],
+         inspector: @inspector
+    test "sets total_processing_time on the span exactly once for a multi-shape transaction",
+         ctx do
+      test_pid = self()
+
+      Repatch.patch(
+        Electric.Telemetry.OpenTelemetry,
+        :add_span_attributes,
+        [mode: :shared],
+        fn attrs ->
+          if Keyword.keyword?(attrs) and Keyword.has_key?(attrs, :total_processing_time) do
+            send(
+              test_pid,
+              {:total_processing_time, Keyword.fetch!(attrs, :total_processing_time)}
+            )
+          end
+
+          true
+        end
+      )
+
+      lsn = Lsn.from_string("0/10")
+
+      consumer1 =
+        start_link_supervised!(
+          {Support.TransactionConsumer,
+           id: 1,
+           stack_id: ctx.stack_id,
+           parent: test_pid,
+           shape: @shape,
+           shape_handle: @shape_handle,
+           action: :restore},
+          id: {:consumer, 1}
+        )
+
+      consumer2 =
+        start_link_supervised!(
+          {Support.TransactionConsumer,
+           id: 2,
+           stack_id: ctx.stack_id,
+           parent: test_pid,
+           shape: @shape,
+           shape_handle: @shape_handle <> "-2",
+           action: :restore},
+          id: {:consumer, 2}
+        )
+
+      :ok =
+        Electric.Shapes.ConsumerRegistry.register_consumer(consumer1, @shape_handle, ctx.stack_id)
+
+      :ok =
+        Electric.Shapes.ConsumerRegistry.register_consumer(
+          consumer2,
+          @shape_handle <> "-2",
+          ctx.stack_id
+        )
+
+      txn =
+        complete_txn_fragment(100, lsn, [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "2", "name" => "foo"},
+            log_offset: LogOffset.new(lsn, 0)
+          }
+        ])
+
+      assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
+
+      # The single incoming fragment is resliced to both shapes by the EventRouter...
+      Support.TransactionConsumer.assert_consume([{1, consumer1}, {2, consumer2}], [txn])
+
+      # ...but the wall-clock attribute is set once, on the original incoming commit fragment.
+      assert_receive {:total_processing_time, value}
+      assert is_integer(value) and value >= 0
+      refute_receive {:total_processing_time, _}
     end
   end
 
@@ -257,7 +340,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       last_log_offset = LogOffset.new(lsn, 0)
 
       txn =
-        transaction(xmin, lsn, [
+        complete_txn_fragment(xmin, lsn, [
           %Changes.NewRecord{
             relation: {"public", "test_table"},
             record: %{"id" => "2", "name" => "foo"},
@@ -279,7 +362,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       ShapeLogCollector.monitor(ctx.stack_id)
 
       txn =
-        transaction(xmin, lsn, [
+        complete_txn_fragment(xmin, lsn, [
           %Changes.NewRecord{
             relation: {"public", "test_table"},
             record: %{"id" => "2", "name" => "foo"},
@@ -364,7 +447,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       next_log_offset = LogOffset.new(next_lsn, 0)
 
       txn =
-        transaction(xmin, lsn, [
+        complete_txn_fragment(xmin, lsn, [
           %Changes.NewRecord{
             relation: {"public", "test_table"},
             record: %{"id" => "2", "name" => "foo"},
@@ -380,7 +463,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       assert xids == [xmin]
 
       txn2 =
-        transaction(xid, next_lsn, [
+        complete_txn_fragment(xid, next_lsn, [
           %Changes.NewRecord{
             relation: {"public", "test_table"},
             record: %{"id" => "2", "name" => "bar"},
@@ -412,7 +495,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         prev_log_offset = LogOffset.new(prev_lsn, 0)
 
         txn =
-          transaction(xid, lsn, [
+          complete_txn_fragment(xid, lsn, [
             %Changes.NewRecord{
               relation: {"public", "test_table"},
               record: %{"id" => "2", "name" => "foo"},
@@ -429,7 +512,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         )
 
         txn2 =
-          transaction(xid, lsn, [
+          complete_txn_fragment(xid, lsn, [
             %Changes.NewRecord{
               relation: {"public", "test_table"},
               record: %{"id" => "2", "name" => "foo"},
@@ -438,7 +521,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
           ])
 
         txn3 =
-          transaction(prev_xid, prev_lsn, [
+          complete_txn_fragment(prev_xid, prev_lsn, [
             %Changes.NewRecord{
               relation: {"public", "test_table"},
               record: %{"id" => "2", "name" => "foo"},
@@ -484,7 +567,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         lsn: lsn,
         last_log_offset: LogOffset.new(lsn, 2),
         has_begin?: false,
-        commit: %Commit{},
+        commit: %Commit{tx_started_at: System.monotonic_time()},
         changes: [
           %Changes.NewRecord{
             relation: {"public", "test_table"},
@@ -537,7 +620,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         lsn: lsn,
         last_log_offset: LogOffset.new(lsn, 2),
         has_begin?: true,
-        commit: %Commit{},
+        commit: %Commit{tx_started_at: System.monotonic_time()},
         changes: [
           %Changes.NewRecord{
             relation: {"public", "test_table"},
@@ -580,7 +663,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       log_offset = LogOffset.new(lsn, 0)
 
       txn =
-        transaction(1, lsn, [
+        complete_txn_fragment(1, lsn, [
           %Changes.NewRecord{
             relation: {"public", "test_table"},
             record: %{"id" => nil, "name" => "foo"},
@@ -598,14 +681,14 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
       register_as_replication_client(ctx.stack_id)
 
-      irrelevant_txn = transaction(99, prev_lsn, [])
+      irrelevant_txn = complete_txn_fragment(99, prev_lsn, [])
 
       assert :ok = ShapeLogCollector.handle_event(irrelevant_txn, ctx.stack_id)
       expected_lsn = Lsn.to_integer(prev_lsn)
       assert_receive {:flush_boundary_updated, ^expected_lsn}, 50
 
       txn =
-        transaction(100, lsn, [
+        complete_txn_fragment(100, lsn, [
           %Changes.NewRecord{
             relation: {"public", "test_table"},
             record: %{"id" => "2", "name" => "foo"},
@@ -647,7 +730,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       log_offset = LogOffset.new(lsn, 0)
 
       txn =
-        transaction(100, lsn, [
+        complete_txn_fragment(100, lsn, [
           %Changes.NewRecord{
             relation: {"public", "irrelevant_table"},
             record: %{"id" => "2", "name" => "foo"},
@@ -669,7 +752,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       log_offset = LogOffset.new(lsn, 0)
 
       txn =
-        transaction(100, lsn, [
+        complete_txn_fragment(100, lsn, [
           %Changes.NewRecord{
             relation: {"public", "irrelevant_table"},
             record: %{"id" => "2", "name" => "foo"},
@@ -688,7 +771,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       log_offset = LogOffset.new(lsn, 0)
 
       txn =
-        transaction(100, lsn, [
+        complete_txn_fragment(100, lsn, [
           %Changes.NewRecord{
             relation: {"public", "test_table"},
             record: %{"id" => "2"},
@@ -717,7 +800,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       log_offset = LogOffset.new(lsn, 0)
 
       txn =
-        transaction(100, lsn, [
+        complete_txn_fragment(100, lsn, [
           %Changes.NewRecord{
             relation: {"public", "test_table"},
             record: %{"id" => "2", "name" => "foo"},
@@ -824,7 +907,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     test "rejects new transactions", ctx do
       lsn = Lsn.from_string("0/10")
 
-      txn = transaction(100, lsn, [])
+      txn = complete_txn_fragment(100, lsn, [])
 
       assert {:error, :not_ready} = ShapeLogCollector.handle_event(txn, ctx.stack_id)
     end
@@ -852,7 +935,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     )
 
     txn =
-      transaction(xmin, lsn, [
+      complete_txn_fragment(xmin, lsn, [
         %Changes.NewRecord{
           relation: {"public", "test_table"},
           record: %{"id" => "1"},
@@ -918,7 +1001,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     ShapeLogCollector.mark_as_ready(ctx.stack_id)
 
     txn_to_drop =
-      transaction(100, start_lsn, [
+      complete_txn_fragment(100, start_lsn, [
         %Changes.NewRecord{
           relation: {"public", "test_table"},
           record: %{"id" => "1"},
@@ -940,7 +1023,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
     # should accept a transaction with a higher LSN and update it
     txn_to_process =
-      transaction(101, next_lsn, [
+      complete_txn_fragment(101, next_lsn, [
         %Changes.NewRecord{
           relation: {"public", "test_table"},
           record: %{"id" => "3"},
@@ -1059,7 +1142,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       )
 
       txn =
-        transaction(100, Lsn.from_string("0/10"), [
+        complete_txn_fragment(100, Lsn.from_string("0/10"), [
           %Changes.NewRecord{
             relation: {"public", "test_table"},
             record: %{"id" => "11"},
@@ -1076,7 +1159,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     test "should not crash if the materializer is not there, instead skipping the depenencies",
          ctx do
       txn =
-        transaction(100, Lsn.from_string("0/10"), [
+        complete_txn_fragment(100, Lsn.from_string("0/10"), [
           %Changes.NewRecord{
             relation: {"public", "test_table"},
             record: %{"id" => "11"},
@@ -1144,7 +1227,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       log_offset = LogOffset.new(lsn, 0)
 
       txn =
-        transaction(100, lsn, [
+        complete_txn_fragment(100, lsn, [
           %Changes.NewRecord{
             relation: {"public", "test_table"},
             record: %{"id" => "2", "name" => "foo"},
@@ -1240,7 +1323,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       log_offset = LogOffset.new(lsn, 0)
 
       txn =
-        transaction(100, lsn, [
+        complete_txn_fragment(100, lsn, [
           %Changes.NewRecord{
             relation: {"public", "test_table"},
             record: %{
@@ -1314,7 +1397,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         lsn: lsn,
         last_log_offset: LogOffset.new(lsn, 5),
         has_begin?: false,
-        commit: %Changes.Commit{},
+        commit: %Changes.Commit{tx_started_at: System.monotonic_time()},
         changes: [
           %Changes.NewRecord{
             relation: {"public", "test_table"},
@@ -1343,24 +1426,6 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       expected_lsn = Lsn.to_integer(lsn)
       assert_receive {:flush_boundary_updated, ^expected_lsn}
     end
-  end
-
-  defp transaction(xid, lsn, changes) do
-    last_log_offset =
-      case Enum.reverse(changes) do
-        [%{log_offset: offset} | _] -> offset
-        [] -> LogOffset.new(lsn, 0)
-      end
-
-    %TransactionFragment{
-      xid: xid,
-      lsn: lsn,
-      last_log_offset: last_log_offset,
-      has_begin?: true,
-      commit: %Commit{},
-      changes: changes,
-      affected_relations: MapSet.new(changes, & &1.relation)
-    }
   end
 
   defp kill_consumer(pid, reason) do
