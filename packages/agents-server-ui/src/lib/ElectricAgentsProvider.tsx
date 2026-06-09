@@ -662,7 +662,9 @@ function createSetEntityTitleAction(
         )
         if (!res.ok) {
           const text = await res.text().catch(() => ``)
-          throw new Error(text || `Set title failed (${res.status})`)
+          throw new Error(
+            parseErrorResponse(text) || `Set title failed (${res.status})`
+          )
         }
         const data = (await res.json()) as { txid: number }
         await entitiesCollection.utils.awaitTxId(data.txid, 10_000)
