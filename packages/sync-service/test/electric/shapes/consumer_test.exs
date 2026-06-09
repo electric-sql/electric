@@ -105,6 +105,43 @@ defmodule Electric.Shapes.ConsumerTest do
     Lsn.from_integer(offset)
   end
 
+  # Block until `pid` is hibernating, then return its armed suspend-timer ref
+  # (or nil if none is armed).
+  defp await_hibernation(pid, timeout \\ 2_000) do
+    poll_until(timeout, fn ->
+      case Process.info(pid, :current_function) do
+        {:current_function, {:gen_server, :loop_hibernate, _}} ->
+          {:ok, :sys.get_state(pid).suspend_timer}
+
+        _ ->
+          :retry
+      end
+    end)
+  end
+
+  # Repeatedly evaluate `fun` until it returns `{:ok, value}` (returning value)
+  # or `timeout` ms elapse (failing the test). The 1ms tick is the only sleep
+  # involved and it ends the moment the condition holds.
+  defp poll_until(timeout, fun) do
+    deadline = System.monotonic_time(:millisecond) + timeout
+    do_poll_until(deadline, fun)
+  end
+
+  defp do_poll_until(deadline, fun) do
+    case fun.() do
+      {:ok, value} ->
+        value
+
+      :retry ->
+        if System.monotonic_time(:millisecond) < deadline do
+          Process.sleep(1)
+          do_poll_until(deadline, fun)
+        else
+          flunk("poll_until/2 timed out waiting for condition")
+        end
+    end
+  end
+
   describe "event handling" do
     setup [
       :with_registry,
@@ -1409,9 +1446,8 @@ defmodule Electric.Shapes.ConsumerTest do
 
       assert_receive {:flush_boundary_updated, 300}, 1_000
 
-      Process.sleep(60)
-
-      assert_receive {:DOWN, ^ref, :process, ^consumer_pid, {:shutdown, :suspend}}
+      # The consumer hibernates, then suspends shape_suspend_after later;
+      assert_receive {:DOWN, ^ref, :process, ^consumer_pid, {:shutdown, :suspend}}, 200
 
       refute Consumer.whereis(ctx.stack_id, shape_handle)
     end
@@ -1449,22 +1485,13 @@ defmodule Electric.Shapes.ConsumerTest do
 
       assert_receive {:flush_boundary_updated, 300}, 1_000
 
-      Process.sleep(100)
-
-      assert {:current_function, {:gen_server, :loop_hibernate, 4}} =
-               Process.info(consumer_pid, :current_function)
-
-      Process.sleep(20)
-
-      assert {:current_function, {:gen_server, :loop_hibernate, 4}} =
-               Process.info(consumer_pid, :current_function)
+      # A shape with dependencies hibernates but never arms a suspend timer
+      # (consumer_can_suspend? is false), so it can never suspend. Observing a
+      # nil suspend_timer once hibernated proves this deterministically.
+      assert is_nil(await_hibernation(consumer_pid))
 
       dependent_consumer_pid = Consumer.whereis(ctx.stack_id, dependent_shape_handle)
-
-      Process.sleep(20)
-
-      assert {:current_function, {:gen_server, :loop_hibernate, 4}} =
-               Process.info(dependent_consumer_pid, :current_function)
+      assert is_nil(await_hibernation(dependent_consumer_pid))
 
       assert is_pid(Consumer.whereis(ctx.stack_id, shape_handle))
     end
@@ -1568,19 +1595,16 @@ defmodule Electric.Shapes.ConsumerTest do
 
       assert_receive {:flush_boundary_updated, 300}, 1_000
 
-      Process.sleep(60)
-
-      refute_receive {:DOWN, ^ref, :process, ^consumer_pid, {:shutdown, :suspend}}
-
+      # Suspend is disabled (@tag suspend: false), so the consumer never suspends
+      # on its own and stays alive.
+      refute_receive {:DOWN, ^ref, :process, ^consumer_pid, {:shutdown, :suspend}}, 100
       assert Consumer.whereis(ctx.stack_id, shape_handle)
 
       # hibernate_after=5, shape_suspend_after=5, jitter_period=10
       Shapes.ConsumerRegistry.enable_suspend(ctx.stack_id, 5, 5, 10)
 
-      Process.sleep(60)
-
-      assert_receive {:DOWN, ^ref, :process, ^consumer_pid, {:shutdown, :suspend}}
-
+      # Enabling suspend on the live consumer makes it suspend on the next cycle.
+      assert_receive {:DOWN, ^ref, :process, ^consumer_pid, {:shutdown, :suspend}}, 200
       refute Consumer.whereis(ctx.stack_id, shape_handle)
     end
 
@@ -1613,22 +1637,14 @@ defmodule Electric.Shapes.ConsumerTest do
 
       assert_receive {:flush_boundary_updated, 300}, 1_000
 
-      # Wait for hibernate_after (10ms) + small buffer
-      # Suspend won't happen until hibernate_after + shape_suspend_after = 10 + 150 = 160ms
-      Process.sleep(50)
+      # The consumer hibernates first (for GC) and arms a suspend timer rather
+      # than suspending directly. Observing an armed timer while hibernated
+      # proves the "hibernate, then suspend" ordering without racing the clock.
+      assert is_reference(await_hibernation(consumer_pid))
+      assert Process.alive?(consumer_pid)
 
-      # Should be hibernated, not suspended yet (we're at ~50ms, suspend at ~160ms)
-      assert {:current_function, {:gen_server, :loop_hibernate, 4}} =
-               Process.info(consumer_pid, :current_function)
-
-      refute_receive {:DOWN, ^ref, :process, ^consumer_pid, {:shutdown, :suspend}}, 0
-
-      # Wait for shape_suspend_after (150ms from hibernate) to complete
-      # We're at ~50ms, need to wait another ~150ms to be past 160ms
-      Process.sleep(180)
-
-      # Now should be suspended
-      assert_receive {:DOWN, ^ref, :process, ^consumer_pid, {:shutdown, :suspend}}
+      # It then suspends once shape_suspend_after elapses.
+      assert_receive {:DOWN, ^ref, :process, ^consumer_pid, {:shutdown, :suspend}}, 300
 
       refute Consumer.whereis(ctx.stack_id, shape_handle)
     end
@@ -1662,18 +1678,11 @@ defmodule Electric.Shapes.ConsumerTest do
       assert :ok = ShapeLogCollector.handle_event(txn1, ctx.stack_id)
       assert_receive {:flush_boundary_updated, 300}, 1_000
 
-      # Wait for hibernate (hibernate_after=10ms + buffer)
-      Process.sleep(30)
+      # Once hibernated, a suspend timer is armed.
+      ref1 = await_hibernation(consumer_pid)
+      assert is_reference(ref1)
 
-      # Should be hibernated
-      assert {:current_function, {:gen_server, :loop_hibernate, 4}} =
-               Process.info(consumer_pid, :current_function)
-
-      # Wait ~50ms so suspend timer has been running but not fired yet
-      # (shape_suspend_after=200ms, so we're at ~80ms total, well before 200ms)
-      Process.sleep(50)
-
-      # Send another transaction - this should cancel the suspend timer
+      # Activity (a new transaction) must cancel that timer.
       txn2 =
         complete_txn_fragment(3, lsn2, [
           %Changes.NewRecord{
@@ -1686,16 +1695,15 @@ defmodule Electric.Shapes.ConsumerTest do
       assert :ok = ShapeLogCollector.handle_event(txn2, ctx.stack_id)
       assert_receive {:flush_boundary_updated, 301}, 1_000
 
-      # Wait past what would have been the original shape_suspend_after window.
-      # The original timer was armed when the consumer first hibernated (~10ms
-      # after txn1, i.e. hibernate_after later), so it would have fired at ~210ms.
-      # The activity at ~80ms cancelled it; the consumer re-hibernates ~10ms after
-      # that activity, arming a new timer at ~90ms that fires at ~290ms.
-      # We're now at ~80ms; wait 160ms to reach ~240ms, past the original ~210ms
-      # deadline but before the new ~290ms one, so the process should still be alive.
-      Process.sleep(160)
+      # After re-hibernating, a *fresh* timer is armed and the original one reads
+      # as cancelled - proving the activity reset the suspend cycle rather than
+      # letting the original timer fire.
+      ref2 = await_hibernation(consumer_pid)
+      assert is_reference(ref2)
+      assert ref2 != ref1
+      assert :erlang.read_timer(ref1) == false
 
-      # Should NOT have suspended because activity reset the timer
+      # No suspend happened.
       refute_receive {:DOWN, ^ref, :process, ^consumer_pid, {:shutdown, :suspend}}, 0
 
       # Process should still be alive (hibernated again)
