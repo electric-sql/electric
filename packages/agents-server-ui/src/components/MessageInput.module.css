@@ -65,6 +65,11 @@
   color: var(--ds-text-1);
 }
 
+.inlineIconButton.voiceActive {
+  background: var(--ds-accent-a3);
+  color: var(--ds-accent-11);
+}
+
 .inlineIconButton:focus-visible {
   outline: 2px solid var(--ds-accent-a6);
   outline-offset: -2px;
