@@ -233,6 +233,40 @@ defmodule Electric.Replication.PublicationManagerTest do
     end
   end
 
+  describe "cast issuance" do
+    @tag update_debounce_timeout: 0
+    test "issues a single configure cast while a submission is in flight", ctx do
+      test_pid = self()
+
+      # Capture casts to the Configurator without forwarding them, so the
+      # submission never produces a result and `committed` stays behind
+      # `submitted` for the whole test — exactly the in-flight window.
+      Repatch.patch(
+        PublicationManager.Configurator,
+        :configure_publication,
+        [mode: :shared],
+        fn _stack_id, filters -> send(test_pid, {:configure_cast, filters}) end
+      )
+
+      # Three shapes on the SAME relation (same oid) → a single relation
+      # transition. Run them async because, with no result delivered, each
+      # add_shape blocks as a waiter.
+      for {handle, where} <- [
+            {@shape_handle_1, @where_clause_1},
+            {@shape_handle_2, @where_clause_2},
+            {@shape_handle_3, @where_clause_3}
+          ] do
+        shape = generate_shape(ctx.relation_with_oid, where)
+        run_async(fn -> PublicationManager.add_shape(ctx.stack_id, handle, shape) end)
+      end
+
+      # Exactly one cast, carrying the single-relation filter set.
+      assert_receive {:configure_cast, filters}
+      assert MapSet.size(filters) == 1
+      refute_receive {:configure_cast, _}, 200
+    end
+  end
+
   describe "remove_shape/2" do
     test "removes single relation when last shape removed", ctx do
       shape = generate_shape(ctx.relation_with_oid, @where_clause_1)
