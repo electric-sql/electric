@@ -751,6 +751,62 @@ describe(`createPullWakeRunner`, () => {
     await runner.stop()
   })
 
+  it(`aborts a hung connection attempt after repeated heartbeat failures`, async () => {
+    vi.useFakeTimers()
+    const connectionHanging = deferred<void>()
+    const secondStreamOpened = deferred<void>()
+    const secondStreamClosed = deferred<void>()
+    let heartbeatCalls = 0
+    const fetchMock = vi.fn(async () => {
+      heartbeatCalls++
+      if (heartbeatCalls <= 2) {
+        throw new Error(`connect ECONNREFUSED 127.0.0.1:4437`)
+      }
+      return Response.json({})
+    })
+    vi.stubGlobal(`fetch`, fetchMock)
+    const streamFactory = vi.fn(async (opts: { signal: AbortSignal }) => {
+      if (streamFactory.mock.calls.length === 1) {
+        connectionHanging.resolve()
+        await new Promise((_, reject) => {
+          opts.signal.addEventListener(`abort`, () => reject(opts.signal.reason), { once: true })
+        })
+        throw new Error(`aborted`)
+      }
+      secondStreamOpened.resolve()
+      return {
+        async *jsonStream() {
+          await secondStreamClosed.promise
+        },
+        cancel: () => secondStreamClosed.resolve(),
+        closed: secondStreamClosed.promise,
+      }
+    })
+
+    const runner = createPullWakeRunner({
+      baseUrl: `http://server`,
+      runnerId: `runner-1`,
+      runtime: runtime(),
+      heartbeatIntervalMs: 10,
+      eventHeartbeatThrottleMs: 0,
+      streamFactory,
+    })
+
+    runner.start()
+    await connectionHanging.promise
+    await vi.advanceTimersByTimeAsync(20)
+
+    expect(heartbeatCalls).toBeGreaterThanOrEqual(2)
+
+    await vi.advanceTimersByTimeAsync(1_000)
+    await secondStreamOpened.promise
+
+    expect(streamFactory).toHaveBeenCalledTimes(2)
+    expect(runner.getHealth().reconnect_count).toBe(1)
+
+    await runner.stop()
+  })
+
   it(`marks heartbeat unhealthy before reporting heartbeat errors`, async () => {
     const observedHeartbeatOk: Array<boolean> = []
     let runner: ReturnType<typeof createPullWakeRunner>

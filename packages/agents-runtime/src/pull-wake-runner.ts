@@ -103,6 +103,7 @@ export function createPullWakeRunner(
 ): PullWakeRunner {
   let state: PullWakeRunnerState = `stopped`
   let controller: AbortController | null = null
+  let connectAbort: AbortController | null = null
   let loop: Promise<void> | null = null
   let response: PullWakeStreamResponse | null = null
   let heartbeatTimer: ReturnType<typeof setInterval> | null = null
@@ -224,9 +225,13 @@ export function createPullWakeRunner(
   }
 
   const requestStreamReconnect = (error: Error): void => {
-    if (!streamConnected || streamResetError) return
+    if (streamResetError) return
     streamResetError = error
-    response?.cancel?.(error)
+    if (streamConnected) {
+      response?.cancel?.(error)
+    } else if (connectAbort) {
+      connectAbort.abort(error)
+    }
   }
 
   const notifyHeartbeatChange = (): void => {
@@ -476,12 +481,18 @@ export function createPullWakeRunner(
 
   const consumeWakeStream = async (signal: AbortSignal): Promise<void> => {
     streamResetError = null
-    response = await streamFactory({
-      url: wakeUrl,
-      headers: await resolveHeaders(),
-      offset: currentOffset,
-      signal,
-    })
+    connectAbort = new AbortController()
+    const connectSignal = AbortSignal.any([signal, connectAbort.signal])
+    try {
+      response = await streamFactory({
+        url: wakeUrl,
+        headers: await resolveHeaders(),
+        offset: currentOffset,
+        signal: connectSignal,
+      })
+    } finally {
+      connectAbort = null
+    }
     state = `running.streaming`
     streamConnected = true
     streamConnectedSince = new Date().toISOString()
@@ -556,6 +567,7 @@ export function createPullWakeRunner(
       acceptingClaims = false
       streamConnected = false
       streamConnectedSince = null
+      connectAbort = null
       response = null
       controller = null
       if (state !== `stopping`) state = `stopped`

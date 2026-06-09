@@ -7,6 +7,8 @@ import {
 
 const MEMORY_CACHE_SIZE_BYTES = 100 * 1024 * 1024
 
+let installed = false
+
 export type DurableStreamsFetchCacheOptions =
   | false
   | {
@@ -19,6 +21,8 @@ export function installDurableStreamsFetchCache(
   options: DurableStreamsFetchCacheOptions = {}
 ): void {
   if (options === false) return
+  if (installed) return
+  installed = true
 
   const store =
     options.store === `sqlite` || options.sqliteLocation

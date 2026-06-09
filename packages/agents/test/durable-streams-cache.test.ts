@@ -27,6 +27,7 @@ vi.mock(`undici`, () => ({
 
 describe(`installDurableStreamsFetchCache`, () => {
   beforeEach(() => {
+    vi.resetModules()
     vi.clearAllMocks()
     compose.mockReturnValue(`composed-dispatcher`)
     getGlobalDispatcher.mockReturnValue({ compose })
@@ -44,5 +45,17 @@ describe(`installDurableStreamsFetchCache`, () => {
     expect(cacheInterceptor).toHaveBeenCalledWith({ store: memoryStore })
     expect(compose).toHaveBeenCalledWith(`cache-interceptor`)
     expect(setGlobalDispatcher).toHaveBeenCalledWith(`composed-dispatcher`)
+  })
+
+  test(`only installs once even when called multiple times`, async () => {
+    const { installDurableStreamsFetchCache } = await import(
+      `../src/durable-streams-cache.js`
+    )
+
+    installDurableStreamsFetchCache()
+    installDurableStreamsFetchCache()
+    installDurableStreamsFetchCache()
+
+    expect(setGlobalDispatcher).toHaveBeenCalledTimes(1)
   })
 })
