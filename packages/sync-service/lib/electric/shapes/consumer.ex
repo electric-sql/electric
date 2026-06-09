@@ -175,6 +175,13 @@ defmodule Electric.Shapes.Consumer do
   end
 
   @impl GenServer
+  # Any incoming message counts as activity: cancel the pending suspend timer (if
+  # any) before dispatching to the real clause, which we reach by recursing with a
+  # cleared timer so this guard no longer matches.
+  def handle_call(msg, from, %{suspend_timer: ref} = state) when not is_nil(ref) do
+    handle_call(msg, from, cancel_suspend_timer(state))
+  end
+
   def handle_call({:monitor, pid}, _from, %{monitors: monitors} = state) do
     ref = make_ref()
     {:reply, ref, %{state | monitors: [{pid, ref} | monitors]}, state.hibernate_after}
@@ -215,6 +222,11 @@ defmodule Electric.Shapes.Consumer do
   end
 
   @impl GenServer
+  # See the handle_call/3 interceptor above - cancel the suspend timer on activity.
+  def handle_cast(msg, %{suspend_timer: ref} = state) when not is_nil(ref) do
+    handle_cast(msg, cancel_suspend_timer(state))
+  end
+
   def handle_cast(
         {:pg_snapshot_known, shape_handle, {xmin, xmax, xip_list} = snapshot},
         %{shape_handle: shape_handle} = state
@@ -252,6 +264,33 @@ defmodule Electric.Shapes.Consumer do
   end
 
   @impl GenServer
+  # Genuine suspend timer: it is still the armed timer (suspend_timer is set), which
+  # means no activity cancelled it since it was scheduled. Suspend if still eligible.
+  def handle_info(:suspend_timeout, %{suspend_timer: ref} = state) when not is_nil(ref) do
+    state = %{state | suspend_timer: nil}
+
+    if consumer_suspend_enabled?(state) and consumer_can_suspend?(state) do
+      Logger.debug(fn -> ["Suspending consumer ", to_string(state.shape_handle)] end)
+      {:stop, ShapeCleaner.consumer_suspend_reason(), state}
+    else
+      # Conditions changed - just restart the hibernate timeout
+      {:noreply, state, state.hibernate_after}
+    end
+  end
+
+  # Stale suspend timer: activity already cancelled it (suspend_timer is nil), but the
+  # timer had fired and enqueued this message before the cancellation. Ignore it.
+  def handle_info(:suspend_timeout, state) do
+    {:noreply, state, state.hibernate_after}
+  end
+
+  # Any incoming message counts as activity: cancel the pending suspend timer (if any)
+  # before dispatching to the real clause. The :suspend_timeout clauses above are
+  # matched first, so this never intercepts the timer message itself.
+  def handle_info(msg, %{suspend_timer: ref} = state) when not is_nil(ref) do
+    handle_info(msg, cancel_suspend_timer(state))
+  end
+
   def handle_info({:initialize_shape, shape, opts}, state) do
     %{stack_id: stack_id, shape_handle: shape_handle} = state
 
@@ -402,20 +441,6 @@ defmodule Electric.Shapes.Consumer do
     {:noreply, state, :hibernate}
   end
 
-  # Suspend timer uses a generation number to handle stale timers. If activity
-  # occurred after the timer was scheduled, a new timer with a higher generation
-  # will have been scheduled, making this one stale (generation mismatch).
-  def handle_info({:suspend_timeout, generation}, state) do
-    if generation == state.suspend_generation and
-         consumer_suspend_enabled?(state) and consumer_can_suspend?(state) do
-      Logger.debug(fn -> ["Suspending consumer ", to_string(state.shape_handle)] end)
-      {:stop, ShapeCleaner.consumer_suspend_reason(), state}
-    else
-      # Stale timer or conditions changed - just restart the hibernate timeout
-      {:noreply, state, state.hibernate_after}
-    end
-  end
-
   defp consumer_suspend_enabled?(%{stack_id: stack_id}) do
     Electric.StackConfig.lookup(stack_id, :shape_enable_suspend?, true)
   end
@@ -427,10 +452,16 @@ defmodule Electric.Shapes.Consumer do
 
   defp schedule_suspend_timer(%{suspend_after: nil} = state), do: state
 
-  defp schedule_suspend_timer(%{suspend_after: suspend_after, suspend_generation: gen} = state) do
-    next_gen = gen + 1
-    :erlang.send_after(suspend_after, self(), {:suspend_timeout, next_gen})
-    %{state | suspend_generation: next_gen}
+  defp schedule_suspend_timer(%{suspend_after: suspend_after} = state) do
+    ref = :erlang.send_after(suspend_after, self(), :suspend_timeout)
+    %{state | suspend_timer: ref}
+  end
+
+  defp cancel_suspend_timer(%{suspend_timer: nil} = state), do: state
+
+  defp cancel_suspend_timer(%{suspend_timer: ref} = state) do
+    :erlang.cancel_timer(ref)
+    %{state | suspend_timer: nil}
   end
 
   @impl GenServer

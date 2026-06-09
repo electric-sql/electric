@@ -1469,7 +1469,9 @@ defmodule Electric.Shapes.ConsumerTest do
       assert is_pid(Consumer.whereis(ctx.stack_id, shape_handle))
     end
 
-    @tag hibernate_after: 10, with_pure_file_storage_opts: [flush_period: 1]
+    @tag hibernate_after: 10,
+         shape_suspend_after: 20,
+         with_pure_file_storage_opts: [flush_period: 1]
     @tag suspend: true
     test "should hibernate not suspend while a multi-fragment transaction is pending", ctx do
       register_as_replication_client(ctx.stack_id)
