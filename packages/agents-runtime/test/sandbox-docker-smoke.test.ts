@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { dockerSandbox } from '../src/sandbox/docker'
 import { dockerAvailable, TEST_IMAGE } from './helpers/docker-probe'
+import { installDockerSandboxTestCleanup } from './helpers/docker-sandbox-cleanup'
 
 const d = dockerAvailable ? describe : describe.skip
 
 d(`ad-hoc docker sandbox smoke`, () => {
+  installDockerSandboxTestCleanup()
+
   it(`exec basic, inspect caps, inspect /etc/passwd vs host, attempt mount`, async () => {
     const sandbox = await dockerSandbox({
       image: TEST_IMAGE,

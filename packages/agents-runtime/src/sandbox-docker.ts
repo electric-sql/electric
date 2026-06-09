@@ -9,6 +9,8 @@
 
 export {
   dockerSandbox,
+  reclaimDockerSandboxByKey,
+  shutdownAllDockerSandboxes,
   sweepOrphanedDockerSandboxes,
   __resetPersistentRegistryForTests,
 } from './sandbox/docker'

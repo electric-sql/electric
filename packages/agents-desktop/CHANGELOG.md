@@ -1,5 +1,11 @@
 # @electric-ax/agents-desktop
 
+## 0.1.15
+
+### Patch Changes
+
+- 24d2c34: Show a clear sign-in prompt when connecting an Electric Cloud server while signed out instead of surfacing pull-wake runner registration errors.
+
 ## 0.1.14
 
 ### Patch Changes

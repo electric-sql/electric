@@ -54,7 +54,8 @@ defmodule Electric.Connection.ConnectionManagerTest do
       max_shapes: nil,
       persistent_kv: ctx.persistent_kv,
       stack_events_registry: stack_events_registry,
-      lock_breaker_guard: ctx[:lock_breaker_guard]
+      lock_breaker_guard: ctx[:lock_breaker_guard],
+      connection_status_check_interval: Map.get(ctx, :connection_status_check_interval, 10_000)
     ]
 
     core_sup =
@@ -79,6 +80,89 @@ defmodule Electric.Connection.ConnectionManagerTest do
     {:ok, socket} = :gen_tcp.listen(0, [])
     {:ok, port} = :inet.port(socket)
     [unresponsive_port: port]
+  end
+
+  describe "connection status check interval" do
+    setup [:start_connection_manager]
+
+    @tag connection_status_check_interval: 50
+    test "is configurable via opts", %{stack_id: stack_id} do
+      manager = stack_id |> Connection.Manager.name() |> GenServer.whereis()
+      assert :sys.get_state(manager).connection_status_check_interval == 50
+    end
+  end
+
+  describe "self-healing stuck slot creation" do
+    @tag connection_status_check_interval: 50
+    test "emits a one-time notice and keeps waiting when the function is not permitted",
+         %{stack_id: stack_id} = ctx do
+      parent = self()
+
+      # Intercept only the pg_log_standby_snapshot() call (issued from the manager
+      # process); pass every other Postgrex query through unchanged.
+      Repatch.patch(Postgrex, :query, [mode: :shared], fn
+        _pool, "SELECT pg_log_standby_snapshot()", _params, _opts ->
+          {:error,
+           %Postgrex.Error{
+             postgres: %{
+               code: :insufficient_privilege,
+               severity: "ERROR",
+               message: "permission denied"
+             }
+           }}
+
+        pool, query, params, opts ->
+          Repatch.real(Postgrex, :query, [pool, query, params, opts])
+      end)
+
+      # Allowance doesn't follow the supervision tree, so allow the manager process
+      # to see the shared patch as soon as it has started.
+      spawn_link(fn ->
+        Stream.repeatedly(fn -> 0 end)
+        |> Enum.reduce_while(0, fn _, _ ->
+          case GenServer.whereis(Electric.Connection.Manager.name(stack_id)) do
+            nil ->
+              {:cont, 0}
+
+            pid ->
+              Repatch.allow(parent, pid)
+              {:halt, 0}
+          end
+        end)
+      end)
+
+      # Hold an xid-bearing transaction open so CREATE_REPLICATION_SLOT blocks.
+      # db_config carries an obfuscated password, so deobfuscate it like the test
+      # support does before opening a raw connection.
+      {:ok, blocker} = Postgrex.start_link(Electric.Utils.deobfuscate_password(ctx.db_config))
+      Postgrex.query!(blocker, "BEGIN", [])
+      Postgrex.query!(blocker, "SELECT txid_current()", [])
+
+      start_connection_manager(ctx)
+
+      # Connection bring-up + lock acquisition is the slow, load-sensitive part. Wait for
+      # it via StatusMonitor (the source sits at conn: :starting while blocked on slot
+      # creation) rather than a multi-second assert_receive, so the assertions below can
+      # use short, default timeouts.
+      wait_until_conn_starting(stack_id)
+
+      assert_receive {:stack_status, _,
+                      :replication_slot_creation_blocked_by_pending_transactions}
+
+      # The notice fires once despite many timer ticks (interval = 50 ms).
+      assert_receive {:stack_status, _,
+                      {:replication_slot_unblock_unavailable,
+                       %{
+                         message:
+                           "Replication slot creation is blocked by a pending transaction. " <>
+                             "Electric might not be able to automatically unblock it" <> _
+                       }}},
+                     200
+
+      refute_receive {:stack_status, _, {:replication_slot_unblock_unavailable, _}}, 400
+
+      Postgrex.query!(blocker, "COMMIT", [])
+    end
   end
 
   describe "status monitor" do
@@ -647,6 +731,23 @@ defmodule Electric.Connection.ConnectionManagerTest do
     |> Electric.Postgres.ReplicationClient.name()
     |> GenServer.whereis()
     |> Process.monitor()
+  end
+
+  # Polls until the source has acquired its lock and reached the configuring stage
+  # (conn: :starting). StatusMonitor.wait_until/3 only supports :read_only/:active,
+  # which a slot-creation-blocked source never reaches, so we poll the status here.
+  defp wait_until_conn_starting(stack_id, attempts \\ 200)
+
+  defp wait_until_conn_starting(_stack_id, 0),
+    do: flunk("source did not reach conn: :starting in time")
+
+  defp wait_until_conn_starting(stack_id, attempts) do
+    if StatusMonitor.status(stack_id).conn == :starting do
+      :ok
+    else
+      Process.sleep(25)
+      wait_until_conn_starting(stack_id, attempts - 1)
+    end
   end
 
   defp wait_for_pg_backend_pid(manager_pid, attempts \\ 100) do

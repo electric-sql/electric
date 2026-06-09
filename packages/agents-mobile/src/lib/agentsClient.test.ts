@@ -61,6 +61,48 @@ describe(`spawnEntity`, () => {
     expect(body.sandbox).toMatchObject({ profile: `docker` })
     expect(body.args).toBeUndefined()
   })
+
+  it(`forwards a structured composer_input payload with its message type`, async () => {
+    const { spawnEntity } = await import(`./agentsClient`)
+    const payload = {
+      source: `/quickstart go`,
+      nodes: [
+        {
+          kind: `slash_command` as const,
+          start: 0,
+          end: 11,
+          raw: `/quickstart`,
+          name: `quickstart`,
+        },
+      ],
+    }
+    await spawnEntity({
+      baseUrl: `http://server`,
+      type: `horton`,
+      initialMessage: payload,
+      initialMessageType: `composer_input`,
+    })
+
+    const body = lastRequestBody()
+    expect(body.initialMessage).toEqual(payload)
+    expect(body.initialMessageType).toBe(`composer_input`)
+  })
+
+  it(`merges caller args with the working directory`, async () => {
+    const { spawnEntity } = await import(`./agentsClient`)
+    await spawnEntity({
+      baseUrl: `http://server`,
+      type: `horton`,
+      args: { model: `opus`, reasoning: `high` },
+      workingDirectory: `/home/me/proj`,
+    })
+
+    expect(lastRequestBody().args).toEqual({
+      model: `opus`,
+      reasoning: `high`,
+      workingDirectory: `/home/me/proj`,
+    })
+  })
 })
 
 describe(`schemas`, () => {

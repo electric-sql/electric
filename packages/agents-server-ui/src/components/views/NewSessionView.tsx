@@ -41,7 +41,8 @@ import {
   isModelProperty,
   schemaModelSupportsImageInput,
 } from '../../lib/modelCapabilities'
-import { ComposerEditor, serializeComposerInput } from '../ComposerEditor'
+import { serializeComposerInput } from '@electric-ax/agents-runtime/client'
+import { ComposerEditor } from '../ComposerEditor'
 import { ComposerShell } from '../ComposerShell'
 import styles from '../NewSessionPage.module.css'
 import type {

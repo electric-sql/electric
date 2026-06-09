@@ -681,7 +681,7 @@ defmodule Electric.Shapes.ShapeTest do
     @tag with_sql: [
            "CREATE TABLE IF NOT EXISTS col_table (id INT PRIMARY KEY, value1 TEXT, value2 TEXT)"
          ]
-    test "validates selected columns and where clauses against queryable columns", %{
+    test "validates selected columns against queryable columns but allows main where", %{
       inspector: inspector
     } do
       assert {:error, {:columns, ["The following columns are not found on the table: value2"]}} =
@@ -691,15 +691,18 @@ defmodule Electric.Shapes.ShapeTest do
                  columns: ["id", "value2"]
                )
 
-      assert {:error, {:where, message}} =
+      assert {:ok,
+              %Shape{
+                selected_columns: ["id", "value1"],
+                queryable_columns: ["id", "value1"],
+                where: %{query: "value2 = 'allowed'"}
+              }} =
                Shape.new("col_table",
                  inspector: inspector,
                  queryable_columns: ["id", "value1"],
                  columns: ["id", "value1"],
-                 where: "value2 = 'blocked'"
+                 where: "value2 = 'allowed'"
                )
-
-      assert message =~ "unknown reference value2"
     end
 
     @tag with_sql: [

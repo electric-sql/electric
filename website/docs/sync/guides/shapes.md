@@ -47,7 +47,7 @@ Shapes are defined by:
 - a [table](#table), such as `items`
 - an optional [where clause](#where-clause) to filter which rows are included in the shape
 - an optional [columns](#columns) clause to select which columns are included
-- an optional [queryable columns](#queryable-columns) clause to restrict which columns may be queried or synced
+- an optional [queryable columns](#queryable-columns) clause to restrict which columns may be queried by subset snapshots or synced
 
 A shape contains all of the rows in the table that match the where clause, if provided. If a columns clause is provided, the synced rows will only contain those selected columns.
 
@@ -249,12 +249,14 @@ The specified columns must always include the primary key column(s), and should 
 
 ### Queryable columns
 
-This is an optional list of columns that may be referenced by shape `where` clauses, subset `where` clauses, subset `order_by` clauses, and the `columns` projection. It is an allow-list for what a request may query or sync; it does not force every listed column to be synced.
+This is an optional list of columns that may be referenced by subset `where` clauses, subset `order_by` clauses, and the `columns` projection. It is an allow-list for what client-controlled subset requests may query or sync; it does not force every listed column to be synced.
 
-For example, this shape can filter by `org_id` without syncing `org_id` to the client:
+`queryable_columns` does not restrict the main shape `where` clause. The main `where` is part of the server-defined shape and should be set by your server or proxy, not by clients.
+
+For example, this shape can filter server-side by `org_id` without syncing `org_id` to the client or allowing client subset requests to reference it:
 
 ```http
-/v1/shape?table=projects&queryable_columns=id,title,org_id&columns=id,title&where=org_id=$1&params[1]=org_123
+/v1/shape?table=projects&queryable_columns=id,title&columns=id,title&where=org_id=$1&params[1]=org_123
 ```
 
 The specified queryable columns must include the primary key column(s). If `queryable_columns` is set and `columns` is omitted, Electric syncs the queryable columns by default.

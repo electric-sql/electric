@@ -1,5 +1,31 @@
 # @electric-ax/agents-server-ui
 
+## 0.4.18
+
+### Patch Changes
+
+- 3dbd075: Add session pinning to the mobile app: long-press a root session row (or any search result) to open a context sheet with the entity info (title, session id, type/status, subagents, runner, sandbox, spawned, last active) and a Pin/Unpin action; the in-session kebab menu also gets a Pin/Unpin item, mirroring the desktop tile menu. Pinned sessions surface in a Pinned section above the groups, persisted per-device in AsyncStorage — the mobile mirror of the web sidebar's pinning. Runner-param types in agents-server-ui's `entityRuntime` helpers are loosened to structural subsets so the mobile app can reuse them.
+- 5aa2d78: Add server-resolved fork anchor + spawn-parity body fields to `POST /_electric/entities/<type>/<id>/fork`.
+  - `anchor: 'latest_completed_run'` is an alternative to `fork_pointer`: the server scans the source root's `main` history, finds the most recent `runs` row with `status === 'completed'`, derives the matching `{ offset, sub_offset }` pointer, and runs the existing pointer-fork path with it. Mutually exclusive with `fork_pointer` (400 if both); 400 if no completed run exists. Lets callers without access to the source's per-row pointer side-table (e.g. an agent forking via a tool) fork at the same anchor the per-row "Fork from here" UI uses.
+  - `parent` overrides the new root fork's `parent` field, making it a CHILD of that URL (rather than inheriting the source's parent).
+  - `wake` registers a subscription on the new root fork at fork time (same shape as `spawn`'s `wake`).
+  - `initialMessage` is delivered to the new root fork via `entityManager.send` after `linkEntityDispatchSubscription` runs — same ordering spawn uses, so the dispatcher is subscribed before the inbox row lands and the fork actually wakes on the message instead of sitting idle.
+  - `tags` are stamped on the new root fork in addition to those copied from the source.
+
+  Together these let an agent fork itself as a child and receive replies via the same manifest-anchored wake mechanism `spawn` uses, with a single round-trip fork-and-dispatch.
+
+  Chat UI: `readInboxText` falls back to `message` and `content` keys when `text` isn't present, so messages sent by agents (which sometimes emit those shapes) render as a chat bubble body instead of a blank bar.
+
+- 146f238: Polish the agents UI with improved spawn-form model controls, tooltips,
+  macOS sidebar vibrancy styling, select sizing fixes, and a response-footer
+  fork action in the timeline.
+- 7892079: Per-runner recent working directories in the spawn UI, derived from the synced sessions list so the same recents appear on every device. The desktop picker becomes per-runner (replacing the localStorage list), and mobile gains sandbox-profile and working-directory selection — including sending the sandbox profile on spawn, without which the runtime ignores the chosen directory.
+- Updated dependencies [d15852d]
+- Updated dependencies [5aa2d78]
+- Updated dependencies [1099366]
+- Updated dependencies [1099366]
+  - @electric-ax/agents-runtime@0.3.11
+
 ## 0.4.17
 
 ### Patch Changes

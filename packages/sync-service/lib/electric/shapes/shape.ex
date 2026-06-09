@@ -241,10 +241,7 @@ defmodule Electric.Shapes.Shape do
              supported_features,
              Map.put(opts, :queryable_columns, queryable_columns)
            ),
-         refs =
-           column_info
-           |> filter_columns(queryable_columns)
-           |> Inspector.columns_to_expr(),
+         refs = Inspector.columns_to_expr(column_info),
          {:ok, where, shape_dependencies} <-
            validate_where_clause(Map.get(opts, :where), opts, refs) do
       flags =
@@ -571,12 +568,6 @@ defmodule Electric.Shapes.Shape do
     else
       {:error, {:queryable_columns, [err_msg]}}
     end
-  end
-
-  defp filter_columns(column_info, nil), do: column_info
-
-  defp filter_columns(column_info, column_names) do
-    Enum.filter(column_info, &(&1.name in column_names))
   end
 
   defp table_not_found_error(relation),
