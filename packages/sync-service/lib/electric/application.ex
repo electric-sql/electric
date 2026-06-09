@@ -413,6 +413,10 @@ defmodule Electric.Application do
           if(get_env(opts, :call_home_telemetry?), do: get_env(opts, :telemetry_url)),
         otel_metrics?: not is_nil(Application.get_env(:otel_metric_exporter, :otlp_endpoint))
       ],
+      # Export the key stack-level metrics (shapes, replication lag, retained WAL) to the
+      # Prometheus `/metrics` endpoint. They already reach the other reporters per-stack via
+      # StackTelemetry, so they go through this Prometheus-only seam to avoid double-reporting.
+      additional_prometheus_metrics: Electric.StackSupervisor.Telemetry.prometheus_metrics(),
       otel_opts: get_opts(opts, export_period: :otel_export_period)
     ]
   end

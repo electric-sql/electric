@@ -42,13 +42,17 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
   defp exporter_child_specs(opts) do
     metrics = metrics(opts)
 
+    # Metrics that should reach Prometheus only, e.g. stack-level metrics that the other
+    # reporters already export per-stack. Appending them here avoids double-reporting.
+    prometheus_metrics = metrics ++ Map.get(opts, :additional_prometheus_metrics, [])
+
     [
       Reporters.CallHomeReporter.child_spec(
         opts,
         metrics: Reporters.CallHomeReporter.application_metrics()
       ),
       Reporters.Otel.child_spec(opts, metrics: metrics),
-      Reporters.Prometheus.child_spec(opts, metrics: metrics),
+      Reporters.Prometheus.child_spec(opts, metrics: prometheus_metrics),
       Reporters.Statsd.child_spec(opts, metrics: metrics)
     ]
   end

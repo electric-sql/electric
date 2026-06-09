@@ -76,6 +76,22 @@ defmodule ElectricTelemetry.Opts do
               {:struct, Telemetry.Metrics.Distribution}
             ]}}
       ],
+      # Metrics exported only via the Prometheus reporter, in addition to the shared
+      # `additional_metrics`. Used to expose stack-level metrics on the `/metrics` endpoint
+      # without double-reporting them through the OTel/StatsD/Call-Home reporters.
+      additional_prometheus_metrics: [
+        type:
+          {:list,
+           {:or,
+            [
+              {:struct, Telemetry.Metrics.Counter},
+              {:struct, Telemetry.Metrics.LastValue},
+              {:struct, Telemetry.Metrics.Sum},
+              {:struct, Telemetry.Metrics.Summary},
+              {:struct, Telemetry.Metrics.Distribution}
+            ]}},
+        default: []
+      ],
       otel_opts: [
         type: :keyword_list,
         keys: [
