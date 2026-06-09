@@ -158,6 +158,12 @@ vi.mock(`../src/entity-stream-db`, () => ({
       const textDeltas = createLocalOnlyTestCollection<Record<string, unknown>>(
         []
       )
+      const reasoning = createLocalOnlyTestCollection<Record<string, unknown>>(
+        []
+      )
+      const reasoningDeltas = createLocalOnlyTestCollection<
+        Record<string, unknown>
+      >([])
       const toolCalls = createLocalOnlyTestCollection<Record<string, unknown>>(
         []
       )
@@ -298,6 +304,8 @@ vi.mock(`../src/entity-stream-db`, () => ({
           runs,
           texts,
           textDeltas,
+          reasoning,
+          reasoningDeltas,
           toolCalls,
           steps,
           manifests,
