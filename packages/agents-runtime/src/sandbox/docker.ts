@@ -579,15 +579,13 @@ export async function dockerSandbox(
  * crash leftover.
  */
 async function writeOwnerMarker(c: DockerodeContainer): Promise<void> {
-  try {
-    await runOneOff(c, [
-      `sh`,
-      `-c`,
-      `echo ${process.pid} > ${OWNER_MARKER_PATH}`,
-    ])
-  } catch {
+  await runOneOff(c, [
+    `sh`,
+    `-c`,
+    `echo ${process.pid} > ${OWNER_MARKER_PATH}`,
+  ]).catch(() => {
     /* best-effort */
-  }
+  })
 }
 
 /**
