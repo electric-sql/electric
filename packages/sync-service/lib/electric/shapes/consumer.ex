@@ -111,6 +111,67 @@ defmodule Electric.Shapes.Consumer do
     ConsumerRegistry.whereis(stack_id, shape_handle)
   end
 
+  @doc """
+  Set the adaptive-GC heap threshold (bytes, or nil to disable) for a single stack.
+  Takes effect immediately for that stack's consumers — safe to call from IEx.
+  """
+  def set_gc_heap_threshold(stack_id, threshold_bytes)
+      when is_nil(threshold_bytes) or (is_integer(threshold_bytes) and threshold_bytes >= 0) do
+    Electric.StackConfig.put(stack_id, :consumer_gc_heap_threshold, threshold_bytes)
+    :ok
+  end
+
+  @doc """
+  Set the adaptive-GC heap threshold for every live stack on this node.
+  Returns `{:ok, number_of_stacks_updated}`. Pass nil to disable everywhere.
+  Intended for live experimentation from an IEx shell.
+  """
+  def set_gc_heap_threshold_all_stacks(threshold_bytes) do
+    stack_ids = list_stack_ids()
+
+    # Guard against a stack dying between enumeration and the put: if the
+    # StackConfig ETS table vanishes, StackConfig.put/3 raises ArgumentError.
+    # We skip such stale entries rather than crashing the operator call.
+    Enum.each(stack_ids, fn stack_id ->
+      try do
+        set_gc_heap_threshold(stack_id, threshold_bytes)
+      rescue
+        ArgumentError -> :ok
+      end
+    end)
+
+    {:ok, length(stack_ids)}
+  end
+
+  # Enumerate live stacks by scanning ETS tables whose names match the
+  # Electric.StackConfig table-name prefix ("Electric.StackConfig:<stack_id>").
+  # This is the most direct approach: StackConfig creates one named ETS table per
+  # stack, so the set of live tables IS the set of live stacks.
+  # No first-class listing API exists in the codebase (grep confirmed).
+  # A race (stack dies mid-iteration) is harmless: StackConfig.put/3 on a vanished
+  # table would raise ArgumentError, which we rescue and skip.
+  defp list_stack_ids do
+    prefix = "#{inspect(Electric.StackConfig)}:"
+    prefix_len = byte_size(prefix)
+
+    :ets.all()
+    |> Enum.flat_map(fn tab ->
+      case :ets.info(tab, :name) do
+        :undefined ->
+          []
+
+        name ->
+          name_str = Atom.to_string(name)
+
+          if String.starts_with?(name_str, prefix) do
+            [binary_part(name_str, prefix_len, byte_size(name_str) - prefix_len)]
+          else
+            []
+          end
+      end
+    end)
+  end
+
   def start_link(%{stack_id: stack_id, shape_handle: shape_handle} = _config) do
     GenServer.start_link(__MODULE__, %{stack_id: stack_id, shape_handle: shape_handle},
       name: name(stack_id, shape_handle),

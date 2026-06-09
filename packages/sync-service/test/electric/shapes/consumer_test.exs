@@ -2891,6 +2891,32 @@ defmodule Electric.Shapes.ConsumerTest do
     end
   end
 
+  describe "set_gc_heap_threshold helpers" do
+    # with_stack_id_from_test (line 87) already starts ProcessRegistry + StackConfig
+    # for ctx.stack_id — no heavier setup is needed for these pure-config tests.
+
+    test "set_gc_heap_threshold/2 writes the value into StackConfig", ctx do
+      assert :ok = Electric.Shapes.Consumer.set_gc_heap_threshold(ctx.stack_id, 2_000_000)
+
+      assert 2_000_000 ==
+               Electric.StackConfig.lookup(ctx.stack_id, :consumer_gc_heap_threshold, nil)
+    end
+
+    test "set_gc_heap_threshold/2 accepts nil to disable", ctx do
+      Electric.Shapes.Consumer.set_gc_heap_threshold(ctx.stack_id, 123)
+      assert :ok = Electric.Shapes.Consumer.set_gc_heap_threshold(ctx.stack_id, nil)
+      assert nil == Electric.StackConfig.lookup(ctx.stack_id, :consumer_gc_heap_threshold, nil)
+    end
+
+    test "set_gc_heap_threshold_all_stacks/1 sets the live stack", ctx do
+      assert {:ok, n} = Electric.Shapes.Consumer.set_gc_heap_threshold_all_stacks(3_000_000)
+      assert n >= 1
+
+      assert 3_000_000 ==
+               Electric.StackConfig.lookup(ctx.stack_id, :consumer_gc_heap_threshold, nil)
+    end
+  end
+
   defp get_log_items_from_storage(offset, shape_storage) do
     Storage.get_log_stream(offset, shape_storage) |> Enum.map(&Jason.decode!/1)
   end
