@@ -65,6 +65,71 @@ describe(`ctx.useRealtime()`, () => {
     ])
   })
 
+  it(`persists realtime input and output transcripts`, async () => {
+    const { ctx } = createTestHandlerContext()
+
+    const realtime = ctx.useRealtime({
+      systemPrompt: `You are realtime.`,
+      provider: createTestRealtimeProvider({
+        events: [
+          { type: `session.started`, sessionId: `provider-session` },
+          {
+            type: `input_transcript.delta`,
+            delta: `hel`,
+            turnId: `input-item-1`,
+          },
+          {
+            type: `input_transcript.delta`,
+            delta: `lo`,
+            turnId: `input-item-1`,
+          },
+          {
+            type: `input_transcript.completed`,
+            text: `hello there`,
+            turnId: `input-item-1`,
+          },
+          {
+            type: `output_transcript.delta`,
+            delta: `Hi`,
+            responseId: `resp-1`,
+          },
+          {
+            type: `output_transcript.completed`,
+            text: `Hi there`,
+            responseId: `resp-1`,
+          },
+          { type: `session.closed` },
+        ],
+      }),
+      tools: [],
+    })
+
+    await realtime.run()
+
+    expect(ctx.db.collections.realtimeTranscripts.toArray).toMatchObject([
+      {
+        key: `realtime-transcript:provider-session:input:input-item-1`,
+        session_id: `provider-session`,
+        direction: `input`,
+        text: `hello there`,
+        status: `final`,
+        turn_id: `input-item-1`,
+        audio_stream: `input`,
+        created_at: expect.any(String),
+      },
+      {
+        key: `realtime-transcript:provider-session:output:resp-1`,
+        session_id: `provider-session`,
+        direction: `output`,
+        text: `Hi there`,
+        status: `final`,
+        response_id: `resp-1`,
+        audio_stream: `output`,
+        created_at: expect.any(String),
+      },
+    ])
+  })
+
   it(`finds active realtime sessions from the manifest`, () => {
     const { ctx } = createTestHandlerContext()
 

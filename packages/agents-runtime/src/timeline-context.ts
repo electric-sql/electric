@@ -7,6 +7,7 @@ import type {
   IncludesContextInserted,
   IncludesContextRemoved,
   IncludesInboxMessage,
+  IncludesRealtimeTranscript,
   IncludesRun,
   IncludesSignal,
   IncludesWakeMessage,
@@ -69,12 +70,14 @@ export function buildTimelineMessages(input: {
   inbox: Array<IncludesInboxMessage>
   wakes?: Array<IncludesWakeMessage>
   signals?: Array<IncludesSignal>
+  realtimeTranscripts?: Array<IncludesRealtimeTranscript>
 }): Array<LLMMessage> {
   return materializeTimeline({
     runs: input.runs,
     inbox: input.inbox,
     wakes: input.wakes ?? [],
     signals: input.signals ?? [],
+    realtimeTranscripts: input.realtimeTranscripts ?? [],
     contextInserted: [],
     contextRemoved: [],
     entities: [],
@@ -223,6 +226,11 @@ export function defaultProjection(
     case `signal`:
       return [renderSignalMessage(item.signal)]
 
+    case `realtime_transcript`:
+      return item.direction === `input` && item.text.length > 0
+        ? [{ role: `user`, content: item.text }]
+        : null
+
     case `run`: {
       const messages: Array<LLMMessage> = []
 
@@ -357,6 +365,11 @@ export function materializeTimeline(
     | { kind: `inbox`; order: TimelineOrder; item: IncludesInboxMessage }
     | { kind: `wake`; order: TimelineOrder; item: IncludesWakeMessage }
     | { kind: `signal`; order: TimelineOrder; item: IncludesSignal }
+    | {
+        kind: `realtime_transcript`
+        order: TimelineOrder
+        item: IncludesRealtimeTranscript
+      }
     | { kind: `run`; order: TimelineOrder; item: IncludesRun }
     | {
         kind: `context_inserted`
@@ -387,6 +400,13 @@ export function materializeTimeline(
         order: item.order,
         item,
       })),
+      ...(data.realtimeTranscripts ?? [])
+        .filter((item) => item.direction === `input` && item.text.length > 0)
+        .map((item) => ({
+          kind: `realtime_transcript` as const,
+          order: item.order,
+          item,
+        })),
       ...data.runs.map((item) => ({
         kind: `run` as const,
         order: item.order,
@@ -443,6 +463,17 @@ export function materializeTimeline(
           kind: `signal`,
           at: orderToOffset(entry.order),
           signal: entry.item,
+        }
+
+      case `realtime_transcript`:
+        return {
+          kind: `realtime_transcript`,
+          at: orderToOffset(entry.order),
+          key: entry.item.key,
+          sessionId: entry.item.session_id,
+          direction: entry.item.direction,
+          text: entry.item.text,
+          status: entry.item.status,
         }
 
       case `run`:

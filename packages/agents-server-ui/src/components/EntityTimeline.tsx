@@ -257,6 +257,13 @@ function estimateRowHeight(
     const lines = Math.max(1, Math.ceil(row.comment.body.length / charsPerLine))
     return Math.max(58, 42 + lines * lineHeight) + timelineRowGap(row, nextRow)
   }
+  if (row.realtimeTranscript) {
+    const lines = Math.max(
+      1,
+      Math.ceil(row.realtimeTranscript.text.length / charsPerLine)
+    )
+    return Math.max(64, 48 + lines * lineHeight) + timelineRowGap(row)
+  }
   if (row.wake || row.signal || row.manifest) {
     return 76 + timelineRowGap(row, nextRow)
   }
@@ -313,6 +320,7 @@ function timelineRowSearchText(
 ): string {
   if (row.comment) return row.comment.body
   if (row.inbox) return readInboxText(row.inbox.payload)
+  if (row.realtimeTranscript) return row.realtimeTranscript.text
   if (row.wake) {
     return wakeSectionText({
       kind: `wake`,
@@ -330,6 +338,7 @@ function timelineRowLabel(row: RenderTimelineRow): string {
   if (row.comment) return `Comment`
   if (row.inbox?.from_agent) return `Agent message`
   if (row.inbox) return `User message`
+  if (row.realtimeTranscript) return `Voice message`
   if (row.wake) return `Wake`
   if (row.signal) return `Signal`
   if (row.error) return `Error`
@@ -1305,6 +1314,28 @@ const TimelineRow = memo(function TimelineRow({
     )
   }
 
+  if (row.realtimeTranscript) {
+    const timestamp = Date.parse(row.realtimeTranscript.created_at)
+    return (
+      <UserMessage
+        section={{
+          kind: `user_message`,
+          from: currentPrincipal,
+          text: row.realtimeTranscript.text,
+          timestamp: Number.isFinite(timestamp) ? timestamp : Date.now(),
+          isInitial: false,
+        }}
+        currentPrincipal={currentPrincipal}
+        usersById={usersById}
+        showStop={
+          stopUserMessageKey !== null && row.$key === stopUserMessageKey
+        }
+        stopPending={stopPending}
+        onStop={onStopGeneration}
+      />
+    )
+  }
+
   if (row.wake) {
     return (
       <WakeTimelineRow
@@ -1566,7 +1597,7 @@ export function EntityTimeline({
     if (streamingIndex < 0) return null
     for (let index = streamingIndex - 1; index >= 0; index--) {
       const row = displayRows[index]
-      if (row?.inbox) {
+      if (row?.inbox || row?.realtimeTranscript) {
         return row.$key
       }
     }
@@ -1582,6 +1613,9 @@ export function EntityTimeline({
     for (const row of displayRows) {
       if (row.inbox) {
         const timestamp = Date.parse(row.inbox.timestamp)
+        lastUserTimestamp = Number.isFinite(timestamp) ? timestamp : null
+      } else if (row.realtimeTranscript) {
+        const timestamp = Date.parse(row.realtimeTranscript.created_at)
         lastUserTimestamp = Number.isFinite(timestamp) ? timestamp : null
       } else if (row.run) {
         timestampByRowKey.set(row.$key, lastUserTimestamp)

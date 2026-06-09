@@ -102,6 +102,7 @@ describe(`createOpenAIRealtimeProvider`, () => {
         audio: {
           input: {
             format: { type: `audio/pcm`, rate: 24_000 },
+            transcription: { model: `gpt-4o-mini-transcribe` },
             turn_detection: {
               type: `server_vad`,
               threshold: 0.5,
@@ -123,6 +124,38 @@ describe(`createOpenAIRealtimeProvider`, () => {
         content: [{ type: `input_text`, text: `Previous context` }],
       },
     })
+  })
+
+  it(`can disable input audio transcription`, async () => {
+    FakeWebSocket.instances = []
+    const provider = createOpenAIRealtimeProvider({
+      apiKey: `sk-test`,
+      WebSocket: FakeWebSocket,
+    })
+
+    await provider.connect({
+      systemPrompt: `Talk`,
+      messages: [],
+      tools: [],
+      audio: {
+        inputFormat: { codec: `pcm16`, sampleRate: 24_000, channels: 1 },
+        inputTranscription: false,
+      },
+    })
+
+    const socket = FakeWebSocket.instances[0]!
+    expect(socket.sent[0]).toMatchObject({
+      session: {
+        audio: {
+          input: {
+            format: { type: `audio/pcm`, rate: 24_000 },
+          },
+        },
+      },
+    })
+    expect(
+      (socket.sent[0] as any).session.audio.input.transcription
+    ).toBeUndefined()
   })
 
   it(`sends audio input chunks as OpenAI input buffer events`, async () => {
@@ -275,6 +308,44 @@ describe(`createOpenAIRealtimeProvider`, () => {
       type: `output_audio.completed`,
       responseId: `resp-1`,
       itemId: `item-1`,
+    })
+  })
+
+  it(`maps GA input audio transcript events`, async () => {
+    FakeWebSocket.instances = []
+    const provider = createOpenAIRealtimeProvider({
+      apiKey: `sk-test`,
+      WebSocket: FakeWebSocket,
+    })
+
+    const session = await provider.connect({
+      systemPrompt: `Talk`,
+      messages: [],
+      tools: [],
+    })
+    const socket = FakeWebSocket.instances[0]!
+    const iterator = session.events[Symbol.asyncIterator]()
+
+    socket.emitMessage({
+      type: `conversation.item.input_audio_transcription.delta`,
+      item_id: `item-1`,
+      delta: `hello`,
+    })
+    await expect(nextEvent(iterator)).resolves.toEqual({
+      type: `input_transcript.delta`,
+      turnId: `item-1`,
+      delta: `hello`,
+    })
+
+    socket.emitMessage({
+      type: `conversation.item.input_audio_transcription.completed`,
+      item_id: `item-1`,
+      transcript: `hello there`,
+    })
+    await expect(nextEvent(iterator)).resolves.toEqual({
+      type: `input_transcript.completed`,
+      turnId: `item-1`,
+      text: `hello there`,
     })
   })
 

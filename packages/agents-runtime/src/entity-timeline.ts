@@ -23,7 +23,12 @@ import type {
 } from '@tanstack/db'
 import type { EntityStreamDB } from './entity-stream-db'
 import { formatPointerOrderToken, type EventPointer } from './event-pointer'
-import type { ChildStatusEntry, MessageReceived, Signal } from './entity-schema'
+import type {
+  ChildStatusEntry,
+  MessageReceived,
+  RealtimeTranscript,
+  Signal,
+} from './entity-schema'
 import type { ManifestEntry, Wake, WakeMessage } from './types'
 
 export const TIMELINE_ORDER_FALLBACK = `~`
@@ -159,6 +164,13 @@ export type IncludesSignal = Omit<Signal, `_seq`> & {
   order: TimelineOrder
 }
 
+export type IncludesRealtimeTranscript = Omit<
+  RealtimeTranscript,
+  `_seq` | `_timeline_order`
+> & {
+  order: TimelineOrder
+}
+
 export interface IncludesContextInserted {
   key: string
   order: TimelineOrder
@@ -195,6 +207,7 @@ export interface EntityTimelineData {
   inbox: Array<IncludesInboxMessage>
   wakes: Array<IncludesWakeMessage>
   signals: Array<IncludesSignal>
+  realtimeTranscripts?: Array<IncludesRealtimeTranscript>
   contextInserted: Array<IncludesContextInserted>
   contextRemoved: Array<IncludesContextRemoved>
   entities: Array<IncludesEntity>
@@ -216,7 +229,7 @@ export interface EntityTimelineQueryOptions {
   /**
    * Additional sources merged into the timeline, keyed by row name. Names
    * must not collide with the built-in sources (`inbox`, `run`, `wake`,
-   * `signal`, `manifest`).
+   * `signal`, `error`, `realtimeTranscript`, `manifest`).
    */
   customSources?: Record<string, EntityTimelineCustomSource>
 }
@@ -323,6 +336,7 @@ export type EntityTimelineSignalRow = IncludesSignal
 export type EntityTimelineErrorRow = EntityTimelineErrorItem & {
   order: TimelineOrder
 }
+export type EntityTimelineRealtimeTranscriptRow = IncludesRealtimeTranscript
 
 export type EntityTimelineQueryRow =
   | {
@@ -332,6 +346,7 @@ export type EntityTimelineQueryRow =
       wake?: undefined
       signal?: undefined
       error?: undefined
+      realtimeTranscript?: undefined
       manifest?: undefined
     }
   | {
@@ -341,6 +356,7 @@ export type EntityTimelineQueryRow =
       wake?: undefined
       signal?: undefined
       error?: undefined
+      realtimeTranscript?: undefined
       manifest?: undefined
     }
   | {
@@ -350,6 +366,7 @@ export type EntityTimelineQueryRow =
       wake: EntityTimelineWakeRow
       signal?: undefined
       error?: undefined
+      realtimeTranscript?: undefined
       manifest?: undefined
     }
   | {
@@ -359,6 +376,7 @@ export type EntityTimelineQueryRow =
       wake?: undefined
       signal: EntityTimelineSignalRow
       error?: undefined
+      realtimeTranscript?: undefined
       manifest?: undefined
     }
   | {
@@ -368,6 +386,7 @@ export type EntityTimelineQueryRow =
       wake?: undefined
       signal?: undefined
       error: EntityTimelineErrorRow
+      realtimeTranscript?: undefined
       manifest?: undefined
     }
   | {
@@ -377,6 +396,17 @@ export type EntityTimelineQueryRow =
       wake?: undefined
       signal?: undefined
       error?: undefined
+      realtimeTranscript: EntityTimelineRealtimeTranscriptRow
+      manifest?: undefined
+    }
+  | {
+      $key: string
+      inbox?: undefined
+      run?: undefined
+      wake?: undefined
+      signal?: undefined
+      error?: undefined
+      realtimeTranscript?: undefined
       manifest: ManifestEntry
     }
 
@@ -492,6 +522,9 @@ export function normalizeEntityTimelineData(
     inbox: data.inbox,
     wakes: data.wakes,
     signals: data.signals ?? [],
+    realtimeTranscripts: [...(data.realtimeTranscripts ?? [])].sort(
+      compareTimelineOrder
+    ),
     contextInserted: data.contextInserted,
     contextRemoved: data.contextRemoved,
     entities: normalizeTimelineEntities(data.entities),
@@ -528,6 +561,9 @@ type WakeRow = OrderedValue<
 type SignalRow = OrderedValue<
   EntityStreamDB[`collections`][`signals`][`toArray`][number]
 >
+type RealtimeTranscriptValueRow =
+  EntityStreamDB[`collections`][`realtimeTranscripts`][`toArray`][number]
+type RealtimeTranscriptRow = OrderedValue<RealtimeTranscriptValueRow>
 type ContextInsertedValueRow =
   EntityStreamDB[`collections`][`contextInserted`][`toArray`][number]
 type ContextRemovedValueRow =
@@ -980,6 +1016,22 @@ function buildSignalMessages(signals: Array<SignalRow>): Array<IncludesSignal> {
   })
 }
 
+function buildRealtimeTranscriptMessages(
+  transcripts: Array<RealtimeTranscriptRow>
+): Array<IncludesRealtimeTranscript> {
+  return [...transcripts].sort(compareTimelineOrder).map((transcript) => {
+    const {
+      _seq: _ignoredSeq,
+      _timeline_order: _ignoredTimelineOrder,
+      ...value
+    } = transcript
+    return {
+      ...value,
+      order: transcript.order,
+    }
+  })
+}
+
 function buildContextInsertedMessages(
   entries: Array<ContextInsertedRow & { historyOffset: string }>
 ): Array<IncludesContextInserted> {
@@ -1098,6 +1150,14 @@ export function buildEntityTimelineData(
   const inbox = withOrderToken(db.collections.inbox)
   const wakes = withOrderToken(db.collections.wakes)
   const signals = withOrderToken(db.collections.signals)
+  const realtimeTranscripts = withOrderToken(
+    getOrderableCollection<RealtimeTranscriptValueRow>(
+      db.collections.realtimeTranscripts as
+        | typeof db.collections.realtimeTranscripts
+        | undefined,
+      `realtimeTranscripts`
+    )
+  )
   const contextInserted = withOrderToken(
     getOrderableCollection<ContextInsertedValueRow>(
       db.collections.contextInserted as
@@ -1145,6 +1205,7 @@ export function buildEntityTimelineData(
     inbox,
     wakes,
     signals,
+    realtimeTranscripts,
     contextInserted,
     contextRemoved,
     manifests.filter(hasOrderToken),
@@ -1162,6 +1223,9 @@ export function buildEntityTimelineData(
     inbox: buildInboxMessages(withOrderFromOrderIndex(inbox, orderIndex)),
     wakes: buildWakeMessages(withOrderFromOrderIndex(wakes, orderIndex)),
     signals: buildSignalMessages(withOrderFromOrderIndex(signals, orderIndex)),
+    realtimeTranscripts: buildRealtimeTranscriptMessages(
+      withOrderFromOrderIndex(realtimeTranscripts, orderIndex)
+    ),
     contextInserted: buildContextInsertedMessages(
       withOrderAndHistoryOffsetFromOrderIndex(contextInserted, orderIndex)
     ),
@@ -1423,6 +1487,28 @@ function buildEntityTimelineQuery(
       run_id: error.run_id,
     }))
 
+  const realtimeTranscriptSource = q
+    .from({ realtimeTranscript: db.collections.realtimeTranscripts })
+    .where(({ realtimeTranscript }) =>
+      eq(realtimeTranscript.direction, `input`)
+    )
+    .select(({ realtimeTranscript }) => ({
+      key: realtimeTranscript.key,
+      order: coalesce(realtimeTranscript._timeline_order, `~`),
+      session_id: realtimeTranscript.session_id,
+      direction: realtimeTranscript.direction,
+      text: realtimeTranscript.text,
+      status: realtimeTranscript.status,
+      turn_id: realtimeTranscript.turn_id,
+      response_id: realtimeTranscript.response_id,
+      audio_stream: realtimeTranscript.audio_stream,
+      audio_offset: realtimeTranscript.audio_offset,
+      audio_next_offset: realtimeTranscript.audio_next_offset,
+      sample_start: realtimeTranscript.sample_start,
+      sample_end: realtimeTranscript.sample_end,
+      created_at: realtimeTranscript.created_at,
+    }))
+
   // Union texts + tool calls into a single ordered stream. The
   // text-delta join lives at this level (vs. inside the consumer's
   // `items.select`) so the correlation key is `text.key` — a field
@@ -1625,6 +1711,7 @@ function buildEntityTimelineQuery(
     wake: wakeSource,
     signal: signalSource,
     error: errorSource,
+    realtimeTranscript: realtimeTranscriptSource,
     manifest: db.collections.manifests,
   }
   for (const [name, buildSource] of Object.entries(opts.customSources ?? {})) {
@@ -1848,6 +1935,29 @@ export function createEntityIncludesQuery(
             outcome: signal.outcome,
             previous_state: signal.previous_state,
             new_state: signal.new_state,
+          }))
+      ),
+      realtimeTranscripts: toArray(
+        q
+          .from({ realtimeTranscript: db.collections.realtimeTranscripts })
+          .orderBy(({ realtimeTranscript }) =>
+            coalesce(realtimeTranscript._seq, -1)
+          )
+          .select(({ realtimeTranscript }) => ({
+            key: realtimeTranscript.key,
+            order: coalesce(realtimeTranscript._seq, -1),
+            session_id: realtimeTranscript.session_id,
+            direction: realtimeTranscript.direction,
+            text: realtimeTranscript.text,
+            status: realtimeTranscript.status,
+            turn_id: realtimeTranscript.turn_id,
+            response_id: realtimeTranscript.response_id,
+            audio_stream: realtimeTranscript.audio_stream,
+            audio_offset: realtimeTranscript.audio_offset,
+            audio_next_offset: realtimeTranscript.audio_next_offset,
+            sample_start: realtimeTranscript.sample_start,
+            sample_end: realtimeTranscript.sample_end,
+            created_at: realtimeTranscript.created_at,
           }))
       ),
       entities: toArray(

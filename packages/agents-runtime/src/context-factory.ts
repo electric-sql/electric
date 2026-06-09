@@ -1315,6 +1315,7 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
       let currentToolCall:
         | { toolCallId: string; name: string; args: unknown }
         | undefined
+      const realtimeSession = activeRealtimeSession()
 
       const endText = (): void => {
         if (!textStarted) return
@@ -1331,6 +1332,125 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         bridge.onTextDelta(delta)
       }
 
+      const transcriptTextByKey = new Map<string, string>()
+      const transcriptCreatedAtByKey = new Map<string, string>()
+      const transcriptFallbackIds = new Map<`input` | `output`, string>()
+      let transcriptFallbackCounter = 0
+      let providerSessionId = realtimeSession?.id
+
+      const currentTranscriptSessionId = (): string =>
+        realtimeSession?.id ?? providerSessionId ?? `ephemeral`
+
+      const transcriptKey = (
+        direction: `input` | `output`,
+        id?: string
+      ): string => {
+        let stableId = id
+        if (!stableId) {
+          stableId = transcriptFallbackIds.get(direction)
+          if (!stableId) {
+            stableId = `fallback-${transcriptFallbackCounter}`
+            transcriptFallbackCounter += 1
+            transcriptFallbackIds.set(direction, stableId)
+          }
+        }
+        return `realtime-transcript:${currentTranscriptSessionId()}:${direction}:${stableId}`
+      }
+
+      const writeRealtimeTranscript = (input: {
+        direction: `input` | `output`
+        key: string
+        text: string
+        status: `partial` | `final`
+        turnId?: string
+        responseId?: string
+      }): void => {
+        const collection = config.db.collections.realtimeTranscripts
+        if (input.text.length === 0 && !collection.has(input.key)) return
+
+        const existing = collection.get(input.key) as
+          | { created_at?: string }
+          | undefined
+        const createdAt =
+          transcriptCreatedAtByKey.get(input.key) ??
+          existing?.created_at ??
+          new Date().toISOString()
+        transcriptCreatedAtByKey.set(input.key, createdAt)
+
+        const value = {
+          session_id: currentTranscriptSessionId(),
+          direction: input.direction,
+          text: input.text,
+          status: input.status,
+          audio_stream: input.direction,
+          ...(input.turnId ? { turn_id: input.turnId } : {}),
+          ...(input.responseId ? { response_id: input.responseId } : {}),
+          created_at: createdAt,
+        }
+        config.writeEvent(
+          (collection.has(input.key)
+            ? entityStateSchema.realtimeTranscripts.update({
+                key: input.key,
+                value: value as never,
+              })
+            : entityStateSchema.realtimeTranscripts.insert({
+                key: input.key,
+                value: value as never,
+              })) as ChangeEvent
+        )
+      }
+
+      const appendRealtimeTranscript = (input: {
+        direction: `input` | `output`
+        delta: string
+        turnId?: string
+        responseId?: string
+      }): void => {
+        if (input.delta.length === 0) return
+        const key = transcriptKey(
+          input.direction,
+          input.direction === `input` ? input.turnId : input.responseId
+        )
+        const text = `${transcriptTextByKey.get(key) ?? ``}${input.delta}`
+        transcriptTextByKey.set(key, text)
+        writeRealtimeTranscript({
+          direction: input.direction,
+          key,
+          text,
+          status: `partial`,
+          turnId: input.turnId,
+          responseId: input.responseId,
+        })
+      }
+
+      const completeRealtimeTranscript = (input: {
+        direction: `input` | `output`
+        text?: string
+        turnId?: string
+        responseId?: string
+      }): void => {
+        const key = transcriptKey(
+          input.direction,
+          input.direction === `input` ? input.turnId : input.responseId
+        )
+        const text = input.text ?? transcriptTextByKey.get(key) ?? ``
+        transcriptTextByKey.set(key, text)
+        writeRealtimeTranscript({
+          direction: input.direction,
+          key,
+          text,
+          status: `final`,
+          turnId: input.turnId,
+          responseId: input.responseId,
+        })
+        if (
+          (input.direction === `input` && !input.turnId) ||
+          (input.direction === `output` && !input.responseId)
+        ) {
+          transcriptFallbackIds.delete(input.direction)
+        }
+      }
+
       const composedTools = (await composeToolsWithProviders(
         activeRealtimeConfig.tools ?? []
       )) as Array<AgentTool>
@@ -1342,7 +1462,6 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         timelineToMessages(config.db)
       )
       let realtimeIo: RealtimeStreamIo | undefined
-      const realtimeSession = activeRealtimeSession()
       let realtimeSessionTerminalWritten = false
 
       async function handleProviderEvent(
@@ -1350,15 +1469,33 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
       ): Promise<void> {
         switch (event.type) {
           case `session.started`:
+            providerSessionId =
+              realtimeSession?.id ?? event.sessionId ?? providerSessionId
+            break
+
           case `session.updated`:
           case `input_audio.speech_started`:
           case `input_audio.speech_stopped`:
-          case `input_transcript.delta`:
-          case `input_transcript.completed`:
           case `output_audio.delta`:
           case `output_audio.completed`:
           case `response.started`:
           case `response.cancelled`:
+            break
+
+          case `input_transcript.delta`:
+            appendRealtimeTranscript({
+              direction: `input`,
+              delta: event.delta,
+              turnId: event.turnId,
+            })
+            break
+
+          case `input_transcript.completed`:
+            completeRealtimeTranscript({
+              direction: `input`,
+              text: event.text,
+              turnId: event.turnId,
+            })
             break
 
           case `session.closed`:
@@ -1390,10 +1527,20 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
             )
 
           case `output_transcript.delta`:
+            appendRealtimeTranscript({
+              direction: `output`,
+              delta: event.delta,
+              responseId: event.responseId,
+            })
             emitText(event.delta)
             break
 
           case `output_transcript.completed`:
+            completeRealtimeTranscript({
+              direction: `output`,
+              text: event.text,
+              responseId: event.responseId,
+            })
             if (!textStarted && event.text) {
               emitText(event.text)
             }

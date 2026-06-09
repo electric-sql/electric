@@ -6,6 +6,7 @@ import {
 import type { EntityStreamDB } from '../src/entity-stream-db'
 import type {
   IncludesInboxMessage,
+  IncludesRealtimeTranscript,
   IncludesRun,
   IncludesSignal,
   IncludesWakeMessage,
@@ -170,6 +171,40 @@ describe(`timeline context`, () => {
     })
 
     expect(result).toEqual([{ role: `user`, content: `updated text` }])
+  })
+
+  it(`projects realtime input transcripts without duplicating output transcripts`, () => {
+    const realtimeTranscripts: Array<IncludesRealtimeTranscript> = [
+      {
+        key: `rt-in`,
+        order: order(1),
+        session_id: `rt-1`,
+        direction: `input`,
+        text: `voice question`,
+        status: `final`,
+        audio_stream: `input`,
+        created_at: `2026-03-28T00:00:00.000Z`,
+      },
+      {
+        key: `rt-out`,
+        order: order(2),
+        session_id: `rt-1`,
+        direction: `output`,
+        text: `voice answer`,
+        status: `final`,
+        audio_stream: `output`,
+        created_at: `2026-03-28T00:00:01.000Z`,
+      },
+    ]
+
+    expect(
+      buildTimelineMessages({
+        runs: [],
+        inbox: [],
+        wakes: [],
+        realtimeTranscripts,
+      })
+    ).toEqual([{ role: `user`, content: `voice question` }])
   })
 
   it(`buildTimelineMessages keeps pending tool calls without emitting tool results`, () => {
@@ -494,6 +529,7 @@ describe(`timeline context`, () => {
           __electricRowOffsets: new Map([[`wake-1`, offset(7)]]),
         },
         signals: { toArray: [], __electricRowOffsets: new Map() },
+        realtimeTranscripts: { toArray: [], __electricRowOffsets: new Map() },
         contextInserted: { toArray: [], __electricRowOffsets: new Map() },
         contextRemoved: { toArray: [], __electricRowOffsets: new Map() },
         manifests: { toArray: [], __electricRowOffsets: new Map() },
@@ -536,6 +572,7 @@ describe(`timeline context`, () => {
         inbox: { toArray: [] },
         wakes: { toArray: [] },
         signals: { toArray: [] },
+        realtimeTranscripts: { toArray: [] },
         contextInserted: { toArray: [] },
         contextRemoved: { toArray: [] },
         manifests: { toArray: [] },

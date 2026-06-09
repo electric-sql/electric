@@ -408,6 +408,15 @@ export type TimelineItem =
   | { kind: `wake`; at: number; payload: unknown }
   | { kind: `signal`; at: number; signal: EntitySignalEntry }
   | {
+      kind: `realtime_transcript`
+      at: number
+      key: string
+      sessionId: string
+      direction: `input` | `output`
+      text: string
+      status: `partial` | `final`
+    }
+  | {
       kind: `run`
       at: number
       finishReason?: string
@@ -996,9 +1005,16 @@ export interface RealtimeAudioFormat {
   channels: number
 }
 
+export interface RealtimeInputTranscriptionConfig {
+  model?: string
+  language?: string
+  prompt?: string
+}
+
 export interface RealtimeAudioConfig {
   inputFormat?: RealtimeAudioFormat
   outputFormat?: RealtimeAudioFormat
+  inputTranscription?: false | RealtimeInputTranscriptionConfig
 }
 
 export interface RealtimeToolPolicy {

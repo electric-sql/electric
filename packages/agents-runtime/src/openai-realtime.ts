@@ -31,6 +31,7 @@ type OpenAIRealtimeWebSocketConstructor = new (
 ) => OpenAIRealtimeSocket
 
 const DEFAULT_OPENAI_REALTIME_MODEL = `gpt-realtime`
+const DEFAULT_OPENAI_INPUT_TRANSCRIPTION_MODEL = `gpt-4o-mini-transcribe`
 
 export interface OpenAIRealtimeProviderOptions {
   apiKey: string | (() => MaybePromise<string>)
@@ -276,12 +277,27 @@ function realtimeFormat(
   }
 }
 
+function inputTranscription(
+  input: RealtimeProviderConnectInput
+): Record<string, unknown> | undefined {
+  if (!input.audio?.inputFormat || input.audio.inputTranscription === false) {
+    return undefined
+  }
+  const config = input.audio.inputTranscription ?? {}
+  return {
+    model: config.model ?? DEFAULT_OPENAI_INPUT_TRANSCRIPTION_MODEL,
+    ...(config.language ? { language: config.language } : {}),
+    ...(config.prompt ? { prompt: config.prompt } : {}),
+  }
+}
+
 function buildSessionUpdate(
   opts: OpenAIRealtimeProviderOptions,
   input: RealtimeProviderConnectInput
 ): Record<string, unknown> {
   const inputFormat = realtimeFormat(input.audio?.inputFormat)
   const outputFormat = realtimeFormat(input.audio?.outputFormat)
+  const transcription = inputTranscription(input)
   return {
     type: `session.update`,
     session: {
@@ -300,6 +316,7 @@ function buildSessionUpdate(
                 ? {
                     input: {
                       format: inputFormat,
+                      ...(transcription ? { transcription } : {}),
                       turn_detection: {
                         type: `server_vad`,
                         threshold: 0.5,
