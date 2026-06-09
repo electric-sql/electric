@@ -119,6 +119,7 @@ type RealtimeControlInput =
   | { type: `input_text`; text: string }
   | { type: `input_audio.commit` }
   | { type: `response.cancel` }
+  | { type: `output_audio.truncate`; itemId: string; audioEndMs: number }
   | { type: `session.close`; reason?: string }
 type RealtimeStreamIo = {
   writeProviderEvent: (event: RealtimeProviderEvent) => Promise<void>
@@ -128,6 +129,12 @@ type RealtimeStreamIo = {
 function isRealtimeControlInput(value: unknown): value is RealtimeControlInput {
   if (!value || typeof value !== `object`) return false
   const type = (value as { type?: unknown }).type
+  if (type === `output_audio.truncate`) {
+    return (
+      typeof (value as { itemId?: unknown }).itemId === `string` &&
+      typeof (value as { audioEndMs?: unknown }).audioEndMs === `number`
+    )
+  }
   return (
     type === `input_text` ||
     type === `input_audio.commit` ||
@@ -249,6 +256,12 @@ function createRealtimeStreamIo(
               break
             case `response.cancel`:
               await providerSession.cancelResponse?.()
+              break
+            case `output_audio.truncate`:
+              await providerSession.truncateOutputAudio?.({
+                itemId: command.itemId,
+                audioEndMs: command.audioEndMs,
+              })
               break
             case `session.close`:
               await providerSession.close?.(command.reason)
@@ -775,6 +788,57 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
     return realtimeSessions().filter(realtimeManifestIsActive).at(-1)
   }
 
+  async function updateRealtimeSessionStatus(
+    session: ManifestRealtimeSessionEntry | undefined,
+    status: `active` | `closed` | `failed`,
+    opts: { reason?: string; error?: string } = {}
+  ): Promise<void> {
+    if (!session) return
+
+    const key = session.key ?? `realtime-session:${session.id}`
+    const terminal = status === `closed` || status === `failed`
+    const endedAt = terminal ? new Date().toISOString() : session.endedAt
+    const meta = {
+      ...(session.meta ?? {}),
+      ...(opts.reason ? { reason: opts.reason } : {}),
+      ...(opts.error ? { error: opts.error } : {}),
+    }
+
+    const nextSession: ManifestRealtimeSessionEntry = {
+      key,
+      kind: `realtime-session`,
+      id: session.id,
+      provider: session.provider,
+      model: session.model,
+      status,
+      startedAt: session.startedAt,
+      endedAt: endedAt ?? null,
+      streams: session.streams,
+      retention: `forever`,
+      ...(Object.keys(meta).length > 0 ? { meta } : {}),
+    }
+
+    config.wakeSession.registerManifestEntry(nextSession)
+    config.writeEvent(
+      entityStateSchema.realtimeSessions.update({
+        key,
+        value: {
+          session_id: session.id,
+          provider: session.provider,
+          model: session.model,
+          status,
+          started_at: session.startedAt,
+          ...(endedAt ? { ended_at: endedAt } : {}),
+          streams: session.streams,
+          ...(opts.reason ? { reason: opts.reason } : {}),
+          ...(opts.error ? { error: opts.error } : {}),
+          ...(Object.keys(meta).length > 0 ? { meta } : {}),
+        } as never,
+      }) as ChangeEvent
+    )
+    await config.wakeSession.commitManifestEntries()
+  }
+
   function structuralHash(nextConfig: UseContextConfig): string {
     const sources = Object.entries(nextConfig.sources)
       .sort(([leftName], [rightName]) => leftName.localeCompare(rightName))
@@ -1232,6 +1296,8 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         timelineToMessages(config.db)
       )
       let realtimeIo: RealtimeStreamIo | undefined
+      const realtimeSession = activeRealtimeSession()
+      let realtimeSessionTerminalWritten = false
 
       async function handleProviderEvent(
         event: RealtimeProviderEvent
@@ -1345,12 +1411,13 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
               messages,
               tools: providerTools,
               audio: activeRealtimeConfig.audio,
-              session: activeRealtimeSession(),
+              session: realtimeSession,
               signal: config.runSignal,
             })
+          await updateRealtimeSessionStatus(realtimeSession, `active`)
           realtimeIo = createRealtimeStreamIo(
             config,
-            activeRealtimeSession(),
+            realtimeSession,
             activeRealtimeProviderSession
           )
 
@@ -1364,6 +1431,10 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         }
 
         endText()
+        await updateRealtimeSessionStatus(realtimeSession, `closed`, {
+          reason: config.runSignal?.aborted ? `aborted` : `completed`,
+        })
+        realtimeSessionTerminalWritten = true
         bridge.onStepEnd({
           finishReason: config.runSignal?.aborted ? `aborted` : `stop`,
           durationMs: Date.now() - startedAt,
@@ -1373,6 +1444,12 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         })
       } catch (error) {
         endText()
+        if (!realtimeSessionTerminalWritten) {
+          await updateRealtimeSessionStatus(realtimeSession, `failed`, {
+            error: error instanceof Error ? error.message : String(error),
+          })
+          realtimeSessionTerminalWritten = true
+        }
         bridge.onStepEnd({
           finishReason: `error`,
           durationMs: Date.now() - startedAt,

@@ -2715,6 +2715,13 @@ export class EntityManager {
         400
       )
     }
+    if (provider !== `openai`) {
+      throw new ElectricAgentsError(
+        ErrCodeInvalidRequest,
+        `Realtime provider "${provider}" is not supported; expected "openai"`,
+        400
+      )
+    }
 
     const sessionId = req.id ?? `rt-${randomUUID()}`
     validateRealtimeSessionId(sessionId)

@@ -234,6 +234,21 @@ describe(`ElectricAgentsManager realtime sessions`, () => {
     })
     expect(inboxEvent.value).not.toHaveProperty(`message_type`)
   })
+
+  it(`rejects non-OpenAI realtime providers in V1`, async () => {
+    const { manager } = createAttachmentManager()
+
+    await expect(
+      manager.createRealtimeSession(`/chat/session-1`, {
+        id: `rt-1`,
+        provider: `other`,
+        model: `other-realtime`,
+      })
+    ).rejects.toMatchObject({
+      status: 400,
+      message: `Realtime provider "other" is not supported; expected "openai"`,
+    })
+  })
 })
 
 describe(`ElectricAgentsManager attachments`, () => {

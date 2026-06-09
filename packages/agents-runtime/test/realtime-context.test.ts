@@ -92,6 +92,96 @@ describe(`ctx.useRealtime()`, () => {
     })
   })
 
+  it(`marks realtime sessions closed when the provider stream ends`, async () => {
+    const { ctx } = createTestHandlerContext()
+
+    ctx.db.collections.manifests.insert({
+      key: `realtime-session:rt-1`,
+      kind: `realtime-session`,
+      id: `rt-1`,
+      provider: `openai`,
+      model: `gpt-realtime-2`,
+      status: `requested`,
+      startedAt: `2026-06-09T12:00:00.000Z`,
+      endedAt: null,
+      retention: `forever`,
+      streams: {
+        audio_in: `/entities/test/realtime/rt-1/audio/in`,
+        audio_out: `/entities/test/realtime/rt-1/audio/out`,
+        control_in: `/entities/test/realtime/rt-1/control/in`,
+        control_out: `/entities/test/realtime/rt-1/control/out`,
+      },
+    })
+
+    const realtime = ctx.useRealtime({
+      systemPrompt: `You are realtime.`,
+      provider: createTestRealtimeProvider({ response: `done` }),
+      tools: [],
+    })
+
+    await realtime.run()
+
+    expect(ctx.realtime.activeSession()).toBeUndefined()
+    expect(
+      ctx.db.collections.manifests.get(`realtime-session:rt-1`)
+    ).toMatchObject({
+      status: `closed`,
+      endedAt: expect.any(String),
+      meta: { reason: `completed` },
+    })
+    expect(
+      ctx.db.collections.realtimeSessions.get(`realtime-session:rt-1`)
+    ).toMatchObject({
+      status: `closed`,
+      ended_at: expect.any(String),
+      reason: `completed`,
+    })
+  })
+
+  it(`marks realtime sessions failed when provider setup fails`, async () => {
+    const { ctx } = createTestHandlerContext()
+
+    ctx.db.collections.manifests.insert({
+      key: `realtime-session:rt-1`,
+      kind: `realtime-session`,
+      id: `rt-1`,
+      provider: `openai`,
+      model: `gpt-realtime-2`,
+      status: `requested`,
+      startedAt: `2026-06-09T12:00:00.000Z`,
+      endedAt: null,
+      retention: `forever`,
+      streams: {
+        audio_in: `/entities/test/realtime/rt-1/audio/in`,
+        audio_out: `/entities/test/realtime/rt-1/audio/out`,
+        control_in: `/entities/test/realtime/rt-1/control/in`,
+        control_out: `/entities/test/realtime/rt-1/control/out`,
+      },
+    })
+
+    const realtime = ctx.useRealtime({
+      systemPrompt: `You are realtime.`,
+      provider: {
+        id: `openai`,
+        model: `gpt-realtime-2`,
+        connect: async () => {
+          throw new Error(`missing key`)
+        },
+      },
+      tools: [],
+    })
+
+    await expect(realtime.run()).rejects.toThrow(`missing key`)
+    expect(ctx.realtime.activeSession()).toBeUndefined()
+    expect(
+      ctx.db.collections.manifests.get(`realtime-session:rt-1`)
+    ).toMatchObject({
+      status: `failed`,
+      endedAt: expect.any(String),
+      meta: { error: `missing key` },
+    })
+  })
+
   it(`persists provider audio and control output to realtime durable streams`, async () => {
     const { ctx } = createTestHandlerContext({
       realtimeStreams: {

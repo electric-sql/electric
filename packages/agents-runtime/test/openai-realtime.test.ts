@@ -132,11 +132,63 @@ describe(`createOpenAIRealtimeProvider`, () => {
     await session.appendInputAudio?.(new Uint8Array([1, 2, 3]))
     await session.commitInputAudio?.()
 
-    expect(socket.sent.at(-2)).toEqual({
+    expect(socket.sent.at(-3)).toEqual({
       type: `input_audio_buffer.append`,
       audio: `AQID`,
     })
-    expect(socket.sent.at(-1)).toEqual({ type: `input_audio_buffer.commit` })
+    expect(socket.sent.at(-2)).toEqual({ type: `input_audio_buffer.commit` })
+    expect(socket.sent.at(-1)).toEqual({ type: `response.create` })
+  })
+
+  it(`unblocks the event stream when the run signal aborts`, async () => {
+    FakeWebSocket.instances = []
+    const controller = new AbortController()
+    const provider = createOpenAIRealtimeProvider({
+      apiKey: `sk-test`,
+      WebSocket: FakeWebSocket,
+    })
+
+    const session = await provider.connect({
+      systemPrompt: `Talk`,
+      messages: [],
+      tools: [],
+      signal: controller.signal,
+    })
+    const iterator = session.events[Symbol.asyncIterator]()
+
+    controller.abort()
+
+    await expect(nextEvent(iterator)).resolves.toEqual({
+      type: `session.closed`,
+      reason: `aborted`,
+    })
+  })
+
+  it(`can truncate output audio for interrupted playback`, async () => {
+    FakeWebSocket.instances = []
+    const provider = createOpenAIRealtimeProvider({
+      apiKey: `sk-test`,
+      WebSocket: FakeWebSocket,
+    })
+
+    const session = await provider.connect({
+      systemPrompt: `Talk`,
+      messages: [],
+      tools: [],
+    })
+    const socket = FakeWebSocket.instances[0]!
+
+    await session.truncateOutputAudio?.({
+      itemId: `item-1`,
+      audioEndMs: 320,
+    })
+
+    expect(socket.sent.at(-1)).toEqual({
+      type: `conversation.item.truncate`,
+      item_id: `item-1`,
+      content_index: 0,
+      audio_end_ms: 320,
+    })
   })
 
   it(`maps OpenAI events and executes function calls`, async () => {

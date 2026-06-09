@@ -895,16 +895,18 @@ function createAssistantHandler(options: {
           `Horton realtime currently supports provider "openai", got "${activeRealtimeSession.provider}"`
         )
       }
-      const apiKey = process.env.OPENAI_API_KEY
-      if (!apiKey) {
-        throw new Error(
-          `OPENAI_API_KEY must be set before starting Horton realtime mode`
-        )
-      }
       const realtime = ctx.useRealtime({
         systemPrompt: hortonRealtimeSystemPrompt(systemPrompt),
         provider: createOpenAIRealtimeProvider({
-          apiKey,
+          apiKey: () => {
+            const apiKey = process.env.OPENAI_API_KEY
+            if (!apiKey) {
+              throw new Error(
+                `OPENAI_API_KEY must be set before starting Horton realtime mode`
+              )
+            }
+            return apiKey
+          },
           model: activeRealtimeSession.model,
         }),
         tools: tools as AgentTool[],

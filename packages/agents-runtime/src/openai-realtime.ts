@@ -470,6 +470,26 @@ export function createOpenAIRealtimeProvider(
       const toolsByName = new Map(
         input.tools.map((tool) => [toolName(tool), tool])
       )
+      let socketOpen = false
+      let socketClosed = false
+      let rejectOpen: ((error: Error) => void) | undefined
+
+      const closeQueue = (reason?: string): void => {
+        if (socketClosed) return
+        socketClosed = true
+        queue.push({ type: `session.closed`, reason })
+        queue.close()
+        input.signal?.removeEventListener(`abort`, handleAbort)
+      }
+
+      const handleAbort = (): void => {
+        const error = new Error(
+          `[agent-runtime] OpenAI realtime WebSocket aborted`
+        )
+        closeQueue(`aborted`)
+        ws.close?.(1000, `aborted`)
+        if (!socketOpen) rejectOpen?.(error)
+      }
 
       const sendToolResult = async (
         result: RealtimeToolResult
@@ -543,12 +563,22 @@ export function createOpenAIRealtimeProvider(
       }
 
       const opened = new Promise<void>((resolve, reject) => {
-        onSocket(ws, `open`, () => resolve())
+        rejectOpen = reject
+        onSocket(ws, `open`, () => {
+          if (socketClosed) return
+          socketOpen = true
+          if (input.signal?.aborted) {
+            handleAbort()
+            return
+          }
+          resolve()
+        })
         onSocket(ws, `error`, (event) => {
           const error =
             event instanceof Error
               ? event
               : new Error(`[agent-runtime] OpenAI realtime WebSocket error`)
+          input.signal?.removeEventListener(`abort`, handleAbort)
           queue.fail(error)
           reject(error)
         })
@@ -569,9 +599,14 @@ export function createOpenAIRealtimeProvider(
         }
       })
       onSocket(ws, `close`, () => {
-        queue.push({ type: `session.closed` })
-        queue.close()
+        closeQueue()
       })
+
+      if (input.signal?.aborted) {
+        handleAbort()
+      } else {
+        input.signal?.addEventListener(`abort`, handleAbort, { once: true })
+      }
 
       await opened
       sendJson(ws, buildSessionUpdate(opts, input))
@@ -589,6 +624,7 @@ export function createOpenAIRealtimeProvider(
         },
         commitInputAudio: async () => {
           sendJson(ws, { type: `input_audio_buffer.commit` })
+          sendJson(ws, { type: `response.create` })
         },
         sendText: async (text) => {
           sendJson(ws, {
@@ -605,9 +641,17 @@ export function createOpenAIRealtimeProvider(
         cancelResponse: async () => {
           sendJson(ws, { type: `response.cancel` })
         },
+        truncateOutputAudio: async ({ itemId, audioEndMs }) => {
+          sendJson(ws, {
+            type: `conversation.item.truncate`,
+            item_id: itemId,
+            content_index: 0,
+            audio_end_ms: audioEndMs,
+          })
+        },
         close: async (reason) => {
+          closeQueue(reason)
           ws.close?.(1000, reason)
-          queue.close()
         },
       }
     },

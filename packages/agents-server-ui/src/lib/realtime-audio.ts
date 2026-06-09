@@ -18,6 +18,15 @@ type RealtimeSessionCreateResult = {
   }
 }
 
+type RealtimeControlOutput =
+  | { type: `input_audio.speech_started`; audioOffset?: string }
+  | { type: `output_audio.delta`; itemId?: string; byteLength?: number }
+  | { type: `output_audio.completed`; responseId?: string; itemId?: string }
+  | { type: `response.completed`; responseId?: string }
+  | { type: `response.cancelled`; responseId?: string }
+  | { type: `session.closed`; reason?: string }
+  | { type: string; [key: string]: unknown }
+
 const REALTIME_SAMPLE_RATE = 24_000
 
 function realtimeUrl(baseUrl: string): string {
@@ -49,6 +58,10 @@ function pcm16Floats(bytes: Uint8Array): Float32Array {
     output[index] = view.getInt16(index * 2, true) / 0x8000
   }
   return output
+}
+
+function jsonBytes(value: unknown): Uint8Array {
+  return new TextEncoder().encode(JSON.stringify(value))
 }
 
 function streamHandle(
@@ -108,112 +121,217 @@ export async function startRealtimeAudioSession({
   baseUrl: string
   entityUrl: string
 }): Promise<RealtimeAudioSession> {
-  const session = await createRealtimeSession(baseUrl, entityUrl)
   const abort = new AbortController()
   const micContext = createAudioContext()
   const playbackContext = createAudioContext()
-  const media = await navigator.mediaDevices.getUserMedia({
-    audio: {
-      channelCount: 1,
-      sampleRate: REALTIME_SAMPLE_RATE,
-      echoCancellation: true,
-      noiseSuppression: true,
-      autoGainControl: true,
-    },
-  })
-  const audioIn = streamHandle(
-    baseUrl,
-    session.streams.audio_in,
-    `audio/pcm; rate=${REALTIME_SAMPLE_RATE}; channels=1`
-  )
-  const audioOut = streamHandle(
-    baseUrl,
-    session.streams.audio_out,
-    `audio/pcm; rate=${REALTIME_SAMPLE_RATE}; channels=1`
-  )
-  const controlIn = streamHandle(
-    baseUrl,
-    session.streams.control_in,
-    `application/json`
-  )
-
-  const source = micContext.createMediaStreamSource(media)
-  const processor = micContext.createScriptProcessor(1024, 1, 1)
-  const silentOutput = micContext.createGain()
-  silentOutput.gain.value = 0
   let appendQueue = Promise.resolve()
-  processor.onaudioprocess = (event) => {
-    if (abort.signal.aborted) return
-    const input = event.inputBuffer.getChannelData(0)
-    const bytes = pcm16Bytes(input)
-    appendQueue = appendQueue
-      .then(() => audioIn.append(bytes))
-      .catch((error) => {
-        console.warn(`[realtime-audio] microphone append failed`, error)
-      })
-  }
-  source.connect(processor)
-  processor.connect(silentOutput)
-  silentOutput.connect(micContext.destination)
-
+  let playback = Promise.resolve()
+  let control = Promise.resolve()
+  let media: MediaStream | undefined
+  let source: MediaStreamAudioSourceNode | undefined
+  let processor: ScriptProcessorNode | undefined
+  let silentOutput: GainNode | undefined
+  let controlIn: DurableStream | undefined
+  let session: RealtimeSessionCreateResult | undefined
   let nextPlaybackTime = playbackContext.currentTime
-  const playback = (async () => {
-    const response = await audioOut.stream({
-      live: true,
-      signal: abort.signal,
-      warnOnHttp: false,
-    })
-    try {
-      for await (const chunk of response.bodyStream()) {
-        if (abort.signal.aborted || chunk.byteLength === 0) continue
-        const samples = pcm16Floats(chunk)
-        const buffer = playbackContext.createBuffer(
-          1,
-          samples.length,
-          REALTIME_SAMPLE_RATE
-        )
-        const channel = new Float32Array(samples.length)
-        channel.set(samples)
-        buffer.copyToChannel(channel, 0)
-        const node = playbackContext.createBufferSource()
-        node.buffer = buffer
-        node.connect(playbackContext.destination)
-        const startAt = Math.max(playbackContext.currentTime, nextPlaybackTime)
-        node.start(startAt)
-        nextPlaybackTime = startAt + buffer.duration
-      }
-    } finally {
-      response.cancel()
-    }
-  })().catch((error) => {
-    if (!abort.signal.aborted) {
-      console.warn(`[realtime-audio] playback stream failed`, error)
-    }
-  })
+  let currentOutputItemId: string | null = null
+  let currentOutputStartedAt: number | null = null
+  const playbackNodes = new Set<AudioBufferSourceNode>()
 
-  return {
-    sessionId: session.sessionId,
-    async sendText(text: string) {
-      await controlIn.append(
-        new TextEncoder().encode(JSON.stringify({ type: `input_text`, text }))
-      )
-    },
-    async stop() {
-      abort.abort()
-      processor.disconnect()
-      silentOutput.disconnect()
-      source.disconnect()
-      for (const track of media.getTracks()) track.stop()
-      await appendQueue.catch(() => undefined)
-      await controlIn
-        .append(
-          new TextEncoder().encode(
-            JSON.stringify({ type: `session.close`, reason: `client-stop` })
+  const appendControl = async (value: unknown): Promise<void> => {
+    await controlIn?.append(jsonBytes(value))
+  }
+
+  const stopScheduledPlayback = (): void => {
+    for (const node of playbackNodes) {
+      try {
+        node.stop()
+      } catch {
+        // Already stopped.
+      }
+    }
+    playbackNodes.clear()
+    nextPlaybackTime = playbackContext.currentTime
+    currentOutputStartedAt = null
+  }
+
+  const interruptPlayback = (): void => {
+    const audioEndMs =
+      currentOutputStartedAt === null
+        ? 0
+        : Math.max(
+            0,
+            Math.floor(
+              (playbackContext.currentTime - currentOutputStartedAt) * 1000
+            )
           )
-        )
-        .catch(() => undefined)
-      await playback
-      await Promise.allSettled([micContext.close(), playbackContext.close()])
-    },
+    const itemId = currentOutputItemId
+    stopScheduledPlayback()
+    void appendControl({ type: `response.cancel` }).catch((error) => {
+      console.warn(`[realtime-audio] response cancel failed`, error)
+    })
+    if (itemId) {
+      void appendControl({
+        type: `output_audio.truncate`,
+        itemId,
+        audioEndMs,
+      }).catch((error) => {
+        console.warn(`[realtime-audio] output truncate failed`, error)
+      })
+    }
+  }
+
+  const cleanup = async (sendClose: boolean): Promise<void> => {
+    abort.abort()
+    processor?.disconnect()
+    silentOutput?.disconnect()
+    source?.disconnect()
+    for (const track of media?.getTracks() ?? []) track.stop()
+    stopScheduledPlayback()
+    await appendQueue.catch(() => undefined)
+    if (sendClose && controlIn) {
+      await appendControl({
+        type: `session.close`,
+        reason: `client-stop`,
+      }).catch(() => undefined)
+    }
+    await Promise.allSettled([playback, control])
+    await Promise.allSettled([micContext.close(), playbackContext.close()])
+  }
+
+  try {
+    media = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        channelCount: 1,
+        sampleRate: REALTIME_SAMPLE_RATE,
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+    })
+    session = await createRealtimeSession(baseUrl, entityUrl)
+    const audioIn = streamHandle(
+      baseUrl,
+      session.streams.audio_in,
+      `audio/pcm; rate=${REALTIME_SAMPLE_RATE}; channels=1`
+    )
+    const audioOut = streamHandle(
+      baseUrl,
+      session.streams.audio_out,
+      `audio/pcm; rate=${REALTIME_SAMPLE_RATE}; channels=1`
+    )
+    controlIn = streamHandle(
+      baseUrl,
+      session.streams.control_in,
+      `application/json`
+    )
+    const controlOut = streamHandle(
+      baseUrl,
+      session.streams.control_out,
+      `application/json`
+    )
+
+    source = micContext.createMediaStreamSource(media)
+    processor = micContext.createScriptProcessor(1024, 1, 1)
+    silentOutput = micContext.createGain()
+    silentOutput.gain.value = 0
+    processor.onaudioprocess = (event) => {
+      if (abort.signal.aborted) return
+      const input = event.inputBuffer.getChannelData(0)
+      const bytes = pcm16Bytes(input)
+      appendQueue = appendQueue
+        .then(() => audioIn.append(bytes))
+        .catch((error) => {
+          console.warn(`[realtime-audio] microphone append failed`, error)
+        })
+    }
+    source.connect(processor)
+    processor.connect(silentOutput)
+    silentOutput.connect(micContext.destination)
+
+    playback = (async () => {
+      const response = await audioOut.stream({
+        live: true,
+        signal: abort.signal,
+        warnOnHttp: false,
+      })
+      try {
+        for await (const chunk of response.bodyStream()) {
+          if (abort.signal.aborted || chunk.byteLength === 0) continue
+          const samples = pcm16Floats(chunk)
+          const buffer = playbackContext.createBuffer(
+            1,
+            samples.length,
+            REALTIME_SAMPLE_RATE
+          )
+          const channel = new Float32Array(samples.length)
+          channel.set(samples)
+          buffer.copyToChannel(channel, 0)
+          const node = playbackContext.createBufferSource()
+          node.buffer = buffer
+          node.connect(playbackContext.destination)
+          node.onended = () => playbackNodes.delete(node)
+          playbackNodes.add(node)
+          const startAt = Math.max(
+            playbackContext.currentTime,
+            nextPlaybackTime
+          )
+          if (currentOutputStartedAt === null) {
+            currentOutputStartedAt = startAt
+          }
+          node.start(startAt)
+          nextPlaybackTime = startAt + buffer.duration
+        }
+      } finally {
+        response.cancel()
+      }
+    })().catch((error) => {
+      if (!abort.signal.aborted) {
+        console.warn(`[realtime-audio] playback stream failed`, error)
+      }
+    })
+
+    control = (async () => {
+      const response = await controlOut.stream<RealtimeControlOutput>({
+        live: true,
+        signal: abort.signal,
+        json: true,
+        warnOnHttp: false,
+      })
+      try {
+        for await (const event of response.jsonStream()) {
+          if (abort.signal.aborted || !event || typeof event !== `object`) {
+            continue
+          }
+          if (
+            event.type === `output_audio.delta` &&
+            typeof event.itemId === `string`
+          ) {
+            currentOutputItemId = event.itemId
+          } else if (event.type === `input_audio.speech_started`) {
+            interruptPlayback()
+          }
+        }
+      } finally {
+        response.cancel()
+      }
+    })().catch((error) => {
+      if (!abort.signal.aborted) {
+        console.warn(`[realtime-audio] control stream failed`, error)
+      }
+    })
+
+    return {
+      sessionId: session.sessionId,
+      async sendText(text: string) {
+        await appendControl({ type: `input_text`, text })
+      },
+      async stop() {
+        await cleanup(true)
+      },
+    }
+  } catch (error) {
+    await cleanup(Boolean(session))
+    throw error
   }
 }
