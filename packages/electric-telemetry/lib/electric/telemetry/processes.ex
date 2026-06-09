@@ -21,10 +21,6 @@ defmodule ElectricTelemetry.Processes do
 
   @doc """
   Derive a stable, low-cardinality `process_type` for a pid.
-
-  The coarse types `:erlang` and `:supervisor` are too generic to be useful as a
-  grouping dimension on their own, so they are refined to a more specific name. The
-  `:logger_olp` type is folded together with the handler id (see `refine_type/2`).
   """
   @spec proc_type(pid()) :: atom() | binary()
   def proc_type(pid), do: proc_type(pid, info(pid))

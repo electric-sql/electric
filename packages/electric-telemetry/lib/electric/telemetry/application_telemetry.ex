@@ -87,14 +87,8 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
 
   def metrics(telemetry_opts) do
     [
-      last_value("process.memory.total",
-        tags: [:process_type],
-        unit: :byte
-      ),
-      last_value("process.bin_memory.total",
-        tags: [:process_type],
-        unit: :byte
-      ),
+      last_value("process.memory.total", tags: [:process_type], unit: :byte),
+      last_value("process.bin_memory.total", tags: [:process_type], unit: :byte),
       last_value("process.bin_memory.max_bin_count", tags: [:process_type]),
       last_value("process.bin_memory.avg_bin_count", tags: [:process_type]),
       last_value("process.bin_memory.max_ref_count", tags: [:process_type]),
@@ -124,10 +118,7 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
         tags: [:process_type],
         unit: :millisecond
       ),
-      distribution("vm.monitor.long_gc.timeout",
-        tags: [:process_type],
-        unit: :millisecond
-      ),
+      distribution("vm.monitor.long_gc.timeout", tags: [:process_type], unit: :millisecond),
       last_value("vm.persistent_term.count"),
       last_value("vm.persistent_term.memory", unit: :byte),
       last_value("vm.reductions.total"),
