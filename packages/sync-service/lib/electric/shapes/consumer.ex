@@ -518,7 +518,32 @@ defmodule Electric.Shapes.Consumer do
 
   defp handle_event(%TransactionFragment{} = txn_fragment, state) do
     Logger.debug(fn -> "Txn fragment received in Shapes.Consumer: #{inspect(txn_fragment)}" end)
-    handle_txn_fragment(txn_fragment, state)
+
+    txn_fragment
+    |> handle_txn_fragment(state)
+    |> maybe_garbage_collect()
+  end
+
+  defp maybe_garbage_collect(%State{stack_id: stack_id} = state) do
+    threshold = Electric.StackConfig.lookup(stack_id, :consumer_gc_heap_threshold, nil)
+
+    if not is_nil(threshold) do
+      {:total_heap_size, heap_words} = :erlang.process_info(self(), :total_heap_size)
+
+      if over_heap_threshold?(heap_words, threshold) do
+        :erlang.garbage_collect()
+      end
+    end
+
+    state
+  end
+
+  @doc false
+  # heap_words: process total_heap_size in words; threshold_bytes: configured byte threshold (or nil)
+  def over_heap_threshold?(_heap_words, nil), do: false
+
+  def over_heap_threshold?(heap_words, threshold_bytes) when is_integer(threshold_bytes) do
+    heap_words * :erlang.system_info(:wordsize) > threshold_bytes
   end
 
   # A consumer process starts with buffering?=true before it has PG snapshot info (xmin, xmax, xip_list).
