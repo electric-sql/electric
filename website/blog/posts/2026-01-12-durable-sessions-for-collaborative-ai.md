@@ -360,30 +360,46 @@ This is then passed to the durable state layer [`StreamDB`](https://durablestrea
 You can then derive reactive views on the data, in the form of derived live query collections. For example, the code to derive a collection of messages out of the raw chunks looks like this ([see full example](https://github.com/electric-sql/transport/blob/main/packages/durable-session/src/collections/messages.ts) and [`materializeMessage`](https://github.com/electric-sql/transport/blob/main/packages/durable-session/src/materialize.ts) source):
 
 ```ts
-import { createLiveQueryCollection, collect, count, minStr } from '@tanstack/db'
+import { createLiveQueryCollection, count, eq, min, toArray } from '@tanstack/db'
 
 const messagesCollection = createLiveQueryCollection({
   query: (q) => {
-    // The first query groups chunks into messages, see:
+    // The first query groups chunks into message metadata, see:
     // https://tanstack.com/db/latest/docs/guides/live-queries#aggregate-functions
-    const collected = q
+    const messageGroups = q
       .from({ chunk: chunksCollection })
       .groupBy(({ chunk }) => chunk.messageId)
       .select(({ chunk }) => ({
         messageId: chunk.messageId,
-        rows: collect(chunk),
-        startedAt: minStr(chunk.createdAt),
+        startedAt: min(chunk.createdAt),
         rowCount: count(chunk),
       }))
 
-    // The second query materializes the grouped chunks into
-    // messages with `materializeMessage` using the built-in
-    // TanStack AI `StreamProcessor`:
+    // The second query uses `toArray` with a correlated subquery
+    // to collect the ordered chunks for each message group.
+    const messagesWithChunks = q
+      .from({ messageGroup: messageGroups })
+      .select(({ messageGroup }) => ({
+        messageId: messageGroup.messageId,
+        startedAt: messageGroup.startedAt,
+        rowCount: messageGroup.rowCount,
+        rows: toArray(
+          q
+            .from({ chunk: chunksCollection })
+            .where(({ chunk }) => eq(chunk.messageId, messageGroup.messageId))
+            .orderBy(({ chunk }) => chunk.createdAt, 'asc')
+            .select(({ chunk }) => chunk)
+        ),
+      }))
+
+    // Finally materialize the ordered chunks into messages with
+    // `materializeMessage` using the built-in TanStack AI
+    // `StreamProcessor`:
     // https://tanstack.com/ai/latest/docs/reference/classes/StreamProcessor
     return q
-      .from({ collected })
-      .orderBy(({ collected }) => collected.startedAt, 'asc')
-      .fn.select(({ collected }) => materializeMessage(collected.rows))
+      .from({ message: messagesWithChunks })
+      .orderBy(({ message }) => message.startedAt, 'asc')
+      .fn.select(({ message }) => materializeMessage(message.rows))
   },
   getKey: (row) => row.id,
 })
