@@ -1,5 +1,53 @@
 # @electric-ax/agents-runtime
 
+## 0.3.11
+
+### Patch Changes
+
+- d15852d: Fix runtime-originated agent send attribution by sending `from_principal`, `from_agent`, and the active wake write token, and accepting `from_agent` when backed by a valid agent write token.
+- 5aa2d78: Add `ctx.fork(opts?)` to `HandlerContext`, with an opts shape that mirrors `ctx.spawn`'s where the semantics map:
+
+  ```ts
+  ctx.fork(opts?: {
+    targetEntityUrl?: string  // omit for self-fork
+    initialMessage?: unknown  // server delivers to the fork in the same round-trip (not atomic with creation)
+    wake?: Wake               // overrides the default runFinished + includeResponse
+    tags?: Record<string, string>
+    observe?: boolean         // `false` = fire-and-forget (no parent, no wake, no manifest entry)
+  })
+  ```
+
+  By default (`observe: true`), the new fork is a CHILD of this entity (same parent-ownership model as `ctx.spawn`), and a `runFinished + includeResponse` wake is registered on it server-side. Reply delivery uses the same manifest-anchored wake mechanism `ctx.spawn` uses — when the fork's next run finishes, this entity wakes with the response. `observe: false` opts out of the parent relationship entirely: no parent URL, no wake subscription, no manifest entry on the parent's stream.
+
+  Internally writes a `kind: 'child'` manifest row on the parent's stream alongside the server-side wake registration, mirroring the spawn flow's bookkeeping so the relationship persists across wakes. Wired through new fields on `RuntimeServerClient.forkEntity` (`parent`, `wake`, `initialMessage`, `tags`) and `WiringConfig.forkEntity`. A `normalizeWake` helper translates the user-facing `Wake` type into the wakeRegistry-compatible shape, same logic `createOrGetChild` uses for spawn.
+
+  The `send` tool's `payload` description now documents the canonical `{ text: "..." }` shape for chat-rendered targets (Horton sessions, agent forks) so messages emitted by `send` render as chat bubbles instead of blank bars.
+
+- 1099366: Docker sandbox creation now pulls the image only when it isn't already present
+  locally, honoring the documented `pullIfMissing` semantics. Previously every
+  container create called `docker pull`, which round-trips to the registry even
+  for a fully cached digest-pinned image — making creation needlessly slow and
+  prone to failing whenever the registry was briefly unreachable.
+- 1099366: Fix leftover Docker sandbox containers (`electric-sbx-*`) piling up.
+
+  Sandbox containers are meant to be short-lived, but several gaps let them
+  outlive the work they were created for — opening the desktop app could leave
+  15+ containers running that were never explicitly started. This closes those
+  gaps so a container only exists while something is actually using it:
+  - **Created only when used.** A container now starts the first time an agent
+    actually uses its sandbox (runs a command, reads/writes a file), so trivial
+    wakes (scheduled ticks, bookkeeping) no longer spin one up.
+  - **Cleaned up on quit.** Shutdown now tears down idle containers immediately
+    instead of leaving their delayed-teardown timers to die with the process.
+  - **Leftovers reclaimed at startup.** Containers are tagged with the process
+    that created them; at startup, those whose owner is gone are reclaimed
+    (throwaway ones removed, reusable ones stopped so their files survive), while
+    containers a live process is still using are left untouched.
+
+  Also: a failed container setup step no longer strands an untracked container,
+  and all sandboxes are grouped under one `electric-sandboxes` entry in Docker
+  Desktop so they can be stopped/removed together.
+
 ## 0.3.10
 
 ### Patch Changes
