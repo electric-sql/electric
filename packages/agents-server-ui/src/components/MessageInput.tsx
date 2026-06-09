@@ -236,6 +236,7 @@ export function MessageInput({
   const showStop =
     !isCommentMode &&
     generationActive &&
+    !realtimeActive &&
     inputText.length === 0 &&
     attachmentCount === 0 &&
     !disabled
