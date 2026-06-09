@@ -2693,8 +2693,7 @@ defmodule Electric.Shapes.ConsumerTest do
       assert_receive {Support.TestStorage, :init_writer!, @shape_handle1, @shape1}
       :started = Consumer.await_snapshot_start(ctx.stack_id, @shape_handle1)
 
-      pid = Consumer.name(ctx.stack_id, @shape_handle1) |> GenServer.whereis()
-      info = Process.info(pid)
+      info = Process.info(consumer)
 
       assert info[:priority] == :high
       assert info[:garbage_collection][:fullsweep_after] == 4
