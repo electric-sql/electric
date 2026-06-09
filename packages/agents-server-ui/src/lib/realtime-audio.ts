@@ -81,6 +81,18 @@ function jsonBytes(value: unknown): Uint8Array {
   return new TextEncoder().encode(JSON.stringify(value))
 }
 
+function trackPendingAppend(
+  pending: Set<Promise<void>>,
+  append: Promise<void>,
+  onError: (error: unknown) => void
+): void {
+  let tracked: Promise<void>
+  tracked = append.catch(onError).finally(() => {
+    pending.delete(tracked)
+  })
+  pending.add(tracked)
+}
+
 function streamHandle(
   baseUrl: string,
   path: string,
@@ -91,7 +103,7 @@ function streamHandle(
     url,
     headers: getConfiguredServerHeaders(url),
     contentType,
-    batching: false,
+    batching: true,
   })
 }
 
@@ -147,7 +159,6 @@ export async function startRealtimeAudioSession({
     micContext.resume(),
     playbackContext.resume(),
   ])
-  let appendQueue = Promise.resolve()
   let playback = Promise.resolve()
   let control = Promise.resolve()
   let media: MediaStream | undefined
@@ -164,6 +175,7 @@ export async function startRealtimeAudioSession({
   let playbackChunks = 0
   let controlEvents = 0
   const playbackNodes = new Set<AudioBufferSourceNode>()
+  const pendingAudioAppends = new Set<Promise<void>>()
 
   const appendControl = async (value: unknown): Promise<void> => {
     await controlIn?.append(jsonBytes(value))
@@ -230,7 +242,7 @@ export async function startRealtimeAudioSession({
     onInputLevel?.(0)
     for (const track of media?.getTracks() ?? []) track.stop()
     stopScheduledPlayback()
-    await appendQueue.catch(() => undefined)
+    await Promise.allSettled(pendingAudioAppends)
     if (sendClose && controlIn) {
       await appendControl({
         type: `session.close`,
@@ -292,11 +304,13 @@ export async function startRealtimeAudioSession({
           `[realtime-audio] microphone first chunk session=${session?.sessionId} bytes=${bytes.byteLength}`
         )
       }
-      appendQueue = appendQueue
-        .then(() => audioIn.append(bytes))
-        .catch((error) => {
+      trackPendingAppend(
+        pendingAudioAppends,
+        audioIn.append(bytes),
+        (error) => {
           console.warn(`[realtime-audio] microphone append failed`, error)
-        })
+        }
+      )
     }
     source.connect(processor)
     processor.connect(silentOutput)

@@ -126,6 +126,18 @@ type RealtimeStreamIo = {
   close: () => Promise<void>
 }
 
+function trackRealtimeAppend(
+  pending: Set<Promise<void>>,
+  append: Promise<void>,
+  onError: (error: unknown) => void
+): void {
+  let tracked: Promise<void>
+  tracked = append.catch(onError).finally(() => {
+    pending.delete(tracked)
+  })
+  pending.add(tracked)
+}
+
 function isRealtimeControlInput(value: unknown): value is RealtimeControlInput {
   if (!value || typeof value !== `object`) return false
   const type = (value as { type?: unknown }).type
@@ -152,7 +164,7 @@ function realtimeDurableStream(
     url: appendPathToUrl(streams.baseUrl, path),
     headers: streams.headers,
     contentType,
-    batching: false,
+    batching: true,
   })
 }
 
@@ -213,6 +225,15 @@ function createRealtimeStreamIo(
   let audioOutChunks = 0
   let audioOutBytes = 0
   let controlOutEvents = 0
+  const pendingOutputAppends = new Set<Promise<void>>()
+
+  const trackOutputAppend = (append: Promise<void>, label: string): void => {
+    trackRealtimeAppend(pendingOutputAppends, append, (error) => {
+      if (!abort.signal.aborted) {
+        runtimeLog.warn(logPrefix, `${label}:`, error)
+      }
+    })
+  }
 
   runtimeLog.info(
     logPrefix,
@@ -327,14 +348,20 @@ function createRealtimeStreamIo(
             `realtime audio/out first chunk session=${session.id} bytes=${event.audio.byteLength}`
           )
         }
-        await audioOut.append(event.audio)
+        trackOutputAppend(
+          audioOut.append(event.audio),
+          `realtime audio/out append failed`
+        )
       }
-      await controlOut.append(jsonBytes(realtimeControlOutput(event)))
+      trackOutputAppend(
+        controlOut.append(jsonBytes(realtimeControlOutput(event))),
+        `realtime control/out append failed`
+      )
     },
     async close() {
       abort.abort()
       config.runSignal?.removeEventListener(`abort`, abortFromRun)
-      await Promise.allSettled(tasks)
+      await Promise.allSettled([...tasks, ...pendingOutputAppends])
       runtimeLog.info(
         logPrefix,
         `realtime stream bridge closed session=${session.id} audioInChunks=${audioInChunks} audioInBytes=${audioInBytes} controlInCommands=${controlInCommands} providerEvents=${controlOutEvents} audioOutChunks=${audioOutChunks} audioOutBytes=${audioOutBytes}`
