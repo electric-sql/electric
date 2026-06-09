@@ -28,8 +28,16 @@ type RealtimeControlOutput =
   | { type: string; [key: string]: unknown }
 
 const REALTIME_SAMPLE_RATE = 24_000
+const MIC_CAPTURE_CHUNK_SAMPLES = 1024
+const MIC_WORKLET_PROCESSOR_NAME = `realtime-mic-capture`
 const BYTES_PER_PCM16_SAMPLE = 2
 const TRUNCATE_SAFETY_MS = 80
+
+type MicCapture = {
+  node: AudioNode
+  cleanup: () => void
+  mode: `audio-worklet` | `script-processor`
+}
 
 function realtimeUrl(baseUrl: string): string {
   return appendPathToUrl(baseUrl, `/_electric/realtime/sessions`)
@@ -68,7 +76,7 @@ function audioLevel(input: Float32Array): number {
   return Math.max(0, Math.min(1, rms * 8))
 }
 
-function pcm16Floats(bytes: Uint8Array): Float32Array {
+function pcm16Floats(bytes: Uint8Array): Float32Array<ArrayBuffer> {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
   const output = new Float32Array(Math.floor(bytes.byteLength / 2))
   for (let index = 0; index < output.length; index += 1) {
@@ -79,6 +87,65 @@ function pcm16Floats(bytes: Uint8Array): Float32Array {
 
 function jsonBytes(value: unknown): Uint8Array {
   return new TextEncoder().encode(JSON.stringify(value))
+}
+
+function micWorkletSource(): string {
+  return `
+class RealtimeMicCaptureProcessor extends AudioWorkletProcessor {
+  constructor(options) {
+    super()
+    this.chunkSamples = options.processorOptions?.chunkSamples ?? ${MIC_CAPTURE_CHUNK_SAMPLES}
+    this.port.onmessage = (event) => {
+      if (event.data?.type === 'flush') this.flush()
+    }
+    this.reset()
+  }
+
+  reset() {
+    this.buffer = new ArrayBuffer(this.chunkSamples * 2)
+    this.view = new DataView(this.buffer)
+    this.offset = 0
+    this.sumSquares = 0
+  }
+
+  flush() {
+    if (this.offset === 0) return
+    const byteLength = this.offset * 2
+    const audio =
+      byteLength === this.buffer.byteLength
+        ? this.buffer
+        : this.buffer.slice(0, byteLength)
+    const rms = Math.sqrt(this.sumSquares / this.offset)
+    const level = Math.max(0, Math.min(1, rms * 8))
+    this.port.postMessage({ type: 'audio', audio, level }, [audio])
+    this.reset()
+  }
+
+  process(inputs, outputs) {
+    const output = outputs[0]?.[0]
+    if (output) output.fill(0)
+
+    const input = inputs[0]?.[0]
+    if (!input) return true
+
+    for (let index = 0; index < input.length; index += 1) {
+      const sample = Math.max(-1, Math.min(1, input[index] || 0))
+      this.view.setInt16(
+        this.offset * 2,
+        sample < 0 ? sample * 0x8000 : sample * 0x7fff,
+        true
+      )
+      this.sumSquares += sample * sample
+      this.offset += 1
+      if (this.offset === this.chunkSamples) this.flush()
+    }
+
+    return true
+  }
+}
+
+registerProcessor('${MIC_WORKLET_PROCESSOR_NAME}', RealtimeMicCaptureProcessor)
+`
 }
 
 function trackPendingAppend(
@@ -109,6 +176,90 @@ function streamHandle(
 
 function createAudioContext(): AudioContext {
   return new AudioContext({ sampleRate: REALTIME_SAMPLE_RATE })
+}
+
+function createScriptProcessorMicCapture(
+  context: AudioContext,
+  onAudio: (bytes: Uint8Array, level: number) => void
+): MicCapture {
+  const processor = context.createScriptProcessor(
+    MIC_CAPTURE_CHUNK_SAMPLES,
+    1,
+    1
+  )
+  processor.onaudioprocess = (event) => {
+    const input = event.inputBuffer.getChannelData(0)
+    onAudio(pcm16Bytes(input), audioLevel(input))
+  }
+  return {
+    node: processor,
+    cleanup() {
+      processor.onaudioprocess = null
+    },
+    mode: `script-processor`,
+  }
+}
+
+async function createAudioWorkletMicCapture(
+  context: AudioContext,
+  onAudio: (bytes: Uint8Array, level: number) => void
+): Promise<MicCapture> {
+  const workletUrl = URL.createObjectURL(
+    new Blob([micWorkletSource()], { type: `application/javascript` })
+  )
+  try {
+    await context.audioWorklet.addModule(workletUrl)
+  } finally {
+    URL.revokeObjectURL(workletUrl)
+  }
+
+  const node = new AudioWorkletNode(context, MIC_WORKLET_PROCESSOR_NAME, {
+    numberOfInputs: 1,
+    numberOfOutputs: 1,
+    outputChannelCount: [1],
+    processorOptions: {
+      chunkSamples: MIC_CAPTURE_CHUNK_SAMPLES,
+    },
+  })
+  node.port.onmessage = (event: MessageEvent<unknown>) => {
+    const data = event.data as
+      | { type?: unknown; audio?: unknown; level?: unknown }
+      | undefined
+    if (
+      data?.type !== `audio` ||
+      !(data.audio instanceof ArrayBuffer) ||
+      typeof data.level !== `number`
+    ) {
+      return
+    }
+    onAudio(new Uint8Array(data.audio), data.level)
+  }
+
+  return {
+    node,
+    cleanup() {
+      node.port.postMessage({ type: `flush` })
+      node.port.close()
+    },
+    mode: `audio-worklet`,
+  }
+}
+
+async function createMicCapture(
+  context: AudioContext,
+  onAudio: (bytes: Uint8Array, level: number) => void
+): Promise<MicCapture> {
+  if (context.audioWorklet) {
+    try {
+      return await createAudioWorkletMicCapture(context, onAudio)
+    } catch (error) {
+      console.warn(
+        `[realtime-audio] audio worklet unavailable, using script processor fallback`,
+        error
+      )
+    }
+  }
+  return createScriptProcessorMicCapture(context, onAudio)
 }
 
 async function createRealtimeSession(
@@ -163,7 +314,7 @@ export async function startRealtimeAudioSession({
   let control = Promise.resolve()
   let media: MediaStream | undefined
   let source: MediaStreamAudioSourceNode | undefined
-  let processor: ScriptProcessorNode | undefined
+  let micCapture: MicCapture | undefined
   let silentOutput: GainNode | undefined
   let controlIn: DurableStream | undefined
   let session: RealtimeSessionCreateResult | undefined
@@ -236,7 +387,8 @@ export async function startRealtimeAudioSession({
 
   const cleanup = async (sendClose: boolean): Promise<void> => {
     abort.abort()
-    processor?.disconnect()
+    micCapture?.cleanup()
+    micCapture?.node.disconnect()
     silentOutput?.disconnect()
     source?.disconnect()
     onInputLevel?.(0)
@@ -289,15 +441,9 @@ export async function startRealtimeAudioSession({
       `application/json`
     )
 
-    source = micContext.createMediaStreamSource(media)
-    processor = micContext.createScriptProcessor(1024, 1, 1)
-    silentOutput = micContext.createGain()
-    silentOutput.gain.value = 0
-    processor.onaudioprocess = (event) => {
+    const handleInputAudio = (bytes: Uint8Array, level: number): void => {
       if (abort.signal.aborted) return
-      const input = event.inputBuffer.getChannelData(0)
-      const bytes = pcm16Bytes(input)
-      onInputLevel?.(audioLevel(input))
+      onInputLevel?.(level)
       micChunks += 1
       if (micChunks === 1) {
         console.info(
@@ -312,8 +458,15 @@ export async function startRealtimeAudioSession({
         }
       )
     }
-    source.connect(processor)
-    processor.connect(silentOutput)
+    source = micContext.createMediaStreamSource(media)
+    micCapture = await createMicCapture(micContext, handleInputAudio)
+    console.info(
+      `[realtime-audio] microphone capture mode session=${session.sessionId} mode=${micCapture.mode}`
+    )
+    silentOutput = micContext.createGain()
+    silentOutput.gain.value = 0
+    source.connect(micCapture.node)
+    micCapture.node.connect(silentOutput)
     silentOutput.connect(micContext.destination)
 
     playback = (async () => {
@@ -337,9 +490,7 @@ export async function startRealtimeAudioSession({
             samples.length,
             REALTIME_SAMPLE_RATE
           )
-          const channel = new Float32Array(samples.length)
-          channel.set(samples)
-          buffer.copyToChannel(channel, 0)
+          buffer.copyToChannel(samples, 0)
           const node = playbackContext.createBufferSource()
           node.buffer = buffer
           node.connect(playbackContext.destination)
