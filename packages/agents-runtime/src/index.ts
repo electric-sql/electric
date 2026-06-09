@@ -150,6 +150,8 @@ export type {
 export { createEntityStreamDB } from './entity-stream-db'
 export { createTestRealtimeProvider } from './realtime'
 export type { TestRealtimeProviderOptions } from './realtime'
+export { createOpenAIRealtimeProvider } from './openai-realtime'
+export type { OpenAIRealtimeProviderOptions } from './openai-realtime'
 export {
   getEntityAttachmentStreamPath,
   manifestAttachmentKey,
