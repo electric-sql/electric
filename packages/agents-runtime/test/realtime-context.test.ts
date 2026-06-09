@@ -182,6 +182,33 @@ describe(`ctx.useRealtime()`, () => {
     })
   })
 
+  it(`does not fail the run when OpenAI reports inactive response cancellation`, async () => {
+    const { ctx } = createTestHandlerContext()
+
+    const realtime = ctx.useRealtime({
+      systemPrompt: `You are realtime.`,
+      provider: createTestRealtimeProvider({
+        events: [
+          { type: `session.started` },
+          {
+            type: `session.error`,
+            code: `response_cancel_not_active`,
+            error: `Cancellation failed: no active response found`,
+          },
+          { type: `session.closed` },
+        ],
+      }),
+      tools: [],
+    })
+
+    await expect(realtime.run()).resolves.toMatchObject({
+      usage: { tokens: 0 },
+    })
+    expect(ctx.db.collections.runs.toArray).toMatchObject([
+      { status: `completed`, finish_reason: `stop` },
+    ])
+  })
+
   it(`persists provider audio and control output to realtime durable streams`, async () => {
     const { ctx } = createTestHandlerContext({
       realtimeStreams: {

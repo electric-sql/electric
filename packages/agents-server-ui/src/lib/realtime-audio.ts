@@ -160,6 +160,9 @@ export async function startRealtimeAudioSession({
   }
 
   const interruptPlayback = (): void => {
+    const itemId = currentOutputItemId
+    if (!itemId) return
+
     const audioEndMs =
       currentOutputStartedAt === null
         ? 0
@@ -169,20 +172,14 @@ export async function startRealtimeAudioSession({
               (playbackContext.currentTime - currentOutputStartedAt) * 1000
             )
           )
-    const itemId = currentOutputItemId
     stopScheduledPlayback()
-    void appendControl({ type: `response.cancel` }).catch((error) => {
-      console.warn(`[realtime-audio] response cancel failed`, error)
+    void appendControl({
+      type: `output_audio.truncate`,
+      itemId,
+      audioEndMs,
+    }).catch((error) => {
+      console.warn(`[realtime-audio] output truncate failed`, error)
     })
-    if (itemId) {
-      void appendControl({
-        type: `output_audio.truncate`,
-        itemId,
-        audioEndMs,
-      }).catch((error) => {
-        console.warn(`[realtime-audio] output truncate failed`, error)
-      })
-    }
   }
 
   const cleanup = async (sendClose: boolean): Promise<void> => {

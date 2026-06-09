@@ -1321,6 +1321,13 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
             break
 
           case `session.error`:
+            if (event.code === `response_cancel_not_active`) {
+              runtimeLog.warn(
+                `[agent-runtime]`,
+                `realtime provider ignored inactive response cancellation: ${event.error}`
+              )
+              break
+            }
             throw new Error(
               `[agent-runtime] realtime provider error${event.code ? ` ${event.code}` : ``}: ${event.error}`
             )
