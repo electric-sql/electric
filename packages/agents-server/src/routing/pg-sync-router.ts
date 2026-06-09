@@ -13,6 +13,7 @@ import type { RouterType } from 'itty-router'
 import type { TenantContext } from './context.js'
 
 const pgSyncOptionsSchema = Type.Object({
+  url: Type.Optional(Type.String()),
   table: Type.String(),
   columns: Type.Optional(Type.Array(Type.String())),
   where: Type.Optional(Type.String()),

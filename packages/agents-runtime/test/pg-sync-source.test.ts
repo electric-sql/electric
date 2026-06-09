@@ -24,7 +24,7 @@ describe(`pgSync observation source`, () => {
     )
   })
 
-  it(`changes sourceRef for different table, where, and params`, () => {
+  it(`changes sourceRef for different URL, table, where, and params`, () => {
     const base = pgSync({
       table: `todos`,
       where: `done = $1`,
@@ -40,6 +40,14 @@ describe(`pgSync observation source`, () => {
     ).not.toBe(base.sourceRef)
     expect(
       pgSync({ table: `todos`, where: `done = $1`, params: [`true`] }).sourceRef
+    ).not.toBe(base.sourceRef)
+    expect(
+      pgSync({
+        url: `https://electric.example/v1/shape`,
+        table: `todos`,
+        where: `done = $1`,
+        params: [`false`],
+      }).sourceRef
     ).not.toBe(base.sourceRef)
   })
 
@@ -63,6 +71,19 @@ describe(`pgSync observation source`, () => {
       where: `priority = $1`,
       params: { priority: `high` },
       replica: `full`,
+    })
+  })
+
+  it(`serializes optional url in manifest config`, () => {
+    const entry = pgSync({
+      url: `https://electric.example/v1/shape`,
+      table: `todos`,
+    }).toManifestEntry()
+
+    expect(entry.config).toEqual({
+      url: `https://electric.example/v1/shape`,
+      table: `todos`,
+      replica: `default`,
     })
   })
 

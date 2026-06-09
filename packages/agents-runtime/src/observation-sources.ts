@@ -22,6 +22,7 @@ import type { EntityTags } from './tags'
 import type { CollectionDefinition } from '@durable-streams/state'
 
 export interface PgSyncOptions {
+  url?: string
   table: string
   columns?: string[]
   where?: string
@@ -53,6 +54,7 @@ export function getPgSyncStreamPath(
 }
 
 export type CanonicalPgSyncConfig = {
+  url?: string
   table: string
   columns?: string[]
   where?: string
@@ -77,6 +79,7 @@ export function canonicalPgSyncOptions(
   options: PgSyncOptions
 ): CanonicalPgSyncConfig {
   return {
+    ...(options.url !== undefined ? { url: options.url } : {}),
     table: options.table,
     ...(options.columns !== undefined ? { columns: [...options.columns] } : {}),
     ...(options.where !== undefined ? { where: options.where } : {}),

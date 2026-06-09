@@ -69,6 +69,7 @@ describe(`pg-sync bridge helpers`, () => {
   it(`builds Electric shape params from JSON-safe options`, () => {
     expect(
       buildElectricShapeParams({
+        url: `https://electric.example/v1/shape`,
         table: `todos`,
         columns: [`id`, `text`],
         where: `done = $1`,
@@ -169,7 +170,8 @@ describe(`PgSyncBridgeManager`, () => {
     expect(mockState.constructedOptions[0]).toMatchObject({
       url: PG_SYNC_ELECTRIC_SHAPE_URL,
       params: { table: `todos` },
-      offset: `-1`,
+      offset: `now`,
+      log: `changes_only`,
     })
 
     await mockState.callbacks[0]!([{ headers: { control: `up-to-date` } }])
@@ -393,7 +395,10 @@ describe(`PgSyncBridgeManager`, () => {
 
     await manager.start()
 
-    expect(mockState.constructedOptions[0]).toMatchObject({ offset: `-1` })
+    expect(mockState.constructedOptions[0]).toMatchObject({
+      offset: `now`,
+      log: `changes_only`,
+    })
     expect(mockState.constructedOptions[0]).not.toHaveProperty(`handle`)
     expect(registry.clearPgSyncBridgeCursor).toHaveBeenCalledWith(sourceRef)
   })
@@ -420,11 +425,14 @@ describe(`PgSyncBridgeManager`, () => {
 
     expect(registry.clearPgSyncBridgeCursor).toHaveBeenCalledWith(sourceRef)
     expect(mockState.constructedOptions).toHaveLength(2)
-    expect(mockState.constructedOptions[1]!.offset).toBe(`-1`)
+    expect(mockState.constructedOptions[1]).toMatchObject({
+      offset: `now`,
+      log: `changes_only`,
+    })
     expect(mockState.constructedOptions[1]).not.toHaveProperty(`handle`)
   })
 
-  it(`restarts from -1 on must-refetch`, async () => {
+  it(`restarts from now on must-refetch`, async () => {
     const manager = new PgSyncBridgeManager({
       baseUrl: `http://durable`,
       ensure: vi.fn(async () => undefined),
@@ -434,7 +442,10 @@ describe(`PgSyncBridgeManager`, () => {
     await mockState.callbacks[0]!([{ headers: { control: `must-refetch` } }])
 
     expect(mockState.constructedOptions).toHaveLength(2)
-    expect(mockState.constructedOptions[1]!.offset).toBe(`-1`)
+    expect(mockState.constructedOptions[1]).toMatchObject({
+      offset: `now`,
+      log: `changes_only`,
+    })
   })
 })
 
@@ -543,7 +554,7 @@ describe(`external review red tests`, () => {
 })
 
 describe(`pg-sync production hardening`, () => {
-  it(`uses configured shape URL and secret server-side`, async () => {
+  it(`uses configured URL and secret server-side`, async () => {
     const manager = new PgSyncBridgeManager(
       {
         baseUrl: `http://durable`,
@@ -552,7 +563,7 @@ describe(`pg-sync production hardening`, () => {
       undefined,
       undefined,
       {
-        shapeUrl: `https://electric.example/v1/shape`,
+        url: `https://electric.example/v1/shape`,
         secret: `server-secret`,
         retry: { initialDelayMs: 0, maxDelayMs: 0 },
       }

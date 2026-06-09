@@ -14,7 +14,11 @@ import {
 import { serverLog } from './utils/log.js'
 import type { StreamClient } from './stream-client.js'
 import type { PgSyncBridgeRow, PostgresRegistry } from './entity-registry.js'
-import type { Offset, ShapeStreamInterface } from '@electric-sql/client'
+import type {
+  LogMode,
+  Offset,
+  ShapeStreamInterface,
+} from '@electric-sql/client'
 
 export const PG_SYNC_ELECTRIC_SHAPE_URL =
   process.env.ELECTRIC_AGENTS_PG_SYNC_ELECTRIC_URL ??
@@ -27,12 +31,12 @@ type WakeEvaluator = (
 ) => Promise<void> | void
 
 export type PgSyncResolvedSource = {
-  shapeUrl: string
+  url: string
   secret?: string
 }
 
 export interface PgSyncBridgeManagerOptions {
-  shapeUrl?: string
+  url?: string
   secret?: string
   retry?: {
     initialDelayMs?: number
@@ -246,7 +250,7 @@ class PgSyncBridge {
       }
     }
     await this.registry?.clearPgSyncBridgeCursor(this.sourceRef)
-    this.startStream(`-1`, undefined, true)
+    this.startStream(`now`, undefined, true)
   }
 
   async stop(): Promise<void> {
@@ -265,7 +269,8 @@ class PgSyncBridge {
   private startStream(
     offset: Offset,
     handle?: string,
-    skipChangesUntilUpToDate = false
+    skipChangesUntilUpToDate = false,
+    log: LogMode = offset === `now` ? `changes_only` : `full`
   ): void {
     this.unsubscribe?.()
     this.abortController?.abort()
@@ -273,7 +278,7 @@ class PgSyncBridge {
     this.abortController = new AbortController()
     const stream: ShapeStreamInterface<Record<string, unknown>> =
       new ShapeStream({
-        url: this.resolvedSource.shapeUrl,
+        url: this.resolvedSource.url,
         params: {
           ...buildElectricShapeParams(this.options),
           ...(this.resolvedSource.secret
@@ -281,6 +286,7 @@ class PgSyncBridge {
             : {}),
         } as never,
         offset,
+        log,
         ...(handle ? { handle } : {}),
         signal: this.abortController.signal,
       })
@@ -291,7 +297,7 @@ class PgSyncBridge {
             if (isControlMessage(message)) {
               if (message.headers.control === `must-refetch`) {
                 await this.registry?.clearPgSyncBridgeCursor(this.sourceRef)
-                this.startStream(`-1`, undefined, true)
+                this.startStream(`now`, undefined, true)
                 return
               }
               if (message.headers.control === `up-to-date`) {
@@ -359,7 +365,7 @@ class PgSyncBridge {
         )
       } else {
         await this.registry?.clearPgSyncBridgeCursor(this.sourceRef)
-        this.startStream(`-1`, undefined, true)
+        this.startStream(`now`, undefined, true)
       }
     } finally {
       this.recovering = false
@@ -391,7 +397,7 @@ export class PgSyncBridgeManager implements PgSyncBridgeCoordinator {
   private bridges = new Map<string, PgSyncBridge>()
   private starting = new Map<string, Promise<void>>()
 
-  private readonly shapeUrl: string
+  private readonly url: string
   private readonly secret?: string
   private readonly retry: Required<
     NonNullable<PgSyncBridgeManagerOptions[`retry`]>
@@ -403,7 +409,7 @@ export class PgSyncBridgeManager implements PgSyncBridgeCoordinator {
     private registry?: PostgresRegistry,
     options: PgSyncBridgeManagerOptions = {}
   ) {
-    this.shapeUrl = options.shapeUrl ?? PG_SYNC_ELECTRIC_SHAPE_URL
+    this.url = options.url ?? PG_SYNC_ELECTRIC_SHAPE_URL
     this.secret = options.secret ?? process.env.ELECTRIC_AGENTS_PG_SYNC_SECRET
     this.retry = {
       initialDelayMs:
@@ -436,7 +442,7 @@ export class PgSyncBridgeManager implements PgSyncBridgeCoordinator {
     options: PgSyncOptions
   ): Promise<{ sourceRef: string; streamUrl: string }> {
     const canonicalOptions = canonicalPgSyncOptions(options)
-    const resolvedSource = this.resolveSource()
+    const resolvedSource = this.resolveSource(canonicalOptions)
     const sourceRef = sourceRefForPgSync(canonicalOptions)
     const streamUrl = getPgSyncStreamPath(sourceRef, this.registry?.tenantId)
     const row = await this.registry?.upsertPgSyncBridge({
@@ -481,7 +487,7 @@ export class PgSyncBridgeManager implements PgSyncBridgeCoordinator {
           contentType: `application/json`,
         })
         const canonicalOptions = canonicalPgSyncOptions(row.options)
-        const resolvedSource = this.resolveSource()
+        const resolvedSource = this.resolveSource(canonicalOptions)
         const bridge = new PgSyncBridge(
           row.sourceRef,
           row.streamUrl,
@@ -501,8 +507,8 @@ export class PgSyncBridgeManager implements PgSyncBridgeCoordinator {
     await start
   }
 
-  private resolveSource(): PgSyncResolvedSource {
-    return { shapeUrl: this.shapeUrl, secret: this.secret }
+  private resolveSource(options: CanonicalPgSyncConfig): PgSyncResolvedSource {
+    return { url: options.url ?? this.url, secret: this.secret }
   }
 
   async stop(): Promise<void> {
