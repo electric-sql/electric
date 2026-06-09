@@ -887,16 +887,22 @@ function resolveImage(opts: DockerSandboxOpts): string {
   return image
 }
 
-async function ensureImage(
+export async function ensureImage(
   docker: Dockerode,
   image: string,
   opts: DockerSandboxOpts
 ): Promise<void> {
-  // Best-effort: try the daemon's inspection by relying on createContainer
-  // to surface the missing image as a 404. To keep the first-run experience
-  // smooth on dev machines, we proactively pull when allowed.
   if (opts.pullIfMissing === false) return
-  // dockerode's `pull` is idempotent; the daemon dedupes by digest.
+  // Pull only when the image isn't already on the daemon. `docker.pull`
+  // always round-trips to the registry — even for a digest that's fully
+  // cached — so pulling unconditionally made every container create hostage
+  // to registry reachability (and slower). `inspect` is a local-only check.
+  try {
+    await docker.getImage(image).inspect()
+    return
+  } catch {
+    // Absent (or inspect failed) — fall through and pull it.
+  }
   const stream = await docker.pull(image)
   await new Promise<void>((resolve, reject) => {
     docker.modem.followProgress(
