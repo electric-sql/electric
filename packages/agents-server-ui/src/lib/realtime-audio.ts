@@ -124,6 +124,10 @@ export async function startRealtimeAudioSession({
   const abort = new AbortController()
   const micContext = createAudioContext()
   const playbackContext = createAudioContext()
+  const resumeAudioContexts = Promise.allSettled([
+    micContext.resume(),
+    playbackContext.resume(),
+  ])
   let appendQueue = Promise.resolve()
   let playback = Promise.resolve()
   let control = Promise.resolve()
@@ -209,6 +213,7 @@ export async function startRealtimeAudioSession({
         autoGainControl: true,
       },
     })
+    await resumeAudioContexts
     session = await createRealtimeSession(baseUrl, entityUrl)
     const audioIn = streamHandle(
       baseUrl,
