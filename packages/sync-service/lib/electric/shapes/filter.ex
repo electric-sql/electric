@@ -172,12 +172,7 @@ defmodule Electric.Shapes.Filter do
 
   defp shapes_affected_by_change(%Filter{} = filter, %Relation{} = relation) do
     # Check all shapes is all tables because the table may have been renamed
-    for shape_id <- all_shape_ids(filter),
-        [{_, shape}] = :ets.lookup(filter.shapes_table, shape_id),
-        Shape.is_affected_by_relation_change?(shape, relation),
-        into: MapSet.new() do
-      shape_id
-    end
+    all_shape_ids(filter, &Shape.is_affected_by_relation_change?(&1, relation))
   end
 
   defp shapes_affected_by_change(%Filter{} = filter, %NewRecord{
@@ -218,24 +213,22 @@ defmodule Electric.Shapes.Filter do
     candidates_from_where_condition
   end
 
-  defp all_shape_ids(%Filter{} = filter) do
+  defp all_shape_ids(%Filter{shapes_table: table}, include? \\ :all) do
     :ets.foldl(
-      fn {_table_name, where_cond_id}, acc ->
-        MapSet.union(acc, WhereCondition.all_shape_ids(filter, where_cond_id))
+      fn {shape_id, shape}, acc ->
+        if include? == :all || include?.(shape) do
+          MapSet.put(acc, shape_id)
+        else
+          acc
+        end
       end,
       MapSet.new(),
-      filter.tables_table
+      table
     )
   end
 
   defp shape_ids_for_table(%Filter{} = filter, table_name) do
-    from_where_condition =
-      case :ets.lookup(filter.tables_table, table_name) do
-        [] -> MapSet.new()
-        [{_, where_cond_id}] -> WhereCondition.all_shape_ids(filter, where_cond_id)
-      end
-
-    from_where_condition
+    all_shape_ids(filter, &(&1.root_table == table_name))
   end
 
   @doc """
