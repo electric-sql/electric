@@ -154,10 +154,6 @@ defmodule ElectricTelemetry.Processes do
     refine_type(type, info)
   end
 
-  # `:erlang` and `:supervisor` are too coarse to be useful as a grouping dimension on
-  # their own, so we replace them with a more specific name derived from cheap process
-  # introspection: the registered name, else the first named `$ancestor`, else the
-  # `initial_call` MFA string. Falls back to the coarse type when none of those apply.
   defp refine_type(type, info) when type in [:erlang, :supervisor] do
     registered_name(info) || ancestor_name(info) || initial_call_mfa_string(info) || type
   end
