@@ -12,6 +12,7 @@ import type {
   ManifestAttachmentEntry,
 } from './types'
 import type { EntitySignal } from './entity-schema'
+import type { RealtimeSessionStreamRefs } from './entity-schema'
 import type {
   WebhookSourceContract,
   WebhookSourceSubscription,
@@ -95,6 +96,32 @@ export interface SendEntityMessageOptions {
   writeToken?: string
 }
 
+export interface RealtimeAudioOptions {
+  codec?: `pcm16`
+  sampleRate?: number
+  channels?: number
+}
+
+export interface StartRealtimeSessionOptions {
+  entityUrl: string
+  id?: string
+  provider: string
+  model: string
+  inputAudio?: RealtimeAudioOptions
+  outputAudio?: RealtimeAudioOptions
+  meta?: Record<string, unknown>
+}
+
+export interface RealtimeSessionStartResult {
+  sessionId: string
+  entityUrl: string
+  provider: string
+  model: string
+  status: `requested`
+  startedAt: string
+  streams: RealtimeSessionStreamRefs
+}
+
 export interface RegisterWakeOptions {
   subscriberUrl: string
   sourceUrl: string
@@ -120,6 +147,9 @@ export interface SignalEntityOptions {
 
 export interface RuntimeServerClient {
   sendEntityMessage: (options: SendEntityMessageOptions) => Promise<void>
+  startRealtimeSession: (
+    options: StartRealtimeSessionOptions
+  ) => Promise<RealtimeSessionStartResult>
   createAttachment: (options: {
     entityUrl: string
     attachment: AttachmentCreateInput
@@ -384,6 +414,24 @@ export function createRuntimeServerClient(
         `send to ${targetUrl} failed (${response.status}): ${await readErrorText(response)}`
       )
     }
+  }
+
+  const startRealtimeSession = async (
+    options: StartRealtimeSessionOptions
+  ): Promise<RealtimeSessionStartResult> => {
+    const response = await request(`/_electric/realtime/sessions`, {
+      method: `POST`,
+      headers: { 'content-type': `application/json` },
+      body: JSON.stringify(options),
+    })
+
+    if (!response.ok) {
+      throw new Error(
+        `startRealtimeSession ${options.entityUrl} failed (${response.status}): ${await readErrorText(response)}`
+      )
+    }
+
+    return (await response.json()) as RealtimeSessionStartResult
   }
 
   const createAttachment = async ({
@@ -940,6 +988,7 @@ export function createRuntimeServerClient(
 
   return {
     sendEntityMessage,
+    startRealtimeSession,
     createAttachment,
     readAttachment,
     spawnEntity,

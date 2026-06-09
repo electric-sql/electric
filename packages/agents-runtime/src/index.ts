@@ -289,6 +289,9 @@ export type {
   DispatchPolicy,
   SpawnEntityOptions,
   SendEntityMessageOptions,
+  RealtimeAudioOptions,
+  RealtimeSessionStartResult,
+  StartRealtimeSessionOptions,
 } from './runtime-server-client'
 export {
   buildWebhookSourceManifestEntry,

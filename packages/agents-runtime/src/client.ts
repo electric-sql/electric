@@ -61,6 +61,11 @@ export type {
 } from './composer-input'
 export type { AgentsClient, AgentsClientConfig } from './agents-client'
 export type {
+  RealtimeAudioOptions,
+  RealtimeSessionStartResult,
+  StartRealtimeSessionOptions,
+} from './runtime-server-client'
+export type {
   AttachmentRole,
   AttachmentStatus,
   AttachmentSubject,

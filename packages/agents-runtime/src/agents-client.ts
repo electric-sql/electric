@@ -5,6 +5,10 @@ import { createRuntimeServerClient } from './runtime-server-client'
 import { appendPathToUrl } from './url'
 import type { EntitySignal } from './runtime-server-client'
 import type {
+  RealtimeSessionStartResult,
+  StartRealtimeSessionOptions,
+} from './runtime-server-client'
+import type {
   EntitiesObservationSource,
   EntityObservationSource,
   PgSyncObservationSource,
@@ -32,6 +36,9 @@ export interface AgentsClient {
     payload?: unknown
   }) => Promise<{ txid: number }>
   kill: (entityUrl: string, reason?: string) => Promise<{ txid: number }>
+  startRealtimeSession: (
+    options: StartRealtimeSessionOptions
+  ) => Promise<RealtimeSessionStartResult>
 }
 
 export function createAgentsClient(config: AgentsClientConfig): AgentsClient {
@@ -45,6 +52,8 @@ export function createAgentsClient(config: AgentsClientConfig): AgentsClient {
         signal: `SIGKILL`,
         reason,
       }),
+    startRealtimeSession: (options) =>
+      serverClient.startRealtimeSession(options),
     async observe(source) {
       if (source.sourceType === `entity`) {
         const info = await serverClient.getEntity(
