@@ -90,6 +90,25 @@ export async function fileExists(filePath: string): Promise<boolean> {
   }
 }
 
+/**
+ * Raised when an Electric shape proxy request must be rejected for security
+ * reasons (an un-scoped table, or a client `where` clause that could escape the
+ * enforced per-tenant/per-principal scoping). The global `errorMapper` hook
+ * maps this to an HTTP error response. Defined here (rather than reusing
+ * `ElectricAgentsError`) to keep this module free of the heavy entity-manager
+ * import graph.
+ */
+export class ElectricProxyError extends Error {
+  constructor(
+    readonly code: `INVALID_WHERE` | `TABLE_NOT_ALLOWED`,
+    message: string,
+    readonly status: number
+  ) {
+    super(message)
+    this.name = `ElectricProxyError`
+  }
+}
+
 export function buildElectricProxyTarget(options: {
   incomingUrl: URL
   electricUrl: string
@@ -115,6 +134,15 @@ export function buildElectricProxyTarget(options: {
 
   if (options.electricSecret) {
     target.searchParams.set(`secret`, options.electricSecret)
+  }
+
+  // The enforced scoping `where` is AND-combined with the client's own `where`.
+  // A client clause that is not self-contained (e.g. `1=1) OR (1=1`) could
+  // break out of its parenthesised group and neutralise the scoping under SQL
+  // operator precedence, so reject anything that isn't balanced.
+  const clientWhere = options.incomingUrl.searchParams.get(`where`)
+  if (clientWhere !== null && !isSelfContainedWhereClause(clientWhere)) {
+    throw new ElectricProxyError(`INVALID_WHERE`, `Invalid where clause`, 400)
   }
 
   const table = options.incomingUrl.searchParams.get(`table`)
@@ -224,9 +252,64 @@ export function buildElectricProxyTarget(options: {
         permissionBypass: options.permissionBypass,
       })
     )
+  } else {
+    // Default-deny: every shape request gets the privileged Electric secret
+    // (when configured) injected above, so only tables with explicit column +
+    // row scoping may be proxied. Any other table (or a missing `table` param)
+    // is rejected.
+    throw new ElectricProxyError(
+      `TABLE_NOT_ALLOWED`,
+      `Table is not available through the Electric proxy`,
+      403
+    )
   }
 
   return target
+}
+
+/**
+ * Returns true when a client-supplied Electric `where` clause is self-contained:
+ * its parentheses are balanced, never close below the top level, all string
+ * (`'`) and identifier (`"`) literals are terminated, and it contains no SQL
+ * comment markers. Such a clause cannot break out of the `(...)` group it is
+ * wrapped in when AND-combined with the enforced scoping predicate, nor comment
+ * out the trailing paren the proxy appends. Characters inside string/identifier
+ * literals are ignored. Comment markers are rejected unconditionally (even where
+ * harmless) as a conservative defensive measure; dollar-quoted and `E''` strings
+ * are not modeled and only ever cause fail-safe over-rejection, never a bypass.
+ */
+function isSelfContainedWhereClause(where: string): boolean {
+  let depth = 0
+  let quote: `'` | `"` | null = null
+  for (let i = 0; i < where.length; i++) {
+    const ch = where[i]
+    if (quote !== null) {
+      if (ch === quote) {
+        if (where[i + 1] === quote) {
+          i++ // doubled quote is an escaped literal quote
+        } else {
+          quote = null
+        }
+      }
+      continue
+    }
+    if (ch === `'` || ch === `"`) {
+      quote = ch
+    } else if (ch === `(`) {
+      depth++
+    } else if (ch === `)`) {
+      depth--
+      if (depth < 0) {
+        return false
+      }
+    } else if (
+      (ch === `-` && where[i + 1] === `-`) ||
+      (ch === `/` && where[i + 1] === `*`)
+    ) {
+      return false // SQL comment marker
+    }
+  }
+  return depth === 0 && quote === null
 }
 
 export function buildReadableEntitiesWhere(options: {

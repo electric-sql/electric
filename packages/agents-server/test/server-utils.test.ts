@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { buildElectricProxyTarget } from '../src/utils/server-utils'
+import {
+  ElectricProxyError,
+  buildElectricProxyTarget,
+} from '../src/utils/server-utils'
 
 function shapeTarget(query: string): URL {
   return buildElectricProxyTarget({
@@ -150,5 +153,145 @@ describe(`server utils`, () => {
       `(subject_kind = 'principal_kind' AND subject_value = 'user')`
     )
     expect(where).not.toMatch(/\bEXISTS\b/i)
+  })
+
+  it(`rejects shape requests for tables outside the scoped allowlist`, () => {
+    // The proxy injects the privileged Electric secret into every /v1/shape
+    // request. Any table that is not explicitly scoped must be denied rather
+    // than forwarded with the secret attached and no row/column filter.
+    for (const table of [
+      `entity_permission_grants`,
+      `subscription_webhooks`,
+      `scheduled_tasks`,
+      `entity_bridges`,
+      `users; DROP TABLE users`,
+    ]) {
+      expect(() => shapeTarget(`table=${encodeURIComponent(table)}`)).toThrow(
+        ElectricProxyError
+      )
+    }
+  })
+
+  it(`rejects shape requests with no table param`, () => {
+    expect(() => shapeTarget(``)).toThrow(ElectricProxyError)
+  })
+
+  it(`rejects client where clauses that break out of the enforced scope`, () => {
+    // tenant_id = '...' AND (1=1) OR (1=1) collapses to OR TRUE under SQL
+    // precedence, defeating per-tenant/per-principal scoping.
+    expect(() =>
+      shapeTarget(`table=users&where=${encodeURIComponent(`1=1) OR (1=1`)}`)
+    ).toThrow(ElectricProxyError)
+  })
+
+  it(`rejects client where clauses that escape via a trailing comment`, () => {
+    expect(() =>
+      shapeTarget(`table=users&where=${encodeURIComponent(`1=1) OR 1=1 --`)}`)
+    ).toThrow(ElectricProxyError)
+  })
+
+  it(`rejects client where clauses with an unterminated string literal`, () => {
+    expect(() =>
+      shapeTarget(`table=users&where=${encodeURIComponent(`email = 'x`)}`)
+    ).toThrow(ElectricProxyError)
+  })
+
+  it(`rejects client where clauses containing SQL comment markers`, () => {
+    // A trailing `--` would comment out the closing paren the proxy appends.
+    for (const clause of [`kind = 'local' -- x`, `kind = 'local' /* x */`]) {
+      expect(() =>
+        shapeTarget(`table=users&where=${encodeURIComponent(clause)}`)
+      ).toThrow(ElectricProxyError)
+    }
+  })
+
+  it(`allows balanced client where clauses with OR inside parentheses`, () => {
+    const target = shapeTarget(
+      `table=users&where=${encodeURIComponent(`email = 'a' OR email = 'b'`)}`
+    )
+
+    expect(target.searchParams.get(`where`)).toBe(
+      `tenant_id = 'tenant-test' AND (email = 'a' OR email = 'b')`
+    )
+  })
+
+  it(`allows parentheses that appear inside string literals`, () => {
+    const target = shapeTarget(
+      `table=users&where=${encodeURIComponent(`display_name = 'a)b'`)}`
+    )
+
+    expect(target.searchParams.get(`where`)).toBe(
+      `tenant_id = 'tenant-test' AND (display_name = 'a)b')`
+    )
+  })
+
+  it(`rejects client where clauses that close the wrapping group early`, () => {
+    // The cleanest break-out: a top-level `)` that closes the proxy's wrapping
+    // `(` (paren depth dips below zero), distinct from the balanced `1=1) OR (1=1`.
+    for (const clause of [`a=1) OR (b=2`, `1=1)`]) {
+      expect(() =>
+        shapeTarget(`table=users&where=${encodeURIComponent(clause)}`)
+      ).toThrow(ElectricProxyError)
+    }
+  })
+
+  it(`wraps a top-level OR client clause so it stays scoped`, () => {
+    // Security depends on the enforced predicate AND-ing a *parenthesised*
+    // client clause; without the wrapping, `1=1 OR 2=2` would collapse scope.
+    const target = shapeTarget(
+      `table=users&where=${encodeURIComponent(`1=1 OR 2=2`)}`
+    )
+
+    expect(target.searchParams.get(`where`)).toBe(
+      `tenant_id = 'tenant-test' AND (1=1 OR 2=2)`
+    )
+  })
+
+  it(`allows double-quoted identifiers, ignoring parens inside them`, () => {
+    const target = shapeTarget(
+      `table=users&where=${encodeURIComponent(`"weird)col" = 1`)}`
+    )
+
+    expect(target.searchParams.get(`where`)).toBe(
+      `tenant_id = 'tenant-test' AND ("weird)col" = 1)`
+    )
+  })
+
+  it(`rejects an unterminated double-quoted identifier`, () => {
+    expect(() =>
+      shapeTarget(`table=users&where=${encodeURIComponent(`"col = 1`)}`)
+    ).toThrow(ElectricProxyError)
+  })
+
+  it(`allows doubled single quotes as escaped literal quotes`, () => {
+    const target = shapeTarget(
+      `table=users&where=${encodeURIComponent(`display_name = 'O''Brien'`)}`
+    )
+
+    expect(target.searchParams.get(`where`)).toBe(
+      `tenant_id = 'tenant-test' AND (display_name = 'O''Brien')`
+    )
+  })
+
+  it(`keeps parens inside escaped-quote string literals from breaking out`, () => {
+    // The `)` and `(` here live inside the string literal (the doubled quotes
+    // are escapes), so the clause is self-contained and must be allowed.
+    const target = shapeTarget(
+      `table=users&where=${encodeURIComponent(`name = 'a'') OR (''x'`)}`
+    )
+
+    expect(target.searchParams.get(`where`)).toBe(
+      `tenant_id = 'tenant-test' AND (name = 'a'') OR (''x')`
+    )
+  })
+
+  it(`allows comment markers that appear inside string literals`, () => {
+    const target = shapeTarget(
+      `table=users&where=${encodeURIComponent(`display_name = '-- legit'`)}`
+    )
+
+    expect(target.searchParams.get(`where`)).toBe(
+      `tenant_id = 'tenant-test' AND (display_name = '-- legit')`
+    )
   })
 })
