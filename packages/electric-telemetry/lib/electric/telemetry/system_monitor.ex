@@ -43,7 +43,7 @@ defmodule ElectricTelemetry.SystemMonitor do
     )
 
     :telemetry.execute(@vm_monitor_long_gc, Map.new(info), %{
-      process_type: type
+      process_type: to_string(type)
     })
 
     {:noreply, state}
@@ -55,7 +55,7 @@ defmodule ElectricTelemetry.SystemMonitor do
     )
 
     :telemetry.execute(@vm_monitor_long_schedule, Map.new(info), %{
-      process_type: :port
+      process_type: "port"
     })
 
     {:noreply, state}
@@ -85,7 +85,7 @@ defmodule ElectricTelemetry.SystemMonitor do
     end)
 
     :telemetry.execute(@vm_monitor_long_schedule, %{timeout: Keyword.fetch!(info, :timeout)}, %{
-      process_type: type
+      process_type: to_string(type)
     })
 
     {:noreply, state}
@@ -131,7 +131,7 @@ defmodule ElectricTelemetry.SystemMonitor do
   defp log_long_message_queue_event(pid, type) do
     with {:message_queue_len, queue_len} <- Process.info(pid, :message_queue_len) do
       :telemetry.execute(@vm_monitor_long_message_queue, %{length: queue_len}, %{
-        process_type: type
+        process_type: to_string(type)
       })
     end
   end
