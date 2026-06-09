@@ -154,6 +154,10 @@ defmodule Electric.StackSupervisor do
                        default: nil
                      ],
                      process_spawn_opts: [type: :map, default: %{}],
+                     consumer_gc_heap_threshold: [
+                       type: {:or, [:non_neg_integer, nil]},
+                       default: Electric.Config.default(:consumer_gc_heap_threshold)
+                     ],
                      consumer_partitions: [type: {:or, [:pos_integer, nil]}, default: nil]
                    ]
                  ],
@@ -357,6 +361,7 @@ defmodule Electric.StackSupervisor do
     shape_enable_suspend? = Keyword.fetch!(config.tweaks, :shape_enable_suspend?)
     shape_suspend_after = Keyword.fetch!(config.tweaks, :shape_suspend_after)
     process_spawn_opts = Keyword.fetch!(config.tweaks, :process_spawn_opts)
+    consumer_gc_heap_threshold = Keyword.fetch!(config.tweaks, :consumer_gc_heap_threshold)
 
     shape_cache_opts = [
       stack_id: stack_id
@@ -407,6 +412,7 @@ defmodule Electric.StackSupervisor do
            shape_enable_suspend?: shape_enable_suspend?,
            shape_suspend_after: shape_suspend_after,
            process_spawn_opts: process_spawn_opts,
+           consumer_gc_heap_threshold: consumer_gc_heap_threshold,
            feature_flags: Map.get(config, :feature_flags, [])
          ]},
         {Electric.AsyncDeleter,
