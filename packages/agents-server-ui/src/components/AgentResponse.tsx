@@ -410,14 +410,33 @@ export const AgentResponseLive = memo(function AgentResponseLive({
   )
   const reasoningEntries = useMemo<Array<ReasoningEntry>>(
     () =>
-      (reasoningRows as Array<ReasoningEntry & { order?: unknown }>)
+      (
+        reasoningRows as Array<{
+          key: string
+          status: `streaming` | `completed`
+          body?: { content?: string }
+          summary_title?: string
+          encrypted?: string
+          order?: unknown
+        }>
+      )
         .slice()
         // The live query already orders by `_timeline_order` then key,
         // but TanStack's projection isn't guaranteed stable across
         // re-mounts — sort by `key` here as a cheap deterministic
         // tiebreaker so the section doesn't visibly reflow between
         // renders if two rows share an order.
-        .sort((a, b) => a.key.localeCompare(b.key)),
+        .sort((a, b) => a.key.localeCompare(b.key))
+        .map<ReasoningEntry>((row) => ({
+          key: row.key,
+          status: row.status,
+          summary_title: row.summary_title,
+          encrypted: row.encrypted,
+          // The projection in `entity-timeline.ts` wraps content under
+          // `body` (inside a caseWhen) to force include materialization.
+          // See the comment there.
+          content: row.body?.content ?? ``,
+        })),
     [reasoningRows]
   )
   const sortedItems = useMemo(

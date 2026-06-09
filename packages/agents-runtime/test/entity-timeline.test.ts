@@ -2460,7 +2460,7 @@ describe(`entity includes query`, () => {
       expect(runRow).toBeTruthy()
       const reasoning = Array.from(runRow.run.reasoning.toArray) as Array<any>
       expect(reasoning).toHaveLength(1)
-      expect(reasoning[0].content).toBe(`AB`)
+      expect(reasoning[0].body?.content).toBe(`AB`)
     })
 
     it(`reasoning content populates even when text deltas are also present`, async () => {
@@ -2531,7 +2531,9 @@ describe(`entity includes query`, () => {
       expect(runRow).toBeTruthy()
       const reasoning = Array.from(runRow.run.reasoning.toArray) as Array<any>
       expect(reasoning).toHaveLength(1)
-      expect(reasoning[0].content).toBe(`Thinking part 1. Thinking part 2.`)
+      expect(reasoning[0].body?.content).toBe(
+        `Thinking part 1. Thinking part 2.`
+      )
       const items = Array.from(runRow.run.items.toArray) as Array<any>
       expect(items).toHaveLength(1)
       expect(items[0].text?.content).toBe(`Answer part 1. Answer part 2.`)
@@ -2589,7 +2591,7 @@ describe(`entity includes query`, () => {
       expect(reasoning).toHaveLength(1)
       expect(reasoning[0].key).toBe(`reasoning-0`)
       expect(reasoning[0].status).toBe(`completed`)
-      expect(reasoning[0].content).toBe(
+      expect(reasoning[0].body?.content).toBe(
         `First thinking step. Second thinking step.`
       )
     })

@@ -225,9 +225,11 @@ export interface EntityTimelineReasoningItem {
   run_id?: string
   order: TimelineOrder
   status: `streaming` | `completed`
-  // Concatenated content from all `reasoning_delta` rows for this row,
-  // built live by the query (mirrors `EntityTimelineTextItem.content`).
-  content: string
+  // The concatenated `reasoning_delta` content lives under
+  // `body.content` rather than top-level — the wrapper is what
+  // forces TanStack DB to materialize the include before the row
+  // reaches `useLiveQuery`. See the timeline-query comment.
+  body?: { content: string }
   // Optional bolded title parsed at write time — only OpenAI Responses
   // emits these; null for Anthropic / DeepSeek / Moonshot.
   summary_title?: string
@@ -1346,6 +1348,43 @@ function buildEntityTimelineQuery(
       }),
     }))
 
+  // Mirror `runItemsSource`'s shape for reasoning rows: the
+  // `concat(toArray(...))` include is *defined* on this top-level
+  // source, then the `reasoning:` consumer inside `runSource.select`
+  // below dereferences it into `content: r.reasoningContent`. The
+  // two-layer source/consumer split is load-bearing: `useLiveQuery`
+  // reads of a sub-collection that has an include co-defined in the
+  // same select return the row with `content: null` + a deferred
+  // `Symbol(includesRouting)` marker. Naming the include field in a
+  // downstream `.select` is what forces materialization — exactly
+  // how `items.text.content` pulls `item.textContent` out of
+  // `runItemsSource`. Alias is `reasoningChunk` to avoid colliding
+  // with `textChunk` used above.
+  const runReasoningSource = q
+    .from({ reasoning: db.collections.reasoning })
+    .select(({ reasoning }) => ({
+      key: reasoning.key,
+      run_id: reasoning.run_id,
+      order: coalesce(reasoning._timeline_order, `~`),
+      status: reasoning.status,
+      summary_title: reasoning.summary_title,
+      encrypted: reasoning.encrypted,
+      reasoningContent: concat(
+        toArray(
+          q
+            .from({ reasoningChunk: db.collections.reasoningDeltas })
+            .where(({ reasoningChunk }) =>
+              eq(reasoningChunk.reasoning_id, reasoning.key)
+            )
+            .orderBy(({ reasoningChunk }) =>
+              coalesce(reasoningChunk._timeline_order, `~`)
+            )
+            .orderBy(({ reasoningChunk }) => reasoningChunk.key)
+            .select(({ reasoningChunk }) => reasoningChunk.delta)
+        )
+      ),
+    }))
+
   const runSource = q.from({ run: db.collections.runs }).select(({ run }) => ({
     key: run.key,
     order: coalesce(run._timeline_order, `~`),
@@ -1374,34 +1413,26 @@ function buildEntityTimelineQuery(
         toolCall: item.toolCall,
       })),
     reasoning: q
-      .from({ reasoning: db.collections.reasoning })
-      .where(({ reasoning }) => eq(reasoning.run_id, run.key))
-      .orderBy(({ reasoning }) => coalesce(reasoning._timeline_order, `~`))
-      .orderBy(({ reasoning }) => reasoning.key)
-      .select(({ reasoning }) => ({
-        key: reasoning.key,
-        run_id: reasoning.run_id,
-        order: coalesce(reasoning._timeline_order, `~`),
-        status: reasoning.status,
-        // Same delta-join pattern as `items.text.content` above. Alias
-        // is `reasoningChunk` (not the generic `chunk`) — see the
-        // text-content comment above for the alias-collision bug.
-        content: concat(
-          toArray(
-            q
-              .from({ reasoningChunk: db.collections.reasoningDeltas })
-              .where(({ reasoningChunk }) =>
-                eq(reasoningChunk.reasoning_id, reasoning.key)
-              )
-              .orderBy(({ reasoningChunk }) =>
-                coalesce(reasoningChunk._timeline_order, `~`)
-              )
-              .orderBy(({ reasoningChunk }) => reasoningChunk.key)
-              .select(({ reasoningChunk }) => reasoningChunk.delta)
-          )
-        ),
-        summary_title: reasoning.summary_title,
-        encrypted: reasoning.encrypted,
+      .from({ r: runReasoningSource })
+      .where(({ r }) => eq(r.run_id, run.key))
+      .orderBy(({ r }) => r.order)
+      .orderBy(({ r }) => r.key)
+      .select(({ r }) => ({
+        key: r.key,
+        run_id: r.run_id,
+        order: r.order,
+        status: r.status,
+        // Wrap the include reference inside a `caseWhen` object body
+        // — the same construct items uses to materialize
+        // `item.textContent` into `text.content`. Bare top-level
+        // references leave the include deferred until UI reads it
+        // through `useLiveQuery`, which never gets through. UI reads
+        // `entry.body?.content` instead of `entry.content`.
+        body: caseWhen(r.key, {
+          content: r.reasoningContent,
+        }),
+        summary_title: r.summary_title,
+        encrypted: r.encrypted,
       })),
     steps: q
       .from({ step: db.collections.steps })
