@@ -2254,6 +2254,7 @@ describe(`entity patterns`, () => {
         createSourceDb: createSourceDb as never,
         createChildDb: vi.fn() as never,
         createOrGetChild: vi.fn() as never,
+        forkEntity: vi.fn() as never,
         createSharedStateDb: vi.fn() as never,
       },
     })
