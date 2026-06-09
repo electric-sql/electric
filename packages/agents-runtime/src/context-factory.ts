@@ -1,4 +1,5 @@
 import { queryOnce } from '@durable-streams/state/db'
+import { DurableStream } from '@durable-streams/client'
 import { assembleContext } from './context-assembly'
 import { createContextEntriesApi } from './context-entries'
 import { entityStateSchema } from './entity-schema'
@@ -18,6 +19,7 @@ import { getCronStreamPath } from './cron-utils'
 import { runtimeLog } from './log'
 import { sliceChars } from './token-budget'
 import { createContextTools } from './tools/context-tools'
+import { appendPathToUrl } from './url'
 import { CACHE_TIERS } from './types'
 import { composeToolsWithProviders } from './tool-providers'
 import { validateSlashCommandDefinitions } from './composer-input'
@@ -112,6 +114,176 @@ function applyRealtimeToolPolicy(
   })
 }
 
+type RealtimeStreamConfig = NonNullable<HandlerContextConfig[`realtimeStreams`]>
+type RealtimeControlInput =
+  | { type: `input_text`; text: string }
+  | { type: `input_audio.commit` }
+  | { type: `response.cancel` }
+  | { type: `session.close`; reason?: string }
+type RealtimeStreamIo = {
+  writeProviderEvent: (event: RealtimeProviderEvent) => Promise<void>
+  close: () => Promise<void>
+}
+
+function isRealtimeControlInput(value: unknown): value is RealtimeControlInput {
+  if (!value || typeof value !== `object`) return false
+  const type = (value as { type?: unknown }).type
+  return (
+    type === `input_text` ||
+    type === `input_audio.commit` ||
+    type === `response.cancel` ||
+    type === `session.close`
+  )
+}
+
+function realtimeDurableStream(
+  streams: RealtimeStreamConfig,
+  path: string,
+  contentType: string
+): DurableStream {
+  return new DurableStream({
+    url: appendPathToUrl(streams.baseUrl, path),
+    headers: streams.headers,
+    contentType,
+    batching: false,
+  })
+}
+
+function jsonBytes(value: unknown): Uint8Array {
+  return new TextEncoder().encode(JSON.stringify(value))
+}
+
+function realtimeControlOutput(event: RealtimeProviderEvent): unknown {
+  if (event.type !== `output_audio.delta`) return event
+  return {
+    type: event.type,
+    responseId: event.responseId,
+    itemId: event.itemId,
+    byteLength: event.audio.byteLength,
+  }
+}
+
+function createRealtimeStreamIo(
+  config: HandlerContextConfig,
+  session: ManifestRealtimeSessionEntry | undefined,
+  providerSession: RealtimeProviderSession
+): RealtimeStreamIo | undefined {
+  if (!config.realtimeStreams || !session) return undefined
+
+  const abort = new AbortController()
+  const abortFromRun = (): void => abort.abort()
+  if (config.runSignal?.aborted) {
+    abort.abort()
+  } else {
+    config.runSignal?.addEventListener(`abort`, abortFromRun, { once: true })
+  }
+
+  const audioIn = realtimeDurableStream(
+    config.realtimeStreams,
+    session.streams.audio_in,
+    `audio/pcm`
+  )
+  const audioOut = realtimeDurableStream(
+    config.realtimeStreams,
+    session.streams.audio_out,
+    `audio/pcm`
+  )
+  const controlIn = realtimeDurableStream(
+    config.realtimeStreams,
+    session.streams.control_in,
+    `application/json`
+  )
+  const controlOut = realtimeDurableStream(
+    config.realtimeStreams,
+    session.streams.control_out,
+    `application/json`
+  )
+  const tasks: Array<Promise<void>> = []
+
+  if (providerSession.appendInputAudio) {
+    tasks.push(
+      (async () => {
+        const response = await audioIn.stream({
+          live: true,
+          signal: abort.signal,
+          warnOnHttp: false,
+        })
+        try {
+          for await (const chunk of response.bodyStream()) {
+            if (abort.signal.aborted) break
+            await providerSession.appendInputAudio?.(chunk)
+          }
+        } finally {
+          response.cancel()
+        }
+      })().catch((error) => {
+        if (!abort.signal.aborted) {
+          runtimeLog.warn(
+            `[agent-runtime] realtime audio/in pump failed:`,
+            error
+          )
+        }
+      })
+    )
+  }
+
+  tasks.push(
+    (async () => {
+      const response = await controlIn.stream<RealtimeControlInput>({
+        live: true,
+        signal: abort.signal,
+        json: true,
+        warnOnHttp: false,
+      })
+      try {
+        for await (const command of response.jsonStream()) {
+          if (abort.signal.aborted || !isRealtimeControlInput(command)) {
+            continue
+          }
+          switch (command.type) {
+            case `input_text`:
+              await providerSession.sendText?.(command.text)
+              break
+            case `input_audio.commit`:
+              await providerSession.commitInputAudio?.()
+              break
+            case `response.cancel`:
+              await providerSession.cancelResponse?.()
+              break
+            case `session.close`:
+              await providerSession.close?.(command.reason)
+              abort.abort()
+              break
+          }
+        }
+      } finally {
+        response.cancel()
+      }
+    })().catch((error) => {
+      if (!abort.signal.aborted) {
+        runtimeLog.warn(
+          `[agent-runtime] realtime control/in pump failed:`,
+          error
+        )
+      }
+    })
+  )
+
+  return {
+    async writeProviderEvent(event) {
+      if (event.type === `output_audio.delta`) {
+        await audioOut.append(event.audio)
+      }
+      await controlOut.append(jsonBytes(realtimeControlOutput(event)))
+    },
+    async close() {
+      abort.abort()
+      config.runSignal?.removeEventListener(`abort`, abortFromRun)
+      await Promise.allSettled(tasks)
+    },
+  }
+}
+
 const MAX_HYDRATED_IMAGE_ATTACHMENTS = 4
 const MAX_HYDRATED_IMAGE_ATTACHMENT_BYTES = 10 * 1024 * 1024
 
@@ -143,6 +315,10 @@ export interface HandlerContextConfig<TState extends StateProxy = StateProxy> {
     }) => void | Promise<void>
   ) => void
   hydratedWebhookSourceWake?: HydratedWebhookSourceWake | null
+  realtimeStreams?: {
+    baseUrl: string
+    headers?: Record<string, string>
+  }
   doObserve: (
     source: ObservationSource,
     wake?: Wake
@@ -1055,6 +1231,7 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
       const messages = await hydrateAttachmentBlocks(
         timelineToMessages(config.db)
       )
+      let realtimeIo: RealtimeStreamIo | undefined
 
       async function handleProviderEvent(
         event: RealtimeProviderEvent
@@ -1144,7 +1321,7 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
             config.wakeEvent,
             config.events,
             config.wakeOffset,
-            config.hydratedEventSourceWake
+            config.hydratedWebhookSourceWake
           )
           const responses = activeRealtimeConfig.testResponses
           if (Array.isArray(responses)) {
@@ -1171,11 +1348,17 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
               session: activeRealtimeSession(),
               signal: config.runSignal,
             })
+          realtimeIo = createRealtimeStreamIo(
+            config,
+            activeRealtimeSession(),
+            activeRealtimeProviderSession
+          )
 
           for await (const event of activeRealtimeProviderSession.events) {
             if (config.runSignal?.aborted) {
               break
             }
+            await realtimeIo?.writeProviderEvent(event)
             await handleProviderEvent(event)
           }
         }
@@ -1197,6 +1380,7 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         bridge.onRunEnd({ finishReason: `error` })
         throw error
       } finally {
+        await realtimeIo?.close()
         activeRealtimeProviderSession = null
       }
 

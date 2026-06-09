@@ -1,8 +1,37 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createTestRealtimeProvider } from '../src/realtime'
 import { createTestHandlerContext } from './helpers/context-test-helpers'
 
+const durableMock = vi.hoisted(() => {
+  const appends: Array<{ url: string; data: unknown }> = []
+  class DurableStream {
+    constructor(readonly opts: { url: string }) {}
+
+    async append(data: unknown): Promise<void> {
+      appends.push({ url: this.opts.url, data })
+    }
+
+    async stream() {
+      return {
+        bodyStream: async function* () {},
+        jsonStream: async function* () {},
+        cancel: vi.fn(),
+      }
+    }
+  }
+
+  return { appends, DurableStream }
+})
+
+vi.mock(`@durable-streams/client`, () => ({
+  DurableStream: durableMock.DurableStream,
+}))
+
 describe(`ctx.useRealtime()`, () => {
+  beforeEach(() => {
+    durableMock.appends.length = 0
+  })
+
   it(`records provider transcript output through the outbound bridge`, async () => {
     const { ctx } = createTestHandlerContext()
 
@@ -60,6 +89,84 @@ describe(`ctx.useRealtime()`, () => {
     expect(ctx.realtime.activeSession()).toMatchObject({
       id: `rt-1`,
       status: `active`,
+    })
+  })
+
+  it(`persists provider audio and control output to realtime durable streams`, async () => {
+    const { ctx } = createTestHandlerContext({
+      realtimeStreams: {
+        baseUrl: `http://server.test`,
+        headers: { authorization: `Bearer claim` },
+      },
+    })
+    ctx.db.collections.manifests.insert({
+      key: `realtime-session:rt-1`,
+      kind: `realtime-session`,
+      id: `rt-1`,
+      provider: `openai`,
+      model: `gpt-realtime-2`,
+      status: `active`,
+      startedAt: `2026-06-09T12:00:00.000Z`,
+      endedAt: null,
+      retention: `forever`,
+      streams: {
+        audio_in: `/test/entity/realtime/rt-1/audio/in`,
+        audio_out: `/test/entity/realtime/rt-1/audio/out`,
+        control_in: `/test/entity/realtime/rt-1/control/in`,
+        control_out: `/test/entity/realtime/rt-1/control/out`,
+      },
+    })
+
+    const realtime = ctx.useRealtime({
+      systemPrompt: `You are realtime.`,
+      provider: createTestRealtimeProvider({
+        events: [
+          { type: `session.started`, sessionId: `rt-1` },
+          {
+            type: `output_audio.delta`,
+            audio: new Uint8Array([1, 2, 3]),
+            responseId: `resp-1`,
+            itemId: `item-1`,
+          },
+          { type: `output_audio.completed`, responseId: `resp-1` },
+          { type: `session.closed` },
+        ],
+      }),
+      tools: [],
+    })
+
+    await realtime.run()
+
+    expect(durableMock.appends).toEqual([
+      {
+        url: `http://server.test/test/entity/realtime/rt-1/control/out`,
+        data: expect.any(Uint8Array),
+      },
+      {
+        url: `http://server.test/test/entity/realtime/rt-1/audio/out`,
+        data: new Uint8Array([1, 2, 3]),
+      },
+      {
+        url: `http://server.test/test/entity/realtime/rt-1/control/out`,
+        data: expect.any(Uint8Array),
+      },
+      {
+        url: `http://server.test/test/entity/realtime/rt-1/control/out`,
+        data: expect.any(Uint8Array),
+      },
+      {
+        url: `http://server.test/test/entity/realtime/rt-1/control/out`,
+        data: expect.any(Uint8Array),
+      },
+    ])
+    const decoder = new TextDecoder()
+    expect(
+      JSON.parse(decoder.decode(durableMock.appends[2]!.data as Uint8Array))
+    ).toEqual({
+      type: `output_audio.delta`,
+      responseId: `resp-1`,
+      itemId: `item-1`,
+      byteLength: 3,
     })
   })
 })
