@@ -2717,7 +2717,7 @@ export class EntityManager {
       throw new ElectricAgentsError(ErrCodeNotFound, `Entity not found`, 404)
     }
 
-    if (token && !this.isValidWriteToken(entity, token)) {
+    if (!this.isValidWriteToken(entity, token ?? ``)) {
       throw new ElectricAgentsError(
         ErrCodeUnauthorized,
         `Invalid write token`,
@@ -2767,7 +2767,7 @@ export class EntityManager {
       throw new ElectricAgentsError(ErrCodeNotFound, `Entity not found`, 404)
     }
 
-    if (token && !this.isValidWriteToken(entity, token)) {
+    if (!this.isValidWriteToken(entity, token ?? ``)) {
       throw new ElectricAgentsError(
         ErrCodeUnauthorized,
         `Invalid write token`,

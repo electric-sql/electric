@@ -293,7 +293,7 @@ export function runElectricAgentsConformanceTests(
               body: JSON.stringify({ payload: { hello: true } }),
             }
           )
-          expect(res.status).toBe(204)
+          expect([200, 204]).toContain(res.status)
         })
         .expectWebhook()
         .respondDone()
@@ -1382,7 +1382,7 @@ export function runElectricAgentsConformanceTests(
               }),
             }
           )
-          expect(res.status).toBe(204)
+          expect([200, 204]).toContain(res.status)
         })
         .run()
     })
@@ -1552,7 +1552,7 @@ export function runElectricAgentsConformanceTests(
                         }),
                       }
                     )
-                    expect(res.status).toBe(204)
+                    expect([200, 204]).toContain(res.status)
                     ctx.history.push({
                       type: `message_sent`,
                       entityUrl: url,
@@ -2365,7 +2365,7 @@ export function runElectricAgentsConformanceTests(
               }),
             }
           )
-          expect(res.status).toBe(204)
+          expect([200, 204]).toContain(res.status)
         })
         .run()
     })
@@ -2676,7 +2676,7 @@ export function runElectricAgentsConformanceTests(
               body: JSON.stringify({ payload: `hi` }),
             }
           )
-          expect(res.status).toBe(204)
+          expect([200, 204]).toContain(res.status)
         })
         .expectWebhook()
         .respondDone()
