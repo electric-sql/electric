@@ -572,6 +572,7 @@ function manifestKindLabel(manifest: Manifest): string {
     case `goal`:
       return `Goal`
   }
+  return manifest.kind
 }
 
 function createParentEntry(parent: DrawerEntity): DrawerEntry {
@@ -714,6 +715,7 @@ function createManifestEntry(
     case `goal`:
       return null
   }
+  return null
 }
 
 function describeSourceConfig(config: unknown): string {

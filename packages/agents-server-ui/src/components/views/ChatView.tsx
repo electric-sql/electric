@@ -362,6 +362,19 @@ function GenericChatBody({
     setStopPending(false)
   }, [entityUrl])
 
+  const autoStartRealtimeSignal =
+    viewParams?.realtime === `start` && entityUrl
+      ? `${entityUrl}:realtime:start`
+      : null
+  const handleRealtimeAutoStartConsumed = useCallback(() => {
+    const nextParams = Object.fromEntries(
+      Object.entries(viewParams ?? {}).filter(([key]) => key !== `realtime`)
+    )
+    helpers.setTileView(tileId, `chat`, {
+      viewParams: Object.keys(nextParams).length > 0 ? nextParams : undefined,
+    })
+  }, [helpers, tileId, viewParams])
+
   const stopGeneration = useCallback(() => {
     if (!canSignal) return
     if (!entityUrl || !signalEntity || !generationActive || stopPending) return
@@ -441,6 +454,8 @@ function GenericChatBody({
         )}
         onSend={() => setSentMessageSignal((value) => value + 1)}
         onStop={stopGeneration}
+        autoStartRealtimeSignal={autoStartRealtimeSignal}
+        onRealtimeAutoStartConsumed={handleRealtimeAutoStartConsumed}
       />
     </>
   )

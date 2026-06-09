@@ -74,6 +74,8 @@ export function MessageInput({
   drawer,
   onSend,
   onStop,
+  autoStartRealtimeSignal,
+  onRealtimeAutoStartConsumed,
 }: {
   db: EntityStreamDBWithActions | null
   baseUrl: string
@@ -95,6 +97,8 @@ export function MessageInput({
   onClearCommentTarget?: () => void
   onSend?: () => void
   onStop?: () => void
+  autoStartRealtimeSignal?: string | null
+  onRealtimeAutoStartConsumed?: () => void
   /**
    * Optional content rendered above the composer, sharing its docked
    * width and lift into the timeline above. The composer is z-indexed
@@ -125,6 +129,7 @@ export function MessageInput({
   const [realtimeActive, setRealtimeActive] = useState(false)
   const [realtimeInputLevel, setRealtimeInputLevel] = useState(0)
   const realtimeSessionRef = useRef<RealtimeAudioSession | null>(null)
+  const handledAutoStartRealtimeRef = useRef<string | null>(null)
   const composerFocusRef = useRef<{ focus: () => void } | null>(null)
   const inputDisabled = disabled || writeDisabled
   const isCommentMode = composerMode === `comment`
@@ -381,6 +386,23 @@ export function MessageInput({
         setRealtimePending(false)
       })
   }, [baseUrl, canUseRealtime, entityUrl, realtimePending])
+
+  useEffect(() => {
+    if (!autoStartRealtimeSignal) return
+    if (handledAutoStartRealtimeRef.current === autoStartRealtimeSignal) return
+    if (!canUseRealtime || realtimePending) return
+    handledAutoStartRealtimeRef.current = autoStartRealtimeSignal
+    onRealtimeAutoStartConsumed?.()
+    if (!realtimeSessionRef.current) {
+      handleRealtimeToggle()
+    }
+  }, [
+    autoStartRealtimeSignal,
+    canUseRealtime,
+    handleRealtimeToggle,
+    onRealtimeAutoStartConsumed,
+    realtimePending,
+  ])
 
   const startEditing = useCallback(
     (message: EntityTimelineData[`inbox`][number]) => {

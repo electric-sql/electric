@@ -1007,6 +1007,7 @@ function manifestKindLabel(manifest: Manifest): string {
     case `goal`:
       return `Goal`
   }
+  return manifest.kind
 }
 
 function manifestTitle(manifest: Manifest): string {
@@ -1023,6 +1024,7 @@ function manifestTitle(manifest: Manifest): string {
     case `goal`:
       return manifest.id
   }
+  return manifest.key
 }
 
 function manifestMeta(manifest: Manifest): string {
@@ -1046,6 +1048,7 @@ function manifestMeta(manifest: Manifest): string {
     case `goal`:
       return manifest.status ?? `active`
   }
+  return ``
 }
 
 function manifestDetails(
@@ -1116,6 +1119,7 @@ function manifestDetails(
         },
       ]
   }
+  return []
 }
 
 function manifestIcon(manifest: Manifest) {

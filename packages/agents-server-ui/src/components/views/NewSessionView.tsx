@@ -5,6 +5,7 @@ import {
   ChevronDown,
   ChevronRight,
   Cpu,
+  Mic,
   Sparkles,
 } from 'lucide-react'
 import { eq, not, useLiveQuery } from '@tanstack/react-db'
@@ -67,6 +68,7 @@ import type {
   SlashCommandRow,
 } from '@electric-ax/agents-runtime/client'
 import type { StandaloneViewProps } from '../../lib/workspace/viewRegistry'
+import type { TileViewParams } from '../../lib/workspace/types'
 
 /**
  * The "default agent" — when an entity type with this name is registered
@@ -74,6 +76,7 @@ import type { StandaloneViewProps } from '../../lib/workspace/viewRegistry'
  * so the most common flow is one keystroke away.
  */
 const DEFAULT_AGENT_NAME = `horton`
+const REALTIME_AUTOSTART_VIEW_PARAMS: TileViewParams = { realtime: `start` }
 
 const HERO_TITLES = [
   `Let’s ship`,
@@ -344,7 +347,8 @@ export function NewSessionView({
       initialMessage?: unknown,
       initialMessageType?: string,
       initialAttachments?: Array<File>,
-      sandboxProfile?: string | null
+      sandboxProfile?: string | null,
+      viewParams?: TileViewParams
     ): Promise<boolean> => {
       if (!spawnEntity) return false
       setError(null)
@@ -402,6 +406,7 @@ export function NewSessionView({
         }
         helpers.openEntity(entityUrl, {
           target: { tileId, position: `replace` },
+          ...(viewParams ? { viewParams } : {}),
         })
         return true
       } catch (err) {
@@ -450,20 +455,15 @@ export function NewSessionView({
     return () => setToolbarTitle(null)
   }, [handleCancelSelected, selected, setToolbarTitle])
 
-  const handleStartDefault = useCallback(
-    async (
-      input: string | ComposerInputPayload,
+  const prepareDefaultAgentArgs = useCallback(
+    (
       args: Record<string, unknown>,
-      attachments: Array<File>,
       sandboxProfile: string | null
-    ): Promise<boolean> => {
-      if (!defaultAgent) return false
-      // Inject the picker's choice into the spawn args for the composer flow
-      // only — non-default agents have their own schemas and may not
-      // understand `workingDirectory`. A remote sandbox runs in the provider
-      // VM, so a host working directory is meaningless there: skip it for
-      // remote profiles. The spawned session itself becomes the newest
-      // synced recent for this runner.
+    ): Record<string, unknown> => {
+      // Inject the picker's choice into the spawn args for the default-agent
+      // composer only — non-default agents have their own schemas and may not
+      // understand `workingDirectory`. Remote sandboxes run in provider VMs, so
+      // host paths are meaningless there.
       const profileIsRemote = isSandboxProfileRemote(
         allSandboxProfiles,
         sandboxProfile
@@ -472,7 +472,20 @@ export function NewSessionView({
       // factory — require a (non-remote) profile or the arg is a no-op.
       const includeWorkingDir =
         workingDirectory !== null && sandboxProfile !== null && !profileIsRemote
-      const augmented = includeWorkingDir ? { ...args, workingDirectory } : args
+      return includeWorkingDir ? { ...args, workingDirectory } : args
+    },
+    [allSandboxProfiles, workingDirectory]
+  )
+
+  const handleStartDefault = useCallback(
+    async (
+      input: string | ComposerInputPayload,
+      args: Record<string, unknown>,
+      attachments: Array<File>,
+      sandboxProfile: string | null
+    ): Promise<boolean> => {
+      if (!defaultAgent) return false
+      const augmented = prepareDefaultAgentArgs(args, sandboxProfile)
       const hasAttachments = attachments.length > 0
       const initialMessage =
         typeof input === `string`
@@ -493,7 +506,27 @@ export function NewSessionView({
         sandboxProfile
       )
     },
-    [defaultAgent, doSpawn, workingDirectory, allSandboxProfiles]
+    [defaultAgent, doSpawn, prepareDefaultAgentArgs]
+  )
+
+  const handleStartDefaultRealtime = useCallback(
+    async (
+      args: Record<string, unknown>,
+      sandboxProfile: string | null
+    ): Promise<boolean> => {
+      if (!defaultAgent) return false
+      const augmented = prepareDefaultAgentArgs(args, sandboxProfile)
+      return await doSpawn(
+        defaultAgent.name,
+        augmented,
+        undefined,
+        undefined,
+        undefined,
+        sandboxProfile,
+        REALTIME_AUTOSTART_VIEW_PARAMS
+      )
+    },
+    [defaultAgent, doSpawn, prepareDefaultAgentArgs]
   )
 
   const defaultComposerReady =
@@ -531,6 +564,7 @@ export function NewSessionView({
             defaultAgentSandboxProfiles={defaultAgent ? allSandboxProfiles : []}
             onSelectType={handleSelectType}
             onStartDefault={handleStartDefault}
+            onStartDefaultRealtime={handleStartDefaultRealtime}
             spawnReady={Boolean(spawnEntity)}
             defaultComposerReady={defaultComposerReady}
             error={error}
@@ -553,6 +587,7 @@ function Picker({
   defaultAgentSandboxProfiles,
   onSelectType,
   onStartDefault,
+  onStartDefaultRealtime,
   spawnReady,
   defaultComposerReady,
   error,
@@ -571,6 +606,10 @@ function Picker({
     input: string | ComposerInputPayload,
     args: Record<string, unknown>,
     attachments: Array<File>,
+    sandboxProfile: string | null
+  ) => Promise<boolean>
+  onStartDefaultRealtime: (
+    args: Record<string, unknown>,
     sandboxProfile: string | null
   ) => Promise<boolean>
   spawnReady: boolean
@@ -608,6 +647,7 @@ function Picker({
           agent={defaultAgent}
           sandboxProfiles={defaultAgentSandboxProfiles}
           onSubmit={onStartDefault}
+          onStartRealtime={onStartDefaultRealtime}
           disabled={!defaultComposerReady}
           workingDirectory={workingDirectory}
           onChangeWorkingDirectory={onChangeWorkingDirectory}
@@ -888,6 +928,7 @@ function DefaultAgentComposer({
   agent,
   sandboxProfiles,
   onSubmit,
+  onStartRealtime,
   disabled,
   workingDirectory,
   onChangeWorkingDirectory,
@@ -902,6 +943,10 @@ function DefaultAgentComposer({
     input: string | ComposerInputPayload,
     args: Record<string, unknown>,
     attachments: Array<File>,
+    sandboxProfile: string | null
+  ) => Promise<boolean>
+  onStartRealtime: (
+    args: Record<string, unknown>,
     sandboxProfile: string | null
   ) => Promise<boolean>
   disabled?: boolean
@@ -923,7 +968,11 @@ function DefaultAgentComposer({
     [sandboxProfiles, selectedSandboxProfile]
   )
   const [value, setValue] = useState(``)
-  const [submitting, setSubmitting] = useState(false)
+  const [submittingMode, setSubmittingMode] = useState<
+    `message` | `realtime` | null
+  >(null)
+  const submitting = submittingMode !== null
+  const realtimeSubmitting = submittingMode === `realtime`
   const composerFocusRef = useRef<{ focus: () => void } | null>(null)
   const inlineProps = useMemo(
     () => inlineSchemaProperties(agent.creation_schema),
@@ -1004,7 +1053,7 @@ function DefaultAgentComposer({
         payload ?? serializeComposerInput(value, slashCommands)
       const trimmed = nextPayload.source.trim()
       if ((!trimmed && files.length === 0) || disabled || submitting) return
-      setSubmitting(true)
+      setSubmittingMode(`message`)
       const cleaned: Record<string, unknown> = {}
       for (const [k, v] of Object.entries(args)) {
         if (v !== undefined && v !== ``) cleaned[k] = v
@@ -1023,7 +1072,7 @@ function DefaultAgentComposer({
         })
         .catch(() => undefined)
         .finally(() => {
-          setSubmitting(false)
+          setSubmittingMode(null)
         })
     },
     [
@@ -1040,6 +1089,29 @@ function DefaultAgentComposer({
     ]
   )
 
+  const startRealtime = useCallback(() => {
+    const files = imageAttachmentsEnabled ? attachments : []
+    if (disabled || submitting || files.length > 0) return
+    setSubmittingMode(`realtime`)
+    const cleaned: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(args)) {
+      if (v !== undefined && v !== ``) cleaned[k] = v
+    }
+    void onStartRealtime(cleaned, selectedSandboxProfile)
+      .catch(() => undefined)
+      .finally(() => {
+        setSubmittingMode(null)
+      })
+  }, [
+    args,
+    attachments,
+    disabled,
+    imageAttachmentsEnabled,
+    onStartRealtime,
+    selectedSandboxProfile,
+    submitting,
+  ])
+
   const attachmentCount = imageAttachmentsEnabled ? attachments.length : 0
   const isActive = Boolean(
     (value.trim() || attachmentCount > 0) && !disabled && !submitting
@@ -1048,6 +1120,12 @@ function DefaultAgentComposer({
   const sendTooltip = submitting
     ? `Starting ${agent.name} session`
     : `Start ${agent.name} session`
+  const realtimeTooltip =
+    attachmentCount > 0
+      ? `Remove attachments to start voice mode`
+      : realtimeSubmitting
+        ? `Starting voice session`
+        : `Start voice session`
 
   return (
     <div
@@ -1121,8 +1199,28 @@ function DefaultAgentComposer({
         send={
           <>
             {submitting && (
-              <span className={styles.composerHint}>Starting…</span>
+              <span className={styles.composerHint}>
+                {realtimeSubmitting ? `Starting voice…` : `Starting…`}
+              </span>
             )}
+            <Tooltip content={realtimeTooltip} side="top">
+              <span className={styles.tooltipTrigger}>
+                <button
+                  type="button"
+                  aria-label="Start voice session"
+                  onClick={startRealtime}
+                  disabled={disabled || submitting || attachmentCount > 0}
+                  className={[
+                    styles.composerVoice,
+                    realtimeSubmitting ? styles.composerVoicePending : null,
+                  ]
+                    .filter(Boolean)
+                    .join(` `)}
+                >
+                  <Icon icon={Mic} size={2} />
+                </button>
+              </span>
+            </Tooltip>
             <Tooltip content={sendTooltip} side="top">
               <span className={styles.tooltipTrigger}>
                 <button
