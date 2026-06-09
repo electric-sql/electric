@@ -307,11 +307,12 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
       )
     end
 
-    {:noreply, state, state.publication_refresh_period}
+    {:noreply, %{state | in_flight_relation_filters: nil}, state.publication_refresh_period}
   end
 
   def handle_cast({:configuration_error, {:error, error}}, state) do
-    {:noreply, reply_to_all_waiters({:error, error}, state), state.publication_refresh_period}
+    state = %{reply_to_all_waiters({:error, error}, state) | in_flight_relation_filters: nil}
+    {:noreply, state, state.publication_refresh_period}
   end
 
   @impl true

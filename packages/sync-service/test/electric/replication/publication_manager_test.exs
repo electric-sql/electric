@@ -265,6 +265,75 @@ defmodule Electric.Replication.PublicationManagerTest do
       assert MapSet.size(filters) == 1
       refute_receive {:configure_cast, _}, 200
     end
+
+    @tag update_debounce_timeout: 0
+    test "re-issues a configure cast after a global configuration error", ctx do
+      test_pid = self()
+
+      Repatch.patch(
+        PublicationManager.Configurator,
+        :configure_publication,
+        [mode: :shared],
+        fn _stack_id, _filters -> send(test_pid, :configure_cast) end
+      )
+
+      relation_tracker = PublicationManager.RelationTracker.name(ctx.stack_id)
+
+      shape1 = generate_shape(ctx.relation_with_oid, @where_clause_1)
+      run_async(fn -> PublicationManager.add_shape(ctx.stack_id, @shape_handle_1, shape1) end)
+
+      # First submission is now in flight.
+      assert_receive :configure_cast
+
+      # Simulate the in-flight chain dying with a global configuration error.
+      GenServer.cast(
+        relation_tracker,
+        {:configuration_error, {:error, %RuntimeError{message: "boom"}}}
+      )
+
+      # A subsequent add on the SAME relation (no change to prepared filters)
+      # must re-arm the retry path and issue a fresh cast.
+      shape2 = generate_shape(ctx.relation_with_oid, @where_clause_2)
+      run_async(fn -> PublicationManager.add_shape(ctx.stack_id, @shape_handle_2, shape2) end)
+
+      assert_receive :configure_cast, 500
+    end
+
+    @tag update_debounce_timeout: 0
+    test "still issues a cast for a new relation while another submission is in flight", ctx do
+      Postgrex.query!(
+        ctx.pool,
+        "CREATE TABLE other_table (id UUID PRIMARY KEY, value TEXT NOT NULL)",
+        []
+      )
+
+      alt_relation = {"public", "other_table"}
+      alt_relation_oid = lookup_relation_oid(ctx.pool, alt_relation)
+
+      test_pid = self()
+
+      Repatch.patch(
+        PublicationManager.Configurator,
+        :configure_publication,
+        [mode: :shared],
+        fn _stack_id, filters -> send(test_pid, {:configure_cast, filters}) end
+      )
+
+      shape1 = generate_shape(ctx.relation_with_oid, @where_clause_1)
+      run_async(fn -> PublicationManager.add_shape(ctx.stack_id, @shape_handle_1, shape1) end)
+
+      # First relation's submission is in flight (no result delivered).
+      assert_receive {:configure_cast, first_filters}
+      assert MapSet.size(first_filters) == 1
+
+      # Adding a DIFFERENT relation changes `prepared`, so a fresh cast must
+      # still be issued despite the in-flight submission.
+      shape2 = generate_shape({alt_relation_oid, alt_relation}, @where_clause_1)
+      run_async(fn -> PublicationManager.add_shape(ctx.stack_id, @shape_handle_2, shape2) end)
+
+      assert_receive {:configure_cast, second_filters}, 500
+      assert MapSet.size(second_filters) == 2
+    end
   end
 
   describe "remove_shape/2" do
