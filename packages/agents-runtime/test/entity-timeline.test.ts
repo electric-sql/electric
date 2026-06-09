@@ -3,6 +3,7 @@ import {
   createCollection,
   createLiveQueryCollection,
 } from '@durable-streams/state/db'
+import { BasicIndex } from '@tanstack/db'
 import {
   buildEntityTimelineData,
   compareTimelineOrders,
@@ -1619,6 +1620,24 @@ describe(`entity includes query`, () => {
         `test-reasoningDeltas`,
         takeOffset
       )
+      texts.collection.createIndex((row) => row.run_id, {
+        indexType: BasicIndex,
+      })
+      textDeltas.collection.createIndex((row) => row.text_id, {
+        indexType: BasicIndex,
+      })
+      textDeltas.collection.createIndex((row) => row.run_id, {
+        indexType: BasicIndex,
+      })
+      toolCalls.collection.createIndex((row) => row.run_id, {
+        indexType: BasicIndex,
+      })
+      steps.collection.createIndex((row) => row.run_id, {
+        indexType: BasicIndex,
+      })
+      errors.collection.createIndex((row) => row.run_id, {
+        indexType: BasicIndex,
+      })
       return {
         collections: {
           runs: runs.collection,
@@ -1942,6 +1961,55 @@ describe(`entity includes query`, () => {
         )
       ).toEqual([`inbox:msg-1`, `annotation:note-1`, `wake:wake-1`])
       expect(rows[1]?.annotation?.note).toBe(`between`)
+    })
+
+    it(`orders live run rows by their first visible item`, async () => {
+      const { collections, sync } = createEntityCollections()
+      const queryFn = createEntityTimelineQuery({ collections } as any)
+      const liveQuery = createLiveQueryCollection({
+        query: queryFn,
+        startSync: true,
+      })
+      await liveQuery.preload()
+
+      sync.runs.insert({
+        key: `run-1`,
+        status: `started`,
+        _timeline_order: order(1),
+      })
+      sync.realtimeTranscripts.insert({
+        key: `rt-in-1`,
+        session_id: `rt-1`,
+        direction: `input`,
+        text: `Find the latest Electric Agents post`,
+        status: `final`,
+        audio_stream: `/horton/test/realtime/rt-1/audio/in`,
+        created_at: `2026-06-09T14:56:00.000Z`,
+        _timeline_order: order(2),
+      })
+      sync.toolCalls.insert({
+        key: `tc-1`,
+        run_id: `run-1`,
+        tool_call_id: `tc-1`,
+        tool_name: `web_search`,
+        status: `completed`,
+        args: { query: `most recent blog post Electric Agents site` },
+        result: `https://electric.ax/blog/2026/04/29/introducing-electric-agents`,
+        _timeline_order: order(3),
+      })
+      await new Promise((r) => setTimeout(r, 50))
+
+      const rows = getData(liveQuery)
+      expect(
+        rows.map((row) =>
+          row.realtimeTranscript
+            ? `realtimeTranscript:${row.realtimeTranscript.key}`
+            : row.run
+              ? `run:${row.run.key}`
+              : `other`
+        )
+      ).toEqual([`realtimeTranscript:rt-in-1`, `run:run-1`])
+      expect(rows[1]?.run.order).toBe(order(3))
     })
 
     it(`projects related entities from one manifest row per related entity`, () => {

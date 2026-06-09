@@ -11,6 +11,7 @@ import {
   isUndefined,
   like,
   localOnlyCollectionOptions,
+  min,
   or,
   sum,
   toArray,
@@ -1627,14 +1628,25 @@ function buildEntityTimelineQuery(
       output_count: count(step.output_tokens),
     }))
 
+  const runItemAnchorSource = q
+    .from({ item: runItemsSource })
+    .groupBy(({ item }) => item.run_id)
+    .select(({ item }) => ({
+      run_id: item.run_id,
+      order: min(item.order),
+    }))
+
   const runSource = q
     .from({ run: db.collections.runs })
     .leftJoin({ runTokens: runTokensSource }, ({ run, runTokens }) =>
       eq(run.key, runTokens.run_id)
     )
-    .select(({ run, runTokens }) => ({
+    .leftJoin({ anchor: runItemAnchorSource }, ({ run, anchor }) =>
+      eq(anchor.run_id, run.key)
+    )
+    .select(({ run, runTokens, anchor }) => ({
       key: run.key,
-      order: coalesce(run._timeline_order, `~`),
+      order: coalesce(anchor.order, run._timeline_order, `~`),
       status: run.status,
       finish_reason: run.finish_reason,
       // Mirrors the `tokens` shape produced by `createEntityIncludesQuery`

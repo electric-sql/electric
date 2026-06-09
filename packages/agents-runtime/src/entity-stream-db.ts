@@ -9,6 +9,7 @@ import {
   createTransaction,
   getStreamDBCollectionId,
 } from '@durable-streams/state/db'
+import { BasicIndex } from '@tanstack/db'
 import { builtInCollections, passthrough } from './entity-schema'
 import type { StandardSchemaV1 } from '@standard-schema/spec'
 import { formatPointerOrderToken, type EventPointer } from './event-pointer'
@@ -105,6 +106,32 @@ type EntityStreamDBOptions = {
 )
 
 const WRITE_TXID_TIMEOUT_MS = 20_000
+
+function createCollectionIndex(
+  collection: unknown,
+  indexCallback: (row: Record<string, unknown>) => unknown
+): void {
+  const createIndex = (
+    collection as {
+      createIndex?: (
+        indexCallback: (row: Record<string, unknown>) => unknown,
+        config: { indexType: typeof BasicIndex }
+      ) => unknown
+    }
+  ).createIndex
+  if (typeof createIndex === `function`) {
+    createIndex.call(collection, indexCallback, { indexType: BasicIndex })
+  }
+}
+
+function createEntityTimelineIndexes(collections: EntityCollections): void {
+  createCollectionIndex(collections.texts, (row) => row.run_id)
+  createCollectionIndex(collections.textDeltas, (row) => row.text_id)
+  createCollectionIndex(collections.textDeltas, (row) => row.run_id)
+  createCollectionIndex(collections.toolCalls, (row) => row.run_id)
+  createCollectionIndex(collections.steps, (row) => row.run_id)
+  createCollectionIndex(collections.errors, (row) => row.run_id)
+}
 
 /**
  * Virtual column the authenticated principal (from the change-event header) is
@@ -563,6 +590,7 @@ export function createEntityStreamDB(
   }
   replayDb.__electricReplayBatchOffset = replayBatchOffset
   replayDb.__electricReplaySourceId = streamUrl
+  createEntityTimelineIndexes(replayDb.collections)
   const pendingWritePersistences = new Set<Promise<void>>()
   let nextWriteSequence = 0
   const pendingWriteSequences = new Set<number>()
