@@ -658,7 +658,12 @@ async function parseAttachmentForm(
 }
 
 function contentDisposition(filename: string): string {
-  const fallback = filename.replace(/["\\\r\n]/g, `_`)
+  // Header values are converted to WebIDL ByteString by undici, so every
+  // character in the raw header value must fit in a single byte. Keep the
+  // RFC 5987 filename* parameter for the full UTF-8 filename, but make the
+  // legacy filename fallback ASCII-only to avoid throwing on names containing
+  // e.g. narrow no-break spaces or emoji.
+  const fallback = filename.replace(/[^\x20-\x7e]|["\\]/g, `_`)
   return `attachment; filename="${fallback}"; filename*=UTF-8''${encodeURIComponent(filename)}`
 }
 
