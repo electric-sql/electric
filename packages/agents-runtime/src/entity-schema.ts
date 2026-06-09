@@ -394,6 +394,85 @@ type ManifestGoalEntryValue = {
   createdAt: string
   updatedAt: string
 }
+type RealtimeSessionStatusValue =
+  | `requested`
+  | `active`
+  | `closing`
+  | `closed`
+  | `failed`
+type RealtimeSessionStreamRefsValue = {
+  audio_in: string
+  audio_out: string
+  control_in: string
+  control_out: string
+}
+type ManifestRealtimeSessionEntryValue = {
+  key?: string
+  kind: `realtime-session`
+  id: string
+  provider: string
+  model: string
+  status: RealtimeSessionStatusValue
+  startedAt: string
+  endedAt?: string | null
+  streams: RealtimeSessionStreamRefsValue
+  retention: `forever`
+  meta?: Record<string, JsonValue>
+}
+type RealtimeSessionValue = {
+  key?: string
+  session_id: string
+  provider: string
+  model: string
+  status: RealtimeSessionStatusValue
+  started_at: string
+  ended_at?: string
+  streams: RealtimeSessionStreamRefsValue
+  reason?: string
+  error?: string
+  meta?: Record<string, JsonValue>
+}
+type RealtimeAudioSpanValue = {
+  key?: string
+  session_id: string
+  stream: `input` | `output`
+  producer_id: string
+  producer_epoch: number
+  seq: number
+  offset: string
+  next_offset?: string
+  byte_start?: number
+  byte_end?: number
+  byte_length: number
+  sample_start: number
+  sample_count: number
+  sample_rate: number
+  channels: number
+  codec: `pcm16`
+  timing_source: `client` | `runtime` | `provider`
+  captured_at?: string
+  received_at?: string
+  participant_id?: string
+  turn_id?: string
+  provider_item_id?: string
+  response_id?: string
+  created_at: string
+}
+type RealtimeTranscriptValue = {
+  key?: string
+  session_id: string
+  direction: `input` | `output`
+  text: string
+  status: `partial` | `final`
+  turn_id?: string
+  response_id?: string
+  audio_stream?: `input` | `output`
+  audio_offset?: string
+  audio_next_offset?: string
+  sample_start?: number
+  sample_end?: number
+  created_at: string
+}
 type ReplayWatermarkValue = {
   key?: string
   source_id: string
@@ -771,6 +850,20 @@ function createContextRemovedSchema(): Schema<ContextRemovedValue> {
     timestamp: z.string(),
   })
 }
+
+function createRealtimeSessionStreamRefsSchema(): Schema<RealtimeSessionStreamRefsValue> {
+  return z.object({
+    audio_in: z.string(),
+    audio_out: z.string(),
+    control_in: z.string(),
+    control_out: z.string(),
+  })
+}
+
+function createRealtimeSessionStatusSchema() {
+  return z.enum([`requested`, `active`, `closing`, `closed`, `failed`])
+}
+
 function createManifestSchema(): Schema<
   | ManifestChildEntryValue
   | ManifestSourceEntryValue
@@ -781,6 +874,7 @@ function createManifestSchema(): Schema<
   | ManifestCronScheduleEntryValue
   | ManifestFutureSendScheduleEntryValue
   | ManifestGoalEntryValue
+  | ManifestRealtimeSessionEntryValue
 > {
   return z.union([
     z.object({
@@ -896,6 +990,20 @@ function createManifestSchema(): Schema<
       createdAt: z.string(),
       updatedAt: z.string(),
     }),
+    z.object({
+      key: z.string().optional(),
+      ...timelineOrderField,
+      kind: z.literal(`realtime-session`),
+      id: z.string(),
+      provider: z.string(),
+      model: z.string(),
+      status: createRealtimeSessionStatusSchema(),
+      startedAt: z.string(),
+      endedAt: z.string().nullable().optional(),
+      streams: createRealtimeSessionStreamRefsSchema(),
+      retention: z.literal(`forever`).default(`forever`),
+      meta: createJsonObjectSchema().optional(),
+    }),
   ]) as unknown as Schema<
     | ManifestChildEntryValue
     | ManifestSourceEntryValue
@@ -906,7 +1014,74 @@ function createManifestSchema(): Schema<
     | ManifestCronScheduleEntryValue
     | ManifestFutureSendScheduleEntryValue
     | ManifestGoalEntryValue
+    | ManifestRealtimeSessionEntryValue
   >
+}
+
+function createRealtimeSessionSchema(): Schema<RealtimeSessionValue> {
+  return z.object({
+    key: z.string().optional(),
+    ...timelineOrderField,
+    session_id: z.string(),
+    provider: z.string(),
+    model: z.string(),
+    status: createRealtimeSessionStatusSchema(),
+    started_at: z.string(),
+    ended_at: z.string().optional(),
+    streams: createRealtimeSessionStreamRefsSchema(),
+    reason: z.string().optional(),
+    error: z.string().optional(),
+    meta: createJsonObjectSchema().optional(),
+  })
+}
+
+function createRealtimeAudioSpanSchema(): Schema<RealtimeAudioSpanValue> {
+  return z.object({
+    key: z.string().optional(),
+    ...timelineOrderField,
+    session_id: z.string(),
+    stream: z.enum([`input`, `output`]),
+    producer_id: z.string(),
+    producer_epoch: z.number().int().nonnegative(),
+    seq: z.number().int().nonnegative(),
+    offset: z.string(),
+    next_offset: z.string().optional(),
+    byte_start: z.number().int().nonnegative().optional(),
+    byte_end: z.number().int().nonnegative().optional(),
+    byte_length: z.number().int().nonnegative(),
+    sample_start: z.number().int().nonnegative(),
+    sample_count: z.number().int().nonnegative(),
+    sample_rate: z.number().int().positive(),
+    channels: z.number().int().positive(),
+    codec: z.literal(`pcm16`),
+    timing_source: z.enum([`client`, `runtime`, `provider`]),
+    captured_at: z.string().optional(),
+    received_at: z.string().optional(),
+    participant_id: z.string().optional(),
+    turn_id: z.string().optional(),
+    provider_item_id: z.string().optional(),
+    response_id: z.string().optional(),
+    created_at: z.string(),
+  })
+}
+
+function createRealtimeTranscriptSchema(): Schema<RealtimeTranscriptValue> {
+  return z.object({
+    key: z.string().optional(),
+    ...timelineOrderField,
+    session_id: z.string(),
+    direction: z.enum([`input`, `output`]),
+    text: z.string(),
+    status: z.enum([`partial`, `final`]),
+    turn_id: z.string().optional(),
+    response_id: z.string().optional(),
+    audio_stream: z.enum([`input`, `output`]).optional(),
+    audio_offset: z.string().optional(),
+    audio_next_offset: z.string().optional(),
+    sample_start: z.number().int().nonnegative().optional(),
+    sample_end: z.number().int().nonnegative().optional(),
+    created_at: z.string(),
+  })
 }
 
 function createReplayWatermarkSchema(): Schema<ReplayWatermarkValue> {
@@ -963,6 +1138,10 @@ export type ManifestFutureSendScheduleEntry =
   SequencedPersistedRow<ManifestFutureSendScheduleEntryValue>
 export type GoalStatus = GoalStatusValue
 export type ManifestGoalEntry = SequencedPersistedRow<ManifestGoalEntryValue>
+export type RealtimeSessionStatus = RealtimeSessionStatusValue
+export type RealtimeSessionStreamRefs = RealtimeSessionStreamRefsValue
+export type ManifestRealtimeSessionEntry =
+  SequencedPersistedRow<ManifestRealtimeSessionEntryValue>
 type ManifestUnion =
   | ManifestChildEntry
   | ManifestSourceEntry
@@ -973,6 +1152,7 @@ type ManifestUnion =
   | ManifestCronScheduleEntry
   | ManifestFutureSendScheduleEntry
   | ManifestGoalEntry
+  | ManifestRealtimeSessionEntry
 export type Manifest = ManifestUnion & {
   id?: string
   entity_url?: string
@@ -1004,7 +1184,11 @@ export type Manifest = ManifestUnion & {
   targetUrl?: string
   producerId?: string
   messageType?: string
-  status?: FutureSendScheduleStatus | AttachmentStatusValue | GoalStatusValue
+  status?:
+    | FutureSendScheduleStatus
+    | AttachmentStatusValue
+    | GoalStatusValue
+    | RealtimeSessionStatusValue
   sentAt?: string
   failedAt?: string
   lastError?: string
@@ -1013,7 +1197,16 @@ export type Manifest = ManifestUnion & {
   tokensUsed?: number
   summary?: string
   updatedAt?: string
+  provider?: string
+  model?: string
+  startedAt?: string
+  endedAt?: string | null
+  streams?: RealtimeSessionStreamRefs
+  retention?: `forever`
 }
+export type RealtimeSession = SequencedPersistedRow<RealtimeSessionValue>
+export type RealtimeAudioSpan = SequencedPersistedRow<RealtimeAudioSpanValue>
+export type RealtimeTranscript = SequencedPersistedRow<RealtimeTranscriptValue>
 export type ReplayWatermark = SequencedPersistedRow<ReplayWatermarkValue>
 
 // ============================================================================
@@ -1038,6 +1231,9 @@ export const ENTITY_COLLECTIONS = {
   tags: `tags`,
   slashCommands: `slashCommands`,
   manifests: `manifests`,
+  realtimeSessions: `realtimeSessions`,
+  realtimeAudioSpans: `realtimeAudioSpans`,
+  realtimeTranscripts: `realtimeTranscripts`,
   contextInserted: `contextInserted`,
   contextRemoved: `contextRemoved`,
   replayWatermarks: `replayWatermarks`,
@@ -1073,6 +1269,12 @@ export const BUILT_IN_EVENT_SCHEMAS = {
   context_removed:
     createContextRemovedSchema() as unknown as BuiltInEntitySchema<ContextRemoved>,
   manifest: createManifestSchema() as unknown as BuiltInEntitySchema<Manifest>,
+  realtime_session:
+    createRealtimeSessionSchema() as unknown as BuiltInEntitySchema<RealtimeSession>,
+  realtime_audio_span:
+    createRealtimeAudioSpanSchema() as unknown as BuiltInEntitySchema<RealtimeAudioSpan>,
+  realtime_transcript:
+    createRealtimeTranscriptSchema() as unknown as BuiltInEntitySchema<RealtimeTranscript>,
   replay_watermark:
     createReplayWatermarkSchema() as unknown as BuiltInEntitySchema<ReplayWatermark>,
 } as const
@@ -1100,6 +1302,9 @@ type EntityCollectionsDefinition = {
   tags: CollectionDefinition<TagEntry>
   slashCommands: CollectionDefinition<SlashCommandEntry>
   manifests: CollectionDefinition<Manifest>
+  realtimeSessions: CollectionDefinition<RealtimeSession>
+  realtimeAudioSpans: CollectionDefinition<RealtimeAudioSpan>
+  realtimeTranscripts: CollectionDefinition<RealtimeTranscript>
   contextInserted: CollectionDefinition<ContextInserted>
   contextRemoved: CollectionDefinition<ContextRemoved>
   replayWatermarks: CollectionDefinition<ReplayWatermark>
@@ -1202,6 +1407,24 @@ export const builtInCollections: EntityCollectionsDefinition = {
     type: `manifest`,
     primaryKey: `key`,
   },
+  realtimeSessions: {
+    schema:
+      BUILT_IN_EVENT_SCHEMAS.realtime_session as StandardSchemaV1<RealtimeSession>,
+    type: `realtime_session`,
+    primaryKey: `key`,
+  },
+  realtimeAudioSpans: {
+    schema:
+      BUILT_IN_EVENT_SCHEMAS.realtime_audio_span as StandardSchemaV1<RealtimeAudioSpan>,
+    type: `realtime_audio_span`,
+    primaryKey: `key`,
+  },
+  realtimeTranscripts: {
+    schema:
+      BUILT_IN_EVENT_SCHEMAS.realtime_transcript as StandardSchemaV1<RealtimeTranscript>,
+    type: `realtime_transcript`,
+    primaryKey: `key`,
+  },
   contextInserted: {
     schema:
       BUILT_IN_EVENT_SCHEMAS.context_inserted as StandardSchemaV1<ContextInserted>,
@@ -1238,6 +1461,8 @@ const MANAGEMENT_TYPES = new Set<string>([
   `entity_created`,
   `signal`,
   `manifest`,
+  `realtime_session`,
+  `realtime_audio_span`,
   `replay_watermark`,
   `ack`,
 ])

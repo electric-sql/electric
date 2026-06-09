@@ -45,8 +45,14 @@ import type {
   ManifestEffectEntry as EntityManifestEffectEntry,
   ManifestFutureSendScheduleEntry as EntityManifestFutureSendScheduleEntry,
   ManifestGoalEntry as EntityManifestGoalEntry,
+  ManifestRealtimeSessionEntry as EntityManifestRealtimeSessionEntry,
   ManifestSharedStateEntry as EntityManifestSharedStateEntry,
   ManifestSourceEntry as EntityManifestSourceEntry,
+  RealtimeAudioSpan as EntityRealtimeAudioSpan,
+  RealtimeSession as EntityRealtimeSession,
+  RealtimeSessionStatus as EntityRealtimeSessionStatus,
+  RealtimeSessionStreamRefs as EntityRealtimeSessionStreamRefs,
+  RealtimeTranscript as EntityRealtimeTranscript,
   Signal as EntitySignalEntry,
   WakeEntry,
 } from './entity-schema'
@@ -324,8 +330,14 @@ export type ManifestEffectEntry = EntityManifestEffectEntry
 export type ManifestFutureSendScheduleEntry =
   EntityManifestFutureSendScheduleEntry
 export type ManifestGoalEntry = EntityManifestGoalEntry
+export type ManifestRealtimeSessionEntry = EntityManifestRealtimeSessionEntry
 export type ManifestSourceEntry = EntityManifestSourceEntry
 export type ManifestSharedStateEntry = EntityManifestSharedStateEntry
+export type RealtimeSession = EntityRealtimeSession
+export type RealtimeSessionStatus = EntityRealtimeSessionStatus
+export type RealtimeSessionStreamRefs = EntityRealtimeSessionStreamRefs
+export type RealtimeAudioSpan = EntityRealtimeAudioSpan
+export type RealtimeTranscript = EntityRealtimeTranscript
 export type ContextInserted = EntityContextInserted
 export type ContextRemoved = EntityContextRemoved
 export type ContextEntryAttrs = EntityContextEntryAttrs
