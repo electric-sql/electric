@@ -897,7 +897,10 @@ defmodule Electric.Shapes.Consumer do
     {txn_fragments, state} = State.pop_buffered(state)
 
     Enum.reduce_while(txn_fragments, state, fn txn_fragment, state ->
-      state = handle_txn_fragment(txn_fragment, state)
+      state =
+        txn_fragment
+        |> handle_txn_fragment(state)
+        |> maybe_garbage_collect()
 
       if state.terminating? do
         {:halt, state}

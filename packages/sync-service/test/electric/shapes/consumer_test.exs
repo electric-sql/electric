@@ -2763,7 +2763,16 @@ defmodule Electric.Shapes.ConsumerTest do
     ]
 
     setup(ctx) do
+      delay_snapshot_creation? = Map.get(ctx, :delay_snapshot_creation?)
+      test_pid = self()
+
       patch_snapshotter(fn parent, shape_handle, _shape, %{snapshot_fun: snapshot_fun} ->
+        if delay_snapshot_creation? do
+          receive do
+            {^test_pid, :resume} -> :ok
+          end
+        end
+
         pg_snapshot = {10, 11, [10]}
         GenServer.cast(parent, {:pg_snapshot_known, shape_handle, pg_snapshot})
         GenServer.cast(parent, {:snapshot_started, shape_handle})
@@ -2888,6 +2897,70 @@ defmodule Electric.Shapes.ConsumerTest do
       # Should process without error even when no GC threshold is configured
       assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
       assert_receive {^ref, :new_changes, _}, @receive_timeout
+    end
+
+    @tag delay_snapshot_creation?: true
+    test "GC runs during buffered-fragment drain when heap exceeds threshold", ctx do
+      # threshold=1 forces GC after every fragment processed during the buffer drain.
+      # The consumer starts with buffering?=true; fragments sent before pg_snapshot_known
+      # land in the buffer. When we unblock the snapshotter it fires pg_snapshot_known
+      # which triggers :consume_buffer → process_buffered_txn_fragments (our new GC call).
+      Electric.StackConfig.put(ctx.stack_id, :consumer_gc_heap_threshold, 1)
+
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape1, ctx.stack_id)
+
+      # The snapshotter is now running but blocked on `receive {^test_pid, :resume}`.
+      assert_receive {:snapshot, ^shape_handle, snapshotter_pid}
+
+      consumer_pid = Consumer.whereis(ctx.stack_id, shape_handle)
+
+      # Trace GC events on the consumer to count full GCs fired during the drain.
+      :erlang.trace(consumer_pid, true, [:garbage_collection])
+
+      # Send a large-payload fragment while buffering?=true — it goes into the buffer.
+      large_binary = :binary.copy(<<0>>, 200_000)
+      xid = 11
+      lsn = Lsn.from_integer(10)
+
+      txn =
+        complete_txn_fragment(xid, lsn, [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "1", "value" => large_binary},
+            log_offset: LogOffset.new(lsn, 0)
+          }
+        ])
+
+      assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
+
+      # Unblock the snapshotter: fires pg_snapshot_known → :consume_buffer →
+      # process_buffered_txn_fragments where our new maybe_garbage_collect() call fires.
+      send(snapshotter_pid, {self(), :resume})
+
+      ref = Shapes.Consumer.register_for_changes(ctx.stack_id, shape_handle)
+      assert_receive {^ref, :new_changes, _}, @receive_timeout
+
+      :erlang.trace(consumer_pid, false, [:garbage_collection])
+
+      # Count how many full GC (garbage_collect) trace messages arrived.
+      # :garbage_collection traces emit {:trace, pid, :gc_major_start, info} /
+      # :gc_major_end pairs (one per full :erlang.garbage_collect() call).
+      gc_events =
+        Stream.repeatedly(fn ->
+          receive do
+            {:trace, ^consumer_pid, :gc_major_start, _} -> :gc
+            {:trace, ^consumer_pid, :gc_minor_start, _} -> :minor
+            {:trace, ^consumer_pid, :gc_major_end, _} -> :skip
+            {:trace, ^consumer_pid, :gc_minor_end, _} -> :skip
+          after
+            0 -> :done
+          end
+        end)
+        |> Stream.take_while(&(&1 != :done))
+        |> Enum.count(&(&1 == :gc))
+
+      assert gc_events >= 1,
+             "expected at least one full GC during buffered-fragment drain, got #{gc_events}"
     end
   end
 
