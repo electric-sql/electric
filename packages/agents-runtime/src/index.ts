@@ -81,10 +81,12 @@ export type {
 } from './types'
 
 export {
+  BUILT_IN_COLLECTION_TYPES,
   ENTITY_COLLECTIONS,
   builtInCollections,
   entityStateSchema,
   isManagementEvent,
+  jsonSchema,
   passthrough,
 } from './entity-schema'
 export type {
@@ -181,6 +183,8 @@ export {
 export type {
   EntityTimelineData,
   EntityTimelineContentItem,
+  EntityTimelineCustomRow,
+  EntityTimelineCustomSource,
   EntityTimelineInboxMode,
   EntityTimelineQueryOptions,
   EntityTimelineQueryRow,

@@ -19,6 +19,7 @@ import {
   createContextSkillLoader,
   completeWithLowCostModel,
 } from '@electric-ax/agents-runtime'
+import { commentCollectionSchema } from './comment-schema'
 import type {
   EntityRegistry,
   HandlerContext,
@@ -760,6 +761,9 @@ export function registerHorton(
   registry.define(`horton`, {
     description: `Friendly capable assistant — chat, code, research, dispatch`,
     creationSchema: hortonCreationSchema,
+    customCollectionSchemas: {
+      comment: commentCollectionSchema,
+    },
     permissionGrants: [
       {
         subject_kind: `principal_kind`,

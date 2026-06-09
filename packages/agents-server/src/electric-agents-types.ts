@@ -447,6 +447,7 @@ export interface ElectricAgentsEntity {
   type_revision?: number
   inbox_schemas?: Record<string, Record<string, unknown>>
   state_schemas?: Record<string, Record<string, unknown>>
+  custom_collection_schemas?: Record<string, Record<string, unknown>>
   created_by?: string
   created_at: number
   updated_at: number
@@ -463,6 +464,7 @@ export interface PublicElectricAgentsEntity {
   spawn_args?: Record<string, unknown>
   sandbox?: EntitySandboxSelection
   parent?: string
+  custom_collection_schemas?: Record<string, Record<string, unknown>>
   created_by?: string
   created_at: number
   updated_at: number
@@ -488,6 +490,7 @@ export function toPublicEntity(
     spawn_args: entity.spawn_args,
     sandbox: entity.sandbox,
     parent: entity.parent,
+    custom_collection_schemas: entity.custom_collection_schemas,
     created_by: entity.created_by,
     created_at: entity.created_at,
     updated_at: entity.updated_at,
@@ -500,6 +503,7 @@ export interface ElectricAgentsEntityType {
   creation_schema?: Record<string, unknown>
   inbox_schemas?: Record<string, Record<string, unknown>>
   state_schemas?: Record<string, Record<string, unknown>>
+  custom_collection_schemas?: Record<string, Record<string, unknown>>
   slash_commands?: Array<SlashCommandDefinition>
   serve_endpoint?: string
   default_dispatch_policy?: DispatchPolicy
@@ -514,6 +518,7 @@ export interface RegisterEntityTypeRequest {
   creation_schema?: Record<string, unknown>
   inbox_schemas?: Record<string, Record<string, unknown>>
   state_schemas?: Record<string, Record<string, unknown>>
+  custom_collection_schemas?: Record<string, Record<string, unknown>>
   slash_commands?: Array<SlashCommandDefinition>
   serve_endpoint?: string
   default_dispatch_policy?: DispatchPolicy

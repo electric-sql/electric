@@ -959,6 +959,106 @@ describe(`ElectricAgentsRoutes send endpoint`, () => {
   })
 })
 
+describe(`ElectricAgentsRoutes collection write endpoint`, () => {
+  it(`delegates a custom collection write to the manager`, async () => {
+    const manager = {
+      registry: {
+        getEntity: vi.fn().mockResolvedValue({ url: `/chat/test` }),
+        getEntityType: vi.fn(),
+      },
+      ensurePrincipal: vi.fn().mockResolvedValue(undefined),
+      appendCollectionRow: vi.fn().mockResolvedValue({ key: `auto-1` }),
+    } as any
+
+    const response = await routeResponse(
+      manager,
+      `POST`,
+      `/_electric/entities/chat/test/collections/note`,
+      { value: { body: `hi` } }
+    )
+
+    expect(response.status).toBe(201)
+    expect(manager.appendCollectionRow).toHaveBeenCalledWith(
+      `/chat/test`,
+      `note`,
+      { key: undefined, value: { body: `hi` } }
+    )
+    expect(await responseJson(response)).toEqual({ key: `auto-1` })
+  })
+
+  it(`returns 404 when the entity is missing`, async () => {
+    const manager = {
+      registry: {
+        getEntity: vi.fn().mockResolvedValue(null),
+        getEntityType: vi.fn().mockResolvedValue({ name: `chat` }),
+      },
+      appendCollectionRow: vi.fn(),
+    } as any
+
+    const response = await routeResponse(
+      manager,
+      `POST`,
+      `/_electric/entities/chat/missing/collections/note`,
+      { value: { body: `hi` } }
+    )
+
+    expect(response.status).toBe(404)
+    expect(manager.appendCollectionRow).not.toHaveBeenCalled()
+  })
+
+  it(`rejects bodies that are missing the value field`, async () => {
+    const manager = {
+      registry: {
+        getEntity: vi.fn().mockResolvedValue({ url: `/chat/test` }),
+        getEntityType: vi.fn(),
+      },
+      ensurePrincipal: vi.fn().mockResolvedValue(undefined),
+      appendCollectionRow: vi.fn(),
+    } as any
+
+    const response = await routeResponse(
+      manager,
+      `POST`,
+      `/_electric/entities/chat/test/collections/note`,
+      {}
+    )
+
+    expect(response.status).toBe(400)
+    expect(manager.appendCollectionRow).not.toHaveBeenCalled()
+  })
+
+  it(`propagates manager-level rejections of reserved collection names`, async () => {
+    const manager = {
+      registry: {
+        getEntity: vi.fn().mockResolvedValue({ url: `/chat/test` }),
+        getEntityType: vi.fn(),
+      },
+      ensurePrincipal: vi.fn().mockResolvedValue(undefined),
+      appendCollectionRow: vi
+        .fn()
+        .mockRejectedValue(
+          new ElectricAgentsError(
+            `INVALID_REQUEST`,
+            `Collection "inbox" is reserved by a built-in and cannot be written through the custom collection endpoint`,
+            400
+          )
+        ),
+    } as any
+
+    const response = await routeResponse(
+      manager,
+      `POST`,
+      `/_electric/entities/chat/test/collections/inbox`,
+      { value: { body: `hi` } }
+    )
+
+    expect(response.status).toBe(400)
+    expect(await responseJson(response)).toMatchObject({
+      error: { code: `INVALID_REQUEST` },
+    })
+  })
+})
+
 describe(`ElectricAgentsRoutes spawn endpoint request validation`, () => {
   it(`rejects malformed JSON before spawning`, async () => {
     const manager = {

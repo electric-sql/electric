@@ -14,6 +14,7 @@ import {
 import { caseWhen } from '@tanstack/db'
 import type {
   Collection,
+  Context,
   InitialQueryBuilder,
   QueryBuilder,
 } from '@tanstack/db'
@@ -176,8 +177,34 @@ export interface EntityTimelineData {
 
 export type EntityTimelineInboxMode = `processed` | `all`
 
+/**
+ * Envelope for custom-collection rows projected into the timeline. Each
+ * custom collection is an entity-type-declared shape (see
+ * `custom_collection_schemas` on the entity type); the caller pre-shapes
+ * its rows into `{ collection, key, order, value }` and the runtime
+ * weaves the source into the same unionAll/orderBy pipeline as the
+ * built-in timeline collections so there's a single ordered live query.
+ */
+export interface EntityTimelineCustomRow {
+  collection: string
+  key: string
+  order: TimelineOrder
+  value: Record<string, unknown>
+}
+
+/**
+ * Pre-shaped query-builder branch a caller supplies to project custom
+ * collections into the timeline. The builder's selected row shape must
+ * match `EntityTimelineCustomRow`. Multiple custom collections compose by
+ * unioning them client-side before passing the result as `customSource`.
+ */
+export type EntityTimelineCustomSource = QueryBuilder<
+  Context & { result: EntityTimelineCustomRow; hasResult: true }
+>
+
 export interface EntityTimelineQueryOptions {
   inboxMode?: EntityTimelineInboxMode
+  customSource?: EntityTimelineCustomSource
 }
 
 export interface EntityTimelineTextChunk {
@@ -259,6 +286,7 @@ export type EntityTimelineQueryRow =
       wake?: undefined
       signal?: undefined
       manifest?: undefined
+      custom?: undefined
     }
   | {
       $key: string
@@ -267,6 +295,7 @@ export type EntityTimelineQueryRow =
       wake?: undefined
       signal?: undefined
       manifest?: undefined
+      custom?: undefined
     }
   | {
       $key: string
@@ -275,6 +304,7 @@ export type EntityTimelineQueryRow =
       wake: EntityTimelineWakeRow
       signal?: undefined
       manifest?: undefined
+      custom?: undefined
     }
   | {
       $key: string
@@ -283,6 +313,7 @@ export type EntityTimelineQueryRow =
       wake?: undefined
       signal: EntityTimelineSignalRow
       manifest?: undefined
+      custom?: undefined
     }
   | {
       $key: string
@@ -291,6 +322,16 @@ export type EntityTimelineQueryRow =
       wake?: undefined
       signal?: undefined
       manifest: ManifestEntry
+      custom?: undefined
+    }
+  | {
+      $key: string
+      inbox?: undefined
+      run?: undefined
+      wake?: undefined
+      signal?: undefined
+      manifest?: undefined
+      custom: EntityTimelineCustomRow
     }
 
 function normalizeTimelineRun(run: IncludesRun): IncludesRun {
@@ -1376,36 +1417,51 @@ function buildEntityTimelineQuery(
       })),
   }))
 
+  const baseBranches = {
+    inbox: inboxSource,
+    run: runSource,
+    wake: wakeSource,
+    signal: signalSource,
+    manifest: db.collections.manifests,
+  }
+  const branches = opts.customSource
+    ? { ...baseBranches, custom: opts.customSource }
+    : baseBranches
+
   return q
-    .unionAll({
-      inbox: inboxSource,
-      run: runSource,
-      wake: wakeSource,
-      signal: signalSource,
-      manifest: db.collections.manifests,
-    })
-    .orderBy(({ inbox, run, wake, signal, manifest }) =>
+    .unionAll(branches)
+    .orderBy((args) =>
       coalesce(
-        inbox.order,
-        run.order,
-        wake.order,
-        signal.order,
-        manifest._timeline_order,
+        args.inbox.order,
+        args.run.order,
+        args.wake.order,
+        args.signal.order,
+        args.manifest._timeline_order,
+        `custom` in args ? args.custom.order : undefined,
         `~`
       )
     )
-    .orderBy(({ inbox, run, wake, signal, manifest }) =>
+    .orderBy((args) =>
       coalesce(
-        caseWhen(inbox.key, `inbox`),
-        caseWhen(run.key, `run`),
-        caseWhen(wake.key, `wake`),
-        caseWhen(signal.key, `signal`),
-        caseWhen(manifest.key, `manifest`),
+        caseWhen(args.inbox.key, `inbox`),
+        caseWhen(args.run.key, `run`),
+        caseWhen(args.wake.key, `wake`),
+        caseWhen(args.signal.key, `signal`),
+        caseWhen(args.manifest.key, `manifest`),
+        `custom` in args ? caseWhen(args.custom.key, `custom`) : undefined,
         ``
       )
     )
-    .orderBy(({ inbox, run, wake, signal, manifest }) =>
-      coalesce(inbox.key, run.key, wake.key, signal.key, manifest.key, ``)
+    .orderBy((args) =>
+      coalesce(
+        args.inbox.key,
+        args.run.key,
+        args.wake.key,
+        args.signal.key,
+        args.manifest.key,
+        `custom` in args ? args.custom.key : undefined,
+        ``
+      )
     )
 }
 

@@ -33,6 +33,29 @@ export function passthrough<T>(): StandardSchemaV1<T> {
   }
 }
 
+/**
+ * Wraps a plain JSON Schema object in a `StandardJSONSchemaV1` envelope so
+ * entity definitions can declare `inboxSchemas` / `stateSchemas` /
+ * `customCollectionSchemas` with a hand-written JSON Schema (rather than
+ * going through Zod or another Standard-Schema library). The server
+ * enforces the schema at write time.
+ */
+export function jsonSchema<T>(
+  schema: Readonly<Record<string, unknown>>
+): StandardJSONSchemaV1<T> {
+  const frozen = schema as Record<string, unknown>
+  return {
+    '~standard': {
+      version: 1 as const,
+      vendor: `electric-agents`,
+      jsonSchema: {
+        input: () => frozen,
+        output: () => frozen,
+      },
+    },
+  }
+}
+
 // ============================================================================
 // Standard Schemas
 // ============================================================================
@@ -1130,6 +1153,10 @@ export const builtInCollections: EntityCollectionsDefinition = {
  */
 export const entityStateSchema: StateSchema<EntityCollectionsDefinition> =
   createStateSchema(builtInCollections)
+
+export const BUILT_IN_COLLECTION_TYPES: ReadonlySet<string> = new Set(
+  Object.values(builtInCollections).map((collection) => collection.type)
+)
 
 // ============================================================================
 // Management Event Guard

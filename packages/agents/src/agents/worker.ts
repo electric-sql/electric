@@ -1,5 +1,6 @@
 import { Type } from '@sinclair/typebox'
 import { db } from '@electric-ax/agents-runtime'
+import { commentCollectionSchema } from './comment-schema'
 import {
   createBashTool,
   braveSearchTool,
@@ -302,6 +303,9 @@ export function registerWorker(
   const { streamFn, modelCatalog } = options
   registry.define(`worker`, {
     description: `Internal — generic worker spawned by other agents. Configure via spawn args (systemPrompt + tools + optional sharedDb).`,
+    customCollectionSchemas: {
+      comment: commentCollectionSchema,
+    },
     permissionGrants: [
       {
         subject_kind: `principal_kind`,

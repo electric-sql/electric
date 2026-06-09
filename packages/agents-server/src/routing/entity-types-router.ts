@@ -87,6 +87,7 @@ const registerEntityTypeBodySchema = Type.Object(
     creation_schema: Type.Optional(jsonObjectSchema),
     inbox_schemas: Type.Optional(schemaMapSchema),
     state_schemas: Type.Optional(schemaMapSchema),
+    custom_collection_schemas: Type.Optional(schemaMapSchema),
     slash_commands: Type.Optional(Type.Array(slashCommandSchema)),
     serve_endpoint: Type.Optional(Type.String()),
     default_dispatch_policy: Type.Optional(dispatchPolicySchema),
@@ -101,6 +102,7 @@ const amendEntityTypeSchemasBodySchema = Type.Object(
   {
     inbox_schemas: Type.Optional(schemaMapSchema),
     state_schemas: Type.Optional(schemaMapSchema),
+    custom_collection_schemas: Type.Optional(schemaMapSchema),
   },
   { additionalProperties: false }
 )
@@ -349,6 +351,7 @@ async function amendSchemas(
   const updated = await ctx.entityManager.amendSchemas(request.params.name, {
     inbox_schemas: parsed.inbox_schemas,
     state_schemas: parsed.state_schemas,
+    custom_collection_schemas: parsed.custom_collection_schemas,
   })
   return json(toPublicEntityType(updated))
 }
@@ -455,6 +458,7 @@ function normalizeEntityTypeRequest(
     creation_schema: parsed.creation_schema,
     inbox_schemas: parsed.inbox_schemas,
     state_schemas: parsed.state_schemas,
+    custom_collection_schemas: parsed.custom_collection_schemas,
     slash_commands: parsed.slash_commands,
     serve_endpoint: serveEndpoint,
     default_dispatch_policy:

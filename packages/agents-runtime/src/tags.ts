@@ -89,6 +89,10 @@ export const entityMembershipRowSchema = z.object({
   type_revision: z.number().int().nullable().optional(),
   inbox_schemas: z.record(z.string(), z.unknown()).nullable().optional(),
   state_schemas: z.record(z.string(), z.unknown()).nullable().optional(),
+  custom_collection_schemas: z
+    .record(z.string(), z.unknown())
+    .nullable()
+    .optional(),
   created_at: z.number(),
   updated_at: z.number(),
 })

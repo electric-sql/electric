@@ -326,8 +326,17 @@ const eventSourceSubscriptionBodySchema = Type.Object({
   reason: Type.Optional(Type.String()),
 })
 
+const collectionWriteBodySchema = Type.Object(
+  {
+    key: Type.Optional(Type.String()),
+    value: Type.Record(Type.String(), Type.Unknown()),
+  },
+  { additionalProperties: false }
+)
+
 type SpawnBody = Static<typeof spawnBodySchema>
 type SendBody = Static<typeof sendBodySchema>
+type CollectionWriteBody = Static<typeof collectionWriteBodySchema>
 type InboxMessageBody = Static<typeof inboxMessageBodySchema>
 type ForkBody = Static<typeof forkBodySchema>
 type SetTagBody = Static<typeof setTagBodySchema>
@@ -406,6 +415,13 @@ entitiesRouter.post(
   withSchema(sendBodySchema),
   withEntityPermission(`write`),
   sendEntity
+)
+entitiesRouter.post(
+  `/:type/:instanceId/collections/:collection`,
+  withExistingEntity,
+  withSchema(collectionWriteBodySchema),
+  withEntityPermission(`write`),
+  writeCollectionRow
 )
 entitiesRouter.post(
   `/:type/:instanceId/attachments`,
@@ -1294,6 +1310,22 @@ async function sendEntity(
   }
 
   return status(204)
+}
+
+async function writeCollectionRow(
+  request: AgentsRouteRequest,
+  ctx: TenantContext
+): Promise<Response> {
+  const parsed = routeBody<CollectionWriteBody>(request)
+  await ctx.entityManager.ensurePrincipal(ctx.principal)
+  const { entityUrl } = requireExistingEntityRoute(request)
+  const collection = decodeURIComponent(request.params.collection)
+  const result = await ctx.entityManager.appendCollectionRow(
+    entityUrl,
+    collection,
+    { key: parsed.key, value: parsed.value }
+  )
+  return json(result, { status: 201 })
 }
 
 async function createAttachment(

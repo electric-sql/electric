@@ -38,10 +38,12 @@ function createAttachmentManager({
   entityStatus = `running`,
   readJson = [],
   streamClient = {},
+  customCollectionSchemas,
 }: {
   entityStatus?: string
   readJson?: Array<unknown>
   streamClient?: Record<string, unknown>
+  customCollectionSchemas?: Record<string, Record<string, unknown>>
 } = {}) {
   return {
     manager: new EntityManager({
@@ -50,6 +52,7 @@ function createAttachmentManager({
           url: `/chat/session-1`,
           status: entityStatus,
           streams: { main: `/chat/session-1` },
+          custom_collection_schemas: customCollectionSchemas,
         }),
         getEntityType: vi.fn(),
         replaceEntityManifestSource: vi.fn(),
@@ -72,6 +75,14 @@ function createAttachmentManager({
     }),
   }
 }
+
+// Permissive note schema for the happy-path tests below — every property
+// optional so we cover the appendCollectionRow plumbing without the
+// schema-shape itself being the subject under test.
+const NOTE_SCHEMA = {
+  type: `object`,
+  additionalProperties: true,
+} as const
 
 function attachmentManifest(value: Record<string, unknown>) {
   return {
@@ -200,6 +211,181 @@ describe(`ElectricAgentsManager attachments`, () => {
     })
 
     expect(remove).not.toHaveBeenCalled()
+  })
+})
+
+describe(`ElectricAgentsManager appendCollectionRow`, () => {
+  it(`appends the row to the entity main stream and returns the key`, async () => {
+    const append = vi.fn().mockResolvedValue(undefined)
+    const { manager } = createAttachmentManager({
+      streamClient: { append },
+      customCollectionSchemas: { note: NOTE_SCHEMA },
+    })
+
+    const result = await manager.appendCollectionRow(
+      `/chat/session-1`,
+      `note`,
+      { key: `n-1`, value: { body: `hello` } }
+    )
+
+    expect(result).toEqual({ key: `n-1` })
+    expect(append).toHaveBeenCalledTimes(1)
+    const [streamPath, encoded] = append.mock.calls[0]!
+    expect(streamPath).toBe(`/chat/session-1`)
+    const event = JSON.parse(new TextDecoder().decode(encoded))
+    expect(event).toEqual({
+      type: `note`,
+      key: `n-1`,
+      value: { body: `hello` },
+      headers: { operation: `insert` },
+    })
+  })
+
+  it(`auto-generates a key when none is provided`, async () => {
+    const append = vi.fn().mockResolvedValue(undefined)
+    const { manager } = createAttachmentManager({
+      streamClient: { append },
+      customCollectionSchemas: { note: NOTE_SCHEMA },
+    })
+
+    const result = await manager.appendCollectionRow(
+      `/chat/session-1`,
+      `note`,
+      { value: { body: `hi` } }
+    )
+
+    expect(result.key).toMatch(/^note-\d+-[a-z0-9]+$/)
+  })
+
+  it(`rejects writes targeting a built-in collection name`, async () => {
+    const append = vi.fn()
+    const { manager } = createAttachmentManager({ streamClient: { append } })
+
+    await expect(
+      manager.appendCollectionRow(`/chat/session-1`, `inbox`, {
+        value: { body: `hi` },
+      })
+    ).rejects.toMatchObject({
+      status: 400,
+      message: `Collection "inbox" is reserved by a built-in and cannot be written through the custom collection endpoint`,
+    })
+    expect(append).not.toHaveBeenCalled()
+  })
+
+  it(`rejects invalid collection names`, async () => {
+    const append = vi.fn()
+    const { manager } = createAttachmentManager({ streamClient: { append } })
+
+    await expect(
+      manager.appendCollectionRow(`/chat/session-1`, `bad name`, {
+        value: { body: `hi` },
+      })
+    ).rejects.toMatchObject({
+      status: 400,
+      message: `Invalid collection name "bad name"`,
+    })
+    expect(append).not.toHaveBeenCalled()
+  })
+
+  it(`rejects non-object values`, async () => {
+    const append = vi.fn()
+    const { manager } = createAttachmentManager({ streamClient: { append } })
+
+    await expect(
+      manager.appendCollectionRow(`/chat/session-1`, `note`, {
+        value: `oops` as unknown as object,
+      })
+    ).rejects.toMatchObject({
+      status: 400,
+      message: `Collection value must be a JSON object`,
+    })
+    expect(append).not.toHaveBeenCalled()
+  })
+
+  it(`rejects writes when the entity is not accepting writes`, async () => {
+    const append = vi.fn()
+    const { manager } = createAttachmentManager({
+      entityStatus: `stopped`,
+      streamClient: { append },
+    })
+
+    await expect(
+      manager.appendCollectionRow(`/chat/session-1`, `note`, {
+        value: { body: `hi` },
+      })
+    ).rejects.toMatchObject({
+      status: 409,
+      message: `Entity is not accepting writes`,
+    })
+    expect(append).not.toHaveBeenCalled()
+  })
+
+  it(`validates the value against a declared custom collection schema`, async () => {
+    const commentSchema = {
+      type: `object`,
+      properties: {
+        body: { type: `string`, minLength: 1 },
+        from_principal: { type: `string` },
+      },
+      required: [`body`, `from_principal`],
+      additionalProperties: true,
+    }
+    const append = vi.fn().mockResolvedValue(undefined)
+    const manager = new EntityManager({
+      registry: {
+        getEntity: vi.fn().mockResolvedValue({
+          url: `/coder/session-1`,
+          type: `coder`,
+          status: `idle`,
+          streams: { main: `/coder/session-1/main` },
+          custom_collection_schemas: { comment: commentSchema },
+        }),
+        getEntityType: vi.fn().mockResolvedValue({
+          name: `coder`,
+          custom_collection_schemas: { comment: commentSchema },
+        }),
+        close: vi.fn(),
+      } as any,
+      streamClient: { append } as any,
+      validator: new SchemaValidator(),
+      wakeRegistry: {
+        setTimeoutCallback: vi.fn(),
+        setDebounceCallback: vi.fn(),
+      } as any,
+    })
+
+    // Happy path: matches the schema.
+    await manager.appendCollectionRow(`/coder/session-1`, `comment`, {
+      value: { body: `looks right`, from_principal: `/principal/user%3Ame` },
+    })
+    expect(append).toHaveBeenCalledTimes(1)
+
+    // Sad path: missing required field.
+    await expect(
+      manager.appendCollectionRow(`/coder/session-1`, `comment`, {
+        value: { from_principal: `/principal/user%3Ame` },
+      })
+    ).rejects.toMatchObject({ status: 422 })
+    expect(append).toHaveBeenCalledTimes(1)
+  })
+
+  it(`rejects writes to collections the entity type did not declare`, async () => {
+    const append = vi.fn()
+    const { manager } = createAttachmentManager({
+      streamClient: { append },
+    })
+
+    // No custom_collection_schemas on entity or type — the collection
+    // isn't a recognized shape, so the write is rejected.
+    await expect(
+      manager.appendCollectionRow(`/chat/session-1`, `anything`, {
+        value: { wild: { stuff: [1, 2, 3] } },
+      })
+    ).rejects.toMatchObject({
+      status: 422,
+      message: `Custom collection "anything" is not declared on entity type "undefined"`,
+    })
+    expect(append).not.toHaveBeenCalled()
   })
 })
 

@@ -46,6 +46,7 @@ interface EntityShapeRow extends Row<unknown> {
   type_revision?: number | null
   inbox_schemas?: Record<string, Record<string, unknown>> | null
   state_schemas?: Record<string, Record<string, unknown>> | null
+  custom_collection_schemas?: Record<string, Record<string, unknown>> | null
   created_at: number
   updated_at: number
 }
@@ -63,6 +64,7 @@ const ENTITY_SHAPE_COLUMNS = [
   `type_revision`,
   `inbox_schemas`,
   `state_schemas`,
+  `custom_collection_schemas`,
   `created_at`,
   `updated_at`,
 ] as const
@@ -129,6 +131,7 @@ function toMemberRow(entity: EntityShapeRow): EntityMembershipRow {
     type_revision: entity.type_revision ?? null,
     inbox_schemas: entity.inbox_schemas ?? null,
     state_schemas: entity.state_schemas ?? null,
+    custom_collection_schemas: entity.custom_collection_schemas ?? null,
     created_at: entity.created_at,
     updated_at: entity.updated_at,
   }

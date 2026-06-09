@@ -1,4 +1,5 @@
 export { createEntityStreamDB } from './entity-stream-db'
+export { passthrough } from './entity-schema'
 export { createAgentsClient } from './agents-client'
 export {
   compareTimelineOrders,

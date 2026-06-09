@@ -633,6 +633,7 @@ export class PostgresRegistry {
         creationSchema: et.creation_schema ?? null,
         inboxSchemas: et.inbox_schemas ?? null,
         stateSchemas: et.state_schemas ?? null,
+        customCollectionSchemas: et.custom_collection_schemas ?? null,
         slashCommands: et.slash_commands ?? null,
         serveEndpoint: et.serve_endpoint ?? null,
         defaultDispatchPolicy: et.default_dispatch_policy ?? null,
@@ -647,6 +648,7 @@ export class PostgresRegistry {
           creationSchema: et.creation_schema ?? null,
           inboxSchemas: et.inbox_schemas ?? null,
           stateSchemas: et.state_schemas ?? null,
+          customCollectionSchemas: et.custom_collection_schemas ?? null,
           slashCommands: et.slash_commands ?? null,
           serveEndpoint: et.serve_endpoint ?? null,
           defaultDispatchPolicy: et.default_dispatch_policy ?? null,
@@ -670,6 +672,7 @@ export class PostgresRegistry {
         creationSchema: et.creation_schema ?? null,
         inboxSchemas: et.inbox_schemas ?? null,
         stateSchemas: et.state_schemas ?? null,
+        customCollectionSchemas: et.custom_collection_schemas ?? null,
         slashCommands: et.slash_commands ?? null,
         serveEndpoint: et.serve_endpoint ?? null,
         defaultDispatchPolicy: et.default_dispatch_policy ?? null,
@@ -712,6 +715,7 @@ export class PostgresRegistry {
         creationSchema: et.creation_schema ?? null,
         inboxSchemas: et.inbox_schemas ?? null,
         stateSchemas: et.state_schemas ?? null,
+        customCollectionSchemas: et.custom_collection_schemas ?? null,
         slashCommands: et.slash_commands ?? null,
         serveEndpoint: et.serve_endpoint ?? null,
         defaultDispatchPolicy: et.default_dispatch_policy ?? null,
@@ -743,6 +747,7 @@ export class PostgresRegistry {
             typeRevision: entity.type_revision ?? null,
             inboxSchemas: entity.inbox_schemas ?? null,
             stateSchemas: entity.state_schemas ?? null,
+            customCollectionSchemas: entity.custom_collection_schemas ?? null,
             createdAt: entity.created_at,
             updatedAt: entity.updated_at,
           })
@@ -1833,6 +1838,9 @@ export class PostgresRegistry {
       state_schemas: row.stateSchemas as
         | Record<string, Record<string, unknown>>
         | undefined,
+      custom_collection_schemas: row.customCollectionSchemas as
+        | Record<string, Record<string, unknown>>
+        | undefined,
       slash_commands:
         (row.slashCommands as ElectricAgentsEntityType[`slash_commands`]) ??
         undefined,
@@ -1904,6 +1912,9 @@ export class PostgresRegistry {
         | Record<string, Record<string, unknown>>
         | undefined,
       state_schemas: row.stateSchemas as
+        | Record<string, Record<string, unknown>>
+        | undefined,
+      custom_collection_schemas: row.customCollectionSchemas as
         | Record<string, Record<string, unknown>>
         | undefined,
       created_at: row.createdAt,

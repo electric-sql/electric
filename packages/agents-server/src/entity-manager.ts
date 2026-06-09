@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import fastq from 'fastq'
 import {
+  BUILT_IN_COLLECTION_TYPES,
   COMPOSER_INPUT_MESSAGE_TYPE,
   assertTags,
   entityStateSchema,
@@ -465,6 +466,7 @@ export class EntityManager {
     this.validateSchema(req.creation_schema)
     this.validateSchemaMap(req.inbox_schemas)
     this.validateSchemaMap(req.state_schemas)
+    this.validateSchemaMap(req.custom_collection_schemas)
     this.validateSlashCommands(req.slash_commands)
     const defaultDispatchPolicy = req.default_dispatch_policy
       ? this.validateDispatchPolicy(req.default_dispatch_policy, {
@@ -480,6 +482,7 @@ export class EntityManager {
       creation_schema: req.creation_schema,
       inbox_schemas: req.inbox_schemas,
       state_schemas: req.state_schemas,
+      custom_collection_schemas: req.custom_collection_schemas,
       slash_commands: req.slash_commands,
       serve_endpoint: req.serve_endpoint,
       default_dispatch_policy: defaultDispatchPolicy,
@@ -734,6 +737,7 @@ export class EntityManager {
       type_revision: entityType.revision,
       inbox_schemas: entityType.inbox_schemas,
       state_schemas: entityType.state_schemas,
+      custom_collection_schemas: entityType.custom_collection_schemas,
       created_at: now,
       created_by: req.created_by ?? parentEntity?.created_by,
       updated_at: now,
@@ -2501,6 +2505,94 @@ export class EntityManager {
     return /^\/[^/]+\/[^/]+\/attachments\/[^/]+$/.test(path)
   }
 
+  async appendCollectionRow(
+    entityUrl: string,
+    collection: string,
+    req: { key?: string; value: unknown }
+  ): Promise<{ key: string }> {
+    if (BUILT_IN_COLLECTION_TYPES.has(collection)) {
+      throw new ElectricAgentsError(
+        ErrCodeInvalidRequest,
+        `Collection "${collection}" is reserved by a built-in and cannot be written through the custom collection endpoint`,
+        400
+      )
+    }
+    if (!/^[a-zA-Z][a-zA-Z0-9_-]{0,127}$/.test(collection)) {
+      throw new ElectricAgentsError(
+        ErrCodeInvalidRequest,
+        `Invalid collection name "${collection}"`,
+        400
+      )
+    }
+    if (req.value === null || typeof req.value !== `object`) {
+      throw new ElectricAgentsError(
+        ErrCodeInvalidRequest,
+        `Collection value must be a JSON object`,
+        400
+      )
+    }
+
+    const entity = await this.registry.getEntity(entityUrl)
+    if (!entity) {
+      throw new ElectricAgentsError(ErrCodeNotFound, `Entity not found`, 404)
+    }
+    if (rejectsNormalWrites(entity.status)) {
+      throw new ElectricAgentsError(
+        ErrCodeNotRunning,
+        `Entity is not accepting writes`,
+        409
+      )
+    }
+    if (this.isForkWorkLockedEntity(entityUrl)) {
+      this.assertEntityNotForkWorkLocked(entityUrl)
+    }
+
+    const { customCollectionSchemas } = await this.getEffectiveSchemas(entity)
+    const schema = customCollectionSchemas?.[collection]
+    if (!schema) {
+      throw new ElectricAgentsError(
+        ErrCodeInvalidRequest,
+        `Custom collection "${collection}" is not declared on entity type "${entity.type}"`,
+        422
+      )
+    }
+    const valErr = this.validator.validate(schema, req.value)
+    if (valErr) {
+      throw new ElectricAgentsError(
+        valErr.code,
+        valErr.message,
+        422,
+        valErr.details
+      )
+    }
+
+    const key =
+      req.key ??
+      `${collection}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const event = {
+      type: collection,
+      key,
+      value: req.value,
+      headers: { operation: `insert` as const },
+    }
+    const encoded = this.encodeChangeEvent(event)
+
+    try {
+      await this.streamClient.append(entity.streams.main, encoded)
+    } catch (err) {
+      if (this.isClosedStreamError(err)) {
+        throw new ElectricAgentsError(
+          ErrCodeNotRunning,
+          `Entity is stopped`,
+          409
+        )
+      }
+      throw err
+    }
+
+    return { key }
+  }
+
   async createAttachment(
     entityUrl: string,
     req: CreateAttachmentRequest
@@ -3619,6 +3711,7 @@ export class EntityManager {
     schemas: {
       inbox_schemas?: Record<string, Record<string, unknown>>
       state_schemas?: Record<string, Record<string, unknown>>
+      custom_collection_schemas?: Record<string, Record<string, unknown>>
     }
   ): Promise<ElectricAgentsEntityType> {
     if (typeName === `principal`) {
@@ -3632,6 +3725,7 @@ export class EntityManager {
     // Validate each provided schema via validateSchemaSubset.
     this.validateSchemaMap(schemas.inbox_schemas)
     this.validateSchemaMap(schemas.state_schemas)
+    this.validateSchemaMap(schemas.custom_collection_schemas)
 
     // Look up current entity type.
     const existing = await this.registry.getEntityType(typeName)
@@ -3643,37 +3737,23 @@ export class EntityManager {
       )
     }
 
-    // Check for key overlap (additive only, no overwriting).
-    if (schemas.inbox_schemas && existing.inbox_schemas) {
-      for (const key of Object.keys(schemas.inbox_schemas)) {
-        if (key in existing.inbox_schemas) {
-          throw new ElectricAgentsError(
-            ErrCodeSchemaKeyExists,
-            `Cannot amend existing inbox schema key: ${key}`,
-            409
-          )
-        }
-      }
-    }
-    if (schemas.state_schemas && existing.state_schemas) {
-      for (const key of Object.keys(schemas.state_schemas)) {
-        if (key in existing.state_schemas) {
-          throw new ElectricAgentsError(
-            ErrCodeSchemaKeyExists,
-            `Cannot amend existing state schema key: ${key}`,
-            409
-          )
-        }
-      }
-    }
-
-    // Merge schemas.
-    const mergedInbox = schemas.inbox_schemas
-      ? { ...(existing.inbox_schemas ?? {}), ...schemas.inbox_schemas }
-      : existing.inbox_schemas
-    const mergedState = schemas.state_schemas
-      ? { ...(existing.state_schemas ?? {}), ...schemas.state_schemas }
-      : existing.state_schemas
+    // Additive merge per schema map: reject overlapping keys (no
+    // overwriting), then spread the new entries onto the existing ones.
+    const mergedInbox = this.mergeAdditiveSchemaMap(
+      `inbox`,
+      schemas.inbox_schemas,
+      existing.inbox_schemas
+    )
+    const mergedState = this.mergeAdditiveSchemaMap(
+      `state`,
+      schemas.state_schemas,
+      existing.state_schemas
+    )
+    const mergedCustomCollection = this.mergeAdditiveSchemaMap(
+      `custom collection`,
+      schemas.custom_collection_schemas,
+      existing.custom_collection_schemas
+    )
 
     const now = new Date().toISOString()
     const nextRevision = existing.revision + 1
@@ -3684,6 +3764,7 @@ export class EntityManager {
       creation_schema: existing.creation_schema,
       inbox_schemas: mergedInbox,
       state_schemas: mergedState,
+      custom_collection_schemas: mergedCustomCollection,
       slash_commands: existing.slash_commands,
       serve_endpoint: existing.serve_endpoint,
       default_dispatch_policy: existing.default_dispatch_policy,
@@ -3746,6 +3827,32 @@ export class EntityManager {
     for (const schema of Object.values(schemas)) {
       this.validateSchema(schema)
     }
+  }
+
+  /**
+   * Additively merge a schema map: reject any key that already exists on
+   * `existing` (additive only, no overwriting), then return the spread of
+   * both. Used by `amendSchemas` to extend `inbox_schemas`, `state_schemas`,
+   * and `custom_collection_schemas` without overwriting registered keys.
+   */
+  private mergeAdditiveSchemaMap(
+    label: string,
+    incoming: Record<string, Record<string, unknown>> | undefined,
+    existing: Record<string, Record<string, unknown>> | undefined
+  ): Record<string, Record<string, unknown>> | undefined {
+    if (!incoming) return existing
+    if (existing) {
+      for (const key of Object.keys(incoming)) {
+        if (key in existing) {
+          throw new ElectricAgentsError(
+            ErrCodeSchemaKeyExists,
+            `Cannot amend existing ${label} schema key: ${key}`,
+            409
+          )
+        }
+      }
+    }
+    return { ...(existing ?? {}), ...incoming }
   }
 
   private validateDispatchPolicy(
@@ -3871,11 +3978,13 @@ export class EntityManager {
   private async getEffectiveSchemas(entity: ElectricAgentsEntity): Promise<{
     inboxSchemas?: Record<string, Record<string, unknown>>
     stateSchemas?: Record<string, Record<string, unknown>>
+    customCollectionSchemas?: Record<string, Record<string, unknown>>
   }> {
     if (!entity.type) {
       return {
         inboxSchemas: entity.inbox_schemas,
         stateSchemas: entity.state_schemas,
+        customCollectionSchemas: entity.custom_collection_schemas,
       }
     }
 
@@ -3888,6 +3997,12 @@ export class EntityManager {
       stateSchemas: latestType?.state_schemas
         ? { ...(entity.state_schemas ?? {}), ...latestType.state_schemas }
         : entity.state_schemas,
+      customCollectionSchemas: latestType?.custom_collection_schemas
+        ? {
+            ...(entity.custom_collection_schemas ?? {}),
+            ...latestType.custom_collection_schemas,
+          }
+        : entity.custom_collection_schemas,
     }
   }
 

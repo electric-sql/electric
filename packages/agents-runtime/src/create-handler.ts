@@ -503,6 +503,11 @@ export function createRuntimeRouter(
         ...(definition.inboxSchemas && {
           inbox_schemas: mapSchemas(definition.inboxSchemas),
         }),
+        ...(definition.customCollectionSchemas && {
+          custom_collection_schemas: mapSchemas(
+            definition.customCollectionSchemas
+          ),
+        }),
         ...(definition.slashCommands && {
           slash_commands: definition.slashCommands,
         }),
