@@ -248,7 +248,6 @@ describe(`ElectricAgentsRoutes schedule endpoints`, () => {
   })
 })
 
-
 describe(`ElectricAgentsRoutes attachment endpoints`, () => {
   it(`serves attachments with non-ASCII filenames without throwing`, async () => {
     const manager = {
