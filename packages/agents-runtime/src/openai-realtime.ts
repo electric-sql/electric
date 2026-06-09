@@ -387,6 +387,7 @@ function mapOpenAIEvent(
             typeof event.audio_start_ms === `number`
               ? String(event.audio_start_ms)
               : undefined,
+          turnId: typeof event.item_id === `string` ? event.item_id : undefined,
         },
       ]
     case `input_audio_buffer.speech_stopped`:
@@ -397,6 +398,7 @@ function mapOpenAIEvent(
             typeof event.audio_end_ms === `number`
               ? String(event.audio_end_ms)
               : undefined,
+          turnId: typeof event.item_id === `string` ? event.item_id : undefined,
         },
       ]
     case `conversation.item.input_audio_transcription.delta`:

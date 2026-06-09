@@ -327,6 +327,28 @@ describe(`createOpenAIRealtimeProvider`, () => {
     const iterator = session.events[Symbol.asyncIterator]()
 
     socket.emitMessage({
+      type: `input_audio_buffer.speech_started`,
+      item_id: `item-1`,
+      audio_start_ms: 120,
+    })
+    await expect(nextEvent(iterator)).resolves.toEqual({
+      type: `input_audio.speech_started`,
+      turnId: `item-1`,
+      audioOffset: `120`,
+    })
+
+    socket.emitMessage({
+      type: `input_audio_buffer.speech_stopped`,
+      item_id: `item-1`,
+      audio_end_ms: 860,
+    })
+    await expect(nextEvent(iterator)).resolves.toEqual({
+      type: `input_audio.speech_stopped`,
+      turnId: `item-1`,
+      audioOffset: `860`,
+    })
+
+    socket.emitMessage({
       type: `conversation.item.input_audio_transcription.delta`,
       item_id: `item-1`,
       delta: `hello`,

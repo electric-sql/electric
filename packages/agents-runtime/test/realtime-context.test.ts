@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createTestRealtimeProvider } from '../src/realtime'
-import { createTestHandlerContext } from './helpers/context-test-helpers'
+import {
+  buildStreamFixture,
+  createTestHandlerContext,
+} from './helpers/context-test-helpers'
+import type { ChangeEvent } from '@durable-streams/state'
 
 const durableMock = vi.hoisted(() => {
   const appends: Array<{ url: string; data: unknown }> = []
@@ -128,6 +132,80 @@ describe(`ctx.useRealtime()`, () => {
         created_at: expect.any(String),
       },
     ])
+  })
+
+  it(`anchors delayed input transcripts at speech start`, async () => {
+    const db = buildStreamFixture([])
+    const events: Array<ChangeEvent> = []
+    const { ctx } = createTestHandlerContext({
+      db,
+      writeEvent: (event) => {
+        events.push(event)
+        db.utils.applyEvent(event)
+      },
+    })
+
+    const realtime = ctx.useRealtime({
+      systemPrompt: `You are realtime.`,
+      provider: createTestRealtimeProvider({
+        events: [
+          { type: `session.started`, sessionId: `provider-session` },
+          { type: `input_audio.speech_started`, turnId: `input-item-1` },
+          {
+            type: `output_transcript.delta`,
+            delta: `Hi`,
+            responseId: `resp-1`,
+          },
+          {
+            type: `output_transcript.completed`,
+            text: `Hi there`,
+            responseId: `resp-1`,
+          },
+          {
+            type: `input_transcript.completed`,
+            text: `hello there`,
+            turnId: `input-item-1`,
+          },
+          { type: `session.closed` },
+        ],
+      }),
+      tools: [],
+    })
+
+    await realtime.run()
+
+    const transcriptEvents = events.filter(
+      (event) =>
+        event.type === `realtime_transcript` &&
+        event.key === `realtime-transcript:provider-session:input:input-item-1`
+    )
+    expect(transcriptEvents).toHaveLength(2)
+    expect(transcriptEvents[0]).toMatchObject({
+      headers: { operation: `insert` },
+      value: {
+        direction: `input`,
+        text: ``,
+        status: `partial`,
+      },
+    })
+    expect(transcriptEvents[1]).toMatchObject({
+      headers: { operation: `update` },
+      value: {
+        direction: `input`,
+        text: `hello there`,
+        status: `final`,
+      },
+    })
+
+    const inputTranscriptInsertIndex = events.findIndex(
+      (event) => event === transcriptEvents[0]
+    )
+    const firstAssistantTextIndex = events.findIndex(
+      (event) => event.type === `text` || event.type === `text_delta`
+    )
+    expect(inputTranscriptInsertIndex).toBeGreaterThanOrEqual(0)
+    expect(firstAssistantTextIndex).toBeGreaterThanOrEqual(0)
+    expect(inputTranscriptInsertIndex).toBeLessThan(firstAssistantTextIndex)
   })
 
   it(`finds active realtime sessions from the manifest`, () => {

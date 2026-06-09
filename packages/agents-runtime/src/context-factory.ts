@@ -1335,7 +1335,9 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
       const transcriptTextByKey = new Map<string, string>()
       const transcriptCreatedAtByKey = new Map<string, string>()
       const transcriptFallbackIds = new Map<`input` | `output`, string>()
+      const inputTranscriptKeyByTurnId = new Map<string, string>()
       let transcriptFallbackCounter = 0
+      let pendingInputTranscriptKey: string | undefined
       let providerSessionId = realtimeSession?.id
 
       const currentTranscriptSessionId = (): string =>
@@ -1357,6 +1359,23 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         return `realtime-transcript:${currentTranscriptSessionId()}:${direction}:${stableId}`
       }
 
+      const inputTranscriptKey = (turnId?: string): string => {
+        if (turnId) {
+          const existing = inputTranscriptKeyByTurnId.get(turnId)
+          if (existing) return existing
+          if (pendingInputTranscriptKey) {
+            inputTranscriptKeyByTurnId.set(turnId, pendingInputTranscriptKey)
+            return pendingInputTranscriptKey
+          }
+          const key = transcriptKey(`input`, turnId)
+          inputTranscriptKeyByTurnId.set(turnId, key)
+          return key
+        }
+        const key = pendingInputTranscriptKey ?? transcriptKey(`input`)
+        pendingInputTranscriptKey = key
+        return key
+      }
+
       const writeRealtimeTranscript = (input: {
         direction: `input` | `output`
         key: string
@@ -1364,9 +1383,16 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         status: `partial` | `final`
         turnId?: string
         responseId?: string
+        allowEmpty?: boolean
       }): void => {
         const collection = config.db.collections.realtimeTranscripts
-        if (input.text.length === 0 && !collection.has(input.key)) return
+        if (
+          input.text.length === 0 &&
+          !input.allowEmpty &&
+          !collection.has(input.key)
+        ) {
+          return
+        }
 
         const existing = collection.get(input.key) as
           | { created_at?: string }
@@ -1400,6 +1426,31 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         )
       }
 
+      const beginRealtimeTranscript = (input: {
+        direction: `input` | `output`
+        turnId?: string
+        responseId?: string
+      }): void => {
+        const key =
+          input.direction === `input`
+            ? inputTranscriptKey(input.turnId)
+            : transcriptKey(`output`, input.responseId)
+        const existing = config.db.collections.realtimeTranscripts.get(key) as
+          | { text?: string }
+          | undefined
+        const text = transcriptTextByKey.get(key) ?? existing?.text ?? ``
+        transcriptTextByKey.set(key, text)
+        writeRealtimeTranscript({
+          direction: input.direction,
+          key,
+          text,
+          status: `partial`,
+          turnId: input.turnId,
+          responseId: input.responseId,
+          allowEmpty: true,
+        })
+      }
+
       const appendRealtimeTranscript = (input: {
         direction: `input` | `output`
         delta: string
@@ -1407,10 +1458,10 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         responseId?: string
       }): void => {
         if (input.delta.length === 0) return
-        const key = transcriptKey(
-          input.direction,
-          input.direction === `input` ? input.turnId : input.responseId
-        )
+        const key =
+          input.direction === `input`
+            ? inputTranscriptKey(input.turnId)
+            : transcriptKey(`output`, input.responseId)
         const text = `${transcriptTextByKey.get(key) ?? ``}${input.delta}`
         transcriptTextByKey.set(key, text)
         writeRealtimeTranscript({
@@ -1429,10 +1480,10 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         turnId?: string
         responseId?: string
       }): void => {
-        const key = transcriptKey(
-          input.direction,
-          input.direction === `input` ? input.turnId : input.responseId
-        )
+        const key =
+          input.direction === `input`
+            ? inputTranscriptKey(input.turnId)
+            : transcriptKey(`output`, input.responseId)
         const text = input.text ?? transcriptTextByKey.get(key) ?? ``
         transcriptTextByKey.set(key, text)
         writeRealtimeTranscript({
@@ -1448,6 +1499,12 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
           (input.direction === `output` && !input.responseId)
         ) {
           transcriptFallbackIds.delete(input.direction)
+        }
+        if (input.direction === `input` && pendingInputTranscriptKey === key) {
+          pendingInputTranscriptKey = undefined
+          if (input.turnId) {
+            transcriptFallbackIds.delete(`input`)
+          }
         }
       }
 
@@ -1474,12 +1531,26 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
             break
 
           case `session.updated`:
-          case `input_audio.speech_started`:
-          case `input_audio.speech_stopped`:
           case `output_audio.delta`:
           case `output_audio.completed`:
           case `response.started`:
           case `response.cancelled`:
+            break
+
+          case `input_audio.speech_started`:
+            beginRealtimeTranscript({
+              direction: `input`,
+              turnId: event.turnId,
+            })
+            break
+
+          case `input_audio.speech_stopped`:
+            if (event.turnId || pendingInputTranscriptKey) {
+              beginRealtimeTranscript({
+                direction: `input`,
+                turnId: event.turnId,
+              })
+            }
             break
 
           case `input_transcript.delta`:

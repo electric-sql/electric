@@ -1037,8 +1037,16 @@ export type RealtimeProviderEvent =
   | { type: `session.updated` }
   | { type: `session.closed`; reason?: string }
   | { type: `session.error`; error: string; code?: string }
-  | { type: `input_audio.speech_started`; audioOffset?: string }
-  | { type: `input_audio.speech_stopped`; audioOffset?: string }
+  | {
+      type: `input_audio.speech_started`
+      audioOffset?: string
+      turnId?: string
+    }
+  | {
+      type: `input_audio.speech_stopped`
+      audioOffset?: string
+      turnId?: string
+    }
   | { type: `input_transcript.delta`; delta: string; turnId?: string }
   | { type: `input_transcript.completed`; text: string; turnId?: string }
   | {
