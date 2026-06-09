@@ -86,7 +86,6 @@ export {
   builtInCollections,
   entityStateSchema,
   isManagementEvent,
-  jsonSchema,
   passthrough,
 } from './entity-schema'
 export type {

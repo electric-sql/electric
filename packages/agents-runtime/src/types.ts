@@ -1151,7 +1151,10 @@ export interface EntityDefinition<
   creationSchema?: TCreationSchema
   inboxSchemas?: Record<string, StandardJSONSchemaV1>
   stateSchemas?: Record<string, StandardJSONSchemaV1>
-  customCollectionSchemas?: Record<string, StandardJSONSchemaV1>
+  customCollectionSchemas?: Record<
+    string,
+    StandardSchemaV1 | Readonly<Record<string, unknown>>
+  >
   permissionGrants?: ReadonlyArray<EntityTypePermissionGrantDefinition>
   slashCommands?: Array<SlashCommandDefinition>
 
