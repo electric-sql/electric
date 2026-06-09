@@ -10,6 +10,13 @@ import type {
   SlashCommandRow,
 } from '@electric-ax/agents-runtime/client'
 import {
+  createSlashCommandTokenRegex,
+  formatSlashCommandArgumentHint,
+  normalizeCommandName,
+  serializeComposerInput,
+  SLASH_COMMAND_TRIGGER_REGEX,
+} from '@electric-ax/agents-runtime/client'
+import {
   type Dispatch,
   type SetStateAction,
   useEffect,
@@ -171,24 +178,6 @@ interface SlashQuery {
 
 interface DismissedSlashQuery extends SlashQuery {}
 
-const normalizeCommandName = (name: string): string =>
-  name.startsWith(`/`) ? name.slice(1) : name
-
-export const formatSlashCommandArgumentHint = (
-  command: SlashCommandRow
-): string => {
-  if (command.arguments && command.arguments.length > 0) {
-    return command.arguments
-      .map((arg) => {
-        const label = arg.required ? arg.name : `[${arg.name}]`
-        return arg.type === `string` ? label : `${label}: ${arg.type}`
-      })
-      .join(` `)
-  }
-
-  return ``
-}
-
 interface SlashCallInsertPlan {
   nodes: Array<ProseMirrorNode>
   cursorOffset: number
@@ -277,36 +266,6 @@ const sourceFromDoc = (doc: ProseMirrorNode): string => {
   })
 
   return parts.join(``)
-}
-
-export const serializeComposerInput = (
-  source: string,
-  slashCommands: Array<SlashCommandRow> = []
-): ComposerInputPayload => {
-  const knownNames = new Set(
-    slashCommands.map((command) => normalizeCommandName(command.name))
-  )
-  const nodes: ComposerInputPayload[`nodes`] = []
-  const commandPattern = /(^|\s)\/([a-z][a-z0-9]*(?:-[a-z0-9]+)*)(?=\s|$)/g
-  let match: RegExpExecArray | null
-
-  while ((match = commandPattern.exec(source)) !== null) {
-    const prefix = match[1] ?? ``
-    const raw = `/${match[2]}`
-    const start = match.index + prefix.length
-    const name = match[2]
-
-    nodes.push({
-      kind: `slash_command`,
-      start,
-      end: start + raw.length,
-      raw,
-      name,
-      ...(knownNames.has(name) ? {} : { unknown: true }),
-    })
-  }
-
-  return nodes.length > 0 ? { source, nodes } : { source }
 }
 
 const serializeComposerInputFromDoc = (
@@ -414,8 +373,7 @@ const createDecorationPlugin = (
 
           if (!node.isText || !node.text) return
 
-          const commandPattern =
-            /(^|\s)\/([a-z][a-z0-9]*(?:-[a-z0-9]+)*)(?=\s|$)/g
+          const commandPattern = createSlashCommandTokenRegex()
           let match: RegExpExecArray | null
 
           while ((match = commandPattern.exec(node.text)) !== null) {
@@ -448,7 +406,7 @@ const getSlashQuery = (state: EditorState): SlashQuery | null => {
 
   const cursor = selection.from
   const textBeforeCursor = state.doc.textBetween(0, cursor, `\n`, `\n`)
-  const match = /(^|\s)\/([a-z0-9_-]*)$/i.exec(textBeforeCursor)
+  const match = SLASH_COMMAND_TRIGGER_REGEX.exec(textBeforeCursor)
   if (!match) return null
 
   const query = match[2] ?? ``
