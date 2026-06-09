@@ -74,6 +74,7 @@ const entitySchema = z.object({
   type_revision: z.coerce.number().nullable().optional(),
   inbox_schemas: z.record(z.unknown()).nullable().optional(),
   state_schemas: z.record(z.unknown()).nullable().optional(),
+  custom_collection_schemas: z.record(z.unknown()).nullable().optional(),
   created_at: z.coerce.number(),
   updated_at: z.coerce.number(),
 })
@@ -84,6 +85,7 @@ const entityTypeSchema = z.object({
   creation_schema: z.unknown().nullable(),
   inbox_schemas: z.record(z.unknown()).nullable(),
   state_schemas: z.record(z.unknown()).nullable(),
+  custom_collection_schemas: z.record(z.unknown()).nullable().optional(),
   slash_commands: z
     .array(
       z.object({

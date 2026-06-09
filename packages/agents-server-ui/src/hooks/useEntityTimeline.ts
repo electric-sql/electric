@@ -4,16 +4,40 @@ import {
   compareTimelineOrders,
   createEntityTimelineQuery,
   normalizeTimelineEntities,
+  passthrough,
 } from '@electric-ax/agents-runtime/client'
 import { coalesce, eq } from '@durable-streams/state/db'
 import { connectEntityStream } from '../lib/entity-connection'
 import type {
   EntityStreamDBWithActions,
-  EntityTimelineQueryRow,
+  EntityTimelineQueryRow as RuntimeEntityTimelineQueryRow,
   IncludesInboxMessage,
   IncludesEntity,
   Manifest,
 } from '@electric-ax/agents-runtime/client'
+import type {
+  CommentRow,
+  EntityTimelineCommentRow,
+  EntityTimelineQueryRow,
+} from '../lib/comments'
+
+const TIMELINE_ORDER_FALLBACK = `~`
+
+/**
+ * Comments are a custom collection declared by the entity type (see
+ * horton's and worker's `customCollectionSchemas: { comment: ... }`).
+ * The UI registers the matching TanStack DB collection here so
+ * `db.collections.comments` resolves and the runtime can splice it
+ * into the timeline projection via `createEntityTimelineQuery`'s
+ * `customSource` option.
+ */
+const COMMENT_CUSTOM_STATE = {
+  comments: {
+    schema: passthrough<CommentRow>(),
+    type: `comment`,
+    primaryKey: `key`,
+  },
+} as const
 
 type TimelineEntityManifest =
   | (Manifest & { kind: `child`; id: string; entity_url: string })
@@ -42,6 +66,28 @@ function isTimelineEntityManifest(
     typeof manifest.sourceRef === `string` &&
     isRecord(manifest.config)
   )
+}
+
+/**
+ * Re-shape the runtime's generic `custom` variant into a UI-friendly
+ * `comment` variant. Runs synchronously off the same live-query result so
+ * comments stay perfectly in order with the rest of the timeline.
+ */
+function projectRow(
+  row: RuntimeEntityTimelineQueryRow
+): EntityTimelineQueryRow {
+  if (row.custom && row.custom.collection === `comment`) {
+    const value = row.custom.value as CommentRow
+    return {
+      $key: row.$key,
+      comment: {
+        ...value,
+        key: row.custom.key,
+        order: row.custom.order,
+      } as EntityTimelineCommentRow,
+    } as EntityTimelineQueryRow
+  }
+  return row as EntityTimelineQueryRow
 }
 
 export function useEntityTimeline(
@@ -73,7 +119,11 @@ export function useEntityTimeline(
     let cancelled = false
     setLoading(true)
 
-    connectEntityStream({ baseUrl, entityUrl })
+    connectEntityStream({
+      baseUrl,
+      entityUrl,
+      customState: COMMENT_CUSTOM_STATE,
+    })
       .then((result) => {
         if (cancelled) {
           result.close()
@@ -102,10 +152,18 @@ export function useEntityTimeline(
     }
   }, [baseUrl, entityUrl])
 
-  const { data: timelineRows = [] } = useLiveQuery(
+  const { data: rawTimelineRows = [] } = useLiveQuery(
     (q) => {
       if (!db) return undefined
-      return createEntityTimelineQuery(db)(q)
+      const customSource = q
+        .from({ comment: (db.collections as any).comments })
+        .select(({ comment }: any) => ({
+          collection: `comment` as const,
+          order: coalesce(comment._timeline_order, TIMELINE_ORDER_FALLBACK),
+          key: comment.key,
+          value: comment,
+        }))
+      return createEntityTimelineQuery(db, { customSource })(q)
     },
     [db]
   )
@@ -113,8 +171,8 @@ export function useEntityTimeline(
     (q) =>
       db
         ? q
-            .from({ manifest: db.collections.manifests as any })
-            .orderBy(({ manifest }: any) => manifest._seq, `asc`)
+            .from({ manifest: db.collections.manifests })
+            .orderBy(({ manifest }) => manifest._seq, `asc`)
         : undefined,
     [db]
   )
@@ -122,19 +180,25 @@ export function useEntityTimeline(
     (q) =>
       db
         ? q
-            .from({ inbox: db.collections.inbox as any })
-            .where(({ inbox }: any) => eq(inbox.status, `pending`))
+            .from({ inbox: db.collections.inbox })
+            .where(({ inbox }) => eq(inbox.status, `pending`))
             .orderBy(
-              ({ inbox }: any) => coalesce(inbox._timeline_order, `~`),
+              ({ inbox }) =>
+                coalesce(inbox._timeline_order, TIMELINE_ORDER_FALLBACK),
               `asc`
             )
-            .orderBy(({ inbox }: any) =>
+            .orderBy(({ inbox }) =>
               coalesce(inbox._seq, Number.MAX_SAFE_INTEGER)
             )
         : undefined,
     [db]
   )
-  const typedTimelineRows = timelineRows as Array<EntityTimelineQueryRow>
+
+  const timelineRows = useMemo<Array<EntityTimelineQueryRow>>(
+    () =>
+      (rawTimelineRows as Array<RuntimeEntityTimelineQueryRow>).map(projectRow),
+    [rawTimelineRows]
+  )
 
   const pendingInbox = useMemo(
     () =>
@@ -178,8 +242,8 @@ export function useEntityTimeline(
     [pendingInboxRows]
   )
   const generationActive = useMemo(
-    () => typedTimelineRows.some((row) => row.run?.status === `started`),
-    [typedTimelineRows]
+    () => timelineRows.some((row) => row.run?.status === `started`),
+    [timelineRows]
   )
   const entities = useMemo(
     () =>
@@ -206,7 +270,7 @@ export function useEntityTimeline(
   )
 
   return {
-    timelineRows: typedTimelineRows,
+    timelineRows,
     pendingInbox,
     entities,
     generationActive,

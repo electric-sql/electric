@@ -191,6 +191,20 @@
   box-sizing: border-box;
 }
 
+.virtualRow[data-highlighted='true'] {
+  animation: targetPulse 1600ms ease-out;
+}
+
+@keyframes targetPulse {
+  0%,
+  65% {
+    background: color-mix(in oklab, var(--ds-accent-a4) 70%, transparent);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
 /* Jump-to-bottom affordance — centered over the chat column so it
    relates to the conversation rather than the viewport edge. It stays
    mounted and toggles visibility with opacity/translate for a soft

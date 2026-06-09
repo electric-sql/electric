@@ -32,7 +32,17 @@ export function InlineEventCard({
   const [expanded, setExpanded] = useState(defaultExpanded)
   const showBody = children !== undefined && (!expandable || expanded)
   const headerOnly = children === undefined
-  const headerContent = (
+  const toggle = () => setExpanded((value) => !value)
+  const toggleIcon = expandable ? (
+    <span className={toolBlock.toggleArrow} aria-hidden="true">
+      {expanded ? (
+        <Icon icon={ChevronDown} size={1} />
+      ) : (
+        <Icon icon={ChevronRight} size={1} />
+      )}
+    </span>
+  ) : null
+  const headerLeadContent = (
     <>
       <span className={toolBlock.headerIcon} aria-hidden="true">
         <Icon icon={icon} size={2} />
@@ -46,18 +56,15 @@ export function InlineEventCard({
       </span>
       {summary ? <span className={toolBlock.summary}>{summary}</span> : null}
       {badge}
+    </>
+  )
+  const headerContent = (
+    <>
+      {headerLeadContent}
       {actions ? (
         <span className={toolBlock.headerActions}>{actions}</span>
       ) : null}
-      {expandable ? (
-        <span className={toolBlock.toggleArrow} aria-hidden="true">
-          {expanded ? (
-            <Icon icon={ChevronDown} size={1} />
-          ) : (
-            <Icon icon={ChevronRight} size={1} />
-          )}
-        </span>
-      ) : null}
+      {toggleIcon}
     </>
   )
 
@@ -67,10 +74,36 @@ export function InlineEventCard({
       className={toolBlock.card}
       data-header-surface={headerOnly || headerSurface ? `true` : undefined}
     >
-      {expandable ? (
+      {expandable && actions ? (
+        <Stack
+          align="center"
+          gap={0}
+          className={`${toolBlock.header} ${toolBlock.headerWithActions}`}
+        >
+          <button
+            type="button"
+            onClick={toggle}
+            aria-expanded={expanded}
+            className={toolBlock.headerContentToggle}
+          >
+            {headerLeadContent}
+          </button>
+          <span className={toolBlock.headerActions}>{actions}</span>
+          <button
+            type="button"
+            onClick={toggle}
+            aria-expanded={expanded}
+            aria-label={expanded ? `Collapse details` : `Expand details`}
+            title={expanded ? `Collapse details` : `Expand details`}
+            className={toolBlock.headerChevronButton}
+          >
+            {toggleIcon}
+          </button>
+        </Stack>
+      ) : expandable ? (
         <button
           type="button"
-          onClick={() => setExpanded((value) => !value)}
+          onClick={toggle}
           aria-expanded={expanded}
           className={`${toolBlock.header} ${toolBlock.headerToggle}`}
         >
