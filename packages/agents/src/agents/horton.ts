@@ -21,6 +21,7 @@ import {
   GOAL_SLASH_COMMAND,
   buildSkillSlashCommands,
   createContextSkillLoader,
+  createOpenAIRealtimeProvider,
   completeWithLowCostModel,
   dispatchGoalCommand,
   formatTokenCount,
@@ -59,6 +60,15 @@ const TITLE_USER_PROMPT = (userMessage: string): string =>
   `User request:\n${userMessage}`
 const TITLE_GENERATION_TIMEOUT_MS = 8_000
 const HORTON_SKILLS_SLASH_COMMAND_OWNER = `horton:skills`
+const HORTON_REALTIME_DIRECT_TOOLS = new Set([
+  `web_search`,
+  `fetch_url`,
+  `spawn_worker`,
+  `send`,
+  `search_electric_agents_docs`,
+  `use_skill`,
+  `remove_skill`,
+])
 
 const TITLE_STOP_WORDS = new Set([
   `a`,
@@ -377,6 +387,25 @@ function getToolName(tool: unknown): string | null {
   if (typeof tool !== `object` || tool === null) return null
   const name = (tool as { name?: unknown }).name
   return typeof name === `string` ? name : null
+}
+
+function hortonRealtimeDirectTools(tools: Array<AgentTool>): Array<string> {
+  return tools
+    .map((tool) => getToolName(tool))
+    .filter(
+      (name): name is string =>
+        name !== null && HORTON_REALTIME_DIRECT_TOOLS.has(name)
+    )
+}
+
+function hortonRealtimeSystemPrompt(systemPrompt: string): string {
+  return `${systemPrompt}
+
+# Realtime mode
+You are speaking with the user live. Keep responses concise enough for voice.
+Prefer dispatching workers for coding, shell, edit, or other long-running tasks.
+Use direct tools only for lightweight orchestration, lookup, context loading, and sending messages.
+When a task may change files, run commands, or take more than a short exchange, spawn a worker and tell the user you are handing it off.`
 }
 
 export function createHortonTools(
@@ -849,17 +878,51 @@ function createAssistantHandler(options: {
         }
       : undefined
 
+    const systemPrompt = buildHortonSystemPrompt(sandboxCwd, {
+      hasDocsSupport: Boolean(docsSupport),
+      hasSkills,
+      docsUrl,
+      modelProvider: modelConfig.provider,
+      modelId: String(modelConfig.model),
+      hasWebhookSourceTools,
+      hasScheduleTools,
+      ...(activeGoalPromptInfo && { activeGoal: activeGoalPromptInfo }),
+    })
+    const activeRealtimeSession = ctx.realtime?.activeSession?.()
+    if (activeRealtimeSession) {
+      if (activeRealtimeSession.provider !== `openai`) {
+        throw new Error(
+          `Horton realtime currently supports provider "openai", got "${activeRealtimeSession.provider}"`
+        )
+      }
+      const apiKey = process.env.OPENAI_API_KEY
+      if (!apiKey) {
+        throw new Error(
+          `OPENAI_API_KEY must be set before starting Horton realtime mode`
+        )
+      }
+      const realtime = ctx.useRealtime({
+        systemPrompt: hortonRealtimeSystemPrompt(systemPrompt),
+        provider: createOpenAIRealtimeProvider({
+          apiKey,
+          model: activeRealtimeSession.model,
+        }),
+        tools: tools as AgentTool[],
+        audio: {
+          inputFormat: { codec: `pcm16`, sampleRate: 24_000, channels: 1 },
+          outputFormat: { codec: `pcm16`, sampleRate: 24_000, channels: 1 },
+        },
+        toolPolicy: {
+          direct: hortonRealtimeDirectTools(tools as AgentTool[]),
+        },
+      })
+      await realtime.run()
+      await titlePromise
+      return
+    }
+
     ctx.useAgent({
-      systemPrompt: buildHortonSystemPrompt(sandboxCwd, {
-        hasDocsSupport: Boolean(docsSupport),
-        hasSkills,
-        docsUrl,
-        modelProvider: modelConfig.provider,
-        modelId: String(modelConfig.model),
-        hasWebhookSourceTools,
-        hasScheduleTools,
-        ...(activeGoalPromptInfo && { activeGoal: activeGoalPromptInfo }),
-      }),
+      systemPrompt,
       ...modelConfig,
       // mcp.tools() inserts sentinel objects that the runtime's
       // composeToolsWithProviders resolves at wake time. The static type of
