@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import {
   Pressable,
   ScrollView,
@@ -11,7 +11,6 @@ import {
   type TextStyle,
 } from 'react-native'
 import {
-  detectSlashCommandTrigger,
   formatSlashCommandArgumentHint,
   normalizeCommandName,
   type SlashCommandRow,
@@ -20,7 +19,9 @@ import {
   buildSlashCommandInsertion,
   computeHighlightRanges,
   filterSlashCommands,
+  resolveSlashTrigger,
   type ComposerInsertion,
+  type Selection,
 } from '../lib/slashAutocomplete'
 import { useTokens } from '../lib/ThemeProvider'
 import { fontSize, lineHeight, radii, spacing } from '../lib/theme'
@@ -43,17 +44,16 @@ export type SlashAutocomplete = {
 
 /**
  * Drives native slash-command autocomplete on a plain `TextInput`: derives the
- * trigger via the shared {@link detectSlashCommandTrigger} grammar, filters the
+ * trigger via the shared grammar (see {@link resolveSlashTrigger}), filters the
  * list, and produces the spliced value on selection. Everything is plain React
  * state — no WebView, no caret coordinates — which is what lets the popover
  * ({@link SlashCommandMenu}) be native.
  *
- * The caret defaults to the end of the text so the menu opens on the first `/`
- * without waiting for `onSelectionChange` — RN delivers that a render after
- * `onChangeText`, so a selection-driven caret trails the value (and can leave
- * the menu stuck closed). A reported caret is trusted only while it still
- * matches the current value, which also enables mid-text triggers and
- * suppresses the menu during a range selection.
+ * We keep only the raw `selection` reported by `onSelectionChange`;
+ * {@link resolveSlashTrigger} turns it into the active trigger, defaulting to
+ * the end of the text until a caret lands so the menu still opens on the first
+ * `/`. See that function for why we bounds-check the caret rather than gate on
+ * the value it was reported against.
  */
 export function useSlashAutocomplete(
   value: string,
@@ -61,39 +61,23 @@ export function useSlashAutocomplete(
   options: { enabled?: boolean } = {}
 ): SlashAutocomplete {
   const enabled = options.enabled ?? true
-  const valueRef = useRef(value)
-  valueRef.current = value
-  const [reported, setReported] = useState<{
-    caret: number | null
-    value: string
-  }>({ caret: null, value: `` })
+  const [selection, setSelection] = useState<Selection | null>(null)
 
   const onSelectionChange = useCallback(
     (event: NativeSyntheticEvent<TextInputSelectionChangeEventData>): void => {
       const { start, end } = event.nativeEvent.selection
-      // A `null` caret marks a range selection — no single insertion point.
-      setReported({
-        caret: start === end ? start : null,
-        value: valueRef.current,
-      })
+      setSelection({ start, end })
     },
     []
   )
 
   const reset = useCallback((): void => {
-    setReported({ caret: null, value: `` })
+    setSelection(null)
   }, [])
 
-  const fresh = reported.value === value
-  const caret = fresh && reported.caret !== null ? reported.caret : value.length
-  const rangeSelected = fresh && reported.caret === null
-
   const trigger = useMemo(
-    () =>
-      enabled && !rangeSelected
-        ? detectSlashCommandTrigger(value, caret)
-        : null,
-    [enabled, rangeSelected, caret, value]
+    () => (enabled ? resolveSlashTrigger(value, selection) : null),
+    [enabled, value, selection]
   )
 
   const items = useMemo(
