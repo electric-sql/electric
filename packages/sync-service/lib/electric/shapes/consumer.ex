@@ -399,6 +399,7 @@ defmodule Electric.Shapes.Consumer do
     # 3. we are not part of a subquery dependency tree, that is either
     #   a. we have no dependent shapes
     #   b. we don't have a materializer subscribed
+    # 4. we're not in the middle of processing a multi-fragment transaction
 
     if consumer_suspend_enabled?(state) and consumer_can_suspend?(state) do
       Logger.debug(fn -> ["Suspending consumer ", to_string(state.shape_handle)] end)
@@ -416,7 +417,7 @@ defmodule Electric.Shapes.Consumer do
 
   defp consumer_can_suspend?(state) do
     is_snapshot_started(state) and not Shape.has_dependencies(state.shape) and
-      not state.materializer_subscribed?
+      not state.materializer_subscribed? and is_nil(state.pending_txn)
   end
 
   @impl GenServer
