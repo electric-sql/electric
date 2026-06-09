@@ -1686,11 +1686,13 @@ defmodule Electric.Shapes.ConsumerTest do
       assert :ok = ShapeLogCollector.handle_event(txn2, ctx.stack_id)
       assert_receive {:flush_boundary_updated, 301}, 1_000
 
-      # Wait past what would have been the original shape_suspend_after window
-      # Original timer started at ~30ms, would fire at ~230ms
-      # We're now at ~80ms, wait 160ms to reach ~240ms
-      # But new timer started at ~80ms, would fire at ~280ms
-      # So at ~240ms the process should still be alive
+      # Wait past what would have been the original shape_suspend_after window.
+      # The original timer was armed when the consumer first hibernated (~10ms
+      # after txn1, i.e. hibernate_after later), so it would have fired at ~210ms.
+      # The activity at ~80ms cancelled it; the consumer re-hibernates ~10ms after
+      # that activity, arming a new timer at ~90ms that fires at ~290ms.
+      # We're now at ~80ms; wait 160ms to reach ~240ms, past the original ~210ms
+      # deadline but before the new ~290ms one, so the process should still be alive.
       Process.sleep(160)
 
       # Should NOT have suspended because activity reset the timer
