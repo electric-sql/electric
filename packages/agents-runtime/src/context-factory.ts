@@ -1336,8 +1336,14 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
       const transcriptCreatedAtByKey = new Map<string, string>()
       const transcriptFallbackIds = new Map<`input` | `output`, string>()
       const inputTranscriptKeyByTurnId = new Map<string, string>()
+      const outputTranscriptKeyByResponseId = new Map<string, string>()
+      const outputTranscriptKeysByResponseId = new Map<string, Array<string>>()
+      const outputTranscriptSegmentByResponseId = new Map<string, number>()
       let transcriptFallbackCounter = 0
       let pendingInputTranscriptKey: string | undefined
+      let activeOutputTranscript:
+        | { key: string; responseId?: string }
+        | undefined
       let providerSessionId = realtimeSession?.id
 
       const currentTranscriptSessionId = (): string =>
@@ -1374,6 +1380,62 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         const key = pendingInputTranscriptKey ?? transcriptKey(`input`)
         pendingInputTranscriptKey = key
         return key
+      }
+
+      const trackOutputTranscriptKey = (
+        responseId: string | undefined,
+        key: string
+      ): void => {
+        activeOutputTranscript = { key, responseId }
+        if (!responseId) return
+        const keys = outputTranscriptKeysByResponseId.get(responseId) ?? []
+        if (!keys.includes(key)) {
+          keys.push(key)
+          outputTranscriptKeysByResponseId.set(responseId, keys)
+        }
+      }
+
+      const outputTranscriptKey = (responseId?: string): string => {
+        if (responseId) {
+          const existing = outputTranscriptKeyByResponseId.get(responseId)
+          if (existing) return existing
+          const key = transcriptKey(`output`, responseId)
+          outputTranscriptKeyByResponseId.set(responseId, key)
+          trackOutputTranscriptKey(responseId, key)
+          return key
+        }
+        const key = activeOutputTranscript?.responseId
+          ? transcriptKey(`output`)
+          : (activeOutputTranscript?.key ?? transcriptKey(`output`))
+        trackOutputTranscriptKey(undefined, key)
+        return key
+      }
+
+      const rotateActiveOutputTranscript = (): void => {
+        const active = activeOutputTranscript
+        if (!active) return
+        const text = transcriptTextByKey.get(active.key) ?? ``
+        if (text.length === 0) return
+
+        if (active.responseId) {
+          const nextSegment =
+            (outputTranscriptSegmentByResponseId.get(active.responseId) ?? 0) +
+            1
+          outputTranscriptSegmentByResponseId.set(
+            active.responseId,
+            nextSegment
+          )
+          const key = transcriptKey(
+            `output`,
+            `${active.responseId}:segment-${nextSegment}`
+          )
+          outputTranscriptKeyByResponseId.set(active.responseId, key)
+          trackOutputTranscriptKey(active.responseId, key)
+          return
+        }
+
+        transcriptFallbackIds.delete(`output`)
+        activeOutputTranscript = undefined
       }
 
       const writeRealtimeTranscript = (input: {
@@ -1434,7 +1496,7 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         const key =
           input.direction === `input`
             ? inputTranscriptKey(input.turnId)
-            : transcriptKey(`output`, input.responseId)
+            : outputTranscriptKey(input.responseId)
         const existing = config.db.collections.realtimeTranscripts.get(key) as
           | { text?: string }
           | undefined
@@ -1461,7 +1523,7 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         const key =
           input.direction === `input`
             ? inputTranscriptKey(input.turnId)
-            : transcriptKey(`output`, input.responseId)
+            : outputTranscriptKey(input.responseId)
         const text = `${transcriptTextByKey.get(key) ?? ``}${input.delta}`
         transcriptTextByKey.set(key, text)
         writeRealtimeTranscript({
@@ -1483,7 +1545,7 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         const key =
           input.direction === `input`
             ? inputTranscriptKey(input.turnId)
-            : transcriptKey(`output`, input.responseId)
+            : outputTranscriptKey(input.responseId)
         const text = input.text ?? transcriptTextByKey.get(key) ?? ``
         transcriptTextByKey.set(key, text)
         writeRealtimeTranscript({
@@ -1505,6 +1567,51 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
           if (input.turnId) {
             transcriptFallbackIds.delete(`input`)
           }
+        }
+      }
+
+      const completeOutputTranscript = (input: {
+        text?: string
+        responseId?: string
+      }): void => {
+        const existingKeys = input.responseId
+          ? outputTranscriptKeysByResponseId.get(input.responseId)
+          : activeOutputTranscript
+            ? [activeOutputTranscript.key]
+            : undefined
+        const keys =
+          existingKeys && existingKeys.length > 0
+            ? existingKeys
+            : [outputTranscriptKey(input.responseId)]
+
+        for (const [index, key] of keys.entries()) {
+          const existing = config.db.collections.realtimeTranscripts.get(
+            key
+          ) as { text?: string } | undefined
+          const text =
+            keys.length === 1 && input.text !== undefined
+              ? input.text
+              : (transcriptTextByKey.get(key) ??
+                existing?.text ??
+                (index === keys.length - 1 ? (input.text ?? ``) : ``))
+          transcriptTextByKey.set(key, text)
+          writeRealtimeTranscript({
+            direction: `output`,
+            key,
+            text,
+            status: `final`,
+            responseId: input.responseId,
+          })
+        }
+
+        if (!input.responseId) {
+          transcriptFallbackIds.delete(`output`)
+        }
+        if (
+          activeOutputTranscript &&
+          activeOutputTranscript.responseId === input.responseId
+        ) {
+          activeOutputTranscript = undefined
         }
       }
 
@@ -1538,6 +1645,7 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
             break
 
           case `input_audio.speech_started`:
+            rotateActiveOutputTranscript()
             beginRealtimeTranscript({
               direction: `input`,
               turnId: event.turnId,
@@ -1603,19 +1711,13 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
               delta: event.delta,
               responseId: event.responseId,
             })
-            emitText(event.delta)
             break
 
           case `output_transcript.completed`:
-            completeRealtimeTranscript({
-              direction: `output`,
+            completeOutputTranscript({
               text: event.text,
               responseId: event.responseId,
             })
-            if (!textStarted && event.text) {
-              emitText(event.text)
-            }
-            endText()
             break
 
           case `tool_call.started`:

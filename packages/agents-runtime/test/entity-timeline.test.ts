@@ -38,6 +38,10 @@ function offset(index: number): EventPointer {
   }
 }
 
+function emptyOrderableCollection() {
+  return { toArray: [], __electricRowOffsets: new Map() }
+}
+
 describe(`compareTimelineOrders`, () => {
   it(`compares two numbers`, () => {
     expect(compareTimelineOrders(1, 2)).toBeLessThan(0)
@@ -1596,6 +1600,10 @@ describe(`entity includes query`, () => {
       const inbox = createSyncCollection(`test-inbox`, takeOffset)
       const wakes = createSyncCollection(`test-wakes`, takeOffset)
       const signals = createSyncCollection(`test-signals`, takeOffset)
+      const realtimeTranscripts = createSyncCollection(
+        `test-realtime-transcripts`,
+        takeOffset
+      )
       const contextInserted = createSyncCollection(
         `test-context-inserted`,
         takeOffset
@@ -1622,6 +1630,7 @@ describe(`entity includes query`, () => {
           inbox: inbox.collection,
           wakes: wakes.collection,
           signals: signals.collection,
+          realtimeTranscripts: realtimeTranscripts.collection,
           contextInserted: contextInserted.collection,
           contextRemoved: contextRemoved.collection,
           manifests: manifests.collection,
@@ -1639,6 +1648,7 @@ describe(`entity includes query`, () => {
           inbox: withSeqInjection(inbox, takeSeq),
           wakes: withSeqInjection(wakes, takeSeq),
           signals: withSeqInjection(signals, takeSeq),
+          realtimeTranscripts: withSeqInjection(realtimeTranscripts, takeSeq),
           contextInserted: withSeqInjection(contextInserted, takeSeq),
           contextRemoved: withSeqInjection(contextRemoved, takeSeq),
           manifests: withSeqInjection(manifests, takeSeq),
@@ -1946,6 +1956,7 @@ describe(`entity includes query`, () => {
           inbox: { toArray: [] },
           wakes: { toArray: [] },
           signals: { toArray: [] },
+          realtimeTranscripts: emptyOrderableCollection(),
           contextInserted: { toArray: [], __electricRowOffsets: new Map() },
           contextRemoved: { toArray: [], __electricRowOffsets: new Map() },
           manifests: {
@@ -2054,6 +2065,7 @@ describe(`entity includes query`, () => {
           },
           wakes: { toArray: [], __electricRowOffsets: new Map() },
           signals: { toArray: [], __electricRowOffsets: new Map() },
+          realtimeTranscripts: emptyOrderableCollection(),
           contextInserted: { toArray: [], __electricRowOffsets: new Map() },
           contextRemoved: { toArray: [], __electricRowOffsets: new Map() },
           manifests: { toArray: [], __electricRowOffsets: new Map() },
@@ -2079,6 +2091,7 @@ describe(`entity includes query`, () => {
           inbox: { toArray: [], __electricRowOffsets: new Map() },
           wakes: { toArray: [], __electricRowOffsets: new Map() },
           signals: { toArray: [], __electricRowOffsets: new Map() },
+          realtimeTranscripts: emptyOrderableCollection(),
           contextInserted: {
             toArray: [
               {
@@ -2196,6 +2209,7 @@ describe(`entity includes query`, () => {
           inbox: { toArray: [] },
           wakes: { toArray: [] },
           signals: { toArray: [] },
+          realtimeTranscripts: emptyOrderableCollection(),
           contextInserted: { toArray: [], __electricRowOffsets: new Map() },
           contextRemoved: { toArray: [], __electricRowOffsets: new Map() },
           manifests: {
@@ -2305,6 +2319,7 @@ describe(`entity includes query`, () => {
           inbox: { toArray: [] },
           wakes: { toArray: [] },
           signals: { toArray: [] },
+          realtimeTranscripts: emptyOrderableCollection(),
           contextInserted: { toArray: [], __electricRowOffsets: new Map() },
           contextRemoved: { toArray: [], __electricRowOffsets: new Map() },
           manifests: {

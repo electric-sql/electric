@@ -46,7 +46,7 @@ import { useCurrentPrincipal } from '../hooks/useCurrentPrincipal'
 import { Icon, IconButton, ScrollArea, Stack, Text, Tooltip } from '../ui'
 import { UserMessage } from './UserMessage'
 import type { ForkFromHereAction, UserMessageAttachment } from './UserMessage'
-import { AgentResponseLive } from './AgentResponse'
+import { AgentResponse, AgentResponseLive } from './AgentResponse'
 import { CommentBubble } from './CommentBubble'
 import { InlineEventCard } from './InlineEventCard'
 import { InlineStatusBadge } from './InlineStatusBadge'
@@ -1319,7 +1319,25 @@ const TimelineRow = memo(function TimelineRow({
   }
 
   if (row.realtimeTranscript) {
+    if (row.realtimeTranscript.text.trim().length === 0) {
+      return <></>
+    }
     const timestamp = Date.parse(row.realtimeTranscript.created_at)
+    if (row.realtimeTranscript.direction === `output`) {
+      const isStreamingTranscript = row.realtimeTranscript.status !== `final`
+      return (
+        <AgentResponse
+          section={{
+            kind: `agent_response`,
+            items: [{ kind: `text`, text: row.realtimeTranscript.text }],
+            ...(isStreamingTranscript ? {} : { done: true as const }),
+          }}
+          isStreaming={!entityStopped && isStreamingTranscript}
+          timestamp={Number.isFinite(timestamp) ? timestamp : null}
+          renderWidth={renderWidth}
+        />
+      )
+    }
     return (
       <UserMessage
         section={{

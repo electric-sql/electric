@@ -227,9 +227,13 @@ export function defaultProjection(
       return [renderSignalMessage(item.signal)]
 
     case `realtime_transcript`:
-      return item.direction === `input` && item.text.length > 0
-        ? [{ role: `user`, content: item.text }]
-        : null
+      if (item.text.length === 0) return null
+      return [
+        {
+          role: item.direction === `input` ? `user` : `assistant`,
+          content: item.text,
+        },
+      ]
 
     case `run`: {
       const messages: Array<LLMMessage> = []
@@ -401,7 +405,7 @@ export function materializeTimeline(
         item,
       })),
       ...(data.realtimeTranscripts ?? [])
-        .filter((item) => item.direction === `input` && item.text.length > 0)
+        .filter((item) => item.text.length > 0)
         .map((item) => ({
           kind: `realtime_transcript` as const,
           order: item.order,

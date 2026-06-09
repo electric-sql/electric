@@ -173,7 +173,7 @@ describe(`timeline context`, () => {
     expect(result).toEqual([{ role: `user`, content: `updated text` }])
   })
 
-  it(`projects realtime input transcripts without duplicating output transcripts`, () => {
+  it(`projects realtime input and output transcripts as chat messages`, () => {
     const realtimeTranscripts: Array<IncludesRealtimeTranscript> = [
       {
         key: `rt-in`,
@@ -204,7 +204,10 @@ describe(`timeline context`, () => {
         wakes: [],
         realtimeTranscripts,
       })
-    ).toEqual([{ role: `user`, content: `voice question` }])
+    ).toEqual([
+      { role: `user`, content: `voice question` },
+      { role: `assistant`, content: `voice answer` },
+    ])
   })
 
   it(`buildTimelineMessages keeps pending tool calls without emitting tool results`, () => {

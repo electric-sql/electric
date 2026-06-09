@@ -1378,6 +1378,33 @@ const getEntitySignalsCollection = cachedCollectionFactory(
     })
 )
 
+const getEntityRealtimeTranscriptsCollection = cachedCollectionFactory(
+  (db: EntityStreamDB) =>
+    createLiveQueryCollection({
+      id: `${String(db.collections.realtimeTranscripts.id)}:realtime-transcripts-live`,
+      query: (q) =>
+        q
+          .from({ realtimeTranscript: db.collections.realtimeTranscripts })
+          .select(({ realtimeTranscript }) => ({
+            timelineKey: TIMELINE_KEY,
+            key: realtimeTranscript.key,
+            order: coalesce(realtimeTranscript._seq, -1),
+            session_id: realtimeTranscript.session_id,
+            direction: realtimeTranscript.direction,
+            text: realtimeTranscript.text,
+            status: realtimeTranscript.status,
+            turn_id: realtimeTranscript.turn_id,
+            response_id: realtimeTranscript.response_id,
+            audio_stream: realtimeTranscript.audio_stream,
+            audio_offset: realtimeTranscript.audio_offset,
+            audio_next_offset: realtimeTranscript.audio_next_offset,
+            sample_start: realtimeTranscript.sample_start,
+            sample_end: realtimeTranscript.sample_end,
+            created_at: realtimeTranscript.created_at,
+          })),
+    })
+)
+
 type EntityTimelineQueryBuilder = (q: InitialQueryBuilder) => QueryBuilder<any>
 
 /**
@@ -1489,9 +1516,6 @@ function buildEntityTimelineQuery(
 
   const realtimeTranscriptSource = q
     .from({ realtimeTranscript: db.collections.realtimeTranscripts })
-    .where(({ realtimeTranscript }) =>
-      eq(realtimeTranscript.direction, `input`)
-    )
     .select(({ realtimeTranscript }) => ({
       key: realtimeTranscript.key,
       order: coalesce(realtimeTranscript._timeline_order, `~`),
@@ -1759,6 +1783,8 @@ export function createEntityIncludesQuery(
   const inboxCollection = getEntityInboxCollection(db)
   const wakesCollection = getEntityWakesCollection(db)
   const signalsCollection = getEntitySignalsCollection(db)
+  const realtimeTranscriptsCollection =
+    getEntityRealtimeTranscriptsCollection(db)
   const entitiesCollection = getEntityEntitiesCollection(db)
 
   return (q: InitialQueryBuilder) =>
@@ -1939,13 +1965,14 @@ export function createEntityIncludesQuery(
       ),
       realtimeTranscripts: toArray(
         q
-          .from({ realtimeTranscript: db.collections.realtimeTranscripts })
-          .orderBy(({ realtimeTranscript }) =>
-            coalesce(realtimeTranscript._seq, -1)
+          .from({ realtimeTranscript: realtimeTranscriptsCollection })
+          .where(({ realtimeTranscript }) =>
+            eq(realtimeTranscript.timelineKey, timeline.key)
           )
+          .orderBy(({ realtimeTranscript }) => realtimeTranscript.order)
           .select(({ realtimeTranscript }) => ({
             key: realtimeTranscript.key,
-            order: coalesce(realtimeTranscript._seq, -1),
+            order: realtimeTranscript.order,
             session_id: realtimeTranscript.session_id,
             direction: realtimeTranscript.direction,
             text: realtimeTranscript.text,

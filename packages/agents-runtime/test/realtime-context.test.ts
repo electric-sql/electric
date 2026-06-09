@@ -36,7 +36,7 @@ describe(`ctx.useRealtime()`, () => {
     durableMock.appends.length = 0
   })
 
-  it(`records provider transcript output through the outbound bridge`, async () => {
+  it(`records provider transcript output as realtime transcript rows`, async () => {
     const { ctx } = createTestHandlerContext()
 
     const realtime = ctx.useRealtime({
@@ -60,11 +60,12 @@ describe(`ctx.useRealtime()`, () => {
         finish_reason: `stop`,
       },
     ])
-    expect(ctx.db.collections.textDeltas.toArray).toMatchObject([
+    expect(ctx.db.collections.textDeltas.toArray).toEqual([])
+    expect(ctx.db.collections.realtimeTranscripts.toArray).toMatchObject([
       {
-        text_id: `msg-0`,
-        run_id: `run-0`,
-        delta: `hello from voice`,
+        direction: `output`,
+        text: `hello from voice`,
+        status: `final`,
       },
     ])
   })
@@ -200,12 +201,115 @@ describe(`ctx.useRealtime()`, () => {
     const inputTranscriptInsertIndex = events.findIndex(
       (event) => event === transcriptEvents[0]
     )
-    const firstAssistantTextIndex = events.findIndex(
-      (event) => event.type === `text` || event.type === `text_delta`
+    const firstAssistantTranscriptIndex = events.findIndex(
+      (event) =>
+        event.type === `realtime_transcript` &&
+        event.key === `realtime-transcript:provider-session:output:resp-1` &&
+        event.headers.operation === `insert`
     )
     expect(inputTranscriptInsertIndex).toBeGreaterThanOrEqual(0)
-    expect(firstAssistantTextIndex).toBeGreaterThanOrEqual(0)
-    expect(inputTranscriptInsertIndex).toBeLessThan(firstAssistantTextIndex)
+    expect(firstAssistantTranscriptIndex).toBeGreaterThanOrEqual(0)
+    expect(inputTranscriptInsertIndex).toBeLessThan(
+      firstAssistantTranscriptIndex
+    )
+  })
+
+  it(`splits output transcripts around later input speech`, async () => {
+    const db = buildStreamFixture([])
+    const events: Array<ChangeEvent> = []
+    const { ctx } = createTestHandlerContext({
+      db,
+      writeEvent: (event) => {
+        events.push(event)
+        db.utils.applyEvent(event)
+      },
+    })
+
+    const realtime = ctx.useRealtime({
+      systemPrompt: `You are realtime.`,
+      provider: createTestRealtimeProvider({
+        events: [
+          { type: `session.started`, sessionId: `provider-session` },
+          {
+            type: `output_transcript.delta`,
+            delta: `Hello `,
+            responseId: `resp-1`,
+          },
+          { type: `input_audio.speech_started`, turnId: `input-item-1` },
+          {
+            type: `output_transcript.delta`,
+            delta: `there`,
+            responseId: `resp-1`,
+          },
+          {
+            type: `input_transcript.completed`,
+            text: `interrupting`,
+            turnId: `input-item-1`,
+          },
+          {
+            type: `output_transcript.completed`,
+            text: `Hello there`,
+            responseId: `resp-1`,
+          },
+          { type: `session.closed` },
+        ],
+      }),
+      tools: [],
+    })
+
+    await realtime.run()
+
+    expect(
+      ctx.db.collections.realtimeTranscripts.get(
+        `realtime-transcript:provider-session:output:resp-1`
+      )
+    ).toMatchObject({
+      direction: `output`,
+      text: `Hello `,
+      status: `final`,
+    })
+    expect(
+      ctx.db.collections.realtimeTranscripts.get(
+        `realtime-transcript:provider-session:input:input-item-1`
+      )
+    ).toMatchObject({
+      direction: `input`,
+      text: `interrupting`,
+      status: `final`,
+    })
+    expect(
+      ctx.db.collections.realtimeTranscripts.get(
+        `realtime-transcript:provider-session:output:resp-1:segment-1`
+      )
+    ).toMatchObject({
+      direction: `output`,
+      text: `there`,
+      status: `final`,
+    })
+
+    const firstOutputInsertIndex = events.findIndex(
+      (event) =>
+        event.type === `realtime_transcript` &&
+        event.key === `realtime-transcript:provider-session:output:resp-1` &&
+        event.headers.operation === `insert`
+    )
+    const inputInsertIndex = events.findIndex(
+      (event) =>
+        event.type === `realtime_transcript` &&
+        event.key ===
+          `realtime-transcript:provider-session:input:input-item-1` &&
+        event.headers.operation === `insert`
+    )
+    const secondOutputInsertIndex = events.findIndex(
+      (event) =>
+        event.type === `realtime_transcript` &&
+        event.key ===
+          `realtime-transcript:provider-session:output:resp-1:segment-1` &&
+        event.headers.operation === `insert`
+    )
+    expect(firstOutputInsertIndex).toBeGreaterThanOrEqual(0)
+    expect(inputInsertIndex).toBeGreaterThan(firstOutputInsertIndex)
+    expect(secondOutputInsertIndex).toBeGreaterThan(inputInsertIndex)
   })
 
   it(`finds active realtime sessions from the manifest`, () => {
