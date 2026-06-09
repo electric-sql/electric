@@ -7,6 +7,7 @@ import type {
   RealtimeProviderEvent,
   RealtimeProviderSession,
   RealtimeToolResult,
+  RealtimeTurnDetectionConfig,
 } from './types'
 
 type MaybePromise<T> = T | Promise<T>
@@ -288,6 +289,43 @@ function inputTranscription(
     model: config.model ?? DEFAULT_OPENAI_INPUT_TRANSCRIPTION_MODEL,
     ...(config.language ? { language: config.language } : {}),
     ...(config.prompt ? { prompt: config.prompt } : {}),
+    ...(config.delay ? { delay: config.delay } : {}),
+  }
+}
+
+function realtimeTurnDetection(
+  config: RealtimeTurnDetectionConfig | undefined
+): Record<string, unknown> | null {
+  if (config === false || config?.type === `none`) return null
+  if (!config) {
+    return {
+      type: `server_vad`,
+      threshold: 0.55,
+      prefix_padding_ms: 300,
+      silence_duration_ms: 500,
+      create_response: true,
+      interrupt_response: true,
+    }
+  }
+  if (config.type === `semantic_vad`) {
+    return {
+      type: `semantic_vad`,
+      ...(config.eagerness ? { eagerness: config.eagerness } : {}),
+      create_response: config.createResponse ?? true,
+      interrupt_response: config.interruptResponse ?? true,
+    }
+  }
+  return {
+    type: `server_vad`,
+    ...(config.threshold != null ? { threshold: config.threshold } : {}),
+    ...(config.prefixPaddingMs != null
+      ? { prefix_padding_ms: config.prefixPaddingMs }
+      : {}),
+    ...(config.silenceDurationMs != null
+      ? { silence_duration_ms: config.silenceDurationMs }
+      : {}),
+    create_response: config.createResponse ?? true,
+    interrupt_response: config.interruptResponse ?? true,
   }
 }
 
@@ -317,14 +355,9 @@ function buildSessionUpdate(
                     input: {
                       format: inputFormat,
                       ...(transcription ? { transcription } : {}),
-                      turn_detection: {
-                        type: `server_vad`,
-                        threshold: 0.5,
-                        prefix_padding_ms: 300,
-                        silence_duration_ms: 200,
-                        create_response: true,
-                        interrupt_response: true,
-                      },
+                      turn_detection: realtimeTurnDetection(
+                        input.audio?.turnDetection
+                      ),
                     },
                   }
                 : {}),
@@ -355,6 +388,43 @@ function parseToolArgs(value: unknown): unknown {
 function toolResultOutput(result: RealtimeToolResult): string {
   if (typeof result.result === `string`) return result.result
   return JSON.stringify(result.result)
+}
+
+type OutputTranscriptSource =
+  | `response.audio_transcript`
+  | `response.output_audio_transcript`
+  | `response.output_text`
+
+function outputTranscriptSource(
+  event: OpenAIRealtimeEvent
+): OutputTranscriptSource | undefined {
+  if (
+    event.type === `response.audio_transcript.delta` ||
+    event.type === `response.audio_transcript.done`
+  ) {
+    return `response.audio_transcript`
+  }
+  if (
+    event.type === `response.output_audio_transcript.delta` ||
+    event.type === `response.output_audio_transcript.done`
+  ) {
+    return `response.output_audio_transcript`
+  }
+  if (
+    event.type === `response.output_text.delta` ||
+    event.type === `response.output_text.done`
+  ) {
+    return `response.output_text`
+  }
+  return undefined
+}
+
+function openAIString(value: unknown): string | undefined {
+  return typeof value === `string` ? value : undefined
+}
+
+function openAINumber(value: unknown): number | undefined {
+  return typeof value === `number` && Number.isFinite(value) ? value : undefined
 }
 
 function mapOpenAIEvent(
@@ -399,6 +469,14 @@ function mapOpenAIEvent(
               ? String(event.audio_end_ms)
               : undefined,
           turnId: typeof event.item_id === `string` ? event.item_id : undefined,
+        },
+      ]
+    case `input_audio_buffer.committed`:
+      return [
+        {
+          type: `input_audio.committed`,
+          turnId: openAIString(event.item_id),
+          previousTurnId: openAIString(event.previous_item_id),
         },
       ]
     case `conversation.item.input_audio_transcription.delta`:
@@ -459,10 +537,10 @@ function mapOpenAIEvent(
         {
           type: `output_transcript.delta`,
           delta: String(event.delta ?? ``),
-          responseId:
-            typeof event.response_id === `string`
-              ? event.response_id
-              : undefined,
+          responseId: openAIString(event.response_id),
+          itemId: openAIString(event.item_id),
+          contentIndex: openAINumber(event.content_index),
+          transcriptSource: outputTranscriptSource(event),
         },
       ]
     case `response.audio_transcript.done`:
@@ -477,10 +555,10 @@ function mapOpenAIEvent(
               : typeof event.text === `string`
                 ? event.text
                 : undefined,
-          responseId:
-            typeof event.response_id === `string`
-              ? event.response_id
-              : undefined,
+          responseId: openAIString(event.response_id),
+          itemId: openAIString(event.item_id),
+          contentIndex: openAINumber(event.content_index),
+          transcriptSource: outputTranscriptSource(event),
         },
       ]
     case `response.done`:
@@ -558,9 +636,11 @@ export function createOpenAIRealtimeProvider(
       const toolsByName = new Map(
         input.tools.map((tool) => [toolName(tool), tool])
       )
+      const seenProviderEventIds = new Set<string>()
       let socketOpen = false
       let socketClosed = false
       let clientCloseRequested = false
+      let responseEpoch = 0
       let rejectOpen: ((error: Error) => void) | undefined
 
       const closeQueue = (reason?: string): void => {
@@ -598,6 +678,7 @@ export function createOpenAIRealtimeProvider(
       const executeToolCall = async (
         event: OpenAIRealtimeEvent
       ): Promise<void> => {
+        const toolResponseEpoch = responseEpoch
         const item = event.item ?? {}
         const toolCallId = String(
           event.call_id ?? item.call_id ?? item.id ?? event.item_id ?? ``
@@ -639,6 +720,14 @@ export function createOpenAIRealtimeProvider(
             result,
           }
           queue.push({ type: `tool_call.completed`, ...realtimeResult })
+          if (
+            clientCloseRequested ||
+            socketClosed ||
+            input.signal?.aborted ||
+            toolResponseEpoch !== responseEpoch
+          ) {
+            return
+          }
           await sendToolResult(realtimeResult)
         } catch (error) {
           const realtimeResult: RealtimeToolResult = {
@@ -648,6 +737,14 @@ export function createOpenAIRealtimeProvider(
             isError: true,
           }
           queue.push({ type: `tool_call.completed`, ...realtimeResult })
+          if (
+            clientCloseRequested ||
+            socketClosed ||
+            input.signal?.aborted ||
+            toolResponseEpoch !== responseEpoch
+          ) {
+            return
+          }
           await sendToolResult(realtimeResult)
         }
       }
@@ -679,6 +776,13 @@ export function createOpenAIRealtimeProvider(
           const parsed = JSON.parse(
             dataToString(socketMessageData(args))
           ) as OpenAIRealtimeEvent
+          if (typeof parsed.event_id === `string`) {
+            if (seenProviderEventIds.has(parsed.event_id)) return
+            seenProviderEventIds.add(parsed.event_id)
+          }
+          if (parsed.type === `response.created`) {
+            responseEpoch += 1
+          }
           if (parsed.type === `response.function_call_arguments.done`) {
             void executeToolCall(parsed).catch((error) => queue.fail(error))
             return
@@ -722,6 +826,9 @@ export function createOpenAIRealtimeProvider(
             audio: bytesToBase64(chunk),
           })
         },
+        clearInputAudio: async () => {
+          sendJson(ws, { type: `input_audio_buffer.clear` })
+        },
         commitInputAudio: async () => {
           sendJson(ws, { type: `input_audio_buffer.commit` })
           sendJson(ws, { type: `response.create` })
@@ -739,6 +846,7 @@ export function createOpenAIRealtimeProvider(
         },
         sendToolResult,
         cancelResponse: async () => {
+          responseEpoch += 1
           sendJson(ws, { type: `response.cancel` })
         },
         truncateOutputAudio: async ({ itemId, audioEndMs }) => {

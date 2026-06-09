@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowUp, Mic, MicOff, Square } from 'lucide-react'
+import { ArrowUp, AudioLines, Square } from 'lucide-react'
 import { useLiveQuery } from '@tanstack/react-db'
 import type { EntityStreamDBWithActions } from '@electric-ax/agents-runtime/client'
 import {
@@ -589,7 +589,7 @@ export function MessageInput({
                         .filter(Boolean)
                         .join(` `)}
                     >
-                      <Icon icon={realtimeActive ? MicOff : Mic} size={2} />
+                      <Icon icon={AudioLines} size={2} />
                     </button>
                   </span>
                 </Tooltip>

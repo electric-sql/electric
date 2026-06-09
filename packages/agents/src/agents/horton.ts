@@ -956,6 +956,18 @@ function createAssistantHandler(options: {
         audio: {
           inputFormat: { codec: `pcm16`, sampleRate: 24_000, channels: 1 },
           outputFormat: { codec: `pcm16`, sampleRate: 24_000, channels: 1 },
+          inputTranscription: {
+            model: `gpt-realtime-whisper`,
+            delay: `minimal`,
+          },
+          turnDetection: {
+            type: `server_vad`,
+            threshold: 0.55,
+            prefixPaddingMs: 300,
+            silenceDurationMs: 500,
+            createResponse: true,
+            interruptResponse: true,
+          },
         },
         toolPolicy: {
           direct: hortonRealtimeDirectTools(tools as AgentTool[]),

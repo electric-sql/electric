@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowUp,
+  AudioLines,
   Check,
   ChevronDown,
   ChevronRight,
   Cpu,
-  Mic,
   Sparkles,
 } from 'lucide-react'
 import { eq, not, useLiveQuery } from '@tanstack/react-db'
@@ -1217,7 +1217,7 @@ function DefaultAgentComposer({
                     .filter(Boolean)
                     .join(` `)}
                 >
-                  <Icon icon={Mic} size={2} />
+                  <Icon icon={AudioLines} size={2} />
                 </button>
               </span>
             </Tooltip>

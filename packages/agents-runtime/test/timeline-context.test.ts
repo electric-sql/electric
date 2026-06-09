@@ -210,6 +210,40 @@ describe(`timeline context`, () => {
     ])
   })
 
+  it(`does not project partial realtime transcripts as chat messages`, () => {
+    const realtimeTranscripts: Array<IncludesRealtimeTranscript> = [
+      {
+        key: `rt-partial`,
+        order: order(1),
+        session_id: `rt-1`,
+        direction: `input`,
+        text: `partially heard`,
+        status: `partial`,
+        audio_stream: `input`,
+        created_at: `2026-03-28T00:00:00.000Z`,
+      },
+      {
+        key: `rt-final`,
+        order: order(2),
+        session_id: `rt-1`,
+        direction: `input`,
+        text: `final question`,
+        status: `final`,
+        audio_stream: `input`,
+        created_at: `2026-03-28T00:00:01.000Z`,
+      },
+    ]
+
+    expect(
+      buildTimelineMessages({
+        runs: [],
+        inbox: [],
+        wakes: [],
+        realtimeTranscripts,
+      })
+    ).toEqual([{ role: `user`, content: `final question` }])
+  })
+
   it(`buildTimelineMessages keeps pending tool calls without emitting tool results`, () => {
     expect(
       buildTimelineMessages({

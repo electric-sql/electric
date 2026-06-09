@@ -128,6 +128,10 @@ function createEntityTimelineIndexes(collections: EntityCollections): void {
   createCollectionIndex(collections.texts, (row) => row.run_id)
   createCollectionIndex(collections.textDeltas, (row) => row.text_id)
   createCollectionIndex(collections.textDeltas, (row) => row.run_id)
+  createCollectionIndex(
+    collections.textDeltas,
+    (row) => row.realtime_transcript_id
+  )
   createCollectionIndex(collections.toolCalls, (row) => row.run_id)
   createCollectionIndex(collections.steps, (row) => row.run_id)
   createCollectionIndex(collections.errors, (row) => row.run_id)

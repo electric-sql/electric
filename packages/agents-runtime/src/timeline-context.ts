@@ -228,6 +228,7 @@ export function defaultProjection(
 
     case `realtime_transcript`:
       if (item.text.length === 0) return null
+      if (item.status !== `final`) return null
       return [
         {
           role: item.direction === `input` ? `user` : `assistant`,

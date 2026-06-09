@@ -32,6 +32,28 @@ const MIC_CAPTURE_CHUNK_SAMPLES = 1024
 const MIC_WORKLET_PROCESSOR_NAME = `realtime-mic-capture`
 const BYTES_PER_PCM16_SAMPLE = 2
 const TRUNCATE_SAFETY_MS = 80
+const MIC_PRE_ROLL_MS = 360
+const MIC_VAD_TAIL_MS = 700
+const MIC_MAX_QUEUE_MS = 1600
+const MIC_APPEND_BATCH_MS = 60
+const MIC_APPEND_DRAIN_WAIT_MS = 350
+const MIC_MIN_START_LEVEL = 0.012
+const MIC_MIN_CONTINUE_LEVEL = 0.006
+const MIC_PLAYBACK_START_LEVEL = 0.035
+const MIC_START_CONFIRM_CHUNKS = 1
+const MIC_PLAYBACK_START_CONFIRM_CHUNKS = 4
+const MIC_NOISE_MARGIN_START = 0.01
+const MIC_NOISE_MARGIN_CONTINUE = 0.004
+const MIC_NOISE_FLOOR_INITIAL = 0.003
+const MIC_NOISE_FLOOR_MAX = 0.018
+const MIC_NOISE_FLOOR_ALPHA = 0.008
+
+const NO_RETRY_BACKOFF = {
+  initialDelay: 100,
+  maxDelay: 100,
+  multiplier: 1,
+  maxRetries: 0,
+}
 
 type MicCapture = {
   node: AudioNode
@@ -65,6 +87,24 @@ function pcm16DurationMs(byteLength: number): number {
   return (byteLength / BYTES_PER_PCM16_SAMPLE / REALTIME_SAMPLE_RATE) * 1000
 }
 
+function durationBytes(durationMs: number): number {
+  return Math.ceil(
+    (durationMs / 1000) * REALTIME_SAMPLE_RATE * BYTES_PER_PCM16_SAMPLE
+  )
+}
+
+function combineChunks(chunks: Array<Uint8Array>): Uint8Array {
+  if (chunks.length === 1) return chunks[0]!
+  const totalLength = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0)
+  const combined = new Uint8Array(totalLength)
+  let offset = 0
+  for (const chunk of chunks) {
+    combined.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return combined
+}
+
 function audioLevel(input: Float32Array): number {
   if (input.length === 0) return 0
   let sumSquares = 0
@@ -85,8 +125,39 @@ function pcm16Floats(bytes: Uint8Array): Float32Array<ArrayBuffer> {
   return output
 }
 
+function alignedPcm16Chunk(
+  chunk: Uint8Array,
+  remainder: Uint8Array | undefined
+): { bytes: Uint8Array; remainder: Uint8Array | undefined } {
+  const bytes = remainder ? combineChunks([remainder, chunk]) : chunk
+  const alignedLength =
+    bytes.byteLength - (bytes.byteLength % BYTES_PER_PCM16_SAMPLE)
+
+  return {
+    bytes:
+      alignedLength === bytes.byteLength
+        ? bytes
+        : bytes.subarray(0, alignedLength),
+    remainder:
+      alignedLength === bytes.byteLength
+        ? undefined
+        : bytes.slice(alignedLength),
+  }
+}
+
 function jsonBytes(value: unknown): Uint8Array {
   return new TextEncoder().encode(JSON.stringify(value))
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function settleWithin(
+  promise: Promise<unknown>,
+  timeoutMs: number
+): Promise<void> {
+  await Promise.race([promise, delay(timeoutMs)])
 }
 
 function micWorkletSource(): string {
@@ -148,28 +219,18 @@ registerProcessor('${MIC_WORKLET_PROCESSOR_NAME}', RealtimeMicCaptureProcessor)
 `
 }
 
-function trackPendingAppend(
-  pending: Set<Promise<void>>,
-  append: Promise<void>,
-  onError: (error: unknown) => void
-): void {
-  let tracked: Promise<void>
-  tracked = append.catch(onError).finally(() => {
-    pending.delete(tracked)
-  })
-  pending.add(tracked)
-}
-
 function streamHandle(
   baseUrl: string,
   path: string,
-  contentType: string
+  contentType: string,
+  opts: { retryWrites?: boolean } = {}
 ): DurableStream {
   const url = streamUrl(baseUrl, path)
   return new DurableStream({
     url,
     headers: getConfiguredServerHeaders(url),
     contentType,
+    ...(opts.retryWrites === false ? { backoffOptions: NO_RETRY_BACKOFF } : {}),
     batching: true,
   })
 }
@@ -323,13 +384,151 @@ export async function startRealtimeAudioSession({
   let currentOutputStartedAt: number | null = null
   let currentOutputReceivedMs = 0
   let micChunks = 0
+  let micSentChunks = 0
   let playbackChunks = 0
   let controlEvents = 0
-  const playbackNodes = new Set<AudioBufferSourceNode>()
+  let speechTurns = 0
+  let voiceCandidateChunks = 0
+  let noiseFloor = MIC_NOISE_FLOOR_INITIAL
+  let speechActive = false
+  let lastVoiceAt = 0
+  let audioQueuedBytes = 0
+  let audioInputStopping = false
+  let audioInputError: Error | undefined
+  let wakeAudioInputWriter: (() => void) | undefined
+  let activeResponseId: string | undefined
+  let responseActive = false
+  const preSpeechChunks: Array<Uint8Array> = []
+  const audioQueue: Array<Uint8Array> = []
   const pendingAudioAppends = new Set<Promise<void>>()
+  const playbackNodes = new Set<AudioBufferSourceNode>()
+  let audioInputWriter = Promise.resolve()
 
   const appendControl = async (value: unknown): Promise<void> => {
     await controlIn?.append(jsonBytes(value))
+  }
+
+  const wakeAudioWriter = (): void => {
+    wakeAudioInputWriter?.()
+    wakeAudioInputWriter = undefined
+  }
+
+  const playbackIsActive = (): boolean =>
+    playbackNodes.size > 0 ||
+    nextPlaybackTime > playbackContext.currentTime + 0.05
+
+  const trimPreSpeechChunks = (): void => {
+    const maxBytes = durationBytes(MIC_PRE_ROLL_MS)
+    let total = preSpeechChunks.reduce(
+      (sum, chunk) => sum + chunk.byteLength,
+      0
+    )
+    while (total > maxBytes && preSpeechChunks.length > 0) {
+      const dropped = preSpeechChunks.shift()!
+      total -= dropped.byteLength
+    }
+  }
+
+  const rememberPreSpeechChunk = (bytes: Uint8Array): void => {
+    preSpeechChunks.push(bytes)
+    trimPreSpeechChunks()
+  }
+
+  const dropStaleAudio = (): void => {
+    const maxBytes = durationBytes(MIC_MAX_QUEUE_MS)
+    while (audioQueuedBytes > maxBytes && audioQueue.length > 1) {
+      const dropped = audioQueue.shift()!
+      audioQueuedBytes -= dropped.byteLength
+    }
+  }
+
+  const enqueueAudioInput = (bytes: Uint8Array): void => {
+    audioQueue.push(bytes)
+    audioQueuedBytes += bytes.byteLength
+    dropStaleAudio()
+    wakeAudioWriter()
+  }
+
+  const dequeueAudioBatch = (): Uint8Array | null => {
+    if (audioQueue.length === 0) return null
+    const maxBytes = durationBytes(MIC_APPEND_BATCH_MS)
+    let batchBytes = 0
+    const chunks: Array<Uint8Array> = []
+    while (audioQueue.length > 0) {
+      const next = audioQueue[0]!
+      if (chunks.length > 0 && batchBytes + next.byteLength > maxBytes) break
+      chunks.push(audioQueue.shift()!)
+      batchBytes += next.byteLength
+      audioQueuedBytes -= next.byteLength
+    }
+    return combineChunks(chunks)
+  }
+
+  const toError = (value: unknown): Error =>
+    value instanceof Error ? value : new Error(String(value))
+
+  const throwIfAudioInputFailed = (): void => {
+    if (audioInputError) throw audioInputError
+  }
+
+  const waitForPendingAudioInput = async (
+    timeoutMs = MIC_APPEND_DRAIN_WAIT_MS
+  ): Promise<void> => {
+    if (pendingAudioAppends.size > 0) {
+      await Promise.race([
+        Promise.all(Array.from(pendingAudioAppends)),
+        new Promise((resolve) => setTimeout(resolve, timeoutMs)),
+      ])
+    }
+    throwIfAudioInputFailed()
+  }
+
+  const trackAudioAppend = (
+    audioIn: DurableStream,
+    batch: Uint8Array
+  ): void => {
+    const append = audioIn
+      .append(batch)
+      .then(() => {
+        micSentChunks += 1
+        if (micSentChunks === 1) {
+          console.info(
+            `[realtime-audio] microphone first sent chunk session=${session?.sessionId} bytes=${batch.byteLength}`
+          )
+        }
+      })
+      .catch((error) => {
+        audioInputError ??= toError(error)
+        console.warn(`[realtime-audio] microphone append failed`, error)
+      })
+      .finally(() => {
+        pendingAudioAppends.delete(append)
+      })
+    pendingAudioAppends.add(append)
+  }
+
+  const runAudioInputWriter = async (audioIn: DurableStream): Promise<void> => {
+    while (
+      !audioInputStopping ||
+      audioQueue.length > 0 ||
+      pendingAudioAppends.size > 0
+    ) {
+      throwIfAudioInputFailed()
+      const batch = dequeueAudioBatch()
+      if (batch) {
+        trackAudioAppend(audioIn, batch)
+        continue
+      }
+
+      if (audioInputStopping && pendingAudioAppends.size > 0) {
+        await waitForPendingAudioInput(250)
+        continue
+      }
+
+      await new Promise<void>((resolve) => {
+        wakeAudioInputWriter = resolve
+      })
+    }
   }
 
   const stopScheduledPlayback = (): void => {
@@ -352,8 +551,18 @@ export async function startRealtimeAudioSession({
     currentOutputReceivedMs = 0
   }
 
-  const interruptPlayback = (): void => {
+  const interruptPlayback = ({
+    cancelResponse = true,
+  }: { cancelResponse?: boolean } = {}): void => {
     const itemId = currentOutputItemId
+    const wasResponseActive = responseActive
+    responseActive = false
+    if (cancelResponse && (wasResponseActive || itemId)) {
+      void appendControl({ type: `response.cancel` }).catch((error) => {
+        console.warn(`[realtime-audio] response cancel failed`, error)
+      })
+    }
+
     if (!itemId) {
       stopScheduledPlayback()
       return
@@ -386,22 +595,31 @@ export async function startRealtimeAudioSession({
   }
 
   const cleanup = async (sendClose: boolean): Promise<void> => {
-    abort.abort()
     micCapture?.cleanup()
     micCapture?.node.disconnect()
     silentOutput?.disconnect()
     source?.disconnect()
     onInputLevel?.(0)
     for (const track of media?.getTracks() ?? []) track.stop()
+    audioInputStopping = true
+    wakeAudioWriter()
+    await settleWithin(audioInputWriter, 250)
+    abort.abort()
     stopScheduledPlayback()
-    await Promise.allSettled(pendingAudioAppends)
+    await settleWithin(audioInputWriter, 250)
     if (sendClose && controlIn) {
-      await appendControl({
-        type: `session.close`,
-        reason: `client-stop`,
-      }).catch(() => undefined)
+      await settleWithin(
+        appendControl({
+          type: `session.close`,
+          reason: `client-stop`,
+        }).catch(() => undefined),
+        500
+      )
     }
-    await Promise.allSettled([playback, control])
+    await Promise.allSettled([
+      settleWithin(playback, 250),
+      settleWithin(control, 250),
+    ])
     await Promise.allSettled([micContext.close(), playbackContext.close()])
   }
 
@@ -423,7 +641,8 @@ export async function startRealtimeAudioSession({
     const audioIn = streamHandle(
       baseUrl,
       session.streams.audio_in,
-      `audio/pcm; rate=${REALTIME_SAMPLE_RATE}; channels=1`
+      `audio/pcm; rate=${REALTIME_SAMPLE_RATE}; channels=1`,
+      { retryWrites: false }
     )
     const audioOut = streamHandle(
       baseUrl,
@@ -433,13 +652,19 @@ export async function startRealtimeAudioSession({
     controlIn = streamHandle(
       baseUrl,
       session.streams.control_in,
-      `application/json`
+      `application/json`,
+      { retryWrites: false }
     )
     const controlOut = streamHandle(
       baseUrl,
       session.streams.control_out,
       `application/json`
     )
+    audioInputWriter = runAudioInputWriter(audioIn).catch((error) => {
+      if (!abort.signal.aborted) {
+        console.warn(`[realtime-audio] microphone writer failed`, error)
+      }
+    })
 
     const handleInputAudio = (bytes: Uint8Array, level: number): void => {
       if (abort.signal.aborted) return
@@ -450,13 +675,60 @@ export async function startRealtimeAudioSession({
           `[realtime-audio] microphone first chunk session=${session?.sessionId} bytes=${bytes.byteLength}`
         )
       }
-      trackPendingAppend(
-        pendingAudioAppends,
-        audioIn.append(bytes),
-        (error) => {
-          console.warn(`[realtime-audio] microphone append failed`, error)
-        }
+      rememberPreSpeechChunk(bytes)
+
+      const now = performance.now()
+      const startThreshold = Math.max(
+        MIC_MIN_START_LEVEL,
+        noiseFloor + MIC_NOISE_MARGIN_START,
+        playbackIsActive() ? MIC_PLAYBACK_START_LEVEL : 0
       )
+      const continueThreshold = Math.max(
+        MIC_MIN_CONTINUE_LEVEL,
+        noiseFloor + MIC_NOISE_MARGIN_CONTINUE
+      )
+      const hasVoice =
+        level >= (speechActive ? continueThreshold : startThreshold)
+
+      if (hasVoice) {
+        lastVoiceAt = now
+        if (!speechActive) {
+          voiceCandidateChunks += 1
+          const requiredChunks = playbackIsActive()
+            ? MIC_PLAYBACK_START_CONFIRM_CHUNKS
+            : MIC_START_CONFIRM_CHUNKS
+          if (voiceCandidateChunks < requiredChunks) return
+
+          voiceCandidateChunks = 0
+          speechActive = true
+          speechTurns += 1
+          console.info(
+            `[realtime-audio] microphone voice gate opened session=${session?.sessionId} turn=${speechTurns} level=${level.toFixed(4)} threshold=${startThreshold.toFixed(4)} noiseFloor=${noiseFloor.toFixed(4)}`
+          )
+          for (const chunk of preSpeechChunks.splice(0)) {
+            enqueueAudioInput(chunk)
+          }
+          return
+        }
+        enqueueAudioInput(bytes)
+        return
+      }
+
+      voiceCandidateChunks = 0
+
+      if (speechActive) {
+        if (now - lastVoiceAt < MIC_VAD_TAIL_MS) {
+          enqueueAudioInput(bytes)
+          return
+        }
+        speechActive = false
+      }
+
+      if (!speechActive && level < startThreshold) {
+        noiseFloor =
+          noiseFloor * (1 - MIC_NOISE_FLOOR_ALPHA) +
+          Math.min(level, MIC_NOISE_FLOOR_MAX) * MIC_NOISE_FLOOR_ALPHA
+      }
     }
     source = micContext.createMediaStreamSource(media)
     micCapture = await createMicCapture(micContext, handleInputAudio)
@@ -475,6 +747,7 @@ export async function startRealtimeAudioSession({
         signal: abort.signal,
         warnOnHttp: false,
       })
+      let playbackRemainder: Uint8Array | undefined
       try {
         for await (const chunk of response.bodyStream()) {
           if (abort.signal.aborted || chunk.byteLength === 0) continue
@@ -484,7 +757,11 @@ export async function startRealtimeAudioSession({
               `[realtime-audio] playback first chunk session=${session?.sessionId} bytes=${chunk.byteLength}`
             )
           }
-          const samples = pcm16Floats(chunk)
+          const aligned = alignedPcm16Chunk(chunk, playbackRemainder)
+          playbackRemainder = aligned.remainder
+          if (aligned.bytes.byteLength === 0) continue
+
+          const samples = pcm16Floats(aligned.bytes)
           const buffer = playbackContext.createBuffer(
             1,
             samples.length,
@@ -533,7 +810,25 @@ export async function startRealtimeAudioSession({
               `[realtime-audio] control first event session=${session?.sessionId} type=${event.type}`
             )
           }
-          if (
+          if (event.type === `response.started`) {
+            activeResponseId =
+              typeof event.responseId === `string`
+                ? event.responseId
+                : undefined
+            responseActive = true
+          } else if (
+            event.type === `response.completed` ||
+            event.type === `response.cancelled`
+          ) {
+            if (
+              !activeResponseId ||
+              typeof event.responseId !== `string` ||
+              event.responseId === activeResponseId
+            ) {
+              activeResponseId = undefined
+              responseActive = false
+            }
+          } else if (
             event.type === `output_audio.delta` &&
             typeof event.itemId === `string`
           ) {
@@ -542,7 +837,7 @@ export async function startRealtimeAudioSession({
               currentOutputReceivedMs += pcm16DurationMs(event.byteLength)
             }
           } else if (event.type === `input_audio.speech_started`) {
-            interruptPlayback()
+            interruptPlayback({ cancelResponse: false })
           }
         }
       } finally {

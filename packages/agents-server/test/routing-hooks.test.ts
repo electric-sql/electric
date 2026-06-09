@@ -43,9 +43,12 @@ describe(`routing/hooks`, () => {
     expect(wrapped?.headers.get(`access-control-allow-methods`)).toContain(
       `GET`
     )
-    expect(wrapped?.headers.get(`access-control-allow-headers`)).toContain(
-      `electric-principal`
-    )
+    const allowedHeaders = wrapped?.headers.get(`access-control-allow-headers`)
+    expect(allowedHeaders).toContain(`electric-principal`)
+    expect(allowedHeaders).toContain(`producer-id`)
+    expect(allowedHeaders).toContain(`producer-epoch`)
+    expect(allowedHeaders).toContain(`producer-seq`)
+    expect(allowedHeaders).toContain(`stream-closed`)
   })
 
   it(`errorMapper converts ElectricAgentsError to API error JSON`, async () => {

@@ -105,9 +105,9 @@ describe(`createOpenAIRealtimeProvider`, () => {
             transcription: { model: `gpt-4o-mini-transcribe` },
             turn_detection: {
               type: `server_vad`,
-              threshold: 0.5,
+              threshold: 0.55,
               prefix_padding_ms: 300,
-              silence_duration_ms: 200,
+              silence_duration_ms: 500,
               create_response: true,
               interrupt_response: true,
             },
@@ -158,6 +158,113 @@ describe(`createOpenAIRealtimeProvider`, () => {
     ).toBeUndefined()
   })
 
+  it(`maps input transcription delay for low latency captions`, async () => {
+    FakeWebSocket.instances = []
+    const provider = createOpenAIRealtimeProvider({
+      apiKey: `sk-test`,
+      WebSocket: FakeWebSocket,
+    })
+
+    await provider.connect({
+      systemPrompt: `Talk`,
+      messages: [],
+      tools: [],
+      audio: {
+        inputFormat: { codec: `pcm16`, sampleRate: 24_000, channels: 1 },
+        inputTranscription: {
+          model: `gpt-realtime-whisper`,
+          delay: `minimal`,
+        },
+      },
+    })
+
+    const socket = FakeWebSocket.instances[0]!
+    expect(socket.sent[0]).toMatchObject({
+      session: {
+        audio: {
+          input: {
+            transcription: {
+              model: `gpt-realtime-whisper`,
+              delay: `minimal`,
+            },
+          },
+        },
+      },
+    })
+  })
+
+  it(`can disable realtime turn detection for manual audio commits`, async () => {
+    FakeWebSocket.instances = []
+    const provider = createOpenAIRealtimeProvider({
+      apiKey: `sk-test`,
+      WebSocket: FakeWebSocket,
+    })
+
+    await provider.connect({
+      systemPrompt: `Talk`,
+      messages: [],
+      tools: [],
+      audio: {
+        inputFormat: { codec: `pcm16`, sampleRate: 24_000, channels: 1 },
+        turnDetection: { type: `none` },
+      },
+    })
+
+    const socket = FakeWebSocket.instances[0]!
+    expect(socket.sent[0]).toMatchObject({
+      session: {
+        audio: {
+          input: {
+            turn_detection: null,
+          },
+        },
+      },
+    })
+  })
+
+  it(`maps realtime server VAD configuration`, async () => {
+    FakeWebSocket.instances = []
+    const provider = createOpenAIRealtimeProvider({
+      apiKey: `sk-test`,
+      WebSocket: FakeWebSocket,
+    })
+
+    await provider.connect({
+      systemPrompt: `Talk`,
+      messages: [],
+      tools: [],
+      audio: {
+        inputFormat: { codec: `pcm16`, sampleRate: 24_000, channels: 1 },
+        turnDetection: {
+          type: `server_vad`,
+          threshold: 0.7,
+          prefixPaddingMs: 250,
+          silenceDurationMs: 650,
+          createResponse: false,
+          interruptResponse: false,
+        },
+      },
+    })
+
+    const socket = FakeWebSocket.instances[0]!
+    expect(socket.sent[0]).toMatchObject({
+      session: {
+        audio: {
+          input: {
+            turn_detection: {
+              type: `server_vad`,
+              threshold: 0.7,
+              prefix_padding_ms: 250,
+              silence_duration_ms: 650,
+              create_response: false,
+              interrupt_response: false,
+            },
+          },
+        },
+      },
+    })
+  })
+
   it(`sends audio input chunks as OpenAI input buffer events`, async () => {
     FakeWebSocket.instances = []
     const provider = createOpenAIRealtimeProvider({
@@ -173,12 +280,14 @@ describe(`createOpenAIRealtimeProvider`, () => {
     const socket = FakeWebSocket.instances[0]!
 
     await session.appendInputAudio?.(new Uint8Array([1, 2, 3]))
+    await session.clearInputAudio?.()
     await session.commitInputAudio?.()
 
-    expect(socket.sent.at(-3)).toEqual({
+    expect(socket.sent.at(-4)).toEqual({
       type: `input_audio_buffer.append`,
       audio: `AQID`,
     })
+    expect(socket.sent.at(-3)).toEqual({ type: `input_audio_buffer.clear` })
     expect(socket.sent.at(-2)).toEqual({ type: `input_audio_buffer.commit` })
     expect(socket.sent.at(-1)).toEqual({ type: `response.create` })
   })
@@ -291,11 +400,16 @@ describe(`createOpenAIRealtimeProvider`, () => {
     socket.emitMessage({
       type: `response.output_audio_transcript.delta`,
       response_id: `resp-1`,
+      item_id: `item-1`,
+      content_index: 0,
       delta: `hello`,
     })
     await expect(nextEvent(iterator)).resolves.toEqual({
       type: `output_transcript.delta`,
       responseId: `resp-1`,
+      itemId: `item-1`,
+      contentIndex: 0,
+      transcriptSource: `response.output_audio_transcript`,
       delta: `hello`,
     })
 
@@ -346,6 +460,17 @@ describe(`createOpenAIRealtimeProvider`, () => {
       type: `input_audio.speech_stopped`,
       turnId: `item-1`,
       audioOffset: `860`,
+    })
+
+    socket.emitMessage({
+      type: `input_audio_buffer.committed`,
+      item_id: `item-1`,
+      previous_item_id: `previous-item`,
+    })
+    await expect(nextEvent(iterator)).resolves.toEqual({
+      type: `input_audio.committed`,
+      turnId: `item-1`,
+      previousTurnId: `previous-item`,
     })
 
     socket.emitMessage({
@@ -445,5 +570,79 @@ describe(`createOpenAIRealtimeProvider`, () => {
       },
     })
     expect(socket.sent.at(-1)).toEqual({ type: `response.create` })
+  })
+
+  it(`does not send tool results for a cancelled response`, async () => {
+    FakeWebSocket.instances = []
+    let resolveTool: (value: {
+      content: Array<{ type: `text`; text: string }>
+      details: Record<string, unknown>
+    }) => void = () => undefined
+    const execute = vi.fn(
+      () =>
+        new Promise<{
+          content: Array<{ type: `text`; text: string }>
+          details: Record<string, unknown>
+        }>((resolve) => {
+          resolveTool = resolve
+        })
+    )
+    const tool: AgentTool = {
+      name: `lookup`,
+      label: `Lookup`,
+      description: `Look up a value`,
+      parameters: Type.Object({ q: Type.String() }),
+      execute,
+    }
+    const provider = createOpenAIRealtimeProvider({
+      apiKey: `sk-test`,
+      WebSocket: FakeWebSocket,
+    })
+
+    const session = await provider.connect({
+      systemPrompt: `Talk`,
+      messages: [],
+      tools: [tool],
+    })
+    const socket = FakeWebSocket.instances[0]!
+    const iterator = session.events[Symbol.asyncIterator]()
+
+    socket.emitMessage({ type: `response.created`, response: { id: `resp-1` } })
+    await expect(nextEvent(iterator)).resolves.toEqual({
+      type: `response.started`,
+      responseId: `resp-1`,
+    })
+
+    socket.emitMessage({
+      type: `response.function_call_arguments.done`,
+      call_id: `call-1`,
+      name: `lookup`,
+      arguments: JSON.stringify({ q: `status` }),
+    })
+    await expect(nextEvent(iterator)).resolves.toMatchObject({
+      type: `tool_call.arguments_completed`,
+      toolCallId: `call-1`,
+    })
+    expect(execute).toHaveBeenCalledWith(`call-1`, { q: `status` }, undefined)
+
+    await session.cancelResponse?.()
+    resolveTool({ content: [{ type: `text`, text: `done` }], details: {} })
+
+    await expect(nextEvent(iterator)).resolves.toMatchObject({
+      type: `tool_call.completed`,
+      toolCallId: `call-1`,
+    })
+    expect(socket.sent).toContainEqual({ type: `response.cancel` })
+    expect(socket.sent).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: `conversation.item.create`,
+          item: expect.objectContaining({
+            type: `function_call_output`,
+            call_id: `call-1`,
+          }),
+        }),
+      ])
+    )
   })
 })

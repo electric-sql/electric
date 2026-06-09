@@ -1009,12 +1009,32 @@ export interface RealtimeInputTranscriptionConfig {
   model?: string
   language?: string
   prompt?: string
+  delay?: `minimal` | `low` | `medium` | `high` | `xhigh`
 }
+
+export type RealtimeTurnDetectionConfig =
+  | false
+  | { type: `none` }
+  | {
+      type: `server_vad`
+      threshold?: number
+      prefixPaddingMs?: number
+      silenceDurationMs?: number
+      createResponse?: boolean
+      interruptResponse?: boolean
+    }
+  | {
+      type: `semantic_vad`
+      eagerness?: `low` | `medium` | `high` | `auto`
+      createResponse?: boolean
+      interruptResponse?: boolean
+    }
 
 export interface RealtimeAudioConfig {
   inputFormat?: RealtimeAudioFormat
   outputFormat?: RealtimeAudioFormat
   inputTranscription?: false | RealtimeInputTranscriptionConfig
+  turnDetection?: RealtimeTurnDetectionConfig
 }
 
 export interface RealtimeToolPolicy {
@@ -1047,6 +1067,11 @@ export type RealtimeProviderEvent =
       audioOffset?: string
       turnId?: string
     }
+  | {
+      type: `input_audio.committed`
+      turnId?: string
+      previousTurnId?: string
+    }
   | { type: `input_transcript.delta`; delta: string; turnId?: string }
   | { type: `input_transcript.completed`; text: string; turnId?: string }
   | {
@@ -1056,11 +1081,27 @@ export type RealtimeProviderEvent =
       itemId?: string
     }
   | { type: `output_audio.completed`; responseId?: string; itemId?: string }
-  | { type: `output_transcript.delta`; delta: string; responseId?: string }
+  | {
+      type: `output_transcript.delta`
+      delta: string
+      responseId?: string
+      itemId?: string
+      contentIndex?: number
+      transcriptSource?:
+        | `response.audio_transcript`
+        | `response.output_audio_transcript`
+        | `response.output_text`
+    }
   | {
       type: `output_transcript.completed`
       text?: string
       responseId?: string
+      itemId?: string
+      contentIndex?: number
+      transcriptSource?:
+        | `response.audio_transcript`
+        | `response.output_audio_transcript`
+        | `response.output_text`
     }
   | { type: `response.started`; responseId?: string }
   | { type: `response.completed`; responseId?: string }
@@ -1113,6 +1154,7 @@ export interface RealtimeProviderSession {
     chunk: Uint8Array,
     meta?: Record<string, unknown>
   ) => Promise<void>
+  clearInputAudio?: () => Promise<void>
   commitInputAudio?: () => Promise<void>
   sendText?: (text: string) => Promise<void>
   sendToolResult?: (result: RealtimeToolResult) => Promise<void>

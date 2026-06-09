@@ -12,6 +12,7 @@ import {
 } from './outbound-bridge'
 import { createPiAgentAdapter } from './pi-adapter'
 import {
+  defaultProjection,
   timelineMessages as runtimeTimelineMessages,
   timelineToMessages,
 } from './timeline-context'
@@ -52,6 +53,7 @@ import type {
   ManifestRealtimeSessionEntry,
   ObservationHandle,
   ObservationSource,
+  RealtimeAudioConfig,
   RealtimeConfig,
   RealtimeHandle,
   RealtimeProviderEvent,
@@ -68,6 +70,8 @@ import type {
   WakeEvent,
   WakeSession,
 } from './types'
+
+const REALTIME_MIN_INPUT_COMMIT_BYTES = 4_800
 
 function agentModelId(model: AgentModel): string {
   return typeof model === `string` ? model : model.id
@@ -117,7 +121,7 @@ function applyRealtimeToolPolicy(
 type RealtimeStreamConfig = NonNullable<HandlerContextConfig[`realtimeStreams`]>
 type RealtimeControlInput =
   | { type: `input_text`; text: string }
-  | { type: `input_audio.commit` }
+  | { type: `input_audio.commit`; afterAudioBytes?: number }
   | { type: `response.cancel` }
   | { type: `output_audio.truncate`; itemId: string; audioEndMs: number }
   | { type: `session.close`; reason?: string }
@@ -147,9 +151,18 @@ function isRealtimeControlInput(value: unknown): value is RealtimeControlInput {
       typeof (value as { audioEndMs?: unknown }).audioEndMs === `number`
     )
   }
+  if (type === `input_audio.commit`) {
+    const afterAudioBytes = (value as { afterAudioBytes?: unknown })
+      .afterAudioBytes
+    return (
+      afterAudioBytes === undefined ||
+      (typeof afterAudioBytes === `number` &&
+        Number.isFinite(afterAudioBytes) &&
+        afterAudioBytes >= 0)
+    )
+  }
   return (
     type === `input_text` ||
-    type === `input_audio.commit` ||
     type === `response.cancel` ||
     type === `session.close`
   )
@@ -182,10 +195,17 @@ function realtimeControlOutput(event: RealtimeProviderEvent): unknown {
   }
 }
 
+function useManualRealtimeInputCommits(
+  audio: RealtimeAudioConfig | undefined
+): boolean {
+  return audio?.turnDetection === false || audio?.turnDetection?.type === `none`
+}
+
 function createRealtimeStreamIo(
   config: HandlerContextConfig,
   session: ManifestRealtimeSessionEntry | undefined,
-  providerSession: RealtimeProviderSession
+  providerSession: RealtimeProviderSession,
+  audio: RealtimeAudioConfig | undefined
 ): RealtimeStreamIo | undefined {
   if (!config.realtimeStreams || !session) return undefined
 
@@ -221,11 +241,20 @@ function createRealtimeStreamIo(
   const tasks: Array<Promise<void>> = []
   let audioInChunks = 0
   let audioInBytes = 0
+  let committedAudioInBytes = 0
   let controlInCommands = 0
   let audioOutChunks = 0
   let audioOutBytes = 0
   let controlOutEvents = 0
   const pendingOutputAppends = new Set<Promise<void>>()
+  const pendingInputCommits: Array<{ afterAudioBytes?: number }> = []
+  const pendingAudioChunks: Array<{
+    start: number
+    end: number
+    data: Uint8Array
+  }> = []
+  let processingInputCommits = false
+  const manualInputCommits = useManualRealtimeInputCommits(audio)
 
   const trackOutputAppend = (append: Promise<void>, label: string): void => {
     trackRealtimeAppend(pendingOutputAppends, append, (error) => {
@@ -235,9 +264,78 @@ function createRealtimeStreamIo(
     })
   }
 
+  const discardCommittedAudioChunks = (): void => {
+    while (
+      pendingAudioChunks.length > 0 &&
+      pendingAudioChunks[0]!.end <= committedAudioInBytes
+    ) {
+      pendingAudioChunks.shift()
+    }
+  }
+
+  const appendAudioRangeToProvider = async (
+    start: number,
+    end: number
+  ): Promise<void> => {
+    if (!providerSession.appendInputAudio) return
+    for (const chunk of pendingAudioChunks) {
+      if (chunk.end <= start) continue
+      if (chunk.start >= end) break
+      const sliceStart = Math.max(0, start - chunk.start)
+      const sliceEnd = Math.min(chunk.data.byteLength, end - chunk.start)
+      if (sliceEnd <= sliceStart) continue
+      await providerSession.appendInputAudio(
+        chunk.data.subarray(sliceStart, sliceEnd)
+      )
+    }
+  }
+
+  const processPendingInputCommits = async (): Promise<void> => {
+    if (processingInputCommits) return
+    processingInputCommits = true
+    try {
+      while (pendingInputCommits.length > 0) {
+        const command = pendingInputCommits[0]!
+        const commitAudioBytes = command.afterAudioBytes ?? audioInBytes
+        if (audioInBytes < commitAudioBytes) return
+
+        pendingInputCommits.shift()
+        if (commitAudioBytes <= committedAudioInBytes) {
+          runtimeLog.info(
+            logPrefix,
+            `realtime input_audio.commit ignored session=${session.id} audioInBytes=${audioInBytes} committedAudioInBytes=${committedAudioInBytes} commitAudioBytes=${commitAudioBytes}`
+          )
+          continue
+        }
+
+        const pendingAudioBytes = commitAudioBytes - committedAudioInBytes
+        if (pendingAudioBytes < REALTIME_MIN_INPUT_COMMIT_BYTES) {
+          runtimeLog.info(
+            logPrefix,
+            `realtime input_audio.commit skipped session=${session.id} audioInBytes=${audioInBytes} committedAudioInBytes=${committedAudioInBytes} commitAudioBytes=${commitAudioBytes}`
+          )
+          await providerSession.clearInputAudio?.()
+          committedAudioInBytes = commitAudioBytes
+          discardCommittedAudioChunks()
+          continue
+        }
+
+        await appendAudioRangeToProvider(
+          committedAudioInBytes,
+          commitAudioBytes
+        )
+        await providerSession.commitInputAudio?.()
+        committedAudioInBytes = commitAudioBytes
+        discardCommittedAudioChunks()
+      }
+    } finally {
+      processingInputCommits = false
+    }
+  }
+
   runtimeLog.info(
     logPrefix,
-    `realtime stream bridge starting session=${session.id} audioIn=${session.streams.audio_in} audioOut=${session.streams.audio_out}`
+    `realtime stream bridge starting session=${session.id} inputMode=${manualInputCommits ? `manual-commit` : `provider-vad`} audioIn=${session.streams.audio_in} audioOut=${session.streams.audio_out}`
   )
 
   if (providerSession.appendInputAudio) {
@@ -251,15 +349,26 @@ function createRealtimeStreamIo(
         try {
           for await (const chunk of response.bodyStream()) {
             if (abort.signal.aborted) break
-            audioInChunks += 1
-            audioInBytes += chunk.byteLength
-            if (audioInChunks === 1) {
+            const nextChunkCount = audioInChunks + 1
+            if (nextChunkCount === 1) {
               runtimeLog.info(
                 logPrefix,
                 `realtime audio/in first chunk session=${session.id} bytes=${chunk.byteLength}`
               )
             }
-            await providerSession.appendInputAudio?.(chunk)
+            const start = audioInBytes
+            audioInChunks = nextChunkCount
+            audioInBytes += chunk.byteLength
+            if (manualInputCommits) {
+              pendingAudioChunks.push({
+                start,
+                end: start + chunk.byteLength,
+                data: chunk,
+              })
+              await processPendingInputCommits()
+            } else {
+              await providerSession.appendInputAudio?.(chunk)
+            }
           }
         } finally {
           response.cancel()
@@ -300,7 +409,17 @@ function createRealtimeStreamIo(
               await providerSession.sendText?.(command.text)
               break
             case `input_audio.commit`:
-              await providerSession.commitInputAudio?.()
+              if (manualInputCommits) {
+                pendingInputCommits.push({
+                  afterAudioBytes: command.afterAudioBytes,
+                })
+                await processPendingInputCommits()
+              } else {
+                runtimeLog.info(
+                  logPrefix,
+                  `realtime input_audio.commit ignored in provider-vad mode session=${session.id}`
+                )
+              }
               break
             case `response.cancel`:
               await providerSession.cancelResponse?.()
@@ -1361,11 +1480,13 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
 
       const transcriptTextByKey = new Map<string, string>()
       const transcriptCreatedAtByKey = new Map<string, string>()
+      const transcriptDeltaSeqByKey = new Map<string, number>()
       const transcriptFallbackIds = new Map<`input` | `output`, string>()
       const inputTranscriptKeyByTurnId = new Map<string, string>()
       const outputTranscriptKeyByResponseId = new Map<string, string>()
       const outputTranscriptKeysByResponseId = new Map<string, Array<string>>()
       const outputTranscriptSegmentByResponseId = new Map<string, number>()
+      const outputTranscriptSourceByKey = new Map<string, string>()
       let transcriptFallbackCounter = 0
       let pendingInputTranscriptKey: string | undefined
       let activeOutputTranscript:
@@ -1465,6 +1586,73 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         activeOutputTranscript = undefined
       }
 
+      const outputTranscriptSourceRank = (source: string): number => {
+        switch (source) {
+          case `response.output_audio_transcript`:
+            return 3
+          case `response.audio_transcript`:
+            return 2
+          case `response.output_text`:
+            return 1
+          default:
+            return 0
+        }
+      }
+
+      const outputTranscriptSourceKey = (input: {
+        responseId?: string
+        itemId?: string
+        contentIndex?: number
+      }): string | undefined => {
+        if (input.responseId) {
+          return `${input.responseId}:${input.itemId ?? ``}:${input.contentIndex ?? 0}`
+        }
+        if (input.itemId) {
+          return `${input.itemId}:${input.contentIndex ?? 0}`
+        }
+        return undefined
+      }
+
+      const resetOutputTranscriptText = (
+        responseId: string | undefined
+      ): void => {
+        const keys = responseId
+          ? (outputTranscriptKeysByResponseId.get(responseId) ?? [])
+          : activeOutputTranscript
+            ? [activeOutputTranscript.key]
+            : []
+        for (const key of keys) {
+          transcriptTextByKey.set(key, ``)
+          deleteRealtimeTranscriptDeltas(key)
+        }
+      }
+
+      const shouldUseOutputTranscriptSource = (input: {
+        responseId?: string
+        itemId?: string
+        contentIndex?: number
+        transcriptSource?: string
+      }): boolean => {
+        if (!input.transcriptSource) return true
+        const key = outputTranscriptSourceKey(input)
+        if (!key) return true
+        const existing = outputTranscriptSourceByKey.get(key)
+        if (!existing) {
+          outputTranscriptSourceByKey.set(key, input.transcriptSource)
+          return true
+        }
+        if (existing === input.transcriptSource) return true
+        if (
+          outputTranscriptSourceRank(input.transcriptSource) >
+          outputTranscriptSourceRank(existing)
+        ) {
+          outputTranscriptSourceByKey.set(key, input.transcriptSource)
+          resetOutputTranscriptText(input.responseId)
+          return true
+        }
+        return false
+      }
+
       const writeRealtimeTranscript = (input: {
         direction: `input` | `output`
         key: string
@@ -1514,26 +1702,84 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
               })) as ChangeEvent
         )
 
+        emitRealtimeTranscript(input)
+      }
+
+      const emitRealtimeTranscript = (input: {
+        direction: `input` | `output`
+        key: string
+        text: string
+        status: `partial` | `final`
+        turnId?: string
+        responseId?: string
+      }): void => {
         const onTranscript = activeRealtimeConfig.onTranscript
-        if (onTranscript) {
-          void Promise.resolve(
-            onTranscript({
-              key: input.key,
-              sessionId: value.session_id,
-              direction: input.direction,
-              text: input.text,
-              status: input.status,
-              ...(input.turnId ? { turnId: input.turnId } : {}),
-              ...(input.responseId ? { responseId: input.responseId } : {}),
-            })
-          ).catch((error) => {
-            runtimeLog.warn(
-              `[agent-runtime]`,
-              `realtime transcript callback failed:`,
-              error
-            )
+        if (!onTranscript) return
+        void Promise.resolve(
+          onTranscript({
+            key: input.key,
+            sessionId: currentTranscriptSessionId(),
+            direction: input.direction,
+            text: input.text,
+            status: input.status,
+            ...(input.turnId ? { turnId: input.turnId } : {}),
+            ...(input.responseId ? { responseId: input.responseId } : {}),
           })
+        ).catch((error) => {
+          runtimeLog.warn(
+            `[agent-runtime]`,
+            `realtime transcript callback failed:`,
+            error
+          )
+        })
+      }
+
+      const writeRealtimeTranscriptDelta = (input: {
+        key: string
+        delta: string
+      }): void => {
+        if (input.delta.length === 0) return
+        const seq = transcriptDeltaSeqByKey.get(input.key) ?? 0
+        transcriptDeltaSeqByKey.set(input.key, seq + 1)
+        config.writeEvent(
+          entityStateSchema.textDeltas.insert({
+            key: `${input.key}:delta-${seq}`,
+            value: {
+              text_id: input.key,
+              realtime_transcript_id: input.key,
+              delta: input.delta,
+            } as never,
+          }) as ChangeEvent
+        )
+      }
+
+      const deleteRealtimeTranscriptDeltas = (key: string): void => {
+        const deltaCount = transcriptDeltaSeqByKey.get(key) ?? 0
+        for (let index = 0; index < deltaCount; index += 1) {
+          config.writeEvent(
+            entityStateSchema.textDeltas.delete({
+              key: `${key}:delta-${index}`,
+            }) as ChangeEvent
+          )
         }
+        transcriptDeltaSeqByKey.set(key, 0)
+      }
+
+      const reconcileRealtimeTranscriptDeltas = (
+        key: string,
+        finalText: string
+      ): void => {
+        const currentText = transcriptTextByKey.get(key) ?? ``
+        if (finalText === currentText) return
+        if (finalText.startsWith(currentText)) {
+          writeRealtimeTranscriptDelta({
+            key,
+            delta: finalText.slice(currentText.length),
+          })
+          return
+        }
+        deleteRealtimeTranscriptDeltas(key)
+        writeRealtimeTranscriptDelta({ key, delta: finalText })
       }
 
       const beginRealtimeTranscript = (input: {
@@ -1566,15 +1812,36 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         delta: string
         turnId?: string
         responseId?: string
+        itemId?: string
+        contentIndex?: number
+        transcriptSource?: string
       }): void => {
         if (input.delta.length === 0) return
+        if (
+          input.direction === `output` &&
+          !shouldUseOutputTranscriptSource(input)
+        ) {
+          return
+        }
         const key =
           input.direction === `input`
             ? inputTranscriptKey(input.turnId)
             : outputTranscriptKey(input.responseId)
         const text = `${transcriptTextByKey.get(key) ?? ``}${input.delta}`
         transcriptTextByKey.set(key, text)
-        writeRealtimeTranscript({
+        if (!config.db.collections.realtimeTranscripts.has(key)) {
+          writeRealtimeTranscript({
+            direction: input.direction,
+            key,
+            text: ``,
+            status: `partial`,
+            turnId: input.turnId,
+            responseId: input.responseId,
+            allowEmpty: true,
+          })
+        }
+        writeRealtimeTranscriptDelta({ key, delta: input.delta })
+        emitRealtimeTranscript({
           direction: input.direction,
           key,
           text,
@@ -1595,6 +1862,7 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
             ? inputTranscriptKey(input.turnId)
             : outputTranscriptKey(input.responseId)
         const text = input.text ?? transcriptTextByKey.get(key) ?? ``
+        reconcileRealtimeTranscriptDeltas(key, text)
         transcriptTextByKey.set(key, text)
         writeRealtimeTranscript({
           direction: input.direction,
@@ -1621,7 +1889,11 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
       const completeOutputTranscript = (input: {
         text?: string
         responseId?: string
+        itemId?: string
+        contentIndex?: number
+        transcriptSource?: string
       }): void => {
+        if (!shouldUseOutputTranscriptSource(input)) return
         const existingKeys = input.responseId
           ? outputTranscriptKeysByResponseId.get(input.responseId)
           : activeOutputTranscript
@@ -1642,6 +1914,7 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
               : (transcriptTextByKey.get(key) ??
                 existing?.text ??
                 (index === keys.length - 1 ? (input.text ?? ``) : ``))
+          reconcileRealtimeTranscriptDeltas(key, text)
           transcriptTextByKey.set(key, text)
           writeRealtimeTranscript({
             direction: `output`,
@@ -1670,9 +1943,23 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         composedTools,
         activeRealtimeConfig.toolPolicy
       )
-      const messages = await hydrateAttachmentBlocks(
-        timelineToMessages(config.db)
-      )
+      const activeRealtimeSessionId = realtimeSession?.id
+      const messages =
+        activeRealtimeConfig.context?.includeTimeline === false
+          ? []
+          : await hydrateAttachmentBlocks(
+              runtimeTimelineMessages(config.db, {
+                projection: (item) => {
+                  if (
+                    item.kind === `realtime_transcript` &&
+                    item.sessionId === activeRealtimeSessionId
+                  ) {
+                    return null
+                  }
+                  return defaultProjection(item)
+                },
+              }).map(({ at: _at, ...message }) => message as LLMMessage)
+            )
       let realtimeIo: RealtimeStreamIo | undefined
       let realtimeSessionTerminalWritten = false
 
@@ -1707,6 +1994,13 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
                 turnId: event.turnId,
               })
             }
+            break
+
+          case `input_audio.committed`:
+            beginRealtimeTranscript({
+              direction: `input`,
+              turnId: event.turnId,
+            })
             break
 
           case `input_transcript.delta`:
@@ -1758,6 +2052,9 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
               direction: `output`,
               delta: event.delta,
               responseId: event.responseId,
+              itemId: event.itemId,
+              contentIndex: event.contentIndex,
+              transcriptSource: event.transcriptSource,
             })
             break
 
@@ -1765,6 +2062,9 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
             completeOutputTranscript({
               text: event.text,
               responseId: event.responseId,
+              itemId: event.itemId,
+              contentIndex: event.contentIndex,
+              transcriptSource: event.transcriptSource,
             })
             break
 
@@ -1850,7 +2150,8 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
           realtimeIo = createRealtimeStreamIo(
             config,
             realtimeSession,
-            activeRealtimeProviderSession
+            activeRealtimeProviderSession,
+            activeRealtimeConfig.audio
           )
 
           for await (const event of activeRealtimeProviderSession.events) {

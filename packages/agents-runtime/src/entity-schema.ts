@@ -174,7 +174,8 @@ type TextValue = {
 type TextDeltaValue = {
   key?: string
   text_id: string
-  run_id: string
+  run_id?: string
+  realtime_transcript_id?: string
   delta: string
 }
 type ToolCallValue = {
@@ -618,7 +619,8 @@ function createTextDeltaSchema(): Schema<TextDeltaValue> {
     key: z.string().optional(),
     ...timelineOrderField,
     text_id: z.string(),
-    run_id: z.string(),
+    run_id: z.string().optional(),
+    realtime_transcript_id: z.string().optional(),
     delta: z.string(),
   })
 }

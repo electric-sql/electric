@@ -32,6 +32,7 @@ export type {
   RealtimeToolResult,
   RealtimeTranscript,
   RealtimeTranscriptEvent,
+  RealtimeTurnDetectionConfig,
   PendingSend,
   EffectConfig,
   ObservationSource,

@@ -213,6 +213,12 @@ describe(`horton tool composition`, () => {
         [
           {
             provider: { id: string; model: string }
+            audio: {
+              inputTranscription?: {
+                model?: string
+                delay?: string
+              }
+            }
             toolPolicy: { direct: Array<string> }
           },
         ]
@@ -221,6 +227,10 @@ describe(`horton tool composition`, () => {
     expect(realtimeConfig.provider).toMatchObject({
       id: `openai`,
       model: `gpt-realtime`,
+    })
+    expect(realtimeConfig.audio.inputTranscription).toEqual({
+      model: `gpt-realtime-whisper`,
+      delay: `minimal`,
     })
     expect(realtimeConfig.toolPolicy.direct).toEqual(
       expect.arrayContaining([

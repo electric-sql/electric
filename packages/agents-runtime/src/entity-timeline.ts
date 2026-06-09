@@ -834,6 +834,25 @@ function buildTextContentById(
   return deltasById
 }
 
+function buildRealtimeTranscriptContentById(
+  textDeltas: Array<TextDeltaRow>
+): Map<string, string> {
+  const deltasById = new Map<string, string>()
+
+  for (const delta of [...textDeltas].sort(compareTimelineOrder)) {
+    const transcriptId =
+      (delta as { realtime_transcript_id?: string }).realtime_transcript_id ??
+      (!delta.run_id ? delta.text_id : undefined)
+    if (!transcriptId) continue
+    deltasById.set(
+      transcriptId,
+      `${deltasById.get(transcriptId) ?? ``}${delta.delta}`
+    )
+  }
+
+  return deltasById
+}
+
 function buildIncludesRuns(input: {
   runs: Array<RunRow>
   texts: Array<TextRow>
@@ -1018,8 +1037,10 @@ function buildSignalMessages(signals: Array<SignalRow>): Array<IncludesSignal> {
 }
 
 function buildRealtimeTranscriptMessages(
-  transcripts: Array<RealtimeTranscriptRow>
+  transcripts: Array<RealtimeTranscriptRow>,
+  textDeltas: Array<TextDeltaRow> = []
 ): Array<IncludesRealtimeTranscript> {
+  const textContentById = buildRealtimeTranscriptContentById(textDeltas)
   return [...transcripts].sort(compareTimelineOrder).map((transcript) => {
     const {
       _seq: _ignoredSeq,
@@ -1029,6 +1050,7 @@ function buildRealtimeTranscriptMessages(
     return {
       ...value,
       order: transcript.order,
+      text: textContentById.get(transcript.key) ?? transcript.text,
     }
   })
 }
@@ -1225,7 +1247,8 @@ export function buildEntityTimelineData(
     wakes: buildWakeMessages(withOrderFromOrderIndex(wakes, orderIndex)),
     signals: buildSignalMessages(withOrderFromOrderIndex(signals, orderIndex)),
     realtimeTranscripts: buildRealtimeTranscriptMessages(
-      withOrderFromOrderIndex(realtimeTranscripts, orderIndex)
+      withOrderFromOrderIndex(realtimeTranscripts, orderIndex),
+      withOrderFromOrderIndex(textDeltas, orderIndex)
     ),
     contextInserted: buildContextInsertedMessages(
       withOrderAndHistoryOffsetFromOrderIndex(contextInserted, orderIndex)
@@ -1392,7 +1415,17 @@ const getEntityRealtimeTranscriptsCollection = cachedCollectionFactory(
             order: coalesce(realtimeTranscript._seq, -1),
             session_id: realtimeTranscript.session_id,
             direction: realtimeTranscript.direction,
-            text: realtimeTranscript.text,
+            text: concat(
+              toArray(
+                q
+                  .from({ delta: db.collections.textDeltas })
+                  .where(({ delta }) =>
+                    eq(delta.realtime_transcript_id, realtimeTranscript.key)
+                  )
+                  .orderBy(({ delta }) => coalesce(delta._seq, -1))
+                  .select(({ delta }) => delta.delta)
+              )
+            ),
             status: realtimeTranscript.status,
             turn_id: realtimeTranscript.turn_id,
             response_id: realtimeTranscript.response_id,
@@ -1522,7 +1555,18 @@ function buildEntityTimelineQuery(
       order: coalesce(realtimeTranscript._timeline_order, `~`),
       session_id: realtimeTranscript.session_id,
       direction: realtimeTranscript.direction,
-      text: realtimeTranscript.text,
+      text: concat(
+        toArray(
+          q
+            .from({ delta: db.collections.textDeltas })
+            .where(({ delta }) =>
+              eq(delta.realtime_transcript_id, realtimeTranscript.key)
+            )
+            .orderBy(({ delta }) => coalesce(delta._timeline_order, `~`))
+            .orderBy(({ delta }) => delta.key)
+            .select(({ delta }) => delta.delta)
+        )
+      ),
       status: realtimeTranscript.status,
       turn_id: realtimeTranscript.turn_id,
       response_id: realtimeTranscript.response_id,
