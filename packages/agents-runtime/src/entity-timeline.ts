@@ -1305,11 +1305,13 @@ function buildEntityTimelineQuery(
       new_state: signal.new_state,
     }))
 
-  // Hoist text fields to top-level scalars on the union row. The
-  // text-delta join below correlates on `item.text_key`, and TanStack
-  // DB's correlated sub-queries only resolve **top-level** fields of
-  // the outer row — referencing a nested field (`item.text.key`)
-  // returned an empty join, even though the deltas were present.
+  // Union texts + tool calls into a single ordered stream. The
+  // text-delta join lives at this level (vs. inside the consumer's
+  // `items.select`) so the correlation key is `text.key` — a field
+  // on the raw text row — rather than a projected scalar. The only
+  // delta-join alias constraint is that it must NOT collide with
+  // the `chunk` alias used in the reasoning content sub-query
+  // below; that's why this one is `textChunk`.
   const runItemsSource = q
     .unionAll({
       text: db.collections.texts,
@@ -1318,10 +1320,24 @@ function buildEntityTimelineQuery(
     .select(({ text, toolCall }) => ({
       order: coalesce(text._timeline_order, toolCall._timeline_order, `~`),
       run_id: coalesce(text.run_id, toolCall.run_id, ``),
-      text_key: text.key,
-      text_run_id: text.run_id,
-      text_order: coalesce(text._timeline_order, `~`),
-      text_status: text.status,
+      text: caseWhen(text.key, {
+        key: text.key,
+        run_id: text.run_id,
+        order: coalesce(text._timeline_order, `~`),
+        status: text.status,
+      }),
+      textContent: concat(
+        toArray(
+          q
+            .from({ textChunk: db.collections.textDeltas })
+            .where(({ textChunk }) => eq(textChunk.text_id, text.key))
+            .orderBy(({ textChunk }) =>
+              coalesce(textChunk._timeline_order, `~`)
+            )
+            .orderBy(({ textChunk }) => textChunk.key)
+            .select(({ textChunk }) => textChunk.delta)
+        )
+      ),
       toolCall: caseWhen(toolCall.key, {
         key: toolCall.key,
         run_id: toolCall.run_id,
@@ -1346,36 +1362,19 @@ function buildEntityTimelineQuery(
       .orderBy(({ item }) => item.order)
       .orderBy(({ item }) =>
         coalesce(
-          caseWhen(item.text_key, `text`),
+          caseWhen(item.text.key, `text`),
           caseWhen(item.toolCall.key, `toolCall`),
           ``
         )
       )
-      .orderBy(({ item }) => coalesce(item.text_key, item.toolCall.key, ``))
+      .orderBy(({ item }) => coalesce(item.text.key, item.toolCall.key, ``))
       .select(({ item }) => ({
-        text: caseWhen(item.text_key, {
-          key: item.text_key,
-          run_id: item.text_run_id,
-          order: item.text_order,
-          status: item.text_status,
-          // Concatenated delta content. The alias here MUST NOT collide
-          // with any other `from({...})` alias in this query graph — when
-          // we previously used the obvious `chunk` alias, this join
-          // silently returned empty strings (a `chunk` alias is also
-          // used inside the reasoning content sub-query below, and the
-          // collision broke correlated row binding).
-          content: concat(
-            toArray(
-              q
-                .from({ textChunk: db.collections.textDeltas })
-                .where(({ textChunk }) => eq(textChunk.text_id, item.text_key))
-                .orderBy(({ textChunk }) =>
-                  coalesce(textChunk._timeline_order, `~`)
-                )
-                .orderBy(({ textChunk }) => textChunk.key)
-                .select(({ textChunk }) => textChunk.delta)
-            )
-          ),
+        text: caseWhen(item.text.key, {
+          key: item.text.key,
+          run_id: item.text.run_id,
+          order: item.text.order,
+          status: item.text.status,
+          content: item.textContent,
         }),
         toolCall: item.toolCall,
       })),
