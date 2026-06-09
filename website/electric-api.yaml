@@ -241,11 +241,12 @@ paths:
           schema:
             type: string
           description: |-
-            Optional list of columns that may be referenced by the shape WHERE clause,
-            subset WHERE clauses, subset ORDER BY clauses, and the `columns` projection.
+            Optional list of columns that may be referenced by subset WHERE clauses,
+            subset ORDER BY clauses, and the `columns` projection.
 
-            This is an allow-list for what the request may query or sync. It does not
-            force every listed column to be synced.
+            This is an allow-list for what client-controlled subset requests may query
+            or sync. It does not force every listed column to be synced, and it does
+            not restrict the main shape WHERE clause.
 
             Queryable columns should always include the primary key columns, and should
             be formed as a comma separated list of column names exactly as they are in
@@ -901,8 +902,9 @@ paths:
           schema:
             type: string
           description: |-
-            Optional list of columns that may be referenced by WHERE clauses,
-            subset filters, subset ordering, and the columns projection.
+            Optional list of columns that may be referenced by subset filters,
+            subset ordering, and the columns projection. It does not restrict the
+            main shape WHERE clause.
         - name: replica
           in: query
           schema:
