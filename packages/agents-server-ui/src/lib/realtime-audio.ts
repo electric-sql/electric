@@ -4,6 +4,7 @@ import { serverFetch, getConfiguredServerHeaders } from './auth-fetch'
 
 export type RealtimeAudioSession = {
   sessionId: string
+  sendText: (text: string) => Promise<void>
   stop: () => Promise<void>
 }
 
@@ -192,6 +193,11 @@ export async function startRealtimeAudioSession({
 
   return {
     sessionId: session.sessionId,
+    async sendText(text: string) {
+      await controlIn.append(
+        new TextEncoder().encode(JSON.stringify({ type: `input_text`, text }))
+      )
+    },
     async stop() {
       abort.abort()
       processor.disconnect()

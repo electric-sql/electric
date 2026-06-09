@@ -270,6 +270,16 @@ export function MessageInput({
         return
       }
       const files = imageAttachmentsEnabled ? attachments : []
+      if (realtimeSessionRef.current && !editingMessage && files.length === 0) {
+        const session = realtimeSessionRef.current
+        setValue(``)
+        onSend?.()
+        session.sendText(text).catch((err: Error) => {
+          setError(err.message)
+          setValue((current) => (current ? current : text))
+        })
+        return
+      }
       const tx = editingMessage
         ? updateAction?.({
             key: editingMessage.key,
