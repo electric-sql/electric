@@ -8,11 +8,6 @@ defmodule ElectricTelemetry.Processes do
   # Minimum memory threshold for a process group when using :mem_percent mode.
   @min_group_memory 1024 * 1024
 
-  # Coarse `process_type` values for which we additionally derive a `process_subtype`.
-  # Membership here is matched against the value returned by `proc_type/2` (an atom
-  # like `:supervisor`, `:erlang`, `:logger_olp`).
-  @proc_types_with_subtype [:erlang, :logger_olp, :supervisor]
-
   defguardp is_valid_mem_percent(percent)
             when is_integer(percent) and percent >= 1 and percent <= 100
 
@@ -24,20 +19,15 @@ defmodule ElectricTelemetry.Processes do
     end
   end
 
-  def proc_type(pid), do: proc_type(pid, info(pid))
-
   @doc """
-  Compute both `process_type` and `process_subtype` using a single `Process.info/2` call.
+  Derive a stable, low-cardinality `process_type` for a pid.
 
-  The subtype is a stable, low-cardinality string (or `nil`) intended to be emitted
-  as a companion attribute on telemetry events.
+  The coarse types `:erlang` and `:supervisor` are too generic to be useful as a
+  grouping dimension on their own, so they are refined to a more specific name. The
+  `:logger_olp` type is folded together with the handler id (see `refine_type/2`).
   """
-  @spec proc_type_and_subtype(pid()) :: {atom() | binary(), atom() | binary() | nil}
-  def proc_type_and_subtype(pid) do
-    info = info(pid)
-    type = proc_type(pid, info)
-    {type, proc_subtype(type, info)}
-  end
+  @spec proc_type(pid()) :: atom() | binary()
+  def proc_type(pid), do: proc_type(pid, info(pid))
 
   def top_memory_by_type, do: top_by(:proc_mem)
   def top_memory_by_type(proc_list_or_limit), do: top_by(:proc_mem, proc_list_or_limit)
@@ -87,12 +77,11 @@ defmodule ElectricTelemetry.Processes do
     process_list
     |> Enum.map(&type_and_memory/1)
     |> Enum.reject(&(&1.type == :dead))
-    |> Enum.group_by(&{&1.type, &1.subtype})
-    |> Enum.map(fn {{type, subtype}, proc_infos} ->
+    |> Enum.group_by(& &1.type)
+    |> Enum.map(fn {type, proc_infos} ->
       proc_infos
       |> mem_stats_for_procs()
       |> Map.put(:type, type)
-      |> Map.put(:subtype, subtype)
     end)
     |> Enum.sort_by(&(-Map.fetch!(&1, sort_key)))
   end
@@ -149,12 +138,10 @@ defmodule ElectricTelemetry.Processes do
   defp type_and_memory(pid) do
     info = info(pid)
     type = proc_type(pid, info)
-    subtype = proc_subtype(type, info)
 
     info
     |> memory_from_info()
     |> Map.put(:type, type)
-    |> Map.put(:subtype, subtype)
   end
 
   @doc false
@@ -163,16 +150,34 @@ defmodule ElectricTelemetry.Processes do
   end
 
   defp proc_type(pid, info) do
-    label_from_info(info) ||
-      initial_module_from_info(info) ||
-      if(Process.alive?(pid), do: :unknown, else: :dead)
+    type =
+      label_from_info(info) ||
+        initial_module_from_info(info) ||
+        if(Process.alive?(pid), do: :unknown, else: :dead)
+
+    refine_type(type, info)
   end
 
-  defp proc_subtype(proc_type, info) when proc_type in @proc_types_with_subtype do
-    registered_name(info) || ancestor_name(info) || initial_call_mfa_string(info)
+  # `:erlang` and `:supervisor` are too coarse to be useful as a grouping dimension on
+  # their own, so we replace them with a more specific name derived from cheap process
+  # introspection: the registered name, else the first named `$ancestor`, else the
+  # `initial_call` MFA string. Falls back to the coarse type when none of those apply.
+  defp refine_type(type, info) when type in [:erlang, :supervisor] do
+    registered_name(info) || ancestor_name(info) || initial_call_mfa_string(info) || type
   end
 
-  defp proc_subtype(_, _), do: nil
+  # Logger handler and proxy processes all share the `:logger_olp` type. The handler id
+  # (the process's registered name) distinguishes them and is low-cardinality, so we fold
+  # it into the type as `"logger_olp:<handler_id>"`, falling back to the coarse type when
+  # the process is unnamed.
+  defp refine_type(:logger_olp, info) do
+    case registered_name(info) do
+      nil -> :logger_olp
+      name -> "logger_olp:#{name}"
+    end
+  end
+
+  defp refine_type(type, _info), do: type
 
   defp registered_name(info) do
     # Process.info(pid, :registered_name) returns an empty list for unregistered processes
