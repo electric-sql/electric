@@ -16,6 +16,10 @@ import {
   validateSlashCommandDefinitions,
 } from '@electric-ax/agents-runtime'
 import type { EventPointer } from '@electric-ax/agents-runtime'
+import type {
+  CommentSnapshot,
+  CommentTarget,
+} from '@electric-ax/agents-runtime'
 import {
   ErrCodeDuplicateURL,
   ErrCodeEntityPersistFailed,
@@ -129,6 +133,18 @@ export interface CreateAttachmentRequest {
   role?: AttachmentRole
   createdBy?: string
   meta?: Record<string, unknown>
+}
+
+export interface CreateCommentRequest {
+  key?: string
+  body: string
+  fromPrincipal: string
+  replyTo?: CommentTarget
+  targetSnapshot?: CommentSnapshot
+}
+
+export interface CreateCommentResult {
+  key: string
 }
 
 export interface ReadAttachmentResult {
@@ -2420,6 +2436,72 @@ export class EntityManager {
       }
       throw err
     }
+  }
+
+  async createComment(
+    entityUrl: string,
+    req: CreateCommentRequest
+  ): Promise<CreateCommentResult> {
+    const entity = await this.registry.getEntity(entityUrl)
+    if (!entity) {
+      throw new ElectricAgentsError(ErrCodeNotFound, `Entity not found`, 404)
+    }
+    if (rejectsNormalWrites(entity.status)) {
+      throw new ElectricAgentsError(
+        ErrCodeNotRunning,
+        `Entity is not accepting writes`,
+        409
+      )
+    }
+    if (this.isForkWorkLockedEntity(entityUrl)) {
+      this.assertEntityNotForkWorkLocked(entityUrl)
+    }
+
+    const body = req.body.trim()
+    if (body.length === 0) {
+      throw new ElectricAgentsError(
+        ErrCodeInvalidRequest,
+        `Comment body is required`,
+        400
+      )
+    }
+
+    const key =
+      req.key ??
+      `comment-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const now = new Date().toISOString()
+    const value: Record<string, unknown> = {
+      body,
+      from_principal: req.fromPrincipal,
+      timestamp: now,
+    }
+    if (req.replyTo) {
+      value.reply_to = req.replyTo
+    }
+    if (req.targetSnapshot) {
+      value.target_snapshot = req.targetSnapshot
+    }
+
+    const envelope = entityStateSchema.comments.insert({
+      key,
+      value,
+    } as any)
+    const encoded = this.encodeChangeEvent(envelope as Record<string, unknown>)
+
+    try {
+      await this.streamClient.append(entity.streams.main, encoded)
+    } catch (err) {
+      if (this.isClosedStreamError(err)) {
+        throw new ElectricAgentsError(
+          ErrCodeNotRunning,
+          `Entity is stopped`,
+          409
+        )
+      }
+      throw err
+    }
+
+    return { key }
   }
 
   async updateInboxMessage(

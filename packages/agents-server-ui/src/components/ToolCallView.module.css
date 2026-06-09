@@ -18,6 +18,19 @@
   white-space: pre-wrap;
 }
 
+.actionButton {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  color: var(--ds-gray-11);
+}
+
+.actionButton:hover {
+  background: var(--ds-gray-a5);
+  color: var(--ds-gray-12);
+}
+
 .diffBlock {
   padding: 0;
   white-space: pre;

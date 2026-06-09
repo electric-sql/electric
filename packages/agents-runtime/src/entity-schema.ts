@@ -203,6 +203,43 @@ type MessageReceivedValue = {
   processed_at?: string
   cancelled_at?: string
 }
+type CommentTargetCollectionValue =
+  | `inbox`
+  | `run`
+  | `text`
+  | `tool_call`
+  | `wake`
+  | `signal`
+  | `manifest`
+type CommentTargetValue =
+  | {
+      kind: `comment`
+      key: string
+    }
+  | {
+      kind: `timeline`
+      collection: CommentTargetCollectionValue
+      key: string
+      run_id?: string
+    }
+type CommentSnapshotValue = {
+  label: string
+  text?: string
+  from?: string
+  timestamp?: string
+  collection?: string
+}
+type CommentValue = {
+  key?: string
+  body: string
+  from_principal: string
+  timestamp: string
+  reply_to?: CommentTargetValue
+  target_snapshot?: CommentSnapshotValue
+  edited_at?: string
+  deleted_at?: string
+  deleted_by?: string
+}
 type WakeEntryValue = {
   key?: string
   timestamp: string
@@ -552,6 +589,54 @@ function createMessageReceivedSchema(): Schema<MessageReceivedValue> {
   })
 }
 
+function createCommentTargetSchema(): Schema<CommentTargetValue> {
+  return z.union([
+    z.object({
+      kind: z.literal(`comment`),
+      key: z.string(),
+    }),
+    z.object({
+      kind: z.literal(`timeline`),
+      collection: z.enum([
+        `inbox`,
+        `run`,
+        `text`,
+        `tool_call`,
+        `wake`,
+        `signal`,
+        `manifest`,
+      ]),
+      key: z.string(),
+      run_id: z.string().optional(),
+    }),
+  ])
+}
+
+function createCommentSnapshotSchema(): Schema<CommentSnapshotValue> {
+  return z.object({
+    label: z.string(),
+    text: z.string().optional(),
+    from: z.string().optional(),
+    timestamp: z.string().optional(),
+    collection: z.string().optional(),
+  })
+}
+
+function createCommentSchema(): Schema<CommentValue> {
+  return z.object({
+    key: z.string().optional(),
+    ...timelineOrderField,
+    body: z.string(),
+    from_principal: z.string(),
+    timestamp: z.string(),
+    reply_to: createCommentTargetSchema().optional(),
+    target_snapshot: createCommentSnapshotSchema().optional(),
+    edited_at: z.string().optional(),
+    deleted_at: z.string().optional(),
+    deleted_by: z.string().optional(),
+  })
+}
+
 function createWakeSchema(): Schema<WakeEntryValue> {
   return z.object({
     key: z.string().optional(),
@@ -851,6 +936,9 @@ export type ToolCall = SequencedPersistedRow<ToolCallValue>
 export type Reasoning = SequencedPersistedRow<ReasoningValue>
 export type ErrorEvent = SequencedPersistedRow<ErrorEventValue>
 export type MessageReceived = SequencedPersistedRow<MessageReceivedValue>
+export type CommentTarget = CommentTargetValue
+export type CommentSnapshot = CommentSnapshotValue
+export type Comment = SequencedPersistedRow<CommentValue>
 export type WakeEntry = SequencedPersistedRow<WakeEntryValue>
 export type EntityCreated = SequencedPersistedRow<EntityCreatedValue>
 export type EntityStopped = SequencedPersistedRow<EntityStoppedValue>
@@ -941,6 +1029,7 @@ export const ENTITY_COLLECTIONS = {
   reasoning: `reasoning`,
   errors: `errors`,
   inbox: `inbox`,
+  comments: `comments`,
   wakes: `wakes`,
   entityCreated: `entityCreated`,
   entityStopped: `entityStopped`,
@@ -966,6 +1055,7 @@ export const BUILT_IN_EVENT_SCHEMAS = {
   error: createErrorEventSchema() as unknown as BuiltInEntitySchema<ErrorEvent>,
   inbox:
     createMessageReceivedSchema() as unknown as BuiltInEntitySchema<MessageReceived>,
+  comment: createCommentSchema() as unknown as BuiltInEntitySchema<Comment>,
   wake: createWakeSchema() as unknown as BuiltInEntitySchema<WakeEntry>,
   entity_created:
     createEntityCreatedSchema() as unknown as BuiltInEntitySchema<EntityCreated>,
@@ -1000,6 +1090,7 @@ type EntityCollectionsDefinition = {
   reasoning: CollectionDefinition<Reasoning>
   errors: CollectionDefinition<ErrorEvent>
   inbox: CollectionDefinition<MessageReceived>
+  comments: CollectionDefinition<Comment>
   wakes: CollectionDefinition<WakeEntry>
   entityCreated: CollectionDefinition<EntityCreated>
   entityStopped: CollectionDefinition<EntityStopped>
@@ -1058,6 +1149,11 @@ export const builtInCollections: EntityCollectionsDefinition = {
   inbox: {
     schema: BUILT_IN_EVENT_SCHEMAS.inbox as StandardSchemaV1<MessageReceived>,
     type: `inbox`,
+    primaryKey: `key`,
+  },
+  comments: {
+    schema: BUILT_IN_EVENT_SCHEMAS.comment as StandardSchemaV1<Comment>,
+    type: `comment`,
     primaryKey: `key`,
   },
   wakes: {

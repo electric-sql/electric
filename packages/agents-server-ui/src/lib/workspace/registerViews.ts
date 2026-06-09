@@ -1,7 +1,7 @@
-import { Database, MessageSquare, SquarePen } from 'lucide-react'
+import { Database, MessageCircle, MessageSquare, SquarePen } from 'lucide-react'
 import { registerView } from './viewRegistry'
 import { NEW_SESSION_VIEW_ID } from './types'
-import { ChatView } from '../../components/views/ChatView'
+import { ChatView, CommentsView } from '../../components/views/ChatView'
 import { StateExplorerView } from '../../components/views/StateExplorerView'
 import { NewSessionView } from '../../components/views/NewSessionView'
 
@@ -21,6 +21,15 @@ registerView({
   icon: MessageSquare,
   description: `Conversation timeline and message composer`,
   Component: ChatView,
+})
+
+registerView({
+  kind: `entity`,
+  id: `comments`,
+  label: `Comments`,
+  icon: MessageCircle,
+  description: `Comment-only timeline`,
+  Component: CommentsView,
 })
 
 registerView({

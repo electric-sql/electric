@@ -94,6 +94,11 @@ function attachmentManifest(value: Record<string, unknown>) {
   }
 }
 
+function decodeAppendEvent(value: unknown): Record<string, any> {
+  expect(value).toBeInstanceOf(Uint8Array)
+  return JSON.parse(new TextDecoder().decode(value as Uint8Array))
+}
+
 describe(`ElectricAgentsManager.validateWriteEvent`, () => {
   it(`validates delete events against old_value instead of value`, async () => {
     const manager = createManager()
@@ -200,6 +205,69 @@ describe(`ElectricAgentsManager attachments`, () => {
     })
 
     expect(remove).not.toHaveBeenCalled()
+  })
+})
+
+describe(`ElectricAgentsManager comments`, () => {
+  it(`appends trimmed comment rows with reply metadata`, async () => {
+    const append = vi.fn()
+    const { manager } = createAttachmentManager({
+      streamClient: { append },
+    })
+    const replyTo = {
+      kind: `timeline`,
+      collection: `run`,
+      key: `run-1`,
+    } as const
+    const targetSnapshot = {
+      label: `Assistant response`,
+      text: `Summary`,
+      collection: `run`,
+    }
+
+    await expect(
+      manager.createComment(`/chat/session-1`, {
+        key: `comment-1`,
+        body: `  Looks good.  `,
+        fromPrincipal: `/principal/user%3Ame`,
+        replyTo,
+        targetSnapshot,
+      })
+    ).resolves.toEqual({ key: `comment-1` })
+
+    expect(append).toHaveBeenCalledWith(
+      `/chat/session-1`,
+      expect.any(Uint8Array)
+    )
+    expect(decodeAppendEvent(append.mock.calls[0]?.[1])).toMatchObject({
+      type: `comment`,
+      key: `comment-1`,
+      headers: { operation: `insert` },
+      value: {
+        body: `Looks good.`,
+        from_principal: `/principal/user%3Ame`,
+        reply_to: replyTo,
+        target_snapshot: targetSnapshot,
+      },
+    })
+  })
+
+  it(`rejects empty comments before appending`, async () => {
+    const append = vi.fn()
+    const { manager } = createAttachmentManager({
+      streamClient: { append },
+    })
+
+    await expect(
+      manager.createComment(`/chat/session-1`, {
+        body: `   `,
+        fromPrincipal: `/principal/user%3Ame`,
+      })
+    ).rejects.toMatchObject({
+      status: 400,
+      message: `Comment body is required`,
+    })
+    expect(append).not.toHaveBeenCalled()
   })
 })
 

@@ -4,6 +4,7 @@ import {
   compareTimelineOrders,
   createEntityTimelineQuery,
   normalizeTimelineEntities,
+  TIMELINE_ORDER_FALLBACK,
 } from '@electric-ax/agents-runtime/client'
 import { coalesce, eq } from '@durable-streams/state/db'
 import { connectEntityStream } from '../lib/entity-connection'
@@ -125,7 +126,8 @@ export function useEntityTimeline(
             .from({ inbox: db.collections.inbox as any })
             .where(({ inbox }: any) => eq(inbox.status, `pending`))
             .orderBy(
-              ({ inbox }: any) => coalesce(inbox._timeline_order, `~`),
+              ({ inbox }: any) =>
+                coalesce(inbox._timeline_order, TIMELINE_ORDER_FALLBACK),
               `asc`
             )
             .orderBy(({ inbox }: any) =>

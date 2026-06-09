@@ -4,10 +4,11 @@ import {
   Download,
   File as FileIcon,
   Image as ImageIcon,
+  Reply,
   Square,
 } from 'lucide-react'
 import type { EntityTimelineSection } from '@electric-ax/agents-runtime/client'
-import { Icon, Stack, Text } from '../ui'
+import { Icon, IconButton, Stack, Text, Tooltip } from '../ui'
 import { downloadAttachment, formatAttachmentSize } from '../lib/attachments'
 import {
   streamdownComponents,
@@ -49,6 +50,7 @@ export const UserMessage = memo(function UserMessage({
   currentPrincipal,
   usersById,
   onStop,
+  onReply,
 }: {
   section: UserMessageSection
   attachments?: Array<UserMessageAttachment>
@@ -57,6 +59,7 @@ export const UserMessage = memo(function UserMessage({
   currentPrincipal?: string
   usersById?: Map<string, ElectricUser>
   onStop?: () => void
+  onReply?: () => void
 }): React.ReactElement {
   const sender = formatSender(section.from, { currentPrincipal, usersById })
 
@@ -111,6 +114,23 @@ export const UserMessage = memo(function UserMessage({
             </Text>
             <TimeText ts={section.timestamp} />
           </>
+        )}
+        {onReply && (
+          <span className={styles.metaActions}>
+            <Tooltip content="Reply" side="top">
+              <IconButton
+                size={1}
+                variant="ghost"
+                tone="neutral"
+                className={styles.metaActionButton}
+                onClick={onReply}
+                aria-label="Reply to message"
+                title="Reply"
+              >
+                <Icon icon={Reply} size={1} />
+              </IconButton>
+            </Tooltip>
+          </span>
         )}
       </Stack>
     </Stack>
