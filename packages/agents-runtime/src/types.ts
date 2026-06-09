@@ -1132,6 +1132,16 @@ export interface RealtimeProviderConfig {
   ) => Promise<RealtimeProviderSession>
 }
 
+export interface RealtimeTranscriptEvent {
+  key: string
+  sessionId: string
+  direction: `input` | `output`
+  text: string
+  status: `partial` | `final`
+  turnId?: string
+  responseId?: string
+}
+
 export interface RealtimeConfig {
   systemPrompt: string
   provider: RealtimeProviderConfig
@@ -1140,6 +1150,7 @@ export interface RealtimeConfig {
   toolPolicy?: RealtimeToolPolicy
   context?: RealtimeContextConfig
   session?: RealtimeSessionPolicy
+  onTranscript?: (transcript: RealtimeTranscriptEvent) => void | Promise<void>
   testResponses?: TestResponses
 }
 

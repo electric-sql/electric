@@ -72,6 +72,13 @@ describe(`ctx.useRealtime()`, () => {
 
   it(`persists realtime input and output transcripts`, async () => {
     const { ctx } = createTestHandlerContext()
+    const transcriptEvents: Array<{
+      direction: `input` | `output`
+      text: string
+      status: `partial` | `final`
+      turnId?: string
+      responseId?: string
+    }> = []
 
     const realtime = ctx.useRealtime({
       systemPrompt: `You are realtime.`,
@@ -107,6 +114,9 @@ describe(`ctx.useRealtime()`, () => {
         ],
       }),
       tools: [],
+      onTranscript: (event) => {
+        transcriptEvents.push(event)
+      },
     })
 
     await realtime.run()
@@ -133,6 +143,22 @@ describe(`ctx.useRealtime()`, () => {
         created_at: expect.any(String),
       },
     ])
+    expect(transcriptEvents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          direction: `input`,
+          text: `hello there`,
+          status: `final`,
+          turnId: `input-item-1`,
+        }),
+        expect.objectContaining({
+          direction: `output`,
+          text: `Hi there`,
+          status: `final`,
+          responseId: `resp-1`,
+        }),
+      ])
+    )
   })
 
   it(`anchors delayed input transcripts at speech start`, async () => {

@@ -31,6 +31,7 @@ export type {
   RealtimeToolPolicy,
   RealtimeToolResult,
   RealtimeTranscript,
+  RealtimeTranscriptEvent,
   PendingSend,
   EffectConfig,
   ObservationSource,

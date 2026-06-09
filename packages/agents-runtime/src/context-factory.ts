@@ -1513,6 +1513,27 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
                 value: value as never,
               })) as ChangeEvent
         )
+
+        const onTranscript = activeRealtimeConfig.onTranscript
+        if (onTranscript) {
+          void Promise.resolve(
+            onTranscript({
+              key: input.key,
+              sessionId: value.session_id,
+              direction: input.direction,
+              text: input.text,
+              status: input.status,
+              ...(input.turnId ? { turnId: input.turnId } : {}),
+              ...(input.responseId ? { responseId: input.responseId } : {}),
+            })
+          ).catch((error) => {
+            runtimeLog.warn(
+              `[agent-runtime]`,
+              `realtime transcript callback failed:`,
+              error
+            )
+          })
+        }
       }
 
       const beginRealtimeTranscript = (input: {

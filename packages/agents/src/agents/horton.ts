@@ -471,6 +471,18 @@ type InboxTitleMessage = {
   _seq?: unknown
 }
 
+type RealtimeTitleTranscript = {
+  direction?: unknown
+  status?: unknown
+  text?: unknown
+  _seq?: unknown
+}
+
+type TitleCandidate = {
+  text: string
+  seq: number
+}
+
 type TitleAttachment = {
   kind?: unknown
   subject?: unknown
@@ -542,15 +554,33 @@ function messageTitleText(
 export async function extractFirstUserMessage(
   ctx: HandlerContext
 ): Promise<string | null> {
-  const firstMessage = (
-    ctx.db.collections.inbox.toArray as Array<InboxTitleMessage>
-  )
-    .filter((message) => message.from !== `system`)
-    .sort((left, right) => messageSeq(left) - messageSeq(right))[0]
+  const candidates: Array<TitleCandidate> = []
 
-  if (!firstMessage) return null
-  const text = messageTitleText(ctx, firstMessage)
-  return text.length > 0 ? text : null
+  for (const message of ctx.db.collections.inbox
+    .toArray as Array<InboxTitleMessage>) {
+    if (message.from === `system`) continue
+    const text = messageTitleText(ctx, message).trim()
+    if (text.length === 0) continue
+    candidates.push({ text, seq: messageSeq(message) })
+  }
+
+  const realtimeTranscripts = (
+    ctx.db.collections as {
+      realtimeTranscripts?: { toArray?: Array<RealtimeTitleTranscript> }
+    }
+  ).realtimeTranscripts?.toArray
+  for (const transcript of realtimeTranscripts ?? []) {
+    if (transcript.direction !== `input` || transcript.status !== `final`) {
+      continue
+    }
+    const text =
+      typeof transcript.text === `string` ? transcript.text.trim() : ``
+    if (text.length === 0) continue
+    candidates.push({ text, seq: messageSeq(transcript) })
+  }
+
+  candidates.sort((left, right) => left.seq - right.seq)
+  return candidates[0]?.text ?? null
 }
 
 function messageSeq(message: { _seq?: unknown }): number {
@@ -712,54 +742,67 @@ function createAssistantHandler(options: {
       (tool) => getToolName(tool) === `upsert_cron_schedule`
     )
 
-    const titlePromise = !ctx.tags.title
-      ? (async () => {
-          const firstUserMessage = await extractFirstUserMessage(ctx)
-          if (!firstUserMessage) return
-
-          let title: string | null = null
-          try {
-            const result = await generateTitle(
-              firstUserMessage,
-              (prompt) =>
-                withTimeout(
-                  createConfiguredTitleCall(
-                    modelCatalog,
-                    modelConfig,
-                    `[horton ${ctx.entityUrl}]`
-                  )(prompt),
-                  TITLE_GENERATION_TIMEOUT_MS,
-                  `title generation`
-                ),
-              (reason) => {
-                serverLog.warn(
-                  `[horton ${ctx.entityUrl}] title generation fell back to local title: ${reason}`
-                )
-              }
-            )
-            if (result.length > 0) title = result
-          } catch (err) {
-            serverLog.warn(
-              `[horton ${ctx.entityUrl}] title generation failed: ${err instanceof Error ? err.message : String(err)}`
-            )
-            title = buildFallbackTitle(firstUserMessage)
-          }
-
-          if (title !== null) {
-            try {
-              await withTimeout(
-                ctx.setTag(`title`, title),
+    let titleGenerationStarted = Boolean(ctx.tags.title)
+    let titlePromise: Promise<void> = Promise.resolve()
+    const setTitleFromUserMessage = (userMessage: string): Promise<void> => {
+      const firstUserMessage = userMessage.trim()
+      if (titleGenerationStarted || firstUserMessage.length === 0) {
+        return titlePromise
+      }
+      titleGenerationStarted = true
+      titlePromise = (async () => {
+        let title: string | null = null
+        try {
+          const result = await generateTitle(
+            firstUserMessage,
+            (prompt) =>
+              withTimeout(
+                createConfiguredTitleCall(
+                  modelCatalog,
+                  modelConfig,
+                  `[horton ${ctx.entityUrl}]`
+                )(prompt),
                 TITLE_GENERATION_TIMEOUT_MS,
-                `set title tag`
-              )
-            } catch (err) {
+                `title generation`
+              ),
+            (reason) => {
               serverLog.warn(
-                `[horton ${ctx.entityUrl}] setTag failed: ${err instanceof Error ? err.message : String(err)}`
+                `[horton ${ctx.entityUrl}] title generation fell back to local title: ${reason}`
               )
             }
+          )
+          if (result.length > 0) title = result
+        } catch (err) {
+          serverLog.warn(
+            `[horton ${ctx.entityUrl}] title generation failed: ${err instanceof Error ? err.message : String(err)}`
+          )
+          title = buildFallbackTitle(firstUserMessage)
+        }
+
+        if (title !== null) {
+          try {
+            await withTimeout(
+              ctx.setTag(`title`, title),
+              TITLE_GENERATION_TIMEOUT_MS,
+              `set title tag`
+            )
+          } catch (err) {
+            serverLog.warn(
+              `[horton ${ctx.entityUrl}] setTag failed: ${err instanceof Error ? err.message : String(err)}`
+            )
           }
-        })()
-      : Promise.resolve()
+        }
+      })()
+      return titlePromise
+    }
+    const generateTitleFromHistory = async (): Promise<void> => {
+      if (titleGenerationStarted) return
+      const firstUserMessage = await extractFirstUserMessage(ctx)
+      if (!firstUserMessage) return
+      await setTitleFromUserMessage(firstUserMessage)
+    }
+
+    titlePromise = generateTitleFromHistory()
 
     if (docsSupport) {
       ctx.useContext({
@@ -916,6 +959,15 @@ function createAssistantHandler(options: {
         },
         toolPolicy: {
           direct: hortonRealtimeDirectTools(tools as AgentTool[]),
+        },
+        onTranscript: (transcript) => {
+          if (
+            transcript.direction !== `input` ||
+            transcript.status !== `final`
+          ) {
+            return
+          }
+          void setTitleFromUserMessage(transcript.text)
         },
       })
       await realtime.run()
