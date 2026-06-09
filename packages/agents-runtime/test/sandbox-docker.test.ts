@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -14,6 +14,7 @@ import { lazySandbox } from '../src/sandbox/lazy'
 import { loadDockerode } from '../src/sandbox/docker/loader'
 import { SandboxError } from '../src/sandbox/types'
 import { dockerAvailable, TEST_IMAGE, TEST_LABEL } from './helpers/docker-probe'
+import { installDockerSandboxTestCleanup } from './helpers/docker-sandbox-cleanup'
 
 /**
  * dockerSandbox integration tests. The whole describe block is gated on
@@ -29,39 +30,8 @@ if (!dockerAvailable) {
 
 const d = dockerAvailable ? describe : describe.skip
 
-async function sweepTestContainers(): Promise<void> {
-  const Docker = await loadDockerode()
-  const docker = new Docker()
-  const containers = await docker.listContainers({
-    all: true,
-    filters: { label: [`${TEST_LABEL}=1`] },
-  })
-  await Promise.all(
-    containers.map((c) =>
-      docker
-        .getContainer(c.Id)
-        .remove({ force: true, v: true })
-        .catch(() => {})
-    )
-  )
-}
-
 d(`dockerSandbox`, () => {
-  beforeAll(async () => {
-    // Best-effort cleanup of leftover containers from previous runs.
-    await sweepTestContainers()
-  }, 30_000)
-
-  afterAll(async () => {
-    await sweepTestContainers()
-  }, 30_000)
-
-  afterEach(async () => {
-    // Every container now flows through the registry + debounced teardown;
-    // clear the in-process bookkeeping (and its timers) between tests.
-    __resetPersistentRegistryForTests()
-    await sweepTestContainers()
-  }, 30_000)
+  installDockerSandboxTestCleanup()
 
   it(`exec roundtrip with stdout / exitCode`, async () => {
     const sandbox = await dockerSandbox({
@@ -433,19 +403,7 @@ d(`dockerSandbox keyed lifecycle`, () => {
   // Unique keys per run so reattach targets a clean deterministic name.
   const KEY = `electric-test-${Date.now()}`
 
-  beforeAll(async () => {
-    await sweepTestContainers()
-  }, 30_000)
-
-  afterEach(async () => {
-    __resetPersistentRegistryForTests()
-    await sweepTestContainers()
-  }, 30_000)
-
-  afterAll(async () => {
-    __resetPersistentRegistryForTests()
-    await sweepTestContainers()
-  }, 30_000)
+  installDockerSandboxTestCleanup()
 
   const make = (
     sandboxKey: string,
