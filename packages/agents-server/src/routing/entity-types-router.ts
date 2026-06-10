@@ -45,6 +45,27 @@ type PublicEntityTypeResponse = ElectricAgentsEntityType & {
 
 const jsonObjectSchema = Type.Record(Type.String(), Type.Unknown())
 const schemaMapSchema = Type.Record(Type.String(), jsonObjectSchema)
+const slashCommandArgumentSchema = Type.Object(
+  {
+    name: Type.String(),
+    type: Type.Union([
+      Type.Literal(`string`),
+      Type.Literal(`number`),
+      Type.Literal(`boolean`),
+    ]),
+    required: Type.Optional(Type.Boolean()),
+    description: Type.Optional(Type.String()),
+  },
+  { additionalProperties: false }
+)
+const slashCommandSchema = Type.Object(
+  {
+    name: Type.String(),
+    description: Type.Optional(Type.String()),
+    arguments: Type.Optional(Type.Array(slashCommandArgumentSchema)),
+  },
+  { additionalProperties: false }
+)
 
 const typePermissionGrantInputSchema = Type.Object(
   {
@@ -66,6 +87,7 @@ const registerEntityTypeBodySchema = Type.Object(
     creation_schema: Type.Optional(jsonObjectSchema),
     inbox_schemas: Type.Optional(schemaMapSchema),
     state_schemas: Type.Optional(schemaMapSchema),
+    slash_commands: Type.Optional(Type.Array(slashCommandSchema)),
     serve_endpoint: Type.Optional(Type.String()),
     default_dispatch_policy: Type.Optional(dispatchPolicySchema),
     permission_grants: Type.Optional(
@@ -433,6 +455,7 @@ function normalizeEntityTypeRequest(
     creation_schema: parsed.creation_schema,
     inbox_schemas: parsed.inbox_schemas,
     state_schemas: parsed.state_schemas,
+    slash_commands: parsed.slash_commands,
     serve_endpoint: serveEndpoint,
     default_dispatch_policy:
       parsed.default_dispatch_policy ??

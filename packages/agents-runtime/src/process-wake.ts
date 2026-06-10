@@ -7,9 +7,12 @@ import { normalizeObservationSchema } from './observation-schema'
 import { createWakeSession } from './wake-session'
 import { createHandlerContext } from './context-factory'
 import { createSetupContext } from './setup-context'
+import type { WiringConfig } from './setup-context'
 import { createEntityLogPrefix, runtimeLog } from './log'
 import { createRuntimeServerClient } from './runtime-server-client'
+import type { RuntimeServerClient } from './runtime-server-client'
 import { unrestrictedSandbox } from './sandbox/unrestricted'
+import { ensureSandboxMaterialized } from './sandbox/lazy'
 import { resolveSandboxIdentity } from './sandbox/identity'
 import { appendPathToUrl } from './url'
 import { manifestChildKey } from './manifest-helpers'
@@ -37,6 +40,7 @@ import type {
   ObservationHandle,
   ObservationSource,
   ProcessWakeConfig,
+  ForkOptions,
   SendResult,
   SharedStateSchemaMap,
   SpawnSandboxOption,
@@ -105,6 +109,36 @@ function isInboxCancellationEvent(event: ChangeEvent): boolean {
 
 function inboxEventKey(event: ChangeEvent): string {
   return String(event.key)
+}
+
+// Translate the user-facing `Wake` into the wakeRegistry-compatible
+// shape used by `serverClient.forkEntity`. Same translation
+// `createOrGetChild` does inline for spawn (subscriberUrl is fixed by
+// the caller — typically the new fork's parent).
+type ServerForkWake = NonNullable<
+  Parameters<RuntimeServerClient[`forkEntity`]>[0][`wake`]
+>
+function normalizeForkWake(wake: Wake, subscriberUrl: string): ServerForkWake {
+  const isRunFinished =
+    wake === `runFinished` ||
+    (typeof wake === `object` && wake.on === `runFinished`)
+  const condition = isRunFinished
+    ? (`runFinished` as const)
+    : (wake as Exclude<Wake, `runFinished` | { on: `runFinished` }>)
+  const result: ServerForkWake = {
+    subscriberUrl,
+    condition,
+  }
+  if (typeof wake === `object` && wake.on === `runFinished`) {
+    if (wake.includeResponse !== undefined) {
+      result.includeResponse = wake.includeResponse
+    }
+  }
+  if (typeof wake === `object` && wake.on === `change`) {
+    if (wake.debounceMs !== undefined) result.debounceMs = wake.debounceMs
+    if (wake.timeoutMs !== undefined) result.timeoutMs = wake.timeoutMs
+  }
+  return result
 }
 
 function toError(err: unknown): Error {
@@ -1228,7 +1262,9 @@ export async function processWake(
           payload: send.payload,
           type: send.type,
           afterMs: send.afterMs,
+          fromPrincipal: notification.principal?.url,
           fromAgent: entityUrl,
+          writeToken,
         })
         .then(() => ({ sent: true as const, targetUrl: send.targetUrl }))
 
@@ -1249,6 +1285,7 @@ export async function processWake(
         parentUrl: string,
         opts?: {
           initialMessage?: unknown
+          initialMessageType?: string
           wake?: Wake
           tags?: Record<string, string>
           sandbox?: SpawnSandboxOption
@@ -1287,7 +1324,7 @@ export async function processWake(
         const requestedInherit =
           opts?.sandbox === `inherit` ||
           (typeof opts?.sandbox === `object` && opts.sandbox.inherit === true)
-        const sandbox = requestedInherit
+        const childSandbox = requestedInherit
           ? resolvedSandboxSelection
             ? {
                 profile: resolvedSandboxSelection.profile,
@@ -1301,16 +1338,50 @@ export async function processWake(
           : opts?.sandbox === `inherit`
             ? undefined
             : opts?.sandbox
+        // An inheriting child only ever ATTACHES by key — make sure the
+        // owner's (lazily-created) container/workspace actually exists before
+        // the child can wake, even if this wake never ran a tool itself.
+        if (requestedInherit && resolvedSandboxSelection && sandbox) {
+          await ensureSandboxMaterialized(sandbox)
+        }
         return serverClient.spawnEntity({
           type: childType,
           id: childId,
           args: spawnArgs,
           parentUrl,
           initialMessage: opts?.initialMessage,
+          initialMessageType: opts?.initialMessageType,
           tags: opts?.tags,
-          sandbox,
+          sandbox: childSandbox,
           wake: wakeOpt,
         })
+      },
+
+      forkEntity: async (
+        sourceEntityUrl: string,
+        opts?: Parameters<WiringConfig[`forkEntity`]>[1]
+      ): Promise<{ entityUrl: string; streamPath: string }> => {
+        // Normalize the user-facing Wake into the wakeRegistry-
+        // compatible shape — same translation `createOrGetChild` does
+        // for spawn. subscriberUrl is derived from `opts.parent`
+        // (the only valid target after the route's wake validation).
+        const wakeOpt =
+          opts?.wake && opts.parent
+            ? normalizeForkWake(opts.wake, opts.parent)
+            : undefined
+        const result = await serverClient.forkEntity({
+          sourceEntityUrl,
+          ...(opts?.instanceId !== undefined && {
+            instanceId: opts.instanceId,
+          }),
+          ...(opts?.parent !== undefined && { parent: opts.parent }),
+          ...(wakeOpt && { wake: wakeOpt }),
+          ...(opts?.initialMessage !== undefined && {
+            initialMessage: opts.initialMessage,
+          }),
+          ...(opts?.tags !== undefined && { tags: opts.tags }),
+        })
+        return { entityUrl: result.entityUrl, streamPath: result.streamPath }
       },
 
       createChildDb: async (
@@ -1338,7 +1409,17 @@ export async function processWake(
           close: () => childDb.close(),
         })
         if (opts?.preload !== false) {
-          await childDb.preload()
+          try {
+            await childDb.preload()
+          } catch (err) {
+            // An observation may target an entity that hasn't been spawned
+            // yet (e.g. a daily-digest entity observes its child writer
+            // before the first spawn). 404 / Stream not found is fine — we
+            // treat the stream as empty for this wake; subsequent wakes
+            // pick up state once the entity is created.
+            const msg = err instanceof Error ? err.message : String(err)
+            if (!/Stream not found|404/i.test(msg)) throw err
+          }
         }
         return childDb
       },
@@ -1722,12 +1803,21 @@ export async function processWake(
       spawnArgs?: Record<string, unknown>,
       opts?: {
         initialMessage?: unknown
+        initialMessageType?: string
         wake?: Wake
         tags?: Record<string, string>
         observe?: boolean
       }
     ): Promise<EntityHandle> => {
       return setupCtx.spawn(type, id, spawnArgs, opts)
+    }
+
+    const doFork = (
+      sourceEntityUrl: string,
+      id: string,
+      opts: ForkOptions
+    ): Promise<EntityHandle> => {
+      return setupCtx.fork(sourceEntityUrl, id, opts)
     }
 
     const doMkdb = <TSchema extends SharedStateSchemaMap>(
@@ -2005,6 +2095,7 @@ export async function processWake(
         state: setupCtx.state,
         events: currentWakeEvents,
         actions: setupCtx.actions,
+        staticSlashCommands: entry.definition.slashCommands,
         electricTools,
         // Non-null at this point: the sandbox was acquired earlier in
         // this try block (after entityArgs); TS narrowing doesn't survive
@@ -2020,6 +2111,7 @@ export async function processWake(
         hydratedEventSourceWake: await hydrateCurrentEventSourceWake(),
         doObserve,
         doSpawn,
+        doFork,
         doMkdb,
         doCreateAttachment: (attachment) =>
           serverClient
@@ -2027,7 +2119,14 @@ export async function processWake(
             .then((result) => result.attachment),
         doReadAttachment: (id) =>
           serverClient.readAttachment({ entityUrl, id }),
-        prepareAgentRun: waitForSharedStateWiring,
+        prepareAgentRun: async () => {
+          await waitForSharedStateWiring()
+          await drainAllPendingWrites()
+          await Promise.all(pendingWakeRegistrations)
+          pendingWakeRegistrations.length = 0
+          await wakeSession.commitManifestEntries()
+          await flushProducedWrites()
+        },
         executeSend: (send) => executeSend(send),
         doSetTag: (key, value) =>
           serverClient.setTag(entityUrl, key, value, writeToken),

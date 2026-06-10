@@ -1,7 +1,7 @@
 {
   "name": "@electric-ax/agents-server-ui",
   "private": true,
-  "version": "0.4.16",
+  "version": "0.4.19",
   "type": "module",
   "scripts": {
     "build": "vite build",
@@ -18,6 +18,7 @@
     "@durable-streams/client": "^0.2.6",
     "@durable-streams/state": "^0.3.1",
     "@electric-ax/agents-runtime": "workspace:*",
+    "@handlewithcare/react-prosemirror": "^3.0.6",
     "@streamdown/math": "^1.0.2",
     "@tanstack/db": "^0.6.6",
     "@tanstack/electric-db-collection": "^0.3.5",
@@ -30,8 +31,14 @@
     "lucide-react": "^0.561.0",
     "mermaid": "^11.14.0",
     "nanoid": "^3.3.11",
+    "prosemirror-commands": "^1.7.1",
+    "prosemirror-keymap": "^1.2.3",
+    "prosemirror-model": "^1.25.7",
+    "prosemirror-state": "^1.4.4",
+    "prosemirror-view": "1.41.7",
     "react": "19.1.0",
     "react-dom": "19.1.0",
+    "react-reconciler": "0.32.0",
     "shiki": "^4.0.2",
     "streamdown": "^2.5.0",
     "zod": "^3.25.76"

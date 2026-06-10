@@ -123,6 +123,35 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
       assert MapSet.equal?(affected, MapSet.new([{"public", "users"}]))
     end
 
+    test "records the transaction's begin timestamp on the commit", %{converter: converter} do
+      {:buffering, converter} =
+        MessageConverter.convert(
+          %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
+          converter
+        )
+
+      {:buffering, converter} =
+        MessageConverter.convert(
+          %LR.Insert{relation_id: 1, tuple_data: ["123"], bytes: 3},
+          converter
+        )
+
+      assert {:ok,
+              %TransactionFragment{
+                commit: %Commit{tx_started_at: tx_started_at}
+              }, _converter} =
+               MessageConverter.convert(
+                 %LR.Commit{
+                   lsn: @test_lsn,
+                   end_lsn: @test_end_lsn,
+                   commit_timestamp: ~U[2024-01-01 00:00:00Z]
+                 },
+                 converter
+               )
+
+      assert is_integer(tx_started_at)
+    end
+
     test "returns TransactionFragment with UpdatedRecord for update", %{converter: converter} do
       {:buffering, converter} =
         MessageConverter.convert(

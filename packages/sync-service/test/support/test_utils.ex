@@ -31,12 +31,16 @@ defmodule Support.TestUtils do
   Build a transaction fragment that may or may not have begin and commit parts.
   """
   def txn_fragment(xid, lsn, changes, opts) do
-    [%{log_offset: last_log_offset} | _] = Enum.reverse(changes)
-
     lsn =
       case lsn do
         %Electric.Postgres.Lsn{} -> lsn
         num when is_integer(num) -> Electric.Postgres.Lsn.from_integer(num)
+      end
+
+    last_log_offset =
+      case Enum.reverse(changes) do
+        [%{log_offset: offset} | _] -> offset
+        [] -> LogOffset.new(lsn, 0)
       end
 
     %TransactionFragment{
@@ -44,7 +48,10 @@ defmodule Support.TestUtils do
       lsn: lsn,
       last_log_offset: last_log_offset,
       has_begin?: Keyword.get(opts, :has_begin?, false),
-      commit: if(Keyword.get(opts, :has_commit?, false), do: %Changes.Commit{}),
+      commit:
+        if(Keyword.get(opts, :has_commit?, false),
+          do: %Changes.Commit{tx_started_at: System.monotonic_time()}
+        ),
       changes: changes,
       change_count: length(changes),
       affected_relations: MapSet.new(changes, & &1.relation)

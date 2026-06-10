@@ -99,12 +99,11 @@
   min-width: 0;
 }
 
-/* Trailing slot — sized to `IconButton size={1}` (24×24) so the
-   remove button slots in cleanly and `margin-left: auto` pushes
-   it past the flex-1 label to the row's right edge, exactly like
-   `ServerPicker.module.css → .removeBtn`. The check sits stacked
-   in the same slot via absolute positioning so swapping check ↔ X
-   never reflows the row. */
+/* Trailing slot — sized to `IconButton size={1}` (24×24) and pushed
+   past the flex-1 label to the row's right edge with
+   `margin-left: auto`, exactly like
+   `ServerPicker.module.css → .removeBtn`, so rows with and without a
+   check share the same 28px dropdown row pitch. */
 .trailing {
   position: relative;
   flex-shrink: 0;
@@ -121,25 +120,4 @@
   justify-content: center;
   color: var(--ds-text-2);
   pointer-events: none;
-}
-
-.trailingRemove {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  transition: opacity 0.1s ease;
-}
-
-/* Hover / kbd-focus on the row reveals the X and hides the check
-   — they share the same trailing slot, so the row never reflows.
-   The IconButton stays interactive (its own pointer events live on
-   the button element, not on `.trailing`) so its `:hover` bg
-   tinting from `Button.module.css → .variant-ghost` still reads. */
-.recentItem:hover .trailingRemove,
-.recentItem[data-highlighted] .trailingRemove {
-  opacity: 1;
-}
-.recentItem:hover .trailingCheck,
-.recentItem[data-highlighted] .trailingCheck {
-  opacity: 0;
 }

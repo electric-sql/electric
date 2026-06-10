@@ -1,5 +1,58 @@
 # @electric-ax/agents
 
+## 0.4.16
+
+### Patch Changes
+
+- Updated dependencies [5238055]
+- Updated dependencies [916f6cd]
+- Updated dependencies [a044ede]
+  - @electric-ax/agents-runtime@0.3.12
+
+## 0.4.15
+
+### Patch Changes
+
+- 8bcadb7: Preserve existing undici global dispatcher interceptors when installing the Durable Streams fetch cache so Electric Agents Desktop keeps injecting Cloud auth headers after the built-in agents runtime starts.
+- 5aa2d78: Give Horton a `fork` tool that creates a child session inheriting this conversation's history up to the latest completed response. Takes an optional `entityUrl` (omit for self-fork), an optional `initialMessage` (server delivers to the fork in the same round-trip — no follow-up `send` needed; not atomic with fork creation), and optional `tags`. The fork is created as a CHILD of the calling entity (same parent-ownership model as `spawn_worker`) and wires reply delivery through the same manifest-anchored wake — when the fork's next run finishes, the parent wakes with the response in the wake message.
+
+  Horton's system prompt grows a "When to fork (vs spawn_worker)" section framing the two tools as a pair: both create a child the parent owns and gets replies from, the difference is what the child boots with — `spawn_worker` starts with an empty context (you brief it from scratch), `fork` starts with a copy of the conversation up to the latest completed response. Includes an explicit trigger pattern ("prefer fork when generating multiple variants the user wants to compare; don't inline") to route "give me three takes" / "evaluate these N approaches" prompts to fork rather than collapsing them into one inline response, plus the workflow for the parallel-exploration loop (end-turn-first, fork-once-per-branch with a different `initialMessage` each, wait for all responses before synthesising).
+
+- a1c1e30: Add built-in schedule tools to Horton and document them in the system prompt.
+- 1099366: Fix leftover Docker sandbox containers (`electric-sbx-*`) piling up.
+
+  Sandbox containers are meant to be short-lived, but several gaps let them
+  outlive the work they were created for — opening the desktop app could leave
+  15+ containers running that were never explicitly started. This closes those
+  gaps so a container only exists while something is actually using it:
+  - **Created only when used.** A container now starts the first time an agent
+    actually uses its sandbox (runs a command, reads/writes a file), so trivial
+    wakes (scheduled ticks, bookkeeping) no longer spin one up.
+  - **Cleaned up on quit.** Shutdown now tears down idle containers immediately
+    instead of leaving their delayed-teardown timers to die with the process.
+  - **Leftovers reclaimed at startup.** Containers are tagged with the process
+    that created them; at startup, those whose owner is gone are reclaimed
+    (throwaway ones removed, reusable ones stopped so their files survive), while
+    containers a live process is still using are left untouched.
+
+  Also: a failed container setup step no longer strands an untracked container,
+  and all sandboxes are grouped under one `electric-sandboxes` entry in Docker
+  Desktop so they can be stopped/removed together.
+
+- Updated dependencies [d15852d]
+- Updated dependencies [5aa2d78]
+- Updated dependencies [1099366]
+- Updated dependencies [1099366]
+  - @electric-ax/agents-runtime@0.3.11
+
+## 0.4.14
+
+### Patch Changes
+
+- 3ecdade: Add structured composer input support, slash command registration, and proactive skill context loading.
+- Updated dependencies [3ecdade]
+  - @electric-ax/agents-runtime@0.3.10
+
 ## 0.4.13
 
 ### Patch Changes

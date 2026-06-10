@@ -4,6 +4,7 @@ import {
   Animated,
   Easing,
   Keyboard,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -19,15 +20,24 @@ import { useEntityTimeline } from '@electric-ax/agents-server-ui/src/hooks/useEn
 import {
   createDeleteInboxMessageAction,
   createQueuePositionBetween,
-  createSendMessageAction,
+  createSendComposerInputAction,
   createSteerInboxMessageAction,
   createUpdateInboxMessageAction,
   readTextPayload,
 } from '@electric-ax/agents-server-ui/src/lib/sendMessage'
 import type { OptimisticInboxMessage } from '@electric-ax/agents-server-ui/src/lib/sendMessage'
-import type { EntityTimelineQueryRow } from '@electric-ax/agents-runtime/client'
+import { serializeComposerInput } from '@electric-ax/agents-runtime/client'
+import type {
+  EntityTimelineQueryRow,
+  SlashCommandRow,
+} from '@electric-ax/agents-runtime/client'
 import { Header, HeaderBackButton } from '../components/Header'
 import { Icon } from '../components/Icon'
+import {
+  renderComposerHighlights,
+  SlashCommandMenu,
+  useSlashAutocomplete,
+} from '../components/NativeComposer'
 import { Screen } from '../components/Screen'
 import { SessionMenu } from '../components/SessionMenu'
 import { StatusDot } from '../components/StatusDot'
@@ -49,7 +59,6 @@ export const CHAT_COMPOSER_OVERLAP = 20
 
 const COMPOSER_INPUT_MIN_HEIGHT = 40
 const COMPOSER_INPUT_MAX_HEIGHT = 200
-const COMPOSER_MIN_CARD_HEIGHT = 48
 const INLINE_QUEUED_TIMEOUT_MS = 15_000
 const SESSION_PERMISSIONS: ReadonlyArray<EntityPermission> = [`write`, `signal`]
 
@@ -462,7 +471,7 @@ function NativeMessageComposer({
   disabled: boolean
   placeholder: string
 }): React.ReactElement {
-  const { serverUrl } = useAgents()
+  const { serverUrl, entityTypesCollection } = useAgents()
   const tokens = useTokens()
   const insets = useSafeAreaInsets()
   const styles = useMemo(() => createComposerStyles(tokens), [tokens])
@@ -473,12 +482,44 @@ function NativeMessageComposer({
   const [editingMessage, setEditingMessage] = useState<{
     key: string
   } | null>(null)
-  const [inputHeight, setInputHeight] = useState(COMPOSER_INPUT_MIN_HEIGHT)
   const text = value.trim()
   const bottomPadding = keyboardVisible ? 4 : Math.max(insets.bottom, 8)
+  // The per-entity slashCommands collection only carries dynamically-registered
+  // commands — statically-declared ones are never materialised into it. So, like
+  // the desktop composer (ChatView -> MessageInput), fall back to the entity
+  // type's declarations when the live collection is empty.
+  const { data: liveSlashCommands = [] } = useLiveQuery(
+    (q) =>
+      db
+        ? q
+            .from({ slashCommand: db.collections.slashCommands as any })
+            .orderBy(({ slashCommand }: any) => slashCommand.name, `asc`)
+        : undefined,
+    [db]
+  )
+  const { data: matchingTypes = [] } = useLiveQuery(
+    (q) =>
+      entity
+        ? q
+            .from({ type: entityTypesCollection })
+            .where(({ type }) => eq(type.name, entity.type))
+        : undefined,
+    [entityTypesCollection, entity?.type]
+  )
+  const slashCommands = useMemo<Array<SlashCommandRow>>(() => {
+    if (liveSlashCommands.length > 0) {
+      return liveSlashCommands as Array<SlashCommandRow>
+    }
+    return (matchingTypes[0]?.slash_commands ?? []).map((command) => ({
+      ...command,
+      key: `static:${command.name}`,
+      source: `static`,
+      updated_at: matchingTypes[0]?.updated_at ?? ``,
+    }))
+  }, [liveSlashCommands, matchingTypes])
   const sendAction = useMemo(() => {
     if (!db) return null
-    return createSendMessageAction({
+    return createSendComposerInputAction({
       db,
       baseUrl: serverUrl,
       entityUrl,
@@ -507,33 +548,20 @@ function NativeMessageComposer({
   const canSend = text.length > 0 && !disabled && !writeDisabled && !sending
   const inputDisabled = disabled || writeDisabled || sending
   const composerDisabled = disabled || (writeDisabled && !showStop)
-  const setMeasuredInputHeight = (height: number): void => {
-    const nextHeight = Math.min(
-      COMPOSER_INPUT_MAX_HEIGHT,
-      Math.max(COMPOSER_INPUT_MIN_HEIGHT, Math.ceil(height))
-    )
-    setInputHeight((current) => (current === nextHeight ? current : nextHeight))
+  const slash = useSlashAutocomplete(value, slashCommands, {
+    enabled: !inputDisabled,
+  })
+  // Controls the caret for one render after a programmatic command insert, then
+  // releases back to uncontrolled so normal typing isn't fought.
+  const [pendingSelection, setPendingSelection] = useState<{
+    start: number
+    end: number
+  } | null>(null)
+  const insertSlashCommand = (command: SlashCommandRow): void => {
+    const insertion = slash.applyCommand(command)
+    setValue(insertion.value)
+    setPendingSelection(insertion.selection)
   }
-
-  const handleChangeText = (nextValue: string): void => {
-    setValue(nextValue)
-
-    // `onContentSizeChange` is the source of truth for wrapped lines, but
-    // explicit newlines can be reflected immediately while RN catches up.
-    const explicitLines = nextValue.split(/\r\n|\r|\n/).length
-    if (explicitLines > 1) {
-      setMeasuredInputHeight(explicitLines * lineHeight.lg + spacing.lg)
-    }
-  }
-
-  useEffect(() => {
-    const cardHeight = Math.max(
-      COMPOSER_MIN_CARD_HEIGHT,
-      inputHeight + spacing.sm * 2
-    )
-    const errorHeight = error ? lineHeight.xs + spacing.xs : 0
-    onHeightChange?.(cardHeight + bottomPadding + errorHeight)
-  }, [bottomPadding, error, inputHeight, onHeightChange])
 
   const finishPersistedAction = (promise: Promise<unknown>): void => {
     promise
@@ -564,19 +592,26 @@ function NativeMessageComposer({
       }
 
       setValue(``)
+      setPendingSelection(null)
+      slash.reset()
       setEditingMessage(null)
       onSendMessage?.()
       finishPersistedAction(tx.isPersisted.promise)
       return
     }
 
-    const tx = sendAction?.({ text, mode: `queued` })
+    const tx = sendAction?.({
+      payload: serializeComposerInput(text, slashCommands),
+      mode: `queued`,
+    })
     if (!tx) {
       setSending(false)
       return
     }
 
     setValue(``)
+    setPendingSelection(null)
+    slash.reset()
     setEditingMessage(null)
     onSendMessage?.()
     finishPersistedAction(tx.isPersisted.promise)
@@ -604,8 +639,10 @@ function NativeMessageComposer({
       })
       setEditingMessage({ key: message.key })
       setValue(queuedText)
+      setPendingSelection(null)
+      slash.reset()
     },
-    [disabled, updateAction, writeDisabled]
+    [disabled, slash.reset, updateAction, writeDisabled]
   )
 
   const cancelEditing = useCallback((): void => {
@@ -621,7 +658,9 @@ function NativeMessageComposer({
     }
     setEditingMessage(null)
     setValue(``)
-  }, [editingMessage, updateAction])
+    setPendingSelection(null)
+    slash.reset()
+  }, [editingMessage, slash.reset, updateAction])
 
   const deleteMessage = useCallback(
     (key: string): void => {
@@ -675,7 +714,12 @@ function NativeMessageComposer({
         styles.root,
         {
           paddingBottom: bottomPadding,
-          transform: [{ translateY: keyboardTranslateY }],
+          // Android's default `resize` mode already lifts this bottom-anchored
+          // card above the keyboard, so translating it again would double the
+          // offset. iOS doesn't resize, so there the translate does the work.
+          transform: [
+            { translateY: Platform.OS === `android` ? 0 : keyboardTranslateY },
+          ],
         },
       ]}
     >
@@ -708,23 +752,37 @@ function NativeMessageComposer({
           </Pressable>
         </View>
       )}
+      {slash.open && (
+        <SlashCommandMenu items={slash.items} onSelect={insertSlashCommand} />
+      )}
       <View
         style={[styles.composer, composerDisabled ? styles.disabled : null]}
       >
         <TextInput
-          value={value}
-          onChangeText={handleChangeText}
+          onChangeText={setValue}
+          onSelectionChange={(event) => {
+            slash.onSelectionChange(event)
+            if (pendingSelection) setPendingSelection(null)
+          }}
+          selection={pendingSelection ?? undefined}
           editable={!inputDisabled}
           multiline
           placeholder={placeholder}
           placeholderTextColor={tokens.text4}
-          scrollEnabled={inputHeight >= COMPOSER_INPUT_MAX_HEIGHT}
-          onContentSizeChange={(event) => {
-            setMeasuredInputHeight(event.nativeEvent.contentSize.height)
-          }}
-          style={[styles.input, { height: inputHeight }]}
+          // Size to content intrinsically (within the style's min/maxHeight)
+          // rather than via onContentSizeChange — that callback never fires when
+          // the text is supplied as child <Text> instead of `value` (RN #13732),
+          // so the input wouldn't grow on iOS. The root onLayout reports the
+          // resulting card height to the timeline embed.
+          style={styles.input}
           returnKeyType="default"
-        />
+        >
+          {renderComposerHighlights(value, slashCommands, {
+            base: styles.baseText,
+            command: styles.commandToken,
+            arg: styles.argToken,
+          })}
+        </TextInput>
         <Pressable
           onPress={handleComposerAction}
           disabled={showStop ? stopPending : !canSend}
@@ -1488,10 +1546,26 @@ function createComposerStyles(tokens: Tokens) {
       maxHeight: COMPOSER_INPUT_MAX_HEIGHT,
       minHeight: COMPOSER_INPUT_MIN_HEIGHT,
       paddingVertical: 0,
-      color: tokens.text1,
       fontSize: fontSize.lg,
       lineHeight: lineHeight.lg,
       textAlignVertical: `top`,
+    },
+    // Base text colour lives on the rendered child spans, not the input, so the
+    // command spans can override it (a nested colour is ignored when the
+    // TextInput sets its own `color`).
+    baseText: {
+      color: tokens.text1,
+    },
+    commandToken: {
+      color: tokens.accent11,
+      backgroundColor: tokens.accentA2,
+      fontWeight: `600`,
+    },
+    // Arguments share the command's subtle background but regular weight (vs the
+    // command's bold), so the value reads as the "slot" within the badge.
+    argToken: {
+      color: tokens.accent11,
+      backgroundColor: tokens.accentA2,
     },
     sendButton: {
       width: 34,

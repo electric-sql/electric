@@ -203,6 +203,114 @@ describe(`ElectricAgentsManager attachments`, () => {
   })
 })
 
+describe(`ElectricAgentsManager composer input validation`, () => {
+  it(`accepts composer_input without an entity-declared inbox schema`, async () => {
+    const manager = new EntityManager({
+      registry: {
+        getEntity: vi.fn().mockResolvedValue({
+          url: `/coder/session-1`,
+          type: `coder`,
+          status: `idle`,
+          inbox_schemas: {
+            note: {
+              type: `object`,
+              properties: { body: { type: `string` } },
+              required: [`body`],
+            },
+          },
+        }),
+        getEntityType: vi.fn().mockResolvedValue({
+          inbox_schemas: {
+            note: {
+              type: `object`,
+              properties: { body: { type: `string` } },
+              required: [`body`],
+            },
+          },
+        }),
+        close: vi.fn(),
+      } as any,
+      streamClient: {} as any,
+      validator: new SchemaValidator(),
+      wakeRegistry: {
+        setTimeoutCallback: vi.fn(),
+        setDebounceCallback: vi.fn(),
+      } as any,
+    })
+
+    await expect(
+      (manager as any).validateSendRequest(`/coder/session-1`, {
+        from: `/principal/user-1`,
+        type: `composer_input`,
+        payload: {
+          source: `/quickstart`,
+          nodes: [
+            {
+              kind: `slash_command`,
+              start: 0,
+              end: 11,
+              raw: `/quickstart`,
+              name: `quickstart`,
+            },
+          ],
+        },
+      })
+    ).resolves.toMatchObject({ url: `/coder/session-1` })
+  })
+
+  it(`rejects invalid composer_input payloads`, async () => {
+    const manager = new EntityManager({
+      registry: {
+        getEntity: vi.fn().mockResolvedValue({
+          url: `/coder/session-1`,
+          type: `coder`,
+          status: `idle`,
+        }),
+        getEntityType: vi.fn(),
+        close: vi.fn(),
+      } as any,
+      streamClient: {} as any,
+      validator: new SchemaValidator(),
+      wakeRegistry: {
+        setTimeoutCallback: vi.fn(),
+        setDebounceCallback: vi.fn(),
+      } as any,
+    })
+
+    await expect(
+      (manager as any).validateSendRequest(`/coder/session-1`, {
+        from: `/principal/user-1`,
+        type: `composer_input`,
+        payload: {
+          source: `/quickstart`,
+          nodes: [
+            {
+              kind: `slash_command`,
+              start: 0,
+              end: 11,
+              raw: `/quick`,
+              name: `QuickStart`,
+            },
+          ],
+        },
+      })
+    ).rejects.toMatchObject({
+      code: `SCHEMA_VALIDATION_FAILED`,
+      status: 422,
+      details: expect.arrayContaining([
+        {
+          path: `/nodes/0/raw`,
+          message: `must equal source.slice(start, end)`,
+        },
+        {
+          path: `/nodes/0/name`,
+          message: `must be a lowercase kebab-case command name`,
+        },
+      ]),
+    })
+  })
+})
+
 describe(`ElectricAgentsManager event source subscriptions`, () => {
   it(`persists the manifest before registering wake side effects`, async () => {
     const calls: Array<string> = []

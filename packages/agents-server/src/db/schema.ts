@@ -24,6 +24,7 @@ export const entityTypes = pgTable(
     creationSchema: jsonb(`creation_schema`),
     inboxSchemas: jsonb(`inbox_schemas`),
     stateSchemas: jsonb(`state_schemas`),
+    slashCommands: jsonb(`slash_commands`),
     serveEndpoint: text(`serve_endpoint`),
     defaultDispatchPolicy: jsonb(`default_dispatch_policy`),
     revision: integer(`revision`).notNull().default(1),

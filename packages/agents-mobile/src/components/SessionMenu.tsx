@@ -8,6 +8,7 @@ import {
 } from './BottomSheet'
 import { Icon } from './Icon'
 import { useDrillTransition } from './useDrillTransition'
+import { togglePin, usePinnedUrls } from '../lib/pinnedEntities'
 import { useTokens } from '../lib/ThemeProvider'
 import type { ElectricEntity, EntitySignal } from '../lib/agentsClient'
 import type { EmbedViewId } from '../lib/embedView'
@@ -101,7 +102,8 @@ const SIGNAL_OPTION_GROUPS: ReadonlyArray<
 
 /**
  * Bottom-sheet "more" menu for the chat screen — exposes the view
- * toggle (chat / state explorer) plus a status header. Tapping a
+ * toggle (chat / state explorer), a pin toggle (mirror of the
+ * desktop tile menu's Pin/Unpin), plus a status header. Tapping a
  * row immediately switches the view and dismisses the sheet, so the
  * user can swap between modes in one tap-tap gesture (kebab → mode).
  */
@@ -127,6 +129,8 @@ export function SessionMenu({
   signalDisabled?: boolean
 }): React.ReactElement {
   const tokens = useTokens()
+  const pinnedUrls = usePinnedUrls()
+  const pinned = entity !== null && pinnedUrls.includes(entity.url)
   const [signalMenuOpen, setSignalMenuOpen] = useState(false)
   const {
     style: drillPaneStyle,
@@ -318,6 +322,28 @@ export function SessionMenu({
                 onPress={() => handlePick(`state-explorer`)}
               />
             </BottomSheetSection>
+            {entity && (
+              <>
+                <BottomSheetSeparator />
+                <BottomSheetSection>
+                  <BottomSheetItem
+                    label={pinned ? `Unpin` : `Pin`}
+                    icon={
+                      <Icon
+                        name="pin"
+                        size={18}
+                        color={tokens.text2}
+                        strokeWidth={2}
+                      />
+                    }
+                    onPress={() => {
+                      togglePin(entity.url)
+                      handleClose()
+                    }}
+                  />
+                </BottomSheetSection>
+              </>
+            )}
             {canOpenSignalMenu && (
               <>
                 <BottomSheetSeparator />

@@ -41,6 +41,52 @@
 .selected:hover {
   background: var(--ds-accent-a3);
 }
+
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .row {
+  overflow: hidden;
+}
+
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .row::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  transition: opacity 0.08s ease;
+}
+
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .row:hover,
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .selected,
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .selected:hover {
+  background: transparent;
+}
+
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .row:hover::before {
+  opacity: 1;
+  background: var(--ds-sidebar-item-hover-bg);
+  -webkit-backdrop-filter: var(--ds-sidebar-item-hover-backdrop-filter);
+  backdrop-filter: var(--ds-sidebar-item-hover-backdrop-filter);
+}
+
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .selected::before,
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .selected:hover::before {
+  opacity: 1;
+  background: var(--ds-sidebar-item-active-bg);
+  -webkit-backdrop-filter: var(--ds-sidebar-item-active-backdrop-filter);
+  backdrop-filter: var(--ds-sidebar-item-active-backdrop-filter);
+}
 .stopped {
   opacity: 0.55;
 }
@@ -80,6 +126,54 @@
 .pinBtn:hover {
   background: var(--ds-gray-a4);
   color: var(--ds-text-1);
+}
+
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .pinBtn,
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .expandOverlay,
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .expandBtnVisible {
+  overflow: hidden;
+}
+
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .pinBtn::before,
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .expandOverlay::before,
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .expandBtnVisible::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  transition: opacity 0.08s ease;
+}
+
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .pinBtn:hover,
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .expandOverlay:hover,
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .expandBtnVisible:hover {
+  background: transparent;
+}
+
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .pinBtn:hover::before,
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .expandOverlay:hover::before,
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .expandBtnVisible:hover::before {
+  opacity: 1;
+  background: var(--ds-sidebar-item-hover-bg);
+  -webkit-backdrop-filter: var(--ds-sidebar-item-hover-backdrop-filter);
+  backdrop-filter: var(--ds-sidebar-item-hover-backdrop-filter);
 }
 /* Pin button is hover-only — even for already-pinned rows. The
    status dot stays visible at rest so the user can still see the
@@ -235,6 +329,7 @@
    count and just leave a permanent down-chevron the user can click
    to collapse. */
 .expandBtnVisible {
+  position: relative;
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;

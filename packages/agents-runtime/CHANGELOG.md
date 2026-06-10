@@ -1,5 +1,93 @@
 # @electric-ax/agents-runtime
 
+## 0.3.12
+
+### Patch Changes
+
+- 5238055: Show per-response token usage in the agent meta row, e.g. `1.2k ↑ 412
+↓`. Updates as each step settles — for a single-turn call this lands
+  once at done; for tool-using runs the counter jumps at each step
+  boundary (the LLM SDK only emits `usage` at end-of-step, so we can't
+  tick smoothly between tokens).
+
+  Plumbing:
+  - `StepValue` gains optional `input_tokens` / `output_tokens` columns
+    (Zod + TS). Strictly additive: events recorded before this change
+    stay valid since both fields are optional, so no migration.
+  - `outbound-bridge.ts:onStepEnd` now persists the `tokenInput` /
+    `tokenOutput` it already received from `pi-adapter.ts` — previously
+    those values were accepted and silently dropped.
+  - `EntityTimelineStepItem` / `IncludesStep` surface the new fields,
+    and the three `.select()` blocks that materialize steps include
+    them.
+  - The cached `agent_response` section gets a `tokens?: { input?,
+output? }` summed across the run's steps at section-build time, and
+    the section-cache fingerprint factors in step token deltas so a
+    late-arriving `onStepEnd` invalidates a stale section.
+
+- 916f6cd: agents-mobile: native slash-command composer for the Horton prompt. The in-session and new-session inputs gain slash-command autocomplete, structured `composer_input` payloads, and inline command/argument highlighting — reaching feature parity with the desktop composer, on a native `TextInput` rather than a WebView. The slash-command grammar and serializer move into `@electric-ax/agents-runtime` (exported via `/client`) as the shared source of truth for both surfaces; the desktop composer repoints to them with no behaviour change.
+- a044ede: agents-server, agents-runtime: fix two first-spawn races that prevented writer-side shared-state entities from reaching their first handler run on a fresh tenant.
+
+  **agents-server**: `PUT /_electric/shared-state/<id>` now inserts the corresponding `shared_state_links` row synchronously whenever the request carries a valid `electric-owner-entity` header and the principal can access the entity. Previously this PUT only ran the authz check; the link row was created later — asynchronously — when the entity's manifest stream event was processed via `applyManifestEntitySource`. The runtime's `mkdb` wiring schedules the PUT and the preload GET back-to-back, so the GET always raced ahead of the eventually-consistent link insert and returned `401 UNAUTHORIZED: Principal is not allowed to read shared state` on every fresh-tenant first wake.
+
+  **agents-runtime**: `createChildDb` (used by entity observations) now swallows `Stream not found` / `404` on initial preload. A handler may legitimately observe an entity that hasn't been spawned yet — e.g. a parent observes its own future child to wake on the child's `runFinished`. Treating the 404 as "no events yet" matches the spirit of the observation (we'll be woken when the entity appears); the previous unconditional throw aborted the entire wake with `HTTP Error 404 ... Stream not found`, and the entity could never recover because the spawn that would create the child never ran.
+
+  Verified end-to-end with OpenFactory's `daily-digest` entity (uses `mkdb` + `observe(db(...))` + `observe(entity(<future child>))`) against a freshly torn-down local agents-server: the first `run-now` now writes the digest row, the discord-router subscriber picks it up, and the digest reaches Discord — without manual SQL or out-of-band link bootstrapping.
+
+## 0.3.11
+
+### Patch Changes
+
+- d15852d: Fix runtime-originated agent send attribution by sending `from_principal`, `from_agent`, and the active wake write token, and accepting `from_agent` when backed by a valid agent write token.
+- 5aa2d78: Add `ctx.fork(opts?)` to `HandlerContext`, with an opts shape that mirrors `ctx.spawn`'s where the semantics map:
+
+  ```ts
+  ctx.fork(opts?: {
+    targetEntityUrl?: string  // omit for self-fork
+    initialMessage?: unknown  // server delivers to the fork in the same round-trip (not atomic with creation)
+    wake?: Wake               // overrides the default runFinished + includeResponse
+    tags?: Record<string, string>
+    observe?: boolean         // `false` = fire-and-forget (no parent, no wake, no manifest entry)
+  })
+  ```
+
+  By default (`observe: true`), the new fork is a CHILD of this entity (same parent-ownership model as `ctx.spawn`), and a `runFinished + includeResponse` wake is registered on it server-side. Reply delivery uses the same manifest-anchored wake mechanism `ctx.spawn` uses — when the fork's next run finishes, this entity wakes with the response. `observe: false` opts out of the parent relationship entirely: no parent URL, no wake subscription, no manifest entry on the parent's stream.
+
+  Internally writes a `kind: 'child'` manifest row on the parent's stream alongside the server-side wake registration, mirroring the spawn flow's bookkeeping so the relationship persists across wakes. Wired through new fields on `RuntimeServerClient.forkEntity` (`parent`, `wake`, `initialMessage`, `tags`) and `WiringConfig.forkEntity`. A `normalizeWake` helper translates the user-facing `Wake` type into the wakeRegistry-compatible shape, same logic `createOrGetChild` uses for spawn.
+
+  The `send` tool's `payload` description now documents the canonical `{ text: "..." }` shape for chat-rendered targets (Horton sessions, agent forks) so messages emitted by `send` render as chat bubbles instead of blank bars.
+
+- 1099366: Docker sandbox creation now pulls the image only when it isn't already present
+  locally, honoring the documented `pullIfMissing` semantics. Previously every
+  container create called `docker pull`, which round-trips to the registry even
+  for a fully cached digest-pinned image — making creation needlessly slow and
+  prone to failing whenever the registry was briefly unreachable.
+- 1099366: Fix leftover Docker sandbox containers (`electric-sbx-*`) piling up.
+
+  Sandbox containers are meant to be short-lived, but several gaps let them
+  outlive the work they were created for — opening the desktop app could leave
+  15+ containers running that were never explicitly started. This closes those
+  gaps so a container only exists while something is actually using it:
+  - **Created only when used.** A container now starts the first time an agent
+    actually uses its sandbox (runs a command, reads/writes a file), so trivial
+    wakes (scheduled ticks, bookkeeping) no longer spin one up.
+  - **Cleaned up on quit.** Shutdown now tears down idle containers immediately
+    instead of leaving their delayed-teardown timers to die with the process.
+  - **Leftovers reclaimed at startup.** Containers are tagged with the process
+    that created them; at startup, those whose owner is gone are reclaimed
+    (throwaway ones removed, reusable ones stopped so their files survive), while
+    containers a live process is still using are left untouched.
+
+  Also: a failed container setup step no longer strands an untracked container,
+  and all sandboxes are grouped under one `electric-sandboxes` entry in Docker
+  Desktop so they can be stopped/removed together.
+
+## 0.3.10
+
+### Patch Changes
+
+- 3ecdade: Add structured composer input support, slash command registration, and proactive skill context loading.
+
 ## 0.3.9
 
 ### Patch Changes

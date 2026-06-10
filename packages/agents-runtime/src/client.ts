@@ -26,12 +26,27 @@ export {
   manifestAttachmentKey,
 } from './manifest-helpers'
 export { buildSections, buildTimelineEntries } from './use-chat'
+export {
+  COMPOSER_INPUT_MESSAGE_TYPE,
+  serializeComposerInput,
+  normalizeCommandName,
+  formatSlashCommandArgumentHint,
+  detectSlashCommandTrigger,
+  createSlashCommandTokenRegex,
+  SLASH_COMMAND_TRIGGER_REGEX,
+} from './composer-input'
 
 export type {
   EntityStreamDB,
   EntityStreamDBWithActions,
 } from './entity-stream-db'
 export type { ObservationStreamDB } from './types'
+export type {
+  ComposerInputPayload,
+  ComposerNode,
+  SlashCommandRow,
+  SlashCommandTrigger,
+} from './composer-input'
 export type { AgentsClient, AgentsClientConfig } from './agents-client'
 export type {
   AttachmentRole,

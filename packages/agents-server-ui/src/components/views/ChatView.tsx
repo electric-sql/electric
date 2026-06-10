@@ -16,6 +16,7 @@ import type { ViewProps } from '../../lib/workspace/viewRegistry'
 import type { EntityTimelineQueryRow } from '@electric-ax/agents-runtime/client'
 import type { EventPointer } from '@electric-ax/agents-runtime'
 import type { OptimisticInboxMessage } from '../../lib/sendMessage'
+import type { SlashCommandRow } from '@electric-ax/agents-runtime/client'
 import type { ForkFromHereAction } from '../UserMessage'
 
 const CHAT_VIEW_PERMISSIONS: ReadonlyArray<EntityPermission> = [
@@ -117,21 +118,22 @@ export function ChatLogView({
     }
   }, [error, navigate, isSpawning])
 
-  const forkFromHereByInboxKey = useMemo(() => {
+  const forkFromHereByRunKey = useMemo(() => {
     if (!forkEntity || !connectUrl || !db) return undefined
     const runOffsets = db.collections.runs.__electricRowOffsets
     if (!runOffsets) return undefined
     const map = new Map<string, ForkFromHereAction>()
-    let anchor: EventPointer | null = null
+    let anchor: { rowKey: string; pointer: EventPointer } | null = null
     for (const row of visibleRows) {
       if (row.run && row.run.status === `completed`) {
         const pointer = runOffsets.get(row.run.key)
-        if (pointer) anchor = pointer
+        anchor = pointer ? { rowKey: row.$key, pointer } : null
       }
       if (row.inbox && anchor) {
-        const capturedAnchor = anchor
+        const capturedAnchor = anchor.pointer
+        const capturedRunKey = anchor.rowKey
         map.set(
-          row.$key,
+          capturedRunKey,
           canFork
             ? {
                 onFork: () => {
@@ -164,7 +166,7 @@ export function ChatLogView({
       entityUrl={connectUrl}
       entities={entities}
       scrollToBottomSignal={scrollToBottomSignal}
-      forkFromHereByInboxKey={forkFromHereByInboxKey}
+      forkFromHereByRunKey={forkFromHereByRunKey}
     />
   )
 }
@@ -249,6 +251,16 @@ function GenericChatBody({
   const drawerPendingInbox = inlinePendingInbox
     ? visiblePendingInbox.slice(1)
     : visiblePendingInbox
+  const fallbackSlashCommands = useMemo<Array<SlashCommandRow>>(
+    () =>
+      (matchingEntityTypes[0]?.slash_commands ?? []).map((command) => ({
+        ...command,
+        key: `static:${command.name}`,
+        source: `static`,
+        updated_at: matchingEntityTypes[0]?.updated_at ?? entity.updated_at,
+      })),
+    [entity.updated_at, matchingEntityTypes]
+  )
 
   // If the timeline subscription errors out for an entity that isn't
   // currently spawning (so the failure isn't transient), bounce back to
@@ -284,27 +296,28 @@ function GenericChatBody({
     })
   }, [canSignal, entityUrl, generationActive, signalEntity, stopPending])
 
-  // "Fork from here" anchor map. For each user-message inbox row, the
-  // anchor is the LATEST preceding completed `runs` row — its pointer
-  // identifies "fork up to and including this response, drop everything
-  // after." Rows without a preceding completed run (first message,
-  // in-flight run, etc.) get no entry, which suppresses the affordance
-  // in UserMessage.
-  const forkFromHereByInboxKey = useMemo(() => {
+  // "Fork from here" anchor map. For each completed `runs` row that is
+  // followed by a user-message inbox row, the run pointer identifies
+  // "fork up to and including this response, drop everything after."
+  // Completed runs without a following prompt (usually the current end
+  // of the conversation) get no entry, preserving the old "historic
+  // prompt" affordance while moving it to the response footer.
+  const forkFromHereByRunKey = useMemo(() => {
     if (!forkEntity || !entityUrl || !db) return undefined
     const runOffsets = db.collections.runs.__electricRowOffsets
     if (!runOffsets) return undefined
     const map = new Map<string, ForkFromHereAction>()
-    let anchor: EventPointer | null = null
+    let anchor: { rowKey: string; pointer: EventPointer } | null = null
     for (const row of timelineRowsWithInlinePending) {
       if (row.run && row.run.status === `completed`) {
         const pointer = runOffsets.get(row.run.key)
-        if (pointer) anchor = pointer
+        anchor = pointer ? { rowKey: row.$key, pointer } : null
       }
       if (row.inbox && anchor) {
-        const capturedAnchor = anchor
+        const capturedAnchor = anchor.pointer
+        const capturedRunKey = anchor.rowKey
         map.set(
-          row.$key,
+          capturedRunKey,
           canFork
             ? {
                 onFork: () => {
@@ -349,13 +362,14 @@ function GenericChatBody({
         scrollToBottomSignal={sentMessageSignal}
         onStopGeneration={stopGeneration}
         stopPending={stopPending}
-        forkFromHereByInboxKey={forkFromHereByInboxKey}
+        forkFromHereByRunKey={forkFromHereByRunKey}
       />
       <MessageInput
         db={db}
         baseUrl={baseUrl}
         entityUrl={entityUrl ?? ``}
         disabled={entityStopped || !db}
+        fallbackSlashCommands={fallbackSlashCommands}
         writeDisabled={!canWrite}
         stopDisabled={!canSignal}
         disabledPlaceholder={!canWrite ? `Read-only` : undefined}

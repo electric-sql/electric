@@ -1350,6 +1350,16 @@ describe(`processWake`, () => {
       },
     })
 
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ ok: true, writeToken: `mock-write-token` }),
+        {
+          status: 200,
+          headers: { 'content-type': `application/json` },
+        }
+      )
+    )
+
     await processWake(
       makeNotification({
         principal: {
@@ -1368,9 +1378,13 @@ describe(`processWake`, () => {
     expect(String(sendUrl)).toContain(`target-entity-2/send`)
     const body = JSON.parse(sendOpts!.body as string) as Record<string, unknown>
     expect(body.from).toBeUndefined()
+    expect(body.from_principal).toBe(`http://localhost:3000/test-agent/agent-1`)
     expect(body.from_agent).toBe(`http://localhost:3000/test-agent/agent-1`)
     expect((sendOpts!.headers as Headers).get(`electric-principal`)).toBe(
       `entity:test-agent/agent-1`
+    )
+    expect((sendOpts!.headers as Headers).get(`authorization`)).toBe(
+      `Bearer mock-write-token`
     )
     expect((body.payload as Record<string, unknown>).action).toBe(`ping`)
   })

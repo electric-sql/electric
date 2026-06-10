@@ -484,10 +484,23 @@ defmodule Electric.Replication.ShapeLogCollector do
           total_attribute: :"shape_log_collector.transaction.total_duration_µs"
         )
 
+        put_wall_clock_duration_if_commit(txn_fragment)
+
         result
       end
     )
   end
+
+  defp put_wall_clock_duration_if_commit(%TransactionFragment{
+         commit: %Changes.Commit{tx_started_at: tx_started_at}
+       }) do
+    OpenTelemetry.add_span_attributes(
+      total_processing_time:
+        System.convert_time_unit(System.monotonic_time() - tx_started_at, :native, :millisecond)
+    )
+  end
+
+  defp put_wall_clock_duration_if_commit(_txn_fragment), do: :ok
 
   # If we've already processed a txn_fragment, then drop it without processing
   defp handle_txn_fragment(%{last_processed_offset: last_processed_offset} = state, txn_fragment)

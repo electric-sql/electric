@@ -306,7 +306,8 @@ Electric separates parameters by purpose:
 - `table` — Root table name (required)
 - `offset` — Shape log position (required, e.g., `-1` for initial sync)
 - `handle` — Shape handle for continuation requests
-- `columns` — Column selection
+- `columns` — Columns to sync on the table (if not set, defaults to all columns)
+- `queryable_columns` — Column allow-list for subset filtering, subset ordering, and which columns are synced
 - `where` — Main shape WHERE clause (for non-subset queries)
 - `replica`, `log`, `live`, `live_sse` — Protocol options
 - `secret` / `api_secret` — API authentication
@@ -324,7 +325,7 @@ Electric always combines the main shape WHERE (URL) with the subset WHERE (POST 
 WHERE {main_shape_where} AND ({subset_where})
 ```
 
-This means **subset queries can only narrow results, never widen them**. Even if a client sends `where: "1=1"` in the POST body, the main shape WHERE still applies. The subset WHERE is validated for syntax and prohibited from containing subqueries.
+This means **subset queries can only narrow results, never widen them**. Even if a client sends `where: "1=1"` in the POST body, the main shape WHERE still applies. The subset WHERE is validated for syntax, prohibited from containing subqueries, and limited to columns in `queryable_columns` when it is set.
 
 ##### Parameters your proxy must control
 
@@ -333,7 +334,7 @@ The proxy must set these **shape definition parameters** server-side — they de
 | Parameter | Where | Security Consideration |
 |-----------|-------|------------------------|
 | `table` | URL | **Must be set server-side.** Letting clients specify the table allows access to any table. |
-| `columns` | URL | **Should be set server-side.** Clients could request sensitive columns. |
+| `queryable_columns` | URL | **Must be set server-side if the table has sensitive columns.** Column allow-list for subset filters, subset ordering, and which columns are synced. It does not restrict the main shape WHERE clause. |
 | `where` | URL | **Must be set server-side.** This is your authorization filter — the main shape WHERE that restricts all queries. |
 | `secret` | URL | **Must be set server-side.** Never expose the API secret to clients. |
 
@@ -356,7 +357,7 @@ These parameters are safe because they either can't widen data access or are nee
 | `order_by` | POST body | Sorting for pagination |
 
 :::tip Key Principle
-Your proxy is an **authorization layer** that controls the **shape definition** (table, columns, main WHERE). Clients can freely use subset parameters to filter and paginate within that shape — Electric ensures they can only narrow results, never escape the main WHERE clause.
+Your proxy is an **authorization layer** that controls the **shape definition** (table, queryable columns, main WHERE). Clients can freely use subset parameters to filter and paginate within that shape — Electric ensures they can never escape the main WHERE clause and can only reference queryable columns in subset filters and sorting.
 :::
 
 ##### Implementing POST support in your proxy
@@ -364,7 +365,7 @@ Your proxy is an **authorization layer** that controls the **shape definition** 
 To support both GET and POST requests:
 
 1. **Accept both methods** on your proxy endpoints
-2. **Set shape definition server-side** — table, columns, and main WHERE clause
+2. **Set shape definition server-side** — table, queryable columns, and main WHERE clause
 3. **For POST**: Forward client subset params (they can only narrow results)
 4. **For GET**: Send WHERE as URL query parameters (existing behavior)
 
@@ -393,6 +394,8 @@ export async function handler(request: Request) {
 
   // Set shape definition server-side (this is your authorization layer)
   originUrl.searchParams.set(`table`, `items`)
+  originUrl.searchParams.set(`queryable_columns`, `id,title,created_at`)
+  originUrl.searchParams.set(`columns`, `id,title`)
   originUrl.searchParams.set(`where`, `"organization_id" = '${user.org_id}'`)
   originUrl.searchParams.set(`secret`, process.env.ELECTRIC_SECRET)
 

@@ -689,4 +689,261 @@ describe(`ElectricAgentsManager.forkSubtree`, () => {
       expect.any(Uint8Array)
     )
   })
+
+  // Helper for the anchor / wake-rollback tests: builds a streamClient
+  // backed by a caller-supplied event list, captures every `fork` call's
+  // opts so the test can assert the resolved pointer, and tracks
+  // appends + deletes for rollback assertions.
+  function makeStreamClient(events: Array<Record<string, unknown>>) {
+    const forkCalls: Array<{
+      forkPath: string
+      sourcePath: string
+      opts?: Record<string, unknown>
+    }> = []
+    const deleted: Array<string> = []
+    return {
+      forkCalls,
+      deleted,
+      client: {
+        readJson: vi.fn().mockResolvedValue(events),
+        exists: vi.fn().mockResolvedValue(false),
+        fork: vi.fn(
+          async (
+            forkPath: string,
+            sourcePath: string,
+            opts?: Record<string, unknown>
+          ) => {
+            forkCalls.push({ forkPath, sourcePath, opts })
+          }
+        ),
+        append: vi.fn().mockResolvedValue({ offset: `1` }),
+        delete: vi.fn(async (path: string) => {
+          deleted.push(path)
+        }),
+      },
+    }
+  }
+
+  it(`anchor 'latest_completed_run' resolves to a fork pointer at the latest completed run`, async () => {
+    const root = makeEntity(`/chat/anchor-src`)
+    // Stream layout (one event per log entry, offsets monotonically
+    // increasing). The runtime mints pointers as
+    //   { offset: <previous distinct headers.offset>, subOffset: <1-based position> }
+    // So the latest completed run is at offset "D" (run-0 update) and
+    // the expected pointer is { offset: "C", subOffset: 1 } — "C" is
+    // the entry-offset of the row before the target (the started-run
+    // row), and subOffset is 1 since it's the only row in entry "D".
+    const events = [
+      {
+        type: `entity_created`,
+        key: `entity-created`,
+        headers: { operation: `insert`, offset: `A` },
+        value: {},
+      },
+      {
+        type: `inbox`,
+        key: `msg-1`,
+        headers: { operation: `insert`, offset: `B` },
+        value: { from: `user`, payload: `hello` },
+      },
+      {
+        type: `run`,
+        key: `run-0`,
+        headers: { operation: `insert`, offset: `C` },
+        value: { status: `started` },
+      },
+      {
+        type: `run`,
+        key: `run-0`,
+        headers: { operation: `update`, offset: `D` },
+        value: { status: `completed` },
+      },
+      // Subsequent activity past the latest-completed anchor — the
+      // resolver should still point at the row at offset "D".
+      {
+        type: `inbox`,
+        key: `msg-2`,
+        headers: { operation: `insert`, offset: `E` },
+        value: { from: `user`, payload: `again` },
+      },
+      {
+        type: `run`,
+        key: `run-1`,
+        headers: { operation: `insert`, offset: `F` },
+        value: { status: `started` },
+      },
+    ]
+    const { forkCalls, client } = makeStreamClient(events)
+    const entitiesByUrl = new Map<string, any>([[root.url, root]])
+
+    const manager = new EntityManager({
+      registry: {
+        getEntity: vi.fn(async (url: string) => entitiesByUrl.get(url) ?? null),
+        listEntities: vi.fn().mockResolvedValue({ entities: [], total: 0 }),
+        createEntity: vi.fn(async (entity: any) => {
+          entitiesByUrl.set(entity.url, entity)
+          return 1
+        }),
+        deleteEntity: vi.fn(),
+        replaceEntityManifestSource: vi.fn(),
+        replaceSharedStateLink: vi.fn(),
+      } as any,
+      streamClient: client as any,
+      validator: {} as any,
+      wakeRegistry: {
+        register: vi.fn(),
+        unregisterBySubscriber: vi.fn(),
+        unregisterBySource: vi.fn(),
+        setTimeoutCallback: vi.fn(),
+        setDebounceCallback: vi.fn(),
+      } as any,
+    })
+
+    await manager.forkSubtree(root.url, {
+      rootInstanceId: `anchor-fork`,
+      anchor: `latest_completed_run`,
+      waitTimeoutMs: 0,
+    })
+
+    const rootForkCall = forkCalls.find(
+      (call) => call.sourcePath === root.streams.main
+    )
+    expect(rootForkCall).toBeDefined()
+    expect(rootForkCall?.opts).toEqual({
+      forkPointer: { offset: `C`, subOffset: 1 },
+    })
+  })
+
+  it(`anchor 'latest_completed_run' rejects when the source has no completed run`, async () => {
+    const root = makeEntity(`/chat/no-completion`)
+    const events = [
+      {
+        type: `entity_created`,
+        key: `entity-created`,
+        headers: { operation: `insert`, offset: `A` },
+        value: {},
+      },
+      {
+        type: `inbox`,
+        key: `msg-1`,
+        headers: { operation: `insert`, offset: `B` },
+        value: { from: `user`, payload: `hi` },
+      },
+      // Only `started` — no `completed` row anywhere.
+      {
+        type: `run`,
+        key: `run-0`,
+        headers: { operation: `insert`, offset: `C` },
+        value: { status: `started` },
+      },
+    ]
+    const { client } = makeStreamClient(events)
+    const entitiesByUrl = new Map<string, any>([[root.url, root]])
+
+    const manager = new EntityManager({
+      registry: {
+        getEntity: vi.fn(async (url: string) => entitiesByUrl.get(url) ?? null),
+        listEntities: vi.fn().mockResolvedValue({ entities: [], total: 0 }),
+        createEntity: vi.fn(),
+        deleteEntity: vi.fn(),
+        replaceEntityManifestSource: vi.fn(),
+        replaceSharedStateLink: vi.fn(),
+      } as any,
+      streamClient: client as any,
+      validator: {} as any,
+      wakeRegistry: {
+        register: vi.fn(),
+        unregisterBySubscriber: vi.fn(),
+        unregisterBySource: vi.fn(),
+        setTimeoutCallback: vi.fn(),
+        setDebounceCallback: vi.fn(),
+      } as any,
+    })
+
+    await expect(
+      manager.forkSubtree(root.url, {
+        rootInstanceId: `no-anchor-fork`,
+        anchor: `latest_completed_run`,
+        waitTimeoutMs: 0,
+      })
+    ).rejects.toMatchObject({
+      status: 400,
+      message: expect.stringContaining(`no completed run`),
+    })
+  })
+
+  it(`rolls back the fork when wake registration fails`, async () => {
+    const root = makeEntity(`/chat/rollback-src`)
+    const events = [
+      {
+        type: `entity_created`,
+        key: `entity-created`,
+        headers: { operation: `insert`, offset: `A` },
+        value: {},
+      },
+      {
+        type: `run`,
+        key: `run-0`,
+        headers: { operation: `insert`, offset: `B` },
+        value: { status: `started` },
+      },
+      {
+        type: `run`,
+        key: `run-0`,
+        headers: { operation: `update`, offset: `C` },
+        value: { status: `completed` },
+      },
+    ]
+    const { client, deleted } = makeStreamClient(events)
+    const entitiesByUrl = new Map<string, any>([[root.url, root]])
+    const deletedEntities: Array<string> = []
+
+    const manager = new EntityManager({
+      registry: {
+        getEntity: vi.fn(async (url: string) => entitiesByUrl.get(url) ?? null),
+        listEntities: vi.fn().mockResolvedValue({ entities: [], total: 0 }),
+        createEntity: vi.fn(async (entity: any) => {
+          entitiesByUrl.set(entity.url, entity)
+          return 1
+        }),
+        deleteEntity: vi.fn(async (url: string) => {
+          deletedEntities.push(url)
+          entitiesByUrl.delete(url)
+        }),
+        replaceEntityManifestSource: vi.fn(),
+        replaceSharedStateLink: vi.fn(),
+      } as any,
+      streamClient: client as any,
+      validator: {} as any,
+      wakeRegistry: {
+        register: vi.fn().mockRejectedValue(new Error(`wake register boom`)),
+        unregisterBySubscriber: vi.fn(),
+        unregisterBySource: vi.fn(),
+        setTimeoutCallback: vi.fn(),
+        setDebounceCallback: vi.fn(),
+      } as any,
+    })
+
+    await expect(
+      manager.forkSubtree(root.url, {
+        rootInstanceId: `rollback-fork`,
+        anchor: `latest_completed_run`,
+        waitTimeoutMs: 0,
+        parent: `/chat/parent`,
+        wake: {
+          subscriberUrl: `/chat/parent`,
+          condition: `runFinished`,
+          includeResponse: true,
+        },
+      })
+    ).rejects.toThrow(`wake register boom`)
+
+    // The new root fork entity was created then deleted; its main
+    // stream was forked then deleted; the source root is untouched.
+    expect(deletedEntities).toContain(`/chat/rollback-fork`)
+    expect(deleted).toEqual(
+      expect.arrayContaining([`/chat/rollback-fork/main`])
+    )
+    expect(deletedEntities).not.toContain(root.url)
+  })
 })

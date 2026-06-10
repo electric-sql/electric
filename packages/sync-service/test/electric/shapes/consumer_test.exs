@@ -1461,6 +1461,76 @@ defmodule Electric.Shapes.ConsumerTest do
       assert is_pid(Consumer.whereis(ctx.stack_id, shape_handle))
     end
 
+    @tag hibernate_after: 10, with_pure_file_storage_opts: [flush_period: 1]
+    @tag suspend: true
+    test "should hibernate not suspend while a multi-fragment transaction is pending", ctx do
+      register_as_replication_client(ctx.stack_id)
+
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape1, ctx.stack_id)
+      lsn1 = Lsn.from_integer(300)
+
+      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
+
+      consumer_pid = Consumer.whereis(ctx.stack_id, shape_handle)
+      assert is_pid(consumer_pid)
+      ref = Process.monitor(consumer_pid)
+
+      # The begin fragment of a multi-fragment transaction leaves the consumer
+      # holding a pending_txn until the matching commit fragment arrives.
+      begin_fragment =
+        txn_fragment(
+          2,
+          lsn1,
+          [
+            %Changes.NewRecord{
+              relation: {"public", "test_table"},
+              record: %{"id" => "21"},
+              log_offset: LogOffset.new(lsn1, 0)
+            }
+          ],
+          has_begin?: true,
+          has_commit?: false
+        )
+
+      assert :ok = ShapeLogCollector.handle_event(begin_fragment, ctx.stack_id)
+
+      # The idle timer (hibernate_after: 10ms) fires, but with a transaction still
+      # pending the consumer must hibernate rather than suspend, so it survives to
+      # receive the rest of the transaction. Suspending here would drop pending_txn
+      # and crash on the next fragment (issue #4501).
+      refute_receive {:DOWN, ^ref, :process, ^consumer_pid, {:shutdown, :suspend}}, 400
+
+      assert {:current_function, {:gen_server, :loop_hibernate, 4}} =
+               Process.info(consumer_pid, :current_function)
+
+      assert is_pid(Consumer.whereis(ctx.stack_id, shape_handle))
+
+      # Completing the transaction clears pending_txn, so the consumer is free to
+      # suspend on the next idle timeout.
+      commit_fragment =
+        txn_fragment(
+          2,
+          lsn1,
+          [
+            %Changes.NewRecord{
+              relation: {"public", "test_table"},
+              record: %{"id" => "22"},
+              log_offset: LogOffset.new(lsn1, 1)
+            }
+          ],
+          has_begin?: false,
+          has_commit?: true
+        )
+
+      assert :ok = ShapeLogCollector.handle_event(commit_fragment, ctx.stack_id)
+
+      assert_receive {:flush_boundary_updated, 300}, 1_000
+
+      assert_receive {:DOWN, ^ref, :process, ^consumer_pid, {:shutdown, :suspend}}
+
+      refute Consumer.whereis(ctx.stack_id, shape_handle)
+    end
+
     @tag with_pure_file_storage_opts: [flush_period: 1]
     @tag suspend: false
     test "ConsumerRegistry.enable_suspend should suspend hibernated consumers", ctx do

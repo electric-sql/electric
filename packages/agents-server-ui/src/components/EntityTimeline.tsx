@@ -56,6 +56,7 @@ import {
   formatAbsoluteDateTimeVerbose,
   formatChatTimestamp,
 } from '../lib/formatTime'
+import { readTextPayload } from '../lib/sendMessage'
 import styles from './EntityTimeline.module.css'
 import type { ElectricUser } from '../lib/ElectricAgentsProvider'
 import type {
@@ -80,8 +81,8 @@ function stringifyPayload(payload: unknown, spaces?: number): string {
   if (payload == null) return ``
   if (typeof payload === `string`) return payload
   if (typeof payload === `object`) {
-    const text = (payload as { text?: unknown }).text
-    if (typeof text === `string`) return text
+    const text = readTextPayload(payload)
+    if (text) return text
     try {
       return JSON.stringify(payload, null, spaces) ?? String(payload)
     } catch {
@@ -92,7 +93,8 @@ function stringifyPayload(payload: unknown, spaces?: number): string {
 }
 
 function readInboxText(payload: unknown): string {
-  return stringifyPayload(payload)
+  const text = readTextPayload(payload)
+  return text || stringifyPayload(payload)
 }
 
 function readInboxPayloadDisplay(payload: unknown): string {
@@ -263,6 +265,7 @@ function timelineRowSearchText(
     })
   }
   if (row.signal) return signalSearchText(row.signal)
+  if (row.error) return `${row.error.error_code} ${row.error.message}`
   if (row.manifest) return manifestSearchText(row.manifest)
   return runSearchTextByKey.get(row.$key) ?? runSearchTextFromSnapshot(row.run)
 }
@@ -272,6 +275,7 @@ function timelineRowLabel(row: RenderTimelineRow): string {
   if (row.inbox) return `User message`
   if (row.wake) return `Wake`
   if (row.signal) return `Signal`
+  if (row.error) return `Error`
   if (row.manifest) return `Manifest item`
   return `Agent response`
 }
@@ -426,6 +430,23 @@ function SignalTimelineRow({
         icon={CircleStop}
         title={`signal ${signal.signal}`}
         summary={signalSummary(signal)}
+        headerSurface
+      />
+    </div>
+  )
+}
+
+function ErrorTimelineRow({
+  error,
+}: {
+  error: NonNullable<RenderTimelineRow[`error`]>
+}): React.ReactElement {
+  return (
+    <div className={styles.manifestRow}>
+      <InlineEventCard
+        icon={CircleStop}
+        title={error.error_code || `error`}
+        summary={error.message}
         headerSurface
       />
     </div>
@@ -931,8 +952,9 @@ const TimelineRow = memo(function TimelineRow({
   stopUserMessageKey: string | null
   stopPending: boolean
   onStopGeneration?: () => void
-  /** When set on a user-message row, enables the "Fork from here" hover
-   * button. Caller pre-resolved the pointer; we just invoke. */
+  /** When set on a completed run row, shows the always-visible
+   * "Fork from here" footer action. Caller pre-resolved the pointer;
+   * we just invoke. */
   onForkFromHere?: ForkFromHereAction
   onRunSearchTextChange: (rowKey: string, text: string) => void
 }): React.ReactElement {
@@ -958,7 +980,6 @@ const TimelineRow = memo(function TimelineRow({
         }
         stopPending={stopPending}
         onStop={onStopGeneration}
-        forkFromHere={onForkFromHere}
       />
     )
   }
@@ -978,6 +999,10 @@ const TimelineRow = memo(function TimelineRow({
 
   if (row.signal) {
     return <SignalTimelineRow signal={row.signal} />
+  }
+
+  if (row.error) {
+    return <ErrorTimelineRow error={row.error} />
   }
 
   if (row.manifest) {
@@ -1002,6 +1027,7 @@ const TimelineRow = memo(function TimelineRow({
       isStreaming={!entityStopped && isStreaming}
       timestamp={responseTimestamp}
       renderWidth={renderWidth}
+      forkFromHere={onForkFromHere}
       onSearchTextChange={onRunSearchTextChange}
     />
   )
@@ -1020,7 +1046,7 @@ export function EntityTimeline({
   scrollToBottomSignal = 0,
   stopPending = false,
   onStopGeneration,
-  forkFromHereByInboxKey,
+  forkFromHereByRunKey,
 }: {
   rows: Array<EntityTimelineQueryRow>
   loading: boolean
@@ -1035,12 +1061,12 @@ export function EntityTimeline({
   stopPending?: boolean
   onStopGeneration?: () => void
   /**
-   * Per-inbox-row click handlers for the "Fork from here" hover button.
+   * Per-run-row click handlers for the "Fork from here" footer button.
    * The map is keyed by the row's `$key`; rows not in the map (or when
    * the prop is omitted) get no fork affordance. The caller resolves
    * the fork pointer and runs the fork → navigate flow.
    */
-  forkFromHereByInboxKey?: Map<string, ForkFromHereAction>
+  forkFromHereByRunKey?: Map<string, ForkFromHereAction>
 }): React.ReactElement {
   const { entitiesCollection, runnersCollection, usersCollection } =
     useElectricAgents()
@@ -1743,7 +1769,7 @@ export function EntityTimeline({
                         stopUserMessageKey={stopUserMessageKey}
                         stopPending={stopPending}
                         onStopGeneration={onStopGeneration}
-                        onForkFromHere={forkFromHereByInboxKey?.get(rowKey)}
+                        onForkFromHere={forkFromHereByRunKey?.get(rowKey)}
                         onRunSearchTextChange={updateRunSearchText}
                       />
                     </TimelineRowErrorBoundary>
