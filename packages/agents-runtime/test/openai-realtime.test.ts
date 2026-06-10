@@ -154,6 +154,34 @@ describe(`createOpenAIRealtimeProvider`, () => {
     expect((socket.sent[0] as any).session.reasoning).toBeUndefined()
   })
 
+  it(`requests audio output when a voice is configured without an output format`, async () => {
+    FakeWebSocket.instances = []
+    const provider = createOpenAIRealtimeProvider({
+      apiKey: `sk-test`,
+      voice: `marin`,
+      WebSocket: FakeWebSocket,
+    })
+
+    await provider.connect({
+      systemPrompt: `Talk`,
+      messages: [],
+      tools: [],
+    })
+
+    const socket = FakeWebSocket.instances[0]!
+    expect(socket.sent[0]).toMatchObject({
+      type: `session.update`,
+      session: {
+        output_modalities: [`audio`],
+        audio: {
+          output: {
+            voice: `marin`,
+          },
+        },
+      },
+    })
+  })
+
   it(`can disable input audio transcription`, async () => {
     FakeWebSocket.instances = []
     const provider = createOpenAIRealtimeProvider({

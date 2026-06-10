@@ -368,6 +368,7 @@ function buildSessionUpdate(
   const outputFormat = realtimeFormat(input.audio?.outputFormat)
   const transcription = inputTranscription(input)
   const model = opts.model ?? DEFAULT_OPENAI_REALTIME_MODEL
+  const wantsAudioOutput = Boolean(outputFormat || opts.voice)
   const reasoningEffort =
     model === DEFAULT_OPENAI_REALTIME_MODEL
       ? (opts.reasoningEffort ?? DEFAULT_OPENAI_REALTIME_REASONING_EFFORT)
@@ -378,13 +379,13 @@ function buildSessionUpdate(
       type: `realtime`,
       model,
       instructions: input.systemPrompt,
-      output_modalities: outputFormat ? [`audio`] : [`text`],
+      output_modalities: wantsAudioOutput ? [`audio`] : [`text`],
       tool_choice: input.tools.length > 0 ? `auto` : `none`,
       ...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {}),
       ...(input.tools.length > 0
         ? { tools: input.tools.map((tool) => toOpenAITool(tool)) }
         : {}),
-      ...(inputFormat || outputFormat || opts.voice
+      ...(inputFormat || wantsAudioOutput
         ? {
             audio: {
               ...(inputFormat
@@ -398,7 +399,7 @@ function buildSessionUpdate(
                     },
                   }
                 : {}),
-              ...(outputFormat || opts.voice
+              ...(wantsAudioOutput
                 ? {
                     output: {
                       ...(outputFormat ? { format: outputFormat } : {}),

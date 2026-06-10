@@ -354,7 +354,7 @@ function validateAttachmentId(id: string): void {
   if (!id || id.includes(`/`) || id.startsWith(`.`)) {
     throw new ElectricAgentsError(
       ErrCodeInvalidRequest,
-      `attachment id must not be empty, start with ".", or contain forward slashes`,
+      `attachment id must not be empty, must not start with ".", and must not contain forward slashes`,
       400
     )
   }
@@ -364,7 +364,7 @@ function validateRealtimeSessionId(id: string): void {
   if (!id || id.includes(`/`) || id.startsWith(`.`)) {
     throw new ElectricAgentsError(
       ErrCodeInvalidRequest,
-      `realtime session id must not be empty, start with ".", or contain forward slashes`,
+      `realtime session id must not be empty, must not start with ".", and must not contain forward slashes`,
       400
     )
   }

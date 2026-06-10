@@ -271,6 +271,23 @@ describe(`ElectricAgentsManager realtime sessions`, () => {
       message: `Realtime provider "other" is not supported; expected "openai"`,
     })
   })
+
+  it(`rejects realtime session ids that start with a dot`, async () => {
+    const { manager } = createAttachmentManager()
+
+    await expect(
+      manager.createRealtimeSession(`/chat/session-1`, {
+        id: `.rt-1`,
+        provider: `openai`,
+        model: `gpt-realtime-2`,
+      })
+    ).rejects.toMatchObject({
+      status: 400,
+      message:
+        `realtime session id must not be empty, must not start with ".", ` +
+        `and must not contain forward slashes`,
+    })
+  })
 })
 
 describe(`ElectricAgentsManager attachments`, () => {
