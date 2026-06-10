@@ -680,6 +680,28 @@ export class Scheduler implements SchedulerClient {
         task.fireAt
       )
 
+      const streamPath =
+        typeof (task.payload as { streamPath?: unknown }).streamPath ===
+        `string`
+          ? (task.payload as { streamPath: string }).streamPath
+          : null
+      const hasSubscribers = streamPath
+        ? await sql<Array<{ id: number | string }>>`
+            select id
+            from wake_registrations
+            where tenant_id = ${tenantId}
+              and source_url = ${streamPath}
+            limit 1
+          `
+        : []
+
+      // Cron streams are virtual shared sources. If no wake registrations
+      // still point at this cron stream (e.g. the owning manifest schedule was
+      // deleted), stop the chain here instead of keeping a forever-global tick
+      // alive. Rehydration/getOrCreateCronStream will seed a fresh tick when a
+      // subscription is recreated.
+      if (hasSubscribers.length === 0) return
+
       await sql`
         insert into scheduled_tasks (
           tenant_id,

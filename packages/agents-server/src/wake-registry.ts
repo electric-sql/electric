@@ -737,7 +737,30 @@ export class WakeRegistry {
     }
 
     if (message.headers.operation === `delete`) {
-      this.removeCachedRegistrationByDbId(Number(message.key))
+      const ids = new Set<number>()
+      const keyed = Number(message.key)
+      if (Number.isFinite(keyed)) ids.add(keyed)
+
+      // Be defensive across Electric shape key encodings. The
+      // wake_registrations table has a serial `id` primary key, but depending
+      // on replica/key encoding a delete can arrive with the old row in
+      // `old_value`/`value` rather than a bare numeric message key. Missing the
+      // delete leaves a stale in-memory wake registration that continues to
+      // wake agents even though the DB row/manifest schedule is gone.
+      const oldValue =
+        (
+          message as unknown as {
+            old_value?: { id?: unknown }
+            value?: { id?: unknown }
+          }
+        ).old_value ??
+        (message as unknown as { value?: { id?: unknown } }).value
+      const oldId = Number(oldValue?.id)
+      if (Number.isFinite(oldId)) ids.add(oldId)
+
+      for (const id of ids) {
+        this.removeCachedRegistrationByDbId(id)
+      }
       return
     }
 
