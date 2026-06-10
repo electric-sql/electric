@@ -301,6 +301,18 @@ export interface EntityTimelineRunRow {
 }
 
 export type EntityTimelineInboxRow = IncludesInboxMessage
+export type EntityTimelineCommentRow = {
+  key: string
+  order: TimelineOrder
+  body: string
+  from: string
+  timestamp: string
+  reply_to?: import(`./comments-collection`).CommentTargetValue
+  target_snapshot?: import(`./comments-collection`).CommentSnapshotValue
+  edited_at?: string
+  deleted_at?: string
+  deleted_by?: string
+}
 export type EntityTimelineWakeRow = IncludesWakeMessage
 export type EntityTimelineSignalRow = IncludesSignal
 export type EntityTimelineErrorRow = EntityTimelineErrorItem & {
@@ -312,6 +324,7 @@ export type EntityTimelineQueryRow =
       $key: string
       inbox: EntityTimelineInboxRow
       run?: undefined
+      comment?: undefined
       wake?: undefined
       signal?: undefined
       error?: undefined
@@ -321,6 +334,7 @@ export type EntityTimelineQueryRow =
       $key: string
       inbox?: undefined
       run: EntityTimelineRunRow
+      comment?: undefined
       wake?: undefined
       signal?: undefined
       error?: undefined
@@ -330,6 +344,16 @@ export type EntityTimelineQueryRow =
       $key: string
       inbox?: undefined
       run?: undefined
+      comment: EntityTimelineCommentRow
+      wake?: undefined
+      signal?: undefined
+      manifest?: undefined
+    }
+  | {
+      $key: string
+      inbox?: undefined
+      run?: undefined
+      comment?: undefined
       wake: EntityTimelineWakeRow
       signal?: undefined
       error?: undefined
@@ -339,6 +363,7 @@ export type EntityTimelineQueryRow =
       $key: string
       inbox?: undefined
       run?: undefined
+      comment?: undefined
       wake?: undefined
       signal: EntityTimelineSignalRow
       error?: undefined
@@ -348,6 +373,7 @@ export type EntityTimelineQueryRow =
       $key: string
       inbox?: undefined
       run?: undefined
+      comment?: undefined
       wake?: undefined
       signal?: undefined
       error: EntityTimelineErrorRow
@@ -1361,6 +1387,24 @@ function buildEntityTimelineQuery(
     cancelled_at: inbox.cancelled_at,
   }))
 
+  const commentsCollection = (db.collections as Record<string, unknown>)
+    .comments as typeof db.collections.wakes | undefined
+
+  const commentSource = commentsCollection
+    ? q.from({ comment: commentsCollection }).select(({ comment }) => ({
+        order: coalesce(comment._timeline_order, `~`),
+        key: comment.key,
+        body: (comment as any).body,
+        from: coalesce((comment as any)._principal?.url, ``),
+        timestamp: coalesce((comment as any).timestamp, ``),
+        reply_to: (comment as any).reply_to,
+        target_snapshot: (comment as any).target_snapshot,
+        edited_at: (comment as any).edited_at,
+        deleted_at: (comment as any).deleted_at,
+        deleted_by: (comment as any).deleted_by,
+      }))
+    : null
+
   const wakeSource = q
     .from({ wake: db.collections.wakes })
     .select(({ wake }) => ({
@@ -1601,6 +1645,51 @@ function buildEntityTimelineQuery(
           message: error.message,
         })),
     }))
+
+  if (commentSource) {
+    return q
+      .unionAll({
+        inbox: inboxSource,
+        run: runSource,
+        comment: commentSource,
+        wake: wakeSource,
+        signal: signalSource,
+        manifest: db.collections.manifests,
+      })
+      .orderBy(({ inbox, run, comment, wake, signal, manifest }) =>
+        coalesce(
+          inbox.order,
+          run.order,
+          comment.order,
+          wake.order,
+          signal.order,
+          manifest._timeline_order,
+          `~`
+        )
+      )
+      .orderBy(({ inbox, run, comment, wake, signal, manifest }) =>
+        coalesce(
+          caseWhen(inbox.key, `inbox`),
+          caseWhen(run.key, `run`),
+          caseWhen(comment.key, `comment`),
+          caseWhen(wake.key, `wake`),
+          caseWhen(signal.key, `signal`),
+          caseWhen(manifest.key, `manifest`),
+          ``
+        )
+      )
+      .orderBy(({ inbox, run, comment, wake, signal, manifest }) =>
+        coalesce(
+          inbox.key,
+          run.key,
+          comment.key,
+          wake.key,
+          signal.key,
+          manifest.key,
+          ``
+        )
+      )
+  }
 
   return q
     .unionAll({
