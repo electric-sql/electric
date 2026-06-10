@@ -176,6 +176,18 @@ describe(`server utils`, () => {
     expect(() => shapeTarget(``)).toThrow(ElectricProxyError)
   })
 
+  it(`rejects shape requests with duplicate table params`, () => {
+    expect(() =>
+      shapeTarget(`table=users&table=subscription_webhooks&offset=-1`)
+    ).toThrow(ElectricProxyError)
+  })
+
+  it(`canonicalises the upstream table param after validation`, () => {
+    const target = shapeTarget(`table=users&offset=-1`)
+
+    expect(target.searchParams.getAll(`table`)).toEqual([`users`])
+  })
+
   it(`rejects client where clauses that break out of the enforced scope`, () => {
     // tenant_id = '...' AND (1=1) OR (1=1) collapses to OR TRUE under SQL
     // precedence, defeating per-tenant/per-principal scoping.

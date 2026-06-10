@@ -145,7 +145,20 @@ export function buildElectricProxyTarget(options: {
     throw new ElectricProxyError(`INVALID_WHERE`, `Invalid where clause`, 400)
   }
 
-  const table = options.incomingUrl.searchParams.get(`table`)
+  const tableParams = options.incomingUrl.searchParams.getAll(`table`)
+  if (tableParams.length !== 1) {
+    throw new ElectricProxyError(
+      `TABLE_NOT_ALLOWED`,
+      `Table is not available through the Electric proxy`,
+      403
+    )
+  }
+
+  const table = tableParams[0]
+  // Canonicalise the upstream table after validation so duplicate client query
+  // params cannot be interpreted differently by Electric or intermediaries.
+  target.searchParams.set(`table`, table)
+
   if (table === `entities`) {
     target.searchParams.set(
       `columns`,
