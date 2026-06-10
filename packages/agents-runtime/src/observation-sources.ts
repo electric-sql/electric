@@ -21,6 +21,19 @@ import type {
 import type { EntityTags } from './tags'
 import type { CollectionDefinition } from '@durable-streams/state'
 
+export interface PgSyncRequestMetadata {
+  tenantId?: string
+  principalKind?: string
+  principalId?: string
+  principalKey?: string
+  principalUrl?: string
+  entityUrl?: string
+  entityType?: string
+  streamPath?: string
+  runtimeConsumerId?: string
+  wakeId?: string
+}
+
 export interface PgSyncOptions {
   url?: string
   table: string
@@ -28,6 +41,7 @@ export interface PgSyncOptions {
   where?: string
   params?: string[] | Record<string, string>
   replica?: `default` | `full`
+  metadata?: PgSyncRequestMetadata
 }
 
 export interface PgSyncObservationSource extends ObservationSource {
@@ -60,6 +74,7 @@ export type CanonicalPgSyncConfig = {
   where?: string
   params?: string[] | Record<string, string>
   replica: `default` | `full`
+  metadata?: PgSyncRequestMetadata
 }
 
 function normalizePgSyncParams(
@@ -87,6 +102,7 @@ export function canonicalPgSyncOptions(
       ? { params: normalizePgSyncParams(options.params) }
       : {}),
     replica: options.replica ?? `default`,
+    ...(options.metadata !== undefined ? { metadata: options.metadata } : {}),
   }
 }
 

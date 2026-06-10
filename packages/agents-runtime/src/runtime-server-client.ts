@@ -1,4 +1,7 @@
-import type { PgSyncOptions } from './observation-sources'
+import type {
+  PgSyncOptions,
+  PgSyncRequestMetadata,
+} from './observation-sources'
 import type { EntityTags, TagOperation } from './tags'
 import { appendPathToUrl } from './url'
 import { buildEventSourceSubscriptionId } from './event-sources'
@@ -173,7 +176,10 @@ export interface RuntimeServerClient {
     streamUrl: string
     sourceRef: string
   }>
-  registerPgSyncSource: (options: PgSyncOptions) => Promise<{
+  registerPgSyncSource: (
+    options: PgSyncOptions,
+    metadata?: PgSyncRequestMetadata
+  ) => Promise<{
     streamUrl: string
     sourceRef: string
   }>
@@ -676,12 +682,13 @@ export function createRuntimeServerClient(
   }
 
   const registerPgSyncSource = async (
-    options: PgSyncOptions
+    options: PgSyncOptions,
+    metadata?: PgSyncRequestMetadata
   ): Promise<{ streamUrl: string; sourceRef: string }> => {
     const response = await request(`/_electric/pg-sync/register`, {
       method: `POST`,
       headers: { 'content-type': `application/json` },
-      body: JSON.stringify({ options }),
+      body: JSON.stringify({ options, ...(metadata ? { metadata } : {}) }),
     })
     if (!response.ok) {
       throw new Error(

@@ -554,7 +554,7 @@ describe(`external review red tests`, () => {
 })
 
 describe(`pg-sync production hardening`, () => {
-  it(`uses configured URL and secret server-side`, async () => {
+  it(`uses configured URL and forwards request metadata as shape params`, async () => {
     const manager = new PgSyncBridgeManager(
       {
         baseUrl: `http://durable`,
@@ -564,16 +564,42 @@ describe(`pg-sync production hardening`, () => {
       undefined,
       {
         url: `https://electric.example/v1/shape`,
-        secret: `server-secret`,
         retry: { initialDelayMs: 0, maxDelayMs: 0 },
       }
     )
 
-    await manager.register({ table: `todos` })
+    await manager.register(
+      { table: `todos` },
+      {
+        tenantId: `tenant-a`,
+        principalKind: `agent`,
+        principalId: `horton`,
+        principalKey: `agent:horton`,
+        principalUrl: `/principal/agent%3Ahorton`,
+        entityUrl: `/horton/abc`,
+        entityType: `horton`,
+        streamPath: `/horton/abc/main`,
+        runtimeConsumerId: `runner-1`,
+        wakeId: `wake-1`,
+      }
+    )
 
     expect(mockState.constructedOptions[0]).toMatchObject({
       url: `https://electric.example/v1/shape`,
-      params: { table: `todos`, replica: `default`, secret: `server-secret` },
+      params: {
+        table: `todos`,
+        replica: `default`,
+        electric_agents_tenant_id: `tenant-a`,
+        electric_agents_principal_kind: `agent`,
+        electric_agents_principal_id: `horton`,
+        electric_agents_principal_key: `agent:horton`,
+        electric_agents_principal_url: `/principal/agent%3Ahorton`,
+        electric_agents_entity_url: `/horton/abc`,
+        electric_agents_entity_type: `horton`,
+        electric_agents_stream_path: `/horton/abc/main`,
+        electric_agents_runtime_consumer_id: `runner-1`,
+        electric_agents_wake_id: `wake-1`,
+      },
     })
   })
 

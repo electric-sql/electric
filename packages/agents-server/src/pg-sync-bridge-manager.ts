@@ -5,6 +5,7 @@ import {
   sourceRefForPgSync,
   type CanonicalPgSyncConfig,
   type PgSyncOptions,
+  type PgSyncRequestMetadata,
 } from '@electric-ax/agents-runtime'
 import {
   ShapeStream,
@@ -32,12 +33,10 @@ type WakeEvaluator = (
 
 export type PgSyncResolvedSource = {
   url: string
-  secret?: string
 }
 
 export interface PgSyncBridgeManagerOptions {
   url?: string
-  secret?: string
   retry?: {
     initialDelayMs?: number
     maxDelayMs?: number
@@ -70,7 +69,8 @@ type PgSyncCursor = {
 export interface PgSyncBridgeCoordinator {
   start?(): Promise<void>
   register(
-    options: PgSyncOptions
+    options: PgSyncOptions,
+    metadata?: PgSyncRequestMetadata
   ): Promise<{ sourceRef: string; streamUrl: string }>
   stop(): Promise<void>
 }
@@ -90,6 +90,39 @@ export function buildElectricShapeParams(
         }
       : {}),
     ...(options.replica !== undefined ? { replica: options.replica } : {}),
+    ...(options.metadata?.tenantId
+      ? { electric_agents_tenant_id: options.metadata.tenantId }
+      : {}),
+    ...(options.metadata?.principalKind
+      ? { electric_agents_principal_kind: options.metadata.principalKind }
+      : {}),
+    ...(options.metadata?.principalId
+      ? { electric_agents_principal_id: options.metadata.principalId }
+      : {}),
+    ...(options.metadata?.principalKey
+      ? { electric_agents_principal_key: options.metadata.principalKey }
+      : {}),
+    ...(options.metadata?.principalUrl
+      ? { electric_agents_principal_url: options.metadata.principalUrl }
+      : {}),
+    ...(options.metadata?.entityUrl
+      ? { electric_agents_entity_url: options.metadata.entityUrl }
+      : {}),
+    ...(options.metadata?.entityType
+      ? { electric_agents_entity_type: options.metadata.entityType }
+      : {}),
+    ...(options.metadata?.streamPath
+      ? { electric_agents_stream_path: options.metadata.streamPath }
+      : {}),
+    ...(options.metadata?.runtimeConsumerId
+      ? {
+          electric_agents_runtime_consumer_id:
+            options.metadata.runtimeConsumerId,
+        }
+      : {}),
+    ...(options.metadata?.wakeId
+      ? { electric_agents_wake_id: options.metadata.wakeId }
+      : {}),
   }
 }
 
@@ -279,12 +312,7 @@ class PgSyncBridge {
     const stream: ShapeStreamInterface<Record<string, unknown>> =
       new ShapeStream({
         url: this.resolvedSource.url,
-        params: {
-          ...buildElectricShapeParams(this.options),
-          ...(this.resolvedSource.secret
-            ? { secret: this.resolvedSource.secret }
-            : {}),
-        } as never,
+        params: buildElectricShapeParams(this.options) as never,
         offset,
         log,
         ...(handle ? { handle } : {}),
@@ -398,7 +426,6 @@ export class PgSyncBridgeManager implements PgSyncBridgeCoordinator {
   private starting = new Map<string, Promise<void>>()
 
   private readonly url: string
-  private readonly secret?: string
   private readonly retry: Required<
     NonNullable<PgSyncBridgeManagerOptions[`retry`]>
   >
@@ -410,7 +437,6 @@ export class PgSyncBridgeManager implements PgSyncBridgeCoordinator {
     options: PgSyncBridgeManagerOptions = {}
   ) {
     this.url = options.url ?? PG_SYNC_ELECTRIC_SHAPE_URL
-    this.secret = options.secret ?? process.env.ELECTRIC_AGENTS_PG_SYNC_SECRET
     this.retry = {
       initialDelayMs:
         options.retry?.initialDelayMs ?? DEFAULT_RETRY_INITIAL_DELAY_MS,
@@ -439,9 +465,16 @@ export class PgSyncBridgeManager implements PgSyncBridgeCoordinator {
   }
 
   async register(
-    options: PgSyncOptions
+    options: PgSyncOptions,
+    metadata?: PgSyncRequestMetadata
   ): Promise<{ sourceRef: string; streamUrl: string }> {
-    const canonicalOptions = canonicalPgSyncOptions(options)
+    const mergedMetadata = { ...options.metadata, ...metadata }
+    const canonicalOptions = {
+      ...canonicalPgSyncOptions(options),
+      ...(Object.keys(mergedMetadata).length > 0
+        ? { metadata: mergedMetadata }
+        : {}),
+    }
     const resolvedSource = this.resolveSource(canonicalOptions)
     const sourceRef = sourceRefForPgSync(canonicalOptions)
     const streamUrl = getPgSyncStreamPath(sourceRef, this.registry?.tenantId)
@@ -508,7 +541,7 @@ export class PgSyncBridgeManager implements PgSyncBridgeCoordinator {
   }
 
   private resolveSource(options: CanonicalPgSyncConfig): PgSyncResolvedSource {
-    return { url: options.url ?? this.url, secret: this.secret }
+    return { url: options.url ?? this.url }
   }
 
   async stop(): Promise<void> {

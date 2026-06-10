@@ -1738,7 +1738,14 @@ export async function processWake(
       let registeredPgSync: { streamUrl: string; sourceRef: string } | undefined
       if (source.sourceType === `pgSync`) {
         registeredPgSync = await serverClient.registerPgSyncSource(
-          (source as PgSyncObservationSource).options
+          (source as PgSyncObservationSource).options,
+          {
+            entityUrl,
+            entityType: typeName,
+            streamPath,
+            runtimeConsumerId: notification.consumerId,
+            wakeId,
+          }
         )
         observedSource = {
           ...source,

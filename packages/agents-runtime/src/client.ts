@@ -77,6 +77,7 @@ export type {
   CanonicalPgSyncConfig,
   PgSyncObservationSource,
   PgSyncOptions,
+  PgSyncRequestMetadata,
 } from './observation-sources'
 export type {
   EntityTimelineContentItem,

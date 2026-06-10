@@ -2,7 +2,10 @@
  * HTTP routes for pg-sync observation source registration.
  */
 
-import type { PgSyncOptions } from '@electric-ax/agents-runtime'
+import type {
+  PgSyncOptions,
+  PgSyncRequestMetadata,
+} from '@electric-ax/agents-runtime'
 import { Type, type Static } from '@sinclair/typebox'
 import { Router, json } from 'itty-router'
 import { apiError } from '../electric-agents-http.js'
@@ -28,8 +31,17 @@ const pgSyncOptionsSchema = Type.Object({
   ),
 })
 
+const pgSyncRequestMetadataSchema = Type.Object({
+  entityUrl: Type.Optional(Type.String()),
+  entityType: Type.Optional(Type.String()),
+  streamPath: Type.Optional(Type.String()),
+  runtimeConsumerId: Type.Optional(Type.String()),
+  wakeId: Type.Optional(Type.String()),
+})
+
 const pgSyncRegisterBodySchema = Type.Object({
   options: pgSyncOptionsSchema,
+  metadata: Type.Optional(pgSyncRequestMetadataSchema),
 })
 
 type PgSyncRegisterBody = Static<typeof pgSyncRegisterBodySchema>
@@ -58,7 +70,7 @@ async function registerPgSync(
   request: JsonRouteRequest,
   ctx: TenantContext
 ): Promise<Response> {
-  const { options } = routeBody<PgSyncRegisterBody>(request)
+  const { options, metadata } = routeBody<PgSyncRegisterBody>(request)
 
   if (options.table.trim() === ``) {
     return apiError(
@@ -77,8 +89,17 @@ async function registerPgSync(
   }
 
   try {
+    const requestMetadata: PgSyncRequestMetadata = {
+      tenantId: ctx.service,
+      principalKind: ctx.principal.kind,
+      principalId: ctx.principal.id,
+      principalKey: ctx.principal.key,
+      principalUrl: ctx.principal.url,
+      ...(metadata ?? {}),
+    }
     const result = await ctx.pgSyncBridgeManager.register(
-      options as PgSyncOptions
+      options as PgSyncOptions,
+      requestMetadata
     )
 
     return json(result)
