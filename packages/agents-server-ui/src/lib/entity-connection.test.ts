@@ -11,6 +11,12 @@ vi.mock(`./auth-fetch`, () => ({
 vi.mock(`@electric-ax/agents-runtime/client`, () => ({
   appendPathToUrl: (baseUrl: string, path: string) =>
     `${baseUrl.replace(/\/+$/, ``)}${path}`,
+  commentsCollection: {
+    schema: {},
+    type: `state:comments`,
+    primaryKey: `key`,
+    externallyWritable: { principalColumn: `_principal` },
+  },
   createEntityStreamDB: vi.fn(() => ({
     preload: preloadMock,
     close: closeMock,

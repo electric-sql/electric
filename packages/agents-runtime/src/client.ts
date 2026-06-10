@@ -106,6 +106,7 @@ export type {
   IncludesInboxMessage,
   IncludesRun,
 } from './entity-timeline'
+export { commentsCollection } from './comments-collection'
 export type {
   CommentSnapshotValue as CommentSnapshot,
   CommentTargetValue as CommentTarget,

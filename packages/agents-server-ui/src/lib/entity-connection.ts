@@ -4,6 +4,7 @@ import { DurableStream } from '@durable-streams/client'
 import type { StreamOptions } from '@durable-streams/client'
 import {
   appendPathToUrl,
+  commentsCollection,
   createEntityStreamDB,
   type EntityStreamDBWithActions,
 } from '@electric-ax/agents-runtime/client'
@@ -19,6 +20,15 @@ function getMainStreamPath(entityUrl: string): string {
  * needed; schema defaults to passthrough on the read side.
  */
 export type UICustomState = Record<string, { type: string; primaryKey: string }>
+
+/**
+ * Collections the UI always registers on every entity stream so that
+ * `db.collections.comments` (and any future UI-specific collections) are
+ * guaranteed to be defined. Callers may overlay their own customState on
+ * top; explicitly-passed entries take precedence.
+ */
+export const UI_ENTITY_CUSTOM_STATE: Record<string, typeof commentsCollection> =
+  { comments: commentsCollection }
 
 let activeBaseUrl: string | null = null
 
@@ -265,7 +275,10 @@ async function connectEntityStreamFresh(opts: {
       }) as unknown as EntityStreamHandle)
   const db = createEntityStreamDB(
     streamUrl,
-    customState as unknown as Parameters<typeof createEntityStreamDB>[1],
+    {
+      ...UI_ENTITY_CUSTOM_STATE,
+      ...(customState ?? {}),
+    } as unknown as Parameters<typeof createEntityStreamDB>[1],
     undefined,
     { stream }
   )
