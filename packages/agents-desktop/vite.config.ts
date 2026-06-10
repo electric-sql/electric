@@ -3,7 +3,9 @@ import { fileURLToPath } from 'node:url'
 import { defineConfig, type PluginOption } from 'vite'
 import electron from 'vite-plugin-electron/simple'
 
-const RENDERER_DEV_SERVER_URL = `http://localhost:5183`
+const RENDERER_DEV_SERVER_URL =
+  process.env.ELECTRIC_DESKTOP_DEV_SERVER_URL ??
+  `http://localhost:${process.env.ELECTRIC_DESKTOP_UI_PORT ?? `5183`}`
 const PACKAGE_DIR = path.dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = path.resolve(PACKAGE_DIR, `../..`)
 

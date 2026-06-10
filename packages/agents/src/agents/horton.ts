@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { serverLog } from '../log'
 import { createHortonDocsSupport } from '../docs/knowledge-base'
 import { createSpawnWorkerTool } from '../tools/spawn-worker'
+import { createObservePgSyncTool } from '../tools/observe-pg-sync'
 import { createForkTool } from '../tools/fork'
 import { createSetTitleTool } from '../tools/set-title'
 import {
@@ -269,6 +270,7 @@ When a user opens with a greeting ("hi", "hello", "hey", etc.) or a broad statem
 - fetch_url: fetch and convert a URL to markdown
 - spawn_worker: dispatch a subagent for an isolated task
 - fork: spawn a child session that inherits this conversation's history up to the latest completed response. Same parent-ownership model as spawn_worker — when the fork's next run finishes, you'll wake with its response.
+- observe_pg_sync: observe an Electric Postgres sync stream and wake on matching changes
 - send: send a message to an Electric Agent/entity. To schedule future work for yourself, call send with self: true and afterMs.
 ${eventSourceTools}${titleTool}${scheduleTools}${docsTools}${skillsTools}
 
@@ -353,6 +355,7 @@ export function createHortonTools(
       : [createFetchUrlTool(sandbox)]),
     createSpawnWorkerTool(ctx, opts.modelConfig),
     createForkTool(ctx),
+    createObservePgSyncTool(ctx),
     createSetTitleTool(ctx),
     createSendTool(ctx.send, { selfEntityUrl: ctx.entityUrl }),
     ...(opts.docsSearchTool ? [opts.docsSearchTool] : []),

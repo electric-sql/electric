@@ -41,6 +41,8 @@ export interface WakeEvalResult {
       collection: string
       kind: `insert` | `update` | `delete`
       key: string
+      value?: unknown
+      oldValue?: unknown
       from?: string
       from_principal?: string
       from_agent?: string
@@ -937,14 +939,21 @@ export class WakeRegistry {
       return null
     }
 
+    const value = event.value as Record<string, unknown> | undefined
     const change: WakeEvalResult[`wakeMessage`][`changes`][number] = {
       collection: eventType,
       kind,
       key: (event.key as string) || ``,
     }
 
+    if (value && `value` in value) {
+      change.value = value.value
+    }
+    if (value && `oldValue` in value) {
+      change.oldValue = value.oldValue
+    }
+
     if (eventType === `inbox`) {
-      const value = event.value as Record<string, unknown> | undefined
       if (typeof value?.from === `string`) change.from = value.from
       if (typeof value?.from_principal === `string`) {
         change.from_principal = value.from_principal

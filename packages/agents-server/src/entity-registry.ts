@@ -10,6 +10,7 @@ import {
   entityLineage,
   entityPermissionGrants,
   entityTypes,
+  pgSyncBridges,
   entityTypePermissionGrants,
   runnerRuntimeDiagnostics,
   runners,
@@ -43,7 +44,7 @@ import type {
   EntityTypePermissionGrant,
   PermissionSubjectKind,
 } from './electric-agents-types.js'
-import type { EntityTags } from '@electric-ax/agents-runtime'
+import type { EntityTags, PgSyncOptions } from '@electric-ax/agents-runtime'
 import type { Principal } from './principal.js'
 
 export class EntityAlreadyExistsError extends Error {
@@ -69,6 +70,19 @@ export interface EntityBridgeRow {
   shapeHandle?: string
   shapeOffset?: string
   lastObserverActivityAt: Date
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface PgSyncBridgeRow {
+  tenantId: string
+  sourceRef: string
+  options: PgSyncOptions
+  streamUrl: string
+  shapeHandle?: string
+  shapeOffset?: string
+  initialSnapshotComplete: boolean
+  lastTouchedAt: Date
   createdAt: Date
   updatedAt: Date
 }
@@ -620,6 +634,13 @@ export class PostgresRegistry {
     return and(
       eq(entityBridges.tenantId, this.tenantId),
       eq(entityBridges.sourceRef, sourceRef)
+    )
+  }
+
+  private pgSyncBridgeWhere(sourceRef: string) {
+    return and(
+      eq(pgSyncBridges.tenantId, this.tenantId),
+      eq(pgSyncBridges.sourceRef, sourceRef)
     )
   }
 
@@ -1528,6 +1549,98 @@ export class PostgresRegistry {
     })
   }
 
+  async upsertPgSyncBridge(row: {
+    sourceRef: string
+    options: PgSyncOptions
+    streamUrl: string
+  }): Promise<PgSyncBridgeRow> {
+    await this.db
+      .insert(pgSyncBridges)
+      .values({
+        tenantId: this.tenantId,
+        sourceRef: row.sourceRef,
+        options: row.options,
+        streamUrl: row.streamUrl,
+        lastTouchedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: [pgSyncBridges.tenantId, pgSyncBridges.sourceRef],
+        set: {
+          options: row.options,
+          streamUrl: row.streamUrl,
+          initialSnapshotComplete: false,
+          lastTouchedAt: new Date(),
+          updatedAt: new Date(),
+        },
+      })
+
+    const existing = await this.getPgSyncBridge(row.sourceRef)
+    if (!existing)
+      throw new Error(`Failed to load pgSync bridge ${row.sourceRef}`)
+    return existing
+  }
+
+  async getPgSyncBridge(sourceRef: string): Promise<PgSyncBridgeRow | null> {
+    const rows = await this.db
+      .select()
+      .from(pgSyncBridges)
+      .where(this.pgSyncBridgeWhere(sourceRef))
+      .limit(1)
+    return rows[0] ? this.rowToPgSyncBridge(rows[0]) : null
+  }
+
+  async listPgSyncBridges(
+    tenantId: string | null = this.tenantId
+  ): Promise<Array<PgSyncBridgeRow>> {
+    const rows =
+      tenantId === null
+        ? await this.db.select().from(pgSyncBridges)
+        : await this.db
+            .select()
+            .from(pgSyncBridges)
+            .where(eq(pgSyncBridges.tenantId, tenantId))
+    return rows.map((row) => this.rowToPgSyncBridge(row))
+  }
+
+  async touchPgSyncBridge(sourceRef: string): Promise<void> {
+    await this.db
+      .update(pgSyncBridges)
+      .set({ lastTouchedAt: new Date(), updatedAt: new Date() })
+      .where(this.pgSyncBridgeWhere(sourceRef))
+  }
+
+  async updatePgSyncBridgeCursor(
+    sourceRef: string,
+    shapeHandle: string,
+    shapeOffset: string,
+    initialSnapshotComplete?: boolean
+  ): Promise<void> {
+    await this.db
+      .update(pgSyncBridges)
+      .set({
+        shapeHandle,
+        shapeOffset,
+        ...(initialSnapshotComplete !== undefined
+          ? { initialSnapshotComplete }
+          : {}),
+        updatedAt: new Date(),
+      })
+      .where(this.pgSyncBridgeWhere(sourceRef))
+  }
+
+  async clearPgSyncBridgeCursor(sourceRef: string): Promise<void> {
+    await this.db
+      .update(pgSyncBridges)
+      .set({
+        shapeHandle: null,
+        shapeOffset: null,
+        initialSnapshotComplete: false,
+        updatedAt: new Date(),
+      })
+      .where(this.pgSyncBridgeWhere(sourceRef))
+  }
+
   async upsertEntityBridge(row: {
     sourceRef: string
     tags: EntityTags
@@ -1919,6 +2032,23 @@ export class PostgresRegistry {
         | undefined,
       created_at: row.createdAt,
       updated_at: row.updatedAt,
+    }
+  }
+
+  private rowToPgSyncBridge(
+    row: typeof pgSyncBridges.$inferSelect
+  ): PgSyncBridgeRow {
+    return {
+      tenantId: row.tenantId,
+      sourceRef: row.sourceRef,
+      options: row.options as PgSyncOptions,
+      streamUrl: row.streamUrl,
+      shapeHandle: row.shapeHandle ?? undefined,
+      shapeOffset: row.shapeOffset ?? undefined,
+      initialSnapshotComplete: row.initialSnapshotComplete,
+      lastTouchedAt: row.lastTouchedAt,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
     }
   }
 

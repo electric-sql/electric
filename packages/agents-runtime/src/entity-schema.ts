@@ -108,6 +108,8 @@ type WakeChangeEntryValue = {
   collection: string
   kind: `insert` | `update` | `delete`
   key: string
+  value?: unknown
+  oldValue?: unknown
   from?: string
   from_principal?: string
   from_agent?: string
@@ -413,6 +415,8 @@ function createWakeChangeSchema(): Schema<WakeChangeEntryValue> {
     collection: z.string(),
     kind: z.enum([`insert`, `update`, `delete`]),
     key: z.string(),
+    value: z.unknown().optional(),
+    oldValue: z.unknown().optional(),
     from: z.string().optional(),
     from_principal: z.string().optional(),
     from_agent: z.string().optional(),

@@ -29,5 +29,8 @@ export const globalRouter: GlobalRoutes = AutoRouter<
 })
 
 globalRouter.all(`/_electric/shared-state/*`, durableStreamsRouter.fetch)
+globalRouter.all(`/_electric/pg-sync/register`, internalRouter.fetch)
+globalRouter.get(`/_electric/pg-sync/*`, durableStreamsRouter.fetch)
+globalRouter.head(`/_electric/pg-sync/*`, durableStreamsRouter.fetch)
 globalRouter.all(`/_electric/*`, internalRouter.fetch)
 globalRouter.all(`*`, durableStreamsRouter.fetch)

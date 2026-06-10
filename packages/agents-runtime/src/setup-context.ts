@@ -5,12 +5,12 @@ import {
   queryOnce,
 } from '@durable-streams/state/db'
 import { createWakeSession } from './wake-session'
+import { appendPathToUrl } from './url'
 import {
   manifestChildKey,
   manifestEffectKey,
   manifestSharedStateKey,
 } from './manifest-helpers'
-import { appendPathToUrl } from './url'
 import type {
   DbObservationSource,
   EntityObservationSource,
@@ -886,9 +886,10 @@ export function createSetupContext(
           source.ensureStream.contentType
         )
       }
-      const sourceStreamUrl = source.streamUrl.startsWith(`/`)
-        ? appendPathToUrl(config.serverBaseUrl, source.streamUrl)
-        : source.streamUrl
+      const sourceStreamUrl =
+        source.sourceType === `pgSync` || !source.streamUrl.startsWith(`/`)
+          ? source.streamUrl
+          : appendPathToUrl(config.serverBaseUrl, source.streamUrl)
       sourceDb = await wiring.createSourceDb(
         sourceStreamUrl,
         source.schema,

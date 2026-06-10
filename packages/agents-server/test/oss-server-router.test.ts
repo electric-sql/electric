@@ -67,6 +67,78 @@ describe(`OSS server routing wrapper`, () => {
     }
   })
 
+  it(`routes pg-sync stream reads to Durable Streams while keeping registration internal and writes blocked`, async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, `fetch`)
+      .mockResolvedValue(new Response(`[]`, { status: 200 }))
+    const pgSyncBridgeManager = {
+      register: vi.fn().mockResolvedValue({
+        sourceRef: `abc123`,
+        streamUrl: `/_electric/pg-sync/abc123`,
+      }),
+    }
+
+    try {
+      const readResponse = await globalRouter.fetch(
+        request(`GET`, `/_electric/pg-sync/abc123?offset=-1`),
+        buildTenantContext()
+      )
+
+      expect(readResponse.status).toBe(200)
+      expect(String(fetchSpy.mock.calls[0]![0])).toBe(
+        `http://durable.local/v1/stream/tenant-test/_electric/pg-sync/abc123?offset=-1`
+      )
+
+      const headResponse = await globalRouter.fetch(
+        request(`HEAD`, `/_electric/pg-sync/abc123`),
+        buildTenantContext()
+      )
+
+      expect(headResponse.status).toBe(200)
+      expect(String(fetchSpy.mock.calls[1]![0])).toBe(
+        `http://durable.local/v1/stream/tenant-test/_electric/pg-sync/abc123`
+      )
+
+      const writeResponse = await globalRouter.fetch(
+        new Request(`http://server/_electric/pg-sync/abc123`, {
+          method: `POST`,
+          headers: { 'content-type': `application/json` },
+          body: JSON.stringify({ type: `pg_sync_change`, key: `forged` }),
+        }),
+        buildTenantContext()
+      )
+
+      expect(writeResponse.status).toBe(404)
+      expect(fetchSpy).toHaveBeenCalledTimes(2)
+
+      const registerResponse = await globalRouter.fetch(
+        new Request(`http://server/_electric/pg-sync/register`, {
+          method: `POST`,
+          headers: { 'content-type': `application/json` },
+          body: JSON.stringify({ options: { table: `entities` } }),
+        }),
+        buildTenantContext({ pgSyncBridgeManager: pgSyncBridgeManager as any })
+      )
+
+      expect(registerResponse.status).toBe(200)
+      expect(pgSyncBridgeManager.register).toHaveBeenCalledWith(
+        {
+          table: `entities`,
+        },
+        {
+          tenantId: `tenant-test`,
+          principalKind: `system`,
+          principalId: `framework`,
+          principalKey: `system:framework`,
+          principalUrl: `/principal/system:framework`,
+        }
+      )
+      expect(fetchSpy).toHaveBeenCalledTimes(2)
+    } finally {
+      fetchSpy.mockRestore()
+    }
+  })
+
   it(`keeps the exported global router free of the mock agent handler`, async () => {
     const runtime = {
       handleWebhookRequest: vi

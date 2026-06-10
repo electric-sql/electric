@@ -1,3 +1,7 @@
+import type {
+  PgSyncOptions,
+  PgSyncRequestMetadata,
+} from './observation-sources'
 import type { EntityTags, TagOperation } from './tags'
 import { appendPathToUrl } from './url'
 import { buildEventSourceSubscriptionId } from './event-sources'
@@ -169,6 +173,13 @@ export interface RuntimeServerClient {
   registerWake: (options: RegisterWakeOptions) => Promise<void>
   ensureCronStream: (expression: string, timezone?: string) => Promise<string>
   ensureEntitiesMembershipStream: (tags: EntityTags) => Promise<{
+    streamUrl: string
+    sourceRef: string
+  }>
+  registerPgSyncSource: (
+    options: PgSyncOptions,
+    metadata?: PgSyncRequestMetadata
+  ) => Promise<{
     streamUrl: string
     sourceRef: string
   }>
@@ -683,6 +694,23 @@ export function createRuntimeServerClient(
     return (await response.json()) as { streamUrl: string; sourceRef: string }
   }
 
+  const registerPgSyncSource = async (
+    options: PgSyncOptions,
+    metadata?: PgSyncRequestMetadata
+  ): Promise<{ streamUrl: string; sourceRef: string }> => {
+    const response = await request(`/_electric/pg-sync/register`, {
+      method: `POST`,
+      headers: { 'content-type': `application/json` },
+      body: JSON.stringify({ options, ...(metadata ? { metadata } : {}) }),
+    })
+    if (!response.ok) {
+      throw new Error(
+        `registerPgSyncSource failed (${response.status}): ${await readErrorText(response)}`
+      )
+    }
+    return (await response.json()) as { streamUrl: string; sourceRef: string }
+  }
+
   const listEventSources = async (): Promise<Array<EventSourceContract>> => {
     const response = await request(`/_electric/event-sources`, {
       method: `GET`,
@@ -903,6 +931,7 @@ export function createRuntimeServerClient(
     registerWake,
     ensureCronStream,
     ensureEntitiesMembershipStream,
+    registerPgSyncSource,
     listEventSources,
     subscribeToEventSource,
     unsubscribeFromEventSource,
