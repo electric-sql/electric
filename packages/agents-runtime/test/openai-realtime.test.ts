@@ -60,6 +60,8 @@ describe(`createOpenAIRealtimeProvider`, () => {
     }
     const provider = createOpenAIRealtimeProvider({
       apiKey: `sk-test`,
+      voice: `marin`,
+      reasoningEffort: `medium`,
       safetyIdentifier: `user-1`,
       WebSocket: FakeWebSocket,
     })
@@ -90,6 +92,7 @@ describe(`createOpenAIRealtimeProvider`, () => {
         type: `realtime`,
         model: `gpt-realtime-2`,
         instructions: `You are Horton.`,
+        reasoning: { effort: `medium` },
         output_modalities: [`audio`],
         tool_choice: `auto`,
         tools: [
@@ -112,7 +115,10 @@ describe(`createOpenAIRealtimeProvider`, () => {
               interrupt_response: true,
             },
           },
-          output: { format: { type: `audio/pcm`, rate: 24_000 } },
+          output: {
+            format: { type: `audio/pcm`, rate: 24_000 },
+            voice: `marin`,
+          },
         },
       },
     })
@@ -124,6 +130,28 @@ describe(`createOpenAIRealtimeProvider`, () => {
         content: [{ type: `input_text`, text: `Previous context` }],
       },
     })
+  })
+
+  it(`does not send reasoning effort to non-reasoning realtime models`, async () => {
+    FakeWebSocket.instances = []
+    const provider = createOpenAIRealtimeProvider({
+      apiKey: `sk-test`,
+      model: `gpt-realtime-1.5`,
+      reasoningEffort: `low`,
+      WebSocket: FakeWebSocket,
+    })
+
+    await provider.connect({
+      systemPrompt: `You are Horton.`,
+      messages: [],
+      tools: [],
+      audio: {
+        outputFormat: { codec: `pcm16`, sampleRate: 24_000, channels: 1 },
+      },
+    })
+
+    const socket = FakeWebSocket.instances[0]!
+    expect((socket.sent[0] as any).session.reasoning).toBeUndefined()
   })
 
   it(`can disable input audio transcription`, async () => {
@@ -279,17 +307,53 @@ describe(`createOpenAIRealtimeProvider`, () => {
     })
     const socket = FakeWebSocket.instances[0]!
 
-    await session.appendInputAudio?.(new Uint8Array([1, 2, 3]))
+    await session.appendInputAudio?.(new Uint8Array([1, 2, 3, 4]))
     await session.clearInputAudio?.()
     await session.commitInputAudio?.()
 
     expect(socket.sent.at(-4)).toEqual({
       type: `input_audio_buffer.append`,
-      audio: `AQID`,
+      audio: `AQIDBA==`,
     })
     expect(socket.sent.at(-3)).toEqual({ type: `input_audio_buffer.clear` })
     expect(socket.sent.at(-2)).toEqual({ type: `input_audio_buffer.commit` })
     expect(socket.sent.at(-1)).toEqual({ type: `response.create` })
+  })
+
+  it(`normalizes audio input chunks before appending them`, async () => {
+    FakeWebSocket.instances = []
+    const provider = createOpenAIRealtimeProvider({
+      apiKey: `sk-test`,
+      WebSocket: FakeWebSocket,
+    })
+
+    const session = await provider.connect({
+      systemPrompt: `Talk`,
+      messages: [],
+      tools: [],
+    })
+    const socket = FakeWebSocket.instances[0]!
+
+    await session.appendInputAudio?.(new Uint8Array())
+    await session.appendInputAudio?.(new Uint8Array([1]))
+    await session.appendInputAudio?.(new Uint8Array([1, 2, 3]))
+
+    const large = new Uint8Array(32 * 1024 + 4)
+    large.fill(7)
+    await session.appendInputAudio?.(large)
+
+    const appendEvents = socket.sent.filter(
+      (event): event is { type: string; audio: string } =>
+        typeof event === `object` &&
+        event !== null &&
+        (event as { type?: unknown }).type === `input_audio_buffer.append`
+    )
+    expect(appendEvents).toHaveLength(3)
+    expect(appendEvents[0]!.audio).toBe(`AQI=`)
+    expect(Buffer.from(appendEvents[1]!.audio, `base64`)).toHaveLength(
+      32 * 1024
+    )
+    expect(Buffer.from(appendEvents[2]!.audio, `base64`)).toHaveLength(4)
   })
 
   it(`unblocks the event stream when the run signal aborts`, async () => {

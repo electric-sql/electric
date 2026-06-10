@@ -9,6 +9,11 @@ import type {
   RealtimeToolResult,
   RealtimeTurnDetectionConfig,
 } from './types'
+import {
+  DEFAULT_OPENAI_REALTIME_MODEL,
+  DEFAULT_OPENAI_REALTIME_REASONING_EFFORT,
+  type OpenAIRealtimeReasoningEffort,
+} from './realtime-options'
 
 type MaybePromise<T> = T | Promise<T>
 type OpenAIRealtimeSocket = {
@@ -31,14 +36,16 @@ type OpenAIRealtimeWebSocketConstructor = new (
   init?: unknown
 ) => OpenAIRealtimeSocket
 
-const DEFAULT_OPENAI_REALTIME_MODEL = `gpt-realtime-2`
 const DEFAULT_OPENAI_INPUT_TRANSCRIPTION_MODEL = `gpt-4o-mini-transcribe`
+const BYTES_PER_PCM16_SAMPLE = 2
+const MAX_INPUT_AUDIO_APPEND_BYTES = 32 * 1024
 
 export interface OpenAIRealtimeProviderOptions {
   apiKey: string | (() => MaybePromise<string>)
   model?: string
   url?: string
   voice?: string
+  reasoningEffort?: OpenAIRealtimeReasoningEffort
   safetyIdentifier?: string
   headers?: Record<string, string>
   WebSocket?: OpenAIRealtimeWebSocketConstructor
@@ -199,6 +206,30 @@ function bytesToBase64(bytes: Uint8Array): string {
   return btoa(binary)
 }
 
+function alignedPcm16Bytes(bytes: Uint8Array): Uint8Array {
+  const alignedLength =
+    bytes.byteLength - (bytes.byteLength % BYTES_PER_PCM16_SAMPLE)
+  if (alignedLength <= 0) return new Uint8Array()
+  return alignedLength === bytes.byteLength
+    ? bytes
+    : bytes.subarray(0, alignedLength)
+}
+
+function inputAudioAppendChunks(bytes: Uint8Array): Array<Uint8Array> {
+  const aligned = alignedPcm16Bytes(bytes)
+  if (aligned.byteLength === 0) return []
+  if (aligned.byteLength <= MAX_INPUT_AUDIO_APPEND_BYTES) return [aligned]
+
+  const chunks: Array<Uint8Array> = []
+  const chunkSize =
+    MAX_INPUT_AUDIO_APPEND_BYTES -
+    (MAX_INPUT_AUDIO_APPEND_BYTES % BYTES_PER_PCM16_SAMPLE)
+  for (let offset = 0; offset < aligned.byteLength; offset += chunkSize) {
+    chunks.push(aligned.subarray(offset, offset + chunkSize))
+  }
+  return chunks
+}
+
 function base64ToBytes(value: string): Uint8Array {
   const bufferCtor = (globalThis as { Buffer?: typeof Buffer }).Buffer
   if (bufferCtor) return new Uint8Array(bufferCtor.from(value, `base64`))
@@ -336,14 +367,20 @@ function buildSessionUpdate(
   const inputFormat = realtimeFormat(input.audio?.inputFormat)
   const outputFormat = realtimeFormat(input.audio?.outputFormat)
   const transcription = inputTranscription(input)
+  const model = opts.model ?? DEFAULT_OPENAI_REALTIME_MODEL
+  const reasoningEffort =
+    model === DEFAULT_OPENAI_REALTIME_MODEL
+      ? (opts.reasoningEffort ?? DEFAULT_OPENAI_REALTIME_REASONING_EFFORT)
+      : undefined
   return {
     type: `session.update`,
     session: {
       type: `realtime`,
-      model: opts.model ?? DEFAULT_OPENAI_REALTIME_MODEL,
+      model,
       instructions: input.systemPrompt,
       output_modalities: outputFormat ? [`audio`] : [`text`],
       tool_choice: input.tools.length > 0 ? `auto` : `none`,
+      ...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {}),
       ...(input.tools.length > 0
         ? { tools: input.tools.map((tool) => toOpenAITool(tool)) }
         : {}),
@@ -821,10 +858,12 @@ export function createOpenAIRealtimeProvider(
       return {
         events: queue,
         appendInputAudio: async (chunk) => {
-          sendJson(ws, {
-            type: `input_audio_buffer.append`,
-            audio: bytesToBase64(chunk),
-          })
+          for (const appendChunk of inputAudioAppendChunks(chunk)) {
+            sendJson(ws, {
+              type: `input_audio_buffer.append`,
+              audio: bytesToBase64(appendChunk),
+            })
+          }
         },
         clearInputAudio: async () => {
           sendJson(ws, { type: `input_audio_buffer.clear` })

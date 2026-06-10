@@ -32,6 +32,9 @@ const CHAT_VIEW_PERMISSIONS: ReadonlyArray<EntityPermission> = [
   `signal`,
   `fork`,
 ]
+const REALTIME_INITIAL_TEXT_VIEW_PARAM = `realtimeInitialText`
+const REALTIME_GREET_VIEW_PARAM = `realtimeGreet`
+
 /**
  * The default view: chat / timeline + message composer.
  *
@@ -364,11 +367,29 @@ function GenericChatBody({
 
   const autoStartRealtimeSignal =
     viewParams?.realtime === `start` && entityUrl
-      ? `${entityUrl}:realtime:start`
+      ? [
+          entityUrl,
+          `realtime`,
+          `start`,
+          viewParams[REALTIME_INITIAL_TEXT_VIEW_PARAM] ?? ``,
+          viewParams[REALTIME_GREET_VIEW_PARAM] ?? ``,
+        ].join(`:`)
       : null
+  const autoStartRealtimeInitialText =
+    viewParams?.realtime === `start`
+      ? viewParams[REALTIME_INITIAL_TEXT_VIEW_PARAM]
+      : undefined
+  const autoStartRealtimeGreetIfSilent =
+    viewParams?.realtime === `start` &&
+    viewParams[REALTIME_GREET_VIEW_PARAM] === `1`
   const handleRealtimeAutoStartConsumed = useCallback(() => {
     const nextParams = Object.fromEntries(
-      Object.entries(viewParams ?? {}).filter(([key]) => key !== `realtime`)
+      Object.entries(viewParams ?? {}).filter(
+        ([key]) =>
+          key !== `realtime` &&
+          key !== REALTIME_INITIAL_TEXT_VIEW_PARAM &&
+          key !== REALTIME_GREET_VIEW_PARAM
+      )
     )
     helpers.setTileView(tileId, `chat`, {
       viewParams: Object.keys(nextParams).length > 0 ? nextParams : undefined,
@@ -455,6 +476,8 @@ function GenericChatBody({
         onSend={() => setSentMessageSignal((value) => value + 1)}
         onStop={stopGeneration}
         autoStartRealtimeSignal={autoStartRealtimeSignal}
+        autoStartRealtimeInitialText={autoStartRealtimeInitialText}
+        autoStartRealtimeGreetIfSilent={autoStartRealtimeGreetIfSilent}
         onRealtimeAutoStartConsumed={handleRealtimeAutoStartConsumed}
       />
     </>

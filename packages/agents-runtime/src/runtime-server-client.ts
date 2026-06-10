@@ -13,6 +13,7 @@ import type {
 } from './types'
 import type { EntitySignal } from './entity-schema'
 import type { RealtimeSessionStreamRefs } from './entity-schema'
+import type { OpenAIRealtimeReasoningEffort } from './realtime-options'
 import type {
   WebhookSourceContract,
   WebhookSourceSubscription,
@@ -107,6 +108,9 @@ export interface StartRealtimeSessionOptions {
   id?: string
   provider: string
   model: string
+  voice?: string
+  reasoningEffort?: OpenAIRealtimeReasoningEffort
+  interruptResponse?: boolean
   inputAudio?: RealtimeAudioOptions
   outputAudio?: RealtimeAudioOptions
   meta?: Record<string, unknown>
@@ -117,6 +121,9 @@ export interface RealtimeSessionStartResult {
   entityUrl: string
   provider: string
   model: string
+  voice?: string
+  reasoningEffort?: OpenAIRealtimeReasoningEffort
+  interruptResponse?: boolean
   status: `requested`
   startedAt: string
   streams: RealtimeSessionStreamRefs

@@ -951,6 +951,12 @@ function createAssistantHandler(options: {
             return apiKey
           },
           model: activeRealtimeSession.model,
+          ...(activeRealtimeSession.voice
+            ? { voice: activeRealtimeSession.voice }
+            : {}),
+          ...(activeRealtimeSession.reasoningEffort
+            ? { reasoningEffort: activeRealtimeSession.reasoningEffort }
+            : {}),
         }),
         tools: tools as AgentTool[],
         audio: {
@@ -966,7 +972,8 @@ function createAssistantHandler(options: {
             prefixPaddingMs: 300,
             silenceDurationMs: 500,
             createResponse: true,
-            interruptResponse: true,
+            interruptResponse:
+              activeRealtimeSession.interruptResponse !== false,
           },
         },
         toolPolicy: {

@@ -758,6 +758,26 @@ describe(`ctx.useRealtime()`, () => {
       itemId: `item-1`,
       byteLength: 3,
     })
+    expect(ctx.db.collections.realtimeAudioSpans.toArray).toMatchObject([
+      {
+        session_id: `rt-1`,
+        stream: `output`,
+        producer_id: `/test/entity/realtime/rt-1/audio/out`,
+        seq: 0,
+        byte_start: 0,
+        byte_end: 3,
+        byte_length: 3,
+        sample_start: 0,
+        sample_count: 1,
+        sample_rate: 24_000,
+        channels: 1,
+        codec: `pcm16`,
+        timing_source: `provider`,
+        participant_id: `assistant`,
+        provider_item_id: `item-1`,
+        response_id: `resp-1`,
+      },
+    ])
   })
 
   it(`skips realtime input audio commits below the provider minimum`, async () => {
@@ -972,6 +992,24 @@ describe(`ctx.useRealtime()`, () => {
     expect(appendInputAudio).toHaveBeenNthCalledWith(2, secondChunk)
     expect(commitInputAudio).not.toHaveBeenCalled()
     expect(close).toHaveBeenCalledWith(`test`)
+    expect(ctx.db.collections.realtimeAudioSpans.toArray).toMatchObject([
+      {
+        session_id: `rt-1`,
+        stream: `input`,
+        producer_id: `/test/entity/realtime/rt-1/audio/in`,
+        seq: 0,
+        byte_start: 0,
+        byte_end: 4096,
+        byte_length: 4096,
+        sample_start: 0,
+        sample_count: 2048,
+        sample_rate: 24_000,
+        channels: 1,
+        codec: `pcm16`,
+        timing_source: `runtime`,
+        participant_id: `user`,
+      },
+    ])
   })
 
   it(`does not block later realtime control commands behind pending audio bytes`, async () => {

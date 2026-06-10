@@ -54,6 +54,7 @@ import type {
   ObservationHandle,
   ObservationSource,
   RealtimeAudioConfig,
+  RealtimeAudioFormat,
   RealtimeConfig,
   RealtimeHandle,
   RealtimeProviderEvent,
@@ -72,6 +73,14 @@ import type {
 } from './types'
 
 const REALTIME_MIN_INPUT_COMMIT_BYTES = 4_800
+const REALTIME_SESSION_SOFT_LIMIT_MS = 55 * 60 * 1000
+const REALTIME_AUDIO_SPAN_MAX_MS = 500
+const REALTIME_PCM16_BYTES_PER_SAMPLE = 2
+const REALTIME_DEFAULT_AUDIO_FORMAT: RealtimeAudioFormat = {
+  codec: `pcm16`,
+  sampleRate: 24_000,
+  channels: 1,
+}
 
 function agentModelId(model: AgentModel): string {
   return typeof model === `string` ? model : model.id
@@ -129,6 +138,25 @@ type RealtimeStreamIo = {
   writeProviderEvent: (event: RealtimeProviderEvent) => Promise<void>
   close: () => Promise<void>
 }
+type RealtimeAudioSpanDraft = {
+  stream: `input` | `output`
+  seq: number
+  producerId: string
+  producerEpoch: number
+  byteStart: number
+  byteEnd: number
+  sampleStart: number
+  sampleCount: number
+  sampleRate: number
+  channels: number
+  timingSource: `runtime` | `provider`
+  createdAt: string
+  capturedAt?: string
+  receivedAt?: string
+  participantId?: string
+  providerItemId?: string
+  responseId?: string
+}
 
 function trackRealtimeAppend(
   pending: Set<Promise<void>>,
@@ -161,11 +189,10 @@ function isRealtimeControlInput(value: unknown): value is RealtimeControlInput {
         afterAudioBytes >= 0)
     )
   }
-  return (
-    type === `input_text` ||
-    type === `response.cancel` ||
-    type === `session.close`
-  )
+  if (type === `input_text`) {
+    return typeof (value as { text?: unknown }).text === `string`
+  }
+  return type === `response.cancel` || type === `session.close`
 }
 
 function realtimeDurableStream(
@@ -199,6 +226,21 @@ function useManualRealtimeInputCommits(
   audio: RealtimeAudioConfig | undefined
 ): boolean {
   return audio?.turnDetection === false || audio?.turnDetection?.type === `none`
+}
+
+function realtimeByteOffset(byte: number): string {
+  return `byte:${byte}`
+}
+
+function realtimeAudioFrameBytes(format: RealtimeAudioFormat): number {
+  return REALTIME_PCM16_BYTES_PER_SAMPLE * format.channels
+}
+
+function realtimeAudioSamples(
+  byteLength: number,
+  format: RealtimeAudioFormat
+): number {
+  return Math.floor(byteLength / realtimeAudioFrameBytes(format))
 }
 
 function createRealtimeStreamIo(
@@ -253,6 +295,13 @@ function createRealtimeStreamIo(
     end: number
     data: Uint8Array
   }> = []
+  const inputAudioFormat = audio?.inputFormat ?? REALTIME_DEFAULT_AUDIO_FORMAT
+  const outputAudioFormat = audio?.outputFormat ?? REALTIME_DEFAULT_AUDIO_FORMAT
+  const audioSpanDrafts: Partial<
+    Record<`input` | `output`, RealtimeAudioSpanDraft>
+  > = {}
+  let inputAudioSpanSeq = 0
+  let outputAudioSpanSeq = 0
   let processingInputCommits = false
   const manualInputCommits = useManualRealtimeInputCommits(audio)
 
@@ -262,6 +311,111 @@ function createRealtimeStreamIo(
         runtimeLog.warn(logPrefix, `${label}:`, error)
       }
     })
+  }
+
+  const flushAudioSpan = (stream: `input` | `output`): void => {
+    const draft = audioSpanDrafts[stream]
+    if (!draft || draft.byteEnd <= draft.byteStart) return
+    audioSpanDrafts[stream] = undefined
+    config.writeEvent(
+      entityStateSchema.realtimeAudioSpans.insert({
+        key: `realtime-audio-span:${session.id}:${stream}:${draft.seq}`,
+        value: {
+          session_id: session.id,
+          stream,
+          producer_id: draft.producerId,
+          producer_epoch: draft.producerEpoch,
+          seq: draft.seq,
+          offset: realtimeByteOffset(draft.byteStart),
+          next_offset: realtimeByteOffset(draft.byteEnd),
+          byte_start: draft.byteStart,
+          byte_end: draft.byteEnd,
+          byte_length: draft.byteEnd - draft.byteStart,
+          sample_start: draft.sampleStart,
+          sample_count: draft.sampleCount,
+          sample_rate: draft.sampleRate,
+          channels: draft.channels,
+          codec: `pcm16`,
+          timing_source: draft.timingSource,
+          created_at: draft.createdAt,
+          ...(draft.capturedAt ? { captured_at: draft.capturedAt } : {}),
+          ...(draft.receivedAt ? { received_at: draft.receivedAt } : {}),
+          ...(draft.participantId
+            ? { participant_id: draft.participantId }
+            : {}),
+          ...(draft.providerItemId
+            ? { provider_item_id: draft.providerItemId }
+            : {}),
+          ...(draft.responseId ? { response_id: draft.responseId } : {}),
+        } as never,
+      }) as ChangeEvent
+    )
+  }
+
+  const appendAudioSpan = (input: {
+    stream: `input` | `output`
+    byteStart: number
+    byteLength: number
+    format: RealtimeAudioFormat
+    producerId: string
+    timingSource: `runtime` | `provider`
+    capturedAt?: string
+    receivedAt?: string
+    participantId?: string
+    providerItemId?: string
+    responseId?: string
+  }): void => {
+    if (input.byteLength <= 0) return
+    const frameBytes = realtimeAudioFrameBytes(input.format)
+    const byteEnd = input.byteStart + input.byteLength
+    const sampleStart = Math.floor(input.byteStart / frameBytes)
+    const sampleCount = realtimeAudioSamples(input.byteLength, input.format)
+    const maxSampleCount = Math.max(
+      1,
+      Math.floor((input.format.sampleRate * REALTIME_AUDIO_SPAN_MAX_MS) / 1000)
+    )
+    const draft = audioSpanDrafts[input.stream]
+    const compatible =
+      draft &&
+      draft.producerId === input.producerId &&
+      draft.timingSource === input.timingSource &&
+      draft.participantId === input.participantId &&
+      draft.providerItemId === input.providerItemId &&
+      draft.responseId === input.responseId &&
+      draft.byteEnd === input.byteStart &&
+      draft.sampleRate === input.format.sampleRate &&
+      draft.channels === input.format.channels &&
+      draft.sampleCount + sampleCount <= maxSampleCount
+
+    if (compatible) {
+      draft.byteEnd = byteEnd
+      draft.sampleCount += sampleCount
+      draft.receivedAt = input.receivedAt ?? draft.receivedAt
+      return
+    }
+
+    flushAudioSpan(input.stream)
+    const seq =
+      input.stream === `input` ? inputAudioSpanSeq++ : outputAudioSpanSeq++
+    audioSpanDrafts[input.stream] = {
+      stream: input.stream,
+      seq,
+      producerId: input.producerId,
+      producerEpoch: config.epoch,
+      byteStart: input.byteStart,
+      byteEnd,
+      sampleStart,
+      sampleCount,
+      sampleRate: input.format.sampleRate,
+      channels: input.format.channels,
+      timingSource: input.timingSource,
+      createdAt: new Date().toISOString(),
+      capturedAt: input.capturedAt,
+      receivedAt: input.receivedAt,
+      participantId: input.participantId,
+      providerItemId: input.providerItemId,
+      responseId: input.responseId,
+    }
   }
 
   const discardCommittedAudioChunks = (): void => {
@@ -359,6 +513,16 @@ function createRealtimeStreamIo(
             const start = audioInBytes
             audioInChunks = nextChunkCount
             audioInBytes += chunk.byteLength
+            appendAudioSpan({
+              stream: `input`,
+              byteStart: start,
+              byteLength: chunk.byteLength,
+              format: inputAudioFormat,
+              producerId: session.streams.audio_in,
+              timingSource: `runtime`,
+              participantId: `user`,
+              receivedAt: new Date().toISOString(),
+            })
             if (manualInputCommits) {
               pendingAudioChunks.push({
                 start,
@@ -459,6 +623,7 @@ function createRealtimeStreamIo(
         )
       }
       if (event.type === `output_audio.delta`) {
+        const byteStart = audioOutBytes
         audioOutChunks += 1
         audioOutBytes += event.audio.byteLength
         if (audioOutChunks === 1) {
@@ -467,6 +632,18 @@ function createRealtimeStreamIo(
             `realtime audio/out first chunk session=${session.id} bytes=${event.audio.byteLength}`
           )
         }
+        appendAudioSpan({
+          stream: `output`,
+          byteStart,
+          byteLength: event.audio.byteLength,
+          format: outputAudioFormat,
+          producerId: session.streams.audio_out,
+          timingSource: `provider`,
+          participantId: `assistant`,
+          providerItemId: event.itemId,
+          responseId: event.responseId,
+          receivedAt: new Date().toISOString(),
+        })
         trackOutputAppend(
           audioOut.append(event.audio),
           `realtime audio/out append failed`
@@ -481,6 +658,8 @@ function createRealtimeStreamIo(
       abort.abort()
       config.runSignal?.removeEventListener(`abort`, abortFromRun)
       await Promise.allSettled([...tasks, ...pendingOutputAppends])
+      flushAudioSpan(`input`)
+      flushAudioSpan(`output`)
       runtimeLog.info(
         logPrefix,
         `realtime stream bridge closed session=${session.id} audioInChunks=${audioInChunks} audioInBytes=${audioInBytes} controlInCommands=${controlInCommands} providerEvents=${controlOutEvents} audioOutChunks=${audioOutChunks} audioOutBytes=${audioOutBytes}`
@@ -1002,6 +1181,13 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
       id: session.id,
       provider: session.provider,
       model: session.model,
+      ...(session.voice ? { voice: session.voice } : {}),
+      ...(session.reasoningEffort
+        ? { reasoningEffort: session.reasoningEffort }
+        : {}),
+      ...(typeof session.interruptResponse === `boolean`
+        ? { interruptResponse: session.interruptResponse }
+        : {}),
       status,
       startedAt: session.startedAt,
       endedAt: endedAt ?? null,
@@ -1018,6 +1204,13 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
           session_id: session.id,
           provider: session.provider,
           model: session.model,
+          ...(session.voice ? { voice: session.voice } : {}),
+          ...(session.reasoningEffort
+            ? { reasoning_effort: session.reasoningEffort }
+            : {}),
+          ...(typeof session.interruptResponse === `boolean`
+            ? { interrupt_response: session.interruptResponse }
+            : {}),
           status,
           started_at: session.startedAt,
           ...(endedAt ? { ended_at: endedAt } : {}),
@@ -1944,6 +2137,7 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         activeRealtimeConfig.toolPolicy
       )
       const activeRealtimeSessionId = realtimeSession?.id
+      let realtimeCloseReason: string | undefined
       const messages =
         activeRealtimeConfig.context?.includeTimeline === false
           ? []
@@ -1962,6 +2156,7 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
             )
       let realtimeIo: RealtimeStreamIo | undefined
       let realtimeSessionTerminalWritten = false
+      let realtimeSessionLimitTimer: ReturnType<typeof setTimeout> | undefined
 
       async function handleProviderEvent(
         event: RealtimeProviderEvent
@@ -2020,6 +2215,10 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
             break
 
           case `session.closed`:
+            realtimeCloseReason = event.reason
+            endText()
+            break
+
           case `response.completed`:
             endText()
             break
@@ -2146,6 +2345,15 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
               session: realtimeSession,
               signal: config.runSignal,
             })
+          realtimeSessionLimitTimer = setTimeout(() => {
+            runtimeLog.info(
+              `[agent-runtime]`,
+              `realtime session soft limit reached session=${realtimeSession?.id ?? `ephemeral`}`
+            )
+            void activeRealtimeProviderSession?.close?.(
+              `session-duration-limit`
+            )
+          }, REALTIME_SESSION_SOFT_LIMIT_MS)
           await updateRealtimeSessionStatus(realtimeSession, `active`)
           realtimeIo = createRealtimeStreamIo(
             config,
@@ -2165,7 +2373,9 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
 
         endText()
         await updateRealtimeSessionStatus(realtimeSession, `closed`, {
-          reason: config.runSignal?.aborted ? `aborted` : `completed`,
+          reason: config.runSignal?.aborted
+            ? `aborted`
+            : (realtimeCloseReason ?? `completed`),
         })
         realtimeSessionTerminalWritten = true
         bridge.onStepEnd({
@@ -2190,6 +2400,9 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         bridge.onRunEnd({ finishReason: `error` })
         throw error
       } finally {
+        if (realtimeSessionLimitTimer) {
+          clearTimeout(realtimeSessionLimitTimer)
+        }
         await realtimeIo?.close()
         activeRealtimeProviderSession = null
       }

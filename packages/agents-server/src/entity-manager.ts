@@ -14,8 +14,16 @@ import {
   resolveCronScheduleSpec,
   validateComposerInputPayload,
   validateSlashCommandDefinitions,
+  DEFAULT_OPENAI_REALTIME_REASONING_EFFORT,
+  DEFAULT_OPENAI_REALTIME_VOICE,
+  isOpenAIRealtimeModel,
+  isOpenAIRealtimeReasoningEffort,
+  isOpenAIRealtimeVoice,
 } from '@electric-ax/agents-runtime'
-import type { EventPointer } from '@electric-ax/agents-runtime'
+import type {
+  EventPointer,
+  OpenAIRealtimeReasoningEffort,
+} from '@electric-ax/agents-runtime'
 import {
   ErrCodeDuplicateURL,
   ErrCodeEntityPersistFailed,
@@ -125,6 +133,9 @@ export type RealtimeSessionCreateRequest = {
   id?: string
   provider: string
   model: string
+  voice?: string
+  reasoningEffort?: OpenAIRealtimeReasoningEffort
+  interruptResponse?: boolean
   inputAudio?: RealtimeAudioRequest
   outputAudio?: RealtimeAudioRequest
   meta?: Record<string, unknown>
@@ -135,6 +146,9 @@ export type RealtimeSessionCreateResult = {
   entityUrl: string
   provider: string
   model: string
+  voice?: string
+  reasoningEffort?: OpenAIRealtimeReasoningEffort
+  interruptResponse?: boolean
   status: `requested`
   startedAt: string
   streams: {
@@ -2722,6 +2736,31 @@ export class EntityManager {
         400
       )
     }
+    if (!isOpenAIRealtimeModel(model)) {
+      throw new ElectricAgentsError(
+        ErrCodeInvalidRequest,
+        `OpenAI realtime model "${model}" is not supported`,
+        400
+      )
+    }
+    const voice = req.voice?.trim() || DEFAULT_OPENAI_REALTIME_VOICE
+    if (!isOpenAIRealtimeVoice(voice)) {
+      throw new ElectricAgentsError(
+        ErrCodeInvalidRequest,
+        `OpenAI realtime voice "${voice}" is not supported`,
+        400
+      )
+    }
+    const reasoningEffort =
+      req.reasoningEffort ?? DEFAULT_OPENAI_REALTIME_REASONING_EFFORT
+    if (!isOpenAIRealtimeReasoningEffort(reasoningEffort)) {
+      throw new ElectricAgentsError(
+        ErrCodeInvalidRequest,
+        `OpenAI realtime reasoning effort "${String(reasoningEffort)}" is not supported`,
+        400
+      )
+    }
+    const interruptResponse = req.interruptResponse !== false
 
     const sessionId = req.id ?? `rt-${randomUUID()}`
     validateRealtimeSessionId(sessionId)
@@ -2758,6 +2797,9 @@ export class EntityManager {
           id: sessionId,
           provider,
           model,
+          voice,
+          reasoningEffort,
+          interruptResponse,
           status: `requested`,
           startedAt,
           endedAt: null,
@@ -2774,6 +2816,9 @@ export class EntityManager {
           session_id: sessionId,
           provider,
           model,
+          voice,
+          reasoning_effort: reasoningEffort,
+          interrupt_response: interruptResponse,
           status: `requested`,
           started_at: startedAt,
           streams,
@@ -2802,6 +2847,9 @@ export class EntityManager {
                 sessionId,
                 provider,
                 model,
+                voice,
+                reasoningEffort,
+                interruptResponse,
                 streams,
               },
               timestamp: startedAt,
@@ -2833,6 +2881,9 @@ export class EntityManager {
       entityUrl,
       provider,
       model,
+      voice,
+      reasoningEffort,
+      interruptResponse,
       status: `requested`,
       startedAt,
       streams,

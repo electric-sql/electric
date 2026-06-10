@@ -330,8 +330,8 @@ export function createDesktopMainController(ctx: DesktopAppContext) {
     runtime.refreshPowerSaveBlocker()
   }
 
-  const getRealtimeSettingsStatus = () =>
-    RealtimeSettings.realtimeSettingsStatus({
+  const getRealtimeSettingsStatus = async () =>
+    await RealtimeSettings.realtimeSettingsStatus({
       settings,
       apiKeys,
       launchEnv: ctx.envApiKeysSnapshot,

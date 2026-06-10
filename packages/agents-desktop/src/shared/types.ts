@@ -4,6 +4,12 @@ import type {
   McpServerConfig,
   RegistrySnapshot,
 } from '@electric-ax/agents'
+import type {
+  OpenAIRealtimeReasoningEffort,
+  RealtimeModelChoice,
+  RealtimeReasoningEffortChoice,
+  RealtimeVoiceChoice,
+} from '@electric-ax/agents-runtime'
 
 export type ServerSource = `manual` | `local-discovery` | `electric-cloud`
 export type ServerDesiredState = `connected` | `disconnected`
@@ -127,19 +133,25 @@ export type RealtimeProvider = `openai`
 export type RealtimeSettings = {
   provider: RealtimeProvider
   model: string
+  voice: string
+  reasoningEffort: OpenAIRealtimeReasoningEffort
+  interruptResponse: boolean
 }
 
-export type RealtimeModelChoice = {
-  id: string
-  label: string
-  description: string
-  recommended?: boolean
-}
+export type RealtimeCredentialStatus =
+  | `missing`
+  | `valid`
+  | `invalid`
+  | `unknown`
 
 export type RealtimeSettingsStatus = {
   settings: RealtimeSettings
   availableModels: Array<RealtimeModelChoice>
+  availableVoices: Array<RealtimeVoiceChoice>
+  availableReasoningEfforts: Array<RealtimeReasoningEffortChoice>
   hasOpenAIApiKey: boolean
+  openAIApiKeyStatus: RealtimeCredentialStatus
+  openAIApiKeyError?: string
   codexEnabled: boolean
 }
 

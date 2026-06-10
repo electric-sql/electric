@@ -41,6 +41,15 @@ const realtimeSessionCreateBodySchema = Type.Object(
     id: Type.Optional(Type.String()),
     provider: Type.String(),
     model: Type.String(),
+    voice: Type.Optional(Type.String()),
+    reasoningEffort: Type.Optional(
+      Type.Union([
+        Type.Literal(`low`),
+        Type.Literal(`medium`),
+        Type.Literal(`high`),
+      ])
+    ),
+    interruptResponse: Type.Optional(Type.Boolean()),
     inputAudio: Type.Optional(realtimeAudioRequestSchema),
     outputAudio: Type.Optional(realtimeAudioRequestSchema),
     meta: Type.Optional(Type.Record(Type.String(), Type.Unknown())),

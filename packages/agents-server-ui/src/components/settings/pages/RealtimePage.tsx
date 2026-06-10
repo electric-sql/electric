@@ -5,7 +5,7 @@ import {
   saveRealtimeSettings,
   type RealtimeSettingsStatus,
 } from '../../../lib/server-connection'
-import { Button, Select, Text } from '../../../ui'
+import { Button, Select, Switch, Text } from '../../../ui'
 import {
   SettingsPanel,
   SettingsRow,
@@ -37,13 +37,30 @@ export function RealtimePage(): React.ReactElement {
     () => new Map(status?.availableModels.map((model) => [model.id, model])),
     [status?.availableModels]
   )
+  const voiceById = useMemo(
+    () => new Map(status?.availableVoices.map((voice) => [voice.id, voice])),
+    [status?.availableVoices]
+  )
+  const reasoningEffortById = useMemo(
+    () =>
+      new Map(
+        status?.availableReasoningEfforts.map((effort) => [effort.id, effort])
+      ),
+    [status?.availableReasoningEfforts]
+  )
   const selectedModel = status ? modelById.get(status.settings.model) : null
+  const selectedVoice = status ? voiceById.get(status.settings.voice) : null
+  const selectedReasoningEffort = status
+    ? reasoningEffortById.get(status.settings.reasoningEffort)
+    : null
 
-  const saveModel = async (model: string | null): Promise<void> => {
-    if (!model || !status) return
+  const saveSettingsPatch = async (
+    patch: Partial<RealtimeSettingsStatus[`settings`]>
+  ): Promise<void> => {
+    if (!status) return
     const next = {
       ...status,
-      settings: { ...status.settings, model },
+      settings: { ...status.settings, ...patch },
     }
     setStatus(next)
     setSaving(true)
@@ -87,9 +104,13 @@ export function RealtimePage(): React.ReactElement {
               control={
                 <>
                   <SettingsStatusBadge
-                    tone={status.hasOpenAIApiKey ? `success` : `warning`}
+                    tone={
+                      status.openAIApiKeyStatus === `valid`
+                        ? `success`
+                        : `warning`
+                    }
                   >
-                    {status.hasOpenAIApiKey ? `Ready` : `API key required`}
+                    {authBadgeLabel(status)}
                   </SettingsStatusBadge>
                   <Button
                     type="button"
@@ -126,7 +147,7 @@ export function RealtimePage(): React.ReactElement {
                 <Select.Root
                   value={status.settings.model}
                   onValueChange={(model) => {
-                    void saveModel(model)
+                    if (model) void saveSettingsPatch({ model })
                   }}
                   disabled={saving}
                 >
@@ -146,6 +167,96 @@ export function RealtimePage(): React.ReactElement {
                 </Select.Root>
               }
             />
+            <SettingsRow
+              label="Voice"
+              description={
+                selectedVoice?.description ??
+                `The OpenAI voice used for audio output. Voice is locked after a session starts.`
+              }
+              splitLayout
+              control={
+                <Select.Root
+                  value={status.settings.voice}
+                  onValueChange={(voice) => {
+                    if (voice) void saveSettingsPatch({ voice })
+                  }}
+                  disabled={saving}
+                >
+                  <Select.Trigger
+                    className={styles.modelSelect}
+                    renderValue={(voice) =>
+                      voice ? (voiceById.get(voice)?.label ?? voice) : `Voice`
+                    }
+                  />
+                  <Select.Content>
+                    {status.availableVoices.map((voice) => (
+                      <Select.Item key={voice.id} value={voice.id}>
+                        {voice.label}
+                      </Select.Item>
+                    ))}
+                  </Select.Content>
+                </Select.Root>
+              }
+            />
+            <SettingsRow
+              label="Reasoning effort"
+              description={
+                status.settings.model === `gpt-realtime-2`
+                  ? (selectedReasoningEffort?.description ??
+                    `How much reasoning GPT-Realtime-2 should spend before responding.`)
+                  : `Reasoning effort only applies to GPT-Realtime-2.`
+              }
+              splitLayout
+              control={
+                <Select.Root
+                  value={status.settings.reasoningEffort}
+                  onValueChange={(reasoningEffort) => {
+                    if (reasoningEffort) {
+                      void saveSettingsPatch({
+                        reasoningEffort:
+                          reasoningEffort as RealtimeSettingsStatus[`settings`][`reasoningEffort`],
+                      })
+                    }
+                  }}
+                  disabled={
+                    saving || status.settings.model !== `gpt-realtime-2`
+                  }
+                >
+                  <Select.Trigger
+                    className={styles.modelSelect}
+                    renderValue={(reasoningEffort) =>
+                      reasoningEffort
+                        ? (reasoningEffortById.get(
+                            reasoningEffort as RealtimeSettingsStatus[`settings`][`reasoningEffort`]
+                          )?.label ?? reasoningEffort)
+                        : `Effort`
+                    }
+                  />
+                  <Select.Content>
+                    {status.availableReasoningEfforts.map((effort) => (
+                      <Select.Item key={effort.id} value={effort.id}>
+                        {effort.label}
+                      </Select.Item>
+                    ))}
+                  </Select.Content>
+                </Select.Root>
+              }
+            />
+            <SettingsRow
+              label="Interrupt responses"
+              description="Stop current audio when OpenAI detects new user speech. Disable this in noisy rooms if short sounds cut Horton off."
+              splitLayout
+              control={
+                <Switch
+                  checked={status.settings.interruptResponse}
+                  disabled={saving}
+                  ariaLabel="Interrupt responses"
+                  onCheckedChange={(interruptResponse) => {
+                    void saveSettingsPatch({ interruptResponse })
+                  }}
+                />
+              }
+            />
             {saving && (
               <SettingsPanel>
                 <Text size={2} tone="muted">
@@ -163,6 +274,43 @@ export function RealtimePage(): React.ReactElement {
           </>
         )}
       </SettingsSection>
+
+      {status && (
+        <SettingsSection
+          title="Available voices"
+          description="Voices exposed for realtime audio output."
+        >
+          <SettingsPanel>
+            <div className={styles.modelList}>
+              {status.availableVoices.map((voice) => (
+                <div key={voice.id} className={styles.modelItem}>
+                  <div className={styles.modelText}>
+                    <span className={styles.modelTitle}>
+                      {voice.label}
+                      {voice.recommended && (
+                        <SettingsStatusBadge tone="info">
+                          Recommended
+                        </SettingsStatusBadge>
+                      )}
+                    </span>
+                    <span className={styles.modelId}>{voice.id}</span>
+                    <span className={styles.modelDescription}>
+                      {voice.description}
+                    </span>
+                  </div>
+                  {voice.id === status.settings.voice && (
+                    <span className={styles.recommended}>
+                      <SettingsStatusBadge tone="success">
+                        Selected
+                      </SettingsStatusBadge>
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </SettingsPanel>
+        </SettingsSection>
+      )}
 
       {status && (
         <SettingsSection
@@ -205,11 +353,36 @@ export function RealtimePage(): React.ReactElement {
 }
 
 function authDescription(status: RealtimeSettingsStatus): string {
-  if (status.hasOpenAIApiKey) {
+  if (status.openAIApiKeyStatus === `valid`) {
     return `Realtime sessions connect to the OpenAI Realtime API with your OpenAI API key.`
+  }
+  if (status.openAIApiKeyStatus === `invalid`) {
+    return (
+      status.openAIApiKeyError ??
+      `The configured OpenAI API key could not be used for realtime audio.`
+    )
+  }
+  if (status.openAIApiKeyStatus === `unknown`) {
+    return (
+      status.openAIApiKeyError ??
+      `Unable to verify realtime API access right now.`
+    )
   }
   if (status.codexEnabled) {
     return `ChatGPT / Codex sign-in is enabled, but realtime voice still needs an OpenAI API key.`
   }
   return `Add an OpenAI API key in Credentials. ChatGPT / Codex sign-in alone does not grant Realtime API access.`
+}
+
+function authBadgeLabel(status: RealtimeSettingsStatus): string {
+  switch (status.openAIApiKeyStatus) {
+    case `valid`:
+      return `Ready`
+    case `invalid`:
+      return `Invalid key`
+    case `unknown`:
+      return status.hasOpenAIApiKey ? `Verify failed` : `Checking`
+    case `missing`:
+      return `API key required`
+  }
 }

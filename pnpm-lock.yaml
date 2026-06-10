@@ -1600,6 +1600,9 @@ importers:
 
   packages/agents-desktop:
     dependencies:
+      '@electric-ax/agents-runtime':
+        specifier: workspace:*
+        version: link:../agents-runtime
       '@electric-sql/client':
         specifier: ^1.5.21
         version: link:../typescript-client

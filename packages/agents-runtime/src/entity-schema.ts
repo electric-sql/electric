@@ -11,6 +11,7 @@ import type {
 } from '@standard-schema/spec'
 import type { SlashCommandRow } from './composer-input'
 import type { JsonValue } from './types'
+import type { OpenAIRealtimeReasoningEffort } from './realtime-options'
 
 // ============================================================================
 // Passthrough Schema Utility
@@ -413,6 +414,9 @@ type ManifestRealtimeSessionEntryValue = {
   id: string
   provider: string
   model: string
+  voice?: string
+  reasoningEffort?: OpenAIRealtimeReasoningEffort
+  interruptResponse?: boolean
   status: RealtimeSessionStatusValue
   startedAt: string
   endedAt?: string | null
@@ -425,6 +429,9 @@ type RealtimeSessionValue = {
   session_id: string
   provider: string
   model: string
+  voice?: string
+  reasoning_effort?: OpenAIRealtimeReasoningEffort
+  interrupt_response?: boolean
   status: RealtimeSessionStatusValue
   started_at: string
   ended_at?: string
@@ -999,6 +1006,9 @@ function createManifestSchema(): Schema<
       id: z.string(),
       provider: z.string(),
       model: z.string(),
+      voice: z.string().optional(),
+      reasoningEffort: z.enum([`low`, `medium`, `high`]).optional(),
+      interruptResponse: z.boolean().optional(),
       status: createRealtimeSessionStatusSchema(),
       startedAt: z.string(),
       endedAt: z.string().nullable().optional(),
@@ -1027,6 +1037,9 @@ function createRealtimeSessionSchema(): Schema<RealtimeSessionValue> {
     session_id: z.string(),
     provider: z.string(),
     model: z.string(),
+    voice: z.string().optional(),
+    reasoning_effort: z.enum([`low`, `medium`, `high`]).optional(),
+    interrupt_response: z.boolean().optional(),
     status: createRealtimeSessionStatusSchema(),
     started_at: z.string(),
     ended_at: z.string().optional(),

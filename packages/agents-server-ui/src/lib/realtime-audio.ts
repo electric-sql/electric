@@ -11,6 +11,7 @@ export type RealtimeAudioSession = {
 
 type RealtimeSessionCreateResult = {
   sessionId: string
+  interruptResponse: boolean
   streams: {
     audio_in: string
     audio_out: string
@@ -48,6 +49,10 @@ const MIC_NOISE_MARGIN_CONTINUE = 0.004
 const MIC_NOISE_FLOOR_INITIAL = 0.003
 const MIC_NOISE_FLOOR_MAX = 0.018
 const MIC_NOISE_FLOOR_ALPHA = 0.008
+const SILENT_GREETING_DELAY_MS = 1000
+const SILENT_GREETING_TEXT =
+  `The user started a voice session but has not spoken yet. ` +
+  `Say a brief friendly hello and ask how you can help.`
 
 const NO_RETRY_BACKOFF = {
   initialDelay: 100,
@@ -60,6 +65,11 @@ type MicCapture = {
   node: AudioNode
   cleanup: () => void
   mode: `audio-worklet` | `script-processor`
+}
+
+type EncodedMicAudio = {
+  bytes: Uint8Array
+  level: number
 }
 
 function realtimeUrl(baseUrl: string): string {
@@ -104,6 +114,56 @@ function combineChunks(chunks: Array<Uint8Array>): Uint8Array {
     offset += chunk.byteLength
   }
   return combined
+}
+
+class Pcm16MicEncoder {
+  private readonly sourceSampleRate: number
+  private readonly targetSampleRate: number
+  private readonly sourceSamplesPerTargetSample: number
+  private nextSourceOffset = 0
+
+  constructor(sourceSampleRate: number, targetSampleRate: number) {
+    this.sourceSampleRate =
+      Number.isFinite(sourceSampleRate) && sourceSampleRate > 0
+        ? sourceSampleRate
+        : targetSampleRate
+    this.targetSampleRate = targetSampleRate
+    this.sourceSamplesPerTargetSample =
+      this.sourceSampleRate / this.targetSampleRate
+  }
+
+  encode(input: Float32Array): EncodedMicAudio | null {
+    if (input.length === 0) return null
+    const samples =
+      this.sourceSampleRate === this.targetSampleRate
+        ? input
+        : this.resample(input)
+    if (samples.length === 0) return null
+    return { bytes: pcm16Bytes(samples), level: audioLevel(samples) }
+  }
+
+  private resample(input: Float32Array): Float32Array {
+    const ratio = this.sourceSamplesPerTargetSample
+    if (!Number.isFinite(ratio) || ratio <= 0) return input
+
+    const samples: Array<number> = []
+    let sourceOffset = this.nextSourceOffset
+
+    while (sourceOffset < input.length) {
+      const leftIndex = Math.floor(sourceOffset)
+      const rightIndex = Math.min(leftIndex + 1, input.length - 1)
+      const fraction = sourceOffset - leftIndex
+      const left = input[leftIndex] ?? 0
+      const right = input[rightIndex] ?? left
+      samples.push(left + (right - left) * fraction)
+      sourceOffset += ratio
+    }
+
+    this.nextSourceOffset = sourceOffset - input.length
+    if (this.nextSourceOffset < 0) this.nextSourceOffset = 0
+
+    return Float32Array.from(samples)
+  }
 }
 
 function audioLevel(input: Float32Array): number {
@@ -174,22 +234,19 @@ class RealtimeMicCaptureProcessor extends AudioWorkletProcessor {
   }
 
   reset() {
-    this.buffer = new ArrayBuffer(this.chunkSamples * 2)
-    this.view = new DataView(this.buffer)
+    this.buffer = new Float32Array(this.chunkSamples)
     this.offset = 0
-    this.sumSquares = 0
   }
 
   flush() {
     if (this.offset === 0) return
-    const byteLength = this.offset * 2
-    const audio =
-      byteLength === this.buffer.byteLength
+    const samples =
+      this.offset === this.buffer.length
         ? this.buffer
-        : this.buffer.slice(0, byteLength)
-    const rms = Math.sqrt(this.sumSquares / this.offset)
-    const level = Math.max(0, Math.min(1, rms * 8))
-    this.port.postMessage({ type: 'audio', audio, level }, [audio])
+        : this.buffer.slice(0, this.offset)
+    this.port.postMessage({ type: 'samples', samples: samples.buffer }, [
+      samples.buffer,
+    ])
     this.reset()
   }
 
@@ -202,12 +259,7 @@ class RealtimeMicCaptureProcessor extends AudioWorkletProcessor {
 
     for (let index = 0; index < input.length; index += 1) {
       const sample = Math.max(-1, Math.min(1, input[index] || 0))
-      this.view.setInt16(
-        this.offset * 2,
-        sample < 0 ? sample * 0x8000 : sample * 0x7fff,
-        true
-      )
-      this.sumSquares += sample * sample
+      this.buffer[this.offset] = sample
       this.offset += 1
       if (this.offset === this.chunkSamples) this.flush()
     }
@@ -242,7 +294,7 @@ function createAudioContext(): AudioContext {
 
 function createScriptProcessorMicCapture(
   context: AudioContext,
-  onAudio: (bytes: Uint8Array, level: number) => void
+  onSamples: (samples: Float32Array) => void
 ): MicCapture {
   const processor = context.createScriptProcessor(
     MIC_CAPTURE_CHUNK_SAMPLES,
@@ -250,8 +302,7 @@ function createScriptProcessorMicCapture(
     1
   )
   processor.onaudioprocess = (event) => {
-    const input = event.inputBuffer.getChannelData(0)
-    onAudio(pcm16Bytes(input), audioLevel(input))
+    onSamples(event.inputBuffer.getChannelData(0))
   }
   return {
     node: processor,
@@ -264,7 +315,7 @@ function createScriptProcessorMicCapture(
 
 async function createAudioWorkletMicCapture(
   context: AudioContext,
-  onAudio: (bytes: Uint8Array, level: number) => void
+  onSamples: (samples: Float32Array) => void
 ): Promise<MicCapture> {
   const workletUrl = URL.createObjectURL(
     new Blob([micWorkletSource()], { type: `application/javascript` })
@@ -284,17 +335,11 @@ async function createAudioWorkletMicCapture(
     },
   })
   node.port.onmessage = (event: MessageEvent<unknown>) => {
-    const data = event.data as
-      | { type?: unknown; audio?: unknown; level?: unknown }
-      | undefined
-    if (
-      data?.type !== `audio` ||
-      !(data.audio instanceof ArrayBuffer) ||
-      typeof data.level !== `number`
-    ) {
+    const data = event.data as { type?: unknown; samples?: unknown } | undefined
+    if (data?.type !== `samples` || !(data.samples instanceof ArrayBuffer)) {
       return
     }
-    onAudio(new Uint8Array(data.audio), data.level)
+    onSamples(new Float32Array(data.samples))
   }
 
   return {
@@ -311,9 +356,16 @@ async function createMicCapture(
   context: AudioContext,
   onAudio: (bytes: Uint8Array, level: number) => void
 ): Promise<MicCapture> {
+  const encoder = new Pcm16MicEncoder(context.sampleRate, REALTIME_SAMPLE_RATE)
+  const onSamples = (samples: Float32Array): void => {
+    const encoded = encoder.encode(samples)
+    if (!encoded) return
+    onAudio(encoded.bytes, encoded.level)
+  }
+
   if (context.audioWorklet) {
     try {
-      return await createAudioWorkletMicCapture(context, onAudio)
+      return await createAudioWorkletMicCapture(context, onSamples)
     } catch (error) {
       console.warn(
         `[realtime-audio] audio worklet unavailable, using script processor fallback`,
@@ -321,7 +373,7 @@ async function createMicCapture(
       )
     }
   }
-  return createScriptProcessorMicCapture(context, onAudio)
+  return createScriptProcessorMicCapture(context, onSamples)
 }
 
 async function createRealtimeSession(
@@ -329,6 +381,16 @@ async function createRealtimeSession(
   entityUrl: string
 ): Promise<RealtimeSessionCreateResult> {
   const realtimeSettings = await loadRealtimeSettingsStatus()
+  if (
+    typeof window !== `undefined` &&
+    typeof window.electronAPI?.getRealtimeSettings === `function` &&
+    realtimeSettings.openAIApiKeyStatus !== `valid`
+  ) {
+    throw new Error(
+      realtimeSettings.openAIApiKeyError ??
+        `OpenAI API key must be verified before starting voice mode.`
+    )
+  }
   const response = await serverFetch(realtimeUrl(baseUrl), {
     method: `POST`,
     headers: { 'content-type': `application/json` },
@@ -336,6 +398,9 @@ async function createRealtimeSession(
       entityUrl,
       provider: `openai`,
       model: realtimeSettings.settings.model,
+      voice: realtimeSettings.settings.voice,
+      reasoningEffort: realtimeSettings.settings.reasoningEffort,
+      interruptResponse: realtimeSettings.settings.interruptResponse,
       inputAudio: {
         codec: `pcm16`,
         sampleRate: REALTIME_SAMPLE_RATE,
@@ -354,17 +419,27 @@ async function createRealtimeSession(
       `Failed to start realtime session (${response.status}): ${await response.text()}`
     )
   }
-  return (await response.json()) as RealtimeSessionCreateResult
+  return {
+    ...((await response.json()) as Omit<
+      RealtimeSessionCreateResult,
+      `interruptResponse`
+    >),
+    interruptResponse: realtimeSettings.settings.interruptResponse,
+  }
 }
 
 export async function startRealtimeAudioSession({
   baseUrl,
   entityUrl,
   onInputLevel,
+  initialText,
+  greetIfSilent = false,
 }: {
   baseUrl: string
   entityUrl: string
   onInputLevel?: (level: number) => void
+  initialText?: string
+  greetIfSilent?: boolean
 }): Promise<RealtimeAudioSession> {
   const abort = new AbortController()
   const micContext = createAudioContext()
@@ -400,6 +475,11 @@ export async function startRealtimeAudioSession({
   let wakeAudioInputWriter: (() => void) | undefined
   let activeResponseId: string | undefined
   let responseActive = false
+  let userSpeechSeen = false
+  let textTurnSent = false
+  let silentGreetingTimer: number | undefined
+  let providerStarted = false
+  let initialStartHandled = false
   const preSpeechChunks: Array<Uint8Array> = []
   const audioQueue: Array<Uint8Array> = []
   const pendingAudioAppends = new Set<Promise<void>>()
@@ -408,6 +488,60 @@ export async function startRealtimeAudioSession({
 
   const appendControl = async (value: unknown): Promise<void> => {
     await controlIn?.append(jsonBytes(value))
+  }
+
+  const cancelSilentGreeting = (): void => {
+    if (silentGreetingTimer === undefined) return
+    window.clearTimeout(silentGreetingTimer)
+    silentGreetingTimer = undefined
+  }
+
+  const markUserSpeechSeen = (): void => {
+    userSpeechSeen = true
+    cancelSilentGreeting()
+  }
+
+  const sendTextTurn = async (text: string): Promise<void> => {
+    const trimmed = text.trim()
+    if (!trimmed) return
+    textTurnSent = true
+    cancelSilentGreeting()
+    await appendControl({ type: `input_text`, text: trimmed })
+  }
+
+  const scheduleSilentGreeting = (): void => {
+    if (!greetIfSilent || initialText?.trim()) return
+    cancelSilentGreeting()
+    console.info(
+      `[realtime-audio] scheduling silent greeting session=${session?.sessionId} delayMs=${SILENT_GREETING_DELAY_MS}`
+    )
+    silentGreetingTimer = window.setTimeout(() => {
+      silentGreetingTimer = undefined
+      if (abort.signal.aborted || userSpeechSeen || textTurnSent) {
+        console.info(
+          `[realtime-audio] silent greeting skipped session=${session?.sessionId} userSpeechSeen=${userSpeechSeen} textTurnSent=${textTurnSent}`
+        )
+        return
+      }
+      console.info(
+        `[realtime-audio] sending silent greeting session=${session?.sessionId}`
+      )
+      void sendTextTurn(SILENT_GREETING_TEXT).catch((error) => {
+        console.warn(`[realtime-audio] silent greeting failed`, error)
+      })
+    }, SILENT_GREETING_DELAY_MS)
+  }
+
+  const handleInitialRealtimeStart = (): void => {
+    if (!providerStarted || initialStartHandled) return
+    initialStartHandled = true
+    if (initialText?.trim()) {
+      void sendTextTurn(initialText).catch((error) => {
+        console.warn(`[realtime-audio] initial realtime text failed`, error)
+      })
+      return
+    }
+    scheduleSilentGreeting()
   }
 
   const wakeAudioWriter = (): void => {
@@ -599,6 +733,7 @@ export async function startRealtimeAudioSession({
   const cleanup = async (sendClose: boolean): Promise<void> => {
     micCapture?.cleanup()
     micCapture?.node.disconnect()
+    cancelSilentGreeting()
     silentOutput?.disconnect()
     source?.disconnect()
     onInputLevel?.(0)
@@ -735,7 +870,7 @@ export async function startRealtimeAudioSession({
     source = micContext.createMediaStreamSource(media)
     micCapture = await createMicCapture(micContext, handleInputAudio)
     console.info(
-      `[realtime-audio] microphone capture mode session=${session.sessionId} mode=${micCapture.mode}`
+      `[realtime-audio] microphone capture mode session=${session.sessionId} mode=${micCapture.mode} inputRate=${micContext.sampleRate} targetRate=${REALTIME_SAMPLE_RATE}`
     )
     silentOutput = micContext.createGain()
     silentOutput.gain.value = 0
@@ -812,7 +947,10 @@ export async function startRealtimeAudioSession({
               `[realtime-audio] control first event session=${session?.sessionId} type=${event.type}`
             )
           }
-          if (event.type === `response.started`) {
+          if (event.type === `session.started`) {
+            providerStarted = true
+            handleInitialRealtimeStart()
+          } else if (event.type === `response.started`) {
             activeResponseId =
               typeof event.responseId === `string`
                 ? event.responseId
@@ -838,8 +976,14 @@ export async function startRealtimeAudioSession({
             if (typeof event.byteLength === `number`) {
               currentOutputReceivedMs += pcm16DurationMs(event.byteLength)
             }
-          } else if (event.type === `input_audio.speech_started`) {
+          } else if (
+            event.type === `input_audio.speech_started` &&
+            session.interruptResponse
+          ) {
+            markUserSpeechSeen()
             interruptPlayback({ cancelResponse: false })
+          } else if (event.type === `input_audio.speech_started`) {
+            markUserSpeechSeen()
           }
         }
       } finally {
@@ -854,7 +998,7 @@ export async function startRealtimeAudioSession({
     return {
       sessionId: session.sessionId,
       async sendText(text: string) {
-        await appendControl({ type: `input_text`, text })
+        await sendTextTurn(text)
       },
       async stop() {
         await cleanup(true)

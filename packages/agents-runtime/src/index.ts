@@ -155,6 +155,24 @@ export type { TestRealtimeProviderOptions } from './realtime'
 export { createOpenAIRealtimeProvider } from './openai-realtime'
 export type { OpenAIRealtimeProviderOptions } from './openai-realtime'
 export {
+  DEFAULT_OPENAI_REALTIME_MODEL,
+  DEFAULT_OPENAI_REALTIME_REASONING_EFFORT,
+  DEFAULT_OPENAI_REALTIME_VOICE,
+  OPENAI_REALTIME_MODELS,
+  OPENAI_REALTIME_REASONING_EFFORTS,
+  OPENAI_REALTIME_VOICES,
+  isOpenAIRealtimeModel,
+  isOpenAIRealtimeReasoningEffort,
+  isOpenAIRealtimeVoice,
+} from './realtime-options'
+export type {
+  OpenAIRealtimeReasoningEffort,
+  RealtimeModelChoice,
+  RealtimeProviderId,
+  RealtimeReasoningEffortChoice,
+  RealtimeVoiceChoice,
+} from './realtime-options'
+export {
   getEntityAttachmentStreamPath,
   manifestAttachmentKey,
 } from './manifest-helpers'

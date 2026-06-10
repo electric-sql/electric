@@ -11,7 +11,9 @@ export type PreferencesIpcDeps = {
   setLaunchAtLogin: (enabled: boolean) => Promise<LaunchAtLoginStatus>
   getPreventAppSuspension: () => PreventAppSuspensionPreference
   setPreventAppSuspension: (enabled: boolean) => Promise<void>
-  getRealtimeSettingsStatus: () => RealtimeSettingsStatus
+  getRealtimeSettingsStatus: () =>
+    | RealtimeSettingsStatus
+    | Promise<RealtimeSettingsStatus>
   setRealtimeSettings: (settings: RealtimeSettings) => Promise<void>
 }
 

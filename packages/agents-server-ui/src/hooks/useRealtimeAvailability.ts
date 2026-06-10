@@ -21,6 +21,21 @@ function missingCredentialsMessage(codexEnabled: boolean): string {
   return `OpenAI API key required for voice mode. Add one in Settings > Credentials.`
 }
 
+function realtimeUnavailableMessage(
+  status: Awaited<ReturnType<typeof loadRealtimeSettingsStatus>>
+): string {
+  if (status.openAIApiKeyStatus === `missing`) {
+    return missingCredentialsMessage(status.codexEnabled)
+  }
+  if (status.openAIApiKeyStatus === `invalid`) {
+    return (
+      status.openAIApiKeyError ??
+      `OpenAI API key could not be used for realtime audio.`
+    )
+  }
+  return status.openAIApiKeyError ?? `Unable to verify realtime credentials.`
+}
+
 export function useRealtimeAvailability(): RealtimeAvailability {
   const [availability, setAvailability] = useState<RealtimeAvailability>(() => {
     const hasBridge = hasDesktopRealtimeSettingsBridge()
@@ -50,7 +65,7 @@ export function useRealtimeAvailability(): RealtimeAvailability {
     void loadRealtimeSettingsStatus()
       .then((status) => {
         if (cancelled) return
-        if (status.hasOpenAIApiKey) {
+        if (status.openAIApiKeyStatus === `valid`) {
           setAvailability({
             loading: false,
             canStart: true,
@@ -61,7 +76,7 @@ export function useRealtimeAvailability(): RealtimeAvailability {
         setAvailability({
           loading: false,
           canStart: false,
-          unavailableReason: missingCredentialsMessage(status.codexEnabled),
+          unavailableReason: realtimeUnavailableMessage(status),
         })
       })
       .catch(() => {

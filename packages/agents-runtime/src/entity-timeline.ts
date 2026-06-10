@@ -717,6 +717,23 @@ function getOrderableCollection<TRow extends { key: string | number }>(
   return collection
 }
 
+function getOptionalOrderableCollection<TRow extends { key: string | number }>(
+  collection:
+    | {
+        id?: string
+        toArray: Array<TRow>
+        __electricRowOffsets?: Map<string | number, EventPointer>
+      }
+    | undefined,
+  id: string
+): {
+  id?: string
+  toArray: Array<TRow>
+  __electricRowOffsets?: Map<string | number, EventPointer>
+} {
+  return collection ?? { id, toArray: [] }
+}
+
 function createOrderIndex(
   groups: ReadonlyArray<ReadonlyArray<{ _orderToken: string }>>
 ): Map<string, TimelineOrder> {
@@ -1174,7 +1191,7 @@ export function buildEntityTimelineData(
   const wakes = withOrderToken(db.collections.wakes)
   const signals = withOrderToken(db.collections.signals)
   const realtimeTranscripts = withOrderToken(
-    getOrderableCollection<RealtimeTranscriptValueRow>(
+    getOptionalOrderableCollection<RealtimeTranscriptValueRow>(
       db.collections.realtimeTranscripts as
         | typeof db.collections.realtimeTranscripts
         | undefined,

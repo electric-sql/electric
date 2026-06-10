@@ -76,6 +76,8 @@ export function MessageInput({
   onSend,
   onStop,
   autoStartRealtimeSignal,
+  autoStartRealtimeInitialText,
+  autoStartRealtimeGreetIfSilent = false,
   onRealtimeAutoStartConsumed,
 }: {
   db: EntityStreamDBWithActions | null
@@ -99,6 +101,8 @@ export function MessageInput({
   onSend?: () => void
   onStop?: () => void
   autoStartRealtimeSignal?: string | null
+  autoStartRealtimeInitialText?: string
+  autoStartRealtimeGreetIfSilent?: boolean
   onRealtimeAutoStartConsumed?: () => void
   /**
    * Optional content rendered above the composer, sharing its docked
@@ -247,6 +251,7 @@ export function MessageInput({
     !inputDisabled &&
     !editingMessage &&
     !isCommentMode &&
+    attachmentCount === 0 &&
     Boolean(baseUrl) &&
     realtimeAvailability.canStart
 
@@ -357,6 +362,48 @@ export function MessageInput({
     handleSubmit()
   }, [canStop, handleSubmit, onStop])
 
+  const startRealtimeSession = useCallback(
+    ({
+      initialText,
+      greetIfSilent = false,
+    }: { initialText?: string; greetIfSilent?: boolean } = {}) => {
+      if (realtimePending) return
+      setError(null)
+      if (!canStartRealtime) {
+        if (realtimeAvailability.unavailableReason) {
+          setError(realtimeAvailability.unavailableReason)
+        }
+        return
+      }
+      setRealtimePending(true)
+      startRealtimeAudioSession({
+        baseUrl,
+        entityUrl,
+        onInputLevel: setRealtimeInputLevel,
+        initialText,
+        greetIfSilent,
+      })
+        .then((session) => {
+          realtimeSessionRef.current = session
+          setRealtimeActive(true)
+        })
+        .catch((err: Error) => {
+          setError(err.message)
+          setRealtimeInputLevel(0)
+        })
+        .finally(() => {
+          setRealtimePending(false)
+        })
+    },
+    [
+      baseUrl,
+      canStartRealtime,
+      entityUrl,
+      realtimeAvailability.unavailableReason,
+      realtimePending,
+    ]
+  )
+
   const handleRealtimeToggle = useCallback(() => {
     if (realtimePending) return
     setError(null)
@@ -374,36 +421,8 @@ export function MessageInput({
         })
       return
     }
-    if (!canStartRealtime) {
-      if (realtimeAvailability.unavailableReason) {
-        setError(realtimeAvailability.unavailableReason)
-      }
-      return
-    }
-    setRealtimePending(true)
-    startRealtimeAudioSession({
-      baseUrl,
-      entityUrl,
-      onInputLevel: setRealtimeInputLevel,
-    })
-      .then((session) => {
-        realtimeSessionRef.current = session
-        setRealtimeActive(true)
-      })
-      .catch((err: Error) => {
-        setError(err.message)
-        setRealtimeInputLevel(0)
-      })
-      .finally(() => {
-        setRealtimePending(false)
-      })
-  }, [
-    baseUrl,
-    canStartRealtime,
-    entityUrl,
-    realtimeAvailability.unavailableReason,
-    realtimePending,
-  ])
+    startRealtimeSession()
+  }, [realtimePending, startRealtimeSession])
 
   useEffect(() => {
     if (!autoStartRealtimeSignal) return
@@ -421,17 +440,22 @@ export function MessageInput({
     handledAutoStartRealtimeRef.current = autoStartRealtimeSignal
     onRealtimeAutoStartConsumed?.()
     if (!realtimeSessionRef.current) {
-      handleRealtimeToggle()
+      startRealtimeSession({
+        initialText: autoStartRealtimeInitialText,
+        greetIfSilent: autoStartRealtimeGreetIfSilent,
+      })
     }
   }, [
     autoStartRealtimeSignal,
+    autoStartRealtimeGreetIfSilent,
+    autoStartRealtimeInitialText,
     canStartRealtime,
-    handleRealtimeToggle,
     onRealtimeAutoStartConsumed,
     realtimeAvailability.canStart,
     realtimeAvailability.loading,
     realtimeAvailability.unavailableReason,
     realtimePending,
+    startRealtimeSession,
   ])
 
   const startEditing = useCallback(
@@ -527,9 +551,11 @@ export function MessageInput({
   const replyPreviewText = commentTarget?.snapshot.text
   const realtimeTooltip = realtimeActive
     ? `Stop voice mode`
-    : realtimeAvailability.loading
-      ? `Checking realtime credentials`
-      : (realtimeAvailability.unavailableReason ?? `Start voice mode`)
+    : attachmentCount > 0
+      ? `Remove attachments to start voice mode`
+      : realtimeAvailability.loading
+        ? `Checking realtime credentials`
+        : (realtimeAvailability.unavailableReason ?? `Start voice mode`)
   const realtimeButtonDisabled =
     realtimePending || (!realtimeActive && !canStartRealtime)
   return (

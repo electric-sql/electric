@@ -78,6 +78,8 @@ import type { TileViewParams } from '../../lib/workspace/types'
  */
 const DEFAULT_AGENT_NAME = `horton`
 const REALTIME_AUTOSTART_VIEW_PARAMS: TileViewParams = { realtime: `start` }
+const REALTIME_INITIAL_TEXT_VIEW_PARAM = `realtimeInitialText`
+const REALTIME_GREET_VIEW_PARAM = `realtimeGreet`
 
 const HERO_TITLES = [
   `Let’s ship`,
@@ -512,11 +514,19 @@ export function NewSessionView({
 
   const handleStartDefaultRealtime = useCallback(
     async (
+      input: string,
       args: Record<string, unknown>,
       sandboxProfile: string | null
     ): Promise<boolean> => {
       if (!defaultAgent) return false
       const augmented = prepareDefaultAgentArgs(args, sandboxProfile)
+      const initialText = input.trim()
+      const viewParams: TileViewParams = {
+        ...REALTIME_AUTOSTART_VIEW_PARAMS,
+        ...(initialText
+          ? { [REALTIME_INITIAL_TEXT_VIEW_PARAM]: initialText }
+          : { [REALTIME_GREET_VIEW_PARAM]: `1` }),
+      }
       return await doSpawn(
         defaultAgent.name,
         augmented,
@@ -524,7 +534,7 @@ export function NewSessionView({
         undefined,
         undefined,
         sandboxProfile,
-        REALTIME_AUTOSTART_VIEW_PARAMS
+        viewParams
       )
     },
     [defaultAgent, doSpawn, prepareDefaultAgentArgs]
@@ -610,6 +620,7 @@ function Picker({
     sandboxProfile: string | null
   ) => Promise<boolean>
   onStartDefaultRealtime: (
+    input: string,
     args: Record<string, unknown>,
     sandboxProfile: string | null
   ) => Promise<boolean>
@@ -947,6 +958,7 @@ function DefaultAgentComposer({
     sandboxProfile: string | null
   ) => Promise<boolean>
   onStartRealtime: (
+    input: string,
     args: Record<string, unknown>,
     sandboxProfile: string | null
   ) => Promise<boolean>
@@ -1095,12 +1107,19 @@ function DefaultAgentComposer({
     const files = imageAttachmentsEnabled ? attachments : []
     if (disabled || submitting || files.length > 0) return
     if (!realtimeAvailability.canStart) return
+    const initialText = serializeComposerInput(
+      value,
+      slashCommands
+    ).source.trim()
     setSubmittingMode(`realtime`)
     const cleaned: Record<string, unknown> = {}
     for (const [k, v] of Object.entries(args)) {
       if (v !== undefined && v !== ``) cleaned[k] = v
     }
-    void onStartRealtime(cleaned, selectedSandboxProfile)
+    void onStartRealtime(initialText, cleaned, selectedSandboxProfile)
+      .then((ok) => {
+        if (ok) setValue(``)
+      })
       .catch(() => undefined)
       .finally(() => {
         setSubmittingMode(null)
@@ -1113,7 +1132,9 @@ function DefaultAgentComposer({
     onStartRealtime,
     realtimeAvailability.canStart,
     selectedSandboxProfile,
+    slashCommands,
     submitting,
+    value,
   ])
 
   const attachmentCount = imageAttachmentsEnabled ? attachments.length : 0

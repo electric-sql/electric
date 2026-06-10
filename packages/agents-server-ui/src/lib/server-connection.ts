@@ -1,3 +1,15 @@
+import {
+  DEFAULT_OPENAI_REALTIME_MODEL,
+  DEFAULT_OPENAI_REALTIME_REASONING_EFFORT,
+  DEFAULT_OPENAI_REALTIME_VOICE,
+  OPENAI_REALTIME_MODELS,
+  OPENAI_REALTIME_REASONING_EFFORTS,
+  OPENAI_REALTIME_VOICES,
+  type OpenAIRealtimeReasoningEffort,
+  type RealtimeModelChoice,
+  type RealtimeReasoningEffortChoice,
+  type RealtimeVoiceChoice,
+} from '@electric-ax/agents-runtime/client'
 import type { ServerConfig } from './types'
 
 export type DesktopRuntimeStatus = `stopped` | `starting` | `running` | `error`
@@ -176,43 +188,41 @@ export interface ApiKeysStatus {
 export type RealtimeSettings = {
   provider: `openai`
   model: string
+  voice: string
+  reasoningEffort: OpenAIRealtimeReasoningEffort
+  interruptResponse: boolean
 }
 
-export type RealtimeModelChoice = {
-  id: string
-  label: string
-  description: string
-  recommended?: boolean
-}
+export type RealtimeCredentialStatus =
+  | `missing`
+  | `valid`
+  | `invalid`
+  | `unknown`
 
 export type RealtimeSettingsStatus = {
   settings: RealtimeSettings
   availableModels: Array<RealtimeModelChoice>
+  availableVoices: Array<RealtimeVoiceChoice>
+  availableReasoningEfforts: Array<RealtimeReasoningEffortChoice>
   hasOpenAIApiKey: boolean
+  openAIApiKeyStatus: RealtimeCredentialStatus
+  openAIApiKeyError?: string
   codexEnabled: boolean
 }
 
 const DEFAULT_REALTIME_SETTINGS_STATUS: RealtimeSettingsStatus = {
-  settings: { provider: `openai`, model: `gpt-realtime-2` },
-  availableModels: [
-    {
-      id: `gpt-realtime-2`,
-      label: `GPT-Realtime-2`,
-      description: `Strongest realtime reasoning, tool use, and instruction following.`,
-      recommended: true,
-    },
-    {
-      id: `gpt-realtime-1.5`,
-      label: `GPT-Realtime-1.5`,
-      description: `Fast, reliable speech-to-speech model for audio in, audio out.`,
-    },
-    {
-      id: `gpt-realtime-mini`,
-      label: `GPT-Realtime mini`,
-      description: `Cost-efficient realtime voice model.`,
-    },
-  ],
+  settings: {
+    provider: `openai`,
+    model: DEFAULT_OPENAI_REALTIME_MODEL,
+    voice: DEFAULT_OPENAI_REALTIME_VOICE,
+    reasoningEffort: DEFAULT_OPENAI_REALTIME_REASONING_EFFORT,
+    interruptResponse: true,
+  },
+  availableModels: [...OPENAI_REALTIME_MODELS],
+  availableVoices: [...OPENAI_REALTIME_VOICES],
+  availableReasoningEfforts: [...OPENAI_REALTIME_REASONING_EFFORTS],
   hasOpenAIApiKey: false,
+  openAIApiKeyStatus: `unknown`,
   codexEnabled: false,
 }
 
