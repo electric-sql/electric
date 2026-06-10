@@ -1,6 +1,10 @@
 if Electric.telemetry_enabled?() and Code.ensure_loaded?(ElectricTelemetry.Reporters.Prometheus) do
   defmodule Electric.StackSupervisor.TelemetryTest do
-    use ExUnit.Case, async: true
+    # Not async: the Prometheus reporter attaches a global :telemetry handler for
+    # [:electric, :plug, :serve_shape], so concurrent async tests that emit that
+    # event (via the real serve_shape plug) leak into this reporter's per-status
+    # counters and make the exact-count assertions below non-deterministic.
+    use ExUnit.Case, async: false
 
     alias Electric.StackSupervisor.Telemetry
 
