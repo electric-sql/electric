@@ -130,8 +130,8 @@ describe(`dispatchGoalCommand`, () => {
           status: input.status ?? `active`,
           tokenBudget,
           tokensUsed: 0,
-          createdAt: 1,
-          updatedAt: 1,
+          createdAt: `2026-01-01T00:00:00.000Z`,
+          updatedAt: `2026-01-01T00:00:00.000Z`,
         }
         goal = next
         return next
@@ -144,7 +144,11 @@ describe(`dispatchGoalCommand`, () => {
       getGoal: () => goal,
       markGoalComplete: () => {
         if (!goal) return undefined
-        const next: GoalEntry = { ...goal, status: `complete`, updatedAt: 2 }
+        const next: GoalEntry = {
+          ...goal,
+          status: `complete`,
+          updatedAt: `2026-01-02T00:00:00.000Z`,
+        }
         goal = next
         return next
       },
@@ -184,8 +188,8 @@ describe(`dispatchGoalCommand`, () => {
       status: `active`,
       tokenBudget: 10_000,
       tokensUsed: 0,
-      createdAt: 0,
-      updatedAt: 0,
+      createdAt: `2026-01-01T00:00:00.000Z`,
+      updatedAt: `2026-01-01T00:00:00.000Z`,
     })
     const result = dispatchGoalCommand(stub.ctx, { kind: `clear` })
     expect(result.handled).toBe(true)
@@ -199,8 +203,8 @@ describe(`dispatchGoalCommand`, () => {
       status: `active`,
       tokenBudget: 10_000,
       tokensUsed: 2_000,
-      createdAt: 0,
-      updatedAt: 0,
+      createdAt: `2026-01-01T00:00:00.000Z`,
+      updatedAt: `2026-01-01T00:00:00.000Z`,
     })
     dispatchGoalCommand(stub.ctx, { kind: `complete` })
     expect(stub.getGoal()?.status).toBe(`complete`)
@@ -219,8 +223,8 @@ describe(`dispatchGoalCommand`, () => {
       status: `active`,
       tokenBudget: 50_000,
       tokensUsed: 12_345,
-      createdAt: 0,
-      updatedAt: 0,
+      createdAt: `2026-01-01T00:00:00.000Z`,
+      updatedAt: `2026-01-01T00:00:00.000Z`,
     })
     const result = dispatchGoalCommand(stub.ctx, { kind: `show` })
     expect(result.message).toMatch(/ship X/)
@@ -234,8 +238,8 @@ describe(`dispatchGoalCommand`, () => {
       status: `active`,
       tokenBudget: null,
       tokensUsed: 7,
-      createdAt: 0,
-      updatedAt: 0,
+      createdAt: `2026-01-01T00:00:00.000Z`,
+      updatedAt: `2026-01-01T00:00:00.000Z`,
     })
     const result = dispatchGoalCommand(stub.ctx, { kind: `show` })
     expect(result.message).toMatch(/unlimited/)

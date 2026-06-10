@@ -375,8 +375,9 @@ type ManifestGoalEntryValue = {
   // Optional completion note recorded by mark_goal_complete — what was
   // accomplished, or what blocked the goal.
   summary?: string
-  createdAt: number
-  updatedAt: number
+  // ISO strings, matching every other manifest kind.
+  createdAt: string
+  updatedAt: string
 }
 type ReplayWatermarkValue = {
   key?: string
@@ -870,8 +871,8 @@ function createManifestSchema(): Schema<
       tokenBudget: z.number().int().positive().nullable(),
       tokensUsed: z.number().int().nonnegative(),
       summary: z.string().optional(),
-      createdAt: z.number().int(),
-      updatedAt: z.number().int(),
+      createdAt: z.string(),
+      updatedAt: z.string(),
     }),
   ]) as unknown as Schema<
     | ManifestChildEntryValue
@@ -965,7 +966,7 @@ export type Manifest = ManifestUnion & {
   filename?: string
   byteLength?: number
   sha256?: string
-  createdAt?: string | number
+  createdAt?: string
   createdBy?: string
   error?: string
   meta?: Record<string, JsonValue>
@@ -988,7 +989,7 @@ export type Manifest = ManifestUnion & {
   tokenBudget?: number | null
   tokensUsed?: number
   summary?: string
-  updatedAt?: number
+  updatedAt?: string
 }
 export type ReplayWatermark = SequencedPersistedRow<ReplayWatermarkValue>
 

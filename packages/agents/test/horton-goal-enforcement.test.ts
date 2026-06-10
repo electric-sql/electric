@@ -32,8 +32,8 @@ function goalEntry(overrides: Partial<GoalEntry> = {}): GoalEntry {
     status: `active`,
     tokenBudget: 1_000,
     tokensUsed: 0,
-    createdAt: 0,
-    updatedAt: 0,
+    createdAt: `2026-01-01T00:00:00.000Z`,
+    updatedAt: `2026-01-01T00:00:00.000Z`,
     ...overrides,
   } as GoalEntry
 }

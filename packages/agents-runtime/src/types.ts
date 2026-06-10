@@ -358,8 +358,9 @@ export interface GoalEntry {
   // Completion note recorded by mark_goal_complete — what was
   // accomplished, or what blocked the goal.
   summary?: string
-  createdAt: number
-  updatedAt: number
+  // ISO strings, matching every other manifest kind.
+  createdAt: string
+  updatedAt: string
 }
 
 export type AttachmentCreateInput = {

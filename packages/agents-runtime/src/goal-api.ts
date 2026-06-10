@@ -56,8 +56,8 @@ function toGoalEntry(row: Record<string, unknown>): GoalEntry {
     ...(typeof row.summary === `string` && row.summary
       ? { summary: row.summary }
       : {}),
-    createdAt: typeof row.createdAt === `number` ? row.createdAt : 0,
-    updatedAt: typeof row.updatedAt === `number` ? row.updatedAt : 0,
+    createdAt: typeof row.createdAt === `string` ? row.createdAt : ``,
+    updatedAt: typeof row.updatedAt === `string` ? row.updatedAt : ``,
   }
 }
 
@@ -65,9 +65,9 @@ export function createGoalApi(opts: {
   db: EntityStreamDBWithActions
   wakeSession: WakeSession
   writeEvent?: (event: ChangeEvent) => void
-  now?: () => number
+  now?: () => string
 }): GoalApi {
-  const now = opts.now ?? (() => Date.now())
+  const now = opts.now ?? (() => new Date().toISOString())
 
   function readRaw():
     | (ManifestGoalEntry & Record<string, unknown>)
@@ -114,7 +114,7 @@ export function createGoalApi(opts: {
             : 0
           : 0,
         createdAt:
-          isSameObjective && typeof existing?.createdAt === `number`
+          isSameObjective && typeof existing?.createdAt === `string`
             ? existing.createdAt
             : timestamp,
         updatedAt: timestamp,
@@ -171,8 +171,11 @@ export function createGoalApi(opts: {
               ? existing.tokenBudget
               : DEFAULT_TOKEN_BUDGET,
         tokensUsed: nextTokens,
+        ...(typeof existing.summary === `string` && existing.summary
+          ? { summary: existing.summary }
+          : {}),
         createdAt:
-          typeof existing.createdAt === `number` ? existing.createdAt : now(),
+          typeof existing.createdAt === `string` ? existing.createdAt : now(),
         updatedAt: now(),
       }
       // Live path: write the manifest update event directly to the entity
