@@ -355,7 +355,6 @@ export interface GoalEntry {
   status: GoalStatus
   tokenBudget: number | null
   tokensUsed: number
-  tokensAtCreation: number
   createdAt: number
   updatedAt: number
 }

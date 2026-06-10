@@ -145,7 +145,6 @@ export interface HandlerContextConfig<TState extends StateProxy = StateProxy> {
 export interface HandlerContextResult<TState extends StateProxy = StateProxy> {
   ctx: HandlerContext<TState>
   getSleepRequested: () => boolean
-  refreshGoalUsage: () => number | undefined
 }
 
 type DebugHandlerContext<TState extends StateProxy = StateProxy> =
@@ -1144,6 +1143,5 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
   return {
     ctx,
     getSleepRequested: () => sleepRequested,
-    refreshGoalUsage: goalApi.refreshGoalUsage,
   }
 }

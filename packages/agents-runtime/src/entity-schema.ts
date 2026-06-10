@@ -369,12 +369,9 @@ type ManifestGoalEntryValue = {
   status: GoalStatusValue
   // `null` means unbounded — the user must opt in explicitly.
   tokenBudget: number | null
+  // Maintained by the handler's in-memory step accumulator (the single
+  // write path for usage); enforcement aborts mid-run via the step-end hook.
   tokensUsed: number
-  // Snapshot of total step tokens on the entity at the moment this goal was
-  // set. `tokensUsed` is recomputed as
-  // `sumStepTokens() - tokensAtCreation` so the count scopes to work done
-  // since the goal was created. Enforcement is mid-run via the step-end hook.
-  tokensAtCreation: number
   createdAt: number
   updatedAt: number
 }
@@ -869,7 +866,6 @@ function createManifestSchema(): Schema<
       ]),
       tokenBudget: z.number().int().positive().nullable(),
       tokensUsed: z.number().int().nonnegative(),
-      tokensAtCreation: z.number().int().nonnegative(),
       createdAt: z.number().int(),
       updatedAt: z.number().int(),
     }),
@@ -987,7 +983,6 @@ export type Manifest = ManifestUnion & {
   objective?: string
   tokenBudget?: number | null
   tokensUsed?: number
-  tokensAtCreation?: number
   updatedAt?: number
 }
 export type ReplayWatermark = SequencedPersistedRow<ReplayWatermarkValue>

@@ -130,7 +130,6 @@ describe(`dispatchGoalCommand`, () => {
           status: input.status ?? `active`,
           tokenBudget,
           tokensUsed: 0,
-          tokensAtCreation: 0,
           createdAt: 1,
           updatedAt: 1,
         }
@@ -185,7 +184,6 @@ describe(`dispatchGoalCommand`, () => {
       status: `active`,
       tokenBudget: 10_000,
       tokensUsed: 0,
-      tokensAtCreation: 0,
       createdAt: 0,
       updatedAt: 0,
     })
@@ -201,7 +199,6 @@ describe(`dispatchGoalCommand`, () => {
       status: `active`,
       tokenBudget: 10_000,
       tokensUsed: 2_000,
-      tokensAtCreation: 0,
       createdAt: 0,
       updatedAt: 0,
     })
@@ -222,7 +219,6 @@ describe(`dispatchGoalCommand`, () => {
       status: `active`,
       tokenBudget: 50_000,
       tokensUsed: 12_345,
-      tokensAtCreation: 0,
       createdAt: 0,
       updatedAt: 0,
     })
@@ -238,7 +234,6 @@ describe(`dispatchGoalCommand`, () => {
       status: `active`,
       tokenBudget: null,
       tokensUsed: 7,
-      tokensAtCreation: 0,
       createdAt: 0,
       updatedAt: 0,
     })

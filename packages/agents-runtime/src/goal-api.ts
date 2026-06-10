@@ -24,10 +24,6 @@ export interface GoalApi {
     tokensUsed: number,
     opts?: { status?: GoalEntry[`status`] }
   ) => GoalEntry | undefined
-  // Fallback recompute from the steps collection. Used by handlers that
-  // don't manage token tracking themselves. Never decreases `tokensUsed` —
-  // an explicit `updateGoalUsage` call wins over a stale collection sum.
-  refreshGoalUsage: () => number | undefined
 }
 
 export const GOAL_MANIFEST_KEY = `goal`
@@ -58,21 +54,9 @@ function toGoalEntry(row: Record<string, unknown>): GoalEntry {
     status: (row.status ?? `active`) as GoalEntry[`status`],
     tokenBudget,
     tokensUsed: typeof row.tokensUsed === `number` ? row.tokensUsed : 0,
-    tokensAtCreation:
-      typeof row.tokensAtCreation === `number` ? row.tokensAtCreation : 0,
     createdAt: typeof row.createdAt === `number` ? row.createdAt : 0,
     updatedAt: typeof row.updatedAt === `number` ? row.updatedAt : 0,
   }
-}
-
-export function sumStepTokens(db: EntityStreamDBWithActions): number {
-  let total = 0
-  for (const row of db.collections.steps.toArray) {
-    const r = row as Record<string, unknown>
-    if (typeof r.input_tokens === `number`) total += r.input_tokens
-    if (typeof r.output_tokens === `number`) total += r.output_tokens
-  }
-  return total
 }
 
 export function createGoalApi(opts: {
@@ -108,16 +92,13 @@ export function createGoalApi(opts: {
     setGoal(input) {
       const existing = readRaw()
       const timestamp = now()
+      // Re-setting the same objective (e.g. to raise the budget) preserves
+      // accumulated usage; a new objective starts from zero.
       const isSameObjective = existing?.objective === input.objective
       const tokenBudget =
         input.tokenBudget === undefined
           ? DEFAULT_TOKEN_BUDGET
           : input.tokenBudget
-      const tokensAtCreation = isSameObjective
-        ? typeof existing?.tokensAtCreation === `number`
-          ? existing.tokensAtCreation
-          : 0
-        : sumStepTokens(opts.db)
       const entry: ManifestGoalEntry = {
         key: GOAL_MANIFEST_KEY,
         kind: `goal`,
@@ -130,7 +111,6 @@ export function createGoalApi(opts: {
             ? existing.tokensUsed
             : 0
           : 0,
-        tokensAtCreation,
         createdAt:
           isSameObjective && typeof existing?.createdAt === `number`
             ? existing.createdAt
@@ -200,10 +180,6 @@ export function createGoalApi(opts: {
               ? existing.tokenBudget
               : DEFAULT_TOKEN_BUDGET,
         tokensUsed: nextTokens,
-        tokensAtCreation:
-          typeof existing.tokensAtCreation === `number`
-            ? existing.tokensAtCreation
-            : 0,
         createdAt:
           typeof existing.createdAt === `number` ? existing.createdAt : now(),
         updatedAt: now(),
@@ -223,44 +199,6 @@ export function createGoalApi(opts: {
         return toGoalEntry(next as unknown as Record<string, unknown>)
       }
       return persist(next)
-    },
-
-    refreshGoalUsage() {
-      const existing = readRaw()
-      if (!existing) return undefined
-      const tokensAtCreation =
-        typeof existing.tokensAtCreation === `number`
-          ? existing.tokensAtCreation
-          : 0
-      const previousTokens =
-        typeof existing.tokensUsed === `number` ? existing.tokensUsed : 0
-      const currentTotal = sumStepTokens(opts.db)
-      const computed = Math.max(0, currentTotal - tokensAtCreation)
-      // Never decrease — an authoritative `updateGoalUsage` may have set a
-      // higher value than the steps collection currently reflects (events
-      // round-trip back into the local DB asynchronously).
-      const tokensUsed = Math.max(previousTokens, computed)
-      if (tokensUsed === previousTokens) return tokensUsed
-      const next: ManifestGoalEntry = {
-        key: GOAL_MANIFEST_KEY,
-        kind: `goal`,
-        id: String(existing.id ?? GOAL_ID),
-        objective: String(existing.objective ?? ``),
-        status: (existing.status ?? `active`) as ManifestGoalEntry[`status`],
-        tokenBudget:
-          existing.tokenBudget === null
-            ? null
-            : typeof existing.tokenBudget === `number`
-              ? existing.tokenBudget
-              : DEFAULT_TOKEN_BUDGET,
-        tokensUsed,
-        tokensAtCreation,
-        createdAt:
-          typeof existing.createdAt === `number` ? existing.createdAt : now(),
-        updatedAt: now(),
-      }
-      opts.wakeSession.registerManifestEntry(next)
-      return tokensUsed
     },
   }
 }

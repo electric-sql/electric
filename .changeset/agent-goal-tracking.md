@@ -48,14 +48,13 @@ the run exceeds the budget.
 ## Plumbing
 
 - `entity-schema.ts` — new `ManifestGoalEntryValue` (objective,
-  status, tokenBudget, tokensUsed, tokensAtCreation, createdAt,
-  updatedAt) added to the manifest discriminated union.
+  status, tokenBudget, tokensUsed, createdAt, updatedAt) added to the
+  manifest discriminated union.
 - `goal-api.ts` (new) — `setGoal` / `clearGoal` / `getGoal` /
-  `markGoalComplete` / `markGoalBudgetLimited` / `updateGoalUsage` /
-  `refreshGoalUsage`. `updateGoalUsage` writes the manifest update
-  directly through `writeEvent` for live UI; `refreshGoalUsage` never
-  decreases `tokensUsed` so a stale collection sum can't clobber an
-  authoritative in-memory value.
+  `markGoalComplete` / `updateGoalUsage`. There is a single usage
+  write path: the handler's in-memory step accumulator persisted via
+  `updateGoalUsage`, which writes the manifest update directly through
+  `writeEvent` for live UI and never decreases `tokensUsed`.
 - `goal-command.ts` (new) — `/goal` parser (`--tokens N|50k|1.2m|
   unlimited`, `--unlimited` flag, subcommand aliases `done`/`status`)
   and dispatcher.
