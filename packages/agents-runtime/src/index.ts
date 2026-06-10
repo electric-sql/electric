@@ -345,6 +345,7 @@ export { createContextEntriesApi } from './context-entries'
 export { createGoalApi, GOAL_MANIFEST_KEY } from './goal-api'
 export type { GoalApi } from './goal-api'
 export {
+  GOAL_SLASH_COMMAND,
   dispatchGoalCommand,
   isGoalCommandText,
   parseGoalCommand,

@@ -17,6 +17,7 @@ import {
 } from '../model-catalog'
 import type { AgentTool, StreamFn } from '@mariozechner/pi-agent-core'
 import {
+  GOAL_SLASH_COMMAND,
   buildSkillSlashCommands,
   createContextSkillLoader,
   completeWithLowCostModel,
@@ -961,7 +962,10 @@ export function registerHorton(
         permission: `manage`,
       },
     ],
-    slashCommands: buildSkillSlashCommands(skillsRegistry),
+    slashCommands: [
+      GOAL_SLASH_COMMAND,
+      ...buildSkillSlashCommands(skillsRegistry),
+    ],
     handler: assistantHandler,
   })
 

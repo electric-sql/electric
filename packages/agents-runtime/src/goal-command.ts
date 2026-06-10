@@ -1,4 +1,26 @@
+import type { SlashCommandDefinition } from './composer-input'
 import type { HandlerContext } from './types'
+
+// Static registry entry so the composer offers /goal in autocomplete.
+// Kept next to the parser so the definition and the grammar it
+// describes can't drift apart.
+export const GOAL_SLASH_COMMAND: SlashCommandDefinition = {
+  name: `goal`,
+  description: `Session goal: set <objective> [--tokens N|unlimited] | show | complete | clear`,
+  arguments: [
+    {
+      name: `subcommand`,
+      type: `string`,
+      required: true,
+      description: `set | show | complete | clear`,
+    },
+    {
+      name: `args`,
+      type: `string`,
+      description: `objective text and flags, e.g. "ship X" --tokens 50k`,
+    },
+  ],
+}
 
 export type GoalCommand =
   | { kind: `set`; objective: string; tokenBudget?: number | null }
