@@ -1,5 +1,9 @@
 import { useCallback, useMemo, useState } from 'react'
 import {
+  ActionSheetIOS,
+  Image,
+  Keyboard,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -23,9 +27,12 @@ import {
   type ComposerInsertion,
   type Selection,
 } from '../lib/slashAutocomplete'
+import type { AttachmentDraft } from '../lib/attachments'
 import { useTokens } from '../lib/ThemeProvider'
 import { fontSize, lineHeight, radii, spacing } from '../lib/theme'
 import type { Tokens } from '../lib/theme'
+import { BottomSheet, BottomSheetItem } from './BottomSheet'
+import { Icon } from './Icon'
 
 export type SlashAutocomplete = {
   /** Whether the suggestion menu should be shown. */
@@ -217,6 +224,128 @@ export function SlashCommandMenu({
   )
 }
 
+/**
+ * Composer affordance for adding image attachments. Opens a native action
+ * sheet (photo library / camera); the keyboard is dismissed first so the sheet
+ * and keyboard don't fight for the bottom of the screen.
+ */
+export function AttachButton({
+  onAddFromLibrary,
+  onAddFromCamera,
+  disabled,
+}: {
+  onAddFromLibrary: () => void
+  onAddFromCamera: () => void
+  disabled?: boolean
+}): React.ReactElement {
+  const tokens = useTokens()
+  const styles = useMemo(() => createStyles(tokens), [tokens])
+  // Android uses the bottom-sheet menu; iOS uses a native action sheet because
+  // presenting the image picker over an RN `Modal` breaks it on iOS.
+  const [open, setOpen] = useState(false)
+  const onPress = (): void => {
+    Keyboard.dismiss()
+    if (Platform.OS === `ios`) {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: [`Cancel`, `Photo Library`, `Take Photo`],
+          cancelButtonIndex: 0,
+        },
+        (index) => {
+          if (index === 1) onAddFromLibrary()
+          else if (index === 2) onAddFromCamera()
+        }
+      )
+      return
+    }
+    setOpen(true)
+  }
+  return (
+    <>
+      <Pressable
+        onPress={onPress}
+        disabled={disabled}
+        hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel="Attach image"
+        style={({ pressed }) => [
+          styles.attachButton,
+          pressed && !disabled ? styles.attachButtonPressed : null,
+        ]}
+      >
+        <Icon
+          name="image"
+          size={20}
+          color={disabled ? tokens.text4 : tokens.text2}
+          strokeWidth={2}
+        />
+      </Pressable>
+      <BottomSheet open={open} onClose={() => setOpen(false)} title="Add image">
+        <BottomSheetItem
+          label="Photo Library"
+          icon={<Icon name="image" size={18} color={tokens.text2} />}
+          onPress={() => {
+            setOpen(false)
+            onAddFromLibrary()
+          }}
+        />
+        <BottomSheetItem
+          label="Take Photo"
+          icon={<Icon name="camera" size={18} color={tokens.text2} />}
+          onPress={() => {
+            setOpen(false)
+            onAddFromCamera()
+          }}
+        />
+      </BottomSheet>
+    </>
+  )
+}
+
+/**
+ * Horizontal strip of image-attachment thumbnails with per-item remove
+ * buttons. Renders nothing when there are no drafts.
+ */
+export function AttachmentTray({
+  drafts,
+  onRemove,
+}: {
+  drafts: ReadonlyArray<AttachmentDraft>
+  onRemove: (index: number) => void
+}): React.ReactElement | null {
+  const tokens = useTokens()
+  const styles = useMemo(() => createStyles(tokens), [tokens])
+  if (drafts.length === 0) return null
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+      contentContainerStyle={styles.tray}
+    >
+      {drafts.map((draft, index) => (
+        <View key={`${draft.uri}:${index}`} style={styles.thumbWrap}>
+          <Image source={{ uri: draft.uri }} style={styles.thumb} />
+          <Pressable
+            onPress={() => onRemove(index)}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel={`Remove ${draft.name}`}
+            style={styles.thumbRemove}
+          >
+            <Icon
+              name="close"
+              size={12}
+              color={tokens.textOnAccent}
+              strokeWidth={2.6}
+            />
+          </Pressable>
+        </View>
+      ))}
+    </ScrollView>
+  )
+}
+
 function createStyles(tokens: Tokens) {
   return StyleSheet.create({
     menu: {
@@ -260,6 +389,49 @@ function createStyles(tokens: Tokens) {
       color: tokens.text3,
       fontSize: fontSize.xs,
       lineHeight: lineHeight.xs,
+    },
+    attachButton: {
+      width: 34,
+      height: 34,
+      borderRadius: radii.pill,
+      alignItems: `center`,
+      justifyContent: `center`,
+    },
+    attachButtonPressed: {
+      backgroundColor: tokens.bgHover,
+    },
+    tray: {
+      gap: spacing.sm,
+      // Leave room for the remove (×) buttons, which protrude 6px past the
+      // top-right of each thumbnail (incl. the last one when scrolled to end).
+      paddingTop: 8,
+      paddingBottom: 2,
+      paddingHorizontal: 8,
+    },
+    thumbWrap: {
+      width: 60,
+      height: 60,
+    },
+    thumb: {
+      width: 60,
+      height: 60,
+      borderRadius: radii.md,
+      borderWidth: 1,
+      borderColor: tokens.border1,
+      backgroundColor: tokens.bgSubtle,
+    },
+    thumbRemove: {
+      position: `absolute`,
+      top: -6,
+      right: -6,
+      width: 20,
+      height: 20,
+      borderRadius: radii.pill,
+      alignItems: `center`,
+      justifyContent: `center`,
+      backgroundColor: tokens.accent9,
+      borderWidth: 1,
+      borderColor: tokens.surface,
     },
   })
 }

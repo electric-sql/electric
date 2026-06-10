@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   KeyboardAvoidingView,
   Platform,
@@ -20,6 +20,8 @@ import {
   isSandboxProfileRemote,
   useSandboxProfileSelection,
 } from '@electric-ax/agents-server-ui/src/lib/sandboxProfiles'
+import { schemaModelSupportsImageInput } from '@electric-ax/agents-server-ui/src/lib/modelCapabilities'
+import { sendEntityMessage } from '@electric-ax/agents-server-ui/src/lib/sendMessage'
 import {
   COMPOSER_INPUT_MESSAGE_TYPE,
   serializeComposerInput,
@@ -27,13 +29,23 @@ import {
 import type { SlashCommandRow } from '@electric-ax/agents-runtime/client'
 import { Header, HeaderBackButton } from '../components/Header'
 import {
+  AttachButton,
+  AttachmentTray,
   renderComposerHighlights,
   SlashCommandMenu,
   useSlashAutocomplete,
 } from '../components/NativeComposer'
 import { PrimaryButton } from '../components/PrimaryButton'
 import { Screen } from '../components/Screen'
+import { SchemaArgsControls } from '../components/SchemaArgsControls'
 import { useAgents } from '../lib/AgentsProvider'
+import { useAttachmentDrafts } from '../lib/attachments'
+import {
+  buildInitialSpawnArgs,
+  finalizeSpawnArgs,
+  hasMissingRequiredArgs,
+  hasSpawnArgControls,
+} from '../lib/spawnArgs'
 import {
   spawnEntity,
   type ElectricEntityType,
@@ -45,6 +57,10 @@ import { fontSize, lineHeight, radii, spacing } from '../lib/theme'
 import type { Tokens } from '../lib/theme'
 
 const DEFAULT_AGENT_NAME = `horton`
+
+// `workingDirectory` has its own picker section below, so keep it out of the
+// generic schema controls (and `spawnEntity` merges it into the args anyway).
+const SCHEMA_OMIT_KEYS = [`workingDirectory`] as const
 
 export function NewSessionScreen({
   onBack,
@@ -69,6 +85,9 @@ export function NewSessionScreen({
   const [dirInput, setDirInput] = useState(``)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Spawn args derived from the selected type's creation schema (model /
+  // reasoning / structured fields). Reset when the chosen type changes.
+  const [args, setArgs] = useState<Record<string, unknown>>({})
 
   const { data: entityTypes = [] } = useLiveQuery(
     (query) =>
@@ -180,6 +199,42 @@ export function NewSessionScreen({
   // args (mirrors the desktop composer, which injects it for horton only).
   const workingDirSupported = activeTypeName === DEFAULT_AGENT_NAME
 
+  const creationSchema = activeType?.creation_schema
+  // Seed defaults when the selected type changes; user edits then stick until
+  // they pick a different type. Keyed on the type name (not the schema object)
+  // so re-syncing the types collection doesn't clobber in-progress edits.
+  useEffect(() => {
+    setArgs(buildInitialSpawnArgs(creationSchema))
+  }, [activeTypeName])
+  const handleArgChange = useCallback((key: string, value: unknown): void => {
+    setArgs((prev) => {
+      if (value === undefined) {
+        const next = { ...prev }
+        delete next[key]
+        return next
+      }
+      return { ...prev, [key]: value }
+    })
+  }, [])
+  const hasSchemaControls = useMemo(
+    () => hasSpawnArgControls(creationSchema, SCHEMA_OMIT_KEYS),
+    [creationSchema]
+  )
+  const missingRequiredArgs = useMemo(
+    () => hasMissingRequiredArgs(creationSchema, args, SCHEMA_OMIT_KEYS),
+    [creationSchema, args]
+  )
+
+  const attach = useAttachmentDrafts()
+  const imageInputSupported = useMemo(
+    () => schemaModelSupportsImageInput(creationSchema, args),
+    [creationSchema, args]
+  )
+  const showAttach = imageInputSupported && attach.supported
+  useEffect(() => {
+    if (!imageInputSupported) attach.clear()
+  }, [imageInputSupported, attach.clear])
+
   const start = async () => {
     if (!activeTypeName || loading) return
     if (!activeRunnerId) {
@@ -194,12 +249,20 @@ export function NewSessionScreen({
     setError(null)
     try {
       const trimmed = message.trim()
+      const schemaArgs = finalizeSpawnArgs(creationSchema, args)
+      const hasAttachments = showAttach && attach.drafts.length > 0
+      const composerPayload = trimmed
+        ? serializeComposerInput(trimmed, slashCommands)
+        : null
       const entityUrl = await spawnEntity({
         baseUrl: serverUrl,
         type: activeTypeName,
-        ...(trimmed
+        args: schemaArgs,
+        // With attachments, the first message is sent *after* spawn so the
+        // upload can target the created entity (mirrors desktop `doSpawn`).
+        ...(composerPayload && !hasAttachments
           ? {
-              initialMessage: serializeComposerInput(trimmed, slashCommands),
+              initialMessage: composerPayload,
               initialMessageType: COMPOSER_INPUT_MESSAGE_TYPE,
             }
           : {}),
@@ -212,6 +275,20 @@ export function NewSessionScreen({
           ? { workingDirectory }
           : {}),
       })
+      if (hasAttachments) {
+        await sendEntityMessage({
+          baseUrl: serverUrl,
+          entityUrl,
+          ...(composerPayload
+            ? {
+                payload: composerPayload,
+                type: COMPOSER_INPUT_MESSAGE_TYPE,
+              }
+            : {}),
+          mode: `immediate`,
+          attachments: attach.drafts,
+        })
+      }
       onOpenSession(entityUrl)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -263,6 +340,19 @@ export function NewSessionScreen({
                 arg: styles.argToken,
               })}
             </TextInput>
+            {showAttach && (
+              <View style={styles.composerExtras}>
+                <AttachmentTray
+                  drafts={attach.drafts}
+                  onRemove={attach.remove}
+                />
+                <AttachButton
+                  onAddFromLibrary={() => void attach.addFromLibrary()}
+                  onAddFromCamera={() => void attach.addFromCamera()}
+                  disabled={loading}
+                />
+              </View>
+            )}
           </View>
           {slash.open && (
             <SlashCommandMenu items={slash.items} onSelect={insertCommand} />
@@ -285,6 +375,19 @@ export function NewSessionScreen({
             <Text style={styles.empty}>
               No entity types are registered on this server.
             </Text>
+          )}
+
+          {hasSchemaControls && (
+            <>
+              <Text style={styles.sectionLabel}>Settings</Text>
+              <SchemaArgsControls
+                schema={creationSchema}
+                args={args}
+                onChange={handleArgChange}
+                omitKeys={SCHEMA_OMIT_KEYS}
+                disabled={loading}
+              />
+            </>
           )}
 
           <Text style={styles.sectionLabel}>Runner</Text>
@@ -379,7 +482,12 @@ export function NewSessionScreen({
             <PrimaryButton
               title="Start session"
               loading={loading}
-              disabled={!activeTypeName || !activeRunnerId || loading}
+              disabled={
+                !activeTypeName ||
+                !activeRunnerId ||
+                loading ||
+                missingRequiredArgs
+              }
               onPress={start}
             />
           </View>
@@ -513,6 +621,13 @@ function createStyles(tokens: Tokens) {
       lineHeight: lineHeight.base,
       padding: spacing.md,
       textAlignVertical: `top`,
+    },
+    composerExtras: {
+      flexDirection: `row`,
+      alignItems: `center`,
+      gap: spacing.sm,
+      paddingHorizontal: spacing.sm,
+      paddingBottom: spacing.sm,
     },
     // Base text colour lives on the rendered child spans, not the input, so the
     // command spans can override it (a nested colour is ignored when the
