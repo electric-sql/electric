@@ -1,3 +1,4 @@
+import { formatTokenCount } from './token-budget'
 import type { SlashCommandDefinition } from './composer-input'
 import type { HandlerContext } from './types'
 
@@ -179,12 +180,6 @@ function tokenize(input: string): Array<string> {
 export interface GoalDispatchResult {
   handled: boolean
   message?: string
-}
-
-function formatTokenCount(n: number): string {
-  if (n < 1_000) return `${n}`
-  if (n < 1_000_000) return `${(n / 1_000).toFixed(n < 10_000 ? 1 : 0)}k`
-  return `${(n / 1_000_000).toFixed(1)}m`
 }
 
 export function dispatchGoalCommand(

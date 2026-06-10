@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { useLiveQuery } from '@tanstack/react-db'
+import { formatTokenCount } from '@electric-ax/agents-runtime/client'
 import styles from './GoalBanner.module.css'
 import type {
   EntityStreamDBWithActions,
@@ -50,8 +51,8 @@ export function GoalBanner({ db }: GoalBannerProps): React.ReactElement | null {
 
   const usageLabel =
     goal.tokenBudget === null
-      ? `${formatTokens(goal.tokensUsed)} tokens`
-      : `${formatTokens(goal.tokensUsed)} / ${formatTokens(goal.tokenBudget)} tokens`
+      ? `${formatTokenCount(goal.tokensUsed)} tokens`
+      : `${formatTokenCount(goal.tokensUsed)} / ${formatTokenCount(goal.tokenBudget)} tokens`
   const fillRatio =
     goal.tokenBudget !== null && goal.tokenBudget > 0
       ? Math.min(1, goal.tokensUsed / goal.tokenBudget)
@@ -94,10 +95,4 @@ function statusClass(status: GoalStatus): string {
     case `budget_limited`:
       return styles.statusBudgetLimited!
   }
-}
-
-function formatTokens(n: number): string {
-  if (n < 1_000) return `${n}`
-  if (n < 1_000_000) return `${(n / 1_000).toFixed(n < 10_000 ? 1 : 0)}k`
-  return `${(n / 1_000_000).toFixed(1)}m`
 }

@@ -352,7 +352,7 @@ export {
 } from './goal-command'
 export type { GoalCommand, GoalDispatchResult } from './goal-command'
 export { assembleContext } from './context-assembly'
-export { approxTokens, sliceChars } from './token-budget'
+export { approxTokens, formatTokenCount, sliceChars } from './token-budget'
 export { createContextTools } from './tools/context-tools'
 export {
   completeWithLowCostModel,

@@ -44,6 +44,7 @@ export {
 // behavior (e.g. which subcommands interrupt a running agent) can't
 // drift from the runtime dispatcher.
 export { isGoalCommandText, parseGoalCommand } from './goal-command'
+export { formatTokenCount } from './token-budget'
 export type { GoalCommand } from './goal-command'
 
 export type {

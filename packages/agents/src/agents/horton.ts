@@ -22,6 +22,7 @@ import {
   createContextSkillLoader,
   completeWithLowCostModel,
   dispatchGoalCommand,
+  formatTokenCount,
   isGoalCommandText,
   parseGoalCommand,
 } from '@electric-ax/agents-runtime'
@@ -869,12 +870,6 @@ function createAssistantHandler(options: {
     }
     await titlePromise
   }
-}
-
-function formatTokenCount(n: number): string {
-  if (n < 1_000) return `${n}`
-  if (n < 1_000_000) return `${(n / 1_000).toFixed(n < 10_000 ? 1 : 0)}k`
-  return `${(n / 1_000_000).toFixed(1)}m`
 }
 
 export function registerHorton(

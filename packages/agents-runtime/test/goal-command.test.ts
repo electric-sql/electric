@@ -228,7 +228,7 @@ describe(`dispatchGoalCommand`, () => {
     })
     const result = dispatchGoalCommand(stub.ctx, { kind: `show` })
     expect(result.message).toMatch(/ship X/)
-    expect(result.message).toMatch(/12k.*50k/)
+    expect(result.message).toMatch(/12\.3k.*50k/)
   })
 
   it(`labels show output as unlimited when budget is null`, () => {
