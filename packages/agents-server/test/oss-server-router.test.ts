@@ -121,9 +121,18 @@ describe(`OSS server routing wrapper`, () => {
       )
 
       expect(registerResponse.status).toBe(200)
-      expect(pgSyncBridgeManager.register).toHaveBeenCalledWith({
-        table: `entities`,
-      })
+      expect(pgSyncBridgeManager.register).toHaveBeenCalledWith(
+        {
+          table: `entities`,
+        },
+        {
+          tenantId: `tenant-test`,
+          principalKind: `system`,
+          principalId: `framework`,
+          principalKey: `system:framework`,
+          principalUrl: `/principal/system:framework`,
+        }
+      )
       expect(fetchSpy).toHaveBeenCalledTimes(2)
     } finally {
       fetchSpy.mockRestore()

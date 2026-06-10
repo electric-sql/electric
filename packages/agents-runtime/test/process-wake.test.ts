@@ -1660,7 +1660,16 @@ describe(`processWake`, () => {
     const pgSyncBody = JSON.parse(
       fetchMock.mock.calls[pgSyncCallIndex]![1]!.body as string
     ) as Record<string, unknown>
-    expect(pgSyncBody).toEqual({ options: source.options })
+    expect(pgSyncBody).toEqual({
+      options: source.options,
+      metadata: {
+        entityUrl: `http://localhost:3000/test-agent/agent-1`,
+        entityType: `test-agent`,
+        streamPath: `/streams/entity:agent-1`,
+        runtimeConsumerId: `consumer-1`,
+        wakeId: `wake-abc`,
+      },
+    })
     expect(fetchMock.mock.invocationCallOrder[pgSyncCallIndex]).toBeLessThan(
       mockSourceDbPreload.mock.invocationCallOrder[0]
     )
