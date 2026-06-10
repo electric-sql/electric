@@ -771,31 +771,35 @@ function createAssistantHandler(options: {
       })
     }
 
-    const activeGoal = ctx.getGoal()
-    const activeGoalPromptInfo =
-      activeGoal && activeGoal.status === `active`
-        ? {
-            objective: activeGoal.objective,
-            tokenBudget: activeGoal.tokenBudget,
-            tokensUsed: activeGoal.tokensUsed,
-          }
-        : undefined
+    // Only an *active* goal drives any goal behavior. A goal that is
+    // `complete` or `budget_limited` stays in the manifest (for the banner
+    // and /goal show) but must not accumulate usage from unrelated chat
+    // turns, trip the budget on them, or appear in the prompt.
+    const goal = ctx.getGoal()
+    const enforcedGoal = goal && goal.status === `active` ? goal : undefined
+    const activeGoalPromptInfo = enforcedGoal
+      ? {
+          objective: enforcedGoal.objective,
+          tokenBudget: enforcedGoal.tokenBudget,
+          tokensUsed: enforcedGoal.tokensUsed,
+        }
+      : undefined
 
     // Mid-run budget enforcement + live banner updates: after each step we
     // (a) advance our in-memory accumulator, (b) write it to the goal entry
     // so the UI banner reflects it optimistically, and (c) abort the run if
     // the budget is exhausted.
     const budgetAbort = new AbortController()
-    let runTokensUsed = activeGoal?.tokensUsed ?? 0
+    let runTokensUsed = enforcedGoal?.tokensUsed ?? 0
     let budgetTripped = false
-    const onStepEnd = activeGoal
+    const onStepEnd = enforcedGoal
       ? (stats: { input: number; output: number }) => {
           if (budgetTripped) return
           runTokensUsed += stats.input + stats.output
           ctx.updateGoalUsage(runTokensUsed)
           if (
-            activeGoal.tokenBudget !== null &&
-            runTokensUsed >= activeGoal.tokenBudget
+            enforcedGoal.tokenBudget !== null &&
+            runTokensUsed >= enforcedGoal.tokenBudget
           ) {
             budgetTripped = true
             serverLog.info(
@@ -838,14 +842,14 @@ function createAssistantHandler(options: {
     // Persist accurate token usage from the in-memory accumulator.
     // The steps collection round-trips back into the local DB
     // asynchronously, so summing it post-run can undercount.
-    if (activeGoal) {
+    if (enforcedGoal) {
       ctx.updateGoalUsage(
         runTokensUsed,
         budgetTripped ? { status: `budget_limited` } : undefined
       )
     }
-    if (budgetTripped && activeGoal && activeGoal.tokenBudget !== null) {
-      const budget = activeGoal.tokenBudget
+    if (budgetTripped && enforcedGoal && enforcedGoal.tokenBudget !== null) {
+      const budget = enforcedGoal.tokenBudget
       const suggestedNext = Math.max(budget * 2, budget + 10_000)
       writeSlashCommandReply(
         ctx,
