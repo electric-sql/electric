@@ -333,7 +333,7 @@ async function createRealtimeSession(
     body: JSON.stringify({
       entityUrl,
       provider: `openai`,
-      model: `gpt-realtime`,
+      model: `gpt-realtime-2`,
       inputAudio: {
         codec: `pcm16`,
         sampleRate: REALTIME_SAMPLE_RATE,

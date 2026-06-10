@@ -31,7 +31,7 @@ type OpenAIRealtimeWebSocketConstructor = new (
   init?: unknown
 ) => OpenAIRealtimeSocket
 
-const DEFAULT_OPENAI_REALTIME_MODEL = `gpt-realtime`
+const DEFAULT_OPENAI_REALTIME_MODEL = `gpt-realtime-2`
 const DEFAULT_OPENAI_INPUT_TRANSCRIPTION_MODEL = `gpt-4o-mini-transcribe`
 
 export interface OpenAIRealtimeProviderOptions {

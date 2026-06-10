@@ -76,7 +76,7 @@ describe(`createOpenAIRealtimeProvider`, () => {
 
     const socket = FakeWebSocket.instances[0]!
     expect(socket.url).toBe(
-      `wss://api.openai.com/v1/realtime?model=gpt-realtime`
+      `wss://api.openai.com/v1/realtime?model=gpt-realtime-2`
     )
     expect(socket.init).toEqual({
       headers: {
@@ -88,7 +88,7 @@ describe(`createOpenAIRealtimeProvider`, () => {
       type: `session.update`,
       session: {
         type: `realtime`,
-        model: `gpt-realtime`,
+        model: `gpt-realtime-2`,
         instructions: `You are Horton.`,
         output_modalities: [`audio`],
         tool_choice: `auto`,

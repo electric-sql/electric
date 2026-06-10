@@ -273,7 +273,7 @@ describe(`runtime-server-client realtime sessions`, () => {
       sessionId: `rt-1`,
       entityUrl: `/horton/demo`,
       provider: `openai`,
-      model: `gpt-realtime`,
+      model: `gpt-realtime-2`,
       status: `requested`,
       startedAt: `2026-06-09T10:00:00.000Z`,
       streams: {
@@ -301,7 +301,7 @@ describe(`runtime-server-client realtime sessions`, () => {
         entityUrl: `/horton/demo`,
         id: `rt-1`,
         provider: `openai`,
-        model: `gpt-realtime`,
+        model: `gpt-realtime-2`,
         inputAudio: { codec: `pcm16`, sampleRate: 16_000, channels: 1 },
         meta: { source: `button` },
       })
@@ -319,7 +319,7 @@ describe(`runtime-server-client realtime sessions`, () => {
       entityUrl: `/horton/demo`,
       id: `rt-1`,
       provider: `openai`,
-      model: `gpt-realtime`,
+      model: `gpt-realtime-2`,
       inputAudio: { codec: `pcm16`, sampleRate: 16_000, channels: 1 },
       meta: { source: `button` },
     })
@@ -338,7 +338,7 @@ describe(`runtime-server-client realtime sessions`, () => {
       client.startRealtimeSession({
         entityUrl: `/horton/demo`,
         provider: `openai`,
-        model: `gpt-realtime`,
+        model: `gpt-realtime-2`,
       })
     ).rejects.toThrow(/startRealtimeSession.*401.*not allowed/)
   })
