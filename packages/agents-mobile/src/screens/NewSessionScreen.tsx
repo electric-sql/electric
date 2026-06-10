@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useLiveQuery } from '@tanstack/react-db'
 import { eq } from '@tanstack/db'
 import {
@@ -77,6 +78,10 @@ export function NewSessionScreen({
   } = useAgents()
   const tokens = useTokens()
   const styles = useMemo(() => createStyles(tokens), [tokens])
+  const insets = useSafeAreaInsets()
+  // Measured height of the pinned action bar, so the scroll content can clear
+  // it (the bar's height varies with the safe-area inset and the error row).
+  const [actionBarHeight, setActionBarHeight] = useState(0)
   const [message, setMessage] = useState(``)
   const [selectedType, setSelectedType] = useState<string | null>(null)
   const [selectedRunner, setSelectedRunner] = useState<string | null>(null)
@@ -311,7 +316,12 @@ export function NewSessionScreen({
       >
         <ScrollView
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={styles.content}
+          contentContainerStyle={[
+            styles.content,
+            actionBarHeight
+              ? { paddingBottom: actionBarHeight + spacing.md }
+              : null,
+          ]}
         >
           <View style={styles.intro}>
             <Text style={styles.title}>What should we work on?</Text>
@@ -471,27 +481,36 @@ export function NewSessionScreen({
                 />
               </>
             )}
-
+        </ScrollView>
+        {/* Pinned above the scroll so the action stays reachable however many
+            schema/sandbox sections are open; the scroll content is padded by
+            the measured bar height so nothing hides behind it. */}
+        <View
+          style={[
+            styles.actionBar,
+            { paddingBottom: Math.max(insets.bottom, spacing.md) },
+          ]}
+          onLayout={(event) =>
+            setActionBarHeight(event.nativeEvent.layout.height)
+          }
+        >
           {error && (
             <View style={styles.errorRow}>
               <Text style={styles.errorText}>{error}</Text>
             </View>
           )}
-
-          <View style={styles.footer}>
-            <PrimaryButton
-              title="Start session"
-              loading={loading}
-              disabled={
-                !activeTypeName ||
-                !activeRunnerId ||
-                loading ||
-                missingRequiredArgs
-              }
-              onPress={start}
-            />
-          </View>
-        </ScrollView>
+          <PrimaryButton
+            title="Start session"
+            loading={loading}
+            disabled={
+              !activeTypeName ||
+              !activeRunnerId ||
+              loading ||
+              missingRequiredArgs
+            }
+            onPress={start}
+          />
+        </View>
       </KeyboardAvoidingView>
     </Screen>
   )
@@ -703,9 +722,13 @@ function createStyles(tokens: Tokens) {
       color: tokens.red11,
       fontSize: fontSize.sm,
     },
-    footer: {
-      flexDirection: `row`,
-      justifyContent: `flex-end`,
+    actionBar: {
+      gap: spacing.sm,
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.md,
+      borderTopWidth: 1,
+      borderTopColor: tokens.border1,
+      backgroundColor: tokens.bg,
     },
   })
 }
