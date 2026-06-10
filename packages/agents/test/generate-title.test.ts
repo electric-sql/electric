@@ -33,6 +33,14 @@ describe(`generateTitle`, () => {
     )
     expect(result).toBe(`Refactor Auth Middleware`)
   })
+
+  it(`falls back when the llm goes conversational instead of titling`, async () => {
+    // e.g. an image message where the text-only title model apologizes.
+    const llmCall = async () =>
+      `I'm sorry but no images were actually shared in our conversation`
+    const result = await generateTitle(`describe these screenshots`, llmCall)
+    expect(result).toBe(`Describe These Screenshots`)
+  })
 })
 
 describe(`extractFirstUserMessage`, () => {
