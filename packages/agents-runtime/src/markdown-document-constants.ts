@@ -1,0 +1,2 @@
+export const MARKDOWN_DOCUMENT_TEXT_NAME = `markdown` as const
+export const MARKDOWN_DOCUMENT_AGENT_PRESENCE_TTL_MS = 45_000

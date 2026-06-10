@@ -4,8 +4,8 @@ import * as Y from 'yjs'
 import {
   MARKDOWN_DOCUMENT_AGENT_PRESENCE_TTL_MS,
   MARKDOWN_DOCUMENT_TEXT_NAME,
-  markdownText,
-} from './markdown-yjs'
+} from './markdown-document-constants'
+import { markdownText } from './markdown-yjs'
 import type {
   ManifestDocumentEntry,
   MarkdownDocumentConnection,

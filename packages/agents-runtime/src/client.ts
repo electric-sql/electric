@@ -50,7 +50,7 @@ export {
 export { isGoalCommandText, parseGoalCommand } from './goal-command'
 export { formatTokenCount } from './token-budget'
 export type { GoalCommand } from './goal-command'
-export { MARKDOWN_DOCUMENT_AGENT_PRESENCE_TTL_MS } from './markdown-yjs'
+export { MARKDOWN_DOCUMENT_AGENT_PRESENCE_TTL_MS } from './markdown-document-constants'
 
 export type {
   EntityStreamDB,
