@@ -4,7 +4,11 @@ import { createContextEntriesApi } from './context-entries'
 import { entityStateSchema } from './entity-schema'
 import { createGoalApi } from './goal-api'
 import { formatPointerOrderToken } from './event-pointer'
-import { createOutboundBridge, loadOutboundIdSeed } from './outbound-bridge'
+import {
+  allocateRunKey,
+  createOutboundBridge,
+  loadOutboundIdSeed,
+} from './outbound-bridge'
 import { createPiAgentAdapter } from './pi-adapter'
 import {
   timelineMessages as runtimeTimelineMessages,
@@ -475,23 +479,16 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
   let useContextConfig: UseContextConfig | null = null
   let useContextHash = ``
   let useContextRegistrations = 0
-  // Lazy-loaded run-id counter used by ctx.recordRun(). Initialized
-  // from the runs already present in the entity's StreamDB so keys
-  // remain monotonic across handler invocations.
-  let recordRunCounter: number | null = null
+  // Run-id allocation for ctx.recordRun() / ctx.replyText(). Delegates
+  // to the outbound bridge's shared id-seed cache so synthetic runs
+  // can't collide with `run-N` keys the bridge allocated for events
+  // that haven't round-tripped into the local collection yet. The local
+  // floor keeps sequential allocations monotonic within this handler
+  // even when the collection lags (or has no stable id, as in tests).
+  let localRunFloor = 0
   const nextRunKey = (): string => {
-    if (recordRunCounter == null) {
-      let max = 0
-      const rows = config.db.collections.runs.toArray as Array<{ key: string }>
-      for (const row of rows) {
-        const m = row.key.match(/^run-(\d+)/)
-        if (!m) continue
-        max = Math.max(max, parseInt(m[1]!, 10) + 1)
-      }
-      recordRunCounter = max
-    }
-    const key = `run-${recordRunCounter}`
-    recordRunCounter += 1
+    const key = allocateRunKey(config.db, localRunFloor)
+    localRunFloor = parseInt(key.slice(`run-`.length), 10) + 1
     return key
   }
 

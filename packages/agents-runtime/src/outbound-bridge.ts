@@ -97,6 +97,40 @@ export async function loadOutboundIdSeed(
   return seed
 }
 
+/**
+ * Synchronously allocate the next `run-N` key, coordinated with the
+ * outbound bridge's id-seed cache. Writers like `ctx.recordRun()` and
+ * `ctx.replyText()` emit run rows via `writeEvent`, which has no
+ * synchronous local apply — the collection only catches up when the
+ * event round-trips, so seeding a counter from `runs.toArray` alone can
+ * reuse a key the bridge just allocated. Consulting (and advancing) the
+ * shared cache keeps all allocators collision-free within the process.
+ */
+export function allocateRunKey(
+  db: Pick<EntityStreamDB, `collections`>,
+  floor = 0
+): string {
+  const cacheKey = db.collections.runs.id
+  const fromDb = nextCounterFromKeys(
+    db.collections.runs.toArray.map((run) => run.key),
+    `run`
+  )
+  // Without a stable collection id the shared cache would cross-contaminate
+  // unrelated DBs (e.g. test fixtures); rely on the caller's floor instead.
+  const cached = cacheKey ? outboundIdSeedCache.get(cacheKey) : undefined
+  const next = Math.max(fromDb, cached?.run ?? 0, floor)
+  if (cacheKey) {
+    outboundIdSeedCache.set(cacheKey, {
+      run: next + 1,
+      step: cached?.step ?? 0,
+      msg: cached?.msg ?? 0,
+      tc: cached?.tc ?? 0,
+      cacheKey,
+    })
+  }
+  return `run-${next}`
+}
+
 export interface OutboundBridge {
   onRunStart: () => void
   onRunEnd: (opts?: { finishReason?: string }) => void
