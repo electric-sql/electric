@@ -6,7 +6,9 @@ import {
 import {
   buildEntityTimelineData,
   compareTimelineOrders,
+  createEntityErrorsQuery,
   createEntityIncludesQuery,
+  createEntityTimelineQuery,
   getEntityState,
   normalizeEntityTimelineData,
 } from '../src/entity-timeline'
@@ -1658,6 +1660,39 @@ describe(`entity includes query`, () => {
         },
       }
     }
+
+    it(`matches standalone errors when run_id is omitted`, async () => {
+      const { collections, sync } = createEntityCollections()
+      const errorsQuery = createLiveQueryCollection({
+        query: createEntityErrorsQuery({ collections } as any),
+        startSync: true,
+      })
+      const timelineQuery = createLiveQueryCollection({
+        query: createEntityTimelineQuery({ collections } as any),
+        startSync: true,
+      })
+      await Promise.all([errorsQuery.preload(), timelineQuery.preload()])
+
+      sync.errors.insert({
+        key: `err-omitted-run`,
+        error_code: `HANDLER_FAILED`,
+        message: `boom`,
+      })
+      await new Promise((r) => setTimeout(r, 50))
+
+      expect(getData(errorsQuery)).toMatchObject([
+        {
+          key: `err-omitted-run`,
+          error_code: `HANDLER_FAILED`,
+          message: `boom`,
+        },
+      ])
+      expect(getData(timelineQuery)[0]?.error).toMatchObject({
+        key: `err-omitted-run`,
+        error_code: `HANDLER_FAILED`,
+        message: `boom`,
+      })
+    })
 
     it(`reacts to changes in the top-level runs collection`, async () => {
       const { collections, sync } = createEntityCollections()

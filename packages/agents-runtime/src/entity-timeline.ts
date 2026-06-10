@@ -6,6 +6,7 @@ import {
   createLiveQueryCollection,
   eq,
   isNull,
+  isUndefined,
   like,
   localOnlyCollectionOptions,
   or,
@@ -1304,7 +1305,7 @@ function buildEntityTimelineQuery(
 
   const errorSource = q
     .from({ error: db.collections.errors })
-    .where(({ error }) => isNull(error.run_id))
+    .where(({ error }) => or(isNull(error.run_id), isUndefined(error.run_id)))
     .select(({ error }) => ({
       key: error.key,
       order: coalesce(error._timeline_order, `~`),
@@ -1643,7 +1644,9 @@ export function createEntityErrorsQuery(
   return (q: InitialQueryBuilder) =>
     q
       .from({ errors: db.collections.errors })
-      .where(({ errors }) => isNull(errors.run_id))
+      .where(({ errors }) =>
+        or(isNull(errors.run_id), isUndefined(errors.run_id))
+      )
       .select(({ errors }) => ({
         key: errors.key,
         error_code: errors.error_code,
