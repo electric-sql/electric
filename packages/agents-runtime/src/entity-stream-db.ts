@@ -240,10 +240,14 @@ export function createEntityStreamDB(
     key: string
   }
 
+  const principalColumns = new Set(principalColumnByCollection.values())
   const cleanRow = (row: Record<string, unknown>): Record<string, unknown> => {
     const clone = { ...row }
     delete clone._seq
     delete clone._timeline_order
+    for (const col of principalColumns) {
+      delete clone[col]
+    }
     return clone
   }
 
