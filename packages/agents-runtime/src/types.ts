@@ -1059,7 +1059,6 @@ export interface HandlerContext<
   clearGoal: () => boolean
   getGoal: () => GoalEntry | undefined
   markGoalComplete: () => GoalEntry | undefined
-  markGoalBudgetLimited: () => GoalEntry | undefined
   updateGoalUsage: (
     tokensUsed: number,
     opts?: { status?: GoalEntry[`status`] }

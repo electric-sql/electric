@@ -987,7 +987,6 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
     clearGoal: goalApi.clearGoal,
     getGoal: goalApi.getGoal,
     markGoalComplete: goalApi.markGoalComplete,
-    markGoalBudgetLimited: goalApi.markGoalBudgetLimited,
     updateGoalUsage: goalApi.updateGoalUsage,
     __debug: {
       useContextRegistrations: () => useContextRegistrations,

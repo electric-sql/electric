@@ -113,7 +113,6 @@ describe(`horton model selection`, () => {
       agent: { run },
       getGoal: vi.fn(() => undefined),
       updateGoalUsage: vi.fn(),
-      markGoalBudgetLimited: vi.fn(),
     } as any
 
     await def!.definition.handler(fakeCtx, { type: `inbox` } as any)

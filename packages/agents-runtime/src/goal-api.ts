@@ -13,7 +13,6 @@ export interface GoalApi {
   clearGoal: () => boolean
   getGoal: () => GoalEntry | undefined
   markGoalComplete: () => GoalEntry | undefined
-  markGoalBudgetLimited: () => GoalEntry | undefined
   /**
    * Persist an accurate `tokensUsed` from an authoritative source (e.g. the
    * runtime's in-memory step accumulator, which doesn't suffer from the
@@ -136,19 +135,6 @@ export function createGoalApi(opts: {
         key: GOAL_MANIFEST_KEY,
         kind: `goal`,
         status: `complete`,
-        updatedAt: now(),
-      }
-      return persist(next)
-    },
-
-    markGoalBudgetLimited() {
-      const existing = readRaw()
-      if (!existing) return undefined
-      const next: ManifestGoalEntry = {
-        ...(existing as unknown as ManifestGoalEntry),
-        key: GOAL_MANIFEST_KEY,
-        kind: `goal`,
-        status: `budget_limited`,
         updatedAt: now(),
       }
       return persist(next)

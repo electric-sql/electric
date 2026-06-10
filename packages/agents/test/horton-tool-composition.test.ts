@@ -68,7 +68,6 @@ async function captureAgentConfig(
     // the captured config reflects the tool-composition path only.
     getGoal: vi.fn(() => undefined),
     updateGoalUsage: vi.fn(),
-    markGoalBudgetLimited: vi.fn(),
     ...ctxOverrides,
   } as any
   await registry
