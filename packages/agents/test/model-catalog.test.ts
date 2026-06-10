@@ -126,6 +126,7 @@ describe(`model catalog`, () => {
     )
 
     expect(payload).toEqual({
+      store: true,
       reasoning: { effort: `minimal` },
     })
   })
@@ -145,8 +146,49 @@ describe(`model catalog`, () => {
     )
 
     expect(payload).toEqual({
+      store: true,
       reasoning: { effort: `high` },
     })
+  })
+
+  it(`forces store true only for OpenAI reasoning model payloads`, async () => {
+    const openAiCatalog = await createBuiltinModelCatalog()
+    const openAiConfig = resolveBuiltinModelConfig(openAiCatalog!, {
+      model: `openai:gpt-5`,
+    })
+
+    expect(
+      openAiConfig.onPayload!(
+        { store: false, reasoning: { effort: `none` } },
+        {} as any
+      )
+    ).toEqual({
+      store: true,
+      reasoning: { effort: `minimal` },
+    })
+
+    delete process.env.OPENAI_API_KEY
+    process.env.DEEPSEEK_API_KEY = `test-deepseek-key`
+    vi.stubGlobal(
+      `fetch`,
+      vi.fn(async (url: string) => {
+        if (String(url).includes(`deepseek.com`)) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ data: [{ id: `deepseek-v4-flash` }] }),
+          }
+        }
+        return { ok: false, status: 401, json: async () => ({}) }
+      })
+    )
+
+    const deepseekCatalog = await createBuiltinModelCatalog()
+    const deepseekConfig = resolveBuiltinModelConfig(deepseekCatalog!, {
+      model: `deepseek:deepseek-v4-flash`,
+    })
+
+    expect(deepseekConfig.onPayload).toBeUndefined()
   })
 
   it(`does not expose providers whose keys are rejected`, async () => {
