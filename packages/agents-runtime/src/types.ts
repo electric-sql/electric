@@ -664,6 +664,12 @@ export interface CollectionDefinition<
   type?: string
   /** Primary key field name. Defaults to `"key"`. */
   primaryKey?: string
+  /**
+   * Opt-in for HTTP-router writes via `POST /:type/:instanceId/collections/:name`.
+   * Absent/false ⇒ agent-only; the endpoint rejects writes. `true` ⇒ writable,
+   * principal materialized into `_principal`. Object form renames that column.
+   */
+  writable?: boolean | { principalColumn?: string }
 }
 
 export interface EntityTypeEntry<
