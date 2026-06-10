@@ -97,9 +97,7 @@ describe(`createOutboundBridge`, () => {
     expect((writes[1]!.value as Record<string, unknown>).tool_name).toBe(
       `search`
     )
-    expect((writes[1]!.value as Record<string, unknown>).status).toBe(
-      `executing`
-    )
+    expect((writes[1]!.value as Record<string, unknown>).status).toBe(`started`)
     expect((writes[1]!.value as Record<string, unknown>).run_id).toBe(`run-0`)
   })
 

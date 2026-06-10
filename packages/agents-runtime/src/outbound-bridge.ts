@@ -577,8 +577,9 @@ export function createOutboundBridge(
         ids.push(toolCallId)
         legacyToolCallIdsByName.set(name, ids)
       }
+      const existing = toolCallsById.has(toolCallId)
       ensureToolCall(toolCallId, name, {
-        status: `executing`,
+        status: existing ? `executing` : `started`,
         args,
       })
     },
