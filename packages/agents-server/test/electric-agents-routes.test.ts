@@ -1499,6 +1499,39 @@ describe(`ElectricAgentsRoutes fork endpoint`, () => {
   })
 })
 
+describe(`ElectricAgentsRoutes collections endpoint`, () => {
+  it(`routes a collection write to the manager with the authenticated principal`, async () => {
+    const manager = {
+      registry: {
+        getEntity: vi.fn().mockResolvedValue({ url: `/chat/test` }),
+        getEntityType: vi.fn(),
+      },
+      ensurePrincipal: vi.fn().mockResolvedValue(undefined),
+      writeCollection: vi.fn().mockResolvedValue({ key: `c1` }),
+    } as any
+
+    const response = await routeResponse(
+      manager,
+      `POST`,
+      `/_electric/entities/chat/test/collections/comments`,
+      { operation: `insert`, key: `c1`, value: { body: `hi` } }
+    )
+
+    expect(response.status).toBe(201)
+    expect(await responseJson(response)).toEqual({ key: `c1` })
+    expect(manager.writeCollection).toHaveBeenCalledWith(
+      `/chat/test`,
+      `comments`,
+      expect.objectContaining({
+        operation: `insert`,
+        key: `c1`,
+        value: { body: `hi` },
+        principal: expect.objectContaining({ url: expect.any(String) }),
+      })
+    )
+  })
+})
+
 describe(`ElectricAgentsRoutes entity-type registration`, () => {
   it(`persists externally_writable_collections on entity type registration`, async () => {
     const registerEntityType = vi.fn().mockResolvedValue({
