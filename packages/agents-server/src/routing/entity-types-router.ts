@@ -45,6 +45,13 @@ type PublicEntityTypeResponse = ElectricAgentsEntityType & {
 
 const jsonObjectSchema = Type.Record(Type.String(), Type.Unknown())
 const schemaMapSchema = Type.Record(Type.String(), jsonObjectSchema)
+const writableCollectionsSchema = Type.Record(
+  Type.String(),
+  Type.Object(
+    { type: Type.String(), principalColumn: Type.String() },
+    { additionalProperties: false }
+  )
+)
 const slashCommandArgumentSchema = Type.Object(
   {
     name: Type.String(),
@@ -93,6 +100,7 @@ const registerEntityTypeBodySchema = Type.Object(
     permission_grants: Type.Optional(
       Type.Array(typePermissionGrantInputSchema)
     ),
+    writable_collections: Type.Optional(writableCollectionsSchema),
   },
   { additionalProperties: false }
 )
@@ -465,6 +473,7 @@ function normalizeEntityTypeRequest(
           } as RegisterEntityTypeRequest[`default_dispatch_policy`])
         : undefined),
     permission_grants: parsed.permission_grants,
+    writable_collections: parsed.writable_collections,
   }
 }
 

@@ -1498,3 +1498,44 @@ describe(`ElectricAgentsRoutes fork endpoint`, () => {
     expect(manager.forkSubtree).not.toHaveBeenCalled()
   })
 })
+
+describe(`ElectricAgentsRoutes entity-type registration`, () => {
+  it(`persists writable_collections on entity type registration`, async () => {
+    const registerEntityType = vi.fn().mockResolvedValue({
+      name: `chat`,
+      description: `chat`,
+      revision: 1,
+      created_at: `t`,
+      updated_at: `t`,
+      writable_collections: {
+        comments: { type: `state:comments`, principalColumn: `_principal` },
+      },
+    })
+    const manager = {
+      registry: { getEntityType: vi.fn() },
+      registerEntityType,
+    } as any
+
+    const response = await routeResponse(
+      manager,
+      `POST`,
+      `/_electric/entity-types`,
+      {
+        name: `chat`,
+        description: `chat`,
+        writable_collections: {
+          comments: { type: `state:comments`, principalColumn: `_principal` },
+        },
+      }
+    )
+
+    expect(response.status).toBe(201)
+    expect(registerEntityType).toHaveBeenCalledWith(
+      expect.objectContaining({
+        writable_collections: {
+          comments: { type: `state:comments`, principalColumn: `_principal` },
+        },
+      })
+    )
+  })
+})
