@@ -1106,12 +1106,10 @@ async function setTag(
 
   const parsed = routeBody<SetTagBody>(request)
   const { entityUrl } = requireExistingEntityRoute(request)
-  const token = writeTokenFromRequest(request)
   const updated = await ctx.entityManager.setTag(
     entityUrl,
     decodeURIComponent(request.params.tagKey),
-    { value: parsed.value },
-    token
+    { value: parsed.value }
   )
   return json(tagResponseBody(updated))
 }
@@ -1127,11 +1125,9 @@ async function deleteTag(
   if (principalMutationError) return principalMutationError
 
   const { entityUrl } = requireExistingEntityRoute(request)
-  const token = writeTokenFromRequest(request)
   const updated = await ctx.entityManager.deleteTag(
     entityUrl,
-    decodeURIComponent(request.params.tagKey),
-    token
+    decodeURIComponent(request.params.tagKey)
   )
   return json(tagResponseBody(updated))
 }

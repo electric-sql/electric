@@ -1052,12 +1052,9 @@ describe(`ElectricAgentsRoutes tag endpoints`, () => {
       { Authorization: `Bearer write-token` }
     )
 
-    expect(manager.setTag).toHaveBeenCalledWith(
-      `/chat/test`,
-      `title`,
-      { value: `Editable title` },
-      `write-token`
-    )
+    expect(manager.setTag).toHaveBeenCalledWith(`/chat/test`, `title`, {
+      value: `Editable title`,
+    })
     expect(await responseJson(response)).toEqual({
       url: `/chat/test`,
       type: `chat`,
@@ -1072,6 +1069,44 @@ describe(`ElectricAgentsRoutes tag endpoints`, () => {
       created_at: 1,
       updated_at: 1,
       txid: 12345,
+    })
+  })
+
+  it(`routes principal-authorized tag upserts without requiring legacy entity write tokens`, async () => {
+    const principal = {
+      kind: `user`,
+      id: `alice`,
+      key: `user:alice`,
+      url: `/principal/user:alice`,
+    }
+    const principalOwnedEntity = {
+      ...existingEntity,
+      created_by: principal.url,
+    }
+    const manager = {
+      registry: {
+        getEntity: vi.fn().mockResolvedValue(principalOwnedEntity),
+        getEntityType: vi.fn(),
+      },
+      setTag: vi.fn().mockResolvedValue({
+        ...principalOwnedEntity,
+        tags: { title: `Editable title` },
+        txid: 12345,
+      }),
+    } as any
+
+    const response = await routeResponse(
+      manager,
+      `POST`,
+      `/_electric/entities/chat/test/tags/title`,
+      { value: `Editable title` },
+      false,
+      principal
+    )
+
+    expect(response.status).toBe(200)
+    expect(manager.setTag).toHaveBeenCalledWith(`/chat/test`, `title`, {
+      value: `Editable title`,
     })
   })
 
@@ -1098,11 +1133,7 @@ describe(`ElectricAgentsRoutes tag endpoints`, () => {
       { Authorization: `Bearer write-token` }
     )
 
-    expect(manager.deleteTag).toHaveBeenCalledWith(
-      `/chat/test`,
-      `title`,
-      `write-token`
-    )
+    expect(manager.deleteTag).toHaveBeenCalledWith(`/chat/test`, `title`)
     expect(await responseJson(response)).toMatchObject({
       url: `/chat/test`,
       tags: {},

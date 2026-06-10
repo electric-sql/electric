@@ -2709,20 +2709,11 @@ export class EntityManager {
   async setTag(
     entityUrl: string,
     key: string,
-    req: SetTagRequest,
-    token?: string
+    req: SetTagRequest
   ): Promise<ElectricAgentsEntity & { txid?: number }> {
     const entity = await this.registry.getEntity(entityUrl)
     if (!entity) {
       throw new ElectricAgentsError(ErrCodeNotFound, `Entity not found`, 404)
-    }
-
-    if (!this.isValidWriteToken(entity, token ?? ``)) {
-      throw new ElectricAgentsError(
-        ErrCodeUnauthorized,
-        `Invalid write token`,
-        401
-      )
     }
     if (rejectsNormalWrites(entity.status)) {
       throw new ElectricAgentsError(
@@ -2759,20 +2750,11 @@ export class EntityManager {
 
   async deleteTag(
     entityUrl: string,
-    key: string,
-    token?: string
+    key: string
   ): Promise<ElectricAgentsEntity & { txid?: number }> {
     const entity = await this.registry.getEntity(entityUrl)
     if (!entity) {
       throw new ElectricAgentsError(ErrCodeNotFound, `Entity not found`, 404)
-    }
-
-    if (!this.isValidWriteToken(entity, token ?? ``)) {
-      throw new ElectricAgentsError(
-        ErrCodeUnauthorized,
-        `Invalid write token`,
-        401
-      )
     }
     if (rejectsNormalWrites(entity.status)) {
       throw new ElectricAgentsError(
