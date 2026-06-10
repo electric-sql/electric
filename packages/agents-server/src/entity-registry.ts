@@ -1422,6 +1422,7 @@ export class PostgresRegistry {
     entity: ElectricAgentsEntity | null
     changed: boolean
     op?: `insert` | `update` | `delete`
+    txid?: number
   }> {
     return this.mutateEntityTags(url, (oldTags) => {
       const previous = oldTags[key]
@@ -1440,7 +1441,11 @@ export class PostgresRegistry {
   async removeEntityTag(
     url: string,
     key: string
-  ): Promise<{ entity: ElectricAgentsEntity | null; changed: boolean }> {
+  ): Promise<{
+    entity: ElectricAgentsEntity | null
+    changed: boolean
+    txid?: number
+  }> {
     return this.mutateEntityTags(url, (oldTags) => {
       if (!(key in oldTags)) return null
       const { [key]: _removed, ...remaining } = oldTags
@@ -1465,6 +1470,7 @@ export class PostgresRegistry {
     entity: ElectricAgentsEntity | null
     changed: boolean
     op?: `insert` | `update`
+    txid?: number
   }> {
     return await this.db.transaction(async (tx) => {
       const [row] = await tx
@@ -1485,7 +1491,7 @@ export class PostgresRegistry {
 
       const nextTags = normalizeTags(mutation.nextTags)
       const updatedAt = Date.now()
-      await tx
+      const [updateResult] = await tx
         .update(entities)
         .set({
           tags: nextTags,
@@ -1493,6 +1499,10 @@ export class PostgresRegistry {
           updatedAt,
         })
         .where(this.entityWhere(url))
+        .returning({
+          txid: sql<string>`pg_current_xact_id()::xid::text`,
+        })
+      const txid = updateResult ? parseInt(updateResult.txid) : undefined
 
       await tx.insert(tagStreamOutbox).values({
         tenantId: this.tenantId,
@@ -1513,6 +1523,7 @@ export class PostgresRegistry {
         entity,
         changed: true,
         ...(op === `insert` || op === `update` ? { op } : {}),
+        ...(txid !== undefined ? { txid } : {}),
       }
     })
   }

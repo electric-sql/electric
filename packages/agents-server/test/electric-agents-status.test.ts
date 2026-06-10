@@ -683,7 +683,7 @@ describe(`ElectricAgentsManager.forkSubtree`, () => {
         from: `user`,
         payload: `after failure`,
       })
-    ).resolves.toBeUndefined()
+    ).resolves.toEqual({ txid: expect.any(String) })
     expect(streamClient.append).toHaveBeenCalledWith(
       root.streams.main,
       expect.any(Uint8Array)

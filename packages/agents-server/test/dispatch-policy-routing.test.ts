@@ -198,7 +198,7 @@ describe(`dispatch policy routing`, () => {
       targets: [{ type: `runner`, runnerId: `runner-1` }],
     }
     const ctx = buildContext()
-    ctx.entityManager.send = vi.fn(async () => undefined)
+    ctx.entityManager.send = vi.fn(async () => ({ txid: `tx-send` }))
 
     const response = await globalRouter.fetch(
       request(`PUT`, `/_electric/entities/chat/one`, {
@@ -238,7 +238,7 @@ describe(`dispatch policy routing`, () => {
       targets: [{ type: `webhook`, url: `http://runtime.local/wake` }],
     }
     const ctx = buildContext()
-    ctx.entityManager.send = vi.fn(async () => undefined)
+    ctx.entityManager.send = vi.fn(async () => ({ txid: `tx-send` }))
 
     const response = await globalRouter.fetch(
       request(`PUT`, `/_electric/entities/chat/one`, {
@@ -281,7 +281,7 @@ describe(`dispatch policy routing`, () => {
       created_at: new Date(0).toISOString(),
       updated_at: new Date(0).toISOString(),
     })
-    ctx.entityManager.send = vi.fn(async () => undefined)
+    ctx.entityManager.send = vi.fn(async () => ({ txid: `tx-send` }))
 
     const response = await globalRouter.fetch(
       request(`POST`, `/_electric/entities/chat/one/send`, {
@@ -290,7 +290,7 @@ describe(`dispatch policy routing`, () => {
       ctx
     )
 
-    expect(response.status).toBe(204)
+    expect(response.status).toBe(200)
     expect(ctx.streamClient.putSubscription).toHaveBeenCalledWith(
       expect.stringMatching(/^runner:runner-1:/),
       expect.objectContaining({
@@ -316,7 +316,7 @@ describe(`dispatch policy routing`, () => {
     ;(ctx.entityManager.registry.getEntity as any).mockResolvedValue(
       entity(dispatchPolicy)
     )
-    ctx.entityManager.send = vi.fn(async () => undefined)
+    ctx.entityManager.send = vi.fn(async () => ({ txid: `tx-send` }))
 
     const response = await globalRouter.fetch(
       request(`POST`, `/_electric/entities/chat/one/send`, {
@@ -325,7 +325,7 @@ describe(`dispatch policy routing`, () => {
       ctx
     )
 
-    expect(response.status).toBe(204)
+    expect(response.status).toBe(200)
     expect(ctx.streamClient.getSubscription).toHaveBeenCalledWith(
       expect.stringMatching(/^runner:runner-1:/)
     )
@@ -355,7 +355,7 @@ describe(`dispatch policy routing`, () => {
     ;(ctx.streamClient.getSubscription as any).mockResolvedValue({
       streams: [{ path: `tenant-test/chat/one/main` }],
     })
-    ctx.entityManager.send = vi.fn(async () => undefined)
+    ctx.entityManager.send = vi.fn(async () => ({ txid: `tx-send` }))
 
     const response = await globalRouter.fetch(
       request(`POST`, `/_electric/entities/chat/one/send`, {
@@ -364,7 +364,7 @@ describe(`dispatch policy routing`, () => {
       ctx
     )
 
-    expect(response.status).toBe(204)
+    expect(response.status).toBe(200)
     expect(ctx.streamClient.getSubscription).toHaveBeenCalledWith(
       expect.stringMatching(/^runner:runner-1:/)
     )
@@ -383,7 +383,7 @@ describe(`dispatch policy routing`, () => {
       ctx
     )
 
-    expect(second.status).toBe(204)
+    expect(second.status).toBe(200)
     expect(ctx.streamClient.getSubscription).toHaveBeenCalledTimes(1)
     expect(ctx.streamClient.ensure).toHaveBeenCalledTimes(2)
     expect(ctx.entityManager.send).toHaveBeenCalledWith(
@@ -414,7 +414,7 @@ describe(`dispatch policy routing`, () => {
         })
       )
     )
-    ctx.entityManager.send = vi.fn(async () => undefined)
+    ctx.entityManager.send = vi.fn(async () => ({ txid: `tx-send` }))
 
     const response = await globalRouter.fetch(
       request(`PUT`, `/_electric/entities/chat/one`, {

@@ -79,8 +79,14 @@ describe(`runtime-server-client.setTag`, () => {
       fetch: fakeFetch,
     })
 
-    await client.setTag(`/horton/abc`, `title`, `Refactor auth`, `wt-1234`)
+    const result = await client.setTag(
+      `/horton/abc`,
+      `title`,
+      `Refactor auth`,
+      `wt-1234`
+    )
 
+    expect(result).toEqual({})
     expect(calls).toHaveLength(1)
     expect(calls[0]!.url).toBe(
       `http://test.example/_electric/entities/horton/abc/tags/title`
@@ -92,6 +98,42 @@ describe(`runtime-server-client.setTag`, () => {
     expect(JSON.parse(calls[0]!.init!.body as string)).toEqual({
       value: `Refactor auth`,
     })
+  })
+
+  it(`returns txid from tag response when present`, async () => {
+    const fakeFetch = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ txid: `tx-title` }), {
+          status: 200,
+          headers: { 'content-type': `application/json` },
+        })
+    ) as unknown as typeof fetch
+    const client = createRuntimeServerClient({
+      baseUrl: `http://test.example`,
+      fetch: fakeFetch,
+    })
+
+    await expect(
+      client.setTag(`/horton/abc`, `title`, `Refactor auth`, `wt-1234`)
+    ).resolves.toEqual({ txid: `tx-title` })
+  })
+
+  it(`coerces numeric txid from tag response to string`, async () => {
+    const fakeFetch = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ txid: 12345 }), {
+          status: 200,
+          headers: { 'content-type': `application/json` },
+        })
+    ) as unknown as typeof fetch
+    const client = createRuntimeServerClient({
+      baseUrl: `http://test.example`,
+      fetch: fakeFetch,
+    })
+
+    await expect(
+      client.setTag(`/horton/abc`, `title`, `Refactor auth`, `wt-1234`)
+    ).resolves.toEqual({ txid: `12345` })
   })
 
   it(`can keep server authorization while sending write token separately`, async () => {
@@ -121,6 +163,20 @@ describe(`runtime-server-client.setTag`, () => {
     expect(headers.get(`electric-claim-token`)).toBe(`wt-1234`)
   })
 
+  it(`returns empty object when tag response body is not valid JSON`, async () => {
+    const fakeFetch = vi.fn(
+      async () => new Response(null, { status: 200 })
+    ) as unknown as typeof fetch
+    const client = createRuntimeServerClient({
+      baseUrl: `http://test.example`,
+      fetch: fakeFetch,
+    })
+
+    await expect(
+      client.setTag(`/horton/abc`, `title`, `Refactor auth`, `wt-1234`)
+    ).resolves.toEqual({})
+  })
+
   it(`throws when the server returns a non-2xx response`, async () => {
     const fakeFetch = vi.fn(
       async () => new Response(`unauthorized`, { status: 401 })
@@ -133,6 +189,80 @@ describe(`runtime-server-client.setTag`, () => {
     await expect(
       client.setTag(`/horton/abc`, `title`, `x`, `bad-token`)
     ).rejects.toThrow(/setTag.*401/)
+  })
+})
+
+describe(`runtime-server-client.deleteTag`, () => {
+  it(`returns empty object when no txid in response`, async () => {
+    const fakeFetch = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { 'content-type': `application/json` },
+        })
+    ) as unknown as typeof fetch
+    const client = createRuntimeServerClient({
+      baseUrl: `http://test.example`,
+      fetch: fakeFetch,
+    })
+
+    const result = await client.deleteTag(`/horton/abc`, `title`, `wt-1234`)
+
+    expect(result).toEqual({})
+    expect(fakeFetch).toHaveBeenCalledWith(
+      `http://test.example/_electric/entities/horton/abc/tags/title`,
+      expect.objectContaining({ method: `DELETE` })
+    )
+  })
+
+  it(`returns txid from deleteTag response when present`, async () => {
+    const fakeFetch = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ txid: `tx-del` }), {
+          status: 200,
+          headers: { 'content-type': `application/json` },
+        })
+    ) as unknown as typeof fetch
+    const client = createRuntimeServerClient({
+      baseUrl: `http://test.example`,
+      fetch: fakeFetch,
+    })
+
+    await expect(
+      client.deleteTag(`/horton/abc`, `title`, `wt-1234`)
+    ).resolves.toEqual({ txid: `tx-del` })
+  })
+
+  it(`coerces numeric txid from deleteTag response to string`, async () => {
+    const fakeFetch = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ txid: 99999 }), {
+          status: 200,
+          headers: { 'content-type': `application/json` },
+        })
+    ) as unknown as typeof fetch
+    const client = createRuntimeServerClient({
+      baseUrl: `http://test.example`,
+      fetch: fakeFetch,
+    })
+
+    await expect(
+      client.deleteTag(`/horton/abc`, `title`, `wt-1234`)
+    ).resolves.toEqual({ txid: `99999` })
+  })
+
+  it(`throws when the server returns a non-2xx response`, async () => {
+    const fakeFetch = vi.fn(
+      async () => new Response(`forbidden`, { status: 403 })
+    ) as unknown as typeof fetch
+    const client = createRuntimeServerClient({
+      baseUrl: `http://test.example`,
+      fetch: fakeFetch,
+    })
+
+    await expect(
+      client.deleteTag(`/horton/abc`, `title`, `bad-token`)
+    ).rejects.toThrow(/deleteTag.*403/)
   })
 })
 

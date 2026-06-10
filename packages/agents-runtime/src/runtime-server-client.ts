@@ -206,12 +206,12 @@ export interface RuntimeServerClient {
     key: string,
     value: string,
     writeToken: string
-  ) => Promise<void>
+  ) => Promise<{ txid?: string }>
   deleteTag: (
     entityUrl: string,
     key: string,
     writeToken: string
-  ) => Promise<void>
+  ) => Promise<{ txid?: string }>
 }
 
 interface RuntimeEntityResponse {
@@ -305,6 +305,19 @@ export function createRuntimeServerClient(
       entityUrl,
       entityType: entity.type,
       streamPath,
+    }
+  }
+
+  const readTxidResponse = async (
+    response: Response
+  ): Promise<{ txid?: string }> => {
+    try {
+      const body = (await response.json()) as { txid?: unknown }
+      if (typeof body.txid === `string`) return { txid: body.txid }
+      if (typeof body.txid === `number`) return { txid: String(body.txid) }
+      return {}
+    } catch {
+      return {}
     }
   }
 
@@ -837,7 +850,7 @@ export function createRuntimeServerClient(
     key: string,
     value: string,
     writeToken: string
-  ): Promise<void> => {
+  ): Promise<{ txid?: string }> => {
     const response = await authedRequest(
       `${entityRpcPath(entityUrl)}/tags/${encodeURIComponent(key)}`,
       {
@@ -852,13 +865,14 @@ export function createRuntimeServerClient(
         `setTag ${entityUrl} failed (${response.status}): ${await readErrorText(response)}`
       )
     }
+    return readTxidResponse(response)
   }
 
   const deleteTag = async (
     entityUrl: string,
     key: string,
     writeToken: string
-  ): Promise<void> => {
+  ): Promise<{ txid?: string }> => {
     const response = await authedRequest(
       `${entityRpcPath(entityUrl)}/tags/${encodeURIComponent(key)}`,
       {
@@ -871,6 +885,7 @@ export function createRuntimeServerClient(
         `deleteTag ${entityUrl} failed (${response.status}): ${await readErrorText(response)}`
       )
     }
+    return readTxidResponse(response)
   }
 
   return {

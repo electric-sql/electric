@@ -336,6 +336,14 @@ function cloneRecord<T extends Record<string, unknown>>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
 }
 
+function withOptionalTxid<T>(
+  entity: T,
+  txid: number | undefined
+): T & { txid?: number } {
+  if (txid === undefined) return entity as T & { txid?: number }
+  return { ...entity, txid }
+}
+
 /**
  * Orchestrates the Electric Agents entity lifecycle: register types, spawn, send, kill.
  *
@@ -2336,7 +2344,7 @@ export class EntityManager {
     entityUrl: string,
     req: SendRequest,
     opts?: { producerId?: string }
-  ): Promise<void> {
+  ): Promise<{ txid: string }> {
     const entity = await this.validateSendRequest(entityUrl, req)
     if (
       this.isForkWorkLockedEntity(entityUrl) &&
@@ -2384,9 +2392,11 @@ export class EntityManager {
       await this.entityBridgeManager?.onEntityChanged(entityUrl)
     }
 
+    const txid = crypto.randomUUID()
     const envelope = entityStateSchema.inbox.insert({
       key,
       value,
+      headers: { txid },
     } as any)
 
     const encoded = this.encodeChangeEvent(envelope as Record<string, unknown>)
@@ -2395,7 +2405,7 @@ export class EntityManager {
         await this.streamClient.appendIdempotent(entity.streams.main, encoded, {
           producerId: opts.producerId,
         })
-        return
+        return { txid }
       }
 
       await this.streamClient.append(entity.streams.main, encoded)
@@ -2407,9 +2417,11 @@ export class EntityManager {
             type: `identity`,
             key: `self`,
             value: identity,
+            headers: { txid },
           })
         )
       }
+      return { txid }
     } catch (err) {
       if (this.isClosedStreamError(err)) {
         throw new ElectricAgentsError(
@@ -2431,7 +2443,7 @@ export class EntityManager {
       mode?: `immediate` | `queued` | `paused` | `steer`
       status?: `pending` | `processed` | `cancelled`
     }
-  ): Promise<void> {
+  ): Promise<{ txid: string }> {
     const entity = await this.registry.getEntity(entityUrl)
     if (!entity) {
       throw new ElectricAgentsError(ErrCodeNotFound, `Entity not found`, 404)
@@ -2463,17 +2475,23 @@ export class EntityManager {
       )
     }
 
+    const txid = crypto.randomUUID()
     const envelope = entityStateSchema.inbox.update({
       key,
       value,
+      headers: { txid },
     } as any)
     await this.streamClient.append(
       entity.streams.main,
       this.encodeChangeEvent(envelope as Record<string, unknown>)
     )
+    return { txid }
   }
 
-  async deleteInboxMessage(entityUrl: string, key: string): Promise<void> {
+  async deleteInboxMessage(
+    entityUrl: string,
+    key: string
+  ): Promise<{ txid: string }> {
     const entity = await this.registry.getEntity(entityUrl)
     if (!entity) {
       throw new ElectricAgentsError(ErrCodeNotFound, `Entity not found`, 404)
@@ -2486,11 +2504,16 @@ export class EntityManager {
       )
     }
 
-    const envelope = entityStateSchema.inbox.delete({ key } as any)
+    const txid = crypto.randomUUID()
+    const envelope = entityStateSchema.inbox.delete({
+      key,
+      headers: { txid },
+    } as any)
     await this.streamClient.append(
       entity.streams.main,
       this.encodeChangeEvent(envelope as Record<string, unknown>)
     )
+    return { txid }
   }
 
   // ==========================================================================
@@ -2686,20 +2709,11 @@ export class EntityManager {
   async setTag(
     entityUrl: string,
     key: string,
-    req: SetTagRequest,
-    token: string
-  ): Promise<ElectricAgentsEntity> {
+    req: SetTagRequest
+  ): Promise<ElectricAgentsEntity & { txid?: number }> {
     const entity = await this.registry.getEntity(entityUrl)
     if (!entity) {
       throw new ElectricAgentsError(ErrCodeNotFound, `Entity not found`, 404)
-    }
-
-    if (!this.isValidWriteToken(entity, token)) {
-      throw new ElectricAgentsError(
-        ErrCodeUnauthorized,
-        `Invalid write token`,
-        401
-      )
     }
     if (rejectsNormalWrites(entity.status)) {
       throw new ElectricAgentsError(
@@ -2731,25 +2745,16 @@ export class EntityManager {
       await this.entityBridgeManager.onEntityChanged(entityUrl)
     }
 
-    return updated
+    return withOptionalTxid(updated, result.txid)
   }
 
   async deleteTag(
     entityUrl: string,
-    key: string,
-    token: string
-  ): Promise<ElectricAgentsEntity> {
+    key: string
+  ): Promise<ElectricAgentsEntity & { txid?: number }> {
     const entity = await this.registry.getEntity(entityUrl)
     if (!entity) {
       throw new ElectricAgentsError(ErrCodeNotFound, `Entity not found`, 404)
-    }
-
-    if (!this.isValidWriteToken(entity, token)) {
-      throw new ElectricAgentsError(
-        ErrCodeUnauthorized,
-        `Invalid write token`,
-        401
-      )
     }
     if (rejectsNormalWrites(entity.status)) {
       throw new ElectricAgentsError(
@@ -2773,7 +2778,7 @@ export class EntityManager {
       await this.entityBridgeManager.onEntityChanged(entityUrl)
     }
 
-    return updated
+    return withOptionalTxid(updated, result.txid)
   }
 
   async ensureEntitiesMembershipStream(
