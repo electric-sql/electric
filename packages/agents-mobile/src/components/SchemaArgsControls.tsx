@@ -10,7 +10,12 @@ import {
   View,
 } from 'react-native'
 import { isModelProperty } from '@electric-ax/agents-server-ui/src/lib/modelCapabilities'
-import { stringArrayToDisplay } from '@electric-ax/agents-server-ui/src/lib/schemaProperties'
+import {
+  modelOptionLabel,
+  modelProviderKey,
+  MODEL_PROVIDER_LABELS,
+  stringArrayToDisplay,
+} from '@electric-ax/agents-server-ui/src/lib/schemaProperties'
 import type { SchemaProperty } from '@electric-ax/agents-server-ui/src/lib/schemaProperties'
 import { BottomSheet, BottomSheetItem, BottomSheetSection } from './BottomSheet'
 import { Icon } from './Icon'
@@ -139,15 +144,6 @@ export function SchemaArgsControls({
   )
 }
 
-// Mirrors the desktop new-session composer's provider labels.
-const MODEL_PROVIDER_LABELS: Record<string, string> = {
-  anthropic: `Anthropic`,
-  openai: `OpenAI`,
-  'openai-codex': `OpenAI Codex`,
-  deepseek: `DeepSeek`,
-  moonshot: `Kimi`,
-}
-
 /** A schema key as a readable label: `reasoningEffort` → `Reasoning Effort`. */
 function humanizeKey(key: string): string {
   return key
@@ -163,20 +159,12 @@ function fieldLabel(propKey: string, prop: SchemaProperty): string {
   return prop.title ?? humanizeKey(propKey)
 }
 
-function providerOf(value: string): string {
-  const idx = value.indexOf(`:`)
-  return idx > 0 ? value.slice(0, idx) : `other`
-}
-
 function providerLabel(provider: string): string {
   return MODEL_PROVIDER_LABELS[provider] ?? humanizeKey(provider)
 }
 
 function optionLabel(value: string, isModel: boolean): string {
-  if (isModel) {
-    const idx = value.indexOf(`:`)
-    return idx > 0 ? value.slice(idx + 1) : value
-  }
+  if (isModel) return modelOptionLabel(value)
   // Title-case enum values (`auto` → `Auto`), mirroring desktop.
   return value
     .split(/[\s_-]+/g)
@@ -212,7 +200,7 @@ function EnumArgPill({
     if (!isModel) return [{ provider: null as string | null, options }]
     const byProvider = new Map<string, Array<string>>()
     for (const option of options) {
-      const provider = providerOf(option)
+      const provider = modelProviderKey(option)
       const list = byProvider.get(provider) ?? []
       list.push(option)
       byProvider.set(provider, list)

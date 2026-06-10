@@ -45,6 +45,9 @@ import {
   groupModelSettings,
   hasSchemaProperties,
   inlineSchemaProperties,
+  modelOptionLabel,
+  modelProviderKey,
+  MODEL_PROVIDER_LABELS,
 } from '../../lib/schemaProperties'
 import type {
   InlineSchemaProperty,
@@ -1236,26 +1239,8 @@ function RunnerPickerPill({
   )
 }
 
-const MODEL_PROVIDER_LABELS: Record<string, string> = {
-  anthropic: `Anthropic`,
-  openai: `OpenAI`,
-  'openai-codex': `OpenAI Codex`,
-  deepseek: `DeepSeek`,
-  moonshot: `Kimi`,
-}
-
-function modelProviderKey(value: string): string {
-  const index = value.indexOf(`:`)
-  return index > 0 ? value.slice(0, index) : `other`
-}
-
 function modelProviderLabel(provider: string): string {
   return MODEL_PROVIDER_LABELS[provider] ?? provider
-}
-
-function modelOptionLabel(value: string): string {
-  const index = value.indexOf(`:`)
-  return index > 0 ? value.slice(index + 1) : value
 }
 
 function groupedModelOptions(

@@ -82,8 +82,7 @@ function isNativeFileDescriptor(
   file: AttachmentInput
 ): file is NativeFileDescriptor {
   // RN file parts are plain `{ uri, name, type }` objects; browser File/Blob
-  // instances expose `arrayBuffer()`. RN's FormData also lacks `set`, so the
-  // native branch must use `append` exclusively.
+  // instances expose `arrayBuffer()` — detect by a `uri` plus its absence.
   return (
     typeof (file as { uri?: unknown }).uri === `string` &&
     typeof (file as { arrayBuffer?: unknown }).arrayBuffer !== `function`

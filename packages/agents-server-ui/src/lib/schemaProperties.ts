@@ -165,3 +165,24 @@ export function groupModelSettings(inlineProps: Array<InlineSchemaProperty>): {
     standalone: inlineProps.filter(({ key }) => !combinedKeys.has(key)),
   }
 }
+
+/** Display labels for a model id's provider prefix (`anthropic:…` → `Anthropic`). */
+export const MODEL_PROVIDER_LABELS: Record<string, string> = {
+  anthropic: `Anthropic`,
+  openai: `OpenAI`,
+  'openai-codex': `OpenAI Codex`,
+  deepseek: `DeepSeek`,
+  moonshot: `Kimi`,
+}
+
+/** The provider prefix of a `provider:model` id, or `other` when unprefixed. */
+export function modelProviderKey(value: string): string {
+  const index = value.indexOf(`:`)
+  return index > 0 ? value.slice(0, index) : `other`
+}
+
+/** The model portion of a `provider:model` id (the part after the prefix). */
+export function modelOptionLabel(value: string): string {
+  const index = value.indexOf(`:`)
+  return index > 0 ? value.slice(index + 1) : value
+}
