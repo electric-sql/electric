@@ -30,7 +30,7 @@ export function createMarkGoalCompleteTool(
         })
       ),
     }),
-    execute: async (_toolCallId, _params) => {
+    execute: async (_toolCallId, params) => {
       const before = ctx.getGoal()
       if (!before) {
         return asToolResult({
@@ -38,11 +38,13 @@ export function createMarkGoalCompleteTool(
           message: `No active goal to mark complete.`,
         })
       }
-      const updated = ctx.markGoalComplete()
+      const { summary } = (params ?? {}) as { summary?: string }
+      const updated = ctx.markGoalComplete(summary)
       return asToolResult({
         completed: true,
         objective: updated?.objective ?? before.objective,
         status: updated?.status ?? `complete`,
+        ...(updated?.summary ? { summary: updated.summary } : {}),
       })
     },
   }

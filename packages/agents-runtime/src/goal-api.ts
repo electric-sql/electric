@@ -12,7 +12,7 @@ export interface GoalApi {
   setGoal: (input: GoalInput) => GoalEntry
   clearGoal: () => boolean
   getGoal: () => GoalEntry | undefined
-  markGoalComplete: () => GoalEntry | undefined
+  markGoalComplete: (summary?: string) => GoalEntry | undefined
   /**
    * Persist an accurate `tokensUsed` from an authoritative source (e.g. the
    * runtime's in-memory step accumulator, which doesn't suffer from the
@@ -53,6 +53,9 @@ function toGoalEntry(row: Record<string, unknown>): GoalEntry {
     status: (row.status ?? `active`) as GoalEntry[`status`],
     tokenBudget,
     tokensUsed: typeof row.tokensUsed === `number` ? row.tokensUsed : 0,
+    ...(typeof row.summary === `string` && row.summary
+      ? { summary: row.summary }
+      : {}),
     createdAt: typeof row.createdAt === `number` ? row.createdAt : 0,
     updatedAt: typeof row.updatedAt === `number` ? row.updatedAt : 0,
   }
@@ -127,14 +130,16 @@ export function createGoalApi(opts: {
       return readLive()
     },
 
-    markGoalComplete() {
+    markGoalComplete(summary) {
       const existing = readRaw()
       if (!existing) return undefined
+      const trimmed = summary?.trim()
       const next: ManifestGoalEntry = {
         ...(existing as unknown as ManifestGoalEntry),
         key: GOAL_MANIFEST_KEY,
         kind: `goal`,
         status: `complete`,
+        ...(trimmed ? { summary: trimmed } : {}),
         updatedAt: now(),
       }
       return persist(next)

@@ -372,6 +372,9 @@ type ManifestGoalEntryValue = {
   // Maintained by the handler's in-memory step accumulator (the single
   // write path for usage); enforcement aborts mid-run via the step-end hook.
   tokensUsed: number
+  // Optional completion note recorded by mark_goal_complete — what was
+  // accomplished, or what blocked the goal.
+  summary?: string
   createdAt: number
   updatedAt: number
 }
@@ -866,6 +869,7 @@ function createManifestSchema(): Schema<
       ]),
       tokenBudget: z.number().int().positive().nullable(),
       tokensUsed: z.number().int().nonnegative(),
+      summary: z.string().optional(),
       createdAt: z.number().int(),
       updatedAt: z.number().int(),
     }),
@@ -983,6 +987,7 @@ export type Manifest = ManifestUnion & {
   objective?: string
   tokenBudget?: number | null
   tokensUsed?: number
+  summary?: string
   updatedAt?: number
 }
 export type ReplayWatermark = SequencedPersistedRow<ReplayWatermarkValue>

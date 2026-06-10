@@ -355,6 +355,9 @@ export interface GoalEntry {
   status: GoalStatus
   tokenBudget: number | null
   tokensUsed: number
+  // Completion note recorded by mark_goal_complete — what was
+  // accomplished, or what blocked the goal.
+  summary?: string
   createdAt: number
   updatedAt: number
 }
@@ -1058,7 +1061,7 @@ export interface HandlerContext<
   setGoal: (input: GoalInput) => GoalEntry
   clearGoal: () => boolean
   getGoal: () => GoalEntry | undefined
-  markGoalComplete: () => GoalEntry | undefined
+  markGoalComplete: (summary?: string) => GoalEntry | undefined
   updateGoalUsage: (
     tokensUsed: number,
     opts?: { status?: GoalEntry[`status`] }

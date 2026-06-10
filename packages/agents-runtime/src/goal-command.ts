@@ -235,7 +235,9 @@ export function dispatchGoalCommand(
             )} tokens`
       return {
         handled: true,
-        message: `Goal: ${goal.objective} (${budgetLabel}, ${goal.status})`,
+        message: `Goal: ${goal.objective} (${budgetLabel}, ${goal.status})${
+          goal.summary ? `\nSummary: ${goal.summary}` : ``
+        }`,
       }
     }
     case `error`:
