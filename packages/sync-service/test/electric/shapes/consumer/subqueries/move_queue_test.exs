@@ -93,12 +93,12 @@ defmodule Electric.Shapes.Consumer.Subqueries.MoveQueueTest do
       |> MoveQueue.enqueue(@dep, %{move_in: [{3, "3"}]}, MapSet.new([1]))
 
     assert {{:move_out, 0, [{1, "1"}], []}, queue} = MoveQueue.pop_next(queue)
-    assert queue.move_out == %{}
+    assert map_size(queue.move_out) == 0
     assert {[{2, "2"}, {3, "3"}], _} = Map.fetch!(queue.move_in, 0)
 
     assert {{:move_in, 0, [{2, "2"}, {3, "3"}], []}, queue} = MoveQueue.pop_next(queue)
-    assert queue.move_out == %{}
-    assert queue.move_in == %{}
+    assert map_size(queue.move_out) == 0
+    assert map_size(queue.move_in) == 0
     assert nil == MoveQueue.pop_next(queue)
   end
 

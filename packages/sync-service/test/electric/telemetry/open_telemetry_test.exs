@@ -202,11 +202,11 @@ defmodule Electric.Telemetry.OpenTelemetryTest do
 
     test "rejects phase values other than :start or :end" do
       assert_raise FunctionClauseError, fn ->
-        OpenTelemetry.process_memory_attributes(nil)
+        apply(OpenTelemetry, :process_memory_attributes, [nil])
       end
 
       assert_raise FunctionClauseError, fn ->
-        OpenTelemetry.process_memory_attributes("start")
+        apply(OpenTelemetry, :process_memory_attributes, ["start"])
       end
     end
   end

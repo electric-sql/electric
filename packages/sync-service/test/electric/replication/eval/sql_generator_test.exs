@@ -508,7 +508,7 @@ defmodule Electric.Replication.Eval.SqlGeneratorTest do
   describe "error handling" do
     test "raises ArgumentError for unsupported AST node" do
       assert_raise ArgumentError, ~r/unsupported AST node/, fn ->
-        SqlGenerator.to_sql(%{unexpected: :node})
+        apply(SqlGenerator, :to_sql, [%{unexpected: :node}])
       end
     end
 
