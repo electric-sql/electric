@@ -1445,6 +1445,31 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert %{initial: 0, existing: 0} == Electric.AdmissionControl.get_current(ctx.stack_id)
     end
 
+    test "500 response body redacts internal exception details", ctx do
+      # The raised message includes content that resembles internal detail
+      # (module paths, query text) that must never reach the client.
+      Repatch.patch(Electric.Shapes.Api, :load_shape_info, fn _request ->
+        raise RuntimeError,
+              "(Postgrex.Error) ERROR 42601 at query: SELECT * FROM secret_table"
+      end)
+
+      conn =
+        try do
+          ctx
+          |> conn(:get, %{"table" => "public.users"}, "?offset=-1")
+          |> ServeShapePlug.call(ctx.plug_opts)
+        catch
+          :error, %Plug.Conn.WrapperError{conn: conn} -> conn
+        end
+
+      assert conn.status == 500
+      assert Jason.decode!(conn.resp_body) == %{"error" => "Internal server error"}
+      # The leaked detail must not appear anywhere in the response body.
+      refute conn.resp_body =~ "Postgrex"
+      refute conn.resp_body =~ "secret_table"
+      refute conn.resp_body =~ "load_shape_info"
+    end
+
     # The `catch` only fires on the re-raise path (`handle_caught` sees
     # `{:plug_conn, :sent}` in the mailbox and re-raises). For the tests
     # in this describe block the exception is raised before any response is

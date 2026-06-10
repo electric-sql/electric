@@ -157,8 +157,13 @@ defmodule Electric.Plug.ServeShapePlug do
     )
   end
 
+  # Catch-all: never echo the formatted exception (which carries the full
+  # stacktrace, internal module paths, library versions, and partial query
+  # text) back to the client. The detail is preserved server-side via
+  # OpenTelemetry.record_exception/3 in handle_error/4 and the `error.type`
+  # span attribute, so no observability is lost.
   defp handle_specific_error(conn, _kind, _reason) do
-    send_resp(conn, conn.status, Jason.encode!(%{error: conn.assigns[:error_str]}))
+    send_resp(conn, conn.status, Jason.encode!(%{error: "Internal server error"}))
   end
 
   # Parse JSON body for POST requests to support subset parameters in body
