@@ -1393,6 +1393,8 @@ function buildEntityTimelineQuery(
     cancelled_at: inbox.cancelled_at,
   }))
 
+  // This projection is specific to the `comments` collection and hardcodes the
+  // `_principal` column — it is not generic over arbitrary externallyWritable collections.
   const commentsCollection = (db.collections as Record<string, unknown>)
     .comments as typeof db.collections.wakes | undefined
 

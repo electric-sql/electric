@@ -15,6 +15,7 @@ let optimisticCommentOrderIndex = OPTIMISTIC_COMMENT_ORDER_START
 
 export type OptimisticComment = EntityTimelineCommentRow & {
   _timeline_order: string
+  _principal?: { url: string }
 }
 
 export type SelectedCommentTarget = {
@@ -71,12 +72,14 @@ export function createSendCommentAction({
   const action = createOptimisticAction<SendCommentInput>({
     onMutate: ({ key, body, replyTo, targetSnapshot, pendingOrderIndex }) => {
       const now = new Date().toISOString()
+      const principalUrl = from ?? getActivePrincipal()
       const comment: OptimisticComment = {
         key,
         order: createPendingTimelineOrder(pendingOrderIndex),
         _timeline_order: createPendingTimelineOrder(pendingOrderIndex),
         body,
-        from: from ?? getActivePrincipal(),
+        from: principalUrl,
+        _principal: { url: principalUrl },
         timestamp: now,
         ...(replyTo ? { reply_to: replyTo } : {}),
         ...(targetSnapshot ? { target_snapshot: targetSnapshot } : {}),

@@ -55,6 +55,7 @@ describe(`createSendCommentAction`, () => {
     ])
 
     expect(optimistic).toHaveLength(2)
+    expect(optimistic[0]?._principal?.url).toBe(`/principal/user%3Ame`)
     expect(optimistic[0]?._timeline_order).toMatch(/^~pending:/)
     expect(optimistic[1]?._timeline_order).toMatch(/^~pending:/)
     expect(
