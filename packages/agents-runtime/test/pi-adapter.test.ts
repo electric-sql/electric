@@ -570,6 +570,141 @@ describe(`createPiAgentAdapter`, () => {
     )
   })
 
+  it(`dispatches streamed tool call arguments to the bridge and tool hook`, async () => {
+    let streamReadyResolve:
+      | ((stream: ReturnType<typeof createAssistantMessageEventStream>) => void)
+      | null = null
+    const streamReady = new Promise<
+      ReturnType<typeof createAssistantMessageEventStream>
+    >((resolve) => {
+      streamReadyResolve = resolve
+    })
+    const partialMessage: AssistantMessage = {
+      role: `assistant`,
+      content: [
+        {
+          type: `toolCall`,
+          id: `call-draft`,
+          name: `draft`,
+          arguments: { text: `Hello` },
+        },
+      ],
+      api: `anthropic-messages`,
+      provider: `anthropic`,
+      model: `claude-sonnet-4-5-20250929`,
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          total: 0,
+        },
+      },
+      stopReason: `toolUse`,
+      timestamp: Date.now(),
+    }
+    const completedMessage: AssistantMessage = {
+      ...partialMessage,
+      content: [{ type: `text`, text: `` }],
+      stopReason: `stop`,
+    }
+    const argDeltas: Array<unknown> = []
+    const events: Array<ChangeEvent> = []
+    const factory = createPiAgentAdapter({
+      systemPrompt: `Test system prompt`,
+      model: `claude-sonnet-4-5-20250929`,
+      tools: [
+        {
+          name: `draft`,
+          label: `Draft`,
+          description: `Draft text`,
+          parameters: {
+            type: `object`,
+            properties: { text: { type: `string` } },
+            required: [`text`],
+          } as never,
+          onArgsDelta: (context) => {
+            argDeltas.push(context)
+          },
+          execute: async () => ({
+            content: [{ type: `text`, text: `ok` }],
+            details: null,
+          }),
+        },
+      ],
+      streamFn: () => {
+        const stream = createAssistantMessageEventStream()
+        streamReadyResolve?.(stream)
+        return stream
+      },
+    })
+    const handle = factory({
+      entityUrl: `test/entity-1`,
+      epoch: 1,
+      messages: [],
+      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0 },
+      writeEvent: (event: ChangeEvent) => {
+        events.push(event)
+      },
+    })
+
+    const runPromise = handle.run(`hello`)
+    const stream = await streamReady
+    stream.push({
+      type: `start`,
+      partial: partialMessage,
+    })
+    stream.push({
+      type: `toolcall_start`,
+      contentIndex: 0,
+      partial: partialMessage,
+    })
+    stream.push({
+      type: `toolcall_delta`,
+      contentIndex: 0,
+      delta: `"Hello"`,
+      partial: partialMessage,
+    })
+    stream.push({
+      type: `toolcall_end`,
+      contentIndex: 0,
+      toolCall: partialMessage.content[0] as never,
+      partial: partialMessage,
+    })
+    stream.push({
+      type: `done`,
+      reason: `stop`,
+      message: completedMessage,
+    })
+    await runPromise
+
+    expect(argDeltas).toEqual([
+      {
+        toolCallId: `call-draft`,
+        toolName: `draft`,
+        contentIndex: 0,
+        delta: `"Hello"`,
+        argsPreview: { text: `Hello` },
+      },
+    ])
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: `tool_arg_delta`,
+        value: expect.objectContaining({
+          tool_call_id: `call-draft`,
+          delta: `"Hello"`,
+          content_index: 0,
+        }),
+      })
+    )
+  })
+
   it(`isRunning returns false initially`, () => {
     const factory = createPiAgentAdapter({
       systemPrompt: `Test system prompt`,

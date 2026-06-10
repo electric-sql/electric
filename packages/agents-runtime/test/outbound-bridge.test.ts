@@ -97,8 +97,62 @@ describe(`createOutboundBridge`, () => {
     expect((writes[1]!.value as Record<string, unknown>).tool_name).toBe(
       `search`
     )
-    expect((writes[1]!.value as Record<string, unknown>).status).toBe(`started`)
+    expect((writes[1]!.value as Record<string, unknown>).status).toBe(
+      `executing`
+    )
     expect((writes[1]!.value as Record<string, unknown>).run_id).toBe(`run-0`)
+  })
+
+  it(`persists streaming tool call argument deltas`, () => {
+    const writes: Array<ChangeEvent> = []
+    const bridge = createOutboundBridge([], (e) => {
+      writes.push(e)
+    })
+
+    bridge.onRunStart()
+    bridge.onToolCallArgsStart(`call-draft`, `draft`, { text: `He` })
+    bridge.onToolCallArgsDelta(`call-draft`, `draft`, `llo`, {
+      contentIndex: 1,
+      argsPreview: { text: `Hello` },
+    })
+    bridge.onToolCallArgsEnd(`call-draft`, `draft`, { text: `Hello` })
+
+    expect(writes[1]).toMatchObject({
+      type: `tool_call`,
+      key: `tc-0`,
+      headers: { operation: `insert` },
+      value: {
+        tool_call_id: `call-draft`,
+        tool_name: `draft`,
+        status: `args_streaming`,
+        args_preview: { text: `He` },
+        run_id: `run-0`,
+      },
+    })
+    expect(writes[2]).toMatchObject({
+      type: `tool_arg_delta`,
+      key: `tc-0:args-0`,
+      value: {
+        tool_call_key: `tc-0`,
+        tool_call_id: `call-draft`,
+        run_id: `run-0`,
+        seq: 0,
+        delta: `llo`,
+        content_index: 1,
+      },
+    })
+    expect(writes[3]).toMatchObject({
+      type: `tool_call`,
+      key: `tc-0`,
+      headers: { operation: `update` },
+      value: {
+        tool_call_id: `call-draft`,
+        tool_name: `draft`,
+        status: `args_complete`,
+        args: { text: `Hello` },
+        run_id: `run-0`,
+      },
+    })
   })
 
   it(`maps tool_call_end to tool_call update with result`, () => {

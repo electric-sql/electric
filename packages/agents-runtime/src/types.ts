@@ -410,6 +410,7 @@ export type TimelineItem =
             error: string | null
             status:
               | `started`
+              | `args_streaming`
               | `args_complete`
               | `executing`
               | `completed`
@@ -947,7 +948,20 @@ export type AgentRunResult = {
   usage: { tokens: number; duration: number }
 }
 
-export type AgentTool = PiAgentTool
+export interface ToolArgumentDeltaContext {
+  toolCallId: string
+  toolName: string
+  contentIndex?: number
+  delta: string
+  argsPreview?: unknown
+}
+
+export type AgentTool = PiAgentTool & {
+  onArgsDelta?: (
+    context: ToolArgumentDeltaContext,
+    signal?: AbortSignal
+  ) => Promise<void> | void
+}
 export type AgentModel = string | Model<any>
 
 export interface AgentConfig {

@@ -21,7 +21,6 @@ import type { ChangeEvent } from '@durable-streams/state'
 import type {
   AgentEvent,
   AgentMessage,
-  AgentTool,
   StreamFn,
 } from '@mariozechner/pi-agent-core'
 import type {
@@ -30,7 +29,12 @@ import type {
   Provider,
   SimpleStreamOptions,
 } from '@mariozechner/pi-ai'
-import type { LLMContentBlock, LLMMessage, LLMMessageContent } from './types'
+import type {
+  AgentTool,
+  LLMContentBlock,
+  LLMMessage,
+  LLMMessageContent,
+} from './types'
 
 /**
  * Split a streamed reasoning blob into `{ title, body }`.
@@ -347,7 +351,24 @@ export function createPiAgentAdapter(
               case `message_update`: {
                 const assistantEvent = (event as Record<string, unknown>)
                   .assistantMessageEvent as
-                  | { type: string; delta?: string }
+                  | {
+                      type: string
+                      contentIndex?: number
+                      delta?: string
+                      toolCall?: {
+                        id?: string
+                        name?: string
+                        arguments?: Record<string, unknown>
+                      }
+                      partial?: {
+                        content?: Array<{
+                          type?: string
+                          id?: string
+                          name?: string
+                          arguments?: Record<string, unknown>
+                        }>
+                      }
+                    }
                   | undefined
                 if (assistantEvent?.type === `text_delta`) {
                   if (!textStarted) {
@@ -391,6 +412,61 @@ export function createPiAgentAdapter(
                     )
                     reasoningStarted = false
                     reasoningAccum = ``
+                  }
+                } else if (
+                  assistantEvent?.type === `toolcall_start` ||
+                  assistantEvent?.type === `toolcall_delta` ||
+                  assistantEvent?.type === `toolcall_end`
+                ) {
+                  const contentIndex = assistantEvent.contentIndex
+                  const partialToolCall =
+                    typeof contentIndex === `number`
+                      ? assistantEvent.partial?.content?.[contentIndex]
+                      : undefined
+                  const toolCall = assistantEvent.toolCall ?? partialToolCall
+                  const toolCallId = toolCall?.id
+                  const toolName = toolCall?.name
+                  const argsPreview = toolCall?.arguments
+                  if (toolCallId && toolName) {
+                    if (assistantEvent.type === `toolcall_start`) {
+                      bridge.onToolCallArgsStart(
+                        toolCallId,
+                        toolName,
+                        argsPreview
+                      )
+                    } else if (assistantEvent.type === `toolcall_delta`) {
+                      const delta = assistantEvent.delta ?? ``
+                      bridge.onToolCallArgsDelta(toolCallId, toolName, delta, {
+                        contentIndex,
+                        argsPreview,
+                      })
+                      const tool = opts.tools.find(
+                        (candidate) => candidate.name === toolName
+                      )
+                      if (tool?.onArgsDelta) {
+                        void Promise.resolve(
+                          tool.onArgsDelta({
+                            toolCallId,
+                            toolName,
+                            contentIndex,
+                            delta,
+                            argsPreview,
+                          })
+                        ).catch((error) => {
+                          runtimeLog.warn(
+                            logPrefix,
+                            `streaming tool arg hook failed for ${toolName}:`,
+                            error
+                          )
+                        })
+                      }
+                    } else {
+                      bridge.onToolCallArgsEnd(
+                        toolCallId,
+                        toolName,
+                        argsPreview
+                      )
+                    }
                   }
                 } else {
                   runtimeLog.debug(

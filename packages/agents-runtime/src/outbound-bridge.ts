@@ -178,6 +178,18 @@ export interface OutboundBridge {
   onReasoningStart: () => void
   onReasoningDelta: (delta: string) => void
   onReasoningEnd: (opts?: { encrypted?: string; summaryTitle?: string }) => void
+  onToolCallArgsStart(
+    toolCallId: string,
+    name: string,
+    argsPreview?: unknown
+  ): void
+  onToolCallArgsDelta(
+    toolCallId: string,
+    name: string,
+    delta: string,
+    opts?: { contentIndex?: number; argsPreview?: unknown }
+  ): void
+  onToolCallArgsEnd(toolCallId: string, name: string, args: unknown): void
   onToolCallStart(toolCallId: string, name: string, args: unknown): void
   onToolCallStart(name: string, args: unknown): void
   onToolCallEnd(
@@ -244,7 +256,7 @@ export function createOutboundBridge(
   let currentReasoningRunKey: string | null = null
   const toolCallsById = new Map<
     string,
-    { key: string; runKey: string; args: unknown }
+    { key: string; runKey: string; args: unknown; argSeq: number }
   >()
   const legacyToolCallIdsByName = new Map<string, Array<string>>()
   const requireActiveRun = (action: string): string => {
@@ -254,6 +266,65 @@ export function createOutboundBridge(
       )
     }
     return currentRunKey
+  }
+  const ensureToolCall = (
+    toolCallId: string,
+    name: string,
+    opts?: {
+      args?: unknown
+      argsPreview?: unknown
+      status?: `started` | `args_streaming` | `args_complete` | `executing`
+    }
+  ): { key: string; runKey: string; args: unknown; argSeq: number } => {
+    const runKey = requireActiveRun(`ensureToolCall`)
+    const existing = toolCallsById.get(toolCallId)
+    if (existing) {
+      if (opts && (`args` in opts || `argsPreview` in opts || opts.status)) {
+        const nextArgs = `args` in opts ? opts.args : existing.args
+        if (`args` in opts) existing.args = opts.args
+        writeEvent(
+          entityStateSchema.toolCalls.update({
+            key: existing.key,
+            value: {
+              tool_call_id: toolCallId,
+              tool_name: name,
+              status: opts.status ?? `args_streaming`,
+              args: nextArgs,
+              ...(opts.argsPreview !== undefined && {
+                args_preview: opts.argsPreview,
+              }),
+              run_id: existing.runKey,
+            } as never,
+          }) as ChangeEvent
+        )
+      }
+      return existing
+    }
+    const key = `tc-${counters.tc++}`
+    persistSeed()
+    const created = {
+      key,
+      runKey,
+      args: opts && `args` in opts ? opts.args : undefined,
+      argSeq: 0,
+    }
+    toolCallsById.set(toolCallId, created)
+    writeEvent(
+      entityStateSchema.toolCalls.insert({
+        key,
+        value: {
+          tool_call_id: toolCallId,
+          tool_name: name,
+          status: opts?.status ?? `started`,
+          args: created.args,
+          ...(opts?.argsPreview !== undefined && {
+            args_preview: opts.argsPreview,
+          }),
+          run_id: runKey,
+        } as never,
+      }) as ChangeEvent
+    )
+    return created
   }
 
   return {
@@ -444,15 +515,61 @@ export function createOutboundBridge(
       currentReasoningRunKey = null
     },
 
+    onToolCallArgsStart(
+      toolCallId: string,
+      name: string,
+      argsPreview?: unknown
+    ) {
+      ensureToolCall(toolCallId, name, {
+        status: `args_streaming`,
+        argsPreview,
+      })
+    },
+
+    onToolCallArgsDelta(
+      toolCallId: string,
+      name: string,
+      delta: string,
+      opts?: { contentIndex?: number; argsPreview?: unknown }
+    ) {
+      const toolCall =
+        toolCallsById.get(toolCallId) ??
+        ensureToolCall(toolCallId, name, {
+          status: `args_streaming`,
+          argsPreview: opts?.argsPreview,
+        })
+      const seq = toolCall.argSeq++
+      writeEvent(
+        entityStateSchema.toolArgDeltas.insert({
+          key: `${toolCall.key}:args-${seq}`,
+          value: {
+            tool_call_key: toolCall.key,
+            tool_call_id: toolCallId,
+            run_id: toolCall.runKey,
+            seq,
+            delta,
+            ...(opts?.contentIndex !== undefined && {
+              content_index: opts.contentIndex,
+            }),
+          } as never,
+        }) as ChangeEvent
+      )
+    },
+
+    onToolCallArgsEnd(toolCallId: string, name: string, args: unknown) {
+      ensureToolCall(toolCallId, name, {
+        status: `args_complete`,
+        args,
+      })
+    },
+
     onToolCallStart(
       toolCallIdOrName: string,
       nameOrArgs: string | unknown,
       maybeArgs?: unknown
     ) {
-      const runKey = requireActiveRun(`onToolCallStart`)
-      const key = `tc-${counters.tc++}`
       const legacyCall = maybeArgs === undefined
-      const toolCallId = legacyCall ? key : toolCallIdOrName
+      const toolCallId = legacyCall ? `tc-${counters.tc}` : toolCallIdOrName
       const name = legacyCall ? toolCallIdOrName : (nameOrArgs as string)
       const args = legacyCall ? nameOrArgs : maybeArgs
       if (legacyCall) {
@@ -460,20 +577,10 @@ export function createOutboundBridge(
         ids.push(toolCallId)
         legacyToolCallIdsByName.set(name, ids)
       }
-      persistSeed()
-      toolCallsById.set(toolCallId, { key, runKey, args })
-      writeEvent(
-        entityStateSchema.toolCalls.insert({
-          key,
-          value: {
-            tool_call_id: toolCallId,
-            tool_name: name,
-            status: `started`,
-            args,
-            run_id: runKey,
-          } as never,
-        }) as ChangeEvent
-      )
+      ensureToolCall(toolCallId, name, {
+        status: `executing`,
+        args,
+      })
     },
 
     onToolCallEnd(
