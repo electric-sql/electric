@@ -10,6 +10,7 @@ import {
   getStreamDBCollectionId,
 } from '@durable-streams/state/db'
 import { builtInCollections, passthrough } from './entity-schema'
+import type { StandardSchemaV1 } from '@standard-schema/spec'
 import { formatPointerOrderToken, type EventPointer } from './event-pointer'
 import type {
   ChangeEvent,
@@ -105,6 +106,39 @@ type EntityStreamDBOptions = {
 
 const WRITE_TXID_TIMEOUT_MS = 20_000
 
+// Wrap a Standard Schema so that named virtual columns (e.g. `_timeline_order`,
+// `_principal`) survive the validation step. TanStack DB calls the schema's
+// validate() on every insert/update and uses result.value as the stored row,
+// so any key not explicitly passed through by the schema is dropped. We
+// extract the virtual fields before validation and re-attach them after.
+function wrapSchemaWithVirtualColumns<T extends object>(
+  inner: StandardSchemaV1<T>,
+  virtualColumns: Array<string>
+): StandardSchemaV1<T> {
+  return {
+    '~standard': {
+      version: 1 as const,
+      vendor: `electric-agents`,
+      validate: (
+        value: unknown
+      ): StandardSchemaV1.Result<T> | Promise<StandardSchemaV1.Result<T>> => {
+        if (typeof value !== `object` || value === null) {
+          return inner[`~standard`].validate(value)
+        }
+        const record = value as Record<string, unknown>
+        const saved: Record<string, unknown> = {}
+        for (const col of virtualColumns) {
+          if (col in record) saved[col] = record[col]
+        }
+        const result = inner[`~standard`].validate(value)
+        if (result instanceof Promise) return result
+        if (`issues` in result && result.issues) return result
+        return { value: Object.assign({}, result.value, saved) as T }
+      },
+    },
+  }
+}
+
 /**
  * Create a StreamDB connected to a Electric Agents entity stream.
  *
@@ -127,10 +161,32 @@ export function createEntityStreamDB(
   // Convert entity-level CollectionDefinition (with optional JSON schema) to
   // stream-db CollectionDefinition (with Standard Schema validator + type + primaryKey)
   const streamCustomState: Record<string, CollectionDefinition> = {}
+  const principalColumnByCollection = new Map<string, string>()
   if (customState) {
     for (const [name, def] of Object.entries(customState)) {
+      const principalColumn = def.writable
+        ? def.writable === true
+          ? `_principal`
+          : (def.writable.principalColumn ?? `_principal`)
+        : undefined
+
+      if (principalColumn) {
+        principalColumnByCollection.set(name, principalColumn)
+      }
+
+      // When virtual columns are projected onto the row, wrap the user schema
+      // to preserve those fields through TanStack DB's schema validation.
+      const baseSchema = def.schema ?? passthrough()
+      const virtualColumns = [
+        `_timeline_order`,
+        ...(principalColumn ? [principalColumn] : []),
+      ]
+      const schema = def.schema
+        ? wrapSchemaWithVirtualColumns(baseSchema, virtualColumns)
+        : baseSchema
+
       streamCustomState[name] = {
-        schema: def.schema ?? passthrough(),
+        schema,
         type: def.type ?? `state:${name}`,
         primaryKey: def.primaryKey ?? `key`,
       }
@@ -354,6 +410,14 @@ export function createEntityStreamDB(
           orders.set(item.key, order)
         }
         ;(item.value as Record<string, unknown>)._timeline_order = order
+        const principalColumn = principalColumnByCollection.get(collectionName)
+        if (principalColumn) {
+          const principal = (item.headers as Record<string, unknown>).principal
+          if (principal !== undefined) {
+            ;(item.value as Record<string, unknown>)[principalColumn] =
+              principal
+          }
+        }
       })
       // After processing the batch, advance the anchor for next time.
       // `batch.offset` is the `Stream-Next-Offset` for this batch —
@@ -727,6 +791,14 @@ export function createEntityStreamDB(
         const order = orders?.get(event.key) ?? formatPointerOrderToken(pointer)
         orders?.set(event.key, order)
         ;(event.value as Record<string, unknown>)._timeline_order = order
+        const principalColumn = principalColumnByCollection.get(collectionName)
+        if (principalColumn) {
+          const principal = (event.headers as Record<string, unknown>).principal
+          if (principal !== undefined) {
+            ;(event.value as Record<string, unknown>)[principalColumn] =
+              principal
+          }
+        }
       }
       const transaction = createWriteTransaction({
         debugOrigin: `apply-event:${event.type}:${event.headers.operation}`,
