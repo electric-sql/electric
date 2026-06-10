@@ -1,0 +1,8 @@
+---
+'@electric-ax/agents-runtime': minor
+'@electric-ax/agents-server': minor
+'@electric-ax/agents-server-ui': minor
+'@electric-ax/agents': minor
+---
+
+Add generic externally-writable custom collections for agent entity state. A collection opts in via `externallyWritable` on its definition; the runtime registers this and the principal column. Router writes go through `POST /:type/:id/collections/:collection`, which is authenticated, schema-validated, and stamps the authenticated principal into the change-event header — the client materializes that header into a read-only virtual column (`_principal`). All other state stays agent-only by default. Comments are reimplemented as one such collection (declared on Horton and worker), with the UI writing via an optimistic action backed by the authenticated endpoint.
