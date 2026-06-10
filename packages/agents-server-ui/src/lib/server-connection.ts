@@ -173,6 +173,49 @@ export interface ApiKeysStatus {
   modelPicker: ModelPickerStatus
 }
 
+export type RealtimeSettings = {
+  provider: `openai`
+  model: string
+}
+
+export type RealtimeModelChoice = {
+  id: string
+  label: string
+  description: string
+  recommended?: boolean
+}
+
+export type RealtimeSettingsStatus = {
+  settings: RealtimeSettings
+  availableModels: Array<RealtimeModelChoice>
+  hasOpenAIApiKey: boolean
+  codexEnabled: boolean
+}
+
+const DEFAULT_REALTIME_SETTINGS_STATUS: RealtimeSettingsStatus = {
+  settings: { provider: `openai`, model: `gpt-realtime-2` },
+  availableModels: [
+    {
+      id: `gpt-realtime-2`,
+      label: `GPT-Realtime-2`,
+      description: `Strongest realtime reasoning, tool use, and instruction following.`,
+      recommended: true,
+    },
+    {
+      id: `gpt-realtime-1.5`,
+      label: `GPT-Realtime-1.5`,
+      description: `Fast, reliable speech-to-speech model for audio in, audio out.`,
+    },
+    {
+      id: `gpt-realtime-mini`,
+      label: `GPT-Realtime mini`,
+      description: `Cost-efficient realtime voice model.`,
+    },
+  ],
+  hasOpenAIApiKey: false,
+  codexEnabled: false,
+}
+
 /**
  * Snapshot consumed by the renderer's onboarding wizard.
  *
@@ -376,6 +419,8 @@ declare global {
       setOnboardingDismissed?: (dismissed: boolean) => Promise<void>
       getPreventAppSuspension?: () => Promise<PreventAppSuspensionPreference>
       setPreventAppSuspension?: (enabled: boolean) => Promise<void>
+      getRealtimeSettings?: () => Promise<RealtimeSettingsStatus>
+      setRealtimeSettings?: (settings: RealtimeSettings) => Promise<void>
       getWorkingDirectory?: () => Promise<string | null>
       chooseWorkingDirectory?: () => Promise<string | null>
       /**
@@ -589,6 +634,19 @@ export async function saveApiKeys(keys: ApiKeys): Promise<void> {
 
 export async function saveEnabledModels(values: Array<string>): Promise<void> {
   await window.electronAPI?.saveEnabledModels?.(values)
+}
+
+export async function loadRealtimeSettingsStatus(): Promise<RealtimeSettingsStatus> {
+  return (
+    (await window.electronAPI?.getRealtimeSettings?.()) ??
+    DEFAULT_REALTIME_SETTINGS_STATUS
+  )
+}
+
+export async function saveRealtimeSettings(
+  settings: RealtimeSettings
+): Promise<void> {
+  await window.electronAPI?.setRealtimeSettings?.(settings)
 }
 
 export async function codexSignIn(): Promise<CodexStatus | null> {

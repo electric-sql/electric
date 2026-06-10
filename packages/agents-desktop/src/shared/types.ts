@@ -122,6 +122,27 @@ export type CodexSettings = {
   source: CodexAuthSource | null
 }
 
+export type RealtimeProvider = `openai`
+
+export type RealtimeSettings = {
+  provider: RealtimeProvider
+  model: string
+}
+
+export type RealtimeModelChoice = {
+  id: string
+  label: string
+  description: string
+  recommended?: boolean
+}
+
+export type RealtimeSettingsStatus = {
+  settings: RealtimeSettings
+  availableModels: Array<RealtimeModelChoice>
+  hasOpenAIApiKey: boolean
+  codexEnabled: boolean
+}
+
 export type DesktopSettings = {
   servers: Array<ServerConfig>
   defaultServerId: string | null
@@ -131,6 +152,7 @@ export type DesktopSettings = {
   preventAppSuspension?: boolean
   codex?: CodexSettings
   enabledModelValues?: Array<string>
+  realtime?: RealtimeSettings
   onboardingDismissed?: boolean
   mcp?: { servers: Array<McpServerConfig> }
   seededDefaultMcpServerNames?: Array<string>

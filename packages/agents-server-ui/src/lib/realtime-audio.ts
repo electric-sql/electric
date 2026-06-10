@@ -1,6 +1,7 @@
 import { DurableStream } from '@durable-streams/client'
 import { appendPathToUrl } from '@electric-ax/agents-runtime/client'
 import { serverFetch, getConfiguredServerHeaders } from './auth-fetch'
+import { loadRealtimeSettingsStatus } from './server-connection'
 
 export type RealtimeAudioSession = {
   sessionId: string
@@ -327,13 +328,14 @@ async function createRealtimeSession(
   baseUrl: string,
   entityUrl: string
 ): Promise<RealtimeSessionCreateResult> {
+  const realtimeSettings = await loadRealtimeSettingsStatus()
   const response = await serverFetch(realtimeUrl(baseUrl), {
     method: `POST`,
     headers: { 'content-type': `application/json` },
     body: JSON.stringify({
       entityUrl,
       provider: `openai`,
-      model: `gpt-realtime-2`,
+      model: realtimeSettings.settings.model,
       inputAudio: {
         codec: `pcm16`,
         sampleRate: REALTIME_SAMPLE_RATE,

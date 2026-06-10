@@ -6,6 +6,7 @@ import {
   KeyRound,
   Palette,
   Plug,
+  RadioTower,
   Server,
   Settings as SettingsIcon,
   Terminal,
@@ -21,6 +22,7 @@ export type SettingsCategoryId =
   | `account`
   | `servers`
   | `credentials`
+  | `realtime`
   | `command-line`
   | `appearance`
   | `local-runtime`
@@ -103,6 +105,12 @@ export function SettingsSidebar({
           id: `credentials`,
           label: `Credentials`,
           icon: <Icon icon={KeyRound} size={2} />,
+          visible: true,
+        },
+        {
+          id: `realtime`,
+          label: `Realtime`,
+          icon: <Icon icon={RadioTower} size={2} />,
           visible: true,
         },
         {

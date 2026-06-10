@@ -10,6 +10,7 @@ const APP_NAME = `Electric Agents`
 const SETTINGS_CATEGORY_LABELS: Record<string, string> = {
   general: `General`,
   appearance: `Appearance`,
+  realtime: `Realtime`,
   'local-runtime': `Local Runtime`,
 }
 
