@@ -1,5 +1,14 @@
 # @electric-ax/example-agents-walkthrough
 
+## 0.1.4
+
+### Patch Changes
+
+- Updated dependencies [5238055]
+- Updated dependencies [916f6cd]
+- Updated dependencies [a044ede]
+  - @electric-ax/agents-runtime@0.3.12
+
 ## 0.1.3
 
 ### Patch Changes
