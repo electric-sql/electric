@@ -118,7 +118,7 @@
       "idx": 16,
       "version": "7",
       "when": 1781200000000,
-      "tag": "0015_entity_type_writable_collections",
+      "tag": "0015_entity_type_externally_writable_collections",
       "breakpoints": true
     }
   ]

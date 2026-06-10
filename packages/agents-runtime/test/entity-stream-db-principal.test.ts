@@ -8,11 +8,11 @@ function principalHeader() {
 }
 
 describe(`entity-stream-db principal virtual column`, () => {
-  it(`projects headers.principal onto the configured column for writable collections`, () => {
+  it(`projects headers.principal onto the configured column for externally writable collections`, () => {
     const db = createEntityStreamDB(`/chat/sess-1`, {
       comments: {
         schema: z.object({ key: z.string().optional(), body: z.string() }),
-        writable: { principalColumn: `_principal` },
+        externallyWritable: { principalColumn: `_principal` },
       },
     })
     db.utils.applyEvent({
@@ -26,11 +26,11 @@ describe(`entity-stream-db principal virtual column`, () => {
     expect(row._principal).toEqual(principalHeader())
   })
 
-  it(`projects headers.principal onto _principal when writable: true`, () => {
+  it(`projects headers.principal onto _principal when externallyWritable: true`, () => {
     const db = createEntityStreamDB(`/chat/sess-3`, {
       notes: {
         schema: z.object({ key: z.string().optional(), body: z.string() }),
-        writable: true,
+        externallyWritable: true,
       },
     })
     db.utils.applyEvent({
@@ -67,7 +67,7 @@ describe(`entity-stream-db principal virtual column`, () => {
       {
         comments: {
           schema: z.object({ key: z.string().optional(), body: z.string() }),
-          writable: { principalColumn: `_principal` },
+          externallyWritable: { principalColumn: `_principal` },
         },
       },
       undefined,

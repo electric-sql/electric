@@ -71,7 +71,7 @@ import type {
   SignalRequest,
   SignalResponse,
   TypedSpawnRequest,
-  WritableCollectionConfig,
+  ExternallyWritableCollectionConfig,
 } from './electric-agents-types.js'
 import type { EntityBridgeCoordinator } from './entity-bridge-manager.js'
 import type { Principal } from './principal.js'
@@ -506,7 +506,7 @@ export class EntityManager {
       creation_schema: req.creation_schema,
       inbox_schemas: req.inbox_schemas,
       state_schemas: req.state_schemas,
-      writable_collections: req.writable_collections,
+      externally_writable_collections: req.externally_writable_collections,
       slash_commands: req.slash_commands,
       serve_endpoint: req.serve_endpoint,
       default_dispatch_policy: defaultDispatchPolicy,
@@ -2463,8 +2463,9 @@ export class EntityManager {
       throw new ElectricAgentsError(ErrCodeNotFound, `Entity not found`, 404)
     }
 
-    const { writableCollections } = await this.getEffectiveSchemas(entity)
-    const config = writableCollections?.[collection]
+    const { externallyWritableCollections } =
+      await this.getEffectiveSchemas(entity)
+    const config = externallyWritableCollections?.[collection]
     if (!config) {
       throw new ElectricAgentsError(
         ErrCodeUnauthorized,
@@ -3984,13 +3985,16 @@ export class EntityManager {
   private async getEffectiveSchemas(entity: ElectricAgentsEntity): Promise<{
     inboxSchemas?: Record<string, Record<string, unknown>>
     stateSchemas?: Record<string, Record<string, unknown>>
-    writableCollections?: Record<string, WritableCollectionConfig>
+    externallyWritableCollections?: Record<
+      string,
+      ExternallyWritableCollectionConfig
+    >
   }> {
     if (!entity.type) {
       return {
         inboxSchemas: entity.inbox_schemas,
         stateSchemas: entity.state_schemas,
-        writableCollections: undefined,
+        externallyWritableCollections: undefined,
       }
     }
 
@@ -4003,7 +4007,8 @@ export class EntityManager {
       stateSchemas: latestType?.state_schemas
         ? { ...(entity.state_schemas ?? {}), ...latestType.state_schemas }
         : entity.state_schemas,
-      writableCollections: latestType?.writable_collections,
+      externallyWritableCollections:
+        latestType?.externally_writable_collections,
     }
   }
 

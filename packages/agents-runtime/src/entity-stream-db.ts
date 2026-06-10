@@ -164,10 +164,10 @@ export function createEntityStreamDB(
   const principalColumnByCollection = new Map<string, string>()
   if (customState) {
     for (const [name, def] of Object.entries(customState)) {
-      const principalColumn = def.writable
-        ? def.writable === true
+      const principalColumn = def.externallyWritable
+        ? def.externallyWritable === true
           ? `_principal`
-          : (def.writable.principalColumn ?? `_principal`)
+          : (def.externallyWritable.principalColumn ?? `_principal`)
         : undefined
 
       if (principalColumn) {

@@ -282,18 +282,18 @@ export function buildEntityTypeRegistrationBody(
     ])
   )
 
-  const writableCollections: Record<
+  const externallyWritableCollections: Record<
     string,
     { type: string; principalColumn: string }
   > = {}
   for (const [collectionName, def] of stateEntries) {
-    if (!def.writable) continue
-    writableCollections[collectionName] = {
+    if (!def.externallyWritable) continue
+    externallyWritableCollections[collectionName] = {
       type: def.type ?? `state:${collectionName}`,
       principalColumn:
-        def.writable === true
+        def.externallyWritable === true
           ? `_principal`
-          : (def.writable.principalColumn ?? `_principal`),
+          : (def.externallyWritable.principalColumn ?? `_principal`),
     }
   }
 
@@ -314,8 +314,8 @@ export function buildEntityTypeRegistrationBody(
       ...stateSchemas,
       ...(definition.stateSchemas ? mapSchemas(definition.stateSchemas) : {}),
     },
-    ...(Object.keys(writableCollections).length > 0 && {
-      writable_collections: writableCollections,
+    ...(Object.keys(externallyWritableCollections).length > 0 && {
+      externally_writable_collections: externallyWritableCollections,
     }),
     ...(definition.permissionGrants && {
       permission_grants: definition.permissionGrants,

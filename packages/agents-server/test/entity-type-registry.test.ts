@@ -41,16 +41,20 @@ describe(`PostgresRegistry entity type registration`, () => {
     await client?.end()
   }, 120_000)
 
-  it(`persists and retrieves writable_collections round-trip`, async () => {
+  it(`persists and retrieves externally_writable_collections round-trip`, async () => {
     const registry = new PostgresRegistry(db, `tenant-a`)
-    const writableCollections = {
+    const externallyWritableCollections = {
       comments: { type: `state:comments`, principalColumn: `author_id` },
     }
     await registry.createEntityType(
-      entityType({ writable_collections: writableCollections })
+      entityType({
+        externally_writable_collections: externallyWritableCollections,
+      })
     )
     const result = await registry.getEntityType(`horton`)
-    expect(result?.writable_collections).toEqual(writableCollections)
+    expect(result?.externally_writable_collections).toEqual(
+      externallyWritableCollections
+    )
   })
 
   it(`upserts entity types against the tenant-scoped primary key`, async () => {

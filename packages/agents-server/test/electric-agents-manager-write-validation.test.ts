@@ -387,7 +387,7 @@ describe(`ElectricAgentsManager.writeCollection`, () => {
     manager.registry.getEntityType = vi.fn().mockResolvedValue({
       name: `chat`,
       state_schemas: { 'state:comments': {} },
-      writable_collections: {
+      externally_writable_collections: {
         comments: { type: `state:comments`, principalColumn: `_principal` },
       },
     })
@@ -428,7 +428,7 @@ describe(`ElectricAgentsManager.writeCollection`, () => {
     manager.registry.getEntityType = vi.fn().mockResolvedValue({
       name: `chat`,
       state_schemas: { 'state:notes': {} },
-      writable_collections: {},
+      externally_writable_collections: {},
     })
 
     await expect(

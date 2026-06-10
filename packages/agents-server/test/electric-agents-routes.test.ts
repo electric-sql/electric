@@ -1500,14 +1500,14 @@ describe(`ElectricAgentsRoutes fork endpoint`, () => {
 })
 
 describe(`ElectricAgentsRoutes entity-type registration`, () => {
-  it(`persists writable_collections on entity type registration`, async () => {
+  it(`persists externally_writable_collections on entity type registration`, async () => {
     const registerEntityType = vi.fn().mockResolvedValue({
       name: `chat`,
       description: `chat`,
       revision: 1,
       created_at: `t`,
       updated_at: `t`,
-      writable_collections: {
+      externally_writable_collections: {
         comments: { type: `state:comments`, principalColumn: `_principal` },
       },
     })
@@ -1523,7 +1523,7 @@ describe(`ElectricAgentsRoutes entity-type registration`, () => {
       {
         name: `chat`,
         description: `chat`,
-        writable_collections: {
+        externally_writable_collections: {
           comments: { type: `state:comments`, principalColumn: `_principal` },
         },
       }
@@ -1532,7 +1532,7 @@ describe(`ElectricAgentsRoutes entity-type registration`, () => {
     expect(response.status).toBe(201)
     expect(registerEntityType).toHaveBeenCalledWith(
       expect.objectContaining({
-        writable_collections: {
+        externally_writable_collections: {
           comments: { type: `state:comments`, principalColumn: `_principal` },
         },
       })

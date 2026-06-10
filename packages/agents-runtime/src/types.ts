@@ -665,11 +665,11 @@ export interface CollectionDefinition<
   /** Primary key field name. Defaults to `"key"`. */
   primaryKey?: string
   /**
-   * Opt-in for HTTP-router writes via `POST /:type/:instanceId/collections/:name`.
-   * Absent/false ⇒ agent-only; the endpoint rejects writes. `true` ⇒ writable,
+   * Opt-in for externally writable via the HTTP router: `POST /:type/:instanceId/collections/:name`.
+   * Absent/false ⇒ agent-only; the endpoint rejects writes. `true` ⇒ externally writable,
    * principal materialized into `_principal`. Object form renames that column.
    */
-  writable?: boolean | { principalColumn?: string }
+  externallyWritable?: boolean | { principalColumn?: string }
 }
 
 export interface EntityTypeEntry<
