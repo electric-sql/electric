@@ -364,6 +364,84 @@ describe(`ElectricAgentsManager event source subscriptions`, () => {
   })
 })
 
+function decodeAppendEvent(bytes: Uint8Array): Record<string, unknown> {
+  return JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>
+}
+
+describe(`ElectricAgentsManager.writeCollection`, () => {
+  const principal = {
+    url: `/principal/user%3Aalice`,
+    kind: `user`,
+    id: `alice`,
+  }
+
+  it(`stamps the principal header and appends a generic collection insert`, async () => {
+    const append = vi.fn()
+    const { manager } = createAttachmentManager({ streamClient: { append } })
+    manager.registry.getEntity = vi.fn().mockResolvedValue({
+      url: `/chat/session-1`,
+      type: `chat`,
+      status: `running`,
+      streams: { main: `/chat/session-1` },
+    })
+    manager.registry.getEntityType = vi.fn().mockResolvedValue({
+      name: `chat`,
+      state_schemas: { 'state:comments': {} },
+      writable_collections: {
+        comments: { type: `state:comments`, principalColumn: `_principal` },
+      },
+    })
+
+    const result = await manager.writeCollection(
+      `/chat/session-1`,
+      `comments`,
+      {
+        operation: `insert`,
+        key: `c1`,
+        value: { body: `hi` },
+        principal,
+      }
+    )
+
+    expect(result).toEqual({ key: `c1` })
+    const event = decodeAppendEvent(append.mock.calls[0]?.[1])
+    expect(event).toMatchObject({
+      type: `state:comments`,
+      key: `c1`,
+      headers: { operation: `insert`, principal },
+      value: { body: `hi` },
+    })
+    expect(
+      (event.value as Record<string, unknown>).from_principal
+    ).toBeUndefined()
+  })
+
+  it(`rejects writes to a collection that is not writable`, async () => {
+    const append = vi.fn()
+    const { manager } = createAttachmentManager({ streamClient: { append } })
+    manager.registry.getEntity = vi.fn().mockResolvedValue({
+      url: `/chat/session-1`,
+      type: `chat`,
+      status: `running`,
+      streams: { main: `/chat/session-1` },
+    })
+    manager.registry.getEntityType = vi.fn().mockResolvedValue({
+      name: `chat`,
+      state_schemas: { 'state:notes': {} },
+      writable_collections: {},
+    })
+
+    await expect(
+      manager.writeCollection(`/chat/session-1`, `notes`, {
+        operation: `insert`,
+        value: { note: `x` },
+        principal,
+      })
+    ).rejects.toMatchObject({ status: 403 })
+    expect(append).not.toHaveBeenCalled()
+  })
+})
+
 function createManifestManager(calls: Array<string>) {
   return new EntityManager({
     registry: {

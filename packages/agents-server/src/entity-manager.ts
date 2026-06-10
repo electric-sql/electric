@@ -132,6 +132,23 @@ export interface CreateAttachmentRequest {
   meta?: Record<string, unknown>
 }
 
+export interface WriteCollectionPrincipal {
+  url: string
+  kind: string
+  id: string
+}
+
+export interface WriteCollectionRequest {
+  operation: `insert` | `update` | `delete`
+  key?: string
+  value?: Record<string, unknown>
+  principal: WriteCollectionPrincipal
+}
+
+export interface WriteCollectionResult {
+  key: string
+}
+
 export interface ReadAttachmentResult {
   attachment: ManifestAttachmentEntry
   bytes: Uint8Array
@@ -2434,6 +2451,95 @@ export class EntityManager {
       }
       throw err
     }
+  }
+
+  async writeCollection(
+    entityUrl: string,
+    collection: string,
+    req: WriteCollectionRequest
+  ): Promise<WriteCollectionResult> {
+    const entity = await this.registry.getEntity(entityUrl)
+    if (!entity) {
+      throw new ElectricAgentsError(ErrCodeNotFound, `Entity not found`, 404)
+    }
+
+    const { writableCollections } = await this.getEffectiveSchemas(entity)
+    const config = writableCollections?.[collection]
+    if (!config) {
+      throw new ElectricAgentsError(
+        ErrCodeUnauthorized,
+        `Collection "${collection}" is not writable`,
+        403
+      )
+    }
+
+    if (rejectsNormalWrites(entity.status)) {
+      throw new ElectricAgentsError(
+        ErrCodeNotRunning,
+        `Entity is not accepting writes`,
+        409
+      )
+    }
+
+    if (
+      req.operation !== `delete` &&
+      (req.value === undefined || req.value === null)
+    ) {
+      throw new ElectricAgentsError(
+        ErrCodeInvalidRequest,
+        `value is required for ${req.operation}`,
+        400
+      )
+    }
+    if (req.operation !== `insert` && !req.key) {
+      throw new ElectricAgentsError(
+        ErrCodeInvalidRequest,
+        `key is required for ${req.operation}`,
+        400
+      )
+    }
+
+    const key =
+      req.key ??
+      `${collection}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
+    const event: Record<string, unknown> = {
+      type: config.type,
+      key,
+      headers: {
+        operation: req.operation,
+        timestamp: new Date().toISOString(),
+        principal: req.principal,
+      },
+    }
+    if (req.operation !== `delete`) {
+      event.value = req.value
+    }
+
+    const validationError = await this.validateWriteEvent(entity, event)
+    if (validationError) {
+      throw new ElectricAgentsError(
+        validationError.code,
+        validationError.message,
+        validationError.status
+      )
+    }
+
+    const encoded = this.encodeChangeEvent(event)
+    try {
+      await this.streamClient.append(entity.streams.main, encoded)
+    } catch (err) {
+      if (this.isClosedStreamError(err)) {
+        throw new ElectricAgentsError(
+          ErrCodeNotRunning,
+          `Entity is stopped`,
+          409
+        )
+      }
+      throw err
+    }
+
+    return { key }
   }
 
   async updateInboxMessage(
