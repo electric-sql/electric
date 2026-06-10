@@ -23,8 +23,8 @@
   },
   "dependencies": {
     "@codemirror/lang-javascript": "^6.2.2",
-    "@codemirror/state": "^6.4.1",
-    "@codemirror/view": "^6.32.0",
+    "@codemirror/state": "^6.6.0",
+    "@codemirror/view": "^6.43.0",
     "@electric-sql/y-electric": "workspace:*",
     "@hono/node-server": "^1.8.2",
     "codemirror": "^6.0.1",
