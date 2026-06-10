@@ -38,6 +38,18 @@ describe(`spawnArgs`, () => {
     })
   })
 
+  it(`skips omitKeys when seeding (both inline and defaulted fields)`, () => {
+    // `reasoningEffort` is an inline enum and `label` a defaulted text field;
+    // omitting them keeps their defaults out of the seeded args, matching the
+    // omitKeys the controls/gating/finalize steps already respect.
+    expect(buildInitialSpawnArgs(schema, [`reasoningEffort`, `label`])).toEqual(
+      {
+        model: `anthropic:a`,
+        verbose: false,
+      }
+    )
+  })
+
   it(`classifies text fields (string/number) but not enums or booleans`, () => {
     expect(isTextFieldProperty({ type: `string` })).toBe(true)
     expect(isTextFieldProperty({ type: `integer` })).toBe(true)

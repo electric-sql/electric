@@ -204,7 +204,7 @@ export function NewSessionScreen({
   // they pick a different type. Keyed on the type name (not the schema object)
   // so re-syncing the types collection doesn't clobber in-progress edits.
   useEffect(() => {
-    setArgs(buildInitialSpawnArgs(creationSchema))
+    setArgs(buildInitialSpawnArgs(creationSchema, SCHEMA_OMIT_KEYS))
   }, [activeTypeName])
   const handleArgChange = useCallback((key: string, value: unknown): void => {
     setArgs((prev) => {

@@ -93,10 +93,13 @@ export function hasSpawnArgControls(
 }
 
 export function buildInitialSpawnArgs(
-  schema: unknown
+  schema: unknown,
+  omitKeys?: ReadonlyArray<string>
 ): Record<string, unknown> {
+  const omit = new Set(omitKeys ?? [])
   const init: Record<string, unknown> = {}
   for (const { key, prop } of inlineSchemaProperties(schema)) {
+    if (omit.has(key)) continue
     if (prop.enum && prop.enum.length > 0 && isModelProperty(key)) {
       const options = prop.enum.map((v) => String(v))
       const lastPicked = getLastPickedModel(options)
@@ -117,6 +120,7 @@ export function buildInitialSpawnArgs(
   // Seed declared defaults for the remaining (text / array / object) fields.
   if (isObjectSchema(schema)) {
     for (const [key, prop] of Object.entries(schema.properties)) {
+      if (omit.has(key)) continue
       if (!(key in init) && prop.default !== undefined) init[key] = prop.default
     }
   }
