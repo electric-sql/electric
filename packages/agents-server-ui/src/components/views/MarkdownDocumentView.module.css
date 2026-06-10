@@ -1,0 +1,297 @@
+.root {
+  --markdown-doc-editor-bg: #fff;
+
+  display: flex;
+  min-height: 0;
+  height: 100%;
+  flex-direction: column;
+  background: var(--ds-bg);
+  color: var(--ds-text-1);
+  font-family: var(--ds-font-body);
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ds-space-3);
+  min-height: 36px;
+  box-sizing: border-box;
+  padding: 6px var(--ds-space-3);
+  border-top: 1px solid var(--ds-divider);
+  border-bottom: 1px solid var(--ds-divider);
+  background: var(--ds-surface);
+}
+
+:global(:root[data-theme='dark']) .root {
+  --markdown-doc-editor-bg: var(--ds-bg);
+}
+
+.title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ds-text-1);
+  font-family: var(--ds-font-heading);
+  font-size: var(--ds-text-sm);
+  line-height: var(--ds-text-sm-lh);
+  font-weight: 600;
+}
+
+.status {
+  flex: 0 0 auto;
+  color: var(--ds-text-3);
+  font-size: var(--ds-text-xs);
+  line-height: var(--ds-text-xs-lh);
+}
+
+.connectionStatus {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--ds-icon-sm);
+  height: var(--ds-icon-sm);
+  flex: 0 0 auto;
+  color: var(--ds-text-4);
+}
+
+.connectionStatus[data-status='connected'] {
+  color: var(--ds-green-11);
+}
+
+.connectionStatus[data-status='connecting'],
+.connectionStatus[data-status='loading'] {
+  color: var(--ds-accent-11);
+}
+
+.connectionStatus[data-status='disconnected'] {
+  color: var(--ds-text-4);
+}
+
+.connectionStatus[data-status='error'] {
+  color: var(--ds-red-11);
+}
+
+.editorScrollArea {
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+  background: var(--markdown-doc-editor-bg);
+}
+
+.editorViewport {
+  background: var(--markdown-doc-editor-bg);
+}
+
+.editor {
+  min-height: 100%;
+  background: var(--markdown-doc-editor-bg);
+}
+
+.editor :global(.cm-editor) {
+  min-height: 100%;
+  background: var(--markdown-doc-editor-bg);
+  color: var(--ds-text-1);
+  font-family: var(--ds-font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.editor :global(.cm-editor.cm-focused) {
+  outline: none;
+}
+
+.editor :global(.cm-scroller) {
+  font-family: var(--ds-font-mono);
+  background: var(--markdown-doc-editor-bg);
+  overflow: visible;
+}
+
+.editor :global(.cm-content) {
+  min-height: 100%;
+  padding: 8px 0 36px;
+  caret-color: var(--ds-accent-11);
+}
+
+.editor :global(.cm-line) {
+  box-sizing: border-box;
+  padding: 0 8px;
+}
+
+.editor :global(.cm-cursor) {
+  border-left-color: var(--ds-accent-11);
+}
+
+.editor :global(.cm-selectionBackground),
+.editor :global(.cm-focused .cm-selectionBackground) {
+  background: var(--ds-accent-a4) !important;
+}
+
+.editor :global(.cm-activeLine) {
+  background: var(--ds-gray-a2);
+}
+
+.editor :global(.cm-gutters) {
+  background: var(--ds-bg-subtle);
+  color: var(--ds-text-4);
+  border-right: 1px solid var(--ds-divider);
+  font-family: var(--ds-font-mono);
+  font-size: var(--ds-text-sm);
+}
+
+.editor :global(.cm-activeLineGutter) {
+  background: var(--ds-gray-a2);
+  color: var(--ds-text-2);
+}
+
+.editor :global(.cm-lineNumbers .cm-gutterElement) {
+  min-width: 24px;
+  padding: 0 6px;
+}
+
+.editor :global(.cm-foldGutter .cm-gutterElement) {
+  width: 10px;
+  padding: 0 2px;
+  color: var(--ds-text-4);
+}
+
+.editor :global(.cm-matchingBracket),
+.editor :global(.cm-nonmatchingBracket) {
+  background: var(--ds-accent-a3);
+  color: var(--ds-text-1);
+}
+
+.editor :global(.cm-tooltip),
+.editor :global(.cm-tooltip-autocomplete) {
+  overflow: hidden;
+  border: 1px solid var(--ds-overlay-border);
+  border-radius: var(--ds-radius-3);
+  background: var(--ds-surface-raised);
+  color: var(--ds-text-1);
+  box-shadow: var(--ds-overlay-shadow);
+  font-family: var(--ds-font-body);
+  font-size: var(--ds-text-sm);
+}
+
+.editor :global(.cm-tooltip-autocomplete ul li[aria-selected]) {
+  background: var(--ds-bg-hover);
+  color: var(--ds-text-1);
+}
+
+.editor :global(.cm-panels) {
+  border-color: var(--ds-divider);
+  background: var(--ds-surface);
+  color: var(--ds-text-1);
+  font-family: var(--ds-font-body);
+  font-size: var(--ds-text-sm);
+}
+
+.editor :global(.cm-panels-top) {
+  border-bottom: 1px solid var(--ds-divider);
+}
+
+.editor :global(.cm-panels-bottom) {
+  border-top: 1px solid var(--ds-divider);
+}
+
+.editor :global(.cm-search) {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+  padding: 6px var(--ds-space-3);
+}
+
+.editor :global(.cm-search label) {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ds-text-2);
+}
+
+.editor :global(.cm-search input) {
+  min-height: 24px;
+  box-sizing: border-box;
+  border: 1px solid var(--ds-border-1);
+  border-radius: var(--ds-radius-2);
+  background: var(--ds-input-bg);
+  color: var(--ds-text-1);
+  font-family: var(--ds-font-body);
+  font-size: var(--ds-text-sm);
+  outline: none;
+  padding: 2px 8px;
+}
+
+.editor :global(.cm-search input:focus) {
+  border-color: var(--ds-accent-9);
+  box-shadow: 0 0 0 1px var(--ds-accent-9);
+}
+
+.editor :global(.cm-search button) {
+  min-height: 24px;
+  border: 1px solid transparent;
+  border-radius: var(--ds-radius-2);
+  background: transparent;
+  color: var(--ds-text-2);
+  cursor: pointer;
+  font-family: var(--ds-font-body);
+  font-size: var(--ds-text-sm);
+  font-weight: 500;
+  padding: 2px 8px;
+}
+
+.editor :global(.cm-search button:hover) {
+  background: var(--ds-bg-hover);
+  color: var(--ds-text-1);
+}
+
+.presence {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+  min-width: 0;
+}
+
+.presenceDot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  box-shadow: 0 0 0 1px var(--ds-surface);
+}
+
+.empty {
+  padding: var(--ds-space-5);
+  color: var(--ds-text-3);
+  font-family: var(--ds-font-body);
+  font-size: var(--ds-text-sm);
+  line-height: var(--ds-text-sm-lh);
+}
+
+:global(.yRemoteSelection) {
+  opacity: 0.24;
+}
+
+:global(.yRemoteSelectionHead) {
+  position: absolute;
+  box-sizing: border-box;
+  height: 1.2em;
+  border-left: 2px solid;
+  opacity: 0.95;
+}
+
+:global(.yRemoteSelectionHead)::after {
+  position: absolute;
+  top: -1.05em;
+  left: -2px;
+  z-index: 10;
+  padding: 1px 4px;
+  border-radius: var(--ds-radius-1);
+  color: white;
+  content: attr(data-user-name);
+  font-family: var(--ds-font-body);
+  font-size: var(--ds-text-2xs);
+  line-height: 1.2;
+  white-space: nowrap;
+  box-shadow: var(--ds-shadow-1);
+}

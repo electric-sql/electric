@@ -3,7 +3,20 @@ import { nanoid } from 'nanoid'
 import { serverLog } from '../log'
 import type { BuiltinAgentModelConfig } from '../model-catalog'
 import type { AgentTool } from '@mariozechner/pi-agent-core'
-import type { HandlerContext } from '@electric-ax/agents-runtime'
+import type {
+  HandlerContext,
+  ManifestDocumentEntry,
+} from '@electric-ax/agents-runtime'
+
+export const MARKDOWN_WORKER_TOOL_NAMES = [
+  `create_markdown_doc`,
+  `set_markdown_doc_cursor`,
+  `insert_markdown_doc`,
+  `replace_markdown_doc_range`,
+  `read_markdown_doc`,
+  `write_markdown_doc`,
+  `edit_markdown_doc`,
+] as const
 
 export const WORKER_TOOL_NAMES = [
   `bash`,
@@ -14,9 +27,65 @@ export const WORKER_TOOL_NAMES = [
   `fetch_url`,
   `spawn_worker`,
   `send`,
+  ...MARKDOWN_WORKER_TOOL_NAMES,
 ] as const
 
 export type WorkerToolName = (typeof WORKER_TOOL_NAMES)[number]
+
+function isManifestDocumentEntry(
+  value: unknown
+): value is ManifestDocumentEntry {
+  if (!value || typeof value !== `object`) return false
+  const entry = value as Partial<ManifestDocumentEntry>
+  return (
+    entry.kind === `document` &&
+    typeof entry.id === `string` &&
+    entry.provider === `y-durable-streams` &&
+    typeof entry.docPath === `string` &&
+    typeof entry.streamPath === `string` &&
+    entry.transportMimeType ===
+      `application/vnd.electric-agents.markdown-yjs` &&
+    entry.contentMimeType === `text/markdown` &&
+    entry.yTextName === `markdown` &&
+    typeof entry.title === `string`
+  )
+}
+
+function manifestMarkdownDocuments(
+  ctx: HandlerContext
+): Array<ManifestDocumentEntry> {
+  const manifests = ctx.db.collections.manifests?.toArray as
+    | Array<unknown>
+    | undefined
+  const injectedDocs = Array.isArray(ctx.args?.markdownDocs)
+    ? ctx.args.markdownDocs.filter(isManifestDocumentEntry)
+    : []
+  return [
+    ...(manifests?.filter(isManifestDocumentEntry) ?? []),
+    ...injectedDocs,
+  ]
+}
+
+function selectedMarkdownDocuments(
+  ctx: HandlerContext,
+  ids: ReadonlyArray<string> | undefined
+): { documents: Array<ManifestDocumentEntry>; missing: Array<string> } {
+  if (!ids || ids.length === 0) return { documents: [], missing: [] }
+  const docsById = new Map(
+    manifestMarkdownDocuments(ctx).map((document) => [document.id, document])
+  )
+  const documents: Array<ManifestDocumentEntry> = []
+  const missing: Array<string> = []
+  for (const id of [...new Set(ids)]) {
+    const document = docsById.get(id)
+    if (document) {
+      documents.push(document)
+    } else {
+      missing.push(id)
+    }
+  }
+  return { documents, missing }
+}
 
 export function createSpawnWorkerTool(
   ctx: HandlerContext,
@@ -39,13 +108,20 @@ export function createSpawnWorkerTool(
       initialMessage: Type.String({
         description: `First user message sent to the worker. Be concrete: include file paths, line numbers, and the form of answer you want back. This is what kicks off its run — without it the worker will idle. Describe the concrete task to perform and what form of message you want back.`,
       }),
+      markdownDocIds: Type.Optional(
+        Type.Array(Type.String(), {
+          description: `Optional collaborative markdown document ids from this entity's manifest to make available to the worker. Include the matching markdown tools in tools when the worker should read or edit them.`,
+        })
+      ),
     }),
     execute: async (_toolCallId, params) => {
-      const { systemPrompt, tools, initialMessage } = params as {
-        systemPrompt: string
-        tools: Array<WorkerToolName>
-        initialMessage: string
-      }
+      const { systemPrompt, tools, initialMessage, markdownDocIds } =
+        params as {
+          systemPrompt: string
+          tools: Array<WorkerToolName>
+          initialMessage: string
+          markdownDocIds?: Array<string>
+        }
       if (!Array.isArray(tools) || tools.length === 0) {
         return {
           content: [
@@ -68,6 +144,22 @@ export function createSpawnWorkerTool(
           details: { spawned: false },
         }
       }
+      const { documents: markdownDocs, missing: missingMarkdownDocIds } =
+        selectedMarkdownDocuments(ctx, markdownDocIds)
+      if (missingMarkdownDocIds.length > 0) {
+        return {
+          content: [
+            {
+              type: `text` as const,
+              text: `Error: markdown document ids not found in this entity's manifest: ${missingMarkdownDocIds.join(`, `)}.`,
+            },
+          ],
+          details: {
+            spawned: false,
+            missingMarkdownDocIds,
+          },
+        }
+      }
 
       const id = nanoid(10)
       const workerModelArgs = modelConfig
@@ -83,7 +175,12 @@ export function createSpawnWorkerTool(
         const handle = await ctx.spawn(
           `worker`,
           id,
-          { systemPrompt, tools, ...workerModelArgs },
+          {
+            systemPrompt,
+            tools,
+            ...(markdownDocs.length > 0 ? { markdownDocs } : {}),
+            ...workerModelArgs,
+          },
           {
             initialMessage,
             wake: { on: `runFinished`, includeResponse: true },

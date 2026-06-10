@@ -10,7 +10,11 @@ import {
   createSendTool,
 } from '@electric-ax/agents-runtime/tools'
 import type { Sandbox } from '@electric-ax/agents-runtime/sandbox'
-import { WORKER_TOOL_NAMES, createSpawnWorkerTool } from '../tools/spawn-worker'
+import {
+  MARKDOWN_WORKER_TOOL_NAMES,
+  WORKER_TOOL_NAMES,
+  createSpawnWorkerTool,
+} from '../tools/spawn-worker'
 import {
   REASONING_EFFORT_VALUES,
   resolveBuiltinModelConfig,
@@ -46,6 +50,21 @@ function isWorkerToolName(value: unknown): value is WorkerToolName {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === `object`
+}
+
+function isMarkdownWorkerToolName(
+  value: WorkerToolName
+): value is (typeof MARKDOWN_WORKER_TOOL_NAMES)[number] {
+  return (MARKDOWN_WORKER_TOOL_NAMES as ReadonlyArray<string>).includes(value)
+}
+
+function electricTool(
+  ctx: HandlerContext,
+  name: string
+): AgentTool | undefined {
+  return ctx.electricTools.find((tool) => tool.name === name) as
+    | AgentTool
+    | undefined
 }
 
 function parseWorkerArgs(value: Readonly<Record<string, unknown>>): WorkerArgs {
@@ -154,6 +173,12 @@ function buildToolsForWorker(
         break
       case `send`:
         out.push(createSendTool(ctx.send, { selfEntityUrl: ctx.entityUrl }))
+        break
+      default:
+        if (isMarkdownWorkerToolName(name)) {
+          const tool = electricTool(ctx, name)
+          if (tool) out.push(tool)
+        }
         break
     }
   }

@@ -287,6 +287,15 @@ const setTagBodySchema = Type.Object({
   value: Type.String(),
 })
 
+const markdownDocumentCreateBodySchema = Type.Object(
+  {
+    id: Type.Optional(Type.String()),
+    title: Type.String(),
+    meta: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
+  },
+  { additionalProperties: false }
+)
+
 const entitySignalSchema = Type.Union([
   Type.Literal(`SIGINT`),
   Type.Literal(`SIGHUP`),
@@ -346,6 +355,9 @@ type SendBody = Static<typeof sendBodySchema>
 type InboxMessageBody = Static<typeof inboxMessageBodySchema>
 type ForkBody = Static<typeof forkBodySchema>
 type SetTagBody = Static<typeof setTagBodySchema>
+type MarkdownDocumentCreateBody = Static<
+  typeof markdownDocumentCreateBodySchema
+>
 type SignalBody = Static<typeof signalBodySchema>
 type ScheduleBody = Static<typeof scheduleBodySchema>
 type WebhookSourceSubscriptionBody = Static<
@@ -446,6 +458,19 @@ entitiesRouter.delete(
   withExistingEntity,
   withEntityPermission(`write`),
   deleteAttachment
+)
+entitiesRouter.post(
+  `/:type/:instanceId/documents`,
+  withExistingEntity,
+  withSchema(markdownDocumentCreateBodySchema),
+  withEntityPermission(`write`),
+  createMarkdownDocument
+)
+entitiesRouter.get(
+  `/:type/:instanceId/documents/:documentId`,
+  withExistingEntity,
+  withEntityPermission(`read`),
+  readMarkdownDocument
 )
 entitiesRouter.patch(
   `/:type/:instanceId/inbox/:messageKey`,
@@ -1441,6 +1466,50 @@ async function deleteAttachment(
     decodeURIComponent(request.params.attachmentId)
   )
   return json(result)
+}
+
+async function createMarkdownDocument(
+  request: AgentsRouteRequest,
+  ctx: TenantContext
+): Promise<Response> {
+  const principalMutationError = rejectPrincipalEntityMutation(
+    request,
+    `given documents`
+  )
+  if (principalMutationError) return principalMutationError
+
+  const parsed = routeBody<MarkdownDocumentCreateBody>(request)
+  const { entityUrl } = requireExistingEntityRoute(request)
+  const result = await ctx.entityManager.createMarkdownDocument(entityUrl, {
+    id: parsed.id,
+    title: parsed.title,
+    createdBy: ctx.principal.url,
+    meta: parsed.meta,
+  })
+  return json(result, { status: 201 })
+}
+
+async function readMarkdownDocument(
+  request: AgentsRouteRequest,
+  ctx: TenantContext
+): Promise<Response> {
+  const { entityUrl } = requireExistingEntityRoute(request)
+  const document = await ctx.entityManager.getMarkdownDocument(
+    entityUrl,
+    decodeURIComponent(request.params.documentId)
+  )
+  if (!document) {
+    throw new ElectricAgentsError(ErrCodeNotFound, `Document not found`, 404)
+  }
+  return json(
+    { document },
+    {
+      headers: {
+        'content-type': `application/json; charset=utf-8`,
+        'cache-control': `no-store`,
+      },
+    }
+  )
 }
 
 async function updateInboxMessage(
