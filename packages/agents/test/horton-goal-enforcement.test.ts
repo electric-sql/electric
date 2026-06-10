@@ -92,17 +92,21 @@ async function runHandler(goal: GoalEntry | undefined) {
   const agentConfig = useAgent.mock.calls[0]?.[0] as {
     onStepEnd?: unknown
     systemPrompt: string
+    tools: Array<{ name?: string }>
   }
-  return { agentConfig, updateGoalUsage, replyText, run }
+  const hasCompleteTool = agentConfig.tools.some(
+    (tool) => tool.name === `mark_goal_complete`
+  )
+  return { agentConfig, hasCompleteTool, updateGoalUsage, replyText, run }
 }
 
 describe(`horton goal enforcement gating`, () => {
   it(`wires enforcement and trips the budget for an active goal`, async () => {
-    const { agentConfig, updateGoalUsage, replyText } = await runHandler(
-      goalEntry({ status: `active`, tokenBudget: 1_000 })
-    )
+    const { agentConfig, hasCompleteTool, updateGoalUsage, replyText } =
+      await runHandler(goalEntry({ status: `active`, tokenBudget: 1_000 }))
 
     expect(agentConfig.onStepEnd).toBeTypeOf(`function`)
+    expect(hasCompleteTool).toBe(true)
     expect(agentConfig.systemPrompt).toContain(`Active goal`)
     // The simulated 5.1k-token step exceeds the 1k budget → status flip +
     // user-visible stop message.
@@ -115,11 +119,13 @@ describe(`horton goal enforcement gating`, () => {
   })
 
   it(`does NOT wire enforcement for a budget_limited goal`, async () => {
-    const { agentConfig, updateGoalUsage, replyText } = await runHandler(
-      goalEntry({ status: `budget_limited`, tokensUsed: 1_500 })
-    )
+    const { agentConfig, hasCompleteTool, updateGoalUsage, replyText } =
+      await runHandler(
+        goalEntry({ status: `budget_limited`, tokensUsed: 1_500 })
+      )
 
     expect(agentConfig.onStepEnd).toBeUndefined()
+    expect(hasCompleteTool).toBe(false)
     expect(agentConfig.systemPrompt).not.toContain(`Active goal`)
     expect(updateGoalUsage).not.toHaveBeenCalled()
     expect(replyText).not.toHaveBeenCalled()
@@ -136,9 +142,11 @@ describe(`horton goal enforcement gating`, () => {
   })
 
   it(`does NOT wire enforcement when no goal exists`, async () => {
-    const { agentConfig, updateGoalUsage } = await runHandler(undefined)
+    const { agentConfig, hasCompleteTool, updateGoalUsage } =
+      await runHandler(undefined)
 
     expect(agentConfig.onStepEnd).toBeUndefined()
+    expect(hasCompleteTool).toBe(false)
     expect(updateGoalUsage).not.toHaveBeenCalled()
   })
 })

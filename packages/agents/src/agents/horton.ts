@@ -386,7 +386,12 @@ export function createHortonTools(
     createObservePgSyncTool(ctx),
     createSetTitleTool(ctx),
     createSendTool(ctx.send, { selfEntityUrl: ctx.entityUrl }),
-    createMarkGoalCompleteTool(ctx),
+    // Tools are rebuilt per wake, so only offer the completion signal when
+    // there is actually an active goal to complete — without one the tool
+    // could only ever answer "No active goal to mark complete."
+    ...(ctx.getGoal()?.status === `active`
+      ? [createMarkGoalCompleteTool(ctx)]
+      : []),
     ...(opts.docsSearchTool ? [opts.docsSearchTool] : []),
   ]
 }
