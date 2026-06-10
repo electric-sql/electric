@@ -297,4 +297,46 @@ describe(`createOutboundBridge`, () => {
     expect((writes[1]!.value as Record<string, unknown>).run_id).toBe(`run-0`)
     expect((writes[2]!.value as Record<string, unknown>).run_id).toBe(`run-0`)
   })
+
+  it(`onStepEnd surfaces token counts on the step update event`, () => {
+    const writes: Array<ChangeEvent> = []
+    const bridge = createOutboundBridge([], (e) => {
+      writes.push(e)
+    })
+
+    bridge.onRunStart()
+    bridge.onStepStart({ modelId: `gpt-4` })
+    bridge.onStepEnd({
+      finishReason: `stop`,
+      tokenInput: 1234,
+      tokenOutput: 567,
+    })
+
+    const stepUpdate = writes[writes.length - 1]!
+    expect(stepUpdate.type).toBe(`step`)
+    expect(stepUpdate.headers.operation).toBe(`update`)
+    const value = stepUpdate.value as Record<string, unknown>
+    expect(value.input_tokens).toBe(1234)
+    expect(value.output_tokens).toBe(567)
+  })
+
+  it(`onStepEnd omits token columns when a side is undefined`, () => {
+    const writes: Array<ChangeEvent> = []
+    const bridge = createOutboundBridge([], (e) => {
+      writes.push(e)
+    })
+
+    bridge.onRunStart()
+    bridge.onStepStart({ modelId: `gpt-4` })
+    // Only one side reported — the other should be absent on the
+    // event so `steps.input_tokens` / `steps.output_tokens` stays
+    // null for that step (and the query-layer `count(...)` treats
+    // it as missing rather than zero).
+    bridge.onStepEnd({ finishReason: `stop`, tokenInput: 42 })
+
+    const stepUpdate = writes[writes.length - 1]!
+    const value = stepUpdate.value as Record<string, unknown>
+    expect(value.input_tokens).toBe(42)
+    expect(`output_tokens` in value).toBe(false)
+  })
 })

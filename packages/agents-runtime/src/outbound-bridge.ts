@@ -231,6 +231,12 @@ export function createOutboundBridge(
             ...(opts?.durationMs !== undefined && {
               duration_ms: opts.durationMs,
             }),
+            ...(opts?.tokenInput !== undefined && {
+              input_tokens: opts.tokenInput,
+            }),
+            ...(opts?.tokenOutput !== undefined && {
+              output_tokens: opts.tokenOutput,
+            }),
           } as never,
         }) as ChangeEvent
       )

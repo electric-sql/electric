@@ -20,7 +20,17 @@ import {
   isSandboxProfileRemote,
   useSandboxProfileSelection,
 } from '@electric-ax/agents-server-ui/src/lib/sandboxProfiles'
+import {
+  COMPOSER_INPUT_MESSAGE_TYPE,
+  serializeComposerInput,
+} from '@electric-ax/agents-runtime/client'
+import type { SlashCommandRow } from '@electric-ax/agents-runtime/client'
 import { Header, HeaderBackButton } from '../components/Header'
+import {
+  renderComposerHighlights,
+  SlashCommandMenu,
+  useSlashAutocomplete,
+} from '../components/NativeComposer'
 import { PrimaryButton } from '../components/PrimaryButton'
 import { Screen } from '../components/Screen'
 import { useAgents } from '../lib/AgentsProvider'
@@ -95,6 +105,36 @@ export function NewSessionScreen({
     selectedRunner ??
     (enabledRunners.length === 1 ? enabledRunners[0]!.id : null)
 
+  const activeType = useMemo(
+    () =>
+      visibleTypes.find((type) => type.name === activeTypeName) ?? defaultType,
+    [visibleTypes, activeTypeName, defaultType]
+  )
+  // Autocomplete commands come from the selected type's static declarations —
+  // there is no entity (so no live slashCommands collection) until spawn.
+  const slashCommands = useMemo<Array<SlashCommandRow>>(
+    () =>
+      (activeType?.slash_commands ?? []).map((command) => ({
+        ...command,
+        key: `static:${command.name}`,
+        source: `static`,
+        updated_at: activeType?.updated_at ?? ``,
+      })),
+    [activeType]
+  )
+  const slash = useSlashAutocomplete(message, slashCommands, {
+    enabled: !loading,
+  })
+  const [pendingSelection, setPendingSelection] = useState<{
+    start: number
+    end: number
+  } | null>(null)
+  const insertCommand = (command: SlashCommandRow): void => {
+    const insertion = slash.applyCommand(command)
+    setMessage(insertion.value)
+    setPendingSelection(insertion.selection)
+  }
+
   // Sandbox profiles ride alongside the runner row. Preserve the runtime's
   // advertised order — the first profile is the default (see the matching
   // comment in agents-server-ui's NewSessionView).
@@ -153,10 +193,16 @@ export function NewSessionScreen({
     setLoading(true)
     setError(null)
     try {
+      const trimmed = message.trim()
       const entityUrl = await spawnEntity({
         baseUrl: serverUrl,
         type: activeTypeName,
-        initialMessage: message,
+        ...(trimmed
+          ? {
+              initialMessage: serializeComposerInput(trimmed, slashCommands),
+              initialMessageType: COMPOSER_INPUT_MESSAGE_TYPE,
+            }
+          : {}),
         runnerId: activeRunnerId,
         ...(sandboxProfile ? { sandboxProfile } : {}),
         ...(workingDirectory &&
@@ -197,8 +243,12 @@ export function NewSessionScreen({
           <View style={styles.composerWrap}>
             <TextInput
               multiline
-              value={message}
               onChangeText={setMessage}
+              onSelectionChange={(event) => {
+                slash.onSelectionChange(event)
+                if (pendingSelection) setPendingSelection(null)
+              }}
+              selection={pendingSelection ?? undefined}
               placeholder={
                 defaultType
                   ? `Ask ${defaultType.name} anything...`
@@ -206,8 +256,17 @@ export function NewSessionScreen({
               }
               placeholderTextColor={tokens.text3}
               style={styles.composer}
-            />
+            >
+              {renderComposerHighlights(message, slashCommands, {
+                base: styles.baseText,
+                command: styles.commandToken,
+                arg: styles.argToken,
+              })}
+            </TextInput>
           </View>
+          {slash.open && (
+            <SlashCommandMenu items={slash.items} onSelect={insertCommand} />
+          )}
 
           <Text style={styles.sectionLabel}>Agent type</Text>
           <View style={styles.typeList}>
@@ -450,11 +509,27 @@ function createStyles(tokens: Tokens) {
     },
     composer: {
       minHeight: 132,
-      color: tokens.text1,
       fontSize: fontSize.sm,
       lineHeight: lineHeight.base,
       padding: spacing.md,
       textAlignVertical: `top`,
+    },
+    // Base text colour lives on the rendered child spans, not the input, so the
+    // command spans can override it (a nested colour is ignored when the
+    // TextInput sets its own `color`).
+    baseText: {
+      color: tokens.text1,
+    },
+    commandToken: {
+      color: tokens.accent11,
+      backgroundColor: tokens.accentA2,
+      fontWeight: `600`,
+    },
+    // Arguments share the command's subtle background but regular weight (vs the
+    // command's bold), so the value reads as the "slot" within the badge.
+    argToken: {
+      color: tokens.accent11,
+      backgroundColor: tokens.accentA2,
     },
     sectionLabel: {
       marginTop: spacing.sm,

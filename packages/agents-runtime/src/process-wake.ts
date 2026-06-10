@@ -1409,7 +1409,17 @@ export async function processWake(
           close: () => childDb.close(),
         })
         if (opts?.preload !== false) {
-          await childDb.preload()
+          try {
+            await childDb.preload()
+          } catch (err) {
+            // An observation may target an entity that hasn't been spawned
+            // yet (e.g. a daily-digest entity observes its child writer
+            // before the first spawn). 404 / Stream not found is fine — we
+            // treat the stream as empty for this wake; subsequent wakes
+            // pick up state once the entity is created.
+            const msg = err instanceof Error ? err.message : String(err)
+            if (!/Stream not found|404/i.test(msg)) throw err
+          }
         }
         return childDb
       },

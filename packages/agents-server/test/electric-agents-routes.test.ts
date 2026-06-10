@@ -248,6 +248,38 @@ describe(`ElectricAgentsRoutes schedule endpoints`, () => {
   })
 })
 
+describe(`ElectricAgentsRoutes attachment endpoints`, () => {
+  it(`serves attachments with non-ASCII filenames without throwing`, async () => {
+    const manager = {
+      registry: {
+        getEntity: vi.fn().mockResolvedValue({ url: `/chat/test` }),
+        getEntityType: vi.fn(),
+      },
+      readAttachment: vi.fn().mockResolvedValue({
+        attachment: {
+          mimeType: `image/png`,
+          filename: `Screenshot 2026-06-09 at 12.09.29 PM.png`,
+        },
+        bytes: new Uint8Array([1, 2, 3]),
+      }),
+    } as any
+
+    const response = await routeResponse(
+      manager,
+      `GET`,
+      `/_electric/entities/chat/test/attachments/att-1`
+    )
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get(`content-disposition`)).toBe(
+      `attachment; filename="Screenshot 2026-06-09 at 12.09.29_PM.png"; filename*=UTF-8''Screenshot%202026-06-09%20at%2012.09.29%E2%80%AFPM.png`
+    )
+    await expect(response.arrayBuffer()).resolves.toEqual(
+      new Uint8Array([1, 2, 3]).buffer
+    )
+  })
+})
+
 describe(`ElectricAgentsRoutes cron stream ensure endpoint`, () => {
   it(`rejects cron ensure requests without an expression in the schema layer`, async () => {
     const manager = {

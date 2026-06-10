@@ -1,6 +1,7 @@
 import { createCollection } from '@tanstack/react-db'
 import { electricCollectionOptions } from '@tanstack/electric-db-collection'
 import { appendPathToUrl } from '@electric-ax/agents-runtime/client'
+import type { ComposerInputPayload } from '@electric-ax/agents-runtime/client'
 import { serverFetch } from '@electric-ax/agents-server-ui/src/lib/auth-fetch'
 import { z } from 'zod'
 
@@ -75,6 +76,27 @@ export const entityTypeSchema = z.object({
   creation_schema: z.unknown().nullable(),
   inbox_schemas: z.record(z.string(), z.unknown()).nullable(),
   state_schemas: z.record(z.string(), z.unknown()).nullable(),
+  // Statically-declared slash commands for the type, used as the autocomplete
+  // source on the new-session composer (where no entity stream exists yet).
+  slash_commands: z
+    .array(
+      z.object({
+        name: z.string(),
+        description: z.string().optional(),
+        arguments: z
+          .array(
+            z.object({
+              name: z.string(),
+              type: z.enum([`string`, `number`, `boolean`]),
+              required: z.boolean().optional(),
+              description: z.string().optional(),
+            })
+          )
+          .optional(),
+      })
+    )
+    .nullable()
+    .optional(),
   serve_endpoint: z.string().nullable(),
   created_at: z.string(),
   updated_at: z.string(),
@@ -291,13 +313,22 @@ export async function spawnEntity({
   baseUrl,
   type,
   initialMessage,
+  initialMessageType,
+  args,
   runnerId,
   sandboxProfile,
   workingDirectory,
 }: {
   baseUrl: string
   type: string
-  initialMessage?: string
+  // Plain text, or a structured composer_input payload — pass
+  // `initialMessageType` alongside the latter.
+  initialMessage?: string | ComposerInputPayload
+  initialMessageType?: string
+  // Creation-schema args merged into the entity's spawn_args. The same channel
+  // desktop uses for schema-form values and model settings; `workingDirectory`
+  // is folded in as one such key.
+  args?: Record<string, unknown>
   // When set, the cloud agents-server routes wake events for this
   // entity to the named pull-wake runner. Without it, dispatch falls
   // back to the entity type's `default_dispatch_policy` — typically a
@@ -320,8 +351,13 @@ export async function spawnEntity({
   // the spawn ack could return before the streams were ready, and the
   // immediate /send would 404 with STREAM_NOT_FOUND.
   const body: Record<string, unknown> = {}
-  const text = initialMessage?.trim()
-  if (text) body.initialMessage = text
+  if (typeof initialMessage === `string`) {
+    const text = initialMessage.trim()
+    if (text) body.initialMessage = text
+  } else if (initialMessage !== undefined) {
+    body.initialMessage = initialMessage
+    if (initialMessageType) body.initialMessageType = initialMessageType
+  }
   if (runnerId) {
     body.dispatch_policy = {
       targets: [{ type: `runner`, runnerId }],
@@ -332,9 +368,11 @@ export async function spawnEntity({
     // survive across wakes and spawned subagents share the container.
     body.sandbox = { profile: sandboxProfile, key: entityUrl }
   }
-  if (workingDirectory) {
-    body.args = { workingDirectory }
+  const mergedArgs = {
+    ...args,
+    ...(workingDirectory ? { workingDirectory } : {}),
   }
+  if (Object.keys(mergedArgs).length > 0) body.args = mergedArgs
   const spawnRes = await serverFetch(
     appendPathToUrl(
       baseUrl,

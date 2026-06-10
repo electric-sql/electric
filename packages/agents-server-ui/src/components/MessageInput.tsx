@@ -9,7 +9,8 @@ import {
   createUpdateInboxMessageAction,
   readTextPayload,
 } from '../lib/sendMessage'
-import { ComposerEditor, serializeComposerInput } from './ComposerEditor'
+import { serializeComposerInput } from '@electric-ax/agents-runtime/client'
+import { ComposerEditor } from './ComposerEditor'
 import { ComposerShell } from './ComposerShell'
 import { Icon, Stack, Text, Tooltip } from '../ui'
 import {

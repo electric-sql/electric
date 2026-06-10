@@ -156,6 +156,12 @@ type StepValue = {
   model_provider?: string
   model_id?: string
   duration_ms?: number
+  // Token usage for this step as reported by the provider's
+  // end-of-message `usage` payload. Populated on `onStepEnd` when the
+  // adapter has the data — older events without these fields stay
+  // valid (both optional), so this is a strictly additive change.
+  input_tokens?: number
+  output_tokens?: number
 }
 type TextValue = {
   key?: string
@@ -475,6 +481,8 @@ function createStepSchema(): Schema<StepValue> {
     model_provider: z.string().optional(),
     model_id: z.string().optional(),
     duration_ms: z.number().int().optional(),
+    input_tokens: z.number().int().nonnegative().optional(),
+    output_tokens: z.number().int().nonnegative().optional(),
   })
 }
 

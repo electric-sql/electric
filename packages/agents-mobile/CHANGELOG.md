@@ -1,5 +1,33 @@
 # @electric-ax/agents-mobile
 
+## 0.0.14
+
+### Patch Changes
+
+- 916f6cd: agents-mobile: native slash-command composer for the Horton prompt. The in-session and new-session inputs gain slash-command autocomplete, structured `composer_input` payloads, and inline command/argument highlighting — reaching feature parity with the desktop composer, on a native `TextInput` rather than a WebView. The slash-command grammar and serializer move into `@electric-ax/agents-runtime` (exported via `/client`) as the shared source of truth for both surfaces; the desktop composer repoints to them with no behaviour change.
+- Updated dependencies [5238055]
+- Updated dependencies [916f6cd]
+- Updated dependencies [a044ede]
+  - @electric-ax/agents-server-ui@0.4.19
+  - @electric-ax/agents-runtime@0.3.12
+
+## 0.0.13
+
+### Patch Changes
+
+- 3dbd075: Add session pinning to the mobile app: long-press a root session row (or any search result) to open a context sheet with the entity info (title, session id, type/status, subagents, runner, sandbox, spawned, last active) and a Pin/Unpin action; the in-session kebab menu also gets a Pin/Unpin item, mirroring the desktop tile menu. Pinned sessions surface in a Pinned section above the groups, persisted per-device in AsyncStorage — the mobile mirror of the web sidebar's pinning. Runner-param types in agents-server-ui's `entityRuntime` helpers are loosened to structural subsets so the mobile app can reuse them.
+- 7892079: Per-runner recent working directories in the spawn UI, derived from the synced sessions list so the same recents appear on every device. The desktop picker becomes per-runner (replacing the localStorage list), and mobile gains sandbox-profile and working-directory selection — including sending the sandbox profile on spawn, without which the runtime ignores the chosen directory.
+- Updated dependencies [3dbd075]
+- Updated dependencies [d15852d]
+- Updated dependencies [5aa2d78]
+- Updated dependencies [5aa2d78]
+- Updated dependencies [146f238]
+- Updated dependencies [7892079]
+- Updated dependencies [1099366]
+- Updated dependencies [1099366]
+  - @electric-ax/agents-server-ui@0.4.18
+  - @electric-ax/agents-runtime@0.3.11
+
 ## 0.0.12
 
 ### Patch Changes
