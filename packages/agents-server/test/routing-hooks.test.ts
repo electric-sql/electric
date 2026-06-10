@@ -1,6 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { AutoRouter } from 'itty-router'
 import { ElectricAgentsError } from '../src/entity-manager'
+import { ElectricProxyError } from '../src/utils/server-utils'
+import { serverLog } from '../src/utils/log'
 import {
   applyCors,
   errorMapper,
@@ -55,6 +57,44 @@ describe(`routing/hooks`, () => {
     expect(await response.json()).toMatchObject({
       error: { code: `TEST_CODE`, message: `boom`, details: { foo: 1 } },
     })
+  })
+
+  it(`errorMapper converts ElectricProxyError to its API error status`, async () => {
+    const response = errorMapper(
+      new ElectricProxyError(
+        `TABLE_NOT_ALLOWED`,
+        `Table is not available through the Electric proxy`,
+        403
+      ),
+      new Request(`http://x`) as IRequest
+    )
+    expect(response.status).toBe(403)
+    expect((await response.json()).error.code).toBe(`TABLE_NOT_ALLOWED`)
+  })
+
+  it(`errorMapper maps an INVALID_WHERE ElectricProxyError to a 400`, async () => {
+    const response = errorMapper(
+      new ElectricProxyError(`INVALID_WHERE`, `Invalid where clause`, 400),
+      new Request(`http://x`) as IRequest
+    )
+    expect(response.status).toBe(400)
+    expect((await response.json()).error.code).toBe(`INVALID_WHERE`)
+  })
+
+  it(`errorMapper logs a warning for ElectricProxyError rejections`, () => {
+    const warnSpy = vi.spyOn(serverLog, `warn`).mockImplementation(() => {})
+    try {
+      errorMapper(
+        new ElectricProxyError(`TABLE_NOT_ALLOWED`, `nope`, 403),
+        new Request(
+          `http://x/_electric/electric/v1/shape?table=secrets`
+        ) as IRequest
+      )
+      expect(warnSpy).toHaveBeenCalledOnce()
+      expect(warnSpy.mock.calls[0]?.join(` `)).toContain(`TABLE_NOT_ALLOWED`)
+    } finally {
+      warnSpy.mockRestore()
+    }
   })
 
   it(`errorMapper turns unknown errors into a 500`, async () => {

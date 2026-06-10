@@ -1,6 +1,7 @@
 import { SpanKind, SpanStatusCode } from '@opentelemetry/api'
 import { apiError } from '../electric-agents-http.js'
 import { ElectricAgentsError } from '../entity-manager.js'
+import { ElectricProxyError } from '../utils/server-utils.js'
 import { ELECTRIC_PRINCIPAL_HEADER } from '../principal.js'
 import { ATTR, extractTraceContext, tracer } from '../tracing.js'
 import { serverLog } from '../utils/log.js'
@@ -111,6 +112,12 @@ export function errorMapper(err: unknown, req: IRequest): Response {
   }
   if (err instanceof ElectricAgentsError) {
     return apiError(err.status, err.code, err.message, err.details)
+  }
+  if (err instanceof ElectricProxyError) {
+    serverLog.warn(
+      `[agent-server] Electric proxy rejected request (${err.code}): ${req.url}`
+    )
+    return apiError(err.status, err.code, err.message)
   }
   serverLog.error(`[agent-server] Unhandled error:`, err)
   return apiError(500, `INTERNAL_SERVER_ERROR`, `Internal server error`)
