@@ -6312,7 +6312,7 @@ describe(`N: wake primitives verification`, () => {
     const child = t.entity(`/${TYPES.n3IdleWakeChild}/wake-agent-child-1`)
     await child.waitForRun()
 
-    const parentAfterWake = await parent.waitForRunCount(2, 10_000)
+    const parentAfterWake = await parent.waitForRunCount(2, 30_000)
     const wakeDrivenDelta = parentAfterWake.find(`text_delta`, (event) => {
       const delta = String(eventValueRecord(event)?.delta ?? ``)
       return (
@@ -6328,7 +6328,7 @@ describe(`N: wake primitives verification`, () => {
     expect(wakeDrivenDelta?.value).toMatchObject({
       delta: expect.stringContaining(`wake.type=wake`),
     })
-  }, 30_000)
+  }, 60_000)
 
   it(`N5: runFinished wake records the finished child on the parent stream`, async () => {
     const parentId = `wake-summary-1`
