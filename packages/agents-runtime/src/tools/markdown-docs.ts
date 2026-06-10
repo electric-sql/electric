@@ -1,25 +1,28 @@
 import { createTwoFilesPatch } from 'diff'
 import { Type } from '@sinclair/typebox'
 import {
-  applyFramedYjsUpdates,
-  createMarkdownYDoc,
-  deleteMarkdownTextRange,
-  editMarkdownText,
-  encodeMarkdownAwarenessUpdate,
-  frameYjsUpdate,
-  insertMarkdownText,
   markdownIndexFromRelativePosition,
-  markdownText,
   relativePositionAtMarkdownIndex,
-  replaceMarkdownText,
 } from '../markdown-yjs'
+import {
+  openMarkdownDocumentSession,
+  type MarkdownDocumentSession,
+} from '../markdown-document-session'
 import type { AgentTool, ProcessWakeConfig } from '../types'
 import type { ManifestDocumentEntry } from '../entity-schema'
-import type * as Y from 'yjs'
+import * as Y from 'yjs'
 
-type ElectricToolContext = Parameters<
+type ElectricToolContextBase = Parameters<
   NonNullable<ProcessWakeConfig[`createElectricTools`]>
 >[0]
+
+type ElectricToolContext = ElectricToolContextBase & {
+  openMarkdownDocumentSession?: (opts: {
+    document: ManifestDocumentEntry
+    entityUrl: string
+    principal: ElectricToolContextBase[`principal`]
+  }) => Promise<MarkdownDocumentSession>
+}
 
 function docLabel(id: string): string {
   return `markdown-doc:${id}`
@@ -69,9 +72,8 @@ type ReplaceSession = InsertSession & {
 
 type MaterializedMarkdownDocument = {
   document: ManifestDocumentEntry
-  doc: Y.Doc
+  session: MarkdownDocumentSession
   textName: string
-  streamOffset?: string
 }
 
 function injectedMarkdownDocuments(
@@ -162,31 +164,48 @@ export function createMarkdownDocumentTools(
     )
   }
 
-  const refreshDocument = async (
-    id: string,
-    materialized: MaterializedMarkdownDocument
-  ): Promise<void> => {
-    const result = await context.readMarkdownDocumentStream(
-      materialized.document.streamPath,
-      materialized.streamOffset
-        ? { offset: materialized.streamOffset }
-        : undefined
+  context.registerCleanup(async () => {
+    const sessions = Array.from(materializedDocs.values())
+    materializedDocs.clear()
+    await Promise.all(
+      sessions.map((materialized) => materialized.session.close())
     )
-    applyFramedYjsUpdates(materialized.doc, result.bytes)
-    if (result.offset !== undefined) {
-      materialized.streamOffset = result.offset
+  })
+
+  const openDocumentSession = async (
+    document: ManifestDocumentEntry
+  ): Promise<MaterializedMarkdownDocument> => {
+    const cached = materializedDocs.get(document.id)
+    if (cached) return cached
+    const session = context.openMarkdownDocumentSession
+      ? await context.openMarkdownDocumentSession({
+          document,
+          entityUrl: context.entityUrl,
+          principal: context.principal,
+        })
+      : await openMarkdownDocumentSession({
+          document,
+          connection: await context.getMarkdownDocumentConnection(
+            document.streamPath
+          ),
+          entityUrl: context.entityUrl,
+          principal: context.principal,
+        })
+    const materialized = {
+      document,
+      session,
+      textName: document.yTextName,
     }
-    readDocs.set(id, contentOf(materialized))
+    materializedDocs.set(document.id, materialized)
+    readDocs.set(document.id, contentOf(materialized))
+    return materialized
   }
 
   const materializeDocument = async (
     id: string
   ): Promise<MaterializedMarkdownDocument> => {
     const cached = materializedDocs.get(id)
-    if (cached) {
-      await refreshDocument(id, cached)
-      return cached
-    }
+    if (cached) return cached
     const document = findManifestDocument(id)
     if (!document) {
       throw new Error(
@@ -195,83 +214,17 @@ export function createMarkdownDocumentTools(
         )} is not in this entity's manifest or injected document refs. Create it with create_markdown_doc first or pass the document ref to this worker.`
       )
     }
-    const result = await context.readMarkdownDocumentStream(document.streamPath)
-    const doc = createMarkdownYDoc(result.bytes)
-    const materialized = {
-      document,
-      doc,
-      textName: document.yTextName,
-      ...(result.offset !== undefined ? { streamOffset: result.offset } : {}),
-    }
-    materializedDocs.set(id, materialized)
-    readDocs.set(id, markdownText(doc, document.yTextName).toString())
-    return materialized
+    return openDocumentSession(document)
   }
 
   const contentOf = (materialized: MaterializedMarkdownDocument): string =>
-    markdownText(materialized.doc, materialized.textName).toString()
-
-  const cacheEmptyDocument = (
-    document: ManifestDocumentEntry
-  ): MaterializedMarkdownDocument => {
-    const materialized = {
-      document,
-      doc: createMarkdownYDoc(new Uint8Array()),
-      textName: document.yTextName,
-    }
-    materializedDocs.set(document.id, materialized)
-    readDocs.set(document.id, ``)
-    return materialized
-  }
-
-  const appendDocumentUpdate = async (
-    id: string,
-    materialized: MaterializedMarkdownDocument,
-    update: Uint8Array
-  ): Promise<void> => {
-    if (update.length === 0) return
-    try {
-      const result = await context.appendMarkdownDocumentUpdate(
-        materialized.document.streamPath,
-        frameYjsUpdate(update)
-      )
-      if (result.offset !== undefined) {
-        materialized.streamOffset = result.offset
-      }
-    } catch (error) {
-      materializedDocs.delete(id)
-      throw error
-    }
-    readDocs.set(id, contentOf(materialized))
-  }
+    materialized.session.content()
 
   const appendPresence = async (
     materialized: MaterializedMarkdownDocument,
     opts: { anchor?: number; head?: number; clear?: boolean }
   ): Promise<void> => {
-    const principalUrl =
-      context.principal?.url ??
-      `/principal/entity:${encodeURIComponent(context.entityUrl)}`
-    await context
-      .appendMarkdownDocumentAwareness(
-        materialized.document.streamPath,
-        encodeMarkdownAwarenessUpdate({
-          doc: materialized.doc,
-          docPath: materialized.document.docPath,
-          principalUrl,
-          clientKey: `${principalUrl}\0${context.entityUrl}`,
-          name: principalDisplayName(principalUrl),
-          role: principalRole(principalUrl),
-          status: `editing`,
-          anchor: opts.anchor,
-          head: opts.head,
-          color: principalColor(principalUrl).color,
-          colorLight: principalColor(principalUrl).colorLight,
-          clear: opts.clear,
-          textName: materialized.textName,
-        })
-      )
-      .catch(() => undefined)
+    await materialized.session.setPresence(opts).catch(() => undefined)
   }
 
   const applyInsertChunk = async (
@@ -281,24 +234,42 @@ export function createMarkdownDocumentTools(
     index?: number
   ): Promise<void> => {
     const materialized = await materializeDocument(id)
-    const result = insertMarkdownText(materialized.doc, chunk, {
-      index: session.nextPosition
-        ? undefined
-        : (session.nextIndex ?? (index !== undefined ? index : undefined)),
-      position:
-        session.nextPosition ??
-        (index === undefined ? cursorPositions.get(id) : undefined),
-      textName: materialized.textName,
-    })
-    await appendDocumentUpdate(id, materialized, result.update)
+    const text = materialized.session.text
+    const position =
+      session.nextPosition ??
+      (index === undefined ? cursorPositions.get(id) : undefined)
+    const absolute = position
+      ? Y.createAbsolutePositionFromRelativePosition(
+          position,
+          materialized.session.doc
+        )
+      : null
+    const insertIndex =
+      absolute && absolute.type === text
+        ? Math.max(0, Math.min(absolute.index, text.length))
+        : Math.max(
+            0,
+            Math.min(
+              session.nextIndex ?? (index !== undefined ? index : text.length),
+              text.length
+            )
+          )
+    if (chunk.length > 0) {
+      materialized.session.doc.transact(() => {
+        text.insert(insertIndex, chunk)
+      }, `agent`)
+    }
+    const nextIndex = insertIndex + chunk.length
+    const nextPosition = Y.createRelativePositionFromTypeIndex(text, nextIndex)
     await appendPresence(materialized, {
-      anchor: result.nextIndex,
-      head: result.nextIndex,
+      anchor: nextIndex,
+      head: nextIndex,
     })
-    session.nextIndex = result.nextIndex
-    session.nextPosition = result.nextPosition
-    cursorPositions.set(id, result.nextPosition)
+    session.nextIndex = nextIndex
+    session.nextPosition = nextPosition
+    cursorPositions.set(id, nextPosition)
     session.streamed = true
+    readDocs.set(id, contentOf(materialized))
   }
 
   const setCursor = async (
@@ -306,10 +277,10 @@ export function createMarkdownDocumentTools(
     index: number
   ): Promise<{ materialized: MaterializedMarkdownDocument; index: number }> => {
     const materialized = await materializeDocument(id)
-    const text = markdownText(materialized.doc, materialized.textName)
+    const text = materialized.session.text
     const boundedIndex = Math.max(0, Math.min(index, text.length))
     const position = relativePositionAtMarkdownIndex(
-      materialized.doc,
+      materialized.session.doc,
       boundedIndex,
       materialized.textName
     )
@@ -444,28 +415,37 @@ export function createMarkdownDocumentTools(
       anchor: range.index,
       head: range.index + range.length,
     })
-    const deletion = deleteMarkdownTextRange(
-      materialized.doc,
-      range.index,
-      range.length,
-      materialized.textName
+    const text = materialized.session.text
+    const deleteIndex = Math.max(0, Math.min(range.index, text.length))
+    const deleteLength = Math.max(
+      0,
+      Math.min(range.length, text.length - deleteIndex)
     )
-    await appendDocumentUpdate(args.id, materialized, deletion.update)
+    if (deleteLength > 0) {
+      materialized.session.doc.transact(() => {
+        text.delete(deleteIndex, deleteLength)
+      }, `agent`)
+    }
+    const deletePosition = Y.createRelativePositionFromTypeIndex(
+      text,
+      deleteIndex
+    )
     await appendPresence(materialized, {
-      anchor: deletion.index,
-      head: deletion.index,
+      anchor: deleteIndex,
+      head: deleteIndex,
     })
 
     session.id = args.id
-    session.nextIndex = deletion.index
-    session.nextPosition = deletion.position
+    session.nextIndex = deleteIndex
+    session.nextPosition = deletePosition
     session.prepared = true
     session.deleted =
       range.deleted ?? before.slice(range.index, range.index + range.length)
-    session.deleteIndex = deletion.index
-    session.deleteLength = deletion.length
+    session.deleteIndex = deleteIndex
+    session.deleteLength = deleteLength
     session.beforeContent = before
-    cursorPositions.set(args.id, deletion.position)
+    cursorPositions.set(args.id, deletePosition)
+    readDocs.set(args.id, contentOf(materialized))
     return materialized
   }
 
@@ -555,20 +535,23 @@ export function createMarkdownDocumentTools(
           id,
           title,
         })
-        const materialized = cacheEmptyDocument(result.document)
+        const materialized = await openDocumentSession(result.document)
         if (content && content.length > 0) {
           await appendPresence(materialized, { anchor: 0, head: 0 })
-          const update = replaceMarkdownText(
-            materialized.doc,
-            content,
-            materialized.textName
-          )
-          await appendDocumentUpdate(result.document.id, materialized, update)
+          materialized.session.doc.transact(() => {
+            materialized.session.text.delete(
+              0,
+              materialized.session.text.length
+            )
+            materialized.session.text.insert(0, content)
+          }, `agent`)
           await appendPresence(materialized, {
             anchor: content.length,
             head: content.length,
           })
+          await materialized.session.flush()
           await appendPresence(materialized, { clear: true })
+          readDocs.set(result.document.id, contentOf(materialized))
         }
         return {
           content: [
@@ -713,6 +696,7 @@ export function createMarkdownDocumentTools(
         }
 
         const materialized = await materializeDocument(id)
+        await materialized.session.flush()
         await appendPresence(materialized, { clear: true })
         const finalContent = contentOf(materialized)
         readDocs.set(id, finalContent)
@@ -859,6 +843,7 @@ export function createMarkdownDocumentTools(
         }
 
         const materialized = await materializeDocument(args.id)
+        await materialized.session.flush()
         await appendPresence(materialized, { clear: true })
         const finalContent = contentOf(materialized)
         readDocs.set(args.id, finalContent)
@@ -907,7 +892,7 @@ export function createMarkdownDocumentTools(
         const content = contentOf(materialized)
         const cursorIndex = cursorPositions.has(id)
           ? markdownIndexFromRelativePosition(
-              materialized.doc,
+              materialized.session.doc,
               cursorPositions.get(id)!,
               materialized.textName
             )
@@ -941,16 +926,15 @@ export function createMarkdownDocumentTools(
         const materialized = await materializeDocument(id)
         const before = contentOf(materialized)
         await appendPresence(materialized, { anchor: 0, head: 0 })
-        const update = replaceMarkdownText(
-          materialized.doc,
-          content,
-          materialized.textName
-        )
-        await appendDocumentUpdate(id, materialized, update)
+        materialized.session.doc.transact(() => {
+          materialized.session.text.delete(0, materialized.session.text.length)
+          if (content.length > 0) materialized.session.text.insert(0, content)
+        }, `agent`)
         await appendPresence(materialized, {
           anchor: content.length,
           head: content.length,
         })
+        await materialized.session.flush()
         await appendPresence(materialized, { clear: true })
         readDocs.set(id, content)
         const diff = createTwoFilesPatch(
@@ -1021,25 +1005,39 @@ export function createMarkdownDocumentTools(
 
         const index = before.indexOf(old_string)
         await appendPresence(materialized, { anchor: index, head: index })
-        const result = editMarkdownText(
-          materialized.doc,
-          old_string,
-          new_string,
-          replace_all,
-          materialized.textName
-        )
-        await appendDocumentUpdate(id, materialized, result.update)
+        let cursorIndex = index
+        materialized.session.doc.transact(() => {
+          if (replace_all) {
+            let cursor = 0
+            while (true) {
+              const nextIndex = materialized.session.text
+                .toString()
+                .indexOf(old_string, cursor)
+              if (nextIndex < 0) break
+              materialized.session.text.delete(nextIndex, old_string.length)
+              materialized.session.text.insert(nextIndex, new_string)
+              cursor = nextIndex + new_string.length
+              cursorIndex = cursor
+            }
+          } else {
+            materialized.session.text.delete(index, old_string.length)
+            materialized.session.text.insert(index, new_string)
+            cursorIndex = index + new_string.length
+          }
+        }, `agent`)
+        const resultContent = contentOf(materialized)
         await appendPresence(materialized, {
-          anchor: result.cursorIndex,
-          head: result.cursorIndex,
+          anchor: cursorIndex,
+          head: cursorIndex,
         })
+        await materialized.session.flush()
         await appendPresence(materialized, { clear: true })
-        readDocs.set(id, result.content)
+        readDocs.set(id, resultContent)
         const diff = createTwoFilesPatch(
           docLabel(id),
           docLabel(id),
           before,
-          result.content,
+          resultContent,
           undefined,
           undefined,
           { context: 3 }
@@ -1063,49 +1061,4 @@ export function createMarkdownDocumentTools(
       executionMode: `sequential`,
     },
   ]
-}
-
-function principalDisplayName(principalUrl: string): string {
-  const raw = principalUrl.split(`/principal/`).at(-1) ?? principalUrl
-  let decoded = raw
-  try {
-    decoded = decodeURIComponent(raw)
-  } catch {
-    // Keep the raw value when the URL segment is not URI encoded.
-  }
-  const withoutPrefix = decoded.replace(/^(user|agent|entity|system):/, ``)
-  return withoutPrefix || decoded || principalUrl
-}
-
-function principalRole(principalUrl: string): `agent` | `user` | `system` {
-  const raw = principalUrl.split(`/principal/`).at(-1) ?? principalUrl
-  let decoded = raw
-  try {
-    decoded = decodeURIComponent(raw)
-  } catch {
-    // Keep the raw value when the URL segment is not URI encoded.
-  }
-  if (decoded.startsWith(`user:`)) return `user`
-  if (decoded.startsWith(`system:`)) return `system`
-  return `agent`
-}
-
-function principalColor(principalUrl: string): {
-  color: string
-  colorLight: string
-} {
-  const colors = [
-    [`#2563eb`, `#2563eb33`],
-    [`#059669`, `#05966933`],
-    [`#dc2626`, `#dc262633`],
-    [`#7c3aed`, `#7c3aed33`],
-    [`#c2410c`, `#c2410c33`],
-    [`#0f766e`, `#0f766e33`],
-  ] as const
-  let hash = 0
-  for (let i = 0; i < principalUrl.length; i += 1) {
-    hash = (hash * 31 + principalUrl.charCodeAt(i)) >>> 0
-  }
-  const [color, colorLight] = colors[hash % colors.length]!
-  return { color, colorLight }
 }

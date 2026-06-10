@@ -20,6 +20,7 @@ import type {
   EntityStreamDBWithActions,
   HeadersProvider,
   ManifestDocumentEntry,
+  MarkdownDocumentConnection,
   ProcessWakeConfig,
   RuntimePrincipal,
   WakeNotification,
@@ -106,6 +107,9 @@ export interface RuntimeRouterConfig {
       title: string
       meta?: Record<string, unknown>
     }) => Promise<{ txid: string; document: ManifestDocumentEntry }>
+    getMarkdownDocumentConnection: (
+      streamPath: string
+    ) => Promise<MarkdownDocumentConnection>
     readMarkdownDocumentStream: (
       streamPath: string,
       opts?: { offset?: string }
@@ -118,6 +122,7 @@ export interface RuntimeRouterConfig {
       streamPath: string,
       update: Uint8Array
     ) => Promise<{ offset?: string }>
+    registerCleanup: (cleanup: () => void | Promise<void>) => void
   }) => Array<AgentTool> | Promise<Array<AgentTool>>
   /**
    * Optional observer for background wake failures. Return true to mark the

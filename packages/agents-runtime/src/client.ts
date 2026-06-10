@@ -30,6 +30,7 @@ export {
 } from './manifest-helpers'
 export { buildSections, buildTimelineEntries } from './use-chat'
 export { COMPOSER_INPUT_MESSAGE_TYPE } from './composer-input'
+export { MARKDOWN_DOCUMENT_AGENT_PRESENCE_TTL_MS } from './markdown-yjs'
 
 export type {
   EntityStreamDB,

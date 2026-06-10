@@ -5,6 +5,7 @@ import type {
   AttachmentCreateInput,
   ClaimTokenHeader,
   HeadersProvider,
+  MarkdownDocumentConnection,
   ManifestAttachmentEntry,
   ManifestDocumentEntry,
 } from './types'
@@ -138,6 +139,9 @@ export interface RuntimeServerClient {
     title: string
     meta?: Record<string, unknown>
   }) => Promise<{ txid: string; document: ManifestDocumentEntry }>
+  getMarkdownDocumentConnection: (
+    streamPath: string
+  ) => Promise<MarkdownDocumentConnection>
   readMarkdownDocumentStream: (
     streamPath: string,
     opts?: { offset?: string }
@@ -447,6 +451,32 @@ export function createRuntimeServerClient(
     return (await response.json()) as {
       txid: string
       document: ManifestDocumentEntry
+    }
+  }
+
+  const getMarkdownDocumentConnection = async (
+    streamPath: string
+  ): Promise<MarkdownDocumentConnection> => {
+    const docsIndex = streamPath.indexOf(`/docs/`)
+    if (docsIndex < 0) {
+      throw new Error(
+        `markdown document stream path is missing /docs/: ${streamPath}`
+      )
+    }
+    const prefix = streamPath.slice(0, docsIndex)
+    const docId = streamPath.slice(docsIndex + `/docs/`.length)
+    const headers = await resolveHeaders()
+    if (config.principalKey) {
+      headers.set(ELECTRIC_PRINCIPAL_HEADER, config.principalKey)
+    }
+    const headerRecord: Record<string, string> = {}
+    headers.forEach((value, key) => {
+      headerRecord[key] = value
+    })
+    return {
+      baseUrl: appendPathToUrl(config.baseUrl, prefix).replace(/\/+$/, ``),
+      docId,
+      headers: headerRecord,
     }
   }
 
@@ -922,6 +952,7 @@ export function createRuntimeServerClient(
     createAttachment,
     readAttachment,
     createMarkdownDocument,
+    getMarkdownDocumentConnection,
     readMarkdownDocumentStream,
     appendMarkdownDocumentUpdate,
     appendMarkdownDocumentAwareness,

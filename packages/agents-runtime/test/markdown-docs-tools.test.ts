@@ -101,66 +101,145 @@ function createToolContext(
   } as const
   let streamFrames = [streamBytesFromContent(`# Notes\n\nFirst line\n`)]
   const awarenessFrames: Array<Uint8Array> = []
+  const openSessions: Array<{
+    doc: Y.Doc
+    off: () => void
+  }> = []
+  const cleanupCallbacks: Array<() => void | Promise<void>> = []
+  const context: any = {
+    entityUrl: opts.entityUrl ?? `/chat/session`,
+    entityType: `chat`,
+    principal: {
+      url: opts.principalUrl ?? `/principal/agent:horton`,
+      kind: `agent`,
+    },
+    args: {
+      ...(opts.markdownDocs ? { markdownDocs: opts.markdownDocs } : {}),
+    },
+    db: {
+      collections: {
+        manifests: { toArray: opts.manifestDocuments ?? [document] },
+      },
+    },
+    events: [],
+    createMarkdownDocument: vi.fn(
+      async (opts: { id?: string; title: string }) => {
+        streamFrames = []
+        return {
+          txid: `tx-create`,
+          document: {
+            ...document,
+            id: opts.id ?? document.id,
+            title: opts.title,
+          },
+        }
+      }
+    ),
+    getMarkdownDocumentConnection: vi.fn(async () => ({
+      baseUrl: `http://test.local/v1/yjs/default`,
+      docId: document.docId,
+      headers: {},
+    })),
+    openMarkdownDocumentSession: vi.fn(
+      async ({
+        document,
+        entityUrl,
+        principal,
+      }: {
+        document: any
+        entityUrl: string
+        principal?: { url?: string }
+      }) => {
+        const ydoc = createMarkdownYDoc(concatFrames(streamFrames))
+        const text = markdownText(ydoc, document.yTextName)
+        const onUpdate = (update: Uint8Array, origin: unknown): void => {
+          if (origin === `server`) return
+          void context.appendMarkdownDocumentUpdate(
+            document.streamPath,
+            frameYjsUpdate(update)
+          )
+        }
+        ydoc.on(`update`, onUpdate)
+        openSessions.push({
+          doc: ydoc,
+          off: () => ydoc.off(`update`, onUpdate),
+        })
+        const principalUrl =
+          principal?.url ?? `/principal/entity:${encodeURIComponent(entityUrl)}`
+        return {
+          document,
+          doc: ydoc,
+          text,
+          textName: document.yTextName,
+          content: () => text.toString(),
+          setPresence: vi.fn(
+            async (presence: {
+              anchor?: number
+              head?: number
+              clear?: boolean
+            }) => {
+              void context.appendMarkdownDocumentAwareness(
+                document.streamPath,
+                encodeMarkdownAwarenessUpdate({
+                  doc: ydoc,
+                  docPath: document.docPath,
+                  principalUrl,
+                  clientKey: `${principalUrl}\0${entityUrl}`,
+                  name: principalUrl,
+                  role: `agent`,
+                  anchor: presence.anchor,
+                  head: presence.head,
+                  clear: presence.clear,
+                  color: `#000000`,
+                  colorLight: `#00000033`,
+                  textName: document.yTextName,
+                })
+              )
+            }
+          ),
+          flush: vi.fn(async () => {}),
+          close: vi.fn(async () => {
+            ydoc.off(`update`, onUpdate)
+            ydoc.destroy()
+          }),
+        }
+      }
+    ),
+    readMarkdownDocumentStream: vi.fn(
+      async (_streamPath: string, opts?: { offset?: string }) => {
+        const offset =
+          opts?.offset !== undefined ? Number.parseInt(opts.offset, 10) : 0
+        const start = Number.isFinite(offset) && offset >= 0 ? offset : 0
+        return {
+          bytes: concatFrames(streamFrames.slice(start)),
+          offset: String(streamFrames.length),
+        }
+      }
+    ),
+    appendMarkdownDocumentUpdate: vi.fn(
+      async (_streamPath: string, update: Uint8Array) => {
+        streamFrames.push(update)
+        return { offset: String(streamFrames.length) }
+      }
+    ),
+    appendMarkdownDocumentAwareness: vi.fn(
+      async (_streamPath: string, update: Uint8Array) => {
+        awarenessFrames.push(update)
+        return {}
+      }
+    ),
+    registerCleanup: vi.fn((cleanup: () => void | Promise<void>) => {
+      cleanupCallbacks.push(cleanup)
+    }),
+    upsertCronSchedule: vi.fn(),
+    upsertFutureSendSchedule: vi.fn(),
+    deleteSchedule: vi.fn(),
+    listEventSources: vi.fn(),
+    subscribeToEventSource: vi.fn(),
+    unsubscribeFromEventSource: vi.fn(),
+  }
   return {
-    context: {
-      entityUrl: opts.entityUrl ?? `/chat/session`,
-      entityType: `chat`,
-      principal: {
-        url: opts.principalUrl ?? `/principal/agent:horton`,
-        kind: `agent`,
-      },
-      args: {
-        ...(opts.markdownDocs ? { markdownDocs: opts.markdownDocs } : {}),
-      },
-      db: {
-        collections: {
-          manifests: { toArray: opts.manifestDocuments ?? [document] },
-        },
-      },
-      events: [],
-      createMarkdownDocument: vi.fn(
-        async (opts: { id?: string; title: string }) => {
-          streamFrames = []
-          return {
-            txid: `tx-create`,
-            document: {
-              ...document,
-              id: opts.id ?? document.id,
-              title: opts.title,
-            },
-          }
-        }
-      ),
-      readMarkdownDocumentStream: vi.fn(
-        async (_streamPath: string, opts?: { offset?: string }) => {
-          const offset =
-            opts?.offset !== undefined ? Number.parseInt(opts.offset, 10) : 0
-          const start = Number.isFinite(offset) && offset >= 0 ? offset : 0
-          return {
-            bytes: concatFrames(streamFrames.slice(start)),
-            offset: String(streamFrames.length),
-          }
-        }
-      ),
-      appendMarkdownDocumentUpdate: vi.fn(
-        async (_streamPath: string, update: Uint8Array) => {
-          streamFrames.push(update)
-          return { offset: String(streamFrames.length) }
-        }
-      ),
-      appendMarkdownDocumentAwareness: vi.fn(
-        async (_streamPath: string, update: Uint8Array) => {
-          awarenessFrames.push(update)
-          return {}
-        }
-      ),
-      upsertCronSchedule: vi.fn(),
-      upsertFutureSendSchedule: vi.fn(),
-      deleteSchedule: vi.fn(),
-      listEventSources: vi.fn(),
-      subscribeToEventSource: vi.fn(),
-      unsubscribeFromEventSource: vi.fn(),
-    } as any,
+    context,
     getContent: () => contentFromStream(concatFrames(streamFrames)),
     getDoc: () => createMarkdownYDoc(concatFrames(streamFrames)),
     getAwarenessFrames: () => awarenessFrames,
@@ -170,7 +249,16 @@ function createToolContext(
       const yText = markdownText(doc)
       const before = Y.encodeStateVector(doc)
       yText.insert(yText.length, text)
-      streamFrames.push(frameYjsUpdate(Y.encodeStateAsUpdate(doc, before)))
+      const update = Y.encodeStateAsUpdate(doc, before)
+      streamFrames.push(frameYjsUpdate(update))
+      for (const session of openSessions) {
+        Y.applyUpdate(session.doc, update, `server`)
+      }
+      doc.destroy()
+    },
+    cleanup: async () => {
+      for (const cleanup of cleanupCallbacks) await cleanup()
+      for (const session of openSessions) session.off()
     },
     document,
   }
@@ -266,8 +354,11 @@ describe(`markdown document tools`, () => {
 
     const result = await read.execute(`tool-read-injected`, { id: `notes` })
 
-    expect(context.readMarkdownDocumentStream).toHaveBeenCalledWith(
-      base.document.streamPath
+    expect(context.openMarkdownDocumentSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        document: base.document,
+        entityUrl: `/worker/subagent`,
+      })
     )
     expect((result.content[0] as { text: string }).text).toContain(`# Notes`)
   })
@@ -476,11 +567,7 @@ describe(`markdown document tools`, () => {
     })
 
     expect(getContent()).toContain(`Refreshed line`)
-    expect(context.readMarkdownDocumentStream).toHaveBeenCalledTimes(2)
-    expect(context.readMarkdownDocumentStream).toHaveBeenNthCalledWith(
-      2,
-      `/v1/yjs/default/docs/agents/chat/session/documents/notes`,
-      { offset: `1` }
-    )
+    expect(context.readMarkdownDocumentStream).not.toHaveBeenCalled()
+    expect(context.openMarkdownDocumentSession).toHaveBeenCalledTimes(1)
   })
 })

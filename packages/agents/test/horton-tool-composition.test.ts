@@ -130,11 +130,17 @@ function createElectricToolsContext() {
       txid: `tx-create-doc`,
       document,
     })),
+    getMarkdownDocumentConnection: vi.fn(async () => ({
+      baseUrl: `http://test.local/v1/yjs/default`,
+      docId: document.docId,
+      headers: {},
+    })),
     readMarkdownDocumentStream: vi.fn(async () => ({
       bytes: new Uint8Array(),
     })),
     appendMarkdownDocumentUpdate: vi.fn(async () => ({})),
     appendMarkdownDocumentAwareness: vi.fn(async () => ({})),
+    registerCleanup: vi.fn(),
   } as any
 }
 

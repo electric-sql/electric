@@ -20,7 +20,10 @@ import { principalKeyFromInput } from '../../lib/principals'
 import { Icon, ScrollArea } from '../../ui'
 import styles from './MarkdownDocumentView.module.css'
 import type { EntityViewProps } from '../../lib/workspace/viewRegistry'
-import type { ManifestDocumentEntry } from '@electric-ax/agents-runtime/client'
+import {
+  MARKDOWN_DOCUMENT_AGENT_PRESENCE_TTL_MS,
+  type ManifestDocumentEntry,
+} from '@electric-ax/agents-runtime/client'
 import type { LucideIcon } from 'lucide-react'
 
 type DocumentResponse = {
@@ -298,7 +301,7 @@ export function MarkdownDocumentView({
             ? user.expiresAt <= now
             : user?.role === `agent` &&
               user.status === `editing` &&
-              now - firstSeen > 5_000
+              now - firstSeen > MARKDOWN_DOCUMENT_AGENT_PRESENCE_TTL_MS
         if (isExpired) {
           staleClients.push(clientId)
           return

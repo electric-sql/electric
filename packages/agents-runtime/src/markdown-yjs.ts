@@ -4,6 +4,7 @@ import { Awareness, encodeAwarenessUpdate } from 'y-protocols/awareness'
 import * as Y from 'yjs'
 
 export const MARKDOWN_DOCUMENT_TEXT_NAME = `markdown` as const
+export const MARKDOWN_DOCUMENT_AGENT_PRESENCE_TTL_MS = 45_000
 
 export function frameYjsUpdate(update: Uint8Array): Uint8Array {
   const encoder = encoding.createEncoder()
@@ -227,7 +228,7 @@ export function encodeMarkdownAwarenessUpdate(opts: {
         role: opts.role,
         status: opts.status ?? `editing`,
         updatedAt: now,
-        expiresAt: now + 5_000,
+        expiresAt: now + MARKDOWN_DOCUMENT_AGENT_PRESENCE_TTL_MS,
         color: opts.color,
         colorLight: opts.colorLight,
       },

@@ -80,6 +80,12 @@ export type EntitiesObservationHandle = ObservationHandle & {
   db: ObservationStreamDB
 }
 
+export type MarkdownDocumentConnection = {
+  baseUrl: string
+  docId: string
+  headers?: Record<string, string>
+}
+
 export type JsonValue =
   | string
   | number
@@ -750,6 +756,9 @@ export interface ProcessWakeConfig {
       title: string
       meta?: Record<string, unknown>
     }) => Promise<{ txid: string; document: ManifestDocumentEntry }>
+    getMarkdownDocumentConnection: (
+      streamPath: string
+    ) => Promise<MarkdownDocumentConnection>
     readMarkdownDocumentStream: (
       streamPath: string,
       opts?: { offset?: string }
@@ -762,6 +771,7 @@ export interface ProcessWakeConfig {
       streamPath: string,
       update: Uint8Array
     ) => Promise<{ offset?: string }>
+    registerCleanup: (cleanup: () => void | Promise<void>) => void
   }) => Array<AgentTool> | Promise<Array<AgentTool>>
   /** Optional shutdown signal to end idle waits during host teardown. */
   shutdownSignal?: AbortSignal
