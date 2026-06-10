@@ -8,6 +8,7 @@ import {
   eq,
   gt,
   isNull,
+  isUndefined,
   like,
   localOnlyCollectionOptions,
   or,
@@ -281,6 +282,9 @@ export interface EntityTimelineRunRow {
 export type EntityTimelineInboxRow = IncludesInboxMessage
 export type EntityTimelineWakeRow = IncludesWakeMessage
 export type EntityTimelineSignalRow = IncludesSignal
+export type EntityTimelineErrorRow = EntityTimelineErrorItem & {
+  order: TimelineOrder
+}
 
 export type EntityTimelineQueryRow =
   | {
@@ -289,6 +293,7 @@ export type EntityTimelineQueryRow =
       run?: undefined
       wake?: undefined
       signal?: undefined
+      error?: undefined
       manifest?: undefined
     }
   | {
@@ -297,6 +302,7 @@ export type EntityTimelineQueryRow =
       run: EntityTimelineRunRow
       wake?: undefined
       signal?: undefined
+      error?: undefined
       manifest?: undefined
     }
   | {
@@ -305,6 +311,7 @@ export type EntityTimelineQueryRow =
       run?: undefined
       wake: EntityTimelineWakeRow
       signal?: undefined
+      error?: undefined
       manifest?: undefined
     }
   | {
@@ -313,6 +320,7 @@ export type EntityTimelineQueryRow =
       run?: undefined
       wake?: undefined
       signal: EntityTimelineSignalRow
+      error?: undefined
       manifest?: undefined
     }
   | {
@@ -321,6 +329,16 @@ export type EntityTimelineQueryRow =
       run?: undefined
       wake?: undefined
       signal?: undefined
+      error: EntityTimelineErrorRow
+      manifest?: undefined
+    }
+  | {
+      $key: string
+      inbox?: undefined
+      run?: undefined
+      wake?: undefined
+      signal?: undefined
+      error?: undefined
       manifest: ManifestEntry
     }
 
@@ -1356,6 +1374,17 @@ function buildEntityTimelineQuery(
       new_state: signal.new_state,
     }))
 
+  const errorSource = q
+    .from({ error: db.collections.errors })
+    .where(({ error }) => or(isNull(error.run_id), isUndefined(error.run_id)))
+    .select(({ error }) => ({
+      key: error.key,
+      order: coalesce(error._timeline_order, `~`),
+      error_code: error.error_code,
+      message: error.message,
+      run_id: error.run_id,
+    }))
+
   const runItemsSource = q
     .unionAll({
       text: db.collections.texts,
@@ -1490,30 +1519,41 @@ function buildEntityTimelineQuery(
       run: runSource,
       wake: wakeSource,
       signal: signalSource,
+      error: errorSource,
       manifest: db.collections.manifests,
     })
-    .orderBy(({ inbox, run, wake, signal, manifest }) =>
+    .orderBy(({ inbox, run, wake, signal, error, manifest }) =>
       coalesce(
         inbox.order,
         run.order,
         wake.order,
         signal.order,
+        error.order,
         manifest._timeline_order,
         `~`
       )
     )
-    .orderBy(({ inbox, run, wake, signal, manifest }) =>
+    .orderBy(({ inbox, run, wake, signal, error, manifest }) =>
       coalesce(
         caseWhen(inbox.key, `inbox`),
         caseWhen(run.key, `run`),
         caseWhen(wake.key, `wake`),
         caseWhen(signal.key, `signal`),
+        caseWhen(error.key, `error`),
         caseWhen(manifest.key, `manifest`),
         ``
       )
     )
-    .orderBy(({ inbox, run, wake, signal, manifest }) =>
-      coalesce(inbox.key, run.key, wake.key, signal.key, manifest.key, ``)
+    .orderBy(({ inbox, run, wake, signal, error, manifest }) =>
+      coalesce(
+        inbox.key,
+        run.key,
+        wake.key,
+        signal.key,
+        error.key,
+        manifest.key,
+        ``
+      )
     )
 }
 
@@ -1751,7 +1791,9 @@ export function createEntityErrorsQuery(
   return (q: InitialQueryBuilder) =>
     q
       .from({ errors: db.collections.errors })
-      .where(({ errors }) => isNull(errors.run_id))
+      .where(({ errors }) =>
+        or(isNull(errors.run_id), isUndefined(errors.run_id))
+      )
       .select(({ errors }) => ({
         key: errors.key,
         error_code: errors.error_code,
