@@ -138,6 +138,9 @@ export interface OutboundBridge {
   onStepEnd: (opts?: {
     finishReason?: string
     tokenInput?: number
+    // Uncached portion of the input side (no cacheRead/cacheWrite). Not
+    // persisted to the step row — forwarded to hooks for budget accounting.
+    tokenInputUncached?: number
     tokenOutput?: number
     durationMs?: number
   }) => void
@@ -157,11 +160,19 @@ export interface OutboundBridge {
 
 export interface OutboundBridgeHooks {
   /**
-   * Called after a step ends and has been written to the entity stream. Receives
-   * the input/output token counts (zero if the provider did not report them).
-   * Use this to drive mid-run accounting like goal budget enforcement.
+   * Called after a step ends and has been written to the entity stream.
+   * Receives the token counts (zero if the provider did not report them):
+   * `input` is the full prompt volume the model saw (including prompt-cache
+   * reads/writes — what the meta row displays), `uncachedInput` is the new
+   * input this step only, `output` is completion tokens. Budget accounting
+   * should use `uncachedInput + output` so warm-cache turns don't re-count
+   * the entire conversation every step.
    */
-  onStepEnd?: (stats: { input: number; output: number }) => void
+  onStepEnd?: (stats: {
+    input: number
+    uncachedInput: number
+    output: number
+  }) => void
 }
 
 export function createOutboundBridge(
@@ -260,6 +271,7 @@ export function createOutboundBridge(
     onStepEnd(opts?: {
       finishReason?: string
       tokenInput?: number
+      tokenInputUncached?: number
       tokenOutput?: number
       durationMs?: number
     }) {
@@ -286,6 +298,7 @@ export function createOutboundBridge(
       )
       hooks?.onStepEnd?.({
         input: opts?.tokenInput ?? 0,
+        uncachedInput: opts?.tokenInputUncached ?? opts?.tokenInput ?? 0,
         output: opts?.tokenOutput ?? 0,
       })
     },

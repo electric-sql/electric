@@ -793,9 +793,13 @@ function createAssistantHandler(options: {
     let runTokensUsed = enforcedGoal?.tokensUsed ?? 0
     let budgetTripped = false
     const onStepEnd = enforcedGoal
-      ? (stats: { input: number; output: number }) => {
+      ? (stats: { input: number; uncachedInput: number; output: number }) => {
           if (budgetTripped) return
-          runTokensUsed += stats.input + stats.output
+          // Budget on new work only: uncached input + output. The display
+          // sum (`stats.input`) includes prompt-cache reads which re-count
+          // the entire conversation on every warm step and would exhaust
+          // any budget in a handful of steps.
+          runTokensUsed += stats.uncachedInput + stats.output
           ctx.updateGoalUsage(runTokensUsed)
           if (
             enforcedGoal.tokenBudget !== null &&

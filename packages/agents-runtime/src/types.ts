@@ -939,8 +939,15 @@ export interface AgentConfig {
   ) => Promise<string | undefined> | string | undefined
   onPayload?: SimpleStreamOptions[`onPayload`]
   // Invoked after each step ends with the provider-reported token counts.
-  // Used for mid-run accounting like goal budget enforcement.
-  onStepEnd?: (stats: { input: number; output: number }) => void
+  // `input` is the full prompt volume (incl. prompt-cache reads/writes, as
+  // displayed in the meta row); `uncachedInput` is the new input this step
+  // only. Budget accounting should use `uncachedInput + output` so warm
+  // cache turns don't re-count the whole conversation each step.
+  onStepEnd?: (stats: {
+    input: number
+    uncachedInput: number
+    output: number
+  }) => void
   testResponses?: TestResponses
 }
 

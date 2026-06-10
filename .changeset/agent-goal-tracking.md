@@ -23,10 +23,12 @@ the run exceeds the budget.
   `manifests` collection — resumes automatically across desktop
   restarts.
 - **Mid-run token enforcement**: an `onStepEnd` hook on the outbound
-  bridge surfaces per-step input/output tokens; Horton accumulates
-  them and aborts the active `ctx.agent.run()` via an
-  `AbortController` once `tokensUsed >= tokenBudget`. The cap covers
-  the sum of input + output across all steps since the goal was set.
+  bridge surfaces per-step token counts; Horton accumulates them and
+  aborts the active `ctx.agent.run()` via an `AbortController` once
+  `tokensUsed >= tokenBudget`. The cap counts **uncached input +
+  output** per step — prompt-cache reads (which re-count the whole
+  conversation on every warm step) are excluded, so the budget tracks
+  new work rather than context size.
 - **Live progress**: the goal banner ticks up after each step. The
   manifest update is written via `writeEvent` directly (not the
   wake-session's staged manifest transaction, which only commits at

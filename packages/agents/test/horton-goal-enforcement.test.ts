@@ -48,12 +48,20 @@ async function runHandler(goal: GoalEntry | undefined) {
   const updateGoalUsage = vi.fn()
   const replyText = vi.fn()
   // The run mock fires the captured onStepEnd (when wired) so the test can
-  // exercise the budget-trip path the way a real step boundary would.
+  // exercise the budget-trip path the way a real step boundary would. The
+  // budget accumulates uncachedInput + output — `input` (display sum incl.
+  // cache reads) must NOT count, which the active-goal assertion verifies.
   const run = vi.fn(async () => {
     const config = useAgent.mock.calls[0]?.[0] as
-      | { onStepEnd?: (stats: { input: number; output: number }) => void }
+      | {
+          onStepEnd?: (stats: {
+            input: number
+            uncachedInput: number
+            output: number
+          }) => void
+        }
       | undefined
-    config?.onStepEnd?.({ input: 5_000, output: 100 })
+    config?.onStepEnd?.({ input: 50_000, uncachedInput: 5_000, output: 100 })
   })
 
   const fakeCtx = {

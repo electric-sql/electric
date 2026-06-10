@@ -42,9 +42,14 @@ export interface PiAdapterOptions {
     provider: string
   ) => Promise<string | undefined> | string | undefined
   onPayload?: SimpleStreamOptions[`onPayload`]
-  // Invoked after each step ends with the input/output tokens reported by the
-  // provider. Used by goal-budget enforcement to abort mid-run.
-  onStepEnd?: (stats: { input: number; output: number }) => void
+  // Invoked after each step ends with the token counts reported by the
+  // provider. Used by goal-budget enforcement to abort mid-run; see
+  // OutboundBridgeHooks for the field semantics.
+  onStepEnd?: (stats: {
+    input: number
+    uncachedInput: number
+    output: number
+  }) => void
 }
 
 interface PiAgentAdapterConfig {
@@ -397,6 +402,18 @@ export function createPiAgentAdapter(
                   (typeof usage?.inputTokens === `number`
                     ? usage.inputTokens
                     : undefined)
+                // Uncached input only — what goal-budget enforcement
+                // accumulates. On warm turns `cacheRead` re-counts the whole
+                // conversation every step, so budgeting on the display sum
+                // would burn a budget in a couple of steps regardless of how
+                // much *new* work happened. Legacy flat `inputTokens` has no
+                // cache split, so the whole side counts as uncached.
+                const usageInputUncached =
+                  typeof usage?.input === `number`
+                    ? usage.input
+                    : typeof usage?.inputTokens === `number`
+                      ? usage.inputTokens
+                      : undefined
                 const usageOutput =
                   typeof usage?.output === `number`
                     ? usage.output
@@ -407,6 +424,9 @@ export function createPiAgentAdapter(
                   finishReason,
                   durationMs: Date.now() - stepStartTime,
                   ...(usageInput !== undefined && { tokenInput: usageInput }),
+                  ...(usageInputUncached !== undefined && {
+                    tokenInputUncached: usageInputUncached,
+                  }),
                   ...(usageOutput !== undefined && {
                     tokenOutput: usageOutput,
                   }),
