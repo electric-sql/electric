@@ -83,6 +83,7 @@ function ctx(
     listSharedStateLinkedEntityUrls: vi.fn(
       async () => overrides.linkedSharedStateEntityUrls ?? [currentEntity.url]
     ),
+    replaceSharedStateLink: vi.fn(async () => undefined),
     hasEntityPermission: vi.fn(async (_url, permission) =>
       typeof overrides.hasEntityPermission === `function`
         ? overrides.hasEntityPermission(permission)
