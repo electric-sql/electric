@@ -3,6 +3,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { eq, useLiveQuery } from '@tanstack/react-db'
 import { useEntityTimeline } from '../../hooks/useEntityTimeline'
 import { EntityTimeline } from '../EntityTimeline'
+import { GoalBanner } from '../GoalBanner'
 import { MessageInput } from '../MessageInput'
 import { EntityContextDrawer } from '../EntityContextDrawer'
 import { useElectricAgents } from '../../lib/ElectricAgentsProvider'
@@ -349,6 +350,7 @@ function GenericChatBody({
 
   return (
     <>
+      <GoalBanner db={db} />
       <EntityTimeline
         rows={timelineRowsWithInlinePending}
         loading={loading}

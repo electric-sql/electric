@@ -27,6 +27,23 @@ import type {
 } from '@electric-ax/agents-runtime/client'
 import type { OptimisticInboxMessage } from '../lib/sendMessage'
 
+// /goal commands that mutate state should interrupt any in-flight agent
+// run so the user doesn't have to wait for the old work to finish before
+// the new goal/state takes effect. /goal show is read-only and never
+// aborts.
+function isAbortingGoalCommand(text: string): boolean {
+  const trimmed = text.trim()
+  if (!trimmed.startsWith(`/goal`)) return false
+  const next = trimmed.charAt(`/goal`.length)
+  if (next !== `` && next !== ` ` && next !== `\t` && next !== `\n`)
+    return false
+  const after = trimmed.slice(`/goal`.length).trim()
+  const sub = after.split(/\s+/)[0]?.toLowerCase() ?? ``
+  return (
+    sub === `set` || sub === `clear` || sub === `complete` || sub === `done`
+  )
+}
+
 export function MessageInput({
   db,
   baseUrl,
@@ -186,6 +203,15 @@ export function MessageInput({
             ...(files.length > 0 ? { attachments: files } : {}),
           })
       if (!tx) return
+      // State-changing /goal commands should interrupt any in-flight agent
+      // run — otherwise the agent keeps working on the old goal/work even
+      // though the user just told it to stop or pivot. /goal show is purely
+      // a read, so it never aborts. `onStop` itself no-ops when nothing is
+      // running, so this is safe to call unconditionally for the matching
+      // commands.
+      if (!editingMessage && isAbortingGoalCommand(text)) {
+        onStop?.()
+      }
       if (!editingMessage) onSend?.()
       setValue(``)
       clearAttachments()
@@ -209,6 +235,7 @@ export function MessageInput({
       updateAction,
       editingMessage,
       onSend,
+      onStop,
       effectiveSlashCommands,
     ]
   )

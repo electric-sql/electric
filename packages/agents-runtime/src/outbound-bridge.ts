@@ -121,9 +121,19 @@ export interface OutboundBridge {
   onToolCallEnd(name: string, result: unknown, isError: boolean): void
 }
 
+export interface OutboundBridgeHooks {
+  /**
+   * Called after a step ends and has been written to the entity stream. Receives
+   * the input/output token counts (zero if the provider did not report them).
+   * Use this to drive mid-run accounting like goal budget enforcement.
+   */
+  onStepEnd?: (stats: { input: number; output: number }) => void
+}
+
 export function createOutboundBridge(
   existingEvents: Array<ChangeEvent> | OutboundIdSeed,
-  writeEvent: (event: ChangeEvent) => void
+  writeEvent: (event: ChangeEvent) => void,
+  hooks?: OutboundBridgeHooks
 ): OutboundBridge {
   const counters: IdCounters = Array.isArray(existingEvents)
     ? scanCounters(existingEvents)
@@ -240,6 +250,10 @@ export function createOutboundBridge(
           } as never,
         }) as ChangeEvent
       )
+      hooks?.onStepEnd?.({
+        input: opts?.tokenInput ?? 0,
+        output: opts?.tokenOutput ?? 0,
+      })
     },
 
     onTextStart() {

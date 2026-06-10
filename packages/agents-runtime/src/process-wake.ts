@@ -2099,7 +2099,11 @@ export async function processWake(
         pendingRunAbortRequested = false
         runAbortController.abort()
       }
-      const { ctx: handlerCtx, getSleepRequested } = createHandlerContext({
+      const {
+        ctx: handlerCtx,
+        getSleepRequested,
+        refreshGoalUsage,
+      } = createHandlerContext({
         entityUrl,
         entityType: typeName,
         epoch,
@@ -2182,6 +2186,7 @@ export async function processWake(
         await drainAllPendingWrites()
         await Promise.all(pendingWakeRegistrations)
         pendingWakeRegistrations.length = 0
+        refreshGoalUsage()
         await wakeSession.commitManifestEntries()
         await flushProducedWrites()
         if (result) {

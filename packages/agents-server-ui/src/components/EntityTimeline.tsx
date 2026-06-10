@@ -749,6 +749,8 @@ function manifestKindLabel(manifest: Manifest): string {
       return `Context`
     case `schedule`:
       return `Schedule`
+    case `goal`:
+      return `Goal`
   }
 }
 
@@ -763,6 +765,7 @@ function manifestTitle(manifest: Manifest): string {
     case `attachment`:
     case `context`:
     case `schedule`:
+    case `goal`:
       return manifest.id
   }
 }
@@ -785,6 +788,8 @@ function manifestMeta(manifest: Manifest): string {
       return manifest.scheduleType === `cron`
         ? `${manifest.expression}${manifest.timezone ? ` · ${manifest.timezone}` : ``}`
         : `${manifest.fireAt} · ${manifest.status}`
+    case `goal`:
+      return manifest.status ?? `active`
   }
 }
 
@@ -843,6 +848,18 @@ function manifestDetails(
             { label: `Target`, value: manifest.targetUrl },
             { label: `Status`, value: manifest.status ?? `pending` },
           ]
+    case `goal`:
+      return [
+        { label: `Objective`, value: manifest.objective ?? `` },
+        { label: `Status`, value: manifest.status ?? `active` },
+        {
+          label: `Tokens`,
+          value:
+            manifest.tokenBudget === null || manifest.tokenBudget === undefined
+              ? `${manifest.tokensUsed ?? 0}`
+              : `${manifest.tokensUsed ?? 0} / ${manifest.tokenBudget}`,
+        },
+      ]
   }
 }
 

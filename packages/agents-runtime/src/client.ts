@@ -58,8 +58,10 @@ export type {
   AttachmentStatus,
   AttachmentSubject,
   AttachmentSubjectType,
+  GoalStatus,
   Manifest,
   ManifestAttachmentEntry,
+  ManifestGoalEntry,
 } from './entity-schema'
 export type {
   AttachmentCreateInput,

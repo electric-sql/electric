@@ -42,6 +42,9 @@ export interface PiAdapterOptions {
     provider: string
   ) => Promise<string | undefined> | string | undefined
   onPayload?: SimpleStreamOptions[`onPayload`]
+  // Invoked after each step ends with the input/output tokens reported by the
+  // provider. Used by goal-budget enforcement to abort mid-run.
+  onStepEnd?: (stats: { input: number; output: number }) => void
 }
 
 interface PiAgentAdapterConfig {
@@ -213,7 +216,8 @@ export function createPiAgentAdapter(
   return (config: PiAgentAdapterConfig): PiAgentHandle => {
     const bridge = createOutboundBridge(
       config.outboundIdSeed,
-      config.writeEvent
+      config.writeEvent,
+      opts.onStepEnd ? { onStepEnd: opts.onStepEnd } : undefined
     )
     const history = toAgentHistory(config.messages)
 
