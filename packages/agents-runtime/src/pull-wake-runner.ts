@@ -1,5 +1,7 @@
+import { createActor } from 'xstate'
 import { DurableStream } from '@durable-streams/client'
 import { DEFAULT_RUNNER_HEARTBEAT_INTERVAL_MS } from './constants'
+import { createPullWakeMachine } from './pull-wake-machine'
 import { appendPathToUrl } from './url'
 import type { RuntimeRouter } from './create-handler'
 import type {
@@ -84,16 +86,6 @@ export interface PullWakeRunnerHealth {
   claims_failed: number
 }
 
-type PullWakeRunnerState =
-  | `stopped`
-  | `starting`
-  | `running.connecting`
-  | `running.streaming`
-  | `running.reconnecting`
-  | `stopping`
-
-const INITIAL_RECONNECT_BACKOFF_MS = 1_000
-const MAX_RECONNECT_BACKOFF_MS = 30_000
 const CLAIM_ACTOR_STOP_GRACE_MS = 1_000
 const DEFAULT_EVENT_HEARTBEAT_THROTTLE_MS = 2_000
 const HEARTBEAT_FAILURE_STREAM_RESET_THRESHOLD = 2
@@ -101,17 +93,16 @@ const HEARTBEAT_FAILURE_STREAM_RESET_THRESHOLD = 2
 export function createPullWakeRunner(
   config: PullWakeRunnerConfig
 ): PullWakeRunner {
-  let state: PullWakeRunnerState = `stopped`
+  // The xstate machine owns the lifecycle (which phase, what transitions are
+  // legal, when to abort in-flight work). This closure owns diagnostics,
+  // heartbeating, and claim processing — effects the machine triggers.
   let controller: AbortController | null = null
-  let loop: Promise<void> | null = null
-  let response: PullWakeStreamResponse | null = null
   let heartbeatTimer: ReturnType<typeof setInterval> | null = null
   let eventHeartbeatTimer: ReturnType<typeof setTimeout> | null = null
   let heartbeatInFlight: Promise<void> | null = null
   let heartbeatPending = false
   let currentOffset = config.offset ?? `-1`
   let startedAt: string | null = null
-  let streamConnected = false
   let streamConnectedSince: string | null = null
   let reconnectCount = 0
   let lastError: string | null = null
@@ -126,9 +117,6 @@ export function createPullWakeRunner(
   let claimsSkipped = 0
   let claimsFailed = 0
   let consecutiveHeartbeatFailures = 0
-  let acceptingClaims = false
-  let nextReconnectBackoffMs = INITIAL_RECONNECT_BACKOFF_MS
-  let streamResetError: Error | null = null
   let stopPromise: Promise<void> | null = null
   const claimActors = new Set<Promise<void>>()
 
@@ -153,21 +141,18 @@ export function createPullWakeRunner(
   const claimUrl = appendPathToUrl(config.baseUrl, claimPath)
 
   const toStatus = (): PullWakeRunnerStatus => {
-    switch (state) {
-      case `stopped`:
-        return `stopped`
-      case `starting`:
-        return `starting`
-      case `running.connecting`:
-        return `connecting`
-      case `running.streaming`:
-        return `streaming`
-      case `running.reconnecting`:
-        return `reconnecting`
-      case `stopping`:
-        return `stopping`
-    }
+    const snapshot = actor.getSnapshot()
+    if (snapshot.matches(`stopped`)) return `stopped`
+    if (snapshot.matches({ running: `connecting` })) return `connecting`
+    if (snapshot.matches({ running: `streaming` })) return `streaming`
+    if (snapshot.matches({ running: `reconnecting` })) return `reconnecting`
+    return `stopping`
   }
+
+  const isRunningState = (): boolean => actor.getSnapshot().matches(`running`)
+
+  const isStreaming = (): boolean =>
+    actor.getSnapshot().matches({ running: `streaming` })
 
   const buildDiagnostics = (): Omit<
     PullWakeRunnerHealth,
@@ -175,7 +160,7 @@ export function createPullWakeRunner(
   > => ({
     status: toStatus(),
     started_at: startedAt,
-    stream_connected: streamConnected,
+    stream_connected: isStreaming(),
     stream_connected_since: streamConnectedSince,
     reconnect_count: reconnectCount,
     last_error: lastError,
@@ -221,12 +206,6 @@ export function createPullWakeRunner(
       // onError is reporting-only; reporters must not control runner lifecycle.
       console.error(`Pull-wake runner onError callback failed`, reporterError)
     }
-  }
-
-  const requestStreamReconnect = (error: Error): void => {
-    if (!streamConnected || streamResetError) return
-    streamResetError = error
-    response?.cancel?.(error)
   }
 
   const notifyHeartbeatChange = (): void => {
@@ -286,9 +265,10 @@ export function createPullWakeRunner(
           consecutiveHeartbeatFailures >=
           HEARTBEAT_FAILURE_STREAM_RESET_THRESHOLD
         ) {
-          requestStreamReconnect(
-            err instanceof Error ? err : new Error(String(err))
-          )
+          actor.send({
+            type: `STREAM_RESET`,
+            error: err instanceof Error ? err : new Error(String(err)),
+          })
         }
       }
     }
@@ -400,9 +380,6 @@ export function createPullWakeRunner(
     }
   }
 
-  const isRunningState = (): boolean =>
-    state === `starting` || state.startsWith(`running.`)
-
   const claimAndDispatch = async (
     event: PullWakeEvent,
     signal: AbortSignal
@@ -410,7 +387,7 @@ export function createPullWakeRunner(
     try {
       const notification = await claimWake(event, signal)
       if (!notification) return
-      if (!acceptingClaims || signal.aborted) {
+      if (!isRunningState() || signal.aborted) {
         return
       }
       try {
@@ -433,11 +410,11 @@ export function createPullWakeRunner(
   }
 
   const spawnClaimActor = (event: PullWakeEvent, signal: AbortSignal): void => {
-    let actor: Promise<void>
-    actor = claimAndDispatch(event, signal).finally(() => {
-      claimActors.delete(actor)
+    let claim: Promise<void>
+    claim = claimAndDispatch(event, signal).finally(() => {
+      claimActors.delete(claim)
     })
-    claimActors.add(actor)
+    claimActors.add(claim)
   }
 
   const waitForClaimActors = async (
@@ -459,140 +436,78 @@ export function createPullWakeRunner(
     return true
   }
 
-  const sleep = async (ms: number, signal: AbortSignal): Promise<void> => {
-    if (ms <= 0 || signal.aborted) return
-    await new Promise<void>((resolve) => {
-      const timer = setTimeout(resolve, ms)
-      signal.addEventListener(
-        `abort`,
-        () => {
-          clearTimeout(timer)
-          resolve()
-        },
-        { once: true }
-      )
-    })
-  }
-
-  const consumeWakeStream = async (signal: AbortSignal): Promise<void> => {
-    streamResetError = null
-    response = await streamFactory({
-      url: wakeUrl,
-      headers: await resolveHeaders(),
-      offset: currentOffset,
-      signal,
-    })
-    state = `running.streaming`
-    streamConnected = true
-    streamConnectedSince = new Date().toISOString()
-    nextReconnectBackoffMs = INITIAL_RECONNECT_BACKOFF_MS
-    notifyHeartbeatChange()
-
-    try {
-      for await (const event of response.jsonStream()) {
-        if (signal.aborted) break
-        if (event?.type === `wake`) {
-          eventsReceived++
-          notifyHeartbeatChange()
-          if (acceptingClaims && !signal.aborted) spawnClaimActor(event, signal)
-        }
-        if (
-          response.offset !== undefined &&
-          response.offset !== currentOffset
-        ) {
-          currentOffset = response.offset
-          notifyHeartbeatChange()
-        }
-      }
-      await response.closed?.catch((err) => {
-        if (!signal.aborted) throw err
-      })
-      if (streamResetError && !signal.aborted) {
-        throw streamResetError
-      }
-    } finally {
-      streamConnected = false
+  const machine = createPullWakeMachine({
+    connectStream: async (signal) =>
+      streamFactory({
+        url: wakeUrl,
+        headers: await resolveHeaders(),
+        offset: currentOffset,
+        signal,
+      }),
+    onStreamConnected: () => {
+      streamConnectedSince = new Date().toISOString()
+      notifyHeartbeatChange()
+    },
+    onStreamDisconnected: () => {
       streamConnectedSince = null
-      response = null
-      if (!signal.aborted) notifyHeartbeatChange()
-    }
-  }
-
-  const run = async (): Promise<void> => {
-    const signal = controller!.signal
-    acceptingClaims = true
-    try {
-      while (!signal.aborted) {
-        state = `running.connecting`
+      notifyHeartbeatChange()
+    },
+    onWake: (event) => {
+      eventsReceived++
+      notifyHeartbeatChange()
+      const signal = controller?.signal
+      if (signal && !signal.aborted) spawnClaimActor(event, signal)
+    },
+    onOffset: (offset) => {
+      if (offset !== currentOffset) {
+        currentOffset = offset
         notifyHeartbeatChange()
-        try {
-          await consumeWakeStream(signal)
-          if (!signal.aborted) {
-            state = `running.reconnecting`
-            notifyHeartbeatChange()
-            const backoffMs = nextReconnectBackoffMs
-            nextReconnectBackoffMs = Math.min(
-              nextReconnectBackoffMs * 2,
-              MAX_RECONNECT_BACKOFF_MS
-            )
-            await sleep(backoffMs, signal)
-          }
-        } catch (err) {
-          if (!signal.aborted) {
-            reconnectCount++
-            reportError(err)
-            state = `running.reconnecting`
-            notifyHeartbeatChange()
-            const backoffMs = nextReconnectBackoffMs
-            nextReconnectBackoffMs = Math.min(
-              nextReconnectBackoffMs * 2,
-              MAX_RECONNECT_BACKOFF_MS
-            )
-            await sleep(backoffMs, signal)
-          }
-        }
       }
-    } finally {
-      acceptingClaims = false
-      streamConnected = false
-      streamConnectedSince = null
-      response = null
-      controller = null
-      if (state !== `stopping`) state = `stopped`
-    }
-  }
-
-  const stopRunner = async (): Promise<void> => {
-    if (state === `stopped`) return
-    state = `stopping`
-    acceptingClaims = false
-    controller?.abort()
-    stopHeartbeat()
-    response?.cancel?.(new Error(`pull wake runner stopped`))
-    if (!(await waitForClaimActors())) {
-      claimActors.clear()
-    }
-    config.runtime.abortWakes()
-    await loop?.catch((err) => {
-      if (!(err instanceof Error && err.name === `AbortError`)) throw err
-    })
-    let drainError: unknown
-    try {
-      await config.runtime.drainWakes()
-    } catch (err) {
+    },
+    onReconnectError: (err) => {
+      reconnectCount++
       reportError(err)
-      drainError = err
-    } finally {
-      state = `stopped`
-    }
-    if (drainError) throw drainError
-  }
+    },
+    notifyHeartbeatChange,
+    cancelResponse: (response, reason) => {
+      response.cancel?.(reason)
+    },
+    onStopping: () => {
+      controller?.abort()
+      controller = null
+      stopHeartbeat()
+    },
+    shutdown: async () => {
+      if (!(await waitForClaimActors())) {
+        claimActors.clear()
+      }
+      config.runtime.abortWakes()
+      try {
+        await config.runtime.drainWakes()
+      } catch (err) {
+        reportError(err)
+        throw err
+      }
+    },
+  })
+
+  const actor = createActor(machine)
+  actor.start()
+
+  const waitForStoppedState = (): Promise<void> =>
+    new Promise((resolve) => {
+      if (actor.getSnapshot().matches(`stopped`)) return resolve()
+      const subscription = actor.subscribe((snapshot) => {
+        if (snapshot.matches(`stopped`)) {
+          subscription.unsubscribe()
+          resolve()
+        }
+      })
+    })
 
   return {
     start() {
-      if (loop || stopPromise) return
-      state = `starting`
-      controller = new AbortController()
+      if (!actor.getSnapshot().matches(`stopped`) || stopPromise) return
       reconnectCount = 0
       lastError = null
       lastErrorAt = null
@@ -606,28 +521,30 @@ export function createPullWakeRunner(
       claimsSkipped = 0
       claimsFailed = 0
       consecutiveHeartbeatFailures = 0
-      nextReconnectBackoffMs = INITIAL_RECONNECT_BACKOFF_MS
-      streamResetError = null
       startedAt = new Date().toISOString()
+      controller = new AbortController()
       startHeartbeat(controller.signal)
-      loop = run().finally(() => {
-        loop = null
-        stopHeartbeat()
-      })
+      actor.send({ type: `START` })
     },
     async stop() {
-      stopPromise ??= stopRunner().finally(() => {
+      if (stopPromise) return stopPromise
+      if (actor.getSnapshot().matches(`stopped`)) return
+      stopPromise = (async () => {
+        actor.send({ type: `STOP` })
+        await waitForStoppedState()
+        const { drainError } = actor.getSnapshot().context
+        if (drainError) throw drainError
+      })().finally(() => {
         stopPromise = null
       })
-      await stopPromise
+      return stopPromise
     },
     async waitForStopped() {
       if (stopPromise) {
         await stopPromise
         return
       }
-      await loop
-      if (stopPromise) await stopPromise
+      await waitForStoppedState()
     },
     get running() {
       return isRunningState()

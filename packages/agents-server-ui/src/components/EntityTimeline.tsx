@@ -265,6 +265,7 @@ function timelineRowSearchText(
     })
   }
   if (row.signal) return signalSearchText(row.signal)
+  if (row.error) return `${row.error.error_code} ${row.error.message}`
   if (row.manifest) return manifestSearchText(row.manifest)
   return runSearchTextByKey.get(row.$key) ?? runSearchTextFromSnapshot(row.run)
 }
@@ -274,6 +275,7 @@ function timelineRowLabel(row: RenderTimelineRow): string {
   if (row.inbox) return `User message`
   if (row.wake) return `Wake`
   if (row.signal) return `Signal`
+  if (row.error) return `Error`
   if (row.manifest) return `Manifest item`
   return `Agent response`
 }
@@ -428,6 +430,23 @@ function SignalTimelineRow({
         icon={CircleStop}
         title={`signal ${signal.signal}`}
         summary={signalSummary(signal)}
+        headerSurface
+      />
+    </div>
+  )
+}
+
+function ErrorTimelineRow({
+  error,
+}: {
+  error: NonNullable<RenderTimelineRow[`error`]>
+}): React.ReactElement {
+  return (
+    <div className={styles.manifestRow}>
+      <InlineEventCard
+        icon={CircleStop}
+        title={error.error_code || `error`}
+        summary={error.message}
         headerSurface
       />
     </div>
@@ -980,6 +999,10 @@ const TimelineRow = memo(function TimelineRow({
 
   if (row.signal) {
     return <SignalTimelineRow signal={row.signal} />
+  }
+
+  if (row.error) {
+    return <ErrorTimelineRow error={row.error} />
   }
 
   if (row.manifest) {

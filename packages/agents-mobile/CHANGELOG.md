@@ -1,5 +1,16 @@
 # @electric-ax/agents-mobile
 
+## 0.0.14
+
+### Patch Changes
+
+- 916f6cd: agents-mobile: native slash-command composer for the Horton prompt. The in-session and new-session inputs gain slash-command autocomplete, structured `composer_input` payloads, and inline command/argument highlighting — reaching feature parity with the desktop composer, on a native `TextInput` rather than a WebView. The slash-command grammar and serializer move into `@electric-ax/agents-runtime` (exported via `/client`) as the shared source of truth for both surfaces; the desktop composer repoints to them with no behaviour change.
+- Updated dependencies [5238055]
+- Updated dependencies [916f6cd]
+- Updated dependencies [a044ede]
+  - @electric-ax/agents-server-ui@0.4.19
+  - @electric-ax/agents-runtime@0.3.12
+
 ## 0.0.13
 
 ### Patch Changes

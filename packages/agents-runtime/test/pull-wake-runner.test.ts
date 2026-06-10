@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { createActor } from 'xstate'
 import { createPullWakeRunner } from '../src/pull-wake-runner'
-import type { PullWakeEvent } from '../src/pull-wake-runner'
+import { createPullWakeMachine } from '../src/pull-wake-machine'
+import type { PullWakeMachineEffects } from '../src/pull-wake-machine'
+import type {
+  PullWakeEvent,
+  PullWakeStreamResponse,
+} from '../src/pull-wake-runner'
 import type { WakeNotification } from '../src/types'
 
 const durableStreamMocks = vi.hoisted(() => {
@@ -751,6 +757,66 @@ describe(`createPullWakeRunner`, () => {
     await runner.stop()
   })
 
+  it(`aborts a hung connection attempt after repeated heartbeat failures`, async () => {
+    vi.useFakeTimers()
+    const connectionHanging = deferred<void>()
+    const secondStreamOpened = deferred<void>()
+    const secondStreamClosed = deferred<void>()
+    let heartbeatCalls = 0
+    const fetchMock = vi.fn(async () => {
+      heartbeatCalls++
+      if (heartbeatCalls <= 2) {
+        throw new Error(`connect ECONNREFUSED 127.0.0.1:4437`)
+      }
+      return Response.json({})
+    })
+    vi.stubGlobal(`fetch`, fetchMock)
+    const streamFactory = vi.fn(async (opts: { signal: AbortSignal }) => {
+      if (streamFactory.mock.calls.length === 1) {
+        connectionHanging.resolve()
+        await new Promise((_, reject) => {
+          opts.signal.addEventListener(
+            `abort`,
+            () => reject(opts.signal.reason),
+            { once: true }
+          )
+        })
+        throw new Error(`aborted`)
+      }
+      secondStreamOpened.resolve()
+      return {
+        async *jsonStream() {
+          await secondStreamClosed.promise
+        },
+        cancel: () => secondStreamClosed.resolve(),
+        closed: secondStreamClosed.promise,
+      }
+    })
+
+    const runner = createPullWakeRunner({
+      baseUrl: `http://server`,
+      runnerId: `runner-1`,
+      runtime: runtime(),
+      heartbeatIntervalMs: 10,
+      eventHeartbeatThrottleMs: 0,
+      streamFactory,
+    })
+
+    runner.start()
+    await connectionHanging.promise
+    await vi.advanceTimersByTimeAsync(20)
+
+    expect(heartbeatCalls).toBeGreaterThanOrEqual(2)
+
+    await vi.advanceTimersByTimeAsync(1_000)
+    await secondStreamOpened.promise
+
+    expect(streamFactory).toHaveBeenCalledTimes(2)
+    expect(runner.getHealth().reconnect_count).toBe(1)
+
+    await runner.stop()
+  })
+
   it(`marks heartbeat unhealthy before reporting heartbeat errors`, async () => {
     const observedHeartbeatOk: Array<boolean> = []
     let runner: ReturnType<typeof createPullWakeRunner>
@@ -1008,5 +1074,200 @@ describe(`createPullWakeRunner`, () => {
     expect(streamFactory).toHaveBeenCalledTimes(3)
 
     await runner.stop()
+  })
+})
+
+describe(`pull-wake machine transitions`, () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  type StateName =
+    | `stopped`
+    | `connecting`
+    | `streaming`
+    | `reconnecting`
+    | `stopping`
+
+  function hungResponse(): PullWakeStreamResponse {
+    return {
+      async *jsonStream() {
+        await new Promise(() => {})
+      },
+      closed: new Promise(() => {}),
+      cancel: vi.fn(),
+    }
+  }
+
+  function harness() {
+    const connect = deferred<PullWakeStreamResponse>()
+    const shutdown = deferred<void>()
+    const effects: PullWakeMachineEffects = {
+      connectStream: vi.fn(() => connect.promise),
+      onStreamConnected: vi.fn(),
+      onStreamDisconnected: vi.fn(),
+      onWake: vi.fn(),
+      onOffset: vi.fn(),
+      onReconnectError: vi.fn(),
+      notifyHeartbeatChange: vi.fn(),
+      cancelResponse: vi.fn(),
+      onStopping: vi.fn(),
+      shutdown: vi.fn(() => shutdown.promise),
+    }
+    const actor = createActor(createPullWakeMachine(effects))
+    actor.start()
+    return { actor, effects, connect, shutdown }
+  }
+
+  type Harness = ReturnType<typeof harness>
+
+  function stateOf(actor: Harness[`actor`]): StateName {
+    const snapshot = actor.getSnapshot()
+    if (snapshot.matches(`stopped`)) return `stopped`
+    if (snapshot.matches({ running: `connecting` })) return `connecting`
+    if (snapshot.matches({ running: `streaming` })) return `streaming`
+    if (snapshot.matches({ running: `reconnecting` })) return `reconnecting`
+    return `stopping`
+  }
+
+  async function driveTo(h: Harness, state: StateName): Promise<void> {
+    if (state === `stopped`) return
+    h.actor.send({ type: `START` })
+    if (state === `connecting`) return
+    if (state === `reconnecting`) {
+      h.actor.send({ type: `STREAM_RESET`, error: new Error(`reset`) })
+      return
+    }
+    if (state === `stopping`) {
+      h.actor.send({ type: `STOP` })
+      return
+    }
+    h.connect.resolve(hungResponse())
+    await waitFor(() => expect(stateOf(h.actor)).toBe(`streaming`))
+  }
+
+  const resetError = new Error(`heartbeat failures exceeded threshold`)
+  const EVENTS = {
+    START: { type: `START` },
+    STOP: { type: `STOP` },
+    STREAM_RESET: { type: `STREAM_RESET`, error: resetError },
+    WAKE: { type: `WAKE`, event: wakeEvent(`one`) },
+    OFFSET: { type: `OFFSET`, offset: `7` },
+    STREAM_END: { type: `STREAM_END` },
+    'STREAM_END(error)': { type: `STREAM_END`, error: new Error(`boom`) },
+  } as const
+
+  // Exhaustive (state × event) matrix. Every pair is pinned so adding a
+  // state or event forces a deliberate decision here.
+  const MATRIX: Record<StateName, Record<keyof typeof EVENTS, StateName>> = {
+    stopped: {
+      START: `connecting`,
+      STOP: `stopped`,
+      STREAM_RESET: `stopped`,
+      WAKE: `stopped`,
+      OFFSET: `stopped`,
+      STREAM_END: `stopped`,
+      'STREAM_END(error)': `stopped`,
+    },
+    connecting: {
+      START: `connecting`,
+      STOP: `stopping`,
+      STREAM_RESET: `reconnecting`,
+      WAKE: `connecting`,
+      OFFSET: `connecting`,
+      STREAM_END: `connecting`,
+      'STREAM_END(error)': `connecting`,
+    },
+    streaming: {
+      START: `streaming`,
+      STOP: `stopping`,
+      STREAM_RESET: `streaming`,
+      WAKE: `streaming`,
+      OFFSET: `streaming`,
+      STREAM_END: `reconnecting`,
+      'STREAM_END(error)': `reconnecting`,
+    },
+    reconnecting: {
+      START: `reconnecting`,
+      STOP: `stopping`,
+      STREAM_RESET: `reconnecting`,
+      WAKE: `reconnecting`,
+      OFFSET: `reconnecting`,
+      STREAM_END: `reconnecting`,
+      'STREAM_END(error)': `reconnecting`,
+    },
+    stopping: {
+      START: `stopping`,
+      STOP: `stopping`,
+      STREAM_RESET: `stopping`,
+      WAKE: `stopping`,
+      OFFSET: `stopping`,
+      STREAM_END: `stopping`,
+      'STREAM_END(error)': `stopping`,
+    },
+  }
+
+  for (const [from, row] of Object.entries(MATRIX) as Array<
+    [StateName, Record<keyof typeof EVENTS, StateName>]
+  >) {
+    for (const [name, to] of Object.entries(row) as Array<
+      [keyof typeof EVENTS, StateName]
+    >) {
+      it(`${from} × ${name} → ${to}`, async () => {
+        const h = harness()
+        await driveTo(h, from)
+        expect(stateOf(h.actor)).toBe(from)
+        h.actor.send(structuredClone(EVENTS[name]))
+        expect(stateOf(h.actor)).toBe(to)
+        h.actor.stop()
+      })
+    }
+  }
+
+  it(`reconnecting → connecting after the backoff delay`, async () => {
+    vi.useFakeTimers()
+    const h = harness()
+    await driveTo(h, `reconnecting`)
+    await vi.advanceTimersByTimeAsync(999)
+    expect(stateOf(h.actor)).toBe(`reconnecting`)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(stateOf(h.actor)).toBe(`connecting`)
+    h.actor.stop()
+  })
+
+  it(`stopping → stopped when shutdown completes`, async () => {
+    const h = harness()
+    await driveTo(h, `stopping`)
+    h.shutdown.resolve()
+    await waitFor(() => expect(stateOf(h.actor)).toBe(`stopped`))
+    h.actor.stop()
+  })
+
+  it(`STREAM_RESET while streaming cancels the response with the error`, async () => {
+    const h = harness()
+    await driveTo(h, `streaming`)
+    h.actor.send({ type: `STREAM_RESET`, error: resetError })
+    expect(h.effects.cancelResponse).toHaveBeenCalledWith(
+      expect.objectContaining({ jsonStream: expect.any(Function) }),
+      resetError
+    )
+    h.actor.stop()
+  })
+
+  it(`STREAM_RESET while connecting reports a reconnect error`, async () => {
+    const h = harness()
+    await driveTo(h, `connecting`)
+    h.actor.send({ type: `STREAM_RESET`, error: resetError })
+    expect(h.effects.onReconnectError).toHaveBeenCalledWith(resetError)
+    h.actor.stop()
+  })
+
+  it(`a second STREAM_RESET while streaming is ignored`, async () => {
+    const h = harness()
+    await driveTo(h, `streaming`)
+    h.actor.send({ type: `STREAM_RESET`, error: resetError })
+    h.actor.send({ type: `STREAM_RESET`, error: new Error(`second`) })
+    expect(h.effects.cancelResponse).toHaveBeenCalledTimes(1)
+    h.actor.stop()
   })
 })

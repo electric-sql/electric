@@ -1,5 +1,36 @@
 # @electric-ax/agents-server-ui
 
+## 0.4.19
+
+### Patch Changes
+
+- 5238055: Show per-response token usage in the agent meta row, e.g. `1.2k ↑ 412
+↓`. Updates as each step settles — for a single-turn call this lands
+  once at done; for tool-using runs the counter jumps at each step
+  boundary (the LLM SDK only emits `usage` at end-of-step, so we can't
+  tick smoothly between tokens).
+
+  Plumbing:
+  - `StepValue` gains optional `input_tokens` / `output_tokens` columns
+    (Zod + TS). Strictly additive: events recorded before this change
+    stay valid since both fields are optional, so no migration.
+  - `outbound-bridge.ts:onStepEnd` now persists the `tokenInput` /
+    `tokenOutput` it already received from `pi-adapter.ts` — previously
+    those values were accepted and silently dropped.
+  - `EntityTimelineStepItem` / `IncludesStep` surface the new fields,
+    and the three `.select()` blocks that materialize steps include
+    them.
+  - The cached `agent_response` section gets a `tokens?: { input?,
+output? }` summed across the run's steps at section-build time, and
+    the section-cache fingerprint factors in step token deltas so a
+    late-arriving `onStepEnd` invalidates a stale section.
+
+- 916f6cd: agents-mobile: native slash-command composer for the Horton prompt. The in-session and new-session inputs gain slash-command autocomplete, structured `composer_input` payloads, and inline command/argument highlighting — reaching feature parity with the desktop composer, on a native `TextInput` rather than a WebView. The slash-command grammar and serializer move into `@electric-ax/agents-runtime` (exported via `/client`) as the shared source of truth for both surfaces; the desktop composer repoints to them with no behaviour change.
+- Updated dependencies [5238055]
+- Updated dependencies [916f6cd]
+- Updated dependencies [a044ede]
+  - @electric-ax/agents-runtime@0.3.12
+
 ## 0.4.18
 
 ### Patch Changes
