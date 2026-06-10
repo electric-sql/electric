@@ -9,6 +9,7 @@ import {
   entitiesObservationCollections,
   getEntitiesStreamPath,
   normalizeTags,
+  hashString,
   sourceRefForTags,
 } from './tags'
 import { getSharedStateStreamPath } from './runtime-server-client'
@@ -19,6 +20,95 @@ import type {
 } from './types'
 import type { EntityTags } from './tags'
 import type { CollectionDefinition } from '@durable-streams/state'
+
+export interface PgSyncRequestMetadata {
+  tenantId?: string
+  principalKind?: string
+  principalId?: string
+  principalKey?: string
+  principalUrl?: string
+  entityUrl?: string
+  entityType?: string
+  streamPath?: string
+  runtimeConsumerId?: string
+  wakeId?: string
+}
+
+export interface PgSyncOptions {
+  url?: string
+  table: string
+  columns?: string[]
+  where?: string
+  params?: string[] | Record<string, string>
+  replica?: `default` | `full`
+  metadata?: PgSyncRequestMetadata
+}
+
+export interface PgSyncObservationSource extends ObservationSource {
+  readonly sourceType: `pgSync`
+  readonly options: PgSyncOptions
+  readonly streamUrl: string
+  readonly schema: typeof pgSyncObservationCollections
+}
+
+export const pgSyncObservationCollections = {
+  changes: {
+    type: `pg_sync_change`,
+    primaryKey: `key`,
+  },
+}
+
+export function getPgSyncStreamPath(
+  sourceRef: string,
+  namespace?: string
+): string {
+  return namespace
+    ? `/_electric/pg-sync/${encodeURIComponent(namespace)}/${sourceRef}`
+    : `/_electric/pg-sync/${sourceRef}`
+}
+
+export type CanonicalPgSyncConfig = {
+  url?: string
+  table: string
+  columns?: string[]
+  where?: string
+  params?: string[] | Record<string, string>
+  replica: `default` | `full`
+  metadata?: PgSyncRequestMetadata
+}
+
+function normalizePgSyncParams(
+  params: PgSyncOptions[`params`]
+): PgSyncOptions[`params`] | undefined {
+  if (params === undefined) return undefined
+  if (Array.isArray(params)) return [...params]
+  return Object.keys(params)
+    .sort()
+    .reduce<Record<string, string>>((sorted, key) => {
+      sorted[key] = params[key]!
+      return sorted
+    }, {})
+}
+
+export function canonicalPgSyncOptions(
+  options: PgSyncOptions
+): CanonicalPgSyncConfig {
+  return {
+    ...(options.url !== undefined ? { url: options.url } : {}),
+    table: options.table,
+    ...(options.columns !== undefined ? { columns: [...options.columns] } : {}),
+    ...(options.where !== undefined ? { where: options.where } : {}),
+    ...(options.params !== undefined
+      ? { params: normalizePgSyncParams(options.params) }
+      : {}),
+    replica: options.replica ?? `default`,
+    ...(options.metadata !== undefined ? { metadata: options.metadata } : {}),
+  }
+}
+
+export function sourceRefForPgSync(options: PgSyncOptions): string {
+  return hashString(JSON.stringify(canonicalPgSyncOptions(options)))
+}
 
 export interface EntityObservationSource extends ObservationSource {
   readonly sourceType: `entity`
@@ -260,6 +350,34 @@ export function db<const TSchema extends SharedStateSchemaMap>(
             ])
           ),
         },
+      }
+    },
+  }
+}
+
+export function pgSync(options: PgSyncOptions): PgSyncObservationSource {
+  const config = canonicalPgSyncOptions(options)
+  const sourceRef = sourceRefForPgSync(config)
+  const streamUrl = getPgSyncStreamPath(sourceRef)
+  return {
+    sourceType: `pgSync`,
+    sourceRef,
+    streamUrl,
+    schema: pgSyncObservationCollections,
+    options: config,
+    wake() {
+      return {
+        sourceUrl: streamUrl,
+        condition: { on: `change`, collections: [`pg_sync_change`] },
+      }
+    },
+    toManifestEntry(): ManifestSourceEntry {
+      return {
+        key: manifestSourceKey(`pgSync`, sourceRef),
+        kind: `source`,
+        sourceType: `pgSync`,
+        sourceRef,
+        config,
       }
     },
   }

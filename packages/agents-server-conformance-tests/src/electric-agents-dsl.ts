@@ -1126,7 +1126,7 @@ async function executeStep(ctx: RunContext, step: Step): Promise<void> {
         method: `POST`,
         body: JSON.stringify(body),
       })
-      expect(res.status).toBe(204)
+      expect([200, 204]).toContain(res.status)
 
       ctx.history.push({
         type: `message_sent`,

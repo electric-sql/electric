@@ -30,12 +30,16 @@ For day-to-day development, use the bundled dev script:
 ./scripts/dev.sh start --detach        # same, but exits after spawning (logs to .dev-logs/)
 ./scripts/dev.sh start --with-agents   # also spawn built-in agents (Horton + Worker)
 ./scripts/dev.sh desktop     # run the Electron desktop app in this terminal
+./scripts/dev.sh isolated    # run an isolated stack on random ports and
+                             # open Electron desktop against it
 ./scripts/dev.sh stop        # stop processes + docker compose down
 ./scripts/dev.sh teardown    # stop + remove Postgres volume + .streams-data/
 ./scripts/dev.sh status      # show which services are running
 ```
 
 `desktop` is a separate command because the Electron app is interactive — it opens a window. Run it in its own terminal after `start` has the rest of the stack up; Ctrl-C in that terminal closes the app without touching the backing services.
+
+`isolated` is the one-command path for testing a worktree or PR without conflicting with another running stack. It chooses random free ports for Postgres, Electric, Jaeger, agents-server, built-in agents, server UI, and desktop UI; uses a branch-based Docker Compose project name (`agents-<branch-slug>`) so containers are easy to identify and clean up in Docker Desktop; sets an isolated durable-streams data directory and Electron user data directory per run; starts Horton/Worker by default; and opens the Electron desktop app. Ctrl-C tears the isolated stack down, including Docker volumes. Use `--no-build` to skip the initial package build or `--no-agents` to skip built-in agents.
 
 `build` covers `typescript-client`, `agents-runtime`, `agents-mcp`, `agents-server`, and `agents`. Re-run it after any dep change before restarting — entrypoints do not auto-restart on `dist/` rebuilds.
 
@@ -131,15 +135,16 @@ Vite dev server with HMR — changes appear instantly.
 
 ### agents-server
 
-| Variable                              | Default   | Description                                         |
-| ------------------------------------- | --------- | --------------------------------------------------- |
-| `DATABASE_URL`                        | —         | Postgres connection URL (required)                  |
-| `ELECTRIC_AGENTS_ELECTRIC_URL`        | —         | Electric sync service URL                           |
-| `ELECTRIC_AGENTS_HOST`                | `0.0.0.0` | Bind address                                        |
-| `ELECTRIC_AGENTS_PORT`                | `4437`    | Server port                                         |
-| `ELECTRIC_AGENTS_BASE_URL`            | —         | Public webhook base URL                             |
-| `ELECTRIC_AGENTS_STREAMS_DATA_DIR`    | —         | Local streams data directory                        |
-| `ELECTRIC_AGENTS_DURABLE_STREAMS_URL` | —         | External durable streams URL (omit to use embedded) |
+| Variable                               | Default                          | Description                                            |
+| -------------------------------------- | -------------------------------- | ------------------------------------------------------ |
+| `DATABASE_URL`                         | —                                | Postgres connection URL (required)                     |
+| `ELECTRIC_AGENTS_ELECTRIC_URL`         | —                                | Electric sync service URL                              |
+| `ELECTRIC_AGENTS_HOST`                 | `0.0.0.0`                        | Bind address                                           |
+| `ELECTRIC_AGENTS_PORT`                 | `4437`                           | Server port                                            |
+| `ELECTRIC_AGENTS_BASE_URL`             | —                                | Public webhook base URL                                |
+| `ELECTRIC_AGENTS_STREAMS_DATA_DIR`     | —                                | Local streams data directory                           |
+| `ELECTRIC_AGENTS_DURABLE_STREAMS_URL`  | —                                | External durable streams URL (omit to use embedded)    |
+| `ELECTRIC_AGENTS_PG_SYNC_ELECTRIC_URL` | `http://localhost:3000/v1/shape` | Electric shape URL used by the pgSync prototype bridge |
 
 ### agents (built-in)
 

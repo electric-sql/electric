@@ -3,7 +3,9 @@ import { z } from 'zod'
 import { serverLog } from '../log'
 import { createHortonDocsSupport } from '../docs/knowledge-base'
 import { createSpawnWorkerTool } from '../tools/spawn-worker'
+import { createObservePgSyncTool } from '../tools/observe-pg-sync'
 import { createForkTool } from '../tools/fork'
+import { createSetTitleTool } from '../tools/set-title'
 import {
   modelInputSchemaDefs,
   modelChoiceValues,
@@ -199,6 +201,7 @@ export function buildHortonSystemPrompt(
   const eventSourceTools = opts.hasEventSourceTools
     ? `\n- list_event_sources: list external webhook/event feeds you can subscribe to, including available buckets and parameters\n- subscribe_event_source: subscribe yourself to one of those feeds or buckets so matching future events wake you\n- list_event_source_subscriptions: list your active event source subscriptions\n- unsubscribe_event_source: remove one of your event source subscriptions by id`
     : ``
+  const titleTool = `\n- set_title: set or rename this chat session's UI title`
   const scheduleTools = opts.hasScheduleTools
     ? `\n- upsert_cron_schedule: create or update a recurring cron wake for yourself. Always include payload with the concrete instruction/message you should receive when the cron fires.\n- delete_schedule: delete one of your cron or future-send schedules by stable id\n- list_schedules: list your manifest-backed cron and future-send schedules`
     : ``
@@ -267,8 +270,9 @@ When a user opens with a greeting ("hi", "hello", "hey", etc.) or a broad statem
 - fetch_url: fetch and convert a URL to markdown
 - spawn_worker: dispatch a subagent for an isolated task
 - fork: spawn a child session that inherits this conversation's history up to the latest completed response. Same parent-ownership model as spawn_worker — when the fork's next run finishes, you'll wake with its response.
+- observe_pg_sync: observe an Electric Postgres sync stream and wake on matching changes
 - send: send a message to an Electric Agent/entity. To schedule future work for yourself, call send with self: true and afterMs.
-${eventSourceTools}${scheduleTools}${docsTools}${skillsTools}
+${eventSourceTools}${titleTool}${scheduleTools}${docsTools}${skillsTools}
 
 # Working with files
 - Prefer edit over write when modifying existing files.
@@ -351,6 +355,8 @@ export function createHortonTools(
       : [createFetchUrlTool(sandbox)]),
     createSpawnWorkerTool(ctx, opts.modelConfig),
     createForkTool(ctx),
+    createObservePgSyncTool(ctx),
+    createSetTitleTool(ctx),
     createSendTool(ctx.send, { selfEntityUrl: ctx.entityUrl }),
     ...(opts.docsSearchTool ? [opts.docsSearchTool] : []),
   ]

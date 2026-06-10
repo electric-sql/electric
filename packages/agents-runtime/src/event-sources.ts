@@ -126,7 +126,7 @@ export type HydratedEventSourceWake = {
 }
 
 const DEFAULT_LIFETIME: SubscriptionLifetime = { kind: `until_entity_stopped` }
-const paramsSchemaValidator = new Ajv({ allErrors: true, strict: false })
+const paramsSchemaValidator = new Ajv({ allErrors: true, strict: false } as any)
 const paramsSchemaCache = new WeakMap<
   Record<string, unknown>,
   ValidateFunction
@@ -296,8 +296,9 @@ function formatParamsSchemaError(error: ErrorObject): string {
       `string`
       ? (error.params as { missingProperty: string }).missingProperty
       : undefined
-  const path =
-    error.instancePath || (missingProperty ? `/${missingProperty}` : `/`)
+  const instancePath = (error as ErrorObject & { instancePath?: string })
+    .instancePath
+  const path = instancePath || (missingProperty ? `/${missingProperty}` : `/`)
   return `${path} ${error.message ?? `is invalid`}`
 }
 

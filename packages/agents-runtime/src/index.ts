@@ -292,6 +292,11 @@ export {
   cron,
   entities,
   db,
+  canonicalPgSyncOptions,
+  getPgSyncStreamPath,
+  pgSync,
+  pgSyncObservationCollections,
+  sourceRefForPgSync,
   webhook,
   getWebhookStreamPath,
   webhookObservationCollections,
@@ -305,6 +310,10 @@ export type {
   WebhookObservationSource,
   WebhookEventRow,
   EntitiesQuery,
+  CanonicalPgSyncConfig,
+  PgSyncObservationSource,
+  PgSyncOptions,
+  PgSyncRequestMetadata,
 } from './observation-sources'
 
 export { processWake } from './process-wake'

@@ -8,7 +8,7 @@ import {
   type EventSourceContract,
 } from '../src/event-sources'
 import { manifestSourceKey } from '../src/manifest-helpers'
-import { db } from '../src/observation-sources'
+import { db, pgSync } from '../src/observation-sources'
 import { processWake } from '../src/process-wake'
 import { clearRegistry, defineEntity } from '../src/define-entity'
 import { entityStateSchema, passthrough } from '../src/entity-schema'
@@ -38,9 +38,10 @@ const {
   mockStreamHead,
   mockStreamJson,
   mockDurableStreamStream,
-  mockCreateStreamDB,
-  mockSourceDbClose,
   mockSourceDbPreload,
+  mockSourceDbClose,
+  mockCreateStreamDB,
+  mockActualCreateStreamDB,
   mockSourceEvents,
   mockInitialManifests,
   mockEntityOnEvent,
@@ -65,9 +66,12 @@ const {
   }),
   mockStreamJson: vi.fn().mockResolvedValue([]),
   mockDurableStreamStream: vi.fn(),
-  mockCreateStreamDB: vi.fn(),
-  mockSourceDbClose: vi.fn(),
   mockSourceDbPreload: vi.fn().mockResolvedValue(undefined),
+  mockSourceDbClose: vi.fn(),
+  mockCreateStreamDB: vi.fn(),
+  mockActualCreateStreamDB: {
+    current: null as ((options: Record<string, unknown>) => unknown) | null,
+  },
   mockSourceEvents: { current: [] as Array<Record<string, unknown>> },
   mockInitialManifests: { current: [] as Array<Record<string, unknown>> },
   mockEntityOnEvent: { current: null as ((event: unknown) => void) | null },
@@ -132,6 +136,15 @@ vi.mock(`@durable-streams/client`, async (importOriginal) => {
     ...actual,
     DurableStream: MockDurableStream,
     IdempotentProducer: MockIdempotentProducer,
+  }
+})
+
+vi.mock(`@durable-streams/state`, async (importOriginal) => {
+  const actual = await importOriginal<any>()
+  mockActualCreateStreamDB.current = actual.createStreamDB
+  return {
+    ...actual,
+    createStreamDB: mockCreateStreamDB,
   }
 })
 
@@ -427,6 +440,15 @@ describe(`processWake`, () => {
     clearRegistry()
     mockConstructedProducers.length = 0
     mockDbPreload.mockResolvedValue(undefined)
+    mockSourceDbPreload.mockResolvedValue(undefined)
+    mockCreateStreamDB.mockImplementation((options) => {
+      if (!mockActualCreateStreamDB.current) {
+        throw new Error(`createStreamDB mock was not initialized`)
+      }
+      return mockActualCreateStreamDB.current(
+        options as Record<string, unknown>
+      )
+    })
     mockInitialManifests.current = []
     mockCreateStreamDB.mockClear()
     mockSourceDbClose.mockClear()
@@ -447,6 +469,17 @@ describe(`processWake`, () => {
       .mockImplementation((url, opts) => {
         const urlStr = String(url)
         const method = opts?.method ?? `GET`
+        if (urlStr.includes(`/_electric/pg-sync/register`)) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                sourceRef: `pg-source-1`,
+                streamUrl: `/_electric/pg-sync/default/pg-source-1`,
+              }),
+              { status: 200, headers: { 'content-type': `application/json` } }
+            )
+          )
+        }
         if (method === `PUT` && !urlStr.includes(`subscription=`)) {
           return Promise.resolve(
             new Response(
@@ -1592,6 +1625,64 @@ describe(`processWake`, () => {
     ).resolves.not.toBeNull()
   })
 
+  it(`pgSync observe registers pgSync source before source DB preload`, async () => {
+    const source = pgSync({
+      table: `todos`,
+      where: `priority = $1`,
+      params: [`high`],
+      replica: `full`,
+    })
+
+    defineEntity(`test-agent`, {
+      async handler(ctx) {
+        await ctx.observe(source)
+      },
+    })
+    mockCreateStreamDB.mockReturnValueOnce({
+      preload: mockSourceDbPreload,
+      close: mockSourceDbClose,
+    })
+
+    await processWake(makeNotification(), BASE_CONFIG)
+
+    expect(mockCreateStreamDB).toHaveBeenCalledWith(
+      expect.objectContaining({
+        streamOptions: expect.objectContaining({
+          url: `/_electric/pg-sync/default/pg-source-1`,
+          contentType: `application/json`,
+        }),
+        state: expect.objectContaining({
+          changes: expect.objectContaining({
+            type: `pg_sync_change`,
+            primaryKey: `key`,
+          }),
+        }),
+      })
+    )
+    expect(mockSourceDbPreload).toHaveBeenCalledOnce()
+
+    const pgSyncCallIndex = fetchMock.mock.calls.findIndex(([url]) =>
+      String(url).includes(`/_electric/pg-sync/register`)
+    )
+    expect(pgSyncCallIndex).toBeGreaterThanOrEqual(0)
+    const pgSyncBody = JSON.parse(
+      fetchMock.mock.calls[pgSyncCallIndex]![1]!.body as string
+    ) as Record<string, unknown>
+    expect(pgSyncBody).toEqual({
+      options: source.options,
+      metadata: {
+        entityUrl: `http://localhost:3000/test-agent/agent-1`,
+        entityType: `test-agent`,
+        streamPath: `/streams/entity:agent-1`,
+        runtimeConsumerId: `consumer-1`,
+        wakeId: `wake-abc`,
+      },
+    })
+    expect(fetchMock.mock.invocationCallOrder[pgSyncCallIndex]).toBeLessThan(
+      mockSourceDbPreload.mock.invocationCallOrder[0]
+    )
+  })
+
   it(`heartbeat is registered with configured interval`, async () => {
     const setIntervalSpy = vi.spyOn(globalThis, `setInterval`)
 
@@ -1718,6 +1809,17 @@ describe(`processWake`, () => {
         },
       },
     ]
+    mockCreateStreamDB.mockReturnValueOnce({
+      collections: {
+        events: {
+          get toArray() {
+            return mockSourceEvents.current
+          },
+        },
+      },
+      close: mockSourceDbClose,
+      preload: mockSourceDbPreload,
+    })
     let receivedMessage = ``
 
     defineEntity(`test-agent`, {

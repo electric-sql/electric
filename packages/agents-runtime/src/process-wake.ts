@@ -28,6 +28,7 @@ import type {
   CronObservationSource,
   EntitiesObservationSource,
   EntityObservationSource,
+  PgSyncObservationSource,
   WebhookEventRow,
 } from './observation-sources'
 import type {
@@ -1734,12 +1735,32 @@ export async function processWake(
         }
       }
 
+      let registeredPgSync: { streamUrl: string; sourceRef: string } | undefined
+      if (source.sourceType === `pgSync`) {
+        registeredPgSync = await serverClient.registerPgSyncSource(
+          (source as PgSyncObservationSource).options,
+          {
+            entityUrl,
+            entityType: typeName,
+            streamPath,
+            runtimeConsumerId: notification.consumerId,
+            wakeId,
+          }
+        )
+        observedSource = {
+          ...source,
+          sourceRef: registeredPgSync.sourceRef,
+          streamUrl: registeredPgSync.streamUrl,
+        }
+      }
+
       if (effectiveWake) {
         const observeHandle = await setupCtx.observe(observedSource, {
           wake: effectiveWake,
         })
 
         const sourceUrl =
+          registeredPgSync?.streamUrl ??
           sourceWakeConfig?.sourceUrl ??
           (observedSource.sourceType === `entity`
             ? (observedSource as EntityObservationSource).entityUrl
@@ -2127,10 +2148,12 @@ export async function processWake(
           await flushProducedWrites()
         },
         executeSend: (send) => executeSend(send),
-        doSetTag: (key, value) =>
-          serverClient.setTag(entityUrl, key, value, writeToken),
-        doDeleteTag: (key) =>
-          serverClient.deleteTag(entityUrl, key, writeToken),
+        doSetTag: async (key, value) => {
+          await serverClient.setTag(entityUrl, key, value, writeToken)
+        },
+        doDeleteTag: async (key) => {
+          await serverClient.deleteTag(entityUrl, key, writeToken)
+        },
       })
 
       let sleepRequested = false

@@ -794,7 +794,7 @@ describe(`ElectricAgentsRoutes send endpoint`, () => {
         getEntityType: vi.fn(),
       },
       ensurePrincipal: vi.fn().mockResolvedValue(undefined),
-      send: vi.fn().mockResolvedValue(undefined),
+      send: vi.fn().mockResolvedValue({ txid: `tx-send` }),
     } as any
 
     const response = await routeResponse(
@@ -840,7 +840,7 @@ describe(`ElectricAgentsRoutes send endpoint`, () => {
         (entity, token) => entity === agentEntity && token === `claim-token`
       ),
       ensurePrincipal: vi.fn().mockResolvedValue(undefined),
-      send: vi.fn().mockResolvedValue(undefined),
+      send: vi.fn().mockResolvedValue({ txid: `tx-send` }),
     } as any
 
     const response = await routeResponse(
@@ -862,7 +862,8 @@ describe(`ElectricAgentsRoutes send endpoint`, () => {
       { 'electric-claim-token': `claim-token` }
     )
 
-    expect(response.status).toBe(204)
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({ txid: `tx-send` })
     expect(manager.isValidWriteToken).toHaveBeenCalledWith(
       agentEntity,
       `claim-token`
@@ -889,7 +890,7 @@ describe(`ElectricAgentsRoutes send endpoint`, () => {
         getEntityType: vi.fn(),
       },
       ensurePrincipal: vi.fn().mockResolvedValue(undefined),
-      send: vi.fn().mockResolvedValue(undefined),
+      send: vi.fn().mockResolvedValue({ txid: `tx-send` }),
     } as any
 
     const response = await routeResponse(
@@ -909,7 +910,8 @@ describe(`ElectricAgentsRoutes send endpoint`, () => {
       }
     )
 
-    expect(response.status).toBe(204)
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({ txid: `tx-send` })
     expect(manager.send).toHaveBeenCalledWith(`/chat/test`, {
       from: `/principal/agent%3Achat%2Ftest`,
       from_principal: `/principal/agent%3Achat%2Ftest`,
@@ -929,7 +931,7 @@ describe(`ElectricAgentsRoutes send endpoint`, () => {
         getEntityType: vi.fn(),
       },
       ensurePrincipal: vi.fn().mockResolvedValue(undefined),
-      send: vi.fn().mockResolvedValue(undefined),
+      send: vi.fn().mockResolvedValue({ txid: `tx-send` }),
     } as any
 
     const response = await routeResponse(
@@ -1042,6 +1044,132 @@ describe(`ElectricAgentsRoutes spawn endpoint request validation`, () => {
         code: `INVALID_REQUEST`,
         message: `Request body does not match API schema`,
       },
+    })
+  })
+})
+
+describe(`ElectricAgentsRoutes tag endpoints`, () => {
+  const existingEntity = {
+    url: `/chat/test`,
+    type: `chat`,
+    status: `running`,
+    streams: { main: `/chat/test/main` },
+    tags: {},
+    created_at: 1,
+    updated_at: 1,
+  }
+
+  it(`routes tag upserts to the manager and returns public entity data with txid`, async () => {
+    const manager = {
+      registry: {
+        getEntity: vi.fn().mockResolvedValue(existingEntity),
+        getEntityType: vi.fn(),
+      },
+      setTag: vi.fn().mockResolvedValue({
+        ...existingEntity,
+        tags: { title: `Editable title` },
+        write_token: `secret-token`,
+        subscription_id: `internal-subscription`,
+        txid: 12345,
+      }),
+    } as any
+
+    const response = await routeResponse(
+      manager,
+      `POST`,
+      `/_electric/entities/chat/test/tags/title`,
+      { value: `Editable title` },
+      false,
+      undefined,
+      { Authorization: `Bearer write-token` }
+    )
+
+    expect(manager.setTag).toHaveBeenCalledWith(`/chat/test`, `title`, {
+      value: `Editable title`,
+    })
+    expect(await responseJson(response)).toEqual({
+      url: `/chat/test`,
+      type: `chat`,
+      status: `running`,
+      streams: { main: `/chat/test/main` },
+      dispatch_policy: undefined,
+      tags: { title: `Editable title` },
+      spawn_args: undefined,
+      sandbox: undefined,
+      parent: undefined,
+      created_by: undefined,
+      created_at: 1,
+      updated_at: 1,
+      txid: 12345,
+    })
+  })
+
+  it(`routes principal-authorized tag upserts without requiring legacy entity write tokens`, async () => {
+    const principal = {
+      kind: `user`,
+      id: `alice`,
+      key: `user:alice`,
+      url: `/principal/user:alice`,
+    }
+    const principalOwnedEntity = {
+      ...existingEntity,
+      created_by: principal.url,
+    }
+    const manager = {
+      registry: {
+        getEntity: vi.fn().mockResolvedValue(principalOwnedEntity),
+        getEntityType: vi.fn(),
+      },
+      setTag: vi.fn().mockResolvedValue({
+        ...principalOwnedEntity,
+        tags: { title: `Editable title` },
+        txid: 12345,
+      }),
+    } as any
+
+    const response = await routeResponse(
+      manager,
+      `POST`,
+      `/_electric/entities/chat/test/tags/title`,
+      { value: `Editable title` },
+      false,
+      principal
+    )
+
+    expect(response.status).toBe(200)
+    expect(manager.setTag).toHaveBeenCalledWith(`/chat/test`, `title`, {
+      value: `Editable title`,
+    })
+  })
+
+  it(`routes tag deletes to the manager and returns public entity data with txid`, async () => {
+    const manager = {
+      registry: {
+        getEntity: vi.fn().mockResolvedValue(existingEntity),
+        getEntityType: vi.fn(),
+      },
+      deleteTag: vi.fn().mockResolvedValue({
+        ...existingEntity,
+        tags: {},
+        txid: 12346,
+      }),
+    } as any
+
+    const response = await routeResponse(
+      manager,
+      `DELETE`,
+      `/_electric/entities/chat/test/tags/title`,
+      undefined,
+      false,
+      undefined,
+      { Authorization: `Bearer write-token` }
+    )
+
+    expect(manager.deleteTag).toHaveBeenCalledWith(`/chat/test`, `title`)
+    expect(await responseJson(response)).toMatchObject({
+      url: `/chat/test`,
+      tags: {},
+      txid: 12346,
     })
   })
 })
@@ -1225,7 +1353,7 @@ describe(`ElectricAgentsRoutes fork endpoint`, () => {
         root: forkedRoot,
         entities: [forkedRoot],
       }),
-      send: vi.fn().mockResolvedValue(undefined),
+      send: vi.fn().mockResolvedValue({ txid: `tx-send` }),
     } as any
 
     const wake = {

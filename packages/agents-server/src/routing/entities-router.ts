@@ -39,6 +39,7 @@ import type {
   ElectricAgentsEntity,
   ElectricAgentsEntityType,
   EntityPermission,
+  PublicElectricAgentsEntity,
   SendRequest,
 } from '../electric-agents-types.js'
 import type { JsonRouteRequest } from './schema.js'
@@ -1088,6 +1089,16 @@ async function deleteEventSourceSubscription(
   return json(result)
 }
 
+function tagResponseBody(
+  entity: ElectricAgentsEntity & { txid?: number }
+): PublicElectricAgentsEntity & { txid?: number } {
+  const publicEntity = toPublicEntity(entity)
+  if (entity.txid !== undefined) {
+    return { ...publicEntity, txid: entity.txid }
+  }
+  return publicEntity
+}
+
 async function setTag(
   request: AgentsRouteRequest,
   ctx: TenantContext
@@ -1100,14 +1111,12 @@ async function setTag(
 
   const parsed = routeBody<SetTagBody>(request)
   const { entityUrl } = requireExistingEntityRoute(request)
-  const token = writeTokenFromRequest(request)
   const updated = await ctx.entityManager.setTag(
     entityUrl,
     decodeURIComponent(request.params.tagKey),
-    { value: parsed.value },
-    token
+    { value: parsed.value }
   )
-  return json(toPublicEntity(updated))
+  return json(tagResponseBody(updated))
 }
 
 async function deleteTag(
@@ -1121,13 +1130,11 @@ async function deleteTag(
   if (principalMutationError) return principalMutationError
 
   const { entityUrl } = requireExistingEntityRoute(request)
-  const token = writeTokenFromRequest(request)
   const updated = await ctx.entityManager.deleteTag(
     entityUrl,
-    decodeURIComponent(request.params.tagKey),
-    token
+    decodeURIComponent(request.params.tagKey)
   )
-  return json(toPublicEntity(updated))
+  return json(tagResponseBody(updated))
 }
 
 async function forkEntity(
@@ -1294,11 +1301,11 @@ async function sendEntity(
       sendReq,
       new Date(Date.now() + parsed.afterMs)
     )
-  } else {
-    await ctx.entityManager.send(entityUrl, sendReq)
+    return status(204)
   }
 
-  return status(204)
+  const result = await ctx.entityManager.send(entityUrl, sendReq)
+  return json(result)
 }
 
 async function createAttachment(
@@ -1373,12 +1380,12 @@ async function updateInboxMessage(
 ): Promise<Response> {
   const parsed = routeBody<InboxMessageBody>(request)
   const { entityUrl } = requireExistingEntityRoute(request)
-  await ctx.entityManager.updateInboxMessage(
+  const result = await ctx.entityManager.updateInboxMessage(
     entityUrl,
     decodeURIComponent(request.params.messageKey),
     parsed
   )
-  return status(204)
+  return json(result)
 }
 
 async function deleteInboxMessage(
@@ -1386,11 +1393,11 @@ async function deleteInboxMessage(
   ctx: TenantContext
 ): Promise<Response> {
   const { entityUrl } = requireExistingEntityRoute(request)
-  await ctx.entityManager.deleteInboxMessage(
+  const result = await ctx.entityManager.deleteInboxMessage(
     entityUrl,
     decodeURIComponent(request.params.messageKey)
   )
-  return status(204)
+  return json(result)
 }
 
 async function spawnEntity(

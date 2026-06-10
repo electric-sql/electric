@@ -12,9 +12,14 @@ export {
   normalizeTimelineEntities,
 } from './entity-timeline'
 export {
+  canonicalPgSyncOptions,
   db,
   entities,
   entity,
+  getPgSyncStreamPath,
+  pgSync,
+  pgSyncObservationCollections,
+  sourceRefForPgSync,
   webhook,
   getWebhookStreamPath,
   webhookObservationCollections,
@@ -69,6 +74,10 @@ export type {
   WebhookObservationSource,
   WebhookEventRow,
   EntitiesQuery,
+  CanonicalPgSyncConfig,
+  PgSyncObservationSource,
+  PgSyncOptions,
+  PgSyncRequestMetadata,
 } from './observation-sources'
 export type {
   EntityTimelineContentItem,

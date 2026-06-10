@@ -36,6 +36,7 @@ import type { EntityBridgeCoordinator } from './entity-bridge-manager.js'
 import type { DurableStreamsRoutingAdapter } from './routing/durable-streams-routing-adapter.js'
 import type { OssServerContext } from './routing/oss-server-router.js'
 import type { EventSourceCatalog } from './routing/context.js'
+import type { PgSyncBridgeManagerOptions } from './pg-sync-bridge-manager.js'
 import type { StartedStandaloneAgentsRuntime } from './standalone-runtime.js'
 import type { DurableStreamsBearerProvider } from './stream-client.js'
 import type {
@@ -72,6 +73,7 @@ export interface ElectricAgentsServerOptions {
   allowDevPrincipalFallback?: boolean
   eventSources?: EventSourceCatalog
   ensureEventSourceWakeSource?: (sourceUrl: string) => Promise<void> | void
+  pgSync?: PgSyncBridgeManagerOptions
   /**
    * Disabled by default. When set to a positive interval, periodically
    * recovers expired dispatch claims and stale outstanding wakes.
@@ -242,6 +244,7 @@ export class ElectricAgentsServer {
         streamClient: this.streamClient,
         electricUrl: this.options.electricUrl,
         electricSecret: this.options.electricSecret,
+        pgSync: this.options.pgSync,
       })
       this.electricAgentsManager = this.standaloneRuntime.manager
       this.entityBridgeManager = this.standaloneRuntime.entityBridgeManager
@@ -446,6 +449,7 @@ export class ElectricAgentsServer {
       streamClient: this.streamClient,
       runtime: this.standaloneRuntime.runtime,
       entityBridgeManager: this.entityBridgeManager,
+      pgSyncBridgeManager: this.standaloneRuntime.runtime.pgSyncBridgeManager,
       ...(this.options.eventSources
         ? { eventSources: this.options.eventSources }
         : {}),

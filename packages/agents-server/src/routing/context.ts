@@ -5,6 +5,7 @@ import type {
 } from '@electric-ax/agents-runtime'
 import type { DrizzleDB } from '../db/index.js'
 import type { EntityBridgeCoordinator } from '../entity-bridge-manager.js'
+import type { PgSyncBridgeCoordinator } from '../pg-sync-bridge-manager.js'
 import type { EntityManager } from '../entity-manager.js'
 import type { ElectricAgentsTenantRuntime } from '../runtime.js'
 import type { StreamClient } from '../stream-client.js'
@@ -54,6 +55,7 @@ export interface TenantContext {
   streamClient: StreamClient
   runtime: ElectricAgentsTenantRuntime
   entityBridgeManager: EntityBridgeCoordinator
+  pgSyncBridgeManager?: PgSyncBridgeCoordinator
   eventSources?: EventSourceCatalog
   ensureEventSourceWakeSource?: (sourceUrl: string) => Promise<void> | void
   authorizeRequest?: AuthorizeRequest

@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createAgentsClient } from '../src/agents-client'
-import { cron, entities, webhook } from '../src/observation-sources'
+import { cron, entities, pgSync, webhook } from '../src/observation-sources'
 import type * as StateDbModule from '@durable-streams/state/db'
 
 const { mockState } = vi.hoisted(() => ({
   mockState: {
     ensureEntitiesMembershipStream: vi.fn(),
     ensureCronStream: vi.fn(),
+    registerPgSyncSource: vi.fn(),
     signalEntity: vi.fn(),
     ensureStream: vi.fn(),
     createStreamDB: vi.fn(),
@@ -24,6 +25,7 @@ vi.mock(`../src/runtime-server-client`, () => ({
   createRuntimeServerClient: () => ({
     ensureEntitiesMembershipStream: mockState.ensureEntitiesMembershipStream,
     ensureCronStream: mockState.ensureCronStream,
+    registerPgSyncSource: mockState.registerPgSyncSource,
     signalEntity: mockState.signalEntity,
     ensureStream: mockState.ensureStream,
   }),
@@ -45,6 +47,10 @@ describe(`createAgentsClient`, () => {
     mockState.ensureEntitiesMembershipStream = vi.fn().mockResolvedValue({
       sourceRef: `source-1`,
       streamUrl: `/_entities/source-1`,
+    })
+    mockState.registerPgSyncSource = vi.fn().mockResolvedValue({
+      sourceRef: `pg-source-1`,
+      streamUrl: `/_electric/pg-sync/default/pg-source-1`,
     })
     mockState.ensureStream = vi.fn().mockResolvedValue(`/_webhooks/repo`)
     mockState.createStreamDB = vi.fn()
@@ -99,6 +105,40 @@ describe(`createAgentsClient`, () => {
       state: source.schema,
     })
     expect(mockState.observedDb.preload).toHaveBeenCalledOnce()
+    expect(db).toBe(mockState.observedDb)
+  })
+
+  it(`registers pgSync sources before preloading the observed StreamDB`, async () => {
+    const client = createAgentsClient({
+      baseUrl: `http://electric-agents.test`,
+    })
+
+    const source = pgSync({
+      table: `todos`,
+      where: `priority = $1`,
+      params: [`high`],
+      replica: `full`,
+    })
+
+    const db = await client.observe(source)
+
+    expect(mockState.registerPgSyncSource).toHaveBeenCalledWith(source.options)
+    expect(mockState.createStreamDB).toHaveBeenCalledWith({
+      streamOptions: {
+        url: `http://electric-agents.test/_electric/pg-sync/default/pg-source-1`,
+        contentType: `application/json`,
+      },
+      state: expect.objectContaining({
+        changes: expect.objectContaining({
+          type: `pg_sync_change`,
+          primaryKey: `key`,
+        }),
+      }),
+    })
+    expect(mockState.observedDb.preload).toHaveBeenCalledOnce()
+    expect(
+      mockState.registerPgSyncSource.mock.invocationCallOrder[0]
+    ).toBeLessThan(mockState.observedDb.preload.mock.invocationCallOrder[0])
     expect(db).toBe(mockState.observedDb)
   })
 

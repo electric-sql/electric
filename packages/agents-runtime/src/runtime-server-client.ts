@@ -1,3 +1,7 @@
+import type {
+  PgSyncOptions,
+  PgSyncRequestMetadata,
+} from './observation-sources'
 import type { EntityTags, TagOperation } from './tags'
 import { appendPathToUrl } from './url'
 import { buildEventSourceSubscriptionId } from './event-sources'
@@ -172,6 +176,13 @@ export interface RuntimeServerClient {
     streamUrl: string
     sourceRef: string
   }>
+  registerPgSyncSource: (
+    options: PgSyncOptions,
+    metadata?: PgSyncRequestMetadata
+  ) => Promise<{
+    streamUrl: string
+    sourceRef: string
+  }>
   listEventSources: () => Promise<Array<EventSourceContract>>
   subscribeToEventSource: (
     options: EventSourceSubscriptionInput & { entityUrl: string }
@@ -206,12 +217,12 @@ export interface RuntimeServerClient {
     key: string,
     value: string,
     writeToken: string
-  ) => Promise<void>
+  ) => Promise<{ txid?: string }>
   deleteTag: (
     entityUrl: string,
     key: string,
     writeToken: string
-  ) => Promise<void>
+  ) => Promise<{ txid?: string }>
 }
 
 interface RuntimeEntityResponse {
@@ -305,6 +316,19 @@ export function createRuntimeServerClient(
       entityUrl,
       entityType: entity.type,
       streamPath,
+    }
+  }
+
+  const readTxidResponse = async (
+    response: Response
+  ): Promise<{ txid?: string }> => {
+    try {
+      const body = (await response.json()) as { txid?: unknown }
+      if (typeof body.txid === `string`) return { txid: body.txid }
+      if (typeof body.txid === `number`) return { txid: String(body.txid) }
+      return {}
+    } catch {
+      return {}
     }
   }
 
@@ -670,6 +694,23 @@ export function createRuntimeServerClient(
     return (await response.json()) as { streamUrl: string; sourceRef: string }
   }
 
+  const registerPgSyncSource = async (
+    options: PgSyncOptions,
+    metadata?: PgSyncRequestMetadata
+  ): Promise<{ streamUrl: string; sourceRef: string }> => {
+    const response = await request(`/_electric/pg-sync/register`, {
+      method: `POST`,
+      headers: { 'content-type': `application/json` },
+      body: JSON.stringify({ options, ...(metadata ? { metadata } : {}) }),
+    })
+    if (!response.ok) {
+      throw new Error(
+        `registerPgSyncSource failed (${response.status}): ${await readErrorText(response)}`
+      )
+    }
+    return (await response.json()) as { streamUrl: string; sourceRef: string }
+  }
+
   const listEventSources = async (): Promise<Array<EventSourceContract>> => {
     const response = await request(`/_electric/event-sources`, {
       method: `GET`,
@@ -837,7 +878,7 @@ export function createRuntimeServerClient(
     key: string,
     value: string,
     writeToken: string
-  ): Promise<void> => {
+  ): Promise<{ txid?: string }> => {
     const response = await authedRequest(
       `${entityRpcPath(entityUrl)}/tags/${encodeURIComponent(key)}`,
       {
@@ -852,13 +893,14 @@ export function createRuntimeServerClient(
         `setTag ${entityUrl} failed (${response.status}): ${await readErrorText(response)}`
       )
     }
+    return readTxidResponse(response)
   }
 
   const deleteTag = async (
     entityUrl: string,
     key: string,
     writeToken: string
-  ): Promise<void> => {
+  ): Promise<{ txid?: string }> => {
     const response = await authedRequest(
       `${entityRpcPath(entityUrl)}/tags/${encodeURIComponent(key)}`,
       {
@@ -871,6 +913,7 @@ export function createRuntimeServerClient(
         `deleteTag ${entityUrl} failed (${response.status}): ${await readErrorText(response)}`
       )
     }
+    return readTxidResponse(response)
   }
 
   return {
@@ -888,6 +931,7 @@ export function createRuntimeServerClient(
     registerWake,
     ensureCronStream,
     ensureEntitiesMembershipStream,
+    registerPgSyncSource,
     listEventSources,
     subscribeToEventSource,
     unsubscribeFromEventSource,
