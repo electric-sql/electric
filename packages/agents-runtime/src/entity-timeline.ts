@@ -30,7 +30,7 @@ import type {
 } from './comments-collection'
 import type { ManifestEntry, Wake, WakeMessage } from './types'
 
-export const TIMELINE_ORDER_FALLBACK = `zzzz:timeline-end`
+export const TIMELINE_ORDER_FALLBACK = `~`
 
 export type EntityTimelineState =
   | `pending`
@@ -564,7 +564,7 @@ function readTimelineOrder(row: object): string | undefined {
 }
 
 export function createPendingTimelineOrder(index: number): string {
-  return `~pending:${index.toString().padStart(12, `0`)}`
+  return `${TIMELINE_ORDER_FALLBACK}pending:${index.toString().padStart(12, `0`)}`
 }
 
 function toSeqOrderToken(seq: number): string {
