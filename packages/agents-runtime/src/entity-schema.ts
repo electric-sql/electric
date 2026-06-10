@@ -355,12 +355,7 @@ type ManifestFutureSendScheduleEntryValue = {
   failedAt?: string
   lastError?: string
 }
-type GoalStatusValue =
-  | `active`
-  | `paused`
-  | `complete`
-  | `budget_limited`
-  | `blocked`
+type GoalStatusValue = `active` | `complete` | `budget_limited`
 type ManifestGoalEntryValue = {
   key?: string
   kind: `goal`
@@ -861,13 +856,7 @@ function createManifestSchema(): Schema<
       kind: z.literal(`goal`),
       id: z.string(),
       objective: z.string(),
-      status: z.enum([
-        `active`,
-        `paused`,
-        `complete`,
-        `budget_limited`,
-        `blocked`,
-      ]),
+      status: z.enum([`active`, `complete`, `budget_limited`]),
       tokenBudget: z.number().int().positive().nullable(),
       tokensUsed: z.number().int().nonnegative(),
       summary: z.string().optional(),

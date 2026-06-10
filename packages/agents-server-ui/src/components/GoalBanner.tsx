@@ -91,12 +91,8 @@ function statusClass(status: GoalStatus): string {
       return styles.statusActive!
     case `complete`:
       return styles.statusComplete!
-    case `blocked`:
-      return styles.statusBlocked!
     case `budget_limited`:
       return styles.statusBudgetLimited!
-    default:
-      return ``
   }
 }
 

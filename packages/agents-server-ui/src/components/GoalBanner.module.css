@@ -47,8 +47,7 @@
   color: var(--success-text, #1b6b1b);
 }
 
-.statusBudgetLimited,
-.statusBlocked {
+.statusBudgetLimited {
   background: var(--danger-surface, rgba(200, 50, 50, 0.12));
   color: var(--danger-text, #a02020);
 }
