@@ -97,7 +97,7 @@ describe(`horton model selection`, () => {
       events: [],
       firstWake: false,
       tags: {},
-      db: { collections: { inbox: { toArray: [] } } },
+      db: { collections: { inbox: { toArray: [] }, runs: { toArray: [] } } },
       sandbox: {
         workingDirectory: `/work`,
         readFile: vi.fn(async () => {
@@ -111,6 +111,9 @@ describe(`horton model selection`, () => {
       useContext: vi.fn(),
       useAgent,
       agent: { run },
+      getGoal: vi.fn(() => undefined),
+      updateGoalUsage: vi.fn(),
+      markGoalBudgetLimited: vi.fn(),
     } as any
 
     await def!.definition.handler(fakeCtx, { type: `inbox` } as any)
