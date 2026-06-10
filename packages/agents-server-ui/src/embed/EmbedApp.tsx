@@ -1,6 +1,7 @@
 import {
   createContext,
   useContext,
+  useEffect,
   useMemo,
   type CSSProperties,
   type ReactElement,
@@ -18,6 +19,7 @@ import {
   ElectricAgentsProvider,
   useElectricAgents,
 } from '../lib/ElectricAgentsProvider'
+import { WorkspaceProvider } from '../hooks/useWorkspace'
 import { ThemeProvider } from '../ui/ThemeProvider'
 import { ChatLogView, ChatView } from '../components/views/ChatView'
 import { StateExplorerView } from '../components/views/StateExplorerView'
@@ -50,7 +52,15 @@ export function EmbedSessionRoot({
   return (
     <ThemeProvider appearance={state.theme}>
       <ElectricAgentsProvider baseUrl={state.serverUrl}>
-        <EmbeddedRouter state={state} onNavigatePathname={onNavigatePathname} />
+        {/* The state-explorer view calls `useWorkspace`; the native shell owns
+            navigation, so this just satisfies the context (tile dispatches are
+            inert against the embed's fixed view). */}
+        <WorkspaceProvider>
+          <EmbeddedRouter
+            state={state}
+            onNavigatePathname={onNavigatePathname}
+          />
+        </WorkspaceProvider>
       </ElectricAgentsProvider>
     </ThemeProvider>
   )
@@ -199,6 +209,21 @@ function EntityHost({
     [entitiesCollection, entityUrl]
   )
   const entity = matches.at(0) ?? null
+
+  // Publish the composer inset on the document root (not just `.column`) so the
+  // image-preview dialog — which portals to <body> — can keep clear of the
+  // native composer overlaying the bottom of the WebView.
+  useEffect(() => {
+    if (typeof document === `undefined` || view !== `chat-log`) return
+    const root = document.documentElement
+    root.style.setProperty(
+      `--mobile-chat-bottom-inset`,
+      `${Math.max(0, bottomInset ?? 0)}px`
+    )
+    return () => {
+      root.style.removeProperty(`--mobile-chat-bottom-inset`)
+    }
+  }, [view, bottomInset])
 
   if (!entity) {
     // Treat both the initial sync window AND a missing-after-sync
