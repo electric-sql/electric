@@ -22,6 +22,7 @@ import {
   startRealtimeAudioSession,
   type RealtimeAudioSession,
 } from '../lib/realtime-audio'
+import { useRealtimeAvailability } from '../hooks/useRealtimeAvailability'
 import { ComposerEditor } from './ComposerEditor'
 import { ComposerShell } from './ComposerShell'
 import { Icon, Stack, Text, Tooltip } from '../ui'
@@ -131,6 +132,7 @@ export function MessageInput({
   const realtimeSessionRef = useRef<RealtimeAudioSession | null>(null)
   const handledAutoStartRealtimeRef = useRef<string | null>(null)
   const composerFocusRef = useRef<{ focus: () => void } | null>(null)
+  const realtimeAvailability = useRealtimeAvailability()
   const inputDisabled = disabled || writeDisabled
   const isCommentMode = composerMode === `comment`
   const attachmentsDisabled =
@@ -241,8 +243,12 @@ export function MessageInput({
     attachmentCount === 0 &&
     !disabled
   const canStop = showStop && !stopPending && !stopDisabled
-  const canUseRealtime =
-    !inputDisabled && !editingMessage && !isCommentMode && Boolean(baseUrl)
+  const canStartRealtime =
+    !inputDisabled &&
+    !editingMessage &&
+    !isCommentMode &&
+    Boolean(baseUrl) &&
+    realtimeAvailability.canStart
 
   useEffect(() => {
     return () => {
@@ -368,7 +374,12 @@ export function MessageInput({
         })
       return
     }
-    if (!canUseRealtime) return
+    if (!canStartRealtime) {
+      if (realtimeAvailability.unavailableReason) {
+        setError(realtimeAvailability.unavailableReason)
+      }
+      return
+    }
     setRealtimePending(true)
     startRealtimeAudioSession({
       baseUrl,
@@ -386,12 +397,27 @@ export function MessageInput({
       .finally(() => {
         setRealtimePending(false)
       })
-  }, [baseUrl, canUseRealtime, entityUrl, realtimePending])
+  }, [
+    baseUrl,
+    canStartRealtime,
+    entityUrl,
+    realtimeAvailability.unavailableReason,
+    realtimePending,
+  ])
 
   useEffect(() => {
     if (!autoStartRealtimeSignal) return
     if (handledAutoStartRealtimeRef.current === autoStartRealtimeSignal) return
-    if (!canUseRealtime || realtimePending) return
+    if (realtimeAvailability.loading || realtimePending) return
+    if (!realtimeAvailability.canStart) {
+      handledAutoStartRealtimeRef.current = autoStartRealtimeSignal
+      onRealtimeAutoStartConsumed?.()
+      if (realtimeAvailability.unavailableReason) {
+        setError(realtimeAvailability.unavailableReason)
+      }
+      return
+    }
+    if (!canStartRealtime) return
     handledAutoStartRealtimeRef.current = autoStartRealtimeSignal
     onRealtimeAutoStartConsumed?.()
     if (!realtimeSessionRef.current) {
@@ -399,9 +425,12 @@ export function MessageInput({
     }
   }, [
     autoStartRealtimeSignal,
-    canUseRealtime,
+    canStartRealtime,
     handleRealtimeToggle,
     onRealtimeAutoStartConsumed,
+    realtimeAvailability.canStart,
+    realtimeAvailability.loading,
+    realtimeAvailability.unavailableReason,
     realtimePending,
   ])
 
@@ -496,6 +525,13 @@ export function MessageInput({
       : `Send message`
   const replyPreviewLabel = formatReplyBannerLabel(commentTarget)
   const replyPreviewText = commentTarget?.snapshot.text
+  const realtimeTooltip = realtimeActive
+    ? `Stop voice mode`
+    : realtimeAvailability.loading
+      ? `Checking realtime credentials`
+      : (realtimeAvailability.unavailableReason ?? `Start voice mode`)
+  const realtimeButtonDisabled =
+    realtimePending || (!realtimeActive && !canStartRealtime)
   return (
     <Stack direction="column" gap={0} className={styles.root}>
       {drawer?.({
@@ -568,12 +604,7 @@ export function MessageInput({
           <>
             {!isCommentMode ? (
               <>
-                <Tooltip
-                  content={
-                    realtimeActive ? `Stop voice mode` : `Start voice mode`
-                  }
-                  side="top"
-                >
+                <Tooltip content={realtimeTooltip} side="top">
                   <span className={styles.tooltipTrigger}>
                     <button
                       type="button"
@@ -581,7 +612,7 @@ export function MessageInput({
                         realtimeActive ? `Stop voice mode` : `Start voice mode`
                       }
                       onClick={handleRealtimeToggle}
-                      disabled={!canUseRealtime || realtimePending}
+                      disabled={realtimeButtonDisabled}
                       className={[
                         styles.inlineIconButton,
                         realtimeActive ? styles.voiceActive : null,

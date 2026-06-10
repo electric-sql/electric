@@ -13,6 +13,7 @@ import { COMPOSER_INPUT_MESSAGE_TYPE } from '@electric-ax/agents-runtime/client'
 import { nanoid } from 'nanoid'
 import { useElectricAgents } from '../../lib/ElectricAgentsProvider'
 import { useWorkspace } from '../../hooks/useWorkspace'
+import { useRealtimeAvailability } from '../../hooks/useRealtimeAvailability'
 import { recentWorkingDirsForRunner } from '../../lib/recentWorkingDirectories'
 import {
   isSandboxProfileRemote,
@@ -974,6 +975,7 @@ function DefaultAgentComposer({
   const submitting = submittingMode !== null
   const realtimeSubmitting = submittingMode === `realtime`
   const composerFocusRef = useRef<{ focus: () => void } | null>(null)
+  const realtimeAvailability = useRealtimeAvailability()
   const inlineProps = useMemo(
     () => inlineSchemaProperties(agent.creation_schema),
     [agent.creation_schema]
@@ -1092,6 +1094,7 @@ function DefaultAgentComposer({
   const startRealtime = useCallback(() => {
     const files = imageAttachmentsEnabled ? attachments : []
     if (disabled || submitting || files.length > 0) return
+    if (!realtimeAvailability.canStart) return
     setSubmittingMode(`realtime`)
     const cleaned: Record<string, unknown> = {}
     for (const [k, v] of Object.entries(args)) {
@@ -1108,6 +1111,7 @@ function DefaultAgentComposer({
     disabled,
     imageAttachmentsEnabled,
     onStartRealtime,
+    realtimeAvailability.canStart,
     selectedSandboxProfile,
     submitting,
   ])
@@ -1125,7 +1129,14 @@ function DefaultAgentComposer({
       ? `Remove attachments to start voice mode`
       : realtimeSubmitting
         ? `Starting voice session`
-        : `Start voice session`
+        : realtimeAvailability.loading
+          ? `Checking realtime credentials`
+          : (realtimeAvailability.unavailableReason ?? `Start voice session`)
+  const realtimeDisabled =
+    disabled ||
+    submitting ||
+    attachmentCount > 0 ||
+    !realtimeAvailability.canStart
 
   return (
     <div
@@ -1209,7 +1220,7 @@ function DefaultAgentComposer({
                   type="button"
                   aria-label="Start voice session"
                   onClick={startRealtime}
-                  disabled={disabled || submitting || attachmentCount > 0}
+                  disabled={realtimeDisabled}
                   className={[
                     styles.composerVoice,
                     realtimeSubmitting ? styles.composerVoicePending : null,
