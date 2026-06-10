@@ -32,6 +32,8 @@
    the spawn-page first-prompt height. */
 .chatComposerShell {
   --composer-editor-min-h: 40px;
+  position: relative;
+  z-index: 2;
 }
 /* Spacing for the inline error row above the composer. The Stack gap
    is 0 so the drawer's negative margin can fully overlap the
@@ -84,6 +86,36 @@
   background: var(--ds-gray-a2);
 }
 
+.replyBanner {
+  box-sizing: border-box;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 12px 6px 14px;
+  border-bottom: 1px solid var(--ds-gray-a4);
+  border-radius: var(--ds-radius-5) var(--ds-radius-5) 0 0;
+  background: var(--ds-gray-a2);
+}
+
+.replyBannerText {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.replyBannerPreview {
+  overflow: hidden;
+  color: var(--ds-text-1);
+  font-family: var(--ds-font-body);
+  font-size: var(--ds-text-xs);
+  line-height: var(--ds-text-xs-lh);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .editingCancel {
   all: unset;
   border-radius: var(--ds-radius-3);
@@ -102,6 +134,53 @@
 .editingCancel:focus-visible {
   outline: 2px solid var(--ds-accent-a6);
   outline-offset: 2px;
+}
+
+.modeTabs {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 2px;
+  margin-top: -1px;
+  padding: 0 0 0 12px;
+  position: relative;
+  z-index: 1;
+}
+
+.modeTab {
+  all: unset;
+  box-sizing: border-box;
+  min-width: 58px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0 0 var(--ds-radius-3) var(--ds-radius-3);
+  background: var(--ds-gray-a2);
+  color: var(--ds-text-3);
+  cursor: pointer;
+  font-family: var(--ds-font-body);
+  font-size: var(--ds-text-xs);
+  line-height: var(--ds-text-xs-lh);
+  padding: 0 10px;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+
+.modeTab:hover {
+  background: var(--ds-gray-a3);
+  color: var(--ds-text-1);
+}
+
+.modeTab[aria-selected='true'] {
+  background: var(--ds-gray-a4);
+  color: var(--ds-text-1);
+}
+
+.modeTab:focus-visible {
+  outline: 2px solid var(--ds-accent-a6);
+  outline-offset: 1px;
 }
 
 .proseMirrorWrap {

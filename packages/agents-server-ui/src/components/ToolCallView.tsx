@@ -1,6 +1,6 @@
-import { Wrench } from 'lucide-react'
+import { Reply, Wrench } from 'lucide-react'
 import type { EntityTimelineContentItem } from '@electric-ax/agents-runtime/client'
-import { Badge, Stack, Text } from '../ui'
+import { Badge, Icon, IconButton, Stack, Text, Tooltip } from '../ui'
 import type { BadgeTone } from '../ui'
 import { InlineEventCard } from './InlineEventCard'
 import { InlineStatusBadge } from './InlineStatusBadge'
@@ -257,9 +257,28 @@ function ToolBody({ item }: { item: ToolCallItem }): React.ReactElement {
 
 export function ToolCallView({
   item,
+  onReply,
 }: {
   item: ToolCallItem
+  onReply?: () => void
 }): React.ReactElement {
+  const replyAction = onReply ? (
+    <Tooltip content="Reply" side="top">
+      <IconButton
+        type="button"
+        size={1}
+        variant="ghost"
+        tone="neutral"
+        className={styles.actionButton}
+        aria-label="Reply to tool call"
+        title="Reply"
+        onClick={onReply}
+      >
+        <Icon icon={Reply} size={1} />
+      </IconButton>
+    </Tooltip>
+  ) : undefined
+
   // send_message: same container style but always expanded with the message text
   if (item.toolName === `send_message` && typeof item.args.text === `string`) {
     const badge = statusBadge(item)
@@ -270,6 +289,7 @@ export function ToolCallView({
         title="send_message"
         titleFont="mono"
         collapsible={false}
+        actions={replyAction}
         badge={
           badge ? (
             <InlineStatusBadge tone={badge.tone}>
@@ -299,6 +319,8 @@ export function ToolCallView({
       titleFont="mono"
       summary={summary}
       defaultExpanded={shouldDefaultExpand}
+      collapsible
+      actions={replyAction}
       badge={
         badge ? (
           <InlineStatusBadge tone={badge.tone}>{badge.label}</InlineStatusBadge>

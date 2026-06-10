@@ -23,6 +23,7 @@ import {
   FileJson,
   GitBranch,
   Radio,
+  Reply,
 } from 'lucide-react'
 import {
   loadTimelineRowHeights,
@@ -46,6 +47,7 @@ import { Icon, IconButton, ScrollArea, Stack, Text, Tooltip } from '../ui'
 import { UserMessage } from './UserMessage'
 import type { ForkFromHereAction, UserMessageAttachment } from './UserMessage'
 import { AgentResponseLive } from './AgentResponse'
+import { CommentBubble } from './CommentBubble'
 import { InlineEventCard } from './InlineEventCard'
 import { InlineStatusBadge } from './InlineStatusBadge'
 import {
@@ -57,13 +59,17 @@ import {
   formatChatTimestamp,
 } from '../lib/formatTime'
 import { readTextPayload } from '../lib/sendMessage'
+import { principalKeyFromInput } from '../lib/principals'
 import styles from './EntityTimeline.module.css'
 import type { ElectricUser } from '../lib/ElectricAgentsProvider'
+import type { SelectedCommentTarget } from '../lib/comments'
 import type {
+  CommentTarget,
   EntityTimelineSection,
   EntityTimelineQueryRow,
   EntityTimelineRunItem,
   EntityTimelineRunRow,
+  EntityTimelineToolCallItem,
   IncludesEntity,
   Manifest,
 } from '@electric-ax/agents-runtime/client'
@@ -72,6 +78,10 @@ import type { PaneFindAdapter, PaneFindMatch } from '../hooks/usePaneFind'
 
 type RenderTimelineRow = EntityTimelineQueryRow
 type WakeSection = Extract<EntityTimelineSection, { kind: `wake` }>
+export type TimelineRowAdjacency = {
+  previousRow?: EntityTimelineQueryRow
+  nextRow?: EntityTimelineQueryRow
+}
 
 function renderRowKey(row: RenderTimelineRow): string {
   return row.$key
@@ -212,7 +222,8 @@ class TimelineRowErrorBoundary extends Component<
  */
 function estimateRowHeight(
   row: RenderTimelineRow | undefined,
-  contentWidth: number
+  contentWidth: number,
+  nextRow?: RenderTimelineRow
 ): number {
   if (!row) return 120
 
@@ -227,12 +238,16 @@ function estimateRowHeight(
       1,
       Math.ceil(readInboxText(row.inbox.payload).length / charsPerLine)
     )
-    return Math.max(64, 48 + lines * lineHeight) + timelineRowGap(row)
+    return Math.max(64, 48 + lines * lineHeight) + timelineRowGap(row, nextRow)
+  }
+  if (row.comment) {
+    const lines = Math.max(1, Math.ceil(row.comment.body.length / charsPerLine))
+    return Math.max(58, 42 + lines * lineHeight) + timelineRowGap(row, nextRow)
   }
   if (row.wake || row.signal || row.manifest) {
-    return 76 + timelineRowGap(row)
+    return 76 + timelineRowGap(row, nextRow)
   }
-  return 120 + timelineRowGap(row)
+  return 120 + timelineRowGap(row, nextRow)
 }
 
 const BOTTOM_PIN_THRESHOLD = 8
@@ -242,8 +257,35 @@ const MANIFEST_ROW_GAP = 10
 const ROW_SETTLE_MS = 500
 type EntityStatus = NonNullable<IncludesEntity[`status`]>
 
-function timelineRowGap(row: RenderTimelineRow): number {
+function timelineRowGap(
+  row: RenderTimelineRow,
+  nextRow?: RenderTimelineRow
+): number {
+  if (shouldCollapseCommentMeta(row, nextRow)) return 6
   return row.manifest || row.wake || row.signal ? MANIFEST_ROW_GAP : ROW_GAP
+}
+
+function isPlainCommentRow(row: RenderTimelineRow | undefined): boolean {
+  const comment = row?.comment
+  if (!comment) return false
+  return !comment.deleted_at && !comment.reply_to && !comment.target_snapshot
+}
+
+function shouldCollapseCommentMeta(
+  row: RenderTimelineRow | undefined,
+  nextRow: RenderTimelineRow | undefined
+): boolean {
+  if (!isPlainCommentRow(row) || !isPlainCommentRow(nextRow)) return false
+  const principal = principalKeyFromInput(row?.comment?.from)
+  if (!principal) return false
+  return principal === principalKeyFromInput(nextRow?.comment?.from)
+}
+
+function shouldShowCommentMeta(
+  row: RenderTimelineRow,
+  nextRow: RenderTimelineRow | undefined
+): boolean {
+  return !shouldCollapseCommentMeta(row, nextRow)
 }
 
 type TimelinePaneFindMatch = PaneFindMatch & {
@@ -256,6 +298,7 @@ function timelineRowSearchText(
   row: RenderTimelineRow,
   runSearchTextByKey: Map<string, string>
 ): string {
+  if (row.comment) return row.comment.body
   if (row.inbox) return readInboxText(row.inbox.payload)
   if (row.wake) {
     return wakeSectionText({
@@ -271,6 +314,7 @@ function timelineRowSearchText(
 }
 
 function timelineRowLabel(row: RenderTimelineRow): string {
+  if (row.comment) return `Comment`
   if (row.inbox?.from_agent) return `Agent message`
   if (row.inbox) return `User message`
   if (row.wake) return `Wake`
@@ -278,6 +322,160 @@ function timelineRowLabel(row: RenderTimelineRow): string {
   if (row.error) return `Error`
   if (row.manifest) return `Manifest item`
   return `Agent response`
+}
+
+function truncateCommentPreview(text: string, maxLength = 280): string {
+  const compact = text.replace(/\s+/g, ` `).trim()
+  return compact.length <= maxLength
+    ? compact
+    : `${compact.slice(0, maxLength - 3)}...`
+}
+
+function createReplyTargetForRow(
+  row: RenderTimelineRow,
+  runSearchTextByKey: Map<string, string>
+): SelectedCommentTarget | null {
+  if (row.comment) {
+    return {
+      target: { kind: `comment`, key: row.comment.key },
+      snapshot: {
+        label: `Comment`,
+        text: truncateCommentPreview(row.comment.body),
+        from: row.comment.from,
+        timestamp: row.comment.timestamp,
+        collection: `comment`,
+      },
+    }
+  }
+
+  if (row.inbox) {
+    return {
+      target: { kind: `timeline`, collection: `inbox`, key: row.inbox.key },
+      snapshot: {
+        label: row.inbox.from_agent ? `Agent message` : `User message`,
+        text: truncateCommentPreview(readInboxText(row.inbox.payload)),
+        from: row.inbox.from,
+        timestamp: row.inbox.timestamp,
+        collection: `inbox`,
+      },
+    }
+  }
+
+  if (row.run) {
+    return {
+      target: { kind: `timeline`, collection: `run`, key: row.run.key },
+      snapshot: {
+        label: `Assistant response`,
+        text: truncateCommentPreview(
+          runSearchTextByKey.get(row.$key) ?? runSearchTextFromSnapshot(row.run)
+        ),
+        collection: `run`,
+      },
+    }
+  }
+
+  if (row.wake) {
+    return {
+      target: { kind: `timeline`, collection: `wake`, key: row.wake.key },
+      snapshot: {
+        label: `Wake`,
+        text: truncateCommentPreview(stringifyPayload(row.wake.payload)),
+        timestamp: row.wake.payload.timestamp,
+        collection: `wake`,
+      },
+    }
+  }
+
+  if (row.signal) {
+    return {
+      target: { kind: `timeline`, collection: `signal`, key: row.signal.key },
+      snapshot: {
+        label: `Signal`,
+        text: truncateCommentPreview(signalSearchText(row.signal)),
+        timestamp: row.signal.timestamp,
+        collection: `signal`,
+      },
+    }
+  }
+
+  if (row.manifest) {
+    return {
+      target: {
+        kind: `timeline`,
+        collection: `manifest`,
+        key: row.manifest.key,
+      },
+      snapshot: {
+        label: manifestKindLabel(row.manifest),
+        text: truncateCommentPreview(manifestSearchText(row.manifest)),
+        collection: `manifest`,
+      },
+    }
+  }
+
+  return null
+}
+
+function createReplyTargetForToolCall(
+  row: RenderTimelineRow,
+  toolCall: EntityTimelineToolCallItem
+): SelectedCommentTarget {
+  const runId = row.run?.key ?? toolCall.run_id
+  return {
+    target: {
+      kind: `timeline`,
+      collection: `tool_call`,
+      key: toolCall.key,
+      ...(runId ? { run_id: runId } : {}),
+    },
+    snapshot: {
+      label: `Tool call`,
+      text: truncateCommentPreview(
+        [
+          toolCall.tool_name,
+          stringifySearchPayload(toolCall.args),
+          stringifySearchPayload(toolCall.result),
+          stringifySearchPayload(toolCall.error),
+        ]
+          .filter((text) => text.length > 0)
+          .join(` `)
+      ),
+      collection: `tool_call`,
+    },
+  }
+}
+
+function timelineRowMatchesCommentTarget(
+  row: RenderTimelineRow,
+  target: CommentTarget
+): boolean {
+  if (target.kind === `comment`) {
+    return row.comment?.key === target.key
+  }
+
+  switch (target.collection) {
+    case `inbox`:
+      return row.inbox?.key === target.key
+    case `run`:
+      return row.run?.key === target.key
+    case `wake`:
+      return row.wake?.key === target.key
+    case `signal`:
+      return row.signal?.key === target.key
+    case `manifest`:
+      return row.manifest?.key === target.key
+    case `text`:
+    case `tool_call`: {
+      const run = row.run
+      if (!run) return false
+      if (target.run_id && run.key === target.run_id) return true
+      return run.items.toArray.some((item) =>
+        target.collection === `text`
+          ? item.text?.key === target.key
+          : item.toolCall?.key === target.key
+      )
+    }
+  }
 }
 
 function firstSelfSendWakeChange(
@@ -338,9 +536,11 @@ function wakeSectionText(
 function WakeTimelineRow({
   section,
   entityUrl,
+  onReply,
 }: {
   section: WakeSection
   entityUrl?: string | null
+  onReply?: () => void
 }): React.ReactElement {
   const reason = wakeReason(section, entityUrl)
   const details = wakeDetails(section, entityUrl)
@@ -352,7 +552,13 @@ function WakeTimelineRow({
         icon={Radio}
         title="woke"
         summary={`${reason} · ${formatChatTimestamp(section.timestamp)}`}
+        actions={
+          onReply ? (
+            <TimelineReplyAction label="Reply to wake" onReply={onReply} />
+          ) : undefined
+        }
         defaultExpanded={false}
+        collapsible
         headerSurface
       >
         <div className={styles.manifestDetails}>
@@ -377,9 +583,11 @@ function WakeTimelineRow({
 function AgentInboxMessageRow({
   inbox,
   entityUrl,
+  onReply,
 }: {
   inbox: NonNullable<RenderTimelineRow[`inbox`]>
   entityUrl?: string | null
+  onReply?: () => void
 }): React.ReactElement {
   const parsed = Date.parse(inbox.timestamp)
   const timestamp = Number.isFinite(parsed) ? parsed : Date.now()
@@ -400,7 +608,16 @@ function AgentInboxMessageRow({
         icon={Radio}
         title={isSelfSend ? `sent to itself` : `agent message`}
         summary={`${isSelfSend ? `self-send` : fromAgent} · ${formatChatTimestamp(timestamp)}`}
+        actions={
+          onReply ? (
+            <TimelineReplyAction
+              label="Reply to agent message"
+              onReply={onReply}
+            />
+          ) : undefined
+        }
         defaultExpanded={false}
+        collapsible
         headerSurface
       >
         <div className={styles.manifestDetails}>
@@ -421,8 +638,10 @@ function AgentInboxMessageRow({
 
 function SignalTimelineRow({
   signal,
+  onReply,
 }: {
   signal: NonNullable<RenderTimelineRow[`signal`]>
+  onReply?: () => void
 }): React.ReactElement {
   return (
     <div className={styles.manifestRow}>
@@ -430,6 +649,11 @@ function SignalTimelineRow({
         icon={CircleStop}
         title={`signal ${signal.signal}`}
         summary={signalSummary(signal)}
+        actions={
+          onReply ? (
+            <TimelineReplyAction label="Reply to signal" onReply={onReply} />
+          ) : undefined
+        }
         headerSurface
       />
     </div>
@@ -593,11 +817,13 @@ function ManifestTimelineRow({
   manifest,
   entityUrl,
   entityStatus,
+  onReply,
 }: {
   manifest: Manifest
   entityUrl: string | null
   tileId: string | null
   entityStatus?: EntityStatus
+  onReply?: () => void
 }): React.ReactElement {
   const workspace = useOptionalWorkspace()
   const navigate = useNavigate()
@@ -667,10 +893,17 @@ function ManifestTimelineRow({
       </IconButton>
     </Tooltip>
   ) : null
+  const replyAction = onReply ? (
+    <TimelineReplyAction
+      label={`Reply to ${manifestKindLabel(manifest).toLowerCase()}`}
+      onReply={onReply}
+    />
+  ) : null
   const actions =
-    statusBadge || openAction ? (
+    statusBadge || openAction || replyAction ? (
       <>
         {statusBadge}
+        {replyAction}
         {openAction}
       </>
     ) : undefined
@@ -927,6 +1160,32 @@ function titleCase(value: string): string {
     .join(` `)
 }
 
+function TimelineReplyAction({
+  label,
+  onReply,
+}: {
+  label: string
+  onReply?: () => void
+}): React.ReactElement | null {
+  if (!onReply) return null
+  return (
+    <Tooltip content="Reply" side="top">
+      <IconButton
+        type="button"
+        size={1}
+        variant="ghost"
+        tone="neutral"
+        className={styles.manifestActionButton}
+        aria-label={label}
+        title="Reply"
+        onClick={onReply}
+      >
+        <Icon icon={Reply} size={1} />
+      </IconButton>
+    </Tooltip>
+  )
+}
+
 function stableEntityUrlKey(urls: Iterable<string>): string {
   return Array.from(new Set(urls)).sort().join(`\0`)
 }
@@ -937,6 +1196,8 @@ function entityUrlsFromKey(key: string): Array<string> {
 
 const TimelineRow = memo(function TimelineRow({
   row,
+  previousRow,
+  nextRow,
   responseTimestamp,
   isInitialUserMessage,
   entityStopped,
@@ -953,8 +1214,13 @@ const TimelineRow = memo(function TimelineRow({
   onStopGeneration,
   onForkFromHere,
   onRunSearchTextChange,
+  onReplyToRow,
+  onReplyToToolCall,
+  onCommentTargetClick,
 }: {
   row: RenderTimelineRow
+  previousRow?: RenderTimelineRow
+  nextRow?: RenderTimelineRow
   responseTimestamp: number | null
   isInitialUserMessage: boolean
   entityStopped: boolean
@@ -974,10 +1240,34 @@ const TimelineRow = memo(function TimelineRow({
    * we just invoke. */
   onForkFromHere?: ForkFromHereAction
   onRunSearchTextChange: (rowKey: string, text: string) => void
+  onReplyToRow?: () => void
+  onReplyToToolCall?: (toolCall: EntityTimelineToolCallItem) => void
+  onCommentTargetClick?: (target: CommentTarget) => void
 }): React.ReactElement {
+  void previousRow
+
+  if (row.comment) {
+    return (
+      <CommentBubble
+        comment={row.comment}
+        currentPrincipal={currentPrincipal}
+        usersById={usersById}
+        showMeta={shouldShowCommentMeta(row, nextRow)}
+        onReply={onReplyToRow ? () => onReplyToRow() : undefined}
+        onTargetClick={onCommentTargetClick}
+      />
+    )
+  }
+
   if (row.inbox) {
     if (row.inbox.from_agent) {
-      return <AgentInboxMessageRow inbox={row.inbox} entityUrl={entityUrl} />
+      return (
+        <AgentInboxMessageRow
+          inbox={row.inbox}
+          entityUrl={entityUrl}
+          onReply={onReplyToRow}
+        />
+      )
     }
     const timestamp = Date.parse(row.inbox.timestamp)
     return (
@@ -997,6 +1287,7 @@ const TimelineRow = memo(function TimelineRow({
         }
         stopPending={stopPending}
         onStop={onStopGeneration}
+        onReply={onReplyToRow}
       />
     )
   }
@@ -1010,12 +1301,13 @@ const TimelineRow = memo(function TimelineRow({
           timestamp: Date.parse(row.wake.payload.timestamp),
         }}
         entityUrl={entityUrl}
+        onReply={onReplyToRow}
       />
     )
   }
 
   if (row.signal) {
-    return <SignalTimelineRow signal={row.signal} />
+    return <SignalTimelineRow signal={row.signal} onReply={onReplyToRow} />
   }
 
   if (row.error) {
@@ -1033,6 +1325,7 @@ const TimelineRow = memo(function TimelineRow({
             ? entityStatusByUrl.get(getManifestEntityUrl(row.manifest)!)
             : undefined
         }
+        onReply={onReplyToRow}
       />
     )
   }
@@ -1046,12 +1339,15 @@ const TimelineRow = memo(function TimelineRow({
       renderWidth={renderWidth}
       forkFromHere={onForkFromHere}
       onSearchTextChange={onRunSearchTextChange}
+      onReply={onReplyToRow}
+      onReplyToToolCall={onReplyToToolCall}
     />
   )
 })
 
 export function EntityTimeline({
   rows,
+  rowAdjacency,
   loading,
   error,
   entityStopped,
@@ -1064,8 +1360,13 @@ export function EntityTimeline({
   stopPending = false,
   onStopGeneration,
   forkFromHereByRunKey,
+  onReplyToRow,
+  focusTarget,
+  onFocusTargetHandled,
+  onCommentTargetClick,
 }: {
   rows: Array<EntityTimelineQueryRow>
+  rowAdjacency?: Array<TimelineRowAdjacency>
   loading: boolean
   error: string | null
   entityStopped: boolean
@@ -1084,6 +1385,10 @@ export function EntityTimeline({
    * the fork pointer and runs the fork → navigate flow.
    */
   forkFromHereByRunKey?: Map<string, ForkFromHereAction>
+  onReplyToRow?: (target: SelectedCommentTarget) => void
+  focusTarget?: CommentTarget | null
+  onFocusTargetHandled?: () => void
+  onCommentTargetClick?: (target: CommentTarget) => void
 }): React.ReactElement {
   const { entitiesCollection, runnersCollection, usersCollection } =
     useElectricAgents()
@@ -1173,6 +1478,9 @@ export function EntityTimeline({
   const spawnMarkerRef = useRef<HTMLSpanElement | null>(null)
   const [showJumpToBottom, setShowJumpToBottom] = useState(false)
   const [showTopDivider, setShowTopDivider] = useState(false)
+  const [highlightedRowKey, setHighlightedRowKey] = useState<string | null>(
+    null
+  )
   const [runSearchTextByKey, setRunSearchTextByKey] = useState(
     () => new Map<string, string>()
   )
@@ -1180,6 +1488,7 @@ export function EntityTimeline({
   const lastMeasureAtRef = useRef(new Map<string, number>())
   const settledKeysRef = useRef(new Set<string>())
   const settleCheckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const handledScrollSignalRef = useRef(scrollToBottomSignal)
   const previousStreamingAgentKeyRef = useRef<string | null>(null)
   const textColumnWidth = Math.max(0, contentWidth - CHAT_SURFACE_GUTTER)
@@ -1349,7 +1658,14 @@ export function EntityTimeline({
     estimateSize: (index) =>
       cachedSizeMapRef.current.get(
         displayRows[index] ? renderRowKey(displayRows[index]!) : ``
-      ) ?? estimateRowHeight(displayRows[index], textColumnWidth),
+      ) ??
+      estimateRowHeight(
+        displayRows[index],
+        textColumnWidth,
+        displayRows[index]
+          ? (rowAdjacency?.[index]?.nextRow ?? displayRows[index + 1])
+          : undefined
+      ),
     getItemKey: (index) =>
       displayRows[index] ? renderRowKey(displayRows[index]!) : index,
     gap: 0,
@@ -1357,6 +1673,50 @@ export function EntityTimeline({
     measureElement: measureRowElement,
     enabled: displayRows.length > 0,
   })
+
+  const revealCommentTarget = useCallback(
+    (target: CommentTarget): boolean => {
+      const targetIndex = displayRows.findIndex((row) =>
+        timelineRowMatchesCommentTarget(row, target)
+      )
+      if (targetIndex < 0) return false
+
+      const row = displayRows[targetIndex]
+      if (!row) return false
+
+      const rowKey = renderRowKey(row)
+      isNearBottom.current = false
+      setShowJumpToBottom(true)
+      rowVirtualizer.scrollToIndex(targetIndex, { align: `center` })
+      setHighlightedRowKey(rowKey)
+
+      if (highlightTimerRef.current !== null) {
+        clearTimeout(highlightTimerRef.current)
+      }
+      highlightTimerRef.current = setTimeout(() => {
+        highlightTimerRef.current = null
+        setHighlightedRowKey((current) => (current === rowKey ? null : current))
+      }, 1600)
+
+      return true
+    },
+    [displayRows, rowVirtualizer]
+  )
+
+  const handleCommentTargetClick = useCallback(
+    (target: CommentTarget) => {
+      if (revealCommentTarget(target)) return
+      onCommentTargetClick?.(target)
+    },
+    [onCommentTargetClick, revealCommentTarget]
+  )
+
+  useEffect(() => {
+    if (!focusTarget) return
+    if (revealCommentTarget(focusTarget)) {
+      onFocusTargetHandled?.()
+    }
+  }, [focusTarget, onFocusTargetHandled, revealCommentTarget])
 
   const paneFindAdapter = useMemo<PaneFindAdapter>(() => {
     const getHighlightRoot = (match: PaneFindMatch): HTMLElement | null => {
@@ -1645,6 +2005,9 @@ export function EntityTimeline({
       if (settleCheckTimerRef.current !== null) {
         clearTimeout(settleCheckTimerRef.current)
       }
+      if (highlightTimerRef.current !== null) {
+        clearTimeout(highlightTimerRef.current)
+      }
     },
     []
   )
@@ -1744,6 +2107,12 @@ export function EntityTimeline({
               {rowVirtualizer.getVirtualItems().map((virtualRow) => {
                 const row = displayRows[virtualRow.index]
                 const rowKey = renderRowKey(row)
+                const previousRow =
+                  rowAdjacency?.[virtualRow.index]?.previousRow ??
+                  displayRows[virtualRow.index - 1]
+                const nextRow =
+                  rowAdjacency?.[virtualRow.index]?.nextRow ??
+                  displayRows[virtualRow.index + 1]
 
                 // Stable row key. The previous implementation appended
                 // `:${contentWidth}` to force remount on every column-width
@@ -1761,15 +2130,20 @@ export function EntityTimeline({
                     data-index={virtualRow.index}
                     data-item-key={rowKey}
                     data-pane-find-row-key={rowKey}
+                    data-highlighted={
+                      highlightedRowKey === rowKey ? `true` : undefined
+                    }
                     className={styles.virtualRow}
                     style={{
                       transform: `translateY(${virtualRow.start}px)`,
-                      paddingBottom: timelineRowGap(row),
+                      paddingBottom: timelineRowGap(row, nextRow),
                     }}
                   >
                     <TimelineRowErrorBoundary rowKey={rowKey}>
                       <TimelineRow
                         row={row}
+                        previousRow={previousRow}
+                        nextRow={nextRow}
                         responseTimestamp={
                           responseTimestampByRowKey.get(rowKey) ?? null
                         }
@@ -1788,6 +2162,26 @@ export function EntityTimeline({
                         onStopGeneration={onStopGeneration}
                         onForkFromHere={forkFromHereByRunKey?.get(rowKey)}
                         onRunSearchTextChange={updateRunSearchText}
+                        onCommentTargetClick={handleCommentTargetClick}
+                        onReplyToRow={
+                          onReplyToRow
+                            ? () => {
+                                const target = createReplyTargetForRow(
+                                  row,
+                                  runSearchTextByKey
+                                )
+                                if (target) onReplyToRow(target)
+                              }
+                            : undefined
+                        }
+                        onReplyToToolCall={
+                          onReplyToRow && row.run
+                            ? (toolCall) =>
+                                onReplyToRow(
+                                  createReplyTargetForToolCall(row, toolCall)
+                                )
+                            : undefined
+                        }
                       />
                     </TimelineRowErrorBoundary>
                   </div>

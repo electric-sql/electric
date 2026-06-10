@@ -2,19 +2,25 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { eq, useLiveQuery } from '@tanstack/react-db'
 import { useEntityTimeline } from '../../hooks/useEntityTimeline'
-import { EntityTimeline } from '../EntityTimeline'
+import { EntityTimeline, type TimelineRowAdjacency } from '../EntityTimeline'
 import { GoalBanner } from '../GoalBanner'
 import { MessageInput } from '../MessageInput'
 import { EntityContextDrawer } from '../EntityContextDrawer'
 import { useElectricAgents } from '../../lib/ElectricAgentsProvider'
+import { useWorkspace } from '../../hooks/useWorkspace'
+import { isAttachmentManifest } from '../../lib/attachments'
 import { schemaModelSupportsImageInput } from '../../lib/modelCapabilities'
+import type { SelectedCommentTarget } from '../../lib/comments'
 import {
   useEntityPermission,
   useEntityPermissions,
   type EntityPermission,
 } from '../../hooks/useEntityPermission'
 import type { ViewProps } from '../../lib/workspace/viewRegistry'
-import type { EntityTimelineQueryRow } from '@electric-ax/agents-runtime/client'
+import type {
+  CommentTarget,
+  EntityTimelineQueryRow,
+} from '@electric-ax/agents-runtime/client'
 import type { EventPointer } from '@electric-ax/agents-runtime'
 import type { OptimisticInboxMessage } from '../../lib/sendMessage'
 import type { SlashCommandRow } from '@electric-ax/agents-runtime/client'
@@ -25,6 +31,95 @@ const CHAT_VIEW_PERMISSIONS: ReadonlyArray<EntityPermission> = [
   `signal`,
   `fork`,
 ]
+const COMMENT_FOCUS_PARAM = `focus`
+const COMMENT_TARGET_COLLECTIONS = new Set<string>([
+  `inbox`,
+  `run`,
+  `text`,
+  `tool_call`,
+  `wake`,
+  `signal`,
+  `manifest`,
+])
+
+export function encodeCommentTargetParam(target: CommentTarget): string {
+  return encodeURIComponent(JSON.stringify(target))
+}
+
+export function decodeCommentTargetParam(
+  value: string | undefined
+): CommentTarget | null {
+  if (!value) return null
+  try {
+    const decoded = JSON.parse(decodeURIComponent(value)) as unknown
+    if (!isCommentTarget(decoded)) return null
+    return decoded
+  } catch {
+    return null
+  }
+}
+
+export function commentFocusViewParams(
+  target: CommentTarget
+): Record<string, string> {
+  return { [COMMENT_FOCUS_PARAM]: encodeCommentTargetParam(target) }
+}
+
+function isCommentTarget(value: unknown): value is CommentTarget {
+  if (!value || typeof value !== `object`) return false
+  const target = value as Partial<CommentTarget>
+  if (target.kind === `comment`) {
+    return typeof target.key === `string`
+  }
+  if (target.kind !== `timeline`) return false
+  const timelineTarget = target as Partial<
+    Extract<CommentTarget, { kind: `timeline` }>
+  >
+  return (
+    typeof timelineTarget.key === `string` &&
+    typeof timelineTarget.collection === `string` &&
+    COMMENT_TARGET_COLLECTIONS.has(timelineTarget.collection) &&
+    (timelineTarget.run_id === undefined ||
+      typeof timelineTarget.run_id === `string`)
+  )
+}
+
+export function buildCommentsTimeline(
+  timelineRows: Array<EntityTimelineQueryRow>
+): {
+  rows: Array<EntityTimelineQueryRow>
+  adjacency: Array<TimelineRowAdjacency>
+} {
+  const rows: Array<EntityTimelineQueryRow> = []
+  const adjacency: Array<TimelineRowAdjacency> = []
+  let previousRenderableRow: EntityTimelineQueryRow | undefined
+  let pendingCommentAdjacencyIndex: number | null = null
+
+  for (const row of timelineRows) {
+    if (isAttachmentManifest(row.manifest)) continue
+
+    if (pendingCommentAdjacencyIndex !== null) {
+      const pendingAdjacency = adjacency[pendingCommentAdjacencyIndex]!
+      adjacency[pendingCommentAdjacencyIndex] = {
+        ...pendingAdjacency,
+        nextRow: row,
+      }
+      pendingCommentAdjacencyIndex = null
+    }
+
+    if (row.comment) {
+      rows.push(row)
+      adjacency.push({
+        previousRow: previousRenderableRow,
+      })
+      pendingCommentAdjacencyIndex = adjacency.length - 1
+    }
+
+    previousRenderableRow = row
+  }
+
+  return { rows, adjacency }
+}
 
 /**
  * The default view: chat / timeline + message composer.
@@ -41,6 +136,7 @@ export function ChatView({
   entityStopped,
   isSpawning,
   tileId,
+  viewParams,
 }: ViewProps): React.ReactElement {
   // While `spawning`, the entity has no inbox yet — `connectUrl` is null
   // so `useEntityTimeline` doesn't try to subscribe and we render an empty
@@ -55,6 +151,7 @@ export function ChatView({
       entityStopped={entityStopped}
       isSpawning={isSpawning}
       tileId={tileId}
+      viewParams={viewParams}
     />
   )
 }
@@ -172,6 +269,84 @@ export function ChatLogView({
   )
 }
 
+export function CommentsView({
+  baseUrl,
+  entityUrl,
+  entity,
+  entityStopped,
+  isSpawning,
+  tileId,
+}: ViewProps): React.ReactElement {
+  const connectUrl = isSpawning ? null : entityUrl
+  const { timelineRows, entities, db, loading, error } = useEntityTimeline(
+    baseUrl || null,
+    connectUrl
+  )
+  const navigate = useNavigate()
+  const { helpers } = useWorkspace()
+  const canWrite = useEntityPermission(entity, `write`)
+  const [sentCommentSignal, setSentCommentSignal] = useState(0)
+  const [selectedCommentTarget, setSelectedCommentTarget] =
+    useState<SelectedCommentTarget | null>(null)
+  const commentsTimeline = useMemo(
+    () => buildCommentsTimeline(timelineRows),
+    [timelineRows]
+  )
+
+  useEffect(() => {
+    if (error && !isSpawning) {
+      void navigate({ to: `/` })
+    }
+  }, [error, navigate, isSpawning])
+
+  useEffect(() => {
+    setSelectedCommentTarget(null)
+  }, [connectUrl])
+
+  const openFullTimelineTarget = useCallback(
+    (target: CommentTarget) => {
+      helpers.setTileView(tileId, `chat`, {
+        viewParams: commentFocusViewParams(target),
+      })
+    },
+    [helpers, tileId]
+  )
+
+  return (
+    <>
+      <EntityTimeline
+        rows={commentsTimeline.rows}
+        rowAdjacency={commentsTimeline.adjacency}
+        loading={loading}
+        error={error}
+        entityStopped={entityStopped}
+        baseUrl={baseUrl}
+        cacheKey={`${baseUrl}${connectUrl ?? ``}:comments-view`}
+        tileId={tileId}
+        entityUrl={connectUrl}
+        entities={entities}
+        scrollToBottomSignal={sentCommentSignal}
+        onReplyToRow={setSelectedCommentTarget}
+        onCommentTargetClick={openFullTimelineTarget}
+      />
+      <MessageInput
+        db={db}
+        baseUrl={baseUrl}
+        entityUrl={connectUrl ?? ``}
+        disabled={entityStopped || !db}
+        writeDisabled={!canWrite}
+        disabledPlaceholder={!canWrite ? `Read-only` : undefined}
+        imageAttachmentsEnabled={false}
+        defaultMode="comment"
+        commentOnly
+        commentTarget={selectedCommentTarget}
+        onClearCommentTarget={() => setSelectedCommentTarget(null)}
+        onSend={() => setSentCommentSignal((value) => value + 1)}
+      />
+    </>
+  )
+}
+
 function GenericChatBody({
   baseUrl,
   entityUrl,
@@ -179,6 +354,7 @@ function GenericChatBody({
   entityStopped,
   isSpawning,
   tileId,
+  viewParams,
 }: {
   baseUrl: string
   entityUrl: string | null
@@ -186,6 +362,7 @@ function GenericChatBody({
   entityStopped: boolean
   isSpawning: boolean
   tileId: string
+  viewParams?: ViewProps[`viewParams`]
 }): React.ReactElement {
   const {
     timelineRows,
@@ -203,8 +380,11 @@ function GenericChatBody({
   const canSignal = permissions.signal
   const canFork = permissions.fork
   const navigate = useNavigate()
+  const { helpers } = useWorkspace()
   const [sentMessageSignal, setSentMessageSignal] = useState(0)
   const [stopPending, setStopPending] = useState(false)
+  const [selectedCommentTarget, setSelectedCommentTarget] =
+    useState<SelectedCommentTarget | null>(null)
   const { data: matchingEntityTypes = [] } = useLiveQuery(
     (query) => {
       if (!entityTypesCollection) return undefined
@@ -249,6 +429,29 @@ function GenericChatBody({
         : timelineRows,
     [inlinePendingInbox, timelineRows]
   )
+  const showComments = viewParams?.comments !== `hidden`
+  const displayTimelineRows = useMemo<Array<EntityTimelineQueryRow>>(
+    () =>
+      showComments
+        ? timelineRowsWithInlinePending
+        : timelineRowsWithInlinePending.filter((row) => !row.comment),
+    [showComments, timelineRowsWithInlinePending]
+  )
+  const focusTarget = useMemo(
+    () => decodeCommentTargetParam(viewParams?.[COMMENT_FOCUS_PARAM]),
+    [viewParams]
+  )
+  const clearFocusTarget = useCallback(() => {
+    if (!viewParams?.[COMMENT_FOCUS_PARAM]) return
+    const nextParams = { ...viewParams }
+    delete nextParams[COMMENT_FOCUS_PARAM]
+    helpers.setTileView(tileId, `chat`, {
+      viewParams: Object.keys(nextParams).length > 0 ? nextParams : undefined,
+    })
+  }, [helpers, tileId, viewParams])
+  useEffect(() => {
+    if (!showComments) setSelectedCommentTarget(null)
+  }, [showComments])
   const drawerPendingInbox = inlinePendingInbox
     ? visiblePendingInbox.slice(1)
     : visiblePendingInbox
@@ -309,7 +512,7 @@ function GenericChatBody({
     if (!runOffsets) return undefined
     const map = new Map<string, ForkFromHereAction>()
     let anchor: { rowKey: string; pointer: EventPointer } | null = null
-    for (const row of timelineRowsWithInlinePending) {
+    for (const row of displayTimelineRows) {
       if (row.run && row.run.status === `completed`) {
         const pointer = runOffsets.get(row.run.key)
         anchor = pointer ? { rowKey: row.$key, pointer } : null
@@ -339,25 +542,18 @@ function GenericChatBody({
       }
     }
     return map
-  }, [
-    timelineRowsWithInlinePending,
-    canFork,
-    db,
-    forkEntity,
-    entityUrl,
-    navigate,
-  ])
+  }, [displayTimelineRows, canFork, db, forkEntity, entityUrl, navigate])
 
   return (
     <>
       <GoalBanner db={db} />
       <EntityTimeline
-        rows={timelineRowsWithInlinePending}
+        rows={displayTimelineRows}
         loading={loading}
         error={error}
         entityStopped={entityStopped}
         baseUrl={baseUrl}
-        cacheKey={`${baseUrl}${entityUrl ?? ``}`}
+        cacheKey={`${baseUrl}${entityUrl ?? ``}:comments:${showComments ? `shown` : `hidden`}`}
         tileId={tileId}
         entityUrl={entityUrl}
         entities={entities}
@@ -365,6 +561,9 @@ function GenericChatBody({
         onStopGeneration={stopGeneration}
         stopPending={stopPending}
         forkFromHereByRunKey={forkFromHereByRunKey}
+        onReplyToRow={showComments ? setSelectedCommentTarget : undefined}
+        focusTarget={focusTarget}
+        onFocusTargetHandled={clearFocusTarget}
       />
       <MessageInput
         db={db}
@@ -384,6 +583,8 @@ function GenericChatBody({
           !generationActive &&
           visiblePendingInbox.length === 0
         }
+        commentTarget={showComments ? selectedCommentTarget : null}
+        onClearCommentTarget={() => setSelectedCommentTarget(null)}
         drawer={(pending) => (
           <EntityContextDrawer
             entity={entity}

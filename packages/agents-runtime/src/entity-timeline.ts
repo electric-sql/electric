@@ -30,6 +30,8 @@ import type {
 } from './comments-collection'
 import type { ManifestEntry, Wake, WakeMessage } from './types'
 
+export const TIMELINE_ORDER_FALLBACK = `zzzz:timeline-end`
+
 export type EntityTimelineState =
   | `pending`
   | `queued`

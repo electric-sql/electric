@@ -1,5 +1,6 @@
 import { Fragment, useState } from 'react'
 import {
+  Check,
   ChevronRight,
   Copy,
   Eye,
@@ -182,6 +183,8 @@ export function SplitMenu({
   const [showInspect, setShowInspect] = useState(false)
   const [showKillConfirm, setShowKillConfirm] = useState(false)
   const instanceName = entity ? getEntityDisplayTitle(entity).title : ``
+  const chatCommentsVisible = tile.viewParams?.comments !== `hidden`
+  const showDisplayOptions = hasEntity && tile.viewId === `chat`
 
   const close = () => setMenuOpen(false)
   /** Wraps a handler so it dispatches and then closes the menu. */
@@ -272,6 +275,15 @@ export function SplitMenu({
     void navigator.clipboard.writeText(url.toString())
   }
 
+  const setChatCommentsVisible = (visible: boolean) => {
+    const nextParams = { ...(tile.viewParams ?? {}) }
+    if (visible) delete nextParams.comments
+    else nextParams.comments = `hidden`
+    helpers.setTileView(tile.id, tile.viewId, {
+      viewParams: Object.keys(nextParams).length > 0 ? nextParams : undefined,
+    })
+  }
+
   // The menu and the dialogs are siblings — keeping them in the same
   // <Menu.Root> portal subtree caused focus / unmount races (Base UI
   // tears the menu popup down on close, and any dialog mounted inside
@@ -323,6 +335,39 @@ export function SplitMenu({
                   )}
                 />
               ))}
+
+              <Menu.Separator />
+            </>
+          )}
+
+          {showDisplayOptions && (
+            <>
+              <Menu.SubmenuRoot>
+                <Menu.SubmenuTrigger className={styles.submenuTrigger}>
+                  <UiIcon icon={Eye} size={2} />
+                  <Text size={2}>Display options</Text>
+                  <UiIcon
+                    icon={ChevronRight}
+                    size={2}
+                    className={styles.submenuChevron}
+                  />
+                </Menu.SubmenuTrigger>
+                <Menu.Content side="left" align="start">
+                  <Menu.Item
+                    onSelect={run(() =>
+                      setChatCommentsVisible(!chatCommentsVisible)
+                    )}
+                  >
+                    <UiIcon
+                      icon={Check}
+                      size={2}
+                      className={styles.optionCheck}
+                      data-visible={chatCommentsVisible ? `true` : `false`}
+                    />
+                    <Text size={2}>Show comments</Text>
+                  </Menu.Item>
+                </Menu.Content>
+              </Menu.SubmenuRoot>
 
               <Menu.Separator />
             </>
