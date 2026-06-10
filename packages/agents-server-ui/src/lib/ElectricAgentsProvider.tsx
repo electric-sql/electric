@@ -412,6 +412,11 @@ export interface SignalInput {
   payload?: unknown
 }
 
+export interface SetEntityTitleInput {
+  entityUrl: string
+  title: string
+}
+
 function parseErrorResponse(text: string): string | null {
   if (!text) return null
   try {
@@ -419,7 +424,12 @@ function parseErrorResponse(text: string): string | null {
       error?: { message?: unknown }
       message?: unknown
     }
-    if (typeof data.error?.message === `string`) return data.error.message
+    if (typeof data.error?.message === `string`) {
+      const code = (data.error as Record<string, unknown>).code
+      return typeof code === `string`
+        ? `${code}: ${data.error.message}`
+        : data.error.message
+    }
     if (typeof data.message === `string`) return data.message
   } catch {
     // Keep the raw response text below.
@@ -522,32 +532,42 @@ function createSpawnAction(
       if (dispatch_policy) body.dispatch_policy = dispatch_policy
       if (sandbox) body.sandbox = sandbox
 
-      const res = await serverFetch(entitySpawnApiUrl(baseUrl, type, name), {
-        method: `PUT`,
-        headers: { 'content-type': `application/json` },
-        body: JSON.stringify(body),
-      })
-      if (!res.ok) {
-        const text = await res.text().catch(() => ``)
-        let message = `Spawn failed (${res.status})`
-        try {
-          const data = JSON.parse(text) as Record<string, unknown>
-          if (data.message) {
-            message = String(data.message)
-          } else if (
-            typeof data.error === `object` &&
-            data.error !== null &&
-            `message` in data.error
-          ) {
-            message = String(data.error.message)
+      try {
+        const res = await serverFetch(entitySpawnApiUrl(baseUrl, type, name), {
+          method: `PUT`,
+          headers: { 'content-type': `application/json` },
+          body: JSON.stringify(body),
+        })
+        if (!res.ok) {
+          const text = await res.text().catch(() => ``)
+          let message = `Spawn failed (${res.status})`
+          try {
+            const data = JSON.parse(text) as Record<string, unknown>
+            if (data.message) {
+              message = String(data.message)
+            } else if (
+              typeof data.error === `object` &&
+              data.error !== null &&
+              `message` in data.error
+            ) {
+              message = String(data.error.message)
+            }
+          } catch {
+            if (text) message = text
           }
-        } catch {
-          if (text) message = text
+          throw new Error(message)
         }
-        throw new Error(message)
+        const data = (await res.json()) as { txid: number }
+        await entitiesCollection.utils.awaitTxId(data.txid, 10_000)
+        return { txid: data.txid }
+      } catch (err) {
+        showToast({
+          tone: `danger`,
+          title: `Spawn failed`,
+          description: err instanceof Error ? err.message : `Unknown error`,
+        })
+        throw err
       }
-      const data = (await res.json()) as { txid: number }
-      return { txid: data.txid }
     },
   })
 }
@@ -595,6 +615,7 @@ function createKillAction(
         throw new Error(text || `Kill failed (${res.status})`)
       }
       const data = (await res.json()) as { txid: number }
+      await entitiesCollection.utils.awaitTxId(data.txid, 10_000)
       return { txid: data.txid }
     },
   })
@@ -621,6 +642,48 @@ function optimisticStatusForSignal(
     case `SIGUSR`:
       return null
   }
+}
+
+function createSetEntityTitleAction(
+  baseUrl: string,
+  entitiesCollection: EntitiesCollection
+) {
+  return createOptimisticAction<SetEntityTitleInput>({
+    onMutate: ({ entityUrl, title }) => {
+      entitiesCollection.update(entityUrl, (draft) => {
+        draft.tags = { ...draft.tags, title }
+        draft.updated_at = Date.now()
+      })
+    },
+    mutationFn: async ({ entityUrl, title }) => {
+      try {
+        const res = await serverFetch(
+          entityApiUrl(baseUrl, entityUrl, `/tags/title`),
+          {
+            method: `POST`,
+            headers: { 'content-type': `application/json` },
+            body: JSON.stringify({ value: title }),
+          }
+        )
+        if (!res.ok) {
+          const text = await res.text().catch(() => ``)
+          throw new Error(
+            parseErrorResponse(text) || `Set title failed (${res.status})`
+          )
+        }
+        const data = (await res.json()) as { txid: number }
+        await entitiesCollection.utils.awaitTxId(data.txid, 10_000)
+        return { txid: data.txid }
+      } catch (err) {
+        showToast({
+          tone: `danger`,
+          title: `Set title failed`,
+          description: err instanceof Error ? err.message : `Unknown error`,
+        })
+        throw err
+      }
+    },
+  })
 }
 
 function createSignalAction(
@@ -671,6 +734,7 @@ function createSignalAction(
         throw new Error(text || `Signal failed (${res.status})`)
       }
       const data = (await res.json()) as { txid: number }
+      await entitiesCollection.utils.awaitTxId(data.txid, 10_000)
       return { txid: data.txid }
     },
   })
@@ -732,6 +796,7 @@ interface ElectricAgentsState {
   entityEffectivePermissionsCollection: EntityEffectivePermissionsCollection | null
   spawnEntity: ReturnType<typeof createSpawnAction> | null
   signalEntity: ReturnType<typeof createSignalAction> | null
+  setEntityTitle: ReturnType<typeof createSetEntityTitleAction> | null
   killEntity: ReturnType<typeof createKillAction> | null
   forkEntity: ReturnType<typeof createForkEntity> | null
 }
@@ -744,6 +809,7 @@ const ElectricAgentsContext = createContext<ElectricAgentsState>({
   entityEffectivePermissionsCollection: null,
   spawnEntity: null,
   signalEntity: null,
+  setEntityTitle: null,
   killEntity: null,
   forkEntity: null,
 })
@@ -783,6 +849,7 @@ export function ElectricAgentsProvider({
         entityEffectivePermissionsCollection: null,
         spawnEntity: null,
         signalEntity: null,
+        setEntityTitle: null,
         killEntity: null,
         forkEntity: null,
       }
@@ -803,6 +870,7 @@ export function ElectricAgentsProvider({
       entityEffectivePermissionsCollection: entityEffectivePermissions,
       spawnEntity: createSpawnAction(baseUrl, entities),
       signalEntity: createSignalAction(baseUrl, entities),
+      setEntityTitle: createSetEntityTitleAction(baseUrl, entities),
       killEntity: createKillAction(baseUrl, entities),
       forkEntity: createForkEntity(baseUrl),
     }

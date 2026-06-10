@@ -6,12 +6,42 @@
   flex: 1;
 }
 
+.titleNameButton {
+  display: inline-flex;
+  align-items: baseline;
+  flex-shrink: 1;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: text;
+}
+
 .titleName {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   flex-shrink: 1;
   min-width: 0;
+}
+
+.titleInput {
+  flex-shrink: 1;
+  min-width: 80px;
+  max-width: 100%;
+  padding: 0 2px;
+  border: 1px solid var(--ds-border-2);
+  border-radius: 4px;
+  background: var(--ds-surface-1);
+  color: var(--ds-text-1);
+  font: inherit;
+  font-size: var(--ds-text-base);
+  outline: none;
+}
+
+.titleInput:focus {
+  border-color: var(--ds-accent-9);
 }
 
 /* Wraps the id button + the trailing copy/check icon so the icon

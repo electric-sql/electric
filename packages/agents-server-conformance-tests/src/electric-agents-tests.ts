@@ -293,7 +293,7 @@ export function runElectricAgentsConformanceTests(
               body: JSON.stringify({ payload: { hello: true } }),
             }
           )
-          expect(res.status).toBe(204)
+          expect([200, 204]).toContain(res.status)
         })
         .expectWebhook()
         .respondDone()
@@ -1382,7 +1382,7 @@ export function runElectricAgentsConformanceTests(
               }),
             }
           )
-          expect(res.status).toBe(204)
+          expect([200, 204]).toContain(res.status)
         })
         .run()
     })
@@ -1552,7 +1552,7 @@ export function runElectricAgentsConformanceTests(
                         }),
                       }
                     )
-                    expect(res.status).toBe(204)
+                    expect([200, 204]).toContain(res.status)
                     ctx.history.push({
                       type: `message_sent`,
                       entityUrl: url,
@@ -2268,7 +2268,7 @@ export function runElectricAgentsConformanceTests(
         .run()
     })
 
-    test(`tag update on stopped entity is rejected without claim`, () => {
+    test(`tag update on stopped entity is rejected as not running`, () => {
       const id = Date.now()
       return electricAgents(config.baseUrl)
         .subscription(`/meta-stopped-agent-${id}/**`, `meta-stopped-sub-${id}`)
@@ -2288,7 +2288,7 @@ export function runElectricAgentsConformanceTests(
               body: JSON.stringify({ value: `value` }),
             }
           )
-          expect(res.status).toBe(401)
+          expect(res.status).toBe(409)
         })
         .run()
     })
@@ -2365,7 +2365,7 @@ export function runElectricAgentsConformanceTests(
               }),
             }
           )
-          expect(res.status).toBe(204)
+          expect([200, 204]).toContain(res.status)
         })
         .run()
     })
@@ -2602,7 +2602,7 @@ export function runElectricAgentsConformanceTests(
         .run()
     })
 
-    test(`tag update without token is rejected`, () => {
+    test(`tag update without legacy entity write token is authorized by principal permission`, () => {
       const id = Date.now()
       return electricAgents(config.baseUrl)
         .subscription(
@@ -2611,7 +2611,7 @@ export function runElectricAgentsConformanceTests(
         )
         .registerType({
           name: `auth-meta-notoken-agent-${id}`,
-          description: `Test tag update without token`,
+          description: `Test tag update without legacy entity write token`,
           creation_schema: { type: `object` },
         })
         .spawn(`auth-meta-notoken-agent-${id}`, `entity-1`)
@@ -2627,7 +2627,7 @@ export function runElectricAgentsConformanceTests(
               body: JSON.stringify({ value: `value` }),
             }
           )
-          expect(res.status).toBe(401)
+          expect(res.status).toBe(200)
         })
         .run()
     })
@@ -2676,7 +2676,7 @@ export function runElectricAgentsConformanceTests(
               body: JSON.stringify({ payload: `hi` }),
             }
           )
-          expect(res.status).toBe(204)
+          expect([200, 204]).toContain(res.status)
         })
         .expectWebhook()
         .respondDone()

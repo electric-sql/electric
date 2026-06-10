@@ -2148,10 +2148,12 @@ export async function processWake(
           await flushProducedWrites()
         },
         executeSend: (send) => executeSend(send),
-        doSetTag: (key, value) =>
-          serverClient.setTag(entityUrl, key, value, writeToken),
-        doDeleteTag: (key) =>
-          serverClient.deleteTag(entityUrl, key, writeToken),
+        doSetTag: async (key, value) => {
+          await serverClient.setTag(entityUrl, key, value, writeToken)
+        },
+        doDeleteTag: async (key) => {
+          await serverClient.deleteTag(entityUrl, key, writeToken)
+        },
       })
 
       let sleepRequested = false

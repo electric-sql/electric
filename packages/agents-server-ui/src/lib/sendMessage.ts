@@ -145,6 +145,13 @@ export function createQueuePositionBetween(
   return createInitialQueuePosition()
 }
 
+function readRequiredTxid(data: { txid?: unknown }, label: string): string {
+  if (typeof data.txid !== `string`) {
+    throw new Error(`${label} returned an invalid txid response`)
+  }
+  return data.txid
+}
+
 function readSendError(status: number, body: string): Error {
   let message = `Send failed (${status})`
   if (body) {
@@ -168,10 +175,13 @@ export async function uploadMessageAttachments({
   entityUrl: string
   key: string
   attachments: Array<File> | undefined
-}): Promise<Array<string>> {
-  if (!attachments || attachments.length === 0) return []
+}): Promise<{ ids: Array<string>; txids: Array<string> }> {
+  if (!attachments || attachments.length === 0) {
+    return { ids: [], txids: [] }
+  }
 
   const uploadedIds: Array<string> = []
+  const txids: Array<string> = []
   try {
     for (const file of attachments) {
       const id = createClientAttachmentId()
@@ -205,7 +215,11 @@ export async function uploadMessageAttachments({
         const body = await res.text().catch(() => ``)
         throw readSendError(res.status, body)
       }
-      const data = (await res.json()) as { attachment?: { id?: unknown } }
+      const data = (await res.json()) as {
+        txid?: unknown
+        attachment?: { id?: unknown }
+      }
+      txids.push(readRequiredTxid(data, `Attachment upload`))
       if (data.attachment?.id !== id) {
         throw new Error(`Attachment upload returned an invalid response`)
       }
@@ -215,7 +229,7 @@ export async function uploadMessageAttachments({
     throw error
   }
 
-  return uploadedIds
+  return { ids: uploadedIds, txids }
 }
 
 async function deleteUploadedAttachments({
@@ -264,13 +278,13 @@ export async function sendEntityMessage({
   position?: string
   attachments?: Array<File>
   from?: string
-}): Promise<void> {
+}): Promise<{ txid: string; attachmentTxids: Array<string> }> {
   const url = entityApiUrl(baseUrl, entityUrl, `/send`)
   const sender = await resolveSenderPrincipalUrl(
     url,
     from ?? getConfiguredActivePrincipal() ?? ``
   )
-  const uploadedAttachmentIds = await uploadMessageAttachments({
+  const uploadedAttachments = await uploadMessageAttachments({
     baseUrl,
     entityUrl,
     key,
@@ -294,11 +308,14 @@ export async function sendEntityMessage({
       const body = await res.text().catch(() => ``)
       throw readSendError(res.status, body)
     }
+    const data = (await res.json()) as { txid?: unknown }
+    const txid = readRequiredTxid(data, `Send`)
+    return { txid, attachmentTxids: uploadedAttachments.txids }
   } catch (error) {
     await deleteUploadedAttachments({
       baseUrl,
       entityUrl,
-      ids: uploadedAttachmentIds,
+      ids: uploadedAttachments.ids,
     })
     throw error
   }
@@ -386,7 +403,7 @@ export function createSendMessageAction({
     },
     mutationFn: async ({ payload, type, key, mode, position, attachments }) => {
       if (attachments && attachments.length > 0) {
-        await sendEntityMessage({
+        const { txid, attachmentTxids } = await sendEntityMessage({
           baseUrl,
           entityUrl,
           payload,
@@ -397,6 +414,10 @@ export function createSendMessageAction({
           attachments,
           from,
         })
+        await Promise.all([
+          ...attachmentTxids.map((id) => db.utils.awaitTxId(id, 10_000)),
+          db.utils.awaitTxId(txid, 10_000),
+        ])
         return
       }
       const url = entityApiUrl(baseUrl, entityUrl, `/send`)
@@ -420,6 +441,8 @@ export function createSendMessageAction({
         const body = await res.text().catch(() => ``)
         throw readSendError(res.status, body)
       }
+      const data = (await res.json()) as { txid?: unknown }
+      await db.utils.awaitTxId(readRequiredTxid(data, `Send`), 10_000)
     },
   })
 
@@ -539,6 +562,8 @@ export function createUpdateInboxMessageAction({
         const body = await res.text().catch(() => ``)
         throw readSendError(res.status, body)
       }
+      const data = (await res.json()) as { txid?: unknown }
+      await db.utils.awaitTxId(readRequiredTxid(data, `Inbox update`), 10_000)
     },
   })
 }
@@ -565,6 +590,8 @@ export function createDeleteInboxMessageAction({
         const body = await res.text().catch(() => ``)
         throw readSendError(res.status, body)
       }
+      const data = (await res.json()) as { txid?: unknown }
+      await db.utils.awaitTxId(readRequiredTxid(data, `Inbox delete`), 10_000)
     },
   })
 }
@@ -600,6 +627,8 @@ export function createSteerInboxMessageAction({
         const body = await res.text().catch(() => ``)
         throw readSendError(res.status, body)
       }
+      const data = (await res.json()) as { txid?: unknown }
+      await db.utils.awaitTxId(readRequiredTxid(data, `Inbox steer`), 10_000)
     },
   })
 }
