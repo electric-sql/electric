@@ -61,4 +61,19 @@ describe(`installDurableStreamsFetchCache`, () => {
     expect(warnSpy).toHaveBeenCalledTimes(2)
     warnSpy.mockRestore()
   })
+
+  test(`retries installation after dispatcher setup fails`, async () => {
+    const { installDurableStreamsFetchCache } = await import(
+      `../src/durable-streams-cache.js`
+    )
+    const error = new Error(`boom`)
+    setGlobalDispatcher.mockImplementationOnce(() => {
+      throw error
+    })
+
+    expect(() => installDurableStreamsFetchCache()).toThrow(error)
+    installDurableStreamsFetchCache()
+
+    expect(setGlobalDispatcher).toHaveBeenCalledTimes(2)
+  })
 })

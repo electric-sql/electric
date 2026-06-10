@@ -27,8 +27,6 @@ export function installDurableStreamsFetchCache(
     )
     return
   }
-  installed = true
-
   const store =
     options.store === `sqlite` || options.sqliteLocation
       ? new cacheStores.SqliteCacheStore({
@@ -51,4 +49,6 @@ export function installDurableStreamsFetchCache(
       })
     )
   )
+
+  installed = true
 }
