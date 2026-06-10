@@ -494,12 +494,21 @@ export function toPublicEntity(
   }
 }
 
+/** Per-collection config making an entity-state collection writable via the router. */
+export interface WritableCollectionConfig {
+  /** Durable-stream event type for this collection, e.g. `state:comments`. */
+  type: string
+  /** Row column the client materializes the principal header into. */
+  principalColumn: string
+}
+
 export interface ElectricAgentsEntityType {
   name: string
   description: string
   creation_schema?: Record<string, unknown>
   inbox_schemas?: Record<string, Record<string, unknown>>
   state_schemas?: Record<string, Record<string, unknown>>
+  writable_collections?: Record<string, WritableCollectionConfig>
   slash_commands?: Array<SlashCommandDefinition>
   serve_endpoint?: string
   default_dispatch_policy?: DispatchPolicy
@@ -514,6 +523,7 @@ export interface RegisterEntityTypeRequest {
   creation_schema?: Record<string, unknown>
   inbox_schemas?: Record<string, Record<string, unknown>>
   state_schemas?: Record<string, Record<string, unknown>>
+  writable_collections?: Record<string, WritableCollectionConfig>
   slash_commands?: Array<SlashCommandDefinition>
   serve_endpoint?: string
   default_dispatch_policy?: DispatchPolicy
