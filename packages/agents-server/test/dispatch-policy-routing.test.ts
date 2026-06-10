@@ -24,7 +24,7 @@ function entity(
     url: `/chat/${id}`,
     type: `chat`,
     status: `idle`,
-    streams: { main: `/chat/${id}/main`, error: `/chat/${id}/error` },
+    streams: { main: `/chat/${id}/main` },
     subscription_id: `chat-handler`,
     dispatch_policy: dispatchPolicy,
     write_token: `write-token`,
@@ -43,11 +43,16 @@ function buildContext(overrides: Partial<TenantContext> = {}): TenantContext {
   }
   return {
     service: `tenant-test`,
+    // dev-local built-in system principal bypasses permission checks
+    // (these tests assert dispatch wiring, not authz; permission
+    // enforcement landed on main after this test was last touched).
+    // The runner mock below has its owner_principal set to the same
+    // url so assertDispatchPolicyAllowed's owner check passes too.
     principal: {
-      kind: `user`,
-      id: `owner@example.com`,
-      key: `user:owner@example.com`,
-      url: `/principal/user%3Aowner%40example.com`,
+      kind: `system`,
+      id: `dev-local`,
+      key: `system:dev-local`,
+      url: `/principal/system:dev-local`,
     },
     publicUrl: `http://server`,
     durableStreamsUrl: `http://durable.local`,
@@ -65,12 +70,14 @@ function buildContext(overrides: Partial<TenantContext> = {}): TenantContext {
           updated_at: new Date(0).toISOString(),
         })),
         getEntity: vi.fn(async () => null),
+        hasEntityPermission: vi.fn(async () => true),
+        hasEntityTypePermission: vi.fn(async () => true),
         updateEntityDispatchPolicy: vi.fn(async (_url, policy) =>
           entity(policy)
         ),
         getRunner: vi.fn(async () => ({
           id: `runner-1`,
-          owner_principal: `/principal/user%3Aowner%40example.com`,
+          owner_principal: `/principal/system:dev-local`,
           label: `Local runner`,
           kind: `local`,
           admin_status: `enabled`,
@@ -210,7 +217,7 @@ describe(`dispatch policy routing`, () => {
       })
     )
     expect(ctx.entityManager.send).toHaveBeenCalledWith(`/chat/one`, {
-      from: `/principal/user%3Aowner%40example.com`,
+      from: `/principal/system:dev-local`,
       payload: `hello`,
     })
     expect(ctx.streamClient.putSubscription).toHaveBeenCalledWith(
@@ -250,7 +257,7 @@ describe(`dispatch policy routing`, () => {
       })
     )
     expect(ctx.entityManager.send).toHaveBeenCalledWith(`/chat/one`, {
-      from: `/principal/user%3Aowner%40example.com`,
+      from: `/principal/system:dev-local`,
       payload: `hello`,
     })
     expect(

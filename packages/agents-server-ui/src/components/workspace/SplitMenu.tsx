@@ -18,6 +18,10 @@ import { useNavigate } from '@tanstack/react-router'
 import { useWorkspace, listTiles } from '../../hooks/useWorkspace'
 import { useElectricAgents } from '../../lib/ElectricAgentsProvider'
 import { usePinnedEntities } from '../../hooks/usePinnedEntities'
+import {
+  useEntityPermissions,
+  type EntityPermission,
+} from '../../hooks/useEntityPermission'
 import { listViews } from '../../lib/workspace/viewRegistry'
 import { JsonInspectDialog } from '../JsonInspectDialog'
 import type { EntityViewDefinition } from '../../lib/workspace/viewRegistry'
@@ -117,6 +121,11 @@ const SIGNAL_OPTION_GROUPS: ReadonlyArray<
   ],
 ]
 
+const TILE_MENU_PERMISSIONS: ReadonlyArray<EntityPermission> = [
+  `fork`,
+  `signal`,
+]
+
 /**
  * Per-tile workspace menu. Shown in the tile header (the `…` button)
  * and contains, in order:
@@ -154,6 +163,9 @@ export function SplitMenu({
 }): React.ReactElement {
   const { workspace, helpers } = useWorkspace()
   const { forkEntity, killEntity, signalEntity } = useElectricAgents()
+  const permissions = useEntityPermissions(entity, TILE_MENU_PERMISSIONS)
+  const canFork = permissions.fork
+  const canSignal = permissions.signal
   const { pinnedUrls, togglePin } = usePinnedEntities()
   const navigate = useNavigate()
   const hasEntity = entity !== null && tile.entityUrl !== null
@@ -185,7 +197,7 @@ export function SplitMenu({
   const availableViews = entity ? listViews(entity) : []
 
   const handleFork = () => {
-    if (!forkEntity || entityUrl === null) return
+    if (!canFork || !forkEntity || entityUrl === null) return
     void forkEntity(entityUrl)
       .then((root) =>
         navigate({
@@ -197,13 +209,13 @@ export function SplitMenu({
   }
 
   const handleKill = () => {
-    if (!killEntity || entityUrl === null) return
+    if (!canSignal || !killEntity || entityUrl === null) return
     const tx = killEntity(entityUrl)
     tx.isPersisted.promise.catch(() => {})
   }
 
   const handleStopImmediately = () => {
-    if (!signalEntity || entityUrl === null) return
+    if (!canSignal || !signalEntity || entityUrl === null) return
     const stopTx = signalEntity({
       entityUrl,
       signal: `SIGSTOP`,
@@ -222,7 +234,7 @@ export function SplitMenu({
   }
 
   const handleSignal = (signal: EntitySignal) => {
-    if (!signalEntity || entityUrl === null) return
+    if (!canSignal || !signalEntity || entityUrl === null) return
     const tx = signalEntity({
       entityUrl,
       signal,
@@ -358,14 +370,20 @@ export function SplitMenu({
             </Menu.Item>
           )}
           {hasEntity && entity && forkEntity && !entity.parent && (
-            <Menu.Item onSelect={handleFork} disabled={entityTerminal}>
+            <Menu.Item
+              onSelect={handleFork}
+              disabled={entityTerminal || !canFork}
+            >
               <UiIcon icon={GitFork} size={2} />
               <Text size={2}>Fork subtree</Text>
             </Menu.Item>
           )}
           {hasEntity && entity && !entityTerminal && signalEntity && (
             <Menu.SubmenuRoot>
-              <Menu.SubmenuTrigger className={styles.submenuTrigger}>
+              <Menu.SubmenuTrigger
+                className={styles.submenuTrigger}
+                disabled={!canSignal}
+              >
                 <UiIcon icon={Radio} size={2} />
                 <Text size={2}>Send signal</Text>
                 <UiIcon
@@ -421,7 +439,10 @@ export function SplitMenu({
           {hasEntity && entity && !entityTerminal && killEntity && (
             <>
               <Menu.Separator />
-              <Menu.Item onSelect={() => setShowKillConfirm(true)}>
+              <Menu.Item
+                onSelect={() => setShowKillConfirm(true)}
+                disabled={!canSignal}
+              >
                 <UiIcon icon={OctagonX} size={2} />
                 <Text size={2}>Kill entity</Text>
               </Menu.Item>

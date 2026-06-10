@@ -47,7 +47,7 @@ The dispatcher exposes a `dispatch` tool. When the LLM classifies an incoming me
 
 The tool then:
 
-1. Spawns the requested entity type with `wake: 'runFinished'`.
+1. Spawns the requested entity type with `wake: { on: 'runFinished', includeResponse: true }`.
 2. Returns immediately with a status message. The dispatcher is re-invoked when the specialist finishes.
 
 ## Dispatch tool
@@ -59,7 +59,7 @@ await ctx.spawn(
   type === `worker` ? { systemPrompt, tools: [`read`] } : { systemPrompt },
   {
     initialMessage: task,
-    wake: `runFinished`,
+    wake: { on: `runFinished`, includeResponse: true },
   }
 )
 
@@ -67,7 +67,7 @@ return {
   content: [
     {
       type: `text` as const,
-      text: `Dispatched to "${type}" specialist (${id}). You will be woken when it finishes.`,
+      text: `Dispatched to "${type}" specialist (${id}). The dispatcher will continue when it finishes.`,
     },
   ],
   details: { id, type },

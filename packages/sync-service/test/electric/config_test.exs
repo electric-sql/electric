@@ -57,6 +57,16 @@ defmodule Electric.ConfigTest do
       )
     end
 
+    test "configuration/1 exposes the curated stack metrics to Prometheus", ctx do
+      config =
+        Electric.Application.configuration(
+          Keyword.take(ctx.initial_config, [:replication_connection_opts])
+        )
+
+      assert config[:telemetry_opts][:additional_prometheus_metrics] ==
+               Electric.StackSupervisor.Telemetry.prometheus_metrics()
+    end
+
     test "api/0" do
       Electric.Application.api()
     end

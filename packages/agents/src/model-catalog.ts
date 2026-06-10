@@ -4,6 +4,7 @@ import {
   MOONSHOT_PROVIDER,
   detectAvailableProviders,
   getMoonshotApiKey,
+  getMoonshotModel,
   getMoonshotModels,
   readCodexAccessToken,
 } from '@electric-ax/agents-runtime'
@@ -150,6 +151,30 @@ function knownModelsForProvider(provider: BuiltinModelProvider) {
     : getModels(
         provider as Exclude<BuiltinModelProvider, typeof MOONSHOT_PROVIDER>
       )
+}
+
+export function resolveBuiltinModelContextWindow(
+  modelConfig: Pick<BuiltinAgentModelConfig, `model` | `provider`>
+): number | null {
+  const modelId = String(modelConfig.model)
+
+  if (modelConfig.provider === MOONSHOT_PROVIDER) {
+    return getMoonshotModel(modelId)?.contextWindow ?? null
+  }
+
+  if (!modelConfig.provider) return null
+
+  return (
+    knownModelsForProvider(modelConfig.provider as BuiltinModelProvider).find(
+      (model) => model.id === modelId
+    )?.contextWindow ?? null
+  )
+}
+
+export function resolveBuiltinModelSourceBudget(
+  modelConfig: Pick<BuiltinAgentModelConfig, `model` | `provider`>
+): number {
+  return resolveBuiltinModelContextWindow(modelConfig) ?? 100_000
 }
 
 function choiceForKnownModel(

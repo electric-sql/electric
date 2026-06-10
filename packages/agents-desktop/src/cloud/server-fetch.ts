@@ -9,9 +9,10 @@ import type {
   DesktopServerFetchResponse,
 } from '../shared/types'
 import {
+  buildCloudAuthHeaders,
   buildSavedServerHeaders,
   type CloudAuthHeaderInjectionDeps,
-} from './auth-injection'
+} from './auth-headers'
 import { findSavedServerForUrl } from './server-matching'
 
 export type DesktopServerFetchDeps = CloudAuthHeaderInjectionDeps
@@ -43,7 +44,7 @@ function assertDesktopServerFetchAllowed(
     throw new Error(`Desktop server fetch only supports mutating requests`)
   }
   const server = findSavedServerForUrl(deps.getServers(), url)
-  if (!server || server.source === `electric-cloud`) {
+  if (!server) {
     throw new Error(
       `Desktop server fetch is only available for saved local servers`
     )
@@ -74,10 +75,13 @@ export async function desktopServerFetch(
   request: unknown
 ): Promise<DesktopServerFetchResponse> {
   const checked = assertDesktopServerFetchAllowed(deps, request)
+  const cloudHeaders = buildCloudAuthHeaders(deps, checked.url)
   const headers = mergeHeaders(
     buildSavedServerHeaders(deps, checked.url) ?? undefined,
-    checked.headers
+    checked.headers,
+    cloudHeaders ?? undefined
   )
+  if (!headers) throw new Error(`No headers available for desktop server fetch`)
   const response = await fetch(checked.url, {
     method: checked.method,
     headers,

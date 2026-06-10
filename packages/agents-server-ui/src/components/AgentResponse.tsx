@@ -1,4 +1,4 @@
-import { Check, Copy } from 'lucide-react'
+import { Check, Copy, GitFork } from 'lucide-react'
 import {
   memo,
   useEffect,
@@ -27,8 +27,11 @@ import { TimeText } from './TimeText'
 import { ThinkingIndicator } from './ThinkingIndicator'
 import { ElapsedTime } from './ElapsedTime'
 import { ReasoningSection, type ReasoningEntry } from './ReasoningSection'
+import { TokenUsage } from './TokenUsage'
+
 import { formatElapsedDuration, toMillis } from '../lib/formatTime'
 import styles from './AgentResponse.module.css'
+import type { ForkFromHereAction } from './UserMessage'
 import type {
   EntityTimelineContentItem,
   EntityTimelineRunRow,
@@ -384,6 +387,7 @@ export const AgentResponseLive = memo(function AgentResponseLive({
   isStreaming,
   timestamp,
   renderWidth = 0,
+  forkFromHere,
   onSearchTextChange,
 }: {
   rowKey: string
@@ -391,6 +395,7 @@ export const AgentResponseLive = memo(function AgentResponseLive({
   isStreaming: boolean
   timestamp?: number | null
   renderWidth?: number
+  forkFromHere?: ForkFromHereAction
   onSearchTextChange?: (rowKey: string, text: string) => void
 }): React.ReactElement {
   const { data: items = [] } = useLiveQuery(
@@ -439,6 +444,23 @@ export const AgentResponseLive = memo(function AgentResponseLive({
         })),
     [reasoningRows]
   )
+  // Token totals are aggregated in the query layer
+  // (`createEntityTimelineQuery`) — see the `runTokensSource`
+  // leftJoin in `entity-timeline.ts`. The query sums each step's
+  // `input_tokens` / `output_tokens` and surfaces a single
+  // `{ input?, output? } | undefined` row that updates at step
+  // boundaries (the LLM SDK only emits `usage` at end-of-step). We
+  // coerce `null` (TanStack DB's "no value" for a side whose
+  // `count` was zero) to `undefined` so `TokenUsage` can use a
+  // single `!= null` check.
+  const liveTokens = useMemo(() => {
+    if (!run.tokens) return null
+    const input = run.tokens.input ?? undefined
+    const output = run.tokens.output ?? undefined
+    if (input === undefined && output === undefined) return null
+    return { input, output }
+  }, [run.tokens])
+
   const sortedItems = useMemo(
     () => [...items].sort(compareLiveRunItems),
     [items]
@@ -472,6 +494,7 @@ export const AgentResponseLive = memo(function AgentResponseLive({
     isStreaming && !done && !failureText && !lastTextHasContent
   const showTimestamp = timestamp != null && !isStreaming
   const hasLeadingMeta = showThinking || done || Boolean(failureText)
+  const showCopyAction = Boolean((done || failureText) && copyText)
   const [copied, setCopied] = useState(false)
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -579,9 +602,24 @@ export const AgentResponseLive = memo(function AgentResponseLive({
             <ElapsedTime ts={timestamp} enabled={isStreaming} />
           </>
         )}
+        {/* Token usage — sums every step's `input_tokens` /
+            `output_tokens` as they land. Updates at step boundaries
+            (the LLM SDK only emits `usage` at end-of-step), so for a
+            single-turn call it appears once at done; for tool-using
+            runs it jumps as each step completes. */}
+        {liveTokens && (
+          <>
+            {(hasLeadingMeta || (isStreaming && timestamp != null)) && (
+              <Text size={1} tone="muted" className={styles.metaSeparator}>
+                ·
+              </Text>
+            )}
+            <TokenUsage input={liveTokens.input} output={liveTokens.output} />
+          </>
+        )}
         {showTimestamp && (
           <>
-            {hasLeadingMeta && (
+            {(hasLeadingMeta || liveTokens) && (
               <Text size={1} tone="muted" className={styles.metaSeparator}>
                 ·
               </Text>
@@ -589,39 +627,88 @@ export const AgentResponseLive = memo(function AgentResponseLive({
             <TimeText ts={timestamp} className={styles.timeText} />
           </>
         )}
-        {(done || failureText) && copyText && (
-          <Tooltip content={copied ? `Copied!` : `Copy response`} side="top">
-            <IconButton
-              size={1}
-              variant="ghost"
-              tone="neutral"
-              className={styles.copyButton}
-              onClick={() => void copyResponseText()}
-              aria-label="Copy response text"
-            >
-              {copied ? (
-                <Icon icon={Check} size={1} />
-              ) : (
-                <Icon icon={Copy} size={1} />
-              )}
-            </IconButton>
-          </Tooltip>
-        )}
+        <ResponseMetaActions
+          showCopy={showCopyAction}
+          copied={copied}
+          onCopy={() => void copyResponseText()}
+          forkFromHere={done ? forkFromHere : undefined}
+        />
       </Stack>
     </Stack>
   )
 })
+
+function ResponseMetaActions({
+  showCopy,
+  copied,
+  onCopy,
+  forkFromHere,
+}: {
+  showCopy: boolean
+  copied: boolean
+  onCopy: () => void
+  forkFromHere?: ForkFromHereAction
+}): React.ReactElement | null {
+  const showFork = forkFromHere !== undefined
+  if (!showCopy && !showFork) return null
+
+  const forkDisabled = forkFromHere?.disabled === true || !forkFromHere?.onFork
+  const forkLabel = forkDisabled ? `Fork permission required` : `Fork from here`
+
+  return (
+    <span className={styles.metaActions}>
+      {showFork && (
+        <Tooltip content={forkLabel} side="top">
+          <span className={styles.tooltipTrigger}>
+            <IconButton
+              size={1}
+              variant="ghost"
+              tone="neutral"
+              className={styles.metaActionButton}
+              disabled={forkDisabled}
+              onClick={forkFromHere?.onFork}
+              aria-label="Fork from here"
+              title={forkLabel}
+            >
+              <Icon icon={GitFork} size={1} />
+            </IconButton>
+          </span>
+        </Tooltip>
+      )}
+      {showCopy && (
+        <Tooltip content={copied ? `Copied!` : `Copy response`} side="top">
+          <IconButton
+            size={1}
+            variant="ghost"
+            tone="neutral"
+            className={styles.metaActionButton}
+            onClick={onCopy}
+            aria-label="Copy response text"
+          >
+            {copied ? (
+              <Icon icon={Check} size={1} />
+            ) : (
+              <Icon icon={Copy} size={1} />
+            )}
+          </IconButton>
+        </Tooltip>
+      )}
+    </span>
+  )
+}
 
 export const AgentResponse = memo(function AgentResponse({
   section,
   isStreaming,
   timestamp,
   renderWidth = 0,
+  forkFromHere,
 }: {
   section: AgentResponseSection
   isStreaming: boolean
   timestamp?: number | null
   renderWidth?: number
+  forkFromHere?: ForkFromHereAction
 }): React.ReactElement {
   const canCache = !isStreaming && section.done === true
   const [copied, setCopied] = useState(false)
@@ -663,6 +750,7 @@ export const AgentResponse = memo(function AgentResponse({
     isStreaming && !section.done && !section.error && !lastTextHasContent
   const showTimestamp = timestamp != null && !isStreaming
   const hasLeadingMeta = showThinking || section.done || Boolean(section.error)
+  const showCopyAction = Boolean(section.done && copyText)
 
   // Mirror of the `sawStreamingRef` / `finalDurationMs` capture from
   // `AgentResponseLive` — see the comment there for why we only
@@ -729,13 +817,29 @@ export const AgentResponse = memo(function AgentResponse({
             <ElapsedTime ts={timestamp} enabled={isStreaming} />
           </>
         )}
+        {/* Token usage — `section.tokens` is the sum across the
+            run's steps, materialized at section-build time. Mirrors
+            the live render above so cached + live look identical. */}
+        {section.tokens && (
+          <>
+            {(hasLeadingMeta || (isStreaming && timestamp != null)) && (
+              <Text size={1} tone="muted" className={styles.metaSeparator}>
+                ·
+              </Text>
+            )}
+            <TokenUsage
+              input={section.tokens.input}
+              output={section.tokens.output}
+            />
+          </>
+        )}
         {/* Timestamp only on a settled response — while the agent is
             still streaming we let `ThinkingIndicator` + `ElapsedTime`
             own the meta row so it doesn't sit inline with a timestamp
             that hasn't really happened yet. */}
         {showTimestamp && (
           <>
-            {hasLeadingMeta && (
+            {(hasLeadingMeta || section.tokens) && (
               <Text size={1} tone="muted" className={styles.metaSeparator}>
                 ·
               </Text>
@@ -743,36 +847,12 @@ export const AgentResponse = memo(function AgentResponse({
             <TimeText ts={timestamp} className={styles.timeText} />
           </>
         )}
-        {section.done && copyText && (
-          <Tooltip content={copied ? `Copied!` : `Copy response`} side="top">
-            <IconButton
-              size={1}
-              variant="ghost"
-              tone="neutral"
-              className={styles.copyButton}
-              onClick={() => void copyResponseText()}
-              aria-label="Copy response text"
-            >
-              {copied ? (
-                <Icon icon={Check} size={1} />
-              ) : (
-                <Icon icon={Copy} size={1} />
-              )}
-            </IconButton>
-          </Tooltip>
-        )}
-        {section.done && copyText && (
-          <button
-            type="button"
-            className={styles.copyButton}
-            onClick={() => void copyResponseText()}
-            aria-label="Copy response text"
-            title={copied ? `Copied` : `Copy all response text`}
-          >
-            {copied ? <Check size={12} /> : <Copy size={12} />}
-            <span>{copied ? `Copied` : `Copy`}</span>
-          </button>
-        )}
+        <ResponseMetaActions
+          showCopy={showCopyAction}
+          copied={copied}
+          onCopy={() => void copyResponseText()}
+          forkFromHere={section.done ? forkFromHere : undefined}
+        />
       </Stack>
     </Stack>
   )

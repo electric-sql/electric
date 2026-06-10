@@ -4,6 +4,7 @@ import {
   Animated,
   Easing,
   Keyboard,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -19,21 +20,34 @@ import { useEntityTimeline } from '@electric-ax/agents-server-ui/src/hooks/useEn
 import {
   createDeleteInboxMessageAction,
   createQueuePositionBetween,
-  createSendMessageAction,
+  createSendComposerInputAction,
   createSteerInboxMessageAction,
   createUpdateInboxMessageAction,
   readTextPayload,
 } from '@electric-ax/agents-server-ui/src/lib/sendMessage'
 import type { OptimisticInboxMessage } from '@electric-ax/agents-server-ui/src/lib/sendMessage'
-import type { EntityTimelineQueryRow } from '@electric-ax/agents-runtime/client'
+import { serializeComposerInput } from '@electric-ax/agents-runtime/client'
+import type {
+  EntityTimelineQueryRow,
+  SlashCommandRow,
+} from '@electric-ax/agents-runtime/client'
 import { Header, HeaderBackButton } from '../components/Header'
 import { Icon } from '../components/Icon'
+import {
+  renderComposerHighlights,
+  SlashCommandMenu,
+  useSlashAutocomplete,
+} from '../components/NativeComposer'
 import { Screen } from '../components/Screen'
 import { SessionMenu } from '../components/SessionMenu'
 import { StatusDot } from '../components/StatusDot'
 import { TopBarIconButton } from '../components/TopBarIconButton'
 import { useAgents } from '../lib/AgentsProvider'
 import { getEntityDisplayTitle } from '../lib/agentsClient'
+import {
+  useEntityPermissions,
+  type EntityPermission,
+} from '../lib/useEntityPermissions'
 import { useTokens } from '../lib/ThemeProvider'
 import { fontSize, lineHeight, radii, spacing } from '../lib/theme'
 import type { Tokens } from '../lib/theme'
@@ -45,8 +59,8 @@ export const CHAT_COMPOSER_OVERLAP = 20
 
 const COMPOSER_INPUT_MIN_HEIGHT = 40
 const COMPOSER_INPUT_MAX_HEIGHT = 200
-const COMPOSER_MIN_CARD_HEIGHT = 48
 const INLINE_QUEUED_TIMEOUT_MS = 15_000
+const SESSION_PERMISSIONS: ReadonlyArray<EntityPermission> = [`write`, `signal`]
 
 type EntityStreamState = ReturnType<typeof useEntityTimeline>
 type EntityStreamDB = EntityStreamState[`db`]
@@ -161,6 +175,9 @@ export function SessionScreen({
     [entitiesCollection, entityUrl]
   )
   const entity = matches.at(0) ?? null
+  const permissions = useEntityPermissions(entity, SESSION_PERMISSIONS)
+  const canWrite = permissions.write
+  const canSignal = permissions.signal
   const streamEntityUrl =
     view === `chat` && entity?.status !== `spawning` ? entityUrl : null
   const { timelineRows, pendingInbox, db, generationActive } =
@@ -292,6 +309,7 @@ export function SessionScreen({
       opts: { stopPending?: boolean } = {}
     ): Promise<void> => {
       if (!entity) return
+      if (!canSignal) return
       if (opts.stopPending) setStopPending(true)
       setSignalError(null)
       try {
@@ -301,18 +319,19 @@ export function SessionScreen({
         setSignalError(err instanceof Error ? err.message : String(err))
       }
     },
-    [entity, entityUrl, signalEntity]
+    [canSignal, entity, entityUrl, signalEntity]
   )
 
   const stopGeneration = useCallback((): void => {
-    if (!generationActive || stopPending) return
+    if (!canSignal || !generationActive || stopPending) return
     void sendSignal(`SIGINT`, `Stopped from mobile chat UI`, {
       stopPending: true,
     })
-  }, [generationActive, sendSignal, stopPending])
+  }, [canSignal, generationActive, sendSignal, stopPending])
 
   const stopImmediately = useCallback(async (): Promise<void> => {
     if (!entity) return
+    if (!canSignal) return
     setSignalError(null)
     try {
       await signalEntity({
@@ -328,13 +347,14 @@ export function SessionScreen({
     } catch (err) {
       setSignalError(err instanceof Error ? err.message : String(err))
     }
-  }, [entity, entityUrl, signalEntity])
+  }, [canSignal, entity, entityUrl, signalEntity])
 
   const sendMenuSignal = useCallback(
     (signal: EntitySignal): void => {
+      if (!canSignal) return
       void sendSignal(signal, `Sent from mobile session menu`)
     },
-    [sendSignal]
+    [canSignal, sendSignal]
   )
 
   const title = entity
@@ -373,6 +393,8 @@ export function SessionScreen({
           generationActive={generationActive}
           stopPending={stopPending}
           onStop={stopGeneration}
+          writeDisabled={!canWrite}
+          stopDisabled={!canSignal}
           disabled={
             !db ||
             entity?.status === `stopped` ||
@@ -388,7 +410,9 @@ export function SessionScreen({
                   ? `Starting...`
                   : !db
                     ? `Connecting...`
-                    : `Send a message...`
+                    : !canWrite
+                      ? `Read-only`
+                      : `Send a message...`
           }
         />
       )}
@@ -402,6 +426,7 @@ export function SessionScreen({
         signalError={signalError}
         onSignal={sendMenuSignal}
         onStopImmediately={() => void stopImmediately()}
+        signalDisabled={!canSignal}
       />
     </Screen>
   )
@@ -422,6 +447,8 @@ function NativeMessageComposer({
   generationActive,
   stopPending,
   onStop,
+  writeDisabled,
+  stopDisabled,
   disabled,
   placeholder,
 }: {
@@ -439,10 +466,12 @@ function NativeMessageComposer({
   generationActive: boolean
   stopPending: boolean
   onStop: () => void
+  writeDisabled: boolean
+  stopDisabled: boolean
   disabled: boolean
   placeholder: string
 }): React.ReactElement {
-  const { serverUrl } = useAgents()
+  const { serverUrl, entityTypesCollection } = useAgents()
   const tokens = useTokens()
   const insets = useSafeAreaInsets()
   const styles = useMemo(() => createComposerStyles(tokens), [tokens])
@@ -453,12 +482,44 @@ function NativeMessageComposer({
   const [editingMessage, setEditingMessage] = useState<{
     key: string
   } | null>(null)
-  const [inputHeight, setInputHeight] = useState(COMPOSER_INPUT_MIN_HEIGHT)
   const text = value.trim()
   const bottomPadding = keyboardVisible ? 4 : Math.max(insets.bottom, 8)
+  // The per-entity slashCommands collection only carries dynamically-registered
+  // commands — statically-declared ones are never materialised into it. So, like
+  // the desktop composer (ChatView -> MessageInput), fall back to the entity
+  // type's declarations when the live collection is empty.
+  const { data: liveSlashCommands = [] } = useLiveQuery(
+    (q) =>
+      db
+        ? q
+            .from({ slashCommand: db.collections.slashCommands as any })
+            .orderBy(({ slashCommand }: any) => slashCommand.name, `asc`)
+        : undefined,
+    [db]
+  )
+  const { data: matchingTypes = [] } = useLiveQuery(
+    (q) =>
+      entity
+        ? q
+            .from({ type: entityTypesCollection })
+            .where(({ type }) => eq(type.name, entity.type))
+        : undefined,
+    [entityTypesCollection, entity?.type]
+  )
+  const slashCommands = useMemo<Array<SlashCommandRow>>(() => {
+    if (liveSlashCommands.length > 0) {
+      return liveSlashCommands as Array<SlashCommandRow>
+    }
+    return (matchingTypes[0]?.slash_commands ?? []).map((command) => ({
+      ...command,
+      key: `static:${command.name}`,
+      source: `static`,
+      updated_at: matchingTypes[0]?.updated_at ?? ``,
+    }))
+  }, [liveSlashCommands, matchingTypes])
   const sendAction = useMemo(() => {
     if (!db) return null
-    return createSendMessageAction({
+    return createSendComposerInputAction({
       db,
       baseUrl: serverUrl,
       entityUrl,
@@ -483,35 +544,24 @@ function NativeMessageComposer({
   }, [db, serverUrl, entityUrl])
   const showStop =
     generationActive && text.length === 0 && !disabled && !editingMessage
-  const canStop = showStop && !stopPending
-  const canSend = text.length > 0 && !disabled && !sending
-  const setMeasuredInputHeight = (height: number): void => {
-    const nextHeight = Math.min(
-      COMPOSER_INPUT_MAX_HEIGHT,
-      Math.max(COMPOSER_INPUT_MIN_HEIGHT, Math.ceil(height))
-    )
-    setInputHeight((current) => (current === nextHeight ? current : nextHeight))
+  const canStop = showStop && !stopPending && !stopDisabled
+  const canSend = text.length > 0 && !disabled && !writeDisabled && !sending
+  const inputDisabled = disabled || writeDisabled || sending
+  const composerDisabled = disabled || (writeDisabled && !showStop)
+  const slash = useSlashAutocomplete(value, slashCommands, {
+    enabled: !inputDisabled,
+  })
+  // Controls the caret for one render after a programmatic command insert, then
+  // releases back to uncontrolled so normal typing isn't fought.
+  const [pendingSelection, setPendingSelection] = useState<{
+    start: number
+    end: number
+  } | null>(null)
+  const insertSlashCommand = (command: SlashCommandRow): void => {
+    const insertion = slash.applyCommand(command)
+    setValue(insertion.value)
+    setPendingSelection(insertion.selection)
   }
-
-  const handleChangeText = (nextValue: string): void => {
-    setValue(nextValue)
-
-    // `onContentSizeChange` is the source of truth for wrapped lines, but
-    // explicit newlines can be reflected immediately while RN catches up.
-    const explicitLines = nextValue.split(/\r\n|\r|\n/).length
-    if (explicitLines > 1) {
-      setMeasuredInputHeight(explicitLines * lineHeight.lg + spacing.lg)
-    }
-  }
-
-  useEffect(() => {
-    const cardHeight = Math.max(
-      COMPOSER_MIN_CARD_HEIGHT,
-      inputHeight + spacing.sm * 2
-    )
-    const errorHeight = error ? lineHeight.xs + spacing.xs : 0
-    onHeightChange?.(cardHeight + bottomPadding + errorHeight)
-  }, [bottomPadding, error, inputHeight, onHeightChange])
 
   const finishPersistedAction = (promise: Promise<unknown>): void => {
     promise
@@ -542,19 +592,26 @@ function NativeMessageComposer({
       }
 
       setValue(``)
+      setPendingSelection(null)
+      slash.reset()
       setEditingMessage(null)
       onSendMessage?.()
       finishPersistedAction(tx.isPersisted.promise)
       return
     }
 
-    const tx = sendAction?.({ text, mode: `queued` })
+    const tx = sendAction?.({
+      payload: serializeComposerInput(text, slashCommands),
+      mode: `queued`,
+    })
     if (!tx) {
       setSending(false)
       return
     }
 
     setValue(``)
+    setPendingSelection(null)
+    slash.reset()
     setEditingMessage(null)
     onSendMessage?.()
     finishPersistedAction(tx.isPersisted.promise)
@@ -570,6 +627,7 @@ function NativeMessageComposer({
 
   const startEditing = useCallback(
     (message: PendingInboxMessage): void => {
+      if (disabled || writeDisabled) return
       const queuedText = readTextPayload(message.payload)
       setError(null)
       updateAction?.({
@@ -581,8 +639,10 @@ function NativeMessageComposer({
       })
       setEditingMessage({ key: message.key })
       setValue(queuedText)
+      setPendingSelection(null)
+      slash.reset()
     },
-    [updateAction]
+    [disabled, slash.reset, updateAction, writeDisabled]
   )
 
   const cancelEditing = useCallback((): void => {
@@ -598,21 +658,25 @@ function NativeMessageComposer({
     }
     setEditingMessage(null)
     setValue(``)
-  }, [editingMessage, updateAction])
+    setPendingSelection(null)
+    slash.reset()
+  }, [editingMessage, slash.reset, updateAction])
 
   const deleteMessage = useCallback(
     (key: string): void => {
+      if (disabled || writeDisabled) return
       setError(null)
       deleteAction?.({ key }).isPersisted.promise.catch((err: Error) => {
         setError(err.message)
       })
       if (editingMessage?.key === key) cancelEditing()
     },
-    [cancelEditing, deleteAction, editingMessage?.key]
+    [cancelEditing, deleteAction, disabled, editingMessage?.key, writeDisabled]
   )
 
   const steerMessage = useCallback(
     (key: string): void => {
+      if (disabled || writeDisabled) return
       setError(null)
       steerAction?.({ key }).isPersisted.promise.catch((err: Error) => {
         setError(err.message)
@@ -620,11 +684,19 @@ function NativeMessageComposer({
       if (editingMessage?.key === key) cancelEditing()
       onSendMessage?.()
     },
-    [cancelEditing, editingMessage?.key, onSendMessage, steerAction]
+    [
+      cancelEditing,
+      disabled,
+      editingMessage?.key,
+      onSendMessage,
+      steerAction,
+      writeDisabled,
+    ]
   )
 
   const reorderMessage = useCallback(
     (key: string, position: string): void => {
+      if (disabled || writeDisabled) return
       setError(null)
       updateAction?.({ key, position }).isPersisted.promise.catch(
         (err: Error) => {
@@ -632,7 +704,7 @@ function NativeMessageComposer({
         }
       )
     },
-    [updateAction]
+    [disabled, updateAction, writeDisabled]
   )
 
   return (
@@ -642,7 +714,12 @@ function NativeMessageComposer({
         styles.root,
         {
           paddingBottom: bottomPadding,
-          transform: [{ translateY: keyboardTranslateY }],
+          // Android's default `resize` mode already lifts this bottom-anchored
+          // card above the keyboard, so translating it again would double the
+          // offset. iOS doesn't resize, so there the translate does the work.
+          transform: [
+            { translateY: Platform.OS === `android` ? 0 : keyboardTranslateY },
+          ],
         },
       ]}
     >
@@ -659,6 +736,7 @@ function NativeMessageComposer({
           onReorderPending={reorderMessage}
           onOpenEntity={onOpenEntity}
           onOpenStateSource={onOpenStateSource}
+          pendingActionsDisabled={disabled || writeDisabled}
         />
       )}
       {editingMessage && (
@@ -674,21 +752,37 @@ function NativeMessageComposer({
           </Pressable>
         </View>
       )}
-      <View style={[styles.composer, disabled ? styles.disabled : null]}>
+      {slash.open && (
+        <SlashCommandMenu items={slash.items} onSelect={insertSlashCommand} />
+      )}
+      <View
+        style={[styles.composer, composerDisabled ? styles.disabled : null]}
+      >
         <TextInput
-          value={value}
-          onChangeText={handleChangeText}
-          editable={!disabled && !sending}
+          onChangeText={setValue}
+          onSelectionChange={(event) => {
+            slash.onSelectionChange(event)
+            if (pendingSelection) setPendingSelection(null)
+          }}
+          selection={pendingSelection ?? undefined}
+          editable={!inputDisabled}
           multiline
           placeholder={placeholder}
           placeholderTextColor={tokens.text4}
-          scrollEnabled={inputHeight >= COMPOSER_INPUT_MAX_HEIGHT}
-          onContentSizeChange={(event) => {
-            setMeasuredInputHeight(event.nativeEvent.contentSize.height)
-          }}
-          style={[styles.input, { height: inputHeight }]}
+          // Size to content intrinsically (within the style's min/maxHeight)
+          // rather than via onContentSizeChange — that callback never fires when
+          // the text is supplied as child <Text> instead of `value` (RN #13732),
+          // so the input wouldn't grow on iOS. The root onLayout reports the
+          // resulting card height to the timeline embed.
+          style={styles.input}
           returnKeyType="default"
-        />
+        >
+          {renderComposerHighlights(value, slashCommands, {
+            base: styles.baseText,
+            command: styles.commandToken,
+            arg: styles.argToken,
+          })}
+        </TextInput>
         <Pressable
           onPress={handleComposerAction}
           disabled={showStop ? stopPending : !canSend}
@@ -697,10 +791,10 @@ function NativeMessageComposer({
           accessibilityLabel={showStop ? `Stop generating` : `Send message`}
           style={({ pressed }) => [
             styles.sendButton,
-            canSend || showStop ? styles.sendButtonActive : null,
+            canSend || canStop ? styles.sendButtonActive : null,
             showStop ? styles.stopButton : null,
             showStop && stopPending ? styles.stopButtonPending : null,
-            pressed && (canSend || showStop) ? styles.sendButtonPressed : null,
+            pressed && (canSend || canStop) ? styles.sendButtonPressed : null,
           ]}
         >
           {sending && !showStop ? (
@@ -709,7 +803,7 @@ function NativeMessageComposer({
             <Icon
               name={showStop ? `square` : `arrow-up`}
               size={showStop ? 14 : 18}
-              color={canSend || showStop ? tokens.textOnAccent : tokens.text4}
+              color={canSend || canStop ? tokens.textOnAccent : tokens.text4}
               strokeWidth={2.4}
             />
           )}
@@ -757,6 +851,7 @@ function NativeEntityContextDrawer({
   onReorderPending,
   onOpenEntity,
   onOpenStateSource,
+  pendingActionsDisabled,
 }: {
   entity: ElectricEntity
   pendingMessages: Array<PendingInboxMessage>
@@ -768,6 +863,7 @@ function NativeEntityContextDrawer({
   onReorderPending: (key: string, position: string) => void
   onOpenEntity?: (entityUrl: string) => void
   onOpenStateSource?: (sourceId: string) => void
+  pendingActionsDisabled: boolean
 }): React.ReactElement | null {
   const { entitiesCollection } = useAgents()
   const tokens = useTokens()
@@ -881,6 +977,7 @@ function NativeEntityContextDrawer({
               onDelete={onDeletePending}
               onSteer={onSteerPending}
               onReorder={onReorderPending}
+              actionsDisabled={pendingActionsDisabled}
               styles={styles}
               tokens={tokens}
             />
@@ -958,6 +1055,7 @@ function QueuedMessageRow({
   onDelete,
   onSteer,
   onReorder,
+  actionsDisabled,
   styles,
   tokens,
 }: {
@@ -969,6 +1067,7 @@ function QueuedMessageRow({
   onDelete: (key: string) => void
   onSteer: (key: string) => void
   onReorder: (key: string, position: string) => void
+  actionsDisabled: boolean
   styles: ReturnType<typeof createDrawerStyles>
   tokens: Tokens
 }): React.ReactElement {
@@ -1001,7 +1100,7 @@ function QueuedMessageRow({
       <View style={styles.rowActions}>
         <SmallActionButton
           label="Move queued message up"
-          disabled={index === 0}
+          disabled={actionsDisabled || index === 0}
           onPress={() => move(-1)}
           styles={styles}
         >
@@ -1009,7 +1108,7 @@ function QueuedMessageRow({
         </SmallActionButton>
         <SmallActionButton
           label="Move queued message down"
-          disabled={index === messages.length - 1}
+          disabled={actionsDisabled || index === messages.length - 1}
           onPress={() => move(1)}
           styles={styles}
         >
@@ -1017,6 +1116,7 @@ function QueuedMessageRow({
         </SmallActionButton>
         <SmallActionButton
           label="Edit queued message"
+          disabled={actionsDisabled}
           onPress={() => onEdit(message)}
           styles={styles}
         >
@@ -1024,6 +1124,7 @@ function QueuedMessageRow({
         </SmallActionButton>
         <SmallActionButton
           label="Steer now"
+          disabled={actionsDisabled}
           onPress={() => onSteer(message.key)}
           styles={styles}
         >
@@ -1031,6 +1132,7 @@ function QueuedMessageRow({
         </SmallActionButton>
         <SmallActionButton
           label="Delete queued message"
+          disabled={actionsDisabled}
           onPress={() => onDelete(message.key)}
           styles={styles}
         >
@@ -1444,10 +1546,26 @@ function createComposerStyles(tokens: Tokens) {
       maxHeight: COMPOSER_INPUT_MAX_HEIGHT,
       minHeight: COMPOSER_INPUT_MIN_HEIGHT,
       paddingVertical: 0,
-      color: tokens.text1,
       fontSize: fontSize.lg,
       lineHeight: lineHeight.lg,
       textAlignVertical: `top`,
+    },
+    // Base text colour lives on the rendered child spans, not the input, so the
+    // command spans can override it (a nested colour is ignored when the
+    // TextInput sets its own `color`).
+    baseText: {
+      color: tokens.text1,
+    },
+    commandToken: {
+      color: tokens.accent11,
+      backgroundColor: tokens.accentA2,
+      fontWeight: `600`,
+    },
+    // Arguments share the command's subtle background but regular weight (vs the
+    // command's bold), so the value reads as the "slot" within the badge.
+    argToken: {
+      color: tokens.accent11,
+      backgroundColor: tokens.accentA2,
     },
     sendButton: {
       width: 34,

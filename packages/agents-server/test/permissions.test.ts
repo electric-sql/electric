@@ -37,7 +37,7 @@ function entity(url = `/task/one`, createdBy = owner.url) {
     url,
     type: `task`,
     status: `idle`,
-    streams: { main: `${url}/main`, error: `${url}/error` },
+    streams: { main: `${url}/main` },
     subscription_id: `task-sub`,
     write_token: `token`,
     tags: {},

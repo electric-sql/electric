@@ -38,7 +38,7 @@ export type HistoryEvent =
       entityUrl: string
       entityType?: string
       status: string
-      streams: { main: string; error: string }
+      streams: { main: string }
       parent?: string
     }
   | {
@@ -154,7 +154,7 @@ interface WebhookEntityContext {
   type?: string
   status: string
   url: string
-  streams: { main: string; error: string }
+  streams: { main: string }
   tags?: Record<string, string>
 }
 
@@ -522,7 +522,7 @@ type Step =
   | { kind: `kill` }
   | { kind: `killUrl`; url: string }
   | { kind: `expectStreamContains`; messageType: string }
-  | { kind: `readStream`; stream?: `main` | `error` }
+  | { kind: `readStream` }
   | {
       kind: `list`
       filter?: {
@@ -651,7 +651,7 @@ export interface RunContext {
 
   // Current entity
   currentEntityUrl: string | null
-  currentEntityStreams: { main: string; error: string } | null
+  currentEntityStreams: { main: string } | null
   currentWriteToken: string | null
 
   // Current webhook notification
@@ -784,8 +784,8 @@ export class ElectricAgentsScenario {
     return this
   }
 
-  readStream(stream?: `main` | `error`): this {
-    this.steps.push({ kind: `readStream`, stream })
+  readStream(): this {
+    this.steps.push({ kind: `readStream` })
     return this
   }
 
@@ -1186,7 +1186,6 @@ async function executeStep(ctx: RunContext, step: Step): Promise<void> {
       ).toBeDefined()
       expect(entity!.url).toBeTruthy()
       expect(entity!.streams.main).toBeTruthy()
-      expect(entity!.streams.error).toBeTruthy()
 
       if (step.checks?.url) {
         expect(entity!.url).toBe(step.checks.url)
@@ -1252,10 +1251,7 @@ async function executeStep(ctx: RunContext, step: Step): Promise<void> {
     case `readStream`: {
       if (!ctx.currentEntityStreams)
         throw new Error(`No current entity streams`)
-      const streamPath =
-        step.stream === `error`
-          ? ctx.currentEntityStreams.error
-          : ctx.currentEntityStreams.main
+      const streamPath = ctx.currentEntityStreams.main
 
       const res = await fetch(
         appendPathToUrl(
@@ -1556,7 +1552,6 @@ async function executeStep(ctx: RunContext, step: Step): Promise<void> {
       ctx.currentEntityUrl = entity.url as string
       ctx.currentEntityStreams = entity.streams as {
         main: string
-        error: string
       }
       ctx.currentWriteToken = null
 
@@ -1565,7 +1560,7 @@ async function executeStep(ctx: RunContext, step: Step): Promise<void> {
         entityUrl: entity.url as string,
         entityType: step.typeName,
         status: entity.status as string,
-        streams: entity.streams as { main: string; error: string },
+        streams: entity.streams as { main: string },
         parent: step.parent,
       })
       break
@@ -2023,14 +2018,13 @@ function checkEntityContextOnWebhook(history: Array<HistoryEvent>): void {
 }
 
 /**
- * Spec S5 — Structural: stream paths must match {entity.url}/main and {entity.url}/error.
+ * Spec S5 — Structural: stream path must match {entity.url}/main.
  * Soundness: Sound | Completeness: Complete (within trace)
  */
 function checkStreamPathsMatchEntityUrl(history: Array<HistoryEvent>): void {
   for (const event of history) {
     if (event.type === `entity_spawned`) {
       expect(event.streams.main).toBe(`${event.entityUrl}/main`)
-      expect(event.streams.error).toBe(`${event.entityUrl}/error`)
     }
   }
 }
@@ -2134,8 +2128,8 @@ function checkAdditiveSchemaEvolution(history: Array<HistoryEvent>): void {
 
 /**
  * Spec R4 — Registry stream consistency: every entity_spawned must refer to an
- * entity that has not already been killed, and stream URLs must follow the
- * convention {entity.url}/main and {entity.url}/error.
+ * entity that has not already been killed, and stream URL must follow the
+ * convention {entity.url}/main.
  * Soundness: Sound | Completeness: Complete (within trace)
  */
 function checkRegistryStreamConsistency(history: Array<HistoryEvent>): void {
@@ -2155,11 +2149,6 @@ function checkRegistryStreamConsistency(history: Array<HistoryEvent>): void {
         event.streams.main,
         `Registry consistency: entity ${event.entityUrl} streams.main must be ${event.entityUrl}/main`
       ).toBe(`${event.entityUrl}/main`)
-
-      expect(
-        event.streams.error,
-        `Registry consistency: entity ${event.entityUrl} streams.error must be ${event.entityUrl}/error`
-      ).toBe(`${event.entityUrl}/error`)
     }
   }
 }

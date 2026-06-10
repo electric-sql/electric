@@ -24,6 +24,12 @@ config :logger, :default_formatter,
   metadata: [:pid, :shape_handle, :request_id],
   colors: [enabled: env!("ELECTRIC_LOG_COLORS", :boolean!, true)]
 
+# The default logger_std_h handler writes application logs to stdout. Cap its
+# OLP mailbox so error bursts shed stdout logs instead of blocking Logger
+# callers (sync mode) or letting the queue grow unbounded.
+config :logger, :default_handler,
+  config: %{sync_mode_qlen: 2000, drop_mode_qlen: 2000, flush_qlen: 5000}
+
 # Enable this to get **very noisy** but useful messages from BEAM about
 # processes being started, stopped and crashes.
 # https://www.erlang.org/doc/apps/sasl/error_logging#sasl-reports
@@ -374,6 +380,12 @@ if Electric.telemetry_enabled?() do
        %{
          config: %{
            resource: %{name: "logs"},
+           # Cap the OLP mailbox so log bursts shed events instead of letting
+           # the queue grow unbounded. `sync_mode_qlen` is intentionally omitted:
+           # OtelMetricExporter.LogHandler forces `sync_mode_qlen == drop_mode_qlen`,
+           # so setting it is a no-op.
+           drop_mode_qlen: 2000,
+           flush_qlen: 5000,
            metadata_map: %{
              request_id: "http.request_id",
              stack_id: "source_id",

@@ -76,13 +76,13 @@ async handler(ctx, wake) {
                 systemPrompt: STAGES[i],
                 tools: STAGE_TOOLS[i], // required for built-in worker, e.g. ["read", "edit"]
               },
-              { initialMessage: currentInput, wake: "runFinished" }
+              { initialMessage: currentInput, wake: { on: "runFinished", includeResponse: true } }
             )
         if (!existing?.url) {
           ctx.db.actions.children_insert({ row: { key: childId, url: child.entityUrl, stage: stageNumber } })
         }
 
-        currentInput = (await child.text()).join("\n\n")
+        return // continue this pipeline from the later runFinished wake
       }
 
       transition(ctx.db, PIPELINE_TRANSITIONS, "done")
@@ -102,21 +102,21 @@ async handler(ctx, wake) {
 
 - **State machine enforces stage order.** `transition(status, PIPELINE_TRANSITIONS, nextStatus)` rejects out-of-order moves.
 - **Deterministic stage IDs.** `${parentId}-stage-${stageNumber}` — stable across re-wakes.
-- **Previous stage's text piped forward.** `currentInput = (await child.text()).join("\n\n")` after each stage.
-- **Every `spawn` uses `wake: "runFinished"`.** The loop awaits each child's completion before moving to the next stage.
+- **Previous stage output is captured from the child-completion wake.** Store `finished_child.response` and use it as the next stage input.
+- **Every `spawn` uses `wake: { on: "runFinished", includeResponse: true }`.** The parent advances one stage per child-completion wake.
 - **Spawn-once guard on each stage.** Re-wakes shouldn't re-spawn previously-completed stages.
 
 ## Pattern-specific review checklist
 
-| #   | Rule                                                                                                      | Why                                                                     |
-| --- | --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| P1  | `state.children` with stage tracking (`stage` field).                                                     | Needed to reconstruct pipeline position after re-wake.                  |
-| P2  | `state.status` with explicit state-machine transitions (`idle → stage_1 → ... → stage_N → done`).         | Prevents out-of-order stages if the handler is re-invoked mid-pipeline. |
-| P3  | Stage IDs use stage number (`${parentId}-stage-${n}`).                                                    | Stable across re-wakes.                                                 |
-| P4  | Each stage's `spawn` sets `wake: "runFinished"`.                                                          | Otherwise the loop stalls waiting for child.                            |
-| P5  | `STAGES` array is declared at module scope or as a constant inside the handler, not regenerated per wake. | Keeps stage count and prompts stable.                                   |
-| P6  | Previous stage's output passed as `initialMessage` to next stage.                                         | Core pipeline semantics.                                                |
-| P7  | Every spawn of the built-in `worker` passes a non-empty `tools` array.                                    | Built-in worker throws at parse time otherwise.                         |
+| #   | Rule                                                                                                      | Why                                                                         |
+| --- | --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| P1  | `state.children` with stage tracking (`stage` field).                                                     | Needed to reconstruct pipeline position after re-wake.                      |
+| P2  | `state.status` with explicit state-machine transitions (`idle → stage_1 → ... → stage_N → done`).         | Prevents out-of-order stages if the handler is re-invoked mid-pipeline.     |
+| P3  | Stage IDs use stage number (`${parentId}-stage-${n}`).                                                    | Stable across re-wakes.                                                     |
+| P4  | Each stage's `spawn` sets `wake: { on: "runFinished", includeResponse: true }`.                           | Otherwise the parent will not receive the continuation wake for that stage. |
+| P5  | `STAGES` array is declared at module scope or as a constant inside the handler, not regenerated per wake. | Keeps stage count and prompts stable.                                       |
+| P6  | Previous stage's output passed as `initialMessage` to next stage.                                         | Core pipeline semantics.                                                    |
+| P7  | Every spawn of the built-in `worker` passes a non-empty `tools` array.                                    | Built-in worker throws at parse time otherwise.                             |
 
 ## Anti-patterns
 

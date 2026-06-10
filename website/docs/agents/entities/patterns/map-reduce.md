@@ -55,7 +55,7 @@ for (let i = 0; i < chunks.length; i++) {
     { systemPrompt: task, tools: [`read`] },
     {
       initialMessage: chunks[i],
-      wake: `runFinished`,
+      wake: { on: `runFinished`, includeResponse: true },
     }
   )
   ctx.db.actions.children_insert({

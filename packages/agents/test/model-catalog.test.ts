@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createBuiltinModelCatalog,
   resolveBuiltinModelConfig,
+  resolveBuiltinModelContextWindow,
+  resolveBuiltinModelSourceBudget,
 } from '../src/model-catalog'
 
 const originalEnv = { ...process.env }
@@ -51,6 +53,36 @@ describe(`model catalog`, () => {
       provider: `openai`,
       model: `gpt-4.1`,
     })
+  })
+
+  it(`resolves model context windows and source budgets from known model metadata`, () => {
+    expect(
+      resolveBuiltinModelContextWindow({
+        provider: `openai`,
+        model: `gpt-4.1`,
+      })
+    ).toBe(1_047_576)
+    expect(
+      resolveBuiltinModelSourceBudget({
+        provider: `anthropic`,
+        model: `claude-sonnet-4-6`,
+      })
+    ).toBe(1_000_000)
+    expect(
+      resolveBuiltinModelSourceBudget({
+        provider: `moonshot`,
+        model: `moonshot-v1-8k`,
+      })
+    ).toBe(8_192)
+  })
+
+  it(`falls back to the previous source budget for unknown model metadata`, () => {
+    expect(
+      resolveBuiltinModelSourceBudget({
+        provider: `openai`,
+        model: `unknown-model`,
+      })
+    ).toBe(100_000)
   })
 
   it(`filters choices to enabled model values`, async () => {

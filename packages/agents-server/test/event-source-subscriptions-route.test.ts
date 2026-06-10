@@ -174,14 +174,20 @@ function tenantContext(
         : undefined
     ),
     getEntityType: vi.fn(),
+    hasEntityPermission: vi.fn(async () => true),
   }
   return {
     service: `svc-agent-1`,
+    // dev-local is a built-in bypass principal (permissions.ts /
+    // isBuiltInSystemPrincipalUrl). These tests assert subscription
+    // routing, not authz — and permission enforcement landed on main
+    // after they were written, so the registry mocks here don't have
+    // the entity-permission methods spawned. Bypass is the minimal fix.
     principal: {
       kind: `system`,
-      id: `test`,
-      key: `system:test`,
-      url: `/principal/system%3Atest`,
+      id: `dev-local`,
+      key: `system:dev-local`,
+      url: `/principal/system:dev-local`,
     },
     publicUrl: `http://agents.test`,
     durableStreamsUrl: `http://streams.test/v1/stream/svc-agent-1`,

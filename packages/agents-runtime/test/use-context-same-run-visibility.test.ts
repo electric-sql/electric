@@ -1,5 +1,14 @@
+import { webcrypto } from 'node:crypto'
 import { describe, expect, it, vi } from 'vitest'
 import { createTestHandlerContext } from './helpers/context-test-helpers'
+
+if (!globalThis.crypto) {
+  Object.defineProperty(globalThis, `crypto`, {
+    value: webcrypto,
+  })
+}
+
+const adapterCalls = vi.hoisted(() => [] as Array<string>)
 
 // We need the real useContext assembly path to fire so `content()` actually
 // runs. Mock pi-adapter so agent.run() skips the LLM call.
@@ -7,7 +16,12 @@ vi.mock(`../src/pi-adapter`, async (importOriginal) => {
   const orig = await importOriginal<any>()
   return {
     ...orig,
-    createPiAgentAdapter: () => () => ({ run: () => Promise.resolve() }),
+    createPiAgentAdapter: () => () => ({
+      run: () => {
+        adapterCalls.push(`adapter-run`)
+        return Promise.resolve()
+      },
+    }),
   }
 })
 
@@ -33,5 +47,19 @@ describe(`same-run visibility`, () => {
 
     expect(contentFn).toHaveBeenCalledTimes(1)
     expect(contentFn.mock.results[0]?.value).toBe(`visible:k`)
+  })
+
+  it(`runs prepareAgentRun before starting the adapter run`, async () => {
+    adapterCalls.length = 0
+    const { ctx } = createTestHandlerContext({
+      prepareAgentRun: async () => {
+        adapterCalls.push(`prepare`)
+      },
+    })
+
+    ctx.useAgent({ systemPrompt: `t`, model: `t`, tools: [] })
+    await ctx.agent.run()
+
+    expect(adapterCalls).toEqual([`prepare`, `adapter-run`])
   })
 })

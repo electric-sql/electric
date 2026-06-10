@@ -5,6 +5,7 @@ import type { LucideIcon } from 'lucide-react'
 import { Icon } from './Icon'
 import popoverStyles from './Popover.module.css'
 import styles from './Select.module.css'
+import { Tooltip } from './Tooltip'
 
 export type SelectSize = `md` | `pill`
 
@@ -36,8 +37,10 @@ interface TriggerProps {
    * there is no visible Field label.
    */
   [`aria-label`]?: string
-  /** Tooltip-style hint shown on hover. */
+  /** @deprecated Use `tooltip` so hints render through the shared tooltip. */
   title?: string
+  /** Tooltip-style hint shown on hover. */
+  tooltip?: ReactNode
   /**
    * Optional leading icon rendered before the value. Slots in as a
    * sibling flex child of `<Select.Value>` so it gets the trigger's
@@ -109,6 +112,7 @@ function Trigger({
   autoFocus,
   [`aria-label`]: ariaLabel,
   title,
+  tooltip,
   icon,
   renderValue,
 }: TriggerProps): React.ReactElement {
@@ -116,14 +120,9 @@ function Trigger({
     .filter(Boolean)
     .join(` `)
   const iconSize = size === `pill` ? 1 : 2
-  return (
-    <BaseSelect.Trigger
-      className={cls}
-      style={style}
-      autoFocus={autoFocus}
-      aria-label={ariaLabel}
-      title={title}
-    >
+  const tooltipContent = tooltip ?? title
+  const triggerContent = (
+    <>
       {icon && (
         <span className={styles.leadingIcon}>
           <Icon icon={icon} size={iconSize} />
@@ -137,7 +136,23 @@ function Trigger({
       <BaseSelect.Icon className={styles.icon}>
         <Icon icon={ChevronDown} size={iconSize} />
       </BaseSelect.Icon>
+    </>
+  )
+  const trigger = (
+    <BaseSelect.Trigger
+      className={cls}
+      style={style}
+      autoFocus={autoFocus}
+      aria-label={ariaLabel}
+    >
+      {triggerContent}
     </BaseSelect.Trigger>
+  )
+  if (!tooltipContent) return trigger
+  return (
+    <Tooltip content={tooltipContent} side="top" align="start">
+      <span className={styles.tooltipTrigger}>{trigger}</span>
+    </Tooltip>
   )
 }
 

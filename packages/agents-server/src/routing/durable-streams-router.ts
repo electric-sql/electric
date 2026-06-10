@@ -717,6 +717,19 @@ async function authorizeDurableStreamAccess(
         ownerEntityUrl
       )
     ) {
+      // Bootstrap the link synchronously so subsequent reads on this stream
+      // (e.g. the runtime's preload right after `mkdb`) can resolve the owner
+      // without waiting for the entity's manifest stream event to be
+      // processed eventually-consistently. Without this, a brand-new
+      // shared-state always 401s on the first preload because the link row
+      // is only created later via `applyManifestEntitySource`.
+      if (ownerEntityUrl) {
+        await ctx.entityManager.registry.replaceSharedStateLink(
+          ownerEntityUrl,
+          `shared-state:${sharedStateId}`,
+          sharedStateId
+        )
+      }
       return undefined
     }
     return apiError(

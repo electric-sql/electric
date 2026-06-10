@@ -1,3 +1,4 @@
+import path from 'node:path'
 import { app, powerSaveBlocker } from 'electron'
 import { AGENT_SKILLS_DIR } from '../shared/paths'
 import {
@@ -204,6 +205,15 @@ export async function startRuntime(
       deps.refreshDesktopState()
       return
     }
+
+    const cloudAuthState = deps.getCloudAuthState()
+    if (cloudAuthState?.status !== `signed-in`) {
+      entry.status = `error`
+      entry.lastError = `Sign in to Electric Cloud before connecting to ${activeServer.name}.`
+      deps.refreshDesktopState()
+      return
+    }
+
     try {
       const prepared = await deps
         .getCloudAgentServers()
@@ -213,18 +223,12 @@ export async function startRuntime(
         await deps.saveSettings()
       }
     } catch (err) {
-      const cachedToken = deps
-        .getCloudAgentServers()
-        .getAgentsToken(activeServer.tenantId)
-      if (!cachedToken) {
-        entry.status = `error`
-        entry.lastError = `Could not prepare cloud agents token for ${activeServer.name}: ${
-          err instanceof Error ? err.message : String(err)
-        }`
-        deps.refreshDesktopState()
-        return
-      }
-      console.warn(`[agents-desktop] cloud agents token refresh failed:`, err)
+      entry.status = `error`
+      entry.lastError = `Could not prepare cloud agents token for ${activeServer.name}: ${
+        err instanceof Error ? err.message : String(err)
+      }`
+      deps.refreshDesktopState()
+      return
     }
   }
 
@@ -290,6 +294,14 @@ export async function startRuntime(
   const nextRuntime = new BuiltinAgentsServer({
     agentServerUrl: activeServer.url,
     workingDirectory: deps.settings.workingDirectory ?? app.getPath(`home`),
+    durableStreamsFetchCache: {
+      store: `sqlite`,
+      sqliteLocation: path.join(
+        app.getPath(`userData`),
+        `durable-streams-fetch-cache.sqlite`
+      ),
+      maxCount: 10_000,
+    },
     extraMcpServers: deps.settings.mcp?.servers,
     enabledModelValues: resolveEnabledModelValues(
       deps.settings.enabledModelValues

@@ -2,17 +2,23 @@ import path from 'node:path'
 import { z } from 'zod'
 import { serverLog } from '../log'
 import { createHortonDocsSupport } from '../docs/knowledge-base'
-import { createSkillTools } from '@electric-ax/agents-runtime'
 import { createSpawnWorkerTool } from '../tools/spawn-worker'
+import { createForkTool } from '../tools/fork'
 import {
   modelInputSchemaDefs,
   modelChoiceValues,
   REASONING_EFFORT_VALUES,
   resolveBuiltinModelConfig,
+  resolveBuiltinModelSourceBudget,
   type BuiltinAgentModelConfig,
   type BuiltinModelCatalog,
 } from '../model-catalog'
 import type { AgentTool, StreamFn } from '@mariozechner/pi-agent-core'
+import {
+  buildSkillSlashCommands,
+  createContextSkillLoader,
+  completeWithLowCostModel,
+} from '@electric-ax/agents-runtime'
 import type {
   EntityRegistry,
   HandlerContext,
@@ -28,7 +34,6 @@ import {
   createSendTool,
 } from '@electric-ax/agents-runtime/tools'
 import type { Sandbox } from '@electric-ax/agents-runtime/sandbox'
-import { completeWithLowCostModel } from '@electric-ax/agents-runtime'
 import { mcp } from '@electric-ax/agents-mcp'
 import type { SkillsRegistry } from '@electric-ax/agents-runtime'
 
@@ -37,9 +42,10 @@ export const HORTON_MODEL = `claude-sonnet-4-6`
 const TITLE_SYSTEM_PROMPT =
   `You generate concise chat session titles in 3-5 words. ` +
   `Respond with only the title, no quotes, no punctuation, no preamble.`
-
 const TITLE_USER_PROMPT = (userMessage: string): string =>
   `User request:\n${userMessage}`
+const TITLE_GENERATION_TIMEOUT_MS = 8_000
+const HORTON_SKILLS_SLASH_COMMAND_OWNER = `horton:skills`
 
 const TITLE_STOP_WORDS = new Set([
   `a`,
@@ -141,6 +147,23 @@ function createConfiguredTitleCall(
     })
 }
 
+function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  description: string
+): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined
+  const timeoutPromise = new Promise<T>((_resolve, reject) => {
+    timeout = setTimeout(() => {
+      reject(new Error(`${description} timed out after ${ms}ms`))
+    }, ms)
+  })
+
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timeout) clearTimeout(timeout)
+  })
+}
+
 export async function generateTitle(
   userMessage: string,
   llmCall: (prompt: string) => Promise<string>,
@@ -163,6 +186,7 @@ export function buildHortonSystemPrompt(
   opts: {
     hasDocsSupport?: boolean
     hasEventSourceTools?: boolean
+    hasScheduleTools?: boolean
     hasSkills?: boolean
     docsUrl?: string
     modelProvider?: string
@@ -174,6 +198,9 @@ export function buildHortonSystemPrompt(
     : ``
   const eventSourceTools = opts.hasEventSourceTools
     ? `\n- list_event_sources: list external webhook/event feeds you can subscribe to, including available buckets and parameters\n- subscribe_event_source: subscribe yourself to one of those feeds or buckets so matching future events wake you\n- list_event_source_subscriptions: list your active event source subscriptions\n- unsubscribe_event_source: remove one of your event source subscriptions by id`
+    : ``
+  const scheduleTools = opts.hasScheduleTools
+    ? `\n- upsert_cron_schedule: create or update a recurring cron wake for yourself. Always include payload with the concrete instruction/message you should receive when the cron fires.\n- delete_schedule: delete one of your cron or future-send schedules by stable id\n- list_schedules: list your manifest-backed cron and future-send schedules`
     : ``
   const skillsTools = opts.hasSkills
     ? `\n- use_skill: load a skill (knowledge, instructions, or a tutorial) into your context to help with the user's request\n- remove_skill: unload a skill from context when you're done with it`
@@ -239,8 +266,9 @@ When a user opens with a greeting ("hi", "hello", "hey", etc.) or a broad statem
 - web_search: search the web
 - fetch_url: fetch and convert a URL to markdown
 - spawn_worker: dispatch a subagent for an isolated task
+- fork: spawn a child session that inherits this conversation's history up to the latest completed response. Same parent-ownership model as spawn_worker — when the fork's next run finishes, you'll wake with its response.
 - send: send a message to an Electric Agent/entity. To schedule future work for yourself, call send with self: true and afterMs.
-${eventSourceTools}${docsTools}${skillsTools}
+${eventSourceTools}${scheduleTools}${docsTools}${skillsTools}
 
 # Working with files
 - Prefer edit over write when modifying existing files.
@@ -266,6 +294,20 @@ Dispatch a worker when:
 When you spawn a worker, write its system prompt the way you'd brief a colleague who just walked in: include file paths, line numbers, what specifically to do, and what form of answer you want back. The system prompt sets the worker's persona and constraints; the required initialMessage is the concrete task you're handing off — that's what kicks the worker off, so without it the worker sits idle.
 
 After spawning, end your turn (optionally with a brief "I've dispatched a worker for X; I'll respond when it finishes"). When the worker finishes, you'll receive a message describing which worker completed and what it returned. Multiple workers may finish at different times — check the message for the worker URL to know which one you're hearing about.
+
+# When to fork (vs spawn_worker)
+\`fork\` is the **sibling primitive to spawn_worker** — both create a child you own, both report back to you on a future wake. The difference is only in what the child boots with:
+
+- **spawn_worker** → child boots with an **empty context**; you brief it from scratch via a system prompt + initial message. Use when the worker doesn't need to know what we've said so far.
+- **fork** → child boots with **a copy of THIS conversation's history** up to your latest completed response. Use when each child needs to know what we've already established (the user's framing, your prior analysis, an earlier decision, the constraints, etc.).
+
+**Trigger pattern: prefer fork when generating multiple variants the user wants to compare.** If the user asks for "three different X" or "two takes on Y" or "evaluate these N approaches" and each variant should reflect the conversation we've had so far, **don't inline the variants in one response** — fork once per variant, send each a tailored follow-up, and synthesize when they report back. Inlining feels faster but the variants end up cross-contaminating in your single response; forks keep them honestly independent. The exception is trivial generation (a list of names, a couple of one-liners) where each variant takes a sentence — there, inline is fine.
+
+Workflow when forking yourself for parallel exploration:
+1. **End your current turn first.** The fork's history stops at your *latest completed* run. Anything you say mid-turn is NOT in the fork. If you want your analysis baked into each fork, finish it and end the turn before calling fork.
+2. On the next wake, call \`fork\` once per branch with a different \`initialMessage\` per call — that's how the branches diverge from a shared starting point. Each fork is YOUR child, just like a spawned worker, and the server delivers \`initialMessage\` to the fork in the same round-trip, so the fork starts running immediately (no follow-up \`send\` needed). Use the shape \`{ text: "..." }\` for the message so it renders in the chat UI.
+3. End your turn. You'll wake automatically when each fork's run finishes (same wake mechanism as spawn_worker); the wake message identifies the fork and includes its response.
+4. If you're waiting on multiple forks, don't synthesize on the first wake — quietly end the turn with "got N of M, waiting" until you have what you need to compare.
 
 # Reporting
 Report outcomes faithfully. If a command failed, say so with the relevant output. If you didn't run a verification step, say that rather than implying you did. Don't hedge confirmed results with unnecessary disclaimers.
@@ -308,6 +350,7 @@ export function createHortonTools(
         ]
       : [createFetchUrlTool(sandbox)]),
     createSpawnWorkerTool(ctx, opts.modelConfig),
+    createForkTool(ctx),
     createSendTool(ctx.send, { selfEntityUrl: ctx.entityUrl }),
     ...(opts.docsSearchTool ? [opts.docsSearchTool] : []),
   ]
@@ -317,8 +360,12 @@ function payloadToTitleText(payload: unknown): string {
   if (typeof payload === `string`) return payload
   if (payload == null) return ``
   if (typeof payload === `object`) {
-    const text = (payload as Record<string, unknown>).text
-    return typeof text === `string` ? text : JSON.stringify(payload)
+    const record = payload as Record<string, unknown>
+    const text = record.text
+    if (typeof text === `string`) return text
+    const source = record.source
+    if (typeof source === `string`) return source
+    return JSON.stringify(payload)
   }
   return String(payload)
 }
@@ -452,14 +499,20 @@ function createAssistantHandler(options: {
     modelCatalog,
     docsUrl,
   } = options
-  const hasSkills = Boolean(skillsRegistry && skillsRegistry.catalog.size > 0)
+  const skillLoader = createContextSkillLoader(skillsRegistry, {
+    slashCommandOwner: HORTON_SKILLS_SLASH_COMMAND_OWNER,
+  })
+  const hasSkills = skillLoader.hasSkills
 
   return async function assistantHandler(
     ctx: HandlerContext,
     wake: WakeEvent
   ): Promise<void> {
+    const loadedSkills = await skillLoader.load(ctx)
+
     const readSet = new Set<string>()
     const modelConfig = resolveBuiltinModelConfig(modelCatalog, ctx.args)
+    const sourceBudget = resolveBuiltinModelSourceBudget(modelConfig)
     // The sandbox's own working directory is the single source of truth for
     // where the agent operates — `/work` in a remote VM, or the host project
     // root for a local sandbox (the local profile derives that from
@@ -479,13 +532,14 @@ function createAssistantHandler(options: {
         modelCatalog,
         logPrefix: `[horton ${ctx.entityUrl}]`,
       }),
-      ...(skillsRegistry && skillsRegistry.catalog.size > 0
-        ? createSkillTools(skillsRegistry, ctx)
-        : []),
+      ...loadedSkills.tools,
       ...mcp.tools(),
     ]
     const hasEventSourceTools = tools.some(
       (tool) => getToolName(tool) === `list_event_sources`
+    )
+    const hasScheduleTools = tools.some(
+      (tool) => getToolName(tool) === `upsert_cron_schedule`
     )
 
     const titlePromise = !ctx.tags.title
@@ -497,11 +551,16 @@ function createAssistantHandler(options: {
           try {
             const result = await generateTitle(
               firstUserMessage,
-              createConfiguredTitleCall(
-                modelCatalog,
-                modelConfig,
-                `[horton ${ctx.entityUrl}]`
-              ),
+              (prompt) =>
+                withTimeout(
+                  createConfiguredTitleCall(
+                    modelCatalog,
+                    modelConfig,
+                    `[horton ${ctx.entityUrl}]`
+                  )(prompt),
+                  TITLE_GENERATION_TIMEOUT_MS,
+                  `title generation`
+                ),
               (reason) => {
                 serverLog.warn(
                   `[horton ${ctx.entityUrl}] title generation fell back to local title: ${reason}`
@@ -513,11 +572,16 @@ function createAssistantHandler(options: {
             serverLog.warn(
               `[horton ${ctx.entityUrl}] title generation failed: ${err instanceof Error ? err.message : String(err)}`
             )
+            title = buildFallbackTitle(firstUserMessage)
           }
 
           if (title !== null) {
             try {
-              await ctx.setTag(`title`, title)
+              await withTimeout(
+                ctx.setTag(`title`, title),
+                TITLE_GENERATION_TIMEOUT_MS,
+                `set title tag`
+              )
             } catch (err) {
               serverLog.warn(
                 `[horton ${ctx.entityUrl}] setTag failed: ${err instanceof Error ? err.message : String(err)}`
@@ -529,7 +593,7 @@ function createAssistantHandler(options: {
 
     if (docsSupport) {
       ctx.useContext({
-        sourceBudget: 100_000,
+        sourceBudget,
         sources: {
           docs_toc: {
             content: () => docsSupport.renderCompressedToc(),
@@ -560,25 +624,15 @@ function createAssistantHandler(options: {
               }
             : {}),
           ...(skillsRegistry && skillsRegistry.catalog.size > 0
-            ? {
-                skills_catalog: {
-                  content: () => skillsRegistry.renderCatalog(2_000),
-                  max: 2_000,
-                  cache: `stable` as const,
-                },
-              }
+            ? loadedSkills.sources
             : {}),
         },
       })
     } else if (skillsRegistry && skillsRegistry.catalog.size > 0) {
       ctx.useContext({
-        sourceBudget: 100_000,
+        sourceBudget,
         sources: {
-          skills_catalog: {
-            content: () => skillsRegistry.renderCatalog(2_000),
-            max: 2_000,
-            cache: `stable` as const,
-          },
+          ...loadedSkills.sources,
           conversation: {
             content: () => ctx.timelineMessages(),
             cache: `volatile`,
@@ -596,7 +650,7 @@ function createAssistantHandler(options: {
       })
     } else if (agentsMd) {
       ctx.useContext({
-        sourceBudget: 100_000,
+        sourceBudget,
         sources: {
           conversation: {
             content: () => ctx.timelineMessages(),
@@ -619,6 +673,7 @@ function createAssistantHandler(options: {
         modelProvider: modelConfig.provider,
         modelId: String(modelConfig.model),
         hasEventSourceTools,
+        hasScheduleTools,
       }),
       ...modelConfig,
       // mcp.tools() inserts sentinel objects that the runtime's
@@ -711,7 +766,13 @@ export function registerHorton(
         subject_value: `user`,
         permission: `spawn`,
       },
+      {
+        subject_kind: `principal_kind`,
+        subject_value: `user`,
+        permission: `manage`,
+      },
     ],
+    slashCommands: buildSkillSlashCommands(skillsRegistry),
     handler: assistantHandler,
   })
 

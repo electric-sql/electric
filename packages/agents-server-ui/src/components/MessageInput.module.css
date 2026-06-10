@@ -25,62 +25,14 @@
   z-index: 1;
 }
 
-.composer {
-  box-sizing: border-box;
-  /* Solid raised-surface fill (also what `--ds-input-bg` resolves to,
-     since both inherit from `--ds-surface-raised`). The composer
-     docks at the bottom of a scrolling chat surface and chat content
-     must NOT bleed through it. Solid raised surface is the right
-     semantic. */
-  background: var(--ds-surface-raised);
-  border: 1px solid var(--ds-border-1);
-  border-radius: var(--ds-radius-5);
-  /* Soft drop shadow lifts the composer slightly off the chat
-     surface so the docked feel reads even when the bottom-fade mask
-     thins out the chat content right above it. */
-  box-shadow:
-    0 1px 3px rgba(15, 15, 30, 0.04),
-    0 1px 1px rgba(15, 15, 30, 0.02);
-  /* 12px on all sides — same as the user-message bubble (`Stack p={3}`
-     in UserMessage.tsx, where `--ds-space-3 = 12px`). Keeping the
-     two surfaces on the same padding makes the textarea text column
-     line up with the user-bubble text column directly above it. */
-  padding: 12px;
-  width: 100%;
-  transition: border-color 0.15s ease;
-  /* Stack on top of `<EntityContextDrawer>` (when present). The drawer
-     extends 20px UNDER the composer via `margin-bottom: -20px`; this
-     z-index ensures the composer paints over the drawer's hidden
-     bottom edge so the drawer reads as a tray tucked behind the
-     composer. Also keeps the composer above the timeline above it
-     (the existing `-20px` lift on `.root`). */
-  position: relative;
-  z-index: 1;
+/* Variant tuning for the shared `<ComposerShell>` in the chat
+   timeline. Inherits the shell's default geometry (16px editor sides,
+   8px footer bottom, etc.); the only chat-specific tweak is the
+   compact editor min-height — chat sends short messages, no need for
+   the spawn-page first-prompt height. */
+.chatComposerShell {
+  --composer-editor-min-h: 40px;
 }
-.composer:focus-within {
-  border-color: var(--ds-accent-a6);
-}
-.composerDropActive {
-  border-color: var(--ds-accent-a7);
-  box-shadow:
-    0 0 0 1px var(--ds-accent-a5),
-    0 8px 28px rgba(15, 15, 30, 0.1);
-}
-
-.composerDropActive::after {
-  content: '';
-  position: absolute;
-  inset: 6px;
-  border: 1px dashed var(--ds-accent-a8);
-  border-radius: calc(var(--ds-radius-5) - 5px);
-  background: var(--ds-accent-a2);
-  pointer-events: none;
-}
-
-.disabled {
-  opacity: 0.5;
-}
-
 /* Spacing for the inline error row above the composer. The Stack gap
    is 0 so the drawer's negative margin can fully overlap the
    composer; this margin restores breathing room around an error
@@ -118,14 +70,16 @@
 
 .editingBanner {
   box-sizing: border-box;
-  width: calc(100% + 24px);
+  width: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin: -12px -12px 8px;
   padding: 5px 12px 5px 14px;
   border-bottom: 1px solid var(--ds-gray-a4);
+  /* Round the top corners flush with `.composer`'s outer corners; the
+     banner now sits at the inner edge (no negative margins) since
+     `.composer` no longer pads its children. */
   border-radius: var(--ds-radius-5) var(--ds-radius-5) 0 0;
   background: var(--ds-gray-a2);
 }
@@ -150,17 +104,41 @@
   outline-offset: 2px;
 }
 
-.composerBody {
-  display: flex;
-  align-items: flex-end;
-  gap: var(--ds-space-2);
-  min-width: 0;
-  width: 100%;
-}
-
-.textarea {
+.proseMirrorWrap {
   flex: 1;
   min-width: 0;
+  position: relative;
+}
+
+/* Padding lives on the contenteditable (.proseMirrorEditor) — not the wrap
+   — so the click target extends into the surrounding inset. Hosts opt in
+   by setting the four `--composer-editor-padding-*` variables on the wrap;
+   defaults stay 0 so existing call sites (chat composer) are unaffected. */
+.proseMirrorWrap[data-empty='true']::before {
+  content: attr(data-placeholder);
+  position: absolute;
+  top: var(--composer-editor-padding-top, 0);
+  left: var(--composer-editor-padding-left, 0);
+  color: var(--ds-text-3);
+  pointer-events: none;
+  font-size: var(--ds-chat-text);
+  line-height: var(--ds-chat-text-lh);
+  font-family: var(--ds-font-body);
+}
+
+.proseMirrorEditor {
+  /* Content-box min-height is bumped by the bottom-inset because
+     `padding-bottom` is zero (see comment on `padding` below) and the
+     reserved bottom space is instead taken by the scrolling `::after`
+     spacer. Adding the spacer to `min-height` keeps the resting box
+     height equal to the pre-spacer geometry (typing area + bottom
+     inset). */
+  min-height: calc(
+    var(--composer-editor-min-h, 40px) +
+      var(--composer-editor-padding-bottom, 0px)
+  );
+  max-height: var(--composer-editor-max-h, 200px);
+  overflow: auto;
   border: none;
   outline: none;
   background: transparent;
@@ -168,22 +146,221 @@
   line-height: var(--ds-chat-text-lh);
   color: var(--ds-text-1);
   font-family: var(--ds-font-body);
-  /* Auto-grow is driven by inline `height = scrollHeight` from
-     MessageInput.tsx. `min-height` floors the resting state at ~2
-     lines so the empty composer reads as a multi-line input rather
-     than a single-line field; `max-height` + `overflow: auto` make
-     it start scrolling internally once content passes ~10 lines.
-     The browser clamps the inline height against both bounds, so
-     the JS auto-resize stays a one-liner. `resize: none` hides the
-     native handle since the auto-resize already does the right
-     thing. */
-  resize: none;
-  overflow: auto;
-  min-height: 40px;
-  max-height: 200px;
+  /* `padding-bottom` is intentionally zero — `overflow: auto`
+     containers don't include `padding-bottom` in their scrollable area
+     (a long-standing browser quirk), so when content overflows the
+     last line would sit at the container's bottom edge, *behind* the
+     absolutely-positioned footer. We instead reserve the bottom inset
+     via the `::after` spacer below, which DOES scroll with the
+     content and keeps the last line clear of the footer overlay. */
+  padding: var(--composer-editor-padding-top, 0)
+    var(--composer-editor-padding-right, 0) 0
+    var(--composer-editor-padding-left, 0);
 }
-.textarea::placeholder {
+
+/* Scrollable spacer that stands in for the missing `padding-bottom`
+   (see comment above). Height matches what the footer overlay needs
+   to clear. `display: block` so it occupies a full line; sits after
+   any paragraphs the contenteditable rendered. */
+.proseMirrorEditor::after {
+  content: '';
+  display: block;
+  height: var(--composer-editor-padding-bottom, 0);
+}
+
+.proseMirrorEditor p {
+  margin: 0;
+}
+
+.proseMirrorEditor p + p {
+  margin-top: 2px;
+}
+
+.slashToken {
+  color: var(--ds-text-2);
+}
+
+.slashTokenKnown {
+  color: var(--ds-accent-11);
+  background: var(--ds-accent-a3);
+  border-radius: var(--ds-radius-2);
+}
+
+.slashTokenUnknown {
   color: var(--ds-text-3);
+}
+
+/* Invisible 1px-wide anchor placed before and after every slash_call by the
+   decoration plugin. Gives the caret a place to render — and clicks a place
+   to land — even when a slash_call is the first/last child of a paragraph
+   or sits next to another slash_call. Non-editable so PM treats it as a
+   widget boundary, not part of the document text. */
+.slashCallAnchor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  vertical-align: middle;
+  user-select: none;
+}
+
+/* Slash-call nodes — sized in em so the pill stays proportional to the
+   surrounding text and fits inside the line box without pushing line-
+   height. All three nodes share one fill, and the text inside renders at
+   the inherited font-size. */
+.slashCall {
+  --slash-call-h: 1.4em;
+  --slash-call-r: 0.7em; /* h / 2 — full semicircle outer ends */
+  --slash-call-concave-w: 0.79em; /* matches viewBox 9 / 16 * h */
+  --slash-call-cap-w: 1.225em; /* matches viewBox 14 / 16 * h */
+  --slash-call-fill: var(--ds-gray-a4);
+  --slash-call-text: var(--ds-text-1);
+
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  vertical-align: middle;
+  line-height: 1;
+  white-space: nowrap;
+  /* `vertical-align: middle` aligns the pill's center with the x-height
+     midpoint, which sits slightly below the visual centerline of the cap-
+     height. Nudge up 1px so the pills sit on the baseline they appear to. */
+  transform: translateY(-1px);
+}
+
+/* Command pill: 3-layer mask — semicircle-left, middle stretches,
+   shallow concave-right Bezier. */
+.slashCommandPill {
+  display: inline-flex;
+  align-items: center;
+  height: var(--slash-call-h);
+  padding: 0 0.85em 0 var(--slash-call-r);
+  background: var(--slash-call-fill);
+  color: var(--slash-call-text);
+  font-weight: inherit;
+
+  /* Middle stretch overlaps the left semicircle and right concave SVG by 1px
+     on each side. Em-sized side widths produce fractional-pixel boundaries
+     that don't snap to the same integer column; the overlap closes any
+     resulting hairline seam. mask-composite defaults to `add`, so overlapping
+     opaque regions remain opaque. */
+  --slash-mask:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 16' preserveAspectRatio='none'><path fill='%23000' d='M 8 0 L 8 16 A 8 8 0 0 1 8 0 Z'/></svg>")
+      left center / var(--slash-call-r) 100% no-repeat,
+    linear-gradient(#000, #000) calc(var(--slash-call-r) - 1px) center /
+      calc(100% - var(--slash-call-r) - var(--slash-call-concave-w) + 2px) 100%
+      no-repeat,
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 16' preserveAspectRatio='none'><path fill='%23000' d='M 0 0 L 9 0 Q 0 8 9 16 L 0 16 Z'/></svg>")
+      right center / var(--slash-call-concave-w) 100% no-repeat;
+  -webkit-mask: var(--slash-mask);
+  mask: var(--slash-mask);
+}
+
+/* Arg pill: standard fully-rounded pill. */
+.slashArgumentSlot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--slash-call-h);
+  min-width: 2em;
+  padding: 0 var(--slash-call-r);
+  background: var(--slash-call-fill);
+  color: var(--slash-call-text);
+  font-weight: inherit;
+  border-radius: var(--slash-call-r);
+}
+
+.slashArgumentSlot:focus-within {
+  background: var(--ds-gray-a5);
+  box-shadow: inset 0 0 0 1px var(--ds-gray-a6);
+}
+
+/* Cap: shallow concave-left + full semicircle-right (mirror of command).
+   Only shown when the call has at least one argument slot. */
+.slashCall:has(.slashArgumentSlot)::after {
+  content: '';
+  display: inline-block;
+  width: var(--slash-call-cap-w);
+  height: var(--slash-call-h);
+  background: var(--slash-call-fill);
+
+  --slash-cap-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 16' preserveAspectRatio='none'><path fill='%23000' d='M 0 0 L 6 0 A 8 8 0 0 1 6 16 L 0 16 Q 9 8 0 0 Z'/></svg>")
+    center / 100% 100% no-repeat;
+  -webkit-mask: var(--slash-cap-mask);
+  mask: var(--slash-cap-mask);
+}
+
+/* No arguments → no cap, and the command becomes a plain fully-rounded
+   pill (drop the concave-right mask, replace with simple border-radius). */
+.slashCall:not(:has(.slashArgumentSlot)) .slashCommandPill {
+  padding: 0 var(--slash-call-r);
+  border-radius: var(--slash-call-r);
+  -webkit-mask: none;
+  mask: none;
+}
+
+.slashArgumentValue {
+  min-width: 0;
+  outline: none;
+  white-space: pre;
+  text-align: center;
+}
+
+.slashArgumentValue:empty::before {
+  content: attr(data-placeholder);
+  color: var(--ds-text-3);
+  pointer-events: none;
+}
+
+.slashPopover {
+  z-index: 5;
+  min-width: 240px;
+  max-width: 360px;
+  padding: 4px;
+}
+
+.slashList {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.slashOption {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  align-items: flex-start;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: var(--ds-radius-3);
+  cursor: pointer;
+}
+
+.slashOptionActive,
+.slashOption:hover {
+  background: var(--ds-bg-hover);
+}
+
+.slashOptionName {
+  color: var(--ds-text-1);
+  font-size: var(--ds-text-sm);
+  line-height: var(--ds-text-sm-lh);
+}
+
+.slashOptionArguments {
+  color: var(--ds-text-3);
+  font-weight: 400;
+}
+
+.slashOptionDescription {
+  color: var(--ds-text-3);
+  font-size: var(--ds-text-xs);
+  line-height: var(--ds-text-xs-lh);
+}
+
+.tooltipTrigger {
+  display: inline-flex;
 }
 
 .composerSend {

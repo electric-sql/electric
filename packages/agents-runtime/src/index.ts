@@ -51,6 +51,9 @@ export type {
   ClaimTokenHeader,
   HeadersProvider,
   HandlerContext,
+  HandlerWake,
+  InboxHandlerWake,
+  OtherHandlerWake,
   AgentRunResult,
   AgentHandle,
   AgentTool,
@@ -100,6 +103,7 @@ export type {
   Signal,
   ChildStatusEntry,
   TagEntry,
+  SlashCommandEntry,
   ContextInserted as ContextInsertedEvent,
   ContextRemoved as ContextRemovedEvent,
   Manifest,
@@ -118,6 +122,39 @@ export {
   getEntityAttachmentStreamPath,
   manifestAttachmentKey,
 } from './manifest-helpers'
+export {
+  COMPOSER_INPUT_MESSAGE_TYPE,
+  firstSlashCommand,
+  getSlashCommandNodes,
+  hasSlashCommand,
+  isKnownComposerNode,
+  knownNodes,
+  textAfterNode,
+  unknownNodes,
+  validateComposerInputPayload,
+  validateSlashCommandDefinitions,
+} from './composer-input'
+export type {
+  BaseComposerNode,
+  BranchComposerNode,
+  ComposerInputPayload,
+  ComposerInputValidationError,
+  ComposerInputValidationIssue,
+  ComposerNode,
+  ComposerNodeKind,
+  DynamicSlashCommandRegistration,
+  FileComposerNode,
+  KnownComposerNode,
+  SlashCommandHelpers,
+  SlashCommandComposerNode,
+  SlashCommandArgumentDefinition,
+  SlashCommandArgumentType,
+  SlashCommandDefinition,
+  SlashCommandRow,
+  SymbolComposerNode,
+  TextComposerNode,
+  WireComposerInputPayload,
+} from './composer-input'
 export {
   assertTags,
   buildTagsIndex,
@@ -279,7 +316,16 @@ export type { ProcessWakeConfig } from './types'
 // body (and any sibling reference docs) on demand.
 export { createSkillsRegistry } from './skills/registry'
 export { createSkillTools } from './skills/tools'
+export {
+  buildSkillSlashCommands,
+  createContextSkillLoader,
+} from './skills/context-loader'
 export type { SkillsRegistry, SkillMeta } from './skills/types'
+export type {
+  ContextSkillLoader,
+  ContextSkillLoaderOptions,
+  LoadedSkillContext,
+} from './skills/context-loader'
 
 export { DEFAULT_STATE_SCHEMAS } from './default-state-schemas'
 export { createContextEntriesApi } from './context-entries'

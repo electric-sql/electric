@@ -32,6 +32,10 @@ import { usePinnedEntities } from '../hooks/usePinnedEntities'
 import { useSidebarCollapsed } from '../hooks/useSidebarCollapsed'
 import { listTiles, useWorkspace } from '../hooks/useWorkspace'
 import { usePaneFindCommands } from '../hooks/usePaneFind'
+import {
+  useEntityPermissions,
+  type EntityPermission,
+} from '../hooks/useEntityPermission'
 import { getEntityDisplayTitle } from '../lib/entityDisplay'
 import { encodeLayout } from '../lib/workspace/layoutCodec'
 import { listViews } from '../lib/workspace/viewRegistry'
@@ -51,6 +55,7 @@ type PaletteItem =
       subtitle?: string
       keywords?: Array<string>
       shortcut?: string
+      disabled?: boolean
       icon: LucideIcon
       run: () => boolean | void | Promise<void>
     }
@@ -66,6 +71,10 @@ type PaletteItem =
 type ResultGroup = { label: string; items: Array<PaletteItem> }
 
 const MAX_SESSION_RESULTS = 30
+const PALETTE_ENTITY_PERMISSIONS: ReadonlyArray<EntityPermission> = [
+  `fork`,
+  `signal`,
+]
 
 function matchesPaletteItem(item: PaletteItem, query: string): boolean {
   const needle = query.trim().toLowerCase()
@@ -157,6 +166,12 @@ export function SearchPalette(): React.ReactElement | null {
     [entitiesCollection, activeTile?.entityUrl]
   )
   const activeEntity = activeEntityMatches.at(0) ?? undefined
+  const activeEntityPermissions = useEntityPermissions(
+    activeEntity,
+    PALETTE_ENTITY_PERMISSIONS
+  )
+  const activeEntityCanFork = activeEntityPermissions.fork
+  const activeEntityCanSignal = activeEntityPermissions.signal
   const activeEntityTitle = activeEntity
     ? getEntityDisplayTitle(activeEntity).title
     : undefined
@@ -328,8 +343,10 @@ export function SearchPalette(): React.ReactElement | null {
           title: `Fork current subtree`,
           subtitle: activeEntityTitle,
           keywords: [`fork`, `session`, `agent`],
+          disabled: !activeEntityCanFork,
           icon: GitFork,
           run: () => {
+            if (!activeEntityCanFork) return false
             if (!activeTile.entityUrl) return
             void forkEntity(activeTile.entityUrl)
               .then((root) =>
@@ -354,8 +371,10 @@ export function SearchPalette(): React.ReactElement | null {
           title: `Kill current entity`,
           subtitle: activeEntityTitle,
           keywords: [`stop`, `terminate`, `agent`, `session`],
+          disabled: !activeEntityCanSignal,
           icon: Trash2,
           run: () => {
+            if (!activeEntityCanSignal) return false
             if (!activeTile.entityUrl) return false
             if (
               !window.confirm(
@@ -374,6 +393,8 @@ export function SearchPalette(): React.ReactElement | null {
     return out
   }, [
     activeEntity,
+    activeEntityCanFork,
+    activeEntityCanSignal,
     activeEntityTitle,
     activeTile,
     collapsed,
@@ -467,6 +488,7 @@ export function SearchPalette(): React.ReactElement | null {
 
   const runItem = useCallback(
     (item: PaletteItem) => {
+      if (item.kind === `action` && item.disabled) return
       const shouldClose = item.run()
       if (shouldClose === false) return
       // Defer close to the next frame so React commits the navigation
@@ -527,12 +549,15 @@ export function SearchPalette(): React.ReactElement | null {
                 {group.items.map((item) => {
                   const idx = cursor++
                   const active = idx === highlight
+                  const disabled = item.kind === `action` && item.disabled
                   return (
                     <div
                       key={item.id}
                       role="option"
                       aria-selected={active}
+                      aria-disabled={disabled || undefined}
                       data-active={active}
+                      data-disabled={disabled || undefined}
                       className={styles.row}
                       onMouseEnter={() => setHighlight(idx)}
                       onClick={() => runItem(item)}

@@ -29,12 +29,14 @@ export type SidebarPrefs = {
   groupBy: SidebarGroupBy
   hiddenTypes: ReadonlySet<string>
   hiddenStatuses: ReadonlySet<string>
+  hiddenCreators: ReadonlySet<string>
 }
 
 const DEFAULT_PREFS: SidebarPrefs = {
   groupBy: `date`,
   hiddenTypes: new Set<string>(),
   hiddenStatuses: new Set<string>(),
+  hiddenCreators: new Set<string>(),
 }
 
 const STORAGE_KEY = `electric-agents-mobile.sidebar-prefs`
@@ -51,11 +53,13 @@ void (async () => {
         groupBy?: SidebarGroupBy
         hiddenTypes?: Array<string>
         hiddenStatuses?: Array<string>
+        hiddenCreators?: Array<string>
       }
       current = {
         groupBy: parsed.groupBy ?? DEFAULT_PREFS.groupBy,
         hiddenTypes: new Set(parsed.hiddenTypes ?? []),
         hiddenStatuses: new Set(parsed.hiddenStatuses ?? []),
+        hiddenCreators: new Set(parsed.hiddenCreators ?? []),
       }
     }
   } catch {
@@ -73,6 +77,7 @@ function persist(): void {
       groupBy: current.groupBy,
       hiddenTypes: Array.from(current.hiddenTypes),
       hiddenStatuses: Array.from(current.hiddenStatuses),
+      hiddenCreators: Array.from(current.hiddenCreators),
     })
   ).catch(() => {})
 }
@@ -113,10 +118,18 @@ export function toggleSidebarStatusVisibility(status: string): void {
   update({ ...current, hiddenStatuses: next })
 }
 
+export function toggleSidebarCreatorVisibility(creator: string): void {
+  const next = new Set(current.hiddenCreators)
+  if (next.has(creator)) next.delete(creator)
+  else next.add(creator)
+  update({ ...current, hiddenCreators: next })
+}
+
 export function resetSidebarFilters(): void {
   update({
     ...current,
     hiddenTypes: new Set<string>(),
     hiddenStatuses: new Set<string>(),
+    hiddenCreators: new Set<string>(),
   })
 }

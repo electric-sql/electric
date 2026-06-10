@@ -38,7 +38,7 @@ function notification(id: string): WakeNotification {
       type: `chat`,
       status: `idle`,
       url: `/chat/${id}`,
-      streams: { main: `/chat/${id}/main`, error: `/chat/${id}/error` },
+      streams: { main: `/chat/${id}/main` },
     },
   }
 }

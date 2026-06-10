@@ -1,21 +1,18 @@
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowUp, Square } from 'lucide-react'
+import { useLiveQuery } from '@tanstack/react-db'
 import type { EntityStreamDBWithActions } from '@electric-ax/agents-runtime/client'
 import {
   createDeleteInboxMessageAction,
-  createSendMessageAction,
+  createSendComposerInputAction,
   createSteerInboxMessageAction,
   createUpdateInboxMessageAction,
   readTextPayload,
 } from '../lib/sendMessage'
-import { Icon, Stack, Text } from '../ui'
+import { serializeComposerInput } from '@electric-ax/agents-runtime/client'
+import { ComposerEditor } from './ComposerEditor'
+import { ComposerShell } from './ComposerShell'
+import { Icon, Stack, Text, Tooltip } from '../ui'
 import {
   AttachmentActionMenu,
   AttachmentPreviewTray,
@@ -24,6 +21,10 @@ import {
 } from './AttachmentDrafts'
 import styles from './MessageInput.module.css'
 import type { EntityTimelineData } from '@electric-ax/agents-runtime/client'
+import type {
+  ComposerInputPayload,
+  SlashCommandRow,
+} from '@electric-ax/agents-runtime/client'
 import type { OptimisticInboxMessage } from '../lib/sendMessage'
 
 export function MessageInput({
@@ -31,6 +32,10 @@ export function MessageInput({
   baseUrl,
   entityUrl,
   disabled,
+  fallbackSlashCommands = [],
+  writeDisabled = false,
+  stopDisabled = false,
+  disabledPlaceholder,
   generationActive = false,
   stopPending = false,
   imageAttachmentsEnabled = true,
@@ -45,6 +50,10 @@ export function MessageInput({
   baseUrl: string
   entityUrl: string
   disabled: boolean
+  fallbackSlashCommands?: Array<SlashCommandRow>
+  writeDisabled?: boolean
+  stopDisabled?: boolean
+  disabledPlaceholder?: string
   generationActive?: boolean
   stopPending?: boolean
   imageAttachmentsEnabled?: boolean
@@ -67,6 +76,7 @@ export function MessageInput({
     onDelete: (key: string) => void
     onSteer: (key: string) => void
     onReorder: (key: string, position: string) => void
+    disabled: boolean
   }) => React.ReactNode
 }): React.ReactElement {
   const [value, setValue] = useState(``)
@@ -75,9 +85,10 @@ export function MessageInput({
     key: string
     originalText: string
   } | null>(null)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const composerFocusRef = useRef<{ focus: () => void } | null>(null)
+  const inputDisabled = disabled || writeDisabled
   const attachmentsDisabled =
-    disabled || Boolean(editingMessage) || !imageAttachmentsEnabled
+    inputDisabled || Boolean(editingMessage) || !imageAttachmentsEnabled
   const {
     attachments,
     clearAttachments,
@@ -91,29 +102,30 @@ export function MessageInput({
   } = useAttachmentDrafts({
     policy: imageAttachmentDraftPolicy,
     disabled: attachmentsDisabled,
-    focusRef: textareaRef,
+    focusRef: composerFocusRef,
   })
 
   useEffect(() => {
     if (!imageAttachmentsEnabled) clearAttachments()
   }, [imageAttachmentsEnabled, clearAttachments])
 
-  // Auto-grow the composer as the user types. We reset to `auto`
-  // first so `scrollHeight` reports the natural content height (not
-  // the previous explicit height), then assign that back as inline
-  // height. The CSS `max-height` caps it; `overflow: auto` then
-  // takes over for anything past the cap. Runs in layout effect so
-  // the resize lands before paint and there's no one-frame flicker.
-  useLayoutEffect(() => {
-    const el = textareaRef.current
-    if (!el) return
-    el.style.height = `auto`
-    el.style.height = `${el.scrollHeight}px`
-  }, [value])
+  const { data: slashCommands = [] } = useLiveQuery(
+    (q) =>
+      db
+        ? q
+            .from({ slashCommand: db.collections.slashCommands as any })
+            .orderBy(({ slashCommand }: any) => slashCommand.name, `asc`)
+        : undefined,
+    [db]
+  )
+  const effectiveSlashCommands =
+    slashCommands.length > 0
+      ? (slashCommands as Array<SlashCommandRow>)
+      : fallbackSlashCommands
 
-  const sendAction = useMemo(() => {
+  const sendComposerAction = useMemo(() => {
     if (!db) return null
-    return createSendMessageAction({
+    return createSendComposerInputAction({
       db,
       baseUrl,
       entityUrl,
@@ -140,59 +152,66 @@ export function MessageInput({
   const inputText = value.trim()
   const attachmentCount = imageAttachmentsEnabled ? attachments.length : 0
   const canSubmit =
-    !disabled &&
+    !inputDisabled &&
     (editingMessage
       ? inputText.length > 0
       : inputText.length > 0 || attachmentCount > 0)
-  const canAttachFiles = !disabled && !editingMessage && imageAttachmentsEnabled
+  const canAttachFiles =
+    !inputDisabled && !editingMessage && imageAttachmentsEnabled
   const showStop =
     generationActive &&
     inputText.length === 0 &&
     attachmentCount === 0 &&
     !disabled
-  const canStop = showStop && !stopPending
+  const canStop = showStop && !stopPending && !stopDisabled
 
-  const handleSubmit = useCallback(() => {
-    if (!canSubmit) return
-    setError(null)
-    const text = value.trim()
-    const files = imageAttachmentsEnabled ? attachments : []
-    const tx = editingMessage
-      ? updateAction?.({
-          key: editingMessage.key,
-          text,
-          mode: `queued`,
-          status: `pending`,
-        })
-      : sendAction?.({
-          text,
-          mode: `queued`,
-          attachments: files,
-        })
-    if (!tx) return
-    if (!editingMessage) onSend?.()
-    setValue(``)
-    clearAttachments()
-    setEditingMessage(null)
-    tx.isPersisted.promise.catch((err: Error) => {
-      setError(err.message)
-      if (!editingMessage) {
-        setValue((current) => (current ? current : text))
-        addAttachments(files)
-      }
-    })
-  }, [
-    addAttachments,
-    attachments,
-    imageAttachmentsEnabled,
-    canSubmit,
-    clearAttachments,
-    editingMessage,
-    onSend,
-    sendAction,
-    updateAction,
-    value,
-  ])
+  const handleSubmit = useCallback(
+    (composerPayload?: ComposerInputPayload) => {
+      if (!canSubmit) return
+      setError(null)
+      const text = value.trim()
+      const files = imageAttachmentsEnabled ? attachments : []
+      const tx = editingMessage
+        ? updateAction?.({
+            key: editingMessage.key,
+            text,
+            mode: `queued`,
+            status: `pending`,
+          })
+        : sendComposerAction?.({
+            payload:
+              composerPayload ??
+              serializeComposerInput(text, effectiveSlashCommands),
+            mode: `queued`,
+            ...(files.length > 0 ? { attachments: files } : {}),
+          })
+      if (!tx) return
+      if (!editingMessage) onSend?.()
+      setValue(``)
+      clearAttachments()
+      setEditingMessage(null)
+      tx.isPersisted.promise.catch((err: Error) => {
+        setError(err.message)
+        if (!editingMessage) {
+          setValue((current) => (current ? current : text))
+          addAttachments(files)
+        }
+      })
+    },
+    [
+      addAttachments,
+      attachments,
+      imageAttachmentsEnabled,
+      canSubmit,
+      clearAttachments,
+      value,
+      sendComposerAction,
+      updateAction,
+      editingMessage,
+      onSend,
+      effectiveSlashCommands,
+    ]
+  )
 
   const handleComposerAction = useCallback(() => {
     if (canStop) {
@@ -204,6 +223,7 @@ export function MessageInput({
 
   const startEditing = useCallback(
     (message: EntityTimelineData[`inbox`][number]) => {
+      if (inputDisabled) return
       const text = readTextPayload(message.payload)
       setError(null)
       clearAttachments()
@@ -216,9 +236,8 @@ export function MessageInput({
       })
       setEditingMessage({ key: message.key, originalText: text })
       setValue(text)
-      textareaRef.current?.focus()
     },
-    [clearAttachments, updateAction]
+    [clearAttachments, inputDisabled, updateAction]
   )
 
   const cancelEditing = useCallback(() => {
@@ -239,6 +258,7 @@ export function MessageInput({
 
   const deleteMessage = useCallback(
     (key: string) => {
+      if (inputDisabled) return
       if (!deleteAction) return
       setError(null)
       deleteAction({ key }).isPersisted.promise.catch((err: Error) => {
@@ -246,11 +266,12 @@ export function MessageInput({
       })
       if (editingMessage?.key === key) cancelEditing()
     },
-    [deleteAction, editingMessage?.key, cancelEditing]
+    [deleteAction, inputDisabled, editingMessage?.key, cancelEditing]
   )
 
   const steerMessage = useCallback(
     (key: string) => {
+      if (inputDisabled) return
       if (!steerAction) return
       setError(null)
       steerAction({ key }).isPersisted.promise.catch((err: Error) => {
@@ -258,10 +279,11 @@ export function MessageInput({
       })
       if (editingMessage?.key === key) cancelEditing()
     },
-    [steerAction, editingMessage?.key, cancelEditing]
+    [steerAction, inputDisabled, editingMessage?.key, cancelEditing]
   )
   const reorderMessage = useCallback(
     (key: string, position: string) => {
+      if (inputDisabled) return
       if (!updateAction) return
       setError(null)
       updateAction({ key, position }).isPersisted.promise.catch(
@@ -270,11 +292,15 @@ export function MessageInput({
         }
       )
     },
-    [updateAction]
+    [inputDisabled, updateAction]
   )
 
-  const isButtonActive = canSubmit || showStop
-
+  const isButtonActive = canSubmit || (showStop && !stopDisabled)
+  const sendTooltip = showStop
+    ? stopDisabled
+      ? `Signal permission required`
+      : `Stop generating`
+    : `Send message`
   return (
     <Stack direction="column" gap={0} className={styles.root}>
       {drawer?.({
@@ -284,45 +310,46 @@ export function MessageInput({
         onDelete: deleteMessage,
         onSteer: steerMessage,
         onReorder: reorderMessage,
+        disabled: inputDisabled,
       })}
       {error && (
         <Text size={1} tone="danger" className={styles.errorText}>
           {error}
         </Text>
       )}
-      <div
-        className={[
-          styles.composer,
-          disabled ? styles.disabled : null,
-          dropActive ? styles.composerDropActive : null,
-        ]
-          .filter(Boolean)
-          .join(` `)}
-        {...dropZoneProps}
-      >
-        {editingMessage && (
-          <div className={styles.editingBanner}>
-            <Text size={1} tone="muted">
-              Editing queued message
-            </Text>
-            <button
-              type="button"
-              aria-label="Cancel editing queued message"
-              onClick={cancelEditing}
-              className={styles.editingCancel}
-            >
-              Cancel
-            </button>
-          </div>
-        )}
-        {imageAttachmentsEnabled && (
-          <AttachmentPreviewTray
-            attachments={attachments}
-            onRemove={removeAttachment}
-          />
-        )}
-        <div className={styles.composerBody}>
-          {imageAttachmentsEnabled && (
+      <ComposerShell
+        className={styles.chatComposerShell}
+        disabled={inputDisabled}
+        dropActive={dropActive}
+        onPaste={handlePaste}
+        dropZoneProps={dropZoneProps}
+        banner={
+          editingMessage ? (
+            <div className={styles.editingBanner}>
+              <Text size={1} tone="muted">
+                Editing queued message
+              </Text>
+              <button
+                type="button"
+                aria-label="Cancel editing queued message"
+                onClick={cancelEditing}
+                className={styles.editingCancel}
+              >
+                Cancel
+              </button>
+            </div>
+          ) : null
+        }
+        attachments={
+          imageAttachmentsEnabled ? (
+            <AttachmentPreviewTray
+              attachments={attachments}
+              onRemove={removeAttachment}
+            />
+          ) : null
+        }
+        controls={
+          imageAttachmentsEnabled ? (
             <AttachmentActionMenu
               disabled={!canAttachFiles}
               accept={imageAttachmentDraftPolicy.accept}
@@ -330,80 +357,60 @@ export function MessageInput({
               onFilesSelected={addAttachments}
               onAttach={openAttachmentPicker}
             />
-          )}
-          <textarea
-            ref={textareaRef}
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            onPaste={handlePaste}
-            // Tell mobile virtual keyboards that Enter means "send" so the
-            // GBoard / iOS keyboard surfaces a send-shaped action key and
-            // — critically on Android Chrome — fires `keydown` with
-            // `key === 'Enter'` reliably. Without this hint the soft
-            // keyboard's return key inside a textarea inserts a newline
-            // and may fire `key === 'Unidentified'` / `keyCode === 229`.
-            enterKeyHint="send"
-            onKeyDown={(e) => {
-              if (e.key !== `Enter` || e.shiftKey) return
-              // Don't submit while an IME composition is in progress —
-              // Enter is committing the candidate, not sending. Android
-              // Chrome reports composing as `keyCode === 229` rather than
-              // setting `isComposing`, so check both.
-              if (e.nativeEvent.isComposing || e.keyCode === 229) return
-              e.preventDefault()
-              handleSubmit()
-            }}
-            // Fallback for soft keyboards (notably Android Chrome / GBoard)
-            // that route the return key through `beforeinput` as an
-            // `insertLineBreak` without firing a `keydown` we can match
-            // on `key === 'Enter'`.
-            onBeforeInput={(e) => {
-              if (
-                (e.nativeEvent as InputEvent).inputType === `insertLineBreak`
-              ) {
-                e.preventDefault()
-                handleSubmit()
-              }
-            }}
-            placeholder={disabled ? `Entity stopped` : `Send a message...`}
-            disabled={disabled}
-            rows={1}
-            data-agent-chat-input=""
-            className={styles.textarea}
-          />
-          <button
-            type="button"
-            aria-label={showStop ? `Stop generating` : `Send message`}
-            title={showStop ? `Stop generating` : `Send message`}
-            // Keep the textarea focused when the user taps Send on a
-            // touch device. Without this, tapping the button blurs the
-            // textarea, dismisses the on-screen keyboard, and the
-            // viewport reflows between pointerdown and pointerup — the
-            // resulting `click` lands on a different element and the
-            // send never fires. `preventDefault` here skips the implicit
-            // focus transfer; the `click` still dispatches normally.
-            onPointerDown={(e) => {
-              if (e.pointerType !== `mouse`) e.preventDefault()
-            }}
-            onClick={handleComposerAction}
-            disabled={showStop ? stopPending : !isButtonActive}
-            className={[
-              styles.composerSend,
-              isButtonActive ? styles.active : null,
-              showStop ? styles.stop : null,
-              stopPending && showStop ? styles.stopPending : null,
-            ]
-              .filter(Boolean)
-              .join(` `)}
-          >
-            <Icon
-              icon={showStop ? Square : ArrowUp}
-              size={showStop ? 2 : 3}
-              {...(showStop ? { fill: `currentColor`, strokeWidth: 0 } : {})}
-            />
-          </button>
-        </div>
-      </div>
+          ) : null
+        }
+        send={
+          <Tooltip content={sendTooltip} side="top">
+            <span className={styles.tooltipTrigger}>
+              <button
+                type="button"
+                aria-label={showStop ? `Stop generating` : `Send message`}
+                // Keep the textarea focused when the user taps Send on a
+                // touch device. Without this, tapping the button blurs the
+                // textarea, dismisses the on-screen keyboard, and the
+                // viewport reflows between pointerdown and pointerup — the
+                // resulting `click` lands on a different element and the
+                // send never fires. `preventDefault` here skips the implicit
+                // focus transfer; the `click` still dispatches normally.
+                onPointerDown={(e) => {
+                  if (e.pointerType !== `mouse`) e.preventDefault()
+                }}
+                onClick={handleComposerAction}
+                disabled={showStop ? !canStop : !isButtonActive}
+                className={[
+                  styles.composerSend,
+                  isButtonActive ? styles.active : null,
+                  showStop ? styles.stop : null,
+                  stopPending && showStop ? styles.stopPending : null,
+                ]
+                  .filter(Boolean)
+                  .join(` `)}
+              >
+                <Icon
+                  icon={showStop ? Square : ArrowUp}
+                  size={showStop ? 2 : 3}
+                  {...(showStop
+                    ? { fill: `currentColor`, strokeWidth: 0 }
+                    : {})}
+                />
+              </button>
+            </span>
+          </Tooltip>
+        }
+      >
+        <ComposerEditor
+          value={value}
+          onChange={setValue}
+          onSubmit={handleSubmit}
+          slashCommands={effectiveSlashCommands}
+          placeholder={
+            disabled
+              ? (disabledPlaceholder ?? `Entity stopped`)
+              : `Send a message...`
+          }
+          disabled={inputDisabled}
+        />
+      </ComposerShell>
     </Stack>
   )
 }

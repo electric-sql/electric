@@ -35,6 +35,9 @@ export const SessionTree = memo(function SessionTree({
   isLastSibling = true,
   parentTrunkX,
   onSelectEntity,
+  currentPrincipalUrl = null,
+  onLongPressRoot,
+  pinnedSet,
 }: {
   entity: ElectricEntity
   childrenByParent: Map<string, Array<ElectricEntity>>
@@ -47,9 +50,17 @@ export const SessionTree = memo(function SessionTree({
    */
   parentTrunkX?: number
   onSelectEntity: (url: string) => void
+  currentPrincipalUrl?: string | null
+  /** Opens the row context menu; not forwarded to children (pinning is root-only). */
+  onLongPressRoot?: (entity: ElectricEntity) => void
+  /** Pinned entities render in the Pinned section, so filter them out of subtrees. */
+  pinnedSet?: ReadonlySet<string>
 }): React.ReactElement {
   const expanded = useIsExpanded(entity.url)
-  const children = childrenByParent.get(entity.url) ?? []
+  const allChildren = childrenByParent.get(entity.url) ?? []
+  const children = pinnedSet
+    ? allChildren.filter((c) => !pinnedSet.has(c.url))
+    : allChildren
   const hasChildren = children.length > 0
 
   // Trunk x for *this* row's children, computed once per render.
@@ -66,6 +77,10 @@ export const SessionTree = memo(function SessionTree({
           hasChildren ? () => toggleExpanded(entity.url) : undefined
         }
         onPress={() => onSelectEntity(entity.url)}
+        currentPrincipalUrl={currentPrincipalUrl}
+        onLongPress={
+          onLongPressRoot ? () => onLongPressRoot(entity) : undefined
+        }
         connector={
           parentTrunkX !== undefined
             ? { trunkX: parentTrunkX, isLastSibling }
@@ -83,6 +98,8 @@ export const SessionTree = memo(function SessionTree({
               isLastSibling={idx === children.length - 1}
               parentTrunkX={myTrunkX}
               onSelectEntity={onSelectEntity}
+              currentPrincipalUrl={currentPrincipalUrl}
+              pinnedSet={pinnedSet}
             />
           ))}
         </View>

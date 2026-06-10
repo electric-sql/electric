@@ -1,5 +1,110 @@
 # @electric-ax/agents-server-ui
 
+## 0.4.18
+
+### Patch Changes
+
+- 3dbd075: Add session pinning to the mobile app: long-press a root session row (or any search result) to open a context sheet with the entity info (title, session id, type/status, subagents, runner, sandbox, spawned, last active) and a Pin/Unpin action; the in-session kebab menu also gets a Pin/Unpin item, mirroring the desktop tile menu. Pinned sessions surface in a Pinned section above the groups, persisted per-device in AsyncStorage — the mobile mirror of the web sidebar's pinning. Runner-param types in agents-server-ui's `entityRuntime` helpers are loosened to structural subsets so the mobile app can reuse them.
+- 5aa2d78: Add server-resolved fork anchor + spawn-parity body fields to `POST /_electric/entities/<type>/<id>/fork`.
+  - `anchor: 'latest_completed_run'` is an alternative to `fork_pointer`: the server scans the source root's `main` history, finds the most recent `runs` row with `status === 'completed'`, derives the matching `{ offset, sub_offset }` pointer, and runs the existing pointer-fork path with it. Mutually exclusive with `fork_pointer` (400 if both); 400 if no completed run exists. Lets callers without access to the source's per-row pointer side-table (e.g. an agent forking via a tool) fork at the same anchor the per-row "Fork from here" UI uses.
+  - `parent` overrides the new root fork's `parent` field, making it a CHILD of that URL (rather than inheriting the source's parent).
+  - `wake` registers a subscription on the new root fork at fork time (same shape as `spawn`'s `wake`).
+  - `initialMessage` is delivered to the new root fork via `entityManager.send` after `linkEntityDispatchSubscription` runs — same ordering spawn uses, so the dispatcher is subscribed before the inbox row lands and the fork actually wakes on the message instead of sitting idle.
+  - `tags` are stamped on the new root fork in addition to those copied from the source.
+
+  Together these let an agent fork itself as a child and receive replies via the same manifest-anchored wake mechanism `spawn` uses, with a single round-trip fork-and-dispatch.
+
+  Chat UI: `readInboxText` falls back to `message` and `content` keys when `text` isn't present, so messages sent by agents (which sometimes emit those shapes) render as a chat bubble body instead of a blank bar.
+
+- 146f238: Polish the agents UI with improved spawn-form model controls, tooltips,
+  macOS sidebar vibrancy styling, select sizing fixes, and a response-footer
+  fork action in the timeline.
+- 7892079: Per-runner recent working directories in the spawn UI, derived from the synced sessions list so the same recents appear on every device. The desktop picker becomes per-runner (replacing the localStorage list), and mobile gains sandbox-profile and working-directory selection — including sending the sandbox profile on spawn, without which the runtime ignores the chosen directory.
+- Updated dependencies [d15852d]
+- Updated dependencies [5aa2d78]
+- Updated dependencies [1099366]
+- Updated dependencies [1099366]
+  - @electric-ax/agents-runtime@0.3.11
+
+## 0.4.17
+
+### Patch Changes
+
+- 3ecdade: Add structured composer input support, slash command registration, and proactive skill context loading.
+- Updated dependencies [3ecdade]
+  - @electric-ax/agents-runtime@0.3.10
+
+## 0.4.16
+
+### Patch Changes
+
+- 9fdf96a: Track agent-originated sends with `from_agent` / `from_principal` inbox metadata and render agent/self-send inbox messages with JSON payload fallbacks.
+- f222d39: Add a form-based **Add / Edit / Remove** flow for MCP servers in the
+  desktop's Settings → MCP Servers page. Before this, the only way to
+  register a server was to hand-edit `settings.json` or a workspace
+  `mcp.json`. The dialog supports both `http` and `stdio` transports, all
+  four auth modes, and writes through to the global `settings.json
+mcp.servers` block.
+
+  The MCP page also gains provenance + shadowing awareness:
+  - Entries from a workspace `mcp.json` render a "from mcp.json" badge
+    and are read-only (no Edit/Remove). Lifecycle verbs still apply.
+  - When a name in `settings.json` collides with one in workspace
+    `mcp.json`, the workspace still wins (existing rule); the shadowed
+    settings entry is rendered grayed-out next to the running workspace
+    twin so the user can see what's been overridden.
+
+  `BuiltinAgentsServer` gains a public `setExtraMcpServers(extras)` so
+  the desktop can push add/edit/remove changes to the live MCP registry
+  without restarting. Workspace `mcp.json` continues to win on name
+  collision through the same merge path used by the file watcher.
+
+- 312f5ec: Typecheck against agents-runtime's built types for the package index instead of
+  its source, so the UI no longer pulls node-only sandbox code into its program.
+  The browser-safe `client` entry stays source-mapped (matching the vite alias).
+- 4f88e6d: Dedupe `@tanstack/db` to a single instance.
+
+  `@tanstack/db` is effectively a singleton (collections/transactions/live
+  queries use `instanceof` checks and module-level state), but the lockfile had
+  drifted to several `0.6.x` copies, breaking StreamDB collections. Adds a root
+  `pnpm.overrides` entry collapsing the `0.6.x` line to `0.6.7`, scoped to
+  `>=0.6.0 <0.7.0` so the legacy example starters pinned to `0.0.x`/`0.5.8` are
+  untouched. Stopgap until `@durable-streams/state` ships `@tanstack/db` as a
+  peer dependency.
+
+  Also raises the `agents-mobile` iOS minimum deployment target to 16.4 (via
+  `expo-build-properties`). The chat renders in an Expo DOM WebView whose markdown
+  stack ships regex lookbehind, which JavaScriptCore only parses on iOS 16.4+;
+  below that the whole DOM bundle fails to parse and the chat renders blank.
+
+- b2bf806: Upgrade `@durable-streams/state` to `0.3.1` and drop the `@tanstack/db` pnpm override.
+
+  `@durable-streams/state@0.3.x` makes `@tanstack/db` an optional peer dependency (it was a direct `^0.6.0` dependency) and splits its tsdb-coupled tools into a `@durable-streams/state/db` subpath. tsdb-specific imports (`createStreamDB`, `queryOnce`, `createTransaction`, query operators, etc.) now come from `@durable-streams/state/db`; the bare entry keeps only the tsdb-free types and helpers.
+
+  Because state no longer pulls its own `@tanstack/db` copy, the root `pnpm.overrides` collapsing `@tanstack/db@>=0.6.0 <0.7.0` to `0.6.7` is removed. To keep a single `0.6.7` instance without it, `@tanstack/react-db` is raised to `^0.1.85` and `@tanstack/electric-db-collection` to `^0.3.5` (both pin `@tanstack/db@0.6.7`), and `@durable-streams/server` to `^0.3.7` (depends on `state@0.3.1`, removing the lingering transitive `state@0.2.9`).
+
+- 6e9e4a7: Show elapsed time while an agent is responding. While a turn is
+  streaming, the meta row now ticks `Thinking · 12s` (or just `12s` once
+  tokens start flowing). When a turn settles, the bare `✓ done` becomes
+  `✓ done in 1m 5s` for turns completed in-session. Historical turns
+  (already complete on page load) keep the bare label, since the client
+  has no reliable completion timestamp for those — only the user message
+  time, and subtracting `now()` would lie about the duration.
+- d14d9a9: Remove the unused per-entity agents error stream. Entities now expose only their main stream; spawn, fork, registry lookup, terminal signal handling, UI/runtime types, client helpers, and conformance tests no longer create or require an entity-level error stream.
+- 889fa20: Expose tenant-scoped users as an Electric shape and add a chat sharing dialog that grants user principals or all workspace users view, chat, or manage permissions over an entity. View/chat sharing includes fork access, forked chats are owned by the principal that creates the fork, shared chats can be identified and filtered by creator in the sidebar, and Cloud requests now inject the signed-in user as the Electric principal.
+
+  Mobile now syncs the users and effective-permissions shapes, marks and filters shared chats by creator, disables native chat and signal controls when the current principal lacks permission, and shows the signed-in user principal on the Account screen for debugging.
+
+- Updated dependencies [9fdf96a]
+- Updated dependencies [312f5ec]
+- Updated dependencies [6434774]
+- Updated dependencies [4f88e6d]
+- Updated dependencies [b2bf806]
+- Updated dependencies [74d2341]
+- Updated dependencies [d14d9a9]
+- Updated dependencies [7c62024]
+  - @electric-ax/agents-runtime@0.3.9
+
 ## 0.4.15
 
 ### Patch Changes
@@ -13,7 +118,7 @@
   Runtimes advertise named **sandbox profiles** (e.g. `local`, `docker`) to the agents-server; spawn requests pick a profile by name, the server validates the choice against the target runner's advertised set, and the new-session UI surfaces a picker. Internally, the built-in tool factories (`createBashTool`, `createFetchUrlTool`, etc.) now route their filesystem and network access through the active `Sandbox`.
 
 - f73d64a: Keep shared dropdown overlays clickable when they overlap desktop pane titlebar regions.
-- d5708c7: Fork at an earlier message instead of only at HEAD. `POST /_electric/entities/<type>/<id>/fork` accepts an optional `fork_pointer: { offset, sub_offset }` (snake_case wire) that truncates the new entity's `main` stream up to and including the chosen event; `error` and shared-state streams still clone at HEAD; the root's manifest is filtered so descendants spawned after the pointer are dropped from the fork along with their subtrees. Pointer-forks skip the all-subtree-idle wait on the root (the historical read can't be torn by concurrent writes past the pointer), so the affordance works during the post-run keep-alive window. UI: hover-revealed "Fork from here" button on user-message bubbles in `ChatView`, anchored to the latest preceding completed `runs` row; suppressed on the first message and while a run is in flight.
+- d5708c7: Fork at an earlier message instead of only at HEAD. `POST /_electric/entities/<type>/<id>/fork` accepts an optional `fork_pointer: { offset, sub_offset }` (snake_case wire) that truncates the new entity's `main` stream up to and including the chosen event; shared-state streams still clone at HEAD; the root's manifest is filtered so descendants spawned after the pointer are dropped from the fork along with their subtrees. Pointer-forks skip the all-subtree-idle wait on the root (the historical read can't be torn by concurrent writes past the pointer), so the affordance works during the post-run keep-alive window. UI: hover-revealed "Fork from here" button on user-message bubbles in `ChatView`, anchored to the latest preceding completed `runs` row; suppressed on the first message and while a run is in flight.
 - 4e2cc22: Make the "Fork from here" affordance work in the mobile Expo DOM embed. Two pieces: (1) wire the fork-anchor map in `ChatLogView` (the view the mobile embed mounts) so `EntityTimeline` actually receives the per-row callbacks; (2) add a `:global(html[data-electric-mobile-dom='true']) .forkButton { opacity: 1 }` rule in `UserMessage.module.css` so the button is visible without a hover/tap (touch devices don't fire `:hover`). The fork POST and post-fork navigation already route through the existing `serverFetch` + `onRequestOpenEntity` callback, so no changes to the mobile package itself.
 - 2896820: Render lightweight markdown links and formatting in inbox messages.
 - f2d3d5e: Render self-send wake notifications with the sent message payload in the agent timeline.

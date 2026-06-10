@@ -1,6 +1,7 @@
 import { createCollection } from '@tanstack/react-db'
 import { electricCollectionOptions } from '@tanstack/electric-db-collection'
 import { appendPathToUrl } from '@electric-ax/agents-runtime/client'
+import type { ComposerInputPayload } from '@electric-ax/agents-runtime/client'
 import { serverFetch } from '@electric-ax/agents-server-ui/src/lib/auth-fetch'
 import { z } from 'zod'
 
@@ -31,13 +32,37 @@ const ENTITY_STATUSES: [EntityStatus, ...Array<EntityStatus>] = [
   `killed`,
 ]
 
+// Mirrors `dispatchPolicySchema` in agents-server-ui's
+// `ElectricAgentsProvider.tsx` — permissive so unknown target shapes
+// still sync. We read the `runner` target's id ("which runner runs this
+// session") for display and to derive per-runner recents; other target
+// kinds (e.g. webhook) carry no runner.
+const dispatchPolicySchema = z.object({
+  targets: z
+    .array(
+      z.object({
+        type: z.string(),
+        runnerId: z.string().optional(),
+        url: z.string().optional(),
+        subscription_id: z.string().optional(),
+      })
+    )
+    .default([]),
+})
+
 export const entitySchema = z.object({
   url: z.string(),
   type: z.string(),
   status: z.enum(ENTITY_STATUSES),
   tags: z.record(z.string(), z.string()).default({}),
   spawn_args: z.record(z.string(), z.unknown()).default({}),
+  sandbox: z
+    .object({ profile: z.string(), key: z.string().optional() })
+    .nullable()
+    .optional(),
+  dispatch_policy: dispatchPolicySchema.nullable().optional(),
   parent: z.string().nullable(),
+  created_by: z.string().nullable().optional(),
   type_revision: z.coerce.number().nullable().optional(),
   inbox_schemas: z.record(z.string(), z.unknown()).nullable().optional(),
   state_schemas: z.record(z.string(), z.unknown()).nullable().optional(),
@@ -51,14 +76,46 @@ export const entityTypeSchema = z.object({
   creation_schema: z.unknown().nullable(),
   inbox_schemas: z.record(z.string(), z.unknown()).nullable(),
   state_schemas: z.record(z.string(), z.unknown()).nullable(),
+  // Statically-declared slash commands for the type, used as the autocomplete
+  // source on the new-session composer (where no entity stream exists yet).
+  slash_commands: z
+    .array(
+      z.object({
+        name: z.string(),
+        description: z.string().optional(),
+        arguments: z
+          .array(
+            z.object({
+              name: z.string(),
+              type: z.enum([`string`, `number`, `boolean`]),
+              required: z.boolean().optional(),
+              description: z.string().optional(),
+            })
+          )
+          .optional(),
+      })
+    )
+    .nullable()
+    .optional(),
   serve_endpoint: z.string().nullable(),
   created_at: z.string(),
   updated_at: z.string(),
 })
 
-// Minimal subset of the runners shape — just the columns the mobile
-// picker needs to identify a runner and pass it as the dispatch
-// target on spawn.
+export const sandboxProfileSchema = z.object({
+  name: z.string(),
+  label: z.string(),
+  description: z.string().optional(),
+  // True for off-host (remote-provider) sandboxes: the workspace lives in the
+  // provider VM, so a host working directory doesn't apply.
+  remote: z.boolean().optional(),
+})
+
+// Minimal subset of the runners shape — the columns the mobile picker
+// needs to identify a runner and pass it as the dispatch target on
+// spawn, plus `sandbox_profiles` to offer its advertised profiles and
+// let the session-row info sheet resolve sandbox labels like the desktop
+// hover card does.
 export const runnerSchema = z.object({
   id: z.string(),
   owner_principal: z.string(),
@@ -66,17 +123,53 @@ export const runnerSchema = z.object({
   kind: z.string(),
   admin_status: z.enum([`enabled`, `disabled`]),
   last_seen_at: z.string().nullable().optional(),
+  // Coerce a missing/null jsonb column to an empty list — `.default([])`
+  // covers `undefined` but not a Postgres NULL.
+  sandbox_profiles: z.preprocess(
+    (v) => (Array.isArray(v) ? v : []),
+    z.array(sandboxProfileSchema)
+  ),
+})
+
+export const userSchema = z.object({
+  id: z.string(),
+  display_name: z.string().nullable(),
+  email: z.string().nullable(),
+  avatar_url: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+})
+
+export const entityEffectivePermissionSchema = z.object({
+  id: z.coerce.number(),
+  entity_url: z.string(),
+  source_entity_url: z.string(),
+  source_grant_id: z.coerce.number(),
+  permission: z.string(),
+  subject_kind: z.string(),
+  subject_value: z.string(),
+  expires_at: z.string().nullable().optional(),
+  created_at: z.string(),
 })
 
 export type ElectricEntity = z.infer<typeof entitySchema>
 export type ElectricEntityType = z.infer<typeof entityTypeSchema>
 export type ElectricRunner = z.infer<typeof runnerSchema>
+export type ElectricSandboxProfile = z.infer<typeof sandboxProfileSchema>
+export type ElectricUser = z.infer<typeof userSchema>
+export type ElectricEntityEffectivePermission = z.infer<
+  typeof entityEffectivePermissionSchema
+>
 
 export type EntitiesCollection = ReturnType<typeof createEntitiesCollection>
 export type EntityTypesCollection = ReturnType<
   typeof createEntityTypesCollection
 >
 export type RunnersCollection = ReturnType<typeof createRunnersCollection>
+export type UsersCollection = ReturnType<typeof createUsersCollection>
+export type EntityEffectivePermissionsCollection = ReturnType<
+  typeof createEntityEffectivePermissionsCollection
+>
 
 export function normalizeServerUrl(input: string): string {
   const trimmed = input.trim().replace(/\/+$/, ``)
@@ -115,7 +208,10 @@ export function createEntitiesCollection(baseUrl: string) {
             `status`,
             `tags`,
             `spawn_args`,
+            `sandbox`,
+            `dispatch_policy`,
             `parent`,
+            `created_by`,
             `type_revision`,
             `inbox_schemas`,
             `state_schemas`,
@@ -164,8 +260,49 @@ export function createRunnersCollection(baseUrl: string) {
             `kind`,
             `admin_status`,
             `last_seen_at`,
+            `sandbox_profiles`,
           ],
         },
+      },
+      getKey: (item) => item.id,
+    })
+  )
+}
+
+export function createUsersCollection(baseUrl: string) {
+  return createCollection(
+    electricCollectionOptions({
+      id: `mobile-users:${baseUrl}`,
+      schema: userSchema,
+      shapeOptions: {
+        url: appendPathToUrl(baseUrl, `/_electric/electric/v1/shape`),
+        fetchClient: serverFetch,
+        params: {
+          table: `users`,
+          columns: [
+            `id`,
+            `display_name`,
+            `email`,
+            `avatar_url`,
+            `created_at`,
+            `updated_at`,
+          ],
+        },
+      },
+      getKey: (item) => item.id,
+    })
+  )
+}
+
+export function createEntityEffectivePermissionsCollection(baseUrl: string) {
+  return createCollection(
+    electricCollectionOptions({
+      id: `mobile-entity-effective-permissions:${baseUrl}`,
+      schema: entityEffectivePermissionSchema,
+      shapeOptions: {
+        url: appendPathToUrl(baseUrl, `/_electric/electric/v1/shape`),
+        fetchClient: serverFetch,
+        params: { table: `entity_effective_permissions` },
       },
       getKey: (item) => item.id,
     })
@@ -176,17 +313,34 @@ export async function spawnEntity({
   baseUrl,
   type,
   initialMessage,
+  initialMessageType,
+  args,
   runnerId,
+  sandboxProfile,
+  workingDirectory,
 }: {
   baseUrl: string
   type: string
-  initialMessage?: string
+  // Plain text, or a structured composer_input payload — pass
+  // `initialMessageType` alongside the latter.
+  initialMessage?: string | ComposerInputPayload
+  initialMessageType?: string
+  // Creation-schema args merged into the entity's spawn_args. The same channel
+  // desktop uses for schema-form values and model settings; `workingDirectory`
+  // is folded in as one such key.
+  args?: Record<string, unknown>
   // When set, the cloud agents-server routes wake events for this
   // entity to the named pull-wake runner. Without it, dispatch falls
   // back to the entity type's `default_dispatch_policy` — typically a
   // webhook to a local serveEndpoint, which the cloud server can't
   // reach.
   runnerId?: string
+  // Sandbox profile advertised by the target runner. Required for
+  // `workingDirectory` to take effect — the runtime only resolves the
+  // working-directory arg through a profile's sandbox factory; with no
+  // profile it falls back to its own process cwd.
+  sandboxProfile?: string
+  workingDirectory?: string
 }): Promise<string> {
   const name = makeEntityName()
   const entityUrl = `/${type}/${name}`
@@ -197,13 +351,28 @@ export async function spawnEntity({
   // the spawn ack could return before the streams were ready, and the
   // immediate /send would 404 with STREAM_NOT_FOUND.
   const body: Record<string, unknown> = {}
-  const text = initialMessage?.trim()
-  if (text) body.initialMessage = text
+  if (typeof initialMessage === `string`) {
+    const text = initialMessage.trim()
+    if (text) body.initialMessage = text
+  } else if (initialMessage !== undefined) {
+    body.initialMessage = initialMessage
+    if (initialMessageType) body.initialMessageType = initialMessageType
+  }
   if (runnerId) {
     body.dispatch_policy = {
       targets: [{ type: `runner`, runnerId }],
     }
   }
+  if (sandboxProfile) {
+    // Key by the session URL for a persistent, shared workspace: files
+    // survive across wakes and spawned subagents share the container.
+    body.sandbox = { profile: sandboxProfile, key: entityUrl }
+  }
+  const mergedArgs = {
+    ...args,
+    ...(workingDirectory ? { workingDirectory } : {}),
+  }
+  if (Object.keys(mergedArgs).length > 0) body.args = mergedArgs
   const spawnRes = await serverFetch(
     appendPathToUrl(
       baseUrl,

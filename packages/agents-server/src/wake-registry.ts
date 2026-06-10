@@ -42,6 +42,8 @@ export interface WakeEvalResult {
       kind: `insert` | `update` | `delete`
       key: string
       from?: string
+      from_principal?: string
+      from_agent?: string
       payload?: unknown
       timestamp?: string
       message_type?: string
@@ -944,6 +946,12 @@ export class WakeRegistry {
     if (eventType === `inbox`) {
       const value = event.value as Record<string, unknown> | undefined
       if (typeof value?.from === `string`) change.from = value.from
+      if (typeof value?.from_principal === `string`) {
+        change.from_principal = value.from_principal
+      }
+      if (typeof value?.from_agent === `string`) {
+        change.from_agent = value.from_agent
+      }
       if (`payload` in (value ?? {})) change.payload = value?.payload
       if (typeof value?.timestamp === `string`)
         change.timestamp = value.timestamp

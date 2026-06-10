@@ -1,15 +1,20 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { spawnSync } from 'node:child_process'
 import {
   __resetPersistentRegistryForTests,
   dockerSandbox,
+  reclaimDockerSandboxByKey,
+  shutdownAllDockerSandboxes,
   sweepOrphanedDockerSandboxes,
 } from '../src/sandbox/docker'
+import { lazySandbox } from '../src/sandbox/lazy'
 import { loadDockerode } from '../src/sandbox/docker/loader'
 import { SandboxError } from '../src/sandbox/types'
 import { dockerAvailable, TEST_IMAGE, TEST_LABEL } from './helpers/docker-probe'
+import { installDockerSandboxTestCleanup } from './helpers/docker-sandbox-cleanup'
 
 /**
  * dockerSandbox integration tests. The whole describe block is gated on
@@ -25,39 +30,8 @@ if (!dockerAvailable) {
 
 const d = dockerAvailable ? describe : describe.skip
 
-async function sweepTestContainers(): Promise<void> {
-  const Docker = await loadDockerode()
-  const docker = new Docker()
-  const containers = await docker.listContainers({
-    all: true,
-    filters: { label: [`${TEST_LABEL}=1`] },
-  })
-  await Promise.all(
-    containers.map((c) =>
-      docker
-        .getContainer(c.Id)
-        .remove({ force: true, v: true })
-        .catch(() => {})
-    )
-  )
-}
-
 d(`dockerSandbox`, () => {
-  beforeAll(async () => {
-    // Best-effort cleanup of leftover containers from previous runs.
-    await sweepTestContainers()
-  }, 30_000)
-
-  afterAll(async () => {
-    await sweepTestContainers()
-  }, 30_000)
-
-  afterEach(async () => {
-    // Every container now flows through the registry + debounced teardown;
-    // clear the in-process bookkeeping (and its timers) between tests.
-    __resetPersistentRegistryForTests()
-    await sweepTestContainers()
-  }, 30_000)
+  installDockerSandboxTestCleanup()
 
   it(`exec roundtrip with stdout / exitCode`, async () => {
     const sandbox = await dockerSandbox({
@@ -429,19 +403,7 @@ d(`dockerSandbox keyed lifecycle`, () => {
   // Unique keys per run so reattach targets a clean deterministic name.
   const KEY = `electric-test-${Date.now()}`
 
-  beforeAll(async () => {
-    await sweepTestContainers()
-  }, 30_000)
-
-  afterEach(async () => {
-    __resetPersistentRegistryForTests()
-    await sweepTestContainers()
-  }, 30_000)
-
-  afterAll(async () => {
-    __resetPersistentRegistryForTests()
-    await sweepTestContainers()
-  }, 30_000)
+  installDockerSandboxTestCleanup()
 
   const make = (
     sandboxKey: string,
@@ -469,8 +431,21 @@ d(`dockerSandbox keyed lifecycle`, () => {
       filters: { label: [`com.electric.sandbox.key=${sandboxKey}`] },
     })
     if (list.length === 0) return `absent`
-    const info = await docker.getContainer(list[0].Id).inspect()
-    return info.State.Running ? `running` : `stopped`
+    try {
+      const info = await docker.getContainer(list[0].Id).inspect()
+      return info.State.Running ? `running` : `stopped`
+    } catch (error) {
+      // Removed between list and inspect (e.g. a reclaim in flight).
+      if (
+        typeof error === `object` &&
+        error !== null &&
+        `statusCode` in error &&
+        error.statusCode === 404
+      ) {
+        return `absent`
+      }
+      throw error
+    }
   }
 
   const waitForKeyState = async (
@@ -530,6 +505,12 @@ d(`dockerSandbox keyed lifecycle`, () => {
       // Per-entity identity lives in labels, since the shared name can't.
       expect(labels[`com.electric.sandbox.entity-type`]).toBe(`horton`)
       expect(labels[`com.electric.sandbox.entity`]).toBe(`/horton/abc123/main`)
+      // Owning process, for the boot sweep's same-host liveness probe.
+      expect(labels[`com.electric.sandbox.owner-pid`]).toBe(String(process.pid))
+      // Compose-style grouping: docker GUIs collapse all sandboxes under one
+      // project, and `docker compose -p electric-sandboxes down` clears them.
+      expect(labels[`com.docker.compose.project`]).toBe(`electric-sandboxes`)
+      expect(labels[`com.docker.compose.service`]).toBe(`horton`)
     } finally {
       await sandbox.dispose()
     }
@@ -743,9 +724,10 @@ d(`dockerSandbox keyed lifecycle`, () => {
     expect(await keyState(key)).toBe(`absent`)
   }, 90_000)
 
-  it(`sweepOrphanedDockerSandboxes leaves a *running* container untouched`, async () => {
-    // A running container may belong to a live sibling process sharing this
-    // daemon — force-removing it would wipe a peer's in-use sandbox.
+  it(`sweepOrphanedDockerSandboxes leaves a *running* container with a live owner untouched`, async () => {
+    // A running container whose owner-pid process (this test process) is alive
+    // belongs to a live sibling — force-removing it would wipe an in-use
+    // sandbox.
     const key = `${KEY}-orphan-running`
     await make(key, 60_000, /* persistent */ false)
     __resetPersistentRegistryForTests()
@@ -766,5 +748,190 @@ d(`dockerSandbox keyed lifecycle`, () => {
 
     await sweepOrphanedDockerSandboxes()
     expect(await keyState(key)).toBe(`stopped`)
+  }, 90_000)
+
+  // A pid that is guaranteed dead: spawn a no-op child and reuse its pid after
+  // it has exited (synchronously, so it is reaped before we return).
+  const deadPid = (): number => {
+    const child = spawnSync(process.execPath, [`-e`, ``])
+    if (child.pid === undefined) throw new Error(`spawnSync returned no pid`)
+    return child.pid
+  }
+
+  // Create a container whose owner-pid label points at a dead process — the
+  // shape a crashed/quit runner leaves behind (its keepalive loop never exits
+  // on its own, so the container is still RUNNING).
+  const makeCrashOrphan = (sandboxKey: string, persistent: boolean) =>
+    dockerSandbox({
+      image: TEST_IMAGE,
+      labels: {
+        [TEST_LABEL]: `1`,
+        'com.electric.sandbox.owner-pid': String(deadPid()),
+      },
+      sandboxKey,
+      persistent,
+      sharedIdleGraceMs: 600_000,
+    })
+
+  it(`sweepOrphanedDockerSandboxes REMOVES a running *ephemeral* orphan whose owner died`, async () => {
+    const key = `${KEY}-crash-eph`
+    await makeCrashOrphan(key, /* persistent */ false)
+    __resetPersistentRegistryForTests() // the owning process is gone
+    expect(await keyState(key)).toBe(`running`)
+
+    const reclaimed = await sweepOrphanedDockerSandboxes()
+    expect(reclaimed.length).toBeGreaterThanOrEqual(1)
+    expect(await keyState(key)).toBe(`absent`)
+  }, 90_000)
+
+  it(`sweepOrphanedDockerSandboxes STOPS a running *persistent* orphan whose owner died`, async () => {
+    // Persistent workspaces survive (the next wake reattaches by key), but a
+    // dead owner can't stop the keepalive — the sweep does it instead.
+    const key = `${KEY}-crash-persist`
+    await makeCrashOrphan(key, /* persistent */ true)
+    __resetPersistentRegistryForTests()
+    expect(await keyState(key)).toBe(`running`)
+
+    await sweepOrphanedDockerSandboxes()
+    expect(await keyState(key)).toBe(`stopped`)
+  }, 90_000)
+
+  it(`sweepOrphanedDockerSandboxes spares a running orphan ADOPTED by a live process`, async () => {
+    // The owner-pid label is immutable, so it goes stale when a live process
+    // reattaches a dead creator's container — adoption is recorded in an
+    // in-container marker that the sweep probes before reclaiming.
+    const key = `${KEY}-adopted`
+    await makeCrashOrphan(key, /* persistent */ true)
+    __resetPersistentRegistryForTests() // the creator is gone…
+    await make(key, 600_000, /* persistent */ true) // …a live process adopts
+    __resetPersistentRegistryForTests() // bypass the in-registry skip
+    expect(await keyState(key)).toBe(`running`)
+
+    await sweepOrphanedDockerSandboxes()
+    expect(await keyState(key)).toBe(`running`)
+  }, 90_000)
+
+  it(`sweepOrphanedDockerSandboxes leaves a running container with no owner-pid label untouched`, async () => {
+    // Containers created before the owner-pid label existed can't be liveness-
+    // probed — fail safe and leave them for a manual labelled prune.
+    const Docker = await loadDockerode()
+    const docker = new Docker()
+    const c = await docker.createContainer({
+      ...{ name: `electric-sbx-legacy-nolabel-test` },
+      Image: TEST_IMAGE,
+      Cmd: [`sh`, `-c`, `while true; do sleep 3600; done`],
+      Labels: {
+        'com.electric.sandbox': `1`,
+        'com.electric.sandbox.persistent': `false`,
+        [TEST_LABEL]: `1`,
+      },
+      HostConfig: {},
+    })
+    await c.start()
+    await sweepOrphanedDockerSandboxes()
+    const info = await c.inspect()
+    expect(info.State.Running).toBe(true)
+  }, 90_000)
+
+  it(`removes the container when post-start init fails (no unregistered zombie)`, async () => {
+    // pidsLimit:1 — PID 1's keepalive holds the only slot, so the post-start
+    // `mkdir -p` exec cannot run and creation fails AFTER the container
+    // started. The failed create must remove it, not leave it behind running
+    // and unregistered (invisible to dispose and, while running, to the sweep).
+    const key = `${KEY}-init-fail`
+    await expect(
+      dockerSandbox({
+        image: TEST_IMAGE,
+        labels: { [TEST_LABEL]: `1` },
+        sandboxKey: key,
+        resources: { pidsLimit: 1 },
+      })
+    ).rejects.toThrow()
+    expect(await keyState(key)).toBe(`absent`)
+  }, 90_000)
+
+  it(`shutdownAllDockerSandboxes flushes pending debounced teardowns immediately`, async () => {
+    // The debounced idle timers are unref'd and die with the process — on
+    // shutdown the pending action must run NOW: STOP persistent, REMOVE
+    // ephemeral.
+    const ephKey = `${KEY}-shutdown-eph`
+    const perKey = `${KEY}-shutdown-per`
+    const eph = await make(ephKey, 600_000, /* persistent */ false)
+    const per = await make(perKey, 600_000, /* persistent */ true)
+    await eph.dispose()
+    await per.dispose()
+    // Teardowns are debounced 10 minutes out — both still running.
+    expect(await keyState(ephKey)).toBe(`running`)
+    expect(await keyState(perKey)).toBe(`running`)
+
+    await shutdownAllDockerSandboxes()
+    expect(await keyState(ephKey)).toBe(`absent`)
+    expect(await keyState(perKey)).toBe(`stopped`)
+  }, 90_000)
+
+  it(`lazy docker sandbox creates no container until first use`, async () => {
+    // The shape bootstrap wires: profile.factory returns a lazy wrapper, so a
+    // trivial wake (no tool use) never starts a container.
+    const key = `${KEY}-lazy`
+    const sb = lazySandbox({
+      name: `docker`,
+      workingDirectory: `/work`,
+      factory: () => make(key, 60_000),
+    })
+    expect(await keyState(key)).toBe(`absent`)
+    const r = await sb.exec({ command: `echo materialized` })
+    expect(r.stdout.toString().trim()).toBe(`materialized`)
+    expect(await keyState(key)).toBe(`running`)
+    await sb.dispose()
+  }, 90_000)
+
+  it(`lazy docker sandbox disposed without use leaves nothing behind`, async () => {
+    const key = `${KEY}-lazy-unused`
+    const sb = lazySandbox({
+      name: `docker`,
+      workingDirectory: `/work`,
+      factory: () => make(key, 60_000),
+    })
+    await sb.dispose()
+    expect(await keyState(key)).toBe(`absent`)
+  }, 60_000)
+
+  it(`reclaimDockerSandboxByKey removes an earlier wake's persistent container without creating one`, async () => {
+    // The lazy wrapper's reclaim path: a terminal wake that never used its
+    // sandbox must still wipe the persistent workspace earlier wakes created.
+    const key = `${KEY}-reclaim-by-key`
+    const earlier = await make(key, 600_000, /* persistent */ true)
+    await earlier.dispose() // idle: container stays (debounced stop pending)
+    expect(await keyState(key)).toBe(`running`)
+
+    await reclaimDockerSandboxByKey(key)
+    expect(await keyState(key)).toBe(`absent`)
+  }, 90_000)
+
+  it(`reclaimDockerSandboxByKey is a no-op when nothing exists under the key`, async () => {
+    await reclaimDockerSandboxByKey(`${KEY}-reclaim-absent`)
+    expect(await keyState(`${KEY}-reclaim-absent`)).toBe(`absent`)
+  }, 60_000)
+
+  it(`reclaimDockerSandboxByKey defers to live leases — wiped once the last drains`, async () => {
+    const key = `${KEY}-reclaim-live`
+    const lease = await make(key, 600_000, /* persistent */ true)
+    await reclaimDockerSandboxByKey(key)
+    // The sibling lease still owns it — not torn down underneath it.
+    expect(await keyState(key)).toBe(`running`)
+    await lease.dispose()
+    // Marked reclaimed: the last lease draining wipes it immediately.
+    await waitForKeyState(key, `absent`, 5_000)
+  }, 90_000)
+
+  it(`shutdownAllDockerSandboxes leaves containers with live leases alone`, async () => {
+    // The registry is process-wide: a still-open lease may belong to a sibling
+    // runtime that is NOT shutting down. Its own dispose tears it down — and if
+    // the process exits first, the boot sweep reclaims it by dead owner pid.
+    const key = `${KEY}-shutdown-live`
+    const live = await make(key, 600_000, /* persistent */ false)
+    await shutdownAllDockerSandboxes()
+    expect(await keyState(key)).toBe(`running`)
+    await live.dispose()
   }, 90_000)
 })

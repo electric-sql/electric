@@ -51,17 +51,17 @@ defmodule ElectricTelemetry.ProcessesTest do
   describe "proc_type/1 with unsupported label types" do
     test "integer label falls back to initial call module" do
       pid = spawn_with_label(12345)
-      assert :erlang = proc_type(pid)
+      assert ":erlang.apply/2" = proc_type(pid)
     end
 
     test "list label falls back to initial call module" do
       pid = spawn_with_label([1, 2, 3])
-      assert :erlang = proc_type(pid)
+      assert ":erlang.apply/2" = proc_type(pid)
     end
 
     test "four-element tuple falls back to initial call module" do
       pid = spawn_with_label({:a, :b, :c, :d})
-      assert :erlang = proc_type(pid)
+      assert ":erlang.apply/2" = proc_type(pid)
     end
   end
 
@@ -90,7 +90,7 @@ defmodule ElectricTelemetry.ProcessesTest do
           Process.sleep(:infinity)
         end)
 
-      assert :erlang = proc_type(pid)
+      assert ":erlang.apply/2" = proc_type(pid)
 
       pid =
         :proc_lib.spawn_link(fn ->
@@ -116,6 +116,109 @@ defmodule ElectricTelemetry.ProcessesTest do
 
       assert_receive {:DOWN, ^ref, :process, ^pid, :normal}
       assert :dead = proc_type(pid)
+    end
+  end
+
+  describe "proc_type/1 refining the coarse :supervisor type" do
+    test "returns the registered name when the supervisor is named" do
+      name = :"sup_named_#{System.unique_integer([:positive])}"
+      {:ok, pid} = Supervisor.start_link([], strategy: :one_for_one, name: name)
+      assert name == proc_type(pid)
+    end
+
+    test "falls back to $ancestors atom for an unnamed supervisor" do
+      parent_sup_name = :"sup_parent_#{System.unique_integer([:positive])}"
+      child_sup_name = :"sup_child_#{System.unique_integer([:positive])}"
+
+      child_sup = %{
+        id: Supervisor,
+        type: :supervisor,
+        start: {Supervisor, :start_link, [[], [strategy: :one_for_one, name: child_sup_name]]}
+      }
+
+      {:ok, sup_pid} =
+        Supervisor.start_link([child_sup], strategy: :one_for_one, name: parent_sup_name)
+
+      [{_, child_pid, _, _}] = Supervisor.which_children(sup_pid)
+
+      assert child_sup_name == proc_type(child_pid)
+
+      true = Process.unregister(child_sup_name)
+      assert parent_sup_name == proc_type(child_pid)
+    end
+
+    test "falls back to initial_call when neither registered name nor named ancestor is available" do
+      # Run the supervisor from a spawned, unregistered process so the entire $ancestors
+      # chain is pids rather than atoms.
+      parent = self()
+
+      spawn_link(fn ->
+        {:ok, pid} = Supervisor.start_link([], strategy: :one_for_one)
+        send(parent, {:sup, pid})
+        Process.sleep(:infinity)
+      end)
+
+      assert_receive {:sup, pid}, 200
+
+      assert ":supervisor.\"Elixir.Supervisor.Default\"/1" == proc_type(pid)
+    end
+  end
+
+  describe "proc_type/1 refining the coarse :erlang type" do
+    test "falls back to initial_call MFA for an anonymous spawn_link" do
+      pid = spawn_link(fn -> Process.sleep(:infinity) end)
+      assert ":erlang.apply/2" == proc_type(pid)
+    end
+
+    test "uses the registered name when an :erlang-typed process is named" do
+      name = :"erlang_named_#{System.unique_integer([:positive])}"
+      pid = spawn_link(fn -> Process.sleep(:infinity) end)
+      Process.register(pid, name)
+
+      assert name == proc_type(pid)
+    end
+  end
+
+  describe "proc_type/1 folding the handler id into :logger_olp" do
+    test "concatenates the registered name (handler id) into the type" do
+      parent = self()
+      name = :"logger_olp_test_#{System.unique_integer([:positive])}"
+
+      pid =
+        spawn_link(fn ->
+          # Mimic an OLP-spawned process: `$initial_call` MFA module is `:logger_olp`,
+          # which is how the real OLP processes show up via proc_lib.
+          Process.put(:"$initial_call", {:logger_olp, :init, 1})
+          Process.register(self(), name)
+          send(parent, :ready)
+          Process.sleep(:infinity)
+        end)
+
+      assert_receive :ready, 200
+
+      assert "logger_olp:#{name}" == proc_type(pid)
+    end
+
+    test "falls back to the bare :logger_olp type for an unregistered process" do
+      parent = self()
+
+      pid =
+        spawn_link(fn ->
+          Process.put(:"$initial_call", {:logger_olp, :init, 1})
+          send(parent, :ready)
+          Process.sleep(:infinity)
+        end)
+
+      assert_receive :ready, 200
+
+      assert :logger_olp == proc_type(pid)
+    end
+  end
+
+  describe "proc_type/1 leaves non-coarse types unchanged" do
+    test "returns a labelled (non-refined) process type as-is" do
+      pid = spawn_with_label(:my_process)
+      assert :my_process == proc_type(pid)
     end
   end
 
@@ -149,7 +252,7 @@ defmodule ElectricTelemetry.ProcessesTest do
                  binary_mem: _,
                  avg_bin_count: _,
                  avg_ref_count: _,
-                 type: :erlang
+                 type: ":erlang.apply/2"
                }
              ] = top_memory_by_type([pid1, pid2])
 

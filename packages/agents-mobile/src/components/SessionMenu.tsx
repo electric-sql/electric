@@ -8,6 +8,7 @@ import {
 } from './BottomSheet'
 import { Icon } from './Icon'
 import { useDrillTransition } from './useDrillTransition'
+import { togglePin, usePinnedUrls } from '../lib/pinnedEntities'
 import { useTokens } from '../lib/ThemeProvider'
 import type { ElectricEntity, EntitySignal } from '../lib/agentsClient'
 import type { EmbedViewId } from '../lib/embedView'
@@ -101,7 +102,8 @@ const SIGNAL_OPTION_GROUPS: ReadonlyArray<
 
 /**
  * Bottom-sheet "more" menu for the chat screen — exposes the view
- * toggle (chat / state explorer) plus a status header. Tapping a
+ * toggle (chat / state explorer), a pin toggle (mirror of the
+ * desktop tile menu's Pin/Unpin), plus a status header. Tapping a
  * row immediately switches the view and dismisses the sheet, so the
  * user can swap between modes in one tap-tap gesture (kebab → mode).
  */
@@ -114,6 +116,7 @@ export function SessionMenu({
   signalError,
   onSignal,
   onStopImmediately,
+  signalDisabled = false,
 }: {
   open: boolean
   onClose: () => void
@@ -123,8 +126,11 @@ export function SessionMenu({
   signalError?: string | null
   onSignal?: (signal: EntitySignal) => void
   onStopImmediately?: () => void
+  signalDisabled?: boolean
 }): React.ReactElement {
   const tokens = useTokens()
+  const pinnedUrls = usePinnedUrls()
+  const pinned = entity !== null && pinnedUrls.includes(entity.url)
   const [signalMenuOpen, setSignalMenuOpen] = useState(false)
   const {
     style: drillPaneStyle,
@@ -155,7 +161,7 @@ export function SessionMenu({
     setSignalMenuOpen(nextSignalMenuOpen)
     drill(nextSignalMenuOpen ? 1 : -1)
   }
-  const canSignal =
+  const canOpenSignalMenu =
     entity !== null &&
     entity.status !== `stopped` &&
     entity.status !== `killed` &&
@@ -163,6 +169,7 @@ export function SessionMenu({
   const handleSignalOption = (
     option: (typeof SIGNAL_OPTION_GROUPS)[number][number]
   ): void => {
+    if (signalDisabled) return
     if (option.composite === `stop-immediately`) {
       onStopImmediately?.()
     } else if (option.signal) {
@@ -315,7 +322,29 @@ export function SessionMenu({
                 onPress={() => handlePick(`state-explorer`)}
               />
             </BottomSheetSection>
-            {canSignal && (
+            {entity && (
+              <>
+                <BottomSheetSeparator />
+                <BottomSheetSection>
+                  <BottomSheetItem
+                    label={pinned ? `Unpin` : `Pin`}
+                    icon={
+                      <Icon
+                        name="pin"
+                        size={18}
+                        color={tokens.text2}
+                        strokeWidth={2}
+                      />
+                    }
+                    onPress={() => {
+                      togglePin(entity.url)
+                      handleClose()
+                    }}
+                  />
+                </BottomSheetSection>
+              </>
+            )}
+            {canOpenSignalMenu && (
               <>
                 <BottomSheetSeparator />
                 <BottomSheetSection>
@@ -337,6 +366,7 @@ export function SessionMenu({
                         strokeWidth={2}
                       />
                     }
+                    disabled={signalDisabled}
                     onPress={() => transitionToMenu(true)}
                   />
                 </BottomSheetSection>

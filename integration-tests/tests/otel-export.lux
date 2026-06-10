@@ -10,7 +10,7 @@
 
 [invoke setup_pg]
 
-[invoke setup_electric_with_env "ELECTRIC_OTLP_ENDPOINT=http://localhost:4318 ELECTRIC_SYSTEM_METRICS_POLL_INTERVAL=1s ELECTRIC_STACK_TELEMETRY_INIT_DELAY=1s ELECTRIC_OTEL_EXPORT_PERIOD=2s DO_NOT_START_CONN_MAN_PING=1 ELECTRIC_LOG_LEVEL=info OTEL_RESOURCE_ATTRIBUTES=custom.attr=electric.val"]
+[invoke setup_electric_with_env "ELECTRIC_OTLP_ENDPOINT=http://localhost:4318 ELECTRIC_SYSTEM_METRICS_POLL_INTERVAL=1s ELECTRIC_STACK_TELEMETRY_INIT_DELAY=1s ELECTRIC_OTEL_EXPORT_PERIOD=2s ELECTRIC_OTEL_SAMPLING_RATIO=1.0 DO_NOT_START_CONN_MAN_PING=1 ELECTRIC_LOG_LEVEL=info OTEL_RESOURCE_ATTRIBUTES=custom.attr=electric.val"]
 
 # Spawn a process containing off-heap binary references and ensure it's in the top 5 by memory footprint.
 [shell electric]
@@ -118,6 +118,11 @@
 
   # A direct subset snapshot query span is exported from the SnapshotQuery.execute_for_subset path.
   [invoke grep_otel_collector_output "Span shape_snapshot\.execute_for_shape .*shape\.query_reason=subset_query"]
+
+  # The transaction_received span carries the per-transaction wall-time attribute.
+  # This span is only exported because the env above forces full sampling
+  # (ELECTRIC_OTEL_SAMPLING_RATIO=1.0); it is sampled at 1% by default.
+  [invoke grep_otel_collector_output "Span pg_txn\.replication_client\.transaction_received .*total_processing_time=[0-9]+"]
 
 ###
 

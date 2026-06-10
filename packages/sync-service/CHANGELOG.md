@@ -1,5 +1,36 @@
 # @core/sync-service
 
+## 1.6.10
+
+### Patch Changes
+
+- 55c063a: Speed up relation change routing by collecting shape ids directly from the filter's shape table instead of walking where-condition indexes.
+- 9dfa0eb: Fix a `KeyError: key :consider_flushed? not found in: nil` crash in `Electric.Shapes.Consumer`. `consumer_can_suspend?/1` now refuses to suspend while a transaction is pending, so the consumer hibernates instead and suspends only once the transaction completes.
+- 52549d3: Cap the overload-protection (OLP) mailboxes of the default console, OpenTelemetry, and Sentry logger handlers so error/log bursts shed messages instead of blocking Logger callers or growing unbounded.
+
+  This is **leading-edge protection only**: it shields against the early phase of a redeployment/error burst but is **not sufficient under deep scheduler starvation** — the real fix for that is upstream (request-proxy admission control and snapshot-pool sizing).
+
+  Note: `sync_mode_qlen` is intentionally not set on the OpenTelemetry log handler — its module forces `sync_mode_qlen == drop_mode_qlen`, so the option would be a no-op there.
+
+- 81f9d4b: Expose key stack-level metrics on the Prometheus `/metrics` endpoint: number of
+  defined shapes, number of active shapes, replication lag (byte-based slot lag
+  and time-based receive-lag histogram), retained WAL size, and per-status-code
+  counts of shape-endpoint HTTP responses
+  (`electric_plug_serve_shape_requests_count{status="200"}`, `409`, `503`, ...),
+  and admission-control concurrency/rejection counts
+  (`electric_admission_control_acquire_current{kind=...}`,
+  `electric_admission_control_reject_count{kind=...}`).
+  These metrics were already collected and exported to OTel/StatsD/Call-Home but
+  not to Prometheus, which previously only served system-level (CPU/RAM/BEAM)
+  metrics. A new `additional_prometheus_metrics` telemetry option routes them
+  through the single shared Prometheus aggregator without double-reporting via the
+  other reporters. Assumes a single stack per instance.
+- fcf9749: Add `queryable_columns` as a means to restrict access to sensitive columns, a server-side shape allow-list for columns that may be synced or queried by subset snapshots.
+- c025d2e: Export a per-request `electric.plug.serve_shape.requests.count` metric tagged by `status`, `known_error` and `live`.
+- d3e1a64: Automatically recover sources whose replication slot creation is stuck waiting on a pending transaction, by periodically calling `pg_log_standby_snapshot()`. Previously such sources required a manual restart. When the function is unavailable (PostgreSQL < 14 or missing EXECUTE privilege), Electric falls back to the previous behavior and emits a one-time notice.
+- c015163: Add a `total_processing_time` span attribute that tracks the wall-clock time
+  taken to process all fragments of a single transaction.
+
 ## 1.6.9
 
 ### Patch Changes

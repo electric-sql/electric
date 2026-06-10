@@ -1,4 +1,5 @@
 import path from 'node:path'
+import { installDurableStreamsFetchCache } from './durable-streams-cache.js'
 import { serverLog } from './log.js'
 import {
   createBuiltinAgentHandler,
@@ -29,12 +30,19 @@ import type {
   PullWakeRunner,
   PullWakeRunnerConfig,
 } from '@electric-ax/agents-runtime'
+import type { DurableStreamsFetchCacheOptions } from './durable-streams-cache.js'
 import type { StreamFn } from '@mariozechner/pi-agent-core'
 
 export interface BuiltinAgentsServerOptions {
   agentServerUrl: string
   workingDirectory?: string
   mockStreamFn?: StreamFn
+  /**
+   * Configure the process-wide HTTP cache used by Undici-backed fetch calls.
+   * Defaults to a 100 MiB in-memory cache. Pass `false` to leave the global
+   * dispatcher unchanged.
+   */
+  durableStreamsFetchCache?: DurableStreamsFetchCacheOptions
   /** Pull-wake runner configuration for built-in agents. */
   pullWake: {
     runnerId: string
@@ -176,6 +184,8 @@ export class BuiltinAgentsServer {
     if (this.bootstrap || this.pullWakeRunner) {
       throw new Error(`Builtin agents runtime already started`)
     }
+
+    installDurableStreamsFetchCache(this.options.durableStreamsFetchCache)
 
     const pullWake = this.options.pullWake
     if (!pullWake?.runnerId) {
@@ -355,6 +365,23 @@ export class BuiltinAgentsServer {
         }),
         new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
       ])
+      // Tear down this process's idle sandbox containers NOW — their debounced
+      // idle teardowns die with the process and would leave them running. Runs
+      // AFTER the drain above on purpose: this flush only reclaims idle,
+      // lease-free containers, so the drained wakes must release their leases
+      // first. Bounded by its own 5s so a hung daemon can't block quit — worst
+      // case shutdown is the two bounds back to back.
+      if (this.bootstrap.shutdownSandboxes) {
+        await Promise.race([
+          this.bootstrap.shutdownSandboxes().catch((err) => {
+            serverLog.error(
+              `[builtin-agents] sandbox shutdown failed during shutdown:`,
+              err
+            )
+          }),
+          new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
+        ])
+      }
       this.bootstrap = null
     }
 

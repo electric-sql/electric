@@ -71,7 +71,7 @@ async handler(ctx, wake) {
               systemPrompt: p.systemPrompt,
               tools: p.tools, // e.g. ["web_search", "fetch_url"] — required, least-privilege
             },
-            { initialMessage: question, wake: "runFinished" }
+            { initialMessage: question, wake: { on: "runFinished", includeResponse: true } }
           )
           ctx.db.actions.children_insert({ row: { key: p.id, url: child.entityUrl, kind: p.id, question } })
         } else {
@@ -86,7 +86,7 @@ async handler(ctx, wake) {
           const row = ctx.db.collections.children?.get(p.id)
           if (!row?.url) return { id: p.id, text: "" }
           const handle = await ctx.observe(entity(row.url))
-          return { id: p.id, text: (await handle.text()).join("\n\n") }
+          return { id: p.id, text: row.output ?? "" }
         })
       )
 
@@ -110,7 +110,7 @@ async handler(ctx, wake) {
 
 - **Spawn-once guard.** Always read `ctx.db.collections.children?.get(id)` before `ctx.spawn`. Reuse via `ctx.observe(entity(url))` on re-wake.
 - **Deterministic child IDs.** Derive the child ID from the specialist role key, not `Date.now()` or counters. `p.id` is stable across wakes.
-- **`wake: "runFinished"` on every spawn.** Parent must be re-invoked when each child completes.
+- **`wake: { on: "runFinished", includeResponse: true }` on every result-producing spawn.** Parent is re-invoked when each child completes.
 - **`Promise.all` for collection.** Gather results after all children report — never sequential awaits when the children are independent.
 - **Synthesis step.** The parent's LLM sees the aggregated results and produces the final answer — the tool returns the aggregation, not a synthesis.
 
@@ -121,7 +121,7 @@ async handler(ctx, wake) {
 | MW1 | `state.children` declared with at minimum `{ key, url }` rows.                                   | Required for spawn-once guard.                                               |
 | MW2 | Spawn site is guarded by `ctx.db.collections.children?.get(id)` check.                           | Otherwise re-wakes produce `spawn(sameId)` errors.                           |
 | MW3 | Each child ID is a stable string (no `Date.now()`, no random).                                   | Determinism across re-wakes.                                                 |
-| MW4 | Every `ctx.spawn` sets `wake: "runFinished"`.                                                    | Parent wake on child completion.                                             |
+| MW4 | Every result-producing `ctx.spawn` sets `wake: { on: "runFinished", includeResponse: true }`.    | Parent wake on child completion.                                             |
 | MW5 | Collection uses `Promise.all` over specialists, not sequential `await`.                          | Children are independent — parallel collection.                              |
 | MW6 | `PERSPECTIVES` (or equivalent specialist list) is declared once, not re-derived per wake.        | Must be stable across wakes to keep IDs deterministic.                       |
 | MW7 | Every spawn of the built-in `worker` passes a non-empty `tools` array of valid `WorkerToolName`. | Built-in worker throws `[worker] tools must be a non-empty array` otherwise. |

@@ -19,6 +19,10 @@ defmodule ElectricTelemetry.Processes do
     end
   end
 
+  @doc """
+  Derive a stable, low-cardinality `process_type` for a pid.
+  """
+  @spec proc_type(pid()) :: atom() | binary()
   def proc_type(pid), do: proc_type(pid, info(pid))
 
   def top_memory_by_type, do: top_by(:proc_mem)
@@ -129,20 +133,72 @@ defmodule ElectricTelemetry.Processes do
 
   defp type_and_memory(pid) do
     info = info(pid)
+    type = proc_type(pid, info)
 
     info
     |> memory_from_info()
-    |> Map.put(:type, proc_type(pid, info))
+    |> Map.put(:type, type)
   end
 
-  defp info(pid) do
-    Process.info(pid, [:dictionary, :initial_call, :label, :memory, :binary])
+  @doc false
+  def info(pid) do
+    Process.info(pid, [:dictionary, :initial_call, :label, :memory, :binary, :registered_name])
   end
 
   defp proc_type(pid, info) do
-    label_from_info(info) ||
-      initial_module_from_info(info) ||
-      if(Process.alive?(pid), do: :unknown, else: :dead)
+    type =
+      label_from_info(info) ||
+        initial_module_from_info(info) ||
+        if(Process.alive?(pid), do: :unknown, else: :dead)
+
+    refine_type(type, info)
+  end
+
+  defp refine_type(type, info) when type in [:erlang, :supervisor] do
+    registered_name(info) || ancestor_name(info) || initial_call_mfa_string(info) || type
+  end
+
+  # Logger handler and proxy processes all share the `:logger_olp` type. The handler id
+  # (the process's registered name) distinguishes them and is low-cardinality, so we fold
+  # it into the type as `"logger_olp:<handler_id>"`, falling back to the coarse type when
+  # the process is unnamed.
+  defp refine_type(:logger_olp, info) do
+    case registered_name(info) do
+      nil -> :logger_olp
+      name -> "logger_olp:#{name}"
+    end
+  end
+
+  defp refine_type(type, _info), do: type
+
+  defp registered_name(info) do
+    # Process.info(pid, :registered_name) returns an empty list for unregistered processes
+    with [] <- info[:registered_name], do: nil
+  end
+
+  defp ancestor_name(info) do
+    case get_in(info, [:dictionary, :"$ancestors"]) do
+      [name | _] when is_atom(name) and not is_nil(name) -> name
+      _ -> nil
+    end
+  end
+
+  defp initial_call_mfa_string(info) do
+    # Prefer the dictionary-stored $initial_call (set by proc_lib for OTP processes),
+    # falling back to the raw initial_call reported by the VM. Returns "Module.fun/arity".
+    mfa =
+      case get_in(info, [:dictionary, :"$initial_call"]) do
+        {m, f, a} -> {m, f, a}
+        _ -> info[:initial_call]
+      end
+
+    case mfa do
+      {m, f, a} when is_atom(m) and is_atom(f) and is_integer(a) ->
+        Exception.format_mfa(m, f, a)
+
+      _ ->
+        nil
+    end
   end
 
   defp label_from_info(info) do

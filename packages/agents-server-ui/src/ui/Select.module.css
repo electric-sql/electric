@@ -7,7 +7,7 @@
   height: 32px;
   min-width: 120px;
   font-size: var(--ds-text-sm);
-  line-height: 1;
+  line-height: var(--ds-text-sm-lh);
   font-family: var(--ds-font-body);
   color: var(--ds-text-1);
   background: var(--ds-input-bg);
@@ -47,7 +47,7 @@
   height: 24px;
   padding: 0 8px;
   font-size: var(--ds-text-xs);
-  line-height: 1;
+  line-height: 1.35;
   font-family: var(--ds-font-body);
   color: var(--ds-text-2);
   /* Solid chip surface (matches inline pills, project picker pill,
@@ -78,6 +78,10 @@
   cursor: not-allowed;
 }
 
+.tooltipTrigger {
+  display: inline-flex;
+}
+
 .icon {
   display: inline-flex;
   color: var(--ds-text-3);
@@ -94,6 +98,7 @@
 }
 
 .popup {
+  box-sizing: border-box;
   padding: 3px;
   min-width: var(--anchor-width, 8rem);
   max-height: min(60vh, 360px);

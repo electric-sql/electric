@@ -77,7 +77,7 @@ async handler(ctx, wake) {
             systemPrompt: task,
             tools: chunkTools, // required for built-in worker, e.g. ["web_search", "fetch_url"]
           },
-          { initialMessage: chunks[i], wake: "runFinished" }
+          { initialMessage: chunks[i], wake: { on: "runFinished", includeResponse: true } }
         )
         ctx.db.actions.children_insert({ row: { key: id, url: child.entityUrl, chunk: i } })
         spawnedIds.push(id)
@@ -90,7 +90,7 @@ async handler(ctx, wake) {
         spawnedIds.map(async (id) => {
           const row = ctx.db.collections.children?.get(id)!
           const handle = await ctx.observe(entity(row.url))
-          return { id, chunk: row.chunk, text: (await handle.text()).join("\n\n") }
+          return { id, chunk: row.chunk, text: row.output ?? "" }
         })
       )
 
@@ -112,21 +112,21 @@ async handler(ctx, wake) {
 
 - **Spawn counter guarantees unique IDs across invocations.** `Date.now()` alone can collide when the tool is called in quick succession.
 - **Single spawn loop — no per-child await inside the loop.** All workers start, then reduce collects.
-- **`wake: "runFinished"` on every spawn.**
+- **`wake: { on: "runFinished", includeResponse: true }` on every result-producing spawn.**
 - **`Promise.all` for reduce.** All collection is parallel.
 - **Status transitions enforce phase ordering.** idle → mapping → reducing → idle.
 
 ## Pattern-specific review checklist
 
-| #   | Rule                                                                                                              | Why                                                             |
-| --- | ----------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| MR1 | `state.children` tracks chunk index and url per spawned worker.                                                   | Needed for reduce phase to correlate results with input chunks. |
-| MR2 | `state.status` with transitions `idle → mapping → reducing → idle`.                                               | Prevents concurrent map phases from interleaving.               |
-| MR3 | Spawn counter (or equivalent monotonic source) included in child IDs.                                             | `Date.now()` alone collides under rapid invocation.             |
-| MR4 | Spawn loop does not `await child.run` or `child.text()` inside the loop — all workers start first, reduce second. | Sequential awaits defeat parallelism.                           |
-| MR5 | Reduce uses `Promise.all` over all spawned children.                                                              | Parallel collection; matches the parallel map.                  |
-| MR6 | Every spawn sets `wake: "runFinished"`.                                                                           | Parent wake on child completion.                                |
-| MR7 | Every spawn of the built-in `worker` passes a non-empty `tools` array.                                            | Built-in worker throws at parse time otherwise.                 |
+| #   | Rule                                                                                                                            | Why                                                             |
+| --- | ------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| MR1 | `state.children` tracks chunk index and url per spawned worker.                                                                 | Needed for reduce phase to correlate results with input chunks. |
+| MR2 | `state.status` with transitions `idle → mapping → reducing → idle`.                                                             | Prevents concurrent map phases from interleaving.               |
+| MR3 | Spawn counter (or equivalent monotonic source) included in child IDs.                                                           | `Date.now()` alone collides under rapid invocation.             |
+| MR4 | Spawn loop records child metadata and returns; reduce runs only from later `runFinished` wakes after all workers have reported. | Sequential awaits defeat parallelism.                           |
+| MR5 | Reduce uses `Promise.all` over all spawned children.                                                                            | Parallel collection; matches the parallel map.                  |
+| MR6 | Every result-producing spawn sets `wake: { on: "runFinished", includeResponse: true }`.                                         | Parent receives a continuation wake on child completion.        |
+| MR7 | Every spawn of the built-in `worker` passes a non-empty `tools` array.                                                          | Built-in worker throws at parse time otherwise.                 |
 
 ## Anti-patterns
 

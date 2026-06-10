@@ -71,6 +71,11 @@ export function AccountScreen({
                       ? `${state.name} (${state.email})`
                       : (state.name ?? state.email ?? `Signed in`)}
                   </Text>
+                  {state.userId ? (
+                    <Text style={styles.principalText} numberOfLines={1}>
+                      user:{state.userId}
+                    </Text>
+                  ) : null}
                 </View>
               </View>
               <View style={styles.rowDivider} />
@@ -247,6 +252,11 @@ function createStyles(tokens: Tokens) {
     },
     rowValueMuted: {
       color: tokens.text3,
+    },
+    principalText: {
+      color: tokens.text3,
+      fontSize: fontSize.xs,
+      textAlign: `right`,
     },
     rowDivider: {
       height: StyleSheet.hairlineWidth,

@@ -1,5 +1,101 @@
 # @electric-ax/agents
 
+## 0.4.15
+
+### Patch Changes
+
+- 8bcadb7: Preserve existing undici global dispatcher interceptors when installing the Durable Streams fetch cache so Electric Agents Desktop keeps injecting Cloud auth headers after the built-in agents runtime starts.
+- 5aa2d78: Give Horton a `fork` tool that creates a child session inheriting this conversation's history up to the latest completed response. Takes an optional `entityUrl` (omit for self-fork), an optional `initialMessage` (server delivers to the fork in the same round-trip — no follow-up `send` needed; not atomic with fork creation), and optional `tags`. The fork is created as a CHILD of the calling entity (same parent-ownership model as `spawn_worker`) and wires reply delivery through the same manifest-anchored wake — when the fork's next run finishes, the parent wakes with the response in the wake message.
+
+  Horton's system prompt grows a "When to fork (vs spawn_worker)" section framing the two tools as a pair: both create a child the parent owns and gets replies from, the difference is what the child boots with — `spawn_worker` starts with an empty context (you brief it from scratch), `fork` starts with a copy of the conversation up to the latest completed response. Includes an explicit trigger pattern ("prefer fork when generating multiple variants the user wants to compare; don't inline") to route "give me three takes" / "evaluate these N approaches" prompts to fork rather than collapsing them into one inline response, plus the workflow for the parallel-exploration loop (end-turn-first, fork-once-per-branch with a different `initialMessage` each, wait for all responses before synthesising).
+
+- a1c1e30: Add built-in schedule tools to Horton and document them in the system prompt.
+- 1099366: Fix leftover Docker sandbox containers (`electric-sbx-*`) piling up.
+
+  Sandbox containers are meant to be short-lived, but several gaps let them
+  outlive the work they were created for — opening the desktop app could leave
+  15+ containers running that were never explicitly started. This closes those
+  gaps so a container only exists while something is actually using it:
+  - **Created only when used.** A container now starts the first time an agent
+    actually uses its sandbox (runs a command, reads/writes a file), so trivial
+    wakes (scheduled ticks, bookkeeping) no longer spin one up.
+  - **Cleaned up on quit.** Shutdown now tears down idle containers immediately
+    instead of leaving their delayed-teardown timers to die with the process.
+  - **Leftovers reclaimed at startup.** Containers are tagged with the process
+    that created them; at startup, those whose owner is gone are reclaimed
+    (throwaway ones removed, reusable ones stopped so their files survive), while
+    containers a live process is still using are left untouched.
+
+  Also: a failed container setup step no longer strands an untracked container,
+  and all sandboxes are grouped under one `electric-sandboxes` entry in Docker
+  Desktop so they can be stopped/removed together.
+
+- Updated dependencies [d15852d]
+- Updated dependencies [5aa2d78]
+- Updated dependencies [1099366]
+- Updated dependencies [1099366]
+  - @electric-ax/agents-runtime@0.3.11
+
+## 0.4.14
+
+### Patch Changes
+
+- 3ecdade: Add structured composer input support, slash command registration, and proactive skill context loading.
+- Updated dependencies [3ecdade]
+  - @electric-ax/agents-runtime@0.3.10
+
+## 0.4.13
+
+### Patch Changes
+
+- f222d39: Add a form-based **Add / Edit / Remove** flow for MCP servers in the
+  desktop's Settings → MCP Servers page. Before this, the only way to
+  register a server was to hand-edit `settings.json` or a workspace
+  `mcp.json`. The dialog supports both `http` and `stdio` transports, all
+  four auth modes, and writes through to the global `settings.json
+mcp.servers` block.
+
+  The MCP page also gains provenance + shadowing awareness:
+  - Entries from a workspace `mcp.json` render a "from mcp.json" badge
+    and are read-only (no Edit/Remove). Lifecycle verbs still apply.
+  - When a name in `settings.json` collides with one in workspace
+    `mcp.json`, the workspace still wins (existing rule); the shadowed
+    settings entry is rendered grayed-out next to the running workspace
+    twin so the user can see what's been overridden.
+
+  `BuiltinAgentsServer` gains a public `setExtraMcpServers(extras)` so
+  the desktop can push add/edit/remove changes to the live MCP registry
+  without restarting. Workspace `mcp.json` continues to win on name
+  collision through the same merge path used by the file watcher.
+
+- 6434774: Add owner-default agents-server permissions with type-level spawn grants, entity grants, effective permission materialization, principal-scoped entity observation streams, shared-state access links, runtime registration permission grants, and default user spawn grants for built-in Horton and Worker types.
+
+  Existing entity observation bridges are rebuilt after upgrade because pre-permission bridge rows do not include principal attribution.
+
+  Entity `manage` grants participate in read visibility, entity-type `manage` grants participate in spawn visibility, and broad parented spawn-time grants require `manage` on the parent.
+
+- b2bf806: Upgrade `@durable-streams/state` to `0.3.1` and drop the `@tanstack/db` pnpm override.
+
+  `@durable-streams/state@0.3.x` makes `@tanstack/db` an optional peer dependency (it was a direct `^0.6.0` dependency) and splits its tsdb-coupled tools into a `@durable-streams/state/db` subpath. tsdb-specific imports (`createStreamDB`, `queryOnce`, `createTransaction`, query operators, etc.) now come from `@durable-streams/state/db`; the bare entry keeps only the tsdb-free types and helpers.
+
+  Because state no longer pulls its own `@tanstack/db` copy, the root `pnpm.overrides` collapsing `@tanstack/db@>=0.6.0 <0.7.0` to `0.6.7` is removed. To keep a single `0.6.7` instance without it, `@tanstack/react-db` is raised to `^0.1.85` and `@tanstack/electric-db-collection` to `^0.3.5` (both pin `@tanstack/db@0.6.7`), and `@durable-streams/server` to `^0.3.7` (depends on `state@0.3.1`, removing the lingering transitive `state@0.2.9`).
+
+- 74d2341: Fix Codex auth for low-cost tool calls by passing fresh access tokens to URL extraction and worker tools.
+- b0030a1: Size Horton's context source budget from the selected model's known context window, including Moonshot metadata, while preserving the previous default for unknown models.
+- 5f96a15: Grant all users manage permission on the built-in Horton entity type by default, and backfill existing agents-server installations that already registered Horton without that grant.
+- 9da7b8f: Install an Undici HTTP cache dispatcher for the built-in agents local Node runner so Durable Streams catch-up reads can use server cache headers. Electric Agents Desktop uses an on-disk SQLite cache so runtime restarts can reuse cached catch-up responses.
+- 7c62024: Remove the old child-handle result API (`EntityHandle.run` and `EntityHandle.text()`) and internal spawn run promise plumbing. Child coordination should use durable `runFinished` server wakes with `includeResponse` so parent handlers can return safely instead of waiting in-memory for child output.
+- 048e2b6: Grant all users manage permission on the built-in Worker entity type by default, and backfill existing agents-server installations that already registered Worker without that grant.
+- Updated dependencies [9fdf96a]
+- Updated dependencies [312f5ec]
+- Updated dependencies [6434774]
+- Updated dependencies [4f88e6d]
+- Updated dependencies [b2bf806]
+- Updated dependencies [74d2341]
+- Updated dependencies [d14d9a9]
+- Updated dependencies [7c62024]
+  - @electric-ax/agents-runtime@0.3.9
+
 ## 0.4.12
 
 ### Patch Changes

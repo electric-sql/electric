@@ -15,6 +15,7 @@ type SidebarTreeProps = {
   onOpenEntityInSplit?: (url: string) => void
   pinnedUrls: ReadonlyArray<string>
   onTogglePin: (url: string) => void
+  currentPrincipalUrl: string | null
   depth?: number
   hoverHandle: ReturnType<typeof HoverCard.useHandle<SidebarRowInfoPayload>>
 }
@@ -70,6 +71,7 @@ export const SidebarTree = memo(function SidebarTree({
   onOpenEntityInSplit,
   pinnedUrls,
   onTogglePin,
+  currentPrincipalUrl,
   depth = 0,
   hoverHandle,
 }: SidebarTreeProps): React.ReactElement {
@@ -104,6 +106,7 @@ export const SidebarTree = memo(function SidebarTree({
         onToggleExpand={() => toggleExpanded(entity.url)}
         pinned={pinnedUrls.includes(entity.url)}
         onTogglePin={isRoot ? () => onTogglePin(entity.url) : undefined}
+        currentPrincipalUrl={currentPrincipalUrl}
         hoverHandle={hoverHandle}
       />
       {expanded && children.length > 0 && (
@@ -118,6 +121,7 @@ export const SidebarTree = memo(function SidebarTree({
               onOpenEntityInSplit={onOpenEntityInSplit}
               pinnedUrls={pinnedUrls}
               onTogglePin={onTogglePin}
+              currentPrincipalUrl={currentPrincipalUrl}
               depth={depth + 1}
               hoverHandle={hoverHandle}
             />

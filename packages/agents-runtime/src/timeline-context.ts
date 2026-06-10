@@ -21,6 +21,7 @@ import type {
   TimelineProjectionOpts,
   TimestampedMessage,
 } from './types'
+import { COMPOSER_INPUT_MESSAGE_TYPE } from './composer-input'
 
 function asString(value: unknown, fallback = ``): string {
   if (typeof value === `string`) {
@@ -32,6 +33,26 @@ function asString(value: unknown, fallback = ``): string {
   }
 
   return JSON.stringify(value)
+}
+
+function projectInboxPayload(item: {
+  payload: unknown
+  messageType?: string
+}): string {
+  if (
+    item.messageType === COMPOSER_INPUT_MESSAGE_TYPE &&
+    typeof item.payload === `object` &&
+    item.payload !== null
+  ) {
+    if (`source` in item.payload && typeof item.payload.source === `string`) {
+      return item.payload.source
+    }
+    if (`text` in item.payload && typeof item.payload.text === `string`) {
+      return item.payload.text
+    }
+  }
+
+  return asString(item.payload)
 }
 
 function orderToOffset(order: TimelineOrder): number {
@@ -178,7 +199,7 @@ export function defaultProjection(
 ): Array<LLMMessage> | null {
   switch (item.kind) {
     case `inbox`:
-      return [{ role: `user`, content: asString(item.payload) }]
+      return [{ role: `user`, content: projectInboxPayload(item) }]
 
     case `wake`:
       return [{ role: `user`, content: asString(item.payload) }]
@@ -391,6 +412,7 @@ export function materializeTimeline(
           at: orderToOffset(entry.order),
           key: entry.item.key,
           payload: entry.item.payload,
+          messageType: entry.item.message_type,
         }
 
       case `wake`:

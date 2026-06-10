@@ -33,7 +33,7 @@ export interface PublicEntity {
   url: string
   type: string
   status: PublicEntityStatus
-  streams: { main: string; error: string }
+  streams: { main: string }
   tags: Record<string, string>
   spawn_args: Record<string, unknown>
   parent: string | null

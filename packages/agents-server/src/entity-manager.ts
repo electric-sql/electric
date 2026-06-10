@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import fastq from 'fastq'
 import {
+  COMPOSER_INPUT_MESSAGE_TYPE,
   assertTags,
   entityStateSchema,
   getCronStreamPath,
@@ -11,6 +12,8 @@ import {
   manifestSharedStateKey,
   manifestSourceKey,
   resolveCronScheduleSpec,
+  validateComposerInputPayload,
+  validateSlashCommandDefinitions,
 } from '@electric-ax/agents-runtime'
 import type { EventPointer } from '@electric-ax/agents-runtime'
 import {
@@ -73,7 +76,6 @@ import type { EntityBridgeCoordinator } from './entity-bridge-manager.js'
 import type { Principal } from './principal.js'
 
 type SpawnPersistResult = [
-  PromiseSettledResult<void>,
   PromiseSettledResult<void>,
   PromiseSettledResult<number>,
 ]
@@ -163,16 +165,48 @@ type ForkSubtreeOptions = {
   rootInstanceId?: string
   waitTimeoutMs?: number
   waitPollMs?: number
+  createdBy?: string
   /**
    * Optional anchor pointing at an event on the source root's `main` stream.
    * When set: only events at or before the pointer are kept on the root's
    * forked `main`, and the root's manifest is filtered so that descendants
    * spawned after the pointer are dropped from the fork (their now-orphan
    * subtrees are not forked). The pointer applies only to the root's
-   * `main` stream — `error` and shared-state streams clone at HEAD
-   * regardless.
+   * `main` stream; shared-state streams clone at HEAD regardless.
    */
   forkPointer?: EventPointer
+  /**
+   * Named server-resolved anchor. Resolves to a concrete `forkPointer`
+   * by reading the source root's `main` history. Mutually exclusive with
+   * `forkPointer`. Use this when the caller doesn't have access to the
+   * source's per-row pointer side-table (e.g. an agent forking a session
+   * via a tool).
+   *
+   * - `latest_completed_run` — the most recent `runs` row on the source
+   *   with `status === 'completed'`. Errors if no such row exists. This
+   *   is the eligibility rule the per-row "Fork from here" UI uses.
+   */
+  anchor?: `latest_completed_run`
+  /**
+   * Optional parent URL for the new root fork entity. When set, the
+   * new fork is a CHILD of this URL — its `parent` field is overridden
+   * (rather than inherited from the source, which is `null` for the
+   * only allowed source: a top-level entity). Pairs with `wake` to give
+   * the parent reply-delivery the same way spawn does.
+   */
+  parent?: string
+  /**
+   * Optional wake subscription registered on the new root fork at fork
+   * time. Same shape and semantics as `spawn`'s `wake` (see
+   * `TypedSpawnRequest.wake`). Typically set by the agent `fork` tool
+   * to wire reply delivery via the parent's manifest-anchored wake.
+   */
+  wake?: TypedSpawnRequest[`wake`]
+  /**
+   * Optional tags stamped onto the new root fork entity in addition
+   * to those copied from the source. Mirrors `spawn`'s `tags`.
+   */
+  tags?: Record<string, string>
 }
 
 type ForkEntityPlan = {
@@ -431,6 +465,7 @@ export class EntityManager {
     this.validateSchema(req.creation_schema)
     this.validateSchemaMap(req.inbox_schemas)
     this.validateSchemaMap(req.state_schemas)
+    this.validateSlashCommands(req.slash_commands)
     const defaultDispatchPolicy = req.default_dispatch_policy
       ? this.validateDispatchPolicy(req.default_dispatch_policy, {
           label: `default_dispatch_policy`,
@@ -445,6 +480,7 @@ export class EntityManager {
       creation_schema: req.creation_schema,
       inbox_schemas: req.inbox_schemas,
       state_schemas: req.state_schemas,
+      slash_commands: req.slash_commands,
       serve_endpoint: req.serve_endpoint,
       default_dispatch_policy: defaultDispatchPolicy,
       revision: existing ? existing.revision + 1 : 1,
@@ -637,7 +673,6 @@ export class EntityManager {
         ? principalUrl(instanceId)
         : `/${typeName}/${instanceId}`
     const mainPath = `${entityURL}/main`
-    const errorPath = `${entityURL}/error`
 
     const subscriptionId = `${typeName}-handler`
 
@@ -689,7 +724,6 @@ export class EntityManager {
       url: entityURL,
       streams: {
         main: mainPath,
-        error: errorPath,
       },
       subscription_id: subscriptionId,
       dispatch_policy: dispatchPolicy,
@@ -738,6 +772,19 @@ export class EntityManager {
       createdEvent as Record<string, unknown>,
     ]
 
+    const slashCommandTimestamp = new Date().toISOString()
+    for (const command of entityType.slash_commands ?? []) {
+      const slashCommandEvent = entityStateSchema.slashCommands.insert({
+        key: command.name,
+        value: {
+          ...command,
+          source: `static`,
+          updated_at: slashCommandTimestamp,
+        },
+      } as any)
+      initialEvents.push(slashCommandEvent as Record<string, unknown>)
+    }
+
     if (req.initialMessage !== undefined) {
       const msgNow = new Date().toISOString()
       const inboxEvent = entityStateSchema.inbox.insert({
@@ -745,6 +792,7 @@ export class EntityManager {
         value: {
           from: req.created_by ?? req.parent ?? `spawn`,
           payload: req.initialMessage,
+          message_type: req.initialMessageType,
           timestamp: msgNow,
         },
       } as any)
@@ -758,8 +806,8 @@ export class EntityManager {
     const queueEnterT0 = performance.now()
     const queueWaiting = this.spawnPersistQueue.length()
     const queueRunning = this.spawnPersistQueue.running()
-    const [mainStreamResult, errorStreamResult, entityResult] =
-      await this.spawnPersistQueue.push(async () => {
+    const [mainStreamResult, entityResult] = await this.spawnPersistQueue.push(
+      async () => {
         // Create entity first so it's visible in the DB before stream
         // creation can trigger webhooks that look up the entity.
         let entityTxid: number
@@ -770,40 +818,33 @@ export class EntityManager {
         } catch (err) {
           return [
             { status: `fulfilled`, value: undefined },
-            { status: `fulfilled`, value: undefined },
             { status: `rejected`, reason: err },
           ] as SpawnPersistResult
         }
 
-        const [mainStreamResult, errorStreamResult] = await Promise.allSettled([
+        const [mainStreamResult] = await Promise.allSettled([
           this.streamClient.create(mainPath, {
             contentType,
             body: initialBody,
           }),
-          this.streamClient.create(errorPath, { contentType }),
         ])
 
         return [
           mainStreamResult,
-          errorStreamResult,
           { status: `fulfilled`, value: entityTxid },
         ] as SpawnPersistResult
-      })
+      }
+    )
     const parallelMs = +(performance.now() - queueEnterT0).toFixed(2)
 
     if (
       mainStreamResult.status === `rejected` ||
-      errorStreamResult.status === `rejected` ||
       entityResult.status === `rejected`
     ) {
       const entityReason =
         entityResult.status === `rejected` ? entityResult.reason : null
       const streamReason =
-        mainStreamResult.status === `rejected`
-          ? mainStreamResult.reason
-          : errorStreamResult.status === `rejected`
-            ? errorStreamResult.reason
-            : null
+        mainStreamResult.status === `rejected` ? mainStreamResult.reason : null
       const isDuplicate = entityReason instanceof EntityAlreadyExistsError
       const isStreamConflict =
         !!streamReason &&
@@ -817,9 +858,6 @@ export class EntityManager {
       if (!isDuplicate && !isStreamConflict) {
         if (mainStreamResult.status === `fulfilled`) {
           rollbacks.push(this.streamClient.delete(mainPath))
-        }
-        if (errorStreamResult.status === `fulfilled`) {
-          rollbacks.push(this.streamClient.delete(errorPath))
         }
         if (entityResult.status === `fulfilled`) {
           rollbacks.push(this.registry.deleteEntity(entityURL))
@@ -847,9 +885,7 @@ export class EntityManager {
       const failure =
         mainStreamResult.status === `rejected`
           ? mainStreamResult.reason
-          : errorStreamResult.status === `rejected`
-            ? errorStreamResult.reason
-            : (entityResult as PromiseRejectedResult).reason
+          : (entityResult as PromiseRejectedResult).reason
       if (failure instanceof Error) throw failure
       throw new ElectricAgentsError(
         `SPAWN_FAILED`,
@@ -905,6 +941,13 @@ export class EntityManager {
     const writeEntityLocks = new Set<string>()
     const writeStreamLocks = new Set<string>()
 
+    // Anchor-forks resolve to a concrete pointer server-side by reading the
+    // source's `main` history. Below this point the resolved pointer (or
+    // an explicit one from `opts.forkPointer`) drives the same code path —
+    // anchor handling collapses entirely into the pointer-fork flow.
+    const usePointerPath =
+      opts.forkPointer !== undefined || opts.anchor !== undefined
+
     try {
       // For pointer-forks we read the source root HISTORICALLY at a
       // frozen offset, so concurrent activity on the root past the
@@ -916,7 +959,7 @@ export class EntityManager {
       // those are HEAD-cloned and need a stable snapshot. For HEAD-forks
       // the old all-idle requirement still applies.
       let sourceTree: Array<ElectricAgentsEntity>
-      if (opts.forkPointer) {
+      if (usePointerPath) {
         const rootEntity = await this.registry.getEntity(rootUrl)
         if (!rootEntity) {
           throw new ElectricAgentsError(
@@ -945,11 +988,11 @@ export class EntityManager {
         )
       }
 
-      // When forking at a pointer, pre-read the root's main, validate the
-      // pointer against the source's true history, and materialise the
-      // root-at-pointer snapshot fragments. The pointer only applies to
-      // the root's `main` stream. Descendants kept by the manifest filter
-      // are forked at HEAD.
+      // When forking at a pointer (or anchor), pre-read the root's main,
+      // validate the pointer against the source's true history, and
+      // materialise the root-at-pointer snapshot fragments. The pointer
+      // only applies to the root's `main` stream. Descendants kept by
+      // the manifest filter are forked at HEAD.
       //
       // Pointer→position translation: the runtime mints pointers as
       // `{ offset: previousBatchOffset, subOffset: itemIndex+1 }`, where
@@ -968,16 +1011,32 @@ export class EntityManager {
             sharedStateIds: Set<string>
           }
         | undefined
-      if (opts.forkPointer) {
+      let effectiveForkPointer: EventPointer | undefined = opts.forkPointer
+      if (usePointerPath) {
         const sourceEvents = await this.streamClient.readJson<
           Record<string, unknown>
         >(sourceRoot.streams.main)
         const flat = sourceEvents.flatMap((item) =>
           Array.isArray(item) ? item : [item]
         ) as Array<Record<string, unknown>>
+        if (!effectiveForkPointer && opts.anchor === `latest_completed_run`) {
+          effectiveForkPointer = this.resolveLatestCompletedRunPointer(
+            flat,
+            sourceRoot.streams.main
+          )
+        }
+        if (!effectiveForkPointer) {
+          // Defensive — would only fire on a future anchor variant we
+          // forget to handle above.
+          throw new ElectricAgentsError(
+            ErrCodeInvalidRequest,
+            `Internal: pointer-path fork with no resolved pointer`,
+            500
+          )
+        }
         const target = this.resolveForkPointerTarget(
           flat,
-          opts.forkPointer,
+          effectiveForkPointer,
           sourceRoot.streams.main
         )
         const filteredEvents = flat.slice(0, target)
@@ -1009,7 +1068,7 @@ export class EntityManager {
       // subtree except the root) are HEAD-cloned, so they must be idle
       // before we read their snapshots. Wait+lock only those — the root
       // was skipped above.
-      if (opts.forkPointer) {
+      if (usePointerPath) {
         const descendants = effectiveSubtree.filter(
           (entity) => entity.url !== sourceRoot.url
         )
@@ -1058,8 +1117,31 @@ export class EntityManager {
       const entityPlans = this.buildForkEntityPlans(
         effectiveSubtree,
         entityUrlMap,
-        stringMap
+        stringMap,
+        opts.createdBy
       )
+
+      // Override fields on the new root fork's plan from caller opts.
+      // Plumbed through from `forkBodySchema` — descendants in
+      // `effectiveSubtree` keep what `buildForkEntityPlans` copied.
+      //
+      // - `parent`: child-fork relationship (vs the default inheritance
+      //   from the source, which is `null` for a top-level source).
+      // - `tags`: merged on top of source tags (caller-supplied wins).
+      const rootPlanForOverrides = entityPlans.find(
+        (plan) => plan.source.url === rootUrl
+      )
+      if (rootPlanForOverrides) {
+        if (opts.parent !== undefined) {
+          rootPlanForOverrides.fork.parent = opts.parent
+        }
+        if (opts.tags !== undefined) {
+          rootPlanForOverrides.fork.tags = {
+            ...(rootPlanForOverrides.fork.tags ?? {}),
+            ...opts.tags,
+          }
+        }
+      }
 
       this.addForkLocks(
         this.forkWriteLockedEntities,
@@ -1085,18 +1167,11 @@ export class EntityManager {
           await this.streamClient.fork(
             plan.fork.streams.main,
             plan.source.streams.main,
-            isRoot && opts.forkPointer
-              ? { forkPointer: opts.forkPointer }
+            isRoot && effectiveForkPointer
+              ? { forkPointer: effectiveForkPointer }
               : undefined
           )
           createdStreams.push(plan.fork.streams.main)
-          // `error` always clones at HEAD — no canonical mapping
-          // between main-offset and error-offset.
-          await this.streamClient.fork(
-            plan.fork.streams.error,
-            plan.source.streams.error
-          )
-          createdStreams.push(plan.fork.streams.error)
         }
 
         for (const [sourceId, forkId] of sharedStateIdMap) {
@@ -1146,6 +1221,30 @@ export class EntityManager {
         for (const plan of entityPlans) {
           await this.registry.createEntity(plan.fork)
           createdEntities.push(plan.fork.url)
+        }
+
+        // Register a wake subscription on the new root fork when the
+        // caller asked for one. Mirrors the spawn flow's wake handling
+        // (entity-manager.spawnInner). Rollback below already calls
+        // `wakeRegistry.unregisterBySource(forkUrl)` for every created
+        // entity, so this cleans up automatically on failure.
+        if (opts.wake !== undefined) {
+          const rootPlan = entityPlans.find(
+            (plan) => plan.source.url === rootUrl
+          )
+          if (rootPlan) {
+            await this.wakeRegistry.register({
+              tenantId: this.tenantId,
+              subscriberUrl: opts.wake.subscriberUrl,
+              sourceUrl: rootPlan.fork.url,
+              condition: opts.wake.condition,
+              debounceMs: opts.wake.debounceMs,
+              timeoutMs: opts.wake.timeoutMs,
+              oneShot: false,
+              includeResponse: opts.wake.includeResponse,
+              manifestKey: opts.wake.manifestKey,
+            })
+          }
         }
 
         for (const plan of entityPlans) {
@@ -1464,6 +1563,58 @@ export class EntityManager {
   }
 
   /**
+   * Find an `EventPointer` that addresses the most recent `runs` row on
+   * the source's `main` stream with `status === 'completed'`. Mirrors the
+   * eligibility rule the per-row "Fork from here" UI applies — only
+   * completed runs are valid fork anchors; `started`/`failed` rows are
+   * skipped.
+   *
+   * The pointer is computed in the same coordinate system the runtime
+   * mints pointers in (see entity-stream-db's onBeforeBatch): for a row
+   * R in log entry E, the pointer is `{ offset: P, subOffset: K }` where
+   * `P` is the END offset of the log entry preceding E (or `null` for
+   * stream start) and `K` is R's 1-indexed position within E.
+   */
+  private resolveLatestCompletedRunPointer(
+    events: ReadonlyArray<Record<string, unknown>>,
+    streamPath: string
+  ): EventPointer {
+    let priorEntryOffset: string | null = null
+    let currentEntryOffset: string | null = null
+    let positionInEntry = 0
+    let latest: EventPointer | null = null
+
+    for (const event of events) {
+      const headers = isRecord(event.headers) ? event.headers : undefined
+      const eventOffset =
+        typeof headers?.offset === `string` ? headers.offset : null
+
+      if (eventOffset !== currentEntryOffset) {
+        priorEntryOffset = currentEntryOffset
+        currentEntryOffset = eventOffset
+        positionInEntry = 0
+      }
+      positionInEntry++
+
+      if (event.type !== `run`) continue
+      if (headers?.operation === `delete`) continue
+      if (!isRecord(event.value)) continue
+      if (event.value.status !== `completed`) continue
+
+      latest = { offset: priorEntryOffset, subOffset: positionInEntry }
+    }
+
+    if (!latest) {
+      throw new ElectricAgentsError(
+        ErrCodeInvalidRequest,
+        `Source ${streamPath} has no completed run to fork from`,
+        400
+      )
+    }
+    return latest
+  }
+
+  /**
    * Compute the subset of `sourceTree` that survives the manifest filter
    * applied at the root. After filtering the root's manifest at the fork
    * pointer, only children whose manifest entries landed at or before the
@@ -1724,7 +1875,6 @@ export class EntityManager {
     for (const [sourceUrl, forkUrl] of entityUrlMap) {
       stringMap.set(sourceUrl, forkUrl)
       stringMap.set(`${sourceUrl}/main`, `${forkUrl}/main`)
-      stringMap.set(`${sourceUrl}/error`, `${forkUrl}/error`)
     }
     for (const [sourceId, forkId] of sharedStateIdMap) {
       stringMap.set(sourceId, forkId)
@@ -1739,7 +1889,8 @@ export class EntityManager {
   private buildForkEntityPlans(
     entitiesToFork: Array<ElectricAgentsEntity>,
     entityUrlMap: Map<string, string>,
-    stringMap: Map<string, string>
+    stringMap: Map<string, string>,
+    createdBy?: string
   ): Array<ForkEntityPlan> {
     const now = Date.now()
     return entitiesToFork.map((source) => {
@@ -1763,12 +1914,12 @@ export class EntityManager {
         status: `idle`,
         streams: {
           main: `${forkUrl}/main`,
-          error: `${forkUrl}/error`,
         },
         subscription_id: `${type}-handler`,
         write_token: randomUUID(),
         spawn_args: spawnArgs,
         parent,
+        created_by: createdBy ?? source.created_by,
         created_at: now,
         updated_at: now,
       }
@@ -2133,6 +2284,7 @@ export class EntityManager {
       {
         entityUrl: targetUrl,
         from: senderUrl,
+        from_agent: senderUrl,
         payload: manifest.payload,
         key: `scheduled-${producerId}`,
         type:
@@ -2199,7 +2351,7 @@ export class EntityManager {
       `msg-in-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
     const value: Record<string, unknown> = {
-      from: req.from,
+      from: req.from_principal ?? req.from,
       payload: req.payload,
       timestamp: now,
       mode: req.mode ?? `immediate`,
@@ -2207,6 +2359,12 @@ export class EntityManager {
         req.mode === `queued` || req.mode === `paused`
           ? `pending`
           : `processed`,
+    }
+    if (req.from_principal) {
+      value.from_principal = req.from_principal
+    }
+    if (req.from_agent) {
+      value.from_agent = req.from_agent
     }
     if (req.type) {
       value.message_type = req.type
@@ -2965,6 +3123,8 @@ export class EntityManager {
       {
         entityUrl,
         from: req.from,
+        from_principal: req.from_principal,
+        from_agent: req.from_agent,
         payload: req.payload,
         key: req.key,
         type: req.type,
@@ -3375,19 +3535,8 @@ export class EntityManager {
       return
     }
 
-    const errorCloseEvent = {
-      type: `signal`,
-      key: signalEvent.key,
-      value: signalEvent.value,
-      headers: signalEvent.headers,
-    }
-    const errorSignalData = this.encodeChangeEvent(
-      errorCloseEvent as unknown as Record<string, unknown>
-    )
-
     for (const [streamPath, data] of [
       [entity.streams.main, signalData],
-      [entity.streams.error, errorSignalData],
     ] as const) {
       try {
         await this.streamClient.append(streamPath, data, { close: true })
@@ -3535,7 +3684,9 @@ export class EntityManager {
       creation_schema: existing.creation_schema,
       inbox_schemas: mergedInbox,
       state_schemas: mergedState,
+      slash_commands: existing.slash_commands,
       serve_endpoint: existing.serve_endpoint,
+      default_dispatch_policy: existing.default_dispatch_policy,
       revision: nextRevision,
       created_at: existing.created_at,
       updated_at: now,
@@ -3624,6 +3775,20 @@ export class EntityManager {
     }
   }
 
+  private validateSlashCommands(input: unknown): void {
+    const validationError = validateSlashCommandDefinitions(input)
+    if (!validationError) {
+      return
+    }
+
+    throw new ElectricAgentsError(
+      ErrCodeSchemaValidationFailed,
+      validationError.message,
+      422,
+      validationError.details
+    )
+  }
+
   private async validateSendRequest(
     entityUrl: string,
     req: SendRequest
@@ -3640,7 +3805,17 @@ export class EntityManager {
       )
     }
 
-    if (req.type && entity.type) {
+    if (req.type === COMPOSER_INPUT_MESSAGE_TYPE) {
+      const valErr = validateComposerInputPayload(req.payload)
+      if (valErr) {
+        throw new ElectricAgentsError(
+          ErrCodeSchemaValidationFailed,
+          valErr.message,
+          422,
+          valErr.details
+        )
+      }
+    } else if (req.type && entity.type) {
       const { inboxSchemas } = await this.getEffectiveSchemas(entity)
       if (inboxSchemas) {
         const schema = inboxSchemas[req.type]

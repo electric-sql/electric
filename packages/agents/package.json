@@ -1,6 +1,6 @@
 {
   "name": "@electric-ax/agents",
-  "version": "0.4.12",
+  "version": "0.4.15",
   "description": "Built-in Electric Agents runtimes such as Horton and worker",
   "repository": {
     "type": "git",
@@ -62,6 +62,7 @@
     "pino": "^10.3.1",
     "pino-pretty": "^13.0.0",
     "sqlite-vec": "^0.1.9",
+    "undici": "^7.24.7",
     "zod": "^4.3.6"
   },
   "devDependencies": {

@@ -54,6 +54,10 @@ async function captureAgentConfig(
         throw new Error(`ENOENT`)
       }),
     },
+    slashCommands: { replaceOwned: vi.fn() },
+    insertContext: vi.fn(),
+    removeContext: vi.fn(),
+    getContext: vi.fn(),
     useContext: vi.fn(),
     useAgent,
     agent: { run: vi.fn(async () => {}) },
@@ -212,7 +216,7 @@ describe(`horton tool composition`, () => {
     )
   })
 
-  it(`adds event source tools through the built-in electric tool factory`, async () => {
+  it(`adds event source and schedule tools through the built-in electric tool factory`, async () => {
     const tools = await createBuiltinElectricTools()(
       createElectricToolsContext()
     )
@@ -224,6 +228,9 @@ describe(`horton tool composition`, () => {
         `subscribe_event_source`,
         `list_event_source_subscriptions`,
         `unsubscribe_event_source`,
+        `upsert_cron_schedule`,
+        `delete_schedule`,
+        `list_schedules`,
       ])
     )
     expect(
@@ -238,7 +245,7 @@ describe(`horton tool composition`, () => {
     ).not.toContain(`manifest-backed`)
   })
 
-  it(`includes event source electric tools in Horton and describes them in the prompt`, async () => {
+  it(`includes event source and schedule electric tools in Horton and describes them in the prompt`, async () => {
     const electricTools = await createBuiltinElectricTools()(
       createElectricToolsContext()
     )
@@ -249,8 +256,14 @@ describe(`horton tool composition`, () => {
 
     expect(names).toContain(`list_event_sources`)
     expect(names).toContain(`subscribe_event_source`)
+    expect(names).toContain(`upsert_cron_schedule`)
+    expect(names).toContain(`delete_schedule`)
+    expect(names).toContain(`list_schedules`)
     expect(cfg.systemPrompt).toContain(`list_event_sources`)
     expect(cfg.systemPrompt).toContain(`subscribe_event_source`)
+    expect(cfg.systemPrompt).toContain(`upsert_cron_schedule`)
+    expect(cfg.systemPrompt).toContain(`delete_schedule`)
+    expect(cfg.systemPrompt).toContain(`list_schedules`)
   })
 
   it(`includes the default built-in toolset`, async () => {

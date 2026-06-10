@@ -49,6 +49,73 @@ html[data-electric-desktop='true'][data-theme='dark'] {
   --ds-chrome-bg: color-mix(in oklab, var(--ds-bg-subtle) 78%, transparent);
 }
 
+html[data-electric-desktop='true'][data-electric-platform='darwin'][data-theme='light'] {
+  --ds-chrome-bg: transparent;
+  --ds-chrome-backdrop-filter: saturate(1.08) sepia(0.08) hue-rotate(350deg);
+  --ds-sidebar-item-hover-bg: color-mix(
+    in oklab,
+    var(--ds-gray-12) 8%,
+    transparent
+  );
+  --ds-sidebar-item-active-bg: color-mix(
+    in oklab,
+    var(--ds-accent-base) 12%,
+    transparent
+  );
+  --ds-sidebar-item-hover-backdrop-filter: saturate(1.16) sepia(0.06)
+    hue-rotate(350deg) brightness(0.97);
+  --ds-sidebar-item-active-backdrop-filter: saturate(1.28) sepia(0.12)
+    hue-rotate(350deg) brightness(0.92);
+  --ds-sidebar-divider: color-mix(in oklab, var(--ds-gray-12) 7%, transparent);
+  --ds-sidebar-divider-blend-mode: multiply;
+}
+
+html[data-electric-desktop='true'][data-electric-platform='darwin'][data-theme='dark'] {
+  --ds-chrome-bg: transparent;
+  --ds-chrome-backdrop-filter: saturate(1.08) sepia(0.05) hue-rotate(350deg);
+  --ds-sidebar-item-hover-bg: color-mix(in oklab, #ffffff 10%, transparent);
+  --ds-sidebar-item-active-bg: color-mix(
+    in oklab,
+    var(--ds-accent-base) 16%,
+    transparent
+  );
+  --ds-sidebar-item-hover-backdrop-filter: saturate(1.18) sepia(0.04)
+    hue-rotate(350deg) brightness(1.14);
+  --ds-sidebar-item-active-backdrop-filter: saturate(1.32) sepia(0.06)
+    hue-rotate(350deg) brightness(1.24);
+  --ds-sidebar-divider: color-mix(in oklab, var(--ds-divider) 50%, transparent);
+  --ds-sidebar-divider-blend-mode: soft-light;
+}
+
+html[data-electric-desktop='true'][data-electric-platform='darwin']
+  [data-sidebar-control-surface]
+  button {
+  position: relative;
+  background-clip: border-box;
+}
+
+html[data-electric-desktop='true'][data-electric-platform='darwin']
+  [data-sidebar-control-surface]
+  button:hover:not(:disabled):not([data-disabled]),
+html[data-electric-desktop='true'][data-electric-platform='darwin']
+  [data-sidebar-control-surface]
+  button[data-popup-open]:not(:disabled):not([data-disabled]),
+html[data-electric-desktop='true'][data-electric-platform='darwin']
+  [data-sidebar-control-surface]
+  button[data-pressed]:not(:disabled):not([data-disabled]) {
+  background: var(--ds-sidebar-item-hover-bg) !important;
+  -webkit-backdrop-filter: var(--ds-sidebar-item-hover-backdrop-filter);
+  backdrop-filter: var(--ds-sidebar-item-hover-backdrop-filter);
+}
+
+html[data-electric-desktop='true'][data-electric-platform='darwin']
+  [data-sidebar-control-surface]
+  button:active:not(:disabled):not([data-disabled]) {
+  background: var(--ds-sidebar-item-active-bg) !important;
+  -webkit-backdrop-filter: var(--ds-sidebar-item-active-backdrop-filter);
+  backdrop-filter: var(--ds-sidebar-item-active-backdrop-filter);
+}
+
 html[data-electric-desktop='true'] input,
 html[data-electric-desktop='true'] textarea,
 html[data-electric-desktop='true'] select,

@@ -5,6 +5,7 @@ import { StatusDot } from './StatusDot'
 import { useTokens } from '../lib/ThemeProvider'
 import { fontSize, radii } from '../lib/theme'
 import { getEntityDisplayTitle, type ElectricEntity } from '../lib/agentsClient'
+import { normalizePrincipalUrl } from '@electric-ax/agents-server-ui/src/lib/principals'
 import type { Tokens } from '../lib/theme'
 
 /**
@@ -58,7 +59,9 @@ export const SessionRow = memo(function SessionRow({
   expanded = false,
   onToggleExpand,
   onPress,
+  onLongPress,
   connector = null,
+  currentPrincipalUrl = null,
 }: {
   entity: ElectricEntity
   depth: number
@@ -66,7 +69,9 @@ export const SessionRow = memo(function SessionRow({
   expanded?: boolean
   onToggleExpand?: () => void
   onPress: () => void
+  onLongPress?: () => void
   connector?: SessionRowConnector | null
+  currentPrincipalUrl?: string | null
 }): React.ReactElement {
   const tokens = useTokens()
   const styles = useMemo(() => createStyles(tokens), [tokens])
@@ -74,6 +79,11 @@ export const SessionRow = memo(function SessionRow({
   const isStopped = entity.status === `stopped`
   const hasChildren = childCount > 0
   const paddingLeft = BASE_PADDING_LEFT + depth * INDENT_PX
+  const creatorUrl = normalizePrincipalUrl(entity.created_by)
+  const shared =
+    creatorUrl !== null &&
+    currentPrincipalUrl !== null &&
+    creatorUrl !== currentPrincipalUrl
 
   return (
     <View style={[styles.row, isStopped ? styles.stopped : null]}>
@@ -85,7 +95,16 @@ export const SessionRow = memo(function SessionRow({
         />
       ) : null}
 
-      <Pressable style={[styles.rowMain, { paddingLeft }]} onPress={onPress}>
+      <Pressable
+        style={[styles.rowMain, { paddingLeft }]}
+        onPress={onPress}
+        onLongPress={onLongPress}
+        // 350ms; RN's 500ms default feels unresponsive for a context menu.
+        delayLongPress={350}
+        accessibilityHint={
+          onLongPress ? `Long press for session options` : undefined
+        }
+      >
         {({ pressed }) => (
           <>
             <View
@@ -101,10 +120,20 @@ export const SessionRow = memo(function SessionRow({
             <Text numberOfLines={1} style={styles.title}>
               {title}
             </Text>
-            <Text style={styles.type} numberOfLines={1}>
-              {entity.type}
-              {hasChildren && !expanded ? ` +${childCount}` : ``}
-            </Text>
+            <View style={styles.meta}>
+              {shared ? (
+                <Icon
+                  name="users"
+                  size={13}
+                  color={tokens.text3}
+                  strokeWidth={2}
+                />
+              ) : null}
+              <Text style={styles.type} numberOfLines={1}>
+                {entity.type}
+                {hasChildren && !expanded ? ` +${childCount}` : ``}
+              </Text>
+            </View>
           </>
         )}
       </Pressable>
@@ -254,6 +283,13 @@ function createStyles(tokens: Tokens) {
       color: tokens.text1,
       fontSize: fontSize.base,
       lineHeight: 20,
+    },
+    meta: {
+      maxWidth: `45%`,
+      flexShrink: 0,
+      flexDirection: `row`,
+      alignItems: `center`,
+      gap: 4,
     },
     type: {
       flexShrink: 0,

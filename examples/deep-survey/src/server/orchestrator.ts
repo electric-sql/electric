@@ -162,7 +162,7 @@ function createExploreCorpusTool(
 
         await ctx.spawn(SURVEY_WORKER_ENTITY_TYPE, childId, args, {
           initialMessage: `Explore your assigned topic and write a wiki entry.`,
-          wake: `runFinished`,
+          wake: { on: `runFinished`, includeResponse: true },
           tags: {
             swarm_id: swarmId,
             topic: topic.slice(0, 50),

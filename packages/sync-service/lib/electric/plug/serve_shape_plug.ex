@@ -451,7 +451,8 @@ defmodule Electric.Plug.ServeShapePlug do
         shape_handle: get_handle(assigns) || conn.query_params["handle"],
         client_ip: conn.remote_ip,
         status: conn.status,
-        stack_id: stack_id
+        stack_id: stack_id,
+        known_error: Api.Response.conn_has_known_error?(conn)
       }
     )
 

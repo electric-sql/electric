@@ -1,7 +1,7 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { remoteSandbox } from '../src/sandbox/remote'
 import { unrestrictedSandbox } from '../src/sandbox/unrestricted'
 import { dockerSandbox } from '../src/sandbox/docker'
@@ -10,6 +10,7 @@ import { KNOWN_ADAPTERS } from '../src/sandbox'
 import type { Sandbox } from '../src/sandbox/types'
 import type { RemoteSandboxClient } from '../src/sandbox/remote/types'
 import { dockerAvailable, TEST_IMAGE, TEST_LABEL } from './helpers/docker-probe'
+import { installDockerSandboxTestCleanup } from './helpers/docker-sandbox-cleanup'
 
 /**
  * Cross-provider conformance: a single set of scenarios exercised against
@@ -217,6 +218,18 @@ describe(`sandbox conformance`, () => {
   for (const provider of providers) {
     const d = provider.enabled ? describe : describe.skip
     d(provider.name, () => {
+      // The docker provider creates real containers; reap them per test, and
+      // give them a real timeout — container creation outgrows the 5s default
+      // (the dedicated docker test files use 60s). The host-fs and in-memory
+      // providers create no containers and keep the snappy default.
+      if (provider.adapter === `docker`) {
+        installDockerSandboxTestCleanup()
+        // Bind a longer timeout at collection time (the docker provider runs
+        // last, so only its tests pick this up); a hook would be too late since
+        // each test's timeout is fixed when it's registered.
+        vi.setConfig({ testTimeout: 60_000 })
+      }
+
       let cwd: string
 
       beforeEach(async () => {
@@ -488,7 +501,8 @@ describe(`sandbox conformance`, () => {
           } finally {
             await sandbox.dispose()
           }
-        }
+        },
+        15_000
       )
     })
   }

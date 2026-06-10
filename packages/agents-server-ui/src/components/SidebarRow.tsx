@@ -1,5 +1,6 @@
-import { memo } from 'react'
-import { ChevronDown, ChevronRight, Pin } from 'lucide-react'
+import { memo, useMemo } from 'react'
+import { useLiveQuery } from '@tanstack/react-db'
+import { ChevronDown, ChevronRight, Pin, Users } from 'lucide-react'
 import { StatusDot } from './StatusDot'
 import { HoverCard, Icon, Text } from '../ui'
 import { getEntityDisplayTitle } from '../lib/entityDisplay'
@@ -7,8 +8,18 @@ import { useEntityRuntimeInfo } from './EntityRuntimeBadges'
 import { runnerDisplayLabel } from '../lib/entityRuntime'
 import { formatAbsoluteDateTime, formatRelativeTime } from '../lib/formatTime'
 import { setWorkspaceDrag } from '../lib/workspace/dragPayload'
+import { useCurrentPrincipal } from '../hooks/useCurrentPrincipal'
+import { useElectricAgents } from '../lib/ElectricAgentsProvider'
+import {
+  normalizePrincipalUrl,
+  principalKeyFromInput,
+  userIdFromPrincipal,
+} from '../lib/principals'
 import styles from './SidebarRow.module.css'
-import type { ElectricEntity } from '../lib/ElectricAgentsProvider'
+import type {
+  ElectricEntity,
+  ElectricUser,
+} from '../lib/ElectricAgentsProvider'
 
 const INDENT_PX = 12
 // 3px so the pin button (filling the 22px iconSlot via inset:0) sits
@@ -56,6 +67,7 @@ type SidebarRowProps = {
   onToggleExpand?: () => void
   pinned?: boolean
   onTogglePin?: () => void
+  currentPrincipalUrl: string | null
   /**
    * Shared HoverCard handle owned by `<Sidebar>`. All rows attach to
    * the same handle so once one info popout is visible, hovering
@@ -102,11 +114,17 @@ export const SidebarRow = memo(function SidebarRow({
   onToggleExpand,
   pinned = false,
   onTogglePin,
+  currentPrincipalUrl,
   hoverHandle,
 }: SidebarRowProps): React.ReactElement {
   const { title } = getEntityDisplayTitle(entity)
   const isStopped = entity.status === `stopped` || entity.status === `killed`
   const hasChildren = childCount > 0
+  const createdByUrl = normalizePrincipalUrl(entity.created_by)
+  const shared =
+    createdByUrl !== null &&
+    currentPrincipalUrl !== null &&
+    createdByUrl !== currentPrincipalUrl
   const sessionId = entity.url.replace(/^\//, ``)
   const className = [
     styles.row,
@@ -202,6 +220,12 @@ export const SidebarRow = memo(function SidebarRow({
 
           <span className={styles.title}>{title}</span>
 
+          {shared && (
+            <span className={styles.sharedIcon} title="Shared with you">
+              <Icon icon={Users} size={1} />
+            </span>
+          )}
+
           <span
             className={[
               styles.type,
@@ -276,6 +300,9 @@ export function SidebarRowInfo({
     ? runnerDisplayLabel(runtime.runner, runtime.runnerId)
     : null
   const sandboxLabel = runtime.sandbox.label
+  const { label: createdByLabel, title: createdByTitle } = usePrincipalDisplay(
+    entity.created_by
+  )
 
   return (
     <div className={styles.info}>
@@ -296,6 +323,13 @@ export function SidebarRowInfo({
       <div className={styles.infoTimes}>
         {runnerLabel && <InfoTimeRow label="Runner" value={runnerLabel} />}
         {sandboxLabel && <InfoTimeRow label="Sandbox" value={sandboxLabel} />}
+        {createdByLabel && (
+          <InfoTimeRow
+            label="Created by"
+            value={createdByLabel}
+            title={createdByTitle}
+          />
+        )}
         <InfoTimeRow label="Spawned" value={spawnedAbs} />
         <InfoTimeRow
           label="Last active"
@@ -305,6 +339,59 @@ export function SidebarRowInfo({
       </div>
     </div>
   )
+}
+
+function usePrincipalDisplay(value: string | null | undefined): {
+  label: string | null
+  title?: string
+} {
+  const { usersCollection } = useElectricAgents()
+  const { principal: currentPrincipal } = useCurrentPrincipal()
+  const key = principalKeyFromInput(value)
+  const currentKey = principalKeyFromInput(currentPrincipal)
+  const userId = userIdFromPrincipal(value)
+
+  const { data: users = [] } = useLiveQuery(
+    (q) => {
+      if (!usersCollection) return undefined
+      return q.from({ user: usersCollection })
+    },
+    [usersCollection]
+  )
+
+  const usersById = useMemo(
+    () => new Map(users.map((user) => [user.id, user])),
+    [users]
+  )
+
+  if (!key) return { label: null }
+  if (key === currentKey) return { label: `Me`, title: key }
+  if (userId) {
+    const user = usersById.get(userId)
+    return {
+      label: userDisplayName(user) ?? formatPrincipalKey(key),
+      title: key,
+    }
+  }
+  return { label: formatPrincipalKey(key), title: key }
+}
+
+function userDisplayName(user: ElectricUser | undefined): string | null {
+  if (!user) return null
+  return user.display_name || user.email || null
+}
+
+function formatPrincipalKey(key: string): string {
+  const colon = key.indexOf(`:`)
+  if (colon <= 0) return shortenPrincipalId(key)
+  const kind = key.slice(0, colon)
+  const id = key.slice(colon + 1)
+  return `${kind}:${shortenPrincipalId(id)}`
+}
+
+function shortenPrincipalId(id: string): string {
+  if (id.length <= 18) return id
+  return `${id.slice(0, 8)}...${id.slice(-6)}`
 }
 
 function InfoTimeRow({

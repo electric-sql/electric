@@ -110,6 +110,7 @@ export function EntityContextDrawer({
   tileId,
   pendingMessages = [],
   pendingEditingKey = null,
+  pendingActionsDisabled = false,
   onEditPending,
   onDeletePending,
   onSteerPending,
@@ -121,6 +122,7 @@ export function EntityContextDrawer({
   tileId: string
   pendingMessages?: EntityTimelineData[`inbox`]
   pendingEditingKey?: string | null
+  pendingActionsDisabled?: boolean
   onEditPending?: (message: EntityTimelineData[`inbox`][number]) => void
   onDeletePending?: (key: string) => void
   onSteerPending?: (key: string) => void
@@ -245,6 +247,7 @@ export function EntityContextDrawer({
             onDelete={onDeletePending}
             onSteer={onSteerPending}
             onReorder={onReorderPending}
+            disabled={pendingActionsDisabled}
           />
         )}
         {groups.map((group) => (
@@ -287,6 +290,7 @@ function PendingInboxSection({
   onDelete,
   onSteer,
   onReorder,
+  disabled,
 }: {
   messages: EntityTimelineData[`inbox`]
   editingKey: string | null
@@ -294,6 +298,7 @@ function PendingInboxSection({
   onDelete: (key: string) => void
   onSteer: (key: string) => void
   onReorder: (key: string, position: string) => void
+  disabled: boolean
 }): React.ReactElement {
   const [expanded, setExpanded] = useState(true)
   const [draggingKey, setDraggingKey] = useState<string | null>(null)
@@ -320,6 +325,7 @@ function PendingInboxSection({
     targetKey: string,
     placement: `before` | `after`
   ): void => {
+    if (disabled) return
     const fromIndex = messages.findIndex(
       (message) => message.key === draggedKey
     )
@@ -391,13 +397,15 @@ function PendingInboxSection({
             ]
               .filter(Boolean)
               .join(` `)}
-            draggable
+            draggable={!disabled}
             onDragStart={(event) => {
+              if (disabled) return
               setDraggingKey(message.key)
               event.dataTransfer.effectAllowed = `move`
               event.dataTransfer.setData(`text/plain`, message.key)
             }}
             onDragOver={(event) => {
+              if (disabled) return
               if (!draggingKey || draggingKey === message.key) return
               event.preventDefault()
               event.dataTransfer.dropEffect = `move`
@@ -412,6 +420,7 @@ function PendingInboxSection({
               )
             }}
             onDrop={(event) => {
+              if (disabled) return
               event.preventDefault()
               const draggedKey =
                 event.dataTransfer.getData(`text/plain`) || draggingKey
@@ -454,6 +463,7 @@ function PendingInboxSection({
                 tone="neutral"
                 className={styles.pendingActionButton}
                 aria-label="Edit queued message"
+                disabled={disabled}
                 onClick={() => onEdit(message)}
               >
                 <Icon icon={Pencil} size={1} />
@@ -465,6 +475,7 @@ function PendingInboxSection({
                 tone="neutral"
                 className={styles.pendingActionButton}
                 aria-label="Steer now"
+                disabled={disabled}
                 onClick={() => onSteer(message.key)}
               >
                 <Icon icon={ArrowUp} size={1} />
@@ -476,6 +487,7 @@ function PendingInboxSection({
                 tone="neutral"
                 className={styles.pendingActionButton}
                 aria-label="Delete queued message"
+                disabled={disabled}
                 onClick={() => onDelete(message.key)}
               >
                 <Icon icon={Trash2} size={1} />

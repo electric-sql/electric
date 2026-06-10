@@ -1,5 +1,76 @@
 # @electric-ax/agents-mobile
 
+## 0.0.13
+
+### Patch Changes
+
+- 3dbd075: Add session pinning to the mobile app: long-press a root session row (or any search result) to open a context sheet with the entity info (title, session id, type/status, subagents, runner, sandbox, spawned, last active) and a Pin/Unpin action; the in-session kebab menu also gets a Pin/Unpin item, mirroring the desktop tile menu. Pinned sessions surface in a Pinned section above the groups, persisted per-device in AsyncStorage — the mobile mirror of the web sidebar's pinning. Runner-param types in agents-server-ui's `entityRuntime` helpers are loosened to structural subsets so the mobile app can reuse them.
+- 7892079: Per-runner recent working directories in the spawn UI, derived from the synced sessions list so the same recents appear on every device. The desktop picker becomes per-runner (replacing the localStorage list), and mobile gains sandbox-profile and working-directory selection — including sending the sandbox profile on spawn, without which the runtime ignores the chosen directory.
+- Updated dependencies [3dbd075]
+- Updated dependencies [d15852d]
+- Updated dependencies [5aa2d78]
+- Updated dependencies [5aa2d78]
+- Updated dependencies [146f238]
+- Updated dependencies [7892079]
+- Updated dependencies [1099366]
+- Updated dependencies [1099366]
+  - @electric-ax/agents-server-ui@0.4.18
+  - @electric-ax/agents-runtime@0.3.11
+
+## 0.0.12
+
+### Patch Changes
+
+- Updated dependencies [3ecdade]
+  - @electric-ax/agents-runtime@0.3.10
+  - @electric-ax/agents-server-ui@0.4.17
+
+## 0.0.11
+
+### Patch Changes
+
+- a811960: Add Sentry crash/error reporting to the mobile app: errors-only reporting disabled in development, with source-map upload wired through the `withSentry` Expo config plugin and `getSentryExpoConfig` metro wrapper.
+- 4f88e6d: Dedupe `@tanstack/db` to a single instance.
+
+  `@tanstack/db` is effectively a singleton (collections/transactions/live
+  queries use `instanceof` checks and module-level state), but the lockfile had
+  drifted to several `0.6.x` copies, breaking StreamDB collections. Adds a root
+  `pnpm.overrides` entry collapsing the `0.6.x` line to `0.6.7`, scoped to
+  `>=0.6.0 <0.7.0` so the legacy example starters pinned to `0.0.x`/`0.5.8` are
+  untouched. Stopgap until `@durable-streams/state` ships `@tanstack/db` as a
+  peer dependency.
+
+  Also raises the `agents-mobile` iOS minimum deployment target to 16.4 (via
+  `expo-build-properties`). The chat renders in an Expo DOM WebView whose markdown
+  stack ships regex lookbehind, which JavaScriptCore only parses on iOS 16.4+;
+  below that the whole DOM bundle fails to parse and the chat renders blank.
+
+- b2bf806: Upgrade `@durable-streams/state` to `0.3.1` and drop the `@tanstack/db` pnpm override.
+
+  `@durable-streams/state@0.3.x` makes `@tanstack/db` an optional peer dependency (it was a direct `^0.6.0` dependency) and splits its tsdb-coupled tools into a `@durable-streams/state/db` subpath. tsdb-specific imports (`createStreamDB`, `queryOnce`, `createTransaction`, query operators, etc.) now come from `@durable-streams/state/db`; the bare entry keeps only the tsdb-free types and helpers.
+
+  Because state no longer pulls its own `@tanstack/db` copy, the root `pnpm.overrides` collapsing `@tanstack/db@>=0.6.0 <0.7.0` to `0.6.7` is removed. To keep a single `0.6.7` instance without it, `@tanstack/react-db` is raised to `^0.1.85` and `@tanstack/electric-db-collection` to `^0.3.5` (both pin `@tanstack/db@0.6.7`), and `@durable-streams/server` to `^0.3.7` (depends on `state@0.3.1`, removing the lingering transitive `state@0.2.9`).
+
+- 3fb4461: Harden the mobile kebab-menu server picker: surface connect failures in-sheet instead of silently swallowing them, persist a Cloud server only after the switch succeeds, and let the submenu close animation finish before resetting to the root page.
+- 889fa20: Expose tenant-scoped users as an Electric shape and add a chat sharing dialog that grants user principals or all workspace users view, chat, or manage permissions over an entity. View/chat sharing includes fork access, forked chats are owned by the principal that creates the fork, shared chats can be identified and filtered by creator in the sidebar, and Cloud requests now inject the signed-in user as the Electric principal.
+
+  Mobile now syncs the users and effective-permissions shapes, marks and filters shared chats by creator, disables native chat and signal controls when the current principal lacks permission, and shows the signed-in user principal on the Account screen for debugging.
+
+- Updated dependencies [9fdf96a]
+- Updated dependencies [f222d39]
+- Updated dependencies [312f5ec]
+- Updated dependencies [6434774]
+- Updated dependencies [312f5ec]
+- Updated dependencies [4f88e6d]
+- Updated dependencies [b2bf806]
+- Updated dependencies [6e9e4a7]
+- Updated dependencies [74d2341]
+- Updated dependencies [d14d9a9]
+- Updated dependencies [7c62024]
+- Updated dependencies [889fa20]
+  - @electric-ax/agents-runtime@0.3.9
+  - @electric-ax/agents-server-ui@0.4.16
+
 ## 0.0.10
 
 ### Patch Changes
