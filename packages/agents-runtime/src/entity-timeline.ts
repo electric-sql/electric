@@ -24,6 +24,10 @@ import type {
 import type { EntityStreamDB } from './entity-stream-db'
 import { formatPointerOrderToken, type EventPointer } from './event-pointer'
 import type { ChildStatusEntry, MessageReceived, Signal } from './entity-schema'
+import type {
+  CommentSnapshotValue,
+  CommentTargetValue,
+} from './comments-collection'
 import type { ManifestEntry, Wake, WakeMessage } from './types'
 
 export type EntityTimelineState =
@@ -307,8 +311,8 @@ export type EntityTimelineCommentRow = {
   body: string
   from: string
   timestamp: string
-  reply_to?: import(`./comments-collection`).CommentTargetValue
-  target_snapshot?: import(`./comments-collection`).CommentSnapshotValue
+  reply_to?: CommentTargetValue
+  target_snapshot?: CommentSnapshotValue
   edited_at?: string
   deleted_at?: string
   deleted_by?: string
