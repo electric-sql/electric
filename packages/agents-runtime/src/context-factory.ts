@@ -1086,6 +1086,11 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         },
       }
     },
+    // Renders `text` as an ordinary assistant message in the chat without
+    // calling the LLM. Used for runtime-driven replies like slash-command
+    // responses and budget-limit notices. The five writes synthesize the
+    // same run + text + delta event sequence the outbound bridge would
+    // emit for a real LLM turn; the UI needs all of them to render.
     replyText(text: string): void {
       if (typeof text !== `string` || text.length === 0) return
       const runKey = nextRunKey()
