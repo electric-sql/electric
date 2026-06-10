@@ -1,7 +1,7 @@
 ---
-'@electric-ax/agents-server-ui': minor
-'@electric-ax/agents-runtime': minor
-'@electric-ax/agents': minor
+'@electric-ax/agents-server-ui': patch
+'@electric-ax/agents-runtime': patch
+'@electric-ax/agents': patch
 ---
 
 Add `/goal` slash command to Horton sessions. Lets the user set an
