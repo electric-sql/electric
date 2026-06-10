@@ -2,13 +2,16 @@ import {
   and,
   coalesce,
   concat,
+  count,
   createCollection,
   createLiveQueryCollection,
   eq,
+  gt,
   isNull,
   like,
   localOnlyCollectionOptions,
   or,
+  sum,
   toArray,
 } from '@durable-streams/state/db'
 import { caseWhen } from '@tanstack/db'
@@ -57,6 +60,13 @@ export type EntityTimelineSection =
       items: Array<EntityTimelineContentItem>
       done?: true
       error?: string
+      // Summed across all steps of the run that produced this section.
+      // Either side may be missing if the provider didn't report it
+      // (e.g. older events recorded before tokens were persisted).
+      tokens?: {
+        input?: number
+        output?: number
+      }
     }
   | {
       kind: `wake`
@@ -73,6 +83,15 @@ export interface IncludesRun {
   toolCalls: Array<IncludesToolCall>
   steps: Array<IncludesStep>
   errors: Array<IncludesError>
+  // Per-run token totals summed across all `steps` of the run.
+  // Either side is omitted if no step reported that side; the whole
+  // field is omitted if no step reported either. Computed in the
+  // query layer (or by `buildIncludesRuns` for in-memory snapshots)
+  // so consumers don't re-aggregate.
+  tokens?: {
+    input?: number
+    output?: number
+  }
 }
 
 export interface IncludesText {
@@ -103,6 +122,8 @@ export interface IncludesStep {
   status: `started` | `completed`
   model_id?: string
   duration_ms?: number
+  input_tokens?: number
+  output_tokens?: number
 }
 
 export interface IncludesError {
@@ -228,6 +249,8 @@ export interface EntityTimelineStepItem {
   status: `started` | `completed`
   model_id?: string
   duration_ms?: number
+  input_tokens?: number
+  output_tokens?: number
 }
 
 export interface EntityTimelineErrorItem {
@@ -245,6 +268,14 @@ export interface EntityTimelineRunRow {
   items: Collection<EntityTimelineRunItem>
   steps: Collection<EntityTimelineStepItem>
   errors: Collection<EntityTimelineErrorItem>
+  // Per-run token totals summed across all `steps` of the run.
+  // Same shape as `IncludesRun.tokens` — the query layer resolves
+  // both sides' presence via `count`, so the UI can render `tokens`
+  // as-is without re-aggregating step rows.
+  tokens?: {
+    input?: number
+    output?: number
+  }
 }
 
 export type EntityTimelineInboxRow = IncludesInboxMessage
@@ -778,6 +809,8 @@ function buildIncludesRuns(input: {
       status: step.status,
       model_id: step.model_id,
       duration_ms: step.duration_ms,
+      input_tokens: step.input_tokens,
+      output_tokens: step.output_tokens,
     })
     stepsByRun.set(step.run_id, entries)
   }
@@ -794,20 +827,58 @@ function buildIncludesRuns(input: {
     errorsByRun.set(error.run_id, entries)
   }
 
-  return [...input.runs].sort(compareTimelineOrder).map((run) => ({
-    key: run.key,
-    order: run.order,
-    status: run.status,
-    finish_reason: run.finish_reason,
-    texts: [...(textsByRun.get(run.key) ?? [])].sort(compareTimelineOrder),
-    toolCalls: [...(toolCallsByRun.get(run.key) ?? [])].sort(
-      compareTimelineOrder
-    ),
-    steps: [...(stepsByRun.get(run.key) ?? [])].sort(
+  return [...input.runs].sort(compareTimelineOrder).map((run) => {
+    const runSteps = [...(stepsByRun.get(run.key) ?? [])].sort(
       (left, right) => left.step_number - right.step_number
-    ),
-    errors: [...(errorsByRun.get(run.key) ?? [])],
-  }))
+    )
+    const tokens = aggregateRunTokens(runSteps)
+    return {
+      key: run.key,
+      order: run.order,
+      status: run.status,
+      finish_reason: run.finish_reason,
+      texts: [...(textsByRun.get(run.key) ?? [])].sort(compareTimelineOrder),
+      toolCalls: [...(toolCallsByRun.get(run.key) ?? [])].sort(
+        compareTimelineOrder
+      ),
+      steps: runSteps,
+      errors: [...(errorsByRun.get(run.key) ?? [])],
+      ...(tokens && { tokens }),
+    }
+  })
+}
+
+/**
+ * In-memory token aggregator used by `buildIncludesRuns` to match the
+ * shape that `createEntityIncludesQuery` / `createEntityTimelineQuery`
+ * produce via `sum` / `count` over the steps collection.
+ *
+ * Returns `undefined` when no step reported a token count on either
+ * side, so the consumer can elide the meta row entirely instead of
+ * showing "0 / 0" for runs whose provider never emitted usage data.
+ */
+function aggregateRunTokens(
+  steps: ReadonlyArray<{ input_tokens?: number; output_tokens?: number }>
+): { input?: number; output?: number } | undefined {
+  let inSum = 0
+  let outSum = 0
+  let sawIn = false
+  let sawOut = false
+  for (const step of steps) {
+    if (typeof step.input_tokens === `number`) {
+      inSum += step.input_tokens
+      sawIn = true
+    }
+    if (typeof step.output_tokens === `number`) {
+      outSum += step.output_tokens
+      sawOut = true
+    }
+  }
+  if (!sawIn && !sawOut) return undefined
+  return {
+    ...(sawIn && { input: inSum }),
+    ...(sawOut && { output: outSum }),
+  }
 }
 
 function buildInboxMessages(
@@ -1322,59 +1393,96 @@ function buildEntityTimelineQuery(
       }),
     }))
 
-  const runSource = q.from({ run: db.collections.runs }).select(({ run }) => ({
-    key: run.key,
-    order: coalesce(run._timeline_order, `~`),
-    status: run.status,
-    finish_reason: run.finish_reason,
-    items: q
-      .from({ item: runItemsSource })
-      .where(({ item }) => eq(item.run_id, run.key))
-      .orderBy(({ item }) => item.order)
-      .orderBy(({ item }) =>
-        coalesce(
-          caseWhen(item.text.key, `text`),
-          caseWhen(item.toolCall.key, `toolCall`),
-          ``
+  const runTokensSource = q
+    .from({ step: db.collections.steps })
+    .groupBy(({ step }) => step.run_id)
+    .select(({ step }) => ({
+      run_id: step.run_id,
+      input: sum(coalesce(step.input_tokens, 0)),
+      output: sum(coalesce(step.output_tokens, 0)),
+      input_count: count(step.input_tokens),
+      output_count: count(step.output_tokens),
+    }))
+
+  const runSource = q
+    .from({ run: db.collections.runs })
+    .leftJoin({ runTokens: runTokensSource }, ({ run, runTokens }) =>
+      eq(run.key, runTokens.run_id)
+    )
+    .select(({ run, runTokens }) => ({
+      key: run.key,
+      order: coalesce(run._timeline_order, `~`),
+      status: run.status,
+      finish_reason: run.finish_reason,
+      // Mirrors the `tokens` shape produced by `createEntityIncludesQuery`
+      // so the UI can read `run.tokens` directly off the live row without
+      // re-summing step contents.
+      tokens: caseWhen(
+        or(
+          gt(coalesce(runTokens.input_count, 0), 0),
+          gt(coalesce(runTokens.output_count, 0), 0)
+        ),
+        {
+          input: caseWhen(
+            gt(coalesce(runTokens.input_count, 0), 0),
+            runTokens.input
+          ),
+          output: caseWhen(
+            gt(coalesce(runTokens.output_count, 0), 0),
+            runTokens.output
+          ),
+        }
+      ),
+      items: q
+        .from({ item: runItemsSource })
+        .where(({ item }) => eq(item.run_id, run.key))
+        .orderBy(({ item }) => item.order)
+        .orderBy(({ item }) =>
+          coalesce(
+            caseWhen(item.text.key, `text`),
+            caseWhen(item.toolCall.key, `toolCall`),
+            ``
+          )
         )
-      )
-      .orderBy(({ item }) => coalesce(item.text.key, item.toolCall.key, ``))
-      .select(({ item }) => ({
-        text: caseWhen(item.text.key, {
-          key: item.text.key,
-          run_id: item.text.run_id,
-          order: item.text.order,
-          status: item.text.status,
-          content: item.textContent,
-        }),
-        toolCall: item.toolCall,
-      })),
-    steps: q
-      .from({ step: db.collections.steps })
-      .where(({ step }) => eq(step.run_id, run.key))
-      .orderBy(({ step }) => step.step_number)
-      .orderBy(({ step }) => coalesce(step._timeline_order, `~`))
-      .orderBy(({ step }) => step.key)
-      .select(({ step }) => ({
-        key: step.key,
-        run_id: step.run_id,
-        order: coalesce(step._timeline_order, `~`),
-        step_number: step.step_number,
-        status: step.status,
-        model_id: step.model_id,
-        duration_ms: step.duration_ms,
-      })),
-    errors: q
-      .from({ error: db.collections.errors })
-      .where(({ error }) => eq(error.run_id, run.key))
-      .orderBy(({ error }) => error.key)
-      .select(({ error }) => ({
-        key: error.key,
-        run_id: error.run_id,
-        error_code: error.error_code,
-        message: error.message,
-      })),
-  }))
+        .orderBy(({ item }) => coalesce(item.text.key, item.toolCall.key, ``))
+        .select(({ item }) => ({
+          text: caseWhen(item.text.key, {
+            key: item.text.key,
+            run_id: item.text.run_id,
+            order: item.text.order,
+            status: item.text.status,
+            content: item.textContent,
+          }),
+          toolCall: item.toolCall,
+        })),
+      steps: q
+        .from({ step: db.collections.steps })
+        .where(({ step }) => eq(step.run_id, run.key))
+        .orderBy(({ step }) => step.step_number)
+        .orderBy(({ step }) => coalesce(step._timeline_order, `~`))
+        .orderBy(({ step }) => step.key)
+        .select(({ step }) => ({
+          key: step.key,
+          run_id: step.run_id,
+          order: coalesce(step._timeline_order, `~`),
+          step_number: step.step_number,
+          status: step.status,
+          model_id: step.model_id,
+          duration_ms: step.duration_ms,
+          input_tokens: step.input_tokens,
+          output_tokens: step.output_tokens,
+        })),
+      errors: q
+        .from({ error: db.collections.errors })
+        .where(({ error }) => eq(error.run_id, run.key))
+        .orderBy(({ error }) => error.key)
+        .select(({ error }) => ({
+          key: error.key,
+          run_id: error.run_id,
+          error_code: error.error_code,
+          message: error.message,
+        })),
+    }))
 
   return q
     .unionAll({
@@ -1427,13 +1535,50 @@ export function createEntityIncludesQuery(
       runs: toArray(
         q
           .from({ run: runsCollection })
+          .leftJoin(
+            {
+              runTokens: q
+                .from({ step: db.collections.steps })
+                .groupBy(({ step }) => step.run_id)
+                .select(({ step }) => ({
+                  run_id: step.run_id,
+                  input: sum(coalesce(step.input_tokens, 0)),
+                  output: sum(coalesce(step.output_tokens, 0)),
+                  input_count: count(step.input_tokens),
+                  output_count: count(step.output_tokens),
+                })),
+            },
+            ({ run, runTokens }) => eq(run.key, runTokens.run_id)
+          )
           .where(({ run }) => eq(run.timelineKey, timeline.key))
           .orderBy(({ run }) => run.order)
-          .select(({ run }) => ({
+          .select(({ run, runTokens }) => ({
             key: run.key,
             order: run.order,
             status: run.status,
             finish_reason: run.finish_reason,
+            // Per-run token totals — `caseWhen` collapses the
+            // joined aggregate row down to the same
+            // `{ input?, output? } | undefined` shape consumers
+            // expect, dropping a side whose `count` is zero so a
+            // provider that only reported one side renders as
+            // "input only" rather than "input + 0 output".
+            tokens: caseWhen(
+              or(
+                gt(coalesce(runTokens.input_count, 0), 0),
+                gt(coalesce(runTokens.output_count, 0), 0)
+              ),
+              {
+                input: caseWhen(
+                  gt(coalesce(runTokens.input_count, 0), 0),
+                  runTokens.input
+                ),
+                output: caseWhen(
+                  gt(coalesce(runTokens.output_count, 0), 0),
+                  runTokens.output
+                ),
+              }
+            ),
             texts: toArray(
               q
                 .from({ text: db.collections.texts })
@@ -1492,6 +1637,8 @@ export function createEntityIncludesQuery(
                   status: step.status,
                   model_id: step.model_id,
                   duration_ms: step.duration_ms,
+                  input_tokens: step.input_tokens,
+                  output_tokens: step.output_tokens,
                 }))
             ),
             errors: toArray(

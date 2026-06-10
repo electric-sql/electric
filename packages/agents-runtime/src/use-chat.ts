@@ -148,6 +148,12 @@ function fingerprintRun(run: IncludesRun): string {
   for (const tc of run.toolCalls) {
     fp += `:${tc.key}.${tc.status}${payloadSniff(`a`, tc.args)}${payloadSniff(`r`, tc.result)}`
   }
+  // Token totals participate in the fingerprint because the section
+  // surfaces them — a late `onStepEnd` landing its usage data after
+  // the run already settled would otherwise not invalidate the cached
+  // section. We fingerprint the resolved `run.tokens` (already summed
+  // by the query layer) rather than each individual step.
+  fp += `|tk:${run.tokens?.input ?? `-`}.${run.tokens?.output ?? `-`}`
   return fp
 }
 
@@ -327,11 +333,17 @@ function buildAgentSection(run: IncludesRun): AgentResponseSection {
       failedToolText ?? finishReason ?? `Run failed (no error details recorded)`
   }
 
+  // Token totals come pre-aggregated on `run.tokens` from the query
+  // layer (`createEntityIncludesQuery` / `buildIncludesRuns`), so we
+  // surface them as-is. A run whose provider never emitted usage data
+  // has `run.tokens` left undefined and renders with no token row
+  // instead of "0 / 0".
   const section: AgentResponseSection = {
     kind: `agent_response`,
     items: contentItems,
     ...(run.status === `completed` && { done: true as const }),
     ...(errorText && { error: errorText }),
+    ...(run.tokens && { tokens: run.tokens }),
   }
   // Always cache (terminal or in-flight). Fingerprint check above
   // guarantees we never serve a stale streaming section — text growth
