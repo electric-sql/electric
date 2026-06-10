@@ -2481,6 +2481,9 @@ export class EntityManager {
         409
       )
     }
+    if (this.isForkWorkLockedEntity(entityUrl)) {
+      this.assertEntityNotForkWorkLocked(entityUrl)
+    }
 
     if (
       req.operation !== `delete` &&

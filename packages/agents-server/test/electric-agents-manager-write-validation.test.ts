@@ -440,6 +440,34 @@ describe(`ElectricAgentsManager.writeCollection`, () => {
     ).rejects.toMatchObject({ status: 403 })
     expect(append).not.toHaveBeenCalled()
   })
+
+  it(`rejects writes to a stopped entity with 409`, async () => {
+    const append = vi.fn()
+    const { manager } = createAttachmentManager({ streamClient: { append } })
+    manager.registry.getEntity = vi.fn().mockResolvedValue({
+      url: `/chat/session-1`,
+      type: `chat`,
+      status: `stopped`,
+      streams: { main: `/chat/session-1` },
+    })
+    manager.registry.getEntityType = vi.fn().mockResolvedValue({
+      name: `chat`,
+      state_schemas: { 'state:comments': {} },
+      externally_writable_collections: {
+        comments: { type: `state:comments`, principalColumn: `_principal` },
+      },
+    })
+
+    await expect(
+      manager.writeCollection(`/chat/session-1`, `comments`, {
+        operation: `insert`,
+        key: `c1`,
+        value: { body: `hi` },
+        principal,
+      })
+    ).rejects.toMatchObject({ status: 409 })
+    expect(append).not.toHaveBeenCalled()
+  })
 })
 
 function createManifestManager(calls: Array<string>) {
