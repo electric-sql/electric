@@ -9,7 +9,11 @@ import {
   createUpdateInboxMessageAction,
   readTextPayload,
 } from '../lib/sendMessage'
-import { serializeComposerInput } from '@electric-ax/agents-runtime/client'
+import {
+  isGoalCommandText,
+  parseGoalCommand,
+  serializeComposerInput,
+} from '@electric-ax/agents-runtime/client'
 import { ComposerEditor } from './ComposerEditor'
 import { ComposerShell } from './ComposerShell'
 import { Icon, Stack, Text, Tooltip } from '../ui'
@@ -30,18 +34,12 @@ import type { OptimisticInboxMessage } from '../lib/sendMessage'
 // /goal commands that mutate state should interrupt any in-flight agent
 // run so the user doesn't have to wait for the old work to finish before
 // the new goal/state takes effect. /goal show is read-only and never
-// aborts.
+// aborts. Delegates to the runtime's parser so the recognized grammar
+// (including subcommand aliases) can't drift from the dispatcher.
 function isAbortingGoalCommand(text: string): boolean {
-  const trimmed = text.trim()
-  if (!trimmed.startsWith(`/goal`)) return false
-  const next = trimmed.charAt(`/goal`.length)
-  if (next !== `` && next !== ` ` && next !== `\t` && next !== `\n`)
-    return false
-  const after = trimmed.slice(`/goal`.length).trim()
-  const sub = after.split(/\s+/)[0]?.toLowerCase() ?? ``
-  return (
-    sub === `set` || sub === `clear` || sub === `complete` || sub === `done`
-  )
+  if (!isGoalCommandText(text)) return false
+  const kind = parseGoalCommand(text).kind
+  return kind === `set` || kind === `clear` || kind === `complete`
 }
 
 export function MessageInput({
