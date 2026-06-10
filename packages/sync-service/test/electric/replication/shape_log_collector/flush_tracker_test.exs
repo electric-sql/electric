@@ -35,6 +35,7 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTrackerTest do
         commit: nil
       }
 
+      # apply/3 hides the intentionally invalid (non-commit) fragment from the type checker.
       assert_raise FunctionClauseError, fn ->
         apply(FlushTracker, :handle_txn_fragment, [tracker, fragment, ["shape1"]])
       end
@@ -50,6 +51,7 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTrackerTest do
         commit: nil
       }
 
+      # apply/3 hides the intentionally invalid (non-commit) fragment from the type checker.
       assert_raise FunctionClauseError, fn ->
         apply(FlushTracker, :handle_txn_fragment, [tracker, fragment, []])
       end
