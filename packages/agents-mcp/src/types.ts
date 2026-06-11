@@ -85,7 +85,7 @@ export interface McpHttpServerConfig {
   transport: `http`
   url: string
   auth: McpAuthConfig
-  /** Per-server timeout override in ms. Default 30000. */
+  /** Per-server timeout override in ms. Default 120000, maximum 600000. */
   timeoutMs?: number
 }
 
@@ -96,7 +96,7 @@ export interface McpStdioServerConfig {
   args?: string[]
   env?: Record<string, string>
   auth?: McpAuthConfig /* typically 'none' for stdio */
-  /** Per-server timeout override in ms. Default 30000. */
+  /** Per-server timeout override in ms. Default 120000, maximum 600000. */
   timeoutMs?: number
 }
 
