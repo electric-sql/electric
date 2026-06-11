@@ -90,7 +90,7 @@ describe(`pg-sync bridge helpers`, () => {
     const options = { url: SHAPE_URL, table: `todos` }
     const insert = pgSyncMessageToDurableEvent(
       {
-        headers: { operation: `insert`, offset: `1_0` },
+        headers: { operation: `insert`, lsn: `1`, op_position: 0 },
         value: { id: 1, text: `a` },
       } as any,
       options
@@ -116,7 +116,22 @@ describe(`pg-sync bridge helpers`, () => {
     expect(del.value.rowKey).toBe(`1`)
   })
 
-  it(`rejects messages without stable string offsets`, () => {
+  it(`derives an offset from lsn and op_position when Electric omits headers.offset`, () => {
+    const options = { url: SHAPE_URL, table: `todos` }
+
+    const event = pgSyncMessageToDurableEvent(
+      {
+        headers: { operation: `insert`, lsn: `28517568`, op_position: 0 },
+        value: { id: 32, text: `testing` },
+      } as any,
+      options
+    )!
+
+    expect(event.key).toBe(`${sourceRefForPgSync(options)}:insert:28517568_0`)
+    expect(event.value.offset).toBe(`28517568_0`)
+  })
+
+  it(`rejects messages without stable offsets or lsn/op_position`, () => {
     const options = { url: SHAPE_URL, table: `todos` }
 
     expect(
@@ -131,7 +146,10 @@ describe(`pg-sync bridge helpers`, () => {
     ).toBeNull()
     expect(
       pgSyncMessageToDurableEvent(
-        { headers: { operation: `insert` }, value: { id: 1 } } as any,
+        {
+          headers: { operation: `insert`, lsn: `28517568` },
+          value: { id: 1 },
+        } as any,
         options
       )
     ).toBeNull()

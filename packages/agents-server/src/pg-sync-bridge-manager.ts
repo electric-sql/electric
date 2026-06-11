@@ -47,6 +47,8 @@ type PgSyncChangeMessage = {
   headers: Record<string, unknown> & {
     operation?: PgSyncOperation | string
     offset?: unknown
+    lsn?: unknown
+    op_position?: unknown
     key?: unknown
     rowKey?: unknown
   }
@@ -163,6 +165,24 @@ function rowKeyForMessage(message: PgSyncChangeMessage): string | undefined {
   return candidate === undefined ? undefined : stableJson(candidate)
 }
 
+function offsetForMessage(message: PgSyncChangeMessage): string | null {
+  const offset = message.headers.offset
+  if (typeof offset === `string` && offset.length > 0) {
+    return offset
+  }
+
+  const lsn = message.headers.lsn
+  const opPosition = message.headers.op_position
+  if (
+    (typeof lsn === `string` || typeof lsn === `number`) &&
+    (typeof opPosition === `string` || typeof opPosition === `number`)
+  ) {
+    return `${lsn}_${opPosition}`
+  }
+
+  return null
+}
+
 export function pgSyncMessageToDurableEvent(
   message: PgSyncChangeMessage,
   optionsOrSourceRef: PgSyncOptions | string
@@ -185,8 +205,8 @@ export function pgSyncMessageToDurableEvent(
       ? optionsOrSourceRef
       : sourceRefForPgSync(optionsOrSourceRef)
   const rowKey = rowKeyForMessage(message)
-  const offset = message.headers.offset
-  if (typeof offset !== `string` || offset.length === 0) return null
+  const offset = offsetForMessage(message)
+  if (!offset) return null
   const messageKeyPart = offset
   const messageKey = `${sourceRef}:${operation}:${messageKeyPart}`
   const timestamp = new Date().toISOString()
