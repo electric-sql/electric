@@ -498,6 +498,8 @@ export function toPublicEntity(
 export interface ExternallyWritableCollectionConfig {
   /** Durable-stream event type for this collection, e.g. `state:comments`. */
   type: string
+  /** Well-known contract this collection implements, e.g. `comments/v1`. */
+  contract?: string
 }
 
 export interface ElectricAgentsEntityType {

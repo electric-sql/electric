@@ -16,6 +16,7 @@ import {
   X,
 } from 'lucide-react'
 import { useNavigate } from '@tanstack/react-router'
+import { entityTypeSupportsComments } from '../../lib/comments-capability'
 import { useWorkspace, listTiles } from '../../hooks/useWorkspace'
 import { useElectricAgents } from '../../lib/ElectricAgentsProvider'
 import { usePinnedEntities } from '../../hooks/usePinnedEntities'
@@ -184,7 +185,12 @@ export function SplitMenu({
   const [showKillConfirm, setShowKillConfirm] = useState(false)
   const instanceName = entity ? getEntityDisplayTitle(entity).title : ``
   const chatCommentsVisible = tile.viewParams?.comments !== `hidden`
-  const showDisplayOptions = hasEntity && tile.viewId === `chat`
+  // The only display option today is the comments toggle, so the section
+  // hides entirely for types without the comments collection.
+  const showDisplayOptions =
+    hasEntity &&
+    tile.viewId === `chat` &&
+    entityTypeSupportsComments(entity?.type)
 
   const close = () => setMenuOpen(false)
   /** Wraps a handler so it dispatches and then closes the menu. */

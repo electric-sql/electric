@@ -61,6 +61,12 @@ export function useEntityTimeline(
   db: EntityStreamDBWithActions | null
   loading: boolean
   error: string | null
+  /**
+   * True when the entity's type declares the comments collection — the
+   * stream connection only registers `db.collections.comments` for types
+   * whose registration advertises the comments contract.
+   */
+  commentsEnabled: boolean
 } {
   const [db, setDb] = useState<EntityStreamDBWithActions | null>(null)
   const [loading, setLoading] = useState(false)
@@ -108,7 +114,10 @@ export function useEntityTimeline(
     }
   }, [baseUrl, entityUrl])
 
-  const includeComments = opts?.comments ?? true
+  const commentsEnabled = Boolean(
+    db && (db.collections as Record<string, unknown>).comments
+  )
+  const includeComments = commentsEnabled && (opts?.comments ?? true)
   const { data: timelineRows = [] } = useLiveQuery(
     (q) => {
       if (!db) return undefined
@@ -225,5 +234,6 @@ export function useEntityTimeline(
     db,
     loading,
     error,
+    commentsEnabled,
   }
 }

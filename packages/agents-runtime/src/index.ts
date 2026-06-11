@@ -419,7 +419,11 @@ export {
 } from './event-pointer'
 export type { EventPointer } from './event-pointer'
 
-export { commentSchema, commentsCollection } from './comments-collection'
+export {
+  COMMENTS_CONTRACT,
+  commentSchema,
+  commentsCollection,
+} from './comments-collection'
 export type {
   CommentTargetValue,
   CommentSnapshotValue,

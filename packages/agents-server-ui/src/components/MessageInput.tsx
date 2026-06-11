@@ -185,10 +185,13 @@ export function MessageInput({
       },
     })
   }, [db, baseUrl, entityUrl, inlineQueuedSubmits, onOptimisticQueuedMessage])
+  const commentsAvailable = Boolean(
+    db && (db.collections as Record<string, unknown>).comments
+  )
   const sendCommentAction = useMemo(() => {
-    if (!db) return null
+    if (!db || !commentsAvailable) return null
     return createSendCommentAction({ db, baseUrl, entityUrl })
-  }, [db, baseUrl, entityUrl])
+  }, [db, commentsAvailable, baseUrl, entityUrl])
   const updateAction = useMemo(() => {
     if (!db) return null
     return createUpdateInboxMessageAction({ db, baseUrl, entityUrl })
@@ -539,7 +542,7 @@ export function MessageInput({
           disabled={inputDisabled}
         />
       </ComposerShell>
-      {!editingMessage && !commentOnly && (
+      {!editingMessage && !commentOnly && commentsAvailable && (
         <div
           className={styles.modeTabs}
           role="tablist"

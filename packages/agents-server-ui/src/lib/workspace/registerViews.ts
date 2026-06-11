@@ -1,4 +1,5 @@
 import { Database, MessageCircle, MessageSquare, SquarePen } from 'lucide-react'
+import { entityTypeSupportsComments } from '../comments-capability'
 import { registerView } from './viewRegistry'
 import { NEW_SESSION_VIEW_ID } from './types'
 import { ChatView, CommentsView } from '../../components/views/ChatView'
@@ -29,6 +30,9 @@ registerView({
   label: `Comments`,
   icon: MessageCircle,
   description: `Comment-only timeline`,
+  // Only entity types whose registration declares the comments collection
+  // get the comment-only view (and the rest of the comment affordances).
+  isAvailable: (entity) => entityTypeSupportsComments(entity.type),
   Component: CommentsView,
 })
 

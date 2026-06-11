@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { z } from 'zod'
+import {
+  COMMENTS_CONTRACT,
+  commentsCollection,
+} from '../src/comments-collection'
 import { buildEntityTypeRegistrationBody } from '../src/create-handler'
 
 describe(`buildEntityTypeRegistrationBody`, () => {
@@ -8,7 +12,7 @@ describe(`buildEntityTypeRegistrationBody`, () => {
       description: `chat`,
       handler: async () => {},
       state: {
-        comments: {
+        feedback: {
           schema: z.object({ key: z.string().optional(), body: z.string() }),
           externallyWritable: true,
         },
@@ -18,7 +22,18 @@ describe(`buildEntityTypeRegistrationBody`, () => {
       },
     } as any)
     expect(body.externally_writable_collections).toEqual({
-      comments: { type: `state:comments` },
+      feedback: { type: `state:feedback` },
+    })
+  })
+
+  it(`forwards the collection contract when declared`, () => {
+    const body = buildEntityTypeRegistrationBody(`chat`, {
+      description: `chat`,
+      handler: async () => {},
+      state: { comments: commentsCollection },
+    } as any)
+    expect(body.externally_writable_collections).toEqual({
+      comments: { type: `state:comments`, contract: COMMENTS_CONTRACT },
     })
   })
 

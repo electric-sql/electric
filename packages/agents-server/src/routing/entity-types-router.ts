@@ -4,6 +4,7 @@
 
 import { Type, type Static } from '@sinclair/typebox'
 import { Router, json, status } from 'itty-router'
+import { COMMENTS_CONTRACT } from '@electric-ax/agents-runtime'
 import { dispatchPolicySchema } from '../dispatch-policy-schema.js'
 import { ElectricAgentsError } from '../entity-manager.js'
 import {
@@ -51,7 +52,11 @@ const schemaMapSchema = Type.Record(Type.String(), jsonObjectSchema)
 const externallyWritableCollectionsSchema = Type.Record(
   Type.String(),
   Type.Object(
-    { type: Type.String(), principalColumn: Type.Optional(Type.String()) },
+    {
+      type: Type.String(),
+      contract: Type.Optional(Type.String()),
+      principalColumn: Type.Optional(Type.String()),
+    },
     { additionalProperties: false }
   )
 )
@@ -458,9 +463,37 @@ function parseExpiresAt(value: string | undefined): Date | undefined {
   return expiresAt
 }
 
+/**
+ * The `comments` collection name is reserved for the canonical comments
+ * contract: the UI keys its comment affordances on it, so a divergent
+ * collection registered under that name (or the contract mounted under
+ * another name) would break that assumption silently.
+ */
+function validateExternallyWritableCollections(
+  collections: RegisterEntityTypeRequest[`externally_writable_collections`]
+): void {
+  for (const [name, config] of Object.entries(collections ?? {})) {
+    if (name === `comments` && config.contract !== COMMENTS_CONTRACT) {
+      throw new ElectricAgentsError(
+        ErrCodeInvalidRequest,
+        `The externally-writable collection name "comments" is reserved for the "${COMMENTS_CONTRACT}" contract`,
+        400
+      )
+    }
+    if (config.contract === COMMENTS_CONTRACT && name !== `comments`) {
+      throw new ElectricAgentsError(
+        ErrCodeInvalidRequest,
+        `The "${COMMENTS_CONTRACT}" contract must be registered under the collection name "comments"`,
+        400
+      )
+    }
+  }
+}
+
 function normalizeEntityTypeRequest(
   parsed: RegisterEntityTypeBody | RegisterEntityTypeRequest
 ): RegisterEntityTypeRequest {
+  validateExternallyWritableCollections(parsed.externally_writable_collections)
   const serveEndpoint = rewriteLoopbackWebhookUrl(parsed.serve_endpoint)
   return {
     name: parsed.name ?? ``,

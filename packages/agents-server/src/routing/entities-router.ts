@@ -1519,8 +1519,21 @@ async function spawnEntity(
   )
 }
 
-function getEntity(request: AgentsRouteRequest): Response {
-  return json(toPublicEntity(requireExistingEntityRoute(request).entity))
+async function getEntity(
+  request: AgentsRouteRequest,
+  ctx: TenantContext
+): Promise<Response> {
+  const { entity } = requireExistingEntityRoute(request)
+  const entityType = entity.type
+    ? await ctx.entityManager.registry.getEntityType(entity.type)
+    : null
+  return json({
+    ...toPublicEntity(entity),
+    ...(entityType?.externally_writable_collections && {
+      externally_writable_collections:
+        entityType.externally_writable_collections,
+    }),
+  })
 }
 
 function headEntity(): Response {

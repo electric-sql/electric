@@ -21,7 +21,8 @@ describe(`commentsCollection`, () => {
     })
   })
 
-  it(`is externally writable`, () => {
+  it(`is externally writable and declares the comments contract`, () => {
     expect(commentsCollection.externallyWritable).toBe(true)
+    expect(commentsCollection.contract).toBe(`comments/v1`)
   })
 })

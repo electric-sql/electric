@@ -1,16 +1,26 @@
 import { describe, expect, it } from 'vitest'
-import { UI_ENTITY_CUSTOM_STATE } from './entity-connection'
+import { COMMENTS_CONTRACT } from '@electric-ax/agents-runtime/client'
+import { uiCustomStateForEntity } from './entity-connection'
 
-describe(`UI_ENTITY_CUSTOM_STATE`, () => {
-  it(`exposes a comments collection so db.collections.comments is defined`, () => {
-    expect(UI_ENTITY_CUSTOM_STATE.comments).toBeDefined()
+describe(`uiCustomStateForEntity`, () => {
+  it(`registers comments when the type advertises the comments contract`, () => {
+    const customState = uiCustomStateForEntity({
+      comments: { type: `state:comments`, contract: COMMENTS_CONTRACT },
+    })
+    expect(customState.comments).toBeDefined()
+    expect(customState.comments!.type).toBe(`state:comments`)
+    expect(customState.comments!.externallyWritable).toBe(true)
   })
 
-  it(`comments collection has the correct type`, () => {
-    expect(UI_ENTITY_CUSTOM_STATE.comments.type).toBe(`state:comments`)
+  it(`registers nothing when the type declares no writable collections`, () => {
+    expect(uiCustomStateForEntity(undefined)).toEqual({})
+    expect(uiCustomStateForEntity(null)).toEqual({})
+    expect(uiCustomStateForEntity({})).toEqual({})
   })
 
-  it(`comments collection is externally writable`, () => {
-    expect(UI_ENTITY_CUSTOM_STATE.comments.externallyWritable).toBe(true)
+  it(`ignores a comments entry without the canonical contract`, () => {
+    expect(
+      uiCustomStateForEntity({ comments: { type: `state:comments` } })
+    ).toEqual({})
   })
 })

@@ -1541,7 +1541,7 @@ describe(`ElectricAgentsRoutes entity-type registration`, () => {
       created_at: `t`,
       updated_at: `t`,
       externally_writable_collections: {
-        comments: { type: `state:comments` },
+        comments: { type: `state:comments`, contract: `comments/v1` },
       },
     })
     const manager = {
@@ -1557,7 +1557,7 @@ describe(`ElectricAgentsRoutes entity-type registration`, () => {
         name: `chat`,
         description: `chat`,
         externally_writable_collections: {
-          comments: { type: `state:comments` },
+          comments: { type: `state:comments`, contract: `comments/v1` },
         },
       }
     )
@@ -1566,9 +1566,55 @@ describe(`ElectricAgentsRoutes entity-type registration`, () => {
     expect(registerEntityType).toHaveBeenCalledWith(
       expect.objectContaining({
         externally_writable_collections: {
-          comments: { type: `state:comments` },
+          comments: { type: `state:comments`, contract: `comments/v1` },
         },
       })
     )
+  })
+
+  it(`rejects a writable "comments" collection without the canonical contract`, async () => {
+    const manager = {
+      registry: { getEntityType: vi.fn() },
+      registerEntityType: vi.fn(),
+    } as any
+
+    const response = await routeResponse(
+      manager,
+      `POST`,
+      `/_electric/entity-types`,
+      {
+        name: `chat`,
+        description: `chat`,
+        externally_writable_collections: {
+          comments: { type: `state:comments` },
+        },
+      }
+    )
+
+    expect(response.status).toBe(400)
+    expect(manager.registerEntityType).not.toHaveBeenCalled()
+  })
+
+  it(`rejects the comments contract registered under another collection name`, async () => {
+    const manager = {
+      registry: { getEntityType: vi.fn() },
+      registerEntityType: vi.fn(),
+    } as any
+
+    const response = await routeResponse(
+      manager,
+      `POST`,
+      `/_electric/entity-types`,
+      {
+        name: `chat`,
+        description: `chat`,
+        externally_writable_collections: {
+          feedback: { type: `state:feedback`, contract: `comments/v1` },
+        },
+      }
+    )
+
+    expect(response.status).toBe(400)
+    expect(manager.registerEntityType).not.toHaveBeenCalled()
   })
 })

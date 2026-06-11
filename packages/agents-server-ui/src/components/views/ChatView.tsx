@@ -245,7 +245,6 @@ function GenericChatBody({
   tileId: string
   viewParams?: ViewProps[`viewParams`]
 }): React.ReactElement {
-  const showComments = viewParams?.comments !== `hidden`
   const {
     timelineRows,
     pendingInbox,
@@ -254,7 +253,11 @@ function GenericChatBody({
     db,
     loading,
     error,
-  } = useEntityTimeline(baseUrl || null, entityUrl, { comments: showComments })
+    commentsEnabled,
+  } = useEntityTimeline(baseUrl || null, entityUrl, {
+    comments: viewParams?.comments !== `hidden`,
+  })
+  const showComments = commentsEnabled && viewParams?.comments !== `hidden`
   const { signalEntity, entityTypesCollection } = useElectricAgents()
   const permissions = useEntityPermissions(entity, CHAT_VIEW_PERMISSIONS)
   const canWrite = permissions.write

@@ -73,9 +73,19 @@ export const commentSchema = z.object({
   deleted_by: z.string().optional(),
 })
 
+/**
+ * Contract identifier for the canonical comments collection. The server
+ * reserves the `comments` collection name for this contract, and the UI
+ * only surfaces comment affordances for entity types whose registration
+ * advertises it — so an agent's unrelated `comments` state can never be
+ * mistaken for platform comments.
+ */
+export const COMMENTS_CONTRACT = `comments/v1`
+
 export const commentsCollection: CollectionDefinition = {
   schema: commentSchema,
   type: `state:comments`,
   primaryKey: `key`,
   externallyWritable: true,
+  contract: COMMENTS_CONTRACT,
 }

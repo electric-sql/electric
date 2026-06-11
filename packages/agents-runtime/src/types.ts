@@ -670,6 +670,12 @@ export interface CollectionDefinition<
    * with the authenticated principal materialized into the `_principal` virtual column.
    */
   externallyWritable?: boolean
+  /**
+   * Well-known contract this collection implements (e.g. `comments/v1`).
+   * Forwarded in the type registration so clients can recognize the
+   * collection by capability instead of by name.
+   */
+  contract?: string
 }
 
 export interface EntityTypeEntry<
