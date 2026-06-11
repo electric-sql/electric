@@ -41,6 +41,14 @@ describe(`generateTitle`, () => {
     const result = await generateTitle(`describe these screenshots`, llmCall)
     expect(result).toBe(`Describe These Screenshots`)
   })
+
+  it(`falls back on a punctuated conversational response under the word cap`, async () => {
+    // Short refusals slip under the 8-word cap, but the prompt forbids
+    // punctuation, so the comma gives the apology away.
+    const llmCall = async () => `I'm sorry, I cannot see any images`
+    const result = await generateTitle(`describe these screenshots`, llmCall)
+    expect(result).toBe(`Describe These Screenshots`)
+  })
 })
 
 describe(`extractFirstUserMessage`, () => {

@@ -173,7 +173,10 @@ function withTimeout<T>(
 // conversational (e.g. apologizing about attachments it can't see) returns a
 // sentence — reject it so we fall back to the locally-derived title.
 function looksLikeNonTitle(title: string): boolean {
-  return title.split(/\s+/).filter(Boolean).length > 8
+  if (title.split(/\s+/).filter(Boolean).length > 8) return true
+  // The prompt forbids punctuation, so `!?,` betray a conversational reply
+  // even under the word cap; dots/hyphens stay legal for technical titles.
+  return /[!?,]/.test(title)
 }
 
 export async function generateTitle(

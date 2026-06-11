@@ -97,6 +97,9 @@ export function buildInitialSpawnArgs(
   omitKeys?: ReadonlyArray<string>
 ): Record<string, unknown> {
   const omit = new Set(omitKeys ?? [])
+  const required = new Set(
+    isObjectSchema(schema) ? (schema.required ?? []) : []
+  )
   const init: Record<string, unknown> = {}
   for (const { key, prop } of inlineSchemaProperties(schema)) {
     if (omit.has(key)) continue
@@ -111,7 +114,9 @@ export function buildInitialSpawnArgs(
     }
     if (prop.default !== undefined) {
       init[key] = prop.default
-    } else if (prop.enum && prop.enum.length > 0) {
+    } else if (prop.enum && prop.enum.length > 0 && required.has(key)) {
+      // Optional default-less enums start unset (the desktop SchemaForm keeps
+      // them clearable), so we don't send a value the user never chose.
       init[key] = prop.enum[0]
     } else if (prop.type === `boolean`) {
       init[key] = false
@@ -162,6 +167,19 @@ export function finalizeSpawnArgs(
       if (arr.length > 0) out[key] = arr
       continue
     }
+    if (
+      prop &&
+      (prop.type === `number` || prop.type === `integer`) &&
+      typeof value === `string`
+    ) {
+      // The text field keeps non-round-tripping input (`0.50`, `1e3`) as raw
+      // text while editing; reconcile to a number here like desktop does.
+      const n = prop.type === `integer` ? parseInt(value, 10) : Number(value)
+      if (Number.isFinite(n)) {
+        out[key] = n
+        continue
+      }
+    }
     out[key] = value
   }
   return out
@@ -179,6 +197,18 @@ export function hasMissingRequiredArgs(
     if (omit.has(key)) continue
     const value = args[key]
     if (value === undefined || value === `` || value === null) return true
+    if (Array.isArray(value) && value.length === 0) return true
+    // A string-array field holding only separators (e.g. ` , `) parses to an
+    // empty array and would be dropped at finalize — treat it as missing too.
+    const prop = schema.properties[key]
+    if (
+      prop &&
+      isStringArrayType(prop) &&
+      typeof value === `string` &&
+      parseStringArray(value).length === 0
+    ) {
+      return true
+    }
   }
   return false
 }

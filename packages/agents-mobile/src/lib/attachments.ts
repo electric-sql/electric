@@ -71,11 +71,9 @@ export function useAttachmentDrafts(): AttachmentDrafts {
   )
 
   const addFromLibrary = useCallback(async (): Promise<void> => {
-    const granted = await ensureGranted(
-      ImagePicker.requestMediaLibraryPermissionsAsync,
-      `Enable photo access in Settings to attach images.`
-    )
-    if (!granted) return
+    // No permission gate: the system pickers (PHPicker / Android Photo
+    // Picker) don't need media-library permission, so requesting it would
+    // only dead-end users who once denied it.
     await append(
       await ImagePicker.launchImageLibraryAsync({
         mediaTypes: [`images`],

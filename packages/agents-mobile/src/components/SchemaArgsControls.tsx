@@ -11,6 +11,7 @@ import {
 } from 'react-native'
 import { isModelProperty } from '@electric-ax/agents-server-ui/src/lib/modelCapabilities'
 import {
+  isObjectSchema,
   modelOptionLabel,
   modelProviderKey,
   MODEL_PROVIDER_LABELS,
@@ -77,6 +78,10 @@ export function SchemaArgsControls({
     () => objectFieldEntries(schema, omitKeys),
     [schema, omitKeys]
   )
+  const requiredKeys = useMemo(
+    () => new Set(isObjectSchema(schema) ? (schema.required ?? []) : []),
+    [schema]
+  )
 
   if (
     inlineProps.length === 0 &&
@@ -97,6 +102,7 @@ export function SchemaArgsControls({
             prop={prop}
             value={args[key]}
             onChange={onChange}
+            clearable={!requiredKeys.has(key)}
             disabled={disabled}
           />
         ) : prop.type === `boolean` ? (
@@ -178,12 +184,15 @@ function EnumArgPill({
   prop,
   value,
   onChange,
+  clearable,
   disabled,
 }: {
   propKey: string
   prop: SchemaProperty
   value: unknown
   onChange: (key: string, value: unknown) => void
+  /** Optional enums can be unset (the desktop Select's clearable `—` item). */
+  clearable?: boolean
   disabled?: boolean
 }): React.ReactElement {
   const tokens = useTokens()
@@ -242,6 +251,16 @@ function EnumArgPill({
       </Pressable>
       <BottomSheet open={open} onClose={() => setOpen(false)} title={label}>
         <ScrollView style={styles.sheetScroll} nestedScrollEnabled>
+          {clearable && (
+            <BottomSheetItem
+              label="None"
+              active={current === ``}
+              onPress={() => {
+                onChange(propKey, undefined)
+                setOpen(false)
+              }}
+            />
+          )}
           {groups.map((group) => (
             <BottomSheetSection
               key={group.provider ?? `__all__`}
