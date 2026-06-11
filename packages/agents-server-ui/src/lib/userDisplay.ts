@@ -27,7 +27,11 @@ export function userDisplay(
   }
 }
 
-export function initials(value: string): string {
+export function userSearchText(user: UserDisplayInfo & { id: string }): string {
+  return [user.display_name, user.email, user.id].filter(Boolean).join(` `)
+}
+
+function initials(value: string): string {
   const parts = value
     .replace(/@.*/, ``)
     .split(/[\s._-]+/)

@@ -20,7 +20,11 @@ import {
   userIdFromPrincipal,
   userPrincipalUrl,
 } from '@electric-ax/agents-server-ui/src/lib/principals'
-import { userDisplay } from '@electric-ax/agents-server-ui/src/lib/userDisplay'
+import { rolePermissionsMatchGrants } from '@electric-ax/agents-server-ui/src/lib/sharePermissions'
+import {
+  userDisplay,
+  userSearchText,
+} from '@electric-ax/agents-server-ui/src/lib/userDisplay'
 import {
   BottomSheet,
   BottomSheetItem,
@@ -168,19 +172,22 @@ export function ShareSessionScreen({
     () => buildShareAccessModel(grants, currentUserId),
     [grants, currentUserId]
   )
+  const ownerUserId = userIdFromPrincipal(entity?.created_by)
+  // The owner is pinned above as a dedicated row, so an explicit grant
+  // for them must not render a second entry.
   const accessRows = useMemo(
     () =>
       model.users
+        .filter((entry) => entry.userId !== ownerUserId)
         .map((entry) => ({
           ...entry,
           display: userDisplay(usersById.get(entry.userId), entry.userId),
           user: usersById.get(entry.userId),
         }))
         .sort((a, b) => a.display.primary.localeCompare(b.display.primary)),
-    [model.users, usersById]
+    [model.users, usersById, ownerUserId]
   )
 
-  const ownerUserId = userIdFromPrincipal(entity?.created_by)
   const ownerDisplay = entity?.created_by
     ? userDisplay(
         ownerUserId ? usersById.get(ownerUserId) : undefined,
@@ -248,7 +255,10 @@ export function ShareSessionScreen({
     role: ShareRole
   ): Promise<void> => {
     setRoleTarget(null)
-    if (target.role === role) return
+    if (savingKey !== null) return
+    // Exact permission-set check (not the coarse role) so re-selecting
+    // a role normalizes partial grant sets, matching desktop's Update.
+    if (rolePermissionsMatchGrants(role, target.grants)) return
     setSavingKey(target.key)
     setError(null)
     try {
@@ -271,9 +281,12 @@ export function ShareSessionScreen({
 
   const removeAccess = (target: ShareTarget): void => {
     setRoleTarget(null)
+    if (savingKey !== null) return
     Alert.alert(
       `Remove access`,
-      `Remove ${target.label}'s access to this session?`,
+      target.key === ALL_USERS_KEY
+        ? `Remove access for all users to this session?`
+        : `Remove ${target.label}'s access to this session?`,
       [
         { text: `Cancel`, style: `cancel` },
         {
@@ -327,7 +340,7 @@ export function ShareSessionScreen({
             <Pressable
               style={styles.introIdRow}
               onPress={() => copy(`id`, sessionIdFromEntityUrl(entityUrl))}
-              hitSlop={6}
+              hitSlop={8}
             >
               <Text style={styles.introId} numberOfLines={1}>
                 {sessionIdFromEntityUrl(entityUrl)}
@@ -345,7 +358,12 @@ export function ShareSessionScreen({
               content, the trailing glyph the action — one tap opens
               the native share sheet, which includes Copy. */}
           <Text style={styles.sectionLabel}>Session link</Text>
-          <TouchableOpacity style={styles.row} onPress={() => void shareLink()}>
+          <TouchableOpacity
+            style={styles.row}
+            onPress={() => void shareLink()}
+            accessibilityRole="button"
+            accessibilityLabel="Share session link"
+          >
             <View style={styles.actionIcon}>
               <Icon
                 name="link"
@@ -458,7 +476,14 @@ export function ShareSessionScreen({
                     saving={savingKey === user.id}
                     onPress={() =>
                       setRoleTarget(
-                        userTarget({ userId: user.id, role: null, grants: [] })
+                        userTarget({
+                          userId: user.id,
+                          role: null,
+                          // Role-less users keep grants the model drops
+                          // (e.g. a lone `fork`); diff against them so
+                          // granting a role doesn't duplicate rows.
+                          grants: model.grantsByUserId.get(user.id) ?? [],
+                        })
                       )
                     }
                   />
@@ -597,10 +622,6 @@ function AccessRow({
       {row}
     </TouchableOpacity>
   )
-}
-
-function userSearchText(user: ElectricUser): string {
-  return [user.display_name, user.email, user.id].filter(Boolean).join(` `)
 }
 
 function createStyles(tokens: Tokens) {

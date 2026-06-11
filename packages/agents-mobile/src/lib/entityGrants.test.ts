@@ -156,6 +156,16 @@ describe(`buildShareAccessModel`, () => {
     // current user; the system principal is not a user.
     expect(model.users).toEqual([])
   })
+
+  it(`exposes raw grants for role-less users so re-adding diffs against them`, async () => {
+    const { buildShareAccessModel } = await import(`./entityGrants`)
+    const forkOnly = grant(1, `fork`, {
+      subject_value: `/principal/user%3Abob`,
+    })
+    const model = buildShareAccessModel([forkOnly], null)
+    expect(model.users).toEqual([])
+    expect(model.grantsByUserId.get(`bob`)).toEqual([forkOnly])
+  })
 })
 
 describe(`grant requests`, () => {

@@ -18,10 +18,6 @@ export type EntityPermissionGrant = {
   permission: SharePermission | string
   subject_kind: `principal` | `principal_kind` | string
   subject_value: string
-  propagation?: `self` | `descendants` | string
-  copy_to_children?: boolean
-  created_by?: string
-  expires_at?: string
   created_at: string
   updated_at: string
 }
@@ -44,6 +40,9 @@ export type ShareAccessEntry = {
 export type ShareAccessModel = {
   allUsers: ShareAccessEntry | null
   users: Array<ShareAccessEntry & { userId: string }>
+  /** All per-user grants, including ones that map to no role — diff
+   * against these when (re-)granting so partial sets aren't duplicated. */
+  grantsByUserId: Map<string, Array<EntityPermissionGrant>>
 }
 
 export class GrantsRequestError extends Error {
@@ -168,6 +167,7 @@ export function buildShareAccessModel(
       ? { role: allUsersRole, grants: allUsersGrants }
       : null,
     users,
+    grantsByUserId,
   }
 }
 

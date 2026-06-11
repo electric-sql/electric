@@ -23,7 +23,7 @@ import { useServerConnection } from '../hooks/useServerConnection'
 import { useCurrentPrincipal } from '../hooks/useCurrentPrincipal'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
 import { userIdFromPrincipal, userPrincipalUrl } from '../lib/principals'
-import { userDisplay } from '../lib/userDisplay'
+import { userDisplay, userSearchText } from '../lib/userDisplay'
 import { Button, Dialog, Icon, IconButton, Input, Text, Tooltip } from '../ui'
 import type {
   ElectricEntity,
@@ -734,8 +734,4 @@ function isAllUsersGrant(grant: EntityPermissionGrant): boolean {
     grant.subject_kind === ALL_USERS_SUBJECT_KIND &&
     grant.subject_value === ALL_USERS_SUBJECT_VALUE
   )
-}
-
-function userSearchText(user: ElectricUser): string {
-  return [user.display_name, user.email, user.id].filter(Boolean).join(` `)
 }
