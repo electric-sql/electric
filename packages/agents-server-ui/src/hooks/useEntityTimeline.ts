@@ -48,7 +48,11 @@ function isTimelineEntityManifest(
 
 export function useEntityTimeline(
   baseUrl: string | null,
-  entityUrl: string | null
+  entityUrl: string | null,
+  opts?: {
+    /** Merge the `comments` collection into the timeline. Defaults to true. */
+    comments?: boolean
+  }
 ): {
   timelineRows: Array<TimelineRow>
   pendingInbox: Array<IncludesInboxMessage>
@@ -104,14 +108,17 @@ export function useEntityTimeline(
     }
   }, [baseUrl, entityUrl])
 
+  const includeComments = opts?.comments ?? true
   const { data: timelineRows = [] } = useLiveQuery(
     (q) => {
       if (!db) return undefined
       return createEntityTimelineQuery(db, {
-        extraSources: { comment: createCommentsTimelineSource(db) },
+        ...(includeComments && {
+          extraSources: { comment: createCommentsTimelineSource(db) },
+        }),
       })(q)
     },
-    [db]
+    [db, includeComments]
   )
   const { data: manifests = [] } = useLiveQuery(
     (q) =>

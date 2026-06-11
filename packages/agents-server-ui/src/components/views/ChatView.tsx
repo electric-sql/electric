@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { eq, useLiveQuery } from '@tanstack/react-db'
 import { useEntityTimeline } from '../../hooks/useEntityTimeline'
+import { useForkFromHere } from '../../hooks/useForkFromHere'
 import { EntityTimeline, type TimelineRowAdjacency } from '../EntityTimeline'
 import { GoalBanner } from '../GoalBanner'
 import { MessageInput } from '../MessageInput'
@@ -18,10 +19,8 @@ import {
 } from '../../hooks/useEntityPermission'
 import type { ViewProps } from '../../lib/workspace/viewRegistry'
 import type { CommentTarget } from '@electric-ax/agents-runtime/client'
-import type { EventPointer } from '@electric-ax/agents-runtime'
 import type { OptimisticInboxMessage } from '../../lib/sendMessage'
 import type { SlashCommandRow } from '@electric-ax/agents-runtime/client'
-import type { ForkFromHereAction } from '../UserMessage'
 
 const CHAT_VIEW_PERMISSIONS: ReadonlyArray<EntityPermission> = [
   `write`,
@@ -167,7 +166,6 @@ export function ChatLogView({
   const connectUrl = isSpawning ? null : entityUrl
   const { timelineRows, pendingInbox, entities, db, loading, error } =
     useEntityTimeline(baseUrl || null, connectUrl)
-  const { forkEntity } = useElectricAgents()
   const canFork = useEntityPermission(entity, `fork`)
   const navigate = useNavigate()
   const processedInboxKeys = useMemo(
@@ -211,41 +209,12 @@ export function ChatLogView({
     }
   }, [error, navigate, isSpawning])
 
-  const forkFromHereByRunKey = useMemo(() => {
-    if (!forkEntity || !connectUrl || !db) return undefined
-    const runOffsets = db.collections.runs.__electricRowOffsets
-    if (!runOffsets) return undefined
-    const map = new Map<string, ForkFromHereAction>()
-    let anchor: { rowKey: string; pointer: EventPointer } | null = null
-    for (const row of visibleRows) {
-      if (row.run && row.run.status === `completed`) {
-        const pointer = runOffsets.get(row.run.key)
-        anchor = pointer ? { rowKey: row.$key, pointer } : null
-      }
-      if (row.inbox && anchor) {
-        const capturedAnchor = anchor.pointer
-        const capturedRunKey = anchor.rowKey
-        map.set(
-          capturedRunKey,
-          canFork
-            ? {
-                onFork: () => {
-                  void forkEntity(connectUrl, { pointer: capturedAnchor })
-                    .then((res) =>
-                      navigate({
-                        to: `/entity/$`,
-                        params: { _splat: res.url.replace(/^\//, ``) },
-                      })
-                    )
-                    .catch(() => {})
-                },
-              }
-            : { disabled: true }
-        )
-      }
-    }
-    return map
-  }, [visibleRows, canFork, db, forkEntity, connectUrl, navigate])
+  const forkFromHereByRunKey = useForkFromHere({
+    rows: visibleRows,
+    db,
+    entityUrl: connectUrl,
+    canFork,
+  })
 
   return (
     <EntityTimeline
@@ -359,6 +328,7 @@ function GenericChatBody({
   tileId: string
   viewParams?: ViewProps[`viewParams`]
 }): React.ReactElement {
+  const showComments = viewParams?.comments !== `hidden`
   const {
     timelineRows,
     pendingInbox,
@@ -367,9 +337,8 @@ function GenericChatBody({
     db,
     loading,
     error,
-  } = useEntityTimeline(baseUrl || null, entityUrl)
-  const { signalEntity, forkEntity, entityTypesCollection } =
-    useElectricAgents()
+  } = useEntityTimeline(baseUrl || null, entityUrl, { comments: showComments })
+  const { signalEntity, entityTypesCollection } = useElectricAgents()
   const permissions = useEntityPermissions(entity, CHAT_VIEW_PERMISSIONS)
   const canWrite = permissions.write
   const canSignal = permissions.signal
@@ -423,14 +392,6 @@ function GenericChatBody({
           ]
         : timelineRows,
     [inlinePendingInbox, timelineRows]
-  )
-  const showComments = viewParams?.comments !== `hidden`
-  const displayTimelineRows = useMemo<Array<TimelineRow>>(
-    () =>
-      showComments
-        ? timelineRowsWithInlinePending
-        : timelineRowsWithInlinePending.filter((row) => !row.comment),
-    [showComments, timelineRowsWithInlinePending]
   )
   const focusTarget = useMemo(
     () => decodeCommentTargetParam(viewParams?.[COMMENT_FOCUS_PARAM]),
@@ -495,55 +456,18 @@ function GenericChatBody({
     })
   }, [canSignal, entityUrl, generationActive, signalEntity, stopPending])
 
-  // "Fork from here" anchor map. For each completed `runs` row that is
-  // followed by a user-message inbox row, the run pointer identifies
-  // "fork up to and including this response, drop everything after."
-  // Completed runs without a following prompt (usually the current end
-  // of the conversation) get no entry, preserving the old "historic
-  // prompt" affordance while moving it to the response footer.
-  const forkFromHereByRunKey = useMemo(() => {
-    if (!forkEntity || !entityUrl || !db) return undefined
-    const runOffsets = db.collections.runs.__electricRowOffsets
-    if (!runOffsets) return undefined
-    const map = new Map<string, ForkFromHereAction>()
-    let anchor: { rowKey: string; pointer: EventPointer } | null = null
-    for (const row of displayTimelineRows) {
-      if (row.run && row.run.status === `completed`) {
-        const pointer = runOffsets.get(row.run.key)
-        anchor = pointer ? { rowKey: row.$key, pointer } : null
-      }
-      if (row.inbox && anchor) {
-        const capturedAnchor = anchor.pointer
-        const capturedRunKey = anchor.rowKey
-        map.set(
-          capturedRunKey,
-          canFork
-            ? {
-                onFork: () => {
-                  // forkEntity surfaces failures via a danger toast before
-                  // rejecting, so the caller just needs to swallow the rejection.
-                  void forkEntity(entityUrl, { pointer: capturedAnchor })
-                    .then((res) =>
-                      navigate({
-                        to: `/entity/$`,
-                        params: { _splat: res.url.replace(/^\//, ``) },
-                      })
-                    )
-                    .catch(() => {})
-                },
-              }
-            : { disabled: true }
-        )
-      }
-    }
-    return map
-  }, [displayTimelineRows, canFork, db, forkEntity, entityUrl, navigate])
+  const forkFromHereByRunKey = useForkFromHere({
+    rows: timelineRowsWithInlinePending,
+    db,
+    entityUrl,
+    canFork,
+  })
 
   return (
     <>
       <GoalBanner db={db} />
       <EntityTimeline
-        rows={displayTimelineRows}
+        rows={timelineRowsWithInlinePending}
         loading={loading}
         error={error}
         entityStopped={entityStopped}
