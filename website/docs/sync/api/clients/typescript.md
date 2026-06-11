@@ -623,7 +623,7 @@ The `subscribe` method allows you to receive updates whenever the shape changes.
 1. A message handler callback (required)
 2. An error handler callback (optional)
 
-```typescript
+```typescript group=typescript-1
 const stream = new ShapeStream({
   url: 'http://localhost:3000/v1/shape',
   params: {
@@ -651,7 +651,7 @@ To stop receiving updates, you can either:
 - Unsubscribe a specific subscription using the function returned by `subscribe`
 - Unsubscribe all subscriptions using `unsubscribeAll()`
 
-```typescript
+```typescript group=typescript-1
 // Store the unsubscribe function
 const unsubscribe = stream.subscribe((messages) => {
   console.log('Received messages:', messages)
@@ -673,15 +673,17 @@ The ShapeStream provides robust error handling with automatic retry support thro
 The `onError` option provides powerful error recovery with automatic retry support:
 
 ```typescript
-onError?: ShapeStreamErrorHandler
+type RetryOpts = {
+  params?: Record<string, string | string[]>
+  headers?: Record<string, string>
+}
 
 type ShapeStreamErrorHandler = (
   error: Error
 ) => void | RetryOpts | Promise<void | RetryOpts>
 
-type RetryOpts = {
-  params?: ParamsRecord
-  headers?: Record<string, string>
+interface ShapeStreamOptions {
+  onError?: ShapeStreamErrorHandler
 }
 ```
 
@@ -941,7 +943,7 @@ GET requests (the default) with subset parameters in the URL can fail with `414 
 
 To avoid this, use POST requests by setting `subsetMethod: 'POST'` on the stream:
 
-```typescript
+```typescript group=typescript-2
 const stream = new ShapeStream({
   url: 'http://localhost:3000/v1/shape',
   params: { table: 'items' },
@@ -952,7 +954,7 @@ const stream = new ShapeStream({
 
 Or override per-request with `method: 'POST'`:
 
-```typescript
+```typescript group=typescript-2
 const { metadata, data } = await stream.requestSnapshot({
   where: "status = 'active'",
   method: 'POST', // Use POST body instead of query parameters
@@ -980,15 +982,15 @@ The snapshot data is automatically injected into the subscribed message stream w
 
 A `snapshot-end` control message is added after the snapshot data to mark its boundary:
 
-```typescript
+```json
 {
-  headers: {
-    control: "snapshot-end",
-    xmin: "1234",
-    xmax: "1240",
-    xip_list: ["1235", "1237"],
-    snapshot_mark: 42,
-    database_lsn: "0/12345678"
+  "headers": {
+    "control": "snapshot-end",
+    "xmin": "1234",
+    "xmax": "1240",
+    "xip_list": ["1235", "1237"],
+    "snapshot_mark": 42,
+    "database_lsn": "0/12345678"
   }
 }
 ```

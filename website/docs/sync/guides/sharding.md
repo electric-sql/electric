@@ -195,7 +195,7 @@ This works well when:
 
 For more control, route requests through a proxy that determines the shard server-side. This hides sharding complexity from clients.
 
-```typescript
+```typescript group=sharding
 // proxy/server.ts
 import express from 'express'
 
@@ -409,7 +409,7 @@ function getShardId(userId: string): number {
 
 Sharding works naturally with Electric's [auth patterns](/docs/sync/guides/auth). Your proxy can handle both shard routing and authorization:
 
-```typescript
+```typescript group=sharding
 app.get('/v1/shape', async (req, res) => {
   // 1. Authenticate
   const user = await validateToken(req.headers.authorization)
@@ -445,7 +445,7 @@ app.get('/v1/shape', async (req, res) => {
 
 Monitor all Electric instances for a complete view of your sharded deployment:
 
-```typescript
+```typescript group=sharding
 // Health check aggregator
 async function checkAllShards(): Promise<ShardHealth[]> {
   const checks = Object.entries(SHARD_URLS).map(async ([shardId, url]) => {

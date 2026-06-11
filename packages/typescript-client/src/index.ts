@@ -6,7 +6,7 @@ export {
   isControlMessage,
   isVisibleInSnapshot,
 } from './helpers'
-export { FetchError } from './error'
+export { FetchError, FetchBackoffAbortError } from './error'
 export { type BackoffOptions, BackoffDefaults } from './fetch'
 export { ELECTRIC_PROTOCOL_QUERY_PARAMS } from './constants'
 export {
