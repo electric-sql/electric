@@ -1,9 +1,13 @@
 ---
 title: "Electric Agents 0.5"
 description: >-
-  ...
+  Electric Agents 0.5 rounds out the platform launched in April with a broader
+  SDK and runtime surface for long-lived entities, StreamDB state, runners,
+  wakes, signals, schedules, app APIs, and multi-agent coordination.
 excerpt: >-
-  ...
+  Electric Agents 0.5 is out today. The release adds runtime and SDK primitives
+  for building agent systems, plus in-development desktop and mobile devtools
+  for inspecting and controlling them.
 authors: [samwillis]
 image: /img/blog/electric-agents-0-5-from-runtime-to-app/header.jpg
 tags: [electric-agents, agents, durable-streams, sync, devtools]
