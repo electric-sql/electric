@@ -4,6 +4,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
   alias Electric.LsnTracker
   alias Electric.Postgres.Lsn
+  alias Electric.Replication.PersistentReplicationState
   alias Electric.Replication.ShapeLogCollector
   alias Electric.Replication.Changes.Relation
   alias Electric.Replication.Changes.Commit
@@ -888,6 +889,88 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       assert :ok = ShapeLogCollector.handle_event(relation2, ctx.stack_id)
 
       Support.TransactionConsumer.assert_consume(ctx.consumers, [relation1, relation2])
+    end
+
+    test "retries changed relation after partition inspection connection error", ctx do
+      id = @shape.root_table_id
+      {:ok, partition_relation_info_calls} = Agent.start_link(fn -> 0 end)
+
+      stub_inspector([force: true],
+        clean: fn ^id, _ -> :ok end,
+        load_relation_info: fn ^id, _ ->
+          call =
+            Agent.get_and_update(partition_relation_info_calls, fn calls ->
+              {calls, calls + 1}
+            end)
+
+          case call do
+            1 ->
+              {:error, :connection_not_available}
+
+            _ ->
+              {:ok, %{id: id, schema: "public", name: "test_table", parent: nil, children: nil}}
+          end
+        end
+      )
+
+      relation = %Relation{
+        id: id,
+        table: "test_table",
+        schema: "public",
+        columns: [%{name: "id", type_oid: {1, 1}}]
+      }
+
+      changed_relation = %{
+        relation
+        | columns: [%{name: "id", type_oid: {2, 1}}]
+      }
+
+      assert :ok = ShapeLogCollector.handle_event(relation, ctx.stack_id)
+
+      assert {:error, :connection_not_available} =
+               ShapeLogCollector.handle_event(changed_relation, ctx.stack_id)
+
+      assert :ok = ShapeLogCollector.handle_event(changed_relation, ctx.stack_id)
+      Support.TransactionConsumer.assert_consume(ctx.consumers, [changed_relation])
+    end
+
+    test "does not persist changed relation before routing completes", ctx do
+      id = @shape.root_table_id
+
+      stub_inspector([force: true], clean: fn ^id, _ -> :ok end)
+
+      relation = %Relation{
+        id: id,
+        table: "test_table",
+        schema: "public",
+        columns: [%{name: "id", type_oid: {1, 1}}]
+      }
+
+      changed_relation = %{
+        relation
+        | columns: [%{name: "id", type_oid: {2, 1}}]
+      }
+
+      assert :ok = ShapeLogCollector.handle_event(relation, ctx.stack_id)
+
+      persistence_opts = [stack_id: ctx.stack_id, persistent_kv: ctx.persistent_kv]
+
+      assert %{
+               id_to_table_info: %{^id => ^relation},
+               table_to_id: %{{"public", "test_table"} => ^id}
+             } = PersistentReplicationState.get_tracked_relations(persistence_opts)
+
+      Repatch.patch(Electric.Shapes.Filter, :affected_shapes, [mode: :shared], fn
+        _, _ -> raise "routing failed"
+      end)
+
+      assert {{%RuntimeError{message: "routing failed"}, _}, _} =
+               catch_exit(ShapeLogCollector.handle_event(changed_relation, ctx.stack_id))
+
+      assert %{
+               id_to_table_info: %{^id => ^relation},
+               table_to_id: %{{"public", "test_table"} => ^id}
+             } = PersistentReplicationState.get_tracked_relations(persistence_opts)
     end
   end
 
