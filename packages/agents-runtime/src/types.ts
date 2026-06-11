@@ -618,6 +618,7 @@ export interface SourceWakeConfig {
 export interface ObservationHandle {
   sourceType: string
   sourceRef: string
+  streamUrl?: string
   db?: EntityStreamDB | ObservationStreamDB
   events: Array<ChangeEvent>
 }

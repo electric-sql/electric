@@ -39,7 +39,12 @@ describe(`observe_pg_sync tool`, () => {
   })
 
   it(`calls ctx.observe with pgSync source and wake options`, async () => {
-    const observe = vi.fn(async () => {})
+    const observe = vi.fn(async () => ({
+      sourceType: `pgSync`,
+      sourceRef: `registered-ref`,
+      streamUrl: `/_electric/pg-sync/default/registered-ref`,
+      events: [],
+    }))
     const tool = createObservePgSyncTool({ observe } as any)
 
     await tool.execute(`call`, {
@@ -80,7 +85,12 @@ describe(`observe_pg_sync tool`, () => {
   })
 
   it(`preserves debounceMs: 0`, async () => {
-    const observe = vi.fn(async () => {})
+    const observe = vi.fn(async () => ({
+      sourceType: `pgSync`,
+      sourceRef: `registered-ref`,
+      streamUrl: `/_electric/pg-sync/default/registered-ref`,
+      events: [],
+    }))
     const tool = createObservePgSyncTool({ observe } as any)
 
     const result = textResult(
@@ -97,8 +107,13 @@ describe(`observe_pg_sync tool`, () => {
     expect(result.wake).toEqual({ on: `change`, debounceMs: 0 })
   })
 
-  it(`returns sourceRef, streamUrl, and wake`, async () => {
-    const observe = vi.fn(async () => {})
+  it(`returns the observed sourceRef, streamUrl, and wake`, async () => {
+    const observe = vi.fn(async () => ({
+      sourceType: `pgSync`,
+      sourceRef: `registered-ref`,
+      streamUrl: `/_electric/pg-sync/default/registered-ref`,
+      events: [],
+    }))
     const tool = createObservePgSyncTool({ observe } as any)
 
     const result = textResult(
@@ -108,20 +123,21 @@ describe(`observe_pg_sync tool`, () => {
         wake: { ops: [`delete`] },
       })
     )
-    const source = pgSync({
-      url: `http://localhost:30000/v1/shape`,
-      table: `todos`,
-    })
 
     expect(result).toEqual({
-      sourceRef: source.sourceRef,
-      streamUrl: source.streamUrl,
+      sourceRef: `registered-ref`,
+      streamUrl: `/_electric/pg-sync/default/registered-ref`,
       wake: { on: `change`, ops: [`delete`] },
     })
   })
 
   it(`defaults wake when wake.ops is omitted`, async () => {
-    const observe = vi.fn(async () => {})
+    const observe = vi.fn(async () => ({
+      sourceType: `pgSync`,
+      sourceRef: `registered-ref`,
+      streamUrl: `/_electric/pg-sync/default/registered-ref`,
+      events: [],
+    }))
     const tool = createObservePgSyncTool({ observe } as any)
 
     const result = textResult(

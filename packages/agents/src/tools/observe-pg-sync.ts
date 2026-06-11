@@ -1,5 +1,9 @@
 import { Type } from '@sinclair/typebox'
-import { pgSync, type HandlerContext } from '@electric-ax/agents-runtime'
+import {
+  getPgSyncStreamPath,
+  pgSync,
+  type HandlerContext,
+} from '@electric-ax/agents-runtime'
 import type { AgentTool } from '@mariozechner/pi-agent-core'
 
 function asToolResult(value: unknown) {
@@ -100,11 +104,11 @@ export function createObservePgSyncTool(ctx: HandlerContext): AgentTool {
           : {}),
       }
 
-      await ctx.observe(source, { wake })
+      const handle = await ctx.observe(source, { wake })
 
       return asToolResult({
-        sourceRef: source.sourceRef,
-        streamUrl: source.streamUrl,
+        sourceRef: handle.sourceRef,
+        streamUrl: handle.streamUrl ?? getPgSyncStreamPath(handle.sourceRef),
         wake,
       })
     },

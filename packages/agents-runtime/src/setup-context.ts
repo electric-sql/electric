@@ -911,6 +911,7 @@ export function createSetupContext(
     return {
       sourceType: source.sourceType,
       sourceRef: source.sourceRef,
+      streamUrl: source.streamUrl,
       db: sourceDb,
       events,
     }

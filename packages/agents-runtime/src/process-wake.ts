@@ -1748,10 +1748,25 @@ export async function processWake(
             wakeId,
           }
         )
+        const originalEntry = source.toManifestEntry() as Record<
+          string,
+          unknown
+        >
         observedSource = {
           ...source,
           sourceRef: registeredPgSync.sourceRef,
           streamUrl: registeredPgSync.streamUrl,
+          toManifestEntry() {
+            return {
+              ...originalEntry,
+              key: `source:pgSync:${registeredPgSync!.sourceRef}`,
+              sourceRef: registeredPgSync!.sourceRef,
+              config: {
+                ...((originalEntry.config as Record<string, unknown>) ?? {}),
+                streamUrl: registeredPgSync!.streamUrl,
+              },
+            } as unknown as ReturnType<ObservationSource[`toManifestEntry`]>
+          },
         }
       }
 
