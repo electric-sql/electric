@@ -314,7 +314,7 @@ interface ManifestChildEntry {
 interface ManifestSourceEntry {
   key: string
   kind: "source"
-  sourceType: string
+  sourceType: "entity" | "cron" | "entities" | "db" | "webhook" | "pgSync" | string
   sourceRef: string
   wake?: WakeConfig
   config: Record<string, unknown>
@@ -396,6 +396,8 @@ interface ManifestFutureSendScheduleEntry {
   lastError?: string
 }
 ```
+
+`pgSync()` observations are stored as `sourceType: "pgSync"` manifest rows and project matching Postgres shape changes into the observed source's `changes` collection.
 
 ### ReplayWatermark
 

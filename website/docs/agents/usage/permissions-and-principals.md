@@ -68,6 +68,8 @@ registry.define("worker", {
 
 `subject_kind` can be `principal` for one principal URL/key or `principal_kind` for every principal of a kind.
 
+Built-in Horton and Worker registrations grant all `user` principals both `spawn` and `manage` on those entity types. This makes local and hosted user principals able to create built-in sessions and see the type metadata needed by creation UIs. Custom entity types should choose their own `permissionGrants`.
+
 ## Entity permissions
 
 Entity grants control access to existing entities. Entity-level permissions are:
@@ -105,6 +107,20 @@ await fetch("http://localhost:4437/_electric/entities/assistant/support-ticket-4
 ```
 
 When spawning from a parent, broad delegation requires `manage` on the parent. This applies to grants such as `manage`, principal-kind grants, descendant propagation, and `copy_to_children`.
+
+## Sharing roles
+
+The server stores granular grants, but the UI presents common sharing roles:
+
+| Role     | Grants |
+| -------- | ------ |
+| `view`   | `read`, `fork` |
+| `chat`   | `read`, `write`, `signal`, `fork`, `schedule`, `spawn` |
+| `manage` | `manage`, `delete` |
+
+These are presets for entity grants. They do not change the underlying permission model, and deployments can still grant individual permissions directly.
+
+The server also exposes principal and effective-permission data through Electric shapes for sharing UIs. Point authorization still uses server-side permission checks; Electric visibility is derived from materialized effective permissions.
 
 ## Grant propagation
 
