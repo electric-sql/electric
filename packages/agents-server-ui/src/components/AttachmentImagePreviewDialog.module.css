@@ -75,8 +75,21 @@
 }
 
 @media (max-width: 640px) {
+  /* Anchor to the edges with the bottom raised by the native composer inset
+     (0 on desktop / web) so the preview never hides under the mobile composer
+     overlaying the WebView. Replaces the centered transform with inset bounds. */
   .imagePreviewDialog {
-    width: calc(100vw - 32px);
-    height: calc(100vh - 32px);
+    /* 16px gap + 20px to clear the native composer's chat-log overlap
+       (CHAT_COMPOSER_OVERLAP) — the inset var is reduced by that overlap, so
+       the preview would otherwise touch the composer's true top (iOS). */
+    inset: 16px 16px calc(36px + var(--mobile-chat-bottom-inset, 0px)) 16px;
+    width: auto;
+    height: auto;
+    max-height: none;
+    transform: none;
+  }
+  .imagePreviewDialog[data-starting-style],
+  .imagePreviewDialog[data-ending-style] {
+    transform: none;
   }
 }

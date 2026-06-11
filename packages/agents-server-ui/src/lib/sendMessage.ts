@@ -35,6 +35,15 @@ export type OptimisticInboxMessage = {
   processed_at?: string
 }
 
+/**
+ * A React Native file part: RN's `FormData` serializes a `{ uri, name, type }`
+ * object into a multipart file part rather than a browser `File`/`Blob`. The
+ * web composer passes real `File`s; the mobile composer passes these.
+ */
+export type NativeFileDescriptor = { uri: string; name: string; type: string }
+
+export type AttachmentInput = File | NativeFileDescriptor
+
 type SendMessageInput = {
   payload: { text: string } | ComposerInputPayload
   type?: string
@@ -42,7 +51,7 @@ type SendMessageInput = {
   key: string
   pendingOrderIndex: number
   position?: string
-  attachments?: Array<File>
+  attachments?: Array<AttachmentInput>
 }
 
 type UpdateInboxMessageInput = {
@@ -67,6 +76,17 @@ export function createClientInboxKey(): string {
 
 function createClientAttachmentId(): string {
   return globalThis.crypto?.randomUUID?.() ?? createClientInboxKey()
+}
+
+function isNativeFileDescriptor(
+  file: AttachmentInput
+): file is NativeFileDescriptor {
+  // RN file parts are plain `{ uri, name, type }` objects; browser File/Blob
+  // instances expose `arrayBuffer()` — detect by a `uri` plus its absence.
+  return (
+    typeof (file as { uri?: unknown }).uri === `string` &&
+    typeof (file as { arrayBuffer?: unknown }).arrayBuffer !== `function`
+  )
 }
 
 function nextOptimisticInboxOrderIndex(): number {
@@ -174,7 +194,7 @@ export async function uploadMessageAttachments({
   baseUrl: string
   entityUrl: string
   key: string
-  attachments: Array<File> | undefined
+  attachments: Array<AttachmentInput> | undefined
 }): Promise<{ ids: Array<string>; txids: Array<string> }> {
   if (!attachments || attachments.length === 0) {
     return { ids: [], txids: [] }
@@ -187,21 +207,23 @@ export async function uploadMessageAttachments({
       const id = createClientAttachmentId()
       uploadedIds.push(id)
       const form = new FormData()
-      form.set(`id`, id)
-      form.set(`file`, file, file.name || `attachment`)
-      form.set(
-        `subject`,
-        JSON.stringify({
-          type: `inbox`,
-          key,
-        })
-      )
-      form.set(`role`, `input`)
+      // RN's FormData implements `append` but not `set`, and serializes a
+      // `{ uri, name, type }` object into the file part; the browser path keeps
+      // `set` + the real File. Both share the same (name, value, filename?)
+      // signature, so a single bound method covers both.
+      const addField = isNativeFileDescriptor(file)
+        ? form.append.bind(form)
+        : form.set.bind(form)
+      addField(`id`, id)
+      // The native descriptor isn't a Blob, but RN's FormData accepts it here.
+      addField(`file`, file as unknown as Blob, file.name || `attachment`)
+      addField(`subject`, JSON.stringify({ type: `inbox`, key }))
+      addField(`role`, `input`)
       if (file.type) {
-        form.set(`mimeType`, file.type)
+        addField(`mimeType`, file.type)
       }
       if (file.name) {
-        form.set(`filename`, file.name)
+        addField(`filename`, file.name)
       }
 
       const res = await serverFetch(
@@ -276,7 +298,7 @@ export async function sendEntityMessage({
   key?: string
   mode?: `immediate` | `queued` | `paused` | `steer`
   position?: string
-  attachments?: Array<File>
+  attachments?: Array<AttachmentInput>
   from?: string
 }): Promise<{ txid: string; attachmentTxids: Array<string> }> {
   const url = entityApiUrl(baseUrl, entityUrl, `/send`)
@@ -459,7 +481,7 @@ export function createSendMessageAction({
     type?: string
     mode?: `immediate` | `queued` | `paused` | `steer`
     position?: string
-    attachments?: Array<File>
+    attachments?: Array<AttachmentInput>
   }) => {
     const pendingOrderIndex = nextOptimisticInboxOrderIndex()
     const effectivePosition =
@@ -495,7 +517,7 @@ export function createSendComposerInputAction(args: {
   }: {
     payload: ComposerInputPayload
     mode?: `immediate` | `queued` | `paused` | `steer`
-    attachments?: Array<File>
+    attachments?: Array<AttachmentInput>
   }) =>
     sendMessage({
       payload,
