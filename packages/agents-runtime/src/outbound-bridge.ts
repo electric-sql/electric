@@ -100,6 +100,7 @@ export async function loadOutboundIdSeed(
 export interface OutboundBridge {
   onRunStart: () => void
   onRunEnd: (opts?: { finishReason?: string }) => void
+  onError: (opts: { errorCode: string; message: string }) => void
   onStepStart: (opts?: { modelProvider?: string; modelId?: string }) => void
   onStepEnd: (opts?: {
     finishReason?: string
@@ -191,6 +192,21 @@ export function createOutboundBridge(
         }) as ChangeEvent
       )
       currentRunKey = null
+    },
+
+    onError(opts: { errorCode: string; message: string }) {
+      if (!currentRunKey) return
+      writeEvent(
+        entityStateSchema.errors.insert({
+          key: `${currentRunKey}:error-${crypto.randomUUID()}`,
+          value: {
+            error_code: opts.errorCode,
+            message: opts.message,
+            run_id: currentRunKey,
+            ...(currentStepKey ? { step_id: currentStepKey } : {}),
+          } as never,
+        }) as ChangeEvent
+      )
     },
 
     onStepStart(opts?: { modelProvider?: string; modelId?: string }) {
