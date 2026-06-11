@@ -226,12 +226,16 @@ export async function serverFetch(
   new Headers(init.headers).forEach((value, key) => {
     headers.set(key, value)
   })
-  if (!hasDesktopHeaderInjection()) {
-    for (const [key, value] of Object.entries(
-      getConfiguredServerHeaders(input)
-    )) {
+
+  const configuredHeaders = getConfiguredServerHeaders(input)
+  const applyConfiguredHeaders = (): void => {
+    for (const [key, value] of Object.entries(configuredHeaders)) {
       if (!headers.has(key)) headers.set(key, value)
     }
+  }
+
+  if (!hasDesktopHeaderInjection()) {
+    applyConfiguredHeaders()
   }
   if (shouldUseDesktopServerFetch(input, init)) {
     const api = desktopServerFetchApi()
@@ -247,6 +251,11 @@ export async function serverFetch(
         })
       )
     }
+    // Some request bodies (notably FormData uploads) cannot be serialized over
+    // the Electron IPC transport. When we fall back to the browser fetch path,
+    // explicitly inject the configured server headers here so auth remains
+    // intact instead of relying only on the global Electron header hook.
+    applyConfiguredHeaders()
   }
   return fetch(input, { ...init, headers })
 }
