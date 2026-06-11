@@ -2,13 +2,13 @@
 title: Built-in collections
 titleTemplate: "... - Electric Agents"
 description: >-
-  Reference for the 18 runtime-managed collections: runs, steps, texts, toolCalls, inbox, signals, errors, and more.
+  Reference for the 19 runtime-managed collections: runs, steps, texts, toolCalls, inbox, signals, errors, slashCommands, and more.
 outline: [2, 3]
 ---
 
 # Built-in collections
 
-Every entity automatically has these 18 collections, populated by the runtime as the agent operates. Custom state collections defined in `EntityDefinition.state` are merged with these at creation time.
+Every entity automatically has these 19 collections, populated by the runtime as the agent operates. Custom state collections defined in `EntityDefinition.state` are merged with these at creation time.
 
 **Source:** `@electric-ax/agents-runtime` -- `entity-schema.ts`
 
@@ -30,6 +30,7 @@ Every entity automatically has these 18 collections, populated by the runtime as
 | `signals`          | `signal`           | `Signal`           | Lifecycle signal records     |
 | `childStatus`      | `child_status`     | `ChildStatusEntry` | Child/observed entity status |
 | `tags`             | `tags`             | `TagEntry`         | Entity tags                  |
+| `slashCommands`    | `slash_command`    | `SlashCommand`     | Composer slash commands      |
 | `manifests`        | `manifest`         | `Manifest`         | Durable resource manifests   |
 | `contextInserted`  | `context_inserted` | `ContextInserted`  | Context additions            |
 | `contextRemoved`   | `context_removed`  | `ContextRemoved`   | Context removals             |
@@ -61,6 +62,8 @@ interface Step {
   model_provider?: string
   model_id?: string
   duration_ms?: number
+  input_tokens?: number
+  output_tokens?: number
 }
 ```
 
@@ -236,6 +239,26 @@ interface ChildStatusEntry {
 interface TagEntry {
   key: string
   value: string
+}
+```
+
+### SlashCommand
+
+```ts
+interface SlashCommand {
+  key: string
+  name: string
+  description?: string
+  arguments?: Array<{
+    name: string
+    type: "string" | "number" | "boolean"
+    required?: boolean
+    description?: string
+  }>
+  source: "static" | "dynamic"
+  owner?: string
+  version?: string
+  updated_at: string
 }
 ```
 

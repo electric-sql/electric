@@ -20,6 +20,7 @@ import {
   createAgentsClient,
   entity,
   entities,
+  pgSync,
 } from "@electric-ax/agents-runtime"
 
 const client = createAgentsClient({ baseUrl: "http://localhost:4437" })
@@ -76,12 +77,18 @@ The same source helpers used by `ctx.observe()` can be used with `AgentsClient`.
 | `entity(url)`       | Observe one entity by URL.                           |
 | `entities({ tags })` | Observe the entity membership stream matching tags. |
 | `db(id, schema)`    | Observe a shared-state stream.                       |
+| `webhook(endpointKey, opts?)` | Observe a webhook-backed stream.             |
+| `pgSync(options)`   | Observe an Electric Postgres shape stream.           |
 | `cron(expression)`  | Build a cron source for wake subscriptions.          |
 
 ```ts
-import { db } from "@electric-ax/agents-runtime"
+import { db, pgSync } from "@electric-ax/agents-runtime"
 
 const shared = await client.observe(db("research-123", researchSchema))
+
+const todos = await client.observe(
+  pgSync({ table: "todos", where: "project_id = $1", params: ["docs"] })
+)
 ```
 
 ## React useChat

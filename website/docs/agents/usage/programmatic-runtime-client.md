@@ -67,6 +67,7 @@ interface SpawnEntityOptions {
   args?: Record<string, unknown>
   parentUrl?: string
   initialMessage?: unknown
+  initialMessageType?: string
   tags?: Record<string, string>
   sandbox?: {
     profile?: string
@@ -93,6 +94,41 @@ interface SpawnEntityOptions {
   }
 }
 ```
+
+### forkEntity
+
+`forkEntity()` wraps `POST /_electric/entities/<type>/<id>/fork` and creates a new entity from a source entity's latest completed run:
+
+```ts
+const fork = await client.forkEntity({
+  sourceEntityUrl: "/horton/onboarding",
+  instanceId: "onboarding-variant",
+  initialMessage: { text: "Try a different approach." },
+  tags: { branch: "variant" },
+})
+
+console.log(fork.entityUrl)
+```
+
+```ts
+interface ForkEntityOptions {
+  sourceEntityUrl: string
+  instanceId?: string
+  parent?: string
+  wake?: {
+    subscriberUrl: string
+    condition: RegisterWakeOptions["condition"]
+    debounceMs?: number
+    timeoutMs?: number
+    includeResponse?: boolean
+    manifestKey?: string
+  }
+  initialMessage?: unknown
+  tags?: Record<string, string>
+}
+```
+
+`initialMessage` is sent after the fork has been created and dispatch subscriptions are linked, so a partial failure can leave an idle fork. Handler code should prefer `ctx.fork()` or `ctx.forkSelf()`.
 
 ### getEntity
 
@@ -231,6 +267,19 @@ const source = await client.ensureEntitiesMembershipStream({ project: "docs" })
 ```
 
 This is the lower-level operation behind observing `entities({ tags })`.
+
+### registerPgSyncSource
+
+```ts
+const source = await client.registerPgSyncSource({
+  table: "todos",
+  where: "project_id = $1",
+  params: ["docs"],
+})
+// { streamUrl, sourceRef }
+```
+
+This is the lower-level operation behind observing `pgSync({ table, where, params })` sources. The server turns the Postgres shape into an Electric Agents observation stream.
 
 ### Event sources
 

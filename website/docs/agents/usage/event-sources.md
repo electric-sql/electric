@@ -18,6 +18,7 @@ An event source contract describes what an agent can subscribe to:
 
 ```ts
 type EventSourceContract = {
+  serviceId?: string
   sourceKey: string
   sourceType: "webhook"
   endpointKey: string
@@ -26,6 +27,7 @@ type EventSourceContract = {
   description?: string
   agentVisible: boolean
   buckets: EventSourceBucket[]
+  updatedAt?: string
   revision: number
 }
 ```
@@ -36,8 +38,10 @@ Buckets describe path templates and parameters:
 type EventSourceBucket = {
   key: string
   label: string
+  description?: string
   pathTemplate: string
   paramsSchema: Record<string, unknown>
+  eventTypes?: string[]
   filters?: EventSourceFilter[]
 }
 ```

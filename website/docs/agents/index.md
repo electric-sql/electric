@@ -110,7 +110,7 @@ The core pattern is [`ctx.useAgent()`](/docs/agents/reference/agent-config) foll
 ```ts
 ctx.useAgent({
   systemPrompt: "You are a helpful assistant.",
-  model: "claude-sonnet-4-5-20250929",
+  model: "claude-sonnet-4-6",
   tools: [...ctx.electricTools, myCustomTool],
 })
 

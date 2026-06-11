@@ -15,12 +15,15 @@ The handler context is passed as the first argument to every entity handler. It 
 ```ts
 interface HandlerContext<TState extends StateProxy = StateProxy> {
   firstWake: boolean
+  wake: HandlerWake
+  slashCommands: SlashCommandHelpers
   tags: Readonly<EntityTags>
   principal?: RuntimePrincipal
   entityUrl: string
   entityType: string
   args: Readonly<Record<string, unknown>>
   db: EntityStreamDBWithActions
+  self: SelfHandle
   state: TState
   events: Array<ChangeEvent>
   actions: Record<string, (...args: unknown[]) => unknown>
@@ -41,12 +44,19 @@ interface HandlerContext<TState extends StateProxy = StateProxy> {
     args?: Record<string, unknown>,
     opts?: {
       initialMessage?: unknown
+      initialMessageType?: string
       wake?: Wake
       tags?: Record<string, string>
       observe?: boolean
       sandbox?: SpawnSandboxOption
     }
   ): Promise<EntityHandle>
+  fork(
+    sourceEntityUrl: string,
+    id: string,
+    opts?: ForkOptions
+  ): Promise<EntityHandle>
+  forkSelf(id: string, opts?: ForkOptions): Promise<EntityHandle>
   observe(
     source: ObservationSource & { sourceType: "entity" },
     opts?: { wake?: Wake }
@@ -69,6 +79,7 @@ interface HandlerContext<TState extends StateProxy = StateProxy> {
     opts?: { type?: string; afterMs?: number }
   ): Promise<SendResult>
   attachments: AttachmentsApi
+  createEffect(functionRef: string, key: string, config: JsonValue): boolean
   onSignal(
     handler: (signal: {
       signal: EntitySignal
@@ -83,19 +94,22 @@ interface HandlerContext<TState extends StateProxy = StateProxy> {
 }
 ```
 
-> **Tip:** Use the helper functions `entity()`, `cron()`, `entities()`, `db()`, and `webhook()` from `@electric-ax/agents-runtime` to construct `ObservationSource` values for `observe()`.
+> **Tip:** Use the helper functions `entity()`, `cron()`, `entities()`, `db()`, `webhook()`, and `pgSync()` from `@electric-ax/agents-runtime` to construct `ObservationSource` values for `observe()`.
 
 ## Properties
 
 | Property     | Type                                              | Description                                                                                                   |
 | ------------ | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
 | `firstWake`  | `boolean`                                         | `true` during the initial setup pass while the entity has no persisted manifest entries. Use state checks for one-time plain state initialization. |
+| `wake`       | `HandlerWake`                                     | Current wake projected into the handler context. Equivalent to the second handler argument.                    |
+| `slashCommands` | `SlashCommandHelpers`                         | Read and manage slash-command definitions exposed to structured composer inputs.                              |
 | `tags`       | `Readonly<EntityTags>`                            | Entity tags — key/value metadata associated with this entity.                                                 |
 | `principal`  | `RuntimePrincipal \| undefined`                   | Principal that caused the current wake, when the server supplied one.                                         |
 | `entityUrl`  | `string`                                          | URL path of this entity (e.g. `"/chat/my-convo"`).                                                            |
 | `entityType` | `string`                                          | Registered type name (e.g. `"chat"`).                                                                         |
 | `args`       | `Readonly<Record<string, unknown>>`               | Spawn arguments passed when the entity was created.                                                           |
 | `db`         | `EntityStreamDBWithActions`                       | The entity's TanStack DB instance with registered actions.                                                    |
+| `self`       | `SelfHandle`                                      | Handle for this entity. Use `ctx.self.send(payload)` to send to yourself without spelling the entity URL.     |
 | `state`      | `TState`                                          | Proxy object keyed by collection name. Each property is a [`StateCollectionProxy`](./state-collection-proxy). |
 | `events`     | `Array<ChangeEvent>`                              | Change events that triggered this wake.                                                                       |
 | `actions`    | `Record<string, (...args: unknown[]) => unknown>` | Custom non-CRUD actions from the entity definition's `actions` factory. Auto-generated CRUD actions live on `ctx.db.actions` and `ctx.state`. |
@@ -116,10 +130,13 @@ interface HandlerContext<TState extends StateProxy = StateProxy> {
 | `getContext(id)`                  | `ContextEntry \| undefined`                                       | Get a context entry by id, or `undefined` if not found.                                                                                                                                                                                    |
 | `listContext()`                   | `Array<ContextEntry>`                                             | List all context entries.                                                                                                                                                                                                                  |
 | `agent.run(input?)`               | `Promise<AgentRunResult>`                                         | Run the configured agent loop. Optional `input` string is appended as a user message before the loop starts.                                                                                                                               |
-| `spawn(type, id, args?, opts?)`   | `Promise<EntityHandle>`                                           | Spawn a child entity. `opts` accepts `tags`, `observe`, `initialMessage`, `wake`, and `sandbox`. See [`EntityHandle`](./entity-handle).                                                                                                    |
+| `spawn(type, id, args?, opts?)`   | `Promise<EntityHandle>`                                           | Spawn a child entity. `opts` accepts `tags`, `observe`, `initialMessage`, `initialMessageType`, `wake`, and `sandbox`. See [`EntityHandle`](./entity-handle).                                                                                                    |
+| `fork(sourceUrl, id, opts?)`      | `Promise<EntityHandle>`                                           | Fork another entity at its latest completed run. By default the fork becomes this entity's child and wakes this entity when the fork's next run finishes.                                                                                   |
+| `forkSelf(id, opts?)`             | `Promise<EntityHandle>`                                           | Convenience wrapper for `ctx.fork(ctx.entityUrl, id, opts)`.                                                                                                                                                                               |
 | `observe(source, opts?)`          | `Promise<EntityHandle \| SharedStateHandle \| ObservationHandle>` | Observe a source. Return type depends on source type: `EntityHandle` for entities, `SharedStateHandle & ObservationHandle` for db, `ObservationHandle` otherwise. Use `entity()`, `cron()`, `entities()`, `db()` helpers to build sources. |
 | `mkdb(id, schema)`                | `SharedStateHandle<T>`                                            | Create a new shared state stream. See [`SharedStateHandle`](./shared-state-handle).                                                                                                                                                        |
 | `send(entityUrl, payload, opts?)` | `Promise<SendResult>`                                             | Send a message to another entity. `opts` accepts `type` and `afterMs` (delay in milliseconds).                                                                                                                                             |
+| `createEffect(ref, key, config)`  | `boolean`                                                         | Register an effect for the current entity definition. Returns whether the effect was newly created for this key.                                                                                                                           |
 | `onSignal(handler)`               | `void`                                                            | Register a handler for lifecycle signals delivered during this wake. Runtime-controlled signals such as `SIGINT`, `SIGSTOP`, `SIGCONT`, and `SIGKILL` are handled by the runtime.                                                         |
 | `recordRun()`                     | `RunHandle`                                                       | Record a non-LLM run in the built-in `runs` collection, so observers using `wake: { on: "runFinished", includeResponse: true }` are notified when external work completes.                                                                                               |
 | `setTag(key, value)`              | `Promise<void>`                                                   | Set a tag on this entity.                                                                                                                                                                                                                  |
@@ -139,9 +156,35 @@ await ctx.spawn("worker", "analysis", args, {
 })
 ```
 
+## Forking
+
+`ctx.fork(sourceEntityUrl, id, opts?)` creates a child fork of another entity at that source entity's latest completed run. `ctx.forkSelf(id, opts?)` forks the current entity. Options mirror spawn where the semantics map:
+
+```ts
+const fork = await ctx.forkSelf("variant-a", {
+  initialMessage: { text: "Try a different approach." },
+  tags: { branch: "variant-a" },
+})
+```
+
+By default the fork is observed as this entity's child with a `runFinished` wake that includes the fork response. Pass `observe: false` for a fire-and-forget fork with no parent manifest entry, wake subscription, or reply path.
+
 ## Attachments
 
 `ctx.attachments` exposes manifest-backed attachments associated with the entity. It is used by the runtime to hydrate image and file context and can also be used by custom handlers or tools that need to inspect uploaded files.
+
+## Slash Commands
+
+`ctx.slashCommands` exposes structured composer commands registered on the entity. Static commands come from the entity type; handlers can add or replace dynamic commands for UI composers that send `composer_input` messages:
+
+```ts
+ctx.slashCommands.register({
+  name: "summarize",
+  description: "Summarize the current session",
+})
+```
+
+Use `ctx.wake` or the handler's `wake` argument to inspect incoming composer payloads.
 
 ## Lifecycle Signals
 

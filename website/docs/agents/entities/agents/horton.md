@@ -26,19 +26,23 @@ npx electric-ax agents observe /horton/my-horton
 
 Horton is configured with `ctx.electricTools` plus the base Horton tool set:
 
-| Tool           | Purpose                                                  |
-| -------------- | -------------------------------------------------------- |
-| `bash`         | Run shell commands in the working directory.             |
-| `read`         | Read a file. Tracked in a per-wake `readSet`.            |
-| `write`        | Create or overwrite a file.                              |
-| `edit`         | Targeted string replacement (file must be `read` first). |
-| `web_search`   | Web search via the configured search provider.            |
-| `fetch_url`    | Fetch a URL and return it as markdown.                   |
-| `spawn_worker` | Dispatch a subagent for an isolated subtask.             |
+| Tool              | Purpose                                                  |
+| ----------------- | -------------------------------------------------------- |
+| `bash`            | Run shell commands in the working directory.             |
+| `read`            | Read a file. Tracked in a per-wake `readSet`.            |
+| `write`           | Create or overwrite a file.                              |
+| `edit`            | Targeted string replacement (file must be `read` first). |
+| `web_search`      | Web search via the configured search provider.           |
+| `fetch_url`       | Fetch a URL and return it as markdown.                   |
+| `spawn_worker`    | Dispatch a subagent for an isolated subtask.             |
+| `fork`            | Branch a session at its latest completed response.       |
+| `observe_pg_sync` | Observe an Electric Postgres shape and wake on changes.  |
+| `send`            | Send a message to another entity.                        |
+| `set_title`       | Rename the current chat session title.                   |
 
 `web_search` uses the search provider configured by the built-in runtime; Brave search requires `BRAVE_SEARCH_API_KEY`.
 
-When docs support or skills are available, Horton also adds the docs search tool and skill tools during bootstrap.
+When docs support or skills are available, Horton also adds the docs search tool and skill tools during bootstrap. Built-in runtimes also provide `ctx.electricTools`, including schedule tools and event-source tools when configured.
 
 ## Title generation
 

@@ -18,16 +18,17 @@ Create a child entity:
 const child = await ctx.spawn(type, id, args?, opts?)
 ```
 
-| Parameter             | Type                      | Description                            |
-| --------------------- | ------------------------- | -------------------------------------- |
-| `type`                | `string`                  | Entity type name (must be registered)  |
-| `id`                  | `string`                  | Unique child ID                        |
-| `args`                | `Record<string, unknown>` | Passed to child handler as `ctx.args`  |
-| `opts.initialMessage` | `unknown`                 | First message delivered to child       |
-| `opts.wake`           | `Wake`                    | When to wake the parent (see below)    |
-| `opts.tags`           | `Record<string, string>`  | Key-value tags applied to the child    |
-| `opts.observe`        | `boolean`                 | Also observe the child (default: true) |
-| `opts.sandbox`        | `SpawnSandboxOption`      | Sandbox profile or inheritance for the child |
+| Parameter                 | Type                      | Description                            |
+| ------------------------- | ------------------------- | -------------------------------------- |
+| `type`                    | `string`                  | Entity type name (must be registered)  |
+| `id`                      | `string`                  | Unique child ID                        |
+| `args`                    | `Record<string, unknown>` | Passed to child handler as `ctx.args`  |
+| `opts.initialMessage`     | `unknown`                 | First message delivered to child       |
+| `opts.initialMessageType` | `string`                  | Optional inbox message type for `initialMessage` |
+| `opts.wake`               | `Wake`                    | When to wake the parent (see below)    |
+| `opts.tags`               | `Record<string, string>`  | Key-value tags applied to the child    |
+| `opts.observe`            | `boolean`                 | Also observe the child (default: true) |
+| `opts.sandbox`            | `SpawnSandboxOption`      | Sandbox profile or inheritance for the child |
 
 `spawn` is a creation-only operation. Calling it with a `(type, id)` pair that already exists in the entity's manifest throws an error. Use `observe(entity(url))` to get a handle to an existing child.
 
@@ -40,6 +41,21 @@ The `wake` option controls when the parent's handler is re-invoked:
 Returns an [`EntityHandle`](#entityhandle).
 
 Use [Sandboxing](./sandboxing) when children need isolated filesystem, process, or network access, or when a worker should inherit its parent's sandbox.
+
+## fork
+
+Forking creates a new entity from another entity's history at its latest completed run. Use it when you want to branch a session and try a different continuation:
+
+```ts
+const fork = await ctx.forkSelf("variant-a", {
+  initialMessage: { text: "Explore the risky option instead." },
+  tags: { branch: "variant-a" },
+})
+```
+
+`ctx.fork(sourceEntityUrl, id, opts?)` forks another entity; `ctx.forkSelf(id, opts?)` forks the current entity. The new fork is a child of the forking entity by default and registers a `runFinished` wake with `includeResponse: true`, so the parent wakes when the fork's next run finishes. Options mirror `spawn` where they apply: `initialMessage`, `wake`, `tags`, and `observe`.
+
+Pass `observe: false` for fire-and-forget branching with no parent relationship or wake subscription.
 
 ## EntityHandle
 
