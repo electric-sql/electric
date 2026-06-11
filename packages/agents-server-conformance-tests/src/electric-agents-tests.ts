@@ -1908,12 +1908,15 @@ export function runElectricAgentsConformanceTests(
       const sandbox = await makeSandbox(`/tmp`)
       try {
         const tool = createBashTool(sandbox)
-        const result = await tool.execute(`test-tc`, { command: `sleep 60` })
+        const result = await tool.execute(`test-tc`, {
+          command: `sleep 60`,
+          timeoutMs: 1_000,
+        })
         expect(result.details.timedOut).toBe(true)
       } finally {
         await sandbox.dispose()
       }
-    }, 35_000)
+    }, 5_000)
 
     test(`read_file rejects paths outside working directory`, async () => {
       const { createReadFileTool } = await import(
