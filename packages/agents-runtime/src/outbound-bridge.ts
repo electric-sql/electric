@@ -163,10 +163,11 @@ export interface OutboundBridgeHooks {
    * Called after a step ends and has been written to the entity stream.
    * Receives the token counts (zero if the provider did not report them):
    * `input` is the full prompt volume the model saw (including prompt-cache
-   * reads/writes — what the meta row displays), `uncachedInput` is the new
-   * input this step only, `output` is completion tokens. Budget accounting
-   * should use `uncachedInput + output` so warm-cache turns don't re-count
-   * the entire conversation every step.
+   * reads — what the meta row displays), `uncachedInput` is the new input
+   * this step only (fresh tokens plus cache writes; cache *reads* excluded),
+   * `output` is completion tokens. Budget accounting should use
+   * `uncachedInput + output` so warm-cache turns don't re-count the entire
+   * conversation every step.
    */
   onStepEnd?: (stats: {
     input: number

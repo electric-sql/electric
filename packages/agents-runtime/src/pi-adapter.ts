@@ -402,18 +402,21 @@ export function createPiAgentAdapter(
                   (typeof usage?.inputTokens === `number`
                     ? usage.inputTokens
                     : undefined)
-                // Uncached input only — what goal-budget enforcement
+                // Non-cache-hit input — what goal-budget enforcement
                 // accumulates. On warm turns `cacheRead` re-counts the whole
                 // conversation every step, so budgeting on the display sum
                 // would burn a budget in a couple of steps regardless of how
-                // much *new* work happened. Legacy flat `inputTokens` has no
-                // cache split, so the whole side counts as uncached.
+                // much *new* work happened. `cacheWrite` IS counted: on
+                // cache-enabled providers the newly appended prompt tokens
+                // are reported there (with `usage.input` collapsing to ~0),
+                // so excluding it would make the budget track output only.
+                // Legacy flat `inputTokens` has no cache split, so the whole
+                // side counts as uncached.
                 const usageInputUncached =
-                  typeof usage?.input === `number`
-                    ? usage.input
-                    : typeof usage?.inputTokens === `number`
-                      ? usage.inputTokens
-                      : undefined
+                  sumPresentNumbers([usage?.input, usage?.cacheWrite]) ??
+                  (typeof usage?.inputTokens === `number`
+                    ? usage.inputTokens
+                    : undefined)
                 const usageOutput =
                   typeof usage?.output === `number`
                     ? usage.output

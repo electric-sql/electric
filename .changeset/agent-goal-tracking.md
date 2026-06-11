@@ -25,10 +25,10 @@ the run exceeds the budget.
 - **Mid-run token enforcement**: an `onStepEnd` hook on the outbound
   bridge surfaces per-step token counts; Horton accumulates them and
   aborts the active `ctx.agent.run()` via an `AbortController` once
-  `tokensUsed >= tokenBudget`. The cap counts **uncached input +
-  output** per step — prompt-cache reads (which re-count the whole
-  conversation on every warm step) are excluded, so the budget tracks
-  new work rather than context size.
+  `tokensUsed >= tokenBudget`. The cap counts **new input (fresh +
+  cache-write tokens) + output** per step — prompt-cache reads (which
+  re-count the whole conversation on every warm step) are excluded, so
+  the budget tracks new work rather than context size.
 - **Live progress**: the goal banner ticks up after each step. The
   manifest update is written via `writeEvent` directly (not the
   wake-session's staged manifest transaction, which only commits at
@@ -51,10 +51,12 @@ the run exceeds the budget.
   status, tokenBudget, tokensUsed, createdAt, updatedAt) added to the
   manifest discriminated union.
 - `goal-api.ts` (new) — `setGoal` / `clearGoal` / `getGoal` /
-  `markGoalComplete` / `updateGoalUsage`. There is a single usage
-  write path: the handler's in-memory step accumulator persisted via
-  `updateGoalUsage`, which writes the manifest update directly through
-  `writeEvent` for live UI and never decreases `tokensUsed`.
+  `markGoalComplete` / `updateGoalUsage`. All goal mutations share a
+  single ordered write channel (direct `writeEvent` upserts, live for
+  the UI) plus an in-wake read-your-writes cache, so a mutation firing
+  mid-run can never snapshot — and replay — a stale `tokensUsed` over
+  a fresher one. `updateGoalUsage` additionally never decreases the
+  counter.
 - `goal-command.ts` (new) — `/goal` parser (`--tokens N|50k|1.2m|
   unlimited`, `--unlimited` flag, subcommand aliases `done`/`status`)
   and dispatcher.

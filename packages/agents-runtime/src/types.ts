@@ -944,8 +944,9 @@ export interface AgentConfig {
   // Invoked after each step ends with the provider-reported token counts.
   // `input` is the full prompt volume (incl. prompt-cache reads/writes, as
   // displayed in the meta row); `uncachedInput` is the new input this step
-  // only. Budget accounting should use `uncachedInput + output` so warm
-  // cache turns don't re-count the whole conversation each step.
+  // only (fresh tokens + cache writes; cache reads excluded). Budget
+  // accounting should use `uncachedInput + output` so warm cache turns
+  // don't re-count the whole conversation each step.
   onStepEnd?: (stats: {
     input: number
     uncachedInput: number
