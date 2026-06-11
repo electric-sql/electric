@@ -431,7 +431,7 @@ defmodule Electric.Shapes.ConsumerTest do
       assert_receive {Support.TestStorage, :append_to_log!, @shape_handle1, _}
     end
 
-    test "does not clean shapes if relation didn't change", ctx do
+    test "does not route relation to shapes if relation didn't change", ctx do
       rel =
         %Relation{
           id: @shape1.root_table_id,
@@ -452,9 +452,9 @@ defmodule Electric.Shapes.ConsumerTest do
 
       assert :ok = ShapeLogCollector.handle_event(rel, ctx.stack_id)
 
-      Repatch.patch(Electric.Shapes.EventRouter, :event_by_shape_handle, [mode: :shared], fn
+      Repatch.patch(Electric.Shapes.Filter, :affected_shapes, [mode: :shared], fn
         _, _ ->
-          raise "Unexpected routing for unchanged duplicate relation"
+          raise "Unexpected call to Filter.affected_shapes/2 for unchanged duplicate relation"
       end)
 
       assert :ok = ShapeLogCollector.handle_event(rel, ctx.stack_id)
