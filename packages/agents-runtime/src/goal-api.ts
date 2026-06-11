@@ -69,9 +69,21 @@ export function createGoalApi(opts: {
 }): GoalApi {
   const now = opts.now ?? (() => new Date().toISOString())
 
+  // Read-your-writes cache for the duration of this wake. Events written via
+  // writeEvent only reach the local manifests collection after a round-trip
+  // through the stream, so a read straight after a write would observe the
+  // previous value — e.g. mark_goal_complete firing mid-run would snapshot a
+  // stale tokensUsed and clobber the fresher per-step counter.
+  let lastWritten: ManifestGoalEntry | undefined
+  let clearedThisWake = false
+
   function readRaw():
     | (ManifestGoalEntry & Record<string, unknown>)
     | undefined {
+    if (clearedThisWake) return undefined
+    if (lastWritten) {
+      return lastWritten as ManifestGoalEntry & Record<string, unknown>
+    }
     for (const row of opts.db.collections.manifests.toArray) {
       if (isGoalManifest(row)) {
         return row as ManifestGoalEntry & Record<string, unknown>
@@ -85,8 +97,25 @@ export function createGoalApi(opts: {
     return raw ? toGoalEntry(raw) : undefined
   }
 
+  // Single write channel: every goal mutation goes directly through
+  // writeEvent (live, ordered) when it is wired. Mixing this with the
+  // wake-session's staged manifest transaction (which replays at
+  // end-of-wake) re-introduces the ordering race where a snapshot staged
+  // mid-run lands after — and overwrites — fresher live writes. The staged
+  // path remains only as a fallback for tests that don't wire writeEvent.
   function persist(entry: ManifestGoalEntry): GoalEntry {
-    opts.wakeSession.registerManifestEntry(entry)
+    if (opts.writeEvent) {
+      opts.writeEvent(
+        entityStateSchema.manifests.upsert({
+          key: GOAL_MANIFEST_KEY,
+          value: entry as never,
+        }) as ChangeEvent
+      )
+    } else {
+      opts.wakeSession.registerManifestEntry(entry)
+    }
+    lastWritten = entry
+    clearedThisWake = false
     return toGoalEntry(entry as unknown as Record<string, unknown>)
   }
 
@@ -123,7 +152,21 @@ export function createGoalApi(opts: {
     },
 
     clearGoal() {
-      return opts.wakeSession.removeManifestEntry(GOAL_MANIFEST_KEY)
+      const existed = readRaw() !== undefined
+      if (opts.writeEvent) {
+        if (existed) {
+          opts.writeEvent(
+            entityStateSchema.manifests.delete({
+              key: GOAL_MANIFEST_KEY,
+            }) as ChangeEvent
+          )
+        }
+      } else {
+        opts.wakeSession.removeManifestEntry(GOAL_MANIFEST_KEY)
+      }
+      lastWritten = undefined
+      clearedThisWake = true
+      return existed
     },
 
     getGoal() {
@@ -177,20 +220,6 @@ export function createGoalApi(opts: {
         createdAt:
           typeof existing.createdAt === `string` ? existing.createdAt : now(),
         updatedAt: now(),
-      }
-      // Live path: write the manifest update event directly to the entity
-      // stream so the UI sees it during the run. The wake-session's manifest
-      // transaction only commits at end-of-wake, which is too late for
-      // per-step UI updates. Fall back to the transactional path if
-      // writeEvent isn't wired (e.g. in tests).
-      if (opts.writeEvent) {
-        opts.writeEvent(
-          entityStateSchema.manifests.update({
-            key: GOAL_MANIFEST_KEY,
-            value: next as never,
-          }) as ChangeEvent
-        )
-        return toGoalEntry(next as unknown as Record<string, unknown>)
       }
       return persist(next)
     },

@@ -115,13 +115,17 @@ describe(`createGoalApi.updateGoalUsage`, () => {
   })
 
   it(`writes through writeEvent when wired (live path)`, () => {
-    const { api, events } = makeApi({ withWriteEvent: true })
+    const { api, events, wakeSession } = makeApi({ withWriteEvent: true })
     api.setGoal({ objective: `x` })
     api.updateGoalUsage(500)
 
-    expect(events.length).toBe(1)
-    const value = (events[0] as { value?: { tokensUsed?: number } }).value
+    expect(events.length).toBe(2)
+    const value = (events[1] as { value?: { tokensUsed?: number } }).value
     expect(value?.tokensUsed).toBe(500)
+    // Single write channel: nothing may go through the wake-session's
+    // staged transaction when writeEvent is wired — staged entries replay
+    // at end-of-wake and would clobber fresher live writes.
+    expect(wakeSession.registerManifestEntry).not.toHaveBeenCalled()
   })
 
   it(`preserves a recorded summary across usage writes`, () => {
@@ -154,6 +158,34 @@ describe(`createGoalApi.markGoalComplete`, () => {
     const { api } = makeApi()
     expect(api.markGoalComplete()).toBeUndefined()
   })
+
+  // Regression: events written via writeEvent only reach the local
+  // manifests collection after a stream round-trip. mark_goal_complete
+  // firing mid-run must read its own wake's latest write (the per-step
+  // usage counter), not a stale collection row — previously it snapshotted
+  // the lagging value and overwrote a fresher tokensUsed.
+  it(`does not clobber fresher usage written earlier in the same wake`, () => {
+    const { api, events } = makeApi({ withWriteEvent: true })
+    api.setGoal({ objective: `x` })
+    api.updateGoalUsage(5_728)
+    const done = api.markGoalComplete(`all wrapped up`)
+
+    expect(done?.tokensUsed).toBe(5_728)
+    const last = events.at(-1) as { value?: Record<string, unknown> }
+    expect(last.value?.tokensUsed).toBe(5_728)
+    expect(last.value?.status).toBe(`complete`)
+  })
+
+  it(`status survives a usage write that follows completion (lagging reads)`, () => {
+    const { api, events } = makeApi({ withWriteEvent: true })
+    api.setGoal({ objective: `x` })
+    api.markGoalComplete()
+    api.updateGoalUsage(9_000)
+
+    const last = events.at(-1) as { value?: Record<string, unknown> }
+    expect(last.value?.status).toBe(`complete`)
+    expect(last.value?.tokensUsed).toBe(9_000)
+  })
 })
 
 describe(`createGoalApi.clearGoal / getGoal`, () => {
@@ -165,5 +197,31 @@ describe(`createGoalApi.clearGoal / getGoal`, () => {
     expect(api.clearGoal()).toBe(true)
     expect(api.getGoal()).toBeUndefined()
     expect(api.clearGoal()).toBe(false)
+  })
+
+  it(`clears via a delete event when writeEvent is wired`, () => {
+    // Seed a goal row as if persisted by a previous wake.
+    const { api, rows, events, wakeSession } = makeApi({
+      withWriteEvent: true,
+    })
+    rows.push({
+      key: `goal`,
+      kind: `goal`,
+      id: `goal`,
+      objective: `x`,
+      status: `active`,
+      tokenBudget: 1_000,
+      tokensUsed: 10,
+      createdAt: `2026-06-09T00:00:00.000Z`,
+      updatedAt: `2026-06-09T00:00:00.000Z`,
+    })
+
+    expect(api.clearGoal()).toBe(true)
+    expect(events.length).toBe(1)
+    // The stale collection row hasn't round-tripped away yet, but reads in
+    // this wake must already observe the goal as gone.
+    expect(api.getGoal()).toBeUndefined()
+    expect(api.clearGoal()).toBe(false)
+    expect(wakeSession.removeManifestEntry).not.toHaveBeenCalled()
   })
 })
