@@ -103,6 +103,11 @@ if Electric.telemetry_enabled?() do
       %{plug_opts: build_plug_opts(ctx)}
     end
 
+    # NOTE: this mutates VM-global telemetry state (stops/starts the :opentelemetry
+    # app and erases its persistent-term tracer cache). The module is `async: false`
+    # and `on_exit` restores the default (empty) processor pipeline, so other test
+    # modules are not affected — but tests in this module must not assume any OTel
+    # state set up outside of it.
     defp restart_opentelemetry(processors) do
       Application.stop(:opentelemetry)
 

@@ -442,7 +442,7 @@ defmodule Electric.Shapes.Api.Response do
 
         OpenTelemetry.with_span(
           "shape_get.plug.stream_chunk",
-          Map.put(sample_rate_attrs, :chunk_size, chunk_size),
+          Map.put(sample_rate_attrs, "chunk_size", chunk_size),
           stack_id,
           fn ->
             case Plug.Conn.chunk(conn, chunk) do
