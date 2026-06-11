@@ -102,6 +102,12 @@ defmodule Electric.Plug.TraceContextPlug do
   defp effective_sample_rate(_rate, status) when is_integer(status) and status >= 500, do: 1
   defp effective_sample_rate(rate, _status), do: rate
 
+  @doc """
+  The name of the span attribute Honeycomb reads as the sampling weight.
+  """
+  @spec sample_rate_attr() :: String.t()
+  def sample_rate_attr, do: @sample_rate_attr
+
   defp sample_rate_hint(span_ctx) do
     with value when is_binary(value) <-
            OpenTelemetry.tracestate_value(span_ctx, @tracestate_key),

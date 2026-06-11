@@ -523,7 +523,7 @@ defmodule Electric.Plug.ServeShapePlug do
     attributes =
       conn
       |> open_telemetry_attrs()
-      |> Map.put("SampleRate", 1)
+      |> Map.put(TraceContextPlug.sample_rate_attr(), 1)
 
     OpenTelemetry.export_unsampled_remote_span(
       "Plug_shape_get",
