@@ -1,5 +1,13 @@
 # @electric-ax/agents-desktop
 
+## 0.1.17
+
+### Patch Changes
+
+- 4640704: Add pg-sync observation source enabling agents to observe Electric Postgres shape streams and wake on matching row changes (insert/update/delete). Includes server-side bridge management with cursor persistence, durable stream forwarding, and an `observe_pg_sync` tool for Horton agents.
+- Updated dependencies [b8875a2]
+  - @electric-sql/client@1.5.21
+
 ## 0.1.16
 
 ### Patch Changes
