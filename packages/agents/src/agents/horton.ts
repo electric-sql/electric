@@ -528,8 +528,12 @@ function extractWakeText(wake: WakeEvent): string | null {
   const payload = wake.payload
   if (typeof payload === `string`) return payload
   if (payload && typeof payload === `object`) {
-    const text = (payload as { text?: unknown }).text
-    if (typeof text === `string`) return text
+    const record = payload as { text?: unknown; source?: unknown }
+    if (typeof record.text === `string`) return record.text
+    // Composer-structured messages (WireComposerInputPayload) carry the
+    // raw typed text in `source` alongside the parsed `nodes`. The /goal
+    // grammar is text-based, so the raw source is what we dispatch on.
+    if (typeof record.source === `string`) return record.source
   }
   return null
 }

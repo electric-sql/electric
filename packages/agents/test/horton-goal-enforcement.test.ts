@@ -150,3 +150,60 @@ describe(`horton goal enforcement gating`, () => {
     expect(updateGoalUsage).not.toHaveBeenCalled()
   })
 })
+
+describe(`/goal interception across wake payload shapes`, () => {
+  async function runWake(payload: unknown) {
+    const registry = createEntityRegistry()
+    registerHorton(registry, { workingDirectory: `/tmp`, modelCatalog })
+    const def = registry.get(`horton`)
+    const useAgent = vi.fn()
+    const replyText = vi.fn()
+    const fakeCtx = {
+      args: {},
+      electricTools: [],
+      events: [],
+      firstWake: false,
+      tags: {},
+      db: { collections: { inbox: { toArray: [] }, runs: { toArray: [] } } },
+      sandbox: {
+        workingDirectory: `/work`,
+        readFile: vi.fn(async () => {
+          throw new Error(`ENOENT`)
+        }),
+      },
+      slashCommands: { replaceOwned: vi.fn() },
+      insertContext: vi.fn(),
+      removeContext: vi.fn(),
+      getContext: vi.fn(),
+      useContext: vi.fn(),
+      useAgent,
+      agent: { run: vi.fn(async () => {}) },
+      getGoal: vi.fn(() => goalEntry({ status: `active` })),
+      updateGoalUsage: vi.fn(),
+      markGoalComplete: vi.fn(),
+      clearGoal: vi.fn(),
+      setGoal: vi.fn(),
+      replyText,
+    } as any
+    await def!.definition.handler(fakeCtx, { type: `inbox`, payload } as any)
+    return { useAgent, replyText }
+  }
+
+  it(`intercepts plain-text payloads`, async () => {
+    const { useAgent, replyText } = await runWake({ text: `/goal show` })
+    expect(replyText).toHaveBeenCalledWith(expect.stringContaining(`Goal:`))
+    expect(useAgent).not.toHaveBeenCalled()
+  })
+
+  it(`intercepts composer-structured payloads (source + nodes)`, async () => {
+    // Shape produced by the native composer (#4533): raw text in `source`,
+    // parsed slash-command nodes alongside. The /goal grammar dispatches on
+    // the raw source.
+    const { useAgent, replyText } = await runWake({
+      source: `/goal show`,
+      nodes: [{ kind: `slash_command`, start: 0, end: 5, raw: `/goal` }],
+    })
+    expect(replyText).toHaveBeenCalledWith(expect.stringContaining(`Goal:`))
+    expect(useAgent).not.toHaveBeenCalled()
+  })
+})
