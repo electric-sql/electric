@@ -23,6 +23,7 @@ interface EntityDefinition {
   inboxSchemas?: Record<string, StandardJSONSchemaV1>
   stateSchemas?: Record<string, StandardJSONSchemaV1>
   permissionGrants?: EntityTypePermissionGrantDefinition[]
+  slashCommands?: SlashCommandDefinition[]
   handler(ctx: HandlerContext, wake: WakeEvent): void | Promise<void>
 }
 ```
@@ -38,6 +39,7 @@ interface EntityDefinition {
 | `inboxSchemas`   | `Record<string, StandardJSONSchemaV1>`               | No       | JSON Schemas for inbound message types, keyed by message type.                                                     |
 | `stateSchemas`   | `Record<string, StandardJSONSchemaV1>`               | No       | Additional JSON Schemas included in the registered entity type's state schema map.                                 |
 | `permissionGrants` | `EntityTypePermissionGrantDefinition[]`            | No       | Initial permission grants applied when this entity type is registered.                                             |
+| `slashCommands`  | `SlashCommandDefinition[]`                           | No       | Static slash commands exposed to structured composers and available through `ctx.slashCommands`.                   |
 | `handler`        | `(ctx, wake) => void \| Promise<void>`               | Yes      | The function invoked on each wake. Receives [`HandlerContext`](./handler-context) and [`WakeEvent`](./wake-event). |
 
 ## CollectionDefinition

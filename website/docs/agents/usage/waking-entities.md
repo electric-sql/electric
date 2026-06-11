@@ -8,9 +8,9 @@ outline: [2, 3]
 
 # Waking entities
 
-Entities in Electric Agents are driven by **wakes**. A wake is a single handler invocation triggered by something outside the handler: a new message, a child finishing, a change in an observed stream, a schedule, or an external event source. Between wakes the entity is idle — no process, no memory, no running handler.
+Entities in Electric Agents are driven by **wakes**. A wake is a single handler invocation triggered by something outside the handler: a new message, a child finishing, a change in an observed stream, a schedule, an external event source, or a Postgres sync source. Between wakes the entity is idle — no process, no memory, no running handler.
 
-Everything you do to make an entity respond to something — `ctx.spawn(..., { wake })`, `ctx.observe(..., { wake })`, `ctx.send()`, `upsertCronSchedule()`, or `subscribe_event_source` — is ultimately a way to produce a wake.
+Everything you do to make an entity respond to something — `ctx.spawn(..., { wake })`, `ctx.observe(..., { wake })`, `ctx.send()`, `upsertCronSchedule()`, `subscribe_event_source`, or `pgSync()` observation — is ultimately a way to produce a wake.
 
 ## The mental model
 
@@ -27,7 +27,7 @@ This means handlers are re-entrant: the same handler function is called fresh on
 
 ## What produces a wake
 
-There are six things that can wake an entity:
+There are seven things that can wake an entity:
 
 ### 1. An incoming message
 
@@ -90,6 +90,25 @@ Runtime hosts can expose schedule-management tools through `ctx.electricTools`. 
 Runtime hosts can expose event-source tools through `ctx.electricTools`. An entity can subscribe to external webhook-backed feeds with `subscribe_event_source`; matching future events wake the entity with hydrated event data.
 
 See [Event sources](./event-sources).
+
+### 7. A Postgres sync source
+
+`pgSync()` observes an Electric Postgres shape stream and wakes the entity when matching row changes arrive:
+
+```ts
+import { pgSync } from "@electric-ax/agents-runtime"
+
+await ctx.observe(
+  pgSync({
+    table: "todos",
+    where: "project_id = $1",
+    params: ["docs"],
+  }),
+  { wake: { on: "change", ops: ["insert", "update"] } }
+)
+```
+
+Built-in Horton also exposes this as the `observe_pg_sync` tool when the runtime host has pg-sync configured.
 
 ## Reading a WakeEvent
 

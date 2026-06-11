@@ -35,11 +35,14 @@ The context API passed into the handler:
 | Property/Method                     | Purpose                                                               |
 | ----------------------------------- | --------------------------------------------------------------------- |
 | `ctx.firstWake`                     | Boolean -- initial setup pass while no manifest entries exist         |
+| `ctx.wake`                          | Current wake, also passed as the second handler argument              |
+| `ctx.slashCommands`                 | Read/register structured composer slash commands                      |
 | `ctx.entityUrl`                     | Identity -- `/type/id`                                                |
 | `ctx.entityType`                    | Type name string                                                      |
 | `ctx.args`                          | Readonly spawn arguments                                              |
 | `ctx.tags`                          | Entity tags -- key/value metadata                                     |
 | `ctx.db`                            | Full TanStack DB: `db.actions` for writes, `db.collections` for reads |
+| `ctx.self`                          | Handle for sending messages to the current entity                     |
 | `ctx.state`                         | Proxy object keyed by collection name                                 |
 | `ctx.events`                        | Change events that triggered this wake                                |
 | `ctx.useAgent()`                    | Set up the LLM agent                                                  |
@@ -49,11 +52,13 @@ The context API passed into the handler:
 | `ctx.agent.run()`                   | Execute the agent loop                                                |
 | `ctx.electricTools`                    | Runtime-provided tools to spread into agent config                    |
 | `ctx.spawn(type, id, args, opts)`   | Create child entity                                                   |
-| `ctx.observe(source, opts)`         | Subscribe to a source via `entity()`, `cron()`, `entities()`, `db()`  |
+| `ctx.fork(url, id, opts)` / `ctx.forkSelf(id, opts)` | Branch an entity at its latest completed run                         |
+| `ctx.observe(source, opts)`         | Subscribe to a source via `entity()`, `cron()`, `entities()`, `db()`, `webhook()`, or `pgSync()` |
 | `ctx.send(url, payload, opts)`      | Send message to an entity                                             |
 | `ctx.sleep()`                       | Return to idle                                                        |
 | `ctx.mkdb(id, schema)`              | Create cross-entity shared state                                      |
 | `ctx.observe(db(id, schema), opts)` | Join existing shared state                                            |
+| `ctx.createEffect(ref, key, config)` | Register an entity effect                                             |
 | `ctx.recordRun()`                   | Record non-LLM work as a run for `runFinished` observers              |
 | `ctx.setTag(key, value)`            | Set a tag on this entity                                              |
 | `ctx.deleteTag(key)`                | Delete a tag from this entity                                         |
@@ -177,8 +182,10 @@ See [Managing state](/docs/agents/usage/managing-state).
 
 - **`spawn(type, id, args, opts)`** -> `EntityHandle` -- create child
   - `opts.initialMessage` -- first message to deliver
+  - `opts.initialMessageType` -- optional inbox message type for the initial message
   - `opts.wake` -- `'runFinished'`, `{ on: 'runFinished', includeResponse? }`, or `{ on: 'change', collections?, debounceMs?, timeoutMs? }`
-- **`observe(source, opts)`** -> `EntityHandle | ObservationHandle` -- subscribe via `entity()`, `cron()`, `entities()`, `db()`
+- **`fork(sourceEntityUrl, id, opts)` / `forkSelf(id, opts)`** -> `EntityHandle` -- branch an entity at its latest completed run
+- **`observe(source, opts)`** -> `EntityHandle | ObservationHandle` -- subscribe via `entity()`, `cron()`, `entities()`, `db()`, `webhook()`, or `pgSync()`
 - **`send(url, payload, opts)`** -- fire-and-forget message
 - **`recordRun()`** -> `RunHandle` -- publish run lifecycle for external work
 - **`sleep()`** -- go idle
