@@ -1873,7 +1873,7 @@ describe(`entity includes query`, () => {
       )
     })
 
-    it(`unions extraSources into the timeline by order`, async () => {
+    it(`unions customSources into the timeline by order`, async () => {
       const { collections, sync } = createEntityCollections()
       let extraOffset = 1000
       const annotations = createSyncCollection(`test-annotations`, () =>
@@ -1881,7 +1881,7 @@ describe(`entity includes query`, () => {
       )
       const liveQuery = createLiveQueryCollection({
         query: createEntityTimelineQuery({ collections } as any, {
-          extraSources: {
+          customSources: {
             annotation: (q) =>
               q
                 .from({ annotation: annotations.collection })

@@ -207,7 +207,7 @@ export type EntityTimelineInboxMode = `processed` | `all`
  * row key. The projection must include `order` (timeline order token) and
  * `key`; all other fields are passed through to the timeline row.
  */
-export type EntityTimelineExtraSource = (
+export type EntityTimelineCustomSource = (
   q: InitialQueryBuilder
 ) => QueryBuilder<any>
 
@@ -218,7 +218,7 @@ export interface EntityTimelineQueryOptions {
    * must not collide with the built-in sources (`inbox`, `run`, `wake`,
    * `signal`, `manifest`).
    */
-  extraSources?: Record<string, EntityTimelineExtraSource>
+  customSources?: Record<string, EntityTimelineCustomSource>
 }
 
 export interface EntityTimelineTextChunk {
@@ -1627,10 +1627,10 @@ function buildEntityTimelineQuery(
     error: errorSource,
     manifest: db.collections.manifests,
   }
-  for (const [name, buildSource] of Object.entries(opts.extraSources ?? {})) {
+  for (const [name, buildSource] of Object.entries(opts.customSources ?? {})) {
     if (name in sources) {
       throw new Error(
-        `extraSources name "${name}" collides with a built-in timeline source`
+        `customSources name "${name}" collides with a built-in timeline source`
       )
     }
     sources[name] = buildSource(q)

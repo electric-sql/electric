@@ -91,7 +91,7 @@ export type {
 export type {
   EntityTimelineContentItem,
   EntityTimelineData,
-  EntityTimelineExtraSource,
+  EntityTimelineCustomSource,
   EntityTimelineInboxMode,
   EntityTimelineQueryOptions,
   EntityTimelineQueryRow,

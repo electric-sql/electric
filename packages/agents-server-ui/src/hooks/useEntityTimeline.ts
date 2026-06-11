@@ -114,7 +114,7 @@ export function useEntityTimeline(
       if (!db) return undefined
       return createEntityTimelineQuery(db, {
         ...(includeComments && {
-          extraSources: { comment: createCommentsTimelineSource(db) },
+          customSources: { comment: createCommentsTimelineSource(db) },
         }),
       })(q)
     },

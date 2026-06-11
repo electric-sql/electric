@@ -11,14 +11,14 @@ import type {
   CommentSnapshot,
   CommentTarget,
   EntityStreamDBWithActions,
-  EntityTimelineExtraSource,
+  EntityTimelineCustomSource,
   EntityTimelineQueryRow,
 } from '@electric-ax/agents-runtime/client'
 
 /**
  * Comments are a UI-level concern: the runtime timeline query knows nothing
  * about them. `useEntityTimeline` merges them in by passing
- * `createCommentsTimelineSource` as an extra timeline source.
+ * `createCommentsTimelineSource` as a custom timeline source.
  */
 export type EntityTimelineCommentRow = {
   key: string
@@ -51,13 +51,13 @@ export type TimelineRow =
 
 /**
  * Timeline source for the `comments` collection, passed to the runtime's
- * `createEntityTimelineQuery` via `extraSources`. The author resolves from
+ * `createEntityTimelineQuery` via `customSources`. The author resolves from
  * the `_principal` virtual column (server-stamped, spoof-proof), falling back
  * to the optimistic row's `from`.
  */
 export function createCommentsTimelineSource(
   db: EntityStreamDBWithActions
-): EntityTimelineExtraSource {
+): EntityTimelineCustomSource {
   const comments = (db.collections as Record<string, any>).comments
   return (q) =>
     q.from({ comment: comments }).select(({ comment }: any) => ({
