@@ -146,32 +146,12 @@ function toError(err: unknown): Error {
   return err instanceof Error ? err : new Error(String(err))
 }
 
-function compareRunOrder(
-  left: { key: string; _timeline_order?: string; _seq?: number },
-  right: { key: string; _timeline_order?: string; _seq?: number }
-): number {
-  if (left._timeline_order && right._timeline_order) {
-    return left._timeline_order.localeCompare(right._timeline_order)
-  }
-  if (left._timeline_order) return 1
-  if (right._timeline_order) return -1
-
-  if (left._seq !== undefined && right._seq !== undefined) {
-    return left._seq - right._seq
-  }
-  if (left._seq !== undefined) return 1
-  if (right._seq !== undefined) return -1
-
-  return left.key.localeCompare(right.key)
-}
-
 function latestNewRunKey(
   db: EntityStreamDBWithActions,
   existingRunKeys: ReadonlySet<string>
 ): string | undefined {
   return db.collections.runs.toArray
     .filter((run) => !existingRunKeys.has(run.key))
-    .sort(compareRunOrder)
     .at(-1)?.key
 }
 
