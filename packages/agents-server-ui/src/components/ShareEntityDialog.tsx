@@ -23,6 +23,7 @@ import { useServerConnection } from '../hooks/useServerConnection'
 import { useCurrentPrincipal } from '../hooks/useCurrentPrincipal'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
 import { userIdFromPrincipal, userPrincipalUrl } from '../lib/principals'
+import { userDisplay } from '../lib/userDisplay'
 import { Button, Dialog, Icon, IconButton, Input, Text, Tooltip } from '../ui'
 import type {
   ElectricEntity,
@@ -737,32 +738,4 @@ function isAllUsersGrant(grant: EntityPermissionGrant): boolean {
 
 function userSearchText(user: ElectricUser): string {
   return [user.display_name, user.email, user.id].filter(Boolean).join(` `)
-}
-
-function userDisplay(
-  user: ElectricUser | undefined,
-  fallbackId: string
-): { primary: string; secondary: string; initials: string } {
-  const primary = user?.display_name || user?.email || fallbackId
-  const secondary =
-    user?.display_name && user.email
-      ? user.email
-      : user?.display_name || user?.email
-        ? fallbackId
-        : `user:${fallbackId}`
-  return {
-    primary,
-    secondary,
-    initials: initials(primary || fallbackId),
-  }
-}
-
-function initials(value: string): string {
-  const parts = value
-    .replace(/@.*/, ``)
-    .split(/[\s._-]+/)
-    .filter(Boolean)
-  const letters =
-    parts.length >= 2 ? `${parts[0]![0]}${parts[1]![0]}` : value.slice(0, 2)
-  return letters.toUpperCase()
 }
