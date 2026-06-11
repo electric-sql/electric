@@ -373,7 +373,9 @@ async function listWebhookSources(
   const webhookSources = ctx.webhookSources
     ? await ctx.webhookSources.listWebhookSources()
     : []
-  return json({ webhookSources: webhookSources.filter(isAgentVisibleWebhookSource) })
+  return json({
+    webhookSources: webhookSources.filter(isAgentVisibleWebhookSource),
+  })
 }
 
 function isAgentVisibleWebhookSource(source: WebhookSourceContract): boolean {

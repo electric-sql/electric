@@ -161,10 +161,10 @@ describe(`webhook source helpers`, () => {
         },
       },
     })
-    const hydrated = buildHydratedWebhookSourceWake(info as WebhookSourceWakeInfo, [
-      webhookEvent({ key: `event-0` }),
-      event,
-    ])
+    const hydrated = buildHydratedWebhookSourceWake(
+      info as WebhookSourceWakeInfo,
+      [webhookEvent({ key: `event-0` }), event]
+    )
 
     expect(hydrated).toMatchObject({
       type: `webhook_source_wake`,

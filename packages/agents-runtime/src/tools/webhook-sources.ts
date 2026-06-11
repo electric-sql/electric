@@ -266,7 +266,8 @@ export function createWebhookSourceTools(opts: {
         const { txid, subscription } = await subscribeToWebhookSource({
           ...parsed,
           id,
-          lifetime: parsed.lifetime ?? defaultWebhookSourceSubscriptionLifetime(),
+          lifetime:
+            parsed.lifetime ?? defaultWebhookSourceSubscriptionLifetime(),
         })
         await db.utils.awaitTxId(txid, 10_000)
         return asToolResult(

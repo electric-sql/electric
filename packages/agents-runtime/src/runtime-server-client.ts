@@ -711,7 +711,9 @@ export function createRuntimeServerClient(
     return (await response.json()) as { streamUrl: string; sourceRef: string }
   }
 
-  const listWebhookSources = async (): Promise<Array<WebhookSourceContract>> => {
+  const listWebhookSources = async (): Promise<
+    Array<WebhookSourceContract>
+  > => {
     const response = await request(`/_electric/webhook-sources`, {
       method: `GET`,
     })

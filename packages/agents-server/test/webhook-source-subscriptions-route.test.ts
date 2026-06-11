@@ -221,7 +221,10 @@ function tenantContext(
         webhookKey === githubContract.webhookKey ? githubContract : undefined,
     },
     ...(overrides.ensureWebhookSourceWakeSource
-      ? { ensureWebhookSourceWakeSource: overrides.ensureWebhookSourceWakeSource }
+      ? {
+          ensureWebhookSourceWakeSource:
+            overrides.ensureWebhookSourceWakeSource,
+        }
       : {}),
     isShuttingDown: () => false,
   }

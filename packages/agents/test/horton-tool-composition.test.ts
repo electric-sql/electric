@@ -113,7 +113,9 @@ function createElectricToolsContext() {
         createdAt: new Date(0).toISOString(),
       },
     })),
-    unsubscribeFromWebhookSource: vi.fn(async () => ({ txid: `tx-unsubscribe` })),
+    unsubscribeFromWebhookSource: vi.fn(async () => ({
+      txid: `tx-unsubscribe`,
+    })),
   } as any
 }
 
