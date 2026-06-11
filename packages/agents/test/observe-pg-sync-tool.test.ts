@@ -118,7 +118,13 @@ describe(`observe_pg_sync tool`, () => {
   it(`is included in Horton's tool list`, () => {
     const tools = createHortonTools(
       { workingDirectory: `/tmp` } as any,
-      { send: vi.fn(), observe: vi.fn() } as any,
+      // getGoal: tool composition is goal-aware (mark_goal_complete is only
+      // registered for an active goal), so the ctx stub needs it present.
+      {
+        send: vi.fn(),
+        observe: vi.fn(),
+        getGoal: vi.fn(() => undefined),
+      } as any,
       new Set()
     )
 
