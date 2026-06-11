@@ -89,9 +89,9 @@ export type {
   PgSyncRequestMetadata,
 } from './observation-sources'
 export type {
-  EntityTimelineCommentRow,
   EntityTimelineContentItem,
   EntityTimelineData,
+  EntityTimelineExtraSource,
   EntityTimelineInboxMode,
   EntityTimelineQueryOptions,
   EntityTimelineQueryRow,

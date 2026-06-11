@@ -1,8 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createCollection, localOnlyCollectionOptions } from '@tanstack/db'
 import { compareTimelineOrders } from '@electric-ax/agents-runtime/client'
+import { createLiveQueryCollection } from '@durable-streams/state/db'
 import { registerActiveServerHeaders } from './auth-fetch'
-import { createSendCommentAction } from './comments'
+import {
+  createCommentsTimelineSource,
+  createSendCommentAction,
+} from './comments'
 import type {
   CommentSnapshot,
   CommentTarget,
@@ -26,6 +30,42 @@ function createCommentsDb() {
     comments,
   }
 }
+
+describe(`createCommentsTimelineSource`, () => {
+  it(`projects author from _principal, falling back to the optimistic from`, async () => {
+    const { db, comments } = createCommentsDb()
+    const liveQuery = createLiveQueryCollection({
+      query: createCommentsTimelineSource(db),
+      startSync: true,
+    })
+    await liveQuery.preload()
+
+    comments.insert({
+      key: `c-synced`,
+      _timeline_order: `00000002`,
+      body: `hello`,
+      timestamp: `2026-04-15T18:00:00.000Z`,
+      _principal: { url: `/principal/user%3Ajane`, kind: `user`, id: `jane` },
+    } as any)
+    comments.insert({
+      key: `c-optimistic`,
+      _timeline_order: `~pending:000000000001`,
+      body: `mine`,
+      from: `/principal/user%3Ame`,
+    } as any)
+    await new Promise((r) => setTimeout(r, 50))
+
+    const rows = new Map(liveQuery.toArray.map((row: any) => [row.key, row]))
+    expect(rows.get(`c-synced`)).toMatchObject({
+      order: `00000002`,
+      body: `hello`,
+      from: `/principal/user%3Ajane`,
+    })
+    expect(rows.get(`c-optimistic`)).toMatchObject({
+      from: `/principal/user%3Ame`,
+    })
+  })
+})
 
 describe(`createSendCommentAction`, () => {
   afterEach(() => {

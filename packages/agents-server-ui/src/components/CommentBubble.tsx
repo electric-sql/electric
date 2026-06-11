@@ -3,8 +3,8 @@ import { Reply } from 'lucide-react'
 import type {
   CommentSnapshot,
   CommentTarget,
-  EntityTimelineCommentRow,
 } from '@electric-ax/agents-runtime/client'
+import type { EntityTimelineCommentRow } from '../lib/comments'
 import { Icon, IconButton, Text, Tooltip } from '../ui'
 import { principalKeyFromInput } from '../lib/principals'
 import { TimeText } from './TimeText'

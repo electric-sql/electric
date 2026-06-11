@@ -24,10 +24,6 @@ import type {
 import type { EntityStreamDB } from './entity-stream-db'
 import { formatPointerOrderToken, type EventPointer } from './event-pointer'
 import type { ChildStatusEntry, MessageReceived, Signal } from './entity-schema'
-import type {
-  CommentSnapshotValue,
-  CommentTargetValue,
-} from './comments-collection'
 import type { ManifestEntry, Wake, WakeMessage } from './types'
 
 export const TIMELINE_ORDER_FALLBACK = `~`
@@ -206,8 +202,23 @@ export interface EntityTimelineData {
 
 export type EntityTimelineInboxMode = `processed` | `all`
 
+/**
+ * A consumer-provided source unioned into the timeline query under its own
+ * row key. The projection must include `order` (timeline order token) and
+ * `key`; all other fields are passed through to the timeline row.
+ */
+export type EntityTimelineExtraSource = (
+  q: InitialQueryBuilder
+) => QueryBuilder<any>
+
 export interface EntityTimelineQueryOptions {
   inboxMode?: EntityTimelineInboxMode
+  /**
+   * Additional sources merged into the timeline, keyed by row name. Names
+   * must not collide with the built-in sources (`inbox`, `run`, `wake`,
+   * `signal`, `manifest`).
+   */
+  extraSources?: Record<string, EntityTimelineExtraSource>
 }
 
 export interface EntityTimelineTextChunk {
@@ -307,18 +318,6 @@ export interface EntityTimelineRunRow {
 }
 
 export type EntityTimelineInboxRow = IncludesInboxMessage
-export type EntityTimelineCommentRow = {
-  key: string
-  order: TimelineOrder
-  body: string
-  from: string
-  timestamp: string
-  reply_to?: CommentTargetValue
-  target_snapshot?: CommentSnapshotValue
-  edited_at?: string
-  deleted_at?: string
-  deleted_by?: string
-}
 export type EntityTimelineWakeRow = IncludesWakeMessage
 export type EntityTimelineSignalRow = IncludesSignal
 export type EntityTimelineErrorRow = EntityTimelineErrorItem & {
@@ -330,7 +329,6 @@ export type EntityTimelineQueryRow =
       $key: string
       inbox: EntityTimelineInboxRow
       run?: undefined
-      comment?: undefined
       wake?: undefined
       signal?: undefined
       error?: undefined
@@ -340,7 +338,6 @@ export type EntityTimelineQueryRow =
       $key: string
       inbox?: undefined
       run: EntityTimelineRunRow
-      comment?: undefined
       wake?: undefined
       signal?: undefined
       error?: undefined
@@ -350,16 +347,6 @@ export type EntityTimelineQueryRow =
       $key: string
       inbox?: undefined
       run?: undefined
-      comment: EntityTimelineCommentRow
-      wake?: undefined
-      signal?: undefined
-      manifest?: undefined
-    }
-  | {
-      $key: string
-      inbox?: undefined
-      run?: undefined
-      comment?: undefined
       wake: EntityTimelineWakeRow
       signal?: undefined
       error?: undefined
@@ -369,7 +356,6 @@ export type EntityTimelineQueryRow =
       $key: string
       inbox?: undefined
       run?: undefined
-      comment?: undefined
       wake?: undefined
       signal: EntityTimelineSignalRow
       error?: undefined
@@ -379,7 +365,6 @@ export type EntityTimelineQueryRow =
       $key: string
       inbox?: undefined
       run?: undefined
-      comment?: undefined
       wake?: undefined
       signal?: undefined
       error: EntityTimelineErrorRow
@@ -1393,26 +1378,6 @@ function buildEntityTimelineQuery(
     cancelled_at: inbox.cancelled_at,
   }))
 
-  // This projection is specific to the `comments` collection and hardcodes the
-  // `_principal` column — it is not generic over arbitrary externallyWritable collections.
-  const commentsCollection = (db.collections as Record<string, unknown>)
-    .comments as typeof db.collections.wakes | undefined
-
-  const commentSource = commentsCollection
-    ? q.from({ comment: commentsCollection }).select(({ comment }) => ({
-        order: coalesce(comment._timeline_order, `~`),
-        key: comment.key,
-        body: (comment as any).body,
-        from: coalesce((comment as any)._principal?.url, ``),
-        timestamp: coalesce((comment as any).timestamp, ``),
-        reply_to: (comment as any).reply_to,
-        target_snapshot: (comment as any).target_snapshot,
-        edited_at: (comment as any).edited_at,
-        deleted_at: (comment as any).deleted_at,
-        deleted_by: (comment as any).deleted_by,
-      }))
-    : null
-
   const wakeSource = q
     .from({ wake: db.collections.wakes })
     .select(({ wake }) => ({
@@ -1654,92 +1619,46 @@ function buildEntityTimelineQuery(
         })),
     }))
 
-  if (commentSource) {
-    return q
-      .unionAll({
-        inbox: inboxSource,
-        run: runSource,
-        comment: commentSource,
-        wake: wakeSource,
-        signal: signalSource,
-        manifest: db.collections.manifests,
-      })
-      .orderBy(({ inbox, run, comment, wake, signal, manifest }) =>
-        coalesce(
-          inbox.order,
-          run.order,
-          comment.order,
-          wake.order,
-          signal.order,
-          manifest._timeline_order,
-          `~`
-        )
-      )
-      .orderBy(({ inbox, run, comment, wake, signal, manifest }) =>
-        coalesce(
-          caseWhen(inbox.key, `inbox`),
-          caseWhen(run.key, `run`),
-          caseWhen(comment.key, `comment`),
-          caseWhen(wake.key, `wake`),
-          caseWhen(signal.key, `signal`),
-          caseWhen(manifest.key, `manifest`),
-          ``
-        )
-      )
-      .orderBy(({ inbox, run, comment, wake, signal, manifest }) =>
-        coalesce(
-          inbox.key,
-          run.key,
-          comment.key,
-          wake.key,
-          signal.key,
-          manifest.key,
-          ``
-        )
-      )
+  const sources: Record<string, any> = {
+    inbox: inboxSource,
+    run: runSource,
+    wake: wakeSource,
+    signal: signalSource,
+    error: errorSource,
+    manifest: db.collections.manifests,
   }
+  for (const [name, buildSource] of Object.entries(opts.extraSources ?? {})) {
+    if (name in sources) {
+      throw new Error(
+        `extraSources name "${name}" collides with a built-in timeline source`
+      )
+    }
+    sources[name] = buildSource(q)
+  }
+  const sourceNames = Object.keys(sources)
+  // The manifests collection joins the union raw, so its order lives on
+  // `_timeline_order` rather than a projected `order` field.
+  const orderRef = (refs: any, name: string) =>
+    name === `manifest` ? refs.manifest._timeline_order : refs[name].order
+  const coalesceAll = (exprs: Array<any>) =>
+    coalesce(...(exprs as [any, ...Array<any>]))
 
   return q
-    .unionAll({
-      inbox: inboxSource,
-      run: runSource,
-      wake: wakeSource,
-      signal: signalSource,
-      error: errorSource,
-      manifest: db.collections.manifests,
-    })
-    .orderBy(({ inbox, run, wake, signal, error, manifest }) =>
-      coalesce(
-        inbox.order,
-        run.order,
-        wake.order,
-        signal.order,
-        error.order,
-        manifest._timeline_order,
-        `~`
-      )
+    .unionAll(sources)
+    .orderBy((refs: any) =>
+      coalesceAll([
+        ...sourceNames.map((name) => orderRef(refs, name)),
+        TIMELINE_ORDER_FALLBACK,
+      ])
     )
-    .orderBy(({ inbox, run, wake, signal, error, manifest }) =>
-      coalesce(
-        caseWhen(inbox.key, `inbox`),
-        caseWhen(run.key, `run`),
-        caseWhen(wake.key, `wake`),
-        caseWhen(signal.key, `signal`),
-        caseWhen(error.key, `error`),
-        caseWhen(manifest.key, `manifest`),
-        ``
-      )
+    .orderBy((refs: any) =>
+      coalesceAll([
+        ...sourceNames.map((name) => caseWhen(refs[name].key, name)),
+        ``,
+      ])
     )
-    .orderBy(({ inbox, run, wake, signal, error, manifest }) =>
-      coalesce(
-        inbox.key,
-        run.key,
-        wake.key,
-        signal.key,
-        error.key,
-        manifest.key,
-        ``
-      )
+    .orderBy((refs: any) =>
+      coalesceAll([...sourceNames.map((name) => refs[name].key), ``])
     )
 }
 

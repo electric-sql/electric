@@ -1,13 +1,76 @@
 import { createOptimisticAction } from '@tanstack/db'
-import { createPendingTimelineOrder } from '@electric-ax/agents-runtime/client'
+import { coalesce } from '@durable-streams/state/db'
+import {
+  createPendingTimelineOrder,
+  TIMELINE_ORDER_FALLBACK,
+} from '@electric-ax/agents-runtime/client'
 import { getActivePrincipal, serverFetch } from './auth-fetch'
 import { entityApiUrl } from './entity-api'
 import type {
   CommentSnapshot,
   CommentTarget,
   EntityStreamDBWithActions,
-  EntityTimelineCommentRow,
+  EntityTimelineExtraSource,
+  EntityTimelineQueryRow,
 } from '@electric-ax/agents-runtime/client'
+
+/**
+ * Comments are a UI-level concern: the runtime timeline query knows nothing
+ * about them. `useEntityTimeline` reads the `comments` collection directly
+ * and merges these rows into the timeline with `mergeCommentRows`.
+ */
+export type EntityTimelineCommentRow = {
+  key: string
+  order: string
+  body: string
+  from: string
+  timestamp: string
+  reply_to?: CommentTarget
+  target_snapshot?: CommentSnapshot
+  edited_at?: string
+  deleted_at?: string
+  deleted_by?: string
+}
+
+export type CommentTimelineRow = {
+  $key: string
+  comment: EntityTimelineCommentRow
+  inbox?: undefined
+  run?: undefined
+  wake?: undefined
+  signal?: undefined
+  manifest?: undefined
+}
+
+/** Timeline row as consumed by UI views: runtime rows plus merged comment rows. */
+export type TimelineRow =
+  | (EntityTimelineQueryRow & { comment?: undefined })
+  | CommentTimelineRow
+
+/**
+ * Timeline source for the `comments` collection, passed to the runtime's
+ * `createEntityTimelineQuery` via `extraSources`. The author resolves from
+ * the `_principal` virtual column (server-stamped, spoof-proof), falling back
+ * to the optimistic row's `from`.
+ */
+export function createCommentsTimelineSource(
+  db: EntityStreamDBWithActions
+): EntityTimelineExtraSource {
+  const comments = (db.collections as Record<string, any>).comments
+  return (q) =>
+    q.from({ comment: comments }).select(({ comment }: any) => ({
+      order: coalesce(comment._timeline_order, TIMELINE_ORDER_FALLBACK),
+      key: comment.key,
+      body: comment.body,
+      from: coalesce(comment._principal?.url, comment.from, ``),
+      timestamp: coalesce(comment.timestamp, ``),
+      reply_to: comment.reply_to,
+      target_snapshot: comment.target_snapshot,
+      edited_at: comment.edited_at,
+      deleted_at: comment.deleted_at,
+      deleted_by: comment.deleted_by,
+    }))
+}
 
 const OPTIMISTIC_COMMENT_ORDER_START = Number.MAX_SAFE_INTEGER - 2_000_000
 

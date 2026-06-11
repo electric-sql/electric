@@ -62,11 +62,10 @@ import { readTextPayload } from '../lib/sendMessage'
 import { principalKeyFromInput } from '../lib/principals'
 import styles from './EntityTimeline.module.css'
 import type { ElectricUser } from '../lib/ElectricAgentsProvider'
-import type { SelectedCommentTarget } from '../lib/comments'
+import type { SelectedCommentTarget, TimelineRow } from '../lib/comments'
 import type {
   CommentTarget,
   EntityTimelineSection,
-  EntityTimelineQueryRow,
   EntityTimelineRunItem,
   EntityTimelineRunRow,
   EntityTimelineToolCallItem,
@@ -76,11 +75,11 @@ import type {
 import type { ErrorInfo, ReactNode } from 'react'
 import type { PaneFindAdapter, PaneFindMatch } from '../hooks/usePaneFind'
 
-type RenderTimelineRow = EntityTimelineQueryRow
+type RenderTimelineRow = TimelineRow
 type WakeSection = Extract<EntityTimelineSection, { kind: `wake` }>
 export type TimelineRowAdjacency = {
-  previousRow?: EntityTimelineQueryRow
-  nextRow?: EntityTimelineQueryRow
+  previousRow?: TimelineRow
+  nextRow?: TimelineRow
 }
 
 function renderRowKey(row: RenderTimelineRow): string {
@@ -1365,7 +1364,7 @@ export function EntityTimeline({
   onFocusTargetHandled,
   onCommentTargetClick,
 }: {
-  rows: Array<EntityTimelineQueryRow>
+  rows: Array<TimelineRow>
   rowAdjacency?: Array<TimelineRowAdjacency>
   loading: boolean
   error: string | null

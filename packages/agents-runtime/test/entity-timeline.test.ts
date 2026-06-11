@@ -22,7 +22,6 @@ import type { EventPointer } from '../src/event-pointer'
 import type {
   EntityTimelineContentItem,
   EntityTimelineData,
-  EntityTimelineQueryRow,
   IncludesInboxMessage,
   IncludesRun,
   IncludesWakeMessage,
@@ -1874,209 +1873,65 @@ describe(`entity includes query`, () => {
       )
     })
 
-    describe(`comments collection projection`, () => {
-      function createEntityCollectionsWithComments() {
-        let nextOffset = 1
-        let nextSeq = 1
-        const takeOffset = () => offset(nextOffset++)
-        const takeSeq = () => nextSeq++
-        const runs = createSyncCollection(`test-runs-c`, takeOffset)
-        const texts = createSyncCollection(`test-texts-c`, takeOffset)
-        const textDeltas = createSyncCollection(`test-textDeltas-c`, takeOffset)
-        const toolCalls = createSyncCollection(`test-toolCalls-c`, takeOffset)
-        const steps = createSyncCollection(`test-steps-c`, takeOffset)
-        const errors = createSyncCollection(`test-errors-c`, takeOffset)
-        const inbox = createSyncCollection(`test-inbox-c`, takeOffset)
-        const comments = createSyncCollection(`test-comments-c`, takeOffset)
-        const wakes = createSyncCollection(`test-wakes-c`, takeOffset)
-        const signals = createSyncCollection(`test-signals-c`, takeOffset)
-        const contextInserted = createSyncCollection(
-          `test-context-inserted-c`,
-          takeOffset
-        )
-        const contextRemoved = createSyncCollection(
-          `test-context-removed-c`,
-          takeOffset
-        )
-        const manifests = createSyncCollection(`test-manifests-c`, takeOffset)
-        const childStatus = createSyncCollection(
-          `test-child-status-c`,
-          takeOffset
-        )
-        return {
-          collections: {
-            runs: runs.collection,
-            texts: texts.collection,
-            textDeltas: textDeltas.collection,
-            toolCalls: toolCalls.collection,
-            steps: steps.collection,
-            errors: errors.collection,
-            inbox: inbox.collection,
-            comments: comments.collection,
-            wakes: wakes.collection,
-            signals: signals.collection,
-            contextInserted: contextInserted.collection,
-            contextRemoved: contextRemoved.collection,
-            manifests: manifests.collection,
-            childStatus: childStatus.collection,
+    it(`unions extraSources into the timeline by order`, async () => {
+      const { collections, sync } = createEntityCollections()
+      let extraOffset = 1000
+      const annotations = createSyncCollection(`test-annotations`, () =>
+        offset(extraOffset++)
+      )
+      const liveQuery = createLiveQueryCollection({
+        query: createEntityTimelineQuery({ collections } as any, {
+          extraSources: {
+            annotation: (q) =>
+              q
+                .from({ annotation: annotations.collection })
+                .select(({ annotation }: any) => ({
+                  order: annotation._timeline_order,
+                  key: annotation.key,
+                  note: annotation.note,
+                })),
           },
-          sync: {
-            runs: withSeqInjection(runs, takeSeq),
-            texts: withSeqInjection(texts, takeSeq),
-            textDeltas: withSeqInjection(textDeltas, takeSeq),
-            toolCalls: withSeqInjection(toolCalls, takeSeq),
-            steps: withSeqInjection(steps, takeSeq),
-            errors: withSeqInjection(errors, takeSeq),
-            inbox: withSeqInjection(inbox, takeSeq),
-            comments: withSeqInjection(comments, takeSeq),
-            wakes: withSeqInjection(wakes, takeSeq),
-            signals: withSeqInjection(signals, takeSeq),
-            contextInserted: withSeqInjection(contextInserted, takeSeq),
-            contextRemoved: withSeqInjection(contextRemoved, takeSeq),
-            manifests: withSeqInjection(manifests, takeSeq),
-            childStatus: withSeqInjection(childStatus, takeSeq),
-          },
-        }
-      }
-
-      function timelineRowLabel(row: EntityTimelineQueryRow): string {
-        if (row.inbox) return `inbox:${row.inbox.key}`
-        if (row.run) return `run:${row.run.key}`
-        if (row.comment) return `comment:${row.comment.key}`
-        if (row.wake) return `wake:${row.wake.key}`
-        if (row.signal) return `signal:${row.signal.key}`
-        return `manifest:${row.manifest?.key}`
-      }
-
-      it(`interleaves comments by _timeline_order`, async () => {
-        const { collections, sync } = createEntityCollectionsWithComments()
-        const liveQuery = createLiveQueryCollection({
-          query: createEntityTimelineQuery({ collections } as any),
-          startSync: true,
-        })
-        await liveQuery.preload()
-
-        sync.inbox.insert({
-          key: `msg-1`,
-          _timeline_order: order(1),
-          from: `user`,
-          payload: `start`,
-          timestamp: `2026-04-15T18:00:00.000Z`,
-          status: `processed`,
-        })
-        sync.comments.insert({
-          key: `comment-1`,
-          _timeline_order: order(2),
-          body: `between prompt and wake`,
-          timestamp: `2026-04-15T18:00:05.000Z`,
-          _principal: { url: `/principal/user%3Ame`, kind: `user`, id: `me` },
-        })
-        sync.wakes.insert({
-          key: `wake-1`,
-          _timeline_order: order(3),
-          timestamp: `2026-04-15T18:00:10.000Z`,
-          source: `/chat/test`,
-          timeout: false,
-          changes: [],
-        })
-        await new Promise((r) => setTimeout(r, 50))
-
-        const rows = Array.from((liveQuery as any).entries()).map(
-          ([, v]: any) => v
-        ) as Array<EntityTimelineQueryRow>
-        expect(rows.map(timelineRowLabel)).toEqual([
-          `inbox:msg-1`,
-          `comment:comment-1`,
-          `wake:wake-1`,
-        ])
+        }),
+        startSync: true,
       })
+      await liveQuery.preload()
 
-      it(`author resolves from _principal virtual column`, async () => {
-        const { collections, sync } = createEntityCollectionsWithComments()
-        const liveQuery = createLiveQueryCollection({
-          query: createEntityTimelineQuery({ collections } as any),
-          startSync: true,
-        })
-        await liveQuery.preload()
-
-        sync.comments.insert({
-          key: `comment-1`,
-          _timeline_order: order(1),
-          body: `hello`,
-          timestamp: `2026-04-15T18:00:00.000Z`,
-          _principal: {
-            url: `/principal/user%3Ajane`,
-            kind: `user`,
-            id: `jane`,
-          },
-        })
-        await new Promise((r) => setTimeout(r, 50))
-
-        const rows = Array.from((liveQuery as any).entries()).map(
-          ([, v]: any) => v
-        ) as Array<EntityTimelineQueryRow>
-        expect(rows).toHaveLength(1)
-        expect(rows[0]?.comment?.from).toBe(`/principal/user%3Ajane`)
+      sync.inbox.insert({
+        key: `msg-1`,
+        _timeline_order: order(1),
+        from: `user`,
+        payload: `start`,
+        timestamp: `2026-04-15T18:00:00.000Z`,
+        status: `processed`,
       })
-
-      it(`preserves reply_to and target_snapshot on comment rows`, async () => {
-        const { collections, sync } = createEntityCollectionsWithComments()
-        const liveQuery = createLiveQueryCollection({
-          query: createEntityTimelineQuery({ collections } as any),
-          startSync: true,
-        })
-        await liveQuery.preload()
-
-        sync.comments.insert({
-          key: `comment-reply`,
-          _timeline_order: order(1),
-          body: `reply body`,
-          timestamp: `2026-04-15T18:00:00.000Z`,
-          reply_to: { kind: `timeline`, collection: `inbox`, key: `msg-1` },
-          target_snapshot: { label: `User message`, text: `start` },
-          _principal: { url: `/principal/user%3Ame`, kind: `user`, id: `me` },
-        })
-        await new Promise((r) => setTimeout(r, 50))
-
-        const rows = Array.from((liveQuery as any).entries()).map(
-          ([, v]: any) => v
-        ) as Array<EntityTimelineQueryRow>
-        expect(rows).toHaveLength(1)
-        expect(rows[0]?.comment?.reply_to).toMatchObject({
-          kind: `timeline`,
-          collection: `inbox`,
-          key: `msg-1`,
-        })
-        expect(rows[0]?.comment?.target_snapshot).toMatchObject({
-          label: `User message`,
-          text: `start`,
-        })
+      annotations.insert({
+        key: `note-1`,
+        _timeline_order: order(2),
+        note: `between`,
       })
-
-      it(`entities without a comments collection are unaffected`, async () => {
-        const { collections, sync } = createEntityCollections()
-        const liveQuery = createLiveQueryCollection({
-          query: createEntityTimelineQuery({ collections } as any),
-          startSync: true,
-        })
-        await liveQuery.preload()
-
-        sync.inbox.insert({
-          key: `msg-1`,
-          _timeline_order: order(1),
-          from: `user`,
-          payload: `start`,
-          timestamp: `2026-04-15T18:00:00.000Z`,
-          status: `processed`,
-        })
-        await new Promise((r) => setTimeout(r, 50))
-
-        const rows = Array.from((liveQuery as any).entries()).map(
-          ([, v]: any) => v
-        ) as Array<EntityTimelineQueryRow>
-        expect(rows).toHaveLength(1)
-        expect(rows[0]?.inbox?.key).toBe(`msg-1`)
+      sync.wakes.insert({
+        key: `wake-1`,
+        _timeline_order: order(3),
+        timestamp: `2026-04-15T18:00:10.000Z`,
+        source: `/chat/test`,
+        timeout: false,
+        changes: [],
       })
+      await new Promise((r) => setTimeout(r, 50))
+
+      const rows = Array.from((liveQuery as any).entries()).map(
+        ([, v]: any) => v
+      )
+      expect(
+        rows.map((row: any) =>
+          row.inbox
+            ? `inbox:${row.inbox.key}`
+            : row.annotation
+              ? `annotation:${row.annotation.key}`
+              : `wake:${row.wake?.key}`
+        )
+      ).toEqual([`inbox:msg-1`, `annotation:note-1`, `wake:wake-1`])
+      expect(rows[1]?.annotation?.note).toBe(`between`)
     })
 
     it(`projects related entities from one manifest row per related entity`, () => {

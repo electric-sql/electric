@@ -10,17 +10,14 @@ import { useElectricAgents } from '../../lib/ElectricAgentsProvider'
 import { useWorkspace } from '../../hooks/useWorkspace'
 import { isAttachmentManifest } from '../../lib/attachments'
 import { schemaModelSupportsImageInput } from '../../lib/modelCapabilities'
-import type { SelectedCommentTarget } from '../../lib/comments'
+import type { SelectedCommentTarget, TimelineRow } from '../../lib/comments'
 import {
   useEntityPermission,
   useEntityPermissions,
   type EntityPermission,
 } from '../../hooks/useEntityPermission'
 import type { ViewProps } from '../../lib/workspace/viewRegistry'
-import type {
-  CommentTarget,
-  EntityTimelineQueryRow,
-} from '@electric-ax/agents-runtime/client'
+import type { CommentTarget } from '@electric-ax/agents-runtime/client'
 import type { EventPointer } from '@electric-ax/agents-runtime'
 import type { OptimisticInboxMessage } from '../../lib/sendMessage'
 import type { SlashCommandRow } from '@electric-ax/agents-runtime/client'
@@ -84,15 +81,13 @@ function isCommentTarget(value: unknown): value is CommentTarget {
   )
 }
 
-export function buildCommentsTimeline(
-  timelineRows: Array<EntityTimelineQueryRow>
-): {
-  rows: Array<EntityTimelineQueryRow>
+export function buildCommentsTimeline(timelineRows: Array<TimelineRow>): {
+  rows: Array<TimelineRow>
   adjacency: Array<TimelineRowAdjacency>
 } {
-  const rows: Array<EntityTimelineQueryRow> = []
+  const rows: Array<TimelineRow> = []
   const adjacency: Array<TimelineRowAdjacency> = []
-  let previousRenderableRow: EntityTimelineQueryRow | undefined
+  let previousRenderableRow: TimelineRow | undefined
   let pendingCommentAdjacencyIndex: number | null = null
 
   for (const row of timelineRows) {
@@ -199,14 +194,14 @@ export function ChatLogView({
     pendingInboxByKey,
     processedInboxKeys,
   ])
-  const visibleRows = useMemo<Array<EntityTimelineQueryRow>>(() => {
+  const visibleRows = useMemo<Array<TimelineRow>>(() => {
     if (!projectedPendingMessage) return timelineRows
     return [
       ...timelineRows,
       {
         $key: `pending-inbox:${projectedPendingMessage.key}`,
         inbox: projectedPendingMessage,
-      } as EntityTimelineQueryRow,
+      } as TimelineRow,
     ]
   }, [projectedPendingMessage, timelineRows])
 
@@ -416,7 +411,7 @@ function GenericChatBody({
   )
   const inlinePendingInbox =
     !entityStopped && !generationActive ? visiblePendingInbox[0] : undefined
-  const timelineRowsWithInlinePending = useMemo<Array<EntityTimelineQueryRow>>(
+  const timelineRowsWithInlinePending = useMemo<Array<TimelineRow>>(
     () =>
       inlinePendingInbox
         ? [
@@ -424,13 +419,13 @@ function GenericChatBody({
             {
               $key: `pending-inbox:${inlinePendingInbox.key}`,
               inbox: inlinePendingInbox,
-            } as EntityTimelineQueryRow,
+            } as TimelineRow,
           ]
         : timelineRows,
     [inlinePendingInbox, timelineRows]
   )
   const showComments = viewParams?.comments !== `hidden`
-  const displayTimelineRows = useMemo<Array<EntityTimelineQueryRow>>(
+  const displayTimelineRows = useMemo<Array<TimelineRow>>(
     () =>
       showComments
         ? timelineRowsWithInlinePending

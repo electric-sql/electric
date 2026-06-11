@@ -8,9 +8,10 @@ import {
 } from '@electric-ax/agents-runtime/client'
 import { coalesce, eq } from '@durable-streams/state/db'
 import { connectEntityStream } from '../lib/entity-connection'
+import { createCommentsTimelineSource } from '../lib/comments'
+import type { TimelineRow } from '../lib/comments'
 import type {
   EntityStreamDBWithActions,
-  EntityTimelineQueryRow,
   IncludesInboxMessage,
   IncludesEntity,
   Manifest,
@@ -49,7 +50,7 @@ export function useEntityTimeline(
   baseUrl: string | null,
   entityUrl: string | null
 ): {
-  timelineRows: Array<EntityTimelineQueryRow>
+  timelineRows: Array<TimelineRow>
   pendingInbox: Array<IncludesInboxMessage>
   entities: Array<IncludesEntity>
   generationActive: boolean
@@ -106,7 +107,9 @@ export function useEntityTimeline(
   const { data: timelineRows = [] } = useLiveQuery(
     (q) => {
       if (!db) return undefined
-      return createEntityTimelineQuery(db)(q)
+      return createEntityTimelineQuery(db, {
+        extraSources: { comment: createCommentsTimelineSource(db) },
+      })(q)
     },
     [db]
   )
@@ -136,7 +139,7 @@ export function useEntityTimeline(
         : undefined,
     [db]
   )
-  const typedTimelineRows = timelineRows as Array<EntityTimelineQueryRow>
+  const typedTimelineRows = timelineRows as Array<TimelineRow>
 
   const pendingInbox = useMemo(
     () =>

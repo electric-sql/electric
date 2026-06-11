@@ -4,15 +4,13 @@ import {
   commentFocusViewParams,
   decodeCommentTargetParam,
 } from './ChatView'
-import type {
-  CommentTarget,
-  EntityTimelineQueryRow,
-} from '@electric-ax/agents-runtime/client'
+import type { CommentTarget } from '@electric-ax/agents-runtime/client'
+import type { TimelineRow } from '../../lib/comments'
 
 function commentRow(
   key: string,
   fromPrincipal = `/principal/user%3Ame`
-): EntityTimelineQueryRow {
+): TimelineRow {
   return {
     $key: `comment:${key}`,
     comment: {
@@ -22,10 +20,10 @@ function commentRow(
       from: fromPrincipal,
       timestamp: `2026-04-15T18:00:00.000Z`,
     },
-  } as EntityTimelineQueryRow
+  } as TimelineRow
 }
 
-function wakeRow(key: string): EntityTimelineQueryRow {
+function wakeRow(key: string): TimelineRow {
   return {
     $key: `wake:${key}`,
     wake: {
@@ -39,10 +37,10 @@ function wakeRow(key: string): EntityTimelineQueryRow {
         changes: [],
       },
     },
-  } as EntityTimelineQueryRow
+  } as TimelineRow
 }
 
-function attachmentRow(key: string): EntityTimelineQueryRow {
+function attachmentRow(key: string): TimelineRow {
   return {
     $key: `manifest:${key}`,
     manifest: {
@@ -56,7 +54,7 @@ function attachmentRow(key: string): EntityTimelineQueryRow {
       byteLength: 12,
       createdAt: `2026-04-15T18:00:00.000Z`,
     },
-  } as EntityTimelineQueryRow
+  } as TimelineRow
 }
 
 describe(`buildCommentsTimeline`, () => {
