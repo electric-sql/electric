@@ -373,8 +373,6 @@ cmd_isolated() {
   done
 
   cd "$REPO_ROOT"
-  [[ -f .env ]] || die ".env not found at repo root. Create one with ANTHROPIC_API_KEY or OPENAI_API_KEY."
-  grep -qE '^(ANTHROPIC_API_KEY|OPENAI_API_KEY)=' .env     || die ".env is missing ANTHROPIC_API_KEY or OPENAI_API_KEY."
   docker info >/dev/null 2>&1 || die "Docker daemon not reachable. Start Docker Desktop and retry."
 
   if $do_build; then
