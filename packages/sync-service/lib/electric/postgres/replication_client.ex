@@ -394,7 +394,8 @@ defmodule Electric.Postgres.ReplicationClient do
     state = %{state | pending_event: nil}
 
     if remaining > 0 do
-      state = log_event_retry(state, :processing, event, remaining, reason, fn -> inspect(reason) end)
+      state =
+        log_event_retry(state, :processing, event, remaining, reason, fn -> inspect(reason) end)
 
       Process.send_after(self(), {:process_event, event, remaining}, @event_retry_delay)
       {:noreply, state}
@@ -617,11 +618,14 @@ defmodule Electric.Postgres.ReplicationClient do
 
   defp scrub_events(%TransactionFragment{} = event), do: "#<#{describe_event(event)}>"
   defp scrub_events(%Relation{} = event), do: "#<#{describe_event(event)}>"
+  defp scrub_events(%_{} = other_struct), do: other_struct
 
   defp scrub_events(tuple) when is_tuple(tuple),
     do: tuple |> Tuple.to_list() |> Enum.map(&scrub_events/1) |> List.to_tuple()
 
-  defp scrub_events(list) when is_list(list), do: Enum.map(list, &scrub_events/1)
+  # head/tail recursion keeps this safe for improper lists, which can show up
+  # in arbitrary exit reasons
+  defp scrub_events([head | tail]), do: [scrub_events(head) | scrub_events(tail)]
   defp scrub_events(other), do: other
 
   # Downstream returned :not_ready — subscribe to StatusMonitor for notification
