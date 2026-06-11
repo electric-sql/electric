@@ -379,19 +379,24 @@ export function createPiAgentAdapter(
                 // `cacheRead` (prompt-cache hits — typically the
                 // system prompt + prior history once the cache is
                 // warm) and `cacheWrite` (tokens added to the cache
-                // this turn). What the user wants in the meta row is
-                // the total prompt volume the model actually saw, so
-                // we sum every side that arrived as a number. Reading
-                // only `usage.input` undercounts massively on second+
-                // turns where most of the prompt hits the cache and
-                // `usage.input` collapses to a handful of tokens.
+                // this turn). The meta row shows the *uncached* input
+                // — `input + cacheWrite` — i.e. the new prompt work
+                // this step did. `cacheRead` is deliberately excluded:
+                // it re-counts the entire conversation on every warm
+                // turn, so including it balloons the label into a
+                // cumulative number that says nothing about this
+                // response. `cacheWrite` IS counted: cache-enabled
+                // providers report newly appended prompt tokens there
+                // (with `input` collapsing to ~0), so excluding it
+                // would surface tiny "3 input" labels instead.
                 //
                 // `inputTokens` / `outputTokens` are legacy flat
                 // aliases (kept as a fallback for non-pi-ai providers
-                // that don't split the cache columns). We deliberately
-                // do NOT coerce a missing side to `0` — doing so
-                // would be indistinguishable from a real zero-token
-                // step in the meta row, and the query-layer
+                // that don't split the cache columns); with no cache
+                // split, the whole side counts as uncached. We
+                // deliberately do NOT coerce a missing side to `0` —
+                // doing so would be indistinguishable from a real
+                // zero-token step in the meta row, and the query-layer
                 // `count(...)` aggregate would mark the side as
                 // present when it really isn't.
                 const sumPresentNumbers = (
@@ -408,11 +413,7 @@ export function createPiAgentAdapter(
                   return saw ? total : undefined
                 }
                 const usageInput =
-                  sumPresentNumbers([
-                    usage?.input,
-                    usage?.cacheRead,
-                    usage?.cacheWrite,
-                  ]) ??
+                  sumPresentNumbers([usage?.input, usage?.cacheWrite]) ??
                   (typeof usage?.inputTokens === `number`
                     ? usage.inputTokens
                     : undefined)

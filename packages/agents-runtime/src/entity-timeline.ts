@@ -62,8 +62,10 @@ export type EntityTimelineSection =
       done?: true
       error?: string
       // Summed across all steps of the run that produced this section.
-      // Either side may be missing if the provider didn't report it
-      // (e.g. older events recorded before tokens were persisted).
+      // `input` is the uncached side only (fresh tokens + cache writes)
+      // — see `StepValue.input_tokens`. Either side may be missing if
+      // the provider didn't report it (e.g. older events recorded
+      // before tokens were persisted).
       tokens?: {
         input?: number
         output?: number
