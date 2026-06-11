@@ -1,5 +1,22 @@
 # @electric-ax/agents-runtime
 
+## 0.3.13
+
+### Patch Changes
+
+- baee54e: Increase agent tool call timeouts to a 2-minute default with a 10-minute maximum, and allow bash calls to request longer timeouts per command.
+- 50e93c2: Add editable session titles: a `set_title` tool for Horton, click-to-edit UI in EntityHeader, and txid propagation for tag/send/inbox mutations so clients can await sync consistency.
+- 73c6f89: Add default model-provider timeout/error handling for agent runs and render durable run errors in the UI.
+- 4640704: Add pg-sync observation source enabling agents to observe Electric Postgres shape streams and wake on matching row changes (insert/update/delete). Includes server-side bridge management with cursor persistence, durable stream forwarding, and an `observe_pg_sync` tool for Horton agents.
+- 87be539: Fix two resilience bugs that could leave the desktop agents runtime unable to pick up sessions until a full app restart, and port the pull-wake runner lifecycle to an xstate state machine.
+  - `installDurableStreamsFetchCache` is now idempotent (with a warning on repeat calls), so restarting the built-in agents runtime no longer stacks duplicate HTTP cache interceptors on the global undici dispatcher.
+  - The pull-wake runner now recovers when the wake stream connection hangs during the connecting phase: repeated heartbeat failures abort the in-flight connection attempt instead of only resetting an already-established stream.
+  - The runner lifecycle (stopped → connecting → streaming → reconnecting → stopping) is now an xstate machine, so in-flight connections, stream sessions, and backoff timers are cancelled automatically on state transitions, and every state × event pair is pinned by an exhaustive transition test matrix.
+
+- 004bea1: Render standalone entity stream errors in the timeline with their error code and message.
+- Updated dependencies [baee54e]
+  - @electric-ax/agents-mcp@0.2.3
+
 ## 0.3.12
 
 ### Patch Changes

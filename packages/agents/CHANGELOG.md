@@ -1,5 +1,33 @@
 # @electric-ax/agents
 
+## 0.4.17
+
+### Patch Changes
+
+- 683cfae: Bring the mobile new-session and chat composers to parity with desktop:
+  - **Schema-driven spawn args + model/reasoning/speed controls.** The new-session screen now renders an agent type's `creation_schema` as native controls — enum properties become picker sheets (the model enum groups options by provider and remembers the last pick), booleans become switches, string/number become text fields, string-arrays a comma-separated field, and other objects a JSON field — so agents that need structured creation args can be configured and started from mobile (full parity with the desktop `SchemaForm`). Required fields gate the **Start session** button, which is now pinned to the bottom of the screen so it stays reachable as these extra sections grow (the scroll content is padded to clear it).
+  - **Image attachments.** Both the in-session and new-session composers can attach images (photo library or camera) via `expo-image-picker`, gated on whether the session's model accepts image input. At spawn the first message is sent immediately after the entity is created so the upload can target it, mirroring the desktop flow. Attachments render in the chat log through the existing embedded timeline.
+
+  The shared `agents-server-ui` send path (`uploadMessageAttachments`) accepts React Native file descriptors alongside browser `File`s, and the new-session schema-classification helpers (`inlineSchemaProperties`, model/reasoning/speed detection, model-settings grouping) move into a reusable `lib/schemaProperties` module shared by desktop and mobile. No server API changes — the title hardening below is the only server-side behavior change.
+
+  Horton's session-title generation is also hardened for attachment messages: the title model could go conversational when the first message referenced images it couldn't see (e.g. apologizing that nothing was shared), and that sentence became the title. The system prompt now instructs it to infer a title from intent and never apologize, and a guard rejects sentence-like responses and falls back to the locally-derived title.
+
+- 50e93c2: Add editable session titles: a `set_title` tool for Horton, click-to-edit UI in EntityHeader, and txid propagation for tag/send/inbox mutations so clients can await sync consistency.
+- 4640704: Add pg-sync observation source enabling agents to observe Electric Postgres shape streams and wake on matching row changes (insert/update/delete). Includes server-side bridge management with cursor persistence, durable stream forwarding, and an `observe_pg_sync` tool for Horton agents.
+- 87be539: Fix two resilience bugs that could leave the desktop agents runtime unable to pick up sessions until a full app restart, and port the pull-wake runner lifecycle to an xstate state machine.
+  - `installDurableStreamsFetchCache` is now idempotent (with a warning on repeat calls), so restarting the built-in agents runtime no longer stacks duplicate HTTP cache interceptors on the global undici dispatcher.
+  - The pull-wake runner now recovers when the wake stream connection hangs during the connecting phase: repeated heartbeat failures abort the in-flight connection attempt instead of only resetting an already-established stream.
+  - The runner lifecycle (stopped → connecting → streaming → reconnecting → stopping) is now an xstate machine, so in-flight connections, stream sessions, and backoff timers are cancelled automatically on state transitions, and every state × event pair is pinned by an exhaustive transition test matrix.
+
+- Updated dependencies [baee54e]
+- Updated dependencies [50e93c2]
+- Updated dependencies [73c6f89]
+- Updated dependencies [4640704]
+- Updated dependencies [87be539]
+- Updated dependencies [004bea1]
+  - @electric-ax/agents-runtime@0.3.13
+  - @electric-ax/agents-mcp@0.2.3
+
 ## 0.4.16
 
 ### Patch Changes

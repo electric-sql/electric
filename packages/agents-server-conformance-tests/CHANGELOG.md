@@ -1,5 +1,14 @@
 # @electric-ax/agents-server-conformance-tests
 
+## 0.1.12
+
+### Patch Changes
+
+- baee54e: Increase agent tool call timeouts to a 2-minute default with a 10-minute maximum, and allow bash calls to request longer timeouts per command.
+- 50e93c2: Add editable session titles: a `set_title` tool for Horton, click-to-edit UI in EntityHeader, and txid propagation for tag/send/inbox mutations so clients can await sync consistency.
+- Updated dependencies [b8875a2]
+  - @electric-sql/client@1.5.21
+
 ## 0.1.11
 
 ### Patch Changes

@@ -1,5 +1,11 @@
 # @electric-ax/agents-mcp
 
+## 0.2.3
+
+### Patch Changes
+
+- baee54e: Increase agent tool call timeouts to a 2-minute default with a 10-minute maximum, and allow bash calls to request longer timeouts per command.
+
 ## 0.2.2
 
 ### Patch Changes

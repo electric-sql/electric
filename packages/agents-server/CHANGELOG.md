@@ -1,5 +1,24 @@
 # @electric-ax/agents-server
 
+## 0.4.20
+
+### Patch Changes
+
+- 671a38f: Sanitize attachment Content-Disposition filename fallbacks to avoid ByteString errors for Unicode filenames.
+- 50e93c2: Add editable session titles: a `set_title` tool for Horton, click-to-edit UI in EntityHeader, and txid propagation for tag/send/inbox mutations so clients can await sync consistency.
+- 618810c: Stop orphaned cron wakes after schedule deletion by clearing stale wake-registry entries and ending cron tick chains with no subscribers.
+- 4640704: Add pg-sync observation source enabling agents to observe Electric Postgres shape streams and wake on matching row changes (insert/update/delete). Includes server-side bridge management with cursor persistence, durable stream forwarding, and an `observe_pg_sync` tool for Horton agents.
+- eed9ade: agents-server: harden the Electric shape proxy (`/_electric/electric/v1/shape`) against access-control bypasses. Requests for tables outside the explicitly scoped allowlist are now rejected with `403 TABLE_NOT_ALLOWED` instead of being forwarded with the privileged Electric secret and no row/column filter. Client-supplied `where` clauses that are not self-contained (unbalanced parentheses, top-level paren underflow, unterminated string/identifier literals, or SQL comment markers) are rejected with `400 INVALID_WHERE` so they cannot break out of the enforced per-tenant/per-principal scoping.
+- Updated dependencies [baee54e]
+- Updated dependencies [b8875a2]
+- Updated dependencies [50e93c2]
+- Updated dependencies [73c6f89]
+- Updated dependencies [4640704]
+- Updated dependencies [87be539]
+- Updated dependencies [004bea1]
+  - @electric-ax/agents-runtime@0.3.13
+  - @electric-sql/client@1.5.21
+
 ## 0.4.19
 
 ### Patch Changes
