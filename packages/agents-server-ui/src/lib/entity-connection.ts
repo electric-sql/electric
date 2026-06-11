@@ -273,15 +273,13 @@ async function connectEntityStreamFresh(opts: {
         contentType: `application/json`,
         fetch: serverFetch,
       }) as unknown as EntityStreamHandle)
-  const db = createEntityStreamDB(
-    streamUrl,
-    {
-      ...UI_ENTITY_CUSTOM_STATE,
-      ...(customState ?? {}),
-    } as unknown as Parameters<typeof createEntityStreamDB>[1],
-    undefined,
-    { stream }
-  )
+  const mergedCustomState: Parameters<typeof createEntityStreamDB>[1] = {
+    ...UI_ENTITY_CUSTOM_STATE,
+    ...(customState ?? {}),
+  }
+  const db = createEntityStreamDB(streamUrl, mergedCustomState, undefined, {
+    stream,
+  })
   try {
     await preloadWithAbort(db, signal)
   } catch (err) {

@@ -2503,9 +2503,7 @@ export class EntityManager {
       )
     }
 
-    const key =
-      req.key ??
-      `${collection}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const key = req.key ?? `${collection}-${randomUUID()}`
 
     const event: Record<string, unknown> = {
       type: config.type,

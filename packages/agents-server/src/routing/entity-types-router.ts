@@ -45,9 +45,15 @@ type PublicEntityTypeResponse = ElectricAgentsEntityType & {
 
 const jsonObjectSchema = Type.Record(Type.String(), Type.Unknown())
 const schemaMapSchema = Type.Record(Type.String(), jsonObjectSchema)
+// `principalColumn` is accepted and ignored: older runtimes still send it
+// (the column is fixed to `_principal` now), and rejecting it would break
+// registration during version skew.
 const externallyWritableCollectionsSchema = Type.Record(
   Type.String(),
-  Type.Object({ type: Type.String() }, { additionalProperties: false })
+  Type.Object(
+    { type: Type.String(), principalColumn: Type.Optional(Type.String()) },
+    { additionalProperties: false }
+  )
 )
 const slashCommandArgumentSchema = Type.Object(
   {

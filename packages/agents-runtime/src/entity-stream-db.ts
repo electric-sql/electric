@@ -137,10 +137,16 @@ function wrapSchemaWithVirtualColumns<T extends object>(
         for (const col of virtualColumns) {
           if (col in record) saved[col] = record[col]
         }
+        const reattach = (
+          result: StandardSchemaV1.Result<T>
+        ): StandardSchemaV1.Result<T> => {
+          if (`issues` in result && result.issues) return result
+          return { value: Object.assign({}, result.value, saved) as T }
+        }
         const result = inner[`~standard`].validate(value)
-        if (result instanceof Promise) return result
-        if (`issues` in result && result.issues) return result
-        return { value: Object.assign({}, result.value, saved) as T }
+        return result instanceof Promise
+          ? result.then(reattach)
+          : reattach(result)
       },
     },
   }
