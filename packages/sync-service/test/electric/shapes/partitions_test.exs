@@ -288,4 +288,32 @@ defmodule Electric.Shapes.PartitionsTest do
                Partitions.handle_txn_fragment(ctx.partitions, batch)
     end
   end
+
+  describe "introspection failures" do
+    defmodule ConstInspector do
+      def load_relation_info(_oid, response), do: response
+    end
+
+    test "handle_relation/2 ignores relations whose table no longer exists" do
+      partitions = Partitions.new(inspector: {ConstInspector, :table_not_found})
+      relation = %Relation{id: 1, schema: "public", table: "dropped", columns: []}
+
+      assert {:ok, %Partitions{}} = Partitions.handle_relation(partitions, relation)
+    end
+
+    test "handle_relation/2 returns unexpected introspection errors" do
+      error = "ERROR 53200 (out_of_memory) out of memory"
+      partitions = Partitions.new(inspector: {ConstInspector, {:error, error}})
+      relation = %Relation{id: 1, schema: "public", table: "a_table", columns: []}
+
+      assert {:error, ^error} = Partitions.handle_relation(partitions, relation)
+    end
+
+    test "add_shape/3 returns unexpected introspection errors instead of raising" do
+      shape = Shape.new!("partitioned", inspector: @inspector)
+      partitions = Partitions.new(inspector: {ConstInspector, {:error, "boom"}})
+
+      assert {:error, "boom"} = Partitions.add_shape(partitions, "s1", shape)
+    end
+  end
 end

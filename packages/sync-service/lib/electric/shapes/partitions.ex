@@ -36,7 +36,7 @@ defmodule Electric.Shapes.Partitions do
   partition root for every change to a partition of that root.
   """
   @spec add_shape(t(), shape_id(), Electric.Shapes.Shape.t()) ::
-          {:ok, t()} | {:error, :connection_not_available}
+          {:ok, t()} | {:error, term()}
   def add_shape(%__MODULE__{} = state, shape_id, shape) do
     case Inspector.load_relation_info(shape.root_table_id, state.inspector) do
       {:ok, relation} ->
@@ -69,13 +69,8 @@ defmodule Electric.Shapes.Partitions do
         # run a snapshot against a non-existent table)
         {:ok, state}
 
-      {:error, :connection_not_available} ->
-        {:error, :connection_not_available}
-
       {:error, reason} ->
-        raise RuntimeError,
-          message:
-            "Unable to introspect table #{Electric.Utils.inspect_relation(shape.root_table)}: #{inspect(reason)}"
+        {:error, reason}
     end
   end
 
@@ -119,7 +114,7 @@ defmodule Electric.Shapes.Partitions do
   Handle relation changes from the replication stream,
   expanding changes to partitions into the partition root as appropriate.
   """
-  @spec handle_relation(t(), Relation.t()) :: {:ok, t()} | {:error, :connection_not_available}
+  @spec handle_relation(t(), Relation.t()) :: {:ok, t()} | {:error, term()}
   def handle_relation(%__MODULE__{} = state, %Relation{} = relation) do
     table = table(relation)
 
@@ -138,8 +133,14 @@ defmodule Electric.Shapes.Partitions do
       {:ok, _} ->
         {:ok, state}
 
-      {:error, :connection_not_available} ->
-        {:error, :connection_not_available}
+      :table_not_found ->
+        # the table was dropped (or dropped and recreated under a new oid)
+        # between the relation message being written to the WAL and us
+        # introspecting it, so there are no partitions left to track
+        {:ok, state}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 

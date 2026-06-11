@@ -279,7 +279,7 @@ defmodule Electric.Replication.ShapeLogCollector do
               # we should skip this shape (and its children will also be skipped)
               case DependencyLayers.add_dependency(layers, shape, shape_handle) do
                 {:ok, layers} ->
-                  {:ok, partitions} = Partitions.add_shape(partitions, shape_handle, shape)
+                  partitions = restore_partitions_for_shape(partitions, shape_handle, shape)
 
                   {
                     partitions,
@@ -313,6 +313,37 @@ defmodule Electric.Replication.ShapeLogCollector do
          }}
       end
     )
+  end
+
+  # Restoring a shape requires introspecting its root table, which can fail
+  # while the database connection pool is still coming up (or the database is
+  # otherwise unhealthy) — exactly the situation we're likely to be in when
+  # restarting after a crash. Skipping the shape is not an option: nothing
+  # re-registers restored shapes later, so a skipped shape would silently stop
+  # receiving updates. Instead retry in place and, if the error persists,
+  # crash with a descriptive error so the supervisor restarts the restore.
+  @restore_retry_delay_ms 100
+  @restore_max_retries 100
+
+  defp restore_partitions_for_shape(partitions, shape_handle, shape, attempt \\ 1) do
+    case Partitions.add_shape(partitions, shape_handle, shape) do
+      {:ok, partitions} ->
+        partitions
+
+      {:error, reason} when attempt >= @restore_max_retries ->
+        raise "Failed to restore partition info for shape #{shape_handle}: #{inspect(reason)}"
+
+      {:error, reason} ->
+        if attempt == 1 do
+          Logger.warning(
+            "Retrying shape restore: failed to introspect #{Electric.Utils.inspect_relation(shape.root_table)}: #{inspect(reason)}",
+            shape_handle: shape_handle
+          )
+        end
+
+        Process.sleep(@restore_retry_delay_ms)
+        restore_partitions_for_shape(partitions, shape_handle, shape, attempt + 1)
+    end
   end
 
   def handle_call(:mark_as_ready, _from, state) do
@@ -420,8 +451,8 @@ defmodule Electric.Replication.ShapeLogCollector do
                     {state, Map.put(results, shape_handle, {:error, :missing_dependencies})}
                 end
 
-              {:error, :connection_not_available} ->
-                {state, Map.put(results, shape_handle, {:error, :connection_not_available})}
+              {:error, reason} ->
+                {state, Map.put(results, shape_handle, {:error, reason})}
             end
           end)
 
@@ -564,6 +595,18 @@ defmodule Electric.Replication.ShapeLogCollector do
 
       {:error, :connection_not_available} ->
         {{:error, :connection_not_available}, state}
+
+      {:error, reason} ->
+        # Introspection failed for a reason other than the connection pool
+        # being down, e.g. the database returned an error to the catalog
+        # query. Reply with the one error the replication client knows how to
+        # recover from: it pauses the stream and redelivers the event, giving
+        # the introspection another chance instead of crashing the collector.
+        Logger.warning(
+          "Failed to introspect relations affected by transaction #{txn_fragment.xid}: #{inspect(reason)}. Replication is paused until introspection succeeds"
+        )
+
+        {{:error, :connection_not_available}, state}
     end
   end
 
@@ -659,6 +702,18 @@ defmodule Electric.Replication.ShapeLogCollector do
         end
 
       {:error, :connection_not_available} ->
+        {{:error, :connection_not_available}, state}
+
+      {:error, reason} ->
+        # Introspection failed for a reason other than the connection pool
+        # being down, e.g. the database returned an error to the catalog
+        # query. Reply with the one error the replication client knows how to
+        # recover from: it pauses the stream and redelivers the event, giving
+        # the introspection another chance instead of crashing the collector.
+        Logger.warning(
+          "Failed to introspect relation #{Electric.Utils.inspect_relation({updated_rel.schema, updated_rel.table})}: #{inspect(reason)}. Replication is paused until introspection succeeds"
+        )
+
         {{:error, :connection_not_available}, state}
     end
   end
@@ -799,6 +854,17 @@ defmodule Electric.Replication.ShapeLogCollector do
     with {:ok, {oid, _}} <- Inspector.load_relation_oid(relation, state.inspector),
          {:ok, info} <- Inspector.load_column_info(oid, state.inspector) do
       {:ok, Inspector.get_pk_cols(info)}
+    else
+      :table_not_found ->
+        # The table was dropped (or renamed) after these changes were written
+        # to the WAL, so its primary key can no longer be introspected. Key
+        # the changes on the full record — the same fallback used for tables
+        # without a primary key — and leave handling of the dropped table to
+        # the affected shapes further down the stack.
+        {:ok, []}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 end

@@ -117,6 +117,38 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     end
   end
 
+  describe "shape restoration with flaky introspection" do
+    setup _ctx do
+      # The collector restores shapes as soon as it starts inside
+      # setup_log_collector, so the inspector has to be patched before that
+      # setup runs.
+      attempts = :counters.new(1, [])
+
+      patch_calls(Electric.Postgres.Inspector, [],
+        load_relation_info: fn 1234, _ ->
+          if :counters.get(attempts, 1) < 2 do
+            :counters.add(attempts, 1, 1)
+            {:error, :connection_not_available}
+          else
+            {:ok, %{id: 1234, schema: "public", name: "test_table", parent: nil, children: nil}}
+          end
+        end
+      )
+
+      :ok
+    end
+
+    setup :setup_log_collector
+
+    @tag capture_log: true
+    @tag restore_shapes: [{@shape_handle, @shape}], inspector: @inspector
+    test "retries introspection until the connection becomes available", ctx do
+      pid = ShapeLogCollector.name(ctx.stack_id) |> GenServer.whereis()
+      assert is_pid(pid)
+      assert Process.alive?(pid)
+    end
+  end
+
   describe "shape restoration" do
     setup :setup_log_collector
 
@@ -812,6 +844,58 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       assert {:error, :connection_not_available} =
                ShapeLogCollector.handle_event(txn, ctx.stack_id)
     end
+
+    @tag capture_log: true
+    test "returns a retryable error and stays alive when column introspection fails unexpectedly",
+         ctx do
+      stub_inspector([force: true],
+        load_relation_oid: fn {"public", "test_table"}, _ ->
+          {:ok, {1234, {"public", "test_table"}}}
+        end,
+        load_column_info: fn 1234, _ ->
+          {:error, "ERROR 53200 (out_of_memory) out of memory"}
+        end
+      )
+
+      lsn = Lsn.from_integer(1)
+      log_offset = LogOffset.new(lsn, 0)
+
+      txn =
+        complete_txn_fragment(100, lsn, [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "2", "name" => "foo"},
+            log_offset: log_offset
+          }
+        ])
+
+      assert {:error, :connection_not_available} =
+               ShapeLogCollector.handle_event(txn, ctx.stack_id)
+
+      assert ShapeLogCollector.name(ctx.stack_id) |> GenServer.whereis() |> Process.alive?()
+    end
+
+    test "processes the transaction when the table was dropped before introspection", ctx do
+      stub_inspector([force: true],
+        load_relation_oid: fn {"public", "test_table"}, _ -> :table_not_found end
+      )
+
+      lsn = Lsn.from_integer(1)
+      log_offset = LogOffset.new(lsn, 0)
+
+      txn =
+        complete_txn_fragment(100, lsn, [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "2", "name" => "foo"},
+            log_offset: log_offset
+          }
+        ])
+
+      assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
+
+      assert ShapeLogCollector.name(ctx.stack_id) |> GenServer.whereis() |> Process.alive?()
+    end
   end
 
   describe "handle_event/2 with relations" do
@@ -889,6 +973,24 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       assert :ok = ShapeLogCollector.handle_event(relation2, ctx.stack_id)
 
       Support.TransactionConsumer.assert_consume(ctx.consumers, [relation1, relation2])
+    end
+
+    @tag capture_log: true
+    test "returns a retryable error and stays alive when relation introspection fails unexpectedly",
+         ctx do
+      stub_inspector([force: true],
+        load_relation_info: fn 1234, _ ->
+          {:error, "ERROR 53200 (out_of_memory) out of memory"}
+        end,
+        clean: fn _, _ -> :ok end
+      )
+
+      relation = %Relation{id: 1234, table: "test_table", schema: "public", columns: []}
+
+      assert {:error, :connection_not_available} =
+               ShapeLogCollector.handle_event(relation, ctx.stack_id)
+
+      assert ShapeLogCollector.name(ctx.stack_id) |> GenServer.whereis() |> Process.alive?()
     end
 
     test "retries changed relation after partition inspection connection error", ctx do
@@ -1154,6 +1256,16 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
       assert ShapeLogCollector.add_shape(ctx.stack_id, @shape_handle, @shape, :create) ==
                {:error, :connection_not_available}
+    end
+
+    test "returns error when introspection fails unexpectedly", ctx do
+      error = "ERROR 53200 (out_of_memory) out of memory"
+      stub_inspector(load_relation_info: fn _, _ -> {:error, error} end)
+
+      assert ShapeLogCollector.add_shape(ctx.stack_id, @shape_handle, @shape, :create) ==
+               {:error, error}
+
+      assert ShapeLogCollector.name(ctx.stack_id) |> GenServer.whereis() |> Process.alive?()
     end
   end
 
