@@ -441,6 +441,49 @@ describe(`ElectricAgentsManager.writeCollection`, () => {
     expect(append).not.toHaveBeenCalled()
   })
 
+  it(`rejects values that fail the collection schema with 422`, async () => {
+    const append = vi.fn()
+    const { manager } = createAttachmentManager({ streamClient: { append } })
+    manager.registry.getEntity = vi.fn().mockResolvedValue({
+      url: `/chat/session-1`,
+      type: `chat`,
+      status: `running`,
+      streams: { main: `/chat/session-1` },
+    })
+    manager.registry.getEntityType = vi.fn().mockResolvedValue({
+      name: `chat`,
+      state_schemas: {
+        'state:comments': {
+          type: `object`,
+          properties: { body: { type: `string` } },
+          required: [`body`],
+          additionalProperties: false,
+        },
+      },
+      externally_writable_collections: {
+        comments: { type: `state:comments` },
+      },
+    })
+
+    await expect(
+      manager.writeCollection(`/chat/session-1`, `comments`, {
+        operation: `insert`,
+        key: `c1`,
+        value: { body: 42 },
+        principal,
+      })
+    ).rejects.toMatchObject({ status: 422 })
+    expect(append).not.toHaveBeenCalled()
+
+    await manager.writeCollection(`/chat/session-1`, `comments`, {
+      operation: `insert`,
+      key: `c2`,
+      value: { body: `valid` },
+      principal,
+    })
+    expect(append).toHaveBeenCalledTimes(1)
+  })
+
   it(`rejects writes to a stopped entity with 409`, async () => {
     const append = vi.fn()
     const { manager } = createAttachmentManager({ streamClient: { append } })
