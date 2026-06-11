@@ -373,6 +373,35 @@ function errorText(errors: Array<EntityTimelineErrorItem>): string | undefined {
   return errors.length > 0 ? errors.map(formatError).join(`; `) : undefined
 }
 
+function RunErrorMessage({ message }: { message: string }): React.ReactElement {
+  const maxSummaryLength = 180
+  const isLong = message.length > maxSummaryLength || message.includes(`\n`)
+  if (!isLong) {
+    return (
+      <Text size={1} tone="danger" className={styles.errorText}>
+        ✗ {message}
+      </Text>
+    )
+  }
+
+  const normalizedSummary = message.replace(/\s+/g, ` `)
+  const isTruncated = normalizedSummary.length > maxSummaryLength
+  const summary = isTruncated
+    ? normalizedSummary.slice(0, maxSummaryLength)
+    : normalizedSummary
+  return (
+    <details className={styles.errorDetails}>
+      <summary>
+        <Text size={1} tone="danger" className={styles.errorSummaryText}>
+          ✗ {summary}
+          {isTruncated ? `…` : ``}
+        </Text>
+      </summary>
+      <pre className={styles.errorPre}>{message}</pre>
+    </details>
+  )
+}
+
 function failedRunText(
   run: EntityTimelineRunRow,
   items: Array<EntityTimelineRunItem>
@@ -667,11 +696,7 @@ export const AgentResponseLive = memo(function AgentResponseLive({
               : `✓ done`}
           </Text>
         )}
-        {failureText && (
-          <Text size={1} tone="danger">
-            ✗ {failureText}
-          </Text>
-        )}
+        {failureText && <RunErrorMessage message={failureText} />}
         {/* Elapsed-time ticker — visible while the response is still
             in flight so the user can see how long the model has been
             working ("Thinking · 12s", or just "12s" once tokens are
@@ -905,11 +930,7 @@ export const AgentResponse = memo(function AgentResponse({
               : `✓ done`}
           </Text>
         )}
-        {section.error && (
-          <Text size={1} tone="danger">
-            ✗ {section.error}
-          </Text>
-        )}
+        {section.error && <RunErrorMessage message={section.error} />}
         {/* Elapsed-time ticker — kept in sync with the live variant
             above so cached sections (rare during streaming, but the
             type permits it) render the same meta row. */}
