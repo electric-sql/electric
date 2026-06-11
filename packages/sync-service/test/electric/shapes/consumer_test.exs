@@ -105,6 +105,42 @@ defmodule Electric.Shapes.ConsumerTest do
     Lsn.from_integer(offset)
   end
 
+  # Block until `pid` is hibernating, then return its armed suspend-timer ref
+  # (or nil if none is armed).
+  defp await_hibernation(pid, timeout \\ 2_000) do
+    poll_until(timeout, fn ->
+      case Process.info(pid, :current_function) do
+        {:current_function, {:gen_server, :loop_hibernate, _}} ->
+          {:ok, :sys.get_state(pid).suspend_timer}
+
+        _ ->
+          :retry
+      end
+    end)
+  end
+
+  # Repeatedly evaluate `fun` until it returns `{:ok, value}` (returning value)
+  # or `timeout` ms elapse (failing the test).
+  defp poll_until(timeout, fun) do
+    deadline = System.monotonic_time(:millisecond) + timeout
+    do_poll_until(deadline, fun)
+  end
+
+  defp do_poll_until(deadline, fun) do
+    case fun.() do
+      {:ok, value} ->
+        value
+
+      :retry ->
+        if System.monotonic_time(:millisecond) < deadline do
+          Process.sleep(50)
+          do_poll_until(deadline, fun)
+        else
+          flunk("poll_until/2 timed out waiting for condition")
+        end
+    end
+  end
+
   describe "event handling" do
     setup [
       :with_registry,
@@ -596,6 +632,12 @@ defmodule Electric.Shapes.ConsumerTest do
         ctx.stack_id,
         :shape_hibernate_after,
         Map.get(ctx, :hibernate_after, 10_000)
+      )
+
+      Electric.StackConfig.put(
+        ctx.stack_id,
+        :shape_suspend_after,
+        Map.get(ctx, :shape_suspend_after, 60_000)
       )
 
       if not Map.get(ctx, :allow_subqueries, true) do
@@ -1375,9 +1417,10 @@ defmodule Electric.Shapes.ConsumerTest do
       assert_receive {:flush_boundary_updated, 301}, 1_000
     end
 
-    @tag hibernate_after: 10, with_pure_file_storage_opts: [flush_period: 1]
+    @tag hibernate_after: 10, shape_suspend_after: 20
+    @tag with_pure_file_storage_opts: [flush_period: 1]
     @tag suspend: true
-    test "should terminate after :hibernate_after ms", ctx do
+    test "should suspend after hibernate_after + shape_suspend_after ms", ctx do
       register_as_replication_client(ctx.stack_id)
 
       {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape1, ctx.stack_id)
@@ -1402,14 +1445,14 @@ defmodule Electric.Shapes.ConsumerTest do
 
       assert_receive {:flush_boundary_updated, 300}, 1_000
 
-      Process.sleep(60)
-
-      assert_receive {:DOWN, ^ref, :process, ^consumer_pid, {:shutdown, :suspend}}
+      # The consumer hibernates, then suspends shape_suspend_after later;
+      assert_receive {:DOWN, ^ref, :process, ^consumer_pid, {:shutdown, :suspend}}, 200
 
       refute Consumer.whereis(ctx.stack_id, shape_handle)
     end
 
-    @tag hibernate_after: 10, with_pure_file_storage_opts: [flush_period: 1]
+    @tag hibernate_after: 10, shape_suspend_after: 10
+    @tag with_pure_file_storage_opts: [flush_period: 1]
     @tag suspend: true
     test "should hibernate not suspend if has dependencies", ctx do
       register_as_replication_client(ctx.stack_id)
@@ -1441,27 +1484,20 @@ defmodule Electric.Shapes.ConsumerTest do
 
       assert_receive {:flush_boundary_updated, 300}, 1_000
 
-      Process.sleep(100)
-
-      assert {:current_function, {:gen_server, :loop_hibernate, 4}} =
-               Process.info(consumer_pid, :current_function)
-
-      Process.sleep(20)
-
-      assert {:current_function, {:gen_server, :loop_hibernate, 4}} =
-               Process.info(consumer_pid, :current_function)
+      # A shape with dependencies hibernates but never arms a suspend timer
+      # (consumer_can_suspend? is false), so it can never suspend. Observing a
+      # nil suspend_timer once hibernated proves this deterministically.
+      assert is_nil(await_hibernation(consumer_pid))
 
       dependent_consumer_pid = Consumer.whereis(ctx.stack_id, dependent_shape_handle)
-
-      Process.sleep(20)
-
-      assert {:current_function, {:gen_server, :loop_hibernate, 4}} =
-               Process.info(dependent_consumer_pid, :current_function)
+      assert is_nil(await_hibernation(dependent_consumer_pid))
 
       assert is_pid(Consumer.whereis(ctx.stack_id, shape_handle))
     end
 
-    @tag hibernate_after: 10, with_pure_file_storage_opts: [flush_period: 1]
+    @tag hibernate_after: 10,
+         shape_suspend_after: 20,
+         with_pure_file_storage_opts: [flush_period: 1]
     @tag suspend: true
     test "should hibernate not suspend while a multi-fragment transaction is pending", ctx do
       register_as_replication_client(ctx.stack_id)
@@ -1558,19 +1594,119 @@ defmodule Electric.Shapes.ConsumerTest do
 
       assert_receive {:flush_boundary_updated, 300}, 1_000
 
-      Process.sleep(60)
-
-      refute_receive {:DOWN, ^ref, :process, ^consumer_pid, {:shutdown, :suspend}}
-
+      # Suspend is disabled (@tag suspend: false), so the consumer never suspends
+      # on its own and stays alive.
+      refute_receive {:DOWN, ^ref, :process, ^consumer_pid, {:shutdown, :suspend}}, 100
       assert Consumer.whereis(ctx.stack_id, shape_handle)
 
-      Shapes.ConsumerRegistry.enable_suspend(ctx.stack_id, 5, 10)
+      # hibernate_after=5, shape_suspend_after=5, jitter_period=10
+      Shapes.ConsumerRegistry.enable_suspend(ctx.stack_id, 5, 5, 10)
 
-      Process.sleep(60)
+      # Enabling suspend on the live consumer makes it suspend on the next cycle.
+      assert_receive {:DOWN, ^ref, :process, ^consumer_pid, {:shutdown, :suspend}}, 200
+      refute Consumer.whereis(ctx.stack_id, shape_handle)
+    end
 
-      assert_receive {:DOWN, ^ref, :process, ^consumer_pid, {:shutdown, :suspend}}
+    @tag hibernate_after: 10,
+         shape_suspend_after: 150,
+         with_pure_file_storage_opts: [flush_period: 1]
+    @tag suspend: true
+    test "should hibernate first then suspend after shape_suspend_after ms", ctx do
+      register_as_replication_client(ctx.stack_id)
+
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape1, ctx.stack_id)
+      lsn1 = Lsn.from_integer(300)
+
+      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
+
+      consumer_pid = Consumer.whereis(ctx.stack_id, shape_handle)
+      assert is_pid(consumer_pid)
+      ref = Process.monitor(consumer_pid)
+
+      txn =
+        complete_txn_fragment(2, lsn1, [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "21"},
+            log_offset: LogOffset.new(lsn1, 0)
+          }
+        ])
+
+      assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
+
+      assert_receive {:flush_boundary_updated, 300}, 1_000
+
+      # The consumer hibernates first (for GC) and arms a suspend timer rather
+      # than suspending directly. Observing an armed timer while hibernated
+      # proves the "hibernate, then suspend" ordering without racing the clock.
+      assert is_reference(await_hibernation(consumer_pid))
+      assert Process.alive?(consumer_pid)
+
+      # It then suspends once shape_suspend_after elapses.
+      assert_receive {:DOWN, ^ref, :process, ^consumer_pid, {:shutdown, :suspend}}, 300
 
       refute Consumer.whereis(ctx.stack_id, shape_handle)
+    end
+
+    @tag hibernate_after: 10,
+         shape_suspend_after: 200,
+         with_pure_file_storage_opts: [flush_period: 1]
+    @tag suspend: true
+    test "activity during hibernation cancels pending suspend", ctx do
+      register_as_replication_client(ctx.stack_id)
+
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape1, ctx.stack_id)
+      lsn1 = Lsn.from_integer(300)
+      lsn2 = Lsn.from_integer(301)
+
+      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
+
+      consumer_pid = Consumer.whereis(ctx.stack_id, shape_handle)
+      assert is_pid(consumer_pid)
+      ref = Process.monitor(consumer_pid)
+
+      txn1 =
+        complete_txn_fragment(2, lsn1, [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "21"},
+            log_offset: LogOffset.new(lsn1, 0)
+          }
+        ])
+
+      assert :ok = ShapeLogCollector.handle_event(txn1, ctx.stack_id)
+      assert_receive {:flush_boundary_updated, 300}, 1_000
+
+      # Once hibernated, a suspend timer is armed.
+      ref1 = await_hibernation(consumer_pid)
+      assert is_reference(ref1)
+
+      # Activity (a new transaction) must cancel that timer.
+      txn2 =
+        complete_txn_fragment(3, lsn2, [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "22"},
+            log_offset: LogOffset.new(lsn2, 0)
+          }
+        ])
+
+      assert :ok = ShapeLogCollector.handle_event(txn2, ctx.stack_id)
+      assert_receive {:flush_boundary_updated, 301}, 1_000
+
+      # After re-hibernating, a *fresh* timer is armed and the original one reads
+      # as cancelled - proving the activity reset the suspend cycle rather than
+      # letting the original timer fire.
+      ref2 = await_hibernation(consumer_pid)
+      assert is_reference(ref2)
+      assert ref2 != ref1
+      assert :erlang.read_timer(ref1) == false
+
+      # No suspend happened.
+      refute_receive {:DOWN, ^ref, :process, ^consumer_pid, {:shutdown, :suspend}}, 0
+
+      # Process should still be alive (hibernated again)
+      assert Process.alive?(consumer_pid)
     end
 
     @tag with_pure_file_storage_opts: [compaction_period: 5, keep_complete_chunks: 133]
