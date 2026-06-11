@@ -142,6 +142,57 @@ defmodule Electric.Telemetry.OpenTelemetry do
   end
 
   @doc """
+  Execute `fun`, recording its duration and process-memory footprint as
+  attributes on the current span.
+
+  This is a flattened alternative to `with_span/4` for code that is strictly
+  1:1 with its enclosing span: instead of emitting a separate child span, the
+  same information is recorded as attributes on the current span, prefixed
+  with `name`:
+
+    * `<name>.duration_ms` — execution time of `fun` in milliseconds
+    * `<name>.memory.start.*` / `<name>.memory.end.*` — the process-memory
+      footprint attributes from `process_memory_attributes/1`, captured before
+      and after `fun` runs
+
+  The attributes are recorded even when `fun` raises, mirroring how a child
+  span would still have been ended with its duration. The exception itself
+  propagates up unchanged, to be recorded on the enclosing span by its error
+  handling (see `record_exception/4`).
+
+  When there is no active span context this is a no-op apart from calling
+  `fun`, avoiding the `Process.info/2` cost on unsampled requests.
+  """
+  @spec with_flattened_span(attr_name(), (-> t)) :: t when t: term
+  def with_flattened_span(name, fun) when is_binary(name) do
+    if in_span_context?() do
+      start_attrs = prefix_attrs(name, process_memory_attributes(:start))
+      start_time = System.monotonic_time()
+
+      try do
+        fun.()
+      after
+        duration_ms =
+          System.convert_time_unit(System.monotonic_time() - start_time, :native, :microsecond) /
+            1000
+
+        end_attrs = prefix_attrs(name, process_memory_attributes(:end))
+
+        start_attrs
+        |> Map.merge(end_attrs)
+        |> Map.put("#{name}.duration_ms", duration_ms)
+        |> add_span_attributes()
+      end
+    else
+      fun.()
+    end
+  end
+
+  defp prefix_attrs(prefix, attrs) do
+    Map.new(attrs, fn {key, value} -> {"#{prefix}.#{key}", value} end)
+  end
+
+  @doc """
   Add dynamic attributes to the current span.
 
   For example, if a span is started prior to issuing a DB request, an attribute named

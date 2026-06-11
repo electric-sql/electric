@@ -295,8 +295,11 @@ defmodule Electric.Shapes.Api do
     Request.update_response(request, &%{&1 | up_to_date: true, offset: request.last_offset})
   end
 
+  # Recorded as `load_shape_info.*` attributes on the enclosing span rather
+  # than as a child span: this code is strictly 1:1 with the root request span,
+  # so a separate span only added event volume, not information.
   defp do_load_shape_info(%Request{} = request) do
-    with_span(request, "shape_get.api.load_shape_info", fn ->
+    OpenTelemetry.with_flattened_span("load_shape_info", fn ->
       request
       |> get_or_create_shape_handle()
       |> handle_shape_info(request)
@@ -601,7 +604,9 @@ defmodule Electric.Shapes.Api do
   def serve_shape_log(%Request{} = request) do
     validate_serve_usage!(request)
 
-    with_span(request, "shape_get.plug.serve_shape_log", fn ->
+    # Recorded as `serve_shape_log.*` attributes on the enclosing span rather
+    # than as a child span — see do_load_shape_info/1.
+    OpenTelemetry.with_flattened_span("serve_shape_log", fn ->
       request
       |> do_serve_shape_log()
       |> Response.ensure_cleanup()

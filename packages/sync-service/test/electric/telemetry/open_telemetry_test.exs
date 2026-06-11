@@ -119,6 +119,62 @@ defmodule Electric.Telemetry.OpenTelemetryTest do
     end
   end
 
+  describe "with_flattened_span/2" do
+    test "records duration and prefixed memory attributes on the current span" do
+      test_pid = self()
+
+      Repatch.patch(:otel_span, :set_attributes, fn ctx, attrs ->
+        send(test_pid, {:set_attributes, attrs})
+        Repatch.real(:otel_span, :set_attributes, [ctx, attrs])
+      end)
+
+      result =
+        OpenTelemetry.with_span("test_span", %{}, @stack_id, fn ->
+          OpenTelemetry.with_flattened_span("inner_op", fn -> :some_result end)
+        end)
+
+      assert result == :some_result
+
+      assert_received {:set_attributes,
+                       %{
+                         "inner_op.duration_ms" => duration_ms,
+                         "inner_op.memory.start.process_bytes" => start_process_bytes,
+                         "inner_op.memory.start.binary_bytes" => _,
+                         "inner_op.memory.end.process_bytes" => _,
+                         "inner_op.memory.end.binary_bytes" => _
+                       }}
+
+      assert is_float(duration_ms) and duration_ms >= 0
+      assert is_integer(start_process_bytes) and start_process_bytes > 0
+    end
+
+    test "still records attributes when the function raises" do
+      test_pid = self()
+
+      Repatch.patch(:otel_span, :set_attributes, fn ctx, attrs ->
+        send(test_pid, {:set_attributes, attrs})
+        Repatch.real(:otel_span, :set_attributes, [ctx, attrs])
+      end)
+
+      assert_raise RuntimeError, "boom", fn ->
+        OpenTelemetry.with_span("test_span", %{}, @stack_id, fn ->
+          OpenTelemetry.with_flattened_span("inner_op", fn -> raise "boom" end)
+        end)
+      end
+
+      assert_received {:set_attributes, %{"inner_op.duration_ms" => _}}
+    end
+
+    test "only calls the function when outside any span context" do
+      Repatch.spy(:otel_span)
+
+      assert OpenTelemetry.with_flattened_span("inner_op", fn -> :some_result end) ==
+               :some_result
+
+      refute Repatch.called?(:otel_span, :set_attributes, 2)
+    end
+  end
+
   describe "process_memory_attributes/1" do
     test "returns process and binary memory for :start phase" do
       attrs = OpenTelemetry.process_memory_attributes(:start)
