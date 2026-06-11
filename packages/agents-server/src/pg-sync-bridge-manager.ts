@@ -21,10 +21,6 @@ import type {
   ShapeStreamInterface,
 } from '@electric-sql/client'
 
-export const PG_SYNC_ELECTRIC_SHAPE_URL =
-  process.env.ELECTRIC_AGENTS_PG_SYNC_ELECTRIC_URL ??
-  `http://localhost:3000/v1/shape`
-
 type PgSyncOperation = `insert` | `update` | `delete`
 type WakeEvaluator = (
   sourceUrl: string,
@@ -36,7 +32,6 @@ export type PgSyncResolvedSource = {
 }
 
 export interface PgSyncBridgeManagerOptions {
-  url?: string
   retry?: {
     initialDelayMs?: number
     maxDelayMs?: number
@@ -425,7 +420,6 @@ export class PgSyncBridgeManager implements PgSyncBridgeCoordinator {
   private bridges = new Map<string, PgSyncBridge>()
   private starting = new Map<string, Promise<void>>()
 
-  private readonly url: string
   private readonly retry: Required<
     NonNullable<PgSyncBridgeManagerOptions[`retry`]>
   >
@@ -436,7 +430,6 @@ export class PgSyncBridgeManager implements PgSyncBridgeCoordinator {
     private registry?: PostgresRegistry,
     options: PgSyncBridgeManagerOptions = {}
   ) {
-    this.url = options.url ?? PG_SYNC_ELECTRIC_SHAPE_URL
     this.retry = {
       initialDelayMs:
         options.retry?.initialDelayMs ?? DEFAULT_RETRY_INITIAL_DELAY_MS,
@@ -541,7 +534,12 @@ export class PgSyncBridgeManager implements PgSyncBridgeCoordinator {
   }
 
   private resolveSource(options: CanonicalPgSyncConfig): PgSyncResolvedSource {
-    return { url: options.url ?? this.url }
+    if (!options.url) {
+      throw new Error(
+        `pgSync source url is required; no server default is configured`
+      )
+    }
+    return { url: options.url }
   }
 
   async stop(): Promise<void> {

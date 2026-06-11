@@ -16,7 +16,7 @@ import type { RouterType } from 'itty-router'
 import type { TenantContext } from './context.js'
 
 const pgSyncOptionsSchema = Type.Object({
-  url: Type.Optional(Type.String()),
+  url: Type.String(),
   table: Type.String(),
   columns: Type.Optional(Type.Array(Type.String())),
   where: Type.Optional(Type.String()),
@@ -71,6 +71,10 @@ async function registerPgSync(
   ctx: TenantContext
 ): Promise<Response> {
   const { options, metadata } = routeBody<PgSyncRegisterBody>(request)
+
+  if (options.url.trim() === ``) {
+    return apiError(400, ErrCodeInvalidRequest, `pgSync url must be non-empty`)
+  }
 
   if (options.table.trim() === ``) {
     return apiError(

@@ -886,10 +886,9 @@ export function createSetupContext(
           source.ensureStream.contentType
         )
       }
-      const sourceStreamUrl =
-        source.sourceType === `pgSync` || !source.streamUrl.startsWith(`/`)
-          ? source.streamUrl
-          : appendPathToUrl(config.serverBaseUrl, source.streamUrl)
+      const sourceStreamUrl = source.streamUrl.startsWith(`/`)
+        ? appendPathToUrl(config.serverBaseUrl, source.streamUrl)
+        : source.streamUrl
       sourceDb = await wiring.createSourceDb(
         sourceStreamUrl,
         source.schema,

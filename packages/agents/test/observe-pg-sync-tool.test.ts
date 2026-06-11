@@ -10,11 +10,15 @@ function textResult(result: unknown): any {
 }
 
 describe(`observe_pg_sync tool`, () => {
-  it(`validates required table`, async () => {
+  it(`validates required url and table`, async () => {
     const tool = createObservePgSyncTool({ observe: vi.fn() } as any)
 
     expect(Value.Check(tool.parameters as any, {})).toBe(false)
-    await expect(tool.execute(`call`, {})).rejects.toThrow(/table is required/)
+    expect(Value.Check(tool.parameters as any, { table: `todos` })).toBe(false)
+    await expect(tool.execute(`call`, {})).rejects.toThrow(/url is required/)
+    await expect(tool.execute(`call`, { table: `todos` })).rejects.toThrow(
+      /url is required/
+    )
   })
 
   it(`rejects invalid ops and unsupported timeoutMs when schema validates`, () => {
@@ -39,6 +43,7 @@ describe(`observe_pg_sync tool`, () => {
     const tool = createObservePgSyncTool({ observe } as any)
 
     await tool.execute(`call`, {
+      url: `http://localhost:30000/v1/shape`,
       table: `todos`,
       columns: [`id`, `text`],
       where: `priority = $1`,
@@ -48,6 +53,7 @@ describe(`observe_pg_sync tool`, () => {
     })
 
     const expectedSource = pgSync({
+      url: `http://localhost:30000/v1/shape`,
       table: `todos`,
       columns: [`id`, `text`],
       where: `priority = $1`,
@@ -78,7 +84,11 @@ describe(`observe_pg_sync tool`, () => {
     const tool = createObservePgSyncTool({ observe } as any)
 
     const result = textResult(
-      await tool.execute(`call`, { table: `todos`, wake: { debounceMs: 0 } })
+      await tool.execute(`call`, {
+        url: `http://localhost:30000/v1/shape`,
+        table: `todos`,
+        wake: { debounceMs: 0 },
+      })
     )
 
     expect(observe).toHaveBeenCalledWith(expect.anything(), {
@@ -92,9 +102,16 @@ describe(`observe_pg_sync tool`, () => {
     const tool = createObservePgSyncTool({ observe } as any)
 
     const result = textResult(
-      await tool.execute(`call`, { table: `todos`, wake: { ops: [`delete`] } })
+      await tool.execute(`call`, {
+        url: `http://localhost:30000/v1/shape`,
+        table: `todos`,
+        wake: { ops: [`delete`] },
+      })
     )
-    const source = pgSync({ table: `todos` })
+    const source = pgSync({
+      url: `http://localhost:30000/v1/shape`,
+      table: `todos`,
+    })
 
     expect(result).toEqual({
       sourceRef: source.sourceRef,
@@ -107,7 +124,12 @@ describe(`observe_pg_sync tool`, () => {
     const observe = vi.fn(async () => {})
     const tool = createObservePgSyncTool({ observe } as any)
 
-    const result = textResult(await tool.execute(`call`, { table: `todos` }))
+    const result = textResult(
+      await tool.execute(`call`, {
+        url: `http://localhost:30000/v1/shape`,
+        table: `todos`,
+      })
+    )
 
     expect(observe).toHaveBeenCalledWith(expect.anything(), {
       wake: { on: `change` },

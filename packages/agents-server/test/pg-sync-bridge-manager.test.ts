@@ -7,7 +7,6 @@ import {
   buildElectricShapeParams,
   pgSyncMessageToDurableEvent,
   PgSyncBridgeManager,
-  PG_SYNC_ELECTRIC_SHAPE_URL,
 } from '../src/pg-sync-bridge-manager'
 
 const { mockState } = vi.hoisted(() => ({
@@ -57,6 +56,8 @@ vi.mock(`@durable-streams/client`, () => ({
   },
 }))
 
+const SHAPE_URL = `https://electric.example/v1/shape`
+
 beforeEach(() => {
   mockState.callbacks = []
   mockState.constructedOptions = []
@@ -86,7 +87,7 @@ describe(`pg-sync bridge helpers`, () => {
   })
 
   it(`converts insert/update/delete messages with stable keys`, () => {
-    const options = { table: `todos` }
+    const options = { url: SHAPE_URL, table: `todos` }
     const insert = pgSyncMessageToDurableEvent(
       {
         headers: { operation: `insert`, offset: `1_0` },
@@ -116,7 +117,7 @@ describe(`pg-sync bridge helpers`, () => {
   })
 
   it(`rejects messages without stable string offsets`, () => {
-    const options = { table: `todos` }
+    const options = { url: SHAPE_URL, table: `todos` }
 
     expect(
       pgSyncMessageToDurableEvent(
@@ -137,7 +138,7 @@ describe(`pg-sync bridge helpers`, () => {
   })
 
   it(`converts BigInt values to strings so durable events are JSON serializable`, () => {
-    const options = { table: `entities` }
+    const options = { url: SHAPE_URL, table: `entities` }
     const event = pgSyncMessageToDurableEvent(
       {
         headers: { operation: `insert`, offset: `12_0` },
@@ -155,6 +156,17 @@ describe(`pg-sync bridge helpers`, () => {
 })
 
 describe(`PgSyncBridgeManager`, () => {
+  it(`requires a source URL at registration time`, async () => {
+    const manager = new PgSyncBridgeManager({
+      baseUrl: `http://durable`,
+      ensure: vi.fn(async () => undefined),
+    } as any)
+
+    await expect(manager.register({ table: `todos` })).rejects.toThrow(
+      /pgSync source url is required/
+    )
+  })
+
   it(`starts one stream per sourceRef and appends change events`, async () => {
     const streamClient = {
       baseUrl: `http://durable`,
@@ -162,13 +174,13 @@ describe(`PgSyncBridgeManager`, () => {
     }
     const manager = new PgSyncBridgeManager(streamClient as any)
 
-    await manager.register({ table: `todos` })
-    await manager.register({ table: `todos` })
+    await manager.register({ url: SHAPE_URL, table: `todos` })
+    await manager.register({ url: SHAPE_URL, table: `todos` })
 
     expect(streamClient.ensure).toHaveBeenCalledTimes(2)
     expect(mockState.constructedOptions).toHaveLength(1)
     expect(mockState.constructedOptions[0]).toMatchObject({
-      url: PG_SYNC_ELECTRIC_SHAPE_URL,
+      url: SHAPE_URL,
       params: { table: `todos` },
       offset: `now`,
       log: `changes_only`,
@@ -193,7 +205,7 @@ describe(`PgSyncBridgeManager`, () => {
     }
     const manager = new PgSyncBridgeManager(streamClient as any, evaluateWakes)
 
-    await manager.register({ table: `todos` })
+    await manager.register({ url: SHAPE_URL, table: `todos` })
     await mockState.callbacks[0]!([
       { headers: { operation: `insert`, offset: `1_0` }, value: { id: 1 } },
       { headers: { control: `up-to-date` } },
@@ -216,7 +228,7 @@ describe(`PgSyncBridgeManager`, () => {
       ensure: vi.fn(async () => undefined),
     }
     const manager = new PgSyncBridgeManager(streamClient as any, evaluateWakes)
-    const options = { table: `todos` }
+    const options = { url: SHAPE_URL, table: `todos` }
     const sourceRef = sourceRefForPgSync(options)
 
     await manager.register(options)
@@ -250,7 +262,7 @@ describe(`PgSyncBridgeManager`, () => {
       undefined,
       registry as any
     )
-    const options = { table: `todos` }
+    const options = { url: SHAPE_URL, table: `todos` }
     const sourceRef = sourceRefForPgSync(options)
 
     const result = await manager.register(options)
@@ -279,7 +291,11 @@ describe(`PgSyncBridgeManager`, () => {
       undefined,
       registry as any
     )
-    const options = { table: `todos`, params: { b: `2`, a: `1` } }
+    const options = {
+      url: SHAPE_URL,
+      table: `todos`,
+      params: { b: `2`, a: `1` },
+    }
     const sourceRef = sourceRefForPgSync(options)
 
     await manager.register(options)
@@ -287,6 +303,7 @@ describe(`PgSyncBridgeManager`, () => {
       sourceRef,
       streamUrl: getPgSyncStreamPath(sourceRef),
       options: {
+        url: SHAPE_URL,
         table: `todos`,
         params: { a: `1`, b: `2` },
         replica: `default`,
@@ -323,7 +340,7 @@ describe(`PgSyncBridgeManager`, () => {
       registry as any
     )
 
-    await manager.register({ table: `todos` })
+    await manager.register({ url: SHAPE_URL, table: `todos` })
     await mockState.callbacks[0]!([{ headers: { control: `up-to-date` } }])
     registry.updatePgSyncBridgeCursor.mockClear()
     mockState.appendError = new Error(`append failed`)
@@ -336,7 +353,7 @@ describe(`PgSyncBridgeManager`, () => {
   })
 
   it(`startup resumes existing pgSync bridges from stored cursor`, async () => {
-    const options = { table: `todos` }
+    const options = { url: SHAPE_URL, table: `todos` }
     const sourceRef = sourceRefForPgSync(options)
     const registry = {
       listPgSyncBridges: vi.fn(async () => [
@@ -370,7 +387,7 @@ describe(`PgSyncBridgeManager`, () => {
   })
 
   it(`invalid stored shape cursor falls back to bootstrap and clears cursor`, async () => {
-    const options = { table: `todos` }
+    const options = { url: SHAPE_URL, table: `todos` }
     const sourceRef = sourceRefForPgSync(options)
     const registry = {
       listPgSyncBridges: vi.fn(async () => [
@@ -404,7 +421,7 @@ describe(`PgSyncBridgeManager`, () => {
   })
 
   it(`must-refetch clears persisted cursor and restarts bootstrap`, async () => {
-    const options = { table: `todos` }
+    const options = { url: SHAPE_URL, table: `todos` }
     const sourceRef = sourceRefForPgSync(options)
     const registry = {
       upsertPgSyncBridge: vi.fn(async (row) => ({ ...row })),
@@ -437,7 +454,7 @@ describe(`PgSyncBridgeManager`, () => {
       baseUrl: `http://durable`,
       ensure: vi.fn(async () => undefined),
     } as any)
-    await manager.register({ table: `todos` })
+    await manager.register({ url: SHAPE_URL, table: `todos` })
 
     await mockState.callbacks[0]!([{ headers: { control: `must-refetch` } }])
 
@@ -488,7 +505,7 @@ describe(`external review red tests`, () => {
       undefined,
       registry as any
     )
-    await first.register({ table: `todos` })
+    await first.register({ url: SHAPE_URL, table: `todos` })
     mockState.streams[0]!.shapeHandle = `shape-a`
     mockState.streams[0]!.lastOffset = `1_0`
     await mockState.callbacks[0]!([
@@ -528,7 +545,7 @@ describe(`external review red tests`, () => {
       registry as any
     )
 
-    await manager.register({ table: `todos` })
+    await manager.register({ url: SHAPE_URL, table: `todos` })
     await mockState.callbacks[0]!([{ headers: { control: `up-to-date` } }])
     mockState.streams[0]!.shapeHandle = `shape-a`
     mockState.streams[0]!.lastOffset = `2_0`
@@ -547,14 +564,14 @@ describe(`external review red tests`, () => {
     expect(
       pgSyncMessageToDurableEvent(
         { headers: { operation: `insert` }, value: { id: 1 } } as any,
-        { table: `todos` }
+        { url: SHAPE_URL, table: `todos` }
       )
     ).toBeNull()
   })
 })
 
 describe(`pg-sync production hardening`, () => {
-  it(`uses configured URL and forwards request metadata as shape params`, async () => {
+  it(`uses the source URL from registration options and forwards request metadata as shape params`, async () => {
     const manager = new PgSyncBridgeManager(
       {
         baseUrl: `http://durable`,
@@ -563,13 +580,12 @@ describe(`pg-sync production hardening`, () => {
       undefined,
       undefined,
       {
-        url: `https://electric.example/v1/shape`,
         retry: { initialDelayMs: 0, maxDelayMs: 0 },
       }
     )
 
     await manager.register(
-      { table: `todos` },
+      { url: SHAPE_URL, table: `todos` },
       {
         tenantId: `tenant-a`,
         principalKind: `agent`,
@@ -585,7 +601,7 @@ describe(`pg-sync production hardening`, () => {
     )
 
     expect(mockState.constructedOptions[0]).toMatchObject({
-      url: `https://electric.example/v1/shape`,
+      url: SHAPE_URL,
       params: {
         table: `todos`,
         replica: `default`,
@@ -624,7 +640,7 @@ describe(`pg-sync production hardening`, () => {
       }
     )
 
-    await manager.register({ table: `todos` })
+    await manager.register({ url: SHAPE_URL, table: `todos` })
     await mockState.callbacks[0]!([{ headers: { control: `up-to-date` } }])
     mockState.appendError = new Error(`append failed`)
     await mockState.callbacks[0]!([

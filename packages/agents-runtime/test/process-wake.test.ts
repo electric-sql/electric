@@ -1619,6 +1619,7 @@ describe(`processWake`, () => {
 
   it(`pgSync observe registers pgSync source before source DB preload`, async () => {
     const source = pgSync({
+      url: `http://localhost:30000/v1/shape`,
       table: `todos`,
       where: `priority = $1`,
       params: [`high`],
@@ -1640,7 +1641,7 @@ describe(`processWake`, () => {
     expect(mockCreateStreamDB).toHaveBeenCalledWith(
       expect.objectContaining({
         streamOptions: expect.objectContaining({
-          url: `/_electric/pg-sync/default/pg-source-1`,
+          url: `http://localhost:3000/_electric/pg-sync/default/pg-source-1`,
           contentType: `application/json`,
         }),
         state: expect.objectContaining({

@@ -27,11 +27,9 @@ export function createObservePgSyncTool(ctx: HandlerContext): AgentTool {
     label: `Observe Postgres Sync`,
     description: `Observe an Electric Postgres shape stream and wake this agent when matching row changes arrive.`,
     parameters: Type.Object({
-      url: Type.Optional(
-        Type.String({
-          description: `Optional Electric shape endpoint URL. Defaults to the server-configured pg-sync URL.`,
-        })
-      ),
+      url: Type.String({
+        description: `Electric shape endpoint URL.`,
+      }),
       table: Type.String({
         minLength: 1,
         pattern: `\\S`,
@@ -66,7 +64,7 @@ export function createObservePgSyncTool(ctx: HandlerContext): AgentTool {
     }),
     execute: async (_toolCallId, params) => {
       const args = params as {
-        url?: string
+        url: string
         table: string
         columns?: string[]
         where?: string
@@ -76,6 +74,10 @@ export function createObservePgSyncTool(ctx: HandlerContext): AgentTool {
           ops?: Array<`insert` | `update` | `delete`>
           debounceMs?: number
         }
+      }
+
+      if (typeof args.url !== `string` || args.url.trim().length === 0) {
+        throw new Error(`url is required`)
       }
 
       if (typeof args.table !== `string` || args.table.trim().length === 0) {
