@@ -1,7 +1,7 @@
 {
   "name": "@electric-sql/client",
   "description": "Postgres everywhere - your data, in sync, wherever you need it.",
-  "version": "1.5.20",
+  "version": "1.5.21",
   "keywords": [
     "tanstack-intent"
   ],

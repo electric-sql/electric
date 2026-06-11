@@ -1,5 +1,11 @@
 # @electric-sql/client
 
+## 1.5.21
+
+### Patch Changes
+
+- b8875a2: Export `FetchBackoffAbortError` from the package entrypoint to match the documented error handling API.
+
 ## 1.5.20
 
 ### Patch Changes
