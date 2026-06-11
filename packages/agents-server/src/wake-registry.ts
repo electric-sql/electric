@@ -739,7 +739,23 @@ export class WakeRegistry {
     }
 
     if (message.headers.operation === `delete`) {
-      this.removeCachedRegistrationByDbId(Number(message.key))
+      // Shape keys are protocol-level identifiers and are not guaranteed to be
+      // the table primary key. The wake_registrations shape uses
+      // `replica: full`, so deletes should carry the deleted row in old_value;
+      // use that row id to remove the matching in-memory registration. If the
+      // id is unavailable, reset the cache so we fail closed rather than
+      // keeping a stale wake registration alive.
+      const oldValue = (
+        message as unknown as {
+          old_value?: { id?: unknown }
+        }
+      ).old_value
+      const oldId = Number(oldValue?.id)
+      if (Number.isFinite(oldId)) {
+        this.removeCachedRegistrationByDbId(oldId)
+      } else {
+        this.resetCachedRegistrations()
+      }
       return
     }
 

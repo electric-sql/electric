@@ -201,6 +201,38 @@ describe(`Wake Registry`, () => {
     expect(results[0]!.sourceEventKey).toBe(`insert:tick-7`)
   })
 
+  it(`removes cached registrations from shape delete old_value ids`, async () => {
+    const registry = new WakeRegistry(createMockDb())
+    await registry.register({
+      subscriberUrl: `/watcher/w1`,
+      sourceUrl: `/_cron/abc`,
+      condition: { on: `change` },
+      oneShot: false,
+    })
+
+    const before = registry.evaluate(`/_cron/abc`, {
+      type: `cron_tick`,
+      key: `tick-7`,
+      value: {},
+      headers: { operation: `insert` },
+    })
+    expect(before).toHaveLength(1)
+
+    await (registry as any).applyShapeMessage({
+      key: `shape-key-is-not-the-registration-id`,
+      old_value: { id: before[0]!.registrationDbId },
+      headers: { operation: `delete` },
+    })
+
+    const after = registry.evaluate(`/_cron/abc`, {
+      type: `cron_tick`,
+      key: `tick-8`,
+      value: {},
+      headers: { operation: `insert` },
+    })
+    expect(after).toHaveLength(0)
+  })
+
   it(`keeps distinct registrations distinct for the same source event`, async () => {
     const registry = new WakeRegistry(createMockDb())
     await registry.register({

@@ -28,6 +28,8 @@
     "expo": "54.0.35",
     "expo-build-properties": "~1.0.10",
     "expo-constants": "~18.0.13",
+    "expo-image-manipulator": "~14.0.8",
+    "expo-image-picker": "~17.0.11",
     "expo-linking": "~8.0.12",
     "expo-router": "~6.0.24",
     "expo-status-bar": "~3.0.9",

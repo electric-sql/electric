@@ -42,8 +42,11 @@ import type { SkillsRegistry } from '@electric-ax/agents-runtime'
 export const HORTON_MODEL = `claude-sonnet-4-6`
 
 const TITLE_SYSTEM_PROMPT =
-  `You generate concise chat session titles in 3-5 words. ` +
-  `Respond with only the title, no quotes, no punctuation, no preamble.`
+  `You generate a concise 3-5 word chat session title from the user's first message. ` +
+  `Respond with only the title — no quotes, punctuation, preamble, or explanation. ` +
+  `The user may reference images, files, or attachments you cannot see; infer a title ` +
+  `from their intent anyway. Never apologize or say anything is missing — always ` +
+  `output a short title.`
 const TITLE_USER_PROMPT = (userMessage: string): string =>
   `User request:\n${userMessage}`
 const TITLE_GENERATION_TIMEOUT_MS = 8_000
@@ -166,6 +169,16 @@ function withTimeout<T>(
   })
 }
 
+// A real title is a few words; a model that ignored the instructions and went
+// conversational (e.g. apologizing about attachments it can't see) returns a
+// sentence — reject it so we fall back to the locally-derived title.
+function looksLikeNonTitle(title: string): boolean {
+  if (title.split(/\s+/).filter(Boolean).length > 8) return true
+  // The prompt forbids punctuation, so `!?,` betray a conversational reply
+  // even under the word cap; dots/hyphens stay legal for technical titles.
+  return /[!?,]/.test(title)
+}
+
 export async function generateTitle(
   userMessage: string,
   llmCall: (prompt: string) => Promise<string>,
@@ -174,8 +187,10 @@ export async function generateTitle(
   try {
     const raw = await llmCall(TITLE_USER_PROMPT(userMessage))
     const title = raw.trim()
-    if (title.length > 0) return title
-    onFallback?.(`empty LLM title response`)
+    if (title.length > 0 && !looksLikeNonTitle(title)) return title
+    onFallback?.(
+      title.length === 0 ? `empty LLM title response` : `non-title LLM response`
+    )
     return buildFallbackTitle(userMessage)
   } catch (err) {
     onFallback?.(err instanceof Error ? err.message : String(err))

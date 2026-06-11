@@ -29,7 +29,7 @@ import {
 } from '../../lib/server-connection'
 import { sendEntityMessage } from '../../lib/sendMessage'
 import { Button, Icon, Menu, Select, Stack, Text, Tooltip } from '../../ui'
-import { SchemaForm, hasSchemaProperties, isObjectSchema } from '../SchemaForm'
+import { SchemaForm } from '../SchemaForm'
 import { WorkingDirectoryPicker } from '../WorkingDirectoryPicker'
 import {
   AttachmentActionMenu,
@@ -41,6 +41,18 @@ import {
   isModelProperty,
   schemaModelSupportsImageInput,
 } from '../../lib/modelCapabilities'
+import {
+  groupModelSettings,
+  hasSchemaProperties,
+  inlineSchemaProperties,
+  modelOptionLabel,
+  modelProviderKey,
+  MODEL_PROVIDER_LABELS,
+} from '../../lib/schemaProperties'
+import type {
+  InlineSchemaProperty,
+  SchemaProperty,
+} from '../../lib/schemaProperties'
 import { serializeComposerInput } from '@electric-ax/agents-runtime/client'
 import { ComposerEditor } from '../ComposerEditor'
 import { ComposerShell } from '../ComposerShell'
@@ -125,16 +137,6 @@ function persistCodexPromptDismissed(value: Array<CodexAuthSource>): void {
     // Quota / private mode — silent.
   }
 }
-
-interface SchemaProperty {
-  type?: string
-  enum?: Array<unknown>
-  default?: unknown
-  title?: string
-  description?: string
-}
-
-type InlineSchemaProperty = { key: string; prop: SchemaProperty }
 
 /**
  * Standalone view: the new-session picker.
@@ -882,45 +884,6 @@ function SandboxProfileRow({
   )
 }
 
-function inlineSchemaProperties(schema: unknown): Array<InlineSchemaProperty> {
-  if (!isObjectSchema(schema)) return []
-  const out: Array<InlineSchemaProperty> = []
-  for (const [key, raw] of Object.entries(schema.properties)) {
-    const prop = raw as SchemaProperty
-    if (prop.enum && prop.enum.length > 0) {
-      out.push({ key, prop })
-    } else if (prop.type === `boolean`) {
-      out.push({ key, prop })
-    }
-  }
-  return out
-}
-
-function normalizedSchemaKey(key: string): string {
-  return key.replace(/[\s_-]/g, ``).toLowerCase()
-}
-
-function isReasoningProperty(key: string): boolean {
-  const normalized = normalizedSchemaKey(key)
-  return (
-    normalized === `reasoningeffort` ||
-    normalized === `reasoninglevel` ||
-    normalized === `thinkingeffort` ||
-    normalized === `thinkinglevel`
-  )
-}
-
-function isSpeedProperty(key: string): boolean {
-  const normalized = normalizedSchemaKey(key)
-  return (
-    normalized === `speed` ||
-    normalized === `speedlevel` ||
-    normalized === `speedmode` ||
-    normalized === `servicetier` ||
-    normalized === `latencytier`
-  )
-}
-
 function DefaultAgentComposer({
   agent,
   sandboxProfiles,
@@ -966,28 +929,10 @@ function DefaultAgentComposer({
     () => inlineSchemaProperties(agent.creation_schema),
     [agent.creation_schema]
   )
-  const modelSettingsProps = useMemo(() => {
-    const model = inlineProps.find(
-      ({ key, prop }) => isModelProperty(key) && prop.enum?.length
-    )
-    const reasoning = inlineProps.find(
-      ({ key, prop }) => isReasoningProperty(key) && prop.enum?.length
-    )
-    if (!model || !reasoning) return null
-    const speed = inlineProps.find(
-      ({ key, prop }) => isSpeedProperty(key) && prop.enum?.length
-    )
-    return { model, reasoning, speed }
-  }, [inlineProps])
-  const standaloneInlineProps = useMemo(() => {
-    if (!modelSettingsProps) return inlineProps
-    const combinedKeys = new Set([
-      modelSettingsProps.model.key,
-      modelSettingsProps.reasoning.key,
-      ...(modelSettingsProps.speed ? [modelSettingsProps.speed.key] : []),
-    ])
-    return inlineProps.filter(({ key }) => !combinedKeys.has(key))
-  }, [inlineProps, modelSettingsProps])
+  const {
+    modelSettings: modelSettingsProps,
+    standalone: standaloneInlineProps,
+  } = useMemo(() => groupModelSettings(inlineProps), [inlineProps])
   const slashCommands = useMemo<Array<SlashCommandRow>>(
     () =>
       (agent.slash_commands ?? []).map((command) => ({
@@ -1294,26 +1239,8 @@ function RunnerPickerPill({
   )
 }
 
-const MODEL_PROVIDER_LABELS: Record<string, string> = {
-  anthropic: `Anthropic`,
-  openai: `OpenAI`,
-  'openai-codex': `OpenAI Codex`,
-  deepseek: `DeepSeek`,
-  moonshot: `Kimi`,
-}
-
-function modelProviderKey(value: string): string {
-  const index = value.indexOf(`:`)
-  return index > 0 ? value.slice(0, index) : `other`
-}
-
 function modelProviderLabel(provider: string): string {
   return MODEL_PROVIDER_LABELS[provider] ?? provider
-}
-
-function modelOptionLabel(value: string): string {
-  const index = value.indexOf(`:`)
-  return index > 0 ? value.slice(index + 1) : value
 }
 
 function groupedModelOptions(

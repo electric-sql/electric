@@ -175,6 +175,12 @@ defmodule Electric.Shapes.Consumer do
   end
 
   @impl GenServer
+  # Any incoming message counts as activity: cancel the pending suspend timer (if
+  # any) and recurse for actual handling of the call.
+  def handle_call(msg, from, %{suspend_timer: ref} = state) when not is_nil(ref) do
+    handle_call(msg, from, cancel_suspend_timer(state))
+  end
+
   def handle_call({:monitor, pid}, _from, %{monitors: monitors} = state) do
     ref = make_ref()
     {:reply, ref, %{state | monitors: [{pid, ref} | monitors]}, state.hibernate_after}
@@ -186,8 +192,8 @@ defmodule Electric.Shapes.Consumer do
 
   def handle_call(:await_snapshot_start, from, state) do
     Logger.debug("Starting a wait on the snapshot #{state.shape_handle} for #{inspect(from)}}")
-
-    {:noreply, State.add_waiter(state, from), state.hibernate_after}
+    state = State.add_waiter(state, from)
+    {:noreply, state, state.hibernate_after}
   end
 
   def handle_call({:handle_event, event, trace_context}, _from, state) do
@@ -205,9 +211,8 @@ defmodule Electric.Shapes.Consumer do
   def handle_call({:subscribe_materializer, pid}, _from, state) do
     Logger.debug("Subscribing materializer for #{state.shape_handle}")
     Process.monitor(pid, tag: :materializer_down)
-
-    {:reply, {:ok, state.latest_offset}, %{state | materializer_subscribed?: true},
-     state.hibernate_after}
+    state = %{state | materializer_subscribed?: true}
+    {:reply, {:ok, state.latest_offset}, state, state.hibernate_after}
   end
 
   def handle_call({:stop, reason}, _from, state) do
@@ -216,6 +221,11 @@ defmodule Electric.Shapes.Consumer do
   end
 
   @impl GenServer
+  # Cancel the suspend timer on activity, then recurse for the actual handling of the cast.
+  def handle_cast(msg, %{suspend_timer: ref} = state) when not is_nil(ref) do
+    handle_cast(msg, cancel_suspend_timer(state))
+  end
+
   def handle_cast(
         {:pg_snapshot_known, shape_handle, {xmin, xmax, xip_list} = snapshot},
         %{shape_handle: shape_handle} = state
@@ -253,6 +263,29 @@ defmodule Electric.Shapes.Consumer do
   end
 
   @impl GenServer
+  def handle_info(:suspend_timeout, %{suspend_timer: ref} = state) when not is_nil(ref) do
+    state = %{state | suspend_timer: nil}
+
+    if consumer_suspend_enabled?(state) and consumer_can_suspend?(state) do
+      Logger.debug(fn -> ["Suspending consumer ", to_string(state.shape_handle)] end)
+      {:stop, ShapeCleaner.consumer_suspend_reason(), state}
+    else
+      # Conditions changed - just restart the hibernate timeout
+      {:noreply, state, state.hibernate_after}
+    end
+  end
+
+  # Timer already cancelled. Ignore the trigger.
+  def handle_info(:suspend_timeout, state) do
+    {:noreply, state, state.hibernate_after}
+  end
+
+  # Any incoming message counts as activity: cancel the pending suspend timer (if any)
+  # and recurse for the actual handling of the message.
+  def handle_info(msg, %{suspend_timer: ref} = state) when not is_nil(ref) do
+    handle_info(msg, cancel_suspend_timer(state))
+  end
+
   def handle_info({:initialize_shape, shape, opts}, state) do
     %{stack_id: stack_id, shape_handle: shape_handle} = state
 
@@ -383,32 +416,24 @@ defmodule Electric.Shapes.Consumer do
     {:stop, reason, state}
   end
 
-  # Set a new value for hibernate after and set a timeout between
-  # hibernate_after and max_timeout in order to spread
-  # consumer suspend events.
-  def handle_info({:configure_suspend, hibernate_after, jitter_period}, state) do
-    {:noreply, %{state | hibernate_after: hibernate_after},
-     Enum.random(hibernate_after..jitter_period)}
+  # Set new values for hibernate_after and suspend_after, and set a jittered
+  # timeout between hibernate_after and jitter_period to spread hibernation
+  # events. Each consumer will hibernate at the jittered timeout, then schedule
+  # suspension for suspend_after ms later.
+  def handle_info({:configure_suspend, hibernate_after, suspend_after, jitter_period}, state) do
+    state = %{state | hibernate_after: hibernate_after, suspend_after: suspend_after}
+    {:noreply, state, Enum.random(hibernate_after..jitter_period)}
   end
 
   def handle_info(:timeout, state) do
-    # we can only suspend (terminate) the consumer process if
-    #
-    # 1. Consumer suspend has been enabled in the stack config
-    # 2. we're not waiting for snapshot information
-    # 3. we are not part of a subquery dependency tree, that is either
-    #   a. we have no dependent shapes
-    #   b. we don't have a materializer subscribed
-    # 4. we're not in the middle of processing a multi-fragment transaction
+    state = %{state | writer: ShapeCache.Storage.hibernate(state.writer)}
 
-    if consumer_suspend_enabled?(state) and consumer_can_suspend?(state) do
-      Logger.debug(fn -> ["Suspending consumer ", to_string(state.shape_handle)] end)
-      {:stop, ShapeCleaner.consumer_suspend_reason(), state}
-    else
-      state = %{state | writer: ShapeCache.Storage.hibernate(state.writer)}
+    state =
+      if consumer_suspend_enabled?(state) and consumer_can_suspend?(state),
+        do: schedule_suspend_timer(state),
+        else: state
 
-      {:noreply, state, :hibernate}
-    end
+    {:noreply, state, :hibernate}
   end
 
   defp consumer_suspend_enabled?(%{stack_id: stack_id}) do
@@ -418,6 +443,20 @@ defmodule Electric.Shapes.Consumer do
   defp consumer_can_suspend?(state) do
     is_snapshot_started(state) and not Shape.has_dependencies(state.shape) and
       not state.materializer_subscribed? and is_nil(state.pending_txn)
+  end
+
+  defp schedule_suspend_timer(%{suspend_after: nil} = state), do: state
+
+  defp schedule_suspend_timer(%{suspend_after: suspend_after} = state) do
+    ref = :erlang.send_after(suspend_after, self(), :suspend_timeout)
+    %{state | suspend_timer: ref}
+  end
+
+  defp cancel_suspend_timer(%{suspend_timer: nil} = state), do: state
+
+  defp cancel_suspend_timer(%{suspend_timer: ref} = state) do
+    :erlang.cancel_timer(ref)
+    %{state | suspend_timer: nil}
   end
 
   @impl GenServer

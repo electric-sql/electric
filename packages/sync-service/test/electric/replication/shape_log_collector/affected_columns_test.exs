@@ -23,7 +23,8 @@ defmodule Electric.Replication.ShapeLogCollector.AffectedColumnsTest do
         ]
       }
 
-      {returned_relation, new_state} = AffectedColumns.transform_relation(relation, state)
+      {:new, returned_relation, new_state} =
+        AffectedColumns.transform_relation(relation, state)
 
       # Verify relation is returned unchanged
       assert returned_relation == relation
@@ -44,7 +45,7 @@ defmodule Electric.Replication.ShapeLogCollector.AffectedColumnsTest do
         ]
       }
 
-      {_, state_with_first} = AffectedColumns.transform_relation(relation1, state)
+      {:new, _, state_with_first} = AffectedColumns.transform_relation(relation1, state)
 
       # Second relation
       relation2 = %Relation{
@@ -58,7 +59,7 @@ defmodule Electric.Replication.ShapeLogCollector.AffectedColumnsTest do
         ]
       }
 
-      {returned_relation, new_state} =
+      {:new, returned_relation, new_state} =
         AffectedColumns.transform_relation(relation2, state_with_first)
 
       # Verify relation is returned unchanged
@@ -68,6 +69,27 @@ defmodule Electric.Replication.ShapeLogCollector.AffectedColumnsTest do
       assert new_state.table_to_id[{"public", "posts"}] == 2
       assert new_state.id_to_table_info[1] == relation1
       assert new_state.id_to_table_info[2] == relation2
+    end
+
+    test "relation with same id/schema/table and columns is unchanged", %{state: state} do
+      relation = %Relation{
+        id: 1,
+        schema: "public",
+        table: "users",
+        columns: [
+          %Column{name: "id", type_oid: 23},
+          %Column{name: "name", type_oid: 25}
+        ]
+      }
+
+      {:new, _, state_with_original} =
+        AffectedColumns.transform_relation(relation, state)
+
+      {:unchanged, returned_relation, new_state} =
+        AffectedColumns.transform_relation(relation, state_with_original)
+
+      assert returned_relation == relation
+      assert new_state == state_with_original
     end
 
     test "relation with same id/schema/table but column was added", %{state: state} do
@@ -82,7 +104,8 @@ defmodule Electric.Replication.ShapeLogCollector.AffectedColumnsTest do
         ]
       }
 
-      {_, state_with_original} = AffectedColumns.transform_relation(original_relation, state)
+      {:new, _, state_with_original} =
+        AffectedColumns.transform_relation(original_relation, state)
 
       # Updated relation with new column
       updated_relation = %Relation{
@@ -96,7 +119,7 @@ defmodule Electric.Replication.ShapeLogCollector.AffectedColumnsTest do
         ]
       }
 
-      {returned_relation, new_state} =
+      {:changed, returned_relation, new_state} =
         AffectedColumns.transform_relation(updated_relation, state_with_original)
 
       # Verify "email" is detected as an affected column
@@ -118,7 +141,8 @@ defmodule Electric.Replication.ShapeLogCollector.AffectedColumnsTest do
         ]
       }
 
-      {_, state_with_original} = AffectedColumns.transform_relation(original_relation, state)
+      {:new, _, state_with_original} =
+        AffectedColumns.transform_relation(original_relation, state)
 
       # Updated relation with changed column type
       updated_relation = %Relation{
@@ -132,7 +156,7 @@ defmodule Electric.Replication.ShapeLogCollector.AffectedColumnsTest do
         ]
       }
 
-      {returned_relation, new_state} =
+      {:changed, returned_relation, new_state} =
         AffectedColumns.transform_relation(updated_relation, state_with_original)
 
       # Verify "name" is detected as an affected column
@@ -155,7 +179,8 @@ defmodule Electric.Replication.ShapeLogCollector.AffectedColumnsTest do
         ]
       }
 
-      {_, state_with_original} = AffectedColumns.transform_relation(original_relation, state)
+      {:new, _, state_with_original} =
+        AffectedColumns.transform_relation(original_relation, state)
 
       # Updated relation with both name and type changes
       updated_relation = %Relation{
@@ -171,7 +196,7 @@ defmodule Electric.Replication.ShapeLogCollector.AffectedColumnsTest do
         ]
       }
 
-      {returned_relation, new_state} =
+      {:changed, returned_relation, new_state} =
         AffectedColumns.transform_relation(updated_relation, state_with_original)
 
       # Verify both "name"/"username" and "description" are affected columns
@@ -195,7 +220,8 @@ defmodule Electric.Replication.ShapeLogCollector.AffectedColumnsTest do
         ]
       }
 
-      {_, state_with_original} = AffectedColumns.transform_relation(original_relation, state)
+      {:new, _, state_with_original} =
+        AffectedColumns.transform_relation(original_relation, state)
 
       # Relation with changed ID
       updated_relation = %Relation{
@@ -208,7 +234,7 @@ defmodule Electric.Replication.ShapeLogCollector.AffectedColumnsTest do
         ]
       }
 
-      {returned_relation, new_state} =
+      {:identity_changed, returned_relation, new_state} =
         AffectedColumns.transform_relation(updated_relation, state_with_original)
 
       # Verify relation is returned unchanged
@@ -233,7 +259,8 @@ defmodule Electric.Replication.ShapeLogCollector.AffectedColumnsTest do
         ]
       }
 
-      {_, state_with_original} = AffectedColumns.transform_relation(original_relation, state)
+      {:new, _, state_with_original} =
+        AffectedColumns.transform_relation(original_relation, state)
 
       # Relation with changed schema/table
       updated_relation = %Relation{
@@ -248,7 +275,7 @@ defmodule Electric.Replication.ShapeLogCollector.AffectedColumnsTest do
         ]
       }
 
-      {returned_relation, new_state} =
+      {:identity_changed, returned_relation, new_state} =
         AffectedColumns.transform_relation(updated_relation, state_with_original)
 
       # Verify relation is returned unchanged
