@@ -15,7 +15,7 @@ vi.mock(`@electric-ax/agents-runtime/client`, () => ({
     schema: {},
     type: `state:comments`,
     primaryKey: `key`,
-    externallyWritable: { principalColumn: `_principal` },
+    externallyWritable: true,
   },
   createEntityStreamDB: vi.fn(() => ({
     preload: preloadMock,

@@ -44,7 +44,7 @@ describe(`PostgresRegistry entity type registration`, () => {
   it(`persists and retrieves externally_writable_collections round-trip`, async () => {
     const registry = new PostgresRegistry(db, `tenant-a`)
     const externallyWritableCollections = {
-      comments: { type: `state:comments`, principalColumn: `author_id` },
+      comments: { type: `state:comments` },
     }
     await registry.createEntityType(
       entityType({

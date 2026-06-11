@@ -388,7 +388,7 @@ describe(`ElectricAgentsManager.writeCollection`, () => {
       name: `chat`,
       state_schemas: { 'state:comments': {} },
       externally_writable_collections: {
-        comments: { type: `state:comments`, principalColumn: `_principal` },
+        comments: { type: `state:comments` },
       },
     })
 
@@ -454,7 +454,7 @@ describe(`ElectricAgentsManager.writeCollection`, () => {
       name: `chat`,
       state_schemas: { 'state:comments': {} },
       externally_writable_collections: {
-        comments: { type: `state:comments`, principalColumn: `_principal` },
+        comments: { type: `state:comments` },
       },
     })
 

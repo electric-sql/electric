@@ -106,6 +106,13 @@ type EntityStreamDBOptions = {
 
 const WRITE_TXID_TIMEOUT_MS = 20_000
 
+/**
+ * Virtual column the authenticated principal (from the change-event header) is
+ * materialized into for externally writable collections. Like `_timeline_order`,
+ * it is stripped before client write-back.
+ */
+export const PRINCIPAL_COLUMN = `_principal`
+
 // Wrap a Standard Schema so that named virtual columns (e.g. `_timeline_order`,
 // `_principal`) survive the validation step. TanStack DB calls the schema's
 // validate() on every insert/update and uses result.value as the stored row,
@@ -161,17 +168,11 @@ export function createEntityStreamDB(
   // Convert entity-level CollectionDefinition (with optional JSON schema) to
   // stream-db CollectionDefinition (with Standard Schema validator + type + primaryKey)
   const streamCustomState: Record<string, CollectionDefinition> = {}
-  const principalColumnByCollection = new Map<string, string>()
+  const externallyWritableCollections = new Set<string>()
   if (customState) {
     for (const [name, def] of Object.entries(customState)) {
-      const principalColumn = def.externallyWritable
-        ? def.externallyWritable === true
-          ? `_principal`
-          : (def.externallyWritable.principalColumn ?? `_principal`)
-        : undefined
-
-      if (principalColumn) {
-        principalColumnByCollection.set(name, principalColumn)
+      if (def.externallyWritable) {
+        externallyWritableCollections.add(name)
       }
 
       // When virtual columns are projected onto the row, wrap the user schema
@@ -179,7 +180,7 @@ export function createEntityStreamDB(
       const baseSchema = def.schema ?? passthrough()
       const virtualColumns = [
         `_timeline_order`,
-        ...(principalColumn ? [principalColumn] : []),
+        ...(def.externallyWritable ? [PRINCIPAL_COLUMN] : []),
       ]
       const schema = def.schema
         ? wrapSchemaWithVirtualColumns(baseSchema, virtualColumns)
@@ -240,14 +241,11 @@ export function createEntityStreamDB(
     key: string
   }
 
-  const principalColumns = new Set(principalColumnByCollection.values())
   const cleanRow = (row: Record<string, unknown>): Record<string, unknown> => {
     const clone = { ...row }
     delete clone._seq
     delete clone._timeline_order
-    for (const col of principalColumns) {
-      delete clone[col]
-    }
+    delete clone[PRINCIPAL_COLUMN]
     return clone
   }
 
@@ -414,11 +412,10 @@ export function createEntityStreamDB(
           orders.set(item.key, order)
         }
         ;(item.value as Record<string, unknown>)._timeline_order = order
-        const principalColumn = principalColumnByCollection.get(collectionName)
-        if (principalColumn) {
+        if (externallyWritableCollections.has(collectionName)) {
           const principal = (item.headers as Record<string, unknown>).principal
           if (principal !== undefined) {
-            ;(item.value as Record<string, unknown>)[principalColumn] =
+            ;(item.value as Record<string, unknown>)[PRINCIPAL_COLUMN] =
               principal
           }
         }
@@ -795,11 +792,10 @@ export function createEntityStreamDB(
         const order = orders?.get(event.key) ?? formatPointerOrderToken(pointer)
         orders?.set(event.key, order)
         ;(event.value as Record<string, unknown>)._timeline_order = order
-        const principalColumn = principalColumnByCollection.get(collectionName)
-        if (principalColumn) {
+        if (externallyWritableCollections.has(collectionName)) {
           const principal = (event.headers as Record<string, unknown>).principal
           if (principal !== undefined) {
-            ;(event.value as Record<string, unknown>)[principalColumn] =
+            ;(event.value as Record<string, unknown>)[PRINCIPAL_COLUMN] =
               principal
           }
         }

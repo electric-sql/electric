@@ -10,7 +10,7 @@ describe(`buildEntityTypeRegistrationBody`, () => {
       state: {
         comments: {
           schema: z.object({ key: z.string().optional(), body: z.string() }),
-          externallyWritable: { principalColumn: `_principal` },
+          externallyWritable: true,
         },
         scratch: {
           schema: z.object({ key: z.string().optional(), note: z.string() }),
@@ -18,7 +18,7 @@ describe(`buildEntityTypeRegistrationBody`, () => {
       },
     } as any)
     expect(body.externally_writable_collections).toEqual({
-      comments: { type: `state:comments`, principalColumn: `_principal` },
+      comments: { type: `state:comments` },
     })
   })
 

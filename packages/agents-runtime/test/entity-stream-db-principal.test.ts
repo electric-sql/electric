@@ -12,7 +12,7 @@ describe(`entity-stream-db principal virtual column`, () => {
     const db = createEntityStreamDB(`/chat/sess-1`, {
       comments: {
         schema: z.object({ key: z.string().optional(), body: z.string() }),
-        externallyWritable: { principalColumn: `_principal` },
+        externallyWritable: true,
       },
     })
     db.utils.applyEvent({
@@ -67,7 +67,7 @@ describe(`entity-stream-db principal virtual column`, () => {
       {
         comments: {
           schema: z.object({ key: z.string().optional(), body: z.string() }),
-          externallyWritable: { principalColumn: `_principal` },
+          externallyWritable: true,
         },
       },
       undefined,

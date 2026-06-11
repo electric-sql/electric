@@ -21,9 +21,7 @@ describe(`commentsCollection`, () => {
     })
   })
 
-  it(`exports externallyWritable with the _principal column`, () => {
-    expect(commentsCollection.externallyWritable).toEqual({
-      principalColumn: `_principal`,
-    })
+  it(`is externally writable`, () => {
+    expect(commentsCollection.externallyWritable).toBe(true)
   })
 })

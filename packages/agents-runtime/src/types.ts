@@ -667,9 +667,9 @@ export interface CollectionDefinition<
   /**
    * Opt-in for externally writable via the HTTP router: `POST /:type/:instanceId/collections/:name`.
    * Absent/false ⇒ agent-only; the endpoint rejects writes. `true` ⇒ externally writable,
-   * principal materialized into `_principal`. Object form renames that column.
+   * with the authenticated principal materialized into the `_principal` virtual column.
    */
-  externallyWritable?: boolean | { principalColumn?: string }
+  externallyWritable?: boolean
 }
 
 export interface EntityTypeEntry<

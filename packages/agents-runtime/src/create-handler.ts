@@ -282,18 +282,11 @@ export function buildEntityTypeRegistrationBody(
     ])
   )
 
-  const externallyWritableCollections: Record<
-    string,
-    { type: string; principalColumn: string }
-  > = {}
+  const externallyWritableCollections: Record<string, { type: string }> = {}
   for (const [collectionName, def] of stateEntries) {
     if (!def.externallyWritable) continue
     externallyWritableCollections[collectionName] = {
       type: def.type ?? `state:${collectionName}`,
-      principalColumn:
-        def.externallyWritable === true
-          ? `_principal`
-          : (def.externallyWritable.principalColumn ?? `_principal`),
     }
   }
 

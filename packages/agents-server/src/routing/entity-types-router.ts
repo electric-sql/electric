@@ -47,10 +47,7 @@ const jsonObjectSchema = Type.Record(Type.String(), Type.Unknown())
 const schemaMapSchema = Type.Record(Type.String(), jsonObjectSchema)
 const externallyWritableCollectionsSchema = Type.Record(
   Type.String(),
-  Type.Object(
-    { type: Type.String(), principalColumn: Type.String() },
-    { additionalProperties: false }
-  )
+  Type.Object({ type: Type.String() }, { additionalProperties: false })
 )
 const slashCommandArgumentSchema = Type.Object(
   {

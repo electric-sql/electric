@@ -498,8 +498,6 @@ export function toPublicEntity(
 export interface ExternallyWritableCollectionConfig {
   /** Durable-stream event type for this collection, e.g. `state:comments`. */
   type: string
-  /** Row column the client materializes the principal header into. */
-  principalColumn: string
 }
 
 export interface ElectricAgentsEntityType {

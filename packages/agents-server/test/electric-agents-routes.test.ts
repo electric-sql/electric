@@ -1541,7 +1541,7 @@ describe(`ElectricAgentsRoutes entity-type registration`, () => {
       created_at: `t`,
       updated_at: `t`,
       externally_writable_collections: {
-        comments: { type: `state:comments`, principalColumn: `_principal` },
+        comments: { type: `state:comments` },
       },
     })
     const manager = {
@@ -1557,7 +1557,7 @@ describe(`ElectricAgentsRoutes entity-type registration`, () => {
         name: `chat`,
         description: `chat`,
         externally_writable_collections: {
-          comments: { type: `state:comments`, principalColumn: `_principal` },
+          comments: { type: `state:comments` },
         },
       }
     )
@@ -1566,7 +1566,7 @@ describe(`ElectricAgentsRoutes entity-type registration`, () => {
     expect(registerEntityType).toHaveBeenCalledWith(
       expect.objectContaining({
         externally_writable_collections: {
-          comments: { type: `state:comments`, principalColumn: `_principal` },
+          comments: { type: `state:comments` },
         },
       })
     )

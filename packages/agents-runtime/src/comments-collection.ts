@@ -77,5 +77,5 @@ export const commentsCollection: CollectionDefinition = {
   schema: commentSchema,
   type: `state:comments`,
   primaryKey: `key`,
-  externallyWritable: { principalColumn: `_principal` },
+  externallyWritable: true,
 }

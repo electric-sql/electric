@@ -10,9 +10,7 @@ describe(`UI_ENTITY_CUSTOM_STATE`, () => {
     expect(UI_ENTITY_CUSTOM_STATE.comments.type).toBe(`state:comments`)
   })
 
-  it(`comments collection is externally writable with _principal column`, () => {
-    expect(UI_ENTITY_CUSTOM_STATE.comments.externallyWritable).toEqual({
-      principalColumn: `_principal`,
-    })
+  it(`comments collection is externally writable`, () => {
+    expect(UI_ENTITY_CUSTOM_STATE.comments.externallyWritable).toBe(true)
   })
 })

@@ -33,9 +33,7 @@ describe(`comments collection registration`, () => {
 
     for (const name of [`horton`, `worker`]) {
       const def = registry.get(name)?.definition as any
-      expect(def.state?.comments?.externallyWritable).toEqual({
-        principalColumn: `_principal`,
-      })
+      expect(def.state?.comments?.externallyWritable).toBe(true)
     }
   })
 })
