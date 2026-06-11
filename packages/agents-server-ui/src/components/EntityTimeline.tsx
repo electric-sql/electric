@@ -62,7 +62,11 @@ import { readTextPayload } from '../lib/sendMessage'
 import { principalKeyFromInput } from '../lib/principals'
 import styles from './EntityTimeline.module.css'
 import type { ElectricUser } from '../lib/ElectricAgentsProvider'
-import type { SelectedCommentTarget, TimelineRow } from '../lib/comments'
+import type {
+  SelectedCommentTarget,
+  TimelineRow,
+  TimelineRowAdjacency,
+} from '../lib/comments'
 import type {
   CommentTarget,
   EntityTimelineSection,
@@ -77,10 +81,6 @@ import type { PaneFindAdapter, PaneFindMatch } from '../hooks/usePaneFind'
 
 type RenderTimelineRow = TimelineRow
 type WakeSection = Extract<EntityTimelineSection, { kind: `wake` }>
-export type TimelineRowAdjacency = {
-  previousRow?: TimelineRow
-  nextRow?: TimelineRow
-}
 
 function renderRowKey(row: RenderTimelineRow): string {
   return row.$key

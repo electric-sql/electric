@@ -20,7 +20,7 @@ import {
 } from './AttachmentImagePreviewDialog'
 import { TimeText } from './TimeText'
 import styles from './UserMessage.module.css'
-import { principalKeyFromInput } from '../lib/principals'
+import { formatSender } from '../lib/principals'
 import type { ElectricUser } from '../lib/ElectricAgentsProvider'
 
 type UserMessageSection = Extract<
@@ -239,44 +239,4 @@ function AttachmentPreview({
       <Icon icon={Download} size={1} />
     </button>
   )
-}
-
-function formatSender(
-  from: string | null | undefined,
-  options: {
-    currentPrincipal?: string
-    usersById?: Map<string, ElectricUser>
-  } = {}
-): {
-  label: string
-  title?: string
-} {
-  const key = principalKeyFromInput(from)
-  if (!key) return { label: from || `user` }
-  if (key === principalKeyFromInput(options.currentPrincipal)) {
-    return { label: `Me`, title: key }
-  }
-  const colon = key.indexOf(`:`)
-  if (colon <= 0) return { label: key, title: key }
-  const kind = key.slice(0, colon)
-  const id = key.slice(colon + 1)
-  if (kind === `user`) {
-    const user = options.usersById?.get(id)
-    const label = userDisplayName(user)
-    if (label) return { label, title: key }
-  }
-  return {
-    label: `${kind}:${formatPrincipalId(id)}`,
-    title: key,
-  }
-}
-
-function formatPrincipalId(id: string): string {
-  if (id.length <= 18) return id
-  return `${id.slice(0, 8)}…${id.slice(-6)}`
-}
-
-function userDisplayName(user: ElectricUser | undefined): string | null {
-  if (!user) return null
-  return user.display_name || user.email || null
 }

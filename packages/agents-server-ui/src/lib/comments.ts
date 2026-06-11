@@ -5,6 +5,7 @@ import {
   TIMELINE_ORDER_FALLBACK,
 } from '@electric-ax/agents-runtime/client'
 import { getActivePrincipal, serverFetch } from './auth-fetch'
+import { isAttachmentManifest } from './attachments'
 import { entityApiUrl } from './entity-api'
 import type {
   CommentSnapshot,
@@ -16,8 +17,8 @@ import type {
 
 /**
  * Comments are a UI-level concern: the runtime timeline query knows nothing
- * about them. `useEntityTimeline` reads the `comments` collection directly
- * and merges these rows into the timeline with `mergeCommentRows`.
+ * about them. `useEntityTimeline` merges them in by passing
+ * `createCommentsTimelineSource` as an extra timeline source.
  */
 export type EntityTimelineCommentRow = {
   key: string
@@ -191,4 +192,102 @@ export function createSendCommentAction({
       pendingOrderIndex,
     })
   }
+}
+
+export const COMMENT_FOCUS_PARAM = `focus`
+
+const COMMENT_TARGET_COLLECTIONS = new Set<string>([
+  `inbox`,
+  `run`,
+  `text`,
+  `tool_call`,
+  `wake`,
+  `signal`,
+  `manifest`,
+])
+
+export function encodeCommentTargetParam(target: CommentTarget): string {
+  return encodeURIComponent(JSON.stringify(target))
+}
+
+export function decodeCommentTargetParam(
+  value: string | undefined
+): CommentTarget | null {
+  if (!value) return null
+  try {
+    const decoded = JSON.parse(decodeURIComponent(value)) as unknown
+    if (!isCommentTarget(decoded)) return null
+    return decoded
+  } catch {
+    return null
+  }
+}
+
+export function commentFocusViewParams(
+  target: CommentTarget
+): Record<string, string> {
+  return { [COMMENT_FOCUS_PARAM]: encodeCommentTargetParam(target) }
+}
+
+function isCommentTarget(value: unknown): value is CommentTarget {
+  if (!value || typeof value !== `object`) return false
+  const target = value as Partial<CommentTarget>
+  if (target.kind === `comment`) {
+    return typeof target.key === `string`
+  }
+  if (target.kind !== `timeline`) return false
+  const timelineTarget = target as Partial<
+    Extract<CommentTarget, { kind: `timeline` }>
+  >
+  return (
+    typeof timelineTarget.key === `string` &&
+    typeof timelineTarget.collection === `string` &&
+    COMMENT_TARGET_COLLECTIONS.has(timelineTarget.collection) &&
+    (timelineTarget.run_id === undefined ||
+      typeof timelineTarget.run_id === `string`)
+  )
+}
+
+export type TimelineRowAdjacency = {
+  previousRow?: TimelineRow
+  nextRow?: TimelineRow
+}
+
+/**
+ * Comment-only timeline: keeps just the comment rows, recording each one's
+ * neighboring renderable rows so the view can show surrounding context.
+ */
+export function buildCommentsTimeline(timelineRows: Array<TimelineRow>): {
+  rows: Array<TimelineRow>
+  adjacency: Array<TimelineRowAdjacency>
+} {
+  const rows: Array<TimelineRow> = []
+  const adjacency: Array<TimelineRowAdjacency> = []
+  let previousRenderableRow: TimelineRow | undefined
+  let pendingCommentAdjacencyIndex: number | null = null
+
+  for (const row of timelineRows) {
+    if (isAttachmentManifest(row.manifest)) continue
+
+    if (pendingCommentAdjacencyIndex !== null) {
+      const pendingAdjacency = adjacency[pendingCommentAdjacencyIndex]!
+      adjacency[pendingCommentAdjacencyIndex] = {
+        ...pendingAdjacency,
+        nextRow: row,
+      }
+      pendingCommentAdjacencyIndex = null
+    }
+
+    if (row.comment) {
+      rows.push(row)
+      adjacency.push({
+        previousRow: previousRenderableRow,
+      })
+      pendingCommentAdjacencyIndex = adjacency.length - 1
+    }
+
+    previousRenderableRow = row
+  }
+
+  return { rows, adjacency }
 }

@@ -6,7 +6,7 @@ import type {
 } from '@electric-ax/agents-runtime/client'
 import type { EntityTimelineCommentRow } from '../lib/comments'
 import { Icon, IconButton, Text, Tooltip } from '../ui'
-import { principalKeyFromInput } from '../lib/principals'
+import { formatSender, principalKeyFromInput } from '../lib/principals'
 import { TimeText } from './TimeText'
 import type { ElectricUser } from '../lib/ElectricAgentsProvider'
 import styles from './CommentBubble.module.css'
@@ -142,39 +142,4 @@ function ReplyPreview({
   }
 
   return <div className={styles.preview}>{content}</div>
-}
-
-function formatSender(
-  from: string | null | undefined,
-  options: {
-    currentPrincipal?: string
-    usersById?: Map<string, ElectricUser>
-  } = {}
-): {
-  label: string
-  title?: string
-} {
-  const key = principalKeyFromInput(from)
-  if (!key) return { label: from || `user` }
-  if (key === principalKeyFromInput(options.currentPrincipal)) {
-    return { label: `Me`, title: key }
-  }
-  const colon = key.indexOf(`:`)
-  if (colon <= 0) return { label: key, title: key }
-  const kind = key.slice(0, colon)
-  const id = key.slice(colon + 1)
-  if (kind === `user`) {
-    const user = options.usersById?.get(id)
-    const label = user?.display_name || user?.email
-    if (label) return { label, title: key }
-  }
-  return {
-    label: `${kind}:${formatPrincipalId(id)}`,
-    title: key,
-  }
-}
-
-function formatPrincipalId(id: string): string {
-  if (id.length <= 18) return id
-  return `${id.slice(0, 8)}...${id.slice(-6)}`
 }
