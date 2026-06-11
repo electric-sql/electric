@@ -311,29 +311,29 @@ describe(`ElectricAgentsManager composer input validation`, () => {
   })
 })
 
-describe(`ElectricAgentsManager event source subscriptions`, () => {
+describe(`ElectricAgentsManager webhook source subscriptions`, () => {
   it(`persists the manifest before registering wake side effects`, async () => {
     const calls: Array<string> = []
     const manager = createManifestManager(calls)
 
-    await manager.upsertEventSourceSubscription(`/coder/session-1`, {
+    await manager.upsertWebhookSourceSubscription(`/coder/session-1`, {
       subscription: {
         id: `watch-pr-123`,
         entityUrl: `/coder/session-1`,
-        sourceKey: `github-repo`,
+        webhookKey: `github-repo`,
         bucketKey: `pull_request`,
         params: { number: 123 },
         filterApplied: false,
         contractRevision: 1,
         sourceUrl: `/_webhooks/github-repo/prs/123`,
         sourceType: `webhook`,
-        manifestKey: `event-source:watch-pr-123`,
+        manifestKey: `webhook-source:watch-pr-123`,
         lifetime: { kind: `until_entity_stopped` },
         createdBy: `tool`,
         createdAt: `2026-05-23T00:00:00.000Z`,
       },
       manifest: {
-        key: `event-source:watch-pr-123`,
+        key: `webhook-source:watch-pr-123`,
         kind: `source`,
         sourceType: `webhook`,
         sourceRef: `github-repo/prs/123`,
@@ -356,7 +356,7 @@ describe(`ElectricAgentsManager event source subscriptions`, () => {
     const calls: Array<string> = []
     const manager = createManifestManager(calls)
 
-    await manager.deleteEventSourceSubscription(`/coder/session-1`, {
+    await manager.deleteWebhookSourceSubscription(`/coder/session-1`, {
       id: `watch-pr-123`,
     })
 

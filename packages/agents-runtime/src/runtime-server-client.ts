@@ -4,7 +4,7 @@ import type {
 } from './observation-sources'
 import type { EntityTags, TagOperation } from './tags'
 import { appendPathToUrl } from './url'
-import { buildEventSourceSubscriptionId } from './event-sources'
+import { buildWebhookSourceSubscriptionId } from './webhook-sources'
 import type {
   AttachmentCreateInput,
   ClaimTokenHeader,
@@ -13,10 +13,10 @@ import type {
 } from './types'
 import type { EntitySignal } from './entity-schema'
 import type {
-  EventSourceContract,
-  EventSourceSubscription,
-  EventSourceSubscriptionInput,
-} from './event-sources'
+  WebhookSourceContract,
+  WebhookSourceSubscription,
+  WebhookSourceSubscriptionInput,
+} from './webhook-sources'
 export type { EntitySignal } from './entity-schema'
 
 const ELECTRIC_PRINCIPAL_HEADER = `electric-principal`
@@ -183,11 +183,11 @@ export interface RuntimeServerClient {
     streamUrl: string
     sourceRef: string
   }>
-  listEventSources: () => Promise<Array<EventSourceContract>>
-  subscribeToEventSource: (
-    options: EventSourceSubscriptionInput & { entityUrl: string }
-  ) => Promise<{ txid: string; subscription: EventSourceSubscription }>
-  unsubscribeFromEventSource: (options: {
+  listWebhookSources: () => Promise<Array<WebhookSourceContract>>
+  subscribeToWebhookSource: (
+    options: WebhookSourceSubscriptionInput & { entityUrl: string }
+  ) => Promise<{ txid: string; subscription: WebhookSourceSubscription }>
+  unsubscribeFromWebhookSource: (options: {
     entityUrl: string
     id: string
   }) => Promise<{ txid: string }>
@@ -711,39 +711,39 @@ export function createRuntimeServerClient(
     return (await response.json()) as { streamUrl: string; sourceRef: string }
   }
 
-  const listEventSources = async (): Promise<Array<EventSourceContract>> => {
-    const response = await request(`/_electric/event-sources`, {
+  const listWebhookSources = async (): Promise<Array<WebhookSourceContract>> => {
+    const response = await request(`/_electric/webhook-sources`, {
       method: `GET`,
     })
     if (!response.ok) {
       throw new Error(
-        `listEventSources failed (${response.status}): ${await readErrorText(response)}`
+        `listWebhookSources failed (${response.status}): ${await readErrorText(response)}`
       )
     }
     const data = (await response.json()) as {
-      eventSources?: Array<EventSourceContract>
+      webhookSources?: Array<WebhookSourceContract>
     }
-    return data.eventSources ?? []
+    return data.webhookSources ?? []
   }
 
-  const subscribeToEventSource = async (
-    options: EventSourceSubscriptionInput & { entityUrl: string }
-  ): Promise<{ txid: string; subscription: EventSourceSubscription }> => {
+  const subscribeToWebhookSource = async (
+    options: WebhookSourceSubscriptionInput & { entityUrl: string }
+  ): Promise<{ txid: string; subscription: WebhookSourceSubscription }> => {
     const id =
       options.id ??
-      buildEventSourceSubscriptionId({
-        sourceKey: options.sourceKey,
+      buildWebhookSourceSubscriptionId({
+        webhookKey: options.webhookKey,
         bucketKey: options.bucketKey,
         params: options.params,
         filterKey: options.filterKey,
       })
     const response = await request(
-      `${entityRpcPath(options.entityUrl)}/event-source-subscriptions/${encodeURIComponent(id)}`,
+      `${entityRpcPath(options.entityUrl)}/webhook-source-subscriptions/${encodeURIComponent(id)}`,
       {
         method: `PUT`,
         headers: { 'content-type': `application/json` },
         body: JSON.stringify({
-          sourceKey: options.sourceKey,
+          webhookKey: options.webhookKey,
           bucketKey: options.bucketKey,
           params: options.params,
           filterKey: options.filterKey,
@@ -754,26 +754,26 @@ export function createRuntimeServerClient(
     )
     if (!response.ok) {
       throw new Error(
-        `subscribeToEventSource failed (${response.status}): ${await readErrorText(response)}`
+        `subscribeToWebhookSource failed (${response.status}): ${await readErrorText(response)}`
       )
     }
     return (await response.json()) as {
       txid: string
-      subscription: EventSourceSubscription
+      subscription: WebhookSourceSubscription
     }
   }
 
-  const unsubscribeFromEventSource = async (options: {
+  const unsubscribeFromWebhookSource = async (options: {
     entityUrl: string
     id: string
   }): Promise<{ txid: string }> => {
     const response = await request(
-      `${entityRpcPath(options.entityUrl)}/event-source-subscriptions/${encodeURIComponent(options.id)}`,
+      `${entityRpcPath(options.entityUrl)}/webhook-source-subscriptions/${encodeURIComponent(options.id)}`,
       { method: `DELETE` }
     )
     if (!response.ok) {
       throw new Error(
-        `unsubscribeFromEventSource failed (${response.status}): ${await readErrorText(response)}`
+        `unsubscribeFromWebhookSource failed (${response.status}): ${await readErrorText(response)}`
       )
     }
     return (await response.json()) as { txid: string }
@@ -932,9 +932,9 @@ export function createRuntimeServerClient(
     ensureCronStream,
     ensureEntitiesMembershipStream,
     registerPgSyncSource,
-    listEventSources,
-    subscribeToEventSource,
-    unsubscribeFromEventSource,
+    listWebhookSources,
+    subscribeToWebhookSource,
+    unsubscribeFromWebhookSource,
     upsertCronSchedule,
     upsertFutureSendSchedule,
     deleteSchedule,

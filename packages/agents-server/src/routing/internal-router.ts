@@ -38,7 +38,7 @@ import { routeBody, validateOptionalJsonBody, withSchema } from './schema.js'
 import { withLeadingSlash } from './tenant-stream-paths.js'
 import type { IRequest, RouterType } from 'itty-router'
 import type {
-  EventSourceContract,
+  WebhookSourceContract,
   WebhookSignatureVerifierConfig,
 } from '@electric-ax/agents-runtime'
 import type { TenantContext } from './context.js'
@@ -121,7 +121,7 @@ export const internalRouter: InternalRoutes = Router<
 })
 
 internalRouter.get(`/health`, () => json({ status: `ok` }))
-internalRouter.get(`/event-sources`, listEventSources)
+internalRouter.get(`/webhook-sources`, listWebhookSources)
 internalRouter.post(
   `/wake`,
   withSchema(wakeRegistrationBodySchema),
@@ -366,17 +366,17 @@ async function registerWake(
   return status(204)
 }
 
-async function listEventSources(
+async function listWebhookSources(
   _request: IRequest,
   ctx: TenantContext
 ): Promise<Response> {
-  const eventSources = ctx.eventSources
-    ? await ctx.eventSources.listEventSources()
+  const webhookSources = ctx.webhookSources
+    ? await ctx.webhookSources.listWebhookSources()
     : []
-  return json({ eventSources: eventSources.filter(isAgentVisibleEventSource) })
+  return json({ webhookSources: webhookSources.filter(isAgentVisibleWebhookSource) })
 }
 
-function isAgentVisibleEventSource(source: EventSourceContract): boolean {
+function isAgentVisibleWebhookSource(source: WebhookSourceContract): boolean {
   return source.agentVisible === true && source.status === `active`
 }
 

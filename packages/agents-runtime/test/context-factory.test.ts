@@ -353,15 +353,15 @@ describe(`createHandlerContext`, () => {
     expect(receivedMessage).toBe(`load xyz skills`)
   })
 
-  it(`uses hydrated event source wake data as the trigger message`, async () => {
+  it(`uses hydrated webhook source wake data as the trigger message`, async () => {
     const db = createMockDb([])
     let receivedMessage = ``
-    const hydratedEventSourceWake = {
-      type: `event_source_wake` as const,
+    const hydratedWebhookSourceWake = {
+      type: `webhook_source_wake` as const,
       source: `/_webhooks/github-repo/prs/42`,
       sourceType: `webhook` as const,
       endpointKey: `github-repo`,
-      sourceKey: `github-repo`,
+      webhookKey: `github-repo`,
       subscription: {
         id: `watch-pr-42`,
         bucketKey: `pull_request`,
@@ -454,7 +454,7 @@ describe(`createHandlerContext`, () => {
           ],
         },
       },
-      hydratedEventSourceWake,
+      hydratedWebhookSourceWake,
       doObserve: vi.fn(),
       doSpawn: vi.fn(),
       doFork: vi.fn(),
@@ -478,7 +478,7 @@ describe(`createHandlerContext`, () => {
     await ctx.agent.run()
 
     expect(JSON.parse(receivedMessage)).toMatchObject({
-      type: `event_source_wake`,
+      type: `webhook_source_wake`,
       source: `/_webhooks/github-repo/prs/42`,
       events: [
         {

@@ -259,30 +259,30 @@ export type {
   SendEntityMessageOptions,
 } from './runtime-server-client'
 export {
-  buildEventSourceManifestEntry,
-  buildHydratedEventSourceWake,
-  buildEventSourceSubscriptionId,
-  defaultEventSourceSubscriptionLifetime,
-  eventSourceWakeInfoFromManifests,
-  eventSourceSubscriptionManifestKey,
-  renderEventSourceBucketPath,
-  resolveEventSourceSubscription,
-} from './event-sources'
+  buildWebhookSourceManifestEntry,
+  buildHydratedWebhookSourceWake,
+  buildWebhookSourceSubscriptionId,
+  defaultWebhookSourceSubscriptionLifetime,
+  webhookSourceWakeInfoFromManifests,
+  webhookSourceSubscriptionManifestKey,
+  renderWebhookSourceBucketPath,
+  resolveWebhookSourceSubscription,
+} from './webhook-sources'
 export type {
-  EventSourceBucket,
-  EventSourceContract,
-  EventSourceFilter,
-  EventSourceFilterCondition,
-  EventSourceStatus,
-  EventSourceSubscription,
-  EventSourceSubscriptionInput,
-  EventSourceType,
-  EventSourceWakeChange,
-  EventSourceWakeInfo,
-  HydratedEventSourceWake,
-  ResolvedEventSourceSubscription,
+  WebhookSourceBucket,
+  WebhookSourceContract,
+  WebhookSourceFilter,
+  WebhookSourceFilterCondition,
+  WebhookSourceStatus,
+  WebhookSourceSubscription,
+  WebhookSourceSubscriptionInput,
+  WebhookSourceType,
+  WebhookSourceWakeChange,
+  WebhookSourceWakeInfo,
+  HydratedWebhookSourceWake,
+  ResolvedWebhookSourceSubscription,
   SubscriptionLifetime,
-} from './event-sources'
+} from './webhook-sources'
 export { createAgentsClient } from './agents-client'
 export type { AgentsClient, AgentsClientConfig } from './agents-client'
 

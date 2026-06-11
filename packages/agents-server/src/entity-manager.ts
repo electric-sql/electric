@@ -7,7 +7,7 @@ import {
   getCronStreamPath,
   getSharedStateStreamPath,
   getNextCronFireAt,
-  eventSourceSubscriptionManifestKey,
+  webhookSourceSubscriptionManifestKey,
   manifestChildKey,
   manifestSharedStateKey,
   manifestSourceKey,
@@ -56,7 +56,7 @@ import type { queueAsPromised } from 'fastq'
 import type { SchedulerClient } from './scheduler.js'
 import type { WakeEvalResult, WakeRegistry } from './wake-registry.js'
 import type { WakeMessage } from '@electric-ax/agents-runtime'
-import type { EventSourceSubscription } from '@electric-ax/agents-runtime'
+import type { WebhookSourceSubscription } from '@electric-ax/agents-runtime'
 import type { PostgresRegistry } from './entity-registry.js'
 import type { SchemaValidator } from './electric-agents/schema-validator.js'
 import type { StreamClient } from './stream-client.js'
@@ -3023,13 +3023,13 @@ export class EntityManager {
     return { txid }
   }
 
-  async upsertEventSourceSubscription(
+  async upsertWebhookSourceSubscription(
     entityUrl: string,
     req: {
-      subscription: EventSourceSubscription
+      subscription: WebhookSourceSubscription
       manifest: Record<string, unknown>
     }
-  ): Promise<{ txid: string; subscription: EventSourceSubscription }> {
+  ): Promise<{ txid: string; subscription: WebhookSourceSubscription }> {
     const manifestKey = req.subscription.manifestKey
     const txid = randomUUID()
     await this.writeManifestEntry(
@@ -3065,11 +3065,11 @@ export class EntityManager {
     return { txid, subscription: req.subscription }
   }
 
-  async deleteEventSourceSubscription(
+  async deleteWebhookSourceSubscription(
     entityUrl: string,
     req: { id: string }
   ): Promise<{ txid: string }> {
-    const manifestKey = eventSourceSubscriptionManifestKey(req.id)
+    const manifestKey = webhookSourceSubscriptionManifestKey(req.id)
     const txid = randomUUID()
     await this.writeManifestEntry(entityUrl, manifestKey, `delete`, undefined, {
       txid,

@@ -1,20 +1,20 @@
 import { describe, expect, it } from 'vitest'
 import {
-  buildEventSourceManifestEntry,
-  buildHydratedEventSourceWake,
-  buildEventSourceSubscriptionId,
-  eventSourceWakeInfoFromManifests,
-  renderEventSourceBucketPath,
-  resolveEventSourceSubscription,
-  type EventSourceContract,
-  type EventSourceWakeInfo,
-} from '../src/event-sources'
+  buildWebhookSourceManifestEntry,
+  buildHydratedWebhookSourceWake,
+  buildWebhookSourceSubscriptionId,
+  webhookSourceWakeInfoFromManifests,
+  renderWebhookSourceBucketPath,
+  resolveWebhookSourceSubscription,
+  type WebhookSourceContract,
+  type WebhookSourceWakeInfo,
+} from '../src/webhook-sources'
 import type { WebhookEventRow } from '../src/observation-sources'
 
-describe(`event source helpers`, () => {
+describe(`webhook source helpers`, () => {
   it(`renders bucket template paths from params`, () => {
     expect(
-      renderEventSourceBucketPath(
+      renderWebhookSourceBucketPath(
         {
           key: `pull_request`,
           label: `Pull request`,
@@ -27,11 +27,11 @@ describe(`event source helpers`, () => {
   })
 
   it(`resolves webhook subscriptions into durable stream manifest entries`, () => {
-    const resolved = resolveEventSourceSubscription({
+    const resolved = resolveWebhookSourceSubscription({
       contract: githubContract,
       entityUrl: `/coder/session-1`,
       request: {
-        sourceKey: `github-repo`,
+        webhookKey: `github-repo`,
         bucketKey: `pull_request`,
         params: { number: 123 },
         lifetime: { kind: `until_entity_stopped` },
@@ -42,7 +42,7 @@ describe(`event source helpers`, () => {
 
     expect(resolved.subscription).toMatchObject({
       entityUrl: `/coder/session-1`,
-      sourceKey: `github-repo`,
+      webhookKey: `github-repo`,
       bucketKey: `pull_request`,
       sourceUrl: `/_webhooks/github-repo/prs/123`,
       sourceType: `webhook`,
@@ -52,7 +52,7 @@ describe(`event source helpers`, () => {
       reason: `Watch PR comments`,
     })
 
-    expect(buildEventSourceManifestEntry(resolved)).toMatchObject({
+    expect(buildWebhookSourceManifestEntry(resolved)).toMatchObject({
       key: resolved.subscription.manifestKey,
       kind: `source`,
       sourceType: `webhook`,
@@ -61,8 +61,8 @@ describe(`event source helpers`, () => {
         endpointKey: `github-repo`,
         streamUrl: `/_webhooks/github-repo/prs/123`,
         bucket: `prs/123`,
-        eventSource: {
-          sourceKey: `github-repo`,
+        webhookSource: {
+          webhookKey: `github-repo`,
           bucketKey: `pull_request`,
           params: { number: 123 },
           filterApplied: false,
@@ -79,11 +79,11 @@ describe(`event source helpers`, () => {
 
   it(`rejects bucket params that do not match paramsSchema`, () => {
     expect(() =>
-      resolveEventSourceSubscription({
+      resolveWebhookSourceSubscription({
         contract: githubContract,
         entityUrl: `/coder/session-1`,
         request: {
-          sourceKey: `github-repo`,
+          webhookKey: `github-repo`,
           bucketKey: `pull_request`,
           params: { number: `123` },
         },
@@ -92,27 +92,27 @@ describe(`event source helpers`, () => {
   })
 
   it(`builds deterministic subscription ids`, () => {
-    const left = buildEventSourceSubscriptionId({
-      sourceKey: `github-repo`,
+    const left = buildWebhookSourceSubscriptionId({
+      webhookKey: `github-repo`,
       bucketKey: `pull_request`,
       params: { number: 123 },
     })
-    const right = buildEventSourceSubscriptionId({
+    const right = buildWebhookSourceSubscriptionId({
       params: { number: 123 },
       bucketKey: `pull_request`,
-      sourceKey: `github-repo`,
+      webhookKey: `github-repo`,
     })
 
     expect(left).toBe(right)
   })
 
-  it(`hydrates event source wake changes with matching webhook rows`, () => {
-    const resolved = resolveEventSourceSubscription({
+  it(`hydrates webhook source wake changes with matching webhook rows`, () => {
+    const resolved = resolveWebhookSourceSubscription({
       contract: githubContract,
       entityUrl: `/coder/session-1`,
       request: {
         id: `watch-pr-123`,
-        sourceKey: `github-repo`,
+        webhookKey: `github-repo`,
         bucketKey: `pull_request`,
         params: { number: 123 },
         lifetime: { kind: `until_entity_stopped` },
@@ -120,9 +120,9 @@ describe(`event source helpers`, () => {
       },
       createdAt: `2026-05-23T00:00:00.000Z`,
     })
-    const manifest = buildEventSourceManifestEntry(resolved)
+    const manifest = buildWebhookSourceManifestEntry(resolved)
 
-    const info = eventSourceWakeInfoFromManifests({
+    const info = webhookSourceWakeInfoFromManifests({
       manifests: [manifest],
       wakeEvent: {
         type: `wake`,
@@ -145,7 +145,7 @@ describe(`event source helpers`, () => {
       sourceUrl: `/_webhooks/github-repo/prs/123`,
       sourceType: `webhook`,
       endpointKey: `github-repo`,
-      sourceKey: `github-repo`,
+      webhookKey: `github-repo`,
       subscriptionId: `watch-pr-123`,
       bucket: `prs/123`,
       bucketKey: `pull_request`,
@@ -161,16 +161,16 @@ describe(`event source helpers`, () => {
         },
       },
     })
-    const hydrated = buildHydratedEventSourceWake(info as EventSourceWakeInfo, [
+    const hydrated = buildHydratedWebhookSourceWake(info as WebhookSourceWakeInfo, [
       webhookEvent({ key: `event-0` }),
       event,
     ])
 
     expect(hydrated).toMatchObject({
-      type: `event_source_wake`,
+      type: `webhook_source_wake`,
       source: `/_webhooks/github-repo/prs/123`,
       endpointKey: `github-repo`,
-      sourceKey: `github-repo`,
+      webhookKey: `github-repo`,
       bucket: `prs/123`,
       subscription: {
         id: `watch-pr-123`,
@@ -212,9 +212,9 @@ function webhookEvent(
   }
 }
 
-const githubContract: EventSourceContract = {
+const githubContract: WebhookSourceContract = {
   serviceId: `svc-agent-1`,
-  sourceKey: `github-repo`,
+  webhookKey: `github-repo`,
   sourceType: `webhook`,
   endpointKey: `github-repo`,
   status: `active`,

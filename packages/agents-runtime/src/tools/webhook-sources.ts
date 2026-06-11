@@ -1,18 +1,18 @@
 import { Type } from '@sinclair/typebox'
 import { runtimeLog } from '../log'
 import {
-  buildEventSourceSubscriptionId,
-  defaultEventSourceSubscriptionLifetime,
-  eventSourceSubscriptionManifestKey,
-} from '../event-sources'
+  buildWebhookSourceSubscriptionId,
+  defaultWebhookSourceSubscriptionLifetime,
+  webhookSourceSubscriptionManifestKey,
+} from '../webhook-sources'
 import type { AgentTool } from '@mariozechner/pi-agent-core'
 import type { EntityStreamDBWithActions } from '../types'
 import type {
-  EventSourceContract,
-  EventSourceSubscription,
-  EventSourceSubscriptionInput,
+  WebhookSourceContract,
+  WebhookSourceSubscription,
+  WebhookSourceSubscriptionInput,
   SubscriptionLifetime,
-} from '../event-sources'
+} from '../webhook-sources'
 
 type ToolResult = {
   content: Array<{ type: `text`; text: string }>
@@ -40,7 +40,7 @@ function formatForLog(value: unknown): string {
   }
 }
 
-function withEventSourceToolLogging<TParams>(
+function withWebhookSourceToolLogging<TParams>(
   entityUrl: string,
   toolName: string,
   execute: (
@@ -76,51 +76,51 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === `object` && value !== null && !Array.isArray(value)
 }
 
-function isEventSourceManifest(value: unknown): boolean {
+function isWebhookSourceManifest(value: unknown): boolean {
   if (!isRecord(value)) return false
   if (value.kind !== `source` || value.sourceType !== `webhook`) return false
   const config = value.config
   return (
     isRecord(config) &&
-    isRecord(config.eventSource) &&
-    typeof config.eventSource.id === `string`
+    isRecord(config.webhookSource) &&
+    typeof config.webhookSource.id === `string`
   )
 }
 
-function getEventSourceSubscriptions(
+function getWebhookSourceSubscriptions(
   entityUrl: string,
   db: EntityStreamDBWithActions
-): Array<EventSourceSubscription> {
-  const entries: Array<EventSourceSubscription> = []
+): Array<WebhookSourceSubscription> {
+  const entries: Array<WebhookSourceSubscription> = []
 
   for (const entry of db.collections.manifests.toArray) {
-    if (!isEventSourceManifest(entry)) continue
+    if (!isWebhookSourceManifest(entry)) continue
     const manifest = entry as Record<string, unknown>
     const config = manifest.config as Record<string, unknown>
-    const eventSource = config.eventSource as Record<string, unknown>
-    const id = String(eventSource.id)
-    const lifetime = isRecord(eventSource.lifetime)
-      ? (eventSource.lifetime as SubscriptionLifetime)
-      : defaultEventSourceSubscriptionLifetime()
+    const webhookSource = config.webhookSource as Record<string, unknown>
+    const id = String(webhookSource.id)
+    const lifetime = isRecord(webhookSource.lifetime)
+      ? (webhookSource.lifetime as SubscriptionLifetime)
+      : defaultWebhookSourceSubscriptionLifetime()
 
     entries.push({
       id,
       entityUrl,
-      sourceKey:
-        typeof eventSource.sourceKey === `string`
-          ? eventSource.sourceKey
+      webhookKey:
+        typeof webhookSource.webhookKey === `string`
+          ? webhookSource.webhookKey
           : String(config.endpointKey ?? ``),
-      ...(typeof eventSource.bucketKey === `string`
-        ? { bucketKey: eventSource.bucketKey }
+      ...(typeof webhookSource.bucketKey === `string`
+        ? { bucketKey: webhookSource.bucketKey }
         : {}),
-      params: isRecord(eventSource.params) ? eventSource.params : {},
-      ...(typeof eventSource.filterKey === `string`
-        ? { filterKey: eventSource.filterKey }
+      params: isRecord(webhookSource.params) ? webhookSource.params : {},
+      ...(typeof webhookSource.filterKey === `string`
+        ? { filterKey: webhookSource.filterKey }
         : {}),
-      filterApplied: eventSource.filterApplied === true,
+      filterApplied: webhookSource.filterApplied === true,
       contractRevision:
-        typeof eventSource.contractRevision === `number`
-          ? eventSource.contractRevision
+        typeof webhookSource.contractRevision === `number`
+          ? webhookSource.contractRevision
           : 0,
       sourceUrl:
         typeof config.streamUrl === `string`
@@ -130,20 +130,20 @@ function getEventSourceSubscriptions(
       manifestKey:
         typeof manifest.key === `string`
           ? manifest.key
-          : eventSourceSubscriptionManifestKey(id),
+          : webhookSourceSubscriptionManifestKey(id),
       lifetime,
-      ...(typeof eventSource.reason === `string`
-        ? { reason: eventSource.reason }
+      ...(typeof webhookSource.reason === `string`
+        ? { reason: webhookSource.reason }
         : {}),
       createdBy:
-        eventSource.createdBy === `handler` ||
-        eventSource.createdBy === `user` ||
-        eventSource.createdBy === `system`
-          ? eventSource.createdBy
+        webhookSource.createdBy === `handler` ||
+        webhookSource.createdBy === `user` ||
+        webhookSource.createdBy === `system`
+          ? webhookSource.createdBy
           : `tool`,
       createdAt:
-        typeof eventSource.createdAt === `string`
-          ? eventSource.createdAt
+        typeof webhookSource.createdAt === `string`
+          ? webhookSource.createdAt
           : new Date(0).toISOString(),
     })
   }
@@ -151,12 +151,12 @@ function getEventSourceSubscriptions(
   return entries.sort((left, right) => left.id.localeCompare(right.id))
 }
 
-function getEventSourceSubscription(
+function getWebhookSourceSubscription(
   entityUrl: string,
   db: EntityStreamDBWithActions,
   id: string
-): EventSourceSubscription | undefined {
-  return getEventSourceSubscriptions(entityUrl, db).find(
+): WebhookSourceSubscription | undefined {
+  return getWebhookSourceSubscriptions(entityUrl, db).find(
     (entry) => entry.id === id
   )
 }
@@ -172,65 +172,65 @@ const lifetimeSchema = Type.Union([
   Type.Object({ kind: Type.Literal(`manual`) }),
 ])
 
-export function createEventSourceTools(opts: {
+export function createWebhookSourceTools(opts: {
   entityUrl: string
   db: EntityStreamDBWithActions
-  listEventSources: () => Promise<Array<EventSourceContract>>
-  subscribeToEventSource: (
-    opts: EventSourceSubscriptionInput
-  ) => Promise<{ txid: string; subscription: EventSourceSubscription }>
-  unsubscribeFromEventSource: (opts: {
+  listWebhookSources: () => Promise<Array<WebhookSourceContract>>
+  subscribeToWebhookSource: (
+    opts: WebhookSourceSubscriptionInput
+  ) => Promise<{ txid: string; subscription: WebhookSourceSubscription }>
+  unsubscribeFromWebhookSource: (opts: {
     id: string
   }) => Promise<{ txid: string }>
 }): Array<AgentTool> {
   const {
     db,
     entityUrl,
-    listEventSources,
-    subscribeToEventSource,
-    unsubscribeFromEventSource,
+    listWebhookSources,
+    subscribeToWebhookSource,
+    unsubscribeFromWebhookSource,
   } = opts
 
   const listSourcesTool: AgentTool = {
-    name: `list_event_sources`,
-    label: `List Event Sources`,
-    description: `List external event feeds you can subscribe to, such as webhook integrations from GitHub, Stripe, email, CI, or other services. Sources may expose named buckets and optional filters; use paramsSchema to choose sourceKey, bucketKey, params, and filterKey for subscribe_event_source.`,
+    name: `list_webhook_sources`,
+    label: `List Webhook Sources`,
+    description: `List external webhook feeds you can subscribe to, such as GitHub, Stripe, email, CI, or other webhook integrations. Webhook sources may expose named buckets and optional filters; use paramsSchema to choose webhookKey, bucketKey, params, and filterKey for subscribe_webhook_source.`,
     parameters: Type.Object({}),
-    execute: withEventSourceToolLogging(
+    execute: withWebhookSourceToolLogging(
       entityUrl,
-      `list_event_sources`,
-      async () => asToolResult(await listEventSources())
+      `list_webhook_sources`,
+      async () => asToolResult(await listWebhookSources())
     ),
   }
 
   const listSubscriptionsTool: AgentTool = {
-    name: `list_event_source_subscriptions`,
-    label: `List Event Subscriptions`,
-    description: `List your active event source subscriptions: external feeds and buckets that are currently configured to wake you when matching events arrive.`,
+    name: `list_webhook_source_subscriptions`,
+    label: `List Webhook Source Subscriptions`,
+    description: `List your active webhook source subscriptions: external feeds and buckets that are currently configured to wake you when matching events arrive.`,
     parameters: Type.Object({}),
-    execute: withEventSourceToolLogging(
+    execute: withWebhookSourceToolLogging(
       entityUrl,
-      `list_event_source_subscriptions`,
-      async () => asToolResult(getEventSourceSubscriptions(entityUrl, db))
+      `list_webhook_source_subscriptions`,
+      async () => asToolResult(getWebhookSourceSubscriptions(entityUrl, db))
     ),
   }
 
   const subscribeTool: AgentTool = {
-    name: `subscribe_event_source`,
-    label: `Subscribe Event Source`,
-    description: `Subscribe to a discoverable external event feed or one of its buckets so matching future events wake you with the matching event data in your next message. Use filterKey only when list_event_sources advertises a named filter you want; filters are advisory until server-side source filters are enabled.`,
+    name: `subscribe_webhook_source`,
+    label: `Subscribe Webhook Source`,
+    description: `Subscribe to a discoverable external webhook feed or one of its buckets so matching future webhooks wake you with the matching webhook data in your next message. Use filterKey only when list_webhook_sources advertises a named filter you want; filters are advisory until server-side webhook filters are enabled.`,
     parameters: Type.Object({
       id: Type.Optional(
         Type.String({
-          description: `Optional stable subscription id. Defaults to a deterministic id from sourceKey, bucketKey, params, and filterKey.`,
+          description: `Optional stable subscription id. Defaults to a deterministic id from webhookKey, bucketKey, params, and filterKey.`,
         })
       ),
-      sourceKey: Type.String({
-        description: `Event source key from list_event_sources`,
+      webhookKey: Type.String({
+        description: `Webhook source key from list_webhook_sources`,
       }),
       bucketKey: Type.Optional(
         Type.String({
-          description: `Bucket key from list_event_sources. Omit to subscribe to the source root stream.`,
+          description: `Bucket key from list_webhook_sources. Omit to subscribe to the source root stream.`,
         })
       ),
       params: Type.Optional(
@@ -250,56 +250,56 @@ export function createEventSourceTools(opts: {
         })
       ),
     }),
-    execute: withEventSourceToolLogging(
+    execute: withWebhookSourceToolLogging(
       entityUrl,
-      `subscribe_event_source`,
+      `subscribe_webhook_source`,
       async (_toolCallId, params) => {
-        const parsed = params as EventSourceSubscriptionInput
+        const parsed = params as WebhookSourceSubscriptionInput
         const id =
           parsed.id ??
-          buildEventSourceSubscriptionId({
-            sourceKey: parsed.sourceKey,
+          buildWebhookSourceSubscriptionId({
+            webhookKey: parsed.webhookKey,
             bucketKey: parsed.bucketKey,
             params: parsed.params,
             filterKey: parsed.filterKey,
           })
-        const { txid, subscription } = await subscribeToEventSource({
+        const { txid, subscription } = await subscribeToWebhookSource({
           ...parsed,
           id,
-          lifetime: parsed.lifetime ?? defaultEventSourceSubscriptionLifetime(),
+          lifetime: parsed.lifetime ?? defaultWebhookSourceSubscriptionLifetime(),
         })
         await db.utils.awaitTxId(txid, 10_000)
         return asToolResult(
-          getEventSourceSubscription(entityUrl, db, id) ?? subscription
+          getWebhookSourceSubscription(entityUrl, db, id) ?? subscription
         )
       }
     ),
   }
 
   const unsubscribeTool: AgentTool = {
-    name: `unsubscribe_event_source`,
-    label: `Unsubscribe Event Source`,
-    description: `Stop being woken by an event source subscription.`,
+    name: `unsubscribe_webhook_source`,
+    label: `Unsubscribe Webhook Source`,
+    description: `Stop being woken by a webhook source subscription.`,
     parameters: Type.Object({
       id: Type.String({ description: `Subscription id` }),
     }),
-    execute: withEventSourceToolLogging(
+    execute: withWebhookSourceToolLogging(
       entityUrl,
-      `unsubscribe_event_source`,
+      `unsubscribe_webhook_source`,
       async (_toolCallId, params) => {
         const { id } = params as { id: string }
-        const existing = getEventSourceSubscription(entityUrl, db, id)
+        const existing = getWebhookSourceSubscription(entityUrl, db, id)
         if (!existing) {
           return asToolResult(
-            `No event source subscription found for id "${id}"`
+            `No webhook source subscription found for id "${id}"`
           )
         }
-        const { txid } = await unsubscribeFromEventSource({ id })
+        const { txid } = await unsubscribeFromWebhookSource({ id })
         await db.utils.awaitTxId(txid, 10_000)
         return asToolResult({
           deleted: true,
           id,
-          key: eventSourceSubscriptionManifestKey(id),
+          key: webhookSourceSubscriptionManifestKey(id),
         })
       }
     ),

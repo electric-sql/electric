@@ -1,6 +1,6 @@
 import type { Agent } from 'undici'
 import type {
-  EventSourceContract,
+  WebhookSourceContract,
   WebhookSignatureVerifierConfig,
 } from '@electric-ax/agents-runtime'
 import type { DrizzleDB } from '../db/index.js'
@@ -15,16 +15,16 @@ import type { DurableStreamsBearerProvider } from '../stream-client.js'
 import type { WebhookSigner } from '../webhook-signing.js'
 import type { AuthorizeRequest } from '../electric-agents-types.js'
 
-export interface EventSourceCatalog {
-  listEventSources: () =>
-    | Array<EventSourceContract>
-    | Promise<Array<EventSourceContract>>
-  getEventSource: (
-    sourceKey: string
+export interface WebhookSourceCatalog {
+  listWebhookSources: () =>
+    | Array<WebhookSourceContract>
+    | Promise<Array<WebhookSourceContract>>
+  getWebhookSource: (
+    webhookKey: string
   ) =>
-    | EventSourceContract
+    | WebhookSourceContract
     | undefined
-    | Promise<EventSourceContract | undefined>
+    | Promise<WebhookSourceContract | undefined>
 }
 
 /**
@@ -56,8 +56,8 @@ export interface TenantContext {
   runtime: ElectricAgentsTenantRuntime
   entityBridgeManager: EntityBridgeCoordinator
   pgSyncBridgeManager?: PgSyncBridgeCoordinator
-  eventSources?: EventSourceCatalog
-  ensureEventSourceWakeSource?: (sourceUrl: string) => Promise<void> | void
+  webhookSources?: WebhookSourceCatalog
+  ensureWebhookSourceWakeSource?: (sourceUrl: string) => Promise<void> | void
   authorizeRequest?: AuthorizeRequest
   isShuttingDown: () => boolean
 }

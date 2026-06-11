@@ -95,25 +95,25 @@ function createElectricToolsContext() {
     upsertCronSchedule: vi.fn(async () => ({ txid: `tx-cron` })),
     upsertFutureSendSchedule: vi.fn(async () => ({ txid: `tx-future` })),
     deleteSchedule: vi.fn(async () => ({ txid: `tx-delete` })),
-    listEventSources: vi.fn(async () => []),
-    subscribeToEventSource: vi.fn(async () => ({
+    listWebhookSources: vi.fn(async () => []),
+    subscribeToWebhookSource: vi.fn(async () => ({
       txid: `tx-subscribe`,
       subscription: {
         id: `subscription`,
         entityUrl: `/horton/smoke/main`,
-        sourceKey: `github`,
+        webhookKey: `github`,
         params: {},
         filterApplied: false,
         contractRevision: 1,
         sourceUrl: `/_webhooks/github`,
         sourceType: `webhook`,
-        manifestKey: `event-source:subscription`,
+        manifestKey: `webhook-source:subscription`,
         lifetime: { kind: `until_entity_stopped` },
         createdBy: `tool`,
         createdAt: new Date(0).toISOString(),
       },
     })),
-    unsubscribeFromEventSource: vi.fn(async () => ({ txid: `tx-unsubscribe` })),
+    unsubscribeFromWebhookSource: vi.fn(async () => ({ txid: `tx-unsubscribe` })),
   } as any
 }
 
@@ -219,7 +219,7 @@ describe(`horton tool composition`, () => {
     )
   })
 
-  it(`adds event source and schedule tools through the built-in electric tool factory`, async () => {
+  it(`adds webhook source and schedule tools through the built-in electric tool factory`, async () => {
     const tools = await createBuiltinElectricTools()(
       createElectricToolsContext()
     )
@@ -227,28 +227,28 @@ describe(`horton tool composition`, () => {
 
     expect(names).toEqual(
       expect.arrayContaining([
-        `list_event_sources`,
-        `subscribe_event_source`,
-        `list_event_source_subscriptions`,
-        `unsubscribe_event_source`,
+        `list_webhook_sources`,
+        `subscribe_webhook_source`,
+        `list_webhook_source_subscriptions`,
+        `unsubscribe_webhook_source`,
         `upsert_cron_schedule`,
         `delete_schedule`,
         `list_schedules`,
       ])
     )
     expect(
-      tools.find((tool) => tool.name === `list_event_sources`)?.description
-    ).toContain(`external event feeds`)
+      tools.find((tool) => tool.name === `list_webhook_sources`)?.description
+    ).toContain(`external webhook feeds`)
     expect(
-      tools.find((tool) => tool.name === `list_event_sources`)?.description
+      tools.find((tool) => tool.name === `list_webhook_sources`)?.description
     ).not.toContain(`this entity`)
     expect(
-      tools.find((tool) => tool.name === `list_event_source_subscriptions`)
+      tools.find((tool) => tool.name === `list_webhook_source_subscriptions`)
         ?.description
     ).not.toContain(`manifest-backed`)
   })
 
-  it(`includes event source and schedule electric tools in Horton and describes them in the prompt`, async () => {
+  it(`includes webhook source and schedule electric tools in Horton and describes them in the prompt`, async () => {
     const electricTools = await createBuiltinElectricTools()(
       createElectricToolsContext()
     )
@@ -257,13 +257,13 @@ describe(`horton tool composition`, () => {
       .filter((t) => !isMcpToolsSentinel(t))
       .map((t) => (t as { name: string }).name)
 
-    expect(names).toContain(`list_event_sources`)
-    expect(names).toContain(`subscribe_event_source`)
+    expect(names).toContain(`list_webhook_sources`)
+    expect(names).toContain(`subscribe_webhook_source`)
     expect(names).toContain(`upsert_cron_schedule`)
     expect(names).toContain(`delete_schedule`)
     expect(names).toContain(`list_schedules`)
-    expect(cfg.systemPrompt).toContain(`list_event_sources`)
-    expect(cfg.systemPrompt).toContain(`subscribe_event_source`)
+    expect(cfg.systemPrompt).toContain(`list_webhook_sources`)
+    expect(cfg.systemPrompt).toContain(`subscribe_webhook_source`)
     expect(cfg.systemPrompt).toContain(`upsert_cron_schedule`)
     expect(cfg.systemPrompt).toContain(`delete_schedule`)
     expect(cfg.systemPrompt).toContain(`list_schedules`)

@@ -171,7 +171,7 @@ mcp.servers` block.
 
 ### Patch Changes
 
-- 833a1cb: Add agent event source contracts and dynamic event source subscription tools. Agents can list active, agent-visible webhook-backed event sources, subscribe entities to resolved bucket streams with explicit lifetimes, and persist those subscriptions as manifest-backed wake registrations. Bucket params are validated against the advertised `paramsSchema` before a subscription is accepted. Horton now receives these tools through the built-in agents runtime by default. Runtime-managed event source wakes now hydrate matching webhook rows into the agent trigger message so tool-created subscriptions include the event payload that caused the wake.
+- 833a1cb: Add agent webhook source contracts and dynamic webhook source subscription tools. Agents can list active, agent-visible webhook-backed webhook sources, subscribe entities to resolved bucket streams with explicit lifetimes, and persist those subscriptions as manifest-backed wake registrations. Bucket params are validated against the advertised `paramsSchema` before a subscription is accepted. Horton now receives these tools through the built-in agents runtime by default. Runtime-managed webhook source wakes now hydrate matching webhook rows into the agent trigger message so tool-created subscriptions include the event payload that caused the wake.
 - Updated dependencies [833a1cb]
 - Updated dependencies [833a1cb]
   - @electric-ax/agents-runtime@0.3.4

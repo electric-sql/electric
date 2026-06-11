@@ -53,10 +53,10 @@ import type {
   SlashCommandHelpers,
 } from './composer-input'
 import type {
-  EventSourceContract,
-  EventSourceSubscription,
-  EventSourceSubscriptionInput,
-} from './event-sources'
+  WebhookSourceContract,
+  WebhookSourceSubscription,
+  WebhookSourceSubscriptionInput,
+} from './webhook-sources'
 import type { EntityTags, TagOperation } from './tags'
 
 export type EntityStreamDB = RuntimeEntityStreamDB
@@ -734,11 +734,11 @@ export interface ProcessWakeConfig {
       messageType?: string
     }) => Promise<{ txid: string }>
     deleteSchedule: (opts: { id: string }) => Promise<{ txid: string }>
-    listEventSources: () => Promise<Array<EventSourceContract>>
-    subscribeToEventSource: (
-      opts: EventSourceSubscriptionInput
-    ) => Promise<{ txid: string; subscription: EventSourceSubscription }>
-    unsubscribeFromEventSource: (opts: {
+    listWebhookSources: () => Promise<Array<WebhookSourceContract>>
+    subscribeToWebhookSource: (
+      opts: WebhookSourceSubscriptionInput
+    ) => Promise<{ txid: string; subscription: WebhookSourceSubscription }>
+    unsubscribeFromWebhookSource: (opts: {
       id: string
     }) => Promise<{ txid: string }>
   }) => Array<AgentTool> | Promise<Array<AgentTool>>

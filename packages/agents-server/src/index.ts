@@ -65,17 +65,17 @@ export type {
   AuthorizeRequest,
 } from './electric-agents-types.js'
 export type {
-  EventSourceBucket,
-  EventSourceContract,
-  EventSourceFilter,
-  EventSourceSubscription,
-  EventSourceSubscriptionInput,
+  WebhookSourceBucket,
+  WebhookSourceContract,
+  WebhookSourceFilter,
+  WebhookSourceSubscription,
+  WebhookSourceSubscriptionInput,
   SubscriptionLifetime,
 } from '@electric-ax/agents-runtime'
 export type { Principal, PrincipalKind } from './principal.js'
 export { globalRouter } from './routing/global-router.js'
 export type { GlobalRoutes } from './routing/global-router.js'
-export type { EventSourceCatalog, TenantContext } from './routing/context.js'
+export type { WebhookSourceCatalog, TenantContext } from './routing/context.js'
 export {
   streamRootDurableStreamsRoutingAdapter,
   pathPrefixedSingleTenantDurableStreamsRoutingAdapter,
