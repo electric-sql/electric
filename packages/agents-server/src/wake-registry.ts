@@ -967,6 +967,8 @@ export class WakeRegistry {
     }
     if (value && `oldValue` in value) {
       change.oldValue = value.oldValue
+    } else if (value && `old_value` in value) {
+      change.oldValue = value.old_value
     }
 
     if (eventType === `inbox`) {

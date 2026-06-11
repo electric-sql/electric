@@ -46,9 +46,6 @@ const DEFAULT_RETRY_MAX_DELAY_MS = 30_000
 type PgSyncChangeMessage = {
   headers: Record<string, unknown> & {
     operation?: PgSyncOperation | string
-    offset?: unknown
-    lsn?: unknown
-    op_position?: unknown
     key?: unknown
     rowKey?: unknown
   }
@@ -165,74 +162,44 @@ function rowKeyForMessage(message: PgSyncChangeMessage): string | undefined {
   return candidate === undefined ? undefined : stableJson(candidate)
 }
 
-function offsetForMessage(message: PgSyncChangeMessage): string | null {
-  const offset = message.headers.offset
-  if (typeof offset === `string` && offset.length > 0) {
-    return offset
-  }
-
-  const lsn = message.headers.lsn
-  const opPosition = message.headers.op_position
-  if (
-    (typeof lsn === `string` || typeof lsn === `number`) &&
-    (typeof opPosition === `string` || typeof opPosition === `number`)
-  ) {
-    return `${lsn}_${opPosition}`
-  }
-
-  return null
-}
-
 export function pgSyncMessageToDurableEvent(
   message: PgSyncChangeMessage,
-  optionsOrSourceRef: PgSyncOptions | string
+  _optionsOrSourceRef: PgSyncOptions | string
 ): {
   type: `pg_sync_change`
   key: string
   value: Record<string, unknown>
-  headers: { operation: PgSyncOperation; timestamp: string }
+  headers: Record<string, unknown> & { operation: PgSyncOperation }
 } | null {
   const operation = message.headers.operation
   if (
     operation !== `insert` &&
     operation !== `update` &&
     operation !== `delete`
-  )
+  ) {
     return null
+  }
 
-  const sourceRef =
-    typeof optionsOrSourceRef === `string`
-      ? optionsOrSourceRef
-      : sourceRefForPgSync(optionsOrSourceRef)
-  const rowKey = rowKeyForMessage(message)
-  const offset = offsetForMessage(message)
-  if (!offset) return null
-  const messageKeyPart = offset
-  const messageKey = `${sourceRef}:${operation}:${messageKeyPart}`
-  const timestamp = new Date().toISOString()
-  const oldValue = message.old_value
-  const safeValue = jsonSafe(message.value)
-  const safeOldValue = jsonSafe(oldValue)
-  const safeHeaders = jsonSafe(message.headers)
+  const key =
+    message.key ??
+    (typeof message.headers.key === `string`
+      ? message.headers.key
+      : undefined) ??
+    rowKeyForMessage(message)
+  if (!key) {
+    return null
+  }
+
+  const safeMessage = jsonSafe(message) as Record<string, unknown>
 
   return {
     type: `pg_sync_change`,
-    key: messageKey,
-    value: {
-      key: messageKey,
-      table:
-        typeof optionsOrSourceRef === `string`
-          ? undefined
-          : optionsOrSourceRef.table,
+    key,
+    value: safeMessage,
+    headers: {
+      ...(jsonSafe(message.headers) as Record<string, unknown>),
       operation,
-      ...(rowKey !== undefined ? { rowKey } : {}),
-      ...(message.value !== undefined ? { value: safeValue } : {}),
-      ...(oldValue !== undefined ? { oldValue: safeOldValue } : {}),
-      headers: safeHeaders,
-      ...(typeof offset === `string` ? { offset } : {}),
-      receivedAt: timestamp,
     },
-    headers: { operation, timestamp },
   }
 }
 

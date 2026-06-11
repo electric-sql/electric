@@ -86,10 +86,11 @@ describe(`pg-sync bridge helpers`, () => {
     })
   })
 
-  it(`converts insert/update/delete messages with stable keys`, () => {
+  it(`copies shape messages directly while preserving the row key`, () => {
     const options = { url: SHAPE_URL, table: `todos` }
     const insert = pgSyncMessageToDurableEvent(
       {
+        key: `"public"."todos"/"1"`,
         headers: { operation: `insert`, lsn: `1`, op_position: 0 },
         value: { id: 1, text: `a` },
       } as any,
@@ -97,58 +98,61 @@ describe(`pg-sync bridge helpers`, () => {
     )!
     const update = pgSyncMessageToDurableEvent(
       {
-        headers: { operation: `update`, offset: `2_0` },
+        key: `"public"."todos"/"1"`,
+        headers: { operation: `update` },
         value: { id: 1, text: `b` },
+        old_value: { id: 1, text: `a` },
       } as any,
       options
     )!
     const del = pgSyncMessageToDurableEvent(
       {
-        headers: { operation: `delete`, offset: `3_0` },
-        value: { id: 1 },
+        key: `"public"."todos"/"1"`,
+        headers: { operation: `delete` },
+        old_value: { id: 1 },
       } as any,
       options
     )!
 
-    expect(insert.key).toBe(`${sourceRefForPgSync(options)}:insert:1_0`)
+    expect(insert.key).toBe(`"public"."todos"/"1"`)
+    expect(insert.value).toMatchObject({
+      key: `"public"."todos"/"1"`,
+      value: { id: 1, text: `a` },
+    })
     expect(update.headers.operation).toBe(`update`)
-    expect(del.value.operation).toBe(`delete`)
-    expect(del.value.rowKey).toBe(`1`)
+    expect(update.value).toMatchObject({
+      key: `"public"."todos"/"1"`,
+      value: { id: 1, text: `b` },
+      old_value: { id: 1, text: `a` },
+    })
+    expect(del.value).toMatchObject({
+      key: `"public"."todos"/"1"`,
+      old_value: { id: 1 },
+    })
   })
 
-  it(`derives an offset from lsn and op_position when Electric omits headers.offset`, () => {
+  it(`falls back to row identity when Electric omits the top-level key`, () => {
     const options = { url: SHAPE_URL, table: `todos` }
 
     const event = pgSyncMessageToDurableEvent(
       {
-        headers: { operation: `insert`, lsn: `28517568`, op_position: 0 },
+        headers: { operation: `insert` },
         value: { id: 32, text: `testing` },
       } as any,
       options
     )!
 
-    expect(event.key).toBe(`${sourceRefForPgSync(options)}:insert:28517568_0`)
-    expect(event.value.offset).toBe(`28517568_0`)
+    expect(event.key).toBe(`32`)
   })
 
-  it(`rejects messages without stable offsets or lsn/op_position`, () => {
+  it(`rejects messages without a row key`, () => {
     const options = { url: SHAPE_URL, table: `todos` }
 
     expect(
       pgSyncMessageToDurableEvent(
         {
-          key: `shape-key-1`,
           headers: { operation: `insert` },
-          value: { id: 1 },
-        } as any,
-        options
-      )
-    ).toBeNull()
-    expect(
-      pgSyncMessageToDurableEvent(
-        {
-          headers: { operation: `insert`, lsn: `28517568` },
-          value: { id: 1 },
+          value: { text: `missing id` },
         } as any,
         options
       )
@@ -168,7 +172,7 @@ describe(`pg-sync bridge helpers`, () => {
 
     expect(JSON.stringify(event)).toContain(`"1"`)
     expect(event.value.value).toEqual({ id: `1`, nested: { count: `2` } })
-    expect(event.value.oldValue).toEqual({ id: `0` })
+    expect(event.value.old_value).toEqual({ id: `0` })
     expect(event.value.headers).toEqual({ operation: `insert`, offset: `12_0` })
   })
 })
@@ -210,8 +214,12 @@ describe(`PgSyncBridgeManager`, () => {
     ])
     expect(JSON.parse(mockState.appends[0]!)).toMatchObject({
       type: `pg_sync_change`,
+      key: `1`,
       headers: { operation: `insert` },
-      value: { table: `todos`, operation: `insert`, rowKey: `1` },
+      value: {
+        headers: { operation: `insert` },
+        value: { id: 1 },
+      },
     })
   })
 
@@ -578,13 +586,17 @@ describe(`external review red tests`, () => {
     })
   })
 
-  it(`rejects pg-sync change messages without a stable per-change offset`, () => {
+  it(`accepts pg-sync change messages without a per-change offset when the row key is present`, () => {
     expect(
       pgSyncMessageToDurableEvent(
-        { headers: { operation: `insert` }, value: { id: 1 } } as any,
+        {
+          key: `"public"."todos"/"1"`,
+          headers: { operation: `insert` },
+          value: { id: 1 },
+        } as any,
         { url: SHAPE_URL, table: `todos` }
       )
-    ).toBeNull()
+    ).toMatchObject({ key: `"public"."todos"/"1"` })
   })
 })
 
