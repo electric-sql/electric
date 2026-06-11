@@ -644,18 +644,19 @@ defmodule Electric.Replication.ShapeLogCollector do
       Inspector.clean(updated_rel.id, state.inspector)
     end
 
-    :ok =
-      PersistentReplicationState.set_tracked_relations(
-        tracker_state,
-        state.persistent_replication_data_opts
-      )
-
-    state = %{state | tracked_relations: tracker_state}
-
     case Partitions.handle_relation(state.partitions, updated_rel) do
       {:ok, partitions} ->
         state = %{state | partitions: partitions}
-        publish_relation(state, updated_rel, relation_status)
+
+        with {:ok, state} <- publish_relation(state, updated_rel, relation_status) do
+          :ok =
+            PersistentReplicationState.set_tracked_relations(
+              tracker_state,
+              state.persistent_replication_data_opts
+            )
+
+          {:ok, %{state | tracked_relations: tracker_state}}
+        end
 
       {:error, :connection_not_available} ->
         {{:error, :connection_not_available}, state}
