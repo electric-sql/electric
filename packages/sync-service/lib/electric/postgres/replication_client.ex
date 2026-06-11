@@ -55,6 +55,7 @@ defmodule Electric.Postgres.ReplicationClient do
       step: :disconnected,
       wait_for_active_ref: nil,
       pending_event: nil,
+      last_retry_error_log: nil,
       received_wal: 0,
       flushed_wal: 0,
       last_seen_txn_lsn: Lsn.from_integer(0),
@@ -81,6 +82,7 @@ defmodule Electric.Postgres.ReplicationClient do
             step: Electric.Postgres.ReplicationClient.step(),
             wait_for_active_ref: {reference(), term()} | nil,
             pending_event: {reference(), term(), non_neg_integer(), integer()} | nil,
+            last_retry_error_log: integer() | nil,
             received_wal: non_neg_integer(),
             flushed_wal: non_neg_integer(),
             last_seen_txn_lsn: Lsn.t(),
@@ -154,6 +156,10 @@ defmodule Electric.Postgres.ReplicationClient do
 
   # Maximum time to spend retrying a crashed event handler before giving up.
   @max_event_retry_time 10 * 60_000
+
+  # How often a still-failing event retry is logged at error level; attempts
+  # in between are logged at debug level. See log_event_retry/6.
+  @retry_log_interval 10_000
 
   @spec start_link(Keyword.t()) :: :gen_statem.start_ret()
   def start_link(opts) do
@@ -361,7 +367,7 @@ defmodule Electric.Postgres.ReplicationClient do
       )
       when is_reference(ref) do
     Process.demonitor(ref, [:flush])
-    state = %{state | pending_event: nil}
+    state = %{state | pending_event: nil, last_retry_error_log: nil}
     state = maybe_update_flush_up_to_date(state)
     {acks, state} = acknowledge_transaction(event, state)
     {:noreply_and_resume, acks, state}
@@ -388,15 +394,15 @@ defmodule Electric.Postgres.ReplicationClient do
     state = %{state | pending_event: nil}
 
     if remaining > 0 do
-      Logger.error(
-        "Error processing replication event (#{remaining}ms retry budget left): " <>
-          inspect(reason)
-      )
+      state = log_event_retry(state, :processing, event, remaining, reason, fn -> inspect(reason) end)
 
       Process.send_after(self(), {:process_event, event, remaining}, @event_retry_delay)
       {:noreply, state}
     else
-      Logger.error("Exhausted retry budget processing replication event: " <> inspect(reason))
+      Logger.error(
+        "Exhausted retry budget processing replication event: #{describe_event(event)} failed with: " <>
+          inspect_scrubbed(reason)
+      )
 
       exit(reason)
     end
@@ -540,23 +546,83 @@ defmodule Electric.Postgres.ReplicationClient do
         remaining = time_remaining - (System.monotonic_time(:millisecond) - start_time)
 
         if remaining > 0 do
-          Logger.error(
-            "Error dispatching replication event (#{remaining}ms retry budget left): " <>
-              Exception.format(kind, reason, __STACKTRACE__)
-          )
+          stacktrace = __STACKTRACE__
+
+          state =
+            log_event_retry(state, :dispatching, event, remaining, reason, fn ->
+              Exception.format(kind, reason, stacktrace)
+            end)
 
           Process.send_after(self(), {:process_event, event, remaining}, @event_retry_delay)
           {:noreply, state}
         else
           Logger.error(
-            "Exhausted retry budget dispatching replication event: " <>
-              Exception.format(kind, reason, __STACKTRACE__)
+            "Exhausted retry budget dispatching replication event: #{describe_event(event)} failed with: " <>
+              inspect_scrubbed(reason)
           )
 
           :erlang.raise(kind, reason, __STACKTRACE__)
         end
     end
   end
+
+  # A failing event is retried every @event_retry_delay (50ms) for up to
+  # @max_event_retry_time (10 minutes), so logging every attempt at error
+  # level floods the log output — and any error tracker fed from it — with up
+  # to ~12000 messages for a single incident. Log the first failure and one
+  # progress update per @retry_log_interval at error level, and every other
+  # attempt at debug level. The throttle window is wall-clock time tracked in
+  # the state because a fast failure (e.g. :noproc) consumes no measurable
+  # retry budget.
+  #
+  # The error-level message carries the event identity instead of the full
+  # event: the payload can be megabytes of row data, which both bloats the
+  # message and copies user data into the logs. The full detail remains
+  # available at debug level.
+  defp log_event_retry(state, action, event, remaining, reason, debug_detail_fn) do
+    now = System.monotonic_time(:millisecond)
+
+    if is_nil(state.last_retry_error_log) or
+         now - state.last_retry_error_log >= @retry_log_interval do
+      Logger.error(
+        "Error #{action} replication event (#{div(remaining, 1000)}s retry budget left, retrying every #{@event_retry_delay}ms): " <>
+          "#{describe_event(event)} failed with: " <> inspect_scrubbed(reason)
+      )
+
+      %{state | last_retry_error_log: now}
+    else
+      Logger.debug(fn ->
+        "Error #{action} replication event (#{remaining}ms retry budget left): " <>
+          debug_detail_fn.()
+      end)
+
+      state
+    end
+  end
+
+  defp describe_event(%TransactionFragment{} = fragment) do
+    "transaction fragment xid=#{fragment.xid} lsn=#{fragment.lsn} changes=#{fragment.change_count}"
+  end
+
+  defp describe_event(%Relation{} = rel) do
+    ~s|relation "#{rel.schema}"."#{rel.table}" (oid #{rel.id})|
+  end
+
+  # Replace replication events embedded in an exit reason (e.g. as arguments
+  # in a :noproc tuple) with their one-line summary before inspecting, so
+  # that error-level logs never carry full row data.
+  defp inspect_scrubbed(term) do
+    term |> scrub_events() |> inspect(limit: 100, printable_limit: 2048)
+  end
+
+  defp scrub_events(%TransactionFragment{} = event), do: "#<#{describe_event(event)}>"
+  defp scrub_events(%Relation{} = event), do: "#<#{describe_event(event)}>"
+
+  defp scrub_events(tuple) when is_tuple(tuple),
+    do: tuple |> Tuple.to_list() |> Enum.map(&scrub_events/1) |> List.to_tuple()
+
+  defp scrub_events(list) when is_list(list), do: Enum.map(list, &scrub_events/1)
+  defp scrub_events(other), do: other
 
   # Downstream returned :not_ready — subscribe to StatusMonitor for notification
   # when the stack becomes active, then retry. This replaces the old blocking

@@ -273,6 +273,43 @@ defmodule Electric.Postgres.ReplicationClientTest do
       assert %NewRecord{record: %{"value" => "test value 2"}} = receive_tx_change()
     end
 
+    @tag handle_event: {MockTransactionProcessor, :handle_event_async, []}
+    test "logs a failing event dispatch at error level once, not per retry attempt",
+         %{db_conn: conn} = ctx do
+      start_client(ctx)
+
+      # process one transaction so that the relation message is already
+      # handled and the failing event below is the transaction itself
+      start_supervised({MockTransactionProcessor, self()})
+      insert_item(conn, "first value")
+      assert %NewRecord{record: %{"value" => "first value"}} = receive_tx_change()
+
+      stop_supervised(MockTransactionProcessor)
+
+      error_log =
+        capture_log([level: :error], fn ->
+          # with the processor stopped every dispatch exits with :noproc and
+          # is retried every 50ms
+          insert_item(conn, "a private row value")
+          Process.sleep(500)
+        end)
+
+      error_lines =
+        error_log
+        |> String.split("\n")
+        |> Enum.count(&(&1 =~ "Error dispatching replication event"))
+
+      assert error_lines == 1
+
+      # the error-level log identifies the event without embedding row data
+      assert error_log =~ "xid="
+      refute error_log =~ "a private row value"
+
+      # the event is still delivered once the handler comes back up
+      start_supervised({MockTransactionProcessor, self()})
+      assert %NewRecord{record: %{"value" => "a private row value"}} = receive_tx_change()
+    end
+
     @tag database_settings: ["wal_sender_timeout='3s'"]
     @tag handle_event: {MockTransactionProcessor, :handle_event_async, []}
     test "connection survives wal_sender_timeout when event handler is unavailable",
