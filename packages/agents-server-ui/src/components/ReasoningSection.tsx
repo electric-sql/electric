@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Streamdown } from 'streamdown'
 import {
   streamdownComponents,
@@ -20,6 +20,10 @@ import styles from './ReasoningSection.module.css'
  */
 export type ReasoningEntry = {
   key: string
+  // Stream position of the reasoning row — same `_timeline_order`
+  // space as the run's text / tool-call items, so the parent can
+  // interleave reasoning blocks at the position they were emitted.
+  order: string | number
   content: string
   status: `streaming` | `completed`
   summary_title?: string
@@ -46,48 +50,17 @@ export type ReasoningEntry = {
  *   the model gets it back on the next turn.
  *
  * Multiple reasoning rows per run are possible — typically one per LLM
- * step in a tool-using turn — so we render each independently with its
- * own collapse state, in order.
+ * step in a tool-using turn — so the parent renders one block per row,
+ * interleaved with the run's text / tool-call items by stream order.
+ *
+ * Expand/collapse state is controlled by the parent (keyed by
+ * `entry.key`) rather than owned here, so the user's choice survives
+ * this block being unmounted and remounted — e.g. when the reasoning
+ * row briefly disappears from the live query while another part of
+ * the run updates, or when a virtualizer measurement pass replaces
+ * the subtree.
  */
-export function ReasoningSection({
-  entries,
-  isStreaming,
-  timestamp,
-}: {
-  entries: Array<ReasoningEntry>
-  isStreaming: boolean
-  timestamp?: number | null
-}): React.ReactElement | null {
-  // Owned here rather than inside `ReasoningEntryView` so the user's
-  // expand/collapse choice survives the entry view being unmounted and
-  // remounted — e.g. when the reasoning row briefly disappears from
-  // the live query while another part of the run updates, or when a
-  // virtualizer measurement pass replaces the subtree.
-  const [expandedByKey, setExpandedByKey] = useState<Record<string, boolean>>(
-    {}
-  )
-  const toggleExpanded = useCallback((key: string) => {
-    setExpandedByKey((prev) => ({ ...prev, [key]: !prev[key] }))
-  }, [])
-
-  if (entries.length === 0) return null
-  return (
-    <Stack direction="column" gap={2} className={styles.root}>
-      {entries.map((entry) => (
-        <ReasoningEntryView
-          key={entry.key}
-          entry={entry}
-          isStreaming={isStreaming}
-          timestamp={timestamp}
-          expanded={Boolean(expandedByKey[entry.key])}
-          onToggle={toggleExpanded}
-        />
-      ))}
-    </Stack>
-  )
-}
-
-function ReasoningEntryView({
+export function ReasoningBlock({
   entry,
   isStreaming,
   timestamp,

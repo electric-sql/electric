@@ -1,19 +1,12 @@
-/* Reasoning sits above the agent's visible answer. We want it to read
- * as secondary content — never compete with the response — but stay
- * legible enough that a curious user can skim it.
+/* Reasoning blocks interleave with the agent's text / tool-call items
+ * at the stream position they were emitted. We want them to read as
+ * secondary content — never compete with the response — but stay
+ * legible enough that a curious user can skim them.
  *
  * Visual hierarchy:
  *   live    → faded markdown body, animated "Thinking" heading
  *   settled → single muted line, click-to-expand
- *   redacted → single muted line, no expand
- *
- * Top/bottom padding matches the agent-response root so the layout
- * doesn't shift when the reasoning section disappears post-collapse. */
-
-.root {
-  margin-inline: auto;
-  width: max(0px, calc(100% - 24px));
-}
+ *   redacted → single muted line, no expand */
 
 .live {
   border-left: 2px solid var(--ds-border-2);
