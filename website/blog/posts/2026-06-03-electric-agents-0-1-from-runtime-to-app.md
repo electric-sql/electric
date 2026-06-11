@@ -20,7 +20,7 @@ Keep the post factual and brisk: runtime/SDK release first, apps as preview
 devtools/demo surfaces, managed Cloud Agents servers as coming soon.
 -->
 
-Electric Agents 0.1 is out today. It rounds out the framework we launched in April — agents as durable, addressable streams — with a broader set of primitives for building agentic systems.
+Electric Agents 0.1 is out today. It rounds out the platform we launched in April — agents as durable, addressable streams — with a broader SDK and runtime surface for building agentic systems.
 
 The release gives you the runtime and SDK primitives: long-lived entities, StreamDB state, local and remote runners, spawning, forking, wakes, signals, schedules, self-sends, app APIs, and multi-agent coordination patterns. The apps are in preview as devtools and demo surfaces. Managed Agents servers in Electric Cloud are coming soon.
 
@@ -38,7 +38,7 @@ what has become more complete since the April launch.
 
 - In April we introduced Electric Agents as the agent platform built on sync: agents are durable, addressable streams of state, not hidden processes trapped behind a chat UI.
 - 0.1 expands the core verbs and primitives: define agents, run them on runners, wake them from events, spawn children, fork history, signal active work, schedule future work, and build apps on top.
-- The apps are the preview and devtools surface. They show what it feels like to inspect, steer, and operate agent systems built on the SDK, but the release is the framework.
+- The apps are the preview and devtools surface. They show what it feels like to inspect, steer, and operate agent systems built on the SDK, but the release is the platform.
 
 ## Every entity is a StreamDB
 
@@ -51,7 +51,7 @@ StreamDB-backed entity", not a transient process.
 - An Electric Agents entity is a long-lived, addressable thing: an assistant, worker, coding session, support ticket, lead researcher, orchestrator, monitor, or any agent type you define.
 - Every entity has a durable stream and a typed StreamDB projection. The stream is the log; the StreamDB is the live state, timeline, inbox, runs, tool calls, context, errors, children, signals, and custom collections.
 - The process that handles a wake can come and go. The entity persists. It can sleep, wake, replay, fork, spawn children, and be observed by apps or other agents.
-- This is what makes the framework feel different from a local chat loop. The agent is not the process. The agent is the durable, observable state.
+- This is what makes the platform feel different from a local chat loop. The agent is not the process. The agent is the durable, observable state.
 
 <!-- ASSET: Diagram or animation. One entity path -> durable stream -> StreamDB collections -> UI/agent subscribers. Show built-in collections and custom state as projections over the same stream. -->
 
@@ -134,13 +134,13 @@ agent lists, timelines, entity views, spawn/send/signal controls, etc.
 
 <!--
 Apps are not the main launch now. Position them as preview/devtools/demo surfaces
-that prove the framework and show the product direction.
+that prove the platform and show the product direction.
 -->
 
 - The desktop app preview is devtools for the runtime and SDK: inspect entities, timelines, state, runs, tool calls, errors, runners, MCP servers, model providers, and server connections.
 - It is also a general chat and coding agent surface: Horton as the built-in assistant, Worker for delegated subtasks, and your custom agents alongside them.
 - The mobile app previews show the remote-control workflow: connect to an Agents server, browse sessions, open live timelines, send messages, and signal running agents from your phone.
-- We are using the apps to dogfood the framework and build toward our own software factory: agents that shepherd PRs and issues, keep work moving, and let everyone connect to the same durable session.
+- We are using the apps to dogfood the SDK and runtime and build toward our own software factory: agents that shepherd PRs and issues, keep work moving, and let everyone connect to the same durable session.
 
 <!-- ASSET: Desktop app preview screenshot/video. Label clearly as app preview / devtools. -->
 <!-- ASSET: Mobile app preview screenshot/video. Label clearly as preview. -->
@@ -242,7 +242,7 @@ DELETE BEFORE PUBLISHING
 - What is interesting about it?
   - Electric Agents 0.1 is the verbs and primitives release: spawn, fork, wake, observe, signal, schedule, send-to-self, coordinate through StreamDB, and build apps on top.
 - Reader takeaway:
-  - Electric Agents is a framework for building agentic systems, now with a more complete set of primitives: durable entities, StreamDB state, runners, coordination verbs, signals, scheduling, app APIs, and preview devtools for inspecting and controlling the agents you build.
+  - Electric Agents is a platform for building agentic systems, with an SDK and runtime that now include a more complete set of primitives: durable entities, StreamDB state, runners, coordination verbs, signals, scheduling, app APIs, and preview devtools for inspecting and controlling the agents you build.
 - CTAs:
   - Run `npx electric-ax agents quickstart`.
   - Read the updated docs.
@@ -253,7 +253,7 @@ DELETE BEFORE PUBLISHING
 
 ## Title brief
 
-Direction: lead with the 0.1 framework/runtime release, not the app preview.
+Direction: lead with the 0.1 platform release, especially the SDK and runtime, not the app preview.
 Working title options: “Electric Agents 0.1 released”, “Electric Agents 0.1: agents as StreamDBs”, “Electric Agents 0.1: the verbs release”.
 Titles must use sentence case.
 
@@ -267,7 +267,7 @@ Max three short sentences. Mention runtime/SDK first, then app previews and Clou
 
 ## Image prompt
 
-Durable agent framework visual. Dark theme. Show several persistent entity nodes as StreamDB-backed streams, with runners claiming wakes and a preview app/devtools surface observing them. Include a small code panel defining an entity/handler. Avoid making the desktop app look like the primary launch headline. Electric brand colours: purple #D0BCFF, green #00d2a0, cyan #75fbfd, yellow #F6F95C, orange #FF8C3B. 16:9 to 16:10, target ~1536x950px, key content center-safe for responsive cropping.
+Durable agent platform visual. Dark theme. Show several persistent entity nodes as StreamDB-backed streams, with runners claiming wakes and a preview app/devtools surface observing them. Include a small code panel defining an entity/handler. Avoid making the desktop app look like the primary launch headline. Electric brand colours: purple #D0BCFF, green #00d2a0, cyan #75fbfd, yellow #F6F95C, orange #FF8C3B. 16:9 to 16:10, target ~1536x950px, key content center-safe for responsive cropping.
 
 ## Asset checklist
 
