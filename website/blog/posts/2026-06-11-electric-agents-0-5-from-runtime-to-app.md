@@ -1,11 +1,11 @@
 ---
-title: "Electric Agents 0.1"
+title: "Electric Agents 0.5"
 description: >-
   ...
 excerpt: >-
   ...
 authors: [samwillis]
-image: /img/blog/electric-agents-0-1-from-runtime-to-app/header.jpg
+image: /img/blog/electric-agents-0-5-from-runtime-to-app/header.jpg
 tags: [electric-agents, agents, durable-streams, sync, devtools]
 outline: [2, 3]
 post: true
@@ -24,7 +24,7 @@ Keep the post factual and brisk: runtime/SDK release first, apps as in-developme
 devtools/demo surfaces, managed Cloud Agents servers as coming soon.
 -->
 
-Electric Agents 0.1 is out today. It rounds out the [platform we launched in April](/blog/2026/04/29/introducing-electric-agents), where agents are durable, addressable streams, with a broader SDK and runtime surface for building agentic systems.
+Electric Agents 0.5 is out today. It rounds out the [platform we launched in April](/blog/2026/04/29/introducing-electric-agents), where agents are durable, addressable streams, with a broader SDK and runtime surface for building agentic systems.
 
 The release gives you the runtime and SDK primitives: [long-lived entities](/docs/agents/usage/defining-entities), StreamDB state, local and remote runners, [spawning and forking](/docs/agents/usage/spawning-and-coordinating), [wakes](/docs/agents/usage/waking-entities), [signals](/docs/agents/usage/signals), schedules, self-sends, [app APIs](/docs/agents/usage/programmatic-runtime-client), and multi-agent coordination patterns. The apps are in development as devtools and demo surfaces. You can download canary builds from [GitHub releases](https://github.com/electric-sql/electric/releases) or build them yourself from source. Managed Agents servers in Electric Cloud are coming soon.
 
@@ -54,12 +54,12 @@ Explain local vs remote runners. This is important for Cloud coming soon and for
 the phone-controlling-local-compute story.
 -->
 
-The stack starts with durable data and builds up to agents, runners, and apps. 0.1 expands the runtime and SDK surface on top of that stack, and the in-development apps show how the same state model can be used for devtools and product workflows.
+The stack starts with durable data and builds up to agents, runners, and apps. 0.5 expands the runtime and SDK surface on top of that stack, and the in-development apps show how the same state model can be used for devtools and product workflows.
 
 <figure>
-  <a href="/img/blog/electric-agents-0-1-from-runtime-to-app/stack.jpg" class="no-visual">
+  <a href="/img/blog/electric-agents-0-5-from-runtime-to-app/stack.jpg" class="no-visual">
     <img
-      src="/img/blog/electric-agents-0-1-from-runtime-to-app/stack.jpg"
+      src="/img/blog/electric-agents-0-5-from-runtime-to-app/stack.jpg"
       alt="Electric Agents stack: Durable Streams, StreamDB, TanStack DB, Agents runtime, and Agents apps."
     />
   </a>
@@ -71,7 +71,7 @@ The **Agents runtime** sits on top of that data layer. It provides the control p
 
 The **Agents apps** are the top layer. They are in-development desktop and mobile surfaces for devtools, coding-agent workflows, remote control, and our own dogfooding. Because coordination and compute are separate, you can start a coding session on your machine, leave the runner there, then open the same session from your phone to send a follow-up, stop it, or ask it to fix something.
 
-Managed Agents servers in Electric Cloud are coming soon. The 0.1 runtime is built around the same local/remote runner model: hosted coordination, user-owned compute.
+Managed Agents servers in Electric Cloud are coming soon. The 0.5 runtime is built around the same local/remote runner model: hosted coordination, user-owned compute.
 
 <!-- ASSET: Diagram or short video. Agents server/control plane in middle, local desktop runner on one side, remote/mobile/app clients on the other. Make clear compute stays with user-owned runners. -->
 
@@ -466,9 +466,9 @@ DELETE BEFORE PUBLISHING
 ## Intent
 
 - What is this post about?
-  - Electric Agents 0.1 launches the runtime and SDK for building durable, persistent agent systems: every entity is a StreamDB, compute runs on local or remote runners you control, the apps are in-development devtools surfaces, and managed Electric Cloud support for Agents servers is coming soon.
+  - Electric Agents 0.5 launches the runtime and SDK for building durable, persistent agent systems: every entity is a StreamDB, compute runs on local or remote runners you control, the apps are in-development devtools surfaces, and managed Electric Cloud support for Agents servers is coming soon.
 - What is interesting about it?
-  - Electric Agents 0.1 expands the core APIs: spawn, fork, wake, observe, signal, schedule, send-to-self, coordinate through StreamDB, and build apps on top.
+  - Electric Agents 0.5 expands the core APIs: spawn, fork, wake, observe, signal, schedule, send-to-self, coordinate through StreamDB, and build apps on top.
 - Reader takeaway:
   - Electric Agents is a platform for building agentic systems, with an SDK and runtime that now include a broader API surface: durable entities, StreamDB state, runners, coordination APIs, signals, scheduling, app APIs, and in-development devtools for inspecting and controlling the agents you build.
 - CTAs:
@@ -481,17 +481,17 @@ DELETE BEFORE PUBLISHING
 
 ## Title brief
 
-Direction: lead with the 0.1 platform release, especially the SDK and runtime, not the apps.
-Working title options: “Electric Agents 0.1 released”, “Electric Agents 0.1: agents as StreamDBs”.
+Direction: lead with the 0.5 platform release, especially the SDK and runtime, not the apps.
+Working title options: “Electric Agents 0.5 released”, “Electric Agents 0.5: agents as StreamDBs”.
 Titles must use sentence case.
 
 ## Description brief
 
-SEO description should say that Electric Agents 0.1 ships the runtime and SDK for building durable, persistent, StreamDB-backed agent systems, with local/remote runners, coordination APIs, app APIs, and in-development devtools. Mention managed Agents servers in Electric Cloud coming soon.
+SEO description should say that Electric Agents 0.5 ships the runtime and SDK for building durable, persistent, StreamDB-backed agent systems, with local/remote runners, coordination APIs, app APIs, and in-development devtools. Mention managed Agents servers in Electric Cloud coming soon.
 
 ## Excerpt brief
 
-Max three short sentences. Mention runtime/SDK first, then apps in development and Cloud coming soon. Example direction: “Electric Agents 0.1 is the runtime release for durable, persistent agents. Every entity is a StreamDB, every runner is yours to control, and the apps show how to inspect and steer the systems you build.”
+Max three short sentences. Mention runtime/SDK first, then apps in development and Cloud coming soon. Example direction: “Electric Agents 0.5 is the runtime release for durable, persistent agents. Every entity is a StreamDB, every runner is yours to control, and the apps show how to inspect and steer the systems you build.”
 
 ## Image prompt
 
