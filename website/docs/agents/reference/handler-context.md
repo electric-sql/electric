@@ -118,6 +118,27 @@ interface HandlerContext<TState extends StateProxy = StateProxy> {
 | `sandbox`    | `Sandbox`                                         | Active sandbox for this wake session. Runtime-provided tools use this for filesystem, process, and network access. |
 | `attachments` | `AttachmentsApi`                                 | Read and create manifest-backed attachments for this entity.                                                  |
 
+## HandlerWake
+
+`ctx.wake` is a normalized convenience view of the raw `WakeEvent` passed as the handler's second argument:
+
+```ts
+type HandlerWake =
+  | {
+      type: "inbox"
+      source: string
+      message: { type: string; payload: unknown; from?: string }
+      raw: WakeEvent
+    }
+  | {
+      type: "other"
+      wakeType: string
+      source: string
+      payload?: unknown
+      raw: WakeEvent
+    }
+```
+
 ## Methods
 
 | Method                            | Return Type                                                       | Description                                                                                                                                                                                                                                |

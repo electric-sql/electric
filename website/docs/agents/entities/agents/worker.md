@@ -20,6 +20,9 @@ interface WorkerArgs {
   tools?: Array<WorkerToolName>
   sharedDb?: { id: string; schema: SharedStateSchemaMap }
   sharedDbToolMode?: "full" | "write-only"
+  model?: string
+  provider?: string
+  reasoningEffort?: string
 }
 ```
 
@@ -29,6 +32,9 @@ interface WorkerArgs {
 | `tools`            | No       | Subset of valid tool names (see below). Unknown names throw at parse time.                    |
 | `sharedDb`         | No       | Shared state stream id and schema to connect to.                                              |
 | `sharedDbToolMode` | No       | Shared state tool mode: `"full"` (default) or `"write-only"`.                                 |
+| `model`            | No       | Model id override. Usually inherited from `spawn_worker` / Horton model config.               |
+| `provider`         | No       | Model provider override paired with `model`.                                                  |
+| `reasoningEffort`  | No       | Reasoning effort override for compatible reasoning models.                                    |
 
 `registerWorker(registry, { workingDirectory, streamFn? })` is called by the dev server during bootstrap; you don't usually call it yourself.
 

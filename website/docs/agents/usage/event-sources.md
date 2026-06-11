@@ -59,7 +59,7 @@ The runtime tool factory can add four tools:
 | `subscribe_event_source` | Subscribe the entity to a source or bucket. |
 | `unsubscribe_event_source` | Remove a subscription by id. |
 
-Horton receives these tools from the built-in runtime. Custom runtimes can provide them with `createEventSourceTools()` or by passing `createElectricTools` through `createRuntimeHandler()`.
+Horton receives these tools from the built-in runtime. Custom runtimes can provide them with `createEventSourceTools()` or by passing `createElectricTools` through `createRuntimeHandler()`. Built-in runtimes also add schedule tools by default; if you replace `createElectricTools`, include both tool sets when you want Horton to keep both capabilities.
 
 ```ts
 import { createEventSourceTools } from "@electric-ax/agents-runtime/tools"
