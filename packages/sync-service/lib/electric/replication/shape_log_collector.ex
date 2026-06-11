@@ -633,9 +633,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   end
 
   defp handle_relation(state, rel) do
-    OpenTelemetry.add_span_attributes("rel.is_dropped": false)
-
-    {updated_rel, tracker_state} =
+    {relation_status, updated_rel, tracker_state} =
       AffectedColumns.transform_relation(rel, state.tracked_relations)
 
     # PG doesn't send all the details in the relation message (in particular, nullability), but
@@ -652,29 +650,44 @@ defmodule Electric.Replication.ShapeLogCollector do
         state.persistent_replication_data_opts
       )
 
+    state = %{state | tracked_relations: tracker_state}
+
+    case Partitions.handle_relation(state.partitions, updated_rel) do
+      {:ok, partitions} ->
+        state = %{state | partitions: partitions}
+        publish_relation(state, updated_rel, relation_status)
+
+      {:error, :connection_not_available} ->
+        {{:error, :connection_not_available}, state}
+    end
+  end
+
+  defp publish_relation(state, rel, :unchanged) do
+    OpenTelemetry.add_span_attributes("rel.is_dropped": true)
+
+    Logger.debug(fn ->
+      "Dropping unchanged relation message for #{inspect(rel.schema)}.#{inspect(rel.table)}"
+    end)
+
+    {:ok, state}
+  end
+
+  defp publish_relation(state, rel, _relation_status) do
     case state do
       %{subscriptions: 0} ->
+        OpenTelemetry.add_span_attributes("rel.is_dropped": true)
+
         Logger.debug(fn ->
           "Dropping relation message for #{inspect(rel.schema)}.#{inspect(rel.table)}: no active consumers"
         end)
 
-        {:ok, %{state | tracked_relations: tracker_state}}
+        {:ok, state}
 
       _ ->
-        case Partitions.handle_relation(state.partitions, updated_rel) do
-          {:ok, partitions} ->
-            # relation changes will also start consumers if they're not running
-            state =
-              publish(
-                %{state | tracked_relations: tracker_state, partitions: partitions},
-                updated_rel
-              )
+        OpenTelemetry.add_span_attributes("rel.is_dropped": false)
 
-            {:ok, state}
-
-          {:error, :connection_not_available} ->
-            {{:error, :connection_not_available}, state}
-        end
+        # relation changes will also start consumers if they're not running
+        {:ok, publish(state, rel)}
     end
   end
 

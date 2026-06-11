@@ -24,18 +24,18 @@ defmodule Electric.Replication.ShapeLogCollector.AffectedColumns do
     case {existing_id, existing_rel} do
       # New relation, register it
       {nil, nil} ->
-        {rel, add_relation(state, id, rel)}
+        {:new, rel, add_relation(state, id, rel)}
 
       # Relation identity matches known, let's compare columns
       {^id, %Relation{schema: ^schema, table: ^table}} ->
         case find_differing_columns(existing_rel, rel) do
-          # No (noticable) changes to the relation, continue as-is
+          # No noticeable changes to the relation, continue as-is
           [] ->
-            {rel, state}
+            {:unchanged, rel, state}
 
           affected_cols ->
             updated_rel = %{rel | affected_columns: affected_cols}
-            {updated_rel, add_relation(state, id, rel)}
+            {:changed, updated_rel, add_relation(state, id, rel)}
         end
 
       # Some part of identity changed, update the state and pass it through
@@ -44,7 +44,7 @@ defmodule Electric.Replication.ShapeLogCollector.AffectedColumns do
           "Relation identity changed: #{existing_id}/#{inspect(existing_rel)} -> #{inspect(rel)}"
         end)
 
-        {rel,
+        {:identity_changed, rel,
          state
          |> delete_tracked_relation(schema_table_key(existing_rel), existing_id)
          |> add_relation(id, rel)}

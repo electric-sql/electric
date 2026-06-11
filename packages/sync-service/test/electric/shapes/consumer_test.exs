@@ -434,10 +434,10 @@ defmodule Electric.Shapes.ConsumerTest do
     test "does not clean shapes if relation didn't change", ctx do
       rel =
         %Relation{
-          id: :erlang.phash2({"random", "definitely_different"}),
-          schema: "random",
-          table: "definitely_different",
-          columns: []
+          id: @shape1.root_table_id,
+          schema: elem(@shape1.root_table, 0),
+          table: elem(@shape1.root_table, 1),
+          columns: [%{name: "id", type_oid: {1, 1}}, %{name: "value", type_oid: {2, 1}}]
         }
 
       ref1 = Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle1))
@@ -449,6 +449,13 @@ defmodule Electric.Shapes.ConsumerTest do
           raise "Unexpected call to remove_shape: #{shape_handle}"
         end
       )
+
+      assert :ok = ShapeLogCollector.handle_event(rel, ctx.stack_id)
+
+      Repatch.patch(Electric.Shapes.EventRouter, :event_by_shape_handle, [mode: :shared], fn
+        _, _ ->
+          raise "Unexpected routing for unchanged duplicate relation"
+      end)
 
       assert :ok = ShapeLogCollector.handle_event(rel, ctx.stack_id)
 
