@@ -74,6 +74,9 @@ export interface BuiltinDockerSandboxMount {
  * Embedder customization for the built-in `docker` sandbox profile.
  * Threads straight into `dockerSandbox()` (which already supports these);
  * custom `extraMounts` are appended after the working-directory mount.
+ * These are embedder/operator-trust inputs: `extraMounts` is subject to the
+ * runtime's docker-socket guard, and `env` is passed verbatim into the
+ * container.
  */
 export interface BuiltinDockerSandboxOptions {
   /** Digest-pinned image unless `allowFloatingTag` is set. */
