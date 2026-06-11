@@ -32,6 +32,14 @@ defmodule Electric.Telemetry.OpenTelemetry do
   alias Electric.Telemetry.Sampler
   alias Electric.Telemetry.IntervalTimer
 
+  require Record
+
+  Record.defrecordp(
+    :span_ctx_record,
+    :span_ctx,
+    Record.extract(:span_ctx, from_lib: "opentelemetry_api/include/opentelemetry.hrl")
+  )
+
   @typep span_name :: String.t()
   @typep attr_name :: String.t()
   @typep span_attrs :: :opentelemetry.attributes_map()
@@ -374,6 +382,76 @@ defmodule Electric.Telemetry.OpenTelemetry do
 
   defp get_interval_timer do
     Process.get(@interval_timer_key, [])
+  end
+
+  @doc """
+  Whether the W3C `sampled` flag is set in the trace flags of the given span context.
+  """
+  @spec span_ctx_sampled?(span_ctx()) :: boolean()
+  def span_ctx_sampled?(span_ctx) when Record.is_record(span_ctx, :span_ctx) do
+    Bitwise.band(span_ctx_record(span_ctx, :trace_flags), 1) == 1
+  end
+
+  @doc """
+  Look up the value of the member with the given key in the W3C tracestate carried
+  by the given span context.
+
+  Returns the member's value as a string, or `nil` when the tracestate has no such
+  member.
+  """
+  @spec tracestate_value(span_ctx(), String.t()) :: String.t() | nil
+  def tracestate_value(span_ctx, key) when Record.is_record(span_ctx, :span_ctx) do
+    case :otel_tracestate.get(key, span_ctx_record(span_ctx, :tracestate)) do
+      value when is_binary(value) and value != "" -> value
+      [_ | _] = value -> List.to_string(value)
+      _ -> nil
+    end
+  end
+
+  @doc """
+  Create and immediately export a finished span as a child of a remote *unsampled*
+  parent span context.
+
+  The parent-based OTel sampler drops every span of a trace whose remote parent has
+  the `sampled` flag unset, so by the time we decide that a request is worth
+  exporting after all (e.g. it resulted in a 5xx response), no recording span exists.
+  This function retroactively synthesizes one: it copies the remote parent span
+  context with the `sampled` trace flag forced on and starts a recording span under
+  that copy, so the parent-based sampler takes its `remote_parent_sampled` branch
+  (`always_on` by default). The synthesized span keeps the remote trace_id and uses
+  the remote span id as its parent, so it shows up in the same trace as the spans
+  recorded by the upstream service.
+
+  Options:
+
+    * `:start_time` - native monotonic timestamp for the span's start (defaults to
+      the current time, producing a zero-duration span)
+    * `:error` - a message to record as the span's error status
+  """
+  @spec export_unsampled_remote_span(span_name(), span_attrs(), span_ctx(), keyword()) :: :ok
+  def export_unsampled_remote_span(name, attributes, parent_span_ctx, opts \\ [])
+      when Record.is_record(parent_span_ctx, :span_ctx) do
+    trace_flags = span_ctx_record(parent_span_ctx, :trace_flags)
+    sampled_parent = span_ctx_record(parent_span_ctx, trace_flags: Bitwise.bor(trace_flags, 1))
+
+    parent_ctx = :otel_tracer.set_current_span(:otel_ctx.new(), sampled_parent)
+
+    span_opts = %{
+      attributes: Map.new(attributes),
+      links: [],
+      is_recording: true,
+      start_time: opts[:start_time] || :opentelemetry.timestamp(),
+      kind: :internal
+    }
+
+    span_ctx = :otel_tracer.start_span(parent_ctx, tracer(), name, span_opts)
+
+    if message = opts[:error] do
+      :otel_span.set_status(span_ctx, :error, message)
+    end
+
+    :otel_span.end_span(span_ctx)
+    :ok
   end
 
   @doc """
