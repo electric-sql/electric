@@ -191,6 +191,38 @@ describe(`model catalog`, () => {
     expect(deepseekConfig.onPayload).toBeUndefined()
   })
 
+  it(`keeps Codex reasoning model payloads stateless`, async () => {
+    // The ChatGPT-login Codex endpoint rejects stateful requests with
+    // `{"detail":"Store must be set to false"}` — the openai branch's
+    // store:true override must not leak into openai-codex payloads.
+    delete process.env.OPENAI_API_KEY
+    process.env.ELECTRIC_CODEX_ACCESS_TOKEN = `test-codex-token`
+
+    const catalog = await createBuiltinModelCatalog()
+    const config = resolveBuiltinModelConfig(catalog!, {
+      model: `openai-codex:gpt-5.4`,
+    })
+
+    expect(config).toMatchObject({
+      provider: `openai-codex`,
+      model: `gpt-5.4`,
+    })
+    expect(config.onPayload).toBeTypeOf(`function`)
+
+    const payload = config.onPayload!(
+      { store: false, reasoning: { effort: `none` } },
+      {} as any
+    )
+
+    expect(payload).toEqual({
+      store: false,
+      reasoning: { effort: `low` },
+    })
+    expect(
+      config.onPayload!({ reasoning: { effort: `none` } }, {} as any)
+    ).not.toHaveProperty(`store`)
+  })
+
   it(`does not expose providers whose keys are rejected`, async () => {
     vi.stubGlobal(
       `fetch`,

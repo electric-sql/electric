@@ -270,8 +270,12 @@ function withProviderPayloadDefaults(
         // OpenAI Responses reasoning/tool-call continuations replay rs_*
         // reasoning items. With store:false, OpenAI does not persist those
         // items server-side, which can make follow-up requests fail with
-        // "Item with id ... not found". Keep Responses stateful for built-ins.
-        store: true,
+        // "Item with id ... not found". Keep Responses stateful for the
+        // regular API. The ChatGPT-login Codex endpoint is the opposite:
+        // it is stateless-only and rejects any stateful request with
+        // `{"detail":"Store must be set to false"}`, so it must keep the
+        // upstream store:false default.
+        ...(choice.provider === `openai` && { store: true }),
         reasoning: {
           ...existingReasoning,
           effort,
