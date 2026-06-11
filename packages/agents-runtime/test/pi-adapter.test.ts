@@ -587,7 +587,7 @@ describe(`toAgentHistory`, () => {
         entityUrl: `test/entity-1`,
         epoch: 1,
         messages: [],
-        outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0 },
+        outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0, reasoning: 0 },
         writeEvent: (e: ChangeEvent) => {
           events.push(e)
         },

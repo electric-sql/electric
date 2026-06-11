@@ -1606,6 +1606,11 @@ describe(`entity includes query`, () => {
       )
       const manifests = createSyncCollection(`test-manifests`, takeOffset)
       const childStatus = createSyncCollection(`test-child-status`, takeOffset)
+      const reasoning = createSyncCollection(`test-reasoning`, takeOffset)
+      const reasoningDeltas = createSyncCollection(
+        `test-reasoningDeltas`,
+        takeOffset
+      )
       return {
         collections: {
           runs: runs.collection,
@@ -1621,6 +1626,8 @@ describe(`entity includes query`, () => {
           contextRemoved: contextRemoved.collection,
           manifests: manifests.collection,
           childStatus: childStatus.collection,
+          reasoning: reasoning.collection,
+          reasoningDeltas: reasoningDeltas.collection,
         },
         sync: {
           runs: withSeqInjection(runs, takeSeq),
@@ -1636,6 +1643,8 @@ describe(`entity includes query`, () => {
           contextRemoved: withSeqInjection(contextRemoved, takeSeq),
           manifests: withSeqInjection(manifests, takeSeq),
           childStatus: withSeqInjection(childStatus, takeSeq),
+          reasoning: withSeqInjection(reasoning, takeSeq),
+          reasoningDeltas: withSeqInjection(reasoningDeltas, takeSeq),
         },
       }
     }
