@@ -48,39 +48,3 @@
 .metaActionButton:hover {
   opacity: 1;
 }
-
-.errorText {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.errorDetails {
-  min-width: 0;
-  max-width: 100%;
-}
-
-.errorDetails summary {
-  cursor: pointer;
-  list-style-position: outside;
-  padding-left: 2px;
-}
-
-.errorSummaryText {
-  display: inline;
-}
-
-.errorPre {
-  margin: 8px 0 0;
-  max-width: 100%;
-  overflow: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
-  color: var(--ds-red-11);
-  background: var(--ds-red-2);
-  border: 1px solid var(--ds-red-6);
-  border-radius: 8px;
-  padding: 8px 10px;
-  font: 12px/1.45 var(--ds-font-mono);
-}
