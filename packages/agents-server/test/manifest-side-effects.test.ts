@@ -51,7 +51,22 @@ describe(`manifest side effects`, () => {
     })
   })
 
-  it(`maps pgSync source manifest sourceRef to pg-sync stream path`, () => {
+  it(`prefers pgSync streamUrl from manifest config when present`, () => {
+    const sourceRef = `pg_abc123`
+
+    expect(
+      extractManifestSourceUrl({
+        kind: `source`,
+        sourceType: `pgSync`,
+        sourceRef,
+        config: {
+          streamUrl: `/_electric/pg-sync/default/${sourceRef}`,
+        },
+      })
+    ).toBe(`/_electric/pg-sync/default/${sourceRef}`)
+  })
+
+  it(`falls back to pgSync sourceRef-derived stream path`, () => {
     const sourceRef = `pg_abc123`
 
     expect(
@@ -71,6 +86,9 @@ describe(`manifest side effects`, () => {
         kind: `source`,
         sourceType: `pgSync`,
         sourceRef,
+        config: {
+          streamUrl: `/_electric/pg-sync/default/${sourceRef}`,
+        },
         wake: { on: `change`, ops: [`delete`] },
       },
       `source:pgSync:${sourceRef}`
@@ -78,7 +96,7 @@ describe(`manifest side effects`, () => {
 
     expect(registration).toEqual({
       subscriberUrl: `/parent/p1`,
-      sourceUrl: getPgSyncStreamPath(sourceRef),
+      sourceUrl: `/_electric/pg-sync/default/${sourceRef}`,
       condition: {
         on: `change`,
         ops: [`delete`],
@@ -107,6 +125,9 @@ describe(`manifest side effects`, () => {
       kind: `source`,
       sourceType: `pgSync`,
       sourceRef,
+      config: {
+        streamUrl: `/_electric/pg-sync/default/${sourceRef}`,
+      },
       wake: {
         on: `change`,
         collections: [`pg_sync_change`],
@@ -118,7 +139,7 @@ describe(`manifest side effects`, () => {
 
     expect(registration).toEqual({
       subscriberUrl: `/parent/p1`,
-      sourceUrl: getPgSyncStreamPath(sourceRef),
+      sourceUrl: `/_electric/pg-sync/default/${sourceRef}`,
       condition: {
         on: `change`,
         collections: [`pg_sync_change`],

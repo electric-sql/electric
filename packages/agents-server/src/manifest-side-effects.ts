@@ -62,6 +62,9 @@ export function extractManifestSourceUrl(
     }
 
     if (manifest.sourceType === `pgSync`) {
+      if (typeof config?.streamUrl === `string`) {
+        return config.streamUrl
+      }
       return typeof manifest.sourceRef === `string`
         ? getPgSyncManifestStreamPath(manifest.sourceRef)
         : undefined
