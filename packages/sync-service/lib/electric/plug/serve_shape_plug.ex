@@ -472,67 +472,6 @@ defmodule Electric.Plug.ServeShapePlug do
 
     conn
     |> add_span_attrs_from_conn()
-    |> stamp_sample_rate()
-  end
-
-  # Stamp the `SampleRate` attribute on the root request span and handle the
-  # error tail of remote-unsampled traces.
-  #
-  # The upstream proxy head-samples successful requests at 1:N (propagated to us via the
-  # `tracestate: electric=rate:N` hint) and keeps all >= 500 responses at rate 1. We
-  # mirror that here, per request:
-  #
-  #   * remote parent sampled: the root span is recording — stamp `SampleRate` = N for
-  #     status < 500 and `SampleRate` = 1 for status >= 500, so sampling-aware tracing
-  #     backends weight aggregates over Electric spans consistently with the upstream
-  #     proxy's own spans;
-  #
-  #   * remote parent NOT sampled: the parent-based sampler dropped all spans for this
-  #     request, which is the volume win for the (vast) majority of successful requests.
-  #     But for status >= 500 we still want server-side telemetry: synthesize a single
-  #     root span carrying the final request attributes with `SampleRate` = 1, parented
-  #     onto the remote span so it lands in the same trace as the upstream's
-  #     kept-on-error spans;
-  #
-  #   * no remote parent (direct traffic): nothing to do — spans are recorded and
-  #     exported unweighted, as before.
-  defp stamp_sample_rate(conn) do
-    case TraceContextPlug.trace_context(conn) do
-      %{parent_sampled?: true} ->
-        case TraceContextPlug.sample_rate_attrs(conn, conn.status) do
-          attrs when map_size(attrs) > 0 -> OpenTelemetry.add_span_attributes(attrs)
-          _ -> :ok
-        end
-
-      %{parent_sampled?: false, parent_span_ctx: parent_span_ctx} ->
-        if is_integer(conn.status) and conn.status >= 500 do
-          export_unsampled_error_span(conn, parent_span_ctx)
-        end
-
-      nil ->
-        :ok
-    end
-
-    conn
-  end
-
-  # The request ran under a remote-unsampled trace (no recording span exists) but ended
-  # in a 5xx — export one root span after the fact so the error is visible server-side.
-  # `SampleRate` is hardcoded to 1: error responses ignore the rate hint, mirroring the
-  # upstream's keep-all-errors-at-rate-1 semantics.
-  defp export_unsampled_error_span(conn, parent_span_ctx) do
-    attributes =
-      conn
-      |> open_telemetry_attrs()
-      |> Map.put(TraceContextPlug.sample_rate_attr(), 1)
-
-    OpenTelemetry.export_unsampled_remote_span(
-      "Plug_shape_get",
-      attributes,
-      parent_span_ctx,
-      start_time: get_in(conn.private, [:electric_telemetry_span, :start_time]),
-      error: conn.assigns[:error_str] || "HTTP #{conn.status}"
-    )
   end
 
   defp get_handle(%{response: %{shape_handle: shape_handle}}), do: shape_handle
@@ -553,12 +492,60 @@ defmodule Electric.Plug.ServeShapePlug do
 
   defp get_root_table(_assigns, _conn), do: nil
 
+  # Put the request's span attributes — the usual conn-derived attributes plus the
+  # `SampleRate` sampling weight when an upstream rate hint applies — where they belong.
+  #
+  # The full attribute map is always computed the same way; the only branch is on the
+  # remote trace context extracted by TraceContextPlug, which is fixed for the lifetime
+  # of the request:
+  #
+  #   * remote parent sampled, or no remote parent (direct traffic): the root span is
+  #     recording — add the attributes to it in bulk. Successful responses carry the
+  #     upstream rate `N`, 5xx responses carry `1`, mirroring the upstream proxy's
+  #     keep-all-errors-at-rate-1 weighting (see TraceContextPlug.sample_rate_attrs/2);
+  #
+  #   * remote parent NOT sampled: the parent-based sampler dropped all spans for this
+  #     request — the volume win for the (vast) majority of successful requests. For
+  #     5xx responses we still export server-side telemetry: the same attribute map
+  #     goes onto a single synthesized root span with `SampleRate` = 1, parented onto
+  #     the remote span so it lands in the same trace as the upstream's kept-on-error
+  #     spans. Anything else exports nothing.
+  #
+  # Called both at span start (status not yet known: the rate hint is stamped as-is and
+  # the 5xx conditions cannot match) and at emit time, when the final attribute values
+  # overwrite the initial ones.
   defp add_span_attrs_from_conn(conn) do
-    conn
-    |> open_telemetry_attrs()
-    |> OpenTelemetry.add_span_attributes()
+    attrs =
+      conn
+      |> open_telemetry_attrs()
+      |> Map.merge(TraceContextPlug.sample_rate_attrs(conn, conn.status))
+
+    case TraceContextPlug.trace_context(conn) do
+      %{parent_sampled?: false, parent_span_ctx: parent_span_ctx} ->
+        if is_integer(conn.status) and conn.status >= 500 do
+          export_unsampled_error_span(conn, parent_span_ctx, attrs)
+        end
+
+      _sampled_or_direct ->
+        OpenTelemetry.add_span_attributes(attrs)
+    end
 
     conn
+  end
+
+  # The request ran under a remote-unsampled trace (no recording span exists) but ended
+  # in a 5xx — export one root span after the fact so the error is visible server-side.
+  # `SampleRate` is set to 1 unconditionally: error responses ignore the rate hint (and
+  # the hint may be absent entirely), mirroring the upstream's keep-all-errors-at-rate-1
+  # semantics.
+  defp export_unsampled_error_span(conn, parent_span_ctx, attrs) do
+    OpenTelemetry.export_unsampled_remote_span(
+      "Plug_shape_get",
+      Map.put(attrs, TraceContextPlug.sample_rate_attr(), 1),
+      parent_span_ctx,
+      start_time: get_in(conn.private, [:electric_telemetry_span, :start_time]),
+      error: conn.assigns[:error_str] || "HTTP #{conn.status}"
+    )
   end
 
   defp open_telemetry_attrs(%Conn{assigns: assigns} = conn) do
