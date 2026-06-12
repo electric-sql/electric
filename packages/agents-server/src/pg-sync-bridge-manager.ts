@@ -615,6 +615,16 @@ export class PgSyncBridgeManager implements PgSyncBridgeCoordinator {
         `pgSync source at ${source.url} rejected the shape request (${response.status})${body ? `: ${body}` : ``}`
       )
     }
+    // Electric answers 200 on paths that aren't the shape API (e.g. its
+    // root), so an ok status alone doesn't prove the URL is right. Real
+    // shape responses always carry the electric-handle header.
+    if (!response.headers.get(`electric-handle`)) {
+      const suggestion = new URL(source.url)
+      suggestion.pathname = `/v1/shape`
+      throw new PgSyncSourceValidationError(
+        `pgSync source at ${source.url} responded but is not a shape log (missing electric-handle header) — the Electric shape API is usually served at ${suggestion.origin}/v1/shape`
+      )
+    }
   }
 
   async stop(): Promise<void> {

@@ -66,7 +66,13 @@ beforeEach(() => {
   mockState.streams = []
   vi.stubGlobal(
     `fetch`,
-    vi.fn(async () => new Response(`[]`, { status: 200 }))
+    vi.fn(
+      async () =>
+        new Response(`[]`, {
+          status: 200,
+          headers: { 'electric-handle': `handle-1` },
+        })
+    )
   )
 })
 
@@ -655,7 +661,11 @@ describe(`pg-sync production hardening`, () => {
 
   it(`probes the shape endpoint before starting a new bridge`, async () => {
     const fetchFn = vi.fn(
-      async (_input: RequestInfo | URL) => new Response(`[]`, { status: 200 })
+      async (_input: RequestInfo | URL) =>
+        new Response(`[]`, {
+          status: 200,
+          headers: { 'electric-handle': `handle-1` },
+        })
     )
     const manager = new PgSyncBridgeManager(
       {
@@ -730,8 +740,34 @@ describe(`pg-sync production hardening`, () => {
     expect(mockState.constructedOptions).toHaveLength(0)
   })
 
+  it(`fails registration when the endpoint responds 200 but is not a shape log`, async () => {
+    // Electric answers 200 with an empty body on its root path, so a bare
+    // host URL passes an ok-check while the shape API lives at /v1/shape.
+    const fetchFn = vi.fn(async () => new Response(``, { status: 200 }))
+    const manager = new PgSyncBridgeManager(
+      {
+        baseUrl: `http://durable`,
+        ensure: vi.fn(async () => undefined),
+      } as any,
+      undefined,
+      undefined,
+      { retry: { initialDelayMs: 0, maxDelayMs: 0 }, fetchFn }
+    )
+
+    await expect(
+      manager.register({ url: `http://localhost:30000`, table: `todos` })
+    ).rejects.toThrow(/not a shape log.*\/v1\/shape/s)
+    expect(mockState.constructedOptions).toHaveLength(0)
+  })
+
   it(`fails registration when the url is not an HTTP(S) endpoint`, async () => {
-    const fetchFn = vi.fn(async () => new Response(`[]`, { status: 200 }))
+    const fetchFn = vi.fn(
+      async () =>
+        new Response(`[]`, {
+          status: 200,
+          headers: { 'electric-handle': `handle-1` },
+        })
+    )
     const manager = new PgSyncBridgeManager(
       {
         baseUrl: `http://durable`,
