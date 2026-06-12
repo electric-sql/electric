@@ -1641,6 +1641,10 @@ export class PostgresRegistry {
       .where(this.pgSyncBridgeWhere(sourceRef))
   }
 
+  async deletePgSyncBridge(sourceRef: string): Promise<void> {
+    await this.db.delete(pgSyncBridges).where(this.pgSyncBridgeWhere(sourceRef))
+  }
+
   async upsertEntityBridge(row: {
     sourceRef: string
     tags: EntityTags

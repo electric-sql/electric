@@ -400,6 +400,40 @@ describe(`Wake Registry`, () => {
     })
   })
 
+  it(`maps pg-sync old_value from the event value into change.oldValue`, async () => {
+    const registry = new WakeRegistry(createMockDb())
+    await registry.register({
+      subscriberUrl: `/watcher/w1`,
+      sourceUrl: `/_electric/pg-sync/default/pg-source-1`,
+      condition: { on: `change`, collections: [`pg_sync_change`] },
+      oneShot: false,
+    })
+
+    const results = registry.evaluate(
+      `/_electric/pg-sync/default/pg-source-1`,
+      {
+        type: `pg_sync_change`,
+        key: `"public"."todos"/"1"`,
+        value: {
+          key: `"public"."todos"/"1"`,
+          value: { id: 1, text: `b` },
+          old_value: { id: 1, text: `a` },
+          headers: { operation: `update` },
+        },
+        headers: { operation: `update` },
+      }
+    )
+
+    expect(results).toHaveLength(1)
+    expect(results[0]!.wakeMessage.changes[0]).toEqual({
+      collection: `pg_sync_change`,
+      kind: `update`,
+      key: `"public"."todos"/"1"`,
+      value: { id: 1, text: `b` },
+      oldValue: { id: 1, text: `a` },
+    })
+  })
+
   it(`cleanup on subscriber deletion removes all registrations`, async () => {
     const registry = new WakeRegistry(createMockDb())
     await registry.register({

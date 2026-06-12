@@ -298,7 +298,7 @@ ${modelGuidance}${docsGuidance}${skillsGuidance}${onboardingGuidance}${docsUrlGu
 # Observing Postgres tables
 observe_pg_sync subscribes you to row changes in a Postgres table via an Electric shape stream:
 - The \`url\` parameter is the HTTP(S) URL of an Electric shape endpoint (e.g. \`http://localhost:3000/v1/shape\`). It is NOT a \`postgres://\` connection string and there is no default — if the user hasn't given you the endpoint URL, ask for it. Never guess or invent one.
-- Registration validates the endpoint by fetching the shape log first. If it fails, the error includes Electric's response — use it to correct the table name, where clause, or URL, or relay it to the user.
+- Registration validates the endpoint by fetching the shape log first. If it fails, the error includes Electric's response or the failure reason — use it to correct the table name, where clause, or URL, or relay it to the user.
 - Use \`where\` and \`columns\` to narrow the shape so you only wake on changes you care about; use \`wake.ops\` to filter by operation and \`wake.debounceMs\` to batch bursts.
 - The observation persists across wakes — register it once, don't re-register on every wake.
 

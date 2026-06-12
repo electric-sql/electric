@@ -9,6 +9,7 @@ import type {
 import { Type, type Static } from '@sinclair/typebox'
 import { Router, json } from 'itty-router'
 import { PgSyncSourceValidationError } from '../pg-sync-bridge-manager.js'
+import { serverLog } from '../utils/log.js'
 import { apiError } from '../electric-agents-http.js'
 import { ErrCodeInvalidRequest } from '../electric-agents-types.js'
 import { routeBody, withSchema } from './schema.js'
@@ -112,6 +113,10 @@ async function registerPgSync(
     if (error instanceof PgSyncSourceValidationError) {
       return apiError(400, ErrCodeInvalidRequest, error.message)
     }
+    serverLog.error(
+      `[pg-sync] registration failed for table "${options.table}":`,
+      error
+    )
     return apiError(
       500,
       ErrCodeInvalidRequest,

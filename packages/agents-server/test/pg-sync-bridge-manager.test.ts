@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   getPgSyncStreamPath,
   sourceRefForPgSync,
@@ -76,6 +76,10 @@ beforeEach(() => {
   )
 })
 
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
+
 describe(`pg-sync bridge helpers`, () => {
   it(`builds Electric shape params from JSON-safe options`, () => {
     expect(
@@ -97,32 +101,22 @@ describe(`pg-sync bridge helpers`, () => {
   })
 
   it(`copies shape messages directly while preserving the row key`, () => {
-    const options = { url: SHAPE_URL, table: `todos` }
-    const insert = pgSyncMessageToDurableEvent(
-      {
-        key: `"public"."todos"/"1"`,
-        headers: { operation: `insert`, lsn: `1`, op_position: 0 },
-        value: { id: 1, text: `a` },
-      } as any,
-      options
-    )!
-    const update = pgSyncMessageToDurableEvent(
-      {
-        key: `"public"."todos"/"1"`,
-        headers: { operation: `update` },
-        value: { id: 1, text: `b` },
-        old_value: { id: 1, text: `a` },
-      } as any,
-      options
-    )!
-    const del = pgSyncMessageToDurableEvent(
-      {
-        key: `"public"."todos"/"1"`,
-        headers: { operation: `delete` },
-        old_value: { id: 1 },
-      } as any,
-      options
-    )!
+    const insert = pgSyncMessageToDurableEvent({
+      key: `"public"."todos"/"1"`,
+      headers: { operation: `insert`, lsn: `1`, op_position: 0 },
+      value: { id: 1, text: `a` },
+    } as any)!
+    const update = pgSyncMessageToDurableEvent({
+      key: `"public"."todos"/"1"`,
+      headers: { operation: `update` },
+      value: { id: 1, text: `b` },
+      old_value: { id: 1, text: `a` },
+    } as any)!
+    const del = pgSyncMessageToDurableEvent({
+      key: `"public"."todos"/"1"`,
+      headers: { operation: `delete` },
+      old_value: { id: 1 },
+    } as any)!
 
     expect(insert.key).toBe(`"public"."todos"/"1"`)
     expect(insert.value).toMatchObject({
@@ -142,43 +136,29 @@ describe(`pg-sync bridge helpers`, () => {
   })
 
   it(`falls back to row identity when Electric omits the top-level key`, () => {
-    const options = { url: SHAPE_URL, table: `todos` }
-
-    const event = pgSyncMessageToDurableEvent(
-      {
-        headers: { operation: `insert` },
-        value: { id: 32, text: `testing` },
-      } as any,
-      options
-    )!
+    const event = pgSyncMessageToDurableEvent({
+      headers: { operation: `insert` },
+      value: { id: 32, text: `testing` },
+    } as any)!
 
     expect(event.key).toBe(`32`)
   })
 
   it(`rejects messages without a row key`, () => {
-    const options = { url: SHAPE_URL, table: `todos` }
-
     expect(
-      pgSyncMessageToDurableEvent(
-        {
-          headers: { operation: `insert` },
-          value: { text: `missing id` },
-        } as any,
-        options
-      )
+      pgSyncMessageToDurableEvent({
+        headers: { operation: `insert` },
+        value: { text: `missing id` },
+      } as any)
     ).toBeNull()
   })
 
   it(`converts BigInt values to strings so durable events are JSON serializable`, () => {
-    const options = { url: SHAPE_URL, table: `entities` }
-    const event = pgSyncMessageToDurableEvent(
-      {
-        headers: { operation: `insert`, offset: `12_0` },
-        value: { id: 1n, nested: { count: 2n } },
-        old_value: { id: 0n },
-      } as any,
-      options
-    )!
+    const event = pgSyncMessageToDurableEvent({
+      headers: { operation: `insert`, offset: `12_0` },
+      value: { id: 1n, nested: { count: 2n } },
+      old_value: { id: 0n },
+    } as any)!
 
     expect(JSON.stringify(event)).toContain(`"1"`)
     expect(event.value.value).toEqual({ id: `1`, nested: { count: `2` } })
@@ -422,6 +402,42 @@ describe(`PgSyncBridgeManager`, () => {
     })
   })
 
+  it(`startup deletes legacy rows without a url and still resumes valid ones`, async () => {
+    const options = { url: SHAPE_URL, table: `todos` }
+    const sourceRef = sourceRefForPgSync(options)
+    const registry = {
+      listPgSyncBridges: vi.fn(async () => [
+        {
+          sourceRef: `legacy-ref`,
+          streamUrl: getPgSyncStreamPath(`legacy-ref`),
+          options: { table: `todos` },
+        },
+        {
+          sourceRef,
+          streamUrl: getPgSyncStreamPath(sourceRef),
+          options,
+          shapeHandle: `handle-1`,
+          shapeOffset: `12_0`,
+        },
+      ]),
+      deletePgSyncBridge: vi.fn(async () => undefined),
+    }
+    const manager = new PgSyncBridgeManager(
+      {
+        baseUrl: `http://durable`,
+        ensure: vi.fn(async () => undefined),
+      } as any,
+      undefined,
+      registry as any
+    )
+
+    await manager.start()
+
+    expect(registry.deletePgSyncBridge).toHaveBeenCalledWith(`legacy-ref`)
+    expect(mockState.constructedOptions).toHaveLength(1)
+    expect(mockState.constructedOptions[0]).toMatchObject({ url: SHAPE_URL })
+  })
+
   it(`invalid stored shape cursor falls back to bootstrap and clears cursor`, async () => {
     const options = { url: SHAPE_URL, table: `todos` }
     const sourceRef = sourceRefForPgSync(options)
@@ -598,14 +614,11 @@ describe(`external review red tests`, () => {
 
   it(`accepts pg-sync change messages without a per-change offset when the row key is present`, () => {
     expect(
-      pgSyncMessageToDurableEvent(
-        {
-          key: `"public"."todos"/"1"`,
-          headers: { operation: `insert` },
-          value: { id: 1 },
-        } as any,
-        { url: SHAPE_URL, table: `todos` }
-      )
+      pgSyncMessageToDurableEvent({
+        key: `"public"."todos"/"1"`,
+        headers: { operation: `insert` },
+        value: { id: 1 },
+      } as any)
     ).toMatchObject({ key: `"public"."todos"/"1"` })
   })
 })

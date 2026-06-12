@@ -4,9 +4,6 @@ import {
   extractManifestSourceUrl,
 } from '../src/manifest-side-effects'
 
-const getPgSyncStreamPath = (sourceRef: string) =>
-  `/_electric/pg-sync/${sourceRef}`
-
 describe(`manifest side effects`, () => {
   it(`uses sourceRef for entity manifest wakes when config has no entityUrl`, () => {
     const registration = buildManifestWakeRegistration(
@@ -66,16 +63,14 @@ describe(`manifest side effects`, () => {
     ).toBe(`/_electric/pg-sync/default/${sourceRef}`)
   })
 
-  it(`falls back to pgSync sourceRef-derived stream path`, () => {
-    const sourceRef = `pg_abc123`
-
+  it(`returns undefined for legacy pgSync manifests without a config streamUrl`, () => {
     expect(
       extractManifestSourceUrl({
         kind: `source`,
         sourceType: `pgSync`,
-        sourceRef,
+        sourceRef: `pg_abc123`,
       })
-    ).toBe(getPgSyncStreamPath(sourceRef))
+    ).toBeUndefined()
   })
 
   it(`builds pgSync change wake registrations with ops`, () => {

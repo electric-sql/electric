@@ -1636,8 +1636,19 @@ describe(`processWake`, () => {
       close: mockSourceDbClose,
     })
 
-    await processWake(makeNotification(), BASE_CONFIG)
+    const result = await processWake(makeNotification(), BASE_CONFIG)
 
+    expect(result?.manifest).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: `source:pgSync:pg-source-1`,
+          sourceRef: `pg-source-1`,
+          config: expect.objectContaining({
+            streamUrl: `/_electric/pg-sync/default/pg-source-1`,
+          }),
+        }),
+      ])
+    )
     expect(mockCreateStreamDB).toHaveBeenCalledWith(
       expect.objectContaining({
         streamOptions: expect.objectContaining({
