@@ -3,17 +3,18 @@ defmodule Electric.Plug.TraceContextPlug do
   A plug that extracts trace context from incoming HTTP headers and sets it as the parent span.
 
   In addition to the standard W3C `traceparent` extraction, this plug parses Electric's
-  sample-rate hint from the `tracestate` header. An upstream proxy (e.g. the Cloudflare
-  worker in front of Electric Cloud) that head-samples requests at a rate of 1:N tells us
-  about that rate via a tracestate member of the form:
+  sample-rate hint from the `tracestate` header. An upstream proxy or gateway that
+  head-samples requests at a rate of 1:N tells us about that rate via a tracestate
+  member of the form:
 
       tracestate: electric=rate:<N>
 
   The hint, together with the remote parent span context and its sampled flag, is stored
   in the conn so that downstream plugs can:
 
-    * stamp Honeycomb's `SampleRate` attribute on exported spans, making Honeycomb weight
-      aggregates by the upstream sampling rate (see `sample_rate_attrs/2`);
+    * stamp the `SampleRate` attribute on exported spans, letting tracing backends that
+      understand sampling weights scale aggregates by the upstream sampling rate
+      (see `sample_rate_attrs/2`);
 
     * export an error-tail span for 5xx responses even when the remote parent was not
       sampled (see `Electric.Telemetry.OpenTelemetry.export_unsampled_remote_span/4`).
@@ -76,12 +77,12 @@ defmodule Electric.Plug.TraceContextPlug do
   def trace_context(%Plug.Conn{private: private}), do: private[@private_key]
 
   @doc """
-  Span attributes carrying Honeycomb's `SampleRate` for a response with the given status.
+  Span attributes carrying the sampling weight for a response with the given status.
 
-  Honeycomb's OTLP ingest natively reads an integer span attribute named `SampleRate`
-  and weights aggregates by it. Successful responses inherit the upstream sampling rate
-  from the tracestate hint, while error (>= 500) responses are stamped with a rate of 1:
-  they mirror the upstream's keep-all-errors-at-rate-1 semantics.
+  Tracing backends that support weighted sampling read an integer span attribute named
+  `SampleRate` and scale aggregates by it. Successful responses inherit the upstream
+  sampling rate from the tracestate hint, while error (>= 500) responses are stamped
+  with a rate of 1: they mirror the upstream's keep-all-errors-at-rate-1 semantics.
 
   Returns an empty map when the request carried no usable rate hint, leaving the spans
   unweighted as before.
@@ -103,7 +104,7 @@ defmodule Electric.Plug.TraceContextPlug do
   defp effective_sample_rate(rate, _status), do: rate
 
   @doc """
-  The name of the span attribute Honeycomb reads as the sampling weight.
+  The name of the span attribute that carries the sampling weight.
   """
   @spec sample_rate_attr() :: String.t()
   def sample_rate_attr, do: @sample_rate_attr

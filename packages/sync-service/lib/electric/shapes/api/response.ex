@@ -428,7 +428,7 @@ defmodule Electric.Shapes.Api.Response do
 
     stack_id = Api.stack_id(response)
 
-    # Per-chunk spans inherit Honeycomb's SampleRate from the upstream tracestate hint
+    # Per-chunk spans inherit the `SampleRate` attribute from the upstream tracestate hint
     # (when present), same as the root request span — see
     # Electric.Plug.TraceContextPlug.sample_rate_attrs/2.
     sample_rate_attrs = Electric.Plug.TraceContextPlug.sample_rate_attrs(conn, status)

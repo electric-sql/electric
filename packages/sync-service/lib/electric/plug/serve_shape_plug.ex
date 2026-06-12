@@ -475,7 +475,7 @@ defmodule Electric.Plug.ServeShapePlug do
     |> stamp_sample_rate()
   end
 
-  # Stamp Honeycomb's `SampleRate` attribute on the root request span and handle the
+  # Stamp the `SampleRate` attribute on the root request span and handle the
   # error tail of remote-unsampled traces.
   #
   # The upstream proxy head-samples successful requests at 1:N (propagated to us via the
@@ -483,8 +483,9 @@ defmodule Electric.Plug.ServeShapePlug do
   # mirror that here, per request:
   #
   #   * remote parent sampled: the root span is recording — stamp `SampleRate` = N for
-  #     status < 500 and `SampleRate` = 1 for status >= 500, so Honeycomb weights
-  #     aggregates over Electric spans the same way it weights the worker's;
+  #     status < 500 and `SampleRate` = 1 for status >= 500, so sampling-aware tracing
+  #     backends weight aggregates over Electric spans consistently with the upstream
+  #     proxy's own spans;
   #
   #   * remote parent NOT sampled: the parent-based sampler dropped all spans for this
   #     request, which is the volume win for the (vast) majority of successful requests.
