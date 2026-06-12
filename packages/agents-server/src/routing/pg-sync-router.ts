@@ -8,6 +8,7 @@ import type {
 } from '@electric-ax/agents-runtime'
 import { Type, type Static } from '@sinclair/typebox'
 import { Router, json } from 'itty-router'
+import { PgSyncSourceValidationError } from '../pg-sync-bridge-manager.js'
 import { apiError } from '../electric-agents-http.js'
 import { ErrCodeInvalidRequest } from '../electric-agents-types.js'
 import { routeBody, withSchema } from './schema.js'
@@ -108,6 +109,9 @@ async function registerPgSync(
 
     return json(result)
   } catch (error) {
+    if (error instanceof PgSyncSourceValidationError) {
+      return apiError(400, ErrCodeInvalidRequest, error.message)
+    }
     return apiError(
       500,
       ErrCodeInvalidRequest,

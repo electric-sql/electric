@@ -64,6 +64,10 @@ beforeEach(() => {
   mockState.appends = []
   mockState.appendError = null
   mockState.streams = []
+  vi.stubGlobal(
+    `fetch`,
+    vi.fn(async () => new Response(`[]`, { status: 200 }))
+  )
 })
 
 describe(`pg-sync bridge helpers`, () => {
@@ -647,6 +651,135 @@ describe(`pg-sync production hardening`, () => {
         electric_agents_wake_id: `wake-1`,
       },
     })
+  })
+
+  it(`probes the shape endpoint before starting a new bridge`, async () => {
+    const fetchFn = vi.fn(
+      async (_input: RequestInfo | URL) => new Response(`[]`, { status: 200 })
+    )
+    const manager = new PgSyncBridgeManager(
+      {
+        baseUrl: `http://durable`,
+        ensure: vi.fn(async () => undefined),
+      } as any,
+      undefined,
+      undefined,
+      { retry: { initialDelayMs: 0, maxDelayMs: 0 }, fetchFn }
+    )
+    const options = {
+      url: SHAPE_URL,
+      table: `todos`,
+      columns: [`id`, `text`],
+      where: `done = $1`,
+      params: [`false`],
+    }
+
+    await manager.register(options)
+
+    expect(fetchFn).toHaveBeenCalledTimes(1)
+    const probeUrl = new URL(String(fetchFn.mock.calls[0]![0]))
+    expect(probeUrl.origin + probeUrl.pathname).toBe(SHAPE_URL)
+    expect(probeUrl.searchParams.get(`table`)).toBe(`todos`)
+    expect(probeUrl.searchParams.get(`columns`)).toBe(`id,text`)
+    expect(probeUrl.searchParams.get(`where`)).toBe(`done = $1`)
+    expect(probeUrl.searchParams.get(`params[1]`)).toBe(`false`)
+    expect(probeUrl.searchParams.get(`offset`)).toBe(`now`)
+
+    await manager.register(options)
+    expect(fetchFn).toHaveBeenCalledTimes(1)
+  })
+
+  it(`fails registration when the shape endpoint rejects the probe`, async () => {
+    const ensure = vi.fn(async () => undefined)
+    const upsertPgSyncBridge = vi.fn(async () => undefined)
+    const fetchFn = vi.fn(
+      async () => new Response(`{"message":"table not found"}`, { status: 400 })
+    )
+    const manager = new PgSyncBridgeManager(
+      { baseUrl: `http://durable`, ensure } as any,
+      undefined,
+      { upsertPgSyncBridge } as any,
+      { retry: { initialDelayMs: 0, maxDelayMs: 0 }, fetchFn }
+    )
+
+    await expect(
+      manager.register({ url: SHAPE_URL, table: `missing` })
+    ).rejects.toThrow(/400.*table not found/s)
+    expect(mockState.constructedOptions).toHaveLength(0)
+    expect(upsertPgSyncBridge).not.toHaveBeenCalled()
+    expect(ensure).not.toHaveBeenCalled()
+  })
+
+  it(`fails registration when the shape endpoint is unreachable`, async () => {
+    const fetchFn = vi.fn(async () => {
+      throw new Error(`ECONNREFUSED`)
+    })
+    const manager = new PgSyncBridgeManager(
+      {
+        baseUrl: `http://durable`,
+        ensure: vi.fn(async () => undefined),
+      } as any,
+      undefined,
+      undefined,
+      { retry: { initialDelayMs: 0, maxDelayMs: 0 }, fetchFn }
+    )
+
+    await expect(
+      manager.register({ url: SHAPE_URL, table: `todos` })
+    ).rejects.toThrow(/unreachable.*ECONNREFUSED/s)
+    expect(mockState.constructedOptions).toHaveLength(0)
+  })
+
+  it(`fails registration when the url is not an HTTP(S) endpoint`, async () => {
+    const fetchFn = vi.fn(async () => new Response(`[]`, { status: 200 }))
+    const manager = new PgSyncBridgeManager(
+      {
+        baseUrl: `http://durable`,
+        ensure: vi.fn(async () => undefined),
+      } as any,
+      undefined,
+      undefined,
+      { retry: { initialDelayMs: 0, maxDelayMs: 0 }, fetchFn }
+    )
+
+    await expect(
+      manager.register({
+        url: `postgres://app:secret@localhost:5432/app`,
+        table: `todos`,
+      })
+    ).rejects.toThrow(/HTTP/)
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+
+  it(`keeps the sourceRef stable across registrations with different request metadata`, async () => {
+    const ensure = vi.fn(async () => undefined)
+    const manager = new PgSyncBridgeManager(
+      { baseUrl: `http://durable`, ensure } as any,
+      undefined,
+      undefined,
+      { retry: { initialDelayMs: 0, maxDelayMs: 0 } }
+    )
+    const options = { url: SHAPE_URL, table: `todos` }
+    const metadata = {
+      tenantId: `tenant-a`,
+      principalKind: `agent`,
+      principalId: `horton`,
+      entityUrl: `/horton/abc`,
+      runtimeConsumerId: `runner-1`,
+    }
+
+    const first = await manager.register(options, {
+      ...metadata,
+      wakeId: `wake-1`,
+    })
+    const second = await manager.register(options, {
+      ...metadata,
+      wakeId: `wake-2`,
+    })
+
+    expect(first.sourceRef).toBe(sourceRefForPgSync(options))
+    expect(second).toEqual(first)
+    expect(mockState.constructedOptions).toHaveLength(1)
   })
 
   it(`backs off before recovery retries`, async () => {

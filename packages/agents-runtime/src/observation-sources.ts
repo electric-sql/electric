@@ -107,7 +107,10 @@ export function canonicalPgSyncOptions(
 }
 
 export function sourceRefForPgSync(options: PgSyncOptions): string {
-  return hashString(JSON.stringify(canonicalPgSyncOptions(options)))
+  // metadata is per-request context (principal, wakeId, ...) and must not
+  // change the identity of the observed shape.
+  const { metadata: _metadata, ...identity } = canonicalPgSyncOptions(options)
+  return hashString(JSON.stringify(identity))
 }
 
 export interface EntityObservationSource extends ObservationSource {

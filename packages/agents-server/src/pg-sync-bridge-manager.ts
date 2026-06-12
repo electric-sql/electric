@@ -38,10 +38,16 @@ export interface PgSyncBridgeManagerOptions {
     random?: () => number
     sleep?: (ms: number) => Promise<void>
   }
+  fetchFn?: typeof fetch
+  probeTimeoutMs?: number
 }
+
+/** Registration was rejected because the source itself is invalid — map to a 4xx. */
+export class PgSyncSourceValidationError extends Error {}
 
 const DEFAULT_RETRY_INITIAL_DELAY_MS = 1_000
 const DEFAULT_RETRY_MAX_DELAY_MS = 30_000
+const DEFAULT_PROBE_TIMEOUT_MS = 10_000
 
 type PgSyncChangeMessage = {
   headers: Record<string, unknown> & {
@@ -118,6 +124,52 @@ export function buildElectricShapeParams(
       ? { electric_agents_wake_id: options.metadata.wakeId }
       : {}),
   }
+}
+
+/**
+ * Build the one-shot URL used to validate a shape source at registration
+ * time. Mirrors the query-param encoding of the Electric TS client: arrays
+ * are comma-joined, where-clause params become `params[n]`.
+ */
+export function buildShapeProbeUrl(
+  sourceUrl: string,
+  options: PgSyncOptions
+): URL {
+  let url: URL
+  try {
+    url = new URL(sourceUrl)
+  } catch {
+    throw new PgSyncSourceValidationError(
+      `pgSync url "${sourceUrl}" is not a valid URL`
+    )
+  }
+  if (url.protocol !== `http:` && url.protocol !== `https:`) {
+    throw new PgSyncSourceValidationError(
+      `pgSync url "${sourceUrl}" must be an HTTP(S) Electric shape endpoint, not a database connection string`
+    )
+  }
+  for (const [key, value] of Object.entries(
+    buildElectricShapeParams(options)
+  )) {
+    if (value === undefined || value === null) continue
+    if (Array.isArray(value)) {
+      if (key === `params`) {
+        value.forEach((item, index) =>
+          url.searchParams.set(`params[${index + 1}]`, String(item))
+        )
+      } else {
+        url.searchParams.set(key, value.join(`,`))
+      }
+    } else if (typeof value === `object`) {
+      for (const [k, v] of Object.entries(value)) {
+        url.searchParams.set(`${key}[${k}]`, String(v))
+      }
+    } else {
+      url.searchParams.set(key, String(value))
+    }
+  }
+  url.searchParams.set(`offset`, `now`)
+  return url
 }
 
 function jsonSafe(value: unknown): unknown {
@@ -410,6 +462,8 @@ export class PgSyncBridgeManager implements PgSyncBridgeCoordinator {
   private readonly retry: Required<
     NonNullable<PgSyncBridgeManagerOptions[`retry`]>
   >
+  private readonly fetchFn?: typeof fetch
+  private readonly probeTimeoutMs: number
 
   constructor(
     private streamClient: StreamClient,
@@ -417,6 +471,8 @@ export class PgSyncBridgeManager implements PgSyncBridgeCoordinator {
     private registry?: PostgresRegistry,
     options: PgSyncBridgeManagerOptions = {}
   ) {
+    this.fetchFn = options.fetchFn
+    this.probeTimeoutMs = options.probeTimeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS
     this.retry = {
       initialDelayMs:
         options.retry?.initialDelayMs ?? DEFAULT_RETRY_INITIAL_DELAY_MS,
@@ -458,6 +514,9 @@ export class PgSyncBridgeManager implements PgSyncBridgeCoordinator {
     const resolvedSource = this.resolveSource(canonicalOptions)
     const sourceRef = sourceRefForPgSync(canonicalOptions)
     const streamUrl = getPgSyncStreamPath(sourceRef, this.registry?.tenantId)
+    if (!this.bridges.has(sourceRef) && !this.starting.has(sourceRef)) {
+      await this.probeSource(resolvedSource, canonicalOptions)
+    }
     const row = await this.registry?.upsertPgSyncBridge({
       sourceRef,
       options: canonicalOptions,
@@ -522,11 +581,40 @@ export class PgSyncBridgeManager implements PgSyncBridgeCoordinator {
 
   private resolveSource(options: CanonicalPgSyncConfig): PgSyncResolvedSource {
     if (!options.url) {
-      throw new Error(
+      throw new PgSyncSourceValidationError(
         `pgSync source url is required; no server default is configured`
       )
     }
     return { url: options.url }
+  }
+
+  /**
+   * One-shot fetch of the shape log before a bridge is created, so a bad
+   * URL or rejected shape fails the registration instead of dying silently
+   * in the bridge's retry loop.
+   */
+  private async probeSource(
+    source: PgSyncResolvedSource,
+    options: CanonicalPgSyncConfig
+  ): Promise<void> {
+    const probeUrl = buildShapeProbeUrl(source.url, options)
+    const fetchFn = this.fetchFn ?? globalThis.fetch
+    let response: Response
+    try {
+      response = await fetchFn(probeUrl, {
+        signal: AbortSignal.timeout(this.probeTimeoutMs),
+      })
+    } catch (error) {
+      throw new PgSyncSourceValidationError(
+        `pgSync source at ${source.url} is unreachable: ${error instanceof Error ? error.message : String(error)}`
+      )
+    }
+    if (!response.ok) {
+      const body = (await response.text().catch(() => ``)).slice(0, 500)
+      throw new PgSyncSourceValidationError(
+        `pgSync source at ${source.url} rejected the shape request (${response.status})${body ? `: ${body}` : ``}`
+      )
+    }
   }
 
   async stop(): Promise<void> {
