@@ -53,6 +53,7 @@ dependencies = [
  "bytes",
  "dashmap",
  "http-body-util",
+ "httparse",
  "hyper",
  "hyper-util",
  "libc",

@@ -1,5 +1,6 @@
 mod api;
 mod engine_hyper;
+mod engine_raw;
 mod handlers;
 mod store;
 
@@ -73,6 +74,7 @@ fn main() {
         );
         match engine.as_str() {
             "hyper" => engine_hyper::serve(store, listener).await,
+            "raw" => engine_raw::serve(store, listener).await,
             _ => unreachable!(),
         }
     });
