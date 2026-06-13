@@ -17,6 +17,7 @@ serde_json = { version = "1", features = ["raw_value"] }
 httparse = "1"
 libc = "0.2"
 percent-encoding = "2"
+ed25519-dalek = { version = "2", default-features = false, features = ["std", "fast"] }
 
 [profile.release]
 lto = true

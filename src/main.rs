@@ -3,6 +3,7 @@ mod engine_hyper;
 mod engine_raw;
 mod handlers;
 mod store;
+mod subs;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -66,6 +67,7 @@ fn main() {
 
     rt.block_on(async move {
         let store = Arc::new(Store::new(data_dir.clone()).expect("failed to init store"));
+        let _ = store.subs.set(Arc::new(subs::SubsManager::new()));
         let addr: SocketAddr = (host, port).into();
         let listener = TcpListener::bind(addr).await.expect("bind failed");
         println!(

@@ -128,8 +128,12 @@ pub async fn handle(store: Arc<Store>, req: Req) -> Resp {
     let path = req.path.clone();
     let mut resp = if path == "/health" {
         text_response(200, "ok")
+    } else if let Some(idx) = path.find("/__ds/") {
+        let root = path[..idx].to_string();
+        let rest = path[idx + 6..].to_string();
+        crate::subs::handle_ds(store, req, root, rest).await
     } else if path.split('/').any(|seg| seg == "__ds") {
-        text_response(501, "control plane not implemented")
+        text_response(404, "not found")
     } else {
         match req.method {
             Method::Put => handle_create(store, req, path).await,
@@ -419,6 +423,7 @@ async fn handle_create(store: Arc<Store>, req: Req, path: String) -> Resp {
                 let file = ap.file.clone();
                 drop(ap);
                 st.sync.sync_to(file, &st, target).await;
+                crate::subs::on_activity(&store, &st.path);
             }
             let t = st.tail();
             let mut b = ResponseBuilder::new(201)
@@ -466,6 +471,35 @@ fn encode_wire(body: &Bytes, is_json: bool, allow_empty_array: bool) -> Result<B
         out.put_u8(b',');
         Ok(out.freeze())
     }
+}
+
+/// Append a single JSON message to a stream from server-internal code
+/// (wake events). Follows the same path as client appends: write, group-commit
+/// fsync, watch notification, debounced meta flush.
+pub(crate) async fn internal_append_json(
+    store: &Arc<Store>,
+    full_path: &str,
+    body: &[u8],
+) -> Option<()> {
+    let st = store.get(full_path)?;
+    {
+        let s = st.shared.read().unwrap();
+        if s.soft_deleted || s.closed {
+            return None;
+        }
+    }
+    let mut wire = BytesMut::with_capacity(body.len() + 1);
+    wire.put_slice(body);
+    wire.put_u8(b',');
+    let wire = wire.freeze();
+    let mut ap = st.appender.lock().await;
+    write_wire(&st, &mut ap, &wire).ok()?;
+    let target = ap.written;
+    let file = ap.file.clone();
+    drop(ap);
+    st.sync.sync_to(file, &st, target).await;
+    st.schedule_meta_flush();
+    Some(())
 }
 
 fn write_wire(st: &StreamState, ap: &mut Appender, wire: &Bytes) -> std::io::Result<()> {
@@ -757,6 +791,9 @@ async fn handle_append(store: Arc<Store>, req: Req, path: String) -> Resp {
         let _ = tokio::task::spawn_blocking(move || write_meta_sync(&st2, true)).await;
     } else {
         st.schedule_meta_flush();
+    }
+    if !wire.is_empty() {
+        crate::subs::on_activity(&store, &st.path);
     }
 
     let tail = st.tail();

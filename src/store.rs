@@ -209,6 +209,7 @@ impl StreamState {
 pub struct Store {
     pub streams: DashMap<String, Arc<StreamState>>,
     pub data_dir: PathBuf,
+    pub subs: std::sync::OnceLock<Arc<crate::subs::SubsManager>>,
     next_id: AtomicU64,
 }
 
@@ -229,6 +230,7 @@ impl Store {
         let store = Store {
             streams: DashMap::new(),
             data_dir,
+            subs: std::sync::OnceLock::new(),
             next_id: AtomicU64::new(seed & MAX_SAFE_INT),
         };
         store.recover(&streams_dir)?;
