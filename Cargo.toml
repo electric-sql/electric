@@ -1,0 +1,23 @@
+[package]
+name = "durable-streams-server"
+version = "0.1.0"
+edition = "2021"
+description = "High-performance Durable Streams server (Rust)"
+license = "Apache-2.0"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+hyper = { version = "1", features = ["http1", "server"] }
+hyper-util = { version = "0.1", features = ["tokio", "server", "http1"] }
+http-body-util = "0.1"
+bytes = "1"
+dashmap = "6"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["raw_value"] }
+libc = "0.2"
+percent-encoding = "2"
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
