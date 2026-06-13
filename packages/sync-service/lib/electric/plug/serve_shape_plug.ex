@@ -470,8 +470,7 @@ defmodule Electric.Plug.ServeShapePlug do
       }
     )
 
-    conn
-    |> add_span_attrs_from_conn()
+    add_span_attrs_from_conn(conn)
   end
 
   defp get_handle(%{response: %{shape_handle: shape_handle}}), do: shape_handle
@@ -501,15 +500,13 @@ defmodule Electric.Plug.ServeShapePlug do
   #
   #   * remote parent sampled, or no remote parent (direct traffic): the root span is
   #     recording — add the attributes to it in bulk. Successful responses carry the
-  #     upstream rate `N`, 5xx responses carry `1`, mirroring the upstream proxy's
-  #     keep-all-errors-at-rate-1 weighting (see TraceContextPlug.sample_rate_attrs/2);
+  #     upstream rate `N` (where `N` is extract from the tracestate header of the client request),
+  #     5xx responses carry `1`.
   #
-  #   * remote parent NOT sampled: the parent-based sampler dropped all spans for this
-  #     request — the volume win for the (vast) majority of successful requests. For
-  #     5xx responses we still export server-side telemetry: the same attribute map
-  #     goes onto a single synthesized root span with `SampleRate` = 1, parented onto
-  #     the remote span so it lands in the same trace as the upstream's kept-on-error
-  #     spans. Anything else exports nothing.
+  #   * remote parent NOT sampled. For 5xx responses we still export server-side telemetry:
+  #     the same attribute map goes onto a single synthesized root span with `SampleRate` = 1,
+  #     parented onto the remote span so it lands in the same trace as the upstream's kept-on-error
+  #     spans.
   #
   # Called both at span start (status not yet known: the rate hint is stamped as-is and
   # the 5xx conditions cannot match) and at emit time, when the final attribute values
@@ -535,9 +532,6 @@ defmodule Electric.Plug.ServeShapePlug do
 
   # The request ran under a remote-unsampled trace (no recording span exists) but ended
   # in a 5xx — export one root span after the fact so the error is visible server-side.
-  # `SampleRate` is set to 1 unconditionally: error responses ignore the rate hint (and
-  # the hint may be absent entirely), mirroring the upstream's keep-all-errors-at-rate-1
-  # semantics.
   defp export_unsampled_error_span(conn, parent_span_ctx, attrs) do
     OpenTelemetry.export_unsampled_remote_span(
       "Plug_shape_get",

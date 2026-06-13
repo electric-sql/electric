@@ -415,6 +415,7 @@ defmodule Electric.Telemetry.OpenTelemetry do
   The parent-based OTel sampler drops every span of a trace whose remote parent has
   the `sampled` flag unset, so by the time we decide that a request is worth
   exporting after all (e.g. it resulted in a 5xx response), no recording span exists.
+
   This function retroactively synthesizes one: it copies the remote parent span
   context with the `sampled` trace flag forced on and starts a recording span under
   that copy, so the parent-based sampler takes its `remote_parent_sampled` branch

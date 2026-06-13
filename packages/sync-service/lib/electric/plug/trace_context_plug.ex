@@ -10,14 +10,9 @@ defmodule Electric.Plug.TraceContextPlug do
       tracestate: electric=rate:<N>
 
   The hint, together with the remote parent span context and its sampled flag, is stored
-  in the conn so that downstream plugs can:
-
-    * stamp the `SampleRate` attribute on exported spans, letting tracing backends that
-      understand sampling weights scale aggregates by the upstream sampling rate
-      (see `sample_rate_attrs/2`);
-
-    * export an error-tail span for 5xx responses even when the remote parent was not
-      sampled (see `Electric.Telemetry.OpenTelemetry.export_unsampled_remote_span/4`).
+  in the conn so that downstream plugs can stamp the `SampleRate` attribute on exported spans,
+  letting tracing backends that understand sampling weights scale aggregates by the upstream
+  sampling rate (see `sample_rate_attrs/2`);
 
   Hints that are missing, unparseable or have a rate below 1 are ignored.
   """
