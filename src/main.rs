@@ -13,10 +13,17 @@ use store::Store;
 
 fn main() {
     let mut port: u16 = 4438;
+    let mut host: std::net::IpAddr = [127, 0, 0, 1].into();
     let mut data_dir = std::env::temp_dir().join("durable-streams-rust");
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
+            "--host" => {
+                host = args
+                    .next()
+                    .and_then(|v| v.parse().ok())
+                    .expect("--host requires an IP address");
+            }
             "--port" => {
                 port = args
                     .next()
@@ -51,7 +58,7 @@ fn main() {
 
     rt.block_on(async move {
         let store = Arc::new(Store::new(data_dir.clone()).expect("failed to init store"));
-        let addr: SocketAddr = ([127, 0, 0, 1], port).into();
+        let addr: SocketAddr = (host, port).into();
         let listener = TcpListener::bind(addr).await.expect("bind failed");
         println!(
             "durable-streams-server listening on http://{addr} (data: {})",
