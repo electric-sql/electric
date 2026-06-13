@@ -1,53 +1,79 @@
 # Benchmark results: Rust vs Node server
 
-Date: 2026-06-13. Machine: macOS, 10 cores, 16 GB RAM, Apple SSD.
-Both servers file-backed with per-append durable fsync (Node: libuv fdatasync =
-F_BARRIERFSYNC; Rust: F_BARRIERFSYNC, coalesced). Same Node-based load clients for
-both servers. Rust built `--release`. Raw result JSONs were produced into
-`.streams-dev/results-{rust,node}.json` (not checked in).
+Date: 2026-06-13. Both servers file-backed with per-append durable fsync
+(Node: libuv `fdatasync` = `F_BARRIERFSYNC`; Rust: `F_BARRIERFSYNC` on macOS,
+`fdatasync` on Linux, coalesced/group-commit). Same Node-based load clients for
+every server, so cross-server numbers are comparable. Rust built `--release`.
 
-## 1. Official suite (`@durable-streams/benchmarks`, via TS client)
+Two Rust HTTP engines are compared:
 
-| Metric (mean)                                      | Node server           | Rust server           | Improvement |
-| -------------------------------------------------- | --------------------- | --------------------- | ----------- |
-| Latency overhead (append→long-poll RTT minus ping) | 18.81 ms              | 0.53 ms               | **35×**     |
-| Small-message throughput (100 B, concurrency 75)   | 4,516 msg/s           | 88,586 msg/s          | **19.6×**   |
-| Large-message throughput (1 MB)                    | 342 msg/s (~342 MB/s) | 730 msg/s (~730 MB/s) | **2.1×**    |
+- **rust-hyper** — `--http-engine hyper` (default): tokio + hyper.
+- **rust-raw** — `--http-engine raw`: custom HTTP/1.1 loop. On Linux it serves
+  read responses with **sendfile(2)** (kernel page cache → socket, zero userspace
+  copy); on macOS it falls back to positioned reads (no sendfile), so on macOS
+  rust-raw ≈ rust-hyper minus framework overhead.
 
-## 2. Scale-out raw HTTP appends (one POST per 100 B message, N worker processes × 75 lanes)
+---
 
-| Workers | Node server | Rust server  |
-| ------- | ----------- | ------------ |
-| 1       | 185 msg/s   | 15,480 msg/s |
-| 2       | 147 msg/s   | 23,508 msg/s |
-| 4       | 189 msg/s   | 20,385 msg/s |
+## 1. macOS (10 cores, 16 GB, Apple SSD)
 
-Rust is **~80–120×** on unbatched appends. The official suite's smaller gap is the TS
-client batching appends before they reach the server. Rust plateaus ~20–23k msg/s at
-~2.6 of 10 cores — bounded by SSD barrier-fsync capacity plus load-generator CPU, not
-by the server.
+### Official suite (`@durable-streams/benchmarks`, via the TS client)
 
-## 3. Scale-out catch-up reads (full reads of a 10 MB stream, 16 lanes/worker)
+| Metric (mean)                    | Node     | rust-hyper | rust-raw   | best vs Node |
+| -------------------------------- | -------- | ---------- | ---------- | ------------ |
+| Latency overhead (RTT − ping)    | 19.76 ms | 0.85 ms    | 0.82 ms    | **24×**      |
+| Small messages (100 B, conc. 75) | 4,214 /s | 116,319 /s | 106,707 /s | **28×**      |
+| Large messages (1 MB)            | 324 /s   | 977 /s     | 1,112 /s   | **3.4×**     |
 
-| Workers | Node server | Rust server |
-| ------- | ----------- | ----------- |
-| 2       | 340 MB/s    | 2,550 MB/s  |
-| 4       | —           | 3,072 MB/s  |
+### Scale-out raw HTTP (2 worker processes, one request per message)
 
-Rust is **~8–9×**, still scaling at 4 workers; the Node _client_ processes saturate
-their cores parsing 3 GB/s before the Rust server does (page-cache reads).
+| Workload                          | Node     | rust-hyper | rust-raw   | best vs Node |
+| --------------------------------- | -------- | ---------- | ---------- | ------------ |
+| Unbatched appends (100 B, 150 ln) | 131 /s   | 30,386 /s  | 31,233 /s  | **~238×**    |
+| Catch-up reads (10 MB, 32 lanes)  | 351 MB/s | 3,580 MB/s | 3,957 MB/s | **11×**      |
+
+## 2. Linux (Docker, release) — where sendfile applies
+
+| Workload                           | rust-hyper  | rust-raw (sendfile) |
+| ---------------------------------- | ----------- | ------------------- |
+| Unbatched appends (100 B)          | 25,220 /s   | 25,661 /s           |
+| Catch-up reads (10 MB)             | 1,524 MB/s  | 1,556 MB/s          |
+| **Server CPU at ~1,580 MB/s read** | **113.9 %** | **11.8 %**          |
+
+**The zero-copy headline:** at equal read throughput, the sendfile engine uses
+~**10× less server CPU** (one core's worth of work shrinks to a tenth). Read
+throughput is _equal_ only because the Node load-generator processes saturate
+first — the raw engine has an order of magnitude more headroom that a heavier
+client (or TLS-via-kTLS, or more readers) would expose.
+
+## Why each optimization matters (recap)
+
+| Optimization                             | What it buys                                                 |
+| ---------------------------------------- | ------------------------------------------------------------ |
+| Contiguous wire-byte storage             | reads are plain byte ranges → enables sendfile, no reframing |
+| Group-commit coalesced fsync             | N concurrent appends ≈ 1 fsync (vs Node's per-append fsync)  |
+| Per-stream single-writer, no global lock | exactly-once bookkeeping with zero cross-stream contention   |
+| Lock-free positioned reads               | hot-tail reads are page-cache hits, never block the writer   |
+| Event-driven long-poll/SSE (watch)       | no polling loop (Node dev server polls SSE ~100 ms)          |
+| sendfile(2) in the raw engine (Linux)    | page cache → socket in-kernel: ~10× less CPU per byte served |
 
 ## Saturation notes
 
-- Append path: disk fsync-bound (physical limit of one SSD), not server-bound.
-- Read path: load-generator-bound. Pushing further needs either a compiled load
-  generator (oha/wrk-style) or more machines — stopped here per compute budget.
+- **Append path:** disk-fsync-bound (one SSD's barrier-fsync capacity), not
+  server-bound — Rust uses ~2.6 of 10 cores at the plateau.
+- **Read path:** load-generator-bound. The Node clients saturate before the Rust
+  server; the Linux CPU measurement is what exposes the real server-side gap.
+  Pushing throughput further needs a compiled load generator (oha/wrk) or more
+  client machines.
 
 ## Reproduce
 
 ```bash
 cargo build --release --manifest-path packages/server-rust/Cargo.toml
-packages/server-rust/target/release/durable-streams-server --port 4564 --data-dir .streams-dev/bench-rust &
+BIN=packages/server-rust/target/release/durable-streams-server
+
+# pick an engine with --http-engine {hyper|raw}
+$BIN --port 4564 --data-dir .streams-dev/bench-rust --http-engine raw &
 BENCH_URL=http://localhost:4564 BENCH_ENV=rust pnpm exec vitest bench --run \
   --config packages/server-rust/bench/vitest.bench.config.ts
 
@@ -55,15 +81,9 @@ PORT=4565 DATA_DIR=.streams-dev/bench-node pnpm exec tsx packages/server-rust/be
 BENCH_URL=http://localhost:4565 BENCH_ENV=node pnpm exec vitest bench --run \
   --config packages/server-rust/bench/vitest.bench.config.ts
 
-# scale-out (append / read)
-BENCH_URL=http://localhost:4564 WORKERS=4 CONCURRENCY=75 node packages/server-rust/bench/scale-out.ts
-MODE=read SEED_MB=10 BENCH_URL=http://localhost:4564 WORKERS=4 CONCURRENCY=16 node packages/server-rust/bench/scale-out.ts
+# scale-out (append / read); use 127.0.0.1 and let TIME_WAIT drain between runs
+BENCH_URL=http://127.0.0.1:4564 WORKERS=2 CONCURRENCY=75 node packages/server-rust/bench/scale-out.ts
+MODE=read SEED_MB=10 BENCH_URL=http://127.0.0.1:4564 WORKERS=2 CONCURRENCY=16 node packages/server-rust/bench/scale-out.ts
 ```
 
 Delete `.streams-dev/bench-*` after runs.
-
-## Post-fork regression check (2026-06-13)
-
-After adding fork support (chained segment reads; reads no longer touch the
-appender lock): latency overhead 0.53 ms (unchanged), scale-out appends
-24,022 msg/s (was 23,508), scale-out reads 2,559 MB/s (was 2,550). No regressions.
