@@ -113,6 +113,39 @@ impl Resp {
     }
 }
 
+pub const BASE64_STD: &[u8; 64] =
+    b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+pub const BASE64_URL: &[u8; 64] =
+    b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+
+/// RFC 4648 base64. `pad` adds trailing `=` (standard, used for SSE binary
+/// frames); pass `false` with `BASE64_URL` for the unpadded base64url used by
+/// webhook signatures and JWKS keys.
+pub fn base64_encode(data: &[u8], charset: &[u8; 64], pad: bool) -> String {
+    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
+    for chunk in data.chunks(3) {
+        let b = [
+            chunk[0],
+            chunk.get(1).copied().unwrap_or(0),
+            chunk.get(2).copied().unwrap_or(0),
+        ];
+        let n = ((b[0] as u32) << 16) | ((b[1] as u32) << 8) | b[2] as u32;
+        out.push(charset[(n >> 18) as usize & 63] as char);
+        out.push(charset[(n >> 12) as usize & 63] as char);
+        if chunk.len() > 1 {
+            out.push(charset[(n >> 6) as usize & 63] as char);
+        } else if pad {
+            out.push('=');
+        }
+        if chunk.len() > 2 {
+            out.push(charset[n as usize & 63] as char);
+        } else if pad {
+            out.push('=');
+        }
+    }
+    out
+}
+
 pub fn status_reason(status: u16) -> &'static str {
     match status {
         200 => "OK",

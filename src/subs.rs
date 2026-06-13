@@ -21,27 +21,10 @@ use crate::store::{format_offset, Store};
 
 // ---------------- small utilities ----------------
 
-const B64URL: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+use crate::api::{base64_encode, BASE64_URL};
 
 fn b64url(data: &[u8]) -> String {
-    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
-    for chunk in data.chunks(3) {
-        let b = [
-            chunk[0],
-            chunk.get(1).copied().unwrap_or(0),
-            chunk.get(2).copied().unwrap_or(0),
-        ];
-        let n = ((b[0] as u32) << 16) | ((b[1] as u32) << 8) | b[2] as u32;
-        out.push(B64URL[(n >> 18) as usize & 63] as char);
-        out.push(B64URL[(n >> 12) as usize & 63] as char);
-        if chunk.len() > 1 {
-            out.push(B64URL[(n >> 6) as usize & 63] as char);
-        }
-        if chunk.len() > 2 {
-            out.push(B64URL[n as usize & 63] as char);
-        }
-    }
-    out
+    base64_encode(data, BASE64_URL, false)
 }
 
 fn random_bytes<const N: usize>() -> [u8; N] {
@@ -435,20 +418,7 @@ fn trigger_wake(store: Arc<Store>, mgr: Arc<SubsManager>, id: String) {
             let token = random_id("tok_");
             match &sub.kind {
                 Kind::Webhook { url } => {
-                    let streams: Vec<Value> = sub
-                        .links
-                        .iter()
-                        .map(|(path, link)| {
-                            let tail = stream_tail(&store, &sub.root, path);
-                            json!({
-                                "path": path,
-                                "link_type": if link.explicit { "explicit" } else { "glob" },
-                                "acked_offset": link.acked,
-                                "tail_offset": tail,
-                                "has_pending": link.acked < tail,
-                            })
-                        })
-                        .collect();
+                    let streams = stream_list_json(&store, sub);
                     let body = json!({
                         "subscription_id": sub.id,
                         "wake_id": wake_id,
@@ -562,6 +532,23 @@ fn has_pending(store: &Store, sub: &Sub) -> bool {
     sub.links
         .iter()
         .any(|(path, link)| link.acked < stream_tail(store, &sub.root, path))
+}
+
+/// Per-stream JSON objects for wake/claim payloads (includes live tail + pending).
+fn stream_list_json(store: &Store, sub: &Sub) -> Vec<Value> {
+    sub.links
+        .iter()
+        .map(|(path, link)| {
+            let tail = stream_tail(store, &sub.root, path);
+            json!({
+                "path": path,
+                "link_type": if link.explicit { "explicit" } else { "glob" },
+                "acked_offset": link.acked,
+                "tail_offset": tail,
+                "has_pending": link.acked < tail,
+            })
+        })
+        .collect()
 }
 
 // ---------------- request routing ----------------
@@ -870,20 +857,7 @@ fn claim_wake(store: &Arc<Store>, mgr: &Arc<SubsManager>, req: &Req, id: &str) -
         deadline: Instant::now() + Duration::from_millis(sub.lease_ttl_ms),
     });
     sub.pending = false;
-    let streams: Vec<Value> = sub
-        .links
-        .iter()
-        .map(|(path, link)| {
-            let tail = stream_tail(store, &sub.root, path);
-            json!({
-                "path": path,
-                "link_type": if link.explicit { "explicit" } else { "glob" },
-                "acked_offset": link.acked,
-                "tail_offset": tail,
-                "has_pending": link.acked < tail,
-            })
-        })
-        .collect();
+    let streams = stream_list_json(store, sub);
     json_response(
         200,
         &json!({

@@ -20,7 +20,7 @@ use tokio::sync::mpsc;
 
 use crate::api::{Body, Method, Req, Resp};
 use crate::handlers;
-use crate::store::{Segment, Store};
+use crate::store::{materialize_segments, Segment, Store};
 
 pub type RespBody = Either<Full<Bytes>, ChannelBody>;
 
@@ -55,26 +55,10 @@ async fn file_range_to_body(
     let data_len: u64 = segments.iter().map(|s| s.len).sum();
     if data_len <= INLINE_READ_MAX {
         // Materialize small ranges into one sized body (content-length).
-        let buf = tokio::task::spawn_blocking(move || {
-            let total = prefix.len() + data_len as usize + suffix.len();
-            let mut buf = BytesMut::zeroed(total);
-            buf[..prefix.len()].copy_from_slice(prefix);
-            let mut at = prefix.len();
-            for seg in &segments {
-                if seg
-                    .file
-                    .read_exact_at(&mut buf[at..at + seg.len as usize], seg.file_start)
-                    .is_err()
-                {
-                    return Bytes::new();
-                }
-                at += seg.len as usize;
-            }
-            buf[at..].copy_from_slice(suffix);
-            buf.freeze()
-        })
-        .await
-        .unwrap_or_default();
+        let buf =
+            tokio::task::spawn_blocking(move || materialize_segments(&segments, prefix, suffix))
+                .await
+                .unwrap_or_default();
         Either::Left(Full::new(buf))
     } else {
         let (tx, rx) = mpsc::channel::<Bytes>(4);
@@ -84,7 +68,7 @@ async fn file_range_to_body(
             }
             for seg in &segments {
                 let mut pos = seg.file_start;
-                let seg_end = seg.file_start + seg.len;
+                let seg_end = seg.file_end();
                 while pos < seg_end {
                     let n = ((seg_end - pos) as usize).min(STREAM_CHUNK);
                     let mut buf = BytesMut::zeroed(n);

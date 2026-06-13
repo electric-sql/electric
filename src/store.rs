@@ -562,6 +562,36 @@ pub struct Segment {
     pub len: u64,
 }
 
+impl Segment {
+    /// Exclusive end byte position in the file (`file_start + len`).
+    pub fn file_end(&self) -> u64 {
+        self.file_start + self.len
+    }
+}
+
+/// Read all `segments` plus framing (`prefix`/`suffix`) into one contiguous
+/// buffer. Returns empty bytes if any positioned read fails (e.g. the file was
+/// removed mid-read). Shared by the buffered read paths (hyper engine, SSE
+/// batches, small inline reads).
+pub fn materialize_segments(segments: &[Segment], prefix: &[u8], suffix: &[u8]) -> bytes::Bytes {
+    use bytes::BytesMut;
+    use std::os::unix::fs::FileExt;
+    let data_len: usize = segments.iter().map(|s| s.len as usize).sum();
+    let total = prefix.len() + data_len + suffix.len();
+    let mut buf = BytesMut::zeroed(total);
+    buf[..prefix.len()].copy_from_slice(prefix);
+    let mut at = prefix.len();
+    for seg in segments {
+        let n = seg.len as usize;
+        if seg.file.read_exact_at(&mut buf[at..at + n], seg.file_start).is_err() {
+            return bytes::Bytes::new();
+        }
+        at += n;
+    }
+    buf[at..].copy_from_slice(suffix);
+    buf.freeze()
+}
+
 /// Resolve a logical byte range to physical file segments, walking the fork
 /// parent chain for ranges below `base_offset`. Source data past the fork
 /// point is never included (capped at base_offset).

@@ -1,6 +1,5 @@
 // HTTP protocol handlers for Durable Streams — engine-agnostic (see api.rs).
 
-use std::os::unix::fs::FileExt;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 
@@ -744,10 +743,8 @@ async fn handle_append(store: Arc<Store>, req: Req, path: String) -> Resp {
     }
 
     // Write + state updates.
-    if !wire.is_empty() {
-        if write_wire(&st, &mut ap, &wire).is_err() {
-            return text_response(500, "write failed");
-        }
+    if !wire.is_empty() && write_wire(&st, &mut ap, &wire).is_err() {
+        return text_response(500, "write failed");
     }
     {
         let mut s = st.shared.write().unwrap();
@@ -1024,33 +1021,6 @@ fn sse_encoding(st: &StreamState) -> SseEncoding {
     }
 }
 
-const BASE64_CHARS: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-fn base64_encode(data: &[u8]) -> String {
-    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
-    for chunk in data.chunks(3) {
-        let b = [
-            chunk[0],
-            chunk.get(1).copied().unwrap_or(0),
-            chunk.get(2).copied().unwrap_or(0),
-        ];
-        let n = ((b[0] as u32) << 16) | ((b[1] as u32) << 8) | b[2] as u32;
-        out.push(BASE64_CHARS[(n >> 18) as usize & 63] as char);
-        out.push(BASE64_CHARS[(n >> 12) as usize & 63] as char);
-        out.push(if chunk.len() > 1 {
-            BASE64_CHARS[(n >> 6) as usize & 63] as char
-        } else {
-            '='
-        });
-        out.push(if chunk.len() > 2 {
-            BASE64_CHARS[n as usize & 63] as char
-        } else {
-            '='
-        });
-    }
-    out
-}
-
 /// Write `payload` as one SSE `data` event, splitting on line terminators to
 /// prevent `data:` injection.
 fn sse_data_event(out: &mut String, payload: &str) {
@@ -1124,7 +1094,10 @@ async fn handle_sse(st: Arc<StreamState>, offset: ParsedOffset, client_cursor: O
                         sse_data_event(&mut ev, &String::from_utf8_lossy(&data));
                     }
                     SseEncoding::Base64 => {
-                        sse_data_event(&mut ev, &base64_encode(&data));
+                        sse_data_event(
+                            &mut ev,
+                            &crate::api::base64_encode(&data, crate::api::BASE64_STD, true),
+                        );
                     }
                 }
                 pos = t.bytes;
@@ -1176,26 +1149,11 @@ async fn handle_sse(st: Arc<StreamState>, offset: ParsedOffset, client_cursor: O
 
 /// Read a logical byte range fully into memory (SSE batches are small).
 async fn read_range_bytes(st: &Arc<StreamState>, start: u64, end: u64) -> Bytes {
-    let len = (end - start) as usize;
     let mut segs = Vec::new();
     collect_segments(st, start, end, &mut segs);
-    tokio::task::spawn_blocking(move || {
-        let mut buf = BytesMut::zeroed(len);
-        let mut at = 0usize;
-        for seg in &segs {
-            if seg
-                .file
-                .read_exact_at(&mut buf[at..at + seg.len as usize], seg.file_start)
-                .is_err()
-            {
-                return Bytes::new();
-            }
-            at += seg.len as usize;
-        }
-        buf.freeze()
-    })
-    .await
-    .unwrap_or_default()
+    tokio::task::spawn_blocking(move || materialize_segments(&segs, b"", b""))
+        .await
+        .unwrap_or_default()
 }
 
 // ---------- HEAD ----------

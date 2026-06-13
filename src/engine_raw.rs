@@ -161,16 +161,18 @@ async fn read_chunked_body(
                 }
             }
         }
-        if out.len() + size > MAX_BODY_BYTES {
-            return Ok(None);
-        }
-        while buf.len() < size + 2 {
+        // Guard against overflow from a hostile chunk-size line.
+        let need = match size.checked_add(2) {
+            Some(n) if out.len().checked_add(size).map(|t| t <= MAX_BODY_BYTES).unwrap_or(false) => n,
+            _ => return Ok(None),
+        };
+        while buf.len() < need {
             if !read_more(stream, buf).await? {
                 return Ok(None);
             }
         }
         out.put_slice(&buf[..size]);
-        buf.advance(size + 2); // chunk data + CRLF
+        buf.advance(need); // chunk data + CRLF
     }
 }
 
@@ -341,9 +343,12 @@ async fn write_response(
 #[cfg(target_os = "linux")]
 async fn write_segment(stream: &mut TcpStream, seg: &Segment) -> std::io::Result<()> {
     use std::os::fd::AsRawFd;
+    if seg.len == 0 {
+        return Ok(());
+    }
     let file_fd = seg.file.as_raw_fd();
     let mut offset = seg.file_start as libc::off_t;
-    let end = (seg.file_start + seg.len) as libc::off_t;
+    let end = seg.file_end() as libc::off_t;
     while offset < end {
         stream.writable().await?;
         let count = (end - offset) as usize;
@@ -357,6 +362,15 @@ async fn write_segment(stream: &mut TcpStream, seg: &Segment) -> std::io::Result
             }
         });
         match res {
+            // sendfile advances `offset` by the bytes sent. A 0 return with
+            // bytes still pending means no progress is possible (e.g. the file
+            // was truncated under us) — stop rather than spin forever.
+            Ok(0) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    "sendfile made no progress",
+                ))
+            }
             Ok(_) => {}
             Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => continue,
             Err(e) => return Err(e),
@@ -369,9 +383,12 @@ async fn write_segment(stream: &mut TcpStream, seg: &Segment) -> std::io::Result
 #[cfg(not(target_os = "linux"))]
 async fn write_segment(stream: &mut TcpStream, seg: &Segment) -> std::io::Result<()> {
     use std::os::unix::fs::FileExt;
+    if seg.len == 0 {
+        return Ok(());
+    }
     const CHUNK: usize = 256 * 1024;
     let mut pos = seg.file_start;
-    let end = seg.file_start + seg.len;
+    let end = seg.file_end();
     let mut buf = vec![0u8; CHUNK.min(seg.len as usize)];
     while pos < end {
         let n = ((end - pos) as usize).min(CHUNK);
