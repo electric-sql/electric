@@ -125,7 +125,7 @@ fn header_is_true(req: &Req, name: &str) -> bool {
 
 pub async fn handle(store: Arc<Store>, req: Req) -> Resp {
     let path = req.path.clone();
-    let mut resp = if path == "/health" {
+    let resp = if path == "/health" {
         text_response(200, "ok")
     } else if let Some(idx) = path.find("/__ds/") {
         let root = path[..idx].to_string();
@@ -144,10 +144,9 @@ pub async fn handle(store: Arc<Store>, req: Req) -> Resp {
             Method::Other => text_response(405, "method not allowed"),
         }
     };
-    resp.headers
-        .push(("x-content-type-options", "nosniff".to_string()));
-    resp.headers
-        .push(("cross-origin-resource-policy", "cross-origin".to_string()));
+    // Constant security headers (nosniff, CORP) are emitted by the engine's
+    // response writer — see api::SECURITY_HEADERS — to avoid two String
+    // allocations on every response.
     resp
 }
 

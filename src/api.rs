@@ -146,6 +146,13 @@ pub fn base64_encode(data: &[u8], charset: &[u8; 64], pad: bool) -> String {
     out
 }
 
+/// Constant security headers added to every response by the HTTP engines.
+/// Kept as static name/value pairs so engines emit them with no allocation.
+pub const SECURITY_HEADERS: &[(&str, &str)] = &[
+    ("x-content-type-options", "nosniff"),
+    ("cross-origin-resource-policy", "cross-origin"),
+];
+
 pub fn status_reason(status: u16) -> &'static str {
     match status {
         200 => "OK",

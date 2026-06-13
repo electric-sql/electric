@@ -113,6 +113,9 @@ async fn to_hyper(resp: Resp) -> Response<RespBody> {
     for (k, v) in resp.headers {
         builder = builder.header(k, v);
     }
+    for (k, v) in crate::api::SECURITY_HEADERS {
+        builder = builder.header(*k, hyper::header::HeaderValue::from_static(v));
+    }
     let body = match resp.body {
         Body::Empty => Either::Left(Full::new(Bytes::new())),
         Body::Full(b) => Either::Left(Full::new(b)),

@@ -144,11 +144,14 @@ fn decode_chunked(mut raw: &[u8]) -> Option<Vec<u8>> {
         if size == 0 {
             return Some(out);
         }
-        if raw.len() < size {
-            return None;
-        }
+        // Need `size` data bytes + trailing CRLF; checked_add guards a hostile
+        // size, and the bound prevents slicing past a truncated response.
+        let end = match size.checked_add(2) {
+            Some(e) if raw.len() >= e => e,
+            _ => return None,
+        };
         out.extend_from_slice(&raw[..size]);
-        raw = &raw[size + 2..];
+        raw = &raw[end..];
     }
 }
 

@@ -269,6 +269,12 @@ async fn write_response(
         head.put_slice(v.as_bytes());
         head.put_slice(b"\r\n");
     }
+    for (k, v) in crate::api::SECURITY_HEADERS {
+        head.put_slice(k.as_bytes());
+        head.put_slice(b": ");
+        head.put_slice(v.as_bytes());
+        head.put_slice(b"\r\n");
+    }
     let body_len = resp.body.len();
     let chunked = body_len.is_none();
     if !no_body_status {
