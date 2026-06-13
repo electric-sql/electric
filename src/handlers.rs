@@ -1,21 +1,15 @@
-// HTTP protocol handlers for Durable Streams.
+// HTTP protocol handlers for Durable Streams — engine-agnostic (see api.rs).
 
-use std::convert::Infallible;
 use std::os::unix::fs::FileExt;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 
 use bytes::{BufMut, Bytes, BytesMut};
-use http_body_util::{BodyExt, Either, Full};
-use hyper::body::{Body, Frame, Incoming};
-use hyper::{Method, Request, Response, StatusCode};
 use serde_json::value::RawValue;
 use tokio::sync::mpsc;
 
+use crate::api::{Body, Method, Req, Resp};
 use crate::store::*;
-
-pub type RespBody = Either<Full<Bytes>, ChannelBody>;
-pub type Resp = Response<RespBody>;
 
 // ---------- header names ----------
 const H_NEXT_OFFSET: &str = "stream-next-offset";
@@ -48,64 +42,44 @@ fn long_poll_timeout_dur() -> Duration {
 const SSE_MAX_DURATION: Duration = Duration::from_secs(60);
 const CACHEABLE: &str = "public, max-age=60, stale-while-revalidate=300";
 
-// ---------- channel-backed streaming body ----------
+// ---------- response building ----------
 
-pub struct ChannelBody {
-    rx: mpsc::Receiver<Bytes>,
+fn full(b: impl Into<Bytes>) -> Body {
+    Body::Full(b.into())
 }
 
-impl Body for ChannelBody {
-    type Data = Bytes;
-    type Error = Infallible;
-
-    fn poll_frame(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
-        match self.rx.poll_recv(cx) {
-            std::task::Poll::Ready(Some(b)) => std::task::Poll::Ready(Some(Ok(Frame::data(b)))),
-            std::task::Poll::Ready(None) => std::task::Poll::Ready(None),
-            std::task::Poll::Pending => std::task::Poll::Pending,
-        }
-    }
+fn empty() -> Body {
+    Body::Empty
 }
 
-fn full(b: impl Into<Bytes>) -> RespBody {
-    Either::Left(Full::new(b.into()))
-}
-
-fn empty() -> RespBody {
-    full(Bytes::new())
-}
-
-fn text_response(status: StatusCode, msg: &str) -> Resp {
-    let mut r = Response::new(full(msg.to_string()));
-    *r.status_mut() = status;
-    r.headers_mut()
-        .insert("content-type", "text/plain".parse().unwrap());
+fn text_response(status: u16, msg: &str) -> Resp {
+    let mut r = Resp::new(status);
+    r.headers.push(("content-type", "text/plain".to_string()));
+    r.body = full(msg.to_string());
     r
 }
 
 struct ResponseBuilder {
-    resp: hyper::http::response::Builder,
+    resp: Resp,
 }
 
 impl ResponseBuilder {
-    fn new(status: StatusCode) -> Self {
+    fn new(status: u16) -> Self {
         ResponseBuilder {
-            resp: Response::builder().status(status),
+            resp: Resp::new(status),
         }
     }
     fn h(mut self, k: &'static str, v: String) -> Self {
-        self.resp = self.resp.header(k, v);
+        self.resp.headers.push((k, v));
         self
     }
     fn hs(mut self, k: &'static str, v: &'static str) -> Self {
-        self.resp = self.resp.header(k, v);
+        self.resp.headers.push((k, v.to_string()));
         self
     }
-    fn body(self, b: RespBody) -> Resp {
-        self.resp.body(b).unwrap()
+    fn body(mut self, b: Body) -> Resp {
+        self.resp.body = b;
+        self.resp
     }
 }
 
@@ -140,38 +114,37 @@ fn parse_query(q: Option<&str>) -> Query {
     out
 }
 
-fn header_str<'a>(req: &'a Request<Incoming>, name: &str) -> Option<&'a str> {
-    req.headers().get(name).and_then(|v| v.to_str().ok())
+fn header_str<'a>(req: &'a Req, name: &str) -> Option<&'a str> {
+    req.header(name)
 }
 
-fn header_is_true(req: &Request<Incoming>, name: &str) -> bool {
-    header_str(req, name)
-        .map(|v| v.eq_ignore_ascii_case("true"))
-        .unwrap_or(false)
+fn header_is_true(req: &Req, name: &str) -> bool {
+    req.header_is_true(name)
 }
 
 // ---------- main dispatch ----------
 
-pub async fn handle(store: Arc<Store>, req: Request<Incoming>) -> Resp {
-    let path = req.uri().path().to_string();
+pub async fn handle(store: Arc<Store>, req: Req) -> Resp {
+    let path = req.path.clone();
     let mut resp = if path == "/health" {
-        text_response(StatusCode::OK, "ok")
+        text_response(200, "ok")
     } else if path.split('/').any(|seg| seg == "__ds") {
-        text_response(StatusCode::NOT_IMPLEMENTED, "control plane not implemented")
+        text_response(501, "control plane not implemented")
     } else {
-        match *req.method() {
-            Method::PUT => handle_create(store, req, path).await,
-            Method::POST => handle_append(store, req, path).await,
-            Method::GET => handle_read(store, req, path).await,
-            Method::HEAD => handle_head(store, path),
-            Method::DELETE => handle_delete(store, path),
-            Method::OPTIONS => ResponseBuilder::new(StatusCode::NO_CONTENT).body(empty()),
-            _ => text_response(StatusCode::METHOD_NOT_ALLOWED, "method not allowed"),
+        match req.method {
+            Method::Put => handle_create(store, req, path).await,
+            Method::Post => handle_append(store, req, path).await,
+            Method::Get => handle_read(store, req, path).await,
+            Method::Head => handle_head(store, path),
+            Method::Delete => handle_delete(store, path),
+            Method::Options => ResponseBuilder::new(204).body(empty()),
+            Method::Other => text_response(405, "method not allowed"),
         }
     };
-    let h = resp.headers_mut();
-    h.insert("x-content-type-options", "nosniff".parse().unwrap());
-    h.insert("cross-origin-resource-policy", "cross-origin".parse().unwrap());
+    resp.headers
+        .push(("x-content-type-options", "nosniff".to_string()));
+    resp.headers
+        .push(("cross-origin-resource-policy", "cross-origin".to_string()));
     resp
 }
 
@@ -244,26 +217,26 @@ fn parse_rfc3339(s: &str) -> Result<SystemTime, ()> {
     Ok(SystemTime::UNIX_EPOCH + Duration::from_secs(secs as u64))
 }
 
-async fn handle_create(store: Arc<Store>, req: Request<Incoming>, path: String) -> Resp {
+async fn handle_create(store: Arc<Store>, req: Req, path: String) -> Resp {
     let content_type = header_str(&req, "content-type")
         .unwrap_or("application/octet-stream")
         .to_string();
     let ttl_raw = header_str(&req, H_TTL).map(|s| s.to_string());
     let exp_raw = header_str(&req, H_EXPIRES_AT).map(|s| s.to_string());
     if ttl_raw.is_some() && exp_raw.is_some() {
-        return text_response(StatusCode::BAD_REQUEST, "Stream-TTL conflicts with Stream-Expires-At");
+        return text_response(400, "Stream-TTL conflicts with Stream-Expires-At");
     }
     let ttl_seconds = match &ttl_raw {
         Some(v) => match parse_ttl(v) {
             Ok(t) => Some(t),
-            Err(_) => return text_response(StatusCode::BAD_REQUEST, "invalid Stream-TTL"),
+            Err(_) => return text_response(400, "invalid Stream-TTL"),
         },
         None => None,
     };
     let expires_at = match &exp_raw {
         Some(v) => match parse_rfc3339(v) {
             Ok(t) => Some(t),
-            Err(_) => return text_response(StatusCode::BAD_REQUEST, "invalid Stream-Expires-At"),
+            Err(_) => return text_response(400, "invalid Stream-Expires-At"),
         },
         None => None,
     };
@@ -276,7 +249,7 @@ async fn handle_create(store: Arc<Store>, req: Request<Incoming>, path: String) 
     let sub_offset_raw = header_str(&req, H_FORK_SUB_OFFSET).map(|s| s.to_string());
     if forked_from.is_none() && (fork_offset_raw.is_some() || sub_offset_raw.is_some()) {
         return text_response(
-            StatusCode::BAD_REQUEST,
+            400,
             "fork headers require Stream-Forked-From",
         );
     }
@@ -284,13 +257,13 @@ async fn handle_create(store: Arc<Store>, req: Request<Incoming>, path: String) 
         None => None,
         Some(v) => {
             if v.is_empty() || !v.bytes().all(|c| c.is_ascii_digit()) {
-                return text_response(StatusCode::BAD_REQUEST, "malformed Stream-Fork-Sub-Offset");
+                return text_response(400, "malformed Stream-Fork-Sub-Offset");
             }
             match v.parse() {
                 Ok(n) => Some(n),
                 Err(_) => {
                     return text_response(
-                        StatusCode::BAD_REQUEST,
+                        400,
                         "malformed Stream-Fork-Sub-Offset",
                     )
                 }
@@ -299,7 +272,7 @@ async fn handle_create(store: Arc<Store>, req: Request<Incoming>, path: String) 
     };
     if sub_offset.unwrap_or(0) > 0 && fork_offset_raw.is_none() {
         return text_response(
-            StatusCode::BAD_REQUEST,
+            400,
             "Stream-Fork-Sub-Offset requires Stream-Fork-Offset",
         );
     }
@@ -315,23 +288,23 @@ async fn handle_create(store: Arc<Store>, req: Request<Incoming>, path: String) 
     if let Some(src_path) = &forked_from {
         let src = match store.get(src_path) {
             Some(s) => s,
-            None => return text_response(StatusCode::NOT_FOUND, "fork source not found"),
+            None => return text_response(404, "fork source not found"),
         };
         if src.shared.read().unwrap().soft_deleted {
-            return text_response(StatusCode::CONFLICT, "fork source is deleted");
+            return text_response(409, "fork source is deleted");
         }
         match &content_type_hdr {
             None => content_type = src.config.content_type.clone(),
             Some(ct) => {
                 if media_type(ct) != media_type(&src.config.content_type) {
-                    return text_response(StatusCode::CONFLICT, "fork content-type mismatch");
+                    return text_response(409, "fork content-type mismatch");
                 }
             }
         }
         let src_tail = src.tail().bytes;
         if sub_offset_raw.is_some() && src_tail == 0 {
             return text_response(
-                StatusCode::BAD_REQUEST,
+                400,
                 "sub-offset on empty source stream",
             );
         }
@@ -343,13 +316,13 @@ async fn handle_create(store: Arc<Store>, req: Request<Incoming>, path: String) 
             Ok(ParsedOffset::At(b)) => {
                 if b > src_tail {
                     return text_response(
-                        StatusCode::BAD_REQUEST,
+                        400,
                         "fork offset beyond stream length",
                     );
                 }
                 b
             }
-            Err(_) => return text_response(StatusCode::BAD_REQUEST, "malformed fork offset"),
+            Err(_) => return text_response(400, "malformed fork offset"),
         };
         let fork_point = match sub_offset.unwrap_or(0) {
             0 => anchor,
@@ -369,7 +342,7 @@ async fn handle_create(store: Arc<Store>, req: Request<Incoming>, path: String) 
                 }
                 if remaining > 0 {
                     return text_response(
-                        StatusCode::BAD_REQUEST,
+                        400,
                         "sub-offset overshoots message count",
                     );
                 }
@@ -378,7 +351,7 @@ async fn handle_create(store: Arc<Store>, req: Request<Incoming>, path: String) 
             sub => {
                 if anchor + sub > src_tail {
                     return text_response(
-                        StatusCode::BAD_REQUEST,
+                        400,
                         "sub-offset overshoots message length",
                     );
                 }
@@ -395,10 +368,7 @@ async fn handle_create(store: Arc<Store>, req: Request<Incoming>, path: String) 
         parent = Some(src);
     }
 
-    let body = match req.into_body().collect().await {
-        Ok(c) => c.to_bytes(),
-        Err(_) => return text_response(StatusCode::BAD_REQUEST, "body read error"),
-    };
+    let body = req.body.clone();
 
     let config = StreamConfig {
         content_type: content_type.clone(),
@@ -418,20 +388,20 @@ async fn handle_create(store: Arc<Store>, req: Request<Incoming>, path: String) 
     } else {
         match encode_wire(&body, is_json, true) {
             Ok(w) => Some(w),
-            Err(msg) => return text_response(StatusCode::BAD_REQUEST, msg),
+            Err(msg) => return text_response(400, msg),
         }
     };
 
     let result = match store.create(&path, config, parent, base_offset) {
         Ok(r) => r,
-        Err(e) => return text_response(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+        Err(e) => return text_response(500, &e.to_string()),
     };
     match result {
-        CreateResult::Conflict => text_response(StatusCode::CONFLICT, "stream exists with different configuration"),
+        CreateResult::Conflict => text_response(409, "stream exists with different configuration"),
         CreateResult::Exists(st) => {
             st.touch();
             let t = st.tail();
-            let mut b = ResponseBuilder::new(StatusCode::OK)
+            let mut b = ResponseBuilder::new(200)
                 .h("content-type", st.config.content_type.clone())
                 .h(H_NEXT_OFFSET, format_offset(t.bytes));
             if t.closed {
@@ -443,7 +413,7 @@ async fn handle_create(store: Arc<Store>, req: Request<Incoming>, path: String) 
             if let Some(wire) = wire {
                 let mut ap = st.appender.lock().await;
                 if write_wire(&st, &mut ap, &wire).is_err() {
-                    return text_response(StatusCode::INTERNAL_SERVER_ERROR, "write failed");
+                    return text_response(500, "write failed");
                 }
                 let target = ap.written;
                 let file = ap.file.clone();
@@ -451,7 +421,7 @@ async fn handle_create(store: Arc<Store>, req: Request<Incoming>, path: String) 
                 st.sync.sync_to(file, &st, target).await;
             }
             let t = st.tail();
-            let mut b = ResponseBuilder::new(StatusCode::CREATED)
+            let mut b = ResponseBuilder::new(201)
                 .h("location", format!("http://{}{}", host.as_deref().unwrap_or("localhost"), st.path))
                 .h("content-type", st.config.content_type.clone())
                 .h(H_NEXT_OFFSET, format_offset(t.bytes));
@@ -525,7 +495,7 @@ struct ProducerHeaders {
     seq: u64,
 }
 
-fn parse_producer_headers(req: &Request<Incoming>) -> Result<Option<ProducerHeaders>, &'static str> {
+fn parse_producer_headers(req: &Req) -> Result<Option<ProducerHeaders>, &'static str> {
     let id = header_str(req, H_PRODUCER_ID);
     let epoch = header_str(req, H_PRODUCER_EPOCH);
     let seq = header_str(req, H_PRODUCER_SEQ);
@@ -599,36 +569,33 @@ fn validate_producer(shared: &Shared, p: &ProducerHeaders) -> ProducerOutcome {
 }
 
 fn gone() -> Resp {
-    text_response(StatusCode::GONE, "stream is deleted")
+    text_response(410, "stream is deleted")
 }
 
-async fn handle_append(store: Arc<Store>, req: Request<Incoming>, path: String) -> Resp {
+async fn handle_append(store: Arc<Store>, req: Req, path: String) -> Resp {
     let st = match store.get(&path) {
         Some(s) => s,
-        None => return text_response(StatusCode::NOT_FOUND, "stream not found"),
+        None => return text_response(404, "stream not found"),
     };
     if st.shared.read().unwrap().soft_deleted {
         return gone();
     }
     let producer = match parse_producer_headers(&req) {
         Ok(p) => p,
-        Err(m) => return text_response(StatusCode::BAD_REQUEST, m),
+        Err(m) => return text_response(400, m),
     };
     let close_req = header_is_true(&req, H_CLOSED);
     let seq_header = header_str(&req, H_SEQ).map(|s| s.to_string());
     let req_ct = header_str(&req, "content-type").map(|s| s.to_string());
 
-    let body = match req.into_body().collect().await {
-        Ok(c) => c.to_bytes(),
-        Err(_) => return text_response(StatusCode::BAD_REQUEST, "body read error"),
-    };
+    let body = req.body.clone();
 
     if body.is_empty() && !close_req {
-        return text_response(StatusCode::BAD_REQUEST, "empty append body");
+        return text_response(400, "empty append body");
     }
     if !body.is_empty() {
         match &req_ct {
-            None => return text_response(StatusCode::BAD_REQUEST, "missing Content-Type"),
+            None => return text_response(400, "missing Content-Type"),
             Some(ct) => {
                 if media_type(ct) != media_type(&st.config.content_type) {
                     // closed check has precedence over content-type mismatch
@@ -636,7 +603,7 @@ async fn handle_append(store: Arc<Store>, req: Request<Incoming>, path: String) 
                     if t.closed && !close_req {
                         return closed_conflict(&st, t.bytes);
                     }
-                    return text_response(StatusCode::CONFLICT, "content-type mismatch");
+                    return text_response(409, "content-type mismatch");
                 }
             }
         }
@@ -647,7 +614,7 @@ async fn handle_append(store: Arc<Store>, req: Request<Incoming>, path: String) 
     } else {
         match encode_wire(&body, st.is_json, false) {
             Ok(w) => w,
-            Err(m) => return text_response(StatusCode::BAD_REQUEST, m),
+            Err(m) => return text_response(400, m),
         }
     };
 
@@ -664,7 +631,7 @@ async fn handle_append(store: Arc<Store>, req: Request<Incoming>, path: String) 
                     if let Some((cid, cep, cseq)) = &s.closed_by {
                         if *cid == p.id && *cep == p.epoch && *cseq == p.seq {
                             drop(s);
-                            return ResponseBuilder::new(StatusCode::NO_CONTENT)
+                            return ResponseBuilder::new(204)
                                 .hs(H_CLOSED, "true")
                                 .h(H_NEXT_OFFSET, format_offset(tail))
                                 .h(H_PRODUCER_EPOCH, p.epoch.to_string())
@@ -678,7 +645,7 @@ async fn handle_append(store: Arc<Store>, req: Request<Incoming>, path: String) 
                 if body.is_empty() {
                     // idempotent close of an already-closed stream
                     drop(s);
-                    return ResponseBuilder::new(StatusCode::NO_CONTENT)
+                    return ResponseBuilder::new(204)
                         .hs(H_CLOSED, "true")
                         .h(H_NEXT_OFFSET, format_offset(tail))
                         .body(empty());
@@ -699,7 +666,7 @@ async fn handle_append(store: Arc<Store>, req: Request<Incoming>, path: String) 
             ProducerOutcome::Accept => {}
             ProducerOutcome::Duplicate { last_seq } => {
                 let tail = st.shared.read().unwrap().tail;
-                let mut b = ResponseBuilder::new(StatusCode::NO_CONTENT)
+                let mut b = ResponseBuilder::new(204)
                     .h(H_NEXT_OFFSET, format_offset(tail))
                     .h(H_PRODUCER_EPOCH, p.epoch.to_string())
                     .h(H_PRODUCER_SEQ, last_seq.to_string());
@@ -709,19 +676,19 @@ async fn handle_append(store: Arc<Store>, req: Request<Incoming>, path: String) 
                 return b.body(empty());
             }
             ProducerOutcome::StaleEpoch { current } => {
-                return ResponseBuilder::new(StatusCode::FORBIDDEN)
+                return ResponseBuilder::new(403)
                     .h(H_PRODUCER_EPOCH, current.to_string())
                     .body(full("stale producer epoch"));
             }
             ProducerOutcome::Gap { expected } => {
-                return ResponseBuilder::new(StatusCode::CONFLICT)
+                return ResponseBuilder::new(409)
                     .h(H_PRODUCER_EXPECTED, expected.to_string())
                     .h(H_PRODUCER_RECEIVED, p.seq.to_string())
                     .body(full("producer sequence gap"));
             }
             ProducerOutcome::BadEpochStart => {
                 return text_response(
-                    StatusCode::BAD_REQUEST,
+                    400,
                     "new producer epoch must start at seq 0",
                 );
             }
@@ -735,7 +702,7 @@ async fn handle_append(store: Arc<Store>, req: Request<Incoming>, path: String) 
             if seq.as_str() <= last.as_str() {
                 let tail = s.tail;
                 drop(s);
-                return ResponseBuilder::new(StatusCode::CONFLICT)
+                return ResponseBuilder::new(409)
                     .h(H_NEXT_OFFSET, format_offset(tail))
                     .body(full("Stream-Seq regression"));
             }
@@ -745,7 +712,7 @@ async fn handle_append(store: Arc<Store>, req: Request<Incoming>, path: String) 
     // Write + state updates.
     if !wire.is_empty() {
         if write_wire(&st, &mut ap, &wire).is_err() {
-            return text_response(StatusCode::INTERNAL_SERVER_ERROR, "write failed");
+            return text_response(500, "write failed");
         }
     }
     {
@@ -794,9 +761,9 @@ async fn handle_append(store: Arc<Store>, req: Request<Incoming>, path: String) 
 
     let tail = st.tail();
     let status = if producer.is_some() && !body.is_empty() {
-        StatusCode::OK
+        200
     } else {
-        StatusCode::NO_CONTENT
+        204
     };
     let mut b = ResponseBuilder::new(status).h(H_NEXT_OFFSET, format_offset(tail.bytes));
     if let Some(p) = &producer {
@@ -812,7 +779,7 @@ async fn handle_append(store: Arc<Store>, req: Request<Incoming>, path: String) 
 
 fn closed_conflict(st: &StreamState, tail: u64) -> Resp {
     let _ = st;
-    ResponseBuilder::new(StatusCode::CONFLICT)
+    ResponseBuilder::new(409)
         .hs(H_CLOSED, "true")
         .h(H_NEXT_OFFSET, format_offset(tail))
         .body(full("stream is closed"))
@@ -820,78 +787,32 @@ fn closed_conflict(st: &StreamState, tail: u64) -> Resp {
 
 // ---------- reading bodies from the data file ----------
 
-const INLINE_READ_MAX: u64 = 4 * 1024 * 1024;
-const STREAM_CHUNK: usize = 1024 * 1024;
-
-/// Read payload range [start, end) and build the response body.
-/// JSON ranges always end on a `,` boundary; the response is `[` + range-minus-comma + `]`.
-/// Logical ranges below the fork base are resolved through the parent chain.
-async fn read_range_body(st: &Arc<StreamState>, start: u64, end: u64) -> RespBody {
+/// Describe payload range [start, end) as a response body. No I/O happens
+/// here — the HTTP engine serves the segments (buffered copy, or sendfile on
+/// engines that support it). JSON ranges always end on a `,` boundary; the
+/// response is `[` + range-minus-comma + `]`. Logical ranges below the fork
+/// base resolve through the parent chain.
+fn read_range_body(st: &Arc<StreamState>, start: u64, end: u64) -> Body {
     let json = st.is_json;
     if end <= start {
         return if json { full("[]") } else { empty() };
     }
     let (data_start, data_end) = if json { (start, end - 1) } else { (start, end) };
-    let len = data_end - data_start;
     let mut segs = Vec::new();
     collect_segments(st, data_start, data_end, &mut segs);
-
-    if len <= INLINE_READ_MAX {
-        let res = tokio::task::spawn_blocking(move || -> std::io::Result<Bytes> {
-            let mut buf = BytesMut::zeroed(len as usize + if json { 2 } else { 0 });
-            let mut at = if json { 1usize } else { 0 };
-            for seg in &segs {
-                seg.file
-                    .read_exact_at(&mut buf[at..at + seg.len as usize], seg.file_start)?;
-                at += seg.len as usize;
-            }
-            if json {
-                buf[0] = b'[';
-                let n = buf.len();
-                buf[n - 1] = b']';
-            }
-            Ok(buf.freeze())
-        })
-        .await;
-        match res {
-            Ok(Ok(b)) => full(b),
-            _ => full(Bytes::new()),
-        }
-    } else {
-        let (tx, rx) = mpsc::channel::<Bytes>(4);
-        tokio::task::spawn_blocking(move || {
-            if json {
-                let _ = tx.blocking_send(Bytes::from_static(b"["));
-            }
-            for seg in &segs {
-                let mut pos = seg.file_start;
-                let seg_end = seg.file_start + seg.len;
-                while pos < seg_end {
-                    let n = ((seg_end - pos) as usize).min(STREAM_CHUNK);
-                    let mut buf = BytesMut::zeroed(n);
-                    if seg.file.read_exact_at(&mut buf, pos).is_err() {
-                        return;
-                    }
-                    pos += n as u64;
-                    if tx.blocking_send(buf.freeze()).is_err() {
-                        return;
-                    }
-                }
-            }
-            if json {
-                let _ = tx.blocking_send(Bytes::from_static(b"]"));
-            }
-        });
-        Either::Right(ChannelBody { rx })
+    Body::FileRange {
+        segments: segs,
+        prefix: if json { b"[" } else { b"" },
+        suffix: if json { b"]" } else { b"" },
     }
 }
 
 // ---------- GET (catch-up / long-poll / SSE) ----------
 
-async fn handle_read(store: Arc<Store>, req: Request<Incoming>, path: String) -> Resp {
+async fn handle_read(store: Arc<Store>, req: Req, path: String) -> Resp {
     let st = match store.get(&path) {
         Some(s) => s,
-        None => return text_response(StatusCode::NOT_FOUND, "stream not found"),
+        None => return text_response(404, "stream not found"),
     };
     if st.shared.read().unwrap().soft_deleted {
         return gone();
@@ -900,31 +821,31 @@ async fn handle_read(store: Arc<Store>, req: Request<Incoming>, path: String) ->
     if st.config.ttl_seconds.is_some() {
         st.schedule_meta_flush(); // sliding TTL must survive restarts
     }
-    let q = parse_query(req.uri().query());
+    let q = parse_query(req.query.as_deref());
     let offset = match parse_offset(q.offset.as_deref()) {
         Ok(o) => o,
-        Err(_) => return text_response(StatusCode::BAD_REQUEST, "malformed offset"),
+        Err(_) => return text_response(400, "malformed offset"),
     };
     let live = q.live.as_deref();
     if live.is_some() && q.offset.is_none() {
-        return text_response(StatusCode::BAD_REQUEST, "offset is required for live modes");
+        return text_response(400, "offset is required for live modes");
     }
     match live {
         Some("long-poll") => handle_long_poll(st, offset, q.cursor).await,
         Some("sse") => handle_sse(st, offset, q.cursor).await,
-        Some(_) => text_response(StatusCode::BAD_REQUEST, "invalid live mode"),
+        Some(_) => text_response(400, "invalid live mode"),
         None => handle_catchup(st, offset, &req).await,
     }
 }
 
-async fn handle_catchup(st: Arc<StreamState>, offset: ParsedOffset, req: &Request<Incoming>) -> Resp {
+async fn handle_catchup(st: Arc<StreamState>, offset: ParsedOffset, req: &Req) -> Resp {
     let t = st.tail();
     let (start, now_mode) = match offset {
         ParsedOffset::Start => (0, false),
         ParsedOffset::Now => (t.bytes, true),
         ParsedOffset::At(b) => {
             if b > t.bytes {
-                return text_response(StatusCode::BAD_REQUEST, "offset beyond tail");
+                return text_response(400, "offset beyond tail");
             }
             (b, false)
         }
@@ -933,7 +854,7 @@ async fn handle_catchup(st: Arc<StreamState>, offset: ParsedOffset, req: &Reques
     let etag = st.etag(start, end, t.closed);
     if let Some(inm) = header_str(req, "if-none-match") {
         if inm == etag {
-            let mut b = ResponseBuilder::new(StatusCode::NOT_MODIFIED)
+            let mut b = ResponseBuilder::new(304)
                 .h("etag", etag)
                 .h(H_NEXT_OFFSET, format_offset(end))
                 .hs(H_UP_TO_DATE, "true");
@@ -943,8 +864,8 @@ async fn handle_catchup(st: Arc<StreamState>, offset: ParsedOffset, req: &Reques
             return b.body(empty());
         }
     }
-    let body = read_range_body(&st, start, end).await;
-    let mut b = ResponseBuilder::new(StatusCode::OK)
+    let body = read_range_body(&st, start, end);
+    let mut b = ResponseBuilder::new(200)
         .h("content-type", st.config.content_type.clone())
         .h(H_NEXT_OFFSET, format_offset(end))
         .hs(H_UP_TO_DATE, "true")
@@ -966,7 +887,7 @@ async fn handle_long_poll(st: Arc<StreamState>, offset: ParsedOffset, client_cur
         ParsedOffset::Now => t0.bytes,
         ParsedOffset::At(b) => {
             if b > t0.bytes {
-                return text_response(StatusCode::BAD_REQUEST, "offset beyond tail");
+                return text_response(400, "offset beyond tail");
             }
             b
         }
@@ -1012,8 +933,8 @@ async fn handle_long_poll(st: Arc<StreamState>, offset: ParsedOffset, client_cur
 
 async fn long_poll_data(st: &Arc<StreamState>, from: u64, t: Tail, client_cursor: Option<u64>) -> Resp {
     let cursor = compute_cursor(client_cursor);
-    let body = read_range_body(st, from, t.bytes).await;
-    let mut b = ResponseBuilder::new(StatusCode::OK)
+    let body = read_range_body(st, from, t.bytes);
+    let mut b = ResponseBuilder::new(200)
         .h("content-type", st.config.content_type.clone())
         .h(H_NEXT_OFFSET, format_offset(t.bytes))
         .h(H_CURSOR, cursor.to_string())
@@ -1027,7 +948,7 @@ async fn long_poll_data(st: &Arc<StreamState>, from: u64, t: Tail, client_cursor
 }
 
 fn long_poll_close(tail: u64, cursor: u64) -> Resp {
-    ResponseBuilder::new(StatusCode::NO_CONTENT)
+    ResponseBuilder::new(204)
         .h(H_NEXT_OFFSET, format_offset(tail))
         .h(H_CURSOR, cursor.to_string())
         .hs(H_UP_TO_DATE, "true")
@@ -1037,7 +958,7 @@ fn long_poll_close(tail: u64, cursor: u64) -> Resp {
 }
 
 fn long_poll_timeout(tail: u64, cursor: u64, closed: bool) -> Resp {
-    let mut b = ResponseBuilder::new(StatusCode::NO_CONTENT)
+    let mut b = ResponseBuilder::new(204)
         .h(H_NEXT_OFFSET, format_offset(tail))
         .h(H_CURSOR, cursor.to_string())
         .hs(H_UP_TO_DATE, "true")
@@ -1131,7 +1052,7 @@ async fn handle_sse(st: Arc<StreamState>, offset: ParsedOffset, client_cursor: O
         ParsedOffset::Now => t0.bytes,
         ParsedOffset::At(b) => {
             if b > t0.bytes {
-                return text_response(StatusCode::BAD_REQUEST, "offset beyond tail");
+                return text_response(400, "offset beyond tail");
             }
             b
         }
@@ -1206,14 +1127,14 @@ async fn handle_sse(st: Arc<StreamState>, offset: ParsedOffset, client_cursor: O
         }
     });
 
-    let mut b = ResponseBuilder::new(StatusCode::OK)
+    let mut b = ResponseBuilder::new(200)
         .hs("content-type", "text/event-stream")
         .hs("cache-control", "no-cache")
         .hs("connection", "keep-alive");
     if is_b64 {
         b = b.hs(H_SSE_ENCODING, "base64");
     }
-    b.body(Either::Right(ChannelBody { rx }))
+    b.body(Body::Channel(rx))
 }
 
 /// Read a logical byte range fully into memory (SSE batches are small).
@@ -1245,14 +1166,14 @@ async fn read_range_bytes(st: &Arc<StreamState>, start: u64, end: u64) -> Bytes 
 fn handle_head(store: Arc<Store>, path: String) -> Resp {
     let st = match store.get(&path) {
         Some(s) => s,
-        None => return text_response(StatusCode::NOT_FOUND, "stream not found"),
+        None => return text_response(404, "stream not found"),
     };
     if st.shared.read().unwrap().soft_deleted {
         return gone();
     }
     // HEAD must not reset the TTL.
     let t = st.tail();
-    let mut b = ResponseBuilder::new(StatusCode::OK)
+    let mut b = ResponseBuilder::new(200)
         .h("content-type", st.config.content_type.clone())
         .h(H_NEXT_OFFSET, format_offset(t.bytes))
         .hs("cache-control", "no-store");
@@ -1273,11 +1194,11 @@ fn handle_head(store: Arc<Store>, path: String) -> Resp {
 fn handle_delete(store: Arc<Store>, path: String) -> Resp {
     let st = match store.get(&path) {
         Some(s) => s,
-        None => return text_response(StatusCode::NOT_FOUND, "stream not found"),
+        None => return text_response(404, "stream not found"),
     };
     if st.shared.read().unwrap().soft_deleted {
         return gone();
     }
     store.delete_or_soft_delete(&st);
-    ResponseBuilder::new(StatusCode::NO_CONTENT).body(empty())
+    ResponseBuilder::new(204).body(empty())
 }

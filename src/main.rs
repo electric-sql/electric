@@ -1,12 +1,11 @@
+mod api;
+mod engine_hyper;
 mod handlers;
 mod store;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use hyper::server::conn::http1;
-use hyper::service::service_fn;
-use hyper_util::rt::TokioIo;
 use tokio::net::TcpListener;
 
 use store::Store;
@@ -15,6 +14,7 @@ fn main() {
     let mut port: u16 = 4438;
     let mut host: std::net::IpAddr = [127, 0, 0, 1].into();
     let mut data_dir = std::env::temp_dir().join("durable-streams-rust");
+    let mut engine = String::from("hyper");
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
@@ -32,6 +32,13 @@ fn main() {
             }
             "--data-dir" => {
                 data_dir = args.next().expect("--data-dir requires a path").into();
+            }
+            "--http-engine" => {
+                engine = args.next().expect("--http-engine requires hyper|raw");
+                if engine != "hyper" && engine != "raw" {
+                    eprintln!("--http-engine must be 'hyper' or 'raw'");
+                    std::process::exit(2);
+                }
             }
             "--long-poll-timeout-ms" => {
                 let ms: u64 = args
@@ -61,26 +68,12 @@ fn main() {
         let addr: SocketAddr = (host, port).into();
         let listener = TcpListener::bind(addr).await.expect("bind failed");
         println!(
-            "durable-streams-server listening on http://{addr} (data: {})",
+            "durable-streams-server listening on http://{addr} (engine: {engine}, data: {})",
             data_dir.display()
         );
-        loop {
-            let (stream, _) = match listener.accept().await {
-                Ok(s) => s,
-                Err(_) => continue,
-            };
-            let _ = stream.set_nodelay(true);
-            let store = store.clone();
-            tokio::spawn(async move {
-                let io = TokioIo::new(stream);
-                let svc = service_fn(move |req| {
-                    let store = store.clone();
-                    async move { Ok::<_, std::convert::Infallible>(handlers::handle(store, req).await) }
-                });
-                let _ = http1::Builder::new()
-                    .serve_connection(io, svc)
-                    .await;
-            });
+        match engine.as_str() {
+            "hyper" => engine_hyper::serve(store, listener).await,
+            _ => unreachable!(),
         }
     });
 }
