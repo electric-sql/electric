@@ -334,7 +334,39 @@ async fn write_response(
     Ok(())
 }
 
-/// Serve one file segment to the socket via positioned reads.
+/// Serve one file segment to the socket.
+///
+/// Linux: sendfile(2) — the kernel copies page cache → socket directly, no
+/// userspace buffer — driven by write readiness on the nonblocking socket.
+#[cfg(target_os = "linux")]
+async fn write_segment(stream: &mut TcpStream, seg: &Segment) -> std::io::Result<()> {
+    use std::os::fd::AsRawFd;
+    let file_fd = seg.file.as_raw_fd();
+    let mut offset = seg.file_start as libc::off_t;
+    let end = (seg.file_start + seg.len) as libc::off_t;
+    while offset < end {
+        stream.writable().await?;
+        let count = (end - offset) as usize;
+        let res = stream.try_io(tokio::io::Interest::WRITABLE, || {
+            let sent =
+                unsafe { libc::sendfile(stream.as_raw_fd(), file_fd, &mut offset, count) };
+            if sent < 0 {
+                Err(std::io::Error::last_os_error())
+            } else {
+                Ok(sent)
+            }
+        });
+        match res {
+            Ok(_) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => continue,
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(())
+}
+
+/// Portable fallback: positioned reads through a reusable buffer.
+#[cfg(not(target_os = "linux"))]
 async fn write_segment(stream: &mut TcpStream, seg: &Segment) -> std::io::Result<()> {
     use std::os::unix::fs::FileExt;
     const CHUNK: usize = 256 * 1024;
