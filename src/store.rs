@@ -39,9 +39,14 @@ pub struct StreamConfig {
     pub expires_at: Option<SystemTime>,
     pub expires_at_raw: Option<String>,
     pub create_closed: bool,
+    /// Fork identity (requested values, for idempotent re-PUT comparison).
+    pub forked_from: Option<String>,
+    pub fork_offset_raw: Option<String>,
+    pub fork_sub_offset: Option<u64>,
 }
 
 pub struct Shared {
+    /// Logical tail offset (base_offset + bytes written to this stream's own file).
     pub tail: u64,
     pub closed: bool,
     /// Producer that closed the stream (producer_id, epoch, seq), for idempotent re-close.
@@ -49,6 +54,10 @@ pub struct Shared {
     pub producers: HashMap<String, ProducerState>,
     pub last_seq_header: Option<String>,
     pub last_access: SystemTime,
+    /// Number of live forks reading through this stream.
+    pub ref_count: u32,
+    /// Deleted while forks still reference it: direct ops 410, path blocked.
+    pub soft_deleted: bool,
 }
 
 pub struct Appender {
@@ -96,8 +105,9 @@ impl SyncCoalescer {
                 }
             };
             if lead {
-                // Sync covers everything written at the time the fsync starts.
-                let covers = stream.shared.read().unwrap().tail;
+                // Sync covers everything written at the time the fsync starts
+                // (file-local bytes: logical tail minus the fork base).
+                let covers = stream.shared.read().unwrap().tail - stream.base_offset;
                 let f = file.clone();
                 let _ = tokio::task::spawn_blocking(move || barrier_fsync(&f)).await;
                 {
@@ -143,6 +153,12 @@ pub struct StreamState {
     pub config: StreamConfig,
     pub is_json: bool,
     pub file_path: PathBuf,
+    /// Shared handle to the data file for lock-free positioned reads.
+    pub file: Arc<File>,
+    /// Logical offset where this stream's own file starts (fork point; 0 for roots).
+    pub base_offset: u64,
+    /// Fork source: ranges below base_offset are read through this chain.
+    pub parent: Option<Arc<StreamState>>,
     pub appender: AsyncMutex<Appender>,
     pub shared: RwLock<Shared>,
     pub tail_tx: watch::Sender<Tail>,
@@ -214,32 +230,79 @@ impl Store {
         })
     }
 
+    /// Look up a stream. Expired streams are removed (or soft-deleted when forks
+    /// still reference them). Soft-deleted entries ARE returned — callers decide
+    /// between 410 (direct ops) and 409 (PUT re-create / fork source).
     pub fn get(&self, path: &str) -> Option<Arc<StreamState>> {
         let st = self.streams.get(path)?.clone();
+        if st.shared.read().unwrap().soft_deleted {
+            return Some(st);
+        }
         if st.is_expired() {
-            drop(st);
-            self.remove(path);
+            self.delete_or_soft_delete(&st);
             return None;
         }
         Some(st)
     }
 
-    pub fn remove(&self, path: &str) -> bool {
-        if let Some((_, st)) = self.streams.remove(path) {
+    /// Hard-delete when nothing references the stream; soft-delete otherwise.
+    pub fn delete_or_soft_delete(&self, st: &Arc<StreamState>) {
+        let soft = {
+            let mut s = st.shared.write().unwrap();
+            if s.ref_count > 0 {
+                s.soft_deleted = true;
+                true
+            } else {
+                false
+            }
+        };
+        if !soft {
+            self.streams
+                .remove_if(&st.path, |_, v| Arc::ptr_eq(v, st));
             let fp = st.file_path.clone();
             tokio::task::spawn_blocking(move || {
                 let _ = std::fs::remove_file(fp);
             });
-            true
-        } else {
-            false
+            self.release_parent(st);
         }
     }
 
-    pub fn create(&self, path: &str, config: StreamConfig) -> std::io::Result<CreateResult> {
+    /// Decrement the parent's fork refcount; cascade-collect soft-deleted parents
+    /// whose last fork just went away.
+    pub fn release_parent(&self, st: &Arc<StreamState>) {
+        let mut cur = st.parent.clone();
+        while let Some(parent) = cur {
+            let gone = {
+                let mut s = parent.shared.write().unwrap();
+                s.ref_count = s.ref_count.saturating_sub(1);
+                s.soft_deleted && s.ref_count == 0
+            };
+            if !gone {
+                break;
+            }
+            self.streams
+                .remove_if(&parent.path, |_, v| Arc::ptr_eq(v, &parent));
+            let fp = parent.file_path.clone();
+            tokio::task::spawn_blocking(move || {
+                let _ = std::fs::remove_file(fp);
+            });
+            cur = parent.parent.clone();
+        }
+    }
+
+    pub fn create(
+        &self,
+        path: &str,
+        config: StreamConfig,
+        parent: Option<Arc<StreamState>>,
+        base_offset: u64,
+    ) -> std::io::Result<CreateResult> {
         use dashmap::mapref::entry::Entry;
         // Fast path: existing stream → config comparison.
         if let Some(existing) = self.get(path) {
+            if existing.shared.read().unwrap().soft_deleted {
+                return Ok(CreateResult::Conflict);
+            }
             return Ok(if config_matches(&existing, &config) {
                 CreateResult::Exists(existing)
             } else {
@@ -249,15 +312,17 @@ impl Store {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let fname = format!("{}~{}", encode_path(path), id);
         let file_path = self.data_dir.join("streams").join(fname);
-        let file = OpenOptions::new()
-            .create(true)
-            .read(true)
-            .append(true)
-            .open(&file_path)?;
+        let file = Arc::new(
+            OpenOptions::new()
+                .create(true)
+                .read(true)
+                .append(true)
+                .open(&file_path)?,
+        );
         let is_json = is_json_content_type(&config.content_type);
         let closed = config.create_closed;
         let (tail_tx, _) = watch::channel(Tail {
-            bytes: 0,
+            bytes: base_offset,
             closed,
         });
         let state = Arc::new(StreamState {
@@ -265,17 +330,19 @@ impl Store {
             path: path.to_string(),
             is_json,
             file_path,
-            appender: AsyncMutex::new(Appender {
-                file: Arc::new(file),
-                written: 0,
-            }),
+            file: file.clone(),
+            base_offset,
+            parent: parent.clone(),
+            appender: AsyncMutex::new(Appender { file, written: 0 }),
             shared: RwLock::new(Shared {
-                tail: 0,
+                tail: base_offset,
                 closed,
                 closed_by: None,
                 producers: HashMap::new(),
                 last_seq_header: None,
                 last_access: SystemTime::now(),
+                ref_count: 0,
+                soft_deleted: false,
             }),
             tail_tx,
             sync: SyncCoalescer::new(),
@@ -287,6 +354,9 @@ impl Store {
                 let existing = e.get().clone();
                 let fp = state.file_path.clone();
                 let _ = std::fs::remove_file(fp);
+                if existing.shared.read().unwrap().soft_deleted {
+                    return Ok(CreateResult::Conflict);
+                }
                 Ok(if config_matches(&existing, &state.config) {
                     CreateResult::Exists(existing)
                 } else {
@@ -295,6 +365,11 @@ impl Store {
             }
             Entry::Vacant(v) => {
                 v.insert(state.clone());
+                // Take the fork reference only once insertion has succeeded, so
+                // rejected/raced creates never leak a refcount on the source.
+                if let Some(p) = &parent {
+                    p.shared.write().unwrap().ref_count += 1;
+                }
                 Ok(CreateResult::Created(state))
             }
         }
@@ -307,6 +382,9 @@ fn config_matches(existing: &StreamState, requested: &StreamConfig) -> bool {
     media_type(&ex.content_type) == media_type(&requested.content_type)
         && ex.ttl_seconds == requested.ttl_seconds
         && ex.expires_at_raw == requested.expires_at_raw
+        && ex.forked_from == requested.forked_from
+        && ex.fork_offset_raw == requested.fork_offset_raw
+        && ex.fork_sub_offset.unwrap_or(0) == requested.fork_sub_offset.unwrap_or(0)
         // PUT without Stream-Closed against a closed stream is a conflict.
         && (requested.create_closed == closed_now)
 }
@@ -332,6 +410,36 @@ fn encode_path(path: &str) -> String {
         out.truncate(120);
     }
     out
+}
+
+/// A physical read: `len` bytes starting at `file_start` in `file`.
+pub struct Segment {
+    pub file: Arc<File>,
+    pub file_start: u64,
+    pub len: u64,
+}
+
+/// Resolve a logical byte range to physical file segments, walking the fork
+/// parent chain for ranges below `base_offset`. Source data past the fork
+/// point is never included (capped at base_offset).
+pub fn collect_segments(st: &Arc<StreamState>, start: u64, end: u64, out: &mut Vec<Segment>) {
+    if end <= start {
+        return;
+    }
+    if start < st.base_offset {
+        if let Some(p) = &st.parent {
+            collect_segments(p, start, end.min(st.base_offset), out);
+        }
+    }
+    if end > st.base_offset {
+        let s = start.max(st.base_offset) - st.base_offset;
+        let e = end - st.base_offset;
+        out.push(Segment {
+            file: st.file.clone(),
+            file_start: s,
+            len: e - s,
+        });
+    }
 }
 
 // ---------------- offsets ----------------

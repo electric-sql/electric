@@ -61,3 +61,9 @@ MODE=read SEED_MB=10 BENCH_URL=http://localhost:4564 WORKERS=4 CONCURRENCY=16 no
 ```
 
 Delete `.streams-dev/bench-*` after runs.
+
+## Post-fork regression check (2026-06-13)
+
+After adding fork support (chained segment reads; reads no longer touch the
+appender lock): latency overhead 0.53 ms (unchanged), scale-out appends
+24,022 msg/s (was 23,508), scale-out reads 2,559 MB/s (was 2,550). No regressions.

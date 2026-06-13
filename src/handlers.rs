@@ -31,6 +31,9 @@ const H_PRODUCER_SEQ: &str = "producer-seq";
 const H_PRODUCER_EXPECTED: &str = "producer-expected-seq";
 const H_PRODUCER_RECEIVED: &str = "producer-received-seq";
 const H_SSE_ENCODING: &str = "stream-sse-data-encoding";
+const H_FORKED_FROM: &str = "stream-forked-from";
+const H_FORK_OFFSET: &str = "stream-fork-offset";
+const H_FORK_SUB_OFFSET: &str = "stream-fork-sub-offset";
 
 static LONG_POLL_TIMEOUT_MS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(30_000);
 
@@ -264,11 +267,133 @@ async fn handle_create(store: Arc<Store>, req: Request<Incoming>, path: String) 
         },
         None => None,
     };
-    if header_str(&req, "stream-forked-from").is_some() {
-        return text_response(StatusCode::NOT_IMPLEMENTED, "forks not implemented");
-    }
     let create_closed = header_is_true(&req, H_CLOSED);
     let host = header_str(&req, "host").map(|s| s.to_string());
+
+    // ---- fork header parsing & validation ----
+    let forked_from = header_str(&req, H_FORKED_FROM).map(|s| s.to_string());
+    let fork_offset_raw = header_str(&req, H_FORK_OFFSET).map(|s| s.to_string());
+    let sub_offset_raw = header_str(&req, H_FORK_SUB_OFFSET).map(|s| s.to_string());
+    if forked_from.is_none() && (fork_offset_raw.is_some() || sub_offset_raw.is_some()) {
+        return text_response(
+            StatusCode::BAD_REQUEST,
+            "fork headers require Stream-Forked-From",
+        );
+    }
+    let sub_offset: Option<u64> = match &sub_offset_raw {
+        None => None,
+        Some(v) => {
+            if v.is_empty() || !v.bytes().all(|c| c.is_ascii_digit()) {
+                return text_response(StatusCode::BAD_REQUEST, "malformed Stream-Fork-Sub-Offset");
+            }
+            match v.parse() {
+                Ok(n) => Some(n),
+                Err(_) => {
+                    return text_response(
+                        StatusCode::BAD_REQUEST,
+                        "malformed Stream-Fork-Sub-Offset",
+                    )
+                }
+            }
+        }
+    };
+    if sub_offset.unwrap_or(0) > 0 && fork_offset_raw.is_none() {
+        return text_response(
+            StatusCode::BAD_REQUEST,
+            "Stream-Fork-Sub-Offset requires Stream-Fork-Offset",
+        );
+    }
+
+    // Resolve the fork source and the fork point (logical byte offset).
+    let content_type_hdr = header_str(&req, "content-type").map(|s| s.to_string());
+    let mut parent: Option<Arc<StreamState>> = None;
+    let mut base_offset: u64 = 0;
+    let mut content_type = content_type;
+    let mut ttl_seconds = ttl_seconds;
+    let mut expires_at = expires_at;
+    let mut exp_raw = exp_raw;
+    if let Some(src_path) = &forked_from {
+        let src = match store.get(src_path) {
+            Some(s) => s,
+            None => return text_response(StatusCode::NOT_FOUND, "fork source not found"),
+        };
+        if src.shared.read().unwrap().soft_deleted {
+            return text_response(StatusCode::CONFLICT, "fork source is deleted");
+        }
+        match &content_type_hdr {
+            None => content_type = src.config.content_type.clone(),
+            Some(ct) => {
+                if media_type(ct) != media_type(&src.config.content_type) {
+                    return text_response(StatusCode::CONFLICT, "fork content-type mismatch");
+                }
+            }
+        }
+        let src_tail = src.tail().bytes;
+        if sub_offset_raw.is_some() && src_tail == 0 {
+            return text_response(
+                StatusCode::BAD_REQUEST,
+                "sub-offset on empty source stream",
+            );
+        }
+        // Fork-Offset omitted → divergence at the source's current tail.
+        let anchor = match parse_offset(fork_offset_raw.as_deref()) {
+            Ok(ParsedOffset::Start) if fork_offset_raw.is_none() => src_tail,
+            Ok(ParsedOffset::Start) => 0,
+            Ok(ParsedOffset::Now) => src_tail,
+            Ok(ParsedOffset::At(b)) => {
+                if b > src_tail {
+                    return text_response(
+                        StatusCode::BAD_REQUEST,
+                        "fork offset beyond stream length",
+                    );
+                }
+                b
+            }
+            Err(_) => return text_response(StatusCode::BAD_REQUEST, "malformed fork offset"),
+        };
+        let fork_point = match sub_offset.unwrap_or(0) {
+            0 => anchor,
+            sub if src.is_json => {
+                // Sub-offset counts messages past the anchor; each message ends with ','.
+                let data = read_range_bytes(&src, anchor, src_tail).await;
+                let mut remaining = sub;
+                let mut adv = 0u64;
+                for (i, b) in data.iter().enumerate() {
+                    if *b == b',' {
+                        remaining -= 1;
+                        if remaining == 0 {
+                            adv = i as u64 + 1;
+                            break;
+                        }
+                    }
+                }
+                if remaining > 0 {
+                    return text_response(
+                        StatusCode::BAD_REQUEST,
+                        "sub-offset overshoots message count",
+                    );
+                }
+                anchor + adv
+            }
+            sub => {
+                if anchor + sub > src_tail {
+                    return text_response(
+                        StatusCode::BAD_REQUEST,
+                        "sub-offset overshoots message length",
+                    );
+                }
+                anchor + sub
+            }
+        };
+        // TTL/expiry inheritance: only when the fork specifies neither.
+        if ttl_seconds.is_none() && exp_raw.is_none() {
+            ttl_seconds = src.config.ttl_seconds;
+            expires_at = src.config.expires_at;
+            exp_raw = src.config.expires_at_raw.clone();
+        }
+        base_offset = fork_point;
+        parent = Some(src);
+    }
 
     let body = match req.into_body().collect().await {
         Ok(c) => c.to_bytes(),
@@ -281,6 +406,9 @@ async fn handle_create(store: Arc<Store>, req: Request<Incoming>, path: String) 
         expires_at,
         expires_at_raw: exp_raw,
         create_closed,
+        forked_from,
+        fork_offset_raw,
+        fork_sub_offset: sub_offset,
     };
 
     let is_json = is_json_content_type(&content_type);
@@ -294,7 +422,7 @@ async fn handle_create(store: Arc<Store>, req: Request<Incoming>, path: String) 
         }
     };
 
-    let result = match store.create(&path, config) {
+    let result = match store.create(&path, config, parent, base_offset) {
         Ok(r) => r,
         Err(e) => return text_response(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
     };
@@ -374,15 +502,16 @@ fn write_wire(st: &StreamState, ap: &mut Appender, wire: &Bytes) -> std::io::Res
     use std::io::Write;
     (&*ap.file).write_all(wire)?;
     ap.written += wire.len() as u64;
+    let tail = st.base_offset + ap.written;
     let closed;
     {
         let mut s = st.shared.write().unwrap();
-        s.tail = ap.written;
+        s.tail = tail;
         s.last_access = SystemTime::now();
         closed = s.closed;
     }
     st.tail_tx.send_replace(Tail {
-        bytes: ap.written,
+        bytes: tail,
         closed,
     });
     Ok(())
@@ -469,11 +598,18 @@ fn validate_producer(shared: &Shared, p: &ProducerHeaders) -> ProducerOutcome {
     }
 }
 
+fn gone() -> Resp {
+    text_response(StatusCode::GONE, "stream is deleted")
+}
+
 async fn handle_append(store: Arc<Store>, req: Request<Incoming>, path: String) -> Resp {
     let st = match store.get(&path) {
         Some(s) => s,
         None => return text_response(StatusCode::NOT_FOUND, "stream not found"),
     };
+    if st.shared.read().unwrap().soft_deleted {
+        return gone();
+    }
     let producer = match parse_producer_headers(&req) {
         Ok(p) => p,
         Err(m) => return text_response(StatusCode::BAD_REQUEST, m),
@@ -680,6 +816,7 @@ const STREAM_CHUNK: usize = 1024 * 1024;
 
 /// Read payload range [start, end) and build the response body.
 /// JSON ranges always end on a `,` boundary; the response is `[` + range-minus-comma + `]`.
+/// Logical ranges below the fork base are resolved through the parent chain.
 async fn read_range_body(st: &Arc<StreamState>, start: u64, end: u64) -> RespBody {
     let json = st.is_json;
     if end <= start {
@@ -687,27 +824,24 @@ async fn read_range_body(st: &Arc<StreamState>, start: u64, end: u64) -> RespBod
     }
     let (data_start, data_end) = if json { (start, end - 1) } else { (start, end) };
     let len = data_end - data_start;
-    let file = { st.appender.lock().await.file.clone() };
+    let mut segs = Vec::new();
+    collect_segments(st, data_start, data_end, &mut segs);
 
     if len <= INLINE_READ_MAX {
-        let res = tokio::task::spawn_blocking(move || {
+        let res = tokio::task::spawn_blocking(move || -> std::io::Result<Bytes> {
             let mut buf = BytesMut::zeroed(len as usize + if json { 2 } else { 0 });
-            let slice_range = if json {
-                1..(len as usize + 1)
-            } else {
-                0..(len as usize)
-            };
-            match file.read_exact_at(&mut buf[slice_range], data_start) {
-                Ok(()) => {
-                    if json {
-                        buf[0] = b'[';
-                        let n = buf.len();
-                        buf[n - 1] = b']';
-                    }
-                    Ok(buf.freeze())
-                }
-                Err(e) => Err(e),
+            let mut at = if json { 1usize } else { 0 };
+            for seg in &segs {
+                seg.file
+                    .read_exact_at(&mut buf[at..at + seg.len as usize], seg.file_start)?;
+                at += seg.len as usize;
             }
+            if json {
+                buf[0] = b'[';
+                let n = buf.len();
+                buf[n - 1] = b']';
+            }
+            Ok(buf.freeze())
         })
         .await;
         match res {
@@ -720,16 +854,19 @@ async fn read_range_body(st: &Arc<StreamState>, start: u64, end: u64) -> RespBod
             if json {
                 let _ = tx.blocking_send(Bytes::from_static(b"["));
             }
-            let mut pos = data_start;
-            while pos < data_end {
-                let n = ((data_end - pos) as usize).min(STREAM_CHUNK);
-                let mut buf = BytesMut::zeroed(n);
-                if file.read_exact_at(&mut buf, pos).is_err() {
-                    return;
-                }
-                pos += n as u64;
-                if tx.blocking_send(buf.freeze()).is_err() {
-                    return;
+            for seg in &segs {
+                let mut pos = seg.file_start;
+                let seg_end = seg.file_start + seg.len;
+                while pos < seg_end {
+                    let n = ((seg_end - pos) as usize).min(STREAM_CHUNK);
+                    let mut buf = BytesMut::zeroed(n);
+                    if seg.file.read_exact_at(&mut buf, pos).is_err() {
+                        return;
+                    }
+                    pos += n as u64;
+                    if tx.blocking_send(buf.freeze()).is_err() {
+                        return;
+                    }
                 }
             }
             if json {
@@ -747,6 +884,9 @@ async fn handle_read(store: Arc<Store>, req: Request<Incoming>, path: String) ->
         Some(s) => s,
         None => return text_response(StatusCode::NOT_FOUND, "stream not found"),
     };
+    if st.shared.read().unwrap().soft_deleted {
+        return gone();
+    }
     st.touch();
     let q = parse_query(req.uri().query());
     let offset = match parse_offset(q.offset.as_deref()) {
@@ -1064,16 +1204,25 @@ async fn handle_sse(st: Arc<StreamState>, offset: ParsedOffset, client_cursor: O
     b.body(Either::Right(ChannelBody { rx }))
 }
 
-/// Read a payload byte range fully into memory (SSE batches are small).
+/// Read a logical byte range fully into memory (SSE batches are small).
 async fn read_range_bytes(st: &Arc<StreamState>, start: u64, end: u64) -> Bytes {
     let len = (end - start) as usize;
-    let file = { st.appender.lock().await.file.clone() };
+    let mut segs = Vec::new();
+    collect_segments(st, start, end, &mut segs);
     tokio::task::spawn_blocking(move || {
         let mut buf = BytesMut::zeroed(len);
-        match file.read_exact_at(&mut buf, start) {
-            Ok(()) => buf.freeze(),
-            Err(_) => Bytes::new(),
+        let mut at = 0usize;
+        for seg in &segs {
+            if seg
+                .file
+                .read_exact_at(&mut buf[at..at + seg.len as usize], seg.file_start)
+                .is_err()
+            {
+                return Bytes::new();
+            }
+            at += seg.len as usize;
         }
+        buf.freeze()
     })
     .await
     .unwrap_or_default()
@@ -1086,6 +1235,9 @@ fn handle_head(store: Arc<Store>, path: String) -> Resp {
         Some(s) => s,
         None => return text_response(StatusCode::NOT_FOUND, "stream not found"),
     };
+    if st.shared.read().unwrap().soft_deleted {
+        return gone();
+    }
     // HEAD must not reset the TTL.
     let t = st.tail();
     let mut b = ResponseBuilder::new(StatusCode::OK)
@@ -1107,9 +1259,13 @@ fn handle_head(store: Arc<Store>, path: String) -> Resp {
 // ---------- DELETE ----------
 
 fn handle_delete(store: Arc<Store>, path: String) -> Resp {
-    if store.remove(&path) {
-        ResponseBuilder::new(StatusCode::NO_CONTENT).body(empty())
-    } else {
-        text_response(StatusCode::NOT_FOUND, "stream not found")
+    let st = match store.get(&path) {
+        Some(s) => s,
+        None => return text_response(StatusCode::NOT_FOUND, "stream not found"),
+    };
+    if st.shared.read().unwrap().soft_deleted {
+        return gone();
     }
+    store.delete_or_soft_delete(&st);
+    ResponseBuilder::new(StatusCode::NO_CONTENT).body(empty())
 }

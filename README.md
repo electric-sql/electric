@@ -31,10 +31,13 @@ cargo run --release -- --port 4437 --data-dir ./data [--long-poll-timeout-ms 300
 
 Implemented: create/append/read (catch-up, long-poll, SSE), HEAD, DELETE, JSON mode,
 idempotent producers, Stream-Seq, close semantics, TTL/expiry, cursors, ETags/304,
-security headers.
+security headers, and stream forks (offset + sub-offset divergence, chained
+fork-of-fork reads through the parent chain, soft-delete refcount lifecycle with
+cascade GC, TTL inheritance).
 
-Not implemented (returns 501/conformance failures expected): stream forks,
-`__ds` control plane (subscriptions/webhooks), compression, restart recovery scan.
+Not implemented: `__ds` control plane (subscriptions/webhooks), compression,
+restart recovery scan (metadata is in-memory; data files are not yet replayed on
+boot).
 
 ## Conformance
 
@@ -44,7 +47,8 @@ RUST_SERVER_URL=http://localhost:4563 pnpm exec vitest run \
   --config packages/server-rust/conformance/vitest.config.ts
 ```
 
-Status: 247 passed / 6 skipped / 79 failed — all failures are fork tests (out of scope).
+Status: 326 passed / 6 skipped / 0 failed (skips are subscription tests, disabled
+via `subscriptions: false`).
 
 ## Benchmarks
 
