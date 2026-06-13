@@ -35,9 +35,15 @@ security headers, and stream forks (offset + sub-offset divergence, chained
 fork-of-fork reads through the parent chain, soft-delete refcount lifecycle with
 cascade GC, TTL inheritance).
 
-Not implemented: `__ds` control plane (subscriptions/webhooks), compression,
-restart recovery scan (metadata is in-memory; data files are not yet replayed on
-boot).
+Also implemented: restart recovery. Each stream has a `.meta` sidecar written
+durably on create/close/delete and debounced (100 ms, non-fsync) for producer
+state and TTL access times; on boot the store rebuilds all streams from data
+files + sidecars (tail = base offset + file size, a property of the contiguous
+layout) and re-links fork chains. Documented crash window per PROTOCOL.md: after
+a crash, producer dedup state may lag the data file — producers should bump
+their epoch on restart.
+
+Not implemented: `__ds` control plane (subscriptions/webhooks), compression.
 
 ## Conformance
 

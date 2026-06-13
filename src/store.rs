@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::os::fd::AsRawFd;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex as StdMutex, RwLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -26,7 +26,7 @@ pub struct Tail {
     pub closed: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct ProducerState {
     pub epoch: u64,
     pub last_seq: u64,
@@ -163,6 +163,8 @@ pub struct StreamState {
     pub shared: RwLock<Shared>,
     pub tail_tx: watch::Sender<Tail>,
     pub sync: SyncCoalescer,
+    /// True while a debounced meta flush is pending.
+    pub meta_dirty: AtomicBool,
 }
 
 impl StreamState {
@@ -218,16 +220,140 @@ pub enum CreateResult {
 
 impl Store {
     pub fn new(data_dir: PathBuf) -> std::io::Result<Self> {
-        std::fs::create_dir_all(data_dir.join("streams"))?;
+        let streams_dir = data_dir.join("streams");
+        std::fs::create_dir_all(&streams_dir)?;
         let seed = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos() as u64;
-        Ok(Store {
+        let store = Store {
             streams: DashMap::new(),
             data_dir,
             next_id: AtomicU64::new(seed & MAX_SAFE_INT),
-        })
+        };
+        store.recover(&streams_dir)?;
+        Ok(store)
+    }
+
+    /// Rebuild stream state from data files + metadata sidecars. The data file
+    /// is the source of truth for content (tail = base_offset + file size, a
+    /// property of the contiguous wire-byte layout); the sidecar provides
+    /// everything else. Orphan files (crash between create and meta write) are
+    /// discarded.
+    fn recover(&self, streams_dir: &std::path::Path) -> std::io::Result<()> {
+        let mut metas: HashMap<String, (Meta, PathBuf)> = HashMap::new();
+        let mut data_files: Vec<PathBuf> = Vec::new();
+        for entry in std::fs::read_dir(streams_dir)? {
+            let p = entry?.path();
+            let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            if name.ends_with(".meta.tmp") {
+                let _ = std::fs::remove_file(&p);
+            } else if name.ends_with(".meta") {
+                let data_path = PathBuf::from(p.as_os_str().to_str().unwrap().trim_end_matches(".meta"));
+                if data_path.exists() {
+                    if let Ok(bytes) = std::fs::read(&p) {
+                        if let Ok(meta) = serde_json::from_slice::<Meta>(&bytes) {
+                            metas.insert(meta.path.clone(), (meta, data_path));
+                            continue;
+                        }
+                    }
+                }
+                let _ = std::fs::remove_file(&p);
+            } else {
+                data_files.push(p);
+            }
+        }
+        // Drop orphan data files (no usable sidecar).
+        for p in data_files {
+            if !metas.values().any(|(_, dp)| *dp == p) {
+                let _ = std::fs::remove_file(&p);
+            }
+        }
+        let mut max_id = 0u64;
+        let paths: Vec<String> = metas.keys().cloned().collect();
+        for path in paths {
+            self.recover_one(&path, &metas);
+        }
+        for (m, _) in metas.values() {
+            max_id = max_id.max(m.id);
+        }
+        // Keep ids unique across restarts (they feed ETags).
+        let cur = self.next_id.load(Ordering::Relaxed);
+        self.next_id.store(cur.max(max_id + 1), Ordering::Relaxed);
+        Ok(())
+    }
+
+    fn recover_one(
+        &self,
+        path: &str,
+        metas: &HashMap<String, (Meta, PathBuf)>,
+    ) -> Option<Arc<StreamState>> {
+        if let Some(existing) = self.streams.get(path) {
+            return Some(existing.clone());
+        }
+        let (meta, data_path) = metas.get(path)?;
+        // Fork parents must be linked first (chains are acyclic; a parent always
+        // outlives its forks, so a missing parent means corruption — skip).
+        let parent = match &meta.forked_from {
+            Some(src) => match self.recover_one(src, metas) {
+                Some(p) => Some(p),
+                // Nothing inherited → the fork stands alone; otherwise the
+                // chain is broken (corruption) and the stream is skipped.
+                None if meta.base_offset == 0 => None,
+                None => return None,
+            },
+            None => None,
+        };
+        let file = Arc::new(
+            OpenOptions::new()
+                .read(true)
+                .append(true)
+                .open(data_path)
+                .ok()?,
+        );
+        let written = file.metadata().ok()?.len();
+        let tail = meta.base_offset + written;
+        let (tail_tx, _) = watch::channel(Tail {
+            bytes: tail,
+            closed: meta.closed,
+        });
+        let state = Arc::new(StreamState {
+            id: meta.id,
+            path: path.to_string(),
+            is_json: is_json_content_type(&meta.content_type),
+            file_path: data_path.clone(),
+            file: file.clone(),
+            base_offset: meta.base_offset,
+            parent,
+            appender: AsyncMutex::new(Appender { file, written }),
+            shared: RwLock::new(Shared {
+                tail,
+                closed: meta.closed,
+                closed_by: meta.closed_by.clone(),
+                producers: meta.producers.clone(),
+                last_seq_header: meta.last_seq_header.clone(),
+                last_access: UNIX_EPOCH + Duration::from_secs(meta.last_access_unix),
+                ref_count: meta.ref_count,
+                soft_deleted: meta.soft_deleted,
+            }),
+            tail_tx,
+            sync: SyncCoalescer::new(),
+            meta_dirty: AtomicBool::new(false),
+            config: StreamConfig {
+                content_type: meta.content_type.clone(),
+                ttl_seconds: meta.ttl_seconds,
+                expires_at: meta
+                    .expires_at_unix
+                    .map(|s| UNIX_EPOCH + Duration::from_secs(s)),
+                expires_at_raw: meta.expires_at_raw.clone(),
+                create_closed: meta.create_closed,
+                forked_from: meta.forked_from.clone(),
+                fork_offset_raw: meta.fork_offset_raw.clone(),
+                fork_sub_offset: meta.fork_sub_offset,
+            },
+        });
+        self.streams.insert(path.to_string(), state.clone());
+        Some(state)
     }
 
     /// Look up a stream. Expired streams are removed (or soft-deleted when forks
@@ -256,11 +382,17 @@ impl Store {
                 false
             }
         };
-        if !soft {
+        if soft {
+            let st2 = st.clone();
+            tokio::task::spawn_blocking(move || {
+                let _ = write_meta_sync(&st2, true);
+            });
+        } else {
             self.streams
                 .remove_if(&st.path, |_, v| Arc::ptr_eq(v, st));
             let fp = st.file_path.clone();
             tokio::task::spawn_blocking(move || {
+                let _ = std::fs::remove_file(meta_path(&fp));
                 let _ = std::fs::remove_file(fp);
             });
             self.release_parent(st);
@@ -278,12 +410,18 @@ impl Store {
                 s.soft_deleted && s.ref_count == 0
             };
             if !gone {
+                // Persist the decremented refcount.
+                let p2 = parent.clone();
+                tokio::task::spawn_blocking(move || {
+                    let _ = write_meta_sync(&p2, true);
+                });
                 break;
             }
             self.streams
                 .remove_if(&parent.path, |_, v| Arc::ptr_eq(v, &parent));
             let fp = parent.file_path.clone();
             tokio::task::spawn_blocking(move || {
+                let _ = std::fs::remove_file(meta_path(&fp));
                 let _ = std::fs::remove_file(fp);
             });
             cur = parent.parent.clone();
@@ -346,6 +484,7 @@ impl Store {
             }),
             tail_tx,
             sync: SyncCoalescer::new(),
+            meta_dirty: AtomicBool::new(false),
             config,
         });
         match self.streams.entry(path.to_string()) {
@@ -369,7 +508,9 @@ impl Store {
                 // rejected/raced creates never leak a refcount on the source.
                 if let Some(p) = &parent {
                     p.shared.write().unwrap().ref_count += 1;
+                    write_meta_sync(p, true)?;
                 }
+                write_meta_sync(&state, true)?;
                 Ok(CreateResult::Created(state))
             }
         }
@@ -438,6 +579,107 @@ pub fn collect_segments(st: &Arc<StreamState>, start: u64, end: u64, out: &mut V
             file: st.file.clone(),
             file_start: s,
             len: e - s,
+        });
+    }
+}
+
+// ---------------- metadata persistence & recovery ----------------
+
+/// On-disk metadata sidecar (`<data file>.meta`). Create/close/delete write it
+/// synchronously with fsync; producer/access updates flush debounced without
+/// fsync (documented guarantee: after a crash, producer dedup state may lag the
+/// data file — producers should bump their epoch on restart, per PROTOCOL.md).
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct Meta {
+    pub id: u64,
+    pub path: String,
+    pub content_type: String,
+    pub ttl_seconds: Option<u64>,
+    pub expires_at_unix: Option<u64>,
+    pub expires_at_raw: Option<String>,
+    pub create_closed: bool,
+    pub forked_from: Option<String>,
+    pub fork_offset_raw: Option<String>,
+    pub fork_sub_offset: Option<u64>,
+    pub base_offset: u64,
+    pub closed: bool,
+    pub closed_by: Option<(String, u64, u64)>,
+    pub producers: HashMap<String, ProducerState>,
+    pub last_seq_header: Option<String>,
+    pub last_access_unix: u64,
+    pub ref_count: u32,
+    pub soft_deleted: bool,
+}
+
+fn unix_secs(t: SystemTime) -> u64 {
+    t.duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
+}
+
+impl Meta {
+    fn capture(st: &StreamState) -> Meta {
+        let s = st.shared.read().unwrap();
+        Meta {
+            id: st.id,
+            path: st.path.clone(),
+            content_type: st.config.content_type.clone(),
+            ttl_seconds: st.config.ttl_seconds,
+            expires_at_unix: st.config.expires_at.map(unix_secs),
+            expires_at_raw: st.config.expires_at_raw.clone(),
+            create_closed: st.config.create_closed,
+            forked_from: st.config.forked_from.clone(),
+            fork_offset_raw: st.config.fork_offset_raw.clone(),
+            fork_sub_offset: st.config.fork_sub_offset,
+            base_offset: st.base_offset,
+            closed: s.closed,
+            closed_by: s.closed_by.clone(),
+            producers: s.producers.clone(),
+            last_seq_header: s.last_seq_header.clone(),
+            last_access_unix: unix_secs(s.last_access),
+            ref_count: s.ref_count,
+            soft_deleted: s.soft_deleted,
+        }
+    }
+}
+
+pub fn meta_path(file_path: &std::path::Path) -> PathBuf {
+    let mut p = file_path.as_os_str().to_owned();
+    p.push(".meta");
+    PathBuf::from(p)
+}
+
+/// Write the metadata sidecar. `durable` forces an fsync (create/close/delete).
+pub fn write_meta_sync(st: &StreamState, durable: bool) -> std::io::Result<()> {
+    let meta = Meta::capture(st);
+    let bytes = serde_json::to_vec(&meta).expect("meta serializes");
+    let tmp = meta_path(&st.file_path).with_extension("meta.tmp");
+    let final_path = meta_path(&st.file_path);
+    {
+        use std::io::Write;
+        let mut f = File::create(&tmp)?;
+        f.write_all(&bytes)?;
+        if durable {
+            f.sync_all()?;
+        }
+    }
+    std::fs::rename(&tmp, &final_path)?;
+    Ok(())
+}
+
+impl StreamState {
+    /// Schedule a debounced, non-durable meta flush (producer/access updates).
+    pub fn schedule_meta_flush(self: &Arc<Self>) {
+        if self
+            .meta_dirty
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .is_err()
+        {
+            return; // flush already scheduled
+        }
+        let st = self.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            st.meta_dirty.store(false, Ordering::Release);
+            let _ = tokio::task::spawn_blocking(move || write_meta_sync(&st, false)).await;
         });
     }
 }

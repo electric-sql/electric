@@ -783,6 +783,15 @@ async fn handle_append(store: Arc<Store>, req: Request<Incoming>, path: String) 
         st.sync.sync_to(file, &st, target).await;
     }
 
+    // Persist metadata: closure durably (monotonic state), producer/access
+    // updates debounced (documented crash window; see store::Meta).
+    if close_req {
+        let st2 = st.clone();
+        let _ = tokio::task::spawn_blocking(move || write_meta_sync(&st2, true)).await;
+    } else {
+        st.schedule_meta_flush();
+    }
+
     let tail = st.tail();
     let status = if producer.is_some() && !body.is_empty() {
         StatusCode::OK
@@ -888,6 +897,9 @@ async fn handle_read(store: Arc<Store>, req: Request<Incoming>, path: String) ->
         return gone();
     }
     st.touch();
+    if st.config.ttl_seconds.is_some() {
+        st.schedule_meta_flush(); // sliding TTL must survive restarts
+    }
     let q = parse_query(req.uri().query());
     let offset = match parse_offset(q.offset.as_deref()) {
         Ok(o) => o,
