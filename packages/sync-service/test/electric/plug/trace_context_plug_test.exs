@@ -33,26 +33,22 @@ if Electric.telemetry_enabled?() do
     test "sampled traceparent with rate hint" do
       conn = call([{"traceparent", traceparent("01")}, {"tracestate", "electric=rate:20"}])
 
-      assert %{parent_sampled?: true, sample_rate_hint: 20, parent_span_ctx: span_ctx} =
-               TraceContextPlug.trace_context(conn)
+      assert %{sample_rate_hint: 20} = TraceContextPlug.trace_context(conn)
 
-      assert span_ctx != :undefined
       # The extracted remote parent is installed as the current span for this process.
-      assert :otel_tracer.current_span_ctx() == span_ctx
+      assert :otel_tracer.current_span_ctx() != :undefined
     end
 
     test "unsampled traceparent still parses the rate hint" do
       conn = call([{"traceparent", traceparent("00")}, {"tracestate", "electric=rate:20"}])
 
-      assert %{parent_sampled?: false, sample_rate_hint: 20} =
-               TraceContextPlug.trace_context(conn)
+      assert %{sample_rate_hint: 20} = TraceContextPlug.trace_context(conn)
     end
 
     test "traceparent without tracestate: no rate hint" do
       conn = call([{"traceparent", traceparent("01")}])
 
-      assert %{parent_sampled?: true, sample_rate_hint: nil} =
-               TraceContextPlug.trace_context(conn)
+      assert %{sample_rate_hint: nil} = TraceContextPlug.trace_context(conn)
     end
 
     test "electric member is found among other tracestate members" do
@@ -100,8 +96,7 @@ if Electric.telemetry_enabled?() do
         conn =
           call([{"traceparent", traceparent("01")}, {"tracestate", unquote(tracestate)}])
 
-        assert %{parent_sampled?: true, sample_rate_hint: nil} =
-                 TraceContextPlug.trace_context(conn)
+        assert %{sample_rate_hint: nil} = TraceContextPlug.trace_context(conn)
       end
     end
 

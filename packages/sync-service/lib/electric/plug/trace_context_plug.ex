@@ -28,14 +28,10 @@ defmodule Electric.Plug.TraceContextPlug do
   @typedoc """
   Remote trace context extracted from the request headers.
 
-    * `:parent_span_ctx` - the span context extracted from `traceparent`
-    * `:parent_sampled?` - whether the remote parent has the W3C `sampled` flag set
     * `:sample_rate_hint` - the upstream 1:N sampling rate parsed from `tracestate`,
       or `nil` when absent/invalid
   """
   @type trace_context :: %{
-          parent_span_ctx: OpenTelemetry.span_ctx(),
-          parent_sampled?: boolean(),
           sample_rate_hint: pos_integer() | nil
         }
 
@@ -57,8 +53,6 @@ defmodule Electric.Plug.TraceContextPlug do
         :otel_tracer.set_current_span(span_ctx)
 
         Plug.Conn.put_private(conn, @private_key, %{
-          parent_span_ctx: span_ctx,
-          parent_sampled?: OpenTelemetry.span_ctx_sampled?(span_ctx),
           sample_rate_hint: sample_rate_hint(span_ctx)
         })
     end
