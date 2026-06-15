@@ -547,6 +547,19 @@ defmodule Electric.Postgres.ReplicationClient do
         remaining = time_remaining - (System.monotonic_time(:millisecond) - start_time)
 
         if remaining > 0 do
+          # On the first failure of an incident, debug-log the full stacktrace
+          # once before entering the throttled retry loop. The error-level log
+          # only carries the scrubbed reason, so this is the only place the
+          # stacktrace is recorded while retries are still in progress.
+          if is_nil(state.last_retry_error_log) do
+            stacktrace = __STACKTRACE__
+
+            Logger.debug(fn ->
+              "Replication event dispatch failed, retrying: " <>
+                Exception.format(kind, reason, stacktrace)
+            end)
+          end
+
           state = log_event_retry(state, :dispatching, event, remaining, reason)
 
           Process.send_after(self(), {:process_event, event, remaining}, @event_retry_delay)
