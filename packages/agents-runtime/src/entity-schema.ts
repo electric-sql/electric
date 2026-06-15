@@ -160,6 +160,9 @@ type StepValue = {
   // end-of-message `usage` payload. Populated on `onStepEnd` when the
   // adapter has the data — older events without these fields stay
   // valid (both optional), so this is a strictly additive change.
+  // `input_tokens` is the *uncached* input side (fresh tokens plus
+  // cache writes; cache reads excluded) — the cache-inclusive total
+  // would re-count the whole conversation on every step.
   input_tokens?: number
   output_tokens?: number
 }
