@@ -1,5 +1,12 @@
 import { useEffect, useState } from 'react'
-import { Animated, Pressable, StyleSheet, Text, View } from 'react-native'
+import {
+  ActivityIndicator,
+  Animated,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native'
 import {
   BottomSheet,
   BottomSheetItem,
@@ -123,6 +130,10 @@ export function SessionMenu({
   onStopImmediately,
   onShare,
   signalDisabled = false,
+  onFork,
+  forkError,
+  forkPending = false,
+  forkDisabled = false,
 }: {
   open: boolean
   onClose: () => void
@@ -135,6 +146,11 @@ export function SessionMenu({
   /** Opens the share & access screen. */
   onShare?: () => void
   signalDisabled?: boolean
+  /** Forks the whole subtree (HEAD clone); root entities only. */
+  onFork?: () => void
+  forkError?: string | null
+  forkPending?: boolean
+  forkDisabled?: boolean
 }): React.ReactElement {
   const tokens = useTokens()
   const { copiedKey, copy } = useCopyFeedback()
@@ -146,6 +162,11 @@ export function SessionMenu({
     drill,
     reset: resetDrill,
   } = useDrillTransition()
+
+  const entityTerminal =
+    entity?.status === `stopped` || entity?.status === `killed`
+  // Root-only, matching desktop's tile menu.
+  const showFork = entity !== null && !entity.parent && Boolean(onFork)
 
   const dotKey = entity ? (STATUS_DOT_COLORS[entity.status] ?? `gray`) : `gray`
   const dotColor =
@@ -399,6 +420,48 @@ export function SessionMenu({
                       }}
                     />
                   )}
+                  {showFork && (
+                    <BottomSheetItem
+                      label={forkPending ? `Forking…` : `Fork subtree`}
+                      subtitle={
+                        forkDisabled && !forkPending
+                          ? `Fork permission required`
+                          : undefined
+                      }
+                      icon={
+                        <Icon
+                          name="git-fork"
+                          size={18}
+                          color={tokens.text2}
+                          strokeWidth={2}
+                        />
+                      }
+                      trailing={
+                        forkPending ? (
+                          <ActivityIndicator
+                            size="small"
+                            color={tokens.text3}
+                          />
+                        ) : undefined
+                      }
+                      disabled={forkDisabled || forkPending || entityTerminal}
+                      // Sheet stays open; the screen closes it on success and
+                      // keeps it open to show `forkError` on failure.
+                      onPress={() => onFork?.()}
+                    />
+                  )}
+                  {showFork && forkError ? (
+                    <Text
+                      style={{
+                        color: tokens.red11,
+                        fontSize: 12,
+                        paddingHorizontal: 12,
+                        paddingBottom: 8,
+                      }}
+                    >
+                      {forkError}
+                    </Text>
+                  ) : null}
                 </BottomSheetSection>
               </>
             )}

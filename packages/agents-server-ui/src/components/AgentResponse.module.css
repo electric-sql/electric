@@ -48,3 +48,13 @@
 .metaActionButton:hover {
   opacity: 1;
 }
+
+.spin {
+  animation: meta-action-spin 0.7s linear infinite;
+}
+
+@keyframes meta-action-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

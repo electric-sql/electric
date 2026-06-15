@@ -67,7 +67,11 @@ export const CHAT_COMPOSER_OVERLAP = 20
 const COMPOSER_INPUT_MIN_HEIGHT = 34
 const COMPOSER_INPUT_MAX_HEIGHT = 200
 const INLINE_QUEUED_TIMEOUT_MS = 15_000
-const SESSION_PERMISSIONS: ReadonlyArray<EntityPermission> = [`write`, `signal`]
+const SESSION_PERMISSIONS: ReadonlyArray<EntityPermission> = [
+  `write`,
+  `signal`,
+  `fork`,
+]
 
 type EntityStreamState = ReturnType<typeof useEntityTimeline>
 type EntityStreamDB = EntityStreamState[`db`]
@@ -116,11 +120,14 @@ export function StateInspectorSessionScreen({
   entityUrl,
   onBack,
   onSetView,
+  onOpenEntity,
   onShare,
 }: {
   entityUrl: string
   onBack: () => void
   onSetView: (view: EmbedViewId) => void
+  // So the kebab "Fork subtree" can navigate from the state view too.
+  onOpenEntity?: (entityUrl: string) => void
   onShare?: () => void
 }): React.ReactElement {
   return (
@@ -129,6 +136,7 @@ export function StateInspectorSessionScreen({
       view="state-explorer"
       onBack={onBack}
       onSetView={onSetView}
+      onOpenEntity={onOpenEntity}
       onShare={onShare}
     />
   )
@@ -168,7 +176,8 @@ export function SessionScreen({
   ) => void
   onShare?: () => void
 }): React.ReactElement {
-  const { entitiesCollection, serverUrl, signalEntity } = useAgents()
+  const { entitiesCollection, serverUrl, signalEntity, forkEntity } =
+    useAgents()
   const tokens = useTokens()
   const styles = useMemo(() => createStyles(tokens), [tokens])
   const [menuOpen, setMenuOpen] = useState(false)
@@ -177,6 +186,11 @@ export function SessionScreen({
   >(() => new Map())
   const [stopPending, setStopPending] = useState(false)
   const [signalError, setSignalError] = useState<string | null>(null)
+  const [forkPending, setForkPending] = useState(false)
+  const [forkError, setForkError] = useState<string | null>(null)
+  // Synchronous re-entry latch: `forkPending` (state) only disables the item
+  // after a re-render, so a same-tick double-tap could fire two forks.
+  const forkInFlightRef = useRef(false)
   const inlineQueuedKeysRef = useRef(new Set<string>())
   const inlineTimeoutsRef = useRef(
     new Map<string, ReturnType<typeof setTimeout>>()
@@ -193,6 +207,7 @@ export function SessionScreen({
   const permissions = useEntityPermissions(entity, SESSION_PERMISSIONS)
   const canWrite = permissions.write
   const canSignal = permissions.signal
+  const canFork = permissions.fork
   const streamEntityUrl =
     view === `chat` && entity?.status !== `spawning` ? entityUrl : null
   const { timelineRows, pendingInbox, db, generationActive } =
@@ -315,6 +330,7 @@ export function SessionScreen({
   useEffect(() => {
     setStopPending(false)
     setSignalError(null)
+    setForkError(null)
   }, [entityUrl])
 
   const sendSignal = useCallback(
@@ -371,6 +387,27 @@ export function SessionScreen({
     },
     [canSignal, sendSignal]
   )
+
+  // Whole-subtree fork (HEAD clone) — the kebab counterpart to desktop's
+  // tile-menu "Fork subtree". Root-only; navigates to the new root on success.
+  const forkSubtree = useCallback(async (): Promise<void> => {
+    if (!entity || !canFork || forkInFlightRef.current) return
+    if (entity.parent) return
+    if (entity.status === `stopped` || entity.status === `killed`) return
+    forkInFlightRef.current = true
+    setForkPending(true)
+    setForkError(null)
+    try {
+      const { url } = await forkEntity({ entityUrl })
+      setMenuOpen(false)
+      onOpenEntity?.(url)
+    } catch (err) {
+      setForkError(err instanceof Error ? err.message : String(err))
+    } finally {
+      forkInFlightRef.current = false
+      setForkPending(false)
+    }
+  }, [canFork, entity, entityUrl, forkEntity, onOpenEntity])
 
   const title = entity
     ? getEntityDisplayTitle(entity)
@@ -443,6 +480,10 @@ export function SessionScreen({
         onStopImmediately={() => void stopImmediately()}
         onShare={onShare}
         signalDisabled={!canSignal}
+        onFork={() => void forkSubtree()}
+        forkError={forkError}
+        forkPending={forkPending}
+        forkDisabled={!canFork}
       />
     </Screen>
   )

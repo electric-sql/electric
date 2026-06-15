@@ -1,4 +1,11 @@
-import { Check, Copy, CircleAlert, GitFork, Reply } from 'lucide-react'
+import {
+  Check,
+  CircleAlert,
+  Copy,
+  GitFork,
+  LoaderCircle,
+  Reply,
+} from 'lucide-react'
 import {
   memo,
   useCallback,
@@ -32,6 +39,7 @@ import { ReasoningBlock, type ReasoningEntry } from './ReasoningSection'
 import { TokenUsage } from './TokenUsage'
 
 import { formatElapsedDuration, toMillis } from '../lib/formatTime'
+import { singleFlight } from '../lib/singleFlight'
 import styles from './AgentResponse.module.css'
 import toolBlock from './toolBlock.module.css'
 import type { ForkFromHereAction } from './UserMessage'
@@ -778,10 +786,32 @@ function ResponseMetaActions({
   onReply?: () => void
 }): React.ReactElement | null {
   const showFork = forkFromHere !== undefined
+
+  // Single-flight + spinner so repeat taps don't spawn duplicate forks.
+  const [forking, setForking] = useState(false)
+  const onForkRef = useRef(forkFromHere?.onFork)
+  onForkRef.current = forkFromHere?.onFork
+  const mountedRef = useRef(true)
+  useEffect(() => () => void (mountedRef.current = false), [])
+  const forkFlight = useMemo(
+    () =>
+      singleFlight(
+        () => onForkRef.current?.(),
+        (pending) => {
+          if (mountedRef.current) setForking(pending)
+        }
+      ),
+    []
+  )
+
   if (!showCopy && !showFork && !onReply) return null
 
   const forkDisabled = forkFromHere?.disabled === true || !forkFromHere?.onFork
-  const forkLabel = forkDisabled ? `Fork permission required` : `Fork from here`
+  const forkLabel = forking
+    ? `Forking…`
+    : forkDisabled
+      ? `Fork permission required`
+      : `Fork from here`
 
   return (
     <span className={styles.metaActions}>
@@ -808,12 +838,16 @@ function ResponseMetaActions({
               variant="ghost"
               tone="neutral"
               className={styles.metaActionButton}
-              disabled={forkDisabled}
-              onClick={forkFromHere?.onFork}
+              disabled={forkDisabled || forking}
+              onClick={forkFlight.invoke}
               aria-label="Fork from here"
               title={forkLabel}
             >
-              <Icon icon={GitFork} size={1} />
+              <Icon
+                icon={forking ? LoaderCircle : GitFork}
+                size={1}
+                className={forking ? styles.spin : undefined}
+              />
             </IconButton>
           </span>
         </Tooltip>

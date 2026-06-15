@@ -36,6 +36,12 @@ type SessionDomEmbedProps = {
   inlineQueuedMessages?: Array<OptimisticInboxMessage>
   bottomInset?: number
   onRequestOpenEntity: (entityUrl: string) => Promise<void>
+  // Marshalled so the per-message fork runs over native networking; pointer
+  // shape matches the runtime's `EventPointer`.
+  onRequestForkEntity?: (
+    entityUrl: string,
+    opts?: { pointer?: { offset: string | null; subOffset: number } }
+  ) => Promise<{ url: string }>
   style?: StyleProp<ViewStyle>
   matchContents?: boolean
   serverHeaders?: { url: string; headers: Record<string, string> } | null
@@ -68,7 +74,7 @@ function SessionRouteInner({
   }
   router: ReturnType<typeof useRouter>
 }): React.ReactElement {
-  const { serverUrl } = useAgents()
+  const { serverUrl, forkEntity } = useAgents()
   const tokens = useTokens()
   const scheme = useColorSchemeMode()
   const insets = useSafeAreaInsets()
@@ -153,6 +159,9 @@ function SessionRouteInner({
             bottomInset={composerInset}
             serverHeaders={serverHeaders}
             onRequestOpenEntity={async (target) => openSession(target)}
+            onRequestForkEntity={(targetUrl, opts) =>
+              forkEntity({ entityUrl: targetUrl, pointer: opts?.pointer })
+            }
             dom={domOptions(styles, embedSize, tokens.bg)}
           />
         ) : (
@@ -186,6 +195,7 @@ function SessionRouteInner({
           entityUrl={entityUrl}
           onBack={goBack}
           onSetView={setView}
+          onOpenEntity={openSession}
           onShare={openShare}
         />
       )}
