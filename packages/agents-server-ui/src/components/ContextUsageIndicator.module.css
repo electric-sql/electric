@@ -25,7 +25,7 @@
 }
 
 /* Levels mirror the compaction thresholds: warning once background
-   compaction would start (85%), critical at the hard ceiling (95%). */
+   compaction would start (85%), critical at the hard ceiling (90%). */
 .normal {
   color: var(--text-muted, rgba(0, 0, 0, 0.55));
 }

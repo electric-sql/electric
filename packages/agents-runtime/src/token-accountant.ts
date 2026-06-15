@@ -24,12 +24,12 @@ import type { LLMMessage } from './types'
  * - `AWARENESS` (25/50/75%): inject a budget notice so the model can pace
  *   itself (Phase 1).
  * - `BACKGROUND_START` (85%): kick off background compaction (Phase 3).
- * - `HARD_CEILING` (95%): usable ceiling; compact/truncate synchronously
- *   before the next model call (Phase 2).
+ * - `HARD_CEILING` (90%): compact synchronously before the next model call
+ *   (Phase 2). Matches Codex's auto-compaction threshold.
  */
 export const CONTEXT_USAGE_AWARENESS_THRESHOLDS = [0.25, 0.5, 0.75] as const
 export const CONTEXT_USAGE_BACKGROUND_START = 0.85
-export const CONTEXT_USAGE_HARD_CEILING = 0.95
+export const CONTEXT_USAGE_HARD_CEILING = 0.9
 
 export interface ContextUsageInput {
   /**
