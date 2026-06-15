@@ -13,7 +13,7 @@
  * same thresholds below.
  */
 
-import { formatTokenCount } from './token-budget'
+import { approxTokens, formatTokenCount } from './token-budget'
 import type { LLMMessage } from './types'
 
 /**
@@ -187,4 +187,34 @@ export function withContextBudgetNotice(
   const notice = buildContextBudgetNotice(usage)
   if (messages.length === 0) return [notice]
   return [...messages.slice(0, -1), notice, messages[messages.length - 1]!]
+}
+
+/**
+ * Default cap on a single tool result's size before it is truncated. One giant
+ * tool output (a huge file read, a verbose command) can fill the window on its
+ * own; capping each result keeps any single one bounded. Mirrors Codex's
+ * per-message truncation.
+ */
+export const CONTEXT_TOOL_OUTPUT_MAX_TOKENS = 10_000
+
+/**
+ * Replace any single `tool_result` whose content exceeds `maxTokens` with a
+ * visible placeholder. Truncation is explicit (never silent) and leaves the
+ * tool-call pairing intact (`toolCallId` / `isError` are preserved). Other
+ * message roles pass through untouched.
+ */
+export function truncateOversizedToolResults(
+  messages: ReadonlyArray<LLMMessage>,
+  maxTokens: number = CONTEXT_TOOL_OUTPUT_MAX_TOKENS
+): Array<LLMMessage> {
+  return messages.map((message) => {
+    if (message.role !== `tool_result`) return message
+    if (approxTokens(message.content) <= maxTokens) return message
+    return {
+      ...message,
+      content: `[Output truncated: exceeded ${formatTokenCount(
+        maxTokens
+      )} tokens and was removed to fit the context window]`,
+    }
+  })
 }

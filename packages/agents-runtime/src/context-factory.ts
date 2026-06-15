@@ -19,6 +19,7 @@ import { runtimeLog } from './log'
 import { sliceChars } from './token-budget'
 import {
   selectLatestContextUsage,
+  truncateOversizedToolResults,
   withContextBudgetNotice,
   type ContextUsageStep,
 } from './token-accountant'
@@ -790,7 +791,13 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         const budgetUsage = selectLatestContextUsage(
           config.db.collections.steps.toArray as ReadonlyArray<ContextUsageStep>
         )
-        const outgoingMessages = withContextBudgetNotice(messages, budgetUsage)
+        // Phase 2: cap any single oversized tool result before the model call
+        // (one huge output can fill the window on its own), then surface the
+        // budget notice.
+        const outgoingMessages = withContextBudgetNotice(
+          truncateOversizedToolResults(messages),
+          budgetUsage
+        )
 
         const adapterFactory = createPiAgentAdapter({
           systemPrompt: activeAgentConfig.systemPrompt,

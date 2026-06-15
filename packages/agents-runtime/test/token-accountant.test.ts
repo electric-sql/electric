@@ -9,6 +9,7 @@ import {
   selectLatestContextUsage,
   shouldSurfaceContextBudget,
   withContextBudgetNotice,
+  truncateOversizedToolResults,
 } from '../src/token-accountant'
 import type { LLMMessage } from '../src/types'
 
@@ -185,5 +186,35 @@ describe(`withContextBudgetNotice`, () => {
     const result = withContextBudgetNotice([], highUsage)
     expect(result).toHaveLength(1)
     expect(String(result[0]?.content)).toContain(`token_budget`)
+  })
+})
+
+describe(`truncateOversizedToolResults`, () => {
+  const toolResult = (content: string): LLMMessage => ({
+    role: `tool_result`,
+    toolCallId: `call-1`,
+    isError: false,
+    content,
+  })
+
+  it(`replaces a tool result that exceeds the cap with a placeholder`, () => {
+    // approxTokens ≈ chars/4, so 400 chars ≈ 100 tokens > cap of 10.
+    const big = `x`.repeat(400)
+    const [out] = truncateOversizedToolResults([toolResult(big)], 10)
+    expect(String(out?.content)).toContain(`Output truncated`)
+    // pairing metadata is preserved so the tool_call/result stays valid
+    expect(out).toMatchObject({ role: `tool_result`, toolCallId: `call-1` })
+  })
+
+  it(`leaves a tool result within the cap untouched`, () => {
+    const small = toolResult(`small output`)
+    const [out] = truncateOversizedToolResults([small], 10)
+    expect(out).toBe(small)
+  })
+
+  it(`never touches non-tool-result messages`, () => {
+    const user: LLMMessage = { role: `user`, content: `x`.repeat(400) }
+    const [out] = truncateOversizedToolResults([user], 10)
+    expect(out).toBe(user)
   })
 })
