@@ -500,6 +500,13 @@ export interface ExternallyWritableCollectionConfig {
   type: string
   /** Well-known contract this collection implements, e.g. `comments/v1`. */
   contract?: string
+  /**
+   * Allowlist of external write operations. When set, the router rejects any
+   * operation not listed (403). When unset, only `insert` is permitted — the
+   * safe default, since open update/delete lets a client overwrite or remove
+   * another principal's rows by key.
+   */
+  operations?: Array<`insert` | `update` | `delete`>
 }
 
 export interface ElectricAgentsEntityType {

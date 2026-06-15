@@ -31,9 +31,6 @@ export type CommentValue = {
   timestamp: string
   reply_to?: CommentTargetValue
   target_snapshot?: CommentSnapshotValue
-  edited_at?: string
-  deleted_at?: string
-  deleted_by?: string
 }
 
 const commentTargetSchema = z.union([
@@ -68,9 +65,6 @@ export const commentSchema = z.object({
   timestamp: z.string(),
   reply_to: commentTargetSchema.optional(),
   target_snapshot: commentSnapshotSchema.optional(),
-  edited_at: z.string().optional(),
-  deleted_at: z.string().optional(),
-  deleted_by: z.string().optional(),
 })
 
 /**
@@ -88,4 +82,8 @@ export const commentsCollection: CollectionDefinition = {
   primaryKey: `key`,
   externallyWritable: true,
   contract: COMMENTS_CONTRACT,
+  // Insert-only: comments are append-only events. Update/delete would let a
+  // client overwrite or remove another principal's comment by key. Edit and
+  // soft-delete flows are deferred; their ops can be added here when they land.
+  operations: [`insert`],
 }

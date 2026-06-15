@@ -55,6 +55,15 @@ const externallyWritableCollectionsSchema = Type.Record(
     {
       type: Type.String(),
       contract: Type.Optional(Type.String()),
+      operations: Type.Optional(
+        Type.Array(
+          Type.Union([
+            Type.Literal(`insert`),
+            Type.Literal(`update`),
+            Type.Literal(`delete`),
+          ])
+        )
+      ),
       principalColumn: Type.Optional(Type.String()),
     },
     { additionalProperties: false }

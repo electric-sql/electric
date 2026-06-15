@@ -34,8 +34,7 @@ export const CommentBubble = memo(function CommentBubble({
     usersById,
   })
   const timestamp = Date.parse(comment.timestamp)
-  const deleted = Boolean(comment.deleted_at)
-  const singleLine = !deleted && !/[\r\n]/.test(comment.body)
+  const singleLine = !/[\r\n]/.test(comment.body)
 
   return (
     <div
@@ -56,9 +55,7 @@ export const CommentBubble = memo(function CommentBubble({
         )}
         <div className={styles.message}>
           <div className={styles.bubble}>
-            <div className={deleted ? styles.deletedBody : styles.body}>
-              {deleted ? `Comment deleted` : comment.body}
-            </div>
+            <div className={styles.body}>{comment.body}</div>
           </div>
           {showMeta && (
             <div className={styles.meta}>
@@ -73,17 +70,7 @@ export const CommentBubble = memo(function CommentBubble({
                   <TimeText ts={timestamp} />
                 </>
               )}
-              {comment.edited_at && !deleted && (
-                <>
-                  <Text size={1} tone="muted">
-                    -
-                  </Text>
-                  <Text size={1} tone="muted">
-                    edited
-                  </Text>
-                </>
-              )}
-              {onReply && !deleted && (
+              {onReply && (
                 <span className={styles.metaActions}>
                   <Tooltip content="Reply" side="top">
                     <IconButton

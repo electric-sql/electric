@@ -28,9 +28,6 @@ export type EntityTimelineCommentRow = {
   timestamp: string
   reply_to?: CommentTarget
   target_snapshot?: CommentSnapshot
-  edited_at?: string
-  deleted_at?: string
-  deleted_by?: string
 }
 
 export type CommentTimelineRow = {
@@ -68,9 +65,6 @@ export function createCommentsTimelineSource(
       timestamp: coalesce(comment.timestamp, ``),
       reply_to: comment.reply_to,
       target_snapshot: comment.target_snapshot,
-      edited_at: comment.edited_at,
-      deleted_at: comment.deleted_at,
-      deleted_by: comment.deleted_by,
     }))
 }
 
@@ -104,8 +98,8 @@ function nextOptimisticCommentOrderIndex(): number {
   return optimisticCommentOrderIndex
 }
 
-function createClientCommentKey(pendingOrderIndex: number): string {
-  return `client-comment-${Date.now()}-${pendingOrderIndex}`
+function createClientCommentKey(): string {
+  return `client-comment-${crypto.randomUUID()}`
 }
 
 function readCommentError(status: number, body: string): Error {
@@ -186,7 +180,7 @@ export function createSendCommentAction({
   }) => {
     const pendingOrderIndex = nextOptimisticCommentOrderIndex()
     return action({
-      key: createClientCommentKey(pendingOrderIndex),
+      key: createClientCommentKey(),
       body,
       replyTo,
       targetSnapshot,

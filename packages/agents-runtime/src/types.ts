@@ -676,6 +676,12 @@ export interface CollectionDefinition<
    * collection by capability instead of by name.
    */
   contract?: string
+  /**
+   * Allowlist of external write operations forwarded in the type registration.
+   * When unset the server permits only `insert` — open update/delete would let
+   * a client overwrite or remove another principal's rows by key.
+   */
+  operations?: Array<`insert` | `update` | `delete`>
 }
 
 export interface EntityTypeEntry<

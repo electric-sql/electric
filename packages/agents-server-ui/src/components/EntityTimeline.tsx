@@ -267,7 +267,7 @@ function timelineRowGap(
 function isPlainCommentRow(row: RenderTimelineRow | undefined): boolean {
   const comment = row?.comment
   if (!comment) return false
-  return !comment.deleted_at && !comment.reply_to && !comment.target_snapshot
+  return !comment.reply_to && !comment.target_snapshot
 }
 
 function shouldCollapseCommentMeta(

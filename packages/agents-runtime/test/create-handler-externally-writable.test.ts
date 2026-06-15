@@ -33,7 +33,11 @@ describe(`buildEntityTypeRegistrationBody`, () => {
       state: { comments: commentsCollection },
     } as any)
     expect(body.externally_writable_collections).toEqual({
-      comments: { type: `state:comments`, contract: COMMENTS_CONTRACT },
+      comments: {
+        type: `state:comments`,
+        contract: COMMENTS_CONTRACT,
+        operations: [`insert`],
+      },
     })
   })
 

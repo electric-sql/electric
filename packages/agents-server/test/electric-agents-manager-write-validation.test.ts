@@ -511,6 +511,63 @@ describe(`ElectricAgentsManager.writeCollection`, () => {
     ).rejects.toMatchObject({ status: 409 })
     expect(append).not.toHaveBeenCalled()
   })
+
+  it(`rejects operations outside the collection allowlist with 403`, async () => {
+    const append = vi.fn()
+    const { manager } = createAttachmentManager({ streamClient: { append } })
+    manager.registry.getEntity = vi.fn().mockResolvedValue({
+      url: `/chat/session-1`,
+      type: `chat`,
+      status: `running`,
+      streams: { main: `/chat/session-1` },
+    })
+    manager.registry.getEntityType = vi.fn().mockResolvedValue({
+      name: `chat`,
+      state_schemas: { 'state:comments': {} },
+      externally_writable_collections: {
+        comments: { type: `state:comments`, operations: [`insert`] },
+      },
+    })
+
+    for (const operation of [`update`, `delete`] as const) {
+      await expect(
+        manager.writeCollection(`/chat/session-1`, `comments`, {
+          operation,
+          key: `c1`,
+          value: { body: `hi` },
+          principal,
+        })
+      ).rejects.toMatchObject({ status: 403 })
+    }
+    expect(append).not.toHaveBeenCalled()
+  })
+
+  it(`defaults to insert-only when no operations allowlist is configured`, async () => {
+    const append = vi.fn()
+    const { manager } = createAttachmentManager({ streamClient: { append } })
+    manager.registry.getEntity = vi.fn().mockResolvedValue({
+      url: `/chat/session-1`,
+      type: `chat`,
+      status: `running`,
+      streams: { main: `/chat/session-1` },
+    })
+    manager.registry.getEntityType = vi.fn().mockResolvedValue({
+      name: `chat`,
+      state_schemas: { 'state:comments': {} },
+      externally_writable_collections: {
+        comments: { type: `state:comments` },
+      },
+    })
+
+    await expect(
+      manager.writeCollection(`/chat/session-1`, `comments`, {
+        operation: `delete`,
+        key: `c1`,
+        principal,
+      })
+    ).rejects.toMatchObject({ status: 403 })
+    expect(append).not.toHaveBeenCalled()
+  })
 })
 
 function createManifestManager(calls: Array<string>) {

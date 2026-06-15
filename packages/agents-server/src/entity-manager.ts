@@ -2474,6 +2474,15 @@ export class EntityManager {
       )
     }
 
+    const allowedOperations = config.operations ?? [`insert`]
+    if (!allowedOperations.includes(req.operation)) {
+      throw new ElectricAgentsError(
+        ErrCodeUnauthorized,
+        `Operation "${req.operation}" is not allowed on collection "${collection}"`,
+        403
+      )
+    }
+
     if (rejectsNormalWrites(entity.status)) {
       throw new ElectricAgentsError(
         ErrCodeNotRunning,

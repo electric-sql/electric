@@ -284,13 +284,14 @@ export function buildEntityTypeRegistrationBody(
 
   const externallyWritableCollections: Record<
     string,
-    { type: string; contract?: string }
+    { type: string; contract?: string; operations?: Array<string> }
   > = {}
   for (const [collectionName, def] of stateEntries) {
     if (!def.externallyWritable) continue
     externallyWritableCollections[collectionName] = {
       type: def.type ?? `state:${collectionName}`,
       ...(def.contract && { contract: def.contract }),
+      ...(def.operations && { operations: def.operations }),
     }
   }
 

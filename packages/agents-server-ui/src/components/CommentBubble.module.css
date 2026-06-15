@@ -62,18 +62,11 @@
   color: #000;
 }
 
-.body,
-.deletedBody {
+.body {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   font-size: var(--ds-chat-text);
   line-height: var(--ds-chat-text-lh);
-}
-
-.deletedBody {
-  color: inherit;
-  opacity: 0.64;
-  font-style: italic;
 }
 
 .preview {
