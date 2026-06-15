@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2021"
 description = "High-performance Durable Streams server (Rust)"
 license = "Apache-2.0"
+# Conservative floor, comfortably above the dependency MSRVs (tokio/hyper/
+# ed25519-dalek). CI builds on stable; this documents the supported minimum.
+rust-version = "1.74"
 repository = "https://github.com/durable-streams/durable-streams"
 homepage = "https://electric-sql.com/primitives/durable-streams"
 readme = "README.md"
