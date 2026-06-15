@@ -2,9 +2,9 @@ defmodule Electric.PollWait do
   @moduledoc """
   Per-process bounded polling of a cheap (ETS-backed) condition.
 
-  `until/3` sleeps between checks with exponential backoff (doubling, capped)
-  and bounded jitter so concurrent waiters land on distinct ETS reads
-  instead of stampeding the same millisecond window.
+  `until/3` sleeps between checks with exponential backoff and bounded jitter
+  so concurrent waiters land on distinct ETS reads instead of stampeding
+  the same millisecond window.
 
   All defaults can be overridden per-call so the primitive can be shared
   between consumers with very different latency profiles.
