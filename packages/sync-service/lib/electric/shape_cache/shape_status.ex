@@ -33,7 +33,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
         }
 
   # MUST be updated when Shape.comparable/1 changes.
-  @version 8
+  @version 9
 
   # Tuple format: {handle, hash, snapshot_started, last_read_time, generation}
   @shape_last_used_time_pos 4

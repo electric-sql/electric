@@ -113,6 +113,7 @@ defmodule Electric.Shapes.Shape do
   def comparable(%__MODULE__{} = shape) do
     {:shape, {shape.root_table_id, shape.root_table}, shape.root_pk,
      Comparable.comparable(shape.where), shape.selected_columns,
+     shape.explicitly_selected_columns,
      Enum.flat_map(shape.flags, fn {k, v} -> if(v, do: [k], else: []) end) |> Enum.sort(),
      shape.replica, shape.log_mode}
   end
