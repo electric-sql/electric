@@ -11,6 +11,7 @@ defmodule Electric.Postgres.ReplicationClient do
   alias Electric.Postgres.ReplicationClient.ConnectionSetup
   alias Electric.Replication.Changes.TransactionFragment
   alias Electric.Replication.Changes.Relation
+  alias Electric.Replication.Changes.LogScrubber
   alias Electric.Telemetry.OpenTelemetry
   alias Electric.Telemetry.Sampler
 
@@ -400,8 +401,8 @@ defmodule Electric.Postgres.ReplicationClient do
       {:noreply, state}
     else
       Logger.error(
-        "Exhausted retry budget processing replication event: #{describe_event(event)} failed with: " <>
-          inspect_scrubbed(reason)
+        "Exhausted retry budget processing replication event: #{LogScrubber.summarize(event)} failed with: " <>
+          LogScrubber.inspect_scrubbed(reason)
       )
 
       exit(reason)
@@ -565,8 +566,8 @@ defmodule Electric.Postgres.ReplicationClient do
           {:noreply, state}
         else
           Logger.error(
-            "Exhausted retry budget dispatching replication event: #{describe_event(event)} failed with: " <>
-              inspect_scrubbed(reason)
+            "Exhausted retry budget dispatching replication event: #{LogScrubber.summarize(event)} failed with: " <>
+              LogScrubber.inspect_scrubbed(reason)
           )
 
           :erlang.raise(kind, reason, __STACKTRACE__)
@@ -592,7 +593,7 @@ defmodule Electric.Postgres.ReplicationClient do
          now - state.last_retry_error_log >= @retry_log_interval do
       Logger.error(
         "Error #{action} replication event (#{div(remaining, 1000)}s retry budget left, retrying every #{@event_retry_delay}ms): " <>
-          "#{describe_event(event)} failed with: " <> inspect_scrubbed(reason)
+          "#{LogScrubber.summarize(event)} failed with: " <> LogScrubber.inspect_scrubbed(reason)
       )
 
       %{state | last_retry_error_log: now}
@@ -600,43 +601,6 @@ defmodule Electric.Postgres.ReplicationClient do
       state
     end
   end
-
-  defp describe_event(%TransactionFragment{} = fragment) do
-    "transaction fragment xid=#{fragment.xid} lsn=#{fragment.lsn} changes=#{fragment.change_count}"
-  end
-
-  defp describe_event(%Relation{} = rel) do
-    ~s|relation "#{rel.schema}"."#{rel.table}" (oid #{rel.id})|
-  end
-
-  # Replace replication events embedded in an exit reason (e.g. as arguments
-  # in a :noproc tuple) with their one-line summary before inspecting, so that
-  # error-level logs never carry full row data. The limits are generous rather
-  # than infinite: real exit reasons are small, so a few-thousand element/binary
-  # cap leaves them untruncated while still bounding a pathological collection or
-  # an event payload that slips past scrub_events in some unanticipated reason
-  # shape — neither can dump unbounded row data into the logs (or any error
-  # tracker fed from them).
-  defp inspect_scrubbed(term) do
-    term |> scrub_events() |> inspect(limit: 4000, printable_limit: 8192)
-  end
-
-  defp scrub_events(%TransactionFragment{} = event), do: "#<#{describe_event(event)}>"
-  defp scrub_events(%Relation{} = event), do: "#<#{describe_event(event)}>"
-  defp scrub_events(%_{} = other_struct), do: other_struct
-
-  defp scrub_events(tuple) when is_tuple(tuple),
-    do: tuple |> Tuple.to_list() |> Enum.map(&scrub_events/1) |> List.to_tuple()
-
-  # Recurse into plain maps too — an event can be nested in a map value within
-  # an arbitrary exit reason.
-  defp scrub_events(map) when is_map(map),
-    do: Map.new(map, fn {k, v} -> {scrub_events(k), scrub_events(v)} end)
-
-  # head/tail recursion keeps this safe for improper lists, which can show up
-  # in arbitrary exit reasons
-  defp scrub_events([head | tail]), do: [scrub_events(head) | scrub_events(tail)]
-  defp scrub_events(other), do: other
 
   # Downstream returned :not_ready — subscribe to StatusMonitor for notification
   # when the stack becomes active, then retry. This replaces the old blocking
