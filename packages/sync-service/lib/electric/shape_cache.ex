@@ -37,6 +37,14 @@ defmodule Electric.ShapeCache do
   # unnecessary noise let's just cover those tail timings with our timeout.
   @call_timeout 30_000
 
+  # ShapeCache create-waiter polling is tuned for the sub-second shape-creation
+  # latency profile, NOT the StatusMonitor stack-readiness profile. Most shape
+  # creations are answered within the first 2-3 polls:
+  # 5 -> 10 -> 20 -> 40 -> 80 -> 100 -> 100 ... ms
+  @poll_initial_interval 5
+  @poll_max_interval 100
+  @poll_backoff 2.0
+
   @max_snapshot_start_attempts 10
   @snapshot_start_retry_sleep_ms 50
 
@@ -71,11 +79,18 @@ defmodule Electric.ShapeCache do
       {handle, offset}
     else
       :error ->
-        GenServer.call(
-          name(stack_id),
-          {:create_or_wait_shape_handle, shape, opts[:otel_ctx]},
-          @call_timeout
-        )
+        # If another caller is already creating this exact shape, don't pile a
+        # GenServer.call into the ShapeCache mailbox behind it -- observe the
+        # in-progress state via the public lock table and poll until ready.
+        if shape_create_in_progress?(stack_id, Shape.comparable(shape)) do
+          wait_for_shape_creation(shape, stack_id)
+        else
+          GenServer.call(
+            name(stack_id),
+            {:create_or_wait_shape_handle, shape, opts[:otel_ctx]},
+            @call_timeout
+          )
+        end
     end
   end
 
@@ -312,19 +327,27 @@ defmodule Electric.ShapeCache do
   def handle_call({:create_or_wait_shape_handle, shape, otel_ctx}, _from, state) do
     if not is_nil(otel_ctx), do: OpenTelemetry.set_current_context(otel_ctx)
 
-    case safe_maybe_create_shape(shape, %{
-           stack_id: state.stack_id,
-           otel_ctx: otel_ctx,
-           feature_flags: state.feature_flags
-         }) do
-      {:ok, {shape_handle, latest_offset}} ->
-        Logger.debug("Returning shape id #{shape_handle} for shape #{inspect(shape)}")
-        {:reply, {shape_handle, latest_offset}, state}
+    lock_table = shape_create_lock_table(state.stack_id)
+    lock_key = Shape.comparable(shape)
+    :ets.insert(lock_table, {lock_key, self()})
 
-      {:error, reason} ->
-        Logger.warning("Failed to create shape for #{inspect(shape)}: #{inspect(reason)}")
+    try do
+      case safe_maybe_create_shape(shape, %{
+             stack_id: state.stack_id,
+             otel_ctx: otel_ctx,
+             feature_flags: state.feature_flags
+           }) do
+        {:ok, {shape_handle, latest_offset}} ->
+          Logger.debug("Returning shape id #{shape_handle} for shape #{inspect(shape)}")
+          {:reply, {shape_handle, latest_offset}, state}
 
-        {:reply, {:error, reason}, state}
+        {:error, reason} ->
+          Logger.warning("Failed to create shape for #{inspect(shape)}: #{inspect(reason)}")
+
+          {:reply, {:error, reason}, state}
+      end
+    after
+      :ets.delete(lock_table, lock_key)
     end
   end
 
@@ -552,6 +575,31 @@ defmodule Electric.ShapeCache do
     :ets.member(shape_create_lock_table(stack_id), lock_key)
   rescue
     ArgumentError -> false
+  end
+
+  defp wait_for_shape_creation(shape, stack_id) do
+    predicate = fn -> poll_shape_ready(stack_id, shape) end
+
+    case PollWait.until(predicate, @call_timeout,
+           initial_interval: @poll_initial_interval,
+           max_interval: @poll_max_interval,
+           backoff: @poll_backoff
+         ) do
+      {:ready, result} -> result
+      :timeout -> {:error, :timeout}
+    end
+  end
+
+  # Cheap, caller-process readiness check: the read-connection handle lookup and
+  # the ETS activation flag. Never touches the write connection.
+  defp poll_shape_ready(stack_id, shape) do
+    with {:ok, handle} <- ShapeStatus.fetch_handle_by_shape(stack_id, shape),
+         true <- ShapeStatus.shape_has_been_activated?(stack_id, handle),
+         {:ok, offset} <- fetch_latest_offset(stack_id, handle) do
+      {:ready, {handle, offset}}
+    else
+      _ -> :not_ready
+    end
   end
 
   @spec fetch_latest_offset(stack_id(), shape_handle(), keyword()) ::
