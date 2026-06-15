@@ -121,77 +121,16 @@ defmodule Electric.Shapes.Consumer do
 
   @doc """
   Set the adaptive-GC heap threshold (bytes, or nil to disable) for a single stack.
-  Takes effect immediately for that stack's consumers — safe to call from IEx.
 
-  **Critical-path note**: this GC runs synchronously on the replication path —
-  the ShapeLogCollector blocks until every consumer replies. Prefer a conservative
-  (high) threshold to minimise added publish latency. The per-process
-  `fullsweep_after` spawn-opt (configured via `ELECTRIC_PROCESS_SPAWN_OPTS`) is
-  the lower-risk lever for steady-state heap bounding; this adaptive GC is a
-  targeted, runtime-tunable backstop. Forced-GC frequency is capped to at most
-  once per `@gc_min_interval_ms` (see `should_force_gc?/5`).
+  Consumers cache this value at startup (see `State.new/2`), so the new threshold only
+  applies to consumers started after this call — already-running consumers keep the
+  threshold they read when they booted. Safe to call from IEx.
   """
   @spec set_gc_heap_threshold(Electric.stack_id(), non_neg_integer() | nil) :: :ok
   def set_gc_heap_threshold(stack_id, threshold_bytes)
       when is_nil(threshold_bytes) or (is_integer(threshold_bytes) and threshold_bytes >= 0) do
     Electric.StackConfig.put(stack_id, :consumer_gc_heap_threshold, threshold_bytes)
     :ok
-  end
-
-  @doc """
-  Set the adaptive-GC heap threshold for every live stack on this node.
-  Returns `{:ok, number_of_stacks_updated}`. Pass nil to disable everywhere.
-  Intended for live experimentation from an IEx shell.
-  """
-  @spec set_gc_heap_threshold_all_stacks(non_neg_integer() | nil) :: {:ok, non_neg_integer()}
-  def set_gc_heap_threshold_all_stacks(threshold_bytes) do
-    stack_ids = list_stack_ids()
-
-    # Guard against a stack dying between enumeration and the put: if the
-    # StackConfig ETS table vanishes, StackConfig.put/3 raises ArgumentError.
-    # We skip such stale entries rather than crashing the operator call.
-    # Only successfully-written stacks are counted so the returned value
-    # reflects reality even when stacks die mid-iteration.
-    count =
-      Enum.reduce(stack_ids, 0, fn stack_id, acc ->
-        try do
-          set_gc_heap_threshold(stack_id, threshold_bytes)
-          acc + 1
-        rescue
-          ArgumentError -> acc
-        end
-      end)
-
-    {:ok, count}
-  end
-
-  # Enumerate live stacks by scanning ETS tables whose names match the
-  # Electric.StackConfig table-name prefix ("Electric.StackConfig:<stack_id>").
-  # This is the most direct approach: StackConfig creates one named ETS table per
-  # stack, so the set of live tables IS the set of live stacks.
-  # No first-class listing API exists in the codebase (grep confirmed).
-  # A race (stack dies mid-iteration) is harmless: StackConfig.put/3 on a vanished
-  # table would raise ArgumentError, which we rescue and skip.
-  defp list_stack_ids do
-    prefix = "#{inspect(Electric.StackConfig)}:"
-    prefix_len = byte_size(prefix)
-
-    :ets.all()
-    |> Enum.flat_map(fn tab ->
-      case :ets.info(tab, :name) do
-        :undefined ->
-          []
-
-        name ->
-          name_str = Atom.to_string(name)
-
-          if String.starts_with?(name_str, prefix) do
-            [binary_part(name_str, prefix_len, byte_size(name_str) - prefix_len)]
-          else
-            []
-          end
-      end
-    end)
   end
 
   def start_link(%{stack_id: stack_id, shape_handle: shape_handle} = _config) do
@@ -608,47 +547,29 @@ defmodule Electric.Shapes.Consumer do
     |> maybe_garbage_collect()
   end
 
-  # NOTE: this runs synchronously on the replication critical path — the
-  # ShapeLogCollector blocks until every consumer replies. A forced
-  # :erlang.garbage_collect() can add measurable publish latency, especially
-  # during a buffered-fragment drain where maybe_garbage_collect/1 is called
-  # for every queued fragment in a tight loop.
-  #
-  # Two safeguards limit the impact:
-  #   1. The nil fast-path exits immediately when no threshold is configured.
-  #   2. Hysteresis (@gc_min_interval_ms) prevents back-to-back full sweeps even
-  #      when the consumer sits just above the threshold across many fragments.
-  #
-  # Operators should prefer a CONSERVATIVE (high) threshold. For steady-state
-  # heap bounding the per-process `fullsweep_after` spawn-opt (set via
-  # ELECTRIC_PROCESS_SPAWN_OPTS) is a lower-risk alternative; this adaptive GC
-  # is a targeted, runtime-tunable backstop.
-  defp maybe_garbage_collect(%State{stack_id: stack_id} = state) do
-    case Electric.StackConfig.lookup(stack_id, :consumer_gc_heap_threshold, nil) do
-      nil ->
-        # Fast path: adaptive GC is disabled — skip all process_info/time calls.
-        state
+  # Fast path: adaptive GC is disabled — skip all process_info/time calls.
+  defp maybe_garbage_collect(%State{gc_heap_threshold: nil} = state), do: state
 
-      threshold ->
-        {:total_heap_size, heap_words} = :erlang.process_info(self(), :total_heap_size)
-        now = System.monotonic_time(:millisecond)
+  defp maybe_garbage_collect(%State{gc_heap_threshold: threshold_bytes} = state) do
+    {:total_heap_size, heap_words} = :erlang.process_info(self(), :total_heap_size)
+    heap_bytes = heap_words * @word_size
+    now = System.monotonic_time(:millisecond)
 
-        if should_force_gc?(heap_words, threshold, state.last_forced_gc_at, now) do
-          :erlang.garbage_collect()
-          %{state | last_forced_gc_at: now}
-        else
-          state
-        end
+    if should_force_gc?(heap_bytes, threshold_bytes, state.last_forced_gc_at, now) do
+      :erlang.garbage_collect()
+      %{state | last_forced_gc_at: now}
+    else
+      state
     end
   end
 
   @doc false
-  # heap_words: process total_heap_size in words; threshold_bytes: configured byte threshold (or nil)
+  # heap_bytes: process total_heap_size in bytes; threshold_bytes: configured byte threshold (or nil)
   @spec over_heap_threshold?(non_neg_integer(), non_neg_integer() | nil) :: boolean()
-  def over_heap_threshold?(_heap_words, nil), do: false
+  def over_heap_threshold?(_heap_bytes, nil), do: false
 
-  def over_heap_threshold?(heap_words, threshold_bytes) when is_integer(threshold_bytes) do
-    heap_words * @word_size > threshold_bytes
+  def over_heap_threshold?(heap_bytes, threshold_bytes) when is_integer(threshold_bytes) do
+    heap_bytes > threshold_bytes
   end
 
   @doc false
@@ -665,17 +586,17 @@ defmodule Electric.Shapes.Consumer do
           non_neg_integer()
         ) :: boolean()
   def should_force_gc?(
-        heap_words,
+        heap_bytes,
         threshold_bytes,
         last_gc_at,
         now_ms,
         min_interval_ms \\ @gc_min_interval_ms
       )
 
-  def should_force_gc?(_heap_words, nil, _last_gc_at, _now_ms, _min_interval_ms), do: false
+  def should_force_gc?(_heap_bytes, nil, _last_gc_at, _now_ms, _min_interval_ms), do: false
 
-  def should_force_gc?(heap_words, threshold_bytes, last_gc_at, now_ms, min_interval_ms) do
-    over_heap_threshold?(heap_words, threshold_bytes) and
+  def should_force_gc?(heap_bytes, threshold_bytes, last_gc_at, now_ms, min_interval_ms) do
+    over_heap_threshold?(heap_bytes, threshold_bytes) and
       (is_nil(last_gc_at) or now_ms - last_gc_at >= min_interval_ms)
   end
 

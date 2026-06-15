@@ -50,7 +50,13 @@ defmodule Electric.Shapes.Consumer.State do
     suspend_after: nil,
     # Monotonic millisecond timestamp of the last consumer-forced GC (nil if never).
     # Used by hysteresis logic in maybe_garbage_collect/1 to cap forced-GC frequency.
-    last_forced_gc_at: nil
+    last_forced_gc_at: nil,
+    # Adaptive-GC heap threshold (bytes) cached at consumer startup, or nil when
+    # disabled. Read once from StackConfig in new/2 so the per-fragment GC check on
+    # the replication critical path stays a plain struct field access instead of an
+    # ETS lookup. Changing the StackConfig value only affects consumers started
+    # afterwards (see Consumer.set_gc_heap_threshold/2).
+    gc_heap_threshold: nil
   ]
 
   @type pg_snapshot() :: SnapshotQuery.pg_snapshot()
@@ -110,6 +116,7 @@ defmodule Electric.Shapes.Consumer.State do
           :shape_suspend_after,
           Electric.Config.default(:shape_suspend_after)
         ),
+      gc_heap_threshold: Electric.StackConfig.lookup(stack_id, :consumer_gc_heap_threshold, nil),
       buffering?: true
     }
   end

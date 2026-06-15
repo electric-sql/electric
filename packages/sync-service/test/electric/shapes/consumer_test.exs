@@ -2727,17 +2727,16 @@ defmodule Electric.Shapes.ConsumerTest do
       refute Electric.Shapes.Consumer.over_heap_threshold?(1_000_000, nil)
     end
 
-    test "false when heap (words) is below threshold (bytes)" do
+    test "false when heap is below threshold" do
       refute Electric.Shapes.Consumer.over_heap_threshold?(10, 1024)
     end
 
-    test "true when heap (words) exceeds threshold (bytes)" do
+    test "true when heap exceeds threshold" do
       assert Electric.Shapes.Consumer.over_heap_threshold?(1000, 1)
     end
 
     test "exactly-equal is not over threshold" do
-      wordsize = :erlang.system_info(:wordsize)
-      refute Electric.Shapes.Consumer.over_heap_threshold?(1, wordsize)
+      refute Electric.Shapes.Consumer.over_heap_threshold?(1024, 1024)
     end
   end
 
@@ -2750,7 +2749,7 @@ defmodule Electric.Shapes.ConsumerTest do
     end
 
     test "true when heap over threshold and consumer has never forced a GC (last_gc_at nil)" do
-      # 1 000 words * 8 bytes/word = 8 000 bytes > threshold of 1 byte
+      # 1_000 bytes > threshold of 1 byte
       assert Electric.Shapes.Consumer.should_force_gc?(1_000, 1, nil, 5_000, 1_000)
     end
 
@@ -2770,7 +2769,7 @@ defmodule Electric.Shapes.ConsumerTest do
     end
 
     test "false when heap is under threshold regardless of timing" do
-      # heap_words=1 * wordsize (8) = 8 bytes; threshold=1_000 bytes → under
+      # heap=1 byte; threshold=1_000 bytes → under
       refute Electric.Shapes.Consumer.should_force_gc?(1, 1_000, nil, 5_000, 1_000)
     end
 
@@ -3017,14 +3016,6 @@ defmodule Electric.Shapes.ConsumerTest do
       Electric.Shapes.Consumer.set_gc_heap_threshold(ctx.stack_id, 123)
       assert :ok = Electric.Shapes.Consumer.set_gc_heap_threshold(ctx.stack_id, nil)
       assert nil == Electric.StackConfig.lookup(ctx.stack_id, :consumer_gc_heap_threshold, nil)
-    end
-
-    test "set_gc_heap_threshold_all_stacks/1 sets the live stack", ctx do
-      assert {:ok, n} = Electric.Shapes.Consumer.set_gc_heap_threshold_all_stacks(3_000_000)
-      assert n >= 1
-
-      assert 3_000_000 ==
-               Electric.StackConfig.lookup(ctx.stack_id, :consumer_gc_heap_threshold, nil)
     end
   end
 
