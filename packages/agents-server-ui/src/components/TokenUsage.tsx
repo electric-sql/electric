@@ -3,6 +3,16 @@ import { Text } from '../ui'
 import styles from './TokenUsage.module.css'
 
 /**
+ * Minimum combined (input + output) token count for a response before
+ * its usage label is shown. Below this the numbers are noise — a quick
+ * tool-only step or a one-line reply — and we hide the label rather than
+ * clutter the meta row. It also matches the point where `formatTokenCount`
+ * switches to compact `1.2k` notation, so every label we render reads in
+ * the same compact style. Bump this to be more aggressive about hiding.
+ */
+const SHOW_USAGE_THRESHOLD = 1000
+
+/**
  * Compact token-usage label, e.g. `1.2k ↑ 412 ↓`.
  *
  * Rendered next to the elapsed-time ticker in the agent response
@@ -27,6 +37,7 @@ export function TokenUsage({
   output: number | undefined
 }): React.ReactElement | null {
   if (input == null && output == null) return null
+  if ((input ?? 0) + (output ?? 0) < SHOW_USAGE_THRESHOLD) return null
   const parts: Array<string> = []
   if (input != null) parts.push(`${formatTokenCount(input)} ↑`)
   if (output != null) parts.push(`${formatTokenCount(output)} ↓`)
