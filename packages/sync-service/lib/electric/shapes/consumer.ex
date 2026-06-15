@@ -40,12 +40,9 @@ defmodule Electric.Shapes.Consumer do
   @stop_and_clean_reason ShapeCleaner.consumer_cleanup_reason()
   @word_size :erlang.system_info(:wordsize)
 
-  # Minimum wall-clock interval (ms) between consumer-forced full GC sweeps.
-  # Prevents GC-thrashing on the replication critical path: the ShapeLogCollector
-  # blocks until every consumer replies, so a forced GC on every fragment (e.g.
-  # during a buffered-fragment drain) would add publish latency proportional to
-  # the number of fragments. Hysteresis caps the worst-case frequency to at most
-  # one forced sweep per @gc_min_interval_ms regardless of fragment rate.
+  # Minimum wall-clock interval (ms) between consumer-forced full GC sweeps. Caps how much CPU
+  # a busy consumer spends on full sweeps to at most one per @gc_min_interval_ms regardless of
+  # fragment rate.
   @gc_min_interval_ms 1_000
 
   @type initialize_shape_opts() :: %{
@@ -194,8 +191,17 @@ defmodule Electric.Shapes.Consumer do
     if state.terminating? do
       {:noreply, state, {:continue, :stop_and_clean}}
     else
-      {:noreply, state, state.hibernate_after}
+      {:noreply, state, {:continue, :maybe_gc}}
     end
+  end
+
+  # Deferred adaptive GC. Reached via {:continue, :maybe_gc} after a fragment (or a
+  # full buffer drain) has been processed, so a forced full sweep runs off the
+  # reply/critical path rather than blocking the ShapeLogCollector. Re-establishes
+  # the hibernate_after timeout that the {:continue, …} return could not carry.
+  def handle_continue(:maybe_gc, state) do
+    state = maybe_garbage_collect(state)
+    {:noreply, state, state.hibernate_after}
   end
 
   @impl GenServer
@@ -228,7 +234,7 @@ defmodule Electric.Shapes.Consumer do
         {:reply, :ok, state, {:continue, :stop_and_clean}}
 
       state ->
-        {:reply, :ok, state, state.hibernate_after}
+        {:reply, :ok, state, {:continue, :maybe_gc}}
     end
   end
 
@@ -542,10 +548,14 @@ defmodule Electric.Shapes.Consumer do
   defp handle_event(%TransactionFragment{} = txn_fragment, state) do
     Logger.debug(fn -> "Txn fragment received in Shapes.Consumer: #{inspect(txn_fragment)}" end)
 
-    txn_fragment
-    |> handle_txn_fragment(state)
-    |> maybe_garbage_collect()
+    handle_txn_fragment(txn_fragment, state)
   end
+
+  # Adaptive GC check. Always invoked from a {:continue, :maybe_gc} handler so the
+  # forced full sweep runs off the ShapeLogCollector's synchronous publish path: the
+  # SLC has already received :ok by the time this runs. Because the SLC publishes
+  # fragments to a given consumer sequentially, the continue typically completes
+  # before the next fragment arrives, so it does not block steady-state throughput.
 
   # Fast path: adaptive GC is disabled — skip all process_info/time calls.
   defp maybe_garbage_collect(%State{gc_heap_threshold: nil} = state), do: state
@@ -878,10 +888,7 @@ defmodule Electric.Shapes.Consumer do
     {txn_fragments, state} = State.pop_buffered(state)
 
     Enum.reduce_while(txn_fragments, state, fn txn_fragment, state ->
-      state =
-        txn_fragment
-        |> handle_txn_fragment(state)
-        |> maybe_garbage_collect()
+      state = handle_txn_fragment(txn_fragment, state)
 
       if state.terminating? do
         {:halt, state}

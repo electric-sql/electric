@@ -2827,8 +2827,6 @@ defmodule Electric.Shapes.ConsumerTest do
 
       xid = 11
       lsn = Lsn.from_integer(10)
-
-      # Inflate the consumer's heap by sending a large binary payload
       large_binary = :binary.copy(<<0>>, 200_000)
 
       txn =
@@ -2841,19 +2839,17 @@ defmodule Electric.Shapes.ConsumerTest do
         ])
 
       assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
-
-      # Wait for the consumer to process the fragment
       assert_receive {^ref, :new_changes, _}, @receive_timeout
 
-      {:total_heap_size, heap_after} = :erlang.process_info(consumer_pid, :total_heap_size)
+      # GC runs in the deferred {:continue, :maybe_gc} after the reply. A synchronous
+      # call is queued behind the pending continue, so :sys.get_state returns only
+      # once the GC has run — and lets us read last_forced_gc_at, which the consumer
+      # stamps iff it forced a sweep. That is a direct signal of our decision,
+      # immune to natural BEAM GCs and heap-size timing.
+      assert %{last_forced_gc_at: forced_at} = :sys.get_state(consumer_pid)
 
-      # threshold=1 forces a full GC after this fragment. Because the ~200 KB payload is
-      # transient garbage (not live state), the post-GC heap must be far below the payload
-      # size. Without GC the heap grows ~185x (observed), so this assertion fails loudly.
-      payload_words = div(200_000, :erlang.system_info(:wordsize))
-
-      assert heap_after < payload_words,
-             "heap_after (#{heap_after} words) should be far below payload (#{payload_words} words) after GC"
+      refute is_nil(forced_at),
+             "threshold=1 keeps the heap over threshold, so a forced GC should be recorded"
     end
 
     test "GC does not run when threshold is very large", ctx do
@@ -2868,8 +2864,6 @@ defmodule Electric.Shapes.ConsumerTest do
 
       xid = 11
       lsn = Lsn.from_integer(10)
-
-      # Inflate the consumer's heap by sending a large binary payload
       large_binary = :binary.copy(<<0>>, 200_000)
 
       txn =
@@ -2882,18 +2876,14 @@ defmodule Electric.Shapes.ConsumerTest do
         ])
 
       assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
-
-      # Wait for the consumer to process the fragment
       assert_receive {^ref, :new_changes, _}, @receive_timeout
 
-      {:total_heap_size, heap_after} = :erlang.process_info(consumer_pid, :total_heap_size)
+      # Flush the deferred :maybe_gc continue and read the state. The heap stays well
+      # under the 1 GB threshold, so the consumer must not have forced a sweep.
+      assert %{last_forced_gc_at: forced_at} = :sys.get_state(consumer_pid)
 
-      # GC was NOT triggered (threshold too high), so the heap still reflects
-      # the retained payload — it must be >= payload_words.
-      payload_words = div(200_000, :erlang.system_info(:wordsize))
-
-      assert heap_after >= payload_words,
-             "heap_after (#{heap_after} words) should be >= payload (#{payload_words} words) when GC is skipped"
+      assert is_nil(forced_at),
+             "no forced GC should be recorded while under threshold, got #{inspect(forced_at)}"
     end
 
     test "no GC by default (threshold=nil)", ctx do
@@ -2924,10 +2914,10 @@ defmodule Electric.Shapes.ConsumerTest do
 
     @tag delay_snapshot_creation?: true
     test "GC runs during buffered-fragment drain when heap exceeds threshold", ctx do
-      # threshold=1 forces GC after every fragment processed during the buffer drain.
-      # The consumer starts with buffering?=true; fragments sent before pg_snapshot_known
-      # land in the buffer. When we unblock the snapshotter it fires pg_snapshot_known
-      # which triggers :consume_buffer → process_buffered_txn_fragments (our new GC call).
+      # threshold=1 forces a GC once the buffered fragments are drained. The consumer
+      # starts with buffering?=true; fragments sent before pg_snapshot_known land in the
+      # buffer. When we unblock the snapshotter it fires pg_snapshot_known which triggers
+      # :consume_buffer → drains the buffer → {:continue, :maybe_gc} runs the GC once.
       Electric.StackConfig.put(ctx.stack_id, :consumer_gc_heap_threshold, 1)
 
       {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape1, ctx.stack_id)
@@ -2936,9 +2926,6 @@ defmodule Electric.Shapes.ConsumerTest do
       assert_receive {:snapshot, ^shape_handle, snapshotter_pid}
 
       consumer_pid = Consumer.whereis(ctx.stack_id, shape_handle)
-
-      # Trace GC events on the consumer to count full GCs fired during the drain.
-      :erlang.trace(consumer_pid, true, [:garbage_collection])
 
       # Send a large-payload fragment while buffering?=true — it goes into the buffer.
       large_binary = :binary.copy(<<0>>, 200_000)
@@ -2956,34 +2943,20 @@ defmodule Electric.Shapes.ConsumerTest do
 
       assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
 
-      # Unblock the snapshotter: fires pg_snapshot_known → :consume_buffer →
-      # process_buffered_txn_fragments where our new maybe_garbage_collect() call fires.
+      # Unblock the snapshotter: fires pg_snapshot_known → :consume_buffer → drains the
+      # buffer, then defers a single GC via {:continue, :maybe_gc}.
       send(snapshotter_pid, {self(), :resume})
 
       ref = Shapes.Consumer.register_for_changes(ctx.stack_id, shape_handle)
       assert_receive {^ref, :new_changes, _}, @receive_timeout
 
-      :erlang.trace(consumer_pid, false, [:garbage_collection])
+      # The deferred GC runs in the :maybe_gc continue after the drain. Flush it with a
+      # synchronous call (queued behind the continue), then check last_forced_gc_at —
+      # the consumer stamps it iff it forced a sweep for the drained fragment.
+      assert %{last_forced_gc_at: forced_at} = :sys.get_state(consumer_pid)
 
-      # Count how many full GC (garbage_collect) trace messages arrived.
-      # :garbage_collection traces emit {:trace, pid, :gc_major_start, info} /
-      # :gc_major_end pairs (one per full :erlang.garbage_collect() call).
-      gc_events =
-        Stream.repeatedly(fn ->
-          receive do
-            {:trace, ^consumer_pid, :gc_major_start, _} -> :gc
-            {:trace, ^consumer_pid, :gc_minor_start, _} -> :minor
-            {:trace, ^consumer_pid, :gc_major_end, _} -> :skip
-            {:trace, ^consumer_pid, :gc_minor_end, _} -> :skip
-          after
-            0 -> :done
-          end
-        end)
-        |> Stream.take_while(&(&1 != :done))
-        |> Enum.count(&(&1 == :gc))
-
-      assert gc_events >= 1,
-             "expected at least one full GC during buffered-fragment drain, got #{gc_events}"
+      refute is_nil(forced_at),
+             "expected a forced GC to be recorded after the buffered-fragment drain"
     end
   end
 

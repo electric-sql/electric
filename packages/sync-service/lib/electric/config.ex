@@ -115,8 +115,7 @@ defmodule Electric.Config do
     # e.g. %{shape_log_collector: [min_heap_size: 1024 * 1024, min_bin_vheap_size: 1024 * 1024]}
     process_spawn_opts: %{},
     # Heap-size threshold (in BYTES) above which a consumer runs :erlang.garbage_collect()
-    # after processing a transaction fragment. nil disables adaptive GC. Looked up at
-    # runtime via StackConfig so it can be changed from a live IEx shell.
+    # after processing a transaction fragment.
     consumer_gc_heap_threshold: nil,
     ## Misc
     process_registry_partitions: &Electric.Config.Defaults.process_registry_partitions/0,
