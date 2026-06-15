@@ -9,6 +9,7 @@ import {
 import { useLiveQuery } from '@tanstack/react-db'
 import { Eye, MessageSquare, Share2, ShieldCheck, X } from 'lucide-react'
 import { entityApiUrl } from '../lib/entity-api'
+import { sessionAppUrl } from '../lib/sessionLinks'
 import { serverFetch } from '../lib/auth-fetch'
 import {
   SHARE_PERMISSIONS,
@@ -107,6 +108,18 @@ export function ShareEntityDialog({
   const { activeServer } = useServerConnection()
   const { usersCollection } = useElectricAgents()
   const baseUrl = activeServer?.url ?? ``
+
+  const copySessionLink = async (): Promise<void> => {
+    if (!baseUrl) return
+    const link = sessionAppUrl(baseUrl, entity.url)
+    try {
+      await navigator.clipboard.writeText(link)
+      showToast({ title: `Session link copied`, tone: `success` })
+    } catch {
+      showToast({ title: `Couldn't copy link`, tone: `danger` })
+    }
+  }
+
   const [open, setOpen] = useState(false)
   const [grants, setGrants] = useState<Array<EntityPermissionGrant>>([])
   const [loadingGrants, setLoadingGrants] = useState(false)
@@ -415,6 +428,17 @@ export function ShareEntityDialog({
               </Text>
             </div>
           )}
+
+          <div className={styles.copyLinkRow}>
+            <button
+              type="button"
+              className={styles.copyLinkButton}
+              disabled={!baseUrl}
+              onClick={() => void copySessionLink()}
+            >
+              Copy session link
+            </button>
+          </div>
 
           <div className={styles.grid}>
             <section className={styles.userPicker}>

@@ -218,6 +218,37 @@
   padding: var(--ds-space-2) 6px;
 }
 
+.copyLinkRow {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--ds-space-2);
+}
+
+.copyLinkButton {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  border: 1px solid var(--ds-border-1);
+  border-radius: var(--ds-radius-2);
+  background: transparent;
+  color: var(--ds-text-2);
+  cursor: pointer;
+  font-family: var(--ds-font-body);
+  font-size: var(--ds-text-sm);
+  line-height: 1;
+  padding: 0 var(--ds-space-3);
+}
+
+.copyLinkButton:hover {
+  background: var(--ds-bg-hover);
+  color: var(--ds-text-1);
+}
+
+.copyLinkButton:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 @media (max-width: 720px) {
   .grid {
     grid-template-columns: 1fr;
