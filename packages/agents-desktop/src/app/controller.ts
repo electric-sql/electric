@@ -5,6 +5,7 @@ import * as LoginItems from './login-items'
 import { createDesktopUpdater } from './updater'
 import * as CloudAuthInjection from '../cloud/auth-injection'
 import * as ServerFetch from '../cloud/server-fetch'
+import { findSavedServerForUrl } from '../cloud/server-matching'
 import { createCredentialsController } from '../credentials/controller'
 import { createLocalDiscoveryLoop } from '../discovery/local-discovery'
 import * as DesktopIpc from '../ipc/register'
@@ -15,6 +16,7 @@ import * as ServerSelection from '../settings/selection'
 import { saveDesktopSettings } from '../settings/store'
 import { desktopStateForWindow as desktopStateForWindowImpl } from '../state/desktop-state'
 import * as DesktopStateModel from '../state/desktop-state'
+import { parseSessionDeepLink } from '../shared/deep-link'
 import { injectDevPrincipalHeaders as injectDevPrincipalHeadersForServer } from '../shared/headers'
 import {
   DEFAULT_LOCAL_DEV_PRINCIPAL,
@@ -30,6 +32,7 @@ import type {
   DesktopMenuSection,
   DesktopMenuState,
   DesktopState,
+  OpenSessionPayload,
   RuntimeEntry,
   ServerConfig,
 } from '../shared/types'
@@ -221,6 +224,42 @@ export function createDesktopMainController(ctx: DesktopAppContext) {
 
   const showOrCreateWindow = (): void => {
     WindowManager.showOrCreateWindow(windows, createWindow)
+  }
+
+  const sendOpenSessionToWindow = (
+    win: BrowserWindow,
+    payload: OpenSessionPayload
+  ): void => {
+    if (win.webContents.isLoading()) {
+      win.webContents.once(`did-finish-load`, () => {
+        win.webContents.send(`desktop:open-session`, payload)
+      })
+    } else {
+      win.webContents.send(`desktop:open-session`, payload)
+    }
+  }
+
+  const openSessionFromDeepLink = (url: string): void => {
+    const parsed = parseSessionDeepLink(url)
+    if (!parsed) {
+      console.warn(`[agents-desktop] Ignoring malformed deep link: ${url}`)
+      return
+    }
+    const matched = findSavedServerForUrl(settings.servers, parsed.serverUrl)
+    const payload: OpenSessionPayload = {
+      serverId: matched?.id ?? null,
+      serverUrl: parsed.serverUrl,
+      entityUrl: parsed.entityUrl,
+    }
+    const existing = [...windows].find((win) => !win.isDestroyed())
+    if (existing) {
+      existing.show()
+      existing.focus()
+      sendOpenSessionToWindow(existing, payload)
+      return
+    }
+    const win = createWindow()
+    sendOpenSessionToWindow(win, payload)
   }
 
   const stopRuntimeEntry = (entry: RuntimeEntry): Promise<void> =>
@@ -516,6 +555,7 @@ export function createDesktopMainController(ctx: DesktopAppContext) {
     buildApplicationMenu,
     createWindow,
     showOrCreateWindow,
+    openSessionFromDeepLink,
     syncLaunchAtLoginSetting,
     connectConfiguredServers,
     startDiscoveryLoop: localDiscovery.startDiscoveryLoop,
