@@ -146,13 +146,12 @@ function toError(err: unknown): Error {
   return err instanceof Error ? err : new Error(String(err))
 }
 
-function latestNewRunKey(
+async function latestNewRunKey(
   db: EntityStreamDBWithActions,
   existingRunKeys: ReadonlySet<string>
-): string | undefined {
-  return db.collections.runs.toArray
-    .filter((run) => !existingRunKeys.has(run.key))
-    .at(-1)?.key
+): Promise<string | undefined> {
+  const runs = await queryOnce((q) => q.from({ runs: db.collections.runs }))
+  return runs.filter((run) => !existingRunKeys.has(run.key)).at(-1)?.key
 }
 
 async function resolveHeadersProvider(
@@ -2220,7 +2219,7 @@ export async function processWake(
             ? setupErr.code
             : `HANDLER_FAILED`
         log.error(`handler failed for ${entityUrl}:`, errMsg)
-        const failedRunKey = latestNewRunKey(db, existingRunKeys)
+        const failedRunKey = await latestNewRunKey(db, existingRunKeys)
         writeEvent(
           entityStateSchema.errors.insert({
             key: `error-${epoch}-${crypto.randomUUID()}`,
