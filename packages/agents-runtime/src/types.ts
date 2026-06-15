@@ -36,6 +36,7 @@ import type {
   ContextInserted as EntityContextInserted,
   ContextRemoved as EntityContextRemoved,
   EntitySignal,
+  GoalStatus as EntityGoalStatus,
   Manifest as EntityManifest,
   ManifestAttachmentEntry as EntityManifestAttachmentEntry,
   ManifestChildEntry as EntityManifestChildEntry,
@@ -43,6 +44,7 @@ import type {
   ManifestCronScheduleEntry as EntityManifestCronScheduleEntry,
   ManifestEffectEntry as EntityManifestEffectEntry,
   ManifestFutureSendScheduleEntry as EntityManifestFutureSendScheduleEntry,
+  ManifestGoalEntry as EntityManifestGoalEntry,
   ManifestSharedStateEntry as EntityManifestSharedStateEntry,
   ManifestSourceEntry as EntityManifestSourceEntry,
   Signal as EntitySignalEntry,
@@ -53,10 +55,10 @@ import type {
   SlashCommandHelpers,
 } from './composer-input'
 import type {
-  EventSourceContract,
-  EventSourceSubscription,
-  EventSourceSubscriptionInput,
-} from './event-sources'
+  WebhookSourceContract,
+  WebhookSourceSubscription,
+  WebhookSourceSubscriptionInput,
+} from './webhook-sources'
 import type { EntityTags, TagOperation } from './tags'
 
 export type EntityStreamDB = RuntimeEntityStreamDB
@@ -321,11 +323,13 @@ export type ManifestCronScheduleEntry = EntityManifestCronScheduleEntry
 export type ManifestEffectEntry = EntityManifestEffectEntry
 export type ManifestFutureSendScheduleEntry =
   EntityManifestFutureSendScheduleEntry
+export type ManifestGoalEntry = EntityManifestGoalEntry
 export type ManifestSourceEntry = EntityManifestSourceEntry
 export type ManifestSharedStateEntry = EntityManifestSharedStateEntry
 export type ContextInserted = EntityContextInserted
 export type ContextRemoved = EntityContextRemoved
 export type ContextEntryAttrs = EntityContextEntryAttrs
+export type GoalStatus = EntityGoalStatus
 
 export interface ContextEntryInput {
   name: string
@@ -336,6 +340,27 @@ export interface ContextEntryInput {
 export interface ContextEntry extends ContextEntryInput {
   id: string
   insertedAt: number
+}
+
+export interface GoalInput {
+  objective: string
+  status?: GoalStatus
+  // `null` means unbounded; omitted means "use the runtime default".
+  tokenBudget?: number | null
+}
+
+export interface GoalEntry {
+  id: string
+  objective: string
+  status: GoalStatus
+  tokenBudget: number | null
+  tokensUsed: number
+  // Completion note recorded by mark_goal_complete — what was
+  // accomplished, or what blocked the goal.
+  summary?: string
+  // ISO strings, matching every other manifest kind.
+  createdAt: string
+  updatedAt: string
 }
 
 export type AttachmentCreateInput = {
@@ -640,6 +665,24 @@ export interface CollectionDefinition<
   type?: string
   /** Primary key field name. Defaults to `"key"`. */
   primaryKey?: string
+  /**
+   * Opt-in for externally writable via the HTTP router: `POST /:type/:instanceId/collections/:name`.
+   * Absent/false ⇒ agent-only; the endpoint rejects writes. `true` ⇒ externally writable,
+   * with the authenticated principal materialized into the `_principal` virtual column.
+   */
+  externallyWritable?: boolean
+  /**
+   * Well-known contract this collection implements (e.g. `comments/v1`).
+   * Forwarded in the type registration so clients can recognize the
+   * collection by capability instead of by name.
+   */
+  contract?: string
+  /**
+   * Allowlist of external write operations forwarded in the type registration.
+   * When unset the server permits only `insert` — open update/delete would let
+   * a client overwrite or remove another principal's rows by key.
+   */
+  operations?: Array<`insert` | `update` | `delete`>
 }
 
 export interface EntityTypeEntry<
@@ -735,11 +778,11 @@ export interface ProcessWakeConfig {
       messageType?: string
     }) => Promise<{ txid: string }>
     deleteSchedule: (opts: { id: string }) => Promise<{ txid: string }>
-    listEventSources: () => Promise<Array<EventSourceContract>>
-    subscribeToEventSource: (
-      opts: EventSourceSubscriptionInput
-    ) => Promise<{ txid: string; subscription: EventSourceSubscription }>
-    unsubscribeFromEventSource: (opts: {
+    listWebhookSources: () => Promise<Array<WebhookSourceContract>>
+    subscribeToWebhookSource: (
+      opts: WebhookSourceSubscriptionInput
+    ) => Promise<{ txid: string; subscription: WebhookSourceSubscription }>
+    unsubscribeFromWebhookSource: (opts: {
       id: string
     }) => Promise<{ txid: string }>
   }) => Array<AgentTool> | Promise<Array<AgentTool>>
@@ -917,6 +960,17 @@ export interface AgentConfig {
     provider: string
   ) => Promise<string | undefined> | string | undefined
   onPayload?: SimpleStreamOptions[`onPayload`]
+  // Invoked after each step ends with the provider-reported token counts.
+  // `input` is the full prompt volume (incl. prompt-cache reads/writes, as
+  // displayed in the meta row); `uncachedInput` is the new input this step
+  // only (fresh tokens + cache writes; cache reads excluded). Budget
+  // accounting should use `uncachedInput + output` so warm cache turns
+  // don't re-count the whole conversation each step.
+  onStepEnd?: (stats: {
+    input: number
+    uncachedInput: number
+    output: number
+  }) => void
   modelTimeoutMs?: number
   modelMaxRetries?: number
   testResponses?: TestResponses
@@ -949,7 +1003,7 @@ export interface OutboundBridgeHandle {
 }
 
 export interface AgentHandle {
-  run: (input?: string) => Promise<AgentRunResult>
+  run: (input?: string, abortSignal?: AbortSignal) => Promise<AgentRunResult>
 }
 
 /**
@@ -1027,6 +1081,14 @@ export interface HandlerContext<
   removeContext: (id: string) => void
   getContext: (id: string) => ContextEntry | undefined
   listContext: () => Array<ContextEntry>
+  setGoal: (input: GoalInput) => GoalEntry
+  clearGoal: () => boolean
+  getGoal: () => GoalEntry | undefined
+  markGoalComplete: (summary?: string) => GoalEntry | undefined
+  updateGoalUsage: (
+    tokensUsed: number,
+    opts?: { status?: GoalEntry[`status`] }
+  ) => GoalEntry | undefined
   agent: AgentHandle
   spawn: (
     type: string,
@@ -1137,6 +1199,13 @@ export interface HandlerContext<
    * `useAgent` flow records runs internally via the outbound bridge.
    */
   recordRun: () => RunHandle
+  /**
+   * Write a synthetic agent text reply to the entity. Emits a complete
+   * runs + texts + text_delta sequence so the chat UI renders it as an
+   * ordinary assistant message. Use for runtime-driven replies (slash
+   * commands, error messages) that don't involve the LLM.
+   */
+  replyText: (text: string) => void
   sleep: () => void
   setTag: (key: string, value: string) => Promise<void>
   deleteTag: (key: string) => Promise<void>

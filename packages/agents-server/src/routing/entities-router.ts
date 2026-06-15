@@ -4,8 +4,8 @@
 
 import { Type, type Static } from '@sinclair/typebox'
 import {
-  buildEventSourceManifestEntry,
-  resolveEventSourceSubscription,
+  buildWebhookSourceManifestEntry,
+  resolveWebhookSourceSubscription,
 } from '@electric-ax/agents-runtime'
 import { Router, json, status } from 'itty-router'
 import { apiError } from '../electric-agents-http.js'
@@ -45,7 +45,7 @@ import type {
 import type { JsonRouteRequest } from './schema.js'
 import type { RouterType } from 'itty-router'
 import type { TenantContext } from './context.js'
-import type { EventSourceSubscriptionInput } from '@electric-ax/agents-runtime'
+import type { WebhookSourceSubscriptionInput } from '@electric-ax/agents-runtime'
 
 interface AgentsRouteRequest extends JsonRouteRequest {
   entityRoute?: ExistingEntityRoute
@@ -148,6 +148,19 @@ const spawnBodySchema = Type.Object({
     })
   ),
 })
+
+const writeCollectionBodySchema = Type.Object(
+  {
+    operation: Type.Union([
+      Type.Literal(`insert`),
+      Type.Literal(`update`),
+      Type.Literal(`delete`),
+    ]),
+    key: Type.Optional(Type.String()),
+    value: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
+  },
+  { additionalProperties: false }
+)
 
 const sendBodySchema = Type.Object({
   payload: Type.Optional(Type.Unknown()),
@@ -318,8 +331,8 @@ const subscriptionLifetimeSchema = Type.Union([
   Type.Object({ kind: Type.Literal(`manual`) }),
 ])
 
-const eventSourceSubscriptionBodySchema = Type.Object({
-  sourceKey: Type.String(),
+const webhookSourceSubscriptionBodySchema = Type.Object({
+  webhookKey: Type.String(),
   bucketKey: Type.Optional(Type.String()),
   params: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
   filterKey: Type.Optional(Type.String()),
@@ -328,14 +341,15 @@ const eventSourceSubscriptionBodySchema = Type.Object({
 })
 
 type SpawnBody = Static<typeof spawnBodySchema>
+type WriteCollectionBody = Static<typeof writeCollectionBodySchema>
 type SendBody = Static<typeof sendBodySchema>
 type InboxMessageBody = Static<typeof inboxMessageBodySchema>
 type ForkBody = Static<typeof forkBodySchema>
 type SetTagBody = Static<typeof setTagBodySchema>
 type SignalBody = Static<typeof signalBodySchema>
 type ScheduleBody = Static<typeof scheduleBodySchema>
-type EventSourceSubscriptionBody = Static<
-  typeof eventSourceSubscriptionBodySchema
+type WebhookSourceSubscriptionBody = Static<
+  typeof webhookSourceSubscriptionBodySchema
 >
 type EntityPermissionGrantInput = Static<
   typeof entityPermissionGrantInputSchema
@@ -409,6 +423,13 @@ entitiesRouter.post(
   sendEntity
 )
 entitiesRouter.post(
+  `/:type/:instanceId/collections/:collection`,
+  withExistingEntity,
+  withSchema(writeCollectionBodySchema),
+  withEntityPermission(`write`),
+  writeCollection
+)
+entitiesRouter.post(
   `/:type/:instanceId/attachments`,
   withExistingEntity,
   withEntityPermission(`write`),
@@ -473,17 +494,17 @@ entitiesRouter.delete(
   deleteSchedule
 )
 entitiesRouter.put(
-  `/:type/:instanceId/event-source-subscriptions/:subscriptionId`,
+  `/:type/:instanceId/webhook-source-subscriptions/:subscriptionId`,
   withExistingEntity,
-  withSchema(eventSourceSubscriptionBodySchema),
+  withSchema(webhookSourceSubscriptionBodySchema),
   withEntityPermission(`write`),
-  upsertEventSourceSubscription
+  upsertWebhookSourceSubscription
 )
 entitiesRouter.delete(
-  `/:type/:instanceId/event-source-subscriptions/:subscriptionId`,
+  `/:type/:instanceId/webhook-source-subscriptions/:subscriptionId`,
   withExistingEntity,
   withEntityPermission(`write`),
-  deleteEventSourceSubscription
+  deleteWebhookSourceSubscription
 )
 entitiesRouter.delete(
   `/:type/:instanceId/pg-sync-observations/:sourceRef`,
@@ -1003,33 +1024,33 @@ async function deleteSchedule(
   return json(result)
 }
 
-async function upsertEventSourceSubscription(
+async function upsertWebhookSourceSubscription(
   request: AgentsRouteRequest,
   ctx: TenantContext
 ): Promise<Response> {
   const principalMutationError = rejectPrincipalEntityMutation(
     request,
-    `subscribed to event sources`
+    `subscribed to webhook sources`
   )
   if (principalMutationError) return principalMutationError
 
-  const catalog = ctx.eventSources
+  const catalog = ctx.webhookSources
   if (!catalog) {
     return apiError(
       404,
       ErrCodeNotFound,
-      `No event source catalog is configured`
+      `No webhook source catalog is configured`
     )
   }
 
   const { entityUrl } = requireExistingEntityRoute(request)
-  const parsed = routeBody<EventSourceSubscriptionBody>(request)
-  const source = await catalog.getEventSource(parsed.sourceKey)
+  const parsed = routeBody<WebhookSourceSubscriptionBody>(request)
+  const source = await catalog.getWebhookSource(parsed.webhookKey)
   if (!source) {
     return apiError(
       404,
       ErrCodeNotFound,
-      `Event source "${parsed.sourceKey}" not found`
+      `Webhook source "${parsed.webhookKey}" not found`
     )
   }
 
@@ -1044,13 +1065,13 @@ async function upsertEventSourceSubscription(
     }
   }
 
-  let resolved: ReturnType<typeof resolveEventSourceSubscription>
+  let resolved: ReturnType<typeof resolveWebhookSourceSubscription>
   try {
-    resolved = resolveEventSourceSubscription({
+    resolved = resolveWebhookSourceSubscription({
       contract: source,
       entityUrl,
       request: {
-        ...(parsed as EventSourceSubscriptionInput),
+        ...(parsed as WebhookSourceSubscriptionInput),
         id: decodeURIComponent(request.params.subscriptionId),
       },
       createdBy: `tool`,
@@ -1063,30 +1084,30 @@ async function upsertEventSourceSubscription(
     )
   }
 
-  await ctx.ensureEventSourceWakeSource?.(resolved.subscription.sourceUrl)
+  await ctx.ensureWebhookSourceWakeSource?.(resolved.subscription.sourceUrl)
 
-  const result = await ctx.entityManager.upsertEventSourceSubscription(
+  const result = await ctx.entityManager.upsertWebhookSourceSubscription(
     entityUrl,
     {
       subscription: resolved.subscription,
-      manifest: buildEventSourceManifestEntry(resolved),
+      manifest: buildWebhookSourceManifestEntry(resolved),
     }
   )
   return json(result)
 }
 
-async function deleteEventSourceSubscription(
+async function deleteWebhookSourceSubscription(
   request: AgentsRouteRequest,
   ctx: TenantContext
 ): Promise<Response> {
   const principalMutationError = rejectPrincipalEntityMutation(
     request,
-    `unsubscribed from event sources`
+    `unsubscribed from webhook sources`
   )
   if (principalMutationError) return principalMutationError
 
   const { entityUrl } = requireExistingEntityRoute(request)
-  const result = await ctx.entityManager.deleteEventSourceSubscription(
+  const result = await ctx.entityManager.deleteWebhookSourceSubscription(
     entityUrl,
     {
       id: decodeURIComponent(request.params.subscriptionId),
@@ -1331,6 +1352,31 @@ async function sendEntity(
   return json(result)
 }
 
+async function writeCollection(
+  request: AgentsRouteRequest,
+  ctx: TenantContext
+): Promise<Response> {
+  const parsed = routeBody<WriteCollectionBody>(request)
+  await ctx.entityManager.ensurePrincipal(ctx.principal)
+  const { entityUrl } = requireExistingEntityRoute(request)
+  const collection = request.params.collection
+  const result = await ctx.entityManager.writeCollection(
+    entityUrl,
+    collection,
+    {
+      operation: parsed.operation,
+      key: parsed.key,
+      value: parsed.value,
+      principal: {
+        url: ctx.principal.url,
+        kind: ctx.principal.kind,
+        id: ctx.principal.id,
+      },
+    }
+  )
+  return json(result, { status: parsed.operation === `insert` ? 201 : 200 })
+}
+
 async function createAttachment(
   request: AgentsRouteRequest,
   ctx: TenantContext
@@ -1496,8 +1542,21 @@ async function spawnEntity(
   )
 }
 
-function getEntity(request: AgentsRouteRequest): Response {
-  return json(toPublicEntity(requireExistingEntityRoute(request).entity))
+async function getEntity(
+  request: AgentsRouteRequest,
+  ctx: TenantContext
+): Promise<Response> {
+  const { entity } = requireExistingEntityRoute(request)
+  const entityType = entity.type
+    ? await ctx.entityManager.registry.getEntityType(entity.type)
+    : null
+  return json({
+    ...toPublicEntity(entity),
+    ...(entityType?.externally_writable_collections && {
+      externally_writable_collections:
+        entityType.externally_writable_collections,
+    }),
+  })
 }
 
 function headEntity(): Response {

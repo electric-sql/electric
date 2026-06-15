@@ -1,5 +1,16 @@
 # @electric-ax/agents-server
 
+## 0.5.0
+
+### Patch Changes
+
+- 8bc630a: Add generic externally-writable custom collections for agent entity state: collections opt in via `externallyWritable`, writes go through an authenticated schema-validated endpoint that stamps the principal into a read-only `_principal` column, and `createEntityTimelineQuery` can project them into the timeline via `customSources`. Comments are reimplemented as one such collection, gated per agent type through a reserved `comments/v1` contract that the UI keys its comment affordances on. External writes are restricted to a per-collection operations allowlist (insert-only by default), and comments are insert-only.
+- Updated dependencies [708c946]
+- Updated dependencies [8bc630a]
+- Updated dependencies [c48c1a8]
+- Updated dependencies [c1f3aac]
+  - @electric-ax/agents-runtime@0.4.0
+
 ## 0.4.20
 
 ### Patch Changes
@@ -173,7 +184,7 @@
 
 ### Patch Changes
 
-- 833a1cb: Add agent event source contracts and dynamic event source subscription tools. Agents can list active, agent-visible webhook-backed event sources, subscribe entities to resolved bucket streams with explicit lifetimes, and persist those subscriptions as manifest-backed wake registrations. Bucket params are validated against the advertised `paramsSchema` before a subscription is accepted. Horton now receives these tools through the built-in agents runtime by default. Runtime-managed event source wakes now hydrate matching webhook rows into the agent trigger message so tool-created subscriptions include the event payload that caused the wake.
+- 833a1cb: Add agent webhook source contracts and dynamic webhook source subscription tools. Agents can list active, agent-visible webhook-backed webhook sources, subscribe entities to resolved bucket streams with explicit lifetimes, and persist those subscriptions as manifest-backed wake registrations. Bucket params are validated against the advertised `paramsSchema` before a subscription is accepted. Horton now receives these tools through the built-in agents runtime by default. Runtime-managed webhook source wakes now hydrate matching webhook rows into the agent trigger message so tool-created subscriptions include the event payload that caused the wake.
 - Updated dependencies [833a1cb]
 - Updated dependencies [1349a55]
 - Updated dependencies [833a1cb]

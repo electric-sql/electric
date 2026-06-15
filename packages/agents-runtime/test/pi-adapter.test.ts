@@ -46,7 +46,7 @@ describe(`createPiAgentAdapter`, () => {
       entityUrl: `test/entity-1`,
       epoch: 1,
       messages: [],
-      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0 },
+      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0, reasoning: 0 },
       writeEvent: (_event: ChangeEvent) => {},
     }
 
@@ -115,7 +115,7 @@ describe(`createPiAgentAdapter`, () => {
       entityUrl: `test/entity-1`,
       epoch: 1,
       messages: [],
-      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0 },
+      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0, reasoning: 0 },
       writeEvent: (_event: ChangeEvent) => {},
     })
     const controller = new AbortController()
@@ -174,7 +174,7 @@ describe(`createPiAgentAdapter`, () => {
       entityUrl: `test/entity-1`,
       epoch: 1,
       messages: [],
-      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0 },
+      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0, reasoning: 0 },
       writeEvent: (_event: ChangeEvent) => {},
     })
 
@@ -229,7 +229,7 @@ describe(`createPiAgentAdapter`, () => {
       entityUrl: `test/entity-1`,
       epoch: 1,
       messages: [],
-      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0 },
+      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0, reasoning: 0 },
       writeEvent: (_event: ChangeEvent) => {},
     })
 
@@ -280,7 +280,7 @@ describe(`createPiAgentAdapter`, () => {
       entityUrl: `test/entity-1`,
       epoch: 1,
       messages: [],
-      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0 },
+      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0, reasoning: 0 },
       writeEvent: (event: ChangeEvent) => events.push(event),
     })
 
@@ -328,7 +328,7 @@ describe(`createPiAgentAdapter`, () => {
       entityUrl: `test/entity-1`,
       epoch: 1,
       messages: [],
-      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0 },
+      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0, reasoning: 0 },
       writeEvent: (event: ChangeEvent) => events.push(event),
     })
 
@@ -442,7 +442,7 @@ describe(`createPiAgentAdapter`, () => {
       entityUrl: `test/entity-1`,
       epoch: 1,
       messages: [],
-      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0 },
+      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0, reasoning: 0 },
       writeEvent: (_event: ChangeEvent) => {},
     })
 
@@ -470,7 +470,7 @@ describe(`createPiAgentAdapter`, () => {
       entityUrl: `test/entity-1`,
       epoch: 1,
       messages: [],
-      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0 },
+      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0, reasoning: 0 },
       writeEvent: (_event: ChangeEvent) => {},
     })
     const controller = new AbortController()
@@ -534,7 +534,7 @@ describe(`createPiAgentAdapter`, () => {
       entityUrl: `test/entity-1`,
       epoch: 1,
       messages: [],
-      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0 },
+      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0, reasoning: 0 },
       writeEvent: (event: ChangeEvent) => {
         events.push(event)
       },
@@ -581,7 +581,7 @@ describe(`createPiAgentAdapter`, () => {
       entityUrl: `test/entity-1`,
       epoch: 1,
       messages: [],
-      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0 },
+      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0, reasoning: 0 },
       writeEvent: (_event: ChangeEvent) => {},
     }
 
@@ -600,7 +600,7 @@ describe(`createPiAgentAdapter`, () => {
       entityUrl: `test/entity-1`,
       epoch: 1,
       messages: [],
-      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0 },
+      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0, reasoning: 0 },
       writeEvent: (_event: ChangeEvent) => {},
     }
 
@@ -916,7 +916,7 @@ describe(`toAgentHistory`, () => {
         entityUrl: `test/entity-1`,
         epoch: 1,
         messages: [],
-        outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0 },
+        outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0, reasoning: 0 },
         writeEvent: (e: ChangeEvent) => {
           events.push(e)
         },
@@ -934,11 +934,14 @@ describe(`toAgentHistory`, () => {
       expect(stepValue?.output_tokens).toBe(567)
     })
 
-    it(`sums input + cacheRead + cacheWrite into the input token total`, async () => {
+    it(`sums input + cacheWrite (cache reads excluded) into the input tokens`, async () => {
       // Anthropic + other prompt-cache providers split input across
-      // three counters; reading only `usage.input` would surface
-      // tiny "3 input" labels on cache-warm turns. The adapter sums
-      // all three so the meta row reflects the real prompt volume.
+      // three counters. The adapter surfaces the *uncached* side —
+      // fresh tokens plus cache writes. `cacheRead` re-counts the
+      // entire history on every warm turn, so including it would make
+      // the meta row a runaway cumulative number; `cacheWrite` must be
+      // counted because cache-enabled providers report newly appended
+      // prompt tokens there (with `input` collapsing to ~0).
       const events = await runOnce(
         makeCompletedMessage({
           input: 50,
@@ -948,7 +951,7 @@ describe(`toAgentHistory`, () => {
         })
       )
       const stepValue = findStepUpdate(events)
-      expect(stepValue?.input_tokens).toBe(1350)
+      expect(stepValue?.input_tokens).toBe(150)
       expect(stepValue?.output_tokens).toBe(80)
     })
 

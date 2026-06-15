@@ -311,29 +311,29 @@ describe(`ElectricAgentsManager composer input validation`, () => {
   })
 })
 
-describe(`ElectricAgentsManager event source subscriptions`, () => {
+describe(`ElectricAgentsManager webhook source subscriptions`, () => {
   it(`persists the manifest before registering wake side effects`, async () => {
     const calls: Array<string> = []
     const manager = createManifestManager(calls)
 
-    await manager.upsertEventSourceSubscription(`/coder/session-1`, {
+    await manager.upsertWebhookSourceSubscription(`/coder/session-1`, {
       subscription: {
         id: `watch-pr-123`,
         entityUrl: `/coder/session-1`,
-        sourceKey: `github-repo`,
+        webhookKey: `github-repo`,
         bucketKey: `pull_request`,
         params: { number: 123 },
         filterApplied: false,
         contractRevision: 1,
         sourceUrl: `/_webhooks/github-repo/prs/123`,
         sourceType: `webhook`,
-        manifestKey: `event-source:watch-pr-123`,
+        manifestKey: `webhook-source:watch-pr-123`,
         lifetime: { kind: `until_entity_stopped` },
         createdBy: `tool`,
         createdAt: `2026-05-23T00:00:00.000Z`,
       },
       manifest: {
-        key: `event-source:watch-pr-123`,
+        key: `webhook-source:watch-pr-123`,
         kind: `source`,
         sourceType: `webhook`,
         sourceRef: `github-repo/prs/123`,
@@ -356,11 +356,217 @@ describe(`ElectricAgentsManager event source subscriptions`, () => {
     const calls: Array<string> = []
     const manager = createManifestManager(calls)
 
-    await manager.deleteEventSourceSubscription(`/coder/session-1`, {
+    await manager.deleteWebhookSourceSubscription(`/coder/session-1`, {
       id: `watch-pr-123`,
     })
 
     expect(calls).toEqual([`append`, `unregister`])
+  })
+})
+
+function decodeAppendEvent(bytes: Uint8Array): Record<string, unknown> {
+  return JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>
+}
+
+describe(`ElectricAgentsManager.writeCollection`, () => {
+  const principal = {
+    url: `/principal/user%3Aalice`,
+    kind: `user`,
+    id: `alice`,
+  }
+
+  it(`stamps the principal header and appends a generic collection insert`, async () => {
+    const append = vi.fn()
+    const { manager } = createAttachmentManager({ streamClient: { append } })
+    manager.registry.getEntity = vi.fn().mockResolvedValue({
+      url: `/chat/session-1`,
+      type: `chat`,
+      status: `running`,
+      streams: { main: `/chat/session-1` },
+    })
+    manager.registry.getEntityType = vi.fn().mockResolvedValue({
+      name: `chat`,
+      state_schemas: { 'state:comments': {} },
+      externally_writable_collections: {
+        comments: { type: `state:comments` },
+      },
+    })
+
+    const result = await manager.writeCollection(
+      `/chat/session-1`,
+      `comments`,
+      {
+        operation: `insert`,
+        key: `c1`,
+        value: { body: `hi` },
+        principal,
+      }
+    )
+
+    expect(result).toEqual({ key: `c1` })
+    const event = decodeAppendEvent(append.mock.calls[0]?.[1])
+    expect(event).toMatchObject({
+      type: `state:comments`,
+      key: `c1`,
+      headers: { operation: `insert`, principal },
+      value: { body: `hi` },
+    })
+    expect(
+      (event.value as Record<string, unknown>).from_principal
+    ).toBeUndefined()
+  })
+
+  it(`rejects writes to a collection that is not writable`, async () => {
+    const append = vi.fn()
+    const { manager } = createAttachmentManager({ streamClient: { append } })
+    manager.registry.getEntity = vi.fn().mockResolvedValue({
+      url: `/chat/session-1`,
+      type: `chat`,
+      status: `running`,
+      streams: { main: `/chat/session-1` },
+    })
+    manager.registry.getEntityType = vi.fn().mockResolvedValue({
+      name: `chat`,
+      state_schemas: { 'state:notes': {} },
+      externally_writable_collections: {},
+    })
+
+    await expect(
+      manager.writeCollection(`/chat/session-1`, `notes`, {
+        operation: `insert`,
+        value: { note: `x` },
+        principal,
+      })
+    ).rejects.toMatchObject({ status: 403 })
+    expect(append).not.toHaveBeenCalled()
+  })
+
+  it(`rejects values that fail the collection schema with 422`, async () => {
+    const append = vi.fn()
+    const { manager } = createAttachmentManager({ streamClient: { append } })
+    manager.registry.getEntity = vi.fn().mockResolvedValue({
+      url: `/chat/session-1`,
+      type: `chat`,
+      status: `running`,
+      streams: { main: `/chat/session-1` },
+    })
+    manager.registry.getEntityType = vi.fn().mockResolvedValue({
+      name: `chat`,
+      state_schemas: {
+        'state:comments': {
+          type: `object`,
+          properties: { body: { type: `string` } },
+          required: [`body`],
+          additionalProperties: false,
+        },
+      },
+      externally_writable_collections: {
+        comments: { type: `state:comments` },
+      },
+    })
+
+    await expect(
+      manager.writeCollection(`/chat/session-1`, `comments`, {
+        operation: `insert`,
+        key: `c1`,
+        value: { body: 42 },
+        principal,
+      })
+    ).rejects.toMatchObject({ status: 422 })
+    expect(append).not.toHaveBeenCalled()
+
+    await manager.writeCollection(`/chat/session-1`, `comments`, {
+      operation: `insert`,
+      key: `c2`,
+      value: { body: `valid` },
+      principal,
+    })
+    expect(append).toHaveBeenCalledTimes(1)
+  })
+
+  it(`rejects writes to a stopped entity with 409`, async () => {
+    const append = vi.fn()
+    const { manager } = createAttachmentManager({ streamClient: { append } })
+    manager.registry.getEntity = vi.fn().mockResolvedValue({
+      url: `/chat/session-1`,
+      type: `chat`,
+      status: `stopped`,
+      streams: { main: `/chat/session-1` },
+    })
+    manager.registry.getEntityType = vi.fn().mockResolvedValue({
+      name: `chat`,
+      state_schemas: { 'state:comments': {} },
+      externally_writable_collections: {
+        comments: { type: `state:comments` },
+      },
+    })
+
+    await expect(
+      manager.writeCollection(`/chat/session-1`, `comments`, {
+        operation: `insert`,
+        key: `c1`,
+        value: { body: `hi` },
+        principal,
+      })
+    ).rejects.toMatchObject({ status: 409 })
+    expect(append).not.toHaveBeenCalled()
+  })
+
+  it(`rejects operations outside the collection allowlist with 403`, async () => {
+    const append = vi.fn()
+    const { manager } = createAttachmentManager({ streamClient: { append } })
+    manager.registry.getEntity = vi.fn().mockResolvedValue({
+      url: `/chat/session-1`,
+      type: `chat`,
+      status: `running`,
+      streams: { main: `/chat/session-1` },
+    })
+    manager.registry.getEntityType = vi.fn().mockResolvedValue({
+      name: `chat`,
+      state_schemas: { 'state:comments': {} },
+      externally_writable_collections: {
+        comments: { type: `state:comments`, operations: [`insert`] },
+      },
+    })
+
+    for (const operation of [`update`, `delete`] as const) {
+      await expect(
+        manager.writeCollection(`/chat/session-1`, `comments`, {
+          operation,
+          key: `c1`,
+          value: { body: `hi` },
+          principal,
+        })
+      ).rejects.toMatchObject({ status: 403 })
+    }
+    expect(append).not.toHaveBeenCalled()
+  })
+
+  it(`defaults to insert-only when no operations allowlist is configured`, async () => {
+    const append = vi.fn()
+    const { manager } = createAttachmentManager({ streamClient: { append } })
+    manager.registry.getEntity = vi.fn().mockResolvedValue({
+      url: `/chat/session-1`,
+      type: `chat`,
+      status: `running`,
+      streams: { main: `/chat/session-1` },
+    })
+    manager.registry.getEntityType = vi.fn().mockResolvedValue({
+      name: `chat`,
+      state_schemas: { 'state:comments': {} },
+      externally_writable_collections: {
+        comments: { type: `state:comments` },
+      },
+    })
+
+    await expect(
+      manager.writeCollection(`/chat/session-1`, `comments`, {
+        operation: `delete`,
+        key: `c1`,
+        principal,
+      })
+    ).rejects.toMatchObject({ status: 403 })
+    expect(append).not.toHaveBeenCalled()
   })
 })
 

@@ -1,7 +1,7 @@
 {
   "name": "@electric-ax/example-deep-survey",
   "private": true,
-  "version": "0.1.24",
+  "version": "0.1.25",
   "type": "module",
   "scripts": {
     "dev": "pnpm run --parallel \"/^dev:/\"",

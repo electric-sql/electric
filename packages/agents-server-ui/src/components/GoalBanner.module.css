@@ -1,0 +1,79 @@
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.875rem;
+  border-bottom: 1px solid var(--surface-border, rgba(0, 0, 0, 0.08));
+  background: var(--surface-subtle, rgba(0, 0, 0, 0.03));
+  font-size: 0.85rem;
+  color: var(--text-default);
+}
+
+.label {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  color: var(--text-muted, rgba(0, 0, 0, 0.55));
+  flex-shrink: 0;
+}
+
+.objective {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.usage {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted, rgba(0, 0, 0, 0.6));
+}
+
+.status {
+  flex-shrink: 0;
+  text-transform: capitalize;
+  padding: 0.1rem 0.45rem;
+  border-radius: 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  background: var(--surface-strong, rgba(0, 0, 0, 0.08));
+}
+
+.statusActive {
+  background: var(--success-surface, rgba(34, 139, 34, 0.12));
+  color: var(--success-text, #1b6b1b);
+}
+
+.statusBudgetLimited {
+  background: var(--danger-surface, rgba(200, 50, 50, 0.12));
+  color: var(--danger-text, #a02020);
+}
+
+.statusComplete {
+  background: var(--info-surface, rgba(60, 120, 200, 0.12));
+  color: var(--info-text, #1f4f8f);
+}
+
+.bar {
+  position: relative;
+  flex-shrink: 0;
+  width: 6rem;
+  height: 0.35rem;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background: var(--surface-strong, rgba(0, 0, 0, 0.08));
+}
+
+.barFill {
+  position: absolute;
+  inset: 0;
+  background: var(--accent, #4078c0);
+  transform-origin: left center;
+}
+
+.barFillOver {
+  background: var(--danger, #c84040);
+}

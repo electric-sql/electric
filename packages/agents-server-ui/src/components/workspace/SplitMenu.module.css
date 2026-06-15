@@ -50,6 +50,14 @@
   color: var(--ds-text-3);
 }
 
+.optionCheck {
+  opacity: 0;
+}
+
+.optionCheck[data-visible='true'] {
+  opacity: 1;
+}
+
 .signalRow {
   display: grid;
   grid-template-columns: minmax(0, 1fr) max-content;

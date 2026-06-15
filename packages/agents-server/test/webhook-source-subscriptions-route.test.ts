@@ -1,18 +1,18 @@
 import { describe, expect, it, vi } from 'vitest'
 import { internalRouter } from '../src/routing/internal-router'
 import type {
-  EventSourceContract,
-  EventSourceSubscription,
+  WebhookSourceContract,
+  WebhookSourceSubscription,
   TenantContext,
 } from '../src/index'
 
-describe(`event source subscription routes`, () => {
+describe(`webhook source subscription routes`, () => {
   it(`creates a manifest-backed webhook wake subscription`, async () => {
-    const upsertEventSourceSubscription = vi.fn(
+    const upsertWebhookSourceSubscription = vi.fn(
       async (
         _entityUrl: string,
         req: {
-          subscription: EventSourceSubscription
+          subscription: WebhookSourceSubscription
           manifest: Record<string, unknown>
         }
       ) => ({
@@ -20,20 +20,20 @@ describe(`event source subscription routes`, () => {
         subscription: req.subscription,
       })
     )
-    const ensureEventSourceWakeSource = vi.fn(async () => {})
+    const ensureWebhookSourceWakeSource = vi.fn(async () => {})
     const ctx = tenantContext({
-      upsertEventSourceSubscription,
-      ensureEventSourceWakeSource,
+      upsertWebhookSourceSubscription,
+      ensureWebhookSourceWakeSource,
     })
 
     const response = await internalRouter.fetch(
       new Request(
-        `http://agents.test/_electric/entities/coder/session-1/event-source-subscriptions/watch-pr-123`,
+        `http://agents.test/_electric/entities/coder/session-1/webhook-source-subscriptions/watch-pr-123`,
         {
           method: `PUT`,
           headers: { 'content-type': `application/json` },
           body: JSON.stringify({
-            sourceKey: `github-repo`,
+            webhookKey: `github-repo`,
             bucketKey: `pull_request`,
             params: { number: 123 },
             lifetime: { kind: `until_entity_stopped` },
@@ -50,20 +50,20 @@ describe(`event source subscription routes`, () => {
       subscription: {
         id: `watch-pr-123`,
         entityUrl: `/coder/session-1`,
-        sourceKey: `github-repo`,
+        webhookKey: `github-repo`,
         sourceUrl: `/_webhooks/github-repo/prs/123`,
-        manifestKey: `event-source:watch-pr-123`,
+        manifestKey: `webhook-source:watch-pr-123`,
         filterApplied: false,
       },
     })
-    expect(ensureEventSourceWakeSource).toHaveBeenCalledWith(
+    expect(ensureWebhookSourceWakeSource).toHaveBeenCalledWith(
       `/_webhooks/github-repo/prs/123`
     )
-    expect(upsertEventSourceSubscription).toHaveBeenCalledWith(
+    expect(upsertWebhookSourceSubscription).toHaveBeenCalledWith(
       `/coder/session-1`,
       expect.objectContaining({
         manifest: expect.objectContaining({
-          key: `event-source:watch-pr-123`,
+          key: `webhook-source:watch-pr-123`,
           sourceType: `webhook`,
           config: expect.objectContaining({
             endpointKey: `github-repo`,
@@ -93,72 +93,72 @@ describe(`event source subscription routes`, () => {
     })
   })
 
-  it(`lists configured event source contracts`, async () => {
+  it(`lists configured webhook source contracts`, async () => {
     const ctx = tenantContext()
 
     const response = await internalRouter.fetch(
-      new Request(`http://agents.test/_electric/event-sources`),
+      new Request(`http://agents.test/_electric/webhook-sources`),
       ctx
     )
 
     expect(response?.status).toBe(200)
     await expect(response!.json()).resolves.toEqual({
-      eventSources: [githubContract],
+      webhookSources: [githubContract],
     })
   })
 
-  it(`hides disabled and agent-invisible event sources from discovery`, async () => {
-    const hiddenContract: EventSourceContract = {
+  it(`hides disabled and agent-invisible webhook sources from discovery`, async () => {
+    const hiddenContract: WebhookSourceContract = {
       ...githubContract,
-      sourceKey: `hidden-repo`,
+      webhookKey: `hidden-repo`,
       agentVisible: false,
     }
-    const disabledContract: EventSourceContract = {
+    const disabledContract: WebhookSourceContract = {
       ...githubContract,
-      sourceKey: `disabled-repo`,
+      webhookKey: `disabled-repo`,
       status: `disabled`,
     }
     const ctx = tenantContext({
-      eventSources: {
-        listEventSources: () => [
+      webhookSources: {
+        listWebhookSources: () => [
           githubContract,
           hiddenContract,
           disabledContract,
         ],
-        getEventSource: (sourceKey: string) =>
+        getWebhookSource: (webhookKey: string) =>
           [githubContract, hiddenContract, disabledContract].find(
-            (source) => source.sourceKey === sourceKey
+            (source) => source.webhookKey === webhookKey
           ),
       },
     })
 
     const response = await internalRouter.fetch(
-      new Request(`http://agents.test/_electric/event-sources`),
+      new Request(`http://agents.test/_electric/webhook-sources`),
       ctx
     )
 
     expect(response?.status).toBe(200)
     await expect(response!.json()).resolves.toEqual({
-      eventSources: [githubContract],
+      webhookSources: [githubContract],
     })
   })
 
   it(`rejects subscriptions whose params do not match the bucket schema`, async () => {
-    const upsertEventSourceSubscription = vi.fn()
-    const ensureEventSourceWakeSource = vi.fn(async () => {})
+    const upsertWebhookSourceSubscription = vi.fn()
+    const ensureWebhookSourceWakeSource = vi.fn(async () => {})
     const ctx = tenantContext({
-      upsertEventSourceSubscription,
-      ensureEventSourceWakeSource,
+      upsertWebhookSourceSubscription,
+      ensureWebhookSourceWakeSource,
     })
 
     const response = await internalRouter.fetch(
       new Request(
-        `http://agents.test/_electric/entities/coder/session-1/event-source-subscriptions/watch-pr-bad`,
+        `http://agents.test/_electric/entities/coder/session-1/webhook-source-subscriptions/watch-pr-bad`,
         {
           method: `PUT`,
           headers: { 'content-type': `application/json` },
           body: JSON.stringify({
-            sourceKey: `github-repo`,
+            webhookKey: `github-repo`,
             bucketKey: `pull_request`,
             params: { number: `123` },
           }),
@@ -173,18 +173,18 @@ describe(`event source subscription routes`, () => {
         message: expect.stringMatching(/paramsSchema.*number/),
       },
     })
-    expect(ensureEventSourceWakeSource).not.toHaveBeenCalled()
-    expect(upsertEventSourceSubscription).not.toHaveBeenCalled()
+    expect(ensureWebhookSourceWakeSource).not.toHaveBeenCalled()
+    expect(upsertWebhookSourceSubscription).not.toHaveBeenCalled()
   })
 })
 
 function tenantContext(
   overrides: {
-    upsertEventSourceSubscription?: unknown
-    deleteEventSourceSubscription?: unknown
+    upsertWebhookSourceSubscription?: unknown
+    deleteWebhookSourceSubscription?: unknown
     deletePgSyncObservation?: unknown
-    ensureEventSourceWakeSource?: TenantContext[`ensureEventSourceWakeSource`]
-    eventSources?: TenantContext[`eventSources`]
+    ensureWebhookSourceWakeSource?: TenantContext[`ensureWebhookSourceWakeSource`]
+    webhookSources?: TenantContext[`webhookSources`]
   } = {}
 ): TenantContext {
   const registry = {
@@ -215,44 +215,47 @@ function tenantContext(
     pgDb: {} as never,
     entityManager: {
       registry,
-      upsertEventSourceSubscription: vi.fn(async () => ({
+      upsertWebhookSourceSubscription: vi.fn(async () => ({
         txid: `tx-1`,
       })),
-      deleteEventSourceSubscription: vi.fn(async () => ({ txid: `tx-1` })),
+      deleteWebhookSourceSubscription: vi.fn(async () => ({ txid: `tx-1` })),
       deletePgSyncObservation:
         overrides.deletePgSyncObservation ??
         vi.fn(async () => ({ txid: `tx-1` })),
-      ...(overrides.upsertEventSourceSubscription
+      ...(overrides.upsertWebhookSourceSubscription
         ? {
-            upsertEventSourceSubscription:
-              overrides.upsertEventSourceSubscription,
+            upsertWebhookSourceSubscription:
+              overrides.upsertWebhookSourceSubscription,
           }
         : {}),
-      ...(overrides.deleteEventSourceSubscription
+      ...(overrides.deleteWebhookSourceSubscription
         ? {
-            deleteEventSourceSubscription:
-              overrides.deleteEventSourceSubscription,
+            deleteWebhookSourceSubscription:
+              overrides.deleteWebhookSourceSubscription,
           }
         : {}),
     } as never,
     streamClient: {} as never,
     runtime: {} as never,
     entityBridgeManager: {} as never,
-    eventSources: overrides.eventSources ?? {
-      listEventSources: () => [githubContract],
-      getEventSource: (sourceKey: string) =>
-        sourceKey === githubContract.sourceKey ? githubContract : undefined,
+    webhookSources: overrides.webhookSources ?? {
+      listWebhookSources: () => [githubContract],
+      getWebhookSource: (webhookKey: string) =>
+        webhookKey === githubContract.webhookKey ? githubContract : undefined,
     },
-    ...(overrides.ensureEventSourceWakeSource
-      ? { ensureEventSourceWakeSource: overrides.ensureEventSourceWakeSource }
+    ...(overrides.ensureWebhookSourceWakeSource
+      ? {
+          ensureWebhookSourceWakeSource:
+            overrides.ensureWebhookSourceWakeSource,
+        }
       : {}),
     isShuttingDown: () => false,
   }
 }
 
-const githubContract: EventSourceContract = {
+const githubContract: WebhookSourceContract = {
   serviceId: `svc-agent-1`,
-  sourceKey: `github-repo`,
+  webhookKey: `github-repo`,
   sourceType: `webhook`,
   endpointKey: `github-repo`,
   status: `active`,

@@ -1,5 +1,8 @@
+import { formatTokenCount } from '@electric-ax/agents-runtime/client'
 import { Text } from '../ui'
 import styles from './TokenUsage.module.css'
+
+const SHOW_USAGE_THRESHOLD = 1000
 
 /**
  * Compact token-usage label, e.g. `1.2k ↑ 412 ↓`.
@@ -8,6 +11,11 @@ import styles from './TokenUsage.module.css'
  * meta row, with `tabular-nums` to keep the digit column from
  * jittering as numbers tick up (input grows when a tool result is
  * fed back; output grows when the model streams a new step).
+ *
+ * `input` is the uncached input side only — fresh prompt tokens plus
+ * cache writes, with prompt-cache *reads* excluded. The cache-inclusive
+ * total re-counts the entire history on every step, so it balloons into
+ * a cumulative number that says nothing about the work this response did.
  *
  * Either side may be `undefined` (the provider didn't emit it, or
  * the section is historical and was recorded before tokens were
@@ -21,6 +29,7 @@ export function TokenUsage({
   output: number | undefined
 }): React.ReactElement | null {
   if (input == null && output == null) return null
+  if ((input ?? 0) + (output ?? 0) < SHOW_USAGE_THRESHOLD) return null
   const parts: Array<string> = []
   if (input != null) parts.push(`${formatTokenCount(input)} ↑`)
   if (output != null) parts.push(`${formatTokenCount(output)} ↓`)
@@ -38,20 +47,4 @@ export function TokenUsage({
       {text}
     </Text>
   )
-}
-
-/**
- * `Intl.NumberFormat` with `notation: 'compact'` gives us "1.2K",
- * "12K", "1.2M" etc., locale-aware and bounded in width — better
- * than a hand-rolled rounder. We force lowercase `k`/`m` afterward
- * so the suffix tone matches the muted meta row.
- */
-const compactFormatter = new Intl.NumberFormat(undefined, {
-  notation: `compact`,
-  maximumFractionDigits: 1,
-})
-
-function formatTokenCount(n: number): string {
-  if (n < 1000) return String(n)
-  return compactFormatter.format(n).toLowerCase()
 }

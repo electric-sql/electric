@@ -1606,6 +1606,11 @@ describe(`entity includes query`, () => {
       )
       const manifests = createSyncCollection(`test-manifests`, takeOffset)
       const childStatus = createSyncCollection(`test-child-status`, takeOffset)
+      const reasoning = createSyncCollection(`test-reasoning`, takeOffset)
+      const reasoningDeltas = createSyncCollection(
+        `test-reasoningDeltas`,
+        takeOffset
+      )
       return {
         collections: {
           runs: runs.collection,
@@ -1621,6 +1626,8 @@ describe(`entity includes query`, () => {
           contextRemoved: contextRemoved.collection,
           manifests: manifests.collection,
           childStatus: childStatus.collection,
+          reasoning: reasoning.collection,
+          reasoningDeltas: reasoningDeltas.collection,
         },
         sync: {
           runs: withSeqInjection(runs, takeSeq),
@@ -1636,6 +1643,8 @@ describe(`entity includes query`, () => {
           contextRemoved: withSeqInjection(contextRemoved, takeSeq),
           manifests: withSeqInjection(manifests, takeSeq),
           childStatus: withSeqInjection(childStatus, takeSeq),
+          reasoning: withSeqInjection(reasoning, takeSeq),
+          reasoningDeltas: withSeqInjection(reasoningDeltas, takeSeq),
         },
       }
     }
@@ -1862,6 +1871,67 @@ describe(`entity includes query`, () => {
       expect(getTimelineData(liveQuery)?.runs[0]?.toolCalls[0]?.status).toBe(
         `completed`
       )
+    })
+
+    it(`unions customSources into the timeline by order`, async () => {
+      const { collections, sync } = createEntityCollections()
+      let extraOffset = 1000
+      const annotations = createSyncCollection(`test-annotations`, () =>
+        offset(extraOffset++)
+      )
+      const liveQuery = createLiveQueryCollection({
+        query: createEntityTimelineQuery({ collections } as any, {
+          customSources: {
+            annotation: (q) =>
+              q
+                .from({ annotation: annotations.collection })
+                .select(({ annotation }: any) => ({
+                  order: annotation._timeline_order,
+                  key: annotation.key,
+                  note: annotation.note,
+                })),
+          },
+        }),
+        startSync: true,
+      })
+      await liveQuery.preload()
+
+      sync.inbox.insert({
+        key: `msg-1`,
+        _timeline_order: order(1),
+        from: `user`,
+        payload: `start`,
+        timestamp: `2026-04-15T18:00:00.000Z`,
+        status: `processed`,
+      })
+      annotations.insert({
+        key: `note-1`,
+        _timeline_order: order(2),
+        note: `between`,
+      })
+      sync.wakes.insert({
+        key: `wake-1`,
+        _timeline_order: order(3),
+        timestamp: `2026-04-15T18:00:10.000Z`,
+        source: `/chat/test`,
+        timeout: false,
+        changes: [],
+      })
+      await new Promise((r) => setTimeout(r, 50))
+
+      const rows = Array.from((liveQuery as any).entries()).map(
+        ([, v]: any) => v
+      )
+      expect(
+        rows.map((row: any) =>
+          row.inbox
+            ? `inbox:${row.inbox.key}`
+            : row.annotation
+              ? `annotation:${row.annotation.key}`
+              : `wake:${row.wake?.key}`
+        )
+      ).toEqual([`inbox:msg-1`, `annotation:note-1`, `wake:wake-1`])
+      expect(rows[1]?.annotation?.note).toBe(`between`)
     })
 
     it(`projects related entities from one manifest row per related entity`, () => {
@@ -2291,6 +2361,343 @@ describe(`entity includes query`, () => {
       })
       expect(liveEntity?.type).toBeUndefined()
       expect(liveEntity?.status).toBeUndefined()
+    })
+
+    function createTimelineCollections() {
+      let nextOffset = 1
+      let nextSeq = 1
+      const takeOffset = () => offset(nextOffset++)
+      const takeSeq = () => nextSeq++
+      const runs = createSyncCollection(`tl-runs`, takeOffset)
+      const texts = createSyncCollection(`tl-texts`, takeOffset)
+      const textDeltas = createSyncCollection(`tl-textDeltas`, takeOffset)
+      const toolCalls = createSyncCollection(`tl-toolCalls`, takeOffset)
+      const steps = createSyncCollection(`tl-steps`, takeOffset)
+      const errors = createSyncCollection(`tl-errors`, takeOffset)
+      const inbox = createSyncCollection(`tl-inbox`, takeOffset)
+      const wakes = createSyncCollection(`tl-wakes`, takeOffset)
+      const signals = createSyncCollection(`tl-signals`, takeOffset)
+      const contextInserted = createSyncCollection(
+        `tl-context-inserted`,
+        takeOffset
+      )
+      const contextRemoved = createSyncCollection(
+        `tl-context-removed`,
+        takeOffset
+      )
+      const manifests = createSyncCollection(`tl-manifests`, takeOffset)
+      const childStatus = createSyncCollection(`tl-child-status`, takeOffset)
+      const reasoning = createSyncCollection(`tl-reasoning`, takeOffset)
+      const reasoningDeltas = createSyncCollection(
+        `tl-reasoningDeltas`,
+        takeOffset
+      )
+      return {
+        collections: {
+          runs: runs.collection,
+          texts: texts.collection,
+          textDeltas: textDeltas.collection,
+          toolCalls: toolCalls.collection,
+          steps: steps.collection,
+          errors: errors.collection,
+          inbox: inbox.collection,
+          wakes: wakes.collection,
+          signals: signals.collection,
+          contextInserted: contextInserted.collection,
+          contextRemoved: contextRemoved.collection,
+          manifests: manifests.collection,
+          childStatus: childStatus.collection,
+          reasoning: reasoning.collection,
+          reasoningDeltas: reasoningDeltas.collection,
+        },
+        sync: {
+          runs: withSeqInjection(runs, takeSeq),
+          texts: withSeqInjection(texts, takeSeq),
+          textDeltas: withSeqInjection(textDeltas, takeSeq),
+          toolCalls: withSeqInjection(toolCalls, takeSeq),
+          steps: withSeqInjection(steps, takeSeq),
+          errors: withSeqInjection(errors, takeSeq),
+          inbox: withSeqInjection(inbox, takeSeq),
+          wakes: withSeqInjection(wakes, takeSeq),
+          signals: withSeqInjection(signals, takeSeq),
+          contextInserted: withSeqInjection(contextInserted, takeSeq),
+          contextRemoved: withSeqInjection(contextRemoved, takeSeq),
+          manifests: withSeqInjection(manifests, takeSeq),
+          childStatus: withSeqInjection(childStatus, takeSeq),
+          reasoning: withSeqInjection(reasoning, takeSeq),
+          reasoningDeltas: withSeqInjection(reasoningDeltas, takeSeq),
+        },
+      }
+    }
+
+    function getRows(liveQuery: any): Array<any> {
+      return Array.from(liveQuery.entries()).map(([, v]: any) => v)
+    }
+
+    it(`live items.text.content streams in even alongside reasoning (alias-collision regression)`, async () => {
+      // Regression: the text-content correlated sub-query inside
+      // `items.select(...)` and the reasoning-content sub-query both
+      // used `chunk` as their `from({...})` alias. The collision broke
+      // the items text-content join silently — `content` came back as
+      // an empty string even though the deltas were in the local DB.
+      // The fix is to use distinct aliases (`textChunk` vs `chunk`).
+      const { collections, sync } = createTimelineCollections()
+      const liveQuery = createLiveQueryCollection({
+        query: createEntityTimelineQuery({ collections } as any),
+        startSync: true,
+      })
+      await liveQuery.preload()
+
+      sync.runs.insert({ key: `run-0`, status: `started` })
+      sync.texts.insert({
+        key: `msg-0`,
+        run_id: `run-0`,
+        status: `streaming`,
+      })
+      sync.textDeltas.insert({
+        key: `msg-0:0`,
+        text_id: `msg-0`,
+        run_id: `run-0`,
+        delta: `Hello`,
+      })
+      sync.textDeltas.insert({
+        key: `msg-0:1`,
+        text_id: `msg-0`,
+        run_id: `run-0`,
+        delta: ` world`,
+      })
+      // Insert a reasoning row alongside the text row so the items
+      // text-content sub-query and the reasoning sub-query are both
+      // active in the same live projection — that's the configuration
+      // that surfaced the collision.
+      sync.reasoning.insert({
+        key: `reasoning-0`,
+        run_id: `run-0`,
+        status: `streaming`,
+      })
+      sync.texts.update({
+        key: `msg-0`,
+        run_id: `run-0`,
+        status: `completed`,
+      })
+      sync.runs.update({
+        key: `run-0`,
+        status: `completed`,
+        finish_reason: `stop`,
+      })
+      await new Promise((r) => setTimeout(r, 50))
+
+      const rows = getRows(liveQuery)
+      const runRow = rows.find((r) => r.run?.key === `run-0`)
+      expect(runRow).toBeTruthy()
+      const items = Array.from(runRow.run.items.toArray) as Array<any>
+      expect(items).toHaveLength(1)
+      const item = items[0]
+      expect(item.text?.key).toBe(`msg-0`)
+      expect(item.text?.content).toBe(`Hello world`)
+    })
+
+    it(`reasoning content survives multiple run-row updates in sequence`, async () => {
+      // Even closer to production: the run row gets updated MULTIPLE
+      // times (each delta + status flip), which may invalidate the
+      // child sub-collection between evaluations.
+      const { collections, sync } = createTimelineCollections()
+      const liveQuery = createLiveQueryCollection({
+        query: createEntityTimelineQuery({ collections } as any),
+        startSync: true,
+      })
+      await liveQuery.preload()
+
+      sync.runs.insert({ key: `run-0`, status: `started` })
+      sync.reasoning.insert({
+        key: `reasoning-0`,
+        run_id: `run-0`,
+        status: `streaming`,
+      })
+      sync.reasoningDeltas.insert({
+        key: `reasoning-0:0`,
+        reasoning_id: `reasoning-0`,
+        run_id: `run-0`,
+        delta: `A`,
+      })
+      sync.reasoningDeltas.insert({
+        key: `reasoning-0:1`,
+        reasoning_id: `reasoning-0`,
+        run_id: `run-0`,
+        delta: `B`,
+      })
+      sync.reasoning.update({
+        key: `reasoning-0`,
+        run_id: `run-0`,
+        status: `completed`,
+      })
+      // Then several text rows / deltas (each triggers run updates
+      // through derived projections).
+      sync.texts.insert({
+        key: `msg-0`,
+        run_id: `run-0`,
+        status: `streaming`,
+      })
+      for (let i = 0; i < 5; i++) {
+        sync.textDeltas.insert({
+          key: `msg-0:${i}`,
+          text_id: `msg-0`,
+          run_id: `run-0`,
+          delta: `t${i}`,
+        })
+      }
+      sync.texts.update({
+        key: `msg-0`,
+        run_id: `run-0`,
+        status: `completed`,
+      })
+      // Finally the run row update — the moment the bug surfaces.
+      sync.runs.update({
+        key: `run-0`,
+        status: `completed`,
+        finish_reason: `stop`,
+      })
+      await new Promise((r) => setTimeout(r, 100))
+
+      const rows = getRows(liveQuery)
+      const runRow = rows.find((r) => r.run?.key === `run-0`)
+      expect(runRow).toBeTruthy()
+      const reasoning = Array.from(runRow.run.reasoning.toArray) as Array<any>
+      expect(reasoning).toHaveLength(1)
+      expect(reasoning[0].body?.content).toBe(`AB`)
+    })
+
+    it(`reasoning content populates even when text deltas are also present`, async () => {
+      // Production scenario: a run has BOTH text deltas and reasoning
+      // deltas. The reasoning sub-query was returning `content: null`
+      // in the running app even though the deltas were in the local DB.
+      const { collections, sync } = createTimelineCollections()
+      const liveQuery = createLiveQueryCollection({
+        query: createEntityTimelineQuery({ collections } as any),
+        startSync: true,
+      })
+      await liveQuery.preload()
+
+      sync.runs.insert({ key: `run-0`, status: `started` })
+      sync.reasoning.insert({
+        key: `reasoning-0`,
+        run_id: `run-0`,
+        status: `streaming`,
+      })
+      sync.reasoningDeltas.insert({
+        key: `reasoning-0:0`,
+        reasoning_id: `reasoning-0`,
+        run_id: `run-0`,
+        delta: `Thinking part 1. `,
+      })
+      sync.reasoningDeltas.insert({
+        key: `reasoning-0:1`,
+        reasoning_id: `reasoning-0`,
+        run_id: `run-0`,
+        delta: `Thinking part 2.`,
+      })
+      sync.reasoning.update({
+        key: `reasoning-0`,
+        run_id: `run-0`,
+        status: `completed`,
+      })
+      sync.texts.insert({
+        key: `msg-0`,
+        run_id: `run-0`,
+        status: `streaming`,
+      })
+      sync.textDeltas.insert({
+        key: `msg-0:0`,
+        text_id: `msg-0`,
+        run_id: `run-0`,
+        delta: `Answer part 1. `,
+      })
+      sync.textDeltas.insert({
+        key: `msg-0:1`,
+        text_id: `msg-0`,
+        run_id: `run-0`,
+        delta: `Answer part 2.`,
+      })
+      sync.texts.update({
+        key: `msg-0`,
+        run_id: `run-0`,
+        status: `completed`,
+      })
+      sync.runs.update({
+        key: `run-0`,
+        status: `completed`,
+        finish_reason: `stop`,
+      })
+      await new Promise((r) => setTimeout(r, 50))
+
+      const rows = getRows(liveQuery)
+      const runRow = rows.find((r) => r.run?.key === `run-0`)
+      expect(runRow).toBeTruthy()
+      const reasoning = Array.from(runRow.run.reasoning.toArray) as Array<any>
+      expect(reasoning).toHaveLength(1)
+      expect(reasoning[0].body?.content).toBe(
+        `Thinking part 1. Thinking part 2.`
+      )
+      const items = Array.from(runRow.run.items.toArray) as Array<any>
+      expect(items).toHaveLength(1)
+      expect(items[0].text?.content).toBe(`Answer part 1. Answer part 2.`)
+    })
+
+    it(`reasoning content remains populated after status flips to completed`, async () => {
+      // Reproduces the bug where the reasoning row's `content` field
+      // came back as `undefined` (not even `""`) once the row's status
+      // transitioned to `completed`, even though the deltas were still
+      // present in the local DB. This made the "Thought for Ns"
+      // expanded view render an empty body.
+      const { collections, sync } = createTimelineCollections()
+      const liveQuery = createLiveQueryCollection({
+        query: createEntityTimelineQuery({ collections } as any),
+        startSync: true,
+      })
+      await liveQuery.preload()
+
+      sync.runs.insert({ key: `run-0`, status: `started` })
+      sync.reasoning.insert({
+        key: `reasoning-0`,
+        run_id: `run-0`,
+        status: `streaming`,
+      })
+      sync.reasoningDeltas.insert({
+        key: `reasoning-0:0`,
+        reasoning_id: `reasoning-0`,
+        run_id: `run-0`,
+        delta: `First thinking step. `,
+      })
+      sync.reasoningDeltas.insert({
+        key: `reasoning-0:1`,
+        reasoning_id: `reasoning-0`,
+        run_id: `run-0`,
+        delta: `Second thinking step.`,
+      })
+      // Now flip the row to completed — this is the transition that
+      // caused content to vanish in the running app.
+      sync.reasoning.update({
+        key: `reasoning-0`,
+        run_id: `run-0`,
+        status: `completed`,
+      })
+      sync.runs.update({
+        key: `run-0`,
+        status: `completed`,
+        finish_reason: `stop`,
+      })
+      await new Promise((r) => setTimeout(r, 50))
+
+      const rows = getRows(liveQuery)
+      const runRow = rows.find((r) => r.run?.key === `run-0`)
+      expect(runRow).toBeTruthy()
+      const reasoning = Array.from(runRow.run.reasoning.toArray) as Array<any>
+      expect(reasoning).toHaveLength(1)
+      expect(reasoning[0].key).toBe(`reasoning-0`)
+      expect(reasoning[0].status).toBe(`completed`)
+      expect(reasoning[0].body?.content).toBe(
+        `First thinking step. Second thinking step.`
+      )
     })
 
     it(`aggregates per-run token totals from steps`, async () => {

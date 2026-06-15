@@ -1,5 +1,5 @@
 import { Type } from '@sinclair/typebox'
-import { db } from '@electric-ax/agents-runtime'
+import { db, commentsCollection } from '@electric-ax/agents-runtime'
 import {
   createBashTool,
   braveSearchTool,
@@ -314,6 +314,9 @@ export function registerWorker(
         permission: `manage`,
       },
     ],
+    state: {
+      comments: commentsCollection,
+    },
     async handler(ctx) {
       const args = parseWorkerArgs(ctx.args)
       const readSet = new Set<string>()

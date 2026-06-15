@@ -18,9 +18,15 @@ import {
 } from '../model-catalog'
 import type { AgentTool, StreamFn } from '@mariozechner/pi-agent-core'
 import {
+  GOAL_SLASH_COMMAND,
   buildSkillSlashCommands,
   createContextSkillLoader,
   completeWithLowCostModel,
+  dispatchGoalCommand,
+  formatTokenCount,
+  isGoalCommandText,
+  parseGoalCommand,
+  commentsCollection,
 } from '@electric-ax/agents-runtime'
 import type {
   EntityRegistry,
@@ -34,6 +40,7 @@ import {
   createWriteTool,
   braveSearchTool,
   createFetchUrlTool,
+  createMarkGoalCompleteTool,
   createSendTool,
 } from '@electric-ax/agents-runtime/tools'
 import type { Sandbox } from '@electric-ax/agents-runtime/sandbox'
@@ -199,23 +206,30 @@ export async function generateTitle(
   }
 }
 
+interface ActiveGoalPromptInfo {
+  objective: string
+  tokenBudget: number | null
+  tokensUsed: number
+}
+
 export function buildHortonSystemPrompt(
   workingDirectory: string,
   opts: {
     hasDocsSupport?: boolean
-    hasEventSourceTools?: boolean
+    hasWebhookSourceTools?: boolean
     hasScheduleTools?: boolean
     hasSkills?: boolean
     docsUrl?: string
     modelProvider?: string
     modelId?: string
+    activeGoal?: ActiveGoalPromptInfo
   } = {}
 ): string {
   const docsTools = opts.hasDocsSupport
     ? `\n- search_electric_agents_docs: hybrid search over the built-in Electric Agents docs index`
     : ``
-  const eventSourceTools = opts.hasEventSourceTools
-    ? `\n- list_event_sources: list external webhook/event feeds you can subscribe to, including available buckets and parameters\n- subscribe_event_source: subscribe yourself to one of those feeds or buckets so matching future events wake you\n- list_event_source_subscriptions: list your active event source subscriptions\n- unsubscribe_event_source: remove one of your event source subscriptions by id`
+  const webhookSourceTools = opts.hasWebhookSourceTools
+    ? `\n- list_webhook_sources: list external webhook feeds you can subscribe to, including available buckets and parameters\n- subscribe_webhook_source: subscribe yourself to one of those feeds or buckets so matching future webhooks wake you\n- list_webhook_source_subscriptions: list your active webhook source subscriptions\n- unsubscribe_webhook_source: remove one of your webhook source subscriptions by id`
     : ``
   const titleTool = `\n- set_title: set or rename this chat session's UI title`
   const scheduleTools = opts.hasScheduleTools
@@ -289,7 +303,7 @@ When a user opens with a greeting ("hi", "hello", "hey", etc.) or a broad statem
 - observe_pg_sync: observe an Electric Postgres sync stream and wake on matching changes (see "Observing Postgres tables")
 - unobserve_pg_sync: stop being woken by a pg-sync stream you previously observed (see "Observing Postgres tables")
 - send: send a message to an Electric Agent/entity. To schedule future work for yourself, call send with self: true and afterMs.
-${eventSourceTools}${titleTool}${scheduleTools}${docsTools}${skillsTools}
+${webhookSourceTools}${titleTool}${scheduleTools}${docsTools}${skillsTools}
 
 # Working with files
 - Prefer edit over write when modifying existing files.
@@ -342,7 +356,22 @@ Workflow when forking yourself for parallel exploration:
 Report outcomes faithfully. If a command failed, say so with the relevant output. If you didn't run a verification step, say that rather than implying you did. Don't hedge confirmed results with unnecessary disclaimers.
 
 Working directory: ${workingDirectory}
-The current year is ${new Date().getFullYear()}.`
+The current year is ${new Date().getFullYear()}.${buildGoalGuidance(opts.activeGoal)}`
+}
+
+function buildGoalGuidance(goal?: ActiveGoalPromptInfo): string {
+  if (!goal) return ``
+  const budgetLine =
+    goal.tokenBudget === null
+      ? `unlimited`
+      : `${goal.tokensUsed} / ${goal.tokenBudget} tokens used`
+  return `
+
+# Active goal
+- Objective: ${goal.objective}
+- Token budget: ${budgetLine}
+
+The user set this goal with /goal set. Work autonomously toward it: do NOT ask the user clarifying questions or pause for confirmation — make reasonable assumptions and proceed. When you believe the goal is met, call the \`mark_goal_complete\` tool. If you hit a blocker that genuinely requires the user (e.g. credentials, a destructive action), call \`mark_goal_complete\` with a summary explaining what's needed. The runtime will abort this run automatically if you exceed the token budget.`
 }
 
 function getToolName(tool: unknown): string | null {
@@ -384,6 +413,12 @@ export function createHortonTools(
     createUnobservePgSyncTool(ctx),
     createSetTitleTool(ctx),
     createSendTool(ctx.send, { selfEntityUrl: ctx.entityUrl }),
+    // Tools are rebuilt per wake, so only offer the completion signal when
+    // there is actually an active goal to complete — without one the tool
+    // could only ever answer "No active goal to mark complete."
+    ...(ctx.getGoal()?.status === `active`
+      ? [createMarkGoalCompleteTool(ctx)]
+      : []),
     ...(opts.docsSearchTool ? [opts.docsSearchTool] : []),
   ]
 }
@@ -515,6 +550,79 @@ async function readAgentsMd(sandbox: Sandbox): Promise<string | null> {
   }
 }
 
+function extractWakeText(wake: WakeEvent): string | null {
+  if (wake.type !== `inbox`) return null
+  const payload = wake.payload
+  if (typeof payload === `string`) return payload
+  if (payload && typeof payload === `object`) {
+    const record = payload as { text?: unknown; source?: unknown }
+    if (typeof record.text === `string`) return record.text
+    // Composer-structured messages (WireComposerInputPayload) carry the
+    // raw typed text in `source` alongside the parsed `nodes`. The /goal
+    // grammar is text-based, so the raw source is what we dispatch on.
+    if (typeof record.source === `string`) return record.source
+  }
+  return null
+}
+
+async function tryHandleSlashCommand(
+  ctx: HandlerContext,
+  wake: WakeEvent
+): Promise<boolean> {
+  const text = extractWakeText(wake)
+  if (text === null) return false
+  if (isGoalCommandText(text)) {
+    const command = parseGoalCommand(text)
+    const result = dispatchGoalCommand(ctx, command)
+    if (result.message) {
+      serverLog.info(`[horton ${ctx.entityUrl}] ${result.message}`)
+      // Surface the response in chat so the user gets visible feedback
+      // for every slash command, not just the ones that change the banner.
+      writeSlashCommandReply(ctx, result.message)
+    }
+    // /goal set kicks off the agent in a fresh wake so it starts working
+    // immediately. Token-budget enforcement (in assistantHandler) handles
+    // the stop condition; no iterative continuation is needed.
+    if (command.kind === `set`) {
+      await kickoffGoalRun(ctx)
+    }
+    return result.handled
+  }
+  return false
+}
+
+const GOAL_KICKOFF_TEXT = `Start working toward the active goal now. Call \`mark_goal_complete\` when you believe it is done.`
+
+async function kickoffGoalRun(ctx: HandlerContext): Promise<void> {
+  const goal = ctx.getGoal()
+  if (!goal || goal.status !== `active`) return
+  try {
+    await ctx.send(
+      ctx.entityUrl,
+      { kind: `goal_kickoff`, text: GOAL_KICKOFF_TEXT },
+      { type: `inbox` }
+    )
+  } catch (err) {
+    serverLog.warn(
+      `[horton ${ctx.entityUrl}] failed to enqueue goal kickoff: ${
+        err instanceof Error ? err.message : String(err)
+      }`
+    )
+  }
+}
+
+function writeSlashCommandReply(ctx: HandlerContext, text: string): void {
+  try {
+    ctx.replyText(text)
+  } catch (err) {
+    serverLog.warn(
+      `[horton ${ctx.entityUrl}] failed to render slash command reply: ${
+        err instanceof Error ? err.message : String(err)
+      }`
+    )
+  }
+}
+
 function createAssistantHandler(options: {
   streamFn?: StreamFn
   docsSupport: HortonDocsSupport | null
@@ -540,6 +648,10 @@ function createAssistantHandler(options: {
     ctx: HandlerContext,
     wake: WakeEvent
   ): Promise<void> {
+    // Slash commands handled directly by the runtime (no LLM turn). These
+    // run as soon as the wake fires, mutate manifest state, and return.
+    if (await tryHandleSlashCommand(ctx, wake)) return
+
     const loadedSkills = await skillLoader.load(ctx)
 
     const readSet = new Set<string>()
@@ -567,8 +679,8 @@ function createAssistantHandler(options: {
       ...loadedSkills.tools,
       ...mcp.tools(),
     ]
-    const hasEventSourceTools = tools.some(
-      (tool) => getToolName(tool) === `list_event_sources`
+    const hasWebhookSourceTools = tools.some(
+      (tool) => getToolName(tool) === `list_webhook_sources`
     )
     const hasScheduleTools = tools.some(
       (tool) => getToolName(tool) === `upsert_cron_schedule`
@@ -697,6 +809,49 @@ function createAssistantHandler(options: {
       })
     }
 
+    // Only an *active* goal drives any goal behavior. A goal that is
+    // `complete` or `budget_limited` stays in the manifest (for the banner
+    // and /goal show) but must not accumulate usage from unrelated chat
+    // turns, trip the budget on them, or appear in the prompt.
+    const goal = ctx.getGoal()
+    const enforcedGoal = goal && goal.status === `active` ? goal : undefined
+    const activeGoalPromptInfo = enforcedGoal
+      ? {
+          objective: enforcedGoal.objective,
+          tokenBudget: enforcedGoal.tokenBudget,
+          tokensUsed: enforcedGoal.tokensUsed,
+        }
+      : undefined
+
+    // Mid-run budget enforcement + live banner updates: after each step we
+    // (a) advance our in-memory accumulator, (b) write it to the goal entry
+    // so the UI banner reflects it optimistically, and (c) abort the run if
+    // the budget is exhausted.
+    const budgetAbort = new AbortController()
+    let runTokensUsed = enforcedGoal?.tokensUsed ?? 0
+    let budgetTripped = false
+    const onStepEnd = enforcedGoal
+      ? (stats: { input: number; uncachedInput: number; output: number }) => {
+          if (budgetTripped) return
+          // Budget on new work only: uncached input + output. The display
+          // sum (`stats.input`) includes prompt-cache reads which re-count
+          // the entire conversation on every warm step and would exhaust
+          // any budget in a handful of steps.
+          runTokensUsed += stats.uncachedInput + stats.output
+          ctx.updateGoalUsage(runTokensUsed)
+          if (
+            enforcedGoal.tokenBudget !== null &&
+            runTokensUsed >= enforcedGoal.tokenBudget
+          ) {
+            budgetTripped = true
+            serverLog.info(
+              `[horton ${ctx.entityUrl}] goal budget exhausted (${runTokensUsed} tokens) — aborting run`
+            )
+            budgetAbort.abort()
+          }
+        }
+      : undefined
+
     ctx.useAgent({
       systemPrompt: buildHortonSystemPrompt(sandboxCwd, {
         hasDocsSupport: Boolean(docsSupport),
@@ -704,8 +859,9 @@ function createAssistantHandler(options: {
         docsUrl,
         modelProvider: modelConfig.provider,
         modelId: String(modelConfig.model),
-        hasEventSourceTools,
+        hasWebhookSourceTools,
         hasScheduleTools,
+        ...(activeGoalPromptInfo && { activeGoal: activeGoalPromptInfo }),
       }),
       ...modelConfig,
       // mcp.tools() inserts sentinel objects that the runtime's
@@ -713,8 +869,41 @@ function createAssistantHandler(options: {
       // useAgent doesn't model this, so cast at the boundary.
       tools: tools as AgentTool[],
       ...(streamFn && { streamFn }),
+      ...(onStepEnd && { onStepEnd }),
     })
-    await ctx.agent.run()
+    try {
+      await ctx.agent.run(undefined, budgetAbort.signal)
+    } catch (err) {
+      if (!budgetTripped) throw err
+      // Swallow the AbortError when WE aborted for budget — the goal status
+      // flip below is the user-visible outcome.
+      serverLog.info(
+        `[horton ${ctx.entityUrl}] agent.run aborted by budget enforcement`
+      )
+    }
+    // Persist accurate token usage from the in-memory accumulator.
+    // The steps collection round-trips back into the local DB
+    // asynchronously, so summing it post-run can undercount.
+    if (enforcedGoal) {
+      ctx.updateGoalUsage(
+        runTokensUsed,
+        budgetTripped ? { status: `budget_limited` } : undefined
+      )
+    }
+    if (budgetTripped && enforcedGoal && enforcedGoal.tokenBudget !== null) {
+      const budget = enforcedGoal.tokenBudget
+      const suggestedNext = Math.max(budget * 2, budget + 10_000)
+      writeSlashCommandReply(
+        ctx,
+        `⚠️ Stopped — goal hit the token budget (${formatTokenCount(
+          runTokensUsed
+        )} / ${formatTokenCount(
+          budget
+        )} tokens used). Raise the budget with \`/goal set "..." --tokens ${formatTokenCount(
+          suggestedNext
+        )}\`, or call \`/goal complete\` to finalize.`
+      )
+    }
     await titlePromise
   }
 }
@@ -804,7 +993,13 @@ export function registerHorton(
         permission: `manage`,
       },
     ],
-    slashCommands: buildSkillSlashCommands(skillsRegistry),
+    state: {
+      comments: commentsCollection,
+    },
+    slashCommands: [
+      GOAL_SLASH_COMMAND,
+      ...buildSkillSlashCommands(skillsRegistry),
+    ],
     handler: assistantHandler,
   })
 

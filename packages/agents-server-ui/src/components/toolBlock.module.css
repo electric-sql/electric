@@ -92,6 +92,59 @@
   background: var(--ds-accent-a2);
 }
 
+.headerWithActions {
+  padding: 0;
+  gap: 0;
+}
+
+.headerContentToggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-self: stretch;
+  padding: 7px 0 7px 10px;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  outline: none;
+  transition: background 0.08s ease;
+}
+
+.headerContentToggle:hover,
+.headerChevronButton:hover {
+  background: var(--ds-bg-hover);
+}
+
+.headerContentToggle:focus-visible,
+.headerChevronButton:focus-visible {
+  background: var(--ds-accent-a2);
+}
+
+.headerChevronButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  align-self: stretch;
+  flex-shrink: 0;
+  padding: 0;
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  outline: none;
+  transition: background 0.08s ease;
+}
+
+.headerChevronButton .toggleArrow {
+  margin-left: 0;
+}
+
 /* Chevron lives in a fixed-size 16px slot so the row height doesn't
    jiggle when expand/collapse swaps glyphs. */
 .toggleArrow {
@@ -128,6 +181,11 @@
 
 .headerActions + .toggleArrow {
   margin-left: 0;
+}
+
+.headerWithActions .headerActions {
+  margin-left: 0;
+  margin-right: 4px;
 }
 
 /* Tool name is the only mono token in the row — it's an identifier,

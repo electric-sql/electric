@@ -3,10 +3,10 @@ import { createTransaction } from '@durable-streams/state/db'
 import { createAssistantMessageEventStream } from '@mariozechner/pi-ai'
 import { getCronSourceRef } from '../src/cron-utils'
 import {
-  buildEventSourceManifestEntry,
-  resolveEventSourceSubscription,
-  type EventSourceContract,
-} from '../src/event-sources'
+  buildWebhookSourceManifestEntry,
+  resolveWebhookSourceSubscription,
+  type WebhookSourceContract,
+} from '../src/webhook-sources'
 import { manifestSourceKey } from '../src/manifest-helpers'
 import { db, pgSync } from '../src/observation-sources'
 import { processWake } from '../src/process-wake'
@@ -171,6 +171,12 @@ vi.mock(`../src/entity-stream-db`, () => ({
       const textDeltas = createLocalOnlyTestCollection<Record<string, unknown>>(
         []
       )
+      const reasoning = createLocalOnlyTestCollection<Record<string, unknown>>(
+        []
+      )
+      const reasoningDeltas = createLocalOnlyTestCollection<
+        Record<string, unknown>
+      >([])
       const toolCalls = createLocalOnlyTestCollection<Record<string, unknown>>(
         []
       )
@@ -311,6 +317,8 @@ vi.mock(`../src/entity-stream-db`, () => ({
           runs,
           texts,
           textDeltas,
+          reasoning,
+          reasoningDeltas,
           toolCalls,
           steps,
           manifests,
@@ -397,8 +405,8 @@ const sharedFindingsSchema = {
   },
 }
 
-const githubEventSourceContract: EventSourceContract = {
-  sourceKey: `github-repo`,
+const githubWebhookSourceContract: WebhookSourceContract = {
+  webhookKey: `github-repo`,
   sourceType: `webhook`,
   endpointKey: `github-repo`,
   status: `active`,
@@ -1788,21 +1796,21 @@ describe(`processWake`, () => {
     )
   })
 
-  it(`hydrates dynamic event source wake rows into the agent trigger message`, async () => {
+  it(`hydrates dynamic webhook source wake rows into the agent trigger message`, async () => {
     const sourceUrl = `/_webhooks/github-repo/prs/42`
-    const resolved = resolveEventSourceSubscription({
-      contract: githubEventSourceContract,
+    const resolved = resolveWebhookSourceSubscription({
+      contract: githubWebhookSourceContract,
       entityUrl: `http://localhost:3000/test-agent/agent-1`,
       request: {
         id: `watch-pr-42`,
-        sourceKey: `github-repo`,
+        webhookKey: `github-repo`,
         bucketKey: `pull_request`,
         params: { number: 42 },
         reason: `Watch PR comments`,
       },
       createdAt: `2026-05-23T00:00:00.000Z`,
     })
-    mockInitialManifests.current = [buildEventSourceManifestEntry(resolved)]
+    mockInitialManifests.current = [buildWebhookSourceManifestEntry(resolved)]
     mockSourceEvents.current = [
       {
         key: `event-42`,
@@ -1885,7 +1893,7 @@ describe(`processWake`, () => {
       })
     )
     expect(JSON.parse(receivedMessage)).toMatchObject({
-      type: `event_source_wake`,
+      type: `webhook_source_wake`,
       source: sourceUrl,
       subscription: {
         id: `watch-pr-42`,

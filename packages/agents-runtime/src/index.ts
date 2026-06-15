@@ -63,6 +63,10 @@ export type {
   ContextInserted,
   ContextRemoved,
   ContextEntryAttrs,
+  GoalEntry,
+  GoalInput,
+  GoalStatus,
+  ManifestGoalEntry,
   CollectionInsert,
   CollectionKey,
   CollectionRow,
@@ -259,30 +263,30 @@ export type {
   SendEntityMessageOptions,
 } from './runtime-server-client'
 export {
-  buildEventSourceManifestEntry,
-  buildHydratedEventSourceWake,
-  buildEventSourceSubscriptionId,
-  defaultEventSourceSubscriptionLifetime,
-  eventSourceWakeInfoFromManifests,
-  eventSourceSubscriptionManifestKey,
-  renderEventSourceBucketPath,
-  resolveEventSourceSubscription,
-} from './event-sources'
+  buildWebhookSourceManifestEntry,
+  buildHydratedWebhookSourceWake,
+  buildWebhookSourceSubscriptionId,
+  defaultWebhookSourceSubscriptionLifetime,
+  webhookSourceWakeInfoFromManifests,
+  webhookSourceSubscriptionManifestKey,
+  renderWebhookSourceBucketPath,
+  resolveWebhookSourceSubscription,
+} from './webhook-sources'
 export type {
-  EventSourceBucket,
-  EventSourceContract,
-  EventSourceFilter,
-  EventSourceFilterCondition,
-  EventSourceStatus,
-  EventSourceSubscription,
-  EventSourceSubscriptionInput,
-  EventSourceType,
-  EventSourceWakeChange,
-  EventSourceWakeInfo,
-  HydratedEventSourceWake,
-  ResolvedEventSourceSubscription,
+  WebhookSourceBucket,
+  WebhookSourceContract,
+  WebhookSourceFilter,
+  WebhookSourceFilterCondition,
+  WebhookSourceStatus,
+  WebhookSourceSubscription,
+  WebhookSourceSubscriptionInput,
+  WebhookSourceType,
+  WebhookSourceWakeChange,
+  WebhookSourceWakeInfo,
+  HydratedWebhookSourceWake,
+  ResolvedWebhookSourceSubscription,
   SubscriptionLifetime,
-} from './event-sources'
+} from './webhook-sources'
 export { createAgentsClient } from './agents-client'
 export type { AgentsClient, AgentsClientConfig } from './agents-client'
 
@@ -345,8 +349,17 @@ export type {
 
 export { DEFAULT_STATE_SCHEMAS } from './default-state-schemas'
 export { createContextEntriesApi } from './context-entries'
+export { createGoalApi, GOAL_MANIFEST_KEY } from './goal-api'
+export type { GoalApi } from './goal-api'
+export {
+  GOAL_SLASH_COMMAND,
+  dispatchGoalCommand,
+  isGoalCommandText,
+  parseGoalCommand,
+} from './goal-command'
+export type { GoalCommand, GoalDispatchResult } from './goal-command'
 export { assembleContext } from './context-assembly'
-export { approxTokens, sliceChars } from './token-budget'
+export { approxTokens, formatTokenCount, sliceChars } from './token-budget'
 export { createContextTools } from './tools/context-tools'
 export {
   completeWithLowCostModel,
@@ -405,3 +418,14 @@ export {
   STREAM_TOKEN_PREFIX,
 } from './event-pointer'
 export type { EventPointer } from './event-pointer'
+
+export {
+  COMMENTS_CONTRACT,
+  commentSchema,
+  commentsCollection,
+} from './comments-collection'
+export type {
+  CommentTargetValue,
+  CommentSnapshotValue,
+  CommentValue,
+} from './comments-collection'

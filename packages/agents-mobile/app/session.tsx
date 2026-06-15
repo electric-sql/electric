@@ -122,6 +122,9 @@ function SessionRouteInner({
       params: { entityUrl: target, view: `chat` },
     })
   }
+  const openShare = (): void => {
+    router.push({ pathname: `/session-share`, params: { entityUrl } })
+  }
   const setView = (next: EmbedViewId): void => {
     router.setParams({ view: next })
   }
@@ -176,12 +179,14 @@ function SessionRouteInner({
           onComposerHeightChange={setChatComposerHeight}
           onSendMessage={() => setChatLogScrollSignal(Date.now())}
           onInlineQueuedMessagesChange={setInlineQueuedMessages}
+          onShare={openShare}
         />
       ) : (
         <StateInspectorSessionScreen
           entityUrl={entityUrl}
           onBack={goBack}
           onSetView={setView}
+          onShare={openShare}
         />
       )}
     </View>

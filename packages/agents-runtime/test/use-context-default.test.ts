@@ -76,7 +76,7 @@ describe(`zero-config default path`, () => {
     )
   })
 
-  it(`uses hydrated event source wake input even when context ends with a wake user message`, async () => {
+  it(`uses hydrated webhook source wake input even when context ends with a wake user message`, async () => {
     const source = `/_webhooks/github-repo/prs/54`
     const wakePayload = {
       source,
@@ -106,12 +106,12 @@ describe(`zero-config default path`, () => {
         eventCount: 1,
         payload: wakePayload,
       },
-      hydratedEventSourceWake: {
-        type: `event_source_wake`,
+      hydratedWebhookSourceWake: {
+        type: `webhook_source_wake`,
         source,
         sourceType: `webhook`,
         endpointKey: `github-repo`,
-        sourceKey: `github-repo`,
+        webhookKey: `github-repo`,
         subscription: {
           id: `watch-pr-54`,
           bucketKey: `pull_request`,
@@ -168,7 +168,7 @@ describe(`zero-config default path`, () => {
       content: expect.stringContaining(`webhook_event`),
     })
     expect(JSON.parse(capturedInputs[0] ?? ``)).toMatchObject({
-      type: `event_source_wake`,
+      type: `webhook_source_wake`,
       source,
       events: [
         {

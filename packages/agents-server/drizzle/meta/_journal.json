@@ -113,6 +113,13 @@
       "when": 1779728400000,
       "tag": "0015_pg_sync_bridges",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1781200000000,
+      "tag": "0016_entity_type_externally_writable_collections",
+      "breakpoints": true
     }
   ]
 }

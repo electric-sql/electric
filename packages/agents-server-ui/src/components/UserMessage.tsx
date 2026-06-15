@@ -4,10 +4,11 @@ import {
   Download,
   File as FileIcon,
   Image as ImageIcon,
+  Reply,
   Square,
 } from 'lucide-react'
 import type { EntityTimelineSection } from '@electric-ax/agents-runtime/client'
-import { Icon, Stack, Text } from '../ui'
+import { Icon, IconButton, Stack, Text, Tooltip } from '../ui'
 import { downloadAttachment, formatAttachmentSize } from '../lib/attachments'
 import {
   streamdownComponents,
@@ -19,7 +20,7 @@ import {
 } from './AttachmentImagePreviewDialog'
 import { TimeText } from './TimeText'
 import styles from './UserMessage.module.css'
-import { principalKeyFromInput } from '../lib/principals'
+import { formatSender } from '../lib/principals'
 import type { ElectricUser } from '../lib/ElectricAgentsProvider'
 
 type UserMessageSection = Extract<
@@ -49,6 +50,7 @@ export const UserMessage = memo(function UserMessage({
   currentPrincipal,
   usersById,
   onStop,
+  onReply,
 }: {
   section: UserMessageSection
   attachments?: Array<UserMessageAttachment>
@@ -57,6 +59,7 @@ export const UserMessage = memo(function UserMessage({
   currentPrincipal?: string
   usersById?: Map<string, ElectricUser>
   onStop?: () => void
+  onReply?: () => void
 }): React.ReactElement {
   const sender = formatSender(section.from, { currentPrincipal, usersById })
 
@@ -111,6 +114,23 @@ export const UserMessage = memo(function UserMessage({
             </Text>
             <TimeText ts={section.timestamp} />
           </>
+        )}
+        {onReply && (
+          <span className={styles.metaActions}>
+            <Tooltip content="Reply" side="top">
+              <IconButton
+                size={1}
+                variant="ghost"
+                tone="neutral"
+                className={styles.metaActionButton}
+                onClick={onReply}
+                aria-label="Reply to message"
+                title="Reply"
+              >
+                <Icon icon={Reply} size={1} />
+              </IconButton>
+            </Tooltip>
+          </span>
         )}
       </Stack>
     </Stack>
@@ -219,44 +239,4 @@ function AttachmentPreview({
       <Icon icon={Download} size={1} />
     </button>
   )
-}
-
-function formatSender(
-  from: string | null | undefined,
-  options: {
-    currentPrincipal?: string
-    usersById?: Map<string, ElectricUser>
-  } = {}
-): {
-  label: string
-  title?: string
-} {
-  const key = principalKeyFromInput(from)
-  if (!key) return { label: from || `user` }
-  if (key === principalKeyFromInput(options.currentPrincipal)) {
-    return { label: `Me`, title: key }
-  }
-  const colon = key.indexOf(`:`)
-  if (colon <= 0) return { label: key, title: key }
-  const kind = key.slice(0, colon)
-  const id = key.slice(colon + 1)
-  if (kind === `user`) {
-    const user = options.usersById?.get(id)
-    const label = userDisplayName(user)
-    if (label) return { label, title: key }
-  }
-  return {
-    label: `${kind}:${formatPrincipalId(id)}`,
-    title: key,
-  }
-}
-
-function formatPrincipalId(id: string): string {
-  if (id.length <= 18) return id
-  return `${id.slice(0, 8)}…${id.slice(-6)}`
-}
-
-function userDisplayName(user: ElectricUser | undefined): string | null {
-  if (!user) return null
-  return user.display_name || user.email || null
 }

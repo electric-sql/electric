@@ -17,6 +17,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { WebhookSignatureVerifierConfig } from './webhook-signature'
 import type {
   AgentTool,
+  AnyEntityDefinition,
   EntityStreamDBWithActions,
   HeadersProvider,
   ProcessWakeConfig,
@@ -26,10 +27,10 @@ import type {
 import type { ChangeEvent } from '@durable-streams/state'
 import type { DispatchPolicy } from './runtime-server-client'
 import type {
-  EventSourceContract,
-  EventSourceSubscription,
-  EventSourceSubscriptionInput,
-} from './event-sources'
+  WebhookSourceContract,
+  WebhookSourceSubscription,
+  WebhookSourceSubscriptionInput,
+} from './webhook-sources'
 
 export interface RuntimeRouterConfig {
   /** Base URL of the durable streams server (e.g. http://localhost:4200) */
@@ -91,11 +92,11 @@ export interface RuntimeRouterConfig {
       messageType?: string
     }) => Promise<{ txid: string }>
     deleteSchedule: (opts: { id: string }) => Promise<{ txid: string }>
-    listEventSources: () => Promise<Array<EventSourceContract>>
-    subscribeToEventSource: (
-      opts: EventSourceSubscriptionInput
-    ) => Promise<{ txid: string; subscription: EventSourceSubscription }>
-    unsubscribeFromEventSource: (opts: {
+    listWebhookSources: () => Promise<Array<WebhookSourceContract>>
+    subscribeToWebhookSource: (
+      opts: WebhookSourceSubscriptionInput
+    ) => Promise<{ txid: string; subscription: WebhookSourceSubscription }>
+    unsubscribeFromWebhookSource: (opts: {
       id: string
     }) => Promise<{ txid: string }>
   }) => Array<AgentTool> | Promise<Array<AgentTool>>
@@ -206,6 +207,120 @@ export interface RuntimeDebugState {
 
 export type RuntimeHandlerConfig = RuntimeRouterConfig
 export type RuntimeHandlerResult = RuntimeHandler
+
+const JSON_SCHEMA_KEYWORDS = [
+  `type`,
+  `properties`,
+  `items`,
+  `enum`,
+  `oneOf`,
+  `anyOf`,
+  `allOf`,
+  `additionalProperties`,
+] as const
+
+function stripSchemaKeyword(
+  jsonSchema: Record<string, unknown>
+): Record<string, unknown> {
+  const { $schema: _schema, ...rest } = jsonSchema
+  return rest
+}
+
+function toJsonSchema(schema: unknown): Record<string, unknown> {
+  if (!schema || typeof schema !== `object` || Array.isArray(schema)) {
+    return {}
+  }
+
+  const standardSchema = schema as {
+    [`~standard`]?: {
+      jsonSchema?: {
+        input?: () => unknown
+      }
+    }
+    toJSONSchema?: () => Record<string, unknown>
+  }
+
+  const standardJsonSchema = standardSchema[`~standard`]?.jsonSchema?.input?.()
+  if (standardJsonSchema) {
+    return stripSchemaKeyword(standardJsonSchema as Record<string, unknown>)
+  }
+
+  if (typeof standardSchema.toJSONSchema === `function`) {
+    return stripSchemaKeyword(standardSchema.toJSONSchema())
+  }
+
+  if (`~standard` in standardSchema) {
+    return {}
+  }
+
+  const jsonSchemaLike = schema as Record<string, unknown>
+  if (JSON_SCHEMA_KEYWORDS.some((keyword) => keyword in jsonSchemaLike)) {
+    return stripSchemaKeyword(jsonSchemaLike)
+  }
+
+  return zodToJsonSchema(schema as any, { target: `jsonSchema7` })
+}
+
+function mapSchemas(
+  schemas: Record<string, unknown>
+): Record<string, Record<string, unknown>> {
+  return Object.fromEntries(
+    Object.entries(schemas).map(([k, v]) => [k, toJsonSchema(v)])
+  )
+}
+
+export function buildEntityTypeRegistrationBody(
+  name: string,
+  definition: AnyEntityDefinition
+): Record<string, unknown> {
+  const stateEntries = definition.state ? Object.entries(definition.state) : []
+
+  const stateSchemas = Object.fromEntries(
+    stateEntries.map(([collectionName, def]) => [
+      def.type ?? `state:${collectionName}`,
+      toJsonSchema(def.schema ?? passthrough()),
+    ])
+  )
+
+  const externallyWritableCollections: Record<
+    string,
+    { type: string; contract?: string; operations?: Array<string> }
+  > = {}
+  for (const [collectionName, def] of stateEntries) {
+    if (!def.externallyWritable) continue
+    externallyWritableCollections[collectionName] = {
+      type: def.type ?? `state:${collectionName}`,
+      ...(def.contract && { contract: def.contract }),
+      ...(def.operations && { operations: def.operations }),
+    }
+  }
+
+  const body: Record<string, unknown> = {
+    name,
+    description: definition.description ?? `${name} entity`,
+    ...(definition.creationSchema && {
+      creation_schema: toJsonSchema(definition.creationSchema),
+    }),
+    ...(definition.inboxSchemas && {
+      inbox_schemas: mapSchemas(definition.inboxSchemas),
+    }),
+    ...(definition.slashCommands && {
+      slash_commands: definition.slashCommands,
+    }),
+    state_schemas: {
+      ...DEFAULT_STATE_SCHEMAS,
+      ...stateSchemas,
+      ...(definition.stateSchemas ? mapSchemas(definition.stateSchemas) : {}),
+    },
+    ...(Object.keys(externallyWritableCollections).length > 0 && {
+      externally_writable_collections: externallyWritableCollections,
+    }),
+    ...(definition.permissionGrants && {
+      permission_grants: definition.permissionGrants,
+    }),
+  }
+  return body
+}
 
 export function createRuntimeRouter(
   config: RuntimeRouterConfig
@@ -413,60 +528,6 @@ export function createRuntimeRouter(
     return handleWebhookRequest(request)
   }
 
-  const stripSchemaKeyword = (
-    jsonSchema: Record<string, unknown>
-  ): Record<string, unknown> => {
-    const { $schema: _schema, ...rest } = jsonSchema
-    return rest
-  }
-
-  const JSON_SCHEMA_KEYWORDS = [
-    `type`,
-    `properties`,
-    `items`,
-    `enum`,
-    `oneOf`,
-    `anyOf`,
-    `allOf`,
-    `additionalProperties`,
-  ] as const
-
-  const toJsonSchema = (schema: unknown): Record<string, unknown> => {
-    if (!schema || typeof schema !== `object` || Array.isArray(schema)) {
-      return {}
-    }
-
-    const standardSchema = schema as {
-      [`~standard`]?: {
-        jsonSchema?: {
-          input?: () => unknown
-        }
-      }
-      toJSONSchema?: () => Record<string, unknown>
-    }
-
-    const standardJsonSchema =
-      standardSchema[`~standard`]?.jsonSchema?.input?.()
-    if (standardJsonSchema) {
-      return stripSchemaKeyword(standardJsonSchema as Record<string, unknown>)
-    }
-
-    if (typeof standardSchema.toJSONSchema === `function`) {
-      return stripSchemaKeyword(standardSchema.toJSONSchema())
-    }
-
-    if (`~standard` in standardSchema) {
-      return {}
-    }
-
-    const jsonSchemaLike = schema as Record<string, unknown>
-    if (JSON_SCHEMA_KEYWORDS.some((keyword) => keyword in jsonSchemaLike)) {
-      return stripSchemaKeyword(jsonSchemaLike)
-    }
-
-    return zodToJsonSchema(schema as any, { target: `jsonSchema7` })
-  }
-
   const registerTypes = async (): Promise<void> => {
     const types = getRegisteredTypes()
     const registered: Array<string> = []
@@ -474,49 +535,11 @@ export function createRuntimeRouter(
     const totalStart = performance.now()
     const effectiveConcurrency = Math.max(1, registrationConcurrency ?? 8)
 
-    const mapSchemas = (
-      schemas: Record<string, unknown>
-    ): Record<string, Record<string, unknown>> =>
-      Object.fromEntries(
-        Object.entries(schemas).map(([k, v]) => [k, toJsonSchema(v)])
-      )
-
     await forEachWithConcurrency(types, effectiveConcurrency, async (entry) => {
       const registrationStart = performance.now()
       const { name, definition } = entry
 
-      const stateSchemas = definition.state
-        ? Object.fromEntries(
-            Object.entries(definition.state).map(([collectionName, def]) => [
-              def.type ?? `state:${collectionName}`,
-              toJsonSchema(def.schema ?? passthrough()),
-            ])
-          )
-        : {}
-
-      const body: Record<string, unknown> = {
-        name,
-        description: definition.description ?? `${name} entity`,
-        ...(definition.creationSchema && {
-          creation_schema: toJsonSchema(definition.creationSchema),
-        }),
-        ...(definition.inboxSchemas && {
-          inbox_schemas: mapSchemas(definition.inboxSchemas),
-        }),
-        ...(definition.slashCommands && {
-          slash_commands: definition.slashCommands,
-        }),
-        state_schemas: {
-          ...DEFAULT_STATE_SCHEMAS,
-          ...stateSchemas,
-          ...(definition.stateSchemas
-            ? mapSchemas(definition.stateSchemas)
-            : {}),
-        },
-        ...(definition.permissionGrants && {
-          permission_grants: definition.permissionGrants,
-        }),
-      }
+      const body = buildEntityTypeRegistrationBody(name, definition)
 
       const defaultDispatchPolicy = defaultDispatchPolicyForType?.(name)
 

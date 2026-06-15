@@ -569,6 +569,8 @@ function manifestKindLabel(manifest: Manifest): string {
       return `Context`
     case `schedule`:
       return manifest.scheduleType === `cron` ? `Cron schedule` : `Future send`
+    case `goal`:
+      return `Goal`
   }
 }
 
@@ -706,6 +708,11 @@ function createManifestEntry(
         action: { kind: `inspect` },
         entity: null,
       }
+
+    // Goal entries are surfaced via the `GoalBanner` above the timeline,
+    // not the manifest drawer.
+    case `goal`:
+      return null
   }
 }
 

@@ -18,11 +18,11 @@ import { appendPathToUrl } from './url'
 import { manifestChildKey } from './manifest-helpers'
 import { ModelProviderError } from './model-provider-error'
 import {
-  buildHydratedEventSourceWake,
-  eventSourceWakeInfoFromManifests,
-} from './event-sources'
+  buildHydratedWebhookSourceWake,
+  webhookSourceWakeInfoFromManifests,
+} from './webhook-sources'
 import { webhookObservationCollections } from './observation-sources'
-import type { HydratedEventSourceWake } from './event-sources'
+import type { HydratedWebhookSourceWake } from './webhook-sources'
 import { SandboxError } from './sandbox/types'
 import type { Sandbox } from './sandbox/types'
 import type {
@@ -170,6 +170,14 @@ function withRegisteredManifestEntry(
       } as unknown as ReturnType<ObservationSource[`toManifestEntry`]>
     },
   }
+}
+
+async function latestNewRunKey(
+  db: EntityStreamDBWithActions,
+  existingRunKeys: ReadonlySet<string>
+): Promise<string | undefined> {
+  const runs = await queryOnce((q) => q.from({ runs: db.collections.runs }))
+  return runs.filter((run) => !existingRunKeys.has(run.key)).at(-1)?.key
 }
 
 async function resolveHeadersProvider(
@@ -1667,9 +1675,9 @@ export async function processWake(
     })
     setupCtx.restorePersistedSharedStateHandles()
 
-    const hydrateCurrentEventSourceWake =
-      async (): Promise<HydratedEventSourceWake | null> => {
-        const info = eventSourceWakeInfoFromManifests({
+    const hydrateCurrentWebhookSourceWake =
+      async (): Promise<HydratedWebhookSourceWake | null> => {
+        const info = webhookSourceWakeInfoFromManifests({
           wakeEvent: currentWakeEvent,
           manifests: db.collections.manifests.toArray,
         })
@@ -1687,10 +1695,10 @@ export async function processWake(
           )
           const rows = (sourceDb.collections.events?.toArray ??
             []) as unknown as Array<WebhookEventRow>
-          return buildHydratedEventSourceWake(info, rows)
+          return buildHydratedWebhookSourceWake(info, rows)
         } catch (error) {
           log.warn(
-            `failed to hydrate event source wake source=${info.sourceUrl}: ${error instanceof Error ? error.message : String(error)}`
+            `failed to hydrate webhook source wake source=${info.sourceUrl}: ${error instanceof Error ? error.message : String(error)}`
           )
           return null
         }
@@ -2088,14 +2096,14 @@ export async function processWake(
                 entityUrl,
                 ...opts,
               }),
-            listEventSources: () => serverClient.listEventSources(),
-            subscribeToEventSource: (opts) =>
-              serverClient.subscribeToEventSource({
+            listWebhookSources: () => serverClient.listWebhookSources(),
+            subscribeToWebhookSource: (opts) =>
+              serverClient.subscribeToWebhookSource({
                 entityUrl,
                 ...opts,
               }),
-            unsubscribeFromEventSource: (opts) =>
-              serverClient.unsubscribeFromEventSource({
+            unsubscribeFromWebhookSource: (opts) =>
+              serverClient.unsubscribeFromWebhookSource({
                 entityUrl,
                 ...opts,
               }),
@@ -2140,7 +2148,7 @@ export async function processWake(
         registerSignalHandler: (handler) => {
           activeSignalHandler = handler
         },
-        hydratedEventSourceWake: await hydrateCurrentEventSourceWake(),
+        hydratedWebhookSourceWake: await hydrateCurrentWebhookSourceWake(),
         doObserve,
         doSpawn,
         doFork,
@@ -2172,6 +2180,9 @@ export async function processWake(
       })
 
       let sleepRequested = false
+      const existingRunKeys = new Set(
+        db.collections.runs.toArray.map((run) => run.key)
+      )
 
       try {
         await wirePendingSharedStates()
@@ -2222,12 +2233,14 @@ export async function processWake(
             ? setupErr.code
             : `HANDLER_FAILED`
         log.error(`handler failed for ${entityUrl}:`, errMsg)
+        const failedRunKey = await latestNewRunKey(db, existingRunKeys)
         writeEvent(
           entityStateSchema.errors.insert({
             key: `error-${epoch}-${crypto.randomUUID()}`,
             value: {
               error_code: errCode,
               message: errMsg,
+              ...(failedRunKey ? { run_id: failedRunKey } : {}),
             } as never,
           }) as ChangeEvent
         )

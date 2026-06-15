@@ -35,7 +35,7 @@ import type { Principal } from './principal.js'
 import type { EntityBridgeCoordinator } from './entity-bridge-manager.js'
 import type { DurableStreamsRoutingAdapter } from './routing/durable-streams-routing-adapter.js'
 import type { OssServerContext } from './routing/oss-server-router.js'
-import type { EventSourceCatalog } from './routing/context.js'
+import type { WebhookSourceCatalog } from './routing/context.js'
 import type { PgSyncBridgeManagerOptions } from './pg-sync-bridge-manager.js'
 import type { StartedStandaloneAgentsRuntime } from './standalone-runtime.js'
 import type { DurableStreamsBearerProvider } from './stream-client.js'
@@ -71,8 +71,8 @@ export interface ElectricAgentsServerOptions {
   ) => Promise<Principal | null> | Principal | null
   authorizeRequest?: AuthorizeRequest
   allowDevPrincipalFallback?: boolean
-  eventSources?: EventSourceCatalog
-  ensureEventSourceWakeSource?: (sourceUrl: string) => Promise<void> | void
+  webhookSources?: WebhookSourceCatalog
+  ensureWebhookSourceWakeSource?: (sourceUrl: string) => Promise<void> | void
   pgSync?: PgSyncBridgeManagerOptions
   /**
    * Disabled by default. When set to a positive interval, periodically
@@ -450,13 +450,13 @@ export class ElectricAgentsServer {
       runtime: this.standaloneRuntime.runtime,
       entityBridgeManager: this.entityBridgeManager,
       pgSyncBridgeManager: this.standaloneRuntime.runtime.pgSyncBridgeManager,
-      ...(this.options.eventSources
-        ? { eventSources: this.options.eventSources }
+      ...(this.options.webhookSources
+        ? { webhookSources: this.options.webhookSources }
         : {}),
-      ...(this.options.ensureEventSourceWakeSource
+      ...(this.options.ensureWebhookSourceWakeSource
         ? {
-            ensureEventSourceWakeSource:
-              this.options.ensureEventSourceWakeSource,
+            ensureWebhookSourceWakeSource:
+              this.options.ensureWebhookSourceWakeSource,
           }
         : {}),
       ...(this.options.authorizeRequest

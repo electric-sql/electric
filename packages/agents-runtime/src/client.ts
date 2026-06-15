@@ -10,6 +10,7 @@ export {
   getEntityState,
   normalizeEntityTimelineData,
   normalizeTimelineEntities,
+  TIMELINE_ORDER_FALLBACK,
 } from './entity-timeline'
 export {
   canonicalPgSyncOptions,
@@ -40,6 +41,12 @@ export {
   createSlashCommandTokenRegex,
   SLASH_COMMAND_TRIGGER_REGEX,
 } from './composer-input'
+// The /goal text grammar — pure parsing, shared with the UI so composer
+// behavior (e.g. which subcommands interrupt a running agent) can't
+// drift from the runtime dispatcher.
+export { isGoalCommandText, parseGoalCommand } from './goal-command'
+export { formatTokenCount } from './token-budget'
+export type { GoalCommand } from './goal-command'
 
 export type {
   EntityStreamDB,
@@ -58,8 +65,10 @@ export type {
   AttachmentStatus,
   AttachmentSubject,
   AttachmentSubjectType,
+  GoalStatus,
   Manifest,
   ManifestAttachmentEntry,
+  ManifestGoalEntry,
 } from './entity-schema'
 export type {
   AttachmentCreateInput,
@@ -82,6 +91,7 @@ export type {
 export type {
   EntityTimelineContentItem,
   EntityTimelineData,
+  EntityTimelineCustomSource,
   EntityTimelineInboxMode,
   EntityTimelineQueryOptions,
   EntityTimelineQueryRow,
@@ -96,4 +106,9 @@ export type {
   IncludesInboxMessage,
   IncludesRun,
 } from './entity-timeline'
+export { COMMENTS_CONTRACT, commentsCollection } from './comments-collection'
+export type {
+  CommentSnapshotValue as CommentSnapshot,
+  CommentTargetValue as CommentTarget,
+} from './comments-collection'
 export type { EntityTimelineEntry } from './use-chat'

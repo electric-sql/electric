@@ -6,6 +6,7 @@ import { appendPathToUrl } from '@electric-ax/agents-runtime/client'
 import type { EventPointer } from '@electric-ax/agents-runtime'
 import type { ReactNode } from 'react'
 import { serverFetch } from './auth-fetch'
+import { registerWritableCollectionsLookup } from './comments-capability'
 import { entityApiUrl, entitySpawnApiUrl } from './entity-api'
 import { showToast } from './toast'
 
@@ -104,6 +105,12 @@ const entityTypeSchema = z.object({
     .nullable()
     .optional(),
   serve_endpoint: z.string().nullable(),
+  externally_writable_collections: z
+    .record(
+      z.object({ type: z.string(), contract: z.string().optional() }).partial()
+    )
+    .nullable()
+    .optional(),
   created_at: z.string(),
   updated_at: z.string(),
 })
@@ -837,6 +844,20 @@ export function ElectricAgentsProvider({
     void preloadAppCollections(baseUrl).catch((err) => {
       console.error(`Failed to preload agents app collections`, err)
     })
+  }, [baseUrl])
+
+  // Expose a synchronous type → writable-collections lookup for non-React
+  // gates (the view registry's `isAvailable`).
+  useEffect(() => {
+    if (!baseUrl) {
+      registerWritableCollectionsLookup(null)
+      return
+    }
+    const { entityTypes } = getOrCreateAppCollections(baseUrl)
+    registerWritableCollectionsLookup(
+      (typeName) => entityTypes.get(typeName)?.externally_writable_collections
+    )
+    return () => registerWritableCollectionsLookup(null)
   }, [baseUrl])
 
   const state = useMemo<ElectricAgentsState>(() => {

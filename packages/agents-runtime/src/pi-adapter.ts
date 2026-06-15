@@ -32,6 +32,33 @@ import type {
 } from '@mariozechner/pi-ai'
 import type { LLMContentBlock, LLMMessage, LLMMessageContent } from './types'
 
+/**
+ * Split a streamed reasoning blob into `{ title, body }`.
+ *
+ * OpenAI's Responses API surfaces reasoning summaries with a bolded
+ * first line — `**Inspecting PR workflow**\n\n<body>` — which we want
+ * to drive a separate heading in the UI rather than render inline.
+ * Anthropic / DeepSeek-R1 / Moonshot K2 don't emit titles; for them
+ * the regex doesn't match and `title` stays `null`.
+ *
+ * Match is anchored to the start, requires a blank-line terminator
+ * (so partial titles mid-stream don't get prematurely promoted), and
+ * forbids `*` or newline inside the title (so we don't accidentally
+ * eat bolded emphasis later in the text).
+ */
+function parseReasoningSummary(text: string): {
+  title: string | null
+  body: string
+} {
+  const content = text.trim()
+  const match = content.match(/^\*\*([^*\n]+)\*\*(?:\r?\n\r?\n|$)/)
+  if (!match) return { title: null, body: content }
+  return {
+    title: match[1]!.trim(),
+    body: content.slice(match[0].length).trimEnd(),
+  }
+}
+
 // ============================================================================
 // Options
 // ============================================================================
@@ -46,6 +73,14 @@ export interface PiAdapterOptions {
     provider: string
   ) => Promise<string | undefined> | string | undefined
   onPayload?: SimpleStreamOptions[`onPayload`]
+  // Invoked after each step ends with the token counts reported by the
+  // provider. Used by goal-budget enforcement to abort mid-run; see
+  // OutboundBridgeHooks for the field semantics.
+  onStepEnd?: (stats: {
+    input: number
+    uncachedInput: number
+    output: number
+  }) => void
   modelTimeoutMs?: number
   modelMaxRetries?: number
 }
@@ -222,7 +257,8 @@ export function createPiAgentAdapter(
   return (config: PiAgentAdapterConfig): PiAgentHandle => {
     const bridge = createOutboundBridge(
       config.outboundIdSeed,
-      config.writeEvent
+      config.writeEvent,
+      opts.onStepEnd ? { onStepEnd: opts.onStepEnd } : undefined
     )
     const history = toAgentHistory(config.messages)
 
@@ -230,6 +266,8 @@ export function createPiAgentAdapter(
     let disposed = false
     let stepStartTime = 0
     let textStarted = false
+    let reasoningStarted = false
+    let reasoningAccum = ``
     let abortedRun = false
 
     const model = resolvePiModel({
@@ -297,6 +335,8 @@ export function createPiAgentAdapter(
               case `message_start`: {
                 stepStartTime = Date.now()
                 textStarted = false
+                reasoningStarted = false
+                reasoningAccum = ``
                 bridge.onStepStart({
                   modelProvider: model.provider,
                   modelId: model.id,
@@ -316,6 +356,42 @@ export function createPiAgentAdapter(
                   }
                   bridge.onTextDelta(assistantEvent.delta ?? ``)
                   textDeltaCount++
+                } else if (assistantEvent?.type === `thinking_start`) {
+                  // Open a reasoning row even if no delta arrives — some
+                  // providers emit an empty thinking block (e.g. when
+                  // reasoning is gated to a level the model didn't use).
+                  // We close it on `thinking_end` regardless.
+                  if (!reasoningStarted) {
+                    reasoningStarted = true
+                    reasoningAccum = ``
+                    bridge.onReasoningStart()
+                  }
+                } else if (assistantEvent?.type === `thinking_delta`) {
+                  // Defensive: providers occasionally emit the first
+                  // delta without a matching `thinking_start`. Open the
+                  // row lazily so we don't drop the chunk.
+                  if (!reasoningStarted) {
+                    reasoningStarted = true
+                    reasoningAccum = ``
+                    bridge.onReasoningStart()
+                  }
+                  const delta = assistantEvent.delta ?? ``
+                  reasoningAccum += delta
+                  bridge.onReasoningDelta(delta)
+                } else if (assistantEvent?.type === `thinking_end`) {
+                  if (reasoningStarted) {
+                    // Parse a bolded `**Title**\n\n` prefix once, here,
+                    // so the UI can drive a heading without re-parsing on
+                    // every render. Only OpenAI's Responses API emits
+                    // these today (Anthropic / DeepSeek don't); the
+                    // helper returns no title for un-titled streams.
+                    const { title } = parseReasoningSummary(reasoningAccum)
+                    bridge.onReasoningEnd(
+                      title !== null ? { summaryTitle: title } : undefined
+                    )
+                    reasoningStarted = false
+                    reasoningAccum = ``
+                  }
                 } else {
                   runtimeLog.debug(
                     logPrefix,
@@ -362,6 +438,19 @@ export function createPiAgentAdapter(
                   bridge.onTextEnd()
                   textStarted = false
                 }
+                if (reasoningStarted) {
+                  // Provider closed the message without an explicit
+                  // `thinking_end` (rare, but seen on aborts / errors).
+                  // Close the open reasoning row with whatever title we
+                  // can salvage from the accumulator so it doesn't sit
+                  // forever in `streaming` state.
+                  const { title } = parseReasoningSummary(reasoningAccum)
+                  bridge.onReasoningEnd(
+                    title !== null ? { summaryTitle: title } : undefined
+                  )
+                  reasoningStarted = false
+                  reasoningAccum = ``
+                }
 
                 const usage = msg?.usage
                 const hasToolCalls = msg?.content?.some(
@@ -379,19 +468,24 @@ export function createPiAgentAdapter(
                 // `cacheRead` (prompt-cache hits — typically the
                 // system prompt + prior history once the cache is
                 // warm) and `cacheWrite` (tokens added to the cache
-                // this turn). What the user wants in the meta row is
-                // the total prompt volume the model actually saw, so
-                // we sum every side that arrived as a number. Reading
-                // only `usage.input` undercounts massively on second+
-                // turns where most of the prompt hits the cache and
-                // `usage.input` collapses to a handful of tokens.
+                // this turn). The meta row shows the *uncached* input
+                // — `input + cacheWrite` — i.e. the new prompt work
+                // this step did. `cacheRead` is deliberately excluded:
+                // it re-counts the entire conversation on every warm
+                // turn, so including it balloons the label into a
+                // cumulative number that says nothing about this
+                // response. `cacheWrite` IS counted: cache-enabled
+                // providers report newly appended prompt tokens there
+                // (with `input` collapsing to ~0), so excluding it
+                // would surface tiny "3 input" labels instead.
                 //
                 // `inputTokens` / `outputTokens` are legacy flat
                 // aliases (kept as a fallback for non-pi-ai providers
-                // that don't split the cache columns). We deliberately
-                // do NOT coerce a missing side to `0` — doing so
-                // would be indistinguishable from a real zero-token
-                // step in the meta row, and the query-layer
+                // that don't split the cache columns); with no cache
+                // split, the whole side counts as uncached. We
+                // deliberately do NOT coerce a missing side to `0` —
+                // doing so would be indistinguishable from a real
+                // zero-token step in the meta row, and the query-layer
                 // `count(...)` aggregate would mark the side as
                 // present when it really isn't.
                 const sumPresentNumbers = (
@@ -408,11 +502,22 @@ export function createPiAgentAdapter(
                   return saw ? total : undefined
                 }
                 const usageInput =
-                  sumPresentNumbers([
-                    usage?.input,
-                    usage?.cacheRead,
-                    usage?.cacheWrite,
-                  ]) ??
+                  sumPresentNumbers([usage?.input, usage?.cacheWrite]) ??
+                  (typeof usage?.inputTokens === `number`
+                    ? usage.inputTokens
+                    : undefined)
+                // Non-cache-hit input — what goal-budget enforcement
+                // accumulates. On warm turns `cacheRead` re-counts the whole
+                // conversation every step, so budgeting on the display sum
+                // would burn a budget in a couple of steps regardless of how
+                // much *new* work happened. `cacheWrite` IS counted: on
+                // cache-enabled providers the newly appended prompt tokens
+                // are reported there (with `usage.input` collapsing to ~0),
+                // so excluding it would make the budget track output only.
+                // Legacy flat `inputTokens` has no cache split, so the whole
+                // side counts as uncached.
+                const usageInputUncached =
+                  sumPresentNumbers([usage?.input, usage?.cacheWrite]) ??
                   (typeof usage?.inputTokens === `number`
                     ? usage.inputTokens
                     : undefined)
@@ -426,6 +531,9 @@ export function createPiAgentAdapter(
                   finishReason,
                   durationMs: Date.now() - stepStartTime,
                   ...(usageInput !== undefined && { tokenInput: usageInput }),
+                  ...(usageInputUncached !== undefined && {
+                    tokenInputUncached: usageInputUncached,
+                  }),
                   ...(usageOutput !== undefined && {
                     tokenOutput: usageOutput,
                   }),

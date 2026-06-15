@@ -16,7 +16,7 @@ import type {
   WakeEvent,
   WakeSession,
 } from '../../src/types'
-import type { HydratedEventSourceWake } from '../../src/event-sources'
+import type { HydratedWebhookSourceWake } from '../../src/webhook-sources'
 import type { Sandbox } from '../../src/sandbox/types'
 
 // Minimal sandbox stub for tests that exercise HandlerContext shape but
@@ -302,7 +302,7 @@ export function createTestHandlerContext(
     db?: ReturnType<typeof buildStreamFixture>
     writeEvent?: (event: ChangeEvent) => void
     wakeEvent?: WakeEvent
-    hydratedEventSourceWake?: HydratedEventSourceWake | null
+    hydratedWebhookSourceWake?: HydratedWebhookSourceWake | null
     prepareAgentRun?: () => Promise<void>
   } = {}
 ) {
@@ -333,7 +333,7 @@ export function createTestHandlerContext(
       eventCount: 1,
       payload: `hi`,
     },
-    hydratedEventSourceWake: opts.hydratedEventSourceWake,
+    hydratedWebhookSourceWake: opts.hydratedWebhookSourceWake,
     prepareAgentRun: opts.prepareAgentRun,
     doObserve: vi.fn(),
     doSpawn: vi.fn(),

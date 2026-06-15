@@ -1,6 +1,7 @@
-import { Check, Copy, GitFork } from 'lucide-react'
+import { Check, Copy, CircleAlert, GitFork, Reply } from 'lucide-react'
 import {
   memo,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -23,12 +24,16 @@ import {
 } from '../lib/streamdownConfig'
 import { Icon, IconButton, Stack, Text, Tooltip } from '../ui'
 import { ToolCallView } from './ToolCallView'
+import { InlineEventCard } from './InlineEventCard'
 import { TimeText } from './TimeText'
 import { ThinkingIndicator } from './ThinkingIndicator'
 import { ElapsedTime } from './ElapsedTime'
+import { ReasoningBlock, type ReasoningEntry } from './ReasoningSection'
 import { TokenUsage } from './TokenUsage'
+
 import { formatElapsedDuration, toMillis } from '../lib/formatTime'
 import styles from './AgentResponse.module.css'
+import toolBlock from './toolBlock.module.css'
 import type { ForkFromHereAction } from './UserMessage'
 import type {
   EntityTimelineContentItem,
@@ -303,6 +308,42 @@ function compareLiveRunItems(
   return runItemKey(left).localeCompare(runItemKey(right))
 }
 
+/**
+ * One renderable element of a live run — either a text/tool-call item
+ * or a reasoning block — tagged with its stream order so the two
+ * streams can be interleaved at the positions they were emitted
+ * (think → write → call tool → think → write …).
+ */
+type LiveRenderEntry =
+  | {
+      kind: `item`
+      key: string
+      order: string | number
+      item: EntityTimelineRunItem
+    }
+  | {
+      kind: `reasoning`
+      key: string
+      order: string | number
+      reasoning: ReasoningEntry
+    }
+
+function compareLiveRenderEntries(
+  left: LiveRenderEntry,
+  right: LiveRenderEntry
+): number {
+  const orderCompare = compareTimelineOrderValues(left.order, right.order)
+  if (orderCompare !== 0) return orderCompare
+  if (left.kind === `item` && right.kind === `item`) {
+    return compareLiveRunItems(left.item, right.item)
+  }
+  // At equal order, reasoning precedes output — the model thinks,
+  // then writes. Mostly matters for legacy rows that predate
+  // `_timeline_order` and all coalesce to the same sentinel.
+  if (left.kind !== right.kind) return left.kind === `reasoning` ? -1 : 1
+  return left.key.localeCompare(right.key)
+}
+
 function liveRunItemsToContentItems(
   items: Array<EntityTimelineRunItem>
 ): Array<EntityTimelineContentItem> {
@@ -332,6 +373,41 @@ function formatError(error: EntityTimelineErrorItem): string {
 
 function errorText(errors: Array<EntityTimelineErrorItem>): string | undefined {
   return errors.length > 0 ? errors.map(formatError).join(`; `) : undefined
+}
+
+const RUN_ERROR_SUMMARY_LENGTH = 180
+
+function isLongRunError(message: string): boolean {
+  return message.length > RUN_ERROR_SUMMARY_LENGTH || message.includes(`\n`)
+}
+
+function runErrorSummary(message: string): string {
+  const normalized = message.replace(/\s+/g, ` `)
+  return normalized.length > RUN_ERROR_SUMMARY_LENGTH
+    ? `${normalized.slice(0, RUN_ERROR_SUMMARY_LENGTH)}…`
+    : normalized
+}
+
+function RunErrorInline({ message }: { message: string }): React.ReactElement {
+  return (
+    <Text size={1} tone="danger" truncate>
+      ✗ {message}
+    </Text>
+  )
+}
+
+function RunErrorCard({ message }: { message: string }): React.ReactElement {
+  return (
+    <InlineEventCard
+      icon={CircleAlert}
+      title="run error"
+      summary={runErrorSummary(message)}
+      defaultExpanded={false}
+      headerSurface
+    >
+      <pre className={toolBlock.codeBlock}>{message}</pre>
+    </InlineEventCard>
+  )
 }
 
 function failedRunText(
@@ -384,6 +460,8 @@ export const AgentResponseLive = memo(function AgentResponseLive({
   timestamp,
   renderWidth = 0,
   forkFromHere,
+  onReply,
+  onReplyToToolCall,
   onSearchTextChange,
 }: {
   rowKey: string
@@ -392,6 +470,8 @@ export const AgentResponseLive = memo(function AgentResponseLive({
   timestamp?: number | null
   renderWidth?: number
   forkFromHere?: ForkFromHereAction
+  onReply?: () => void
+  onReplyToToolCall?: (item: EntityTimelineToolCallItem) => void
   onSearchTextChange?: (rowKey: string, text: string) => void
 }): React.ReactElement {
   const { data: items = [] } = useLiveQuery(
@@ -401,6 +481,47 @@ export const AgentResponseLive = memo(function AgentResponseLive({
   const { data: errors = [] } = useLiveQuery(
     (q) => (run.errors ? q.from({ error: run.errors }) : undefined),
     [run.errors]
+  )
+  // Subscribe to the run's reasoning rows so the section ticks as
+  // each `reasoning_delta` arrives. Empty array for runs without
+  // any reasoning content (most non-extended-thinking models).
+  const { data: reasoningRows = [] } = useLiveQuery(
+    (q) => (run.reasoning ? q.from({ reasoning: run.reasoning }) : undefined),
+    [run.reasoning]
+  )
+  const reasoningEntries = useMemo<Array<ReasoningEntry>>(
+    () =>
+      (
+        reasoningRows as Array<{
+          key: string
+          status: `streaming` | `completed`
+          body?: { content?: string }
+          summary_title?: string
+          encrypted?: string
+          order?: string | number
+        }>
+      )
+        .map<ReasoningEntry>((row) => ({
+          key: row.key,
+          order: row.order ?? `~`,
+          status: row.status,
+          summary_title: row.summary_title,
+          encrypted: row.encrypted,
+          // The projection in `entity-timeline.ts` wraps content under
+          // `body` (inside a caseWhen) to force include materialization.
+          // See the comment there.
+          content: row.body?.content ?? ``,
+        }))
+        // Drop rows with nothing to show. The bridge opens a reasoning
+        // row on `thinking_start` even when no delta ever arrives —
+        // some providers (e.g. OpenAI codex models) report that the
+        // model reasoned but never expose the tokens — and an empty
+        // "Thought" block is pure noise. Encrypted rows stay: they're
+        // Anthropic redacted thinking, rendered as a placeholder. A
+        // row that is still streaming appears as soon as its first
+        // delta lands.
+        .filter((entry) => entry.content.trim().length > 0 || entry.encrypted),
+    [reasoningRows]
   )
   // Token totals are aggregated in the query layer
   // (`createEntityTimelineQuery`) — see the `runTokensSource`
@@ -418,10 +539,44 @@ export const AgentResponseLive = memo(function AgentResponseLive({
     if (input === undefined && output === undefined) return null
     return { input, output }
   }, [run.tokens])
+
   const sortedItems = useMemo(
     () => [...items].sort(compareLiveRunItems),
     [items]
   )
+  // Interleave reasoning blocks with the run's items by stream order
+  // so each block renders where the model emitted it — before the
+  // step's text / tool calls, not lumped above the whole response.
+  const renderEntries = useMemo<Array<LiveRenderEntry>>(
+    () =>
+      [
+        ...sortedItems.map<LiveRenderEntry>((item) => ({
+          kind: `item`,
+          key: item.$key,
+          order: item.text?.order ?? item.toolCall?.order ?? `~`,
+          item,
+        })),
+        ...reasoningEntries.map<LiveRenderEntry>((reasoning) => ({
+          kind: `reasoning`,
+          key: reasoning.key,
+          order: reasoning.order,
+          reasoning,
+        })),
+      ].sort(compareLiveRenderEntries),
+    [sortedItems, reasoningEntries]
+  )
+  // Expand/collapse state for settled reasoning blocks, keyed by row
+  // key. Owned here rather than inside `ReasoningBlock` so the user's
+  // choice survives the block being unmounted and remounted — e.g.
+  // when the reasoning row briefly disappears from the live query
+  // while another part of the run updates, or when a virtualizer
+  // measurement pass replaces the subtree.
+  const [expandedReasoning, setExpandedReasoning] = useState<
+    Record<string, boolean>
+  >({})
+  const toggleReasoning = useCallback((key: string) => {
+    setExpandedReasoning((prev) => ({ ...prev, [key]: !prev[key] }))
+  }, [])
   const contentItems = useMemo(
     () => liveRunItemsToContentItems(sortedItems),
     [sortedItems]
@@ -496,13 +651,27 @@ export const AgentResponseLive = memo(function AgentResponseLive({
 
   return (
     <Stack direction="column" gap={2} className={styles.root}>
-      {sortedItems.map((item, i) => {
+      {renderEntries.map((entry) => {
+        if (entry.kind === `reasoning`) {
+          return (
+            <ReasoningBlock
+              key={entry.key}
+              entry={entry.reasoning}
+              isStreaming={isStreaming}
+              timestamp={timestamp}
+              expanded={Boolean(expandedReasoning[entry.key])}
+              onToggle={toggleReasoning}
+            />
+          )
+        }
+
+        const item = entry.item
         if (item.text) {
           return (
             <LiveTextItem
               key={item.$key}
               item={item.text}
-              isStreaming={isStreaming && i === sortedItems.length - 1}
+              isStreaming={isStreaming && item === lastItem}
               renderWidth={renderWidth}
             />
           )
@@ -517,9 +686,18 @@ export const AgentResponseLive = memo(function AgentResponseLive({
           <ToolCallView
             key={item.$key}
             item={liveToolCallToContentItem(item.toolCall)}
+            onReply={
+              onReplyToToolCall
+                ? () => onReplyToToolCall(item.toolCall!)
+                : undefined
+            }
           />
         )
       })}
+
+      {failureText && isLongRunError(failureText) && (
+        <RunErrorCard message={failureText} />
+      )}
 
       <Stack align="center" gap={2} className={styles.metaRow}>
         {showThinking && <ThinkingIndicator />}
@@ -530,10 +708,8 @@ export const AgentResponseLive = memo(function AgentResponseLive({
               : `✓ done`}
           </Text>
         )}
-        {failureText && (
-          <Text size={1} tone="danger">
-            ✗ {failureText}
-          </Text>
+        {failureText && !isLongRunError(failureText) && (
+          <RunErrorInline message={failureText} />
         )}
         {/* Elapsed-time ticker — visible while the response is still
             in flight so the user can see how long the model has been
@@ -581,6 +757,7 @@ export const AgentResponseLive = memo(function AgentResponseLive({
           copied={copied}
           onCopy={() => void copyResponseText()}
           forkFromHere={done ? forkFromHere : undefined}
+          onReply={onReply}
         />
       </Stack>
     </Stack>
@@ -592,20 +769,37 @@ function ResponseMetaActions({
   copied,
   onCopy,
   forkFromHere,
+  onReply,
 }: {
   showCopy: boolean
   copied: boolean
   onCopy: () => void
   forkFromHere?: ForkFromHereAction
+  onReply?: () => void
 }): React.ReactElement | null {
   const showFork = forkFromHere !== undefined
-  if (!showCopy && !showFork) return null
+  if (!showCopy && !showFork && !onReply) return null
 
   const forkDisabled = forkFromHere?.disabled === true || !forkFromHere?.onFork
   const forkLabel = forkDisabled ? `Fork permission required` : `Fork from here`
 
   return (
     <span className={styles.metaActions}>
+      {onReply && (
+        <Tooltip content="Reply" side="top">
+          <IconButton
+            size={1}
+            variant="ghost"
+            tone="neutral"
+            className={styles.metaActionButton}
+            onClick={onReply}
+            aria-label="Reply to response"
+            title="Reply"
+          >
+            <Icon icon={Reply} size={1} />
+          </IconButton>
+        </Tooltip>
+      )}
       {showFork && (
         <Tooltip content={forkLabel} side="top">
           <span className={styles.tooltipTrigger}>
@@ -652,12 +846,14 @@ export const AgentResponse = memo(function AgentResponse({
   timestamp,
   renderWidth = 0,
   forkFromHere,
+  onReply,
 }: {
   section: AgentResponseSection
   isStreaming: boolean
   timestamp?: number | null
   renderWidth?: number
   forkFromHere?: ForkFromHereAction
+  onReply?: () => void
 }): React.ReactElement {
   const canCache = !isStreaming && section.done === true
   const [copied, setCopied] = useState(false)
@@ -739,6 +935,10 @@ export const AgentResponse = memo(function AgentResponse({
         return <ToolCallView key={item.toolCallId} item={item} />
       })}
 
+      {section.error && isLongRunError(section.error) && (
+        <RunErrorCard message={section.error} />
+      )}
+
       <Stack align="center" gap={2} className={styles.metaRow}>
         {showThinking && <ThinkingIndicator />}
         {section.done && (
@@ -748,10 +948,8 @@ export const AgentResponse = memo(function AgentResponse({
               : `✓ done`}
           </Text>
         )}
-        {section.error && (
-          <Text size={1} tone="danger">
-            ✗ {section.error}
-          </Text>
+        {section.error && !isLongRunError(section.error) && (
+          <RunErrorInline message={section.error} />
         )}
         {/* Elapsed-time ticker — kept in sync with the live variant
             above so cached sections (rare during streaming, but the
@@ -801,6 +999,7 @@ export const AgentResponse = memo(function AgentResponse({
           copied={copied}
           onCopy={() => void copyResponseText()}
           forkFromHere={section.done ? forkFromHere : undefined}
+          onReply={onReply}
         />
       </Stack>
     </Stack>

@@ -4,6 +4,7 @@
 
 import { Type, type Static } from '@sinclair/typebox'
 import { Router, json, status } from 'itty-router'
+import { COMMENTS_CONTRACT } from '@electric-ax/agents-runtime'
 import { dispatchPolicySchema } from '../dispatch-policy-schema.js'
 import { ElectricAgentsError } from '../entity-manager.js'
 import {
@@ -45,6 +46,29 @@ type PublicEntityTypeResponse = ElectricAgentsEntityType & {
 
 const jsonObjectSchema = Type.Record(Type.String(), Type.Unknown())
 const schemaMapSchema = Type.Record(Type.String(), jsonObjectSchema)
+// `principalColumn` is accepted and ignored: older runtimes still send it
+// (the column is fixed to `_principal` now), and rejecting it would break
+// registration during version skew.
+const externallyWritableCollectionsSchema = Type.Record(
+  Type.String(),
+  Type.Object(
+    {
+      type: Type.String(),
+      contract: Type.Optional(Type.String()),
+      operations: Type.Optional(
+        Type.Array(
+          Type.Union([
+            Type.Literal(`insert`),
+            Type.Literal(`update`),
+            Type.Literal(`delete`),
+          ])
+        )
+      ),
+      principalColumn: Type.Optional(Type.String()),
+    },
+    { additionalProperties: false }
+  )
+)
 const slashCommandArgumentSchema = Type.Object(
   {
     name: Type.String(),
@@ -92,6 +116,9 @@ const registerEntityTypeBodySchema = Type.Object(
     default_dispatch_policy: Type.Optional(dispatchPolicySchema),
     permission_grants: Type.Optional(
       Type.Array(typePermissionGrantInputSchema)
+    ),
+    externally_writable_collections: Type.Optional(
+      externallyWritableCollectionsSchema
     ),
   },
   { additionalProperties: false }
@@ -445,9 +472,37 @@ function parseExpiresAt(value: string | undefined): Date | undefined {
   return expiresAt
 }
 
+/**
+ * The `comments` collection name is reserved for the canonical comments
+ * contract: the UI keys its comment affordances on it, so a divergent
+ * collection registered under that name (or the contract mounted under
+ * another name) would break that assumption silently.
+ */
+function validateExternallyWritableCollections(
+  collections: RegisterEntityTypeRequest[`externally_writable_collections`]
+): void {
+  for (const [name, config] of Object.entries(collections ?? {})) {
+    if (name === `comments` && config.contract !== COMMENTS_CONTRACT) {
+      throw new ElectricAgentsError(
+        ErrCodeInvalidRequest,
+        `The externally-writable collection name "comments" is reserved for the "${COMMENTS_CONTRACT}" contract`,
+        400
+      )
+    }
+    if (config.contract === COMMENTS_CONTRACT && name !== `comments`) {
+      throw new ElectricAgentsError(
+        ErrCodeInvalidRequest,
+        `The "${COMMENTS_CONTRACT}" contract must be registered under the collection name "comments"`,
+        400
+      )
+    }
+  }
+}
+
 function normalizeEntityTypeRequest(
   parsed: RegisterEntityTypeBody | RegisterEntityTypeRequest
 ): RegisterEntityTypeRequest {
+  validateExternallyWritableCollections(parsed.externally_writable_collections)
   const serveEndpoint = rewriteLoopbackWebhookUrl(parsed.serve_endpoint)
   return {
     name: parsed.name ?? ``,
@@ -465,6 +520,7 @@ function normalizeEntityTypeRequest(
           } as RegisterEntityTypeRequest[`default_dispatch_policy`])
         : undefined),
     permission_grants: parsed.permission_grants,
+    externally_writable_collections: parsed.externally_writable_collections,
   }
 }
 

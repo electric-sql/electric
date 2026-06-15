@@ -2,8 +2,13 @@ import { queryOnce } from '@durable-streams/state/db'
 import { assembleContext } from './context-assembly'
 import { createContextEntriesApi } from './context-entries'
 import { entityStateSchema } from './entity-schema'
+import { createGoalApi } from './goal-api'
 import { formatPointerOrderToken } from './event-pointer'
-import { createOutboundBridge, loadOutboundIdSeed } from './outbound-bridge'
+import {
+  allocateRunKey,
+  createOutboundBridge,
+  loadOutboundIdSeed,
+} from './outbound-bridge'
 import { createPiAgentAdapter } from './pi-adapter'
 import {
   timelineMessages as runtimeTimelineMessages,
@@ -16,7 +21,7 @@ import { createContextTools } from './tools/context-tools'
 import { CACHE_TIERS } from './types'
 import { composeToolsWithProviders } from './tool-providers'
 import { validateSlashCommandDefinitions } from './composer-input'
-import type { HydratedEventSourceWake } from './event-sources'
+import type { HydratedWebhookSourceWake } from './webhook-sources'
 import type { ChangeEvent } from '@durable-streams/state'
 import type { Sandbox } from './sandbox/types'
 import type {
@@ -96,7 +101,7 @@ export interface HandlerContextConfig<TState extends StateProxy = StateProxy> {
       payload?: unknown
     }) => void | Promise<void>
   ) => void
-  hydratedEventSourceWake?: HydratedEventSourceWake | null
+  hydratedWebhookSourceWake?: HydratedWebhookSourceWake | null
   doObserve: (
     source: ObservationSource,
     wake?: Wake
@@ -194,7 +199,7 @@ function getTriggerMessageText(
   wakeEvent: WakeEvent,
   events: Array<ChangeEvent>,
   wakeOffset: string,
-  hydratedEventSourceWake?: HydratedEventSourceWake | null
+  hydratedWebhookSourceWake?: HydratedWebhookSourceWake | null
 ): string {
   if (wakeEvent.type === `inbox`) {
     let latestPayload: unknown = wakeEvent.payload
@@ -228,8 +233,8 @@ function getTriggerMessageText(
   }
 
   if (wakeEvent.type === `wake` && typeof wakeEvent.source === `string`) {
-    if (hydratedEventSourceWake) {
-      return asMessageText(hydratedEventSourceWake)
+    if (hydratedWebhookSourceWake) {
+      return asMessageText(hydratedWebhookSourceWake)
     }
 
     const cronPayload = getCronScheduleTriggerPayload(db, wakeEvent.source)
@@ -248,6 +253,29 @@ function getTriggerMessageText(
     toOffset: wakeEvent.toOffset,
     eventCount: wakeEvent.eventCount,
   })
+}
+
+function combineAbortSignals(a: AbortSignal, b: AbortSignal): AbortSignal {
+  // Prefer the platform helper when available (Node 20+, modern browsers).
+  const any = (
+    AbortSignal as unknown as {
+      any?: (sigs: Array<AbortSignal>) => AbortSignal
+    }
+  ).any
+  if (typeof any === `function`) return any.call(AbortSignal, [a, b])
+  const controller = new AbortController()
+  const linkTo = (source: AbortSignal): void => {
+    if (source.aborted) {
+      controller.abort(source.reason)
+      return
+    }
+    source.addEventListener(`abort`, () => controller.abort(source.reason), {
+      once: true,
+    })
+  }
+  linkTo(a)
+  linkTo(b)
+  return controller.signal
 }
 
 function toHandlerWake(wakeEvent: WakeEvent): HandlerWake {
@@ -451,23 +479,16 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
   let useContextConfig: UseContextConfig | null = null
   let useContextHash = ``
   let useContextRegistrations = 0
-  // Lazy-loaded run-id counter used by ctx.recordRun(). Initialized
-  // from the runs already present in the entity's StreamDB so keys
-  // remain monotonic across handler invocations.
-  let recordRunCounter: number | null = null
+  // Run-id allocation for ctx.recordRun() / ctx.replyText(). Delegates
+  // to the outbound bridge's shared id-seed cache so synthetic runs
+  // can't collide with `run-N` keys the bridge allocated for events
+  // that haven't round-tripped into the local collection yet. The local
+  // floor keeps sequential allocations monotonic within this handler
+  // even when the collection lags (or has no stable id, as in tests).
+  let localRunFloor = 0
   const nextRunKey = (): string => {
-    if (recordRunCounter == null) {
-      let max = 0
-      const rows = config.db.collections.runs.toArray as Array<{ key: string }>
-      for (const row of rows) {
-        const m = row.key.match(/^run-(\d+)/)
-        if (!m) continue
-        max = Math.max(max, parseInt(m[1]!, 10) + 1)
-      }
-      recordRunCounter = max
-    }
-    const key = `run-${recordRunCounter}`
-    recordRunCounter += 1
+    const key = allocateRunKey(config.db, localRunFloor)
+    localRunFloor = parseInt(key.slice(`run-`.length), 10) + 1
     return key
   }
 
@@ -475,6 +496,12 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
     db: config.db,
     writeEvent: config.writeEvent,
     wakeSession: config.wakeSession,
+  })
+
+  const goalApi = createGoalApi({
+    db: config.db,
+    wakeSession: config.wakeSession,
+    writeEvent: config.writeEvent,
   })
 
   const listAttachments: AttachmentsApi[`list`] = (filter) => {
@@ -714,7 +741,10 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
   }
 
   const agent: AgentHandle = {
-    async run(input?: string): Promise<AgentRunResult> {
+    async run(
+      input?: string,
+      abortSignal?: AbortSignal
+    ): Promise<AgentRunResult> {
       if (!agentConfig) {
         throw new Error(
           `[agent-runtime] agent.run() called without useAgent().`
@@ -732,7 +762,7 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         config.wakeEvent,
         config.events,
         config.wakeOffset,
-        config.hydratedEventSourceWake
+        config.hydratedWebhookSourceWake
       )
       const effectiveInput = input ?? messageText
 
@@ -757,6 +787,7 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
 
           onPayload: activeAgentConfig.onPayload,
 
+          onStepEnd: activeAgentConfig.onStepEnd,
           modelTimeoutMs: activeAgentConfig.modelTimeoutMs,
           modelMaxRetries: activeAgentConfig.modelMaxRetries,
         })
@@ -771,7 +802,7 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         const latestMessageRole = messages.at(-1)?.role
         const runInput =
           input !== undefined ||
-          config.hydratedEventSourceWake != null ||
+          config.hydratedWebhookSourceWake != null ||
           latestMessageRole !== `user`
             ? effectiveInput
             : undefined
@@ -806,7 +837,11 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
           )
         }
 
-        await handle.run(runInput, config.runSignal)
+        const combinedSignal =
+          config.runSignal && abortSignal
+            ? combineAbortSignals(config.runSignal, abortSignal)
+            : (abortSignal ?? config.runSignal)
+        await handle.run(runInput, combinedSignal)
         runtimeLog.info(logPrefix, `agent.run completed`)
 
         return {
@@ -951,6 +986,11 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
     removeContext: contextApi.removeContext,
     getContext: contextApi.getContext,
     listContext: contextApi.listContext,
+    setGoal: goalApi.setGoal,
+    clearGoal: goalApi.clearGoal,
+    getGoal: goalApi.getGoal,
+    markGoalComplete: goalApi.markGoalComplete,
+    updateGoalUsage: goalApi.updateGoalUsage,
     __debug: {
       useContextRegistrations: () => useContextRegistrations,
     },
@@ -1047,6 +1087,53 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         },
       }
     },
+    // Renders `text` as an ordinary assistant message in the chat without
+    // calling the LLM. Used for runtime-driven replies like slash-command
+    // responses and budget-limit notices. The five writes synthesize the
+    // same run + text + delta event sequence the outbound bridge would
+    // emit for a real LLM turn; the UI needs all of them to render.
+    replyText(text: string): void {
+      if (typeof text !== `string` || text.length === 0) return
+      const runKey = nextRunKey()
+      const msgKey = `${runKey}:msg`
+      config.writeEvent(
+        entityStateSchema.runs.insert({
+          key: runKey,
+          value: { status: `started` } as never,
+        }) as ChangeEvent
+      )
+      config.writeEvent(
+        entityStateSchema.texts.insert({
+          key: msgKey,
+          value: { status: `streaming`, run_id: runKey } as never,
+        }) as ChangeEvent
+      )
+      config.writeEvent(
+        entityStateSchema.textDeltas.insert({
+          key: `${msgKey}:0`,
+          value: {
+            text_id: msgKey,
+            run_id: runKey,
+            delta: text,
+          } as never,
+        }) as ChangeEvent
+      )
+      config.writeEvent(
+        entityStateSchema.texts.update({
+          key: msgKey,
+          value: { status: `completed`, run_id: runKey } as never,
+        }) as ChangeEvent
+      )
+      config.writeEvent(
+        entityStateSchema.runs.update({
+          key: runKey,
+          value: {
+            status: `completed`,
+            finish_reason: `stop`,
+          } as never,
+        }) as ChangeEvent
+      )
+    },
     sleep(): void {
       sleepRequested = true
     },
@@ -1058,5 +1145,8 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
     },
   }
 
-  return { ctx, getSleepRequested: () => sleepRequested }
+  return {
+    ctx,
+    getSleepRequested: () => sleepRequested,
+  }
 }
