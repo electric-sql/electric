@@ -10,6 +10,8 @@ export type {
   AgentHandlerResult,
   BuiltinElectricToolsFactory,
   BuiltinAgentHandlerOptions,
+  BuiltinDockerSandboxMount,
+  BuiltinDockerSandboxOptions,
 } from './bootstrap.js'
 
 export { BuiltinAgentsServer } from './server.js'
@@ -47,11 +49,14 @@ export {
 export {
   builtinModelProviderLabel,
   listBuiltinModelChoices,
+  resolveBuiltinModelConfig,
 } from './model-catalog.js'
 export type {
   BuiltinModelCatalogOptions,
   BuiltinModelChoice,
   BuiltinModelProvider,
+  BuiltinAgentModelConfig,
+  BuiltinModelCatalog,
 } from './model-catalog.js'
 export { registerWorker } from './agents/worker.js'
 export {
