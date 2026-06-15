@@ -367,11 +367,17 @@ export {
   computeContextUsage,
   contextUsageLevel,
   formatContextUsagePercent,
+  selectLatestContextUsage,
+  shouldSurfaceContextBudget,
+  formatContextBudgetNotice,
+  buildContextBudgetNotice,
+  withContextBudgetNotice,
 } from './token-accountant'
 export type {
   ContextUsage,
   ContextUsageInput,
   ContextUsageLevel,
+  ContextUsageStep,
 } from './token-accountant'
 export { createContextTools } from './tools/context-tools'
 export {

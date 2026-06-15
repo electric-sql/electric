@@ -17,6 +17,11 @@ import {
 import { getCronStreamPath } from './cron-utils'
 import { runtimeLog } from './log'
 import { sliceChars } from './token-budget'
+import {
+  selectLatestContextUsage,
+  withContextBudgetNotice,
+  type ContextUsageStep,
+} from './token-accountant'
 import { createContextTools } from './tools/context-tools'
 import { CACHE_TIERS } from './types'
 import { composeToolsWithProviders } from './tool-providers'
@@ -773,6 +778,20 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         const composedTools = (await composeToolsWithProviders(
           activeAgentConfig.tools
         )) as Array<AgentTool>
+
+        // Phase 1: surface the remaining context budget to the model once usage
+        // reaches the first awareness threshold (25%). Synthesized fresh each
+        // call from the latest persisted step — so it is always current, and we
+        // deliberately do NOT persist it as a context row (a self-superseding
+        // entry would leave `load_context_history(...)` tombstones, which are
+        // meaningless breadcrumbs for an ephemeral budget hint). The notice is
+        // injected just before the final message so the closing turn — and the
+        // runInput detection below, which reads `.at(-1)` — is unchanged.
+        const budgetUsage = selectLatestContextUsage(
+          config.db.collections.steps.toArray as ReadonlyArray<ContextUsageStep>
+        )
+        const outgoingMessages = withContextBudgetNotice(messages, budgetUsage)
+
         const adapterFactory = createPiAgentAdapter({
           systemPrompt: activeAgentConfig.systemPrompt,
           model: activeAgentConfig.model,
@@ -797,12 +816,12 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         const handle = adapterFactory({
           entityUrl: config.entityUrl,
           epoch: config.epoch,
-          messages,
+          messages: outgoingMessages,
           outboundIdSeed: await loadOutboundIdSeed(config.db),
           writeEvent: config.writeEvent,
         })
 
-        const latestMessageRole = messages.at(-1)?.role
+        const latestMessageRole = outgoingMessages.at(-1)?.role
         const runInput =
           input !== undefined ||
           config.hydratedWebhookSourceWake != null ||
@@ -815,14 +834,14 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
           logPrefix,
           `agent.run starting provider=${agentModelProvider(activeAgentConfig)} ` +
             `model=${agentModelId(activeAgentConfig.model)} ` +
-            `messages=${messages.length} latestRole=${latestMessageRole ?? `none`} ` +
+            `messages=${outgoingMessages.length} latestRole=${latestMessageRole ?? `none`} ` +
             `wakeType=${config.wakeEvent.type} wakeOffset=${config.wakeOffset} ` +
             `triggerMessageLen=${messageText.length} ` +
             `runInputLen=${runInput?.length ?? 0} ` +
             `tools=${composedTools.length + extraTools.length}`
         )
-        if (messages.length > 0) {
-          const tail = messages.slice(-3)
+        if (outgoingMessages.length > 0) {
+          const tail = outgoingMessages.slice(-3)
           runtimeLog.info(
             logPrefix,
             `agent.run last messages: ${tail

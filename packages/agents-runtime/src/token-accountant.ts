@@ -2,14 +2,19 @@
  * Token accounting for context-window usage.
  *
  * This is the single source of truth for turning a step's reported token usage
- * into a "% of the context window used" figure. Both the runtime (telemetry)
- * and the UI (the composer usage gauge) compute usage through here, so the
- * number the user sees is exactly the number later compaction phases will act
- * on. If this drifts, everything downstream drifts with it.
+ * into a "% of the context window used" figure. Both the runtime (telemetry +
+ * the model-facing budget notice) and the UI (the composer usage gauge) compute
+ * usage through here, so the number the user sees is exactly the number later
+ * compaction phases will act on. If this drifts, everything downstream drifts
+ * with it.
  *
- * Phase 0 only reads it for display; later phases drive budget notices,
- * background compaction, and the hard ceiling off the same thresholds below.
+ * Phase 0 reads it for display; Phase 1 surfaces it to the model as a budget
+ * notice; later phases drive background compaction and the hard ceiling off the
+ * same thresholds below.
  */
+
+import { formatTokenCount } from './token-budget'
+import type { LLMMessage } from './types'
 
 /**
  * Fractions of the context window at which the compaction system changes
@@ -86,4 +91,100 @@ export function contextUsageLevel(ratio: number): ContextUsageLevel {
 /** Render a usage ratio as a whole-percent label, e.g. `42%`. */
 export function formatContextUsagePercent(ratio: number): string {
   return `${Math.round(ratio * 100)}%`
+}
+
+/**
+ * Minimal shape of a persisted step row needed to derive context usage — the
+ * cache-inclusive prompt size, the step's output, the model window, and `_seq`
+ * (the collection's monotonic insertion order) to find the most recent one.
+ */
+export interface ContextUsageStep {
+  _seq?: number
+  context_input_tokens?: number
+  context_window?: number
+  output_tokens?: number
+}
+
+/**
+ * Pick the most recent step that reported context usage and compute its usage.
+ * The latest step of the latest run carries the whole conversation, so its
+ * cache-inclusive prompt size is the best estimate of current fullness. Returns
+ * `null` when no step has reported usage yet (e.g. the very first turn).
+ */
+export function selectLatestContextUsage(
+  steps: ReadonlyArray<ContextUsageStep>
+): ContextUsage | null {
+  let latest: ContextUsageStep | null = null
+  for (const step of steps) {
+    if (
+      typeof step.context_window !== `number` ||
+      step.context_window <= 0 ||
+      typeof step.context_input_tokens !== `number`
+    ) {
+      continue
+    }
+    if (!latest || (step._seq ?? 0) > (latest._seq ?? 0)) {
+      latest = step
+    }
+  }
+  if (!latest) return null
+  return computeContextUsage({
+    contextInputTokens: latest.context_input_tokens as number,
+    outputTokens: latest.output_tokens,
+    contextWindow: latest.context_window as number,
+  })
+}
+
+/**
+ * Whether to show the model a budget notice — once usage reaches the first
+ * awareness threshold (25%). Below that the window is empty enough that a
+ * reminder is just noise.
+ */
+export function shouldSurfaceContextBudget(ratio: number): boolean {
+  return ratio >= CONTEXT_USAGE_AWARENESS_THRESHOLDS[0]
+}
+
+/**
+ * The human-readable body of the model-facing budget notice — remaining tokens
+ * plus the percentage left. Recomputed every turn from the latest step, so it
+ * is always current rather than a stale snapshot from when a threshold was
+ * first crossed.
+ */
+export function formatContextBudgetNotice(usage: ContextUsage): string {
+  const remaining = Math.max(0, usage.contextWindow - usage.usedTokens)
+  const percentLeft = Math.max(0, Math.round((1 - usage.ratio) * 100))
+  return `You have about ${formatTokenCount(
+    remaining
+  )} tokens (${percentLeft}%) of the context window remaining.`
+}
+
+/** Tag wrapping the budget notice, mirroring Codex's `<token_budget>`. */
+const CONTEXT_BUDGET_NOTICE_TAG = `token_budget`
+
+/** The model-facing budget notice as a (user-role) message. */
+export function buildContextBudgetNotice(usage: ContextUsage): LLMMessage {
+  return {
+    role: `user`,
+    content: `<${CONTEXT_BUDGET_NOTICE_TAG}>\n${formatContextBudgetNotice(
+      usage
+    )}\n</${CONTEXT_BUDGET_NOTICE_TAG}>`,
+  }
+}
+
+/**
+ * Return `messages` with a current context-budget notice injected, or unchanged
+ * when usage is unknown or below the first awareness threshold. The notice is
+ * placed just before the final message so the closing turn (and any
+ * last-message inspection downstream) is preserved.
+ */
+export function withContextBudgetNotice(
+  messages: ReadonlyArray<LLMMessage>,
+  usage: ContextUsage | null
+): Array<LLMMessage> {
+  if (!usage || !shouldSurfaceContextBudget(usage.ratio)) {
+    return [...messages]
+  }
+  const notice = buildContextBudgetNotice(usage)
+  if (messages.length === 0) return [notice]
+  return [...messages.slice(0, -1), notice, messages[messages.length - 1]!]
 }
