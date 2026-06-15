@@ -400,10 +400,12 @@ defmodule Electric.Postgres.ReplicationClient do
       Process.send_after(self(), {:process_event, event, remaining}, @event_retry_delay)
       {:noreply, state}
     else
-      Logger.error(
-        "Exhausted retry budget processing replication event: #{LogScrubber.summarize(event)} failed with: " <>
-          LogScrubber.inspect_scrubbed(reason)
-      )
+      Logger.error([
+        "Exhausted retry budget processing replication event: ",
+        LogScrubber.summarize(event),
+        " failed with: ",
+        LogScrubber.inspect_scrubbed(reason)
+      ])
 
       exit(reason)
     end
@@ -555,8 +557,10 @@ defmodule Electric.Postgres.ReplicationClient do
             stacktrace = __STACKTRACE__
 
             Logger.debug(fn ->
-              "Replication event dispatch failed, retrying: " <>
+              [
+                "Replication event dispatch failed, retrying: ",
                 Exception.format(kind, reason, stacktrace)
+              ]
             end)
           end
 
@@ -565,10 +569,12 @@ defmodule Electric.Postgres.ReplicationClient do
           Process.send_after(self(), {:process_event, event, remaining}, @event_retry_delay)
           {:noreply, state}
         else
-          Logger.error(
-            "Exhausted retry budget dispatching replication event: #{LogScrubber.summarize(event)} failed with: " <>
-              LogScrubber.inspect_scrubbed(reason)
-          )
+          Logger.error([
+            "Exhausted retry budget dispatching replication event: ",
+            LogScrubber.summarize(event),
+            " failed with: ",
+            LogScrubber.inspect_scrubbed(reason)
+          ])
 
           :erlang.raise(kind, reason, __STACKTRACE__)
         end
@@ -591,10 +597,12 @@ defmodule Electric.Postgres.ReplicationClient do
 
     if is_nil(state.last_retry_error_log) or
          now - state.last_retry_error_log >= @retry_log_interval do
-      Logger.error(
-        "Error #{action} replication event (#{div(remaining, 1000)}s retry budget left, retrying every #{@event_retry_delay}ms): " <>
-          "#{LogScrubber.summarize(event)} failed with: " <> LogScrubber.inspect_scrubbed(reason)
-      )
+      Logger.error([
+        "Error #{action} replication event (#{div(remaining, 1000)}s retry budget left, retrying every #{@event_retry_delay}ms): ",
+        LogScrubber.summarize(event),
+        " failed with: ",
+        LogScrubber.inspect_scrubbed(reason)
+      ])
 
       %{state | last_retry_error_log: now}
     else
