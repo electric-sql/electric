@@ -67,6 +67,20 @@ RUST_SERVER_URL=http://localhost:4562 pnpm exec vitest run \
 
 Status: **332 passed / 0 failed**, on both engines.
 
+## Releasing
+
+Prebuilt binaries are published to GitHub Releases by the
+`release-server-rust` workflow when a `server-rust-v*` tag is pushed:
+
+```bash
+# bump version in Cargo.toml, then:
+git tag server-rust-v0.1.0
+git push origin server-rust-v0.1.0
+```
+
+This builds `durable-streams-server` for linux and macOS (x86_64 + arm64)
+and attaches the tarballs plus SHA-256 checksums to the release.
+
 ---
 
 ## Benchmarks (preliminary)
