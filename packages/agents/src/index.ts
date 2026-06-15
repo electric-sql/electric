@@ -5,7 +5,6 @@ export {
   createAgentHandler,
   registerBuiltinAgentTypes,
   registerAgentTypes,
-  resolveDockerSandboxOpts,
 } from './bootstrap.js'
 export type {
   AgentHandlerResult,

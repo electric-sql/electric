@@ -70,6 +70,18 @@ export interface BuiltinDockerSandboxMount {
   readOnly?: boolean
 }
 
+// Compile-time drift guard: keep `BuiltinDockerSandboxMount` (intentionally
+// duplicated to keep the runtime docker subpath out of the import graph)
+// assignable to the runtime's mount shape. The constrained generic errors at
+// instantiation if the shapes drift; the inline `import(...)` type is fully
+// erased, so this adds no runtime dependency.
+type _AssignableTo<A extends B, B> = A
+type _AssertMountCompat = _AssignableTo<
+  BuiltinDockerSandboxMount,
+  // eslint-disable-next-line quotes -- type-position import() requires a string literal
+  NonNullable<import('@electric-ax/agents-runtime/sandbox/docker').DockerSandboxOpts['extraMounts']>[number]
+>
+
 /**
  * Embedder customization for the built-in `docker` sandbox profile.
  * Threads straight into `dockerSandbox()` (which already supports these);
@@ -77,6 +89,10 @@ export interface BuiltinDockerSandboxMount {
  * These are embedder/operator-trust inputs: `extraMounts` is subject to the
  * runtime's docker-socket guard, and `env` is passed verbatim into the
  * container.
+ *
+ * Note: custom `extraMounts` must not target the working-directory container
+ * path (`/work`) — it collides with the cwd mount and fails at container-create
+ * time with an opaque docker error.
  */
 export interface BuiltinDockerSandboxOptions {
   /** Digest-pinned image unless `allowFloatingTag` is set. */
@@ -290,7 +306,9 @@ function sweepOrphanedDockerSandboxesOnce(
 
 /**
  * Merge the profile's working-directory mount with embedder docker options
- * into the option fragment spread into `dockerSandbox()`. Exported for tests.
+ * into the option fragment spread into `dockerSandbox()`. An internal helper:
+ * exported from this module so the unit test can import it, but intentionally
+ * not re-exported from `index.ts` (not part of the package's public API).
  */
 export function resolveDockerSandboxOpts(
   cwdMount: BuiltinDockerSandboxMount | undefined,
