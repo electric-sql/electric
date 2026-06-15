@@ -567,10 +567,10 @@ defmodule Electric.Postgres.ReplicationClient do
     end
   end
 
-  # A failing event is retried every @event_retry_delay (50ms) for up to
-  # @max_event_retry_time (10 minutes), so logging every attempt at error
-  # level floods the log output — and any error tracker fed from it — with up
-  # to ~12000 messages for a single incident. Log the first failure and one
+  # A failing event is retried every @event_retry_delay for up to
+  # @max_event_retry_time, so logging every attempt at error level floods the
+  # log output — and any error tracker fed from it — with thousands of
+  # messages for a single incident. Log the first failure and one
   # progress update per @retry_log_interval at error level, and every other
   # attempt at debug level. The throttle window is wall-clock time tracked in
   # the state because a fast failure (e.g. :noproc) consumes no measurable
