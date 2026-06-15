@@ -40,6 +40,13 @@ export type IconName =
   | `user`
   | `users`
   | `pin`
+  | `image`
+  | `camera`
+  | `copy`
+  | `link`
+  | `share`
+  | `eye`
+  | `shield`
 
 const PATHS: Record<IconName, string> = {
   back: `M15 18l-6-6 6-6`,
@@ -68,6 +75,18 @@ const PATHS: Record<IconName, string> = {
   // Lucide `pin` — matches the desktop sidebar's pin toggle glyph.
   pin: `M12 17v5M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z`,
   square: `M7 7h10v10H7z`,
+  // Lucide `image` / `camera` — image attachment affordances.
+  image: `M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM8.5 11a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3ZM21 15l-5-5L5 21`,
+  camera: `M9 4 7.5 6H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-2.5L15 4ZM12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z`,
+  // Lucide `copy` / `link` / `share-2` — session link & share actions
+  // (`share-2` matches the desktop share dialog's trigger glyph).
+  copy: `M8 8h13v13H8zM4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2`,
+  link: `M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71`,
+  share: `M18 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM6 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM18 22a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98`,
+  // Lucide `eye` / `shield-check` — share role glyphs, matching the
+  // desktop share dialog's View/Manage segments.
+  eye: `M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7ZM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z`,
+  shield: `M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1 1 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1ZM9 12l2 2 4-4`,
   github: `M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4M9 18c-4.51 2-5-2-7-2`,
   // Official Google "G" mark, rendered in a single fill colour. Google's
   // brand guidelines permit monochrome use in CTA contexts where the

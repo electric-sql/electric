@@ -31,13 +31,17 @@ import type {
   EntityTimelineQueryRow,
   SlashCommandRow,
 } from '@electric-ax/agents-runtime/client'
+import { schemaModelSupportsImageInput } from '@electric-ax/agents-server-ui/src/lib/modelCapabilities'
 import { Header, HeaderBackButton } from '../components/Header'
 import { Icon } from '../components/Icon'
 import {
+  AttachButton,
+  AttachmentTray,
   renderComposerHighlights,
   SlashCommandMenu,
   useSlashAutocomplete,
 } from '../components/NativeComposer'
+import { useAttachmentDrafts } from '../lib/attachments'
 import { Screen } from '../components/Screen'
 import { SessionMenu } from '../components/SessionMenu'
 import { StatusDot } from '../components/StatusDot'
@@ -57,7 +61,10 @@ import type { ElectricEntity, EntitySignal } from '../lib/agentsClient'
 export const CHAT_COMPOSER_BASE_HEIGHT = 76
 export const CHAT_COMPOSER_OVERLAP = 20
 
-const COMPOSER_INPUT_MIN_HEIGHT = 40
+// Match the send/attach button height so a single line of text sits centered
+// alongside the buttons (with `paddingVertical` below) rather than floating
+// above them.
+const COMPOSER_INPUT_MIN_HEIGHT = 34
 const COMPOSER_INPUT_MAX_HEIGHT = 200
 const INLINE_QUEUED_TIMEOUT_MS = 15_000
 const SESSION_PERMISSIONS: ReadonlyArray<EntityPermission> = [`write`, `signal`]
@@ -75,6 +82,7 @@ export function ChatSessionScreen({
   onComposerHeightChange,
   onSendMessage,
   onInlineQueuedMessagesChange,
+  onShare,
 }: {
   entityUrl: string
   onBack: () => void
@@ -86,6 +94,7 @@ export function ChatSessionScreen({
   onInlineQueuedMessagesChange?: (
     messages: Array<OptimisticInboxMessage>
   ) => void
+  onShare?: () => void
 }): React.ReactElement {
   return (
     <SessionScreen
@@ -98,6 +107,7 @@ export function ChatSessionScreen({
       onComposerHeightChange={onComposerHeightChange}
       onSendMessage={onSendMessage}
       onInlineQueuedMessagesChange={onInlineQueuedMessagesChange}
+      onShare={onShare}
     />
   )
 }
@@ -106,10 +116,12 @@ export function StateInspectorSessionScreen({
   entityUrl,
   onBack,
   onSetView,
+  onShare,
 }: {
   entityUrl: string
   onBack: () => void
   onSetView: (view: EmbedViewId) => void
+  onShare?: () => void
 }): React.ReactElement {
   return (
     <SessionScreen
@@ -117,6 +129,7 @@ export function StateInspectorSessionScreen({
       view="state-explorer"
       onBack={onBack}
       onSetView={onSetView}
+      onShare={onShare}
     />
   )
 }
@@ -140,6 +153,7 @@ export function SessionScreen({
   onComposerHeightChange,
   onSendMessage,
   onInlineQueuedMessagesChange,
+  onShare,
 }: {
   entityUrl: string
   view: EmbedViewId
@@ -152,6 +166,7 @@ export function SessionScreen({
   onInlineQueuedMessagesChange?: (
     messages: Array<OptimisticInboxMessage>
   ) => void
+  onShare?: () => void
 }): React.ReactElement {
   const { entitiesCollection, serverUrl, signalEntity } = useAgents()
   const tokens = useTokens()
@@ -426,6 +441,7 @@ export function SessionScreen({
         signalError={signalError}
         onSignal={sendMenuSignal}
         onStopImmediately={() => void stopImmediately()}
+        onShare={onShare}
         signalDisabled={!canSignal}
       />
     </Screen>
@@ -517,6 +533,22 @@ function NativeMessageComposer({
       updated_at: matchingTypes[0]?.updated_at ?? ``,
     }))
   }, [liveSlashCommands, matchingTypes])
+  const attach = useAttachmentDrafts()
+  // Gate the attach affordance on whether the session's model accepts images,
+  // mirroring the desktop composer.
+  const imageInputSupported = useMemo(
+    () =>
+      schemaModelSupportsImageInput(
+        matchingTypes[0]?.creation_schema,
+        entity?.spawn_args ?? {}
+      ),
+    [matchingTypes, entity?.spawn_args]
+  )
+  const showAttach = imageInputSupported && attach.supported && !editingMessage
+  useEffect(() => {
+    if (!imageInputSupported) attach.clear()
+  }, [imageInputSupported, attach.clear])
+  const hasDraftAttachments = attach.drafts.length > 0 && !editingMessage
   const sendAction = useMemo(() => {
     if (!db) return null
     return createSendComposerInputAction({
@@ -543,9 +575,17 @@ function NativeMessageComposer({
     return createSteerInboxMessageAction({ db, baseUrl: serverUrl, entityUrl })
   }, [db, serverUrl, entityUrl])
   const showStop =
-    generationActive && text.length === 0 && !disabled && !editingMessage
+    generationActive &&
+    text.length === 0 &&
+    !hasDraftAttachments &&
+    !disabled &&
+    !editingMessage
   const canStop = showStop && !stopPending && !stopDisabled
-  const canSend = text.length > 0 && !disabled && !writeDisabled && !sending
+  const canSend =
+    (text.length > 0 || hasDraftAttachments) &&
+    !disabled &&
+    !writeDisabled &&
+    !sending
   const inputDisabled = disabled || writeDisabled || sending
   const composerDisabled = disabled || (writeDisabled && !showStop)
   const slash = useSlashAutocomplete(value, slashCommands, {
@@ -603,6 +643,7 @@ function NativeMessageComposer({
     const tx = sendAction?.({
       payload: serializeComposerInput(text, slashCommands),
       mode: `queued`,
+      attachments: hasDraftAttachments ? attach.drafts : undefined,
     })
     if (!tx) {
       setSending(false)
@@ -613,6 +654,7 @@ function NativeMessageComposer({
     setPendingSelection(null)
     slash.reset()
     setEditingMessage(null)
+    attach.clear()
     onSendMessage?.()
     finishPersistedAction(tx.isPersisted.promise)
   }
@@ -714,9 +756,10 @@ function NativeMessageComposer({
         styles.root,
         {
           paddingBottom: bottomPadding,
-          // Android's default `resize` mode already lifts this bottom-anchored
-          // card above the keyboard, so translating it again would double the
-          // offset. iOS doesn't resize, so there the translate does the work.
+          // Android's window resizes for the IME, which already lifts this
+          // bottom-anchored card above the keyboard; applying the translate
+          // there too would double the offset. iOS doesn't resize, so there the
+          // translate does the work.
           transform: [
             { translateY: Platform.OS === `android` ? 0 : keyboardTranslateY },
           ],
@@ -755,9 +798,19 @@ function NativeMessageComposer({
       {slash.open && (
         <SlashCommandMenu items={slash.items} onSelect={insertSlashCommand} />
       )}
+      {showAttach && (
+        <AttachmentTray drafts={attach.drafts} onRemove={attach.remove} />
+      )}
       <View
         style={[styles.composer, composerDisabled ? styles.disabled : null]}
       >
+        {showAttach && (
+          <AttachButton
+            onAddFromLibrary={() => void attach.addFromLibrary()}
+            onAddFromCamera={() => void attach.addFromCamera()}
+            disabled={inputDisabled}
+          />
+        )}
         <TextInput
           onChangeText={setValue}
           onSelectionChange={(event) => {
@@ -1545,7 +1598,9 @@ function createComposerStyles(tokens: Tokens) {
       minWidth: 0,
       maxHeight: COMPOSER_INPUT_MAX_HEIGHT,
       minHeight: COMPOSER_INPUT_MIN_HEIGHT,
-      paddingVertical: 0,
+      // (34 - 24 line height) / 2 vertically centers a single line within the
+      // button-height min, while leaving breathing room as it grows multiline.
+      paddingVertical: 5,
       fontSize: fontSize.lg,
       lineHeight: lineHeight.lg,
       textAlignVertical: `top`,

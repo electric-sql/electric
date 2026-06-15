@@ -242,6 +242,24 @@ export type EntityTimelineRunItem =
       toolCall: EntityTimelineToolCallItem
     }
 
+export interface EntityTimelineReasoningItem {
+  key: string
+  run_id?: string
+  order: TimelineOrder
+  status: `streaming` | `completed`
+  // The concatenated `reasoning_delta` content lives under
+  // `body.content` rather than top-level — the wrapper is what
+  // forces TanStack DB to materialize the include before the row
+  // reaches `useLiveQuery`. See the timeline-query comment.
+  body?: { content: string }
+  // Optional bolded title parsed at write time — only OpenAI Responses
+  // emits these; null for Anthropic / DeepSeek / Moonshot.
+  summary_title?: string
+  // Anthropic redacted-thinking opaque payload. Persist verbatim so we
+  // can echo it back on the next turn; the UI shows a placeholder.
+  encrypted?: string
+}
+
 export interface EntityTimelineStepItem {
   key: string
   run_id?: string
@@ -267,6 +285,7 @@ export interface EntityTimelineRunRow {
   status: `started` | `completed` | `failed`
   finish_reason?: string
   items: Collection<EntityTimelineRunItem>
+  reasoning: Collection<EntityTimelineReasoningItem>
   steps: Collection<EntityTimelineStepItem>
   errors: Collection<EntityTimelineErrorItem>
   // Per-run token totals summed across all `steps` of the run.
@@ -1385,6 +1404,13 @@ function buildEntityTimelineQuery(
       run_id: error.run_id,
     }))
 
+  // Union texts + tool calls into a single ordered stream. The
+  // text-delta join lives at this level (vs. inside the consumer's
+  // `items.select`) so the correlation key is `text.key` — a field
+  // on the raw text row — rather than a projected scalar. The only
+  // delta-join alias constraint is that it must NOT collide with
+  // the `chunk` alias used in the reasoning content sub-query
+  // below; that's why this one is `textChunk`.
   const runItemsSource = q
     .unionAll({
       text: db.collections.texts,
@@ -1402,11 +1428,13 @@ function buildEntityTimelineQuery(
       textContent: concat(
         toArray(
           q
-            .from({ chunk: db.collections.textDeltas })
-            .where(({ chunk }) => eq(chunk.text_id, text.key))
-            .orderBy(({ chunk }) => coalesce(chunk._timeline_order, `~`))
-            .orderBy(({ chunk }) => chunk.key)
-            .select(({ chunk }) => chunk.delta)
+            .from({ textChunk: db.collections.textDeltas })
+            .where(({ textChunk }) => eq(textChunk.text_id, text.key))
+            .orderBy(({ textChunk }) =>
+              coalesce(textChunk._timeline_order, `~`)
+            )
+            .orderBy(({ textChunk }) => textChunk.key)
+            .select(({ textChunk }) => textChunk.delta)
         )
       ),
       toolCall: caseWhen(toolCall.key, {
@@ -1420,6 +1448,43 @@ function buildEntityTimelineQuery(
         result: toolCall.result,
         error: toolCall.error,
       }),
+    }))
+
+  // Mirror `runItemsSource`'s shape for reasoning rows: the
+  // `concat(toArray(...))` include is *defined* on this top-level
+  // source, then the `reasoning:` consumer inside `runSource.select`
+  // below dereferences it into `content: r.reasoningContent`. The
+  // two-layer source/consumer split is load-bearing: `useLiveQuery`
+  // reads of a sub-collection that has an include co-defined in the
+  // same select return the row with `content: null` + a deferred
+  // `Symbol(includesRouting)` marker. Naming the include field in a
+  // downstream `.select` is what forces materialization — exactly
+  // how `items.text.content` pulls `item.textContent` out of
+  // `runItemsSource`. Alias is `reasoningChunk` to avoid colliding
+  // with `textChunk` used above.
+  const runReasoningSource = q
+    .from({ reasoning: db.collections.reasoning })
+    .select(({ reasoning }) => ({
+      key: reasoning.key,
+      run_id: reasoning.run_id,
+      order: coalesce(reasoning._timeline_order, `~`),
+      status: reasoning.status,
+      summary_title: reasoning.summary_title,
+      encrypted: reasoning.encrypted,
+      reasoningContent: concat(
+        toArray(
+          q
+            .from({ reasoningChunk: db.collections.reasoningDeltas })
+            .where(({ reasoningChunk }) =>
+              eq(reasoningChunk.reasoning_id, reasoning.key)
+            )
+            .orderBy(({ reasoningChunk }) =>
+              coalesce(reasoningChunk._timeline_order, `~`)
+            )
+            .orderBy(({ reasoningChunk }) => reasoningChunk.key)
+            .select(({ reasoningChunk }) => reasoningChunk.delta)
+        )
+      ),
     }))
 
   const runTokensSource = q
@@ -1483,6 +1548,28 @@ function buildEntityTimelineQuery(
             content: item.textContent,
           }),
           toolCall: item.toolCall,
+        })),
+      reasoning: q
+        .from({ r: runReasoningSource })
+        .where(({ r }) => eq(r.run_id, run.key))
+        .orderBy(({ r }) => r.order)
+        .orderBy(({ r }) => r.key)
+        .select(({ r }) => ({
+          key: r.key,
+          run_id: r.run_id,
+          order: r.order,
+          status: r.status,
+          // Wrap the include reference inside a `caseWhen` object body
+          // — the same construct items uses to materialize
+          // `item.textContent` into `text.content`. Bare top-level
+          // references leave the include deferred until UI reads it
+          // through `useLiveQuery`, which never gets through. UI reads
+          // `entry.body?.content` instead of `entry.content`.
+          body: caseWhen(r.key, {
+            content: r.reasoningContent,
+          }),
+          summary_title: r.summary_title,
+          encrypted: r.encrypted,
         })),
       steps: q
         .from({ step: db.collections.steps })

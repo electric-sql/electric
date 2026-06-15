@@ -952,6 +952,8 @@ export interface AgentConfig {
     uncachedInput: number
     output: number
   }) => void
+  modelTimeoutMs?: number
+  modelMaxRetries?: number
   testResponses?: TestResponses
 }
 

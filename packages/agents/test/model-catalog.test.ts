@@ -149,6 +149,88 @@ describe(`model catalog`, () => {
     })
   })
 
+  it(`enables Anthropic extended thinking with a minimal budget when reasoningEffort is auto`, async () => {
+    process.env.ANTHROPIC_API_KEY = `test-anthropic-key`
+    vi.stubGlobal(
+      `fetch`,
+      vi.fn(async (url: string) => {
+        if (String(url).includes(`api.anthropic.com`)) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ data: [{ id: `claude-sonnet-4-6` }] }),
+          }
+        }
+        return { ok: false, status: 401, json: async () => ({}) }
+      })
+    )
+
+    const catalog = await createBuiltinModelCatalog()
+    const config = resolveBuiltinModelConfig(catalog!, {
+      model: `anthropic:claude-sonnet-4-6`,
+    })
+
+    expect(config.onPayload).toBeTypeOf(`function`)
+    expect(config.onPayload!({}, {} as any)).toEqual({
+      thinking: { type: `enabled`, budget_tokens: 1024 },
+    })
+  })
+
+  it(`overrides a pre-existing thinking.type=disabled in the Anthropic payload`, async () => {
+    process.env.ANTHROPIC_API_KEY = `test-anthropic-key`
+    vi.stubGlobal(
+      `fetch`,
+      vi.fn(async (url: string) => {
+        if (String(url).includes(`api.anthropic.com`)) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ data: [{ id: `claude-sonnet-4-6` }] }),
+          }
+        }
+        return { ok: false, status: 401, json: async () => ({}) }
+      })
+    )
+
+    const catalog = await createBuiltinModelCatalog()
+    const config = resolveBuiltinModelConfig(catalog!, {
+      model: `anthropic:claude-sonnet-4-6`,
+    })
+
+    expect(
+      config.onPayload!({ thinking: { type: `disabled` } }, {} as any)
+    ).toEqual({
+      thinking: { type: `enabled`, budget_tokens: 1024 },
+    })
+  })
+
+  it(`scales Anthropic thinking budget with explicit reasoningEffort`, async () => {
+    process.env.ANTHROPIC_API_KEY = `test-anthropic-key`
+    vi.stubGlobal(
+      `fetch`,
+      vi.fn(async (url: string) => {
+        if (String(url).includes(`api.anthropic.com`)) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ data: [{ id: `claude-sonnet-4-6` }] }),
+          }
+        }
+        return { ok: false, status: 401, json: async () => ({}) }
+      })
+    )
+
+    const catalog = await createBuiltinModelCatalog()
+    const config = resolveBuiltinModelConfig(catalog!, {
+      model: `anthropic:claude-sonnet-4-6`,
+      reasoningEffort: `high`,
+    })
+
+    expect(config.onPayload!({}, {} as any)).toEqual({
+      thinking: { type: `enabled`, budget_tokens: 24576 },
+    })
+  })
+
   it(`does not expose providers whose keys are rejected`, async () => {
     vi.stubGlobal(
       `fetch`,

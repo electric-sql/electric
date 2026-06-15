@@ -8,10 +8,14 @@
  */
 
 import { Agent } from '@mariozechner/pi-agent-core'
-import { getModel } from '@mariozechner/pi-ai'
+import { getModel, streamSimple } from '@mariozechner/pi-ai'
 import { createOutboundBridge } from './outbound-bridge'
 import { MOONSHOT_PROVIDER, getMoonshotModel } from './moonshot-models'
 import { runtimeLog } from './log'
+import {
+  ModelProviderError,
+  toModelProviderError,
+} from './model-provider-error'
 import type { OutboundIdSeed } from './outbound-bridge'
 import type { ChangeEvent } from '@durable-streams/state'
 import type {
@@ -27,6 +31,33 @@ import type {
   SimpleStreamOptions,
 } from '@mariozechner/pi-ai'
 import type { LLMContentBlock, LLMMessage, LLMMessageContent } from './types'
+
+/**
+ * Split a streamed reasoning blob into `{ title, body }`.
+ *
+ * OpenAI's Responses API surfaces reasoning summaries with a bolded
+ * first line — `**Inspecting PR workflow**\n\n<body>` — which we want
+ * to drive a separate heading in the UI rather than render inline.
+ * Anthropic / DeepSeek-R1 / Moonshot K2 don't emit titles; for them
+ * the regex doesn't match and `title` stays `null`.
+ *
+ * Match is anchored to the start, requires a blank-line terminator
+ * (so partial titles mid-stream don't get prematurely promoted), and
+ * forbids `*` or newline inside the title (so we don't accidentally
+ * eat bolded emphasis later in the text).
+ */
+function parseReasoningSummary(text: string): {
+  title: string | null
+  body: string
+} {
+  const content = text.trim()
+  const match = content.match(/^\*\*([^*\n]+)\*\*(?:\r?\n\r?\n|$)/)
+  if (!match) return { title: null, body: content }
+  return {
+    title: match[1]!.trim(),
+    body: content.slice(match[0].length).trimEnd(),
+  }
+}
 
 // ============================================================================
 // Options
@@ -50,7 +81,12 @@ export interface PiAdapterOptions {
     uncachedInput: number
     output: number
   }) => void
+  modelTimeoutMs?: number
+  modelMaxRetries?: number
 }
+
+const DEFAULT_MODEL_TIMEOUT_MS = 30_000
+const DEFAULT_MODEL_MAX_RETRIES = 0
 
 interface PiAgentAdapterConfig {
   entityUrl: string
@@ -230,24 +266,40 @@ export function createPiAgentAdapter(
     let disposed = false
     let stepStartTime = 0
     let textStarted = false
+    let reasoningStarted = false
+    let reasoningAccum = ``
     let abortedRun = false
 
     const model = resolvePiModel({
       model: opts.model,
       ...(opts.provider && { provider: opts.provider }),
     })
+    const modelTimeoutMs = opts.modelTimeoutMs ?? DEFAULT_MODEL_TIMEOUT_MS
+    const modelMaxRetries = opts.modelMaxRetries ?? DEFAULT_MODEL_MAX_RETRIES
 
-    const agent = new Agent({
+    const baseStreamFn = opts.streamFn ?? streamSimple
+    const streamFn: StreamFn = (streamModel, context, streamOptions) =>
+      baseStreamFn(streamModel, context, {
+        ...streamOptions,
+        timeoutMs: modelTimeoutMs,
+        maxRetries: modelMaxRetries,
+      })
+
+    const agentOptions = {
       initialState: {
         systemPrompt: opts.systemPrompt,
         tools: opts.tools as Array<never>,
         messages: history as Array<never>,
         model,
       },
-      ...(opts.streamFn && { streamFn: opts.streamFn }),
+      streamFn,
       ...(opts.getApiKey && { getApiKey: opts.getApiKey }),
       ...(opts.onPayload && { onPayload: opts.onPayload }),
-    })
+    }
+
+    const agent = new Agent(
+      agentOptions as ConstructorParameters<typeof Agent>[0]
+    )
 
     function processAgentEvents(
       resolveWhenDone: () => void,
@@ -283,6 +335,8 @@ export function createPiAgentAdapter(
               case `message_start`: {
                 stepStartTime = Date.now()
                 textStarted = false
+                reasoningStarted = false
+                reasoningAccum = ``
                 bridge.onStepStart({
                   modelProvider: model.provider,
                   modelId: model.id,
@@ -302,6 +356,42 @@ export function createPiAgentAdapter(
                   }
                   bridge.onTextDelta(assistantEvent.delta ?? ``)
                   textDeltaCount++
+                } else if (assistantEvent?.type === `thinking_start`) {
+                  // Open a reasoning row even if no delta arrives — some
+                  // providers emit an empty thinking block (e.g. when
+                  // reasoning is gated to a level the model didn't use).
+                  // We close it on `thinking_end` regardless.
+                  if (!reasoningStarted) {
+                    reasoningStarted = true
+                    reasoningAccum = ``
+                    bridge.onReasoningStart()
+                  }
+                } else if (assistantEvent?.type === `thinking_delta`) {
+                  // Defensive: providers occasionally emit the first
+                  // delta without a matching `thinking_start`. Open the
+                  // row lazily so we don't drop the chunk.
+                  if (!reasoningStarted) {
+                    reasoningStarted = true
+                    reasoningAccum = ``
+                    bridge.onReasoningStart()
+                  }
+                  const delta = assistantEvent.delta ?? ``
+                  reasoningAccum += delta
+                  bridge.onReasoningDelta(delta)
+                } else if (assistantEvent?.type === `thinking_end`) {
+                  if (reasoningStarted) {
+                    // Parse a bolded `**Title**\n\n` prefix once, here,
+                    // so the UI can drive a heading without re-parsing on
+                    // every render. Only OpenAI's Responses API emits
+                    // these today (Anthropic / DeepSeek don't); the
+                    // helper returns no title for un-titled streams.
+                    const { title } = parseReasoningSummary(reasoningAccum)
+                    bridge.onReasoningEnd(
+                      title !== null ? { summaryTitle: title } : undefined
+                    )
+                    reasoningStarted = false
+                    reasoningAccum = ``
+                  }
                 } else {
                   runtimeLog.debug(
                     logPrefix,
@@ -347,6 +437,19 @@ export function createPiAgentAdapter(
                 if (textStarted) {
                   bridge.onTextEnd()
                   textStarted = false
+                }
+                if (reasoningStarted) {
+                  // Provider closed the message without an explicit
+                  // `thinking_end` (rare, but seen on aborts / errors).
+                  // Close the open reasoning row with whatever title we
+                  // can salvage from the accumulator so it doesn't sit
+                  // forever in `streaming` state.
+                  const { title } = parseReasoningSummary(reasoningAccum)
+                  bridge.onReasoningEnd(
+                    title !== null ? { summaryTitle: title } : undefined
+                  )
+                  reasoningStarted = false
+                  reasoningAccum = ``
                 }
 
                 const usage = msg?.usage
@@ -436,8 +539,11 @@ export function createPiAgentAdapter(
                 })
 
                 if (isError) {
-                  throw new Error(
-                    `pi-agent message_end error: ${msg.errorMessage ?? `unknown error`} (stopReason=${msg.stopReason ?? `none`})`
+                  throw toModelProviderError(
+                    new Error(
+                      `pi-agent message_end error: ${msg.errorMessage ?? `unknown error`} (stopReason=${msg.stopReason ?? `none`})`
+                    ),
+                    { provider: model.provider, model: model.id }
                   )
                 }
                 break
@@ -463,6 +569,20 @@ export function createPiAgentAdapter(
               }
 
               case `agent_end`: {
+                const messages = (event as Record<string, unknown>).messages as
+                  | Array<{ stopReason?: string; errorMessage?: string }>
+                  | undefined
+                const errorMessage = messages?.find(
+                  (message) =>
+                    message.stopReason === `error` && !!message.errorMessage
+                )?.errorMessage
+                if (errorMessage) {
+                  throw toModelProviderError(
+                    new Error(`pi-agent agent_end error: ${errorMessage}`),
+                    { provider: model.provider, model: model.id }
+                  )
+                }
+
                 bridge.onRunEnd({
                   finishReason: abortedRun ? `aborted` : `stop`,
                 })
@@ -526,6 +646,17 @@ export function createPiAgentAdapter(
             unsubscribe()
             bridge.onRunEnd({ finishReason })
           }
+          const failWithProviderError = (err: unknown): ModelProviderError => {
+            const providerError = toModelProviderError(err, {
+              provider: model.provider,
+              model: model.id,
+            })
+            bridge.onError({
+              errorCode: providerError.code,
+              message: providerError.message,
+            })
+            return providerError
+          }
           const abortRun = (): void => {
             if (settled) return
             abortedRun = true
@@ -551,8 +682,9 @@ export function createPiAgentAdapter(
             },
             (err) => {
               if (settled) return
+              const providerError = failWithProviderError(err)
               finish(`error`)
-              reject(err)
+              reject(providerError)
             }
           )
 
@@ -566,8 +698,9 @@ export function createPiAgentAdapter(
           Promise.resolve(runPromise).catch((err: Error) => {
             if (settled) return
             if (abortedRun) return
+            const providerError = failWithProviderError(err)
             finish(`error`)
-            reject(err)
+            reject(providerError)
           })
         })
       },

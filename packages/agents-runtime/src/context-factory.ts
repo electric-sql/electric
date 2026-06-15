@@ -787,6 +787,8 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
           onPayload: activeAgentConfig.onPayload,
 
           onStepEnd: activeAgentConfig.onStepEnd,
+          modelTimeoutMs: activeAgentConfig.modelTimeoutMs,
+          modelMaxRetries: activeAgentConfig.modelMaxRetries,
         })
         const handle = adapterFactory({
           entityUrl: config.entityUrl,

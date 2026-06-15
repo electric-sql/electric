@@ -1,88 +1,20 @@
 import { useCallback, useMemo, useState } from 'react'
+import {
+  isObjectSchema,
+  isSimpleType,
+  isStringArrayType,
+  parseStringArray,
+  stringArrayToDisplay,
+} from '../lib/schemaProperties'
 import { Button, Field, Input, Select, Stack, Text, Textarea } from '../ui'
 import styles from './SchemaForm.module.css'
+import type { ObjectSchema, SchemaProperty } from '../lib/schemaProperties'
 
 // Sentinel value the optional "—" item submits. We can't use the empty
 // string because Base UI's Select treats `value=""` as "no item", so an
 // item with that value would be unselectable; using a unique string and
 // converting in the change handler keeps the UX (clearable enum) intact.
 const EMPTY_VALUE = `__none__`
-
-interface SchemaProperty {
-  type?: string
-  enum?: Array<unknown>
-  items?: { type?: string }
-  title?: string
-  description?: string
-  default?: unknown
-}
-
-interface ObjectSchema {
-  type?: string
-  properties: Record<string, SchemaProperty>
-  required?: Array<string>
-}
-
-export function isObjectSchema(schema: unknown): schema is ObjectSchema {
-  if (!schema || typeof schema !== `object` || Array.isArray(schema))
-    return false
-  const s = schema as Record<string, unknown>
-  return (
-    s.properties != null &&
-    typeof s.properties === `object` &&
-    !Array.isArray(s.properties)
-  )
-}
-
-export function hasSchemaProperties(schema: unknown): boolean {
-  return isObjectSchema(schema) && Object.keys(schema.properties).length > 0
-}
-
-function isSimpleType(prop: SchemaProperty): boolean {
-  if (prop.enum) return true
-  return (
-    prop.type === `string` ||
-    prop.type === `number` ||
-    prop.type === `integer` ||
-    prop.type === `boolean`
-  )
-}
-
-function isStringArrayType(prop: SchemaProperty): boolean {
-  return prop.type === `array` && prop.items?.type === `string`
-}
-
-/**
- * Convert a display string to a string array.
- * Accepts either valid JSON array syntax (e.g. `["a", "b"]`) or
- * a comma-separated list (e.g. `a, b`).
- */
-function parseStringArray(text: string): Array<string> {
-  const trimmed = text.trim()
-  if (trimmed === ``) return []
-  if (trimmed.startsWith(`[`)) {
-    try {
-      const parsed: unknown = JSON.parse(trimmed)
-      if (Array.isArray(parsed) && parsed.every((v) => typeof v === `string`)) {
-        return parsed
-      }
-    } catch {
-      // Fall through to comma-separated parsing
-    }
-  }
-  return trimmed
-    .split(`,`)
-    .map((s) => s.trim())
-    .filter(Boolean)
-}
-
-function stringArrayToDisplay(value: unknown): string {
-  if (Array.isArray(value)) {
-    return value.map(String).join(`, `)
-  }
-  if (typeof value === `string`) return value
-  return ``
-}
 
 /**
  * Renders a JSON-Schema `properties` object as a stack of form fields,

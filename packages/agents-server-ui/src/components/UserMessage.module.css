@@ -114,9 +114,8 @@
 
 .imageAttachment {
   display: grid;
-  grid-template-rows: minmax(0, 1fr) 32px;
+  grid-template-rows: auto 32px;
   width: min(240px, 100%);
-  aspect-ratio: 1;
   padding: 0;
   overflow: hidden;
   border: 1px solid var(--ds-gray-a4);
@@ -127,9 +126,25 @@
   text-align: left;
 }
 
-.imageAttachment img {
+/* Square thumbnail. The image is absolutely positioned so it can't push the
+   aspect-ratio box taller than computed — Safari/iOS WebKit otherwise lets the
+   image's intrinsic height win and overflow the bubble. */
+.imageThumb {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  overflow: hidden;
+}
+
+.imageThumb img,
+.imageThumb .imageLoading {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
+}
+
+.imageAttachment img {
   object-fit: contain;
   background: var(--ds-gray-a2);
 }

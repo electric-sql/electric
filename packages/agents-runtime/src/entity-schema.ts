@@ -187,7 +187,24 @@ type ToolCallValue = {
 }
 type ReasoningValue = {
   key?: string
+  run_id?: string
   status: `streaming` | `completed`
+  // Anthropic emits "redacted thinking" content blocks the client can't
+  // display but MUST round-trip back to the model on the next turn or
+  // the conversation errors. Persist verbatim, render nothing.
+  encrypted?: string
+  // OpenAI's Responses API surfaces reasoning with a bolded title line
+  // (`**Inspecting PR workflow**\n\n<body>`). We split it out at write
+  // time so the UI can drive a separate heading without re-parsing on
+  // every render. Empty / absent for providers that don't emit titles
+  // (Anthropic, DeepSeek-R1, Moonshot K2).
+  summary_title?: string
+}
+type ReasoningDeltaValue = {
+  key?: string
+  reasoning_id: string
+  run_id: string
+  delta: string
 }
 type ErrorEventValue = {
   key?: string
@@ -549,7 +566,20 @@ function createReasoningSchema(): Schema<ReasoningValue> {
   return z.object({
     key: z.string().optional(),
     ...timelineOrderField,
+    run_id: z.string().optional(),
     status: z.enum([`streaming`, `completed`]),
+    encrypted: z.string().optional(),
+    summary_title: z.string().optional(),
+  })
+}
+
+function createReasoningDeltaSchema(): Schema<ReasoningDeltaValue> {
+  return z.object({
+    key: z.string().optional(),
+    ...timelineOrderField,
+    reasoning_id: z.string(),
+    run_id: z.string(),
+    delta: z.string(),
   })
 }
 
@@ -895,6 +925,7 @@ export type Text = SequencedPersistedRow<TextValue>
 export type TextDelta = SequencedPersistedRow<TextDeltaValue>
 export type ToolCall = SequencedPersistedRow<ToolCallValue>
 export type Reasoning = SequencedPersistedRow<ReasoningValue>
+export type ReasoningDelta = SequencedPersistedRow<ReasoningDeltaValue>
 export type ErrorEvent = SequencedPersistedRow<ErrorEventValue>
 export type MessageReceived = SequencedPersistedRow<MessageReceivedValue>
 export type WakeEntry = SequencedPersistedRow<WakeEntryValue>
@@ -993,6 +1024,7 @@ export const ENTITY_COLLECTIONS = {
   textDeltas: `textDeltas`,
   toolCalls: `toolCalls`,
   reasoning: `reasoning`,
+  reasoningDeltas: `reasoningDeltas`,
   errors: `errors`,
   inbox: `inbox`,
   wakes: `wakes`,
@@ -1017,6 +1049,8 @@ export const BUILT_IN_EVENT_SCHEMAS = {
   tool_call: createToolCallSchema() as unknown as BuiltInEntitySchema<ToolCall>,
   reasoning:
     createReasoningSchema() as unknown as BuiltInEntitySchema<Reasoning>,
+  reasoning_delta:
+    createReasoningDeltaSchema() as unknown as BuiltInEntitySchema<ReasoningDelta>,
   error: createErrorEventSchema() as unknown as BuiltInEntitySchema<ErrorEvent>,
   inbox:
     createMessageReceivedSchema() as unknown as BuiltInEntitySchema<MessageReceived>,
@@ -1052,6 +1086,7 @@ type EntityCollectionsDefinition = {
   textDeltas: CollectionDefinition<TextDelta>
   toolCalls: CollectionDefinition<ToolCall>
   reasoning: CollectionDefinition<Reasoning>
+  reasoningDeltas: CollectionDefinition<ReasoningDelta>
   errors: CollectionDefinition<ErrorEvent>
   inbox: CollectionDefinition<MessageReceived>
   wakes: CollectionDefinition<WakeEntry>
@@ -1102,6 +1137,12 @@ export const builtInCollections: EntityCollectionsDefinition = {
   reasoning: {
     schema: BUILT_IN_EVENT_SCHEMAS.reasoning as StandardSchemaV1<Reasoning>,
     type: `reasoning`,
+    primaryKey: `key`,
+  },
+  reasoningDeltas: {
+    schema:
+      BUILT_IN_EVENT_SCHEMAS.reasoning_delta as StandardSchemaV1<ReasoningDelta>,
+    type: `reasoning_delta`,
     primaryKey: `key`,
   },
   errors: {

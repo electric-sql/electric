@@ -173,13 +173,15 @@ function AttachmentPreview({
           title={label}
           onClick={() => setPreviewOpen(true)}
         >
-          {objectUrl ? (
-            <img src={objectUrl} alt={attachment.name} loading="lazy" />
-          ) : (
-            <div className={styles.imageLoading}>
-              <Icon icon={ImageIcon} size={2} />
-            </div>
-          )}
+          <div className={styles.imageThumb}>
+            {objectUrl ? (
+              <img src={objectUrl} alt={attachment.name} loading="lazy" />
+            ) : (
+              <div className={styles.imageLoading}>
+                <Icon icon={ImageIcon} size={2} />
+              </div>
+            )}
+          </div>
           <span>
             <Icon icon={ImageIcon} size={1} />
             {attachment.name}

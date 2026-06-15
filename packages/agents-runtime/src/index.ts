@@ -204,6 +204,13 @@ export type {
 export { buildSections, buildTimelineEntries } from './use-chat'
 export type { EntityTimelineEntry } from './use-chat'
 export { appendPathToUrl } from './url'
+export {
+  ModelProviderError,
+  classifyModelProviderError,
+  modelProviderErrorMessage,
+  toModelProviderError,
+} from './model-provider-error'
+export type { ModelProviderErrorCode } from './model-provider-error'
 
 export {
   defaultProjection,

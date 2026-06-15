@@ -38,6 +38,16 @@ export default ({ config }: ConfigContext): ExpoConfig =>
         // expo-web-browser. See `plugins/with-android-on-new-intent.js`
         // for the underlying Expo issue.
         `./plugins/with-android-on-new-intent.js`,
+        // Image attachments in the composer. The plugin injects the iOS
+        // photo-library / camera usage strings; a dev build (not Expo Go) is
+        // required for the native module.
+        [
+          `expo-image-picker`,
+          {
+            photosPermission: `Allow Electric Agents to attach photos to messages.`,
+            cameraPermission: `Allow Electric Agents to take a photo to attach to a message.`,
+          },
+        ],
       ],
       ios: {
         ...config.ios,

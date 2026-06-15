@@ -314,7 +314,7 @@ describe(`Scheduler`, () => {
 
   it(`reschedules cron from the stored fireAt instead of now`, async () => {
     const mock = createMockPgClient({
-      txResponses: [[{ id: 11 }], []],
+      txResponses: [[{ id: 11 }], [{ exists: 1 }], []],
     })
     const scheduler = new Scheduler({
       pgClient: mock.pgClient,
@@ -344,6 +344,42 @@ describe(`Scheduler`, () => {
     expect(insertCall!.values[4]).toBe(`UTC`)
     expect(insertCall!.values[5]).toBe(5)
     expect(insertCall!.values[2]).toBe(`2026-04-09T10:30:00.000Z`)
+  })
+
+  it(`stops rescheduling cron ticks when the stream has no subscribers`, async () => {
+    const mock = createMockPgClient({
+      txResponses: [[{ id: 11 }], []],
+    })
+    const scheduler = new Scheduler({
+      pgClient: mock.pgClient,
+      instanceId: `instance-1`,
+      executors: {
+        delayed_send: vi.fn(),
+        cron_tick: vi.fn(),
+      },
+    })
+
+    await (scheduler as any).completeAndRescheduleCron({
+      id: 11,
+      kind: `cron_tick`,
+      payload: { streamPath: `/_cron/test` },
+      fireAt: new Date(`2026-04-09T10:00:00.000Z`),
+      cronExpression: `*/30 * * * *`,
+      cronTimezone: `UTC`,
+      cronTickNumber: 4,
+    })
+
+    expect(
+      mock.txCalls.some((call) => call.sql.includes(`update scheduled_tasks`))
+    ).toBe(true)
+    expect(
+      mock.txCalls.some((call) => call.sql.includes(`from wake_registrations`))
+    ).toBe(true)
+    expect(
+      mock.txCalls.some((call) =>
+        call.sql.includes(`insert into scheduled_tasks`)
+      )
+    ).toBe(false)
   })
 
   it(`recovers from transient run loop errors instead of stopping permanently`, async () => {

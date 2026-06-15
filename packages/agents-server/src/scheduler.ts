@@ -228,6 +228,14 @@ export function isPermanentElectricAgentsError(err: unknown): boolean {
   )
 }
 
+function cronTaskStreamPath(
+  payload: DelayedSendPayload | CronTickPayload
+): string | null {
+  return typeof (payload as { streamPath?: unknown }).streamPath === `string`
+    ? (payload as { streamPath: string }).streamPath
+    : null
+}
+
 function normalizeTask(row: ScheduledTaskRow): {
   id: number
   tenantId: string
@@ -679,6 +687,24 @@ export class Scheduler implements SchedulerClient {
         task.cronTimezone!,
         task.fireAt
       )
+
+      const streamPath = cronTaskStreamPath(task.payload)
+      const subscriberRows = streamPath
+        ? await sql<Array<{ exists: number }>>`
+            select 1 as exists
+            from wake_registrations
+            where tenant_id = ${tenantId}
+              and source_url = ${streamPath}
+            limit 1
+          `
+        : []
+
+      // Cron streams are virtual shared sources. If no wake registrations
+      // still point at this cron stream (e.g. the owning manifest schedule was
+      // deleted), stop the chain here instead of keeping a forever-global tick
+      // alive. Rehydration/getOrCreateCronStream will seed a fresh tick when a
+      // subscription is recreated.
+      if (subscriberRows.length === 0) return
 
       await sql`
         insert into scheduled_tasks (

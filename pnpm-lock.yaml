@@ -1019,7 +1019,7 @@ importers:
   examples/tanstack-db-expo-starter:
     dependencies:
       '@electric-sql/client':
-        specifier: 1.5.20
+        specifier: 1.5.21
         version: link:../../packages/typescript-client
       '@expo/metro-runtime':
         specifier: ~5.0.4
@@ -1601,7 +1601,7 @@ importers:
   packages/agents-desktop:
     dependencies:
       '@electric-sql/client':
-        specifier: ^1.5.20
+        specifier: ^1.5.21
         version: link:../typescript-client
       '@mixmark-io/domino':
         specifier: ^2.2.0
@@ -1728,9 +1728,18 @@ importers:
       expo-build-properties:
         specifier: ~1.0.10
         version: 1.0.10(expo@54.0.35)
+      expo-clipboard:
+        specifier: ~8.0.8
+        version: 8.0.8(expo@54.0.35)(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
       expo-constants:
         specifier: ~18.0.13
         version: 18.0.13(expo@54.0.35)(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))
+      expo-image-manipulator:
+        specifier: ~14.0.8
+        version: 14.0.8(expo@54.0.35)
+      expo-image-picker:
+        specifier: ~17.0.11
+        version: 17.0.11(expo@54.0.35)
       expo-linking:
         specifier: ~8.0.12
         version: 8.0.12(expo@54.0.35)(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
@@ -1926,7 +1935,7 @@ importers:
         specifier: workspace:*
         version: link:../agents-runtime
       '@electric-sql/client':
-        specifier: ^1.5.20
+        specifier: ^1.5.21
         version: link:../typescript-client
       '@mariozechner/pi-agent-core':
         specifier: ^0.70.2
@@ -2011,7 +2020,7 @@ importers:
         specifier: ^0.2.6
         version: 0.2.6
       '@electric-sql/client':
-        specifier: ^1.5.20
+        specifier: ^1.5.21
         version: link:../typescript-client
       fast-check:
         specifier: ^4.6.0
@@ -2160,7 +2169,7 @@ importers:
         specifier: workspace:*
         version: link:../agents-runtime
       '@electric-sql/client':
-        specifier: ^1.5.20
+        specifier: ^1.5.21
         version: link:../typescript-client
       '@tanstack/db':
         specifier: ^0.6.4
@@ -14136,6 +14145,13 @@ packages:
     peerDependencies:
       expo: '*'
 
+  expo-clipboard@8.0.8:
+    resolution: {integrity: sha512-VKoBkHIpZZDJTB0jRO4/PZskHdMNOEz3P/41tmM6fDuODMpqhvyWK053X0ebspkxiawJX9lX33JXHBCvVsTTOA==}
+    peerDependencies:
+      expo: '*'
+      react: '*'
+      react-native: '*'
+
   expo-constants@17.1.7:
     resolution: {integrity: sha512-byBjGsJ6T6FrLlhOBxw4EaiMXrZEn/MlUYIj/JAd+FS7ll5X/S4qVRbIimSJtdW47hXMq0zxPfJX6njtA56hHA==}
     peerDependencies:
@@ -14183,6 +14199,21 @@ packages:
       expo: '*'
       react: '*'
       react-native: '*'
+
+  expo-image-loader@6.0.0:
+    resolution: {integrity: sha512-nKs/xnOGw6ACb4g26xceBD57FKLFkSwEUTDXEDF3Gtcu3MqF3ZIYd3YM+sSb1/z9AKV1dYT7rMSGVNgsveXLIQ==}
+    peerDependencies:
+      expo: '*'
+
+  expo-image-manipulator@14.0.8:
+    resolution: {integrity: sha512-sXsXjm7rIxLWZe0j2A41J/Ph53PpFJRdyzJ3EQ/qetxLUvS2m3K1sP5xy37px43qCf0l79N/i6XgFgenFV36/Q==}
+    peerDependencies:
+      expo: '*'
+
+  expo-image-picker@17.0.11:
+    resolution: {integrity: sha512-/apkoyukDvsCHHb9fzP+F34A1uQqSzUtYH/2P/xJACNEwq+mwEXjXvVU8bzlJq6ih0Qo1+tpVivIa7B9kYSwOQ==}
+    peerDependencies:
+      expo: '*'
 
   expo-keep-awake@14.1.4:
     resolution: {integrity: sha512-wU9qOnosy4+U4z/o4h8W9PjPvcFMfZXrlUoKTMBW7F4pLqhkkP/5G4EviPZixv4XWFMjn1ExQ5rV6BX8GwJsWA==}
@@ -23478,7 +23509,7 @@ snapshots:
       '@babel/core': 7.29.0
       '@babel/helper-annotate-as-pure': 7.27.3
       '@babel/helper-compilation-targets': 7.28.6
-      '@babel/helper-globals': 7.28.0
+      '@babel/helper-globals': 7.29.7
       '@babel/helper-plugin-utils': 7.28.6
       '@babel/helper-replace-supers': 7.28.6(@babel/core@7.29.0)
       '@babel/traverse': 7.29.0
@@ -23507,7 +23538,7 @@ snapshots:
     dependencies:
       '@babel/core': 7.29.0
       '@babel/helper-plugin-utils': 7.28.6
-      '@babel/template': 7.28.6
+      '@babel/template': 7.29.7
 
   '@babel/plugin-transform-computed-properties@7.29.7(@babel/core@7.29.0)':
     dependencies:
@@ -36986,6 +37017,12 @@ snapshots:
       expo: 54.0.35(@babel/core@7.29.0)(@expo/metro-runtime@6.1.2)(expo-router@6.0.24)(react-native-webview@13.15.0(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)(typescript@5.9.3)
       semver: 7.7.4
 
+  expo-clipboard@8.0.8(expo@54.0.35)(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0):
+    dependencies:
+      expo: 54.0.35(@babel/core@7.29.0)(@expo/metro-runtime@6.1.2)(expo-router@6.0.24)(react-native-webview@13.15.0(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)(typescript@5.9.3)
+      react: 19.1.0
+      react-native: 0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0)
+
   expo-constants@17.1.7(expo@53.0.20(@babel/core@7.28.0)(@expo/metro-runtime@5.0.4(react-native@0.80.1(@babel/core@7.28.0)(@types/react@19.1.17)(react@19.1.0)))(react-native-webview@13.16.1(react-native@0.80.1(@babel/core@7.28.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.80.1(@babel/core@7.28.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.80.1(@babel/core@7.28.0)(@types/react@19.1.17)(react@19.1.0)):
     dependencies:
       '@expo/config': 11.0.13
@@ -37046,6 +37083,20 @@ snapshots:
       fontfaceobserver: 2.3.0
       react: 19.1.0
       react-native: 0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0)
+
+  expo-image-loader@6.0.0(expo@54.0.35):
+    dependencies:
+      expo: 54.0.35(@babel/core@7.29.0)(@expo/metro-runtime@6.1.2)(expo-router@6.0.24)(react-native-webview@13.15.0(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)(typescript@5.9.3)
+
+  expo-image-manipulator@14.0.8(expo@54.0.35):
+    dependencies:
+      expo: 54.0.35(@babel/core@7.29.0)(@expo/metro-runtime@6.1.2)(expo-router@6.0.24)(react-native-webview@13.15.0(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)(typescript@5.9.3)
+      expo-image-loader: 6.0.0(expo@54.0.35)
+
+  expo-image-picker@17.0.11(expo@54.0.35):
+    dependencies:
+      expo: 54.0.35(@babel/core@7.29.0)(@expo/metro-runtime@6.1.2)(expo-router@6.0.24)(react-native-webview@13.15.0(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)(typescript@5.9.3)
+      expo-image-loader: 6.0.0(expo@54.0.35)
 
   expo-keep-awake@14.1.4(expo@53.0.20(@babel/core@7.28.0)(@expo/metro-runtime@5.0.4(react-native@0.80.1(@babel/core@7.28.0)(@types/react@19.1.17)(react@19.1.0)))(react-native-webview@13.16.1(react-native@0.80.1(@babel/core@7.28.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.80.1(@babel/core@7.28.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react@19.1.0):
     dependencies:

@@ -5,9 +5,11 @@ import {
   toAgentHistory,
 } from '../src/pi-adapter'
 import { createAssistantMessageEventStream } from '@mariozechner/pi-ai'
+import { Type } from '@sinclair/typebox'
 import type { OutboundIdSeed } from '../src/outbound-bridge'
 import type { LLMMessage } from '../src/types'
 import type { ChangeEvent } from '@durable-streams/state'
+import type { AgentTool } from '@mariozechner/pi-agent-core'
 import type {
   AssistantMessage,
   Model,
@@ -44,7 +46,7 @@ describe(`createPiAgentAdapter`, () => {
       entityUrl: `test/entity-1`,
       epoch: 1,
       messages: [],
-      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0 },
+      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0, reasoning: 0 },
       writeEvent: (_event: ChangeEvent) => {},
     }
 
@@ -113,7 +115,7 @@ describe(`createPiAgentAdapter`, () => {
       entityUrl: `test/entity-1`,
       epoch: 1,
       messages: [],
-      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0 },
+      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0, reasoning: 0 },
       writeEvent: (_event: ChangeEvent) => {},
     })
     const controller = new AbortController()
@@ -123,6 +125,333 @@ describe(`createPiAgentAdapter`, () => {
     await abortSeen
     await expect(runPromise).resolves.toBeUndefined()
     expect(handle.isRunning()).toBe(false)
+  })
+
+  it(`passes timeout and retry options to each provider stream call`, async () => {
+    const seenOptions: Array<{ timeoutMs?: number; maxRetries?: number }> = []
+    const completedMessage: AssistantMessage = {
+      role: `assistant`,
+      content: [{ type: `text`, text: `ok` }],
+      api: `anthropic-messages`,
+      provider: `anthropic`,
+      model: `claude-sonnet-4-5-20250929`,
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          total: 0,
+        },
+      },
+      stopReason: `stop`,
+      timestamp: Date.now(),
+    }
+
+    const factory = createPiAgentAdapter({
+      systemPrompt: `Test system prompt`,
+      model: `claude-sonnet-4-5-20250929`,
+      tools: [],
+      modelTimeoutMs: 1234,
+      modelMaxRetries: 2,
+      streamFn: (_model, _context, options) => {
+        seenOptions.push({
+          timeoutMs: options?.timeoutMs,
+          maxRetries: options?.maxRetries,
+        })
+        const stream = createAssistantMessageEventStream()
+        queueMicrotask(() => stream.end(completedMessage))
+        return stream
+      },
+    })
+
+    const handle = factory({
+      entityUrl: `test/entity-1`,
+      epoch: 1,
+      messages: [],
+      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0, reasoning: 0 },
+      writeEvent: (_event: ChangeEvent) => {},
+    })
+
+    await handle.run(`hello`)
+
+    expect(seenOptions).toEqual([{ timeoutMs: 1234, maxRetries: 2 }])
+  })
+
+  it(`preserves existing stream options while injecting timeout and retry options`, async () => {
+    let capturedSignal: AbortSignal | undefined
+    const completedMessage: AssistantMessage = {
+      role: `assistant`,
+      content: [{ type: `text`, text: `ok` }],
+      api: `anthropic-messages`,
+      provider: `anthropic`,
+      model: `claude-sonnet-4-5-20250929`,
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          total: 0,
+        },
+      },
+      stopReason: `stop`,
+      timestamp: Date.now(),
+    }
+
+    const factory = createPiAgentAdapter({
+      systemPrompt: `Test system prompt`,
+      model: `claude-sonnet-4-5-20250929`,
+      tools: [],
+      modelTimeoutMs: 1234,
+      modelMaxRetries: 2,
+      streamFn: (_model, _context, options) => {
+        capturedSignal = options?.signal
+        expect(options?.timeoutMs).toBe(1234)
+        expect(options?.maxRetries).toBe(2)
+        const stream = createAssistantMessageEventStream()
+        queueMicrotask(() => stream.end(completedMessage))
+        return stream
+      },
+    })
+
+    const handle = factory({
+      entityUrl: `test/entity-1`,
+      epoch: 1,
+      messages: [],
+      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0, reasoning: 0 },
+      writeEvent: (_event: ChangeEvent) => {},
+    })
+
+    await handle.run(`hello`)
+
+    expect(capturedSignal).toBeInstanceOf(AbortSignal)
+  })
+
+  it(`converts stream-encoded provider errors into model provider errors`, async () => {
+    const events: Array<ChangeEvent> = []
+    const errorMessage: AssistantMessage = {
+      role: `assistant`,
+      content: [{ type: `text`, text: `` }],
+      api: `anthropic-messages`,
+      provider: `anthropic`,
+      model: `claude-sonnet-4-5-20250929`,
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          total: 0,
+        },
+      },
+      stopReason: `error`,
+      errorMessage: `request timed out`,
+      timestamp: Date.now(),
+    }
+
+    const factory = createPiAgentAdapter({
+      systemPrompt: `Test system prompt`,
+      model: `claude-sonnet-4-5-20250929`,
+      tools: [],
+      streamFn: () => {
+        const stream = createAssistantMessageEventStream()
+        queueMicrotask(() => stream.end(errorMessage))
+        return stream
+      },
+    })
+
+    const handle = factory({
+      entityUrl: `test/entity-1`,
+      epoch: 1,
+      messages: [],
+      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0, reasoning: 0 },
+      writeEvent: (event: ChangeEvent) => events.push(event),
+    })
+
+    await expect(handle.run(`hello`)).rejects.toMatchObject({
+      name: `ModelProviderError`,
+      code: `MODEL_PROVIDER_TIMEOUT`,
+    })
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: `error`,
+        headers: expect.objectContaining({ operation: `insert` }),
+        value: expect.objectContaining({
+          error_code: `MODEL_PROVIDER_TIMEOUT`,
+          run_id: `run-0`,
+          step_id: expect.stringMatching(/^step-/),
+        }),
+      })
+    )
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: `run`,
+        headers: expect.objectContaining({ operation: `update` }),
+        key: `run-0`,
+        value: expect.objectContaining({
+          status: `failed`,
+          finish_reason: `error`,
+        }),
+      })
+    )
+  })
+
+  it(`converts thrown provider errors into model provider errors`, async () => {
+    const events: Array<ChangeEvent> = []
+    const factory = createPiAgentAdapter({
+      systemPrompt: `Test system prompt`,
+      model: `claude-sonnet-4-5-20250929`,
+      tools: [],
+      streamFn: () => {
+        throw new Error(`request timed out`)
+      },
+    })
+
+    const handle = factory({
+      entityUrl: `test/entity-1`,
+      epoch: 1,
+      messages: [],
+      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0, reasoning: 0 },
+      writeEvent: (event: ChangeEvent) => events.push(event),
+    })
+
+    await expect(handle.run(`hello`)).rejects.toMatchObject({
+      name: `ModelProviderError`,
+      code: `MODEL_PROVIDER_TIMEOUT`,
+    })
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: `error`,
+        headers: expect.objectContaining({ operation: `insert` }),
+        value: expect.objectContaining({
+          error_code: `MODEL_PROVIDER_TIMEOUT`,
+          run_id: `run-0`,
+        }),
+      })
+    )
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: `run`,
+        headers: expect.objectContaining({ operation: `update` }),
+        key: `run-0`,
+        value: expect.objectContaining({
+          status: `failed`,
+          finish_reason: `error`,
+        }),
+      })
+    )
+  })
+
+  it(`does not treat model timeout as a whole-run timeout during tool execution`, async () => {
+    const seenOptions: Array<{ timeoutMs?: number; maxRetries?: number }> = []
+    const usage = {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 0,
+      cost: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        total: 0,
+      },
+    }
+    const toolCallMessage: AssistantMessage = {
+      role: `assistant`,
+      content: [
+        {
+          type: `toolCall`,
+          id: `call-1`,
+          name: `slow_tool`,
+          arguments: {},
+        },
+      ],
+      api: `anthropic-messages`,
+      provider: `anthropic`,
+      model: `claude-sonnet-4-5-20250929`,
+      usage,
+      stopReason: `toolUse`,
+      timestamp: Date.now(),
+    }
+    const completedMessage: AssistantMessage = {
+      role: `assistant`,
+      content: [{ type: `text`, text: `done` }],
+      api: `anthropic-messages`,
+      provider: `anthropic`,
+      model: `claude-sonnet-4-5-20250929`,
+      usage,
+      stopReason: `stop`,
+      timestamp: Date.now(),
+    }
+    const tools: Array<AgentTool> = [
+      {
+        name: `slow_tool`,
+        label: `Slow tool`,
+        description: `Sleeps longer than the model timeout`,
+        parameters: Type.Object({}),
+        execute: async () => {
+          await new Promise((resolve) => setTimeout(resolve, 30))
+          return {
+            content: [{ type: `text`, text: `tool result` }],
+            details: {},
+          }
+        },
+      },
+    ]
+
+    const factory = createPiAgentAdapter({
+      systemPrompt: `Test system prompt`,
+      model: `claude-sonnet-4-5-20250929`,
+      tools,
+      modelTimeoutMs: 5,
+      modelMaxRetries: 2,
+      streamFn: (_model, _context, options) => {
+        seenOptions.push({
+          timeoutMs: options?.timeoutMs,
+          maxRetries: options?.maxRetries,
+        })
+        const stream = createAssistantMessageEventStream()
+        const message =
+          seenOptions.length === 1 ? toolCallMessage : completedMessage
+        queueMicrotask(() => stream.end(message))
+        return stream
+      },
+    })
+
+    const handle = factory({
+      entityUrl: `test/entity-1`,
+      epoch: 1,
+      messages: [],
+      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0, reasoning: 0 },
+      writeEvent: (_event: ChangeEvent) => {},
+    })
+
+    await expect(handle.run(`hello`)).resolves.toBeUndefined()
+
+    expect(seenOptions).toEqual([
+      { timeoutMs: 5, maxRetries: 2 },
+      { timeoutMs: 5, maxRetries: 2 },
+    ])
   })
 
   it(`settles an aborted run even if the model stream does not emit completion`, async () => {
@@ -141,7 +470,7 @@ describe(`createPiAgentAdapter`, () => {
       entityUrl: `test/entity-1`,
       epoch: 1,
       messages: [],
-      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0 },
+      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0, reasoning: 0 },
       writeEvent: (_event: ChangeEvent) => {},
     })
     const controller = new AbortController()
@@ -205,7 +534,7 @@ describe(`createPiAgentAdapter`, () => {
       entityUrl: `test/entity-1`,
       epoch: 1,
       messages: [],
-      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0 },
+      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0, reasoning: 0 },
       writeEvent: (event: ChangeEvent) => {
         events.push(event)
       },
@@ -252,7 +581,7 @@ describe(`createPiAgentAdapter`, () => {
       entityUrl: `test/entity-1`,
       epoch: 1,
       messages: [],
-      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0 },
+      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0, reasoning: 0 },
       writeEvent: (_event: ChangeEvent) => {},
     }
 
@@ -271,7 +600,7 @@ describe(`createPiAgentAdapter`, () => {
       entityUrl: `test/entity-1`,
       epoch: 1,
       messages: [],
-      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0 },
+      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0, reasoning: 0 },
       writeEvent: (_event: ChangeEvent) => {},
     }
 
@@ -587,7 +916,7 @@ describe(`toAgentHistory`, () => {
         entityUrl: `test/entity-1`,
         epoch: 1,
         messages: [],
-        outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0 },
+        outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0, reasoning: 0 },
         writeEvent: (e: ChangeEvent) => {
           events.push(e)
         },
