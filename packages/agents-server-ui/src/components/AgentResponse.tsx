@@ -1,4 +1,4 @@
-import { Check, Copy, GitFork, Reply } from 'lucide-react'
+import { Check, Copy, CircleAlert, GitFork, Reply } from 'lucide-react'
 import {
   memo,
   useCallback,
@@ -24,6 +24,7 @@ import {
 } from '../lib/streamdownConfig'
 import { Icon, IconButton, Stack, Text, Tooltip } from '../ui'
 import { ToolCallView } from './ToolCallView'
+import { InlineEventCard } from './InlineEventCard'
 import { TimeText } from './TimeText'
 import { ThinkingIndicator } from './ThinkingIndicator'
 import { ElapsedTime } from './ElapsedTime'
@@ -32,6 +33,7 @@ import { TokenUsage } from './TokenUsage'
 
 import { formatElapsedDuration, toMillis } from '../lib/formatTime'
 import styles from './AgentResponse.module.css'
+import toolBlock from './toolBlock.module.css'
 import type { ForkFromHereAction } from './UserMessage'
 import type {
   EntityTimelineContentItem,
@@ -373,6 +375,41 @@ function errorText(errors: Array<EntityTimelineErrorItem>): string | undefined {
   return errors.length > 0 ? errors.map(formatError).join(`; `) : undefined
 }
 
+const RUN_ERROR_SUMMARY_LENGTH = 180
+
+function isLongRunError(message: string): boolean {
+  return message.length > RUN_ERROR_SUMMARY_LENGTH || message.includes(`\n`)
+}
+
+function runErrorSummary(message: string): string {
+  const normalized = message.replace(/\s+/g, ` `)
+  return normalized.length > RUN_ERROR_SUMMARY_LENGTH
+    ? `${normalized.slice(0, RUN_ERROR_SUMMARY_LENGTH)}…`
+    : normalized
+}
+
+function RunErrorInline({ message }: { message: string }): React.ReactElement {
+  return (
+    <Text size={1} tone="danger" truncate>
+      ✗ {message}
+    </Text>
+  )
+}
+
+function RunErrorCard({ message }: { message: string }): React.ReactElement {
+  return (
+    <InlineEventCard
+      icon={CircleAlert}
+      title="run error"
+      summary={runErrorSummary(message)}
+      defaultExpanded={false}
+      headerSurface
+    >
+      <pre className={toolBlock.codeBlock}>{message}</pre>
+    </InlineEventCard>
+  )
+}
+
 function failedRunText(
   run: EntityTimelineRunRow,
   items: Array<EntityTimelineRunItem>
@@ -658,6 +695,10 @@ export const AgentResponseLive = memo(function AgentResponseLive({
         )
       })}
 
+      {failureText && isLongRunError(failureText) && (
+        <RunErrorCard message={failureText} />
+      )}
+
       <Stack align="center" gap={2} className={styles.metaRow}>
         {showThinking && <ThinkingIndicator />}
         {done && (
@@ -667,10 +708,8 @@ export const AgentResponseLive = memo(function AgentResponseLive({
               : `✓ done`}
           </Text>
         )}
-        {failureText && (
-          <Text size={1} tone="danger">
-            ✗ {failureText}
-          </Text>
+        {failureText && !isLongRunError(failureText) && (
+          <RunErrorInline message={failureText} />
         )}
         {/* Elapsed-time ticker — visible while the response is still
             in flight so the user can see how long the model has been
@@ -896,6 +935,10 @@ export const AgentResponse = memo(function AgentResponse({
         return <ToolCallView key={item.toolCallId} item={item} />
       })}
 
+      {section.error && isLongRunError(section.error) && (
+        <RunErrorCard message={section.error} />
+      )}
+
       <Stack align="center" gap={2} className={styles.metaRow}>
         {showThinking && <ThinkingIndicator />}
         {section.done && (
@@ -905,10 +948,8 @@ export const AgentResponse = memo(function AgentResponse({
               : `✓ done`}
           </Text>
         )}
-        {section.error && (
-          <Text size={1} tone="danger">
-            ✗ {section.error}
-          </Text>
+        {section.error && !isLongRunError(section.error) && (
+          <RunErrorInline message={section.error} />
         )}
         {/* Elapsed-time ticker — kept in sync with the live variant
             above so cached sections (rare during streaming, but the

@@ -146,6 +146,14 @@ function toError(err: unknown): Error {
   return err instanceof Error ? err : new Error(String(err))
 }
 
+async function latestNewRunKey(
+  db: EntityStreamDBWithActions,
+  existingRunKeys: ReadonlySet<string>
+): Promise<string | undefined> {
+  const runs = await queryOnce((q) => q.from({ runs: db.collections.runs }))
+  return runs.filter((run) => !existingRunKeys.has(run.key)).at(-1)?.key
+}
+
 async function resolveHeadersProvider(
   provider: ProcessWakeConfig[`claimHeaders`]
 ): Promise<Record<string, string> | undefined> {
@@ -2158,6 +2166,9 @@ export async function processWake(
       })
 
       let sleepRequested = false
+      const existingRunKeys = new Set(
+        db.collections.runs.toArray.map((run) => run.key)
+      )
 
       try {
         await wirePendingSharedStates()
@@ -2208,12 +2219,14 @@ export async function processWake(
             ? setupErr.code
             : `HANDLER_FAILED`
         log.error(`handler failed for ${entityUrl}:`, errMsg)
+        const failedRunKey = await latestNewRunKey(db, existingRunKeys)
         writeEvent(
           entityStateSchema.errors.insert({
             key: `error-${epoch}-${crypto.randomUUID()}`,
             value: {
               error_code: errCode,
               message: errMsg,
+              ...(failedRunKey ? { run_id: failedRunKey } : {}),
             } as never,
           }) as ChangeEvent
         )
