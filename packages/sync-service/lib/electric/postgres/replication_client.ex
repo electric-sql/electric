@@ -394,8 +394,7 @@ defmodule Electric.Postgres.ReplicationClient do
     state = %{state | pending_event: nil}
 
     if remaining > 0 do
-      state =
-        log_event_retry(state, :processing, event, remaining, reason)
+      state = log_event_retry(state, :processing, event, remaining, reason)
 
       Process.send_after(self(), {:process_event, event, remaining}, @event_retry_delay)
       {:noreply, state}
@@ -612,11 +611,14 @@ defmodule Electric.Postgres.ReplicationClient do
 
   # Replace replication events embedded in an exit reason (e.g. as arguments
   # in a :noproc tuple) with their one-line summary before inspecting, so that
-  # error-level logs never carry full row data. Only the event payloads are
-  # collapsed — the rest of the reason is inspected without limits so the full
-  # error structure reaches the logs (and any error tracker fed from them).
+  # error-level logs never carry full row data. limit: :infinity keeps the full
+  # error structure (every tuple/list/map element) so the reason reaches the
+  # logs — and any error tracker fed from them — untruncated. printable_limit
+  # stays bounded as a backstop: should an event payload slip past scrub_events
+  # in some unanticipated reason shape, individual string blobs are still capped
+  # rather than dumping unbounded row data.
   defp inspect_scrubbed(term) do
-    term |> scrub_events() |> inspect(limit: :infinity, printable_limit: :infinity)
+    term |> scrub_events() |> inspect(limit: :infinity, printable_limit: 8192)
   end
 
   defp scrub_events(%TransactionFragment{} = event), do: "#<#{describe_event(event)}>"
@@ -625,6 +627,11 @@ defmodule Electric.Postgres.ReplicationClient do
 
   defp scrub_events(tuple) when is_tuple(tuple),
     do: tuple |> Tuple.to_list() |> Enum.map(&scrub_events/1) |> List.to_tuple()
+
+  # Recurse into plain maps too — an event can be nested in a map value within
+  # an arbitrary exit reason, and the inspect no longer truncates to catch it.
+  defp scrub_events(map) when is_map(map),
+    do: Map.new(map, fn {k, v} -> {scrub_events(k), scrub_events(v)} end)
 
   # head/tail recursion keeps this safe for improper lists, which can show up
   # in arbitrary exit reasons
