@@ -22,6 +22,22 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
       assert is_integer(oid)
     end
 
+    test "bounds the DB transaction with an explicit timeout", %{opts: opts, db_conn: pool} do
+      test_pid = self()
+
+      Repatch.patch(Postgrex, :transaction, [mode: :shared], fn p, fun, db_opts ->
+        if p == pool, do: send(test_pid, {:db_timeout, Keyword.get(db_opts, :timeout)})
+        Repatch.real(Postgrex.transaction(p, fun, db_opts))
+      end)
+
+      Repatch.allow(self(), opts[:server])
+
+      assert {:ok, {_oid, {"public", "items"}}} =
+               EtsInspector.load_relation_oid({"public", "items"}, opts)
+
+      assert_receive {:db_timeout, 5_000}
+    end
+
     test "caches the relation id for a given relation once accesses", %{opts: opts} do
       assert {:ok, {oid, {"public", "items"}}} =
                EtsInspector.load_relation_oid({"public", "items"}, opts)
@@ -92,7 +108,7 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
       # Non-parallel call should return value from cache
       assert {:ok, ^info} = EtsInspector.load_relation_info(items_oid, opts)
 
-      assert Repatch.called?(Postgrex, :transaction, 2, by: opts[:server], exactly: 1)
+      assert Repatch.called?(Postgrex, :transaction, 3, by: opts[:server], exactly: 1)
     end
 
     test "returns a not found marker when the relation does not exist", %{opts: opts} do
@@ -239,7 +255,7 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
       # Non-parallel call should return value from cache
       assert {:ok, ^columns} = EtsInspector.load_column_info(items_oid, opts)
 
-      assert Repatch.called?(Postgrex, :transaction, 2, by: opts[:server], exactly: 1)
+      assert Repatch.called?(Postgrex, :transaction, 3, by: opts[:server], exactly: 1)
     end
 
     test "returns a not found marker when the relation does not exist", %{opts: opts} do

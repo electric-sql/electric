@@ -13,6 +13,11 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
   import Electric, only: :macros
   require Logger
 
+  # Bound a single relation/column lookup so a degraded pool cannot keep the
+  # inspector busy for Postgrex's 15s default. A shape request that waits this
+  # long has almost certainly already missed its HTTP budget.
+  @fetch_db_timeout 5_000
+
   alias Electric.Postgres.Inspector
   alias Electric.PersistentKV
   alias Electric.Postgres.Inspector.DirectInspector
@@ -240,20 +245,24 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
   defp fetch_from_db(rel_or_oid, state)
        when is_relation(rel_or_oid) or is_relation_id(rel_or_oid) do
     wrap_in_db_errors(fn ->
-      Postgrex.transaction(state.pg_pool, fn conn ->
-        loader_fn =
-          if is_relation(rel_or_oid),
-            do: &DirectInspector.normalize_and_load_relation_info/2,
-            else: &DirectInspector.load_relation_info/2
+      Postgrex.transaction(
+        state.pg_pool,
+        fn conn ->
+          loader_fn =
+            if is_relation(rel_or_oid),
+              do: &DirectInspector.normalize_and_load_relation_info/2,
+              else: &DirectInspector.load_relation_info/2
 
-        with {:ok, rel} <- loader_fn.(rel_or_oid, conn),
-             {:ok, cols} <- DirectInspector.load_column_info(rel.relation_id, conn) do
-          {rel, cols}
-        else
-          {:error, err} -> Postgrex.rollback(conn, err)
-          :table_not_found -> :table_not_found
-        end
-      end)
+          with {:ok, rel} <- loader_fn.(rel_or_oid, conn),
+               {:ok, cols} <- DirectInspector.load_column_info(rel.relation_id, conn) do
+            {rel, cols}
+          else
+            {:error, err} -> Postgrex.rollback(conn, err)
+            :table_not_found -> :table_not_found
+          end
+        end,
+        timeout: @fetch_db_timeout
+      )
     end)
   end
 
