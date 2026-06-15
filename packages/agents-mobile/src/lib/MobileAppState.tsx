@@ -18,6 +18,7 @@ import {
   removeCloudSavedServers,
 } from './savedServers'
 import { prepareServerHeaders } from './serverHeaders'
+import { isSessionDeepLink } from './sessionLinks'
 
 const SERVER_URL_KEY = `electric-agents-mobile.server-url`
 const ONBOARDING_DISMISSED_KEY = `electric-agents-mobile.onboarding-dismissed`
@@ -36,6 +37,9 @@ type MobileAppState = {
   /** Set (or, with `null`, clear) the active server. */
   saveServerUrl: (next: string | null) => Promise<void>
   launchUrl: string | null
+  /** Most recent open-session deep link awaiting routing, or null. */
+  pendingSessionLink: string | null
+  setPendingSessionLink: (next: string | null) => void
   /**
    * Whether the user has finished or explicitly opted out of the
    * first-launch onboarding wizard (cloud sign-in + server URL).
@@ -56,6 +60,9 @@ export function MobileAppStateProvider({
   const [loading, setLoading] = useState(true)
   const [serverUrl, setServerUrl] = useState<string | null>(null)
   const [launchUrl, setLaunchUrl] = useState<string | null>(null)
+  const [pendingSessionLink, setPendingSessionLink] = useState<string | null>(
+    null
+  )
   const [onboardingDismissed, setOnboardingDismissedState] = useState(false)
 
   useEffect(() => {
@@ -92,9 +99,19 @@ export function MobileAppStateProvider({
       }
       setServerUrl(storedUrl)
       setLaunchUrl(initialUrl)
+      if (initialUrl && isSessionDeepLink(initialUrl)) {
+        setPendingSessionLink(initialUrl)
+      }
       setOnboardingDismissedState(storedOnboarding === `true`)
       setLoading(false)
     })()
+  }, [])
+
+  useEffect(() => {
+    const subscription = Linking.addEventListener(`url`, ({ url }) => {
+      if (isSessionDeepLink(url)) setPendingSessionLink(url)
+    })
+    return () => subscription.remove()
   }, [])
 
   const persistServerUrl = useCallback(
@@ -144,6 +161,8 @@ export function MobileAppStateProvider({
       loading,
       serverUrl,
       launchUrl,
+      pendingSessionLink,
+      setPendingSessionLink,
       saveServerUrl: persistServerUrl,
       onboardingDismissed,
       setOnboardingDismissed: async (next: boolean) => {
@@ -155,7 +174,14 @@ export function MobileAppStateProvider({
         setOnboardingDismissedState(next)
       },
     }),
-    [loading, serverUrl, launchUrl, onboardingDismissed, persistServerUrl]
+    [
+      loading,
+      serverUrl,
+      launchUrl,
+      pendingSessionLink,
+      onboardingDismissed,
+      persistServerUrl,
+    ]
   )
 
   return (
