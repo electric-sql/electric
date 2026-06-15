@@ -20,6 +20,7 @@ import type {
   LaunchAtLoginStatus,
   McpServerConfig,
   OnboardingState,
+  OpenSessionPayload,
   PreventAppSuspensionPreference,
   ServerConfig,
 } from './shared/types'
@@ -236,6 +237,16 @@ const api = {
     ) => callback(command)
     ipcRenderer.on(`desktop:command`, listener)
     return () => ipcRenderer.removeListener(`desktop:command`, listener)
+  },
+  onOpenSession: (
+    callback: (payload: OpenSessionPayload) => void
+  ): (() => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      payload: OpenSessionPayload
+    ) => callback(payload)
+    ipcRenderer.on(`desktop:open-session`, listener)
+    return () => ipcRenderer.removeListener(`desktop:open-session`, listener)
   },
   // ── MCP registry surface ────────────────────────────────────────
   // Push-based view of the embedded BuiltinAgentsServer's MCP registry.

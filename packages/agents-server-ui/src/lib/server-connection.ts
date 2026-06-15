@@ -405,6 +405,13 @@ declare global {
       onDesktopCommand?: (
         callback: (command: DesktopCommand) => void
       ) => () => void
+      onOpenSession?: (
+        callback: (payload: {
+          serverId: string | null
+          serverUrl: string
+          entityUrl: string
+        }) => void
+      ) => () => void
       /**
        * Push-based view of the in-process MCP registry. `getSnapshot`
        * returns the latest state (or empty when no runtime is running);
