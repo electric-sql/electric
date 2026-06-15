@@ -78,8 +78,10 @@ export interface BuiltinDockerSandboxMount {
 type _AssignableTo<A extends B, B> = A
 type _AssertMountCompat = _AssignableTo<
   BuiltinDockerSandboxMount,
-  // eslint-disable-next-line quotes -- type-position import() requires a string literal
-  NonNullable<import('@electric-ax/agents-runtime/sandbox/docker').DockerSandboxOpts['extraMounts']>[number]
+  NonNullable<
+    // eslint-disable-next-line quotes -- type-position import() requires a string literal
+    import('@electric-ax/agents-runtime/sandbox/docker').DockerSandboxOpts['extraMounts']
+  >[number]
 >
 
 /**
