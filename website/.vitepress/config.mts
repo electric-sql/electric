@@ -284,6 +284,10 @@ const agentsDocsSidebar = [
       },
       { text: 'MCP servers', link: '/docs/agents/usage/mcp-servers' },
       { text: 'Testing', link: '/docs/agents/usage/testing' },
+      {
+        text: 'Sharing and deep links',
+        link: '/docs/agents/usage/sharing-and-deep-links',
+      },
     ],
   },
   {
