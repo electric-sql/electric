@@ -69,13 +69,9 @@ Status: **332 passed / 0 failed**, on both engines.
 
 ---
 
-<!-- PRELIMINARY: inlined from bench/RESULTS.md for review; remove before merge and keep the canonical copy in bench/RESULTS.md. -->
+## Benchmarks (preliminary)
 
-## Benchmarks (preliminary — see `bench/RESULTS.md`)
-
-> These numbers are preliminary and inlined here for review — a snapshot, not a maintained part of the README. The canonical, full version (including the scale-out load generator and reproduce steps) lives in [`bench/RESULTS.md`](bench/RESULTS.md).
-
-Measured 2026-06-13. Both servers file-backed with per-append durable fsync (Node: libuv `fdatasync` = `F_BARRIERFSYNC`; Rust: `F_BARRIERFSYNC` on macOS, `fdatasync` on Linux, coalesced/group-commit). The same Node-based load clients drive every server, so cross-server numbers are comparable. Rust built `--release`. `rust-hyper` is `--http-engine hyper` (tokio + hyper); `rust-raw` is `--http-engine raw` (custom HTTP/1.1 loop, `sendfile(2)` reads on Linux; on macOS it falls back to positioned reads, so there `rust-raw ≈ rust-hyper` minus framework overhead).
+These numbers are preliminary. Measured 2026-06-13, both servers file-backed with per-append durable fsync (Node: libuv `fdatasync` = `F_BARRIERFSYNC`; Rust: `F_BARRIERFSYNC` on macOS, `fdatasync` on Linux, coalesced/group-commit). The same Node-based load clients drive every server, so cross-server numbers are comparable. Rust built `--release`. `rust-hyper` is `--http-engine hyper` (tokio + hyper); `rust-raw` is `--http-engine raw` (custom HTTP/1.1 loop, `sendfile(2)` reads on Linux; on macOS it falls back to positioned reads, so there `rust-raw ≈ rust-hyper` minus framework overhead).
 
 ### macOS (10 cores, 16 GB, Apple SSD) — official suite (`@durable-streams/benchmarks`, via the TS client)
 
@@ -94,3 +90,25 @@ Measured 2026-06-13. Both servers file-backed with per-append durable fsync (Nod
 | **Server CPU at ~1,580 MB/s read** | **113.9 %** | **11.8 %**          |
 
 The zero-copy headline: at equal read throughput, the sendfile engine uses ~**10× less server CPU** (one core's worth of work shrinks to a tenth). Read throughput is _equal_ only because the Node load-generator processes saturate first — the raw engine has an order of magnitude more headroom that a heavier client (or kTLS, or more readers) would expose.
+
+### Running them
+
+The official suite (`@durable-streams/benchmarks`, latency + small/large-message throughput) runs against any server over HTTP. Run it against this server on each engine, and against the reference Node server for comparison:
+
+```bash
+# build the Rust server
+cargo build --release --manifest-path packages/server-rust/Cargo.toml
+BIN=packages/server-rust/target/release/durable-streams-server
+
+# Rust server — pick an engine with --http-engine {hyper|raw}
+$BIN --port 4564 --data-dir .streams-dev/bench-rust --http-engine raw &
+BENCH_URL=http://localhost:4564 BENCH_ENV=rust pnpm exec vitest bench --run \
+  --config packages/server-rust/bench/vitest.bench.config.ts
+
+# reference Node server, for comparison
+PORT=4565 DATA_DIR=.streams-dev/bench-node pnpm exec tsx packages/server-rust/bench/node-server.ts &
+BENCH_URL=http://localhost:4565 BENCH_ENV=node pnpm exec vitest bench --run \
+  --config packages/server-rust/bench/vitest.bench.config.ts
+```
+
+Each run writes `benchmark-results.json` to the cwd. Delete `.streams-dev/bench-*` and stop the backgrounded servers when done.
