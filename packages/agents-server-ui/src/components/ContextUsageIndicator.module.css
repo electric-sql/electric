@@ -1,0 +1,39 @@
+.indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0 0.25rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted, rgba(0, 0, 0, 0.55));
+  user-select: none;
+  cursor: default;
+}
+
+.percent {
+  font-size: 0.72rem;
+  line-height: 1;
+  color: inherit;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
+/* Levels mirror the compaction thresholds: warning once background
+   compaction would start (85%), critical at the hard ceiling (95%). */
+.normal {
+  color: var(--text-muted, rgba(0, 0, 0, 0.55));
+}
+
+.warning {
+  color: var(--warning-text, #b26a00);
+}
+
+.critical {
+  color: var(--danger-text, #a02020);
+}

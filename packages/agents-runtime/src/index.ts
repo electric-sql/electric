@@ -360,6 +360,19 @@ export {
 export type { GoalCommand, GoalDispatchResult } from './goal-command'
 export { assembleContext } from './context-assembly'
 export { approxTokens, formatTokenCount, sliceChars } from './token-budget'
+export {
+  CONTEXT_USAGE_AWARENESS_THRESHOLDS,
+  CONTEXT_USAGE_BACKGROUND_START,
+  CONTEXT_USAGE_HARD_CEILING,
+  computeContextUsage,
+  contextUsageLevel,
+  formatContextUsagePercent,
+} from './token-accountant'
+export type {
+  ContextUsage,
+  ContextUsageInput,
+  ContextUsageLevel,
+} from './token-accountant'
 export { createContextTools } from './tools/context-tools'
 export {
   completeWithLowCostModel,

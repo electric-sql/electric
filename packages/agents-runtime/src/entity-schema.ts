@@ -165,6 +165,17 @@ type StepValue = {
   // would re-count the whole conversation on every step.
   input_tokens?: number
   output_tokens?: number
+  // Cache-inclusive prompt size for this step (`input + cacheRead +
+  // cacheWrite`) — i.e. how many tokens of the model's context window the
+  // request actually occupied. Unlike `input_tokens` (which excludes cache
+  // reads so budget accounting doesn't re-count the conversation every warm
+  // turn) this is the right number for a context-fullness gauge. Optional and
+  // additive, so older events without it stay valid.
+  context_input_tokens?: number
+  // The model's context window at the time of this step. Persisted alongside
+  // the usage so consumers can render a fraction without resolving the model
+  // registry themselves.
+  context_window?: number
 }
 type TextValue = {
   key?: string

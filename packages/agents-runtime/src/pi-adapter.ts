@@ -531,6 +531,24 @@ export function createPiAgentAdapter(
                     : typeof usage?.outputTokens === `number`
                       ? usage.outputTokens
                       : undefined
+                // Cache-INCLUSIVE prompt size: every token the request put in
+                // the context window, including prompt-cache reads. This is
+                // what a "% of context used" gauge needs — cached tokens still
+                // occupy the window even though `usageInput` excludes them for
+                // budget accounting.
+                const usageContext =
+                  sumPresentNumbers([
+                    usage?.input,
+                    usage?.cacheWrite,
+                    usage?.cacheRead,
+                  ]) ??
+                  (typeof usage?.inputTokens === `number`
+                    ? usage.inputTokens
+                    : undefined)
+                const contextWindow =
+                  typeof model.contextWindow === `number`
+                    ? model.contextWindow
+                    : undefined
                 bridge.onStepEnd({
                   finishReason,
                   durationMs: Date.now() - stepStartTime,
@@ -541,6 +559,10 @@ export function createPiAgentAdapter(
                   ...(usageOutput !== undefined && {
                     tokenOutput: usageOutput,
                   }),
+                  ...(usageContext !== undefined && {
+                    tokenContext: usageContext,
+                  }),
+                  ...(contextWindow !== undefined && { contextWindow }),
                 })
 
                 if (isError) {
