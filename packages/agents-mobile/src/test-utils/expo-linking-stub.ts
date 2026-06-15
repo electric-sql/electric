@@ -17,7 +17,10 @@ export function parse(url: string): {
   try {
     const parsed = new URL(url)
     parsed.searchParams.forEach((value, key) => {
-      queryParams[key] = decodeURIComponent(value)
+      // URLSearchParams already percent-decodes values; decoding again would
+      // double-decode (and throw on a literal `%`), diverging from real
+      // expo-linking.
+      queryParams[key] = value
     })
     path = parsed.pathname || null
     hostname = parsed.hostname || null
