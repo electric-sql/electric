@@ -135,6 +135,7 @@ export interface HandlerContextConfig<TState extends StateProxy = StateProxy> {
   }) => Promise<SendResult>
   doSetTag: (key: string, value: string) => Promise<void>
   doDeleteTag: (key: string) => Promise<void>
+  doUnobserve: (sourceRef: string) => Promise<void>
 }
 
 export interface HandlerContextResult<TState extends StateProxy = StateProxy> {
@@ -959,6 +960,9 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         ObservationHandle & EntityHandle & SharedStateHandle
       >
     }) as DebugHandlerContext<TState>[`observe`],
+    unobserve(sourceRef: string): Promise<void> {
+      return config.doUnobserve(sourceRef)
+    },
     spawn(
       type: string,
       id: string,

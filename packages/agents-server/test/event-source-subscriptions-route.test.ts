@@ -74,6 +74,25 @@ describe(`event source subscription routes`, () => {
     )
   })
 
+  it(`deletes a pg-sync observation for the entity`, async () => {
+    const deletePgSyncObservation = vi.fn(async () => ({ txid: `tx-9` }))
+    const ctx = tenantContext({ deletePgSyncObservation })
+
+    const response = await internalRouter.fetch(
+      new Request(
+        `http://agents.test/_electric/entities/coder/session-1/pg-sync-observations/ref-abc`,
+        { method: `DELETE` }
+      ),
+      ctx
+    )
+
+    expect(response?.status).toBe(200)
+    await expect(response!.json()).resolves.toEqual({ txid: `tx-9` })
+    expect(deletePgSyncObservation).toHaveBeenCalledWith(`/coder/session-1`, {
+      sourceRef: `ref-abc`,
+    })
+  })
+
   it(`lists configured event source contracts`, async () => {
     const ctx = tenantContext()
 
@@ -163,6 +182,7 @@ function tenantContext(
   overrides: {
     upsertEventSourceSubscription?: unknown
     deleteEventSourceSubscription?: unknown
+    deletePgSyncObservation?: unknown
     ensureEventSourceWakeSource?: TenantContext[`ensureEventSourceWakeSource`]
     eventSources?: TenantContext[`eventSources`]
   } = {}
@@ -199,6 +219,9 @@ function tenantContext(
         txid: `tx-1`,
       })),
       deleteEventSourceSubscription: vi.fn(async () => ({ txid: `tx-1` })),
+      deletePgSyncObservation:
+        overrides.deletePgSyncObservation ??
+        vi.fn(async () => ({ txid: `tx-1` })),
       ...(overrides.upsertEventSourceSubscription
         ? {
             upsertEventSourceSubscription:

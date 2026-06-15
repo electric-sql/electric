@@ -3,6 +3,7 @@ import { Value } from '@sinclair/typebox/value'
 import { pgSync } from '@electric-ax/agents-runtime'
 import { createHortonTools } from '../src/agents/horton'
 import { createObservePgSyncTool } from '../src/tools/observe-pg-sync'
+import { createUnobservePgSyncTool } from '../src/tools/unobserve-pg-sync'
 
 function textResult(result: unknown): any {
   const text = (result as { content: Array<{ text: string }> }).content[0]!.text
@@ -161,5 +162,124 @@ describe(`observe_pg_sync tool`, () => {
     )
 
     expect(tools.map((tool) => tool.name)).toContain(`observe_pg_sync`)
+  })
+})
+
+function ctxWithObservations(
+  observations: Array<{
+    sourceRef: string
+    table?: string
+    url?: string
+    streamUrl?: string
+  }>,
+  unobserve = vi.fn(async () => undefined)
+) {
+  return {
+    unobserve,
+    db: {
+      collections: {
+        manifests: {
+          toArray: observations.map((o) => ({
+            key: `source:pgSync:${o.sourceRef}`,
+            kind: `source`,
+            sourceType: `pgSync`,
+            sourceRef: o.sourceRef,
+            ...(o.streamUrl ? { streamUrl: o.streamUrl } : {}),
+            config: {
+              ...(o.table ? { table: o.table } : {}),
+              ...(o.url ? { url: o.url } : {}),
+            },
+          })),
+        },
+      },
+    },
+  } as any
+}
+
+describe(`unobserve_pg_sync tool`, () => {
+  it(`lists active observations when called with no arguments`, async () => {
+    const tool = createUnobservePgSyncTool(
+      ctxWithObservations([
+        { sourceRef: `ref-a`, table: `todos`, url: `http://e/v1/shape` },
+      ])
+    )
+
+    const result = textResult(await tool.execute(`call`, {}))
+    expect(result.observations).toEqual([
+      {
+        sourceRef: `ref-a`,
+        table: `todos`,
+        url: `http://e/v1/shape`,
+      },
+    ])
+  })
+
+  it(`unobserves by sourceRef`, async () => {
+    const unobserve = vi.fn(async () => undefined)
+    const tool = createUnobservePgSyncTool(
+      ctxWithObservations([{ sourceRef: `ref-a`, table: `todos` }], unobserve)
+    )
+
+    const result = textResult(
+      await tool.execute(`call`, { sourceRef: `ref-a` })
+    )
+    expect(unobserve).toHaveBeenCalledWith(`ref-a`)
+    expect(result).toEqual({ unobserved: true, sourceRef: `ref-a` })
+  })
+
+  it(`resolves a unique table to its sourceRef`, async () => {
+    const unobserve = vi.fn(async () => undefined)
+    const tool = createUnobservePgSyncTool(
+      ctxWithObservations(
+        [
+          { sourceRef: `ref-a`, table: `todos` },
+          { sourceRef: `ref-b`, table: `users` },
+        ],
+        unobserve
+      )
+    )
+
+    await tool.execute(`call`, { table: `users` })
+    expect(unobserve).toHaveBeenCalledWith(`ref-b`)
+  })
+
+  it(`refuses an ambiguous table without unobserving`, async () => {
+    const unobserve = vi.fn(async () => undefined)
+    const tool = createUnobservePgSyncTool(
+      ctxWithObservations(
+        [
+          { sourceRef: `ref-a`, table: `todos` },
+          { sourceRef: `ref-b`, table: `todos` },
+        ],
+        unobserve
+      )
+    )
+
+    const result = textResult(await tool.execute(`call`, { table: `todos` }))
+    expect(unobserve).not.toHaveBeenCalled()
+    expect(result.error).toMatch(/Multiple pg-sync observations/)
+  })
+
+  it(`reports not-found for an unknown sourceRef without unobserving`, async () => {
+    const unobserve = vi.fn(async () => undefined)
+    const tool = createUnobservePgSyncTool(
+      ctxWithObservations([{ sourceRef: `ref-a`, table: `todos` }], unobserve)
+    )
+
+    const result = await tool.execute(`call`, { sourceRef: `missing` })
+    const text = (result as { content: Array<{ text: string }> }).content[0]!
+      .text
+    expect(unobserve).not.toHaveBeenCalled()
+    expect(text).toMatch(/No active pg-sync observation/)
+  })
+
+  it(`is included in Horton's tool list`, () => {
+    const tools = createHortonTools(
+      { workingDirectory: `/tmp` } as any,
+      { send: vi.fn(), observe: vi.fn() } as any,
+      new Set()
+    )
+
+    expect(tools.map((tool) => tool.name)).toContain(`unobserve_pg_sync`)
   })
 })

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { getPgSyncStreamPath, pgSync } from '../src/observation-sources'
+import {
+  getPgSyncStreamPath,
+  pgSync,
+  sourceRefForPgSync,
+} from '../src/observation-sources'
 
 describe(`pgSync observation source`, () => {
   it(`uses the pgSync source type`, () => {
@@ -125,6 +129,47 @@ describe(`pgSync observation source`, () => {
   it(`treats omitted replica as replica default`, () => {
     expect(pgSync({ table: `todos` }).sourceRef).toBe(
       pgSync({ table: `todos`, replica: `default` }).sourceRef
+    )
+  })
+})
+
+describe(`sourceRefForPgSync identity metadata`, () => {
+  const base = { url: `https://electric.example/v1/shape`, table: `todos` }
+
+  it(`isolates identity-bearing metadata so different principals/tenants/entities get distinct bridges`, () => {
+    expect(
+      sourceRefForPgSync({ ...base, metadata: { principalId: `a` } })
+    ).not.toBe(sourceRefForPgSync({ ...base, metadata: { principalId: `b` } }))
+    expect(
+      sourceRefForPgSync({ ...base, metadata: { tenantId: `t1` } })
+    ).not.toBe(sourceRefForPgSync({ ...base, metadata: { tenantId: `t2` } }))
+    expect(
+      sourceRefForPgSync({ ...base, metadata: { entityUrl: `/x/1` } })
+    ).not.toBe(sourceRefForPgSync({ ...base, metadata: { entityUrl: `/x/2` } }))
+  })
+
+  it(`ignores ephemeral metadata (wakeId, runtimeConsumerId, streamPath) so a bridge is reused across wakes`, () => {
+    const identity = { tenantId: `t1`, principalId: `a`, entityUrl: `/x/1` }
+    expect(
+      sourceRefForPgSync({
+        ...base,
+        metadata: {
+          ...identity,
+          wakeId: `wake-1`,
+          runtimeConsumerId: `runner-1`,
+          streamPath: `/x/1/main`,
+        },
+      })
+    ).toBe(
+      sourceRefForPgSync({
+        ...base,
+        metadata: {
+          ...identity,
+          wakeId: `wake-2`,
+          runtimeConsumerId: `runner-2`,
+          streamPath: `/x/1/other`,
+        },
+      })
     )
   })
 })

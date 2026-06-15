@@ -485,6 +485,12 @@ entitiesRouter.delete(
   withEntityPermission(`write`),
   deleteEventSourceSubscription
 )
+entitiesRouter.delete(
+  `/:type/:instanceId/pg-sync-observations/:sourceRef`,
+  withExistingEntity,
+  withEntityPermission(`write`),
+  deletePgSyncObservation
+)
 entitiesRouter.get(
   `/:type/:instanceId/grants`,
   withExistingEntity,
@@ -1086,6 +1092,23 @@ async function deleteEventSourceSubscription(
       id: decodeURIComponent(request.params.subscriptionId),
     }
   )
+  return json(result)
+}
+
+async function deletePgSyncObservation(
+  request: AgentsRouteRequest,
+  ctx: TenantContext
+): Promise<Response> {
+  const principalMutationError = rejectPrincipalEntityMutation(
+    request,
+    `unobserved a pg-sync source`
+  )
+  if (principalMutationError) return principalMutationError
+
+  const { entityUrl } = requireExistingEntityRoute(request)
+  const result = await ctx.entityManager.deletePgSyncObservation(entityUrl, {
+    sourceRef: decodeURIComponent(request.params.sourceRef),
+  })
   return json(result)
 }
 

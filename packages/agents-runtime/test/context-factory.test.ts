@@ -96,6 +96,7 @@ describe(`createHandlerContext`, () => {
       tags: {},
       doSetTag: vi.fn().mockResolvedValue(undefined),
       doDeleteTag: vi.fn().mockResolvedValue(undefined),
+      doUnobserve: vi.fn().mockResolvedValue(undefined),
     })
 
     expect(ctx.wake).toMatchObject({
@@ -188,6 +189,7 @@ describe(`createHandlerContext`, () => {
       tags: {},
       doSetTag: vi.fn().mockResolvedValue(undefined),
       doDeleteTag: vi.fn().mockResolvedValue(undefined),
+      doUnobserve: vi.fn().mockResolvedValue(undefined),
     })
 
     ctx.slashCommands.register({
@@ -336,6 +338,7 @@ describe(`createHandlerContext`, () => {
       tags: {},
       doSetTag: vi.fn().mockResolvedValue(undefined),
       doDeleteTag: vi.fn().mockResolvedValue(undefined),
+      doUnobserve: vi.fn().mockResolvedValue(undefined),
     })
 
     ctx.useAgent({
@@ -463,6 +466,7 @@ describe(`createHandlerContext`, () => {
       tags: {},
       doSetTag: vi.fn().mockResolvedValue(undefined),
       doDeleteTag: vi.fn().mockResolvedValue(undefined),
+      doUnobserve: vi.fn().mockResolvedValue(undefined),
     })
 
     ctx.useAgent({

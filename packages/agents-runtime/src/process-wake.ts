@@ -2166,6 +2166,9 @@ export async function processWake(
         doDeleteTag: async (key) => {
           await serverClient.deleteTag(entityUrl, key, writeToken)
         },
+        doUnobserve: async (sourceRef) => {
+          await serverClient.removePgSyncObservation({ entityUrl, sourceRef })
+        },
       })
 
       let sleepRequested = false

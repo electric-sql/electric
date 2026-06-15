@@ -342,6 +342,7 @@ export function createTestHandlerContext(
     executeSend: vi.fn(),
     doSetTag: vi.fn(async () => undefined),
     doDeleteTag: vi.fn(async () => undefined),
+    doUnobserve: vi.fn(async () => undefined),
   })
 }
 

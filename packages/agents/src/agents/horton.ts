@@ -4,6 +4,7 @@ import { serverLog } from '../log'
 import { createHortonDocsSupport } from '../docs/knowledge-base'
 import { createSpawnWorkerTool } from '../tools/spawn-worker'
 import { createObservePgSyncTool } from '../tools/observe-pg-sync'
+import { createUnobservePgSyncTool } from '../tools/unobserve-pg-sync'
 import { createForkTool } from '../tools/fork'
 import { createSetTitleTool } from '../tools/set-title'
 import {
@@ -286,6 +287,7 @@ When a user opens with a greeting ("hi", "hello", "hey", etc.) or a broad statem
 - spawn_worker: dispatch a subagent for an isolated task
 - fork: spawn a child session that inherits this conversation's history up to the latest completed response. Same parent-ownership model as spawn_worker — when the fork's next run finishes, you'll wake with its response.
 - observe_pg_sync: observe an Electric Postgres sync stream and wake on matching changes (see "Observing Postgres tables")
+- unobserve_pg_sync: stop being woken by a pg-sync stream you previously observed (see "Observing Postgres tables")
 - send: send a message to an Electric Agent/entity. To schedule future work for yourself, call send with self: true and afterMs.
 ${eventSourceTools}${titleTool}${scheduleTools}${docsTools}${skillsTools}
 
@@ -301,6 +303,7 @@ observe_pg_sync subscribes you to row changes in a Postgres table via an Electri
 - Registration validates the endpoint by fetching the shape log first. If it fails, the error includes Electric's response or the failure reason — use it to correct the table name, where clause, or URL, or relay it to the user.
 - Use \`where\` and \`columns\` to narrow the shape so you only wake on changes you care about; use \`wake.ops\` to filter by operation and \`wake.debounceMs\` to batch bursts.
 - The observation persists across wakes — register it once, don't re-register on every wake.
+- To stop, call unobserve_pg_sync with the sourceRef from observe_pg_sync (or the table name). Call it with no arguments to list your active observations. This only ends your own subscription.
 
 # Risky actions
 Pause and confirm with the user before:
@@ -378,6 +381,7 @@ export function createHortonTools(
     createSpawnWorkerTool(ctx, opts.modelConfig),
     createForkTool(ctx),
     createObservePgSyncTool(ctx),
+    createUnobservePgSyncTool(ctx),
     createSetTitleTool(ctx),
     createSendTool(ctx.send, { selfEntityUrl: ctx.entityUrl }),
     ...(opts.docsSearchTool ? [opts.docsSearchTool] : []),

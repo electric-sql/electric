@@ -1,4 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest'
 import {
   getPgSyncStreamPath,
   sourceRefForPgSync,
@@ -8,6 +17,12 @@ import {
   pgSyncMessageToDurableEvent,
   PgSyncBridgeManager,
 } from '../src/pg-sync-bridge-manager'
+import { createDb } from '../src/db/index'
+import { PostgresRegistry } from '../src/entity-registry'
+import {
+  resetElectricAgentsTestBackend,
+  TEST_POSTGRES_URL,
+} from './test-backend'
 
 const { mockState } = vi.hoisted(() => ({
   mockState: {
@@ -623,6 +638,46 @@ describe(`external review red tests`, () => {
   })
 })
 
+describe(`pg-sync bridge registry (real DB)`, () => {
+  let client: ReturnType<typeof createDb>[`client`] | undefined
+  let registry: PostgresRegistry
+
+  beforeAll(async () => {
+    await resetElectricAgentsTestBackend()
+    const connection = createDb(TEST_POSTGRES_URL)
+    client = connection.client
+    registry = new PostgresRegistry(connection.db, `tenant-a`)
+  }, 120_000)
+
+  afterAll(async () => {
+    await client?.end()
+  }, 120_000)
+
+  it(`preserves the committed cursor and snapshot flag across a duplicate registration`, async () => {
+    const options = { url: SHAPE_URL, table: `todos` }
+    await registry.upsertPgSyncBridge({
+      sourceRef: `ref-dup`,
+      options,
+      streamUrl: `/stream`,
+    })
+    // The running bridge completes its initial snapshot and commits a cursor.
+    await registry.updatePgSyncBridgeCursor(`ref-dup`, `shape-a`, `5_0`, true)
+
+    // A re-registration (now the common path with a metadata-stable sourceRef)
+    // must not invalidate the bootstrap state while keeping the cursor.
+    await registry.upsertPgSyncBridge({
+      sourceRef: `ref-dup`,
+      options,
+      streamUrl: `/stream`,
+    })
+
+    const row = await registry.getPgSyncBridge(`ref-dup`)
+    expect(row?.shapeHandle).toBe(`shape-a`)
+    expect(row?.shapeOffset).toBe(`5_0`)
+    expect(row?.initialSnapshotComplete).toBe(true)
+  })
+})
+
 describe(`pg-sync production hardening`, () => {
   it(`uses the source URL from registration options and forwards request metadata as shape params`, async () => {
     const manager = new PgSyncBridgeManager(
@@ -826,7 +881,11 @@ describe(`pg-sync production hardening`, () => {
       wakeId: `wake-2`,
     })
 
-    expect(first.sourceRef).toBe(sourceRefForPgSync(options))
+    // Identity now folds in principal/tenant/entity metadata (so it differs
+    // from the bare-options hash), but ephemeral fields like wakeId are
+    // excluded, so re-registering across wakes reuses the same bridge.
+    expect(first.sourceRef).not.toBe(sourceRefForPgSync(options))
+    expect(second.sourceRef).toBe(first.sourceRef)
     expect(second).toEqual(first)
     expect(mockState.constructedOptions).toHaveLength(1)
   })
