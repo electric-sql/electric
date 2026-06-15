@@ -82,6 +82,7 @@ export function ChatSessionScreen({
   onComposerHeightChange,
   onSendMessage,
   onInlineQueuedMessagesChange,
+  onShare,
 }: {
   entityUrl: string
   onBack: () => void
@@ -93,6 +94,7 @@ export function ChatSessionScreen({
   onInlineQueuedMessagesChange?: (
     messages: Array<OptimisticInboxMessage>
   ) => void
+  onShare?: () => void
 }): React.ReactElement {
   return (
     <SessionScreen
@@ -105,6 +107,7 @@ export function ChatSessionScreen({
       onComposerHeightChange={onComposerHeightChange}
       onSendMessage={onSendMessage}
       onInlineQueuedMessagesChange={onInlineQueuedMessagesChange}
+      onShare={onShare}
     />
   )
 }
@@ -113,10 +116,12 @@ export function StateInspectorSessionScreen({
   entityUrl,
   onBack,
   onSetView,
+  onShare,
 }: {
   entityUrl: string
   onBack: () => void
   onSetView: (view: EmbedViewId) => void
+  onShare?: () => void
 }): React.ReactElement {
   return (
     <SessionScreen
@@ -124,6 +129,7 @@ export function StateInspectorSessionScreen({
       view="state-explorer"
       onBack={onBack}
       onSetView={onSetView}
+      onShare={onShare}
     />
   )
 }
@@ -147,6 +153,7 @@ export function SessionScreen({
   onComposerHeightChange,
   onSendMessage,
   onInlineQueuedMessagesChange,
+  onShare,
 }: {
   entityUrl: string
   view: EmbedViewId
@@ -159,6 +166,7 @@ export function SessionScreen({
   onInlineQueuedMessagesChange?: (
     messages: Array<OptimisticInboxMessage>
   ) => void
+  onShare?: () => void
 }): React.ReactElement {
   const { entitiesCollection, serverUrl, signalEntity } = useAgents()
   const tokens = useTokens()
@@ -433,6 +441,7 @@ export function SessionScreen({
         signalError={signalError}
         onSignal={sendMenuSignal}
         onStopImmediately={() => void stopImmediately()}
+        onShare={onShare}
         signalDisabled={!canSignal}
       />
     </Screen>

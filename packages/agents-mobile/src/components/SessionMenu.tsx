@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Animated, StyleSheet, Text, View } from 'react-native'
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native'
 import {
   BottomSheet,
   BottomSheetItem,
@@ -7,9 +7,12 @@ import {
   BottomSheetSeparator,
 } from './BottomSheet'
 import { Icon } from './Icon'
+import { useCopyFeedback } from './useCopyFeedback'
 import { useDrillTransition } from './useDrillTransition'
 import { togglePin, usePinnedUrls } from '../lib/pinnedEntities'
+import { sessionIdFromEntityUrl } from '../lib/sessionLinks'
 import { useTokens } from '../lib/ThemeProvider'
+import { monoFontFamily } from '../lib/theme'
 import type { ElectricEntity, EntitySignal } from '../lib/agentsClient'
 import type { EmbedViewId } from '../lib/embedView'
 
@@ -102,8 +105,10 @@ const SIGNAL_OPTION_GROUPS: ReadonlyArray<
 
 /**
  * Bottom-sheet "more" menu for the chat screen — exposes the view
- * toggle (chat / state explorer), a pin toggle (mirror of the
- * desktop tile menu's Pin/Unpin), plus a status header. Tapping a
+ * toggle (chat / state explorer), a pin toggle (mirror of the desktop
+ * tile menu's Pin/Unpin), a Share entry that drills into the share &
+ * access screen, plus a status header with a copyable session id.
+ * Tapping a
  * row immediately switches the view and dismisses the sheet, so the
  * user can swap between modes in one tap-tap gesture (kebab → mode).
  */
@@ -116,6 +121,7 @@ export function SessionMenu({
   signalError,
   onSignal,
   onStopImmediately,
+  onShare,
   signalDisabled = false,
 }: {
   open: boolean
@@ -126,9 +132,12 @@ export function SessionMenu({
   signalError?: string | null
   onSignal?: (signal: EntitySignal) => void
   onStopImmediately?: () => void
+  /** Opens the share & access screen. */
+  onShare?: () => void
   signalDisabled?: boolean
 }): React.ReactElement {
   const tokens = useTokens()
+  const { copiedKey, copy } = useCopyFeedback()
   const pinnedUrls = usePinnedUrls()
   const pinned = entity !== null && pinnedUrls.includes(entity.url)
   const [signalMenuOpen, setSignalMenuOpen] = useState(false)
@@ -267,15 +276,39 @@ export function SessionMenu({
                       {entity.status}
                     </Text>
                     <View style={{ flex: 1 }} />
-                    <Text
+                    {/* Tappable session id — mirrors the desktop
+                        entity header's copy-id affordance (icon swaps
+                        to a check while the copy feedback is active). */}
+                    <Pressable
+                      onPress={() =>
+                        copy(`id`, sessionIdFromEntityUrl(entity.url))
+                      }
+                      hitSlop={8}
                       style={{
-                        color: tokens.text3,
-                        fontSize: 12,
-                        textTransform: `lowercase`,
+                        flexDirection: `row`,
+                        alignItems: `center`,
+                        gap: 6,
+                        flexShrink: 1,
                       }}
                     >
-                      {entity.type}
-                    </Text>
+                      <Text
+                        numberOfLines={1}
+                        style={{
+                          flexShrink: 1,
+                          color: tokens.text3,
+                          fontSize: 12,
+                          fontFamily: monoFontFamily,
+                        }}
+                      >
+                        {sessionIdFromEntityUrl(entity.url)}
+                      </Text>
+                      <Icon
+                        name={copiedKey === `id` ? `check` : `copy`}
+                        size={14}
+                        color={tokens.text3}
+                        strokeWidth={2}
+                      />
+                    </Pressable>
                   </View>
                   {signalError ? (
                     <Text
@@ -341,6 +374,31 @@ export function SessionMenu({
                       handleClose()
                     }}
                   />
+                  {onShare && (
+                    <BottomSheetItem
+                      label="Share"
+                      icon={
+                        <Icon
+                          name="share"
+                          size={18}
+                          color={tokens.text2}
+                          strokeWidth={2}
+                        />
+                      }
+                      trailing={
+                        <Icon
+                          name="chevron-right"
+                          size={16}
+                          color={tokens.text3}
+                          strokeWidth={2}
+                        />
+                      }
+                      onPress={() => {
+                        handleClose()
+                        onShare()
+                      }}
+                    />
+                  )}
                 </BottomSheetSection>
               </>
             )}

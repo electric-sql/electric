@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { StyleSheet, Text, View } from 'react-native'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { useLiveQuery } from '@tanstack/react-db'
 import {
   formatAbsoluteDateTime,
@@ -18,8 +18,10 @@ import {
   BottomSheetSeparator,
 } from './BottomSheet'
 import { Icon } from './Icon'
+import { useCopyFeedback } from './useCopyFeedback'
 import { useAgents } from '../lib/AgentsProvider'
 import { getEntityDisplayTitle, type ElectricEntity } from '../lib/agentsClient'
+import { sessionIdFromEntityUrl } from '../lib/sessionLinks'
 import { useTokens } from '../lib/ThemeProvider'
 import { fontSize, monoFontFamily } from '../lib/theme'
 import type { Tokens } from '../lib/theme'
@@ -89,6 +91,7 @@ function EntityInfo({
   const tokens = useTokens()
   const styles = useMemo(() => createStyles(tokens), [tokens])
   const { runnersCollection } = useAgents()
+  const { copiedKey, copy } = useCopyFeedback()
 
   // Resolve runner/sandbox labels via the shared pure helpers (the
   // web's `useEntityRuntimeInfo` reads its own provider context, so
@@ -108,9 +111,21 @@ function EntityInfo({
       <Text style={styles.infoTitle} numberOfLines={2}>
         {getEntityDisplayTitle(entity)}
       </Text>
-      <Text style={styles.infoId} numberOfLines={1}>
-        {entity.url.replace(/^\//, ``)}
-      </Text>
+      <Pressable
+        onPress={() => copy(`id`, sessionIdFromEntityUrl(entity.url))}
+        hitSlop={8}
+        style={styles.infoIdRow}
+      >
+        <Text style={styles.infoId} numberOfLines={1}>
+          {sessionIdFromEntityUrl(entity.url)}
+        </Text>
+        <Icon
+          name={copiedKey === `id` ? `check` : `copy`}
+          size={14}
+          color={tokens.text3}
+          strokeWidth={2}
+        />
+      </Pressable>
       <Text style={styles.infoMeta} numberOfLines={1}>
         {entity.type} · {entity.status}
         {childCount > 0
@@ -166,7 +181,15 @@ function createStyles(tokens: Tokens) {
       fontWeight: `500`,
       lineHeight: 20,
     },
+    infoIdRow: {
+      alignSelf: `flex-start`,
+      flexDirection: `row`,
+      alignItems: `center`,
+      gap: 6,
+      maxWidth: `100%`,
+    },
     infoId: {
+      flexShrink: 1,
       color: tokens.text3,
       fontSize: fontSize.sm,
       fontFamily: monoFontFamily,
