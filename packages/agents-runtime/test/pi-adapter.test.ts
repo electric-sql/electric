@@ -46,7 +46,7 @@ describe(`createPiAgentAdapter`, () => {
       entityUrl: `test/entity-1`,
       epoch: 1,
       messages: [],
-      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0 },
+      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0, reasoning: 0 },
       writeEvent: (_event: ChangeEvent) => {},
     }
 
@@ -115,7 +115,7 @@ describe(`createPiAgentAdapter`, () => {
       entityUrl: `test/entity-1`,
       epoch: 1,
       messages: [],
-      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0 },
+      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0, reasoning: 0 },
       writeEvent: (_event: ChangeEvent) => {},
     })
     const controller = new AbortController()
@@ -174,7 +174,7 @@ describe(`createPiAgentAdapter`, () => {
       entityUrl: `test/entity-1`,
       epoch: 1,
       messages: [],
-      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0 },
+      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0, reasoning: 0 },
       writeEvent: (_event: ChangeEvent) => {},
     })
 
@@ -229,7 +229,7 @@ describe(`createPiAgentAdapter`, () => {
       entityUrl: `test/entity-1`,
       epoch: 1,
       messages: [],
-      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0 },
+      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0, reasoning: 0 },
       writeEvent: (_event: ChangeEvent) => {},
     })
 
@@ -280,7 +280,7 @@ describe(`createPiAgentAdapter`, () => {
       entityUrl: `test/entity-1`,
       epoch: 1,
       messages: [],
-      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0 },
+      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0, reasoning: 0 },
       writeEvent: (event: ChangeEvent) => events.push(event),
     })
 
@@ -328,7 +328,7 @@ describe(`createPiAgentAdapter`, () => {
       entityUrl: `test/entity-1`,
       epoch: 1,
       messages: [],
-      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0 },
+      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0, reasoning: 0 },
       writeEvent: (event: ChangeEvent) => events.push(event),
     })
 
@@ -442,7 +442,7 @@ describe(`createPiAgentAdapter`, () => {
       entityUrl: `test/entity-1`,
       epoch: 1,
       messages: [],
-      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0 },
+      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0, reasoning: 0 },
       writeEvent: (_event: ChangeEvent) => {},
     })
 
@@ -470,7 +470,7 @@ describe(`createPiAgentAdapter`, () => {
       entityUrl: `test/entity-1`,
       epoch: 1,
       messages: [],
-      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0 },
+      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0, reasoning: 0 },
       writeEvent: (_event: ChangeEvent) => {},
     })
     const controller = new AbortController()
@@ -534,7 +534,7 @@ describe(`createPiAgentAdapter`, () => {
       entityUrl: `test/entity-1`,
       epoch: 1,
       messages: [],
-      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0 },
+      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0, reasoning: 0 },
       writeEvent: (event: ChangeEvent) => {
         events.push(event)
       },
@@ -581,7 +581,7 @@ describe(`createPiAgentAdapter`, () => {
       entityUrl: `test/entity-1`,
       epoch: 1,
       messages: [],
-      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0 },
+      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0, reasoning: 0 },
       writeEvent: (_event: ChangeEvent) => {},
     }
 
@@ -600,7 +600,7 @@ describe(`createPiAgentAdapter`, () => {
       entityUrl: `test/entity-1`,
       epoch: 1,
       messages: [],
-      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0 },
+      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0, reasoning: 0 },
       writeEvent: (_event: ChangeEvent) => {},
     }
 
@@ -916,7 +916,7 @@ describe(`toAgentHistory`, () => {
         entityUrl: `test/entity-1`,
         epoch: 1,
         messages: [],
-        outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0 },
+        outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0, reasoning: 0 },
         writeEvent: (e: ChangeEvent) => {
           events.push(e)
         },
