@@ -564,20 +564,11 @@ defmodule Electric.Shapes.Consumer do
   end
 
   @doc false
-  # heap_bytes: process total_heap_size in bytes; threshold_bytes: configured byte threshold (or nil)
-  @spec over_heap_threshold?(non_neg_integer(), non_neg_integer() | nil) :: boolean()
-  def over_heap_threshold?(_heap_bytes, nil), do: false
-
-  def over_heap_threshold?(heap_bytes, threshold_bytes) when is_integer(threshold_bytes) do
-    heap_bytes > threshold_bytes
-  end
-
-  @doc false
-  # Decide whether to force a full GC sweep: heap must be over the threshold AND
-  # at least @gc_min_interval_ms must have elapsed since the last forced GC.
-  # last_gc_at / now_ms are monotonic milliseconds; last_gc_at is nil if this
-  # consumer has never forced a GC (always fire on first over-threshold event).
-  # Passing explicit min_interval_ms enables deterministic unit tests.
+  # Decide whether to force a full GC sweep: heap (bytes) must be over the
+  # threshold (bytes) AND at least @gc_min_interval_ms must have elapsed since the
+  # last forced GC. last_gc_at / now_ms are monotonic milliseconds; last_gc_at is
+  # nil if this consumer has never forced a GC (always fire on first over-threshold
+  # event). Passing explicit min_interval_ms enables deterministic unit tests.
   @spec should_force_gc?(
           non_neg_integer(),
           non_neg_integer() | nil,
@@ -596,7 +587,7 @@ defmodule Electric.Shapes.Consumer do
   def should_force_gc?(_heap_bytes, nil, _last_gc_at, _now_ms, _min_interval_ms), do: false
 
   def should_force_gc?(heap_bytes, threshold_bytes, last_gc_at, now_ms, min_interval_ms) do
-    over_heap_threshold?(heap_bytes, threshold_bytes) and
+    heap_bytes > threshold_bytes and
       (is_nil(last_gc_at) or now_ms - last_gc_at >= min_interval_ms)
   end
 

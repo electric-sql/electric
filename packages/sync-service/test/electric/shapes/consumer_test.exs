@@ -2722,24 +2722,6 @@ defmodule Electric.Shapes.ConsumerTest do
     :ok
   end
 
-  describe "over_heap_threshold?/2" do
-    test "false when threshold is nil" do
-      refute Electric.Shapes.Consumer.over_heap_threshold?(1_000_000, nil)
-    end
-
-    test "false when heap is below threshold" do
-      refute Electric.Shapes.Consumer.over_heap_threshold?(10, 1024)
-    end
-
-    test "true when heap exceeds threshold" do
-      assert Electric.Shapes.Consumer.over_heap_threshold?(1000, 1)
-    end
-
-    test "exactly-equal is not over threshold" do
-      refute Electric.Shapes.Consumer.over_heap_threshold?(1024, 1024)
-    end
-  end
-
   describe "should_force_gc?/5" do
     # All tests pass explicit now_ms / last_gc_at / min_interval_ms so they are
     # fully deterministic and do not depend on wall-clock time.
@@ -2775,6 +2757,10 @@ defmodule Electric.Shapes.ConsumerTest do
 
     test "false when heap is under threshold even if interval would have elapsed" do
       refute Electric.Shapes.Consumer.should_force_gc?(1, 1_000, 0, 5_000, 1_000)
+    end
+
+    test "false when heap exactly equals threshold (strict comparison)" do
+      refute Electric.Shapes.Consumer.should_force_gc?(1_000, 1_000, nil, 5_000, 1_000)
     end
   end
 
