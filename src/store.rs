@@ -1,7 +1,7 @@
 // Stream store: per-stream state, contiguous wire-byte data files, coalesced fsync.
 //
-// On-disk layout (per research notes/rust-server-research.md): the data file
-// contains exactly the wire bytes of the stream payload, contiguously.
+// On-disk layout: the data file contains exactly the wire bytes of the stream
+// payload, contiguously.
 //   - binary streams: raw payload bytes as POSTed
 //   - JSON streams:   each message followed by a `,` separator
 // A catch-up read is then a literal byte range of the file (JSON responses
