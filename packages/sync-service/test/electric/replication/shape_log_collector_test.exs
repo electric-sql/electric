@@ -135,17 +135,59 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         end
       )
 
-      :ok
+      %{introspection_attempts: attempts}
     end
 
     setup :setup_log_collector
 
     @tag capture_log: true
     @tag restore_shapes: [{@shape_handle, @shape}], inspector: @inspector
-    test "retries introspection until the connection becomes available", ctx do
+    test "retries introspection until the connection becomes available and restores the shape",
+         ctx do
       pid = ShapeLogCollector.name(ctx.stack_id) |> GenServer.whereis()
       assert is_pid(pid)
       assert Process.alive?(pid)
+
+      # The retry loop should have hit the connection error twice before
+      # succeeding, otherwise this test would pass even if retrying were broken.
+      assert :counters.get(ctx.introspection_attempts, 1) == 2
+
+      # Survival isn't enough: prove the shape was actually restored by routing a
+      # transaction through it. If restore had given up (or skipped the shape),
+      # the EventRouter wouldn't know about it and nothing would be consumed.
+      parent = self()
+      xmin = 100
+      lsn = Lsn.from_string("0/10")
+      last_log_offset = LogOffset.new(lsn, 0)
+
+      consumer =
+        start_link_supervised!(
+          {Support.TransactionConsumer,
+           [
+             id: 1,
+             stack_id: ctx.stack_id,
+             parent: parent,
+             shape: @shape,
+             shape_handle: @shape_handle,
+             action: :restore
+           ]}
+        )
+
+      :ok =
+        Electric.Shapes.ConsumerRegistry.register_consumer(consumer, @shape_handle, ctx.stack_id)
+
+      txn =
+        complete_txn_fragment(xmin, lsn, [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "2", "name" => "foo"},
+            log_offset: last_log_offset
+          }
+        ])
+
+      assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
+
+      assert [^xmin] = Support.TransactionConsumer.assert_consume([{1, consumer}], [txn])
     end
   end
 
