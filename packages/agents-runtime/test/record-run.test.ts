@@ -15,20 +15,27 @@ interface RecordRunHarness {
   writeEvent: ReturnType<typeof vi.fn>
 }
 
+// Unique collection ids per harness: the run-key allocator coordinates
+// through a process-wide seed cache keyed by `runs.id` (mirroring how each
+// entity has a unique runs collection in production), so reusing one id
+// across test cases would leak allocations between them.
+let harnessSeq = 0
+
 function buildHarness(opts?: { existingRunKeys?: Array<string> }): {
   ctx: ReturnType<typeof createHandlerContext>[`ctx`]
   writeEvent: ReturnType<typeof vi.fn>
 } {
+  const harnessId = harnessSeq++
   const collections: Record<string, unknown> = {}
   for (const [name] of Object.entries(ENTITY_COLLECTIONS)) {
     if (name === `runs`) continue
     collections[name] = createLocalOnlyTestCollection([], {
-      id: `test-${name}`,
+      id: `test-${harnessId}-${name}`,
     })
   }
   collections.runs = createLocalOnlyTestCollection(
     (opts?.existingRunKeys ?? []).map((key) => ({ key, status: `completed` })),
-    { id: `test-runs` }
+    { id: `test-${harnessId}-runs` }
   )
 
   const db = {

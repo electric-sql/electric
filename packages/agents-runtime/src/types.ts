@@ -36,6 +36,7 @@ import type {
   ContextInserted as EntityContextInserted,
   ContextRemoved as EntityContextRemoved,
   EntitySignal,
+  GoalStatus as EntityGoalStatus,
   Manifest as EntityManifest,
   ManifestAttachmentEntry as EntityManifestAttachmentEntry,
   ManifestChildEntry as EntityManifestChildEntry,
@@ -43,6 +44,7 @@ import type {
   ManifestCronScheduleEntry as EntityManifestCronScheduleEntry,
   ManifestEffectEntry as EntityManifestEffectEntry,
   ManifestFutureSendScheduleEntry as EntityManifestFutureSendScheduleEntry,
+  ManifestGoalEntry as EntityManifestGoalEntry,
   ManifestSharedStateEntry as EntityManifestSharedStateEntry,
   ManifestSourceEntry as EntityManifestSourceEntry,
   Signal as EntitySignalEntry,
@@ -321,11 +323,13 @@ export type ManifestCronScheduleEntry = EntityManifestCronScheduleEntry
 export type ManifestEffectEntry = EntityManifestEffectEntry
 export type ManifestFutureSendScheduleEntry =
   EntityManifestFutureSendScheduleEntry
+export type ManifestGoalEntry = EntityManifestGoalEntry
 export type ManifestSourceEntry = EntityManifestSourceEntry
 export type ManifestSharedStateEntry = EntityManifestSharedStateEntry
 export type ContextInserted = EntityContextInserted
 export type ContextRemoved = EntityContextRemoved
 export type ContextEntryAttrs = EntityContextEntryAttrs
+export type GoalStatus = EntityGoalStatus
 
 export interface ContextEntryInput {
   name: string
@@ -336,6 +340,27 @@ export interface ContextEntryInput {
 export interface ContextEntry extends ContextEntryInput {
   id: string
   insertedAt: number
+}
+
+export interface GoalInput {
+  objective: string
+  status?: GoalStatus
+  // `null` means unbounded; omitted means "use the runtime default".
+  tokenBudget?: number | null
+}
+
+export interface GoalEntry {
+  id: string
+  objective: string
+  status: GoalStatus
+  tokenBudget: number | null
+  tokensUsed: number
+  // Completion note recorded by mark_goal_complete — what was
+  // accomplished, or what blocked the goal.
+  summary?: string
+  // ISO strings, matching every other manifest kind.
+  createdAt: string
+  updatedAt: string
 }
 
 export type AttachmentCreateInput = {
@@ -916,6 +941,17 @@ export interface AgentConfig {
     provider: string
   ) => Promise<string | undefined> | string | undefined
   onPayload?: SimpleStreamOptions[`onPayload`]
+  // Invoked after each step ends with the provider-reported token counts.
+  // `input` is the full prompt volume (incl. prompt-cache reads/writes, as
+  // displayed in the meta row); `uncachedInput` is the new input this step
+  // only (fresh tokens + cache writes; cache reads excluded). Budget
+  // accounting should use `uncachedInput + output` so warm cache turns
+  // don't re-count the whole conversation each step.
+  onStepEnd?: (stats: {
+    input: number
+    uncachedInput: number
+    output: number
+  }) => void
   modelTimeoutMs?: number
   modelMaxRetries?: number
   testResponses?: TestResponses
@@ -948,7 +984,7 @@ export interface OutboundBridgeHandle {
 }
 
 export interface AgentHandle {
-  run: (input?: string) => Promise<AgentRunResult>
+  run: (input?: string, abortSignal?: AbortSignal) => Promise<AgentRunResult>
 }
 
 /**
@@ -1026,6 +1062,14 @@ export interface HandlerContext<
   removeContext: (id: string) => void
   getContext: (id: string) => ContextEntry | undefined
   listContext: () => Array<ContextEntry>
+  setGoal: (input: GoalInput) => GoalEntry
+  clearGoal: () => boolean
+  getGoal: () => GoalEntry | undefined
+  markGoalComplete: (summary?: string) => GoalEntry | undefined
+  updateGoalUsage: (
+    tokensUsed: number,
+    opts?: { status?: GoalEntry[`status`] }
+  ) => GoalEntry | undefined
   agent: AgentHandle
   spawn: (
     type: string,
@@ -1130,6 +1174,13 @@ export interface HandlerContext<
    * `useAgent` flow records runs internally via the outbound bridge.
    */
   recordRun: () => RunHandle
+  /**
+   * Write a synthetic agent text reply to the entity. Emits a complete
+   * runs + texts + text_delta sequence so the chat UI renders it as an
+   * ordinary assistant message. Use for runtime-driven replies (slash
+   * commands, error messages) that don't involve the LLM.
+   */
+  replyText: (text: string) => void
   sleep: () => void
   setTag: (key: string, value: string) => Promise<void>
   deleteTag: (key: string) => Promise<void>

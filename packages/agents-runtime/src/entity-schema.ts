@@ -372,6 +372,25 @@ type ManifestFutureSendScheduleEntryValue = {
   failedAt?: string
   lastError?: string
 }
+type GoalStatusValue = `active` | `complete` | `budget_limited`
+type ManifestGoalEntryValue = {
+  key?: string
+  kind: `goal`
+  id: string
+  objective: string
+  status: GoalStatusValue
+  // `null` means unbounded — the user must opt in explicitly.
+  tokenBudget: number | null
+  // Maintained by the handler's in-memory step accumulator (the single
+  // write path for usage); enforcement aborts mid-run via the step-end hook.
+  tokensUsed: number
+  // Optional completion note recorded by mark_goal_complete — what was
+  // accomplished, or what blocked the goal.
+  summary?: string
+  // ISO strings, matching every other manifest kind.
+  createdAt: string
+  updatedAt: string
+}
 type ReplayWatermarkValue = {
   key?: string
   source_id: string
@@ -758,6 +777,7 @@ function createManifestSchema(): Schema<
   | ManifestContextEntryValue
   | ManifestCronScheduleEntryValue
   | ManifestFutureSendScheduleEntryValue
+  | ManifestGoalEntryValue
 > {
   return z.union([
     z.object({
@@ -860,6 +880,19 @@ function createManifestSchema(): Schema<
       failedAt: z.string().optional(),
       lastError: z.string().optional(),
     }),
+    z.object({
+      key: z.string().optional(),
+      ...timelineOrderField,
+      kind: z.literal(`goal`),
+      id: z.string(),
+      objective: z.string(),
+      status: z.enum([`active`, `complete`, `budget_limited`]),
+      tokenBudget: z.number().int().positive().nullable(),
+      tokensUsed: z.number().int().nonnegative(),
+      summary: z.string().optional(),
+      createdAt: z.string(),
+      updatedAt: z.string(),
+    }),
   ]) as unknown as Schema<
     | ManifestChildEntryValue
     | ManifestSourceEntryValue
@@ -869,6 +902,7 @@ function createManifestSchema(): Schema<
     | ManifestContextEntryValue
     | ManifestCronScheduleEntryValue
     | ManifestFutureSendScheduleEntryValue
+    | ManifestGoalEntryValue
   >
 }
 
@@ -924,6 +958,8 @@ export type ManifestCronScheduleEntry =
   SequencedPersistedRow<ManifestCronScheduleEntryValue>
 export type ManifestFutureSendScheduleEntry =
   SequencedPersistedRow<ManifestFutureSendScheduleEntryValue>
+export type GoalStatus = GoalStatusValue
+export type ManifestGoalEntry = SequencedPersistedRow<ManifestGoalEntryValue>
 type ManifestUnion =
   | ManifestChildEntry
   | ManifestSourceEntry
@@ -933,6 +969,7 @@ type ManifestUnion =
   | ManifestContextEntry
   | ManifestCronScheduleEntry
   | ManifestFutureSendScheduleEntry
+  | ManifestGoalEntry
 export type Manifest = ManifestUnion & {
   id?: string
   entity_url?: string
@@ -964,10 +1001,15 @@ export type Manifest = ManifestUnion & {
   targetUrl?: string
   producerId?: string
   messageType?: string
-  status?: FutureSendScheduleStatus | AttachmentStatusValue
+  status?: FutureSendScheduleStatus | AttachmentStatusValue | GoalStatusValue
   sentAt?: string
   failedAt?: string
   lastError?: string
+  objective?: string
+  tokenBudget?: number | null
+  tokensUsed?: number
+  summary?: string
+  updatedAt?: string
 }
 export type ReplayWatermark = SequencedPersistedRow<ReplayWatermarkValue>
 

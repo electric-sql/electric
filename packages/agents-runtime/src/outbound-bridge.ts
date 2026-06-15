@@ -106,6 +106,41 @@ export async function loadOutboundIdSeed(
   return seed
 }
 
+/**
+ * Synchronously allocate the next `run-N` key, coordinated with the
+ * outbound bridge's id-seed cache. Writers like `ctx.recordRun()` and
+ * `ctx.replyText()` emit run rows via `writeEvent`, which has no
+ * synchronous local apply — the collection only catches up when the
+ * event round-trips, so seeding a counter from `runs.toArray` alone can
+ * reuse a key the bridge just allocated. Consulting (and advancing) the
+ * shared cache keeps all allocators collision-free within the process.
+ */
+export function allocateRunKey(
+  db: Pick<EntityStreamDB, `collections`>,
+  floor = 0
+): string {
+  const cacheKey = db.collections.runs.id
+  const fromDb = nextCounterFromKeys(
+    db.collections.runs.toArray.map((run) => run.key),
+    `run`
+  )
+  // Without a stable collection id the shared cache would cross-contaminate
+  // unrelated DBs (e.g. test fixtures); rely on the caller's floor instead.
+  const cached = cacheKey ? outboundIdSeedCache.get(cacheKey) : undefined
+  const next = Math.max(fromDb, cached?.run ?? 0, floor)
+  if (cacheKey) {
+    outboundIdSeedCache.set(cacheKey, {
+      run: next + 1,
+      step: cached?.step ?? 0,
+      msg: cached?.msg ?? 0,
+      tc: cached?.tc ?? 0,
+      reasoning: cached?.reasoning ?? 0,
+      cacheKey,
+    })
+  }
+  return `run-${next}`
+}
+
 export interface OutboundBridge {
   onRunStart: () => void
   onRunEnd: (opts?: { finishReason?: string }) => void
@@ -114,6 +149,9 @@ export interface OutboundBridge {
   onStepEnd: (opts?: {
     finishReason?: string
     tokenInput?: number
+    // Uncached portion of the input side (no cacheRead/cacheWrite). Not
+    // persisted to the step row — forwarded to hooks for budget accounting.
+    tokenInputUncached?: number
     tokenOutput?: number
     durationMs?: number
   }) => void
@@ -148,9 +186,28 @@ export interface OutboundBridge {
   onToolCallEnd(name: string, result: unknown, isError: boolean): void
 }
 
+export interface OutboundBridgeHooks {
+  /**
+   * Called after a step ends and has been written to the entity stream.
+   * Receives the token counts (zero if the provider did not report them):
+   * `input` is the full prompt volume the model saw (including prompt-cache
+   * reads — what the meta row displays), `uncachedInput` is the new input
+   * this step only (fresh tokens plus cache writes; cache *reads* excluded),
+   * `output` is completion tokens. Budget accounting should use
+   * `uncachedInput + output` so warm-cache turns don't re-count the entire
+   * conversation every step.
+   */
+  onStepEnd?: (stats: {
+    input: number
+    uncachedInput: number
+    output: number
+  }) => void
+}
+
 export function createOutboundBridge(
   existingEvents: Array<ChangeEvent> | OutboundIdSeed,
-  writeEvent: (event: ChangeEvent) => void
+  writeEvent: (event: ChangeEvent) => void,
+  hooks?: OutboundBridgeHooks
 ): OutboundBridge {
   const counters: IdCounters = Array.isArray(existingEvents)
     ? scanCounters(existingEvents)
@@ -261,6 +318,7 @@ export function createOutboundBridge(
     onStepEnd(opts?: {
       finishReason?: string
       tokenInput?: number
+      tokenInputUncached?: number
       tokenOutput?: number
       durationMs?: number
     }) {
@@ -285,6 +343,11 @@ export function createOutboundBridge(
           } as never,
         }) as ChangeEvent
       )
+      hooks?.onStepEnd?.({
+        input: opts?.tokenInput ?? 0,
+        uncachedInput: opts?.tokenInputUncached ?? opts?.tokenInput ?? 0,
+        output: opts?.tokenOutput ?? 0,
+      })
     },
 
     onTextStart() {

@@ -63,6 +63,10 @@ export type {
   ContextInserted,
   ContextRemoved,
   ContextEntryAttrs,
+  GoalEntry,
+  GoalInput,
+  GoalStatus,
+  ManifestGoalEntry,
   CollectionInsert,
   CollectionKey,
   CollectionRow,
@@ -345,8 +349,17 @@ export type {
 
 export { DEFAULT_STATE_SCHEMAS } from './default-state-schemas'
 export { createContextEntriesApi } from './context-entries'
+export { createGoalApi, GOAL_MANIFEST_KEY } from './goal-api'
+export type { GoalApi } from './goal-api'
+export {
+  GOAL_SLASH_COMMAND,
+  dispatchGoalCommand,
+  isGoalCommandText,
+  parseGoalCommand,
+} from './goal-command'
+export type { GoalCommand, GoalDispatchResult } from './goal-command'
 export { assembleContext } from './context-assembly'
-export { approxTokens, sliceChars } from './token-budget'
+export { approxTokens, formatTokenCount, sliceChars } from './token-budget'
 export { createContextTools } from './tools/context-tools'
 export {
   completeWithLowCostModel,
