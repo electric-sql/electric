@@ -149,6 +149,23 @@ defmodule Electric.ShapeCacheTest do
     end
   end
 
+  describe "shape-create lock table" do
+    setup [
+      :with_noop_publication_manager,
+      :with_log_chunking,
+      :with_registry,
+      :with_shape_log_collector
+    ]
+
+    test "is created empty when the ShapeCache starts", ctx do
+      with_shape_cache(ctx)
+
+      lock_table = :"shape_create_lock:#{ctx.stack_id}"
+      assert :ets.whereis(lock_table) != :undefined
+      assert :ets.tab2list(lock_table) == []
+    end
+  end
+
   describe "get_or_create_shape_handle/2 shape initialization" do
     setup [
       :with_noop_publication_manager,

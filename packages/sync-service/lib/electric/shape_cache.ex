@@ -1,6 +1,7 @@
 defmodule Electric.ShapeCache do
   use GenServer
 
+  alias Electric.PollWait
   alias Electric.Replication.LogOffset
   alias Electric.Replication.ShapeLogCollector
   alias Electric.ShapeCache.ShapeStatus
@@ -275,6 +276,8 @@ defmodule Electric.ShapeCache do
       feature_flags: Electric.StackConfig.lookup(stack_id, :feature_flags, [])
     }
 
+    create_shape_create_lock_table(stack_id)
+
     {:ok, state, {:continue, :wait_for_restore}}
   end
 
@@ -518,6 +521,37 @@ defmodule Electric.ShapeCache do
       end
 
     {descendents ++ [{handle, shape, start_shape_opts} | siblings], known}
+  end
+
+  # Per-stack, GenServer-owned, caller-readable lock keyed by Shape.comparable/1.
+  # Only the ShapeCache process writes to it (set on create entry, clear on
+  # create exit), so callers can read it for routing but can never strand a
+  # stale claim. Owned by the ShapeCache process, so it is destroyed and
+  # recreated empty on a GenServer restart.
+  defp shape_create_lock_table(stack_id), do: :"shape_create_lock:#{stack_id}"
+
+  defp create_shape_create_lock_table(stack_id) do
+    table = shape_create_lock_table(stack_id)
+
+    if :ets.whereis(table) == :undefined do
+      :ets.new(table, [
+        :named_table,
+        :public,
+        :set,
+        read_concurrency: true,
+        write_concurrency: :auto
+      ])
+    else
+      # Belt-and-suspenders crash recovery: if the table somehow outlived a
+      # previous owner, drop any stale in-progress claims.
+      :ets.delete_all_objects(table)
+    end
+  end
+
+  defp shape_create_in_progress?(stack_id, lock_key) do
+    :ets.member(shape_create_lock_table(stack_id), lock_key)
+  rescue
+    ArgumentError -> false
   end
 
   @spec fetch_latest_offset(stack_id(), shape_handle(), keyword()) ::
