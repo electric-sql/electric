@@ -181,7 +181,23 @@ fn parse_rfc3339(s: &str) -> Result<SystemTime, ()> {
     }
     let (y, mo, d) = (num(0..4)?, num(5..7)?, num(8..10)?);
     let (h, mi, sec) = (num(11..13)?, num(14..16)?, num(17..19)?);
-    if !(1..=12).contains(&mo) || !(1..=31).contains(&d) || h > 23 || mi > 59 || sec > 60 {
+    // Reject seconds == 60 (leap seconds), matching the reference server's
+    // `new Date(...)` which returns Invalid Date for sec >= 60.
+    if !(1..=12).contains(&mo) || h > 23 || mi > 59 || sec > 59 {
+        return Err(());
+    }
+    // Per-month day limits, with leap-year February. This rejects impossible
+    // calendar dates (e.g. 2021-02-31) instead of silently rolling them over
+    // into a different expiry instant.
+    let leap = (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
+    let max_day = match mo {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if leap => 29,
+        2 => 28,
+        _ => return Err(()),
+    };
+    if !(1..=max_day).contains(&d) {
         return Err(());
     }
     let mut idx = 19;
@@ -763,16 +779,17 @@ async fn handle_append(store: Arc<Store>, req: Req, path: String) -> Resp {
             s.last_seq_header = Some(seq);
         }
         if close_req {
+            // Set the closed flag in memory so the durable meta capture below
+            // records it, but DO NOT notify readers (tail_tx) yet. The closure
+            // must be durable before any reader can observe EOF; otherwise a
+            // reader could act on the close, the server could crash before the
+            // closure is fsynced, and the stream would recover OPEN — a
+            // monotonicity violation (PROTOCOL.md §4.1). The reader
+            // notification is deferred until after write_meta_sync completes.
             s.closed = true;
             if let Some(p) = &producer {
                 s.closed_by = Some((p.id.clone(), p.epoch, p.seq));
             }
-            let t = Tail {
-                bytes: s.tail,
-                closed: true,
-            };
-            drop(s);
-            st.tail_tx.send_replace(t);
         }
     }
     let target = ap.written;
@@ -785,9 +802,21 @@ async fn handle_append(store: Arc<Store>, req: Req, path: String) -> Resp {
 
     // Persist metadata: closure durably (monotonic state), producer/access
     // updates debounced (documented crash window; see store::Meta).
+    //
+    // Closure ordering mirrors the Node reference (data fdatasync → durable
+    // metadata commit → only then notify readers): the data was fsynced above,
+    // the closure is made durable here, and only afterwards is the close signal
+    // broadcast on tail_tx. This guarantees readers never observe EOF for a
+    // closure that is not yet durable, preserving monotonicity across crashes.
     if close_req {
         let st2 = st.clone();
         let _ = tokio::task::spawn_blocking(move || write_meta_sync(&st2, true)).await;
+        // Closure is now durable — safe to wake long-poll / SSE waiters.
+        let t = Tail {
+            bytes: st.shared.read().unwrap().tail,
+            closed: true,
+        };
+        st.tail_tx.send_replace(t);
     } else {
         st.schedule_meta_flush();
     }

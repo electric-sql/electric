@@ -10,6 +10,11 @@ use tokio::sync::mpsc;
 
 use crate::store::Segment;
 
+/// Maximum accepted request body size; larger bodies get `413 Payload Too
+/// Large`. Shared by both HTTP engines so the limit is consistent regardless
+/// of `--http-engine`.
+pub const MAX_BODY_BYTES: usize = 1024 * 1024 * 1024; // 1 GiB safety cap
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Method {
     Get,

@@ -8,6 +8,7 @@
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::io::Read;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, ToSocketAddrs};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -109,8 +110,26 @@ async fn http_post_json(url: &str, sig_header: &str, body: &[u8]) -> Option<(u16
     );
     stream.write_all(req.as_bytes()).await.ok()?;
     stream.write_all(body).await.ok()?;
+    // Cap the response read: a hostile or misbehaving webhook endpoint must not
+    // be able to exhaust memory by streaming an unbounded body. We only need a
+    // small JSON ack ({ "done": true, "acks": [...] }); 1 MiB is generous.
+    const MAX_RESP: usize = 1 << 20;
     let mut raw = Vec::with_capacity(4096);
-    stream.read_to_end(&mut raw).await.ok()?;
+    let mut chunk = [0u8; 16 * 1024];
+    loop {
+        let n = stream.read(&mut chunk).await.ok()?;
+        if n == 0 {
+            break;
+        }
+        if raw.len() + n > MAX_RESP {
+            // Truncate to the cap and stop reading. Parsing below still works
+            // if the headers + JSON ack fit within the cap; otherwise it fails
+            // closed (treated as a non-`done` delivery).
+            raw.extend_from_slice(&chunk[..MAX_RESP - raw.len()]);
+            break;
+        }
+        raw.extend_from_slice(&chunk[..n]);
+    }
     let mut headers = [httparse::EMPTY_HEADER; 32];
     let mut resp = httparse::Response::new(&mut headers);
     let n = match resp.parse(&raw) {
@@ -318,35 +337,141 @@ fn stream_tail(store: &Store, root: &str, rel: &str) -> String {
     }
 }
 
-/// Reject webhook URLs that could reach internal networks (SSRF). http is
-/// allowed for loopback only; private/link-local ranges always rejected.
+/// Classify an IP as one that webhook delivery must never reach (SSRF guard),
+/// independent of loopback. Covers RFC1918 private v4, link-local v4/v6
+/// (including the `169.254.169.254` cloud-metadata endpoint), the unspecified
+/// address, IPv6 unique-local (`fc00::/7`), and IPv4-mapped IPv6 (so a mapped
+/// private/loopback v4 is still caught). Loopback is handled separately by the
+/// caller because http delivery to loopback is the documented dev exception.
+fn ip_is_blocked(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => {
+            v4.is_private()
+                || v4.is_link_local()
+                || v4.is_unspecified()
+                // 100.64.0.0/10 carrier-grade NAT (shared address space).
+                || (v4.octets()[0] == 100 && (64..=127).contains(&v4.octets()[1]))
+        }
+        IpAddr::V6(v6) => {
+            if let Some(mapped) = v6.to_ipv4_mapped() {
+                return ip_is_blocked(IpAddr::V4(mapped));
+            }
+            v6.is_unspecified()
+                // fc00::/7 unique-local (ULA).
+                || (v6.octets()[0] & 0xfe) == 0xfc
+                // fe80::/10 link-local.
+                || (v6.octets()[0] == 0xfe && (v6.octets()[1] & 0xc0) == 0x80)
+        }
+    }
+}
+
+/// Is this address a loopback target (the only kind for which plain `http://`
+/// webhook delivery is permitted, per PROTOCOL.md §6.2 / §12.8)?
+fn ip_is_loopback(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => v4.is_loopback(),
+        IpAddr::V6(v6) => {
+            v6.is_loopback()
+                || v6
+                    .to_ipv4_mapped()
+                    .map(|m| m.is_loopback())
+                    .unwrap_or(false)
+        }
+    }
+}
+
+/// Resolve a webhook host to the set of IPs it would actually be dialed at.
+/// Returns `None` if resolution fails. Validating the *resolved* addresses
+/// (rather than the host string) closes encoded-IP bypasses (decimal/octal/hex
+/// such as `http://2130706433/` for 127.0.0.1) and DNS-rebind-at-creation
+/// attacks, since `ToSocketAddrs` performs the same lookup the delivery path
+/// would. Residual risk: TOCTOU DNS rebinding *between* creation-time
+/// validation and each later delivery is not eliminated here (the delivery
+/// client re-resolves independently); fully closing it would require pinning
+/// the validated IP through delivery, which the minimal http client does not do.
+fn resolve_host(host: &str) -> Option<Vec<IpAddr>> {
+    // Port is irrelevant to address classification; use a placeholder.
+    let addrs: Vec<IpAddr> = (host, 80u16)
+        .to_socket_addrs()
+        .ok()?
+        .map(|sa| sa.ip())
+        .collect();
+    if addrs.is_empty() {
+        None
+    } else {
+        Some(addrs)
+    }
+}
+
+/// Reject webhook URLs that could reach internal networks (SSRF). Design:
+/// https-only except for loopback, which may also use http (the documented dev
+/// exception the conformance suite relies on). Private/link-local/ULA/metadata
+/// ranges are always rejected. Hosts are resolved and *every* resolved address
+/// is classified, so encoded-IP literals and IPv6 ranges cannot bypass a
+/// textual prefix check.
 fn webhook_url_allowed(url: &str) -> bool {
-    let rest = if let Some(r) = url.strip_prefix("http://") {
-        r
-    } else if let Some(r) = url.strip_prefix("https://") {
-        r
+    let (is_https, rest) = if let Some(r) = url.strip_prefix("https://") {
+        (true, r)
+    } else if let Some(r) = url.strip_prefix("http://") {
+        (false, r)
     } else {
         return false;
     };
-    let host = rest.split(['/', ':']).next().unwrap_or("");
-    let is_loopback = host == "localhost" || host.starts_with("127.") || host == "::1";
-    let private = host.starts_with("10.")
-        || host.starts_with("192.168.")
-        || host.starts_with("169.254.")
-        || (host.starts_with("172.")
-            && host
-                .split('.')
-                .nth(1)
-                .and_then(|s| s.parse::<u8>().ok())
-                .map(|o| (16..=31).contains(&o))
-                .unwrap_or(false));
-    if private {
+    // Authority is everything up to the first '/'. Strip any userinfo, then the
+    // port. Bracketed IPv6 literals are unwrapped.
+    let authority = rest.split('/').next().unwrap_or("");
+    let authority = authority.rsplit('@').next().unwrap_or(authority);
+    let host = if let Some(stripped) = authority.strip_prefix('[') {
+        // [v6]:port — take up to the closing bracket.
+        stripped.split(']').next().unwrap_or("")
+    } else {
+        // host:port — host is everything before the (last) ':' if a port is
+        // present. A bare IPv6 without brackets is invalid here, which is fine.
+        authority.rsplit_once(':').map(|(h, _)| h).unwrap_or(authority)
+    };
+    if host.is_empty() {
         return false;
     }
-    if url.starts_with("http://") {
-        return is_loopback;
+
+    // Resolve to the concrete address set that would actually be dialed. This
+    // catches encoded IPs and hostnames that map to internal ranges. If the
+    // host is itself an IP literal it resolves to just that address.
+    let addrs = match resolve_host(host) {
+        Some(a) => a,
+        // Unresolvable hosts: fail closed for http (loopback exception requires
+        // proving the target is loopback), allow for https (can't be validated
+        // here, but TLS to an unresolvable name simply won't connect).
+        None => {
+            // Special-case the textual loopback names that may legitimately not
+            // resolve in constrained environments.
+            let lc = host.to_ascii_lowercase();
+            let loop_name = lc == "localhost"
+                || lc.ends_with(".localhost")
+                || host
+                    .parse::<Ipv4Addr>()
+                    .map(|v4| v4.is_loopback())
+                    .unwrap_or(false)
+                || host
+                    .parse::<Ipv6Addr>()
+                    .map(|v6| v6.is_loopback())
+                    .unwrap_or(false);
+            return if is_https { true } else { loop_name };
+        }
+    };
+
+    // Any resolved address in a blocked range rejects the URL outright.
+    if addrs.iter().any(|&ip| ip_is_blocked(ip)) {
+        return false;
     }
-    true
+    let all_loopback = addrs.iter().all(|&ip| ip_is_loopback(ip));
+
+    if is_https {
+        // https to loopback is fine too; only blocked ranges (above) are denied.
+        true
+    } else {
+        // Plain http is the dev exception: loopback targets only.
+        all_loopback
+    }
 }
 
 // ---------------- activity hook ----------------

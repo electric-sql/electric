@@ -12,12 +12,11 @@ use bytes::{Buf, BufMut, Bytes, BytesMut};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
-use crate::api::{status_reason, Body, Method, Req, Resp};
+use crate::api::{status_reason, Body, Method, Req, Resp, MAX_BODY_BYTES};
 use crate::handlers;
 use crate::store::{Segment, Store};
 
 const MAX_HEADER_BYTES: usize = 64 * 1024;
-const MAX_BODY_BYTES: usize = 1024 * 1024 * 1024; // 1 GiB safety cap
 
 pub async fn serve(store: Arc<Store>, listener: TcpListener) {
     loop {
@@ -149,14 +148,17 @@ async fn read_chunked_body(
         };
         buf.advance(line_end + 2);
         if size == 0 {
-            // Trailer section: consume until blank line.
+            // Trailer section: consume until blank line. Bounded by
+            // MAX_HEADER_BYTES so a client that sends `0\r\n` then an endless
+            // stream that never forms the terminating blank line can't grow
+            // `buf` without limit (OOM / DoS).
             loop {
                 if let Some(pos) = find_crlf(buf) {
                     buf.advance(pos + 2);
                     if pos == 0 {
                         return Ok(Some(out.freeze()));
                     }
-                } else if !read_more(stream, buf).await? {
+                } else if buf.len() > MAX_HEADER_BYTES || !read_more(stream, buf).await? {
                     return Ok(None);
                 }
             }

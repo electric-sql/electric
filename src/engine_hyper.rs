@@ -18,9 +18,18 @@ use hyper_util::rt::TokioIo;
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
 
-use crate::api::{Body, Method, Req, Resp};
+use crate::api::{Body, Method, Req, Resp, MAX_BODY_BYTES};
 use crate::handlers;
 use crate::store::{materialize_segments, Segment, Store};
+
+/// Why building a `Req` from the incoming hyper request failed.
+enum ReqError {
+    /// Body could not be read (transport error).
+    BadBody,
+    /// Body exceeds `MAX_BODY_BYTES` — answered with `413 Payload Too Large`,
+    /// matching the raw engine.
+    TooLarge,
+}
 
 pub type RespBody = Either<Full<Bytes>, ChannelBody>;
 
@@ -89,7 +98,7 @@ async fn file_range_to_body(
     }
 }
 
-async fn to_req(req: Request<Incoming>) -> Result<Req, ()> {
+async fn to_req(req: Request<Incoming>) -> Result<Req, ReqError> {
     let method = Method::parse(req.method().as_str());
     let path = req.uri().path().to_string();
     let query = req.uri().query().map(|s| s.to_string());
@@ -98,7 +107,19 @@ async fn to_req(req: Request<Incoming>) -> Result<Req, ()> {
         .iter()
         .filter_map(|(k, v)| v.to_str().ok().map(|v| (k.as_str().to_string(), v.to_string())))
         .collect();
-    let body = req.into_body().collect().await.map_err(|_| ())?.to_bytes();
+    let incoming = req.into_body();
+    // Reject before buffering when the body advertises a size over the cap, so
+    // an oversized declared length can't force us to read it all first.
+    if incoming.size_hint().lower() > MAX_BODY_BYTES as u64 {
+        return Err(ReqError::TooLarge);
+    }
+    let body = incoming.collect().await.map_err(|_| ReqError::BadBody)?.to_bytes();
+    // Chunked / unframed bodies have no advance size hint; cap on the bytes we
+    // actually received so the limit holds regardless of framing — same cap
+    // (`MAX_BODY_BYTES`) and status (413) as the raw engine.
+    if body.len() > MAX_BODY_BYTES {
+        return Err(ReqError::TooLarge);
+    }
     Ok(Req {
         method,
         path,
@@ -144,7 +165,10 @@ pub async fn serve(store: Arc<Store>, listener: TcpListener) {
                 async move {
                     let resp = match to_req(hreq).await {
                         Ok(req) => handlers::handle(store, req).await,
-                        Err(_) => {
+                        // 413 with an empty body mirrors the raw engine's
+                        // `413 Payload Too Large` response shape.
+                        Err(ReqError::TooLarge) => Resp::new(413),
+                        Err(ReqError::BadBody) => {
                             let mut r = Resp::new(400);
                             r.body = Body::Full(Bytes::from_static(b"body read error"));
                             r
