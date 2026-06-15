@@ -303,20 +303,20 @@ defmodule Electric.ShapeCacheTest do
         GenServer.cast(parent, {:snapshot_started, shape_handle})
       end)
 
-      # Block the leader inside shape creation so the lock stays held while the
-      # followers arrive. PublicationManager.add_shape runs on the consumer
-      # process that start_shape synchronously waits on, so blocking it keeps
-      # the ShapeCache handler (and therefore the lock) busy.
-      Support.TestUtils.patch_calls(Electric.Replication.PublicationManager,
-        wait_for_restore: fn _, _ -> :ok end,
-        add_shape: fn _handle, _shape, _opts ->
+      # Block the leader BEFORE the shape handle is registered (i.e. before
+      # ShapeStatus.add_shape), so the followers genuinely miss the fast path and
+      # must consult the lock. fetch_handle_by_shape_critical runs in the
+      # ShapeCache process at the very start of maybe_create_shape and returns
+      # :error for a not-yet-existing shape, so it is a safe block point.
+      Support.TestUtils.patch_calls(Electric.ShapeCache.ShapeStatus,
+        fetch_handle_by_shape_critical: fn _stack_id, _shape ->
           send(test_pid, {:creation_blocked, self()})
 
           receive do
             :continue_creation -> :ok
           end
 
-          :ok
+          :error
         end
       )
 
@@ -327,14 +327,12 @@ defmodule Electric.ShapeCacheTest do
 
       shape_cache_pid = GenServer.whereis(ShapeCache.name(ctx.stack_id))
       lock_table = :"shape_create_lock:#{ctx.stack_id}"
-      lock_key = Shape.comparable(@shape)
 
       leader =
         Task.async(fn -> ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id) end)
 
-      # Leader is now inside the handler, holding the lock, blocked in add_shape.
+      # Leader is now inside the handler, blocked before the handle is registered.
       assert_receive {:creation_blocked, blocked_pid}, 2000
-      assert :ets.member(lock_table, lock_key)
 
       followers =
         for _ <- 1..5,
@@ -356,7 +354,7 @@ defmodule Electric.ShapeCacheTest do
         assert {^leader_handle, _offset} = Task.await(follower)
       end
 
-      refute :ets.member(lock_table, lock_key)
+      refute :ets.member(lock_table, Shape.comparable(@shape))
 
       # The expensive snapshot work ran exactly once.
       assert_received {:called, :create_snapshot_fn}
