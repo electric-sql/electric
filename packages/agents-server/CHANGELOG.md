@@ -1,5 +1,16 @@
 # @electric-ax/agents-server
 
+## 0.5.0
+
+### Patch Changes
+
+- 8bc630a: Add generic externally-writable custom collections for agent entity state: collections opt in via `externallyWritable`, writes go through an authenticated schema-validated endpoint that stamps the principal into a read-only `_principal` column, and `createEntityTimelineQuery` can project them into the timeline via `customSources`. Comments are reimplemented as one such collection, gated per agent type through a reserved `comments/v1` contract that the UI keys its comment affordances on. External writes are restricted to a per-collection operations allowlist (insert-only by default), and comments are insert-only.
+- Updated dependencies [708c946]
+- Updated dependencies [8bc630a]
+- Updated dependencies [c48c1a8]
+- Updated dependencies [c1f3aac]
+  - @electric-ax/agents-runtime@0.4.0
+
 ## 0.4.20
 
 ### Patch Changes

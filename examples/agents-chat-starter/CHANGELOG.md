@@ -1,5 +1,15 @@
 # @electric-ax/example-agents-chat-starter
 
+## 0.1.9
+
+### Patch Changes
+
+- Updated dependencies [708c946]
+- Updated dependencies [8bc630a]
+- Updated dependencies [c48c1a8]
+- Updated dependencies [c1f3aac]
+  - @electric-ax/agents-runtime@0.4.0
+
 ## 0.1.8
 
 ### Patch Changes
