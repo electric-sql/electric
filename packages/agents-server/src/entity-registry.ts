@@ -43,6 +43,7 @@ import type {
   EntityTypePermission,
   EntityTypePermissionGrant,
   PermissionSubjectKind,
+  ExternallyWritableCollectionConfig,
 } from './electric-agents-types.js'
 import type { EntityTags, PgSyncOptions } from '@electric-ax/agents-runtime'
 import type { Principal } from './principal.js'
@@ -654,6 +655,8 @@ export class PostgresRegistry {
         creationSchema: et.creation_schema ?? null,
         inboxSchemas: et.inbox_schemas ?? null,
         stateSchemas: et.state_schemas ?? null,
+        externallyWritableCollections:
+          et.externally_writable_collections ?? null,
         slashCommands: et.slash_commands ?? null,
         serveEndpoint: et.serve_endpoint ?? null,
         defaultDispatchPolicy: et.default_dispatch_policy ?? null,
@@ -668,6 +671,8 @@ export class PostgresRegistry {
           creationSchema: et.creation_schema ?? null,
           inboxSchemas: et.inbox_schemas ?? null,
           stateSchemas: et.state_schemas ?? null,
+          externallyWritableCollections:
+            et.externally_writable_collections ?? null,
           slashCommands: et.slash_commands ?? null,
           serveEndpoint: et.serve_endpoint ?? null,
           defaultDispatchPolicy: et.default_dispatch_policy ?? null,
@@ -691,6 +696,8 @@ export class PostgresRegistry {
         creationSchema: et.creation_schema ?? null,
         inboxSchemas: et.inbox_schemas ?? null,
         stateSchemas: et.state_schemas ?? null,
+        externallyWritableCollections:
+          et.externally_writable_collections ?? null,
         slashCommands: et.slash_commands ?? null,
         serveEndpoint: et.serve_endpoint ?? null,
         defaultDispatchPolicy: et.default_dispatch_policy ?? null,
@@ -733,6 +740,8 @@ export class PostgresRegistry {
         creationSchema: et.creation_schema ?? null,
         inboxSchemas: et.inbox_schemas ?? null,
         stateSchemas: et.state_schemas ?? null,
+        externallyWritableCollections:
+          et.externally_writable_collections ?? null,
         slashCommands: et.slash_commands ?? null,
         serveEndpoint: et.serve_endpoint ?? null,
         defaultDispatchPolicy: et.default_dispatch_policy ?? null,
@@ -1957,6 +1966,11 @@ export class PostgresRegistry {
       state_schemas: row.stateSchemas as
         | Record<string, Record<string, unknown>>
         | undefined,
+      externally_writable_collections:
+        (row.externallyWritableCollections as Record<
+          string,
+          ExternallyWritableCollectionConfig
+        > | null) ?? undefined,
       slash_commands:
         (row.slashCommands as ElectricAgentsEntityType[`slash_commands`]) ??
         undefined,

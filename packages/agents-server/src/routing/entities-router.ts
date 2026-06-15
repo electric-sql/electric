@@ -149,6 +149,19 @@ const spawnBodySchema = Type.Object({
   ),
 })
 
+const writeCollectionBodySchema = Type.Object(
+  {
+    operation: Type.Union([
+      Type.Literal(`insert`),
+      Type.Literal(`update`),
+      Type.Literal(`delete`),
+    ]),
+    key: Type.Optional(Type.String()),
+    value: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
+  },
+  { additionalProperties: false }
+)
+
 const sendBodySchema = Type.Object({
   payload: Type.Optional(Type.Unknown()),
   key: Type.Optional(Type.String()),
@@ -328,6 +341,7 @@ const eventSourceSubscriptionBodySchema = Type.Object({
 })
 
 type SpawnBody = Static<typeof spawnBodySchema>
+type WriteCollectionBody = Static<typeof writeCollectionBodySchema>
 type SendBody = Static<typeof sendBodySchema>
 type InboxMessageBody = Static<typeof inboxMessageBodySchema>
 type ForkBody = Static<typeof forkBodySchema>
@@ -407,6 +421,13 @@ entitiesRouter.post(
   withSchema(sendBodySchema),
   withEntityPermission(`write`),
   sendEntity
+)
+entitiesRouter.post(
+  `/:type/:instanceId/collections/:collection`,
+  withExistingEntity,
+  withSchema(writeCollectionBodySchema),
+  withEntityPermission(`write`),
+  writeCollection
 )
 entitiesRouter.post(
   `/:type/:instanceId/attachments`,
@@ -1308,6 +1329,31 @@ async function sendEntity(
   return json(result)
 }
 
+async function writeCollection(
+  request: AgentsRouteRequest,
+  ctx: TenantContext
+): Promise<Response> {
+  const parsed = routeBody<WriteCollectionBody>(request)
+  await ctx.entityManager.ensurePrincipal(ctx.principal)
+  const { entityUrl } = requireExistingEntityRoute(request)
+  const collection = request.params.collection
+  const result = await ctx.entityManager.writeCollection(
+    entityUrl,
+    collection,
+    {
+      operation: parsed.operation,
+      key: parsed.key,
+      value: parsed.value,
+      principal: {
+        url: ctx.principal.url,
+        kind: ctx.principal.kind,
+        id: ctx.principal.id,
+      },
+    }
+  )
+  return json(result, { status: parsed.operation === `insert` ? 201 : 200 })
+}
+
 async function createAttachment(
   request: AgentsRouteRequest,
   ctx: TenantContext
@@ -1473,8 +1519,21 @@ async function spawnEntity(
   )
 }
 
-function getEntity(request: AgentsRouteRequest): Response {
-  return json(toPublicEntity(requireExistingEntityRoute(request).entity))
+async function getEntity(
+  request: AgentsRouteRequest,
+  ctx: TenantContext
+): Promise<Response> {
+  const { entity } = requireExistingEntityRoute(request)
+  const entityType = entity.type
+    ? await ctx.entityManager.registry.getEntityType(entity.type)
+    : null
+  return json({
+    ...toPublicEntity(entity),
+    ...(entityType?.externally_writable_collections && {
+      externally_writable_collections:
+        entityType.externally_writable_collections,
+    }),
+  })
 }
 
 function headEntity(): Response {

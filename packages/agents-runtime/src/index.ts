@@ -418,3 +418,14 @@ export {
   STREAM_TOKEN_PREFIX,
 } from './event-pointer'
 export type { EventPointer } from './event-pointer'
+
+export {
+  COMMENTS_CONTRACT,
+  commentSchema,
+  commentsCollection,
+} from './comments-collection'
+export type {
+  CommentTargetValue,
+  CommentSnapshotValue,
+  CommentValue,
+} from './comments-collection'

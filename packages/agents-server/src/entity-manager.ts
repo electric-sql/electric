@@ -71,6 +71,7 @@ import type {
   SignalRequest,
   SignalResponse,
   TypedSpawnRequest,
+  ExternallyWritableCollectionConfig,
 } from './electric-agents-types.js'
 import type { EntityBridgeCoordinator } from './entity-bridge-manager.js'
 import type { Principal } from './principal.js'
@@ -129,6 +130,23 @@ export interface CreateAttachmentRequest {
   role?: AttachmentRole
   createdBy?: string
   meta?: Record<string, unknown>
+}
+
+export interface WriteCollectionPrincipal {
+  url: string
+  kind: string
+  id: string
+}
+
+export interface WriteCollectionRequest {
+  operation: `insert` | `update` | `delete`
+  key?: string
+  value?: Record<string, unknown>
+  principal: WriteCollectionPrincipal
+}
+
+export interface WriteCollectionResult {
+  key: string
 }
 
 export interface ReadAttachmentResult {
@@ -488,6 +506,7 @@ export class EntityManager {
       creation_schema: req.creation_schema,
       inbox_schemas: req.inbox_schemas,
       state_schemas: req.state_schemas,
+      externally_writable_collections: req.externally_writable_collections,
       slash_commands: req.slash_commands,
       serve_endpoint: req.serve_endpoint,
       default_dispatch_policy: defaultDispatchPolicy,
@@ -2434,6 +2453,106 @@ export class EntityManager {
     }
   }
 
+  async writeCollection(
+    entityUrl: string,
+    collection: string,
+    req: WriteCollectionRequest
+  ): Promise<WriteCollectionResult> {
+    const entity = await this.registry.getEntity(entityUrl)
+    if (!entity) {
+      throw new ElectricAgentsError(ErrCodeNotFound, `Entity not found`, 404)
+    }
+
+    const { externallyWritableCollections } =
+      await this.getEffectiveSchemas(entity)
+    const config = externallyWritableCollections?.[collection]
+    if (!config) {
+      throw new ElectricAgentsError(
+        ErrCodeUnauthorized,
+        `Collection "${collection}" is not writable`,
+        403
+      )
+    }
+
+    const allowedOperations = config.operations ?? [`insert`]
+    if (!allowedOperations.includes(req.operation)) {
+      throw new ElectricAgentsError(
+        ErrCodeUnauthorized,
+        `Operation "${req.operation}" is not allowed on collection "${collection}"`,
+        403
+      )
+    }
+
+    if (rejectsNormalWrites(entity.status)) {
+      throw new ElectricAgentsError(
+        ErrCodeNotRunning,
+        `Entity is not accepting writes`,
+        409
+      )
+    }
+    if (this.isForkWorkLockedEntity(entityUrl)) {
+      this.assertEntityNotForkWorkLocked(entityUrl)
+    }
+
+    if (
+      req.operation !== `delete` &&
+      (req.value === undefined || req.value === null)
+    ) {
+      throw new ElectricAgentsError(
+        ErrCodeInvalidRequest,
+        `value is required for ${req.operation}`,
+        400
+      )
+    }
+    if (req.operation !== `insert` && !req.key) {
+      throw new ElectricAgentsError(
+        ErrCodeInvalidRequest,
+        `key is required for ${req.operation}`,
+        400
+      )
+    }
+
+    const key = req.key ?? `${collection}-${randomUUID()}`
+
+    const event: Record<string, unknown> = {
+      type: config.type,
+      key,
+      headers: {
+        operation: req.operation,
+        timestamp: new Date().toISOString(),
+        principal: req.principal,
+      },
+    }
+    if (req.operation !== `delete`) {
+      event.value = req.value
+    }
+
+    const validationError = await this.validateWriteEvent(entity, event)
+    if (validationError) {
+      throw new ElectricAgentsError(
+        validationError.code,
+        validationError.message,
+        validationError.status
+      )
+    }
+
+    const encoded = this.encodeChangeEvent(event)
+    try {
+      await this.streamClient.append(entity.streams.main, encoded)
+    } catch (err) {
+      if (this.isClosedStreamError(err)) {
+        throw new ElectricAgentsError(
+          ErrCodeNotRunning,
+          `Entity is stopped`,
+          409
+        )
+      }
+      throw err
+    }
+
+    return { key }
+  }
+
   async updateInboxMessage(
     entityUrl: string,
     key: string,
@@ -3876,11 +3995,16 @@ export class EntityManager {
   private async getEffectiveSchemas(entity: ElectricAgentsEntity): Promise<{
     inboxSchemas?: Record<string, Record<string, unknown>>
     stateSchemas?: Record<string, Record<string, unknown>>
+    externallyWritableCollections?: Record<
+      string,
+      ExternallyWritableCollectionConfig
+    >
   }> {
     if (!entity.type) {
       return {
         inboxSchemas: entity.inbox_schemas,
         stateSchemas: entity.state_schemas,
+        externallyWritableCollections: undefined,
       }
     }
 
@@ -3893,6 +4017,8 @@ export class EntityManager {
       stateSchemas: latestType?.state_schemas
         ? { ...(entity.state_schemas ?? {}), ...latestType.state_schemas }
         : entity.state_schemas,
+      externallyWritableCollections:
+        latestType?.externally_writable_collections,
     }
   }
 

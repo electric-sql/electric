@@ -664,6 +664,24 @@ export interface CollectionDefinition<
   type?: string
   /** Primary key field name. Defaults to `"key"`. */
   primaryKey?: string
+  /**
+   * Opt-in for externally writable via the HTTP router: `POST /:type/:instanceId/collections/:name`.
+   * Absent/false ⇒ agent-only; the endpoint rejects writes. `true` ⇒ externally writable,
+   * with the authenticated principal materialized into the `_principal` virtual column.
+   */
+  externallyWritable?: boolean
+  /**
+   * Well-known contract this collection implements (e.g. `comments/v1`).
+   * Forwarded in the type registration so clients can recognize the
+   * collection by capability instead of by name.
+   */
+  contract?: string
+  /**
+   * Allowlist of external write operations forwarded in the type registration.
+   * When unset the server permits only `insert` — open update/delete would let
+   * a client overwrite or remove another principal's rows by key.
+   */
+  operations?: Array<`insert` | `update` | `delete`>
 }
 
 export interface EntityTypeEntry<

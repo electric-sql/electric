@@ -130,6 +130,7 @@ async function ensureExpectedSchema(postgresUrl: string): Promise<void> {
       hasSharedStateLinks,
       hasEntityBridgePrincipal,
       hasLegacyEntitiesMetadata,
+      hasEntityTypeExternallyWritableCollections,
     ] = await Promise.all([
       hasColumn(postgresUrl, `entities`, `tags`),
       hasColumn(postgresUrl, `entities`, `tags_index`),
@@ -140,6 +141,7 @@ async function ensureExpectedSchema(postgresUrl: string): Promise<void> {
       hasTable(postgresUrl, `shared_state_links`),
       hasColumn(postgresUrl, `entity_bridges`, `principal_url`),
       hasColumn(postgresUrl, `entities`, `metadata`),
+      hasColumn(postgresUrl, `entity_types`, `externally_writable_collections`),
     ])
 
     return (
@@ -151,7 +153,8 @@ async function ensureExpectedSchema(postgresUrl: string): Promise<void> {
       hasEntityEffectivePermissions &&
       hasSharedStateLinks &&
       hasEntityBridgePrincipal &&
-      !hasLegacyEntitiesMetadata
+      !hasLegacyEntitiesMetadata &&
+      hasEntityTypeExternallyWritableCollections
     )
   }
 
