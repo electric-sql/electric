@@ -494,12 +494,31 @@ export function toPublicEntity(
   }
 }
 
+/** Per-collection config making an entity-state collection externally writable via the router. */
+export interface ExternallyWritableCollectionConfig {
+  /** Durable-stream event type for this collection, e.g. `state:comments`. */
+  type: string
+  /** Well-known contract this collection implements, e.g. `comments/v1`. */
+  contract?: string
+  /**
+   * Allowlist of external write operations. When set, the router rejects any
+   * operation not listed (403). When unset, only `insert` is permitted — the
+   * safe default, since open update/delete lets a client overwrite or remove
+   * another principal's rows by key.
+   */
+  operations?: Array<`insert` | `update` | `delete`>
+}
+
 export interface ElectricAgentsEntityType {
   name: string
   description: string
   creation_schema?: Record<string, unknown>
   inbox_schemas?: Record<string, Record<string, unknown>>
   state_schemas?: Record<string, Record<string, unknown>>
+  externally_writable_collections?: Record<
+    string,
+    ExternallyWritableCollectionConfig
+  >
   slash_commands?: Array<SlashCommandDefinition>
   serve_endpoint?: string
   default_dispatch_policy?: DispatchPolicy
@@ -514,6 +533,10 @@ export interface RegisterEntityTypeRequest {
   creation_schema?: Record<string, unknown>
   inbox_schemas?: Record<string, Record<string, unknown>>
   state_schemas?: Record<string, Record<string, unknown>>
+  externally_writable_collections?: Record<
+    string,
+    ExternallyWritableCollectionConfig
+  >
   slash_commands?: Array<SlashCommandDefinition>
   serve_endpoint?: string
   default_dispatch_policy?: DispatchPolicy

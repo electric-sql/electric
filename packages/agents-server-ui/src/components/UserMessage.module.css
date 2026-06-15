@@ -77,6 +77,26 @@
   }
 }
 
+.meta {
+  width: 100%;
+}
+
+.metaActions {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.metaActionButton {
+  color: var(--ds-text-4);
+  opacity: 0.7;
+}
+
+.metaActionButton:hover {
+  opacity: 1;
+}
+
 .body {
   font-size: var(--ds-chat-text);
   line-height: var(--ds-chat-text-lh);
@@ -220,9 +240,12 @@
 }
 
 .meta {
-  opacity: 0.4;
   /* Match the bubble's 12px horizontal padding so the timestamp/sender
    * row aligns with the agent text column rather than with the wider
    * bubble background. */
   padding-inline: 12px;
+}
+
+.meta > :not(.metaActions) {
+  opacity: 0.4;
 }

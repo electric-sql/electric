@@ -14,6 +14,7 @@ import {
   timestamp,
   unique,
 } from 'drizzle-orm/pg-core'
+import type { ExternallyWritableCollectionConfig } from '../electric-agents-types.js'
 
 export const entityTypes = pgTable(
   `entity_types`,
@@ -24,6 +25,9 @@ export const entityTypes = pgTable(
     creationSchema: jsonb(`creation_schema`),
     inboxSchemas: jsonb(`inbox_schemas`),
     stateSchemas: jsonb(`state_schemas`),
+    externallyWritableCollections: jsonb(
+      `externally_writable_collections`
+    ).$type<Record<string, ExternallyWritableCollectionConfig>>(),
     slashCommands: jsonb(`slash_commands`),
     serveEndpoint: text(`serve_endpoint`),
     defaultDispatchPolicy: jsonb(`default_dispatch_policy`),

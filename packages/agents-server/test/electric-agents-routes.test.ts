@@ -1498,3 +1498,123 @@ describe(`ElectricAgentsRoutes fork endpoint`, () => {
     expect(manager.forkSubtree).not.toHaveBeenCalled()
   })
 })
+
+describe(`ElectricAgentsRoutes collections endpoint`, () => {
+  it(`routes a collection write to the manager with the authenticated principal`, async () => {
+    const manager = {
+      registry: {
+        getEntity: vi.fn().mockResolvedValue({ url: `/chat/test` }),
+        getEntityType: vi.fn(),
+      },
+      ensurePrincipal: vi.fn().mockResolvedValue(undefined),
+      writeCollection: vi.fn().mockResolvedValue({ key: `c1` }),
+    } as any
+
+    const response = await routeResponse(
+      manager,
+      `POST`,
+      `/_electric/entities/chat/test/collections/comments`,
+      { operation: `insert`, key: `c1`, value: { body: `hi` } }
+    )
+
+    expect(response.status).toBe(201)
+    expect(await responseJson(response)).toEqual({ key: `c1` })
+    expect(manager.writeCollection).toHaveBeenCalledWith(
+      `/chat/test`,
+      `comments`,
+      expect.objectContaining({
+        operation: `insert`,
+        key: `c1`,
+        value: { body: `hi` },
+        principal: expect.objectContaining({ url: expect.any(String) }),
+      })
+    )
+  })
+})
+
+describe(`ElectricAgentsRoutes entity-type registration`, () => {
+  it(`persists externally_writable_collections on entity type registration`, async () => {
+    const registerEntityType = vi.fn().mockResolvedValue({
+      name: `chat`,
+      description: `chat`,
+      revision: 1,
+      created_at: `t`,
+      updated_at: `t`,
+      externally_writable_collections: {
+        comments: { type: `state:comments`, contract: `comments/v1` },
+      },
+    })
+    const manager = {
+      registry: { getEntityType: vi.fn() },
+      registerEntityType,
+    } as any
+
+    const response = await routeResponse(
+      manager,
+      `POST`,
+      `/_electric/entity-types`,
+      {
+        name: `chat`,
+        description: `chat`,
+        externally_writable_collections: {
+          comments: { type: `state:comments`, contract: `comments/v1` },
+        },
+      }
+    )
+
+    expect(response.status).toBe(201)
+    expect(registerEntityType).toHaveBeenCalledWith(
+      expect.objectContaining({
+        externally_writable_collections: {
+          comments: { type: `state:comments`, contract: `comments/v1` },
+        },
+      })
+    )
+  })
+
+  it(`rejects a writable "comments" collection without the canonical contract`, async () => {
+    const manager = {
+      registry: { getEntityType: vi.fn() },
+      registerEntityType: vi.fn(),
+    } as any
+
+    const response = await routeResponse(
+      manager,
+      `POST`,
+      `/_electric/entity-types`,
+      {
+        name: `chat`,
+        description: `chat`,
+        externally_writable_collections: {
+          comments: { type: `state:comments` },
+        },
+      }
+    )
+
+    expect(response.status).toBe(400)
+    expect(manager.registerEntityType).not.toHaveBeenCalled()
+  })
+
+  it(`rejects the comments contract registered under another collection name`, async () => {
+    const manager = {
+      registry: { getEntityType: vi.fn() },
+      registerEntityType: vi.fn(),
+    } as any
+
+    const response = await routeResponse(
+      manager,
+      `POST`,
+      `/_electric/entity-types`,
+      {
+        name: `chat`,
+        description: `chat`,
+        externally_writable_collections: {
+          feedback: { type: `state:feedback`, contract: `comments/v1` },
+        },
+      }
+    )
+
+    expect(response.status).toBe(400)
+    expect(manager.registerEntityType).not.toHaveBeenCalled()
+  })
+})

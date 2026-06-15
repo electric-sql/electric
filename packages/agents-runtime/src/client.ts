@@ -10,6 +10,7 @@ export {
   getEntityState,
   normalizeEntityTimelineData,
   normalizeTimelineEntities,
+  TIMELINE_ORDER_FALLBACK,
 } from './entity-timeline'
 export {
   canonicalPgSyncOptions,
@@ -90,6 +91,7 @@ export type {
 export type {
   EntityTimelineContentItem,
   EntityTimelineData,
+  EntityTimelineCustomSource,
   EntityTimelineInboxMode,
   EntityTimelineQueryOptions,
   EntityTimelineQueryRow,
@@ -104,4 +106,9 @@ export type {
   IncludesInboxMessage,
   IncludesRun,
 } from './entity-timeline'
+export { COMMENTS_CONTRACT, commentsCollection } from './comments-collection'
+export type {
+  CommentSnapshotValue as CommentSnapshot,
+  CommentTargetValue as CommentTarget,
+} from './comments-collection'
 export type { EntityTimelineEntry } from './use-chat'

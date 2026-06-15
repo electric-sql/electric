@@ -4,12 +4,14 @@ import {
   compareTimelineOrders,
   createEntityTimelineQuery,
   normalizeTimelineEntities,
+  TIMELINE_ORDER_FALLBACK,
 } from '@electric-ax/agents-runtime/client'
 import { coalesce, eq } from '@durable-streams/state/db'
 import { connectEntityStream } from '../lib/entity-connection'
+import { createCommentsTimelineSource } from '../lib/comments'
+import type { TimelineRow } from '../lib/comments'
 import type {
   EntityStreamDBWithActions,
-  EntityTimelineQueryRow,
   IncludesInboxMessage,
   IncludesEntity,
   Manifest,
@@ -46,15 +48,25 @@ function isTimelineEntityManifest(
 
 export function useEntityTimeline(
   baseUrl: string | null,
-  entityUrl: string | null
+  entityUrl: string | null,
+  opts?: {
+    /** Merge the `comments` collection into the timeline. Defaults to true. */
+    comments?: boolean
+  }
 ): {
-  timelineRows: Array<EntityTimelineQueryRow>
+  timelineRows: Array<TimelineRow>
   pendingInbox: Array<IncludesInboxMessage>
   entities: Array<IncludesEntity>
   generationActive: boolean
   db: EntityStreamDBWithActions | null
   loading: boolean
   error: string | null
+  /**
+   * True when the entity's type declares the comments collection — the
+   * stream connection only registers `db.collections.comments` for types
+   * whose registration advertises the comments contract.
+   */
+  commentsEnabled: boolean
 } {
   const [db, setDb] = useState<EntityStreamDBWithActions | null>(null)
   const [loading, setLoading] = useState(false)
@@ -102,12 +114,20 @@ export function useEntityTimeline(
     }
   }, [baseUrl, entityUrl])
 
+  const commentsEnabled = Boolean(
+    db && (db.collections as Record<string, unknown>).comments
+  )
+  const includeComments = commentsEnabled && (opts?.comments ?? true)
   const { data: timelineRows = [] } = useLiveQuery(
     (q) => {
       if (!db) return undefined
-      return createEntityTimelineQuery(db)(q)
+      return createEntityTimelineQuery(db, {
+        ...(includeComments && {
+          customSources: { comment: createCommentsTimelineSource(db) },
+        }),
+      })(q)
     },
-    [db]
+    [db, includeComments]
   )
   const { data: manifests = [] } = useLiveQuery(
     (q) =>
@@ -125,7 +145,8 @@ export function useEntityTimeline(
             .from({ inbox: db.collections.inbox as any })
             .where(({ inbox }: any) => eq(inbox.status, `pending`))
             .orderBy(
-              ({ inbox }: any) => coalesce(inbox._timeline_order, `~`),
+              ({ inbox }: any) =>
+                coalesce(inbox._timeline_order, TIMELINE_ORDER_FALLBACK),
               `asc`
             )
             .orderBy(({ inbox }: any) =>
@@ -134,7 +155,7 @@ export function useEntityTimeline(
         : undefined,
     [db]
   )
-  const typedTimelineRows = timelineRows as Array<EntityTimelineQueryRow>
+  const typedTimelineRows = timelineRows as Array<TimelineRow>
 
   const pendingInbox = useMemo(
     () =>
@@ -213,5 +234,6 @@ export function useEntityTimeline(
     db,
     loading,
     error,
+    commentsEnabled,
   }
 }

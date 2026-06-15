@@ -1873,6 +1873,67 @@ describe(`entity includes query`, () => {
       )
     })
 
+    it(`unions customSources into the timeline by order`, async () => {
+      const { collections, sync } = createEntityCollections()
+      let extraOffset = 1000
+      const annotations = createSyncCollection(`test-annotations`, () =>
+        offset(extraOffset++)
+      )
+      const liveQuery = createLiveQueryCollection({
+        query: createEntityTimelineQuery({ collections } as any, {
+          customSources: {
+            annotation: (q) =>
+              q
+                .from({ annotation: annotations.collection })
+                .select(({ annotation }: any) => ({
+                  order: annotation._timeline_order,
+                  key: annotation.key,
+                  note: annotation.note,
+                })),
+          },
+        }),
+        startSync: true,
+      })
+      await liveQuery.preload()
+
+      sync.inbox.insert({
+        key: `msg-1`,
+        _timeline_order: order(1),
+        from: `user`,
+        payload: `start`,
+        timestamp: `2026-04-15T18:00:00.000Z`,
+        status: `processed`,
+      })
+      annotations.insert({
+        key: `note-1`,
+        _timeline_order: order(2),
+        note: `between`,
+      })
+      sync.wakes.insert({
+        key: `wake-1`,
+        _timeline_order: order(3),
+        timestamp: `2026-04-15T18:00:10.000Z`,
+        source: `/chat/test`,
+        timeout: false,
+        changes: [],
+      })
+      await new Promise((r) => setTimeout(r, 50))
+
+      const rows = Array.from((liveQuery as any).entries()).map(
+        ([, v]: any) => v
+      )
+      expect(
+        rows.map((row: any) =>
+          row.inbox
+            ? `inbox:${row.inbox.key}`
+            : row.annotation
+              ? `annotation:${row.annotation.key}`
+              : `wake:${row.wake?.key}`
+        )
+      ).toEqual([`inbox:msg-1`, `annotation:note-1`, `wake:wake-1`])
+      expect(rows[1]?.annotation?.note).toBe(`between`)
+    })
+
     it(`projects related entities from one manifest row per related entity`, () => {
       const timeline = buildEntityTimelineData({
         collections: {

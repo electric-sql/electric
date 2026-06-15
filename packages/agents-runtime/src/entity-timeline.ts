@@ -26,6 +26,8 @@ import { formatPointerOrderToken, type EventPointer } from './event-pointer'
 import type { ChildStatusEntry, MessageReceived, Signal } from './entity-schema'
 import type { ManifestEntry, Wake, WakeMessage } from './types'
 
+export const TIMELINE_ORDER_FALLBACK = `~`
+
 export type EntityTimelineState =
   | `pending`
   | `queued`
@@ -200,8 +202,23 @@ export interface EntityTimelineData {
 
 export type EntityTimelineInboxMode = `processed` | `all`
 
+/**
+ * A consumer-provided source unioned into the timeline query under its own
+ * row key. The projection must include `order` (timeline order token) and
+ * `key`; all other fields are passed through to the timeline row.
+ */
+export type EntityTimelineCustomSource = (
+  q: InitialQueryBuilder
+) => QueryBuilder<any>
+
 export interface EntityTimelineQueryOptions {
   inboxMode?: EntityTimelineInboxMode
+  /**
+   * Additional sources merged into the timeline, keyed by row name. Names
+   * must not collide with the built-in sources (`inbox`, `run`, `wake`,
+   * `signal`, `manifest`).
+   */
+  customSources?: Record<string, EntityTimelineCustomSource>
 }
 
 export interface EntityTimelineTextChunk {
@@ -532,7 +549,7 @@ function readTimelineOrder(row: object): string | undefined {
 }
 
 export function createPendingTimelineOrder(index: number): string {
-  return `~pending:${index.toString().padStart(12, `0`)}`
+  return `${TIMELINE_ORDER_FALLBACK}pending:${index.toString().padStart(12, `0`)}`
 }
 
 function toSeqOrderToken(seq: number): string {
@@ -1602,47 +1619,46 @@ function buildEntityTimelineQuery(
         })),
     }))
 
+  const sources: Record<string, any> = {
+    inbox: inboxSource,
+    run: runSource,
+    wake: wakeSource,
+    signal: signalSource,
+    error: errorSource,
+    manifest: db.collections.manifests,
+  }
+  for (const [name, buildSource] of Object.entries(opts.customSources ?? {})) {
+    if (name in sources) {
+      throw new Error(
+        `customSources name "${name}" collides with a built-in timeline source`
+      )
+    }
+    sources[name] = buildSource(q)
+  }
+  const sourceNames = Object.keys(sources)
+  // The manifests collection joins the union raw, so its order lives on
+  // `_timeline_order` rather than a projected `order` field.
+  const orderRef = (refs: any, name: string) =>
+    name === `manifest` ? refs.manifest._timeline_order : refs[name].order
+  const coalesceAll = (exprs: Array<any>) =>
+    coalesce(...(exprs as [any, ...Array<any>]))
+
   return q
-    .unionAll({
-      inbox: inboxSource,
-      run: runSource,
-      wake: wakeSource,
-      signal: signalSource,
-      error: errorSource,
-      manifest: db.collections.manifests,
-    })
-    .orderBy(({ inbox, run, wake, signal, error, manifest }) =>
-      coalesce(
-        inbox.order,
-        run.order,
-        wake.order,
-        signal.order,
-        error.order,
-        manifest._timeline_order,
-        `~`
-      )
+    .unionAll(sources)
+    .orderBy((refs: any) =>
+      coalesceAll([
+        ...sourceNames.map((name) => orderRef(refs, name)),
+        TIMELINE_ORDER_FALLBACK,
+      ])
     )
-    .orderBy(({ inbox, run, wake, signal, error, manifest }) =>
-      coalesce(
-        caseWhen(inbox.key, `inbox`),
-        caseWhen(run.key, `run`),
-        caseWhen(wake.key, `wake`),
-        caseWhen(signal.key, `signal`),
-        caseWhen(error.key, `error`),
-        caseWhen(manifest.key, `manifest`),
-        ``
-      )
+    .orderBy((refs: any) =>
+      coalesceAll([
+        ...sourceNames.map((name) => caseWhen(refs[name].key, name)),
+        ``,
+      ])
     )
-    .orderBy(({ inbox, run, wake, signal, error, manifest }) =>
-      coalesce(
-        inbox.key,
-        run.key,
-        wake.key,
-        signal.key,
-        error.key,
-        manifest.key,
-        ``
-      )
+    .orderBy((refs: any) =>
+      coalesceAll([...sourceNames.map((name) => refs[name].key), ``])
     )
 }
 

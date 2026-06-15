@@ -1,4 +1,4 @@
-import { Check, Copy, GitFork } from 'lucide-react'
+import { Check, Copy, GitFork, Reply } from 'lucide-react'
 import {
   memo,
   useCallback,
@@ -423,6 +423,8 @@ export const AgentResponseLive = memo(function AgentResponseLive({
   timestamp,
   renderWidth = 0,
   forkFromHere,
+  onReply,
+  onReplyToToolCall,
   onSearchTextChange,
 }: {
   rowKey: string
@@ -431,6 +433,8 @@ export const AgentResponseLive = memo(function AgentResponseLive({
   timestamp?: number | null
   renderWidth?: number
   forkFromHere?: ForkFromHereAction
+  onReply?: () => void
+  onReplyToToolCall?: (item: EntityTimelineToolCallItem) => void
   onSearchTextChange?: (rowKey: string, text: string) => void
 }): React.ReactElement {
   const { data: items = [] } = useLiveQuery(
@@ -645,6 +649,11 @@ export const AgentResponseLive = memo(function AgentResponseLive({
           <ToolCallView
             key={item.$key}
             item={liveToolCallToContentItem(item.toolCall)}
+            onReply={
+              onReplyToToolCall
+                ? () => onReplyToToolCall(item.toolCall!)
+                : undefined
+            }
           />
         )
       })}
@@ -709,6 +718,7 @@ export const AgentResponseLive = memo(function AgentResponseLive({
           copied={copied}
           onCopy={() => void copyResponseText()}
           forkFromHere={done ? forkFromHere : undefined}
+          onReply={onReply}
         />
       </Stack>
     </Stack>
@@ -720,20 +730,37 @@ function ResponseMetaActions({
   copied,
   onCopy,
   forkFromHere,
+  onReply,
 }: {
   showCopy: boolean
   copied: boolean
   onCopy: () => void
   forkFromHere?: ForkFromHereAction
+  onReply?: () => void
 }): React.ReactElement | null {
   const showFork = forkFromHere !== undefined
-  if (!showCopy && !showFork) return null
+  if (!showCopy && !showFork && !onReply) return null
 
   const forkDisabled = forkFromHere?.disabled === true || !forkFromHere?.onFork
   const forkLabel = forkDisabled ? `Fork permission required` : `Fork from here`
 
   return (
     <span className={styles.metaActions}>
+      {onReply && (
+        <Tooltip content="Reply" side="top">
+          <IconButton
+            size={1}
+            variant="ghost"
+            tone="neutral"
+            className={styles.metaActionButton}
+            onClick={onReply}
+            aria-label="Reply to response"
+            title="Reply"
+          >
+            <Icon icon={Reply} size={1} />
+          </IconButton>
+        </Tooltip>
+      )}
       {showFork && (
         <Tooltip content={forkLabel} side="top">
           <span className={styles.tooltipTrigger}>
@@ -780,12 +807,14 @@ export const AgentResponse = memo(function AgentResponse({
   timestamp,
   renderWidth = 0,
   forkFromHere,
+  onReply,
 }: {
   section: AgentResponseSection
   isStreaming: boolean
   timestamp?: number | null
   renderWidth?: number
   forkFromHere?: ForkFromHereAction
+  onReply?: () => void
 }): React.ReactElement {
   const canCache = !isStreaming && section.done === true
   const [copied, setCopied] = useState(false)
@@ -929,6 +958,7 @@ export const AgentResponse = memo(function AgentResponse({
           copied={copied}
           onCopy={() => void copyResponseText()}
           forkFromHere={section.done ? forkFromHere : undefined}
+          onReply={onReply}
         />
       </Stack>
     </Stack>

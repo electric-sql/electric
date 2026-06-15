@@ -10,6 +10,10 @@ import {
   readTextPayload,
 } from '../lib/sendMessage'
 import {
+  createSendCommentAction,
+  type SelectedCommentTarget,
+} from '../lib/comments'
+import {
   isGoalCommandText,
   parseGoalCommand,
   serializeComposerInput,
@@ -42,6 +46,8 @@ function isAbortingGoalCommand(text: string): boolean {
   return kind === `set` || kind === `clear` || kind === `complete`
 }
 
+type ComposerMode = `prompt` | `comment`
+
 export function MessageInput({
   db,
   baseUrl,
@@ -57,6 +63,10 @@ export function MessageInput({
   pendingMessages = [],
   inlineQueuedSubmits = false,
   onOptimisticQueuedMessage,
+  defaultMode = `prompt`,
+  commentOnly = false,
+  commentTarget = null,
+  onClearCommentTarget,
   drawer,
   onSend,
   onStop,
@@ -75,6 +85,10 @@ export function MessageInput({
   pendingMessages?: EntityTimelineData[`inbox`]
   inlineQueuedSubmits?: boolean
   onOptimisticQueuedMessage?: (message: OptimisticInboxMessage) => void
+  defaultMode?: ComposerMode
+  commentOnly?: boolean
+  commentTarget?: SelectedCommentTarget | null
+  onClearCommentTarget?: () => void
   onSend?: () => void
   onStop?: () => void
   /**
@@ -96,14 +110,21 @@ export function MessageInput({
 }): React.ReactElement {
   const [value, setValue] = useState(``)
   const [error, setError] = useState<string | null>(null)
+  const [composerMode, setComposerMode] = useState<ComposerMode>(
+    commentOnly ? `comment` : defaultMode
+  )
   const [editingMessage, setEditingMessage] = useState<{
     key: string
     originalText: string
   } | null>(null)
   const composerFocusRef = useRef<{ focus: () => void } | null>(null)
   const inputDisabled = disabled || writeDisabled
+  const isCommentMode = composerMode === `comment`
   const attachmentsDisabled =
-    inputDisabled || Boolean(editingMessage) || !imageAttachmentsEnabled
+    inputDisabled ||
+    Boolean(editingMessage) ||
+    isCommentMode ||
+    !imageAttachmentsEnabled
   const {
     attachments,
     clearAttachments,
@@ -124,6 +145,18 @@ export function MessageInput({
     if (!imageAttachmentsEnabled) clearAttachments()
   }, [imageAttachmentsEnabled, clearAttachments])
 
+  useEffect(() => {
+    setComposerMode(commentOnly ? `comment` : defaultMode)
+  }, [commentOnly, defaultMode, entityUrl])
+
+  useEffect(() => {
+    if (commentTarget) setComposerMode(`comment`)
+  }, [commentTarget])
+
+  useEffect(() => {
+    if (isCommentMode) clearAttachments()
+  }, [isCommentMode, clearAttachments])
+
   const { data: slashCommands = [] } = useLiveQuery(
     (q) =>
       db
@@ -133,8 +166,9 @@ export function MessageInput({
         : undefined,
     [db]
   )
-  const effectiveSlashCommands =
-    slashCommands.length > 0
+  const effectiveSlashCommands = isCommentMode
+    ? []
+    : slashCommands.length > 0
       ? (slashCommands as Array<SlashCommandRow>)
       : fallbackSlashCommands
 
@@ -151,6 +185,13 @@ export function MessageInput({
       },
     })
   }, [db, baseUrl, entityUrl, inlineQueuedSubmits, onOptimisticQueuedMessage])
+  const commentsAvailable = Boolean(
+    db && (db.collections as Record<string, unknown>).comments
+  )
+  const sendCommentAction = useMemo(() => {
+    if (!db || !commentsAvailable) return null
+    return createSendCommentAction({ db, baseUrl, entityUrl })
+  }, [db, commentsAvailable, baseUrl, entityUrl])
   const updateAction = useMemo(() => {
     if (!db) return null
     return createUpdateInboxMessageAction({ db, baseUrl, entityUrl })
@@ -165,15 +206,22 @@ export function MessageInput({
   }, [db, baseUrl, entityUrl])
 
   const inputText = value.trim()
-  const attachmentCount = imageAttachmentsEnabled ? attachments.length : 0
+  const attachmentCount =
+    !isCommentMode && imageAttachmentsEnabled ? attachments.length : 0
   const canSubmit =
     !inputDisabled &&
-    (editingMessage
+    (isCommentMode
       ? inputText.length > 0
-      : inputText.length > 0 || attachmentCount > 0)
+      : editingMessage
+        ? inputText.length > 0
+        : inputText.length > 0 || attachmentCount > 0)
   const canAttachFiles =
-    !inputDisabled && !editingMessage && imageAttachmentsEnabled
+    !inputDisabled &&
+    !editingMessage &&
+    !isCommentMode &&
+    imageAttachmentsEnabled
   const showStop =
+    !isCommentMode &&
     generationActive &&
     inputText.length === 0 &&
     attachmentCount === 0 &&
@@ -185,6 +233,26 @@ export function MessageInput({
       if (!canSubmit) return
       setError(null)
       const text = value.trim()
+      if (isCommentMode) {
+        const tx = sendCommentAction?.({
+          body: text,
+          ...(commentTarget
+            ? {
+                replyTo: commentTarget.target,
+                targetSnapshot: commentTarget.snapshot,
+              }
+            : {}),
+        })
+        if (!tx) return
+        onSend?.()
+        setValue(``)
+        onClearCommentTarget?.()
+        tx.isPersisted.promise.catch((err: Error) => {
+          setError(err.message)
+          setValue((current) => (current ? current : text))
+        })
+        return
+      }
       const files = imageAttachmentsEnabled ? attachments : []
       const tx = editingMessage
         ? updateAction?.({
@@ -234,6 +302,10 @@ export function MessageInput({
       editingMessage,
       onSend,
       onStop,
+      isCommentMode,
+      sendCommentAction,
+      commentTarget,
+      onClearCommentTarget,
       effectiveSlashCommands,
     ]
   )
@@ -251,6 +323,7 @@ export function MessageInput({
       if (inputDisabled) return
       const text = readTextPayload(message.payload)
       setError(null)
+      if (!commentOnly) setComposerMode(`prompt`)
       clearAttachments()
       updateAction?.({
         key: message.key,
@@ -262,7 +335,7 @@ export function MessageInput({
       setEditingMessage({ key: message.key, originalText: text })
       setValue(text)
     },
-    [clearAttachments, inputDisabled, updateAction]
+    [clearAttachments, commentOnly, inputDisabled, updateAction]
   )
 
   const cancelEditing = useCallback(() => {
@@ -325,7 +398,11 @@ export function MessageInput({
     ? stopDisabled
       ? `Signal permission required`
       : `Stop generating`
-    : `Send message`
+    : isCommentMode
+      ? `Post comment`
+      : `Send message`
+  const replyPreviewLabel = formatReplyBannerLabel(commentTarget)
+  const replyPreviewText = commentTarget?.snapshot.text
   return (
     <Stack direction="column" gap={0} className={styles.root}>
       {drawer?.({
@@ -363,10 +440,31 @@ export function MessageInput({
                 Cancel
               </button>
             </div>
+          ) : isCommentMode && commentTarget ? (
+            <div className={styles.replyBanner}>
+              <div className={styles.replyBannerText}>
+                <Text size={1} tone="muted">
+                  {replyPreviewLabel}
+                </Text>
+                {replyPreviewText && (
+                  <span className={styles.replyBannerPreview}>
+                    {replyPreviewText}
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                aria-label="Clear comment target"
+                onClick={onClearCommentTarget}
+                className={styles.editingCancel}
+              >
+                Clear
+              </button>
+            </div>
           ) : null
         }
         attachments={
-          imageAttachmentsEnabled ? (
+          imageAttachmentsEnabled && !isCommentMode ? (
             <AttachmentPreviewTray
               attachments={attachments}
               onRemove={removeAttachment}
@@ -374,7 +472,7 @@ export function MessageInput({
           ) : null
         }
         controls={
-          imageAttachmentsEnabled ? (
+          imageAttachmentsEnabled && !isCommentMode ? (
             <AttachmentActionMenu
               disabled={!canAttachFiles}
               accept={imageAttachmentDraftPolicy.accept}
@@ -389,7 +487,13 @@ export function MessageInput({
             <span className={styles.tooltipTrigger}>
               <button
                 type="button"
-                aria-label={showStop ? `Stop generating` : `Send message`}
+                aria-label={
+                  showStop
+                    ? `Stop generating`
+                    : isCommentMode
+                      ? `Post comment`
+                      : `Send message`
+                }
                 // Keep the textarea focused when the user taps Send on a
                 // touch device. Without this, tapping the button blurs the
                 // textarea, dismisses the on-screen keyboard, and the
@@ -431,11 +535,45 @@ export function MessageInput({
           placeholder={
             disabled
               ? (disabledPlaceholder ?? `Entity stopped`)
-              : `Send a message...`
+              : isCommentMode
+                ? `Add a comment...`
+                : `Send a message...`
           }
           disabled={inputDisabled}
         />
       </ComposerShell>
+      {!editingMessage && !commentOnly && commentsAvailable && (
+        <div
+          className={styles.modeTabs}
+          role="tablist"
+          aria-label="Composer mode"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={!isCommentMode}
+            className={styles.modeTab}
+            onClick={() => setComposerMode(`prompt`)}
+          >
+            Prompt
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={isCommentMode}
+            className={styles.modeTab}
+            onClick={() => setComposerMode(`comment`)}
+          >
+            Comment
+          </button>
+        </div>
+      )}
     </Stack>
   )
+}
+
+function formatReplyBannerLabel(target: SelectedCommentTarget | null): string {
+  const label = target?.snapshot.label.trim()
+  if (!label) return `Reply`
+  return `Reply to ${label.charAt(0).toLowerCase()}${label.slice(1)}`
 }

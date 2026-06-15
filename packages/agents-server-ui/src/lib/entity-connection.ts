@@ -4,9 +4,13 @@ import { DurableStream } from '@durable-streams/client'
 import type { StreamOptions } from '@durable-streams/client'
 import {
   appendPathToUrl,
+  commentsCollection,
   createEntityStreamDB,
   type EntityStreamDBWithActions,
 } from '@electric-ax/agents-runtime/client'
+
+import { supportsComments } from './comments-capability'
+import type { ExternallyWritableCollections } from './comments-capability'
 
 function getMainStreamPath(entityUrl: string): string {
   return `${entityUrl}/main`
@@ -19,6 +23,20 @@ function getMainStreamPath(entityUrl: string): string {
  * needed; schema defaults to passthrough on the read side.
  */
 export type UICustomState = Record<string, { type: string; primaryKey: string }>
+
+/**
+ * Collections the UI registers on the entity stream when the entity's
+ * type advertises the matching contract in its
+ * `externally_writable_collections` registration. `db.collections.comments`
+ * is therefore only defined for types that declared comments — its absence
+ * is what gates the comment affordances. Callers may overlay their own
+ * customState on top; explicitly-passed entries take precedence.
+ */
+export function uiCustomStateForEntity(
+  collections: ExternallyWritableCollections
+): Record<string, typeof commentsCollection> {
+  return supportsComments(collections) ? { comments: commentsCollection } : {}
+}
 
 let activeBaseUrl: string | null = null
 
@@ -253,7 +271,9 @@ async function connectEntityStreamFresh(opts: {
     entityUrl,
     signal,
   })
-  await res.body?.cancel()
+  const metadata = (await res.json().catch(() => null)) as {
+    externally_writable_collections?: ExternallyWritableCollections
+  } | null
   throwIfAborted(signal)
   const streamUrl = appendPathToUrl(baseUrl, getMainStreamPath(entityUrl))
   const stream: EntityStreamHandle = isReactNativeRuntime()
@@ -263,12 +283,13 @@ async function connectEntityStreamFresh(opts: {
         contentType: `application/json`,
         fetch: serverFetch,
       }) as unknown as EntityStreamHandle)
-  const db = createEntityStreamDB(
-    streamUrl,
-    customState as unknown as Parameters<typeof createEntityStreamDB>[1],
-    undefined,
-    { stream }
-  )
+  const mergedCustomState: Parameters<typeof createEntityStreamDB>[1] = {
+    ...uiCustomStateForEntity(metadata?.externally_writable_collections),
+    ...(customState ?? {}),
+  }
+  const db = createEntityStreamDB(streamUrl, mergedCustomState, undefined, {
+    stream,
+  })
   try {
     await preloadWithAbort(db, signal)
   } catch (err) {

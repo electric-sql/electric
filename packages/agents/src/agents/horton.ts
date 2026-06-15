@@ -25,6 +25,7 @@ import {
   formatTokenCount,
   isGoalCommandText,
   parseGoalCommand,
+  commentsCollection,
 } from '@electric-ax/agents-runtime'
 import type {
   EntityRegistry,
@@ -981,6 +982,9 @@ export function registerHorton(
         permission: `manage`,
       },
     ],
+    state: {
+      comments: commentsCollection,
+    },
     slashCommands: [
       GOAL_SLASH_COMMAND,
       ...buildSkillSlashCommands(skillsRegistry),
