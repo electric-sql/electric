@@ -409,6 +409,7 @@ describe(`createHandlerContext: tags + tag mutations`, () => {
       doDeleteTag: async (key) => {
         calls.push({ key, removed: true })
       },
+      doUnobserve: async () => {},
     })
     expect(ctx.tags).toEqual({ title: `existing` })
     await ctx.setTag(`title`, `new`)

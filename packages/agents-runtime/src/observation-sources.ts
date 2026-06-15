@@ -106,8 +106,42 @@ export function canonicalPgSyncOptions(
   }
 }
 
+// Metadata fields that vary across wakes/runs of the same observation but
+// don't change WHAT is observed or under WHOSE authority. They must stay out
+// of the identity so a bridge is reused across wakes.
+const EPHEMERAL_PG_SYNC_METADATA = new Set<keyof PgSyncRequestMetadata>([
+  `wakeId`,
+  `runtimeConsumerId`,
+  `streamPath`,
+])
+
+function identityPgSyncMetadata(
+  metadata: PgSyncRequestMetadata | undefined
+): Partial<PgSyncRequestMetadata> | undefined {
+  if (!metadata) return undefined
+  const identity: Partial<PgSyncRequestMetadata> = {}
+  for (const key of Object.keys(metadata).sort() as Array<
+    keyof PgSyncRequestMetadata
+  >) {
+    if (EPHEMERAL_PG_SYNC_METADATA.has(key)) continue
+    const value = metadata[key]
+    if (value !== undefined) identity[key] = value
+  }
+  return Object.keys(identity).length > 0 ? identity : undefined
+}
+
 export function sourceRefForPgSync(options: PgSyncOptions): string {
-  return hashString(JSON.stringify(canonicalPgSyncOptions(options)))
+  // Identity-bearing metadata (tenant, principal, observing entity) scopes the
+  // long-lived Electric request, so it must change the source identity —
+  // otherwise different principals would share one bridge bound to whoever
+  // registered first. Only ephemeral per-request fields are excluded.
+  const { metadata, ...identity } = canonicalPgSyncOptions(options)
+  const identityMetadata = identityPgSyncMetadata(metadata)
+  return hashString(
+    JSON.stringify(
+      identityMetadata ? { ...identity, metadata: identityMetadata } : identity
+    )
+  )
 }
 
 export interface EntityObservationSource extends ObservationSource {

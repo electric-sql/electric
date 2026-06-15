@@ -1575,10 +1575,16 @@ export class PostgresRegistry {
       })
       .onConflictDoUpdate({
         target: [pgSyncBridges.tenantId, pgSyncBridges.sourceRef],
+        // A conflict means the sourceRef matched, i.e. the shape-identity
+        // options are identical, so the persisted cursor and bootstrap state
+        // are still valid. Re-registration is the common path now that the
+        // sourceRef ignores per-request metadata; resetting
+        // initialSnapshotComplete here would make a later restart resume from
+        // the saved cursor while re-skipping changes until up-to-date, dropping
+        // real changes that arrived during downtime.
         set: {
           options: row.options,
           streamUrl: row.streamUrl,
-          initialSnapshotComplete: false,
           lastTouchedAt: new Date(),
           updatedAt: new Date(),
         },
@@ -1648,6 +1654,10 @@ export class PostgresRegistry {
         updatedAt: new Date(),
       })
       .where(this.pgSyncBridgeWhere(sourceRef))
+  }
+
+  async deletePgSyncBridge(sourceRef: string): Promise<void> {
+    await this.db.delete(pgSyncBridges).where(this.pgSyncBridgeWhere(sourceRef))
   }
 
   async upsertEntityBridge(row: {

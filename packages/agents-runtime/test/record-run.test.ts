@@ -102,6 +102,7 @@ function buildHarness(opts?: { existingRunKeys?: Array<string> }): {
     tags: {},
     doSetTag: vi.fn().mockResolvedValue(undefined),
     doDeleteTag: vi.fn().mockResolvedValue(undefined),
+    doUnobserve: vi.fn().mockResolvedValue(undefined),
   })
 
   return { ctx, writeEvent }

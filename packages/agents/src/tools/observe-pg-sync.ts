@@ -25,13 +25,11 @@ export function createObservePgSyncTool(ctx: HandlerContext): AgentTool {
   return {
     name: `observe_pg_sync`,
     label: `Observe Postgres Sync`,
-    description: `Observe an Electric Postgres shape stream and wake this agent when matching row changes arrive.`,
+    description: `Observe an Electric Postgres shape stream and wake this agent when matching row changes arrive. Requires the HTTP(S) URL of an Electric shape endpoint — ask the user for it if you don't know it. Registration validates the endpoint up front and fails with Electric's error if the shape can't be fetched.`,
     parameters: Type.Object({
-      url: Type.Optional(
-        Type.String({
-          description: `Optional Electric shape endpoint URL. Defaults to the server-configured pg-sync URL.`,
-        })
-      ),
+      url: Type.String({
+        description: `HTTP(S) URL of the Electric shape endpoint, e.g. http://localhost:3000/v1/shape. Not a postgres:// connection string. Never guess this — ask the user if it hasn't been provided.`,
+      }),
       table: Type.String({
         minLength: 1,
         pattern: `\\S`,
@@ -66,7 +64,7 @@ export function createObservePgSyncTool(ctx: HandlerContext): AgentTool {
     }),
     execute: async (_toolCallId, params) => {
       const args = params as {
-        url?: string
+        url: string
         table: string
         columns?: string[]
         where?: string
@@ -76,6 +74,10 @@ export function createObservePgSyncTool(ctx: HandlerContext): AgentTool {
           ops?: Array<`insert` | `update` | `delete`>
           debounceMs?: number
         }
+      }
+
+      if (typeof args.url !== `string` || args.url.trim().length === 0) {
+        throw new Error(`url is required`)
       }
 
       if (typeof args.table !== `string` || args.table.trim().length === 0) {
@@ -98,11 +100,16 @@ export function createObservePgSyncTool(ctx: HandlerContext): AgentTool {
           : {}),
       }
 
-      await ctx.observe(source, { wake })
+      const handle = await ctx.observe(source, { wake })
+      if (!handle.streamUrl) {
+        throw new Error(
+          `pg-sync observation did not return a stream URL for ${handle.sourceRef}`
+        )
+      }
 
       return asToolResult({
-        sourceRef: source.sourceRef,
-        streamUrl: source.streamUrl,
+        sourceRef: handle.sourceRef,
+        streamUrl: handle.streamUrl,
         wake,
       })
     },

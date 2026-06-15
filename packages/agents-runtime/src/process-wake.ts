@@ -146,6 +146,32 @@ function toError(err: unknown): Error {
   return err instanceof Error ? err : new Error(String(err))
 }
 
+// Rebind an observation source to the sourceRef/streamUrl the server assigned
+// at registration time (entities, pgSync), keeping its manifest entry in sync.
+function withRegisteredManifestEntry(
+  source: ObservationSource,
+  sourceType: `entities` | `pgSync`,
+  registered: { sourceRef: string; streamUrl: string }
+): ObservationSource {
+  const originalEntry = source.toManifestEntry() as Record<string, unknown>
+  return {
+    ...source,
+    sourceRef: registered.sourceRef,
+    streamUrl: registered.streamUrl,
+    toManifestEntry() {
+      return {
+        ...originalEntry,
+        key: `source:${sourceType}:${registered.sourceRef}`,
+        sourceRef: registered.sourceRef,
+        config: {
+          ...((originalEntry.config as Record<string, unknown>) ?? {}),
+          streamUrl: registered.streamUrl,
+        },
+      } as unknown as ReturnType<ObservationSource[`toManifestEntry`]>
+    },
+  }
+}
+
 async function latestNewRunKey(
   db: EntityStreamDBWithActions,
   existingRunKeys: ReadonlySet<string>
@@ -1722,26 +1748,11 @@ export async function processWake(
         const ensured = await serverClient.ensureEntitiesMembershipStream(
           (source as EntitiesObservationSource).tags
         )
-        const originalEntry = source.toManifestEntry() as Record<
-          string,
-          unknown
-        >
-        observedSource = {
-          ...source,
-          sourceRef: ensured.sourceRef,
-          streamUrl: ensured.streamUrl,
-          toManifestEntry() {
-            return {
-              ...originalEntry,
-              key: `source:entities:${ensured.sourceRef}`,
-              sourceRef: ensured.sourceRef,
-              config: {
-                ...((originalEntry.config as Record<string, unknown>) ?? {}),
-                streamUrl: ensured.streamUrl,
-              },
-            } as unknown as ReturnType<ObservationSource[`toManifestEntry`]>
-          },
-        }
+        observedSource = withRegisteredManifestEntry(
+          source,
+          `entities`,
+          ensured
+        )
       }
 
       let registeredPgSync: { streamUrl: string; sourceRef: string } | undefined
@@ -1756,11 +1767,11 @@ export async function processWake(
             wakeId,
           }
         )
-        observedSource = {
-          ...source,
-          sourceRef: registeredPgSync.sourceRef,
-          streamUrl: registeredPgSync.streamUrl,
-        }
+        observedSource = withRegisteredManifestEntry(
+          source,
+          `pgSync`,
+          registeredPgSync
+        )
       }
 
       if (effectiveWake) {
@@ -2162,6 +2173,9 @@ export async function processWake(
         },
         doDeleteTag: async (key) => {
           await serverClient.deleteTag(entityUrl, key, writeToken)
+        },
+        doUnobserve: async (sourceRef) => {
+          await serverClient.removePgSyncObservation({ entityUrl, sourceRef })
         },
       })
 

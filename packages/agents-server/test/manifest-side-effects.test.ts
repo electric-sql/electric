@@ -4,9 +4,6 @@ import {
   extractManifestSourceUrl,
 } from '../src/manifest-side-effects'
 
-const getPgSyncStreamPath = (sourceRef: string) =>
-  `/_electric/pg-sync/${sourceRef}`
-
 describe(`manifest side effects`, () => {
   it(`uses sourceRef for entity manifest wakes when config has no entityUrl`, () => {
     const registration = buildManifestWakeRegistration(
@@ -51,7 +48,7 @@ describe(`manifest side effects`, () => {
     })
   })
 
-  it(`maps pgSync source manifest sourceRef to pg-sync stream path`, () => {
+  it(`prefers pgSync streamUrl from manifest config when present`, () => {
     const sourceRef = `pg_abc123`
 
     expect(
@@ -59,8 +56,21 @@ describe(`manifest side effects`, () => {
         kind: `source`,
         sourceType: `pgSync`,
         sourceRef,
+        config: {
+          streamUrl: `/_electric/pg-sync/default/${sourceRef}`,
+        },
       })
-    ).toBe(getPgSyncStreamPath(sourceRef))
+    ).toBe(`/_electric/pg-sync/default/${sourceRef}`)
+  })
+
+  it(`returns undefined for legacy pgSync manifests without a config streamUrl`, () => {
+    expect(
+      extractManifestSourceUrl({
+        kind: `source`,
+        sourceType: `pgSync`,
+        sourceRef: `pg_abc123`,
+      })
+    ).toBeUndefined()
   })
 
   it(`builds pgSync change wake registrations with ops`, () => {
@@ -71,6 +81,9 @@ describe(`manifest side effects`, () => {
         kind: `source`,
         sourceType: `pgSync`,
         sourceRef,
+        config: {
+          streamUrl: `/_electric/pg-sync/default/${sourceRef}`,
+        },
         wake: { on: `change`, ops: [`delete`] },
       },
       `source:pgSync:${sourceRef}`
@@ -78,7 +91,7 @@ describe(`manifest side effects`, () => {
 
     expect(registration).toEqual({
       subscriberUrl: `/parent/p1`,
-      sourceUrl: getPgSyncStreamPath(sourceRef),
+      sourceUrl: `/_electric/pg-sync/default/${sourceRef}`,
       condition: {
         on: `change`,
         ops: [`delete`],
@@ -107,6 +120,9 @@ describe(`manifest side effects`, () => {
       kind: `source`,
       sourceType: `pgSync`,
       sourceRef,
+      config: {
+        streamUrl: `/_electric/pg-sync/default/${sourceRef}`,
+      },
       wake: {
         on: `change`,
         collections: [`pg_sync_change`],
@@ -118,7 +134,7 @@ describe(`manifest side effects`, () => {
 
     expect(registration).toEqual({
       subscriberUrl: `/parent/p1`,
-      sourceUrl: getPgSyncStreamPath(sourceRef),
+      sourceUrl: `/_electric/pg-sync/default/${sourceRef}`,
       condition: {
         on: `change`,
         collections: [`pg_sync_change`],

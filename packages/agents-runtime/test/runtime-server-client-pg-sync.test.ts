@@ -26,6 +26,7 @@ describe(`runtime-server-client.registerPgSyncSource`, () => {
     })
 
     const options = {
+      url: `http://localhost:30000/v1/shape`,
       table: `todos`,
       columns: [`id`, `text`],
       where: `priority = $1`,
@@ -59,7 +60,10 @@ describe(`runtime-server-client.registerPgSyncSource`, () => {
     })
 
     await expect(
-      client.registerPgSyncSource({ table: `todos` })
+      client.registerPgSyncSource({
+        url: `http://localhost:30000/v1/shape`,
+        table: `todos`,
+      })
     ).rejects.toThrow(/registerPgSyncSource failed \(400\): bad table/)
   })
 })

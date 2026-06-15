@@ -8,6 +8,8 @@ import type {
 } from '@electric-ax/agents-runtime'
 import { Type, type Static } from '@sinclair/typebox'
 import { Router, json } from 'itty-router'
+import { PgSyncSourceValidationError } from '../pg-sync-bridge-manager.js'
+import { serverLog } from '../utils/log.js'
 import { apiError } from '../electric-agents-http.js'
 import { ErrCodeInvalidRequest } from '../electric-agents-types.js'
 import { routeBody, withSchema } from './schema.js'
@@ -16,7 +18,7 @@ import type { RouterType } from 'itty-router'
 import type { TenantContext } from './context.js'
 
 const pgSyncOptionsSchema = Type.Object({
-  url: Type.Optional(Type.String()),
+  url: Type.String(),
   table: Type.String(),
   columns: Type.Optional(Type.Array(Type.String())),
   where: Type.Optional(Type.String()),
@@ -72,6 +74,10 @@ async function registerPgSync(
 ): Promise<Response> {
   const { options, metadata } = routeBody<PgSyncRegisterBody>(request)
 
+  if (options.url.trim() === ``) {
+    return apiError(400, ErrCodeInvalidRequest, `pgSync url must be non-empty`)
+  }
+
   if (options.table.trim() === ``) {
     return apiError(
       400,
@@ -104,6 +110,13 @@ async function registerPgSync(
 
     return json(result)
   } catch (error) {
+    if (error instanceof PgSyncSourceValidationError) {
+      return apiError(400, ErrCodeInvalidRequest, error.message)
+    }
+    serverLog.error(
+      `[pg-sync] registration failed for table "${options.table}":`,
+      error
+    )
     return apiError(
       500,
       ErrCodeInvalidRequest,

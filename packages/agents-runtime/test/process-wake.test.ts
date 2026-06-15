@@ -1627,6 +1627,7 @@ describe(`processWake`, () => {
 
   it(`pgSync observe registers pgSync source before source DB preload`, async () => {
     const source = pgSync({
+      url: `http://localhost:30000/v1/shape`,
       table: `todos`,
       where: `priority = $1`,
       params: [`high`],
@@ -1643,12 +1644,23 @@ describe(`processWake`, () => {
       close: mockSourceDbClose,
     })
 
-    await processWake(makeNotification(), BASE_CONFIG)
+    const result = await processWake(makeNotification(), BASE_CONFIG)
 
+    expect(result?.manifest).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: `source:pgSync:pg-source-1`,
+          sourceRef: `pg-source-1`,
+          config: expect.objectContaining({
+            streamUrl: `/_electric/pg-sync/default/pg-source-1`,
+          }),
+        }),
+      ])
+    )
     expect(mockCreateStreamDB).toHaveBeenCalledWith(
       expect.objectContaining({
         streamOptions: expect.objectContaining({
-          url: `/_electric/pg-sync/default/pg-source-1`,
+          url: `http://localhost:3000/_electric/pg-sync/default/pg-source-1`,
           contentType: `application/json`,
         }),
         state: expect.objectContaining({
@@ -1678,6 +1690,18 @@ describe(`processWake`, () => {
         wakeId: `wake-abc`,
       },
     })
+    const wakeCall = fetchMock.mock.calls.find(
+      ([url, opts]) =>
+        String(url).includes(`/_electric/wake`) &&
+        !String(url).includes(`wake-abc`) &&
+        (opts as RequestInit | undefined)?.method === `POST`
+    )
+    const wakeBody = JSON.parse(wakeCall![1]!.body as string) as Record<
+      string,
+      unknown
+    >
+    expect(wakeBody.sourceUrl).toBe(`/_electric/pg-sync/default/pg-source-1`)
+    expect(wakeBody.manifestKey).toBe(`source:pgSync:pg-source-1`)
     expect(fetchMock.mock.invocationCallOrder[pgSyncCallIndex]).toBeLessThan(
       mockSourceDbPreload.mock.invocationCallOrder[0]
     )

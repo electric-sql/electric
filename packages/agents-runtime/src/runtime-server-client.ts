@@ -191,6 +191,10 @@ export interface RuntimeServerClient {
     entityUrl: string
     id: string
   }) => Promise<{ txid: string }>
+  removePgSyncObservation: (options: {
+    entityUrl: string
+    sourceRef: string
+  }) => Promise<{ txid: string }>
   upsertCronSchedule: (options: {
     entityUrl: string
     id: string
@@ -781,6 +785,22 @@ export function createRuntimeServerClient(
     return (await response.json()) as { txid: string }
   }
 
+  const removePgSyncObservation = async (options: {
+    entityUrl: string
+    sourceRef: string
+  }): Promise<{ txid: string }> => {
+    const response = await request(
+      `${entityRpcPath(options.entityUrl)}/pg-sync-observations/${encodeURIComponent(options.sourceRef)}`,
+      { method: `DELETE` }
+    )
+    if (!response.ok) {
+      throw new Error(
+        `removePgSyncObservation failed (${response.status}): ${await readErrorText(response)}`
+      )
+    }
+    return (await response.json()) as { txid: string }
+  }
+
   const upsertCronSchedule = async (options: {
     entityUrl: string
     id: string
@@ -937,6 +957,7 @@ export function createRuntimeServerClient(
     listWebhookSources,
     subscribeToWebhookSource,
     unsubscribeFromWebhookSource,
+    removePgSyncObservation,
     upsertCronSchedule,
     upsertFutureSendSchedule,
     deleteSchedule,

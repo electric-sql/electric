@@ -115,7 +115,12 @@ describe(`OSS server routing wrapper`, () => {
         new Request(`http://server/_electric/pg-sync/register`, {
           method: `POST`,
           headers: { 'content-type': `application/json` },
-          body: JSON.stringify({ options: { table: `entities` } }),
+          body: JSON.stringify({
+            options: {
+              url: `https://electric.example/v1/shape`,
+              table: `entities`,
+            },
+          }),
         }),
         buildTenantContext({ pgSyncBridgeManager: pgSyncBridgeManager as any })
       )
@@ -123,6 +128,7 @@ describe(`OSS server routing wrapper`, () => {
       expect(registerResponse.status).toBe(200)
       expect(pgSyncBridgeManager.register).toHaveBeenCalledWith(
         {
+          url: `https://electric.example/v1/shape`,
           table: `entities`,
         },
         {

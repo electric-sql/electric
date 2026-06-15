@@ -3,6 +3,7 @@ import { Value } from '@sinclair/typebox/value'
 import { pgSync } from '@electric-ax/agents-runtime'
 import { createHortonTools } from '../src/agents/horton'
 import { createObservePgSyncTool } from '../src/tools/observe-pg-sync'
+import { createUnobservePgSyncTool } from '../src/tools/unobserve-pg-sync'
 
 function textResult(result: unknown): any {
   const text = (result as { content: Array<{ text: string }> }).content[0]!.text
@@ -10,11 +11,15 @@ function textResult(result: unknown): any {
 }
 
 describe(`observe_pg_sync tool`, () => {
-  it(`validates required table`, async () => {
+  it(`validates required url and table`, async () => {
     const tool = createObservePgSyncTool({ observe: vi.fn() } as any)
 
     expect(Value.Check(tool.parameters as any, {})).toBe(false)
-    await expect(tool.execute(`call`, {})).rejects.toThrow(/table is required/)
+    expect(Value.Check(tool.parameters as any, { table: `todos` })).toBe(false)
+    await expect(tool.execute(`call`, {})).rejects.toThrow(/url is required/)
+    await expect(tool.execute(`call`, { table: `todos` })).rejects.toThrow(
+      /url is required/
+    )
   })
 
   it(`rejects invalid ops and unsupported timeoutMs when schema validates`, () => {
@@ -35,10 +40,16 @@ describe(`observe_pg_sync tool`, () => {
   })
 
   it(`calls ctx.observe with pgSync source and wake options`, async () => {
-    const observe = vi.fn(async () => {})
+    const observe = vi.fn(async () => ({
+      sourceType: `pgSync`,
+      sourceRef: `registered-ref`,
+      streamUrl: `/_electric/pg-sync/default/registered-ref`,
+      events: [],
+    }))
     const tool = createObservePgSyncTool({ observe } as any)
 
     await tool.execute(`call`, {
+      url: `http://localhost:30000/v1/shape`,
       table: `todos`,
       columns: [`id`, `text`],
       where: `priority = $1`,
@@ -48,6 +59,7 @@ describe(`observe_pg_sync tool`, () => {
     })
 
     const expectedSource = pgSync({
+      url: `http://localhost:30000/v1/shape`,
       table: `todos`,
       columns: [`id`, `text`],
       where: `priority = $1`,
@@ -74,11 +86,20 @@ describe(`observe_pg_sync tool`, () => {
   })
 
   it(`preserves debounceMs: 0`, async () => {
-    const observe = vi.fn(async () => {})
+    const observe = vi.fn(async () => ({
+      sourceType: `pgSync`,
+      sourceRef: `registered-ref`,
+      streamUrl: `/_electric/pg-sync/default/registered-ref`,
+      events: [],
+    }))
     const tool = createObservePgSyncTool({ observe } as any)
 
     const result = textResult(
-      await tool.execute(`call`, { table: `todos`, wake: { debounceMs: 0 } })
+      await tool.execute(`call`, {
+        url: `http://localhost:30000/v1/shape`,
+        table: `todos`,
+        wake: { debounceMs: 0 },
+      })
     )
 
     expect(observe).toHaveBeenCalledWith(expect.anything(), {
@@ -87,27 +108,45 @@ describe(`observe_pg_sync tool`, () => {
     expect(result.wake).toEqual({ on: `change`, debounceMs: 0 })
   })
 
-  it(`returns sourceRef, streamUrl, and wake`, async () => {
-    const observe = vi.fn(async () => {})
+  it(`returns the observed sourceRef, streamUrl, and wake`, async () => {
+    const observe = vi.fn(async () => ({
+      sourceType: `pgSync`,
+      sourceRef: `registered-ref`,
+      streamUrl: `/_electric/pg-sync/default/registered-ref`,
+      events: [],
+    }))
     const tool = createObservePgSyncTool({ observe } as any)
 
     const result = textResult(
-      await tool.execute(`call`, { table: `todos`, wake: { ops: [`delete`] } })
+      await tool.execute(`call`, {
+        url: `http://localhost:30000/v1/shape`,
+        table: `todos`,
+        wake: { ops: [`delete`] },
+      })
     )
-    const source = pgSync({ table: `todos` })
 
     expect(result).toEqual({
-      sourceRef: source.sourceRef,
-      streamUrl: source.streamUrl,
+      sourceRef: `registered-ref`,
+      streamUrl: `/_electric/pg-sync/default/registered-ref`,
       wake: { on: `change`, ops: [`delete`] },
     })
   })
 
   it(`defaults wake when wake.ops is omitted`, async () => {
-    const observe = vi.fn(async () => {})
+    const observe = vi.fn(async () => ({
+      sourceType: `pgSync`,
+      sourceRef: `registered-ref`,
+      streamUrl: `/_electric/pg-sync/default/registered-ref`,
+      events: [],
+    }))
     const tool = createObservePgSyncTool({ observe } as any)
 
-    const result = textResult(await tool.execute(`call`, { table: `todos` }))
+    const result = textResult(
+      await tool.execute(`call`, {
+        url: `http://localhost:30000/v1/shape`,
+        table: `todos`,
+      })
+    )
 
     expect(observe).toHaveBeenCalledWith(expect.anything(), {
       wake: { on: `change` },
@@ -129,5 +168,128 @@ describe(`observe_pg_sync tool`, () => {
     )
 
     expect(tools.map((tool) => tool.name)).toContain(`observe_pg_sync`)
+  })
+})
+
+function ctxWithObservations(
+  observations: Array<{
+    sourceRef: string
+    table?: string
+    url?: string
+    streamUrl?: string
+  }>,
+  unobserve = vi.fn(async () => undefined)
+) {
+  return {
+    unobserve,
+    db: {
+      collections: {
+        manifests: {
+          toArray: observations.map((o) => ({
+            key: `source:pgSync:${o.sourceRef}`,
+            kind: `source`,
+            sourceType: `pgSync`,
+            sourceRef: o.sourceRef,
+            ...(o.streamUrl ? { streamUrl: o.streamUrl } : {}),
+            config: {
+              ...(o.table ? { table: o.table } : {}),
+              ...(o.url ? { url: o.url } : {}),
+            },
+          })),
+        },
+      },
+    },
+  } as any
+}
+
+describe(`unobserve_pg_sync tool`, () => {
+  it(`lists active observations when called with no arguments`, async () => {
+    const tool = createUnobservePgSyncTool(
+      ctxWithObservations([
+        { sourceRef: `ref-a`, table: `todos`, url: `http://e/v1/shape` },
+      ])
+    )
+
+    const result = textResult(await tool.execute(`call`, {}))
+    expect(result.observations).toEqual([
+      {
+        sourceRef: `ref-a`,
+        table: `todos`,
+        url: `http://e/v1/shape`,
+      },
+    ])
+  })
+
+  it(`unobserves by sourceRef`, async () => {
+    const unobserve = vi.fn(async () => undefined)
+    const tool = createUnobservePgSyncTool(
+      ctxWithObservations([{ sourceRef: `ref-a`, table: `todos` }], unobserve)
+    )
+
+    const result = textResult(
+      await tool.execute(`call`, { sourceRef: `ref-a` })
+    )
+    expect(unobserve).toHaveBeenCalledWith(`ref-a`)
+    expect(result).toEqual({ unobserved: true, sourceRef: `ref-a` })
+  })
+
+  it(`resolves a unique table to its sourceRef`, async () => {
+    const unobserve = vi.fn(async () => undefined)
+    const tool = createUnobservePgSyncTool(
+      ctxWithObservations(
+        [
+          { sourceRef: `ref-a`, table: `todos` },
+          { sourceRef: `ref-b`, table: `users` },
+        ],
+        unobserve
+      )
+    )
+
+    await tool.execute(`call`, { table: `users` })
+    expect(unobserve).toHaveBeenCalledWith(`ref-b`)
+  })
+
+  it(`refuses an ambiguous table without unobserving`, async () => {
+    const unobserve = vi.fn(async () => undefined)
+    const tool = createUnobservePgSyncTool(
+      ctxWithObservations(
+        [
+          { sourceRef: `ref-a`, table: `todos` },
+          { sourceRef: `ref-b`, table: `todos` },
+        ],
+        unobserve
+      )
+    )
+
+    const result = textResult(await tool.execute(`call`, { table: `todos` }))
+    expect(unobserve).not.toHaveBeenCalled()
+    expect(result.error).toMatch(/Multiple pg-sync observations/)
+  })
+
+  it(`reports not-found for an unknown sourceRef without unobserving`, async () => {
+    const unobserve = vi.fn(async () => undefined)
+    const tool = createUnobservePgSyncTool(
+      ctxWithObservations([{ sourceRef: `ref-a`, table: `todos` }], unobserve)
+    )
+
+    const result = await tool.execute(`call`, { sourceRef: `missing` })
+    const text = (result as { content: Array<{ text: string }> }).content[0]!
+      .text
+    expect(unobserve).not.toHaveBeenCalled()
+    expect(text).toMatch(/No active pg-sync observation/)
+  })
+
+  it(`is included in Horton's tool list`, () => {
+    const tools = createHortonTools(
+      { workingDirectory: `/tmp` } as any,
+      {
+        send: vi.fn(),
+        observe: vi.fn(),
+        getGoal: vi.fn(() => undefined),
+      } as any,
+      new Set()
+    )
+
+    expect(tools.map((tool) => tool.name)).toContain(`unobserve_pg_sync`)
   })
 })

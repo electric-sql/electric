@@ -74,6 +74,25 @@ describe(`webhook source subscription routes`, () => {
     )
   })
 
+  it(`deletes a pg-sync observation for the entity`, async () => {
+    const deletePgSyncObservation = vi.fn(async () => ({ txid: `tx-9` }))
+    const ctx = tenantContext({ deletePgSyncObservation })
+
+    const response = await internalRouter.fetch(
+      new Request(
+        `http://agents.test/_electric/entities/coder/session-1/pg-sync-observations/ref-abc`,
+        { method: `DELETE` }
+      ),
+      ctx
+    )
+
+    expect(response?.status).toBe(200)
+    await expect(response!.json()).resolves.toEqual({ txid: `tx-9` })
+    expect(deletePgSyncObservation).toHaveBeenCalledWith(`/coder/session-1`, {
+      sourceRef: `ref-abc`,
+    })
+  })
+
   it(`lists configured webhook source contracts`, async () => {
     const ctx = tenantContext()
 
@@ -163,6 +182,7 @@ function tenantContext(
   overrides: {
     upsertWebhookSourceSubscription?: unknown
     deleteWebhookSourceSubscription?: unknown
+    deletePgSyncObservation?: unknown
     ensureWebhookSourceWakeSource?: TenantContext[`ensureWebhookSourceWakeSource`]
     webhookSources?: TenantContext[`webhookSources`]
   } = {}
@@ -199,6 +219,9 @@ function tenantContext(
         txid: `tx-1`,
       })),
       deleteWebhookSourceSubscription: vi.fn(async () => ({ txid: `tx-1` })),
+      deletePgSyncObservation:
+        overrides.deletePgSyncObservation ??
+        vi.fn(async () => ({ txid: `tx-1` })),
       ...(overrides.upsertWebhookSourceSubscription
         ? {
             upsertWebhookSourceSubscription:

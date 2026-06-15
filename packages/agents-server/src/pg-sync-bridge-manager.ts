@@ -21,10 +21,6 @@ import type {
   ShapeStreamInterface,
 } from '@electric-sql/client'
 
-export const PG_SYNC_ELECTRIC_SHAPE_URL =
-  process.env.ELECTRIC_AGENTS_PG_SYNC_ELECTRIC_URL ??
-  `http://localhost:3000/v1/shape`
-
 type PgSyncOperation = `insert` | `update` | `delete`
 type WakeEvaluator = (
   sourceUrl: string,
@@ -36,22 +32,28 @@ export type PgSyncResolvedSource = {
 }
 
 export interface PgSyncBridgeManagerOptions {
-  url?: string
   retry?: {
     initialDelayMs?: number
     maxDelayMs?: number
     random?: () => number
     sleep?: (ms: number) => Promise<void>
   }
+  fetchFn?: typeof fetch
+  probeTimeoutMs?: number
+}
+
+/** Registration was rejected because the source itself is invalid — map to a 4xx. */
+export class PgSyncSourceValidationError extends Error {
+  override name = `PgSyncSourceValidationError`
 }
 
 const DEFAULT_RETRY_INITIAL_DELAY_MS = 1_000
 const DEFAULT_RETRY_MAX_DELAY_MS = 30_000
+const DEFAULT_PROBE_TIMEOUT_MS = 10_000
 
 type PgSyncChangeMessage = {
   headers: Record<string, unknown> & {
     operation?: PgSyncOperation | string
-    offset?: unknown
     key?: unknown
     rowKey?: unknown
   }
@@ -126,6 +128,54 @@ export function buildElectricShapeParams(
   }
 }
 
+/**
+ * Build the one-shot URL used to validate a shape source at registration
+ * time. Approximates the query-param encoding of the Electric TS client
+ * (arrays comma-joined, where-clause params as `params[n]`) — unlike the
+ * client it does not quote column identifiers, so probe and stream encoding
+ * can diverge for exotic column names.
+ */
+export function buildShapeProbeUrl(
+  sourceUrl: string,
+  options: PgSyncOptions
+): URL {
+  let url: URL
+  try {
+    url = new URL(sourceUrl)
+  } catch {
+    throw new PgSyncSourceValidationError(
+      `pgSync url "${sourceUrl}" is not a valid URL`
+    )
+  }
+  if (url.protocol !== `http:` && url.protocol !== `https:`) {
+    throw new PgSyncSourceValidationError(
+      `pgSync url "${sourceUrl}" must be an HTTP(S) Electric shape endpoint, not a database connection string`
+    )
+  }
+  for (const [key, value] of Object.entries(
+    buildElectricShapeParams(options)
+  )) {
+    if (value === undefined || value === null) continue
+    if (Array.isArray(value)) {
+      if (key === `params`) {
+        value.forEach((item, index) =>
+          url.searchParams.set(`params[${index + 1}]`, String(item))
+        )
+      } else {
+        url.searchParams.set(key, value.join(`,`))
+      }
+    } else if (typeof value === `object`) {
+      for (const [k, v] of Object.entries(value)) {
+        url.searchParams.set(`${key}[${k}]`, String(v))
+      }
+    } else {
+      url.searchParams.set(key, String(value))
+    }
+  }
+  url.searchParams.set(`offset`, `now`)
+  return url
+}
+
 function jsonSafe(value: unknown): unknown {
   if (typeof value === `bigint`) return value.toString()
   if (value === null || typeof value !== `object`) return value
@@ -168,56 +218,41 @@ function rowKeyForMessage(message: PgSyncChangeMessage): string | undefined {
   return candidate === undefined ? undefined : stableJson(candidate)
 }
 
-export function pgSyncMessageToDurableEvent(
-  message: PgSyncChangeMessage,
-  optionsOrSourceRef: PgSyncOptions | string
-): {
+export function pgSyncMessageToDurableEvent(message: PgSyncChangeMessage): {
   type: `pg_sync_change`
   key: string
   value: Record<string, unknown>
-  headers: { operation: PgSyncOperation; timestamp: string }
+  headers: Record<string, unknown> & { operation: PgSyncOperation }
 } | null {
   const operation = message.headers.operation
   if (
     operation !== `insert` &&
     operation !== `update` &&
     operation !== `delete`
-  )
+  ) {
     return null
+  }
 
-  const sourceRef =
-    typeof optionsOrSourceRef === `string`
-      ? optionsOrSourceRef
-      : sourceRefForPgSync(optionsOrSourceRef)
-  const rowKey = rowKeyForMessage(message)
-  const offset = message.headers.offset
-  if (typeof offset !== `string` || offset.length === 0) return null
-  const messageKeyPart = offset
-  const messageKey = `${sourceRef}:${operation}:${messageKeyPart}`
-  const timestamp = new Date().toISOString()
-  const oldValue = message.old_value
-  const safeValue = jsonSafe(message.value)
-  const safeOldValue = jsonSafe(oldValue)
-  const safeHeaders = jsonSafe(message.headers)
+  const key =
+    message.key ??
+    (typeof message.headers.key === `string`
+      ? message.headers.key
+      : undefined) ??
+    rowKeyForMessage(message)
+  if (!key) {
+    return null
+  }
+
+  const safeMessage = jsonSafe(message) as Record<string, unknown>
 
   return {
     type: `pg_sync_change`,
-    key: messageKey,
-    value: {
-      key: messageKey,
-      table:
-        typeof optionsOrSourceRef === `string`
-          ? undefined
-          : optionsOrSourceRef.table,
+    key,
+    value: safeMessage,
+    headers: {
+      ...(jsonSafe(message.headers) as Record<string, unknown>),
       operation,
-      ...(rowKey !== undefined ? { rowKey } : {}),
-      ...(message.value !== undefined ? { value: safeValue } : {}),
-      ...(oldValue !== undefined ? { oldValue: safeOldValue } : {}),
-      headers: safeHeaders,
-      ...(typeof offset === `string` ? { offset } : {}),
-      receivedAt: timestamp,
     },
-    headers: { operation, timestamp },
   }
 }
 
@@ -338,13 +373,18 @@ class PgSyncBridge {
             }
             if (!isChangeMessage(message)) continue
             if (!this.skipChangesUntilUpToDate) {
-              const event = pgSyncMessageToDurableEvent(message, this.options)
+              const event = pgSyncMessageToDurableEvent(message)
               if (event) {
                 if (!this.producer)
                   throw new Error(`pg-sync producer is not started`)
                 await this.producer.append(JSON.stringify(event))
                 await this.producer.flush?.()
                 await this.evaluateWakes?.(this.streamUrl, event)
+              } else {
+                serverLog.warn(
+                  `[pg-sync-bridge] dropped change message for ${this.sourceRef} (unknown operation or missing row key):`,
+                  message.headers
+                )
               }
             }
             await this.persistCursor(stream)
@@ -425,10 +465,11 @@ export class PgSyncBridgeManager implements PgSyncBridgeCoordinator {
   private bridges = new Map<string, PgSyncBridge>()
   private starting = new Map<string, Promise<void>>()
 
-  private readonly url: string
   private readonly retry: Required<
     NonNullable<PgSyncBridgeManagerOptions[`retry`]>
   >
+  private readonly fetchFn?: typeof fetch
+  private readonly probeTimeoutMs: number
 
   constructor(
     private streamClient: StreamClient,
@@ -436,7 +477,8 @@ export class PgSyncBridgeManager implements PgSyncBridgeCoordinator {
     private registry?: PostgresRegistry,
     options: PgSyncBridgeManagerOptions = {}
   ) {
-    this.url = options.url ?? PG_SYNC_ELECTRIC_SHAPE_URL
+    this.fetchFn = options.fetchFn
+    this.probeTimeoutMs = options.probeTimeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS
     this.retry = {
       initialDelayMs:
         options.retry?.initialDelayMs ?? DEFAULT_RETRY_INITIAL_DELAY_MS,
@@ -453,14 +495,23 @@ export class PgSyncBridgeManager implements PgSyncBridgeCoordinator {
     const rows = await this.registry?.listPgSyncBridges?.()
     if (!rows) return
     await Promise.all(
-      rows.map((row) =>
-        this.ensureBridge(row).catch((error) => {
+      rows.map(async (row) => {
+        if (!row.options.url) {
+          // Rows persisted before source URLs were required can never
+          // resume — remove them instead of warning on every boot.
+          serverLog.warn(
+            `[pg-sync-bridge] deleting registration ${row.sourceRef}: it predates required source URLs; re-register the observation with an explicit Electric shape URL`
+          )
+          await this.registry?.deletePgSyncBridge?.(row.sourceRef)
+          return
+        }
+        await this.ensureBridge(row).catch((error) => {
           serverLog.warn(
             `[pg-sync-bridge] failed to start ${row.sourceRef}:`,
             error
           )
         })
-      )
+      })
     )
   }
 
@@ -478,6 +529,9 @@ export class PgSyncBridgeManager implements PgSyncBridgeCoordinator {
     const resolvedSource = this.resolveSource(canonicalOptions)
     const sourceRef = sourceRefForPgSync(canonicalOptions)
     const streamUrl = getPgSyncStreamPath(sourceRef, this.registry?.tenantId)
+    if (!this.bridges.has(sourceRef) && !this.starting.has(sourceRef)) {
+      await this.probeSource(resolvedSource, canonicalOptions)
+    }
     const row = await this.registry?.upsertPgSyncBridge({
       sourceRef,
       options: canonicalOptions,
@@ -541,7 +595,53 @@ export class PgSyncBridgeManager implements PgSyncBridgeCoordinator {
   }
 
   private resolveSource(options: CanonicalPgSyncConfig): PgSyncResolvedSource {
-    return { url: options.url ?? this.url }
+    if (!options.url) {
+      throw new PgSyncSourceValidationError(
+        `pgSync source url is required; no server default is configured`
+      )
+    }
+    return { url: options.url }
+  }
+
+  /**
+   * One-shot fetch of the shape log before a bridge is created, so a bad
+   * URL or rejected shape fails the registration instead of dying silently
+   * in the bridge's retry loop.
+   */
+  private async probeSource(
+    source: PgSyncResolvedSource,
+    options: CanonicalPgSyncConfig
+  ): Promise<void> {
+    const probeUrl = buildShapeProbeUrl(source.url, options)
+    const fetchFn = this.fetchFn ?? globalThis.fetch
+    let response: Response
+    try {
+      response = await fetchFn(probeUrl, {
+        signal: AbortSignal.timeout(this.probeTimeoutMs),
+      })
+    } catch (error) {
+      throw new PgSyncSourceValidationError(
+        `pgSync source at ${source.url} is unreachable: ${error instanceof Error ? error.message : String(error)}`
+      )
+    }
+    if (!response.ok) {
+      const body = (
+        await response.text().catch(() => `<failed to read body>`)
+      ).slice(0, 500)
+      throw new PgSyncSourceValidationError(
+        `pgSync source at ${source.url} rejected the shape request (${response.status})${body ? `: ${body}` : ``}`
+      )
+    }
+    // Electric answers 200 on paths that aren't the shape API (e.g. its
+    // root), so an ok status alone doesn't prove the URL is right. Real
+    // shape responses always carry the electric-handle header.
+    if (!response.headers.get(`electric-handle`)) {
+      const suggestion = new URL(source.url)
+      suggestion.pathname = `/v1/shape`
+      throw new PgSyncSourceValidationError(
+        `pgSync source at ${source.url} responded but is not a shape log (missing electric-handle header) — the Electric shape API is usually served at ${suggestion.origin}/v1/shape`
+      )
+    }
   }
 
   async stop(): Promise<void> {

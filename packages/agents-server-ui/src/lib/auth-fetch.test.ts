@@ -203,6 +203,42 @@ describe(`server fetch helpers`, () => {
     expect(fetchMock).toHaveBeenCalledOnce()
   })
 
+  it(`injects configured headers when a local Electron request falls back from desktop transport`, async () => {
+    const desktopFetch = vi.fn()
+    ;(globalThis as { window?: unknown }).window = {
+      electronAPI: { serverFetch: desktopFetch },
+    }
+    registerActiveServerHeaders({
+      name: `Local`,
+      url: `http://127.0.0.1:4437`,
+      headers: {
+        'electric-principal': `system:dev-local`,
+        Authorization: `Bearer local-token`,
+      },
+    })
+
+    const fetchMock = vi
+      .spyOn(globalThis, `fetch`)
+      .mockResolvedValue(new Response(`ok`))
+
+    const form = new FormData()
+    form.set(`file`, new Blob([`hi`], { type: `text/plain` }), `hi.txt`)
+
+    await serverFetch(
+      `http://127.0.0.1:4437/_electric/entities/horton/a/attachments`,
+      {
+        method: `POST`,
+        body: form,
+      }
+    )
+
+    expect(desktopFetch).not.toHaveBeenCalled()
+    expect(fetchMock).toHaveBeenCalledOnce()
+    const headers = new Headers(fetchMock.mock.calls[0][1]?.headers)
+    expect(headers.get(`electric-principal`)).toBe(`system:dev-local`)
+    expect(headers.get(`authorization`)).toBe(`Bearer local-token`)
+  })
+
   it(`returns the active principal as a canonical principal URL`, () => {
     registerActiveServerHeaders({
       name: `Tenant`,

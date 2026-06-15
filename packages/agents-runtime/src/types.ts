@@ -643,6 +643,7 @@ export interface SourceWakeConfig {
 export interface ObservationHandle {
   sourceType: string
   sourceRef: string
+  streamUrl?: string
   db?: EntityStreamDB | ObservationStreamDB
   events: Array<ChangeEvent>
 }
@@ -1160,6 +1161,12 @@ export interface HandlerContext<
       source: ObservationSource,
       opts?: { wake?: Wake }
     ) => Promise<ObservationHandle>)
+  /**
+   * Stop observing a pg-sync source by its registered sourceRef: drops this
+   * entity's wake on the source. The shared pg-sync bridge is left running for
+   * any other observers.
+   */
+  unobserve: (sourceRef: string) => Promise<void>
   mkdb: <T extends SharedStateSchemaMap>(
     id: string,
     schema: T

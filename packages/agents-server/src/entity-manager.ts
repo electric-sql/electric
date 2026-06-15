@@ -3203,6 +3203,30 @@ export class EntityManager {
     return { txid }
   }
 
+  /**
+   * Stop this entity observing a pg-sync source: drop its manifest entry and
+   * the wake it anchors. The shared pg-sync bridge (keyed by sourceRef, not by
+   * subscriber) is intentionally left running for any other observers.
+   */
+  async deletePgSyncObservation(
+    entityUrl: string,
+    req: { sourceRef: string }
+  ): Promise<{ txid: string }> {
+    const manifestKey = `source:pgSync:${req.sourceRef}`
+    const txid = randomUUID()
+    await this.writeManifestEntry(entityUrl, manifestKey, `delete`, undefined, {
+      txid,
+    })
+
+    await this.wakeRegistry.unregisterByManifestKey(
+      entityUrl,
+      manifestKey,
+      this.tenantId
+    )
+
+    return { txid }
+  }
+
   // ==========================================================================
   // Wake Evaluation
   // ==========================================================================
