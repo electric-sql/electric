@@ -442,6 +442,27 @@ function compactToastText(text: string): string {
   return trimmed.length > 360 ? `${trimmed.slice(0, 357)}...` : trimmed
 }
 
+const NULL_BODY_STATUSES = new Set([204, 205, 304])
+
+async function readOptionalJson<T>(res: Response): Promise<T | null> {
+  if (NULL_BODY_STATUSES.has(res.status)) return null
+  const raw = await res.text().catch(() => ``)
+  if (!raw.trim()) return null
+  try {
+    return JSON.parse(raw) as T
+  } catch {
+    throw new Error(`Response body was not valid JSON`)
+  }
+}
+
+async function readRequiredJson<T>(res: Response): Promise<T> {
+  const data = await readOptionalJson<T>(res)
+  if (data === null) {
+    throw new Error(`Response body was empty`)
+  }
+  return data
+}
+
 function showSignalFailureToast(input: {
   action: `kill` | `signal`
   entityUrl: string
@@ -557,7 +578,10 @@ function createSpawnAction(
           }
           throw new Error(message)
         }
-        const data = (await res.json()) as { txid: number }
+        const data = await readRequiredJson<{ txid?: number }>(res)
+        if (typeof data.txid !== `number`) {
+          throw new Error(`Spawn returned an invalid txid response`)
+        }
         await entitiesCollection.utils.awaitTxId(data.txid, 10_000)
         return { txid: data.txid }
       } catch (err) {
@@ -614,7 +638,10 @@ function createKillAction(
         })
         throw new Error(text || `Kill failed (${res.status})`)
       }
-      const data = (await res.json()) as { txid: number }
+      const data = await readRequiredJson<{ txid?: number }>(res)
+      if (typeof data.txid !== `number`) {
+        throw new Error(`Kill returned an invalid txid response`)
+      }
       await entitiesCollection.utils.awaitTxId(data.txid, 10_000)
       return { txid: data.txid }
     },
@@ -671,7 +698,10 @@ function createSetEntityTitleAction(
             parseErrorResponse(text) || `Set title failed (${res.status})`
           )
         }
-        const data = (await res.json()) as { txid: number }
+        const data = await readRequiredJson<{ txid?: number }>(res)
+        if (typeof data.txid !== `number`) {
+          throw new Error(`Set title returned an invalid txid response`)
+        }
         await entitiesCollection.utils.awaitTxId(data.txid, 10_000)
         return { txid: data.txid }
       } catch (err) {
@@ -733,7 +763,10 @@ function createSignalAction(
         })
         throw new Error(text || `Signal failed (${res.status})`)
       }
-      const data = (await res.json()) as { txid: number }
+      const data = await readRequiredJson<{ txid?: number }>(res)
+      if (typeof data.txid !== `number`) {
+        throw new Error(`Signal returned an invalid txid response`)
+      }
       await entitiesCollection.utils.awaitTxId(data.txid, 10_000)
       return { txid: data.txid }
     },
@@ -776,7 +809,7 @@ function createForkEntity(baseUrl: string) {
       const message = parseErrorResponse(text) ?? `Fork failed (${res.status})`
       throw new Error(message)
     }
-    const data = (await res.json()) as { root?: { url?: string } }
+    const data = await readRequiredJson<{ root?: { url?: string } }>(res)
     if (!data.root?.url) {
       const message = `Fork returned an invalid response`
       showForkFailureToast({ entityUrl, error: message })

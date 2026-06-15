@@ -172,6 +172,27 @@ function readRequiredTxid(data: { txid?: unknown }, label: string): string {
   return data.txid
 }
 
+const NULL_BODY_STATUSES = new Set([204, 205, 304])
+
+async function readOptionalJson<T>(res: Response): Promise<T | null> {
+  if (NULL_BODY_STATUSES.has(res.status)) return null
+  const raw = await res.text().catch(() => ``)
+  if (!raw.trim()) return null
+  try {
+    return JSON.parse(raw) as T
+  } catch {
+    throw new Error(`Response body was not valid JSON`)
+  }
+}
+
+async function readRequiredJson<T>(res: Response): Promise<T> {
+  const data = await readOptionalJson<T>(res)
+  if (data === null) {
+    throw new Error(`Response body was empty`)
+  }
+  return data
+}
+
 function readSendError(status: number, body: string): Error {
   let message = `Send failed (${status})`
   if (body) {
@@ -237,10 +258,10 @@ export async function uploadMessageAttachments({
         const body = await res.text().catch(() => ``)
         throw readSendError(res.status, body)
       }
-      const data = (await res.json()) as {
+      const data = await readRequiredJson<{
         txid?: unknown
         attachment?: { id?: unknown }
-      }
+      }>(res)
       txids.push(readRequiredTxid(data, `Attachment upload`))
       if (data.attachment?.id !== id) {
         throw new Error(`Attachment upload returned an invalid response`)
@@ -330,7 +351,7 @@ export async function sendEntityMessage({
       const body = await res.text().catch(() => ``)
       throw readSendError(res.status, body)
     }
-    const data = (await res.json()) as { txid?: unknown }
+    const data = await readRequiredJson<{ txid?: unknown }>(res)
     const txid = readRequiredTxid(data, `Send`)
     return { txid, attachmentTxids: uploadedAttachments.txids }
   } catch (error) {
@@ -463,7 +484,7 @@ export function createSendMessageAction({
         const body = await res.text().catch(() => ``)
         throw readSendError(res.status, body)
       }
-      const data = (await res.json()) as { txid?: unknown }
+      const data = await readRequiredJson<{ txid?: unknown }>(res)
       await db.utils.awaitTxId(readRequiredTxid(data, `Send`), 10_000)
     },
   })
@@ -584,7 +605,7 @@ export function createUpdateInboxMessageAction({
         const body = await res.text().catch(() => ``)
         throw readSendError(res.status, body)
       }
-      const data = (await res.json()) as { txid?: unknown }
+      const data = await readRequiredJson<{ txid?: unknown }>(res)
       await db.utils.awaitTxId(readRequiredTxid(data, `Inbox update`), 10_000)
     },
   })
@@ -612,7 +633,7 @@ export function createDeleteInboxMessageAction({
         const body = await res.text().catch(() => ``)
         throw readSendError(res.status, body)
       }
-      const data = (await res.json()) as { txid?: unknown }
+      const data = await readRequiredJson<{ txid?: unknown }>(res)
       await db.utils.awaitTxId(readRequiredTxid(data, `Inbox delete`), 10_000)
     },
   })
@@ -649,7 +670,7 @@ export function createSteerInboxMessageAction({
         const body = await res.text().catch(() => ``)
         throw readSendError(res.status, body)
       }
-      const data = (await res.json()) as { txid?: unknown }
+      const data = await readRequiredJson<{ txid?: unknown }>(res)
       await db.utils.awaitTxId(readRequiredTxid(data, `Inbox steer`), 10_000)
     },
   })
