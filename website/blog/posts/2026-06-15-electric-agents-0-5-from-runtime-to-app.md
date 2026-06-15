@@ -13,7 +13,7 @@ image: /img/blog/electric-agents-0-5-from-runtime-to-app/header.jpg
 tags: [electric-agents, agents, durable-streams, sync, devtools]
 outline: [2, 3]
 post: true
-published: true
+published: false
 ---
 
 <script setup>
