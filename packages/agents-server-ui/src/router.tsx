@@ -19,6 +19,7 @@ import {
   type EntitySignal,
 } from './lib/ElectricAgentsProvider'
 import { usePinnedEntities } from './hooks/usePinnedEntities'
+import { useServerConnection } from './hooks/useServerConnection'
 import {
   SidebarCollapsedProvider,
   useSidebarCollapsed,
@@ -57,6 +58,7 @@ import { CommandLinePage } from './components/settings/pages/CommandLinePage'
 import { ServersPage } from './components/settings/pages/ServersPage'
 import { McpServersPage } from './components/settings/pages/McpServersPage'
 import { LocalRuntimePage } from './components/settings/pages/LocalRuntimePage'
+import { showToast } from './lib/toast'
 import styles from './router.module.css'
 
 const SETTINGS_CATEGORY_IDS: ReadonlyArray<SettingsCategoryId> = [
@@ -367,6 +369,24 @@ function RootShell(): React.ReactElement {
     },
     [navigate]
   )
+
+  const { servers, setActiveServer } = useServerConnection()
+  useEffect(() => {
+    const off = window.electronAPI?.onOpenSession?.((payload) => {
+      if (!payload.serverId) {
+        showToast({
+          title: `Can't open this session`,
+          description: `It lives on a server you haven't added (${payload.serverUrl}).`,
+          tone: `warning`,
+        })
+        return
+      }
+      const target = servers.find((s) => s.id === payload.serverId)
+      if (target) setActiveServer(target)
+      navigateToEntity(payload.entityUrl)
+    })
+    return () => off?.()
+  }, [servers, setActiveServer, navigateToEntity])
 
   // ⌘/Ctrl-click + middle-click on a sidebar row → open the entity to
   // the right of the active tile, rather than replacing it (matches
