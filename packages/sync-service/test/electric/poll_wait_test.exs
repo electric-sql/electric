@@ -56,20 +56,22 @@ defmodule Electric.PollWaitTest do
       ts = timestamps |> :ets.tab2list() |> Enum.map(&elem(&1, 0)) |> Enum.sort()
       diffs = ts |> Enum.chunk_every(2, 1, :discard) |> Enum.map(fn [a, b] -> b - a end)
 
-      # With 0 jitter and a 2.0 factor: 5, 10, 20, 20, 20, ... ms between checks.
+      # With 0 jitter, a 2.0 backoff factor, and the 10ms floor in jittered/2,
+      # the configured sleeps clamp to 10, 10, 20, 20, ... ms between checks
+      # (initial_interval: 5 and 5*2=10 both floor to 10; 10*2=20 hits max).
       [d1, d2, d3 | _] = diffs
 
-      # Each measured delta must be at least the configured sleep (minus 1ms slop
-      # for monotonic-time resolution).
-      assert d1 >= 4, "expected d1 >= 4ms (configured 5), got #{d1}"
-      assert d2 >= 8, "expected d2 >= 8ms (configured 10), got #{d2}"
-      assert d3 >= 15, "expected d3 >= 15ms (configured 20), got #{d3}"
+      # Assert lower bounds only. Process.sleep never returns early, so a measured
+      # delta can overshoot under a loaded runner but never undershoot. Comparing
+      # two measured deltas to each other would be flaky (a shorter-configured
+      # sleep can overshoot past a longer one), so we deliberately don't.
+      assert d1 >= 8, "expected d1 >= 8ms (floored 10), got #{d1}"
+      assert d2 >= 8, "expected d2 >= 8ms (floored 10), got #{d2}"
 
-      # And growth must be monotonic: each subsequent interval is at least the
-      # previous one (within scheduler slop). This proves the backoff factor is
-      # being applied, regardless of how slow the CI runner is.
-      assert d2 >= d1, "expected d2 >= d1, got d1=#{d1}, d2=#{d2}"
-      assert d3 >= d2, "expected d3 >= d2, got d2=#{d2}, d3=#{d3}"
+      # Backoff is proven by the third interval reaching ~20ms: without the factor
+      # being applied every interval would stay floored at 10ms, so d3 could not
+      # climb toward the 20ms max.
+      assert d3 >= 16, "expected d3 >= 16ms (backoff grew interval to 20), got #{d3}"
       :ets.delete(timestamps)
     end
 
