@@ -1,5 +1,5 @@
 ---
-'@electric-ax/agents': minor
+'@electric-ax/agents': patch
 ---
 
 Embedder customization hooks for the built-in agents:
