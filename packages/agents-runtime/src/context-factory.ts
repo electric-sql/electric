@@ -21,8 +21,16 @@ import {
   selectLatestContextUsage,
   truncateOversizedToolResults,
   withContextBudgetNotice,
+  CONTEXT_USAGE_HARD_CEILING,
   type ContextUsageStep,
 } from './token-accountant'
+import { approxTokens } from './token-budget'
+import {
+  COMPACTION_CHECKPOINT_ID,
+  COMPACTION_CHECKPOINT_KIND,
+  COMPACTION_CHECKPOINT_NAME,
+} from './compaction'
+import { summarizeMessages } from './compaction-summarize'
 import { createContextTools } from './tools/context-tools'
 import { CACHE_TIERS } from './types'
 import { composeToolsWithProviders } from './tool-providers'
@@ -791,12 +799,69 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         const budgetUsage = selectLatestContextUsage(
           config.db.collections.steps.toArray as ReadonlyArray<ContextUsageStep>
         )
-        // Phase 2: cap any single oversized tool result before the model call
-        // (one huge output can fill the window on its own), then surface the
-        // budget notice.
+
+        // Phase 2 hard ceiling: if the last turn left context at/over 95% of
+        // the window, compact synchronously before this model call. Summarize
+        // the current history, persist a compaction checkpoint (so future turns
+        // reconstruct from it via the timeline watermark), and send only the
+        // summary this turn — the current ask is delivered separately as
+        // runInput. The `approxTokens` guard avoids re-compacting an already
+        // compacted (small) history while the last step's usage is still high.
+        let workingMessages = messages
+        let didCompact = false
+        const estimatedHistoryTokens = messages.reduce(
+          (sum, message) => sum + approxTokens(message.content),
+          0
+        )
+        if (
+          budgetUsage &&
+          budgetUsage.ratio >= CONTEXT_USAGE_HARD_CEILING &&
+          estimatedHistoryTokens > budgetUsage.contextWindow / 2
+        ) {
+          const logPrefix = `[${config.entityUrl}]`
+          try {
+            const provider = agentModelProvider(activeAgentConfig)
+            const apiKey = await activeAgentConfig.getApiKey?.(provider)
+            const summary = await summarizeMessages({
+              model: activeAgentConfig.model,
+              provider,
+              messages,
+              ...(apiKey ? { apiKey } : {}),
+              ...(activeAgentConfig.summarizeComplete
+                ? { complete: activeAgentConfig.summarizeComplete }
+                : {}),
+            })
+            contextApi.insertContext(COMPACTION_CHECKPOINT_ID, {
+              name: COMPACTION_CHECKPOINT_NAME,
+              attrs: { kind: COMPACTION_CHECKPOINT_KIND },
+              content: summary,
+            })
+            workingMessages = [
+              {
+                role: `user`,
+                content: `<${COMPACTION_CHECKPOINT_NAME}>\n${summary}\n</${COMPACTION_CHECKPOINT_NAME}>`,
+              },
+            ]
+            didCompact = true
+            runtimeLog.info(
+              logPrefix,
+              `compaction: summarized ${messages.length} messages at ratio=${budgetUsage.ratio.toFixed(2)} window=${budgetUsage.contextWindow}`
+            )
+          } catch (error) {
+            runtimeLog.warn(
+              logPrefix,
+              `compaction failed; proceeding uncompacted: ${error instanceof Error ? error.message : String(error)}`
+            )
+          }
+        }
+
+        // Cap any single oversized tool result (one huge output can fill the
+        // window on its own), then surface the budget notice. After a fresh
+        // compaction the last step's ratio is stale, so skip the notice this
+        // turn rather than report a misleading "~0% remaining".
         const outgoingMessages = withContextBudgetNotice(
-          truncateOversizedToolResults(messages),
-          budgetUsage
+          truncateOversizedToolResults(workingMessages),
+          didCompact ? null : budgetUsage
         )
 
         const adapterFactory = createPiAgentAdapter({

@@ -4,22 +4,9 @@ import {
   COMPACTION_SUMMARIZATION_PROMPT,
   COMPACTION_SUMMARY_PREFIX,
 } from './compaction'
-import type { LLMMessage } from './types'
+import type { LLMMessage, SummarizeCompleteFn } from './types'
 
-/**
- * The model-call seam for summarization. Defaults to pi-ai's `completeSimple`;
- * tests inject a stub so the summarizer is exercisable without a network call
- * or API key. Typed loosely on purpose — it only needs the text content back.
- */
-export type SummarizeCompleteFn = (
-  model: unknown,
-  context: { messages: Array<unknown>; systemPrompt?: string },
-  options?: Record<string, unknown>
-) => Promise<{
-  content: Array<{ type: string; text?: string }>
-  stopReason?: string
-  errorMessage?: string
-}>
+export type { SummarizeCompleteFn }
 
 const DEFAULT_SUMMARY_MAX_TOKENS = 2048
 
