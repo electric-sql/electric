@@ -23,6 +23,7 @@ import { serverLog } from './log'
 import { registerHorton } from './agents/horton'
 import { registerWorker } from './agents/worker'
 import { createBuiltinModelCatalog } from './model-catalog'
+import type { BuiltinModelCatalog } from './model-catalog'
 import { createSkillsRegistry } from '@electric-ax/agents-runtime'
 import type {
   AgentTool,
@@ -51,11 +52,57 @@ export interface AgentHandlerResult {
    * die with the process, which would leave containers running.
    */
   shutdownSandboxes: (() => Promise<void>) | null
+  /**
+   * Model catalog the built-in agents resolve `model` args against — lets
+   * embedders register sibling agent types with the same model resolution.
+   */
+  modelCatalog: BuiltinModelCatalog
 }
 
 export type BuiltinElectricToolsFactory = NonNullable<
   ProcessWakeConfig[`createElectricTools`]
 >
+
+/** Mount spec mirroring `DockerSandboxOpts['extraMounts']` items. */
+export interface BuiltinDockerSandboxMount {
+  hostPath: string
+  containerPath: string
+  readOnly?: boolean
+}
+
+// Compile-time drift guard: keep `BuiltinDockerSandboxMount` (intentionally
+// duplicated to keep the runtime docker subpath out of the import graph)
+// assignable to the runtime's mount shape. The constrained generic errors at
+// instantiation if the shapes drift; the inline `import(...)` type is fully
+// erased, so this adds no runtime dependency.
+type _AssignableTo<A extends B, B> = A
+type _AssertMountCompat = _AssignableTo<
+  BuiltinDockerSandboxMount,
+  NonNullable<
+    // eslint-disable-next-line quotes -- type-position import() requires a string literal
+    import('@electric-ax/agents-runtime/sandbox/docker').DockerSandboxOpts['extraMounts']
+  >[number]
+>
+
+/**
+ * Embedder customization for the built-in `docker` sandbox profile.
+ * Threads straight into `dockerSandbox()` (which already supports these);
+ * custom `extraMounts` are appended after the working-directory mount.
+ * These are embedder/operator-trust inputs: `extraMounts` is subject to the
+ * runtime's docker-socket guard, and `env` is passed verbatim into the
+ * container.
+ *
+ * Note: custom `extraMounts` must not target the working-directory container
+ * path (`/work`) — it collides with the cwd mount and fails at container-create
+ * time with an opaque docker error.
+ */
+export interface BuiltinDockerSandboxOptions {
+  /** Digest-pinned image unless `allowFloatingTag` is set. */
+  image?: string
+  allowFloatingTag?: boolean
+  env?: Record<string, string>
+  extraMounts?: Array<BuiltinDockerSandboxMount>
+}
 
 export interface BuiltinAgentHandlerOptions {
   agentServerUrl: string
@@ -72,6 +119,8 @@ export interface BuiltinAgentHandlerOptions {
     typeName: string
   ) => DispatchPolicy | undefined
   createElectricTools?: BuiltinElectricToolsFactory
+  /** Customize the built-in `docker` sandbox profile (image, env, mounts). */
+  dockerSandbox?: BuiltinDockerSandboxOptions
 }
 
 function toolName(tool: AgentTool): string | null {
@@ -120,6 +169,7 @@ export async function createBuiltinAgentHandler(
     baseSkillsDir: baseSkillsDirOverride,
     serverHeaders,
     defaultDispatchPolicyForType,
+    dockerSandbox: dockerSandboxOpts,
   } = options
 
   const modelCatalog = await createBuiltinModelCatalog({
@@ -169,7 +219,7 @@ export async function createBuiltinAgentHandler(
   typeNames.push(`worker`)
 
   const { profiles: sandboxProfiles, shutdownSandboxes } =
-    await buildBuiltinSandboxProfiles(cwd)
+    await buildBuiltinSandboxProfiles(cwd, dockerSandboxOpts)
 
   const runtime = createRuntimeHandler({
     baseUrl: agentServerUrl,
@@ -192,6 +242,7 @@ export async function createBuiltinAgentHandler(
     typeNames,
     skillsRegistry,
     shutdownSandboxes,
+    modelCatalog,
   }
 }
 
@@ -256,6 +307,35 @@ function sweepOrphanedDockerSandboxesOnce(
 }
 
 /**
+ * Merge the profile's working-directory mount with embedder docker options
+ * into the option fragment spread into `dockerSandbox()`. An internal helper:
+ * exported from this module so the unit test can import it, but intentionally
+ * not re-exported from `index.ts` (not part of the package's public API).
+ */
+export function resolveDockerSandboxOpts(
+  cwdMount: BuiltinDockerSandboxMount | undefined,
+  custom: BuiltinDockerSandboxOptions | undefined
+): {
+  image?: string
+  allowFloatingTag?: boolean
+  env?: Record<string, string>
+  extraMounts?: Array<BuiltinDockerSandboxMount>
+} {
+  const extraMounts = [
+    ...(cwdMount ? [cwdMount] : []),
+    ...(custom?.extraMounts ?? []),
+  ]
+  return {
+    ...(custom?.image !== undefined && { image: custom.image }),
+    ...(custom?.allowFloatingTag !== undefined && {
+      allowFloatingTag: custom.allowFloatingTag,
+    }),
+    ...(custom?.env !== undefined && { env: custom.env }),
+    ...(extraMounts.length > 0 && { extraMounts }),
+  }
+}
+
+/**
  * Built-in sandbox profiles. `local` is always available. `docker` is
  * gated on Docker being reachable so a user without Docker installed
  * sees only what works — the UI never offers a non-functional choice.
@@ -265,7 +345,10 @@ function sweepOrphanedDockerSandboxesOnce(
  * server must run on shutdown (the providers' debounced idle teardowns die
  * with the process).
  */
-async function buildBuiltinSandboxProfiles(workingDirectory: string): Promise<{
+async function buildBuiltinSandboxProfiles(
+  workingDirectory: string,
+  dockerOpts?: BuiltinDockerSandboxOptions
+): Promise<{
   profiles: Array<SandboxProfile>
   shutdownSandboxes: (() => Promise<void>) | null
 }> {
@@ -327,9 +410,12 @@ async function buildBuiltinSandboxProfiles(workingDirectory: string): Promise<{
                 // fully-isolated rather than splitting into `docker-permissive`
                 // / `docker-isolated`.
                 initialNetworkPolicy: { mode: `allow-all` },
-                extraMounts: cwd
-                  ? [{ hostPath: cwd, containerPath: `/work`, readOnly: false }]
-                  : undefined,
+                ...resolveDockerSandboxOpts(
+                  cwd
+                    ? { hostPath: cwd, containerPath: `/work`, readOnly: false }
+                    : undefined,
+                  dockerOpts
+                ),
                 // The container is always named-by-key and reattachable;
                 // `persistent` chooses idle teardown (stop vs remove) and
                 // `owner` gates creation (an attacher reattaches only). All
