@@ -629,7 +629,7 @@ defmodule Electric.Postgres.ReplicationClient do
     do: tuple |> Tuple.to_list() |> Enum.map(&scrub_events/1) |> List.to_tuple()
 
   # Recurse into plain maps too — an event can be nested in a map value within
-  # an arbitrary exit reason, and the inspect no longer truncates to catch it.
+  # an arbitrary exit reason.
   defp scrub_events(map) when is_map(map),
     do: Map.new(map, fn {k, v} -> {scrub_events(k), scrub_events(v)} end)
 
