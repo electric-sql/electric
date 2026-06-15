@@ -593,20 +593,12 @@ defmodule Electric.Replication.ShapeLogCollector do
 
         {:ok, state}
 
-      {:error, :connection_not_available} ->
-        {{:error, :connection_not_available}, state}
-
       {:error, reason} ->
-        # Introspection failed for a reason other than the connection pool
-        # being down, e.g. the database returned an error to the catalog
-        # query. Reply with the one error the replication client knows how to
-        # recover from: it pauses the stream and redelivers the event, giving
-        # the introspection another chance instead of crashing the collector.
         Logger.warning(
           "Failed to introspect relations affected by transaction #{txn_fragment.xid}: #{inspect(reason)}. Replication is paused until introspection succeeds"
         )
 
-        {{:error, :connection_not_available}, state}
+        {normalize_inspector_error(reason), state}
     end
   end
 
@@ -701,22 +693,24 @@ defmodule Electric.Replication.ShapeLogCollector do
           {:ok, %{state | tracked_relations: tracker_state}}
         end
 
-      {:error, :connection_not_available} ->
-        {{:error, :connection_not_available}, state}
-
       {:error, reason} ->
-        # Introspection failed for a reason other than the connection pool
-        # being down, e.g. the database returned an error to the catalog
-        # query. Reply with the one error the replication client knows how to
-        # recover from: it pauses the stream and redelivers the event, giving
-        # the introspection another chance instead of crashing the collector.
         Logger.warning(
           "Failed to introspect relation #{Electric.Utils.inspect_relation({updated_rel.schema, updated_rel.table})}: #{inspect(reason)}. Replication is paused until introspection succeeds"
         )
 
-        {{:error, :connection_not_available}, state}
+        {normalize_inspector_error(reason), state}
     end
   end
+
+  defp normalize_inspector_error(:connection_not_available),
+    do: {:error, :connection_not_available}
+
+  # Introspection failed for a reason other than the connection pool being
+  # down, e.g. the database returned an error to the catalog query. Reply with
+  # the one error the replication client knows how to recover from: it pauses
+  # the stream and redelivers the event, giving the introspection another
+  # chance instead of crashing the collector.
+  defp normalize_inspector_error(_reason), do: {:error, :connection_not_available}
 
   defp publish_relation(state, rel, :unchanged) do
     OpenTelemetry.add_span_attributes("rel.is_dropped": true)
