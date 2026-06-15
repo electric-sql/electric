@@ -16,6 +16,7 @@ import { ensureSandboxMaterialized } from './sandbox/lazy'
 import { resolveSandboxIdentity } from './sandbox/identity'
 import { appendPathToUrl } from './url'
 import { manifestChildKey } from './manifest-helpers'
+import { ModelProviderError } from './model-provider-error'
 import {
   buildHydratedEventSourceWake,
   eventSourceWakeInfoFromManifests,
@@ -2200,13 +2201,18 @@ export async function processWake(
         await waitForSignalHandlers()
         activeSignalHandler = null
         wakeSession.rollbackManifestEntries()
-        const errMsg = toError(setupErr).message
+        const err = toError(setupErr)
+        const errMsg = err.message
+        const errCode =
+          setupErr instanceof ModelProviderError
+            ? setupErr.code
+            : `HANDLER_FAILED`
         log.error(`handler failed for ${entityUrl}:`, errMsg)
         writeEvent(
           entityStateSchema.errors.insert({
             key: `error-${epoch}-${crypto.randomUUID()}`,
             value: {
-              error_code: `HANDLER_FAILED`,
+              error_code: errCode,
               message: errMsg,
             } as never,
           }) as ChangeEvent

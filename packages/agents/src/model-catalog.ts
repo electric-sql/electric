@@ -286,11 +286,6 @@ function withProviderPayloadDefaults(
 
         return {
           ...body,
-          // OpenAI Responses reasoning/tool-call continuations replay rs_*
-          // reasoning items. With store:false, OpenAI does not persist those
-          // items server-side, which can make follow-up requests fail with
-          // "Item with id ... not found". Keep Responses stateful for built-ins.
-          store: true,
           reasoning: {
             ...existingReasoning,
             effort,

@@ -1,5 +1,20 @@
 # @core/sync-service
 
+## 1.7.0
+
+### Minor Changes
+
+- 63f4107: Add hibernate-then-suspend behavior for Consumer processes. When suspend is enabled, consumers now hibernate first (triggering GC) before suspending. Adds `shape_suspend_after` config to control the delay between hibernation and suspension. Any activity cancels the pending suspend timer, restarting the cycle.
+
+### Patch Changes
+
+- 66c775e: Drop duplicate relation messages before shape routing when Postgres resends unchanged table metadata.
+- 0947230: Reduce OTel span volume for shape GET requests: the `shape_get.api.load_shape_info` and `shape_get.plug.serve_shape_log` child spans (strictly 1:1 with the root request span) are no longer emitted. Their timing and process-memory information is preserved as attributes on the `Plug_shape_get` root span instead (`load_shape_info.duration_ms`, `load_shape_info.memory.{start,end}.*`, `serve_shape_log.duration_ms`, `serve_shape_log.memory.{start,end}.*`).
+
+  Note for operators: since these two names no longer exist as spans, listing them in `ELECTRIC_EXCLUDE_SPANS` (the `Sampler` `:exclude_spans` setting) no longer has any effect — the data is recorded as root-span attributes whenever the request trace is sampled. In embedded usage (elixir-client / Phoenix.Sync) `Api.serve_shape_log/1` previously created a standalone root span; it now records attributes onto the caller's current span if one exists (e.g. the Phoenix request span in OTel-instrumented apps) and emits nothing otherwise.
+
+- bee63df: Redact internal exception details from 500 responses. Uncaught errors in the shape-serving plug previously returned the full Elixir stacktrace (internal module paths, library versions, partial query text) in the response body. Clients now receive a generic `"Internal server error"` message; the full detail is still captured server-side via OpenTelemetry.
+
 ## 1.6.10
 
 ### Patch Changes

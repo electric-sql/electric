@@ -8,10 +8,14 @@
  */
 
 import { Agent } from '@mariozechner/pi-agent-core'
-import { getModel } from '@mariozechner/pi-ai'
+import { getModel, streamSimple } from '@mariozechner/pi-ai'
 import { createOutboundBridge } from './outbound-bridge'
 import { MOONSHOT_PROVIDER, getMoonshotModel } from './moonshot-models'
 import { runtimeLog } from './log'
+import {
+  ModelProviderError,
+  toModelProviderError,
+} from './model-provider-error'
 import type { OutboundIdSeed } from './outbound-bridge'
 import type { ChangeEvent } from '@durable-streams/state'
 import type {
@@ -69,7 +73,12 @@ export interface PiAdapterOptions {
     provider: string
   ) => Promise<string | undefined> | string | undefined
   onPayload?: SimpleStreamOptions[`onPayload`]
+  modelTimeoutMs?: number
+  modelMaxRetries?: number
 }
+
+const DEFAULT_MODEL_TIMEOUT_MS = 30_000
+const DEFAULT_MODEL_MAX_RETRIES = 0
 
 interface PiAgentAdapterConfig {
   entityUrl: string
@@ -256,18 +265,32 @@ export function createPiAgentAdapter(
       model: opts.model,
       ...(opts.provider && { provider: opts.provider }),
     })
+    const modelTimeoutMs = opts.modelTimeoutMs ?? DEFAULT_MODEL_TIMEOUT_MS
+    const modelMaxRetries = opts.modelMaxRetries ?? DEFAULT_MODEL_MAX_RETRIES
 
-    const agent = new Agent({
+    const baseStreamFn = opts.streamFn ?? streamSimple
+    const streamFn: StreamFn = (streamModel, context, streamOptions) =>
+      baseStreamFn(streamModel, context, {
+        ...streamOptions,
+        timeoutMs: modelTimeoutMs,
+        maxRetries: modelMaxRetries,
+      })
+
+    const agentOptions = {
       initialState: {
         systemPrompt: opts.systemPrompt,
         tools: opts.tools as Array<never>,
         messages: history as Array<never>,
         model,
       },
-      ...(opts.streamFn && { streamFn: opts.streamFn }),
+      streamFn,
       ...(opts.getApiKey && { getApiKey: opts.getApiKey }),
       ...(opts.onPayload && { onPayload: opts.onPayload }),
-    })
+    }
+
+    const agent = new Agent(
+      agentOptions as ConstructorParameters<typeof Agent>[0]
+    )
 
     function processAgentEvents(
       resolveWhenDone: () => void,
@@ -489,8 +512,11 @@ export function createPiAgentAdapter(
                 })
 
                 if (isError) {
-                  throw new Error(
-                    `pi-agent message_end error: ${msg.errorMessage ?? `unknown error`} (stopReason=${msg.stopReason ?? `none`})`
+                  throw toModelProviderError(
+                    new Error(
+                      `pi-agent message_end error: ${msg.errorMessage ?? `unknown error`} (stopReason=${msg.stopReason ?? `none`})`
+                    ),
+                    { provider: model.provider, model: model.id }
                   )
                 }
                 break
@@ -516,6 +542,20 @@ export function createPiAgentAdapter(
               }
 
               case `agent_end`: {
+                const messages = (event as Record<string, unknown>).messages as
+                  | Array<{ stopReason?: string; errorMessage?: string }>
+                  | undefined
+                const errorMessage = messages?.find(
+                  (message) =>
+                    message.stopReason === `error` && !!message.errorMessage
+                )?.errorMessage
+                if (errorMessage) {
+                  throw toModelProviderError(
+                    new Error(`pi-agent agent_end error: ${errorMessage}`),
+                    { provider: model.provider, model: model.id }
+                  )
+                }
+
                 bridge.onRunEnd({
                   finishReason: abortedRun ? `aborted` : `stop`,
                 })
@@ -579,6 +619,17 @@ export function createPiAgentAdapter(
             unsubscribe()
             bridge.onRunEnd({ finishReason })
           }
+          const failWithProviderError = (err: unknown): ModelProviderError => {
+            const providerError = toModelProviderError(err, {
+              provider: model.provider,
+              model: model.id,
+            })
+            bridge.onError({
+              errorCode: providerError.code,
+              message: providerError.message,
+            })
+            return providerError
+          }
           const abortRun = (): void => {
             if (settled) return
             abortedRun = true
@@ -604,8 +655,9 @@ export function createPiAgentAdapter(
             },
             (err) => {
               if (settled) return
+              const providerError = failWithProviderError(err)
               finish(`error`)
-              reject(err)
+              reject(providerError)
             }
           )
 
@@ -619,8 +671,9 @@ export function createPiAgentAdapter(
           Promise.resolve(runPromise).catch((err: Error) => {
             if (settled) return
             if (abortedRun) return
+            const providerError = failWithProviderError(err)
             finish(`error`)
-            reject(err)
+            reject(providerError)
           })
         })
       },
