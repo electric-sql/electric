@@ -734,9 +734,12 @@ async fn handle_append(store: Arc<Store>, req: Req, path: String) -> Resp {
             if seq.as_str() <= last.as_str() {
                 let tail = s.tail;
                 drop(s);
+                // Body must read "Sequence conflict" to match the reference
+                // server: clients classify a 409 as a sequence conflict by the
+                // word "sequence" in the message (see @durable-streams/client).
                 return ResponseBuilder::new(409)
                     .h(H_NEXT_OFFSET, format_offset(tail))
-                    .body(full("Stream-Seq regression"));
+                    .body(full("Sequence conflict"));
             }
         }
     }
@@ -1101,8 +1104,23 @@ async fn handle_sse(st: Arc<StreamState>, offset: ParsedOffset, client_cursor: O
                 }
                 pos = t.bytes;
                 let up_to_date = pos >= st.tail().bytes;
-                sse_control_event(&mut ev, pos, compute_cursor(client_cursor), up_to_date, false);
+                // If the stream closed atomically with this final data, fold the
+                // close into this control event (streamClosed:true) rather than
+                // emitting a plain up-to-date control followed by a separate close
+                // event — the reference server / TS client expect the close signal
+                // on the control immediately after the final data.
+                let closed_now = t.closed && pos >= t.bytes;
+                sse_control_event(
+                    &mut ev,
+                    pos,
+                    compute_cursor(client_cursor),
+                    up_to_date,
+                    closed_now,
+                );
                 if tx.send(Bytes::from(ev)).await.is_err() {
+                    return;
+                }
+                if closed_now {
                     return;
                 }
             }
