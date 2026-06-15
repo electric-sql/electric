@@ -266,15 +266,15 @@ describe(`runtime-server-client.deleteTag`, () => {
   })
 })
 
-describe(`runtime-server-client event sources`, () => {
-  it(`lists event sources from the runtime server`, async () => {
+describe(`runtime-server-client webhook sources`, () => {
+  it(`lists webhook sources from the runtime server`, async () => {
     const fakeFetch = vi.fn(
       async () =>
         new Response(
           JSON.stringify({
-            eventSources: [
+            webhookSources: [
               {
-                sourceKey: `github-repo`,
+                webhookKey: `github-repo`,
                 sourceType: `webhook`,
                 endpointKey: `github-repo`,
                 status: `active`,
@@ -296,28 +296,28 @@ describe(`runtime-server-client event sources`, () => {
       fetch: fakeFetch,
     })
 
-    await expect(client.listEventSources()).resolves.toMatchObject([
-      { sourceKey: `github-repo` },
+    await expect(client.listWebhookSources()).resolves.toMatchObject([
+      { webhookKey: `github-repo` },
     ])
     expect(fakeFetch).toHaveBeenCalledWith(
-      `http://test.example/t/tenant-a/v1/_electric/event-sources`,
+      `http://test.example/t/tenant-a/v1/_electric/webhook-sources`,
       expect.objectContaining({ method: `GET` })
     )
   })
 
-  it(`subscribes to event sources with a deterministic id and JSON body`, async () => {
+  it(`subscribes to webhook sources with a deterministic id and JSON body`, async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = []
     const subscription = {
       id: `github-repo-pull-request-1kwxl2f`,
       entityUrl: `/coder/session-1`,
-      sourceKey: `github-repo`,
+      webhookKey: `github-repo`,
       bucketKey: `pull_request`,
       params: { number: 123 },
       filterApplied: false,
       contractRevision: 1,
       sourceUrl: `/_webhooks/github-repo/prs/123`,
       sourceType: `webhook`,
-      manifestKey: `event-source:github-repo-pull-request-1kwxl2f`,
+      manifestKey: `webhook-source:github-repo-pull-request-1kwxl2f`,
       lifetime: { kind: `until_entity_stopped` },
       createdBy: `tool`,
       createdAt: `2026-05-23T00:00:00.000Z`,
@@ -335,9 +335,9 @@ describe(`runtime-server-client event sources`, () => {
     })
 
     await expect(
-      client.subscribeToEventSource({
+      client.subscribeToWebhookSource({
         entityUrl: `/coder/session-1`,
-        sourceKey: `github-repo`,
+        webhookKey: `github-repo`,
         bucketKey: `pull_request`,
         params: { number: 123 },
         reason: `Watch PR feedback`,
@@ -346,18 +346,18 @@ describe(`runtime-server-client event sources`, () => {
 
     expect(calls).toHaveLength(1)
     expect(calls[0]!.url).toMatch(
-      /^http:\/\/test\.example\/_electric\/entities\/coder\/session-1\/event-source-subscriptions\/github-repo-pull_request-/
+      /^http:\/\/test\.example\/_electric\/entities\/coder\/session-1\/webhook-source-subscriptions\/github-repo-pull_request-/
     )
     expect(calls[0]!.init?.method).toBe(`PUT`)
     expect(JSON.parse(calls[0]!.init!.body as string)).toEqual({
-      sourceKey: `github-repo`,
+      webhookKey: `github-repo`,
       bucketKey: `pull_request`,
       params: { number: 123 },
       reason: `Watch PR feedback`,
     })
   })
 
-  it(`surfaces event source subscription failures`, async () => {
+  it(`surfaces webhook source subscription failures`, async () => {
     const fakeFetch = vi.fn(
       async () =>
         new Response(`invalid params`, {
@@ -370,11 +370,11 @@ describe(`runtime-server-client event sources`, () => {
     })
 
     await expect(
-      client.subscribeToEventSource({
+      client.subscribeToWebhookSource({
         entityUrl: `/coder/session-1`,
-        sourceKey: `github-repo`,
+        webhookKey: `github-repo`,
       })
-    ).rejects.toThrow(/subscribeToEventSource failed \(400\): invalid params/)
+    ).rejects.toThrow(/subscribeToWebhookSource failed \(400\): invalid params/)
   })
 })
 

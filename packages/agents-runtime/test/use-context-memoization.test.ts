@@ -63,7 +63,7 @@ describe(`useContext memoization`, () => {
     expect(v2).toHaveBeenCalledTimes(1)
   })
 
-  it(`reordering structurally identical source keys does not trigger a new registration`, async () => {
+  it(`reordering structurally identical webhook keys does not trigger a new registration`, async () => {
     const { ctx } = createTestHandlerContext({})
     const a = vi.fn(() => `a`)
     const b = vi.fn(() => `b`)

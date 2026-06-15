@@ -22,21 +22,21 @@ describe(`buildHortonSystemPrompt`, () => {
     expect(prompt).not.toContain(`# Electric Agents documentation`)
   })
 
-  it(`describes event source tools when they are available`, () => {
+  it(`describes webhook source tools when they are available`, () => {
     const prompt = buildHortonSystemPrompt(`/tmp/test`, {
-      hasEventSourceTools: true,
+      hasWebhookSourceTools: true,
     })
 
-    expect(prompt).toContain(`list_event_sources`)
-    expect(prompt).toContain(`subscribe_event_source`)
-    expect(prompt).toContain(`external webhook/event feeds`)
+    expect(prompt).toContain(`list_webhook_sources`)
+    expect(prompt).toContain(`subscribe_webhook_source`)
+    expect(prompt).toContain(`external webhook feeds`)
     expect(prompt).toContain(`subscribe yourself`)
   })
 
-  it(`omits event source tools when they are unavailable`, () => {
+  it(`omits webhook source tools when they are unavailable`, () => {
     const prompt = buildHortonSystemPrompt(`/tmp/test`)
-    expect(prompt).not.toContain(`list_event_sources`)
-    expect(prompt).not.toContain(`subscribe_event_source`)
+    expect(prompt).not.toContain(`list_webhook_sources`)
+    expect(prompt).not.toContain(`subscribe_webhook_source`)
   })
 
   it(`includes docs URL guidance alongside local docs support`, () => {
