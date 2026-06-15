@@ -29,11 +29,12 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
     prepared_relation_filters: MapSet.new(),
     submitted_relation_filters: MapSet.new(),
     committed_relation_filters: MapSet.new(),
-    # Snapshot of the filter set carried by the cast currently being processed
-    # by the Configurator. While set, the "committed lags submitted" retry in
-    # update_needed?/1 is suppressed so a burst of add_shape/remove_shape calls
-    # cannot mint one redundant cast each. Cleared on a terminal signal from the
-    # Configurator (full commit, per-relation error, or global error).
+    # The relations covered by the configuration request the Configurator is
+    # currently working on, or nil when none is outstanding. While set, the
+    # "committed lags submitted, retry" branch in update_needed?/1 is held off,
+    # so a burst of add_shape/remove_shape calls can't each send another
+    # duplicate request. Reset to nil once the Configurator reports back (a full
+    # commit, a per-relation error, or a global error).
     in_flight_relation_filters: nil,
     waiters: %{},
     # start with optimistic assumption about what the
@@ -366,12 +367,12 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
        }) do
     prepared_changed? = not MapSet.equal?(prepared, submitted)
 
-    # The committed-lag check is the legitimate "previous attempt didn't fully
-    # commit, retry" signal, but it must not fire while a submission for the
-    # same filters is already in flight — otherwise every add_shape/remove_shape
-    # during that window mints a redundant cast. The publication_refresh_period
-    # inactivity timeout is the fallback retry if a chain dies without delivering
-    # any result.
+    # "submitted but not yet committed" is the legitimate "the last request
+    # didn't fully go through, retry it" signal. But we must not act on it while
+    # a request for the same relations is still outstanding, otherwise every
+    # add_shape/remove_shape in that window would send another duplicate request.
+    # If a request dies without ever reporting back, the publication_refresh_period
+    # inactivity timeout is the fallback that retries.
     retry_needed? = is_nil(in_flight) and not MapSet.equal?(submitted, committed)
 
     prepared_changed? or retry_needed?
