@@ -21,7 +21,7 @@ import { createContextTools } from './tools/context-tools'
 import { CACHE_TIERS } from './types'
 import { composeToolsWithProviders } from './tool-providers'
 import { validateSlashCommandDefinitions } from './composer-input'
-import type { HydratedEventSourceWake } from './event-sources'
+import type { HydratedWebhookSourceWake } from './webhook-sources'
 import type { ChangeEvent } from '@durable-streams/state'
 import type { Sandbox } from './sandbox/types'
 import type {
@@ -101,7 +101,7 @@ export interface HandlerContextConfig<TState extends StateProxy = StateProxy> {
       payload?: unknown
     }) => void | Promise<void>
   ) => void
-  hydratedEventSourceWake?: HydratedEventSourceWake | null
+  hydratedWebhookSourceWake?: HydratedWebhookSourceWake | null
   doObserve: (
     source: ObservationSource,
     wake?: Wake
@@ -198,7 +198,7 @@ function getTriggerMessageText(
   wakeEvent: WakeEvent,
   events: Array<ChangeEvent>,
   wakeOffset: string,
-  hydratedEventSourceWake?: HydratedEventSourceWake | null
+  hydratedWebhookSourceWake?: HydratedWebhookSourceWake | null
 ): string {
   if (wakeEvent.type === `inbox`) {
     let latestPayload: unknown = wakeEvent.payload
@@ -232,8 +232,8 @@ function getTriggerMessageText(
   }
 
   if (wakeEvent.type === `wake` && typeof wakeEvent.source === `string`) {
-    if (hydratedEventSourceWake) {
-      return asMessageText(hydratedEventSourceWake)
+    if (hydratedWebhookSourceWake) {
+      return asMessageText(hydratedWebhookSourceWake)
     }
 
     const cronPayload = getCronScheduleTriggerPayload(db, wakeEvent.source)
@@ -761,7 +761,7 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         config.wakeEvent,
         config.events,
         config.wakeOffset,
-        config.hydratedEventSourceWake
+        config.hydratedWebhookSourceWake
       )
       const effectiveInput = input ?? messageText
 
@@ -801,7 +801,7 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         const latestMessageRole = messages.at(-1)?.role
         const runInput =
           input !== undefined ||
-          config.hydratedEventSourceWake != null ||
+          config.hydratedWebhookSourceWake != null ||
           latestMessageRole !== `user`
             ? effectiveInput
             : undefined

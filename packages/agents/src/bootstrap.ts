@@ -9,7 +9,7 @@ import {
   createRuntimeHandler,
 } from '@electric-ax/agents-runtime'
 import {
-  createEventSourceTools,
+  createWebhookSourceTools,
   createScheduleTools,
 } from '@electric-ax/agents-runtime/tools'
 import {
@@ -146,7 +146,7 @@ export function createBuiltinElectricTools(
 ): BuiltinElectricToolsFactory {
   return async (context) => {
     const builtinTools = [
-      ...createEventSourceTools(context),
+      ...createWebhookSourceTools(context),
       ...createScheduleTools({ ...context, db: context.db as any }),
     ]
     const customTools = custom ? await custom(context) : []
