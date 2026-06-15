@@ -49,6 +49,8 @@ Full protocol: create / append / read (catch-up, long-poll, SSE), HEAD, DELETE, 
 
 Durable by default: an append returns only after the fsync that covers it. State survives restarts — on boot the store rebuilds every stream from its data file plus a `.meta` sidecar and re-links fork chains. (Crash window per [PROTOCOL.md](../../PROTOCOL.md): producer dedup state may lag the data file, so producers should bump their epoch on restart.)
 
+**Control-plane durability — known limitation.** The stream data is durable, but the `__ds` control plane is **in-memory only**: subscriptions, pull-wake leases/cursors, and the Ed25519 webhook-signing key are not persisted across restarts. After a restart, existing subscriptions are gone and a new signing key is generated — so webhook receivers that pinned the previous `kid` / JWKS must refetch it. Persisting the control plane (at minimum the signing key) is a planned follow-up; for now, treat it as ephemeral or front it with a component that re-creates subscriptions on startup.
+
 ## How it's built
 
 - **Contiguous wire-byte storage** — each stream's data file holds exactly the bytes that go on the wire, so a catch-up read is a literal byte range. No reframing, no per-message copies.

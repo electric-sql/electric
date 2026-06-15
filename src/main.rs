@@ -74,6 +74,12 @@ fn main() {
             "durable-streams-server listening on http://{addr} (engine: {engine}, data: {})",
             data_dir.display()
         );
+        // The stream data is durable, but the __ds control plane is not: see
+        // the README "Control-plane durability" note.
+        println!(
+            "note: __ds control plane is in-memory only — subscriptions and the \
+             webhook-signing key reset on restart"
+        );
         match engine.as_str() {
             "hyper" => engine_hyper::serve(store, listener).await,
             "raw" => engine_raw::serve(store, listener).await,
