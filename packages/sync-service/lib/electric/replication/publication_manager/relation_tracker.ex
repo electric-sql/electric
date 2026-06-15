@@ -30,11 +30,7 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
     submitted_relation_filters: MapSet.new(),
     committed_relation_filters: MapSet.new(),
     # The relations covered by the configuration request the Configurator is
-    # currently working on, or nil when none is outstanding. While set, the
-    # "committed lags submitted, retry" branch in update_needed?/1 is held off,
-    # so a burst of add_shape/remove_shape calls can't each send another
-    # duplicate request. Reset to nil once the Configurator reports back (a full
-    # commit, a per-relation error, or a global error).
+    # currently working on, or nil when none is outstanding.
     in_flight_relation_filters: nil,
     waiters: %{},
     # start with optimistic assumption about what the
