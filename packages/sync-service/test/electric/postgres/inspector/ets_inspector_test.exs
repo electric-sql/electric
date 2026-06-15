@@ -30,7 +30,7 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
         Repatch.real(Postgrex.transaction(p, fun, db_opts))
       end)
 
-      Repatch.allow(self(), opts[:server])
+      allow_fill_workers(opts[:server])
 
       assert {:ok, {_oid, {"public", "items"}}} =
                EtsInspector.load_relation_oid({"public", "items"}, opts)
@@ -48,7 +48,7 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
         raise "should not be called again"
       end)
 
-      Repatch.allow(self(), opts[:server])
+      allow_fill_workers(opts[:server])
 
       assert {:ok, {^oid, {"public", "items"}}} =
                EtsInspector.load_relation_oid({"public", "items"}, opts)
@@ -67,7 +67,7 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
         {:error, %DBConnection.ConnectionError{message: "expected error"}}
       end)
 
-      Repatch.allow(self(), opts[:server])
+      allow_fill_workers(opts[:server])
 
       assert {:error, "expected error"} =
                EtsInspector.load_relation_oid({"public", "items"}, opts)
@@ -90,25 +90,66 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
 
     test "concurrent calls load value exactly once", %{
       opts: opts,
-      items_oid: items_oid
+      items_oid: items_oid,
+      db_conn: pool
     } do
-      Repatch.spy(Postgrex)
-      Repatch.allow(self(), opts[:server])
+      test_pid = self()
+
+      Repatch.patch(Postgrex, :transaction, [mode: :shared], fn p, fun, db_opts ->
+        if p == pool, do: send(test_pid, :db_transaction)
+        Repatch.real(Postgrex.transaction(p, fun, db_opts))
+      end)
+
+      # Required so the shared patch reaches the supervised fill worker (its
+      # `$callers` include the GenServer, which we allow here).
+      allow_fill_workers(opts[:server])
 
       task1 = Task.async(fn -> EtsInspector.load_relation_info(items_oid, opts) end)
       task2 = Task.async(fn -> EtsInspector.load_relation_info(items_oid, opts) end)
 
       assert {:ok,
               %{relation: {"public", "items"}, relation_id: ^items_oid, kind: :ordinary_table} =
-                info} =
-               Task.await(task1)
+                info} = Task.await(task1)
 
       assert {:ok, ^info} = Task.await(task2)
 
       # Non-parallel call should return value from cache
       assert {:ok, ^info} = EtsInspector.load_relation_info(items_oid, opts)
 
-      assert Repatch.called?(Postgrex, :transaction, 3, by: opts[:server], exactly: 1)
+      assert_receive :db_transaction
+      refute_receive :db_transaction
+    end
+
+    test "concurrent calls for a missing relation produce a single DB attempt",
+         %{opts: opts, db_conn: pool} do
+      test_pid = self()
+      missing_oid = 1_234_567_890
+
+      # Hold the first (and only) worker inside the DB call until we've confirmed
+      # no second worker started. This makes coalescing deterministic: while the
+      # one worker is parked, every other concurrent request must coalesce onto
+      # its in-flight entry rather than spawn a fresh DB attempt.
+      Repatch.patch(Postgrex, :transaction, [mode: :shared], fn p, fun, db_opts ->
+        if p == pool do
+          send(test_pid, {:db_transaction, self()})
+          receive do: (:proceed -> :ok)
+        end
+
+        Repatch.real(Postgrex.transaction(p, fun, db_opts))
+      end)
+
+      allow_fill_workers(opts[:server])
+
+      tasks =
+        for _ <- 1..10 do
+          Task.async(fn -> EtsInspector.load_relation_info(missing_oid, opts) end)
+        end
+
+      assert_receive {:db_transaction, worker}
+      refute_receive {:db_transaction, _}, 200
+
+      send(worker, :proceed)
+      assert Enum.all?(Task.await_many(tasks), &(&1 == :table_not_found))
     end
 
     test "returns a not found marker when the relation does not exist", %{opts: opts} do
@@ -120,7 +161,7 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
         {:error, %DBConnection.ConnectionError{message: "expected error"}}
       end)
 
-      Repatch.allow(self(), opts[:server])
+      allow_fill_workers(opts[:server])
 
       assert {:error, "expected error"} =
                EtsInspector.load_relation_info(1_234_567_890, opts)
@@ -240,22 +281,29 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
 
     test "concurrent calls load value exactly once", %{
       opts: opts,
-      items_oid: items_oid
+      items_oid: items_oid,
+      db_conn: pool
     } do
-      Repatch.spy(Postgrex)
-      Repatch.allow(self(), opts[:server])
+      test_pid = self()
+
+      Repatch.patch(Postgrex, :transaction, [mode: :shared], fn p, fun, db_opts ->
+        if p == pool, do: send(test_pid, :db_transaction)
+        Repatch.real(Postgrex.transaction(p, fun, db_opts))
+      end)
+
+      allow_fill_workers(opts[:server])
 
       task1 = Task.async(fn -> EtsInspector.load_column_info(items_oid, opts) end)
       task2 = Task.async(fn -> EtsInspector.load_column_info(items_oid, opts) end)
 
       assert {:ok, [%{name: "id"}, %{name: "value"}] = columns} = Task.await(task1)
-
       assert {:ok, ^columns} = Task.await(task2)
 
       # Non-parallel call should return value from cache
       assert {:ok, ^columns} = EtsInspector.load_column_info(items_oid, opts)
 
-      assert Repatch.called?(Postgrex, :transaction, 3, by: opts[:server], exactly: 1)
+      assert_receive :db_transaction
+      refute_receive :db_transaction
     end
 
     test "returns a not found marker when the relation does not exist", %{opts: opts} do
@@ -267,7 +315,7 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
         {:error, %DBConnection.ConnectionError{message: "expected error"}}
       end)
 
-      Repatch.allow(self(), opts[:server])
+      allow_fill_workers(opts[:server])
 
       assert {:error, "expected error"} =
                EtsInspector.load_column_info(1_234_567_890, opts)
@@ -342,21 +390,27 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
       end
     end
 
-    test "concurrent calls load value exactly once", %{opts: opts} do
-      Repatch.spy(Postgrex)
-      Repatch.allow(self(), opts[:server])
+    test "concurrent calls load value exactly once", %{opts: opts, db_conn: pool} do
+      test_pid = self()
+
+      Repatch.patch(Postgrex, :query, [mode: :shared], fn p, sql, params ->
+        if p == pool, do: send(test_pid, :db_query)
+        Repatch.real(Postgrex.query(p, sql, params))
+      end)
+
+      allow_fill_workers(opts[:server])
 
       task1 = Task.async(fn -> EtsInspector.load_supported_features(opts) end)
       task2 = Task.async(fn -> EtsInspector.load_supported_features(opts) end)
 
       assert {:ok, %{supports_generated_column_replication: _val} = features} = Task.await(task1)
-
       assert {:ok, ^features} = Task.await(task2)
 
       # Non-parallel call should return value from cache
       assert {:ok, ^features} = EtsInspector.load_supported_features(opts)
 
-      assert Repatch.called?(Postgrex, :query, 3, by: opts[:server], exactly: 1)
+      assert_receive :db_query
+      refute_receive :db_query
     end
   end
 
@@ -634,5 +688,24 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
       Postgrex.query!(conn, "SELECT oid FROM pg_class WHERE relname = 'items'", [])
 
     %{items_oid: oid}
+  end
+
+  # EtsInspector runs its DB lookups in short-lived `Task.Supervisor.async_nolink`
+  # workers spawned by the GenServer. A `mode: :shared` Repatch patch does not
+  # reach a process spawned by an allowed process, so to observe/stub the DB call
+  # we allow the GenServer and then allow each worker it spawns: patch
+  # `async_nolink` (which runs in the now-allowed GenServer) to allow the returned
+  # task's pid. The worker then sees this test's shared patches.
+  defp allow_fill_workers(server) do
+    test_pid = self()
+    Repatch.allow(test_pid, server)
+
+    Repatch.patch(Task.Supervisor, :async_nolink, [mode: :shared], fn supervisor, fun ->
+      task = Repatch.real(Task.Supervisor.async_nolink(supervisor, fun))
+      Repatch.allow(test_pid, task.pid)
+      task
+    end)
+
+    :ok
   end
 end

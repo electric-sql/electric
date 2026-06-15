@@ -48,7 +48,7 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
           {:ok, Electric.oid_relation()} | :table_not_found | {:error, term()}
   def load_relation_oid(relation, opts) when is_relation(relation) do
     with :not_in_cache <- fetch_normalized_relation_from_ets(relation, opts) do
-      GenServer.call(opts[:server], {:load_relation_oid, relation}, :infinity)
+      GenServer.call(opts[:server], {:load, {:rel, relation}, :relation_oid}, :infinity)
     end
   end
 
@@ -57,7 +57,7 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
           {:ok, Inspector.relation_info()} | :table_not_found | {:error, term()}
   def load_relation_info(oid, opts) when is_relation_id(oid) do
     with :not_in_cache <- fetch_relation_info_from_ets(oid, opts) do
-      GenServer.call(opts[:server], {:load_relation_info, oid}, :infinity)
+      GenServer.call(opts[:server], {:load, {:oid, oid}, :relation_info}, :infinity)
     end
   end
 
@@ -66,7 +66,7 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
           {:ok, [Inspector.column_info()]} | :table_not_found | {:error, term()}
   def load_column_info(oid, opts) when is_relation_id(oid) do
     with :not_in_cache <- fetch_column_info_from_ets(oid, opts) do
-      GenServer.call(opts[:server], {:load_column_info, oid}, :infinity)
+      GenServer.call(opts[:server], {:load, {:oid, oid}, :column_info}, :infinity)
     end
   end
 
@@ -75,7 +75,7 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
           {:ok, Map.t()} | {:error, String.t() | :connection_not_available}
   def load_supported_features(opts) do
     with :not_in_cache <- fetch_supported_features_from_ets(opts) do
-      GenServer.call(opts[:server], :load_supported_features, :infinity)
+      GenServer.call(opts[:server], {:load, :supported_features, :supported_features}, :infinity)
     end
   end
 
@@ -116,12 +116,16 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
 
     persistence_key = "#{opts.stack_id}:ets_inspector_state"
 
+    {:ok, task_sup} = Task.Supervisor.start_link()
+
     state =
       %{
         pg_inspector_table: pg_inspector_table,
         pg_pool: opts.pool,
         persistent_kv: opts.persistent_kv,
-        persistence_key: persistence_key
+        persistence_key: persistence_key,
+        task_sup: task_sup,
+        in_flight: %{}
       }
       |> restore_persistent_state()
 
@@ -129,47 +133,11 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
   end
 
   @impl GenServer
-  def handle_call({:load_relation_oid, rel}, _from, state) do
-    response =
-      with :not_in_cache <- fetch_normalized_relation_from_ets(rel, state),
-           :ok <- fill_cache(rel, state) do
-        fetch_normalized_relation_from_ets(rel, state)
-      end
-
-    {:reply, response, state}
-  end
-
-  def handle_call({:load_relation_info, oid}, _from, state) do
-    response =
-      with :not_in_cache <- fetch_relation_info_from_ets(oid, state),
-           :ok <- fill_cache(oid, state) do
-        fetch_relation_info_from_ets(oid, state)
-      end
-
-    {:reply, response, state}
-  end
-
-  def handle_call({:load_column_info, oid}, _from, state) do
-    response =
-      with :not_in_cache <- fetch_column_info_from_ets(oid, state),
-           :ok <- fill_cache(oid, state) do
-        fetch_column_info_from_ets(oid, state)
-      end
-
-    {:reply, response, state}
-  end
-
-  def handle_call(:load_supported_features, _from, state) do
-    response =
-      with :not_in_cache <- fetch_supported_features_from_ets(state),
-           {:ok, features} <-
-             wrap_in_db_errors(fn -> DirectInspector.load_supported_features(state.pg_pool) end) do
-        store_supported_features(state, features)
-        persist_data(state)
-        {:ok, features}
-      end
-
-    {:reply, response, state}
+  def handle_call({:load, key, reader}, from, state) do
+    case read_from_ets(key, reader, state) do
+      :not_in_cache -> {:noreply, enqueue_waiter(state, key, {from, reader})}
+      response -> {:reply, response, state}
+    end
   end
 
   def handle_call({:clean, oid}, _from, state) do
@@ -223,30 +191,125 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
   end
 
   @impl GenServer
+  def handle_info({ref, result}, state) when is_reference(ref) do
+    Process.demonitor(ref, [:flush])
+
+    case pop_in_flight_by_ref(state, ref) do
+      {nil, state} ->
+        {:noreply, state}
+
+      {{key, entry}, state} ->
+        state = apply_fill_result(state, key, result)
+        reply_waiters(state, key, result, entry.waiters)
+        {:noreply, state}
+    end
+  end
+
+  def handle_info({:DOWN, ref, :process, _pid, reason}, state) do
+    case pop_in_flight_by_ref(state, ref) do
+      {nil, state} ->
+        {:noreply, state}
+
+      {{key, entry}, state} ->
+        Logger.warning(
+          "EtsInspector fill worker for #{inspect(key)} exited before replying: #{inspect(reason)}"
+        )
+
+        for {from, _reader} <- entry.waiters do
+          GenServer.reply(from, {:error, :connection_not_available})
+        end
+
+        {:noreply, state}
+    end
+  end
+
   def handle_info({:EXIT, _, reason}, state) do
     {:stop, reason, state}
   end
 
-  defp fill_cache(rel_or_oid, state) when is_relation(rel_or_oid) or is_relation_id(rel_or_oid) do
-    case fetch_from_db(rel_or_oid, state) do
-      {:ok, {rel, cols}} ->
-        state
-        |> store_relation_info(rel, cols)
-        |> persist_data()
+  # Coalesce concurrent loads of the same key: the first waiter spawns one
+  # supervised worker to do the DB lookup; later waiters for the same key just
+  # park their `from` and are all answered when the worker reports back. This
+  # keeps the inspector's mailbox population proportional to unique in-flight
+  # keys rather than to in-flight requests, and avoids head-of-line blocking on
+  # a single slow lookup.
+  defp enqueue_waiter(state, key, waiter) do
+    case Map.fetch(state.in_flight, key) do
+      {:ok, entry} ->
+        entry = %{entry | waiters: [waiter | entry.waiters]}
+        %{state | in_flight: Map.put(state.in_flight, key, entry)}
 
-      {:ok, :table_not_found} ->
-        :table_not_found
+      :error ->
+        %{ref: ref} =
+          Task.Supervisor.async_nolink(state.task_sup, fn ->
+            fetch_for_key(key, state.pg_pool)
+          end)
 
-      {:error, err} ->
-        {:error, err}
+        entry = %{waiters: [waiter], ref: ref}
+        %{state | in_flight: Map.put(state.in_flight, key, entry)}
     end
   end
 
-  defp fetch_from_db(rel_or_oid, state)
+  defp pop_in_flight_by_ref(state, ref) do
+    case Enum.find(state.in_flight, fn {_key, entry} -> entry.ref == ref end) do
+      nil ->
+        {nil, state}
+
+      {key, entry} ->
+        {{key, entry}, %{state | in_flight: Map.delete(state.in_flight, key)}}
+    end
+  end
+
+  defp fetch_for_key({:rel, rel}, pool), do: fetch_from_db(rel, pool)
+  defp fetch_for_key({:oid, oid}, pool), do: fetch_from_db(oid, pool)
+
+  defp fetch_for_key(:supported_features, pool) do
+    wrap_in_db_errors(fn -> DirectInspector.load_supported_features(pool) end)
+  end
+
+  defp apply_fill_result(state, :supported_features, {:ok, features}) do
+    state |> store_supported_features(features) |> persist_data()
+    state
+  end
+
+  defp apply_fill_result(state, _key, {:ok, {rel, cols}}) do
+    state |> store_relation_info(rel, cols) |> persist_data()
+    state
+  end
+
+  # Terminal negative results (table-not-found / DB error) are broadcast to the
+  # parked waiters but not cached.
+  defp apply_fill_result(state, _key, _terminal), do: state
+
+  defp reply_waiters(state, key, result, waiters) do
+    for {from, reader} <- waiters do
+      GenServer.reply(from, waiter_response(state, key, reader, result))
+    end
+
+    :ok
+  end
+
+  defp waiter_response(_state, _key, _reader, {:ok, :table_not_found}), do: :table_not_found
+  defp waiter_response(_state, _key, _reader, {:error, reason}), do: {:error, reason}
+  defp waiter_response(state, key, reader, {:ok, _payload}), do: read_from_ets(key, reader, state)
+
+  defp read_from_ets({:rel, rel}, :relation_oid, state),
+    do: fetch_normalized_relation_from_ets(rel, state)
+
+  defp read_from_ets({:oid, oid}, :relation_info, state),
+    do: fetch_relation_info_from_ets(oid, state)
+
+  defp read_from_ets({:oid, oid}, :column_info, state),
+    do: fetch_column_info_from_ets(oid, state)
+
+  defp read_from_ets(:supported_features, :supported_features, state),
+    do: fetch_supported_features_from_ets(state)
+
+  defp fetch_from_db(rel_or_oid, pool)
        when is_relation(rel_or_oid) or is_relation_id(rel_or_oid) do
     wrap_in_db_errors(fn ->
       Postgrex.transaction(
-        state.pg_pool,
+        pool,
         fn conn ->
           loader_fn =
             if is_relation(rel_or_oid),
