@@ -95,7 +95,7 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
         {:ok, relations}
 
       {:error, err} ->
-        normalize_query_error(err)
+        {:error, normalize_query_error(err)}
     end
   end
 
@@ -105,17 +105,16 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
   # Postgrex as `{:error, %DBConnection.ConnectionError{}}` rather than
   # raised, so without this they would bypass the `:connection_not_available`
   # mapping that callers rely on for retries.
-  @spec normalize_query_error(Exception.t()) ::
-          {:error, String.t() | :connection_not_available}
+  @spec normalize_query_error(Exception.t()) :: String.t() | :connection_not_available
   def normalize_query_error(%DBConnection.ConnectionError{} = err) do
     if Electric.DbConnectionError.from_error(err).type != :unknown do
-      {:error, :connection_not_available}
+      :connection_not_available
     else
-      {:error, Exception.message(err)}
+      Exception.message(err)
     end
   end
 
-  def normalize_query_error(err), do: {:error, Exception.message(err)}
+  def normalize_query_error(err), do: Exception.message(err)
 
   defp load_relation_query(match) do
     # partitions can live in other namespaces from the parent/root table, so we
@@ -205,7 +204,7 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
         {:ok, rows}
 
       {:error, err} ->
-        normalize_query_error(err)
+        {:error, normalize_query_error(err)}
     end
   end
 

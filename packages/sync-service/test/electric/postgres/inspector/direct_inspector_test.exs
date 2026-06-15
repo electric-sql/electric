@@ -8,15 +8,14 @@ defmodule Electric.Postgres.Inspector.DirectInspectorTest do
       for message <- ["ssl recv: closed", "tcp recv: closed", "ssl connect: closed"] do
         error = %DBConnection.ConnectionError{message: message}
 
-        assert {:error, :connection_not_available} =
-                 DirectInspector.normalize_query_error(error)
+        assert :connection_not_available = DirectInspector.normalize_query_error(error)
       end
     end
 
     test "stringifies unknown connection errors" do
       error = %DBConnection.ConnectionError{message: "something inexplicable"}
 
-      assert {:error, "something inexplicable"} = DirectInspector.normalize_query_error(error)
+      assert "something inexplicable" = DirectInspector.normalize_query_error(error)
     end
 
     test "stringifies server-side errors" do
@@ -30,7 +29,7 @@ defmodule Electric.Postgres.Inspector.DirectInspectorTest do
         }
       }
 
-      assert {:error, message} = DirectInspector.normalize_query_error(error)
+      message = DirectInspector.normalize_query_error(error)
       assert message =~ "out of memory"
       assert is_binary(message)
     end
