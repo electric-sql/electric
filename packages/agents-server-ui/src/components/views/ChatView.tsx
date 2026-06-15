@@ -76,15 +76,27 @@ export function ChatLogView({
   tileId,
   scrollToBottomSignal,
   inlineQueuedMessages = [],
+  commentsOnly = false,
+  onReplyToComment,
 }: ViewProps & {
   scrollToBottomSignal?: number
   inlineQueuedMessages?: Array<OptimisticInboxMessage>
+  /** Render only the comment rows (with surrounding context), mirroring CommentsView. */
+  commentsOnly?: boolean
+  /**
+   * Forwarded across the Expo-DOM boundary when the user taps "reply" on a
+   * timeline row — the native composer owns the reply target on mobile.
+   */
+  onReplyToComment?: (target: SelectedCommentTarget) => void
 }): React.ReactElement {
   const connectUrl = isSpawning ? null : entityUrl
   const { timelineRows, pendingInbox, entities, db, loading, error } =
     useEntityTimeline(baseUrl || null, connectUrl)
   const canFork = useEntityPermission(entity, `fork`)
   const navigate = useNavigate()
+  // `onCommentTargetClick` jumps from a reply's snapshot to the original row.
+  // The embed router stubs out navigation, so we track the focus target locally.
+  const [focusTarget, setFocusTarget] = useState<CommentTarget | null>(null)
   const processedInboxKeys = useMemo(
     () =>
       new Set(
@@ -133,19 +145,29 @@ export function ChatLogView({
     canFork,
   })
 
+  const commentsTimeline = useMemo(
+    () => (commentsOnly ? buildCommentsTimeline(timelineRows) : null),
+    [commentsOnly, timelineRows]
+  )
+
   return (
     <EntityTimeline
-      rows={visibleRows}
+      rows={commentsTimeline ? commentsTimeline.rows : visibleRows}
+      rowAdjacency={commentsTimeline?.adjacency}
       loading={loading}
       error={error}
       entityStopped={entityStopped}
       baseUrl={baseUrl}
-      cacheKey={`${baseUrl}${connectUrl ?? ``}:${scrollToBottomSignal ?? 0}`}
+      cacheKey={`${baseUrl}${connectUrl ?? ``}:${commentsOnly ? `comments` : `chat`}:${scrollToBottomSignal ?? 0}`}
       tileId={tileId}
       entityUrl={connectUrl}
       entities={entities}
       scrollToBottomSignal={scrollToBottomSignal}
-      forkFromHereByRunKey={forkFromHereByRunKey}
+      forkFromHereByRunKey={commentsOnly ? undefined : forkFromHereByRunKey}
+      onReplyToRow={onReplyToComment}
+      onCommentTargetClick={onReplyToComment ? setFocusTarget : undefined}
+      focusTarget={focusTarget}
+      onFocusTargetHandled={() => setFocusTarget(null)}
     />
   )
 }

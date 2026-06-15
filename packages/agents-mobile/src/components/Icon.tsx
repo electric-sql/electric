@@ -30,6 +30,7 @@ export type IconName =
   | `info`
   | `swap`
   | `chat`
+  | `comment`
   | `database`
   | `radio`
   | `arrow-up`
@@ -69,6 +70,8 @@ const PATHS: Record<IconName, string> = {
   info: `M12 8v.01M11 12h1v4h1M12 21a9 9 0 1 1 0-18 9 9 0 0 1 0 18Z`,
   swap: `M7 4l-3 3 3 3M4 7h13M17 14l3 3-3 3M20 17H7`,
   chat: `M4 4h16v12H8l-4 4Z`,
+  // Lucide `message-square` — distinct from the simpler `chat` bubble.
+  comment: `M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z`,
   database: `M5 5c0-1.1 3.1-2 7-2s7 .9 7 2v14c0 1.1-3.1 2-7 2s-7-.9-7-2V5ZM5 12c0 1.1 3.1 2 7 2s7-.9 7-2`,
   radio: `M4.9 19.1a10 10 0 0 1 0-14.2M7.8 16.2a6 6 0 0 1 0-8.4M10.6 13.4a2 2 0 0 1 0-2.8M14 12h.01M16.2 7.8a6 6 0 0 1 0 8.4M19.1 4.9a10 10 0 0 1 0 14.2`,
   'arrow-up': `M12 19V5M5 12l7-7 7 7`,

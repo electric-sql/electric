@@ -25,6 +25,7 @@ import SessionChatLogDomEmbedModule from '@electric-ax/agents-server-ui/src/embe
 import SessionStateInspectorDomEmbedModule from '@electric-ax/agents-server-ui/src/embed/SessionStateInspectorDomEmbed'
 import { getActiveServerHeadersSnapshot } from '@electric-ax/agents-server-ui/src/lib/auth-fetch'
 import type { OptimisticInboxMessage } from '@electric-ax/agents-server-ui/src/lib/sendMessage'
+import type { SelectedCommentTarget } from '@electric-ax/agents-server-ui/src/lib/comments'
 
 const HEADER_HEIGHT = 44
 
@@ -35,7 +36,9 @@ type SessionDomEmbedProps = {
   scrollToBottomSignal?: number
   inlineQueuedMessages?: Array<OptimisticInboxMessage>
   bottomInset?: number
+  commentsOnly?: boolean
   onRequestOpenEntity: (entityUrl: string) => Promise<void>
+  onRequestReplyToComment?: (target: SelectedCommentTarget) => void
   style?: StyleProp<ViewStyle>
   matchContents?: boolean
   serverHeaders?: { url: string; headers: Record<string, string> } | null
@@ -81,11 +84,24 @@ function SessionRouteInner({
   const [inlineQueuedMessages, setInlineQueuedMessages] = useState<
     Array<OptimisticInboxMessage>
   >([])
+  const [replyTarget, setReplyTarget] = useState<SelectedCommentTarget | null>(
+    null
+  )
 
   const entityUrl = Array.isArray(params.entityUrl)
     ? params.entityUrl[0]
     : (params.entityUrl ?? ``)
-  const view = params.view === `state-explorer` ? `state-explorer` : `chat`
+  const view: EmbedViewId =
+    params.view === `state-explorer`
+      ? `state-explorer`
+      : params.view === `comments`
+        ? `comments`
+        : `chat`
+
+  // Drop any pending reply target when the session or view changes.
+  useEffect(() => {
+    setReplyTarget(null)
+  }, [entityUrl, view])
 
   // Read once per render — the DOM embed receives this as a prop and
   // re-registers it on its side of the JS-context boundary.
@@ -93,7 +109,7 @@ function SessionRouteInner({
 
   const embedTop = insets.top + HEADER_HEIGHT
   const composerInset =
-    view === `chat`
+    view !== `state-explorer`
       ? Math.max(0, chatComposerHeight + keyboardInset - CHAT_COMPOSER_OVERLAP)
       : 0
   const embedFrame = useMemo(
@@ -141,7 +157,7 @@ function SessionRouteInner({
           { backgroundColor: tokens.bg },
         ]}
       >
-        {view === `chat` ? (
+        {view !== `state-explorer` ? (
           <SessionChatLogDomEmbed
             style={[styles.domEmbedWeb, embedSize]}
             matchContents={false}
@@ -151,8 +167,10 @@ function SessionRouteInner({
             scrollToBottomSignal={chatLogScrollSignal}
             inlineQueuedMessages={inlineQueuedMessages}
             bottomInset={composerInset}
+            commentsOnly={view === `comments`}
             serverHeaders={serverHeaders}
             onRequestOpenEntity={async (target) => openSession(target)}
+            onRequestReplyToComment={(target) => setReplyTarget(target)}
             dom={domOptions(styles, embedSize, tokens.bg)}
           />
         ) : (
@@ -169,9 +187,10 @@ function SessionRouteInner({
         )}
       </View>
 
-      {view === `chat` ? (
+      {view !== `state-explorer` ? (
         <ChatSessionScreen
           entityUrl={entityUrl}
+          view={view}
           onBack={goBack}
           onSetView={setView}
           onOpenEntity={openSession}
@@ -180,6 +199,8 @@ function SessionRouteInner({
           onSendMessage={() => setChatLogScrollSignal(Date.now())}
           onInlineQueuedMessagesChange={setInlineQueuedMessages}
           onShare={openShare}
+          commentTarget={replyTarget}
+          onClearCommentTarget={() => setReplyTarget(null)}
         />
       ) : (
         <StateInspectorSessionScreen

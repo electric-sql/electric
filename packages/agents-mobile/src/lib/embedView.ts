@@ -1,1 +1,1 @@
-export type EmbedViewId = `chat` | `state-explorer`
+export type EmbedViewId = `chat` | `comments` | `state-explorer`

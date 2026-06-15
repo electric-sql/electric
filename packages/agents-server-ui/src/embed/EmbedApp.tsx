@@ -26,18 +26,24 @@ import { StateExplorerView } from '../components/views/StateExplorerView'
 import { registerActiveServerHeaders } from '../lib/auth-fetch'
 import styles from './EmbedApp.module.css'
 import type { OptimisticInboxMessage } from '../lib/sendMessage'
+import type { SelectedCommentTarget } from '../lib/comments'
 
 const TILE_ID = `mobile-embed`
 
 type EmbedView = `chat` | `chat-log` | `state-explorer`
 type EmbedTheme = `light` | `dark`
 
+/** Forwarded across the Expo-DOM boundary when a timeline row's "reply" is tapped. */
+type ReplyToCommentFn = (target: SelectedCommentTarget) => void
+
 export type EmbedSessionProps = EmbedState & {
   onNavigatePathname?: (pathname: string) => void | Promise<void>
+  onRequestReplyToComment?: ReplyToCommentFn
 }
 
 export function EmbedSessionRoot({
   onNavigatePathname,
+  onRequestReplyToComment,
   ...state
 }: EmbedSessionProps): ReactElement {
   // Register the Cloud auth headers in THIS context's auth-fetch
@@ -59,6 +65,7 @@ export function EmbedSessionRoot({
           <EmbeddedRouter
             state={state}
             onNavigatePathname={onNavigatePathname}
+            onReplyToComment={onRequestReplyToComment}
           />
         </WorkspaceProvider>
       </ElectricAgentsProvider>
@@ -86,6 +93,8 @@ type EmbedState = {
   scrollToBottomSignal?: number
   inlineQueuedMessages?: Array<OptimisticInboxMessage>
   bottomInset?: number
+  /** Render only the comment rows — the native shell's "comments" view. */
+  commentsOnly?: boolean
   // Forwarded across the Expo-DOM boundary so the embed's auth-fetch
   // module instance (separate from the native side) can inject the
   // Cloud auth headers on every outbound request. `null` means no
@@ -96,9 +105,14 @@ type EmbedState = {
   } | null
 }
 
-const EmbedStateContext = createContext<EmbedState | null>(null)
+/** Context value: the serializable embed state plus the marshalled reply callback. */
+type EmbedRuntime = EmbedState & {
+  onReplyToComment?: ReplyToCommentFn
+}
 
-function useCurrentEmbedState(): EmbedState {
+const EmbedStateContext = createContext<EmbedRuntime | null>(null)
+
+function useCurrentEmbedState(): EmbedRuntime {
   const state = useContext(EmbedStateContext)
   if (!state) {
     throw new Error(`useCurrentEmbedState must be used inside EmbeddedRouter`)
@@ -119,9 +133,11 @@ function useCurrentEmbedState(): EmbedState {
 function EmbeddedRouter({
   state,
   onNavigatePathname,
+  onReplyToComment,
 }: {
   state: EmbedState
   onNavigatePathname?: (pathname: string) => void | Promise<void>
+  onReplyToComment?: ReplyToCommentFn
 }): ReactElement {
   const router = useMemo(() => {
     const rootRoute = createRootRoute({
@@ -151,8 +167,13 @@ function EmbeddedRouter({
     return router
   }, [onNavigatePathname])
 
+  const runtime = useMemo<EmbedRuntime>(
+    () => ({ ...state, onReplyToComment }),
+    [state, onReplyToComment]
+  )
+
   return (
-    <EmbedStateContext.Provider value={state}>
+    <EmbedStateContext.Provider value={runtime}>
       <RouterProvider router={router} />
     </EmbedStateContext.Provider>
   )
@@ -162,7 +183,7 @@ function EmbedRouteSurface(): ReactElement {
   return <EmbedSurface state={useCurrentEmbedState()} />
 }
 
-function EmbedSurface({ state }: { state: EmbedState }): ReactElement {
+function EmbedSurface({ state }: { state: EmbedRuntime }): ReactElement {
   const { entitiesCollection } = useElectricAgents()
 
   if (!state.entityUrl) {
@@ -181,6 +202,8 @@ function EmbedSurface({ state }: { state: EmbedState }): ReactElement {
       scrollToBottomSignal={state.scrollToBottomSignal}
       inlineQueuedMessages={state.inlineQueuedMessages}
       bottomInset={state.bottomInset}
+      commentsOnly={state.commentsOnly}
+      onReplyToComment={state.onReplyToComment}
     />
   )
 }
@@ -192,6 +215,8 @@ function EntityHost({
   scrollToBottomSignal,
   inlineQueuedMessages,
   bottomInset,
+  commentsOnly,
+  onReplyToComment,
 }: {
   entityUrl: string
   view: EmbedView
@@ -199,6 +224,8 @@ function EntityHost({
   scrollToBottomSignal?: number
   inlineQueuedMessages?: Array<OptimisticInboxMessage>
   bottomInset?: number
+  commentsOnly?: boolean
+  onReplyToComment?: ReplyToCommentFn
 }): ReactElement {
   const { entitiesCollection } = useElectricAgents()
   const { data: matches = [], isLoading } = useLiveQuery(
@@ -259,6 +286,8 @@ function EntityHost({
           {...props}
           scrollToBottomSignal={scrollToBottomSignal}
           inlineQueuedMessages={inlineQueuedMessages}
+          commentsOnly={commentsOnly}
+          onReplyToComment={onReplyToComment}
         />
       </div>
     )

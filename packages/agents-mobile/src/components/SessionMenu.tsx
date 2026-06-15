@@ -118,6 +118,7 @@ export function SessionMenu({
   entity,
   view,
   onSetView,
+  commentsEnabled = false,
   signalError,
   onSignal,
   onStopImmediately,
@@ -129,6 +130,8 @@ export function SessionMenu({
   entity: ElectricEntity | null
   view: EmbedViewId
   onSetView: (view: EmbedViewId) => void
+  /** Show the Comments view entry — entity type declares the comments collection. */
+  commentsEnabled?: boolean
   signalError?: string | null
   onSignal?: (signal: EntitySignal) => void
   onStopImmediately?: () => void
@@ -341,6 +344,21 @@ export function SessionMenu({
                 active={view === `chat`}
                 onPress={() => handlePick(`chat`)}
               />
+              {commentsEnabled && (
+                <BottomSheetItem
+                  label="Comments"
+                  icon={
+                    <Icon
+                      name="comment"
+                      size={18}
+                      color={tokens.text2}
+                      strokeWidth={2}
+                    />
+                  }
+                  active={view === `comments`}
+                  onPress={() => handlePick(`comments`)}
+                />
+              )}
               <BottomSheetItem
                 label="State explorer"
                 icon={

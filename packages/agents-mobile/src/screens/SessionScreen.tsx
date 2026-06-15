@@ -26,6 +26,8 @@ import {
   readTextPayload,
 } from '@electric-ax/agents-server-ui/src/lib/sendMessage'
 import type { OptimisticInboxMessage } from '@electric-ax/agents-server-ui/src/lib/sendMessage'
+import { createSendCommentAction } from '@electric-ax/agents-server-ui/src/lib/comments'
+import type { SelectedCommentTarget } from '@electric-ax/agents-server-ui/src/lib/comments'
 import { serializeComposerInput } from '@electric-ax/agents-runtime/client'
 import type {
   EntityTimelineQueryRow,
@@ -52,6 +54,7 @@ import {
   useEntityPermissions,
   type EntityPermission,
 } from '../lib/useEntityPermissions'
+import { useCurrentPrincipal } from '../lib/useCurrentPrincipal'
 import { useTokens } from '../lib/ThemeProvider'
 import { fontSize, lineHeight, radii, spacing } from '../lib/theme'
 import type { Tokens } from '../lib/theme'
@@ -75,6 +78,7 @@ type PendingInboxMessage = EntityStreamState[`pendingInbox`][number]
 
 export function ChatSessionScreen({
   entityUrl,
+  view = `chat`,
   onBack,
   onSetView,
   onOpenEntity,
@@ -83,8 +87,12 @@ export function ChatSessionScreen({
   onSendMessage,
   onInlineQueuedMessagesChange,
   onShare,
+  commentTarget,
+  onClearCommentTarget,
 }: {
   entityUrl: string
+  /** `chat` (default) or the comments-only `comments` view. */
+  view?: EmbedViewId
   onBack: () => void
   onSetView: (view: EmbedViewId) => void
   onOpenEntity: (entityUrl: string) => void
@@ -95,11 +103,13 @@ export function ChatSessionScreen({
     messages: Array<OptimisticInboxMessage>
   ) => void
   onShare?: () => void
+  commentTarget?: SelectedCommentTarget | null
+  onClearCommentTarget?: () => void
 }): React.ReactElement {
   return (
     <SessionScreen
       entityUrl={entityUrl}
-      view="chat"
+      view={view}
       onBack={onBack}
       onSetView={onSetView}
       onOpenEntity={onOpenEntity}
@@ -108,6 +118,8 @@ export function ChatSessionScreen({
       onSendMessage={onSendMessage}
       onInlineQueuedMessagesChange={onInlineQueuedMessagesChange}
       onShare={onShare}
+      commentTarget={commentTarget}
+      onClearCommentTarget={onClearCommentTarget}
     />
   )
 }
@@ -154,6 +166,8 @@ export function SessionScreen({
   onSendMessage,
   onInlineQueuedMessagesChange,
   onShare,
+  commentTarget = null,
+  onClearCommentTarget,
 }: {
   entityUrl: string
   view: EmbedViewId
@@ -167,7 +181,11 @@ export function SessionScreen({
     messages: Array<OptimisticInboxMessage>
   ) => void
   onShare?: () => void
+  /** Reply target forwarded from the embed timeline (chat + comments views). */
+  commentTarget?: SelectedCommentTarget | null
+  onClearCommentTarget?: () => void
 }): React.ReactElement {
+  const commentOnly = view === `comments`
   const { entitiesCollection, serverUrl, signalEntity } = useAgents()
   const tokens = useTokens()
   const styles = useMemo(() => createStyles(tokens), [tokens])
@@ -194,8 +212,10 @@ export function SessionScreen({
   const canWrite = permissions.write
   const canSignal = permissions.signal
   const streamEntityUrl =
-    view === `chat` && entity?.status !== `spawning` ? entityUrl : null
-  const { timelineRows, pendingInbox, db, generationActive } =
+    view !== `state-explorer` && entity?.status !== `spawning`
+      ? entityUrl
+      : null
+  const { timelineRows, pendingInbox, db, generationActive, commentsEnabled } =
     useEntityTimeline(serverUrl, streamEntityUrl)
   const manifests = useMemo(
     () =>
@@ -392,7 +412,7 @@ export function SessionScreen({
       />
 
       <View pointerEvents="none" style={styles.bodyFill} />
-      {view === `chat` && (
+      {view !== `state-explorer` && (
         <NativeMessageComposer
           entityUrl={entityUrl}
           entity={entity}
@@ -410,6 +430,10 @@ export function SessionScreen({
           onStop={stopGeneration}
           writeDisabled={!canWrite}
           stopDisabled={!canSignal}
+          commentsEnabled={commentsEnabled}
+          commentOnly={commentOnly}
+          commentTarget={commentTarget}
+          onClearCommentTarget={onClearCommentTarget}
           disabled={
             !db ||
             entity?.status === `stopped` ||
@@ -438,6 +462,7 @@ export function SessionScreen({
         entity={entity}
         view={view}
         onSetView={onSetView}
+        commentsEnabled={commentsEnabled}
         signalError={signalError}
         onSignal={sendMenuSignal}
         onStopImmediately={() => void stopImmediately()}
@@ -465,6 +490,10 @@ function NativeMessageComposer({
   onStop,
   writeDisabled,
   stopDisabled,
+  commentsEnabled,
+  commentOnly,
+  commentTarget,
+  onClearCommentTarget,
   disabled,
   placeholder,
 }: {
@@ -484,20 +513,50 @@ function NativeMessageComposer({
   onStop: () => void
   writeDisabled: boolean
   stopDisabled: boolean
+  /** Entity type declares the comments collection — enables the comment toggle. */
+  commentsEnabled: boolean
+  /** Comments-only view: lock the composer to comment mode, hide the toggle. */
+  commentOnly: boolean
+  /** Reply target forwarded from the embed timeline. */
+  commentTarget: SelectedCommentTarget | null
+  onClearCommentTarget?: () => void
   disabled: boolean
   placeholder: string
 }): React.ReactElement {
   const { serverUrl, entityTypesCollection } = useAgents()
+  const { principal } = useCurrentPrincipal()
   const tokens = useTokens()
   const insets = useSafeAreaInsets()
   const styles = useMemo(() => createComposerStyles(tokens), [tokens])
   const { keyboardVisible, keyboardTranslateY } = useKeyboardAttachment()
+  const inputRef = useRef<TextInput>(null)
   const [value, setValue] = useState(``)
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [mode, setMode] = useState<`prompt` | `comment`>(
+    commentOnly ? `comment` : `prompt`
+  )
   const [editingMessage, setEditingMessage] = useState<{
     key: string
   } | null>(null)
+  // A reply target (from tapping a timeline row) or the comments-only view
+  // forces comment mode; focus the input so the user can type immediately.
+  useEffect(() => {
+    if (commentTarget) {
+      setMode(`comment`)
+      inputRef.current?.focus()
+    }
+  }, [commentTarget])
+  useEffect(() => {
+    if (commentOnly) setMode(`comment`)
+  }, [commentOnly])
+  // If the entity loses comment support (or write access), fall back to prompt.
+  useEffect(() => {
+    if (!commentOnly && (!commentsEnabled || writeDisabled)) setMode(`prompt`)
+  }, [commentOnly, commentsEnabled, writeDisabled])
+  const commentMode = mode === `comment`
+  const showCommentToggle = commentsEnabled && !commentOnly && !editingMessage
+  const attachmentsAllowed = !commentMode
   const text = value.trim()
   const bottomPadding = keyboardVisible ? 4 : Math.max(insets.bottom, 8)
   // The per-entity slashCommands collection only carries dynamically-registered
@@ -544,11 +603,16 @@ function NativeMessageComposer({
       ),
     [matchingTypes, entity?.spawn_args]
   )
-  const showAttach = imageInputSupported && attach.supported && !editingMessage
+  const showAttach =
+    imageInputSupported &&
+    attach.supported &&
+    !editingMessage &&
+    attachmentsAllowed
   useEffect(() => {
-    if (!imageInputSupported) attach.clear()
-  }, [imageInputSupported, attach.clear])
-  const hasDraftAttachments = attach.drafts.length > 0 && !editingMessage
+    if (!imageInputSupported || commentMode) attach.clear()
+  }, [imageInputSupported, commentMode, attach.clear])
+  const hasDraftAttachments =
+    attach.drafts.length > 0 && !editingMessage && attachmentsAllowed
   const sendAction = useMemo(() => {
     if (!db) return null
     return createSendComposerInputAction({
@@ -562,6 +626,15 @@ function NativeMessageComposer({
       },
     })
   }, [db, entityUrl, inlineQueuedSubmits, onOptimisticQueuedMessage, serverUrl])
+  const sendCommentAction = useMemo(() => {
+    if (!db || !commentsEnabled) return null
+    return createSendCommentAction({
+      db,
+      baseUrl: serverUrl,
+      entityUrl,
+      from: principal,
+    })
+  }, [db, commentsEnabled, serverUrl, entityUrl, principal])
   const updateAction = useMemo(() => {
     if (!db) return null
     return createUpdateInboxMessageAction({ db, baseUrl: serverUrl, entityUrl })
@@ -589,7 +662,7 @@ function NativeMessageComposer({
   const inputDisabled = disabled || writeDisabled || sending
   const composerDisabled = disabled || (writeDisabled && !showStop)
   const slash = useSlashAutocomplete(value, slashCommands, {
-    enabled: !inputDisabled,
+    enabled: !inputDisabled && !commentMode,
   })
   // Controls the caret for one render after a programmatic command insert, then
   // releases back to uncontrolled so normal typing isn't fought.
@@ -618,6 +691,30 @@ function NativeMessageComposer({
 
     setSending(true)
     setError(null)
+
+    if (commentMode) {
+      const tx = sendCommentAction?.({
+        body: text,
+        ...(commentTarget
+          ? {
+              replyTo: commentTarget.target,
+              targetSnapshot: commentTarget.snapshot,
+            }
+          : {}),
+      })
+      if (!tx) {
+        setSending(false)
+        return
+      }
+
+      setValue(``)
+      setPendingSelection(null)
+      slash.reset()
+      onClearCommentTarget?.()
+      onSendMessage?.()
+      finishPersistedAction(tx.isPersisted.promise)
+      return
+    }
 
     if (editingMessage) {
       const tx = updateAction?.({
@@ -767,7 +864,7 @@ function NativeMessageComposer({
       ]}
     >
       {error && <Text style={styles.error}>{error}</Text>}
-      {entity && (
+      {entity && !commentOnly && (
         <NativeEntityContextDrawer
           entity={entity}
           pendingMessages={pendingMessages}
@@ -795,6 +892,62 @@ function NativeMessageComposer({
           </Pressable>
         </View>
       )}
+      {commentMode && commentTarget && (
+        <View style={styles.replyBanner}>
+          <View style={styles.replyBannerBody}>
+            <Text style={styles.replyLabel} numberOfLines={1}>
+              Replying to {commentTarget.snapshot.label}
+            </Text>
+            {commentTarget.snapshot.text ? (
+              <Text style={styles.replyText} numberOfLines={1}>
+                {commentTarget.snapshot.text}
+              </Text>
+            ) : null}
+          </View>
+          <Pressable
+            onPress={() => onClearCommentTarget?.()}
+            accessibilityRole="button"
+            accessibilityLabel="Cancel reply"
+            hitSlop={8}
+          >
+            <Icon name="close" size={16} color={tokens.text3} strokeWidth={2} />
+          </Pressable>
+        </View>
+      )}
+      {showCommentToggle && (
+        <View style={styles.modeToggle}>
+          <Pressable
+            onPress={() => setMode(`prompt`)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: !commentMode }}
+            style={[styles.modeButton, !commentMode && styles.modeButtonActive]}
+          >
+            <Text
+              style={[
+                styles.modeButtonText,
+                !commentMode && styles.modeButtonTextActive,
+              ]}
+            >
+              Message
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setMode(`comment`)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: commentMode }}
+            style={[styles.modeButton, commentMode && styles.modeButtonActive]}
+          >
+            <Text
+              style={[
+                styles.modeButtonText,
+                commentMode && styles.modeButtonTextActive,
+              ]}
+            >
+              Comment
+            </Text>
+          </Pressable>
+        </View>
+      )}
       {slash.open && (
         <SlashCommandMenu items={slash.items} onSelect={insertSlashCommand} />
       )}
@@ -812,6 +965,7 @@ function NativeMessageComposer({
           />
         )}
         <TextInput
+          ref={inputRef}
           onChangeText={setValue}
           onSelectionChange={(event) => {
             slash.onSelectionChange(event)
@@ -820,7 +974,9 @@ function NativeMessageComposer({
           selection={pendingSelection ?? undefined}
           editable={!inputDisabled}
           multiline
-          placeholder={placeholder}
+          placeholder={
+            commentMode && !inputDisabled ? `Add a comment...` : placeholder
+          }
           placeholderTextColor={tokens.text4}
           // Size to content intrinsically (within the style's min/maxHeight)
           // rather than via onContentSizeChange — that callback never fires when
@@ -841,7 +997,13 @@ function NativeMessageComposer({
           disabled={showStop ? stopPending : !canSend}
           hitSlop={8}
           accessibilityRole="button"
-          accessibilityLabel={showStop ? `Stop generating` : `Send message`}
+          accessibilityLabel={
+            showStop
+              ? `Stop generating`
+              : commentMode
+                ? `Post comment`
+                : `Send message`
+          }
           style={({ pressed }) => [
             styles.sendButton,
             canSend || canStop ? styles.sendButtonActive : null,
@@ -1673,6 +1835,59 @@ function createComposerStyles(tokens: Tokens) {
       fontSize: fontSize.xs,
       lineHeight: lineHeight.xs,
       fontWeight: `600`,
+    },
+    replyBanner: {
+      marginBottom: spacing.xs,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.xs,
+      borderRadius: radii.lg,
+      backgroundColor: tokens.accentA2,
+      flexDirection: `row`,
+      alignItems: `center`,
+      justifyContent: `space-between`,
+      gap: spacing.sm,
+    },
+    replyBannerBody: {
+      flex: 1,
+    },
+    replyLabel: {
+      color: tokens.text2,
+      fontSize: fontSize.xs,
+      lineHeight: lineHeight.xs,
+      fontWeight: `600`,
+    },
+    replyText: {
+      color: tokens.text3,
+      fontSize: fontSize.xs,
+      lineHeight: lineHeight.xs,
+    },
+    modeToggle: {
+      flexDirection: `row`,
+      alignSelf: `flex-start`,
+      marginBottom: spacing.xs,
+      padding: 2,
+      borderRadius: radii.lg,
+      backgroundColor: tokens.surface,
+      borderWidth: 1,
+      borderColor: tokens.border1,
+      gap: 2,
+    },
+    modeButton: {
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.xs,
+      borderRadius: radii.md,
+    },
+    modeButtonActive: {
+      backgroundColor: tokens.accentA3,
+    },
+    modeButtonText: {
+      color: tokens.text3,
+      fontSize: fontSize.xs,
+      lineHeight: lineHeight.xs,
+      fontWeight: `600`,
+    },
+    modeButtonTextActive: {
+      color: tokens.accent11,
     },
   })
 }
