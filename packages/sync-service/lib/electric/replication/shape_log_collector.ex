@@ -320,10 +320,32 @@ defmodule Electric.Replication.ShapeLogCollector do
   # otherwise unhealthy) — exactly the situation we're likely to be in when
   # restarting after a crash. Skipping the shape is not an option: nothing
   # re-registers restored shapes later, so a skipped shape would silently stop
-  # receiving updates. Instead retry in place and, if the error persists,
-  # crash with a descriptive error so the supervisor restarts the restore.
+  # receiving updates.
+  #
+  # We deliberately retry in place rather than letting the error propagate and
+  # be "handled upstream", because there is no upstream handler that recovers
+  # gracefully here:
+  #
+  #   * Restore runs in `handle_continue`, not through the event path, so the
+  #     replication client's pause/redeliver recovery for
+  #     `:connection_not_available` does not apply.
+  #   * `ShapeLogCollector.Supervisor` is `max_restarts: 0`, so a crash is not
+  #     retried locally — it propagates straight to the `:one_for_all`
+  #     `Shapes.Supervisor`, restarting the *entire* shape subsystem.
+  #   * The failure is a transient pool-warmup race that recurs on every
+  #     restart, so repeated crashes blow the supervisor restart intensity and
+  #     escalate — the cascade the shape subsystem is explicitly designed to be
+  #     resilient against (see `Electric.CoreSupervisor`).
+  #
+  # Blocking in `handle_continue` is intentional: it keeps restore atomic with
+  # respect to `mark_as_ready`/`handle_event`, so the collector never starts
+  # serving before its partition state is rebuilt. The trade-off is that this
+  # also delays the process's response to a shutdown signal, so the total wait
+  # is bounded below the supervisor's default 5s shutdown timeout. If the error
+  # still persists after that, we give up and crash with a descriptive error so
+  # the wider connection-recovery machinery can take over.
   @restore_retry_delay_ms 100
-  @restore_max_retries 100
+  @restore_max_retries 40
 
   defp restore_partitions_for_shape(partitions, shape_handle, shape, attempt \\ 1) do
     case Partitions.add_shape(partitions, shape_handle, shape) do
