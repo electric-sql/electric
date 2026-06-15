@@ -547,7 +547,6 @@ defmodule Electric.Shapes.Consumer do
 
   defp handle_event(%TransactionFragment{} = txn_fragment, state) do
     Logger.debug(fn -> "Txn fragment received in Shapes.Consumer: #{inspect(txn_fragment)}" end)
-
     handle_txn_fragment(txn_fragment, state)
   end
 
