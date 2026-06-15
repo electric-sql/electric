@@ -2,14 +2,6 @@ import { formatTokenCount } from '@electric-ax/agents-runtime/client'
 import { Text } from '../ui'
 import styles from './TokenUsage.module.css'
 
-/**
- * Minimum combined (input + output) token count for a response before
- * its usage label is shown. Below this the numbers are noise — a quick
- * tool-only step or a one-line reply — and we hide the label rather than
- * clutter the meta row. It also matches the point where `formatTokenCount`
- * switches to compact `1.2k` notation, so every label we render reads in
- * the same compact style. Bump this to be more aggressive about hiding.
- */
 const SHOW_USAGE_THRESHOLD = 1000
 
 /**
