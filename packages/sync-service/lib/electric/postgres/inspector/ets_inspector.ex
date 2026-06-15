@@ -18,6 +18,11 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
   # long has almost certainly already missed its HTTP budget.
   @fetch_db_timeout 5_000
 
+  # How long terminal negative results (table-not-found, connection errors) are
+  # cached so a burst against a failing key drains the mailbox instead of
+  # refilling it at the same rate. Short, because a connection error may clear.
+  @default_negative_cache_ttl_ms 1_000
+
   alias Electric.Postgres.Inspector
   alias Electric.PersistentKV
   alias Electric.Postgres.Inspector.DirectInspector
@@ -47,7 +52,8 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
   @spec load_relation_oid(Electric.relation(), opts :: term()) ::
           {:ok, Electric.oid_relation()} | :table_not_found | {:error, term()}
   def load_relation_oid(relation, opts) when is_relation(relation) do
-    with :not_in_cache <- fetch_normalized_relation_from_ets(relation, opts) do
+    with :not_in_cache <- fetch_normalized_relation_from_ets(relation, opts),
+         :not_in_cache <- fetch_negative_cache({:rel, relation}, opts) do
       GenServer.call(opts[:server], {:load, {:rel, relation}, :relation_oid}, :infinity)
     end
   end
@@ -56,7 +62,8 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
   @spec load_relation_info(Electric.relation_id(), opts :: term()) ::
           {:ok, Inspector.relation_info()} | :table_not_found | {:error, term()}
   def load_relation_info(oid, opts) when is_relation_id(oid) do
-    with :not_in_cache <- fetch_relation_info_from_ets(oid, opts) do
+    with :not_in_cache <- fetch_relation_info_from_ets(oid, opts),
+         :not_in_cache <- fetch_negative_cache({:oid, oid}, opts) do
       GenServer.call(opts[:server], {:load, {:oid, oid}, :relation_info}, :infinity)
     end
   end
@@ -65,7 +72,8 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
   @spec load_column_info(Electric.relation_id(), opts :: term()) ::
           {:ok, [Inspector.column_info()]} | :table_not_found | {:error, term()}
   def load_column_info(oid, opts) when is_relation_id(oid) do
-    with :not_in_cache <- fetch_column_info_from_ets(oid, opts) do
+    with :not_in_cache <- fetch_column_info_from_ets(oid, opts),
+         :not_in_cache <- fetch_negative_cache({:oid, oid}, opts) do
       GenServer.call(opts[:server], {:load, {:oid, oid}, :column_info}, :infinity)
     end
   end
@@ -74,7 +82,8 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
   @spec load_supported_features(opts :: term()) ::
           {:ok, Map.t()} | {:error, String.t() | :connection_not_available}
   def load_supported_features(opts) do
-    with :not_in_cache <- fetch_supported_features_from_ets(opts) do
+    with :not_in_cache <- fetch_supported_features_from_ets(opts),
+         :not_in_cache <- fetch_negative_cache(:supported_features, opts) do
       GenServer.call(opts[:server], {:load, :supported_features, :supported_features}, :infinity)
     end
   end
@@ -125,7 +134,9 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
         persistent_kv: opts.persistent_kv,
         persistence_key: persistence_key,
         task_sup: task_sup,
-        in_flight: %{}
+        in_flight: %{},
+        negative_cache_ttl_ms:
+          Map.get(opts, :negative_cache_ttl_ms, @default_negative_cache_ttl_ms)
       }
       |> restore_persistent_state()
 
@@ -134,7 +145,7 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
 
   @impl GenServer
   def handle_call({:load, key, reader}, from, state) do
-    case read_from_ets(key, reader, state) do
+    case read_cached(key, reader, state) do
       :not_in_cache -> {:noreply, enqueue_waiter(state, key, {from, reader})}
       response -> {:reply, response, state}
     end
@@ -277,9 +288,14 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
     state
   end
 
-  # Terminal negative results (table-not-found / DB error) are broadcast to the
-  # parked waiters but not cached.
-  defp apply_fill_result(state, _key, _terminal), do: state
+  # Terminal negative results (table-not-found / DB error) are cached for a short
+  # TTL so a burst against a failing key drains the mailbox instead of refilling
+  # it; the client reads this cache and short-circuits before messaging us again.
+  defp apply_fill_result(state, key, {:ok, :table_not_found}),
+    do: put_negative_cache(state, key, :table_not_found)
+
+  defp apply_fill_result(state, key, {:error, reason}),
+    do: put_negative_cache(state, key, {:error, reason})
 
   defp reply_waiters(state, key, result, waiters) do
     for {from, reader} <- waiters do
@@ -304,6 +320,13 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
 
   defp read_from_ets(:supported_features, :supported_features, state),
     do: fetch_supported_features_from_ets(state)
+
+  defp read_cached(key, reader, state) do
+    case read_from_ets(key, reader, state) do
+      :not_in_cache -> fetch_negative_cache(key, state)
+      response -> response
+    end
+  end
 
   defp fetch_from_db(rel_or_oid, pool)
        when is_relation(rel_or_oid) or is_relation_id(rel_or_oid) do
@@ -354,8 +377,36 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
 
   @spec persist_data(map()) :: :ok
   defp persist_data(state) do
-    inspector_data = :ets.tab2list(state.pg_inspector_table)
+    # Negative-cache entries are transient and their `expires_at` is a monotonic
+    # timestamp that is meaningless across restarts, so they are never persisted.
+    inspector_data =
+      state.pg_inspector_table
+      |> :ets.tab2list()
+      |> Enum.reject(&match?({{:negative, _}, _, _}, &1))
+
     PersistentKV.set(state.persistent_kv, state.persistence_key, version: 1, data: inspector_data)
+  end
+
+  defp negative_cache_key(key), do: {:negative, key}
+
+  defp put_negative_cache(state, key, result) do
+    expires_at = System.monotonic_time(:millisecond) + state.negative_cache_ttl_ms
+    :ets.insert(inspector_table(state), {negative_cache_key(key), result, expires_at})
+    state
+  end
+
+  @spec fetch_negative_cache(term(), opts :: term()) ::
+          :table_not_found | {:error, term()} | :not_in_cache
+  defp fetch_negative_cache(key, opts) do
+    case :ets.lookup(inspector_table(opts), negative_cache_key(key)) do
+      [{_key, result, expires_at}] ->
+        if System.monotonic_time(:millisecond) < expires_at, do: result, else: :not_in_cache
+
+      [] ->
+        :not_in_cache
+    end
+  rescue
+    ArgumentError -> :not_in_cache
   end
 
   @spec restore_persistent_state(map()) :: map()

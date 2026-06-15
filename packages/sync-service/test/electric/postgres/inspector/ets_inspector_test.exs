@@ -72,6 +72,25 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
       assert {:error, "expected error"} =
                EtsInspector.load_relation_oid({"public", "items"}, opts)
     end
+
+    test "caches a not-found result so repeat lookups skip the DB", %{opts: opts, db_conn: pool} do
+      test_pid = self()
+
+      Repatch.patch(Postgrex, :transaction, [mode: :shared], fn p, fun, db_opts ->
+        if p == pool, do: send(test_pid, :db_transaction)
+        Repatch.real(Postgrex.transaction(p, fun, db_opts))
+      end)
+
+      allow_fill_workers(opts[:server])
+
+      assert :table_not_found = EtsInspector.load_relation_oid({"public", "ghost"}, opts)
+      assert_receive :db_transaction
+
+      # Second lookup within the TTL must be served from the negative cache in the
+      # client process, without messaging the GenServer or hitting the DB.
+      assert :table_not_found = EtsInspector.load_relation_oid({"public", "ghost"}, opts)
+      refute_receive :db_transaction
+    end
   end
 
   describe "load_relation_info/2" do
@@ -680,6 +699,46 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
                EtsInspector.load_column_info(1234, opts)
 
       assert :error = EtsInspector.list_relations_with_stale_cache(opts)
+    end
+  end
+
+  describe "negative cache expiry" do
+    setup :with_shared_db
+    setup :in_transaction
+    setup :with_stack_id_from_test
+    setup [:with_persistent_kv, :with_basic_tables, :with_sql_execute]
+
+    setup ctx do
+      server =
+        start_supervised!(
+          {EtsInspector,
+           stack_id: ctx.stack_id,
+           pool: ctx.db_conn,
+           persistent_kv: ctx.persistent_kv,
+           negative_cache_ttl_ms: 50}
+        )
+
+      %{opts: [stack_id: ctx.stack_id, server: server]}
+    end
+
+    test "re-attempts the DB after the negative TTL expires", %{opts: opts, db_conn: pool} do
+      test_pid = self()
+
+      Repatch.patch(Postgrex, :transaction, [mode: :shared], fn p, fun, db_opts ->
+        if p == pool, do: send(test_pid, :db_transaction)
+        Repatch.real(Postgrex.transaction(p, fun, db_opts))
+      end)
+
+      allow_fill_workers(opts[:server])
+
+      assert :table_not_found = EtsInspector.load_relation_oid({"public", "ghost"}, opts)
+      assert_receive :db_transaction
+
+      Process.sleep(80)
+
+      # TTL elapsed: the negative cache entry is stale, so the lookup hits the DB again.
+      assert :table_not_found = EtsInspector.load_relation_oid({"public", "ghost"}, opts)
+      assert_receive :db_transaction
     end
   end
 
