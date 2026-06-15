@@ -22,6 +22,7 @@ import type {
   TimestampedMessage,
 } from './types'
 import { COMPOSER_INPUT_MESSAGE_TYPE } from './composer-input'
+import { isCompactionCheckpointAttrs } from './compaction'
 
 function asString(value: unknown, fallback = ``): string {
   if (typeof value === `string`) {
@@ -468,8 +469,16 @@ export function timelineMessages(
   const attachmentsByInboxKey = attachmentsBySubjectInboxKey(db)
   const messages: Array<TimestampedMessage> = []
 
+  // A compaction checkpoint summarizes everything before it: drop items below
+  // its order (the watermark) and let the checkpoint itself render the summary
+  // in their place. No checkpoint → watermark stays -Infinity → no-op.
+  const compactionWatermark = latestCompactionWatermark(items)
+
   for (const item of items) {
     if (item.at < since) {
+      continue
+    }
+    if (item.at < compactionWatermark) {
       continue
     }
 
@@ -482,6 +491,25 @@ export function timelineMessages(
   }
 
   return messages
+}
+
+/**
+ * Order (`at`) of the newest live compaction checkpoint, or -Infinity if none.
+ * Everything strictly below it has been summarized into the checkpoint.
+ */
+function latestCompactionWatermark(items: ReadonlyArray<TimelineItem>): number {
+  let watermark = Number.NEGATIVE_INFINITY
+  for (const item of items) {
+    if (
+      item.kind === `context_inserted` &&
+      !item.superseded &&
+      isCompactionCheckpointAttrs(item.attrs) &&
+      item.at > watermark
+    ) {
+      watermark = item.at
+    }
+  }
+  return watermark
 }
 
 export function timelineToMessages(db: EntityStreamDB): Array<LLMMessage> {

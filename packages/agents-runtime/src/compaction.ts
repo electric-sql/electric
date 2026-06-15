@@ -1,0 +1,51 @@
+/**
+ * Context compaction (RFC §8/§9).
+ *
+ * When the conversation approaches the context window, it is summarized into a
+ * durable "checkpoint" — a `context_inserted` row tagged `kind: "compaction"` —
+ * and the messages it summarizes are dropped from the reconstructed history.
+ * The checkpoint is written at the head of the timeline, so its order acts as a
+ * watermark: timeline reconstruction hides everything before it and emits the
+ * summary in their place (see `timelineMessages`).
+ *
+ * Phase 2 wires this up synchronously at the 95% hard ceiling; Phase 3 adds the
+ * background trigger at 85%.
+ */
+
+/** `attrs.kind` marking a `context_inserted` row as a compaction checkpoint. */
+export const COMPACTION_CHECKPOINT_KIND = `compaction`
+
+/** `name` (and thus the rendered tag) for a compaction checkpoint entry. */
+export const COMPACTION_CHECKPOINT_NAME = `compaction_summary`
+
+/** Stable id for the (single, self-superseding) compaction checkpoint entry. */
+export const COMPACTION_CHECKPOINT_ID = `compaction`
+
+/**
+ * Whether a `context_inserted` row's attrs mark it as a compaction checkpoint.
+ */
+export function isCompactionCheckpointAttrs(
+  attrs: Record<string, string | number | boolean> | undefined
+): boolean {
+  return attrs?.kind === COMPACTION_CHECKPOINT_KIND
+}
+
+/**
+ * Summarization prompt, reused verbatim from OpenAI Codex (RFC Appendix A).
+ * Appended as a user message after the conversation being compacted.
+ */
+export const COMPACTION_SUMMARIZATION_PROMPT = `You are performing a CONTEXT CHECKPOINT COMPACTION. Create a handoff summary for another LLM that will resume the task.
+
+Include:
+- Current progress and key decisions made
+- Important context, constraints, or user preferences
+- What remains to be done (clear next steps)
+- Any critical data, examples, or references needed to continue
+
+Be concise, structured, and focused on helping the next LLM seamlessly continue the work.`
+
+/**
+ * Prefix prepended to the produced summary when it is reinserted as the
+ * checkpoint, reused verbatim from Codex (RFC Appendix A).
+ */
+export const COMPACTION_SUMMARY_PREFIX = `Another language model started to solve this problem and produced a summary of its thinking process. You also have access to the state of the tools that were used by that language model. Use this to build on the work that has already been done and avoid duplicating work. Here is the summary produced by the other language model, use the information in this summary to assist with your own analysis:`
