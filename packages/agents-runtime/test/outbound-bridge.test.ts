@@ -202,7 +202,7 @@ describe(`createOutboundBridge`, () => {
   it(`uses a preloaded ID seed for later reruns`, () => {
     const writes: Array<ChangeEvent> = []
     const bridge = createOutboundBridge(
-      { run: 2, step: 4, msg: 3, tc: 5 },
+      { run: 2, step: 4, msg: 3, tc: 5, reasoning: 0 },
       (event) => {
         writes.push(event)
       }

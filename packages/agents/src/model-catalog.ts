@@ -238,42 +238,96 @@ function filterChoicesByEnabledModels(
   return filtered.length > 0 ? filtered : choices
 }
 
+/**
+ * Anthropic-specific budget mapping for `reasoningEffort`.
+ *
+ * Anthropic's `thinking.budget_tokens` is a hard cap on tokens spent
+ * inside the thinking block before the model must commit to its
+ * answer. Docs require ≥ 1024; we scale from there. Numbers tuned so
+ * `medium` is the spot most "show your work" requests land, and
+ * `high` covers tougher reasoning without uncapped spend.
+ *
+ * Keep in sync with provider doc updates — Anthropic has shifted the
+ * minimum once already (older models capped lower).
+ */
+const ANTHROPIC_THINKING_BUDGET_BY_EFFORT: Record<
+  ExplicitReasoningEffort,
+  number
+> = {
+  minimal: 1024,
+  low: 2048,
+  medium: 8192,
+  high: 24576,
+}
+
 function withProviderPayloadDefaults(
   config: PersistedModelConfig & { getApiKey?: AgentConfig[`getApiKey`] },
   choice: BuiltinModelChoice,
   reasoningEffort: ExplicitReasoningEffort | null
 ): BuiltinAgentModelConfig {
-  if (
-    (choice.provider !== `openai` && choice.provider !== `openai-codex`) ||
-    !choice.reasoning
-  )
-    return config
+  if (!choice.reasoning) return config
 
-  const defaultEffort = choice.provider === `openai-codex` ? `low` : `minimal`
-  const effort =
-    reasoningEffort === `minimal` && choice.provider === `openai-codex`
-      ? `low`
-      : (reasoningEffort ?? defaultEffort)
+  if (choice.provider === `openai` || choice.provider === `openai-codex`) {
+    const defaultEffort = choice.provider === `openai-codex` ? `low` : `minimal`
+    const effort =
+      reasoningEffort === `minimal` && choice.provider === `openai-codex`
+        ? `low`
+        : (reasoningEffort ?? defaultEffort)
 
-  return {
-    ...config,
-    onPayload: (payload) => {
-      if (typeof payload !== `object` || payload === null) return undefined
-      const body = payload as Record<string, unknown>
-      const existingReasoning =
-        typeof body.reasoning === `object` && body.reasoning !== null
-          ? (body.reasoning as Record<string, unknown>)
-          : {}
+    return {
+      ...config,
+      onPayload: (payload) => {
+        if (typeof payload !== `object` || payload === null) return undefined
+        const body = payload as Record<string, unknown>
+        const existingReasoning =
+          typeof body.reasoning === `object` && body.reasoning !== null
+            ? (body.reasoning as Record<string, unknown>)
+            : {}
 
-      return {
-        ...body,
-        reasoning: {
-          ...existingReasoning,
-          effort,
-        },
-      }
-    },
+        return {
+          ...body,
+          reasoning: {
+            ...existingReasoning,
+            effort,
+          },
+        }
+      },
+    }
   }
+
+  if (choice.provider === `anthropic`) {
+    // `auto` maps to the minimal budget so extended thinking is always
+    // on for reasoning-capable Anthropic models, matching the OpenAI
+    // branch above (where `auto` falls through to a `minimal` default).
+    const effectiveEffort = reasoningEffort ?? `minimal`
+    const budgetTokens = ANTHROPIC_THINKING_BUDGET_BY_EFFORT[effectiveEffort]
+
+    return {
+      ...config,
+      onPayload: (payload) => {
+        if (typeof payload !== `object` || payload === null) return undefined
+        const body = payload as Record<string, unknown>
+        // pi-ai writes `thinking: { type: "disabled" }` into the payload
+        // by default. Merge our enabled-thinking values last so they win
+        // — otherwise the API rejects `budget_tokens` for a disabled
+        // `thinking` block.
+        const existingThinking =
+          typeof body.thinking === `object` && body.thinking !== null
+            ? (body.thinking as Record<string, unknown>)
+            : {}
+        return {
+          ...body,
+          thinking: {
+            ...existingThinking,
+            type: `enabled`,
+            budget_tokens: budgetTokens,
+          },
+        }
+      },
+    }
+  }
+
+  return config
 }
 
 function parseReasoningEffort(value: unknown): ExplicitReasoningEffort | null {
