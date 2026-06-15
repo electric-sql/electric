@@ -13,6 +13,7 @@ import {
 import { secretsPath } from './shared/paths'
 import type { CloudAgentServersState } from './cloud/cloud-agent-servers'
 import type { CloudAuthState } from './cloud/cloud-auth'
+import { extractSessionDeepLinkFromArgv } from './shared/deep-link'
 import { app, nativeTheme } from 'electron'
 import fixPath from 'fix-path'
 import path from 'node:path'
@@ -57,6 +58,32 @@ function broadcastCloudAgentServersState(next: CloudAgentServersState): void {
 
 desktopController = createDesktopMainController(desktopContext)
 
+// Claim the `electric-agents://` scheme so the OS routes deep links to us.
+// In dev on Windows/Linux the OS must relaunch the actual dev binary, so we
+// pass execPath + the entry script explicitly.
+if (process.defaultApp && process.argv.length >= 2) {
+  app.setAsDefaultProtocolClient(`electric-agents`, process.execPath, [
+    path.resolve(process.argv[1]!),
+  ])
+} else {
+  app.setAsDefaultProtocolClient(`electric-agents`)
+}
+
+// `open-url` (macOS) can fire before the app is ready; queue until then.
+let pendingDeepLink: string | null = null
+function dispatchDeepLink(url: string): void {
+  if (!app.isReady() || !desktopController) {
+    pendingDeepLink = url
+    return
+  }
+  desktopController.openSessionFromDeepLink(url)
+}
+
+app.on(`open-url`, (event, url) => {
+  event.preventDefault()
+  dispatchDeepLink(url)
+})
+
 async function main(): Promise<void> {
   // Make sure macOS shows the product name everywhere (about menu,
   // dock tooltip, default window title) instead of the npm package id.
@@ -68,6 +95,11 @@ async function main(): Promise<void> {
   }
 
   app.on(`second-instance`, (_event, argv) => {
+    const deepLink = extractSessionDeepLinkFromArgv(argv)
+    if (deepLink) {
+      desktopController?.openSessionFromDeepLink(deepLink)
+      return
+    }
     if (LoginItems.shouldOpenWindowForSecondInstance(argv)) {
       desktopController?.showOrCreateWindow()
     }
@@ -132,6 +164,15 @@ async function main(): Promise<void> {
   controller.connectConfiguredServers()
   controller.startDiscoveryLoop()
   controller.initializeUpdater()
+
+  // Windows/Linux cold start: the deep link is an argv entry. macOS cold
+  // start: `open-url` already fired and stashed it in `pendingDeepLink`.
+  const argvDeepLink = extractSessionDeepLinkFromArgv(process.argv)
+  const coldStartLink = pendingDeepLink ?? argvDeepLink
+  if (coldStartLink) {
+    pendingDeepLink = null
+    controller.openSessionFromDeepLink(coldStartLink)
+  }
 }
 
 void main()
