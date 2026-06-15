@@ -4,7 +4,7 @@ import {
   extractSessionDeepLinkFromArgv,
   isSessionDeepLink,
   parseSessionDeepLink,
-} from './deep-link.ts'
+} from './deep-link'
 
 test(`isSessionDeepLink matches only open-session links`, () => {
   assert.equal(
