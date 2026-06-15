@@ -158,8 +158,8 @@ defmodule Electric.Postgres.ReplicationClient do
   @max_event_retry_time 10 * 60_000
 
   # How often a still-failing event retry is logged at error level; attempts
-  # in between are logged at debug level. See log_event_retry/6.
-  @retry_log_interval 10_000
+  # in between are not logged. See log_event_retry/5.
+  @retry_log_interval 30_000
 
   @spec start_link(Keyword.t()) :: :gen_statem.start_ret()
   def start_link(opts) do
@@ -395,7 +395,7 @@ defmodule Electric.Postgres.ReplicationClient do
 
     if remaining > 0 do
       state =
-        log_event_retry(state, :processing, event, remaining, reason, fn -> inspect(reason) end)
+        log_event_retry(state, :processing, event, remaining, reason)
 
       Process.send_after(self(), {:process_event, event, remaining}, @event_retry_delay)
       {:noreply, state}
@@ -547,12 +547,7 @@ defmodule Electric.Postgres.ReplicationClient do
         remaining = time_remaining - (System.monotonic_time(:millisecond) - start_time)
 
         if remaining > 0 do
-          stacktrace = __STACKTRACE__
-
-          state =
-            log_event_retry(state, :dispatching, event, remaining, reason, fn ->
-              Exception.format(kind, reason, stacktrace)
-            end)
+          state = log_event_retry(state, :dispatching, event, remaining, reason)
 
           Process.send_after(self(), {:process_event, event, remaining}, @event_retry_delay)
           {:noreply, state}
@@ -570,17 +565,15 @@ defmodule Electric.Postgres.ReplicationClient do
   # A failing event is retried every @event_retry_delay for up to
   # @max_event_retry_time, so logging every attempt at error level floods the
   # log output — and any error tracker fed from it — with thousands of
-  # messages for a single incident. Log the first failure and one
-  # progress update per @retry_log_interval at error level, and every other
-  # attempt at debug level. The throttle window is wall-clock time tracked in
-  # the state because a fast failure (e.g. :noproc) consumes no measurable
-  # retry budget.
+  # messages for a single incident. Log the first failure and one progress
+  # update per @retry_log_interval at error level; attempts in between are not
+  # logged. The throttle window is wall-clock time tracked in the state because
+  # a fast failure (e.g. :noproc) consumes no measurable retry budget.
   #
   # The error-level message carries the event identity instead of the full
   # event: the payload can be megabytes of row data, which both bloats the
-  # message and copies user data into the logs. The full detail remains
-  # available at debug level.
-  defp log_event_retry(state, action, event, remaining, reason, debug_detail_fn) do
+  # message and copies user data into the logs.
+  defp log_event_retry(state, action, event, remaining, reason) do
     now = System.monotonic_time(:millisecond)
 
     if is_nil(state.last_retry_error_log) or
@@ -592,11 +585,6 @@ defmodule Electric.Postgres.ReplicationClient do
 
       %{state | last_retry_error_log: now}
     else
-      Logger.debug(fn ->
-        "Error #{action} replication event (#{remaining}ms retry budget left): " <>
-          debug_detail_fn.()
-      end)
-
       state
     end
   end
