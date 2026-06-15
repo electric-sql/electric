@@ -148,6 +148,9 @@ export interface OutboundBridge {
   onStepStart: (opts?: { modelProvider?: string; modelId?: string }) => void
   onStepEnd: (opts?: {
     finishReason?: string
+    // Uncached input side only (fresh prompt tokens + cache writes;
+    // prompt-cache *reads* excluded) — the cache-inclusive total would
+    // re-count the whole conversation on every warm-cache step.
     tokenInput?: number
     // Uncached portion of the input side (no cacheRead/cacheWrite). Not
     // persisted to the step row — forwarded to hooks for budget accounting.
