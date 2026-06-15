@@ -2,6 +2,8 @@ import { formatTokenCount } from '@electric-ax/agents-runtime/client'
 import { Text } from '../ui'
 import styles from './TokenUsage.module.css'
 
+const SHOW_USAGE_THRESHOLD = 1000
+
 /**
  * Compact token-usage label, e.g. `1.2k ↑ 412 ↓`.
  *
@@ -27,6 +29,7 @@ export function TokenUsage({
   output: number | undefined
 }): React.ReactElement | null {
   if (input == null && output == null) return null
+  if ((input ?? 0) + (output ?? 0) < SHOW_USAGE_THRESHOLD) return null
   const parts: Array<string> = []
   if (input != null) parts.push(`${formatTokenCount(input)} ↑`)
   if (output != null) parts.push(`${formatTokenCount(output)} ↓`)
