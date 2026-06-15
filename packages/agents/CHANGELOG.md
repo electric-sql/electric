@@ -1,5 +1,16 @@
 # @electric-ax/agents
 
+## 0.4.19
+
+### Patch Changes
+
+- d8af425: Rename agent-facing webhook subscription APIs from generic event source terminology to webhook source terminology. This is a breaking rename for the experimental webhook-source tools, runtime/server types, routes, manifest metadata, and wake payload names.
+- 23b7ec0: Require an explicit Electric shape endpoint URL for pg-sync observations. Source identity is derived from the shape options plus the observing tenant/principal/entity — ephemeral per-request fields (wakeId, runtimeConsumerId, streamPath) are excluded — so the same agent reuses one bridge across wakes while different principals get their own correctly-scoped streams. Registration validates the endpoint by fetching the shape log up front, failing with Electric's error instead of retrying silently, and a duplicate registration no longer resets a running bridge's bootstrap state (which could drop changes after a restart). Adds an `unobserve_pg_sync` tool so an agent can stop being woken by a shape stream it previously observed without affecting other observers.
+- Updated dependencies [d8af425]
+- Updated dependencies [23b7ec0]
+- Updated dependencies [3528e67]
+  - @electric-ax/agents-runtime@0.4.1
+
 ## 0.4.18
 
 ### Patch Changes

@@ -1,5 +1,16 @@
 # @electric-ax/agents-server-ui
 
+## 0.5.1
+
+### Patch Changes
+
+- 23b7ec0: Harden desktop UI response parsing for send and session mutation requests, and preserve configured auth headers when Electron local requests fall back from the desktop IPC transport to browser fetch.
+- 3528e67: Persist handler errors on the run that produced them and render long run error messages in the agents UI as expandable details.
+- Updated dependencies [d8af425]
+- Updated dependencies [23b7ec0]
+- Updated dependencies [3528e67]
+  - @electric-ax/agents-runtime@0.4.1
+
 ## 0.5.0
 
 ### Minor Changes
