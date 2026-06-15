@@ -611,10 +611,12 @@ defmodule Electric.Postgres.ReplicationClient do
   end
 
   # Replace replication events embedded in an exit reason (e.g. as arguments
-  # in a :noproc tuple) with their one-line summary before inspecting, so
-  # that error-level logs never carry full row data.
+  # in a :noproc tuple) with their one-line summary before inspecting, so that
+  # error-level logs never carry full row data. Only the event payloads are
+  # collapsed — the rest of the reason is inspected without limits so the full
+  # error structure reaches the logs (and any error tracker fed from them).
   defp inspect_scrubbed(term) do
-    term |> scrub_events() |> inspect(limit: 100, printable_limit: 2048)
+    term |> scrub_events() |> inspect(limit: :infinity, printable_limit: :infinity)
   end
 
   defp scrub_events(%TransactionFragment{} = event), do: "#<#{describe_event(event)}>"
