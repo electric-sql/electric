@@ -1,5 +1,137 @@
 # @electric-ax/agents
 
+## 0.4.18
+
+### Patch Changes
+
+- 708c946: Add `/goal` slash command to Horton sessions. Lets the user set an
+  objective with an optional token budget; the agent works autonomously
+  toward the goal and stops when it calls `mark_goal_complete` or when
+  the run exceeds the budget.
+
+  ```text
+  /goal set "ship feature X" --tokens 50k   # default 50k tokens
+  /goal set "explore" --unlimited           # opt out of the cap
+  /goal show                                 # current state
+  /goal complete                             # mark done manually
+  /goal clear                                # remove the goal
+  ```
+
+  ## Behaviour
+  - **One goal per session**, persisted as a `kind: 'goal'` entry on the
+    `manifests` collection — resumes automatically across desktop
+    restarts.
+  - **Mid-run token enforcement**: an `onStepEnd` hook on the outbound
+    bridge surfaces per-step token counts; Horton accumulates them and
+    aborts the active `ctx.agent.run()` via an `AbortController` once
+    `tokensUsed >= tokenBudget`. The cap counts **new input (fresh +
+    cache-write tokens) + output** per step — prompt-cache reads (which
+    re-count the whole conversation on every warm step) are excluded, so
+    the budget tracks new work rather than context size.
+  - **Live progress**: the goal banner ticks up after each step. The
+    manifest update is written via `writeEvent` directly (not the
+    wake-session's staged manifest transaction, which only commits at
+    end-of-wake — too late for a long-running run).
+  - **`mark_goal_complete` tool**: registered on Horton's tool list.
+    Flips status to `complete`, surfaces in the chat as an ordinary
+    agent reply via the new `ctx.replyText` helper.
+  - **State-changing `/goal` commands interrupt the active run** —
+    typing `/goal complete`, `/goal clear`, or `/goal set` while a run
+    is in flight signals SIGINT alongside sending the message, so the
+    prior run aborts instead of finishing the old work first. `/goal
+show` is read-only and does not interrupt.
+  - **Budget-limited stop message**: when the cap is hit mid-run, the
+    agent posts a synthetic reply explaining what happened and
+    suggesting a larger budget to resume.
+
+  ## Plumbing
+  - `entity-schema.ts` — new `ManifestGoalEntryValue` (objective,
+    status, tokenBudget, tokensUsed, createdAt, updatedAt) added to the
+    manifest discriminated union.
+  - `goal-api.ts` (new) — `setGoal` / `clearGoal` / `getGoal` /
+    `markGoalComplete` / `updateGoalUsage`. All goal mutations share a
+    single ordered write channel (direct `writeEvent` upserts, live for
+    the UI) plus an in-wake read-your-writes cache, so a mutation firing
+    mid-run can never snapshot — and replay — a stale `tokensUsed` over
+    a fresher one. `updateGoalUsage` additionally never decreases the
+    counter.
+  - `goal-command.ts` (new) — `/goal` parser (`--tokens N|50k|1.2m|
+unlimited`, `--unlimited` flag, subcommand aliases `done`/`status`)
+    and dispatcher.
+  - `tools/goal-tools.ts` (new) — `createMarkGoalCompleteTool` exposes
+    the completion signal to the LLM.
+  - `outbound-bridge.ts` — new optional `OutboundBridgeHooks.onStepEnd`
+    callback, threaded through `pi-adapter` and the `AgentConfig` passed
+    to `useAgent`.
+  - `context-factory.ts` — `AgentHandle.run` now accepts an optional
+    `abortSignal` and combines it with the runtime's `runSignal`. New
+    `ctx.replyText(text)` writes a complete runs + texts + textDeltas
+    sequence so synthetic replies render in the chat. New goal-related
+    methods exposed on `HandlerContext`.
+  - `horton.ts` — `tryHandleSlashCommand` intercepts `/goal *` before
+    the LLM; `/goal set` enqueues a one-shot kickoff so the agent starts
+    immediately; `assistantHandler` wires the budget-enforcing
+    `onStepEnd`, aborts on overflow, and posts the explanation reply.
+  - `agents-server-ui` — new `GoalBanner` component above the timeline
+    (objective + budget bar + status badge). `MessageInput` aborts the
+    active run when a state-changing `/goal` command is submitted.
+    `EntityTimeline` / `EntityContextDrawer` handle the new `goal`
+    manifest kind.
+
+- 8bc630a: Add generic externally-writable custom collections for agent entity state: collections opt in via `externallyWritable`, writes go through an authenticated schema-validated endpoint that stamps the principal into a read-only `_principal` column, and `createEntityTimelineQuery` can project them into the timeline via `customSources`. Comments are reimplemented as one such collection, gated per agent type through a reserved `comments/v1` contract that the UI keys its comment affordances on. External writes are restricted to a per-collection operations allowlist (insert-only by default), and comments are insert-only.
+- 6fc36d8: Embedder customization hooks for the built-in agents:
+  - `BuiltinAgentHandlerOptions.dockerSandbox` ({ image, allowFloatingTag, env, extraMounts }) threads into the built-in `docker` sandbox profile. These are embedder/operator-trust inputs: `extraMounts` is subject to the runtime's docker-socket guard and `env` is passed verbatim into the container.
+  - `AgentHandlerResult.modelCatalog` exposes the resolved model catalog so embedders can register sibling agent types with the same model resolution.
+  - New exports: `resolveBuiltinModelConfig`, and types `BuiltinModelCatalog`, `BuiltinAgentModelConfig`, `BuiltinDockerSandboxOptions`, `BuiltinDockerSandboxMount`.
+
+- c48c1a8: Stream model reasoning / extended-thinking content into the UI. While
+  the model is "thinking" (Anthropic extended thinking, DeepSeek-R1
+  reasoning, Moonshot K2, OpenAI Responses summaries) the agent response
+  now shows the live reasoning text faded above the answer, with the
+  existing `Thinking` shimmer heading and an elapsed-time ticker. Once
+  the reasoning settles it collapses to `▸ Thought for 12s` — click to
+  expand. Multiple reasoning rows per run are rendered independently in
+  order, so tool-using turns show each step's reasoning separately.
+
+  Implementation:
+  - **Schema** — `reasoning` row gains `run_id`, `encrypted` (Anthropic
+    redacted-thinking opaque payload, must round-trip back to the model
+    verbatim), and `summary_title` (extracted at write time for
+    providers that emit a bolded heading). New `reasoningDeltas`
+    collection mirrors `textDeltas` for streamed content.
+  - **Bridge** — `OutboundBridge` gains `onReasoningStart` /
+    `onReasoningDelta` / `onReasoningEnd`, parallel to the text path.
+  - **Adapter** — `pi-adapter.ts` routes pi-ai's `thinking_start` /
+    `thinking_delta` / `thinking_end` events to the bridge, parses the
+    `**Title**\n\n<body>` heading (OpenAI Responses only) once at
+    `thinking_end` so the UI doesn't re-parse on every render.
+  - **Timeline** — `EntityTimelineRunRow` gains a live
+    `reasoning: Collection<EntityTimelineReasoningItem>` with content
+    built from a delta-join, mirroring `EntityTimelineTextItem`.
+  - **UI** — New `<ReasoningSection>` component renders above the
+    answer in `AgentResponseLive`. Live shows faded markdown via
+    `Streamdown` with `ThinkingIndicator` heading + summary title +
+    elapsed-time ticker. Settled collapses to `Thought for Ns` with
+    click-to-expand. Redacted Anthropic blocks render a single muted
+    line — content is opaque, but the encrypted payload is still
+    persisted server-side so the model gets it back next turn.
+
+  Providers without reasoning emit nothing → no reasoning section
+  rendered. Historical responses recorded before this PR have no
+  closure cue, same as today.
+
+  Anthropic extended thinking is now always-on for reasoning-capable
+  models: `reasoningEffort: auto` maps to the minimal budget
+  (1024 tokens), matching the OpenAI branch where `auto` already
+  defaulted to `minimal`. Explicit `low`/`medium`/`high` scale the
+  budget as before.
+
+- Updated dependencies [708c946]
+- Updated dependencies [8bc630a]
+- Updated dependencies [c48c1a8]
+- Updated dependencies [c1f3aac]
+  - @electric-ax/agents-runtime@0.4.0
+
 ## 0.4.17
 
 ### Patch Changes
