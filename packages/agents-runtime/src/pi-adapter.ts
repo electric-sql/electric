@@ -73,6 +73,14 @@ export interface PiAdapterOptions {
     provider: string
   ) => Promise<string | undefined> | string | undefined
   onPayload?: SimpleStreamOptions[`onPayload`]
+  // Invoked after each step ends with the token counts reported by the
+  // provider. Used by goal-budget enforcement to abort mid-run; see
+  // OutboundBridgeHooks for the field semantics.
+  onStepEnd?: (stats: {
+    input: number
+    uncachedInput: number
+    output: number
+  }) => void
   modelTimeoutMs?: number
   modelMaxRetries?: number
 }
@@ -249,7 +257,8 @@ export function createPiAgentAdapter(
   return (config: PiAgentAdapterConfig): PiAgentHandle => {
     const bridge = createOutboundBridge(
       config.outboundIdSeed,
-      config.writeEvent
+      config.writeEvent,
+      opts.onStepEnd ? { onStepEnd: opts.onStepEnd } : undefined
     )
     const history = toAgentHistory(config.messages)
 
@@ -496,6 +505,21 @@ export function createPiAgentAdapter(
                   (typeof usage?.inputTokens === `number`
                     ? usage.inputTokens
                     : undefined)
+                // Non-cache-hit input — what goal-budget enforcement
+                // accumulates. On warm turns `cacheRead` re-counts the whole
+                // conversation every step, so budgeting on the display sum
+                // would burn a budget in a couple of steps regardless of how
+                // much *new* work happened. `cacheWrite` IS counted: on
+                // cache-enabled providers the newly appended prompt tokens
+                // are reported there (with `usage.input` collapsing to ~0),
+                // so excluding it would make the budget track output only.
+                // Legacy flat `inputTokens` has no cache split, so the whole
+                // side counts as uncached.
+                const usageInputUncached =
+                  sumPresentNumbers([usage?.input, usage?.cacheWrite]) ??
+                  (typeof usage?.inputTokens === `number`
+                    ? usage.inputTokens
+                    : undefined)
                 const usageOutput =
                   typeof usage?.output === `number`
                     ? usage.output
@@ -506,6 +530,9 @@ export function createPiAgentAdapter(
                   finishReason,
                   durationMs: Date.now() - stepStartTime,
                   ...(usageInput !== undefined && { tokenInput: usageInput }),
+                  ...(usageInputUncached !== undefined && {
+                    tokenInputUncached: usageInputUncached,
+                  }),
                   ...(usageOutput !== undefined && {
                     tokenOutput: usageOutput,
                   }),

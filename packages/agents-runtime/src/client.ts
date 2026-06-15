@@ -40,6 +40,12 @@ export {
   createSlashCommandTokenRegex,
   SLASH_COMMAND_TRIGGER_REGEX,
 } from './composer-input'
+// The /goal text grammar — pure parsing, shared with the UI so composer
+// behavior (e.g. which subcommands interrupt a running agent) can't
+// drift from the runtime dispatcher.
+export { isGoalCommandText, parseGoalCommand } from './goal-command'
+export { formatTokenCount } from './token-budget'
+export type { GoalCommand } from './goal-command'
 
 export type {
   EntityStreamDB,
@@ -58,8 +64,10 @@ export type {
   AttachmentStatus,
   AttachmentSubject,
   AttachmentSubjectType,
+  GoalStatus,
   Manifest,
   ManifestAttachmentEntry,
+  ManifestGoalEntry,
 } from './entity-schema'
 export type {
   AttachmentCreateInput,

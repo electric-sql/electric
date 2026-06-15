@@ -9,7 +9,11 @@ import {
   createUpdateInboxMessageAction,
   readTextPayload,
 } from '../lib/sendMessage'
-import { serializeComposerInput } from '@electric-ax/agents-runtime/client'
+import {
+  isGoalCommandText,
+  parseGoalCommand,
+  serializeComposerInput,
+} from '@electric-ax/agents-runtime/client'
 import { ComposerEditor } from './ComposerEditor'
 import { ComposerShell } from './ComposerShell'
 import { Icon, Stack, Text, Tooltip } from '../ui'
@@ -26,6 +30,17 @@ import type {
   SlashCommandRow,
 } from '@electric-ax/agents-runtime/client'
 import type { OptimisticInboxMessage } from '../lib/sendMessage'
+
+// /goal commands that mutate state should interrupt any in-flight agent
+// run so the user doesn't have to wait for the old work to finish before
+// the new goal/state takes effect. /goal show is read-only and never
+// aborts. Delegates to the runtime's parser so the recognized grammar
+// (including subcommand aliases) can't drift from the dispatcher.
+function isAbortingGoalCommand(text: string): boolean {
+  if (!isGoalCommandText(text)) return false
+  const kind = parseGoalCommand(text).kind
+  return kind === `set` || kind === `clear` || kind === `complete`
+}
 
 export function MessageInput({
   db,
@@ -186,6 +201,15 @@ export function MessageInput({
             ...(files.length > 0 ? { attachments: files } : {}),
           })
       if (!tx) return
+      // State-changing /goal commands should interrupt any in-flight agent
+      // run — otherwise the agent keeps working on the old goal/work even
+      // though the user just told it to stop or pivot. /goal show is purely
+      // a read, so it never aborts. `onStop` itself no-ops when nothing is
+      // running, so this is safe to call unconditionally for the matching
+      // commands.
+      if (!editingMessage && isAbortingGoalCommand(text)) {
+        onStop?.()
+      }
       if (!editingMessage) onSend?.()
       setValue(``)
       clearAttachments()
@@ -209,6 +233,7 @@ export function MessageInput({
       updateAction,
       editingMessage,
       onSend,
+      onStop,
       effectiveSlashCommands,
     ]
   )

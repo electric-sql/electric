@@ -1,3 +1,4 @@
+import { formatTokenCount } from '@electric-ax/agents-runtime/client'
 import { Text } from '../ui'
 import styles from './TokenUsage.module.css'
 
@@ -38,20 +39,4 @@ export function TokenUsage({
       {text}
     </Text>
   )
-}
-
-/**
- * `Intl.NumberFormat` with `notation: 'compact'` gives us "1.2K",
- * "12K", "1.2M" etc., locale-aware and bounded in width — better
- * than a hand-rolled rounder. We force lowercase `k`/`m` afterward
- * so the suffix tone matches the muted meta row.
- */
-const compactFormatter = new Intl.NumberFormat(undefined, {
-  notation: `compact`,
-  maximumFractionDigits: 1,
-})
-
-function formatTokenCount(n: number): string {
-  if (n < 1000) return String(n)
-  return compactFormatter.format(n).toLowerCase()
 }

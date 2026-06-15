@@ -48,7 +48,7 @@ async function captureAgentConfig(
     events: [],
     firstWake: false,
     tags: {},
-    db: { collections: { inbox: { toArray: [] } } },
+    db: { collections: { inbox: { toArray: [] }, runs: { toArray: [] } } },
     sandbox: {
       workingDirectory: `/work`,
       readFile: vi.fn(async () => {
@@ -63,6 +63,11 @@ async function captureAgentConfig(
     useAgent,
     agent: { run: vi.fn(async () => {}) },
     setTag: vi.fn(async () => {}),
+    // The assistant handler reads the active goal up front and wires
+    // budget enforcement on agent.run. Stub these to a no-goal state so
+    // the captured config reflects the tool-composition path only.
+    getGoal: vi.fn(() => undefined),
+    updateGoalUsage: vi.fn(),
     ...ctxOverrides,
   } as any
   await registry
