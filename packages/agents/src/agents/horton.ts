@@ -295,7 +295,7 @@ When a user opens with a greeting ("hi", "hello", "hey", etc.) or a broad statem
 - bash: run shell commands
 - read: read a file
 - write: create or overwrite a file
-- edit: targeted string replacement in an existing file (you must read the file first)
+- edit: targeted string replacement in an existing file
 - web_search: search the web
 - fetch_url: fetch and convert a URL to markdown
 - spawn_worker: dispatch a subagent for an isolated task
@@ -307,7 +307,6 @@ ${webhookSourceTools}${titleTool}${scheduleTools}${docsTools}${skillsTools}
 
 # Working with files
 - Prefer edit over write when modifying existing files.
-- You must read a file before you can edit it.
 - Use absolute paths or paths relative to the current working directory.
 ${modelGuidance}${docsGuidance}${skillsGuidance}${onboardingGuidance}${docsUrlGuidance}
 
@@ -383,7 +382,6 @@ function getToolName(tool: unknown): string | null {
 export function createHortonTools(
   sandbox: Sandbox,
   ctx: HandlerContext,
-  readSet: Set<string>,
   opts: {
     docsSearchTool?: AgentTool
     modelConfig?: ReturnType<typeof resolveBuiltinModelConfig>
@@ -393,9 +391,9 @@ export function createHortonTools(
 ): Array<AgentTool> {
   return [
     createBashTool(sandbox),
-    createReadFileTool(sandbox, readSet),
-    createWriteTool(sandbox, readSet),
-    createEditTool(sandbox, readSet),
+    createReadFileTool(sandbox),
+    createWriteTool(sandbox),
+    createEditTool(sandbox),
     braveSearchTool,
     ...(opts.modelCatalog && opts.modelConfig
       ? [
@@ -654,7 +652,6 @@ function createAssistantHandler(options: {
 
     const loadedSkills = await skillLoader.load(ctx)
 
-    const readSet = new Set<string>()
     const modelConfig = resolveBuiltinModelConfig(modelCatalog, ctx.args)
     const sourceBudget = resolveBuiltinModelSourceBudget(modelConfig)
     // The sandbox's own working directory is the single source of truth for
@@ -670,7 +667,7 @@ function createAssistantHandler(options: {
     // spawn time) and disposed when the wake-session ends.
     const tools = [
       ...ctx.electricTools,
-      ...createHortonTools(ctx.sandbox, ctx, readSet, {
+      ...createHortonTools(ctx.sandbox, ctx, {
         docsSearchTool,
         modelConfig,
         modelCatalog,

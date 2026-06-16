@@ -17,11 +17,10 @@ describe(`write→edit roundtrip in same wake`, () => {
     await rm(cwd, { recursive: true, force: true })
   })
 
-  it(`edit succeeds on a freshly-written file (write populates readSet)`, async () => {
+  it(`edit succeeds on a freshly-written file`, async () => {
     const sandbox = await unrestrictedSandbox({ workingDirectory: cwd })
-    const readSet = new Set<string>()
-    const write = createWriteTool(sandbox, readSet)
-    const edit = createEditTool(sandbox, readSet)
+    const write = createWriteTool(sandbox)
+    const edit = createEditTool(sandbox)
 
     await write.execute(`w`, {
       path: `r.txt`,

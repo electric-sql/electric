@@ -6,23 +6,17 @@ import { SandboxError } from '../sandbox/types'
 import type { Sandbox } from '../sandbox/types'
 import type { AgentTool } from '@mariozechner/pi-agent-core'
 
-const READ_GUARD_MESSAGE = (rel: string): string =>
-  `File ${rel} has not been read in this session (sessions are per-wake — re-read after waking from a worker).`
-
-export function createEditTool(
-  sandbox: Sandbox,
-  readSet: Set<string>
-): AgentTool {
+export function createEditTool(sandbox: Sandbox): AgentTool {
   return {
     name: `edit`,
     label: `Edit File`,
-    description: `Replace text in a file. The file must have been read with the read tool earlier in this session. By default the old_string must occur exactly once; set replace_all to true to replace every occurrence.`,
+    description: `Replace text in a file. By default the old_string must occur exactly once; set replace_all to true to replace every occurrence.`,
     parameters: Type.Object({
       path: Type.String({
         description: `File path (relative to working directory)`,
       }),
       old_string: Type.String({
-        description: `The literal text to find. Must be unique unless replace_all is true.`,
+        description: `The literal text to find, exactly as it appears in the file. Do not include read tool line-number prefixes like "42: "; those are display-only. Must be unique unless replace_all is true.`,
       }),
       new_string: Type.String({
         description: `The replacement text.`,
@@ -45,20 +39,9 @@ export function createEditTool(
         new_string: string
         replace_all?: boolean
       }
-      // `key`/`rel` are pure-string normalizations (readSet key + messages);
-      // an out-of-workspace path can't have been read, so the read-guard
-      // below naturally refuses it. Symlink/containment escapes are caught
-      // from the sandbox's FS calls as SandboxError('policy').
       const key = resolve(sandbox.workingDirectory, filePath)
       const rel = relative(sandbox.workingDirectory, key)
       try {
-        if (!readSet.has(key)) {
-          return {
-            content: [{ type: `text` as const, text: READ_GUARD_MESSAGE(rel) }],
-            details: { replacements: 0 },
-          }
-        }
-
         const original = (await sandbox.readFile(filePath)).toString(`utf-8`)
 
         if (!replace_all) {

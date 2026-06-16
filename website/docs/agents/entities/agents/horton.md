@@ -29,9 +29,9 @@ Horton is configured with `ctx.electricTools` plus the base Horton tool set:
 | Tool              | Purpose                                                  |
 | ----------------- | -------------------------------------------------------- |
 | `bash`            | Run shell commands in the working directory.             |
-| `read`            | Read a file. Tracked in a per-wake `readSet`.            |
+| `read`            | Read a file.                                             |
 | `write`           | Create or overwrite a file.                              |
-| `edit`            | Targeted string replacement (file must be `read` first). |
+| `edit`            | Targeted string replacement.                             |
 | `web_search`      | Web search via the configured search provider.           |
 | `fetch_url`       | Fetch a URL and return it as markdown.                   |
 | `spawn_worker`    | Dispatch a subagent for an isolated subtask.             |
@@ -74,13 +74,12 @@ import {
 registry.define("my-assistant", {
   description: "Horton with an extra custom tool",
   async handler(ctx) {
-    const readSet = new Set<string>()
     ctx.useAgent({
       systemPrompt: buildHortonSystemPrompt(process.cwd()),
       model: HORTON_MODEL,
       tools: [
         ...ctx.electricTools,
-        ...createHortonTools(ctx.sandbox, ctx, readSet),
+        ...createHortonTools(ctx.sandbox, ctx),
         myCustomTool,
       ],
     })

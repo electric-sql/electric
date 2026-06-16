@@ -40,8 +40,7 @@ describe(`tools refuse symlink-based escape from the working directory`, () => {
     await symlink(join(outside, `victim.txt`), join(cwd, `link.txt`))
 
     const sandbox = await unrestrictedSandbox({ workingDirectory: cwd })
-    const readSet = new Set<string>([join(cwd, `link.txt`)])
-    const tool = createEditTool(sandbox, readSet)
+    const tool = createEditTool(sandbox)
     const result = await tool.execute(`e`, {
       path: `link.txt`,
       old_string: `untouched`,
