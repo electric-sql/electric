@@ -18,6 +18,7 @@ published: false
 
 <script setup>
 import EntityStreamDemo from '../../src/components/agents-home/EntityStreamDemo.vue'
+import YoutubeEmbed from '../../src/components/YoutubeEmbed.vue'
 </script>
 
 Electric Agents 0.5 is out today. It rounds out the [platform we launched in April](/blog/2026/04/29/introducing-electric-agents) with a broader SDK and runtime surface for building agentic systems.
@@ -71,53 +72,85 @@ In Electric Agents, the agent is the durable stream, not the process currently h
 
 ## Demos and videos
 
+### Logical entities
+
+See how Electric Agents models agents as durable, addressable entities.
+
+<figure>
+  <div class="embed-container" style="padding-bottom: 56.25%">
+    <YoutubeEmbed video-id="AhQRJ_9yOFw" title="Electric Agents logical entities demo" />
+  </div>
+</figure>
+
+### State
+
+Inspect an entity's live StreamDB state: messages, runs, tool calls, child status, and custom collections.
+
+<figure>
+  <div class="embed-container" style="padding-bottom: 56.25%">
+    <YoutubeEmbed video-id="GoADVUN_BAQ" title="Electric Agents state demo" />
+  </div>
+</figure>
+
 ### Forking and spawning
 
-Show the difference between spawning a fresh child and forking an entity with parent history.
+Spawning starts a fresh child entity. Forking branches an existing entity with its parent history intact.
 
-<!-- VIDEO PLACEHOLDER: Forking vs spawning. Show spawn as fresh child; fork as branch with parent history. -->
+<figure>
+  <div class="embed-container" style="padding-bottom: 56.25%">
+    <YoutubeEmbed video-id="sG8NHMX0NPM" title="Electric Agents spawn and fork demo" />
+  </div>
+</figure>
 
-### Every agent is a StreamDB
+### Child agents
 
-Show the inspector or timeline/state view: the same entity as messages, runs, tool calls, state, children, and stream rows.
+Use child agents to split work into separately owned streams that the parent can observe and coordinate.
 
-<!-- VIDEO PLACEHOLDER: Every agent as StreamDB / inspector. Show timeline, collections, stream rows, and state projection. -->
+<figure>
+  <div class="embed-container" style="padding-bottom: 56.25%">
+    <YoutubeEmbed video-id="TwPFeDzX8S4" title="Electric Agents child agent demo" />
+  </div>
+</figure>
 
-### Multiple layers of spawning
+### Signals
 
-Use James' demo or another nested agent tree to show parent -> child -> grandchild coordination.
+Signals give operators and apps a control plane for active work: `SIGINT`, pause, resume, kill, and handler-level lifecycle events.
 
-<!-- VIDEO PLACEHOLDER: Multi-layer spawning. Show parent, child, grandchild, and wake/completion flow. -->
-
-### Local vs remote runners
-
-Show a local runner doing the work while another client observes or controls the same session.
-
-<!-- VIDEO PLACEHOLDER: Local runner controlled remotely. Show compute on laptop and control from another client. -->
-
-### Signals quick tour
-
-Show `SIGINT`, pause/resume, kill, and handler-level signals from CLI or app.
-
-<!-- VIDEO PLACEHOLDER: Signals quick tour. Show interrupt, pause, resume, kill, and handler signal response. -->
+<figure>
+  <div class="embed-container" style="padding-bottom: 56.25%">
+    <YoutubeEmbed video-id="WqkmhQM2X-Q" title="Electric Agents signals demo" />
+  </div>
+</figure>
 
 ### PG sync triggers
 
-Show a Postgres change triggering an agent through sync/event plumbing.
+Postgres changes can flow through sync and wake an agent when the data it cares about changes.
 
-<!-- VIDEO PLACEHOLDER: PG sync trigger / reactive agents. Show database change -> observation source -> wake -> handler. -->
+<figure>
+  <div class="embed-container" style="padding-bottom: 56.25%">
+    <YoutubeEmbed video-id="0dH9tJDHvI0" title="Electric Agents PG sync triggers demo" />
+  </div>
+</figure>
 
-### Send to self and cron
+### Send to self
 
-Show an agent scheduling its own future work or waking itself to continue.
+An agent can send itself a future message to sleep now and continue work later.
 
-<!-- VIDEO PLACEHOLDER: Send-to-self and cron. Show delayed send, cron schedule, and follow-up wake. -->
+<figure>
+  <div class="embed-container" style="padding-bottom: 56.25%">
+    <YoutubeEmbed video-id="B3pWzh6KouA" title="Electric Agents send to self demo" />
+  </div>
+</figure>
 
-### Multi-agent patterns
+### Cron
 
-Show blackboard/shared state, orchestrator/worker, reactive observers, or map-reduce.
+Cron schedules wake agents on recurring intervals without keeping a worker process alive.
 
-<!-- VIDEO PLACEHOLDER: Multi-agent patterns. Show one concrete pattern with shared state and observed child progress. -->
+<figure>
+  <div class="embed-container" style="padding-bottom: 56.25%">
+    <YoutubeEmbed video-id="iPczPCOLJLs" title="Electric Agents cron demo" />
+  </div>
+</figure>
 
 ## Core APIs
 
