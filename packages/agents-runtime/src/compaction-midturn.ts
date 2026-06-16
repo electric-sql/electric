@@ -86,7 +86,19 @@ export function createMidTurnCompactor(
     if (!overCeiling) return compactedView(messages)
 
     const keepTail = Math.min(deps.keepTail, Math.max(0, messages.length - 1))
-    const coveredCount = messages.length - keepTail
+    let coveredCount = messages.length - keepTail
+
+    // Don't split a tool_call/tool_result pair: the kept tail must not start
+    // with an orphaned tool_result, whose matching tool_use (in the assistant
+    // message) would be folded into the summary — Anthropic rejects that. Advance
+    // the fold boundary past any leading tool-result messages so the tail begins
+    // on a fresh user/assistant turn.
+    while (
+      coveredCount < messages.length &&
+      messages[coveredCount]?.role === `toolResult`
+    ) {
+      coveredCount++
+    }
 
     // Nothing new to fold beyond the existing summary's coverage.
     if (coveredCount <= 0) return compactedView(messages)

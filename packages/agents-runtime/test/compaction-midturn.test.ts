@@ -108,6 +108,30 @@ describe(`createMidTurnCompactor`, () => {
     expect(JSON.stringify(out![0])).toContain(`SUMMARY2`)
   })
 
+  it(`never starts the kept tail with an orphaned tool_result`, async () => {
+    const summarize = vi.fn().mockResolvedValue(`SUMMARY`)
+    const compact = createMidTurnCompactor({
+      summarize,
+      writeCheckpoint: vi.fn(),
+      ceiling: 0.9,
+      minTokens: 100,
+      keepTail: 4,
+    })
+    // Boundary would land at index 6 (10 − keepTail 4); make that a tool_result
+    // whose tool_use (index 5 assistant) is being folded. The fold boundary must
+    // advance past it so the tail starts on the assistant turn at index 7.
+    const messages = msgs(10)
+    messages[6] = { role: `toolResult`, content: `tr` }
+    const out = await compact({
+      messages,
+      currentTokens: 9500,
+      contextWindow: 10000,
+    })
+    expect((summarize.mock.calls[0]![0] as Array<unknown>).length).toBe(7)
+    expect(out![1]).toBe(messages[7])
+    expect((out![1] as { role: string }).role).toBe(`assistant`)
+  })
+
   it(`on failure writes "failed" and leaves context untouched`, async () => {
     const summarize = vi.fn().mockRejectedValue(new Error(`boom`))
     const statuses: Array<string> = []
