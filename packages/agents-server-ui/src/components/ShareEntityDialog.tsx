@@ -7,7 +7,7 @@ import {
   type ComponentProps,
 } from 'react'
 import { useLiveQuery } from '@tanstack/react-db'
-import { Eye, MessageSquare, Share2, ShieldCheck, X } from 'lucide-react'
+import { Eye, Link2, MessageSquare, Share2, ShieldCheck, X } from 'lucide-react'
 import { entityApiUrl } from '../lib/entity-api'
 import { sessionAppUrl } from '../lib/sessionLinks'
 import { serverFetch } from '../lib/auth-fetch'
@@ -429,17 +429,6 @@ export function ShareEntityDialog({
             </div>
           )}
 
-          <div className={styles.copyLinkRow}>
-            <button
-              type="button"
-              className={styles.copyLinkButton}
-              disabled={!baseUrl}
-              onClick={() => void copySessionLink()}
-            >
-              Copy session link
-            </button>
-          </div>
-
           <div className={styles.grid}>
             <section className={styles.userPicker}>
               <Input
@@ -542,6 +531,16 @@ export function ShareEntityDialog({
         </Dialog.Body>
 
         <Dialog.Footer>
+          <Button
+            variant="soft"
+            tone="neutral"
+            onClick={() => void copySessionLink()}
+            disabled={!baseUrl}
+            style={{ marginRight: `auto` }}
+          >
+            <Icon icon={Link2} size={1} />
+            Copy session link
+          </Button>
           <Dialog.Close
             render={
               <Button variant="soft" tone="neutral" disabled={saving}>
