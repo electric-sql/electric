@@ -43,6 +43,7 @@
   },
   "devDependencies": {
     "@electric-ax/agents": "workspace:*",
+    "@electric-ax/agents-runtime": "workspace:*",
     "@electric-ax/agents-server-ui": "workspace:*",
     "@types/node": "^22.19.17",
     "concurrently": "^8.2.2",

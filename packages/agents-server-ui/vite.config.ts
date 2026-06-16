@@ -47,6 +47,13 @@ export default defineConfig(({ command, mode }) => {
           find: /^@electric-ax\/agents-runtime\/client$/,
           replacement: resolve(PACKAGE_DIR, `../agents-runtime/src/client.ts`),
         },
+        {
+          find: /^@electric-ax\/agents-runtime\/session-links$/,
+          replacement: resolve(
+            PACKAGE_DIR,
+            `../agents-runtime/src/session-links.ts`
+          ),
+        },
         { find: `react`, replacement: localNodeModules(`react`) },
         { find: `react-dom`, replacement: localNodeModules(`react-dom`) },
         {

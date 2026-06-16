@@ -18,6 +18,7 @@ import { fontSize, lineHeight, radii, rowHeight, spacing } from '../lib/theme'
 import { checkServerHealth, normalizeServerUrl } from '../lib/agentsClient'
 import { prepareServerHeaders } from '../lib/serverHeaders'
 import { getCloudServiceIdFromServerUrl } from '../lib/cloudAgentUrls'
+import { hostOf } from '../lib/serverHost'
 import { addSavedServer } from '../lib/savedServers'
 import type { Tokens } from '../lib/theme'
 
@@ -228,14 +229,6 @@ export function ServerSetupScreen({
       </KeyboardAvoidingView>
     </Screen>
   )
-}
-
-function hostOf(url: string): string {
-  try {
-    return new URL(url).host || url
-  } catch {
-    return url
-  }
 }
 
 function createStyles(tokens: Tokens) {

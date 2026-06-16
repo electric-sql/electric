@@ -64,6 +64,16 @@
         "default": "./dist/tools.cjs"
       }
     },
+    "./session-links": {
+      "import": {
+        "types": "./dist/session-links.d.ts",
+        "default": "./dist/session-links.js"
+      },
+      "require": {
+        "types": "./dist/session-links.d.cts",
+        "default": "./dist/session-links.cjs"
+      }
+    },
     "./sandbox": {
       "import": {
         "types": "./dist/sandbox.d.ts",

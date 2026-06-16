@@ -1,12 +1,16 @@
-import * as Linking from 'expo-linking'
+import { sessionIdFromEntityUrl } from '@electric-ax/agents-runtime/session-links'
 
 const WEB_UI_PATH = `__agent_ui`
-const SESSION_DEEP_LINK_SCHEME = `electric-agents`
-const SESSION_DEEP_LINK_HOST = `open-session`
 
-export function sessionIdFromEntityUrl(entityUrl: string): string {
-  return entityUrl.replace(/^\/+/, ``)
-}
+// The app deep-link format (build/parse/match) is shared across the desktop,
+// mobile and web apps so the wire format can never drift. Re-exported here so
+// existing imports from `./sessionLinks` keep working.
+export {
+  sessionIdFromEntityUrl,
+  sessionAppUrl,
+  isSessionDeepLink,
+  parseSessionDeepLink,
+} from '@electric-ax/agents-runtime/session-links'
 
 /**
  * Browser-openable link to a session in the server's bundled web UI.
@@ -26,55 +30,4 @@ export function sessionWebUrl(serverUrl: string, entityUrl: string): string {
     base = serverUrl.replace(/\/+$/, ``)
   }
   return `${base}/${WEB_UI_PATH}/#/entity/${id}`
-}
-
-/**
- * App deep link that opens a session directly in the Electric Agents app.
- * Carries the full server base URL (incl. any Cloud tenant prefix) and the
- * server-scoped entity url, both URL-encoded. Host is `open-session` (not
- * `session`) so expo-router doesn't auto-route it to the internal /session
- * screen — a dedicated landing route handles it.
- */
-export function sessionAppUrl(serverUrl: string, entityUrl: string): string {
-  const server = encodeURIComponent(serverUrl.replace(/\/+$/, ``))
-  const entity = encodeURIComponent(sessionIdFromEntityUrl(entityUrl))
-  return `${SESSION_DEEP_LINK_SCHEME}://${SESSION_DEEP_LINK_HOST}?server=${server}&entity=${entity}`
-}
-
-/**
- * Loose match for "is this our open-session deep link?". Accepts both
- * `electric-agents://open-session` and the single-slash Android variant
- * `electric-agents:/open-session` (the OS occasionally collapses the slashes),
- * mirroring `cloudAuth.isCallbackUrl`.
- */
-export function isSessionDeepLink(url: string): boolean {
-  if (typeof url !== `string`) return false
-  const prefix = `${SESSION_DEEP_LINK_SCHEME}:`
-  if (!url.startsWith(prefix)) return false
-  const rest = url.slice(prefix.length).replace(/^\/+/, ``)
-  return rest.startsWith(SESSION_DEEP_LINK_HOST)
-}
-
-export function parseSessionDeepLink(
-  url: string
-): { serverUrl: string; entityUrl: string } | null {
-  if (!isSessionDeepLink(url)) return null
-  let parsed: ReturnType<typeof Linking.parse>
-  try {
-    parsed = Linking.parse(url)
-  } catch {
-    return null
-  }
-  const params = parsed.queryParams ?? {}
-  const server = pickString(params.server)
-  const entity = pickString(params.entity)
-  if (!server || !entity) return null
-  return { serverUrl: server, entityUrl: `/${entity.replace(/^\/+/, ``)}` }
-}
-
-function pickString(
-  value: string | Array<string> | null | undefined
-): string | null {
-  if (Array.isArray(value)) return value[0] ?? null
-  return typeof value === `string` ? value : null
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   Outlet,
   createHashHistory,
@@ -371,22 +371,56 @@ function RootShell(): React.ReactElement {
   )
 
   const { servers, setActiveServer } = useServerConnection()
+  // An open-session deep link is always *pulled* from main
+  // (`getPendingSession`), never received as a pushed payload: a push races
+  // React mounting its listener on a cold start and can be lost. The renderer
+  // pulls on mount (cold start) and again on each `onOpenSession` wake-up
+  // signal (a link arriving while the window is already up). The pull clears
+  // main's copy, so the payload is consumed exactly once. A separate effect
+  // resolves it only once `servers` actually contains the target — routing
+  // before then would open the entity against whatever server happened to be
+  // active rather than the link's server.
+  const [pendingOpenSession, setPendingOpenSession] = useState<{
+    serverId: string | null
+    serverUrl: string
+    entityUrl: string
+  } | null>(null)
+
   useEffect(() => {
-    const off = window.electronAPI?.onOpenSession?.((payload) => {
-      if (!payload.serverId) {
-        showToast({
-          title: `Can't open this session`,
-          description: `It lives on a server you haven't added (${payload.serverUrl}).`,
-          tone: `warning`,
-        })
-        return
-      }
-      const target = servers.find((s) => s.id === payload.serverId)
-      if (target) setActiveServer(target)
-      navigateToEntity(payload.entityUrl)
-    })
-    return () => off?.()
-  }, [servers, setActiveServer, navigateToEntity])
+    let cancelled = false
+    const consumePending = () => {
+      void window.electronAPI?.getPendingSession?.().then((payload) => {
+        if (!cancelled && payload) setPendingOpenSession(payload)
+      })
+    }
+    const off = window.electronAPI?.onOpenSession?.(consumePending)
+    consumePending()
+    return () => {
+      cancelled = true
+      off?.()
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!pendingOpenSession) return
+    const payload = pendingOpenSession
+    if (!payload.serverId) {
+      showToast({
+        title: `Can't open this session`,
+        description: `It lives on a server you haven't added (${payload.serverUrl}).`,
+        tone: `warning`,
+      })
+      setPendingOpenSession(null)
+      return
+    }
+    const target = servers.find((s) => s.id === payload.serverId)
+    // Target server known to main but not yet hydrated in the renderer — wait
+    // for `servers` to populate; this effect re-runs when it changes.
+    if (!target) return
+    setActiveServer(target)
+    navigateToEntity(payload.entityUrl)
+    setPendingOpenSession(null)
+  }, [pendingOpenSession, servers, setActiveServer, navigateToEntity])
 
   // ⌘/Ctrl-click + middle-click on a sidebar row → open the entity to
   // the right of the active tile, rather than replacing it (matches

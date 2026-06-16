@@ -36,5 +36,6 @@ Clicking or tapping the link opens the app and navigates to the session:
 - On mobile, if you are not signed in or have not set up a server, onboarding
   runs first and the session opens once setup completes.
 - If the link points at a server you have not added, the app tells you instead
-  of opening (desktop), or opens onboarding for setup (mobile). For now there is
-  no web-browser fallback.
+  of opening, on both desktop and mobile — it will not silently connect to an
+  unknown server. (On mobile, if you have not finished onboarding or set up any
+  server yet, onboarding runs first.) For now there is no web-browser fallback.

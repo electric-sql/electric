@@ -18,18 +18,11 @@ import {
   removeCloudSavedServers,
 } from './savedServers'
 import { prepareServerHeaders } from './serverHeaders'
+import { hostOf } from './serverHost'
 import { isSessionDeepLink } from './sessionLinks'
 
 const SERVER_URL_KEY = `electric-agents-mobile.server-url`
 const ONBOARDING_DISMISSED_KEY = `electric-agents-mobile.onboarding-dismissed`
-
-function hostOf(url: string): string {
-  try {
-    return new URL(url).host || url
-  } catch {
-    return url
-  }
-}
 
 type MobileAppState = {
   loading: boolean

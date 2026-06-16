@@ -1,10 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, StyleSheet, View } from 'react-native'
+import {
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native'
 import { Redirect } from 'expo-router'
 import { useMobileAppState } from '../src/lib/MobileAppState'
 import { parseSessionDeepLink } from '../src/lib/sessionLinks'
-import { addSavedServer, getSavedServers } from '../src/lib/savedServers'
+import { getSavedServers } from '../src/lib/savedServers'
 import { getCloudServiceIdFromServerUrl } from '../src/lib/cloudAgentUrls'
+import { decideOpenSession } from '../src/lib/openSessionDecision'
 import { useTokens } from '../src/lib/ThemeProvider'
 import type { Tokens } from '../src/lib/theme'
 
@@ -16,6 +23,10 @@ import type { Tokens } from '../src/lib/theme'
  * clear). Switches the active server to the link's server when needed, then
  * redirects to the session. Mirrors `app/oauth/callback.tsx`: render-phase
  * `<Redirect>` for navigation, a ref-guarded effect for state mutations.
+ *
+ * Like the desktop app, an untrusted link can only switch to a server the
+ * user has *already added*; a link pointing at an unknown server is refused
+ * rather than silently added + connected to (it could be attacker-controlled).
  */
 export default function OpenSessionRoute(): React.ReactElement {
   const {
@@ -32,56 +43,44 @@ export default function OpenSessionRoute(): React.ReactElement {
       pendingSessionLink ? parseSessionDeepLink(pendingSessionLink) : null,
     [pendingSessionLink]
   )
-  const targetServer = target ? target.serverUrl.replace(/\/+$/, ``) : null
-  const activeServer = serverUrl ? serverUrl.replace(/\/+$/, ``) : null
-  const activeMatches = targetServer !== null && targetServer === activeServer
-  const isCloud =
-    targetServer !== null &&
-    getCloudServiceIdFromServerUrl(targetServer) !== null
 
   const [destination, setDestination] = useState<string | null>(null)
   const [abandoned, setAbandoned] = useState(false)
+  const [refusedHost, setRefusedHost] = useState<string | null>(null)
   const handledRef = useRef(false)
 
   useEffect(() => {
     if (handledRef.current) return
-    // No usable link, or a Cloud server we can't silently switch to
-    // (Cloud needs sign-in) — give up and clear the pending link.
-    if (!target || (isCloud && !activeMatches)) {
-      handledRef.current = true
-      setPendingSessionLink(null)
-      setAbandoned(true)
-      return
+    const decision = decideOpenSession({
+      target,
+      activeServerUrl: serverUrl,
+      isCloudServer: (url) => getCloudServiceIdFromServerUrl(url) !== null,
+      isSavedServer: (url) => getSavedServers().some((s) => s.url === url),
+    })
+    switch (decision.kind) {
+      case `abandon`:
+        handledRef.current = true
+        setPendingSessionLink(null)
+        setAbandoned(true)
+        return
+      case `route`:
+        // Capture the destination BEFORE clearing pending (which clears target).
+        handledRef.current = true
+        setDestination(decision.entityUrl)
+        setPendingSessionLink(null)
+        return
+      case `refuse`:
+        handledRef.current = true
+        setPendingSessionLink(null)
+        setRefusedHost(decision.host)
+        return
+      case `switch`:
+        // Activate the (already-saved) server. The serverUrl change re-renders;
+        // the next pass yields a `route` decision and navigates to the session.
+        void saveServerUrl(decision.serverUrl)
+        return
     }
-    if (activeMatches) {
-      // Capture the destination BEFORE clearing pending (which clears target).
-      handledRef.current = true
-      setDestination(target.entityUrl)
-      setPendingSessionLink(null)
-      return
-    }
-    // Self-hosted server we can switch to: add it if missing, then activate.
-    // The serverUrl change re-renders; next pass hits the activeMatches branch.
-    if (
-      targetServer &&
-      !getSavedServers().some((s) => s.url === targetServer)
-    ) {
-      addSavedServer({
-        id: targetServer,
-        name: hostOf(targetServer),
-        url: targetServer,
-        source: `manual`,
-      })
-    }
-    if (targetServer) void saveServerUrl(targetServer)
-  }, [
-    target,
-    isCloud,
-    activeMatches,
-    targetServer,
-    setPendingSessionLink,
-    saveServerUrl,
-  ])
+  }, [target, serverUrl, setPendingSessionLink, saveServerUrl])
 
   if (abandoned) return <Redirect href="/" />
   if (destination) {
@@ -91,19 +90,32 @@ export default function OpenSessionRoute(): React.ReactElement {
       />
     )
   }
+  if (refusedHost !== null) {
+    return (
+      <View style={styles.root}>
+        <View style={styles.message}>
+          <Text style={styles.title}>Can&apos;t open this session</Text>
+          <Text style={styles.body}>
+            It lives on a server you haven&apos;t added
+            {refusedHost ? ` (${refusedHost})` : ``}. Add the server in the app
+            first, then open the link again.
+          </Text>
+          <Pressable
+            style={styles.button}
+            onPress={() => setAbandoned(true)}
+            accessibilityRole="button"
+          >
+            <Text style={styles.buttonLabel}>Back to app</Text>
+          </Pressable>
+        </View>
+      </View>
+    )
+  }
   return (
     <View style={styles.root}>
       <ActivityIndicator color={tokens.accent11} />
     </View>
   )
-}
-
-function hostOf(url: string): string {
-  try {
-    return new URL(url).host || url
-  } catch {
-    return url
-  }
 }
 
 function createStyles(tokens: Tokens) {
@@ -113,6 +125,36 @@ function createStyles(tokens: Tokens) {
       alignItems: `center`,
       justifyContent: `center`,
       backgroundColor: tokens.bg,
+      padding: 24,
+    },
+    message: {
+      alignItems: `center`,
+      gap: 12,
+      maxWidth: 360,
+    },
+    title: {
+      color: tokens.text1,
+      fontSize: 18,
+      fontWeight: `600`,
+      textAlign: `center`,
+    },
+    body: {
+      color: tokens.text3,
+      fontSize: 14,
+      lineHeight: 20,
+      textAlign: `center`,
+    },
+    button: {
+      marginTop: 8,
+      paddingVertical: 10,
+      paddingHorizontal: 20,
+      borderRadius: 8,
+      backgroundColor: tokens.accent9,
+    },
+    buttonLabel: {
+      color: tokens.textOnAccent,
+      fontSize: 15,
+      fontWeight: `600`,
     },
   })
 }

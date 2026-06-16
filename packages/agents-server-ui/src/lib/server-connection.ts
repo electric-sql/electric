@@ -405,13 +405,23 @@ declare global {
       onDesktopCommand?: (
         callback: (command: DesktopCommand) => void
       ) => () => void
-      onOpenSession?: (
-        callback: (payload: {
-          serverId: string | null
-          serverUrl: string
-          entityUrl: string
-        }) => void
-      ) => () => void
+      /**
+       * Wake-up signal that an open-session deep link arrived while a window
+       * was already up. Carries no payload — the renderer pulls it via
+       * `getPendingSession` so there's a single consumer for cold and warm
+       * starts alike.
+       */
+      onOpenSession?: (callback: () => void) => () => void
+      /**
+       * Pulls (and clears) any open-session deep link captured by main. Called
+       * on mount (cold start) and on each `onOpenSession` signal (warm start).
+       * Returns null when nothing is pending.
+       */
+      getPendingSession?: () => Promise<{
+        serverId: string | null
+        serverUrl: string
+        entityUrl: string
+      } | null>
       /**
        * Push-based view of the in-process MCP registry. `getSnapshot`
        * returns the latest state (or empty when no runtime is running);

@@ -238,16 +238,19 @@ const api = {
     ipcRenderer.on(`desktop:command`, listener)
     return () => ipcRenderer.removeListener(`desktop:command`, listener)
   },
-  onOpenSession: (
-    callback: (payload: OpenSessionPayload) => void
-  ): (() => void) => {
-    const listener = (
-      _event: Electron.IpcRendererEvent,
-      payload: OpenSessionPayload
-    ) => callback(payload)
+  // Wake-up signal: a deep link arrived while a window was already up. Carries
+  // no payload — the renderer pulls it via `getPendingSession` so there's a
+  // single consumer regardless of cold vs warm start.
+  onOpenSession: (callback: () => void): (() => void) => {
+    const listener = () => callback()
     ipcRenderer.on(`desktop:open-session`, listener)
     return () => ipcRenderer.removeListener(`desktop:open-session`, listener)
   },
+  // Pulls (and clears) any open-session deep link captured by main. Called on
+  // mount (cold start) and on each `onOpenSession` signal (warm start).
+  // Returns null when there's nothing pending.
+  getPendingSession: (): Promise<OpenSessionPayload | null> =>
+    ipcRenderer.invoke(`desktop:get-pending-session`),
   // ── MCP registry surface ────────────────────────────────────────
   // Push-based view of the embedded BuiltinAgentsServer's MCP registry.
   // `getSnapshot()` returns the most recent snapshot (or an empty list
