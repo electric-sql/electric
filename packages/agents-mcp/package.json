@@ -1,6 +1,6 @@
 {
   "name": "@electric-ax/agents-mcp",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Model Context Protocol registry, transports, and OAuth bridges for Electric Agents",
   "keywords": [
     "mcp",

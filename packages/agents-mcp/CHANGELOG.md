@@ -1,5 +1,11 @@
 # @electric-ax/agents-mcp
 
+## 0.6.0
+
+### Minor Changes
+
+- 15beffa: Release all Electric Agents packages as 0.6.
+
 ## 0.2.3
 
 ### Patch Changes

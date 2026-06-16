@@ -1,5 +1,17 @@
 # @electric-ax/agents
 
+## 0.6.0
+
+### Minor Changes
+
+- 15beffa: Release all Electric Agents packages as 0.6.
+
+### Patch Changes
+
+- Updated dependencies [15beffa]
+  - @electric-ax/agents-runtime@0.6.0
+  - @electric-ax/agents-mcp@0.6.0
+
 ## 0.4.19
 
 ### Patch Changes
