@@ -12,6 +12,7 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAgents } from '../src/lib/AgentsProvider'
+import type { ForkPointer } from '../src/lib/agentsClient'
 import { useAgentsRouteGuard } from '../src/lib/useAgentsRouteGuard'
 import { useColorSchemeMode, useTokens } from '../src/lib/ThemeProvider'
 import {
@@ -36,11 +37,10 @@ type SessionDomEmbedProps = {
   inlineQueuedMessages?: Array<OptimisticInboxMessage>
   bottomInset?: number
   onRequestOpenEntity: (entityUrl: string) => Promise<void>
-  // Marshalled so the per-message fork runs over native networking; pointer
-  // shape matches the runtime's `EventPointer`.
+  // Marshalled so the per-message fork runs over native networking.
   onRequestForkEntity?: (
     entityUrl: string,
-    opts?: { pointer?: { offset: string | null; subOffset: number } }
+    opts?: { pointer?: ForkPointer }
   ) => Promise<{ url: string }>
   style?: StyleProp<ViewStyle>
   matchContents?: boolean
