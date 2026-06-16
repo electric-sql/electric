@@ -942,6 +942,55 @@ defmodule Electric.Shapes.FilterTest do
       end)
     end
 
+    @tag :performance
+    test "removing a subquery shape is O(1) in the total number of shapes" do
+      # Each shape lives on its own subquery node (distinct outer equality
+      # value), so no single node ever holds more than one shape. The only thing
+      # that grows is the total number of subquery shapes in the index, and the
+      # cost of removing any one shape must stay flat as that total grows.
+      filter = Filter.new()
+
+      Enum.each(1..@shape_count, fn i ->
+        shape =
+          Shape.new!("table",
+            where: "number = #{i} AND id IN (SELECT id FROM another_table)",
+            inspector: @inspector,
+            feature_flags: ["allow_subqueries"]
+          )
+
+        Filter.add_shape(filter, i, shape)
+      end)
+
+      Enum.each(1..@shape_count, fn i ->
+        remove_reductions = reductions(fn -> Filter.remove_shape(filter, i) end)
+        assert remove_reductions < @max_reductions
+      end)
+    end
+
+    @tag :performance
+    test "removing a subquery shape is O(1) in the number of shapes on its node" do
+      # All shapes share an identical subquery predicate, so they all register on
+      # the same subquery node. Removing one shape must not scan every other
+      # shape registered on that node.
+      filter = Filter.new()
+
+      Enum.each(1..@shape_count, fn i ->
+        shape =
+          Shape.new!("table",
+            where: "id IN (SELECT id FROM another_table)",
+            inspector: @inspector,
+            feature_flags: ["allow_subqueries"]
+          )
+
+        Filter.add_shape(filter, i, shape)
+      end)
+
+      Enum.each(1..@shape_count, fn i ->
+        remove_reductions = reductions(fn -> Filter.remove_shape(filter, i) end)
+        assert remove_reductions < @max_reductions
+      end)
+    end
+
     defp reductions(fun) do
       {:reductions, reductions_before} = :erlang.process_info(self(), :reductions)
       fun.()
