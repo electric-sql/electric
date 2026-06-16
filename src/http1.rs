@@ -5,7 +5,9 @@
 // strategy; everything here is a plain function over slices/Vecs so the two
 // engines can't drift on protocol details.
 
-use crate::api::{status_reason, Method, SECURITY_HEADERS};
+use bytes::{Bytes, BytesMut};
+
+use crate::api::{status_reason, Method, MAX_BODY_BYTES, SECURITY_HEADERS};
 
 pub(crate) const MAX_HEADER_BYTES: usize = 64 * 1024;
 /// Bodies up to this size are coalesced into the head buffer and sent as one
@@ -143,4 +145,118 @@ pub(crate) fn frame_chunk(out: &mut Vec<u8>, b: &[u8]) {
     out.extend_from_slice(format!("{:x}\r\n", b.len()).as_bytes());
     out.extend_from_slice(b);
     out.extend_from_slice(b"\r\n");
+}
+
+// ---- request reading (shared over a byte source) ----
+
+/// A buffered, async byte source: the engine-specific transport seam. Each
+/// engine implements it over its own buffer + I/O primitive (tokio `BytesMut` +
+/// `read_buf`, or tokio-uring `Vec<u8>` + owned-buffer `read`); all request
+/// reading (head, sized body, chunked body) below is shared over this trait so
+/// the protocol logic lives in one place.
+pub(crate) trait ByteSource {
+    /// Bytes received but not yet consumed.
+    fn buffered(&self) -> &[u8];
+    /// Discard the first `n` buffered bytes (already parsed).
+    fn consume(&mut self, n: usize);
+    /// Read more bytes from the transport into the buffer; `false` on clean EOF.
+    async fn fill(&mut self) -> std::io::Result<bool>;
+}
+
+pub(crate) enum HeadResult {
+    /// Clean connection close (no partial request pending).
+    Eof,
+    /// Malformed or oversized request head — caller should send 400 and close.
+    Bad,
+    Head(ReqHead),
+}
+
+/// Read and parse the next request head, filling from the source as needed.
+pub(crate) async fn read_head<S: ByteSource>(src: &mut S) -> std::io::Result<HeadResult> {
+    loop {
+        match try_parse_head(src.buffered()) {
+            Err(()) => return Ok(HeadResult::Bad),
+            Ok(Some((head, consumed))) => {
+                src.consume(consumed);
+                return Ok(HeadResult::Head(head));
+            }
+            Ok(None) => {
+                if !src.fill().await? {
+                    return Ok(HeadResult::Eof);
+                }
+            }
+        }
+    }
+}
+
+/// Read a fixed-length request body. `Ok(None)` means the body exceeds
+/// `MAX_BODY_BYTES` or the connection ended early (caller sends 413 / closes).
+pub(crate) async fn read_sized<S: ByteSource>(
+    src: &mut S,
+    n: usize,
+) -> std::io::Result<Option<Bytes>> {
+    if n > MAX_BODY_BYTES {
+        return Ok(None);
+    }
+    while src.buffered().len() < n {
+        if !src.fill().await? {
+            return Ok(None);
+        }
+    }
+    let body = Bytes::copy_from_slice(&src.buffered()[..n]);
+    src.consume(n);
+    Ok(Some(body))
+}
+
+/// Decode a `transfer-encoding: chunked` request body. `Ok(None)` on a
+/// malformed body, an oversized body (`MAX_BODY_BYTES`), or early EOF — bounded
+/// so a client that never terminates the body can't grow memory without limit.
+pub(crate) async fn decode_chunked<S: ByteSource>(src: &mut S) -> std::io::Result<Option<Bytes>> {
+    let mut out = BytesMut::new();
+    loop {
+        // chunk-size line
+        let line_end = loop {
+            if let Some(pos) = find_crlf(src.buffered()) {
+                break pos;
+            }
+            if src.buffered().len() > MAX_HEADER_BYTES || !src.fill().await? {
+                return Ok(None);
+            }
+        };
+        let size = {
+            let line = std::str::from_utf8(&src.buffered()[..line_end]).unwrap_or("");
+            let s = line.split(';').next().unwrap_or("").trim();
+            match usize::from_str_radix(s, 16) {
+                Ok(v) => v,
+                Err(_) => return Ok(None),
+            }
+        };
+        src.consume(line_end + 2);
+        if size == 0 {
+            // trailer section: consume until the terminating blank line, bounded
+            // by MAX_HEADER_BYTES.
+            loop {
+                if let Some(pos) = find_crlf(src.buffered()) {
+                    src.consume(pos + 2);
+                    if pos == 0 {
+                        return Ok(Some(out.freeze()));
+                    }
+                } else if src.buffered().len() > MAX_HEADER_BYTES || !src.fill().await? {
+                    return Ok(None);
+                }
+            }
+        }
+        // Guard against overflow from a hostile chunk-size line.
+        let need = match size.checked_add(2) {
+            Some(v) if out.len().checked_add(size).map(|t| t <= MAX_BODY_BYTES).unwrap_or(false) => v,
+            _ => return Ok(None),
+        };
+        while src.buffered().len() < need {
+            if !src.fill().await? {
+                return Ok(None);
+            }
+        }
+        out.extend_from_slice(&src.buffered()[..size]);
+        src.consume(need); // chunk data + CRLF
+    }
 }

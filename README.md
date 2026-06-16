@@ -61,6 +61,16 @@ Durable by default: an append returns only after the fsync that covers it. State
 - **Three HTTP engines** — `hyper` (default, portable), a custom `raw` HTTP/1.1 loop that owns the socket to serve reads with `sendfile(2)` on Linux, and `uring` (Linux): a thread-per-core current-thread runtime backed by **io_uring** (via tokio-uring) for socket and file I/O — batched submit/complete with no epoll round-trip and no blocking-pool handoff for cold reads. All three pass the full suite; the request handlers are shared, only the I/O loop differs.
 - **Resident tail cache** — the most recent appended chunk is kept in memory, so caught-up live readers (long-poll / SSE) and immediate catch-up reads are served from one shared copy instead of a per-subscriber file read.
 
+## Choosing an engine
+
+All three speak the same protocol and pass the full suite; they differ only in how they move bytes. Pick with `--http-engine`:
+
+- **`hyper`** (default) — portable, runs anywhere (any OS, any kernel). Start here unless you have a reason not to.
+- **`raw`** (Linux) — the custom HTTP/1.1 loop. Serves reads with `sendfile(2)` (zero-copy page cache → socket, ~10× less CPU per byte) and wins large reads. `sendfile` is an always-permitted syscall, so this works even under restrictive container seccomp where io_uring is blocked — making it the practical fast engine for most Linux deployments. `--read-offload tail` (the default) keeps a cold backfill's disk fault off the async workers.
+- **`uring`** (Linux, **experimental**) — io*uring via tokio-uring, thread-per-core. Fastest on small high-concurrency reads (batched submit/complete, no epoll round-trip, no blocking-pool handoff). \*\*Requires the `io_uring*\*`syscalls to be permitted** — many container seccomp profiles, gVisor, and hardened/locked-down hosts block them, and the server will fail to start there. Enable it on bare metal or tuned hosts where io_uring is available; otherwise prefer`raw`.
+
+See [`bench/RESULTS.md`](bench/RESULTS.md) for the measured trade-offs (uring wins small reads; raw/sendfile wins large reads and has the tightest cold-read tail; uring uses more CPU for its throughput).
+
 ## Conformance
 
 ```bash

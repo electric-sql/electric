@@ -16,13 +16,13 @@
 use std::os::fd::AsRawFd;
 use std::sync::Arc;
 
-use bytes::{Bytes, BytesMut};
+use bytes::Bytes;
 use tokio_uring::buf::BoundedBuf;
 use tokio_uring::net::{TcpListener, TcpStream};
 
-use crate::api::{Body, Req, Resp, MAX_BODY_BYTES};
+use crate::api::{Body, Req, Resp};
 use crate::handlers;
-use crate::http1::{self, find_crlf, try_parse_head, MAX_HEADER_BYTES};
+use crate::http1;
 use crate::store::{Segment, Store};
 
 const READ_CHUNK: usize = 64 * 1024;
@@ -82,40 +82,55 @@ fn set_nodelay(stream: &TcpStream) {
     }
 }
 
-/// Read more bytes from the socket into `acc`, reusing `rbuf`'s allocation.
-/// Returns Ok(false) on clean EOF.
-async fn fill(stream: &TcpStream, acc: &mut Vec<u8>, rbuf: Vec<u8>) -> std::io::Result<(bool, Vec<u8>)> {
-    let (res, rbuf) = stream.read(rbuf).await;
-    let n = res?;
-    if n == 0 {
-        return Ok((false, rbuf));
+/// Adapts a tokio-uring `TcpStream` + accumulator to the shared `ByteSource`
+/// request reader. `scratch` is a reusable owned read buffer (tokio-uring's
+/// `read` takes ownership of the buffer and returns it); it is borrowed from the
+/// connection loop so it persists across requests (no per-request allocation).
+struct UringSource<'a> {
+    stream: &'a TcpStream,
+    acc: &'a mut Vec<u8>,
+    scratch: &'a mut Vec<u8>,
+}
+
+impl http1::ByteSource for UringSource<'_> {
+    fn buffered(&self) -> &[u8] {
+        self.acc
     }
-    acc.extend_from_slice(&rbuf[..n]);
-    Ok((true, rbuf))
+    fn consume(&mut self, n: usize) {
+        self.acc.drain(..n);
+    }
+    async fn fill(&mut self) -> std::io::Result<bool> {
+        let buf = std::mem::take(self.scratch);
+        let (res, buf) = self.stream.read(buf).await;
+        let n = res?;
+        if n > 0 {
+            self.acc.extend_from_slice(&buf[..n]);
+        }
+        *self.scratch = buf;
+        Ok(n > 0)
+    }
 }
 
 async fn conn_loop(store: Arc<Store>, stream: TcpStream) -> std::io::Result<()> {
     let mut acc: Vec<u8> = Vec::with_capacity(16 * 1024);
-    let mut rbuf: Vec<u8> = vec![0u8; READ_CHUNK];
+    let mut scratch: Vec<u8> = vec![0u8; READ_CHUNK];
     loop {
-        // ---- request head ----
-        let (head, consumed) = loop {
-            match try_parse_head(&acc) {
-                Err(()) => {
+        // ---- request head ---- (Source scoped so `stream` is free to write.)
+        let head = {
+            let mut src = UringSource {
+                stream: &stream,
+                acc: &mut acc,
+                scratch: &mut scratch,
+            };
+            match http1::read_head(&mut src).await? {
+                http1::HeadResult::Eof => return Ok(()),
+                http1::HeadResult::Bad => {
                     let _ = write_all(&stream, bad_request()).await;
                     return Ok(());
                 }
-                Ok(Some(parsed)) => break parsed,
-                Ok(None) => {
-                    let (more, b) = fill(&stream, &mut acc, rbuf).await?;
-                    rbuf = b;
-                    if !more {
-                        return Ok(()); // clean EOF between requests
-                    }
-                }
+                http1::HeadResult::Head(h) => h,
             }
         };
-        acc.drain(..consumed);
 
         if head.expect_continue {
             write_all(&stream, b"HTTP/1.1 100 Continue\r\n\r\n".to_vec()).await?;
@@ -123,7 +138,15 @@ async fn conn_loop(store: Arc<Store>, stream: TcpStream) -> std::io::Result<()> 
 
         // ---- request body ----
         let body = if head.chunked {
-            match read_chunked(&stream, &mut acc, &mut rbuf).await? {
+            let decoded = {
+                let mut src = UringSource {
+                    stream: &stream,
+                    acc: &mut acc,
+                    scratch: &mut scratch,
+                };
+                http1::decode_chunked(&mut src).await?
+            };
+            match decoded {
                 Some(b) => b,
                 None => {
                     let _ = write_all(&stream, bad_request()).await;
@@ -133,19 +156,22 @@ async fn conn_loop(store: Arc<Store>, stream: TcpStream) -> std::io::Result<()> 
         } else {
             match head.content_length.unwrap_or(0) {
                 0 => Bytes::new(),
-                n if n > MAX_BODY_BYTES => {
-                    let _ = write_all(&stream, payload_too_large()).await;
-                    return Ok(());
-                }
                 n => {
-                    while acc.len() < n {
-                        let (more, b) = fill(&stream, &mut acc, rbuf).await?;
-                        rbuf = b;
-                        if !more {
+                    let read = {
+                        let mut src = UringSource {
+                            stream: &stream,
+                            acc: &mut acc,
+                            scratch: &mut scratch,
+                        };
+                        http1::read_sized(&mut src, n).await?
+                    };
+                    match read {
+                        Some(b) => b,
+                        None => {
+                            let _ = write_all(&stream, payload_too_large()).await;
                             return Ok(());
                         }
                     }
-                    Bytes::copy_from_slice(&acc.drain(..n).collect::<Vec<u8>>())
                 }
             }
         };
@@ -164,71 +190,6 @@ async fn conn_loop(store: Arc<Store>, stream: TcpStream) -> std::io::Result<()> 
         if !keep_alive {
             return Ok(());
         }
-    }
-}
-
-/// Decode a chunked request body from `acc`, reading more as needed.
-async fn read_chunked(
-    stream: &TcpStream,
-    acc: &mut Vec<u8>,
-    rbuf: &mut Vec<u8>,
-) -> std::io::Result<Option<Bytes>> {
-    let mut out = BytesMut::new();
-    loop {
-        // size line
-        let line_end = loop {
-            if let Some(pos) = find_crlf(acc) {
-                break pos;
-            }
-            if acc.len() > MAX_HEADER_BYTES {
-                return Ok(None);
-            }
-            let (more, b) = fill(stream, acc, std::mem::take(rbuf)).await?;
-            *rbuf = b;
-            if !more {
-                return Ok(None);
-            }
-        };
-        let size_str = std::str::from_utf8(&acc[..line_end]).unwrap_or("");
-        let size_str = size_str.split(';').next().unwrap_or("").trim();
-        let size = match usize::from_str_radix(size_str, 16) {
-            Ok(s) => s,
-            Err(_) => return Ok(None),
-        };
-        acc.drain(..line_end + 2);
-        if size == 0 {
-            // trailers until blank line
-            loop {
-                if let Some(pos) = find_crlf(acc) {
-                    acc.drain(..pos + 2);
-                    if pos == 0 {
-                        return Ok(Some(out.freeze()));
-                    }
-                } else {
-                    if acc.len() > MAX_HEADER_BYTES {
-                        return Ok(None);
-                    }
-                    let (more, b) = fill(stream, acc, std::mem::take(rbuf)).await?;
-                    *rbuf = b;
-                    if !more {
-                        return Ok(None);
-                    }
-                }
-            }
-        }
-        let need = match size.checked_add(2) {
-            Some(n) if out.len().checked_add(size).map(|t| t <= MAX_BODY_BYTES).unwrap_or(false) => n,
-            _ => return Ok(None),
-        };
-        while acc.len() < need {
-            let (more, b) = fill(stream, acc, std::mem::take(rbuf)).await?;
-            *rbuf = b;
-            if !more {
-                return Ok(None);
-            }
-        }
-        out.extend_from_slice(&acc[..size]);
-        acc.drain(..need);
     }
 }
 

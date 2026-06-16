@@ -17,13 +17,13 @@
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Arc;
 
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use bytes::{Buf, Bytes, BytesMut};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
-use crate::api::{Body, Req, Resp, MAX_BODY_BYTES};
+use crate::api::{Body, Req, Resp};
 use crate::handlers;
-use crate::http1::{self, find_crlf, try_parse_head, MAX_HEADER_BYTES};
+use crate::http1;
 use crate::store::{Segment, Store};
 
 /// Where the raw engine runs sendfile for a FileRange read.
@@ -86,102 +86,48 @@ pub async fn serve(store: Arc<Store>, listener: TcpListener) {
     }
 }
 
-async fn read_more(stream: &mut TcpStream, buf: &mut BytesMut) -> std::io::Result<bool> {
-    Ok(stream.read_buf(buf).await? > 0)
+/// Adapts a tokio `TcpStream` + reusable `BytesMut` to the shared `ByteSource`
+/// request reader. Reads land directly in the `BytesMut`'s spare capacity.
+struct RawSource<'a> {
+    stream: &'a mut TcpStream,
+    buf: &'a mut BytesMut,
 }
 
-/// Read `n` body bytes (some may already be buffered).
-async fn read_sized_body(
-    stream: &mut TcpStream,
-    buf: &mut BytesMut,
-    n: usize,
-) -> std::io::Result<Option<Bytes>> {
-    if n > MAX_BODY_BYTES {
-        return Ok(None);
+impl http1::ByteSource for RawSource<'_> {
+    fn buffered(&self) -> &[u8] {
+        self.buf
     }
-    while buf.len() < n {
-        if !read_more(stream, buf).await? {
-            return Ok(None);
-        }
+    fn consume(&mut self, n: usize) {
+        self.buf.advance(n);
     }
-    Ok(Some(buf.split_to(n).freeze()))
-}
-
-/// Decode a chunked request body.
-async fn read_chunked_body(
-    stream: &mut TcpStream,
-    buf: &mut BytesMut,
-) -> std::io::Result<Option<Bytes>> {
-    let mut out = BytesMut::new();
-    loop {
-        // Find the size line.
-        let line_end = loop {
-            if let Some(pos) = find_crlf(buf) {
-                break pos;
-            }
-            if buf.len() > MAX_HEADER_BYTES || !read_more(stream, buf).await? {
-                return Ok(None);
-            }
-        };
-        let size_str = std::str::from_utf8(&buf[..line_end]).unwrap_or("");
-        let size_str = size_str.split(';').next().unwrap_or("").trim();
-        let size = match usize::from_str_radix(size_str, 16) {
-            Ok(s) => s,
-            Err(_) => return Ok(None),
-        };
-        buf.advance(line_end + 2);
-        if size == 0 {
-            // Trailer section: consume until blank line. Bounded by
-            // MAX_HEADER_BYTES so a client that sends `0\r\n` then an endless
-            // stream that never forms the terminating blank line can't grow
-            // `buf` without limit (OOM / DoS).
-            loop {
-                if let Some(pos) = find_crlf(buf) {
-                    buf.advance(pos + 2);
-                    if pos == 0 {
-                        return Ok(Some(out.freeze()));
-                    }
-                } else if buf.len() > MAX_HEADER_BYTES || !read_more(stream, buf).await? {
-                    return Ok(None);
-                }
-            }
-        }
-        // Guard against overflow from a hostile chunk-size line.
-        let need = match size.checked_add(2) {
-            Some(n) if out.len().checked_add(size).map(|t| t <= MAX_BODY_BYTES).unwrap_or(false) => n,
-            _ => return Ok(None),
-        };
-        while buf.len() < need {
-            if !read_more(stream, buf).await? {
-                return Ok(None);
-            }
-        }
-        out.put_slice(&buf[..size]);
-        buf.advance(need); // chunk data + CRLF
+    async fn fill(&mut self) -> std::io::Result<bool> {
+        Ok(self.stream.read_buf(self.buf).await? > 0)
     }
 }
 
 async fn conn_loop(store: Arc<Store>, mut stream: TcpStream) -> std::io::Result<()> {
+    const BAD_REQUEST: &[u8] =
+        b"HTTP/1.1 400 Bad Request\r\ncontent-length: 0\r\nconnection: close\r\n\r\n";
+    const TOO_LARGE: &[u8] =
+        b"HTTP/1.1 413 Payload Too Large\r\ncontent-length: 0\r\nconnection: close\r\n\r\n";
     let mut buf = BytesMut::with_capacity(16 * 1024);
     loop {
-        // ---- read request head ----
-        let (head, consumed) = loop {
-            match try_parse_head(&buf) {
-                Err(()) => {
-                    let _ = stream
-                        .write_all(b"HTTP/1.1 400 Bad Request\r\ncontent-length: 0\r\nconnection: close\r\n\r\n")
-                        .await;
+        // ---- read request head ---- (Source scoped so `stream` is free to
+        // write the response / error once the read phase ends.)
+        let head = {
+            let mut src = RawSource {
+                stream: &mut stream,
+                buf: &mut buf,
+            };
+            match http1::read_head(&mut src).await? {
+                http1::HeadResult::Eof => return Ok(()),
+                http1::HeadResult::Bad => {
+                    let _ = stream.write_all(BAD_REQUEST).await;
                     return Ok(());
                 }
-                Ok(Some(parsed)) => break parsed,
-                Ok(None) => {
-                    if !read_more(&mut stream, &mut buf).await? {
-                        return Ok(()); // clean EOF between requests
-                    }
-                }
+                http1::HeadResult::Head(h) => h,
             }
         };
-        buf.advance(consumed);
 
         if head.expect_continue {
             stream.write_all(b"HTTP/1.1 100 Continue\r\n\r\n").await?;
@@ -189,27 +135,39 @@ async fn conn_loop(store: Arc<Store>, mut stream: TcpStream) -> std::io::Result<
 
         // ---- read request body ----
         let body = if head.chunked {
-            match read_chunked_body(&mut stream, &mut buf).await? {
+            let decoded = {
+                let mut src = RawSource {
+                    stream: &mut stream,
+                    buf: &mut buf,
+                };
+                http1::decode_chunked(&mut src).await?
+            };
+            match decoded {
                 Some(b) => b,
                 None => {
-                    let _ = stream
-                        .write_all(b"HTTP/1.1 400 Bad Request\r\ncontent-length: 0\r\nconnection: close\r\n\r\n")
-                        .await;
+                    let _ = stream.write_all(BAD_REQUEST).await;
                     return Ok(());
                 }
             }
         } else {
             match head.content_length.unwrap_or(0) {
                 0 => Bytes::new(),
-                n => match read_sized_body(&mut stream, &mut buf, n).await? {
-                    Some(b) => b,
-                    None => {
-                        let _ = stream
-                            .write_all(b"HTTP/1.1 413 Payload Too Large\r\ncontent-length: 0\r\nconnection: close\r\n\r\n")
-                            .await;
-                        return Ok(());
+                n => {
+                    let read = {
+                        let mut src = RawSource {
+                            stream: &mut stream,
+                            buf: &mut buf,
+                        };
+                        http1::read_sized(&mut src, n).await?
+                    };
+                    match read {
+                        Some(b) => b,
+                        None => {
+                            let _ = stream.write_all(TOO_LARGE).await;
+                            return Ok(());
+                        }
                     }
-                },
+                }
             }
         };
 
