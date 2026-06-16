@@ -386,8 +386,22 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
 
   # Delete this shape's node-local member rows for this node by enumerating the shape's
   # own values (scoped to the node's subquery_ref) from its membership rows and
-  # point-deleting each. O(V_node · log n); touches only this shape's rows. Relies on
-  # membership rows still being present (consumer stopped before removal — see spec).
+  # point-deleting each. O(V_node · log n); touches only this shape's rows.
+  #
+  # INVARIANT (the safety of this approach rests on it): a node-member row is always a
+  # subset of the shape's membership values — `add_value/5` and `remove_value/5` write
+  # and remove the membership row alongside the node-member rows — so enumerating
+  # membership finds every node-member row to delete. This requires membership rows to
+  # outlive node removal, and to not be mutated concurrently:
+  #   * Ordering: `Filter.remove_shape/2` runs this (via `remove_shape/5`) BEFORE
+  #     `unregister_shape/2` deletes the `:membership` rows, so they are still present.
+  #   * No concurrent writer: the shape's consumer is the only process that writes
+  #     membership/node-member rows, and it is stopped synchronously before
+  #     `Filter.remove_shape/2` runs (`ShapeCleaner.remove_shape_immediate/3`), so no
+  #     `add_value`/`remove_value` can race this.
+  # The "no orphan rows" test guards exactly this path. Reordering cleanup to remove
+  # from the filter before stopping the consumer would reintroduce orphaned node-member
+  # rows.
   defp delete_node_members(table, node_id, shape_id, polarity, next_condition_id, subquery_ref) do
     tag =
       case polarity do
