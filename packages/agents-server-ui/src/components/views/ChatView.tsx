@@ -104,8 +104,19 @@ export function ChatLogView({
   onReplyToComment?: (target: SelectedCommentTarget) => void
 }): React.ReactElement {
   const connectUrl = isSpawning ? null : entityUrl
-  const { timelineRows, pendingInbox, entities, db, loading, error } =
-    useEntityTimeline(baseUrl || null, connectUrl)
+  const {
+    timelineRows,
+    pendingInbox,
+    entities,
+    db,
+    loading,
+    error,
+    commentsEnabled,
+  } = useEntityTimeline(baseUrl || null, connectUrl)
+  // Only expose the reply affordance when the entity type declares comments —
+  // the native shell always passes the callback, so gate it here (mirrors
+  // desktop GenericChatBody's `onReplyToRow={showComments ? ... : undefined}`).
+  const replyToComment = commentsEnabled ? onReplyToComment : undefined
   const canFork = useEntityPermission(entity, `fork`)
   const navigate = useNavigate()
   // `onCommentTargetClick` jumps from a reply's snapshot to the original row.
@@ -197,8 +208,8 @@ export function ChatLogView({
       entities={entities}
       scrollToBottomSignal={scrollToBottomSignal}
       forkFromHereByRunKey={commentsOnly ? undefined : forkFromHereByRunKey}
-      onReplyToRow={onReplyToComment}
-      onCommentTargetClick={onReplyToComment ? setFocusTarget : undefined}
+      onReplyToRow={replyToComment}
+      onCommentTargetClick={replyToComment ? setFocusTarget : undefined}
       focusTarget={focusTarget}
       onFocusTargetHandled={() => setFocusTarget(null)}
     />
