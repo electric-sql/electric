@@ -23,10 +23,6 @@ export default ({ config }: ConfigContext): ExpoConfig =>
       version: packageJson.version,
       runtimeVersion: packageJson.version,
       orientation: `portrait`,
-      // App icon — the Electric mark (cyan bolt on dark). Without this Expo
-      // prebuild falls back to its default placeholder icon, which on Android
-      // produced a green-robot launcher icon that didn't match the Play Store
-      // listing and got the app rejected for a "store listing mismatch".
       icon: `./assets/icon.png`,
       userInterfaceStyle: `automatic`,
       newArchEnabled: true,
@@ -69,9 +65,6 @@ export default ({ config }: ConfigContext): ExpoConfig =>
         package: applicationId,
         versionCode,
         edgeToEdgeEnabled: true,
-        // Adaptive launcher icon: the cyan bolt mark centered within the
-        // safe zone over the brand's dark background (#101217). This is what
-        // the launcher actually installs, so it must match the store icon.
         adaptiveIcon: {
           foregroundImage: `./assets/adaptive-icon.png`,
           backgroundColor: `#101217`,
