@@ -22,12 +22,34 @@ export const COMPACTION_CHECKPOINT_NAME = `compaction_summary`
 export const COMPACTION_CHECKPOINT_ID = `compaction`
 
 /**
- * Whether a `context_inserted` row's attrs mark it as a compaction checkpoint.
+ * Lifecycle of a compaction checkpoint, carried in `attrs.status`:
+ * - `running`  — summarization in flight (UI shows a live "Compacting…" entry)
+ * - `complete` — summary ready; acts as the timeline watermark
+ * - `failed`   — summarization failed; turn proceeded uncompacted
+ */
+export type CompactionStatus = `running` | `complete` | `failed`
+
+/**
+ * Whether a `context_inserted` row's attrs mark it as a compaction checkpoint
+ * (any status).
  */
 export function isCompactionCheckpointAttrs(
   attrs: Record<string, string | number | boolean> | undefined
 ): boolean {
   return attrs?.kind === COMPACTION_CHECKPOINT_KIND
+}
+
+/**
+ * Whether attrs mark a *completed* compaction checkpoint — the only state that
+ * acts as the reconstruction watermark. A `running` (or crashed) checkpoint
+ * must never hide history.
+ */
+export function isCompleteCompactionCheckpointAttrs(
+  attrs: Record<string, string | number | boolean> | undefined
+): boolean {
+  return (
+    attrs?.kind === COMPACTION_CHECKPOINT_KIND && attrs?.status === `complete`
+  )
 }
 
 /**

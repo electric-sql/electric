@@ -22,7 +22,10 @@ import type {
   TimestampedMessage,
 } from './types'
 import { COMPOSER_INPUT_MESSAGE_TYPE } from './composer-input'
-import { isCompactionCheckpointAttrs } from './compaction'
+import {
+  isCompactionCheckpointAttrs,
+  isCompleteCompactionCheckpointAttrs,
+} from './compaction'
 
 function asString(value: unknown, fallback = ``): string {
   if (typeof value === `string`) {
@@ -469,16 +472,28 @@ export function timelineMessages(
   const attachmentsByInboxKey = attachmentsBySubjectInboxKey(db)
   const messages: Array<TimestampedMessage> = []
 
-  // A compaction checkpoint summarizes everything before it: drop items below
-  // its order (the watermark) and let the checkpoint itself render the summary
-  // in their place. No checkpoint → watermark stays -Infinity → no-op.
-  const compactionWatermark = latestCompactionWatermark(items)
+  // A completed compaction checkpoint summarizes everything before it: drop
+  // items below its order (the watermark) and let the checkpoint itself render
+  // the summary in their place. Only `complete` checkpoints count, so a
+  // `running` (or crashed) one never hides history. No checkpoint → watermark
+  // stays -Infinity → no-op.
+  const compactionWatermark = latestCompleteCompactionWatermark(items)
 
   for (const item of items) {
     if (item.at < since) {
       continue
     }
     if (item.at < compactionWatermark) {
+      continue
+    }
+    // Compaction checkpoints are UI-only markers, except the active (complete,
+    // watermark) one, which renders the summary. Skip running/failed/older
+    // checkpoints from the model context.
+    if (
+      item.kind === `context_inserted` &&
+      isCompactionCheckpointAttrs(item.attrs) &&
+      item.at !== compactionWatermark
+    ) {
       continue
     }
 
@@ -494,16 +509,20 @@ export function timelineMessages(
 }
 
 /**
- * Order (`at`) of the newest live compaction checkpoint, or -Infinity if none.
- * Everything strictly below it has been summarized into the checkpoint.
+ * Order (`at`) of the newest live *completed* compaction checkpoint, or
+ * -Infinity if none. Everything strictly below it has been summarized into the
+ * checkpoint. `running`/`failed` checkpoints are ignored so an in-flight or
+ * crashed compaction never hides history.
  */
-function latestCompactionWatermark(items: ReadonlyArray<TimelineItem>): number {
+function latestCompleteCompactionWatermark(
+  items: ReadonlyArray<TimelineItem>
+): number {
   let watermark = Number.NEGATIVE_INFINITY
   for (const item of items) {
     if (
       item.kind === `context_inserted` &&
       !item.superseded &&
-      isCompactionCheckpointAttrs(item.attrs) &&
+      isCompleteCompactionCheckpointAttrs(item.attrs) &&
       item.at > watermark
     ) {
       watermark = item.at

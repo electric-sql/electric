@@ -29,6 +29,7 @@ import {
   COMPACTION_CHECKPOINT_ID,
   COMPACTION_CHECKPOINT_KIND,
   COMPACTION_CHECKPOINT_NAME,
+  type CompactionStatus,
 } from './compaction'
 import { summarizeMessages } from './compaction-summarize'
 import { createContextTools } from './tools/context-tools'
@@ -800,13 +801,15 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
           config.db.collections.steps.toArray as ReadonlyArray<ContextUsageStep>
         )
 
-        // Phase 2 hard ceiling: if the last turn left context at/over 95% of
-        // the window, compact synchronously before this model call. Summarize
-        // the current history, persist a compaction checkpoint (so future turns
-        // reconstruct from it via the timeline watermark), and send only the
-        // summary this turn — the current ask is delivered separately as
-        // runInput. The `approxTokens` guard avoids re-compacting an already
-        // compacted (small) history while the last step's usage is still high.
+        // Phase 2 hard ceiling: if the last turn left context at/over 90% of
+        // the window, compact synchronously before this model call. We surface
+        // the work as a status'd checkpoint row so the UI can show it live:
+        // insert a `running` checkpoint, summarize, then mark it `complete`
+        // with the summary (or `failed`). Only a `complete` checkpoint acts as
+        // the timeline watermark, so a crash mid-compaction never hides history.
+        // The current ask is delivered separately as runInput. The `approxTokens`
+        // guard avoids re-compacting an already compacted (small) history while
+        // the last step's usage is still high.
         let workingMessages = messages
         let didCompact = false
         const estimatedHistoryTokens = messages.reduce(
@@ -819,6 +822,18 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
           estimatedHistoryTokens > budgetUsage.contextWindow / 2
         ) {
           const logPrefix = `[${config.entityUrl}]`
+          const writeCheckpoint = (
+            status: CompactionStatus,
+            content: string
+          ): void => {
+            contextApi.insertContext(COMPACTION_CHECKPOINT_ID, {
+              name: COMPACTION_CHECKPOINT_NAME,
+              attrs: { kind: COMPACTION_CHECKPOINT_KIND, status },
+              content,
+            })
+          }
+          // Live: announce compaction is in progress (UI shows "Compacting…").
+          writeCheckpoint(`running`, ``)
           try {
             const provider = agentModelProvider(activeAgentConfig)
             const apiKey = await activeAgentConfig.getApiKey?.(provider)
@@ -831,11 +846,9 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
                 ? { complete: activeAgentConfig.summarizeComplete }
                 : {}),
             })
-            contextApi.insertContext(COMPACTION_CHECKPOINT_ID, {
-              name: COMPACTION_CHECKPOINT_NAME,
-              attrs: { kind: COMPACTION_CHECKPOINT_KIND },
-              content: summary,
-            })
+            // Complete: this supersedes the `running` row and becomes the
+            // watermark; future turns reconstruct from it.
+            writeCheckpoint(`complete`, summary)
             workingMessages = [
               {
                 role: `user`,
@@ -848,6 +861,8 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
               `compaction: summarized ${messages.length} messages at ratio=${budgetUsage.ratio.toFixed(2)} window=${budgetUsage.contextWindow}`
             )
           } catch (error) {
+            // Mark failed (clears the UI indicator) and proceed uncompacted.
+            writeCheckpoint(`failed`, ``)
             runtimeLog.warn(
               logPrefix,
               `compaction failed; proceeding uncompacted: ${error instanceof Error ? error.message : String(error)}`

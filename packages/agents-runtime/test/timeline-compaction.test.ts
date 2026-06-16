@@ -17,7 +17,7 @@ describe(`timelineMessages compaction reconstruction`, () => {
         value: {
           id: `compaction`,
           name: `compaction_summary`,
-          attrs: { kind: `compaction` },
+          attrs: { kind: `compaction`, status: `complete` },
           content: `SUMMARY_OF_EARLIER_WORK`,
         },
       },
@@ -31,6 +31,30 @@ describe(`timelineMessages compaction reconstruction`, () => {
     // …replaced by the summary, with post-checkpoint messages kept verbatim.
     expect(out).toContain(`SUMMARY_OF_EARLIER_WORK`)
     expect(out).toContain(`LATEST_MESSAGE`)
+  })
+
+  it(`does NOT hide history for a running (incomplete) checkpoint`, () => {
+    // Crash-safety: an in-flight/crashed compaction must never drop history.
+    const db = buildStreamFixture([
+      { kind: `inbox`, at: 1, value: { payload: `FIRST_MESSAGE` } },
+      {
+        kind: `context_inserted`,
+        at: 2,
+        value: {
+          id: `compaction`,
+          name: `compaction_summary`,
+          attrs: { kind: `compaction`, status: `running` },
+          content: ``,
+        },
+      },
+      { kind: `inbox`, at: 3, value: { payload: `SECOND_MESSAGE` } },
+    ])
+
+    const out = serialize(db)
+    expect(out).toContain(`FIRST_MESSAGE`)
+    expect(out).toContain(`SECOND_MESSAGE`)
+    // The running checkpoint is a UI-only marker — not rendered to the model.
+    expect(out).not.toContain(`compaction_summary`)
   })
 
   it(`is a no-op when there is no compaction checkpoint`, () => {

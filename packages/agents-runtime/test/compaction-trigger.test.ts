@@ -80,13 +80,21 @@ describe(`synchronous compaction trigger`, () => {
     // …the model saw the summary, not the giant original message…
     expect(captured).toContain(`COMPACTED_SUMMARY`)
     expect(captured).not.toContain(`AAAAAAAAAAAAAAAAAAAA`)
-    // …and a compaction checkpoint was persisted for future turns.
-    const checkpoint = writes.find(
-      (event) =>
-        (event.value as { attrs?: { kind?: string } } | undefined)?.attrs
-          ?.kind === `compaction`
-    )
-    expect(checkpoint).toBeTruthy()
+    // …and the checkpoint went through the running → complete lifecycle
+    // (so the UI can show a live "compacting" entry then the final marker).
+    const statuses = writes
+      .map(
+        (event) =>
+          (
+            event.value as
+              | { attrs?: { kind?: string; status?: string } }
+              | undefined
+          )?.attrs
+      )
+      .filter((attrs) => attrs?.kind === `compaction`)
+      .map((attrs) => attrs?.status)
+    expect(statuses).toContain(`running`)
+    expect(statuses).toContain(`complete`)
   })
 
   it(`does not compact below the hard ceiling`, async () => {
