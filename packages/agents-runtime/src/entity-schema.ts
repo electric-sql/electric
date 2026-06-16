@@ -165,6 +165,12 @@ type StepValue = {
   context_input_tokens?: number
   // The model's context window for this step.
   context_window?: number
+  // JSON-encoded estimate of how the prompt decomposes across the stable
+  // request parts — `{ system, tools }` token counts (approximate; char/4).
+  // The UI derives the remaining "messages" bucket as the real cache-inclusive
+  // total minus these, so the breakdown always sums to the gauge. Optional and
+  // additive; older events without it stay valid.
+  context_breakdown?: string
 }
 type TextValue = {
   key?: string
@@ -522,6 +528,7 @@ function createStepSchema(): Schema<StepValue> {
     duration_ms: z.number().int().optional(),
     input_tokens: z.number().int().nonnegative().optional(),
     output_tokens: z.number().int().nonnegative().optional(),
+    context_breakdown: z.string().optional(),
   })
 }
 

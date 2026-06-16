@@ -1,0 +1,113 @@
+.panel {
+  min-width: 230px;
+  max-width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text, inherit);
+}
+
+.headline {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text, inherit);
+}
+
+.subhead {
+  font-size: 0.72rem;
+  color: var(--text-muted, rgba(0, 0, 0, 0.55));
+  margin-top: -0.25rem;
+}
+
+/* Stacked composition bar. */
+.bar {
+  display: flex;
+  width: 100%;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--surface-sunken, rgba(0, 0, 0, 0.06));
+}
+
+.barSeg {
+  height: 100%;
+  display: block;
+}
+
+.legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.legendRow {
+  display: grid;
+  grid-template-columns: 0.6rem 1fr auto auto;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.72rem;
+}
+
+.swatch {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.legendLabel {
+  color: var(--text, inherit);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.legendTokens {
+  color: var(--text-muted, rgba(0, 0, 0, 0.55));
+  text-align: right;
+}
+
+.legendPercent {
+  color: var(--text-muted, rgba(0, 0, 0, 0.55));
+  text-align: right;
+  min-width: 2.4rem;
+}
+
+.note {
+  font-size: 0.66rem;
+  color: var(--text-muted, rgba(0, 0, 0, 0.45));
+  font-style: italic;
+}
+
+/* Per-segment colours, shared by the bar fills and the legend swatches. */
+.system {
+  background: var(--accent-9, #4c6ef5);
+}
+
+.tools {
+  background: var(--violet-9, #7048e8);
+}
+
+.messages {
+  background: var(--teal-9, #0ca678);
+}
+
+.free {
+  background: var(--surface-sunken, rgba(0, 0, 0, 0.12));
+}

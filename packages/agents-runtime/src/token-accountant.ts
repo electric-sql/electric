@@ -65,6 +65,80 @@ export function computeContextUsage(
   return { usedTokens, contextWindow: input.contextWindow, ratio }
 }
 
+export type ContextBreakdownKey = `system` | `tools` | `messages` | `free`
+
+export interface ContextBreakdownSegment {
+  key: ContextBreakdownKey
+  label: string
+  tokens: number
+  /** Fraction of the whole context window, [0, 1]. */
+  ratio: number
+}
+
+/** Estimated token cost of the stable request parts (from `context_breakdown`). */
+export interface ContextBreakdownParts {
+  systemTokens?: number
+  toolsTokens?: number
+}
+
+const CONTEXT_BREAKDOWN_LABELS: Record<ContextBreakdownKey, string> = {
+  system: `System prompt`,
+  tools: `Tools`,
+  messages: `Messages`,
+  free: `Free space`,
+}
+
+/**
+ * Decompose a step's context usage into display segments: the *estimated*
+ * stable parts (system prompt + tools, char/4 approximations persisted on the
+ * step) plus the real "messages" remainder and the free space. The used
+ * segments (everything but `free`) sum to `usage.usedTokens` and all four sum
+ * to the window — so the breakdown always agrees with the gauge even though the
+ * part estimates are approximate. Modelled on Claude Code's `/context` view.
+ */
+export function computeContextBreakdown(
+  usage: ContextUsage,
+  parts: ContextBreakdownParts = {}
+): Array<ContextBreakdownSegment> {
+  const window = usage.contextWindow
+  const used = Math.max(0, Math.min(usage.usedTokens, window))
+  const system = Math.max(0, Math.min(parts.systemTokens ?? 0, used))
+  const tools = Math.max(0, Math.min(parts.toolsTokens ?? 0, used - system))
+  const messages = Math.max(0, used - system - tools)
+  const free = Math.max(0, window - used)
+  const segment = (
+    key: ContextBreakdownKey,
+    tokens: number
+  ): ContextBreakdownSegment => ({
+    key,
+    label: CONTEXT_BREAKDOWN_LABELS[key],
+    tokens,
+    ratio: window > 0 ? tokens / window : 0,
+  })
+  return [
+    segment(`system`, system),
+    segment(`tools`, tools),
+    segment(`messages`, messages),
+    segment(`free`, free),
+  ]
+}
+
+/** Parse the persisted `context_breakdown` JSON into estimate parts (tolerant). */
+export function parseContextBreakdown(
+  raw: string | undefined | null
+): ContextBreakdownParts {
+  if (!raw) return {}
+  try {
+    const obj = JSON.parse(raw) as { system?: unknown; tools?: unknown }
+    return {
+      ...(typeof obj.system === `number` && { systemTokens: obj.system }),
+      ...(typeof obj.tools === `number` && { toolsTokens: obj.tools }),
+    }
+  } catch {
+    return {}
+  }
+}
+
 export type ContextUsageLevel = `normal` | `warning` | `critical`
 
 /**
