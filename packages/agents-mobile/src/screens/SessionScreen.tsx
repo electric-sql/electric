@@ -27,7 +27,10 @@ import {
 } from '@electric-ax/agents-server-ui/src/lib/sendMessage'
 import type { OptimisticInboxMessage } from '@electric-ax/agents-server-ui/src/lib/sendMessage'
 import { createSendCommentAction } from '@electric-ax/agents-server-ui/src/lib/comments'
-import type { SelectedCommentTarget } from '@electric-ax/agents-server-ui/src/lib/comments'
+import type {
+  EntityTimelineCommentRow,
+  SelectedCommentTarget,
+} from '@electric-ax/agents-server-ui/src/lib/comments'
 import { serializeComposerInput } from '@electric-ax/agents-runtime/client'
 import type {
   EntityTimelineQueryRow,
@@ -86,6 +89,7 @@ export function ChatSessionScreen({
   onComposerHeightChange,
   onSendMessage,
   onInlineQueuedMessagesChange,
+  onInlineCommentsChange,
   onShare,
   commentTarget,
   onClearCommentTarget,
@@ -102,6 +106,7 @@ export function ChatSessionScreen({
   onInlineQueuedMessagesChange?: (
     messages: Array<OptimisticInboxMessage>
   ) => void
+  onInlineCommentsChange?: (comments: Array<EntityTimelineCommentRow>) => void
   onShare?: () => void
   commentTarget?: SelectedCommentTarget | null
   onClearCommentTarget?: () => void
@@ -117,6 +122,7 @@ export function ChatSessionScreen({
       onComposerHeightChange={onComposerHeightChange}
       onSendMessage={onSendMessage}
       onInlineQueuedMessagesChange={onInlineQueuedMessagesChange}
+      onInlineCommentsChange={onInlineCommentsChange}
       onShare={onShare}
       commentTarget={commentTarget}
       onClearCommentTarget={onClearCommentTarget}
@@ -165,6 +171,7 @@ export function SessionScreen({
   onComposerHeightChange,
   onSendMessage,
   onInlineQueuedMessagesChange,
+  onInlineCommentsChange,
   onShare,
   commentTarget = null,
   onClearCommentTarget,
@@ -180,6 +187,12 @@ export function SessionScreen({
   onInlineQueuedMessagesChange?: (
     messages: Array<OptimisticInboxMessage>
   ) => void
+  /**
+   * Optimistic comments (pending, not yet synced) forwarded to the embed so a
+   * posted comment renders immediately — the composer's `db` is a separate JS
+   * context from the embed's, so its optimistic insert isn't otherwise visible.
+   */
+  onInlineCommentsChange?: (comments: Array<EntityTimelineCommentRow>) => void
   onShare?: () => void
   /** Reply target forwarded from the embed timeline (chat + comments views). */
   commentTarget?: SelectedCommentTarget | null
@@ -327,6 +340,25 @@ export function SessionScreen({
   useEffect(() => {
     onInlineQueuedMessagesChange?.(Array.from(inlineQueuedMessages.values()))
   }, [inlineQueuedMessages, onInlineQueuedMessagesChange])
+
+  // Optimistic comments the composer inserted into our (native) db but that
+  // the embed timeline — a separate JS context — can't see yet. Forward the
+  // still-pending ones so the embed projects them until its own stream syncs
+  // the authoritative row. `~pending` is the optimistic timeline-order prefix.
+  const inlineComments = useMemo(
+    () =>
+      timelineRows
+        .filter((row) => row.comment?.order?.startsWith(`~pending`))
+        .map((row) => row.comment!),
+    [timelineRows]
+  )
+  const lastInlineCommentSigRef = useRef(``)
+  useEffect(() => {
+    const signature = inlineComments.map((comment) => comment.key).join(`\0`)
+    if (signature === lastInlineCommentSigRef.current) return
+    lastInlineCommentSigRef.current = signature
+    onInlineCommentsChange?.(inlineComments)
+  }, [inlineComments, onInlineCommentsChange])
 
   useEffect(() => {
     if (!generationActive) setStopPending(false)

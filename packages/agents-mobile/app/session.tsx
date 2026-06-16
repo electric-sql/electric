@@ -25,7 +25,10 @@ import SessionChatLogDomEmbedModule from '@electric-ax/agents-server-ui/src/embe
 import SessionStateInspectorDomEmbedModule from '@electric-ax/agents-server-ui/src/embed/SessionStateInspectorDomEmbed'
 import { getActiveServerHeadersSnapshot } from '@electric-ax/agents-server-ui/src/lib/auth-fetch'
 import type { OptimisticInboxMessage } from '@electric-ax/agents-server-ui/src/lib/sendMessage'
-import type { SelectedCommentTarget } from '@electric-ax/agents-server-ui/src/lib/comments'
+import type {
+  EntityTimelineCommentRow,
+  SelectedCommentTarget,
+} from '@electric-ax/agents-server-ui/src/lib/comments'
 
 const HEADER_HEIGHT = 44
 
@@ -35,6 +38,7 @@ type SessionDomEmbedProps = {
   theme: `light` | `dark`
   scrollToBottomSignal?: number
   inlineQueuedMessages?: Array<OptimisticInboxMessage>
+  inlineComments?: Array<EntityTimelineCommentRow>
   bottomInset?: number
   commentsOnly?: boolean
   onRequestOpenEntity: (entityUrl: string) => Promise<void>
@@ -83,6 +87,9 @@ function SessionRouteInner({
   const [chatLogScrollSignal, setChatLogScrollSignal] = useState(0)
   const [inlineQueuedMessages, setInlineQueuedMessages] = useState<
     Array<OptimisticInboxMessage>
+  >([])
+  const [inlineComments, setInlineComments] = useState<
+    Array<EntityTimelineCommentRow>
   >([])
   const [replyTarget, setReplyTarget] = useState<SelectedCommentTarget | null>(
     null
@@ -166,6 +173,7 @@ function SessionRouteInner({
             theme={scheme}
             scrollToBottomSignal={chatLogScrollSignal}
             inlineQueuedMessages={inlineQueuedMessages}
+            inlineComments={inlineComments}
             bottomInset={composerInset}
             commentsOnly={view === `comments`}
             serverHeaders={serverHeaders}
@@ -198,6 +206,7 @@ function SessionRouteInner({
           onComposerHeightChange={setChatComposerHeight}
           onSendMessage={() => setChatLogScrollSignal(Date.now())}
           onInlineQueuedMessagesChange={setInlineQueuedMessages}
+          onInlineCommentsChange={setInlineComments}
           onShare={openShare}
           commentTarget={replyTarget}
           onClearCommentTarget={() => setReplyTarget(null)}

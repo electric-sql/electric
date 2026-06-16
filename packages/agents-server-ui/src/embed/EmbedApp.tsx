@@ -26,7 +26,10 @@ import { StateExplorerView } from '../components/views/StateExplorerView'
 import { registerActiveServerHeaders } from '../lib/auth-fetch'
 import styles from './EmbedApp.module.css'
 import type { OptimisticInboxMessage } from '../lib/sendMessage'
-import type { SelectedCommentTarget } from '../lib/comments'
+import type {
+  EntityTimelineCommentRow,
+  SelectedCommentTarget,
+} from '../lib/comments'
 
 const TILE_ID = `mobile-embed`
 
@@ -92,6 +95,8 @@ type EmbedState = {
   theme: EmbedTheme
   scrollToBottomSignal?: number
   inlineQueuedMessages?: Array<OptimisticInboxMessage>
+  /** Optimistic comments from the native composer (separate JS context). */
+  inlineComments?: Array<EntityTimelineCommentRow>
   bottomInset?: number
   /** Render only the comment rows — the native shell's "comments" view. */
   commentsOnly?: boolean
@@ -201,6 +206,7 @@ function EmbedSurface({ state }: { state: EmbedRuntime }): ReactElement {
       serverUrl={state.serverUrl}
       scrollToBottomSignal={state.scrollToBottomSignal}
       inlineQueuedMessages={state.inlineQueuedMessages}
+      inlineComments={state.inlineComments}
       bottomInset={state.bottomInset}
       commentsOnly={state.commentsOnly}
       onReplyToComment={state.onReplyToComment}
@@ -214,6 +220,7 @@ function EntityHost({
   serverUrl,
   scrollToBottomSignal,
   inlineQueuedMessages,
+  inlineComments,
   bottomInset,
   commentsOnly,
   onReplyToComment,
@@ -223,6 +230,7 @@ function EntityHost({
   serverUrl: string
   scrollToBottomSignal?: number
   inlineQueuedMessages?: Array<OptimisticInboxMessage>
+  inlineComments?: Array<EntityTimelineCommentRow>
   bottomInset?: number
   commentsOnly?: boolean
   onReplyToComment?: ReplyToCommentFn
@@ -286,6 +294,7 @@ function EntityHost({
           {...props}
           scrollToBottomSignal={scrollToBottomSignal}
           inlineQueuedMessages={inlineQueuedMessages}
+          inlineComments={inlineComments}
           commentsOnly={commentsOnly}
           onReplyToComment={onReplyToComment}
         />

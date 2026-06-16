@@ -16,7 +16,11 @@ import {
   commentFocusViewParams,
   decodeCommentTargetParam,
 } from '../../lib/comments'
-import type { SelectedCommentTarget, TimelineRow } from '../../lib/comments'
+import type {
+  EntityTimelineCommentRow,
+  SelectedCommentTarget,
+  TimelineRow,
+} from '../../lib/comments'
 import {
   useEntityPermission,
   useEntityPermissions,
@@ -76,11 +80,21 @@ export function ChatLogView({
   tileId,
   scrollToBottomSignal,
   inlineQueuedMessages = [],
+  inlineComments = [],
   commentsOnly = false,
   onReplyToComment,
 }: ViewProps & {
   scrollToBottomSignal?: number
   inlineQueuedMessages?: Array<OptimisticInboxMessage>
+  /**
+   * Optimistic comments from the native composer, forwarded across the
+   * Expo-DOM boundary because the composer's `db` is a separate JS context
+   * from this embed's. Projected into the timeline so a posted comment shows
+   * immediately, mirroring desktop where composer and timeline share one `db`.
+   * They carry `~pending` orders, so they sort into the same bottom band the
+   * shared query would place them in — deduped by key once the row syncs.
+   */
+  inlineComments?: Array<EntityTimelineCommentRow>
   /** Render only the comment rows (with surrounding context), mirroring CommentsView. */
   commentsOnly?: boolean
   /**
@@ -121,16 +135,35 @@ export function ChatLogView({
     pendingInboxByKey,
     processedInboxKeys,
   ])
+  // Optimistic comments not yet present in the timeline (deduped by key against
+  // comments already synced), so a posted comment renders before the stream
+  // catches up. `~pending` orders keep them in the same bottom band the shared
+  // query uses, so ordering still matches desktop.
+  const projectedComments = useMemo<Array<TimelineRow>>(() => {
+    if (inlineComments.length === 0) return []
+    const syncedKeys = new Set(
+      timelineRows.filter((row) => row.comment).map((row) => row.comment!.key)
+    )
+    return inlineComments
+      .filter((comment) => !syncedKeys.has(comment.key))
+      .map(
+        (comment) =>
+          ({ $key: `pending-comment:${comment.key}`, comment }) as TimelineRow
+      )
+  }, [inlineComments, timelineRows])
+
   const visibleRows = useMemo<Array<TimelineRow>>(() => {
-    if (!projectedPendingMessage) return timelineRows
-    return [
-      ...timelineRows,
-      {
-        $key: `pending-inbox:${projectedPendingMessage.key}`,
-        inbox: projectedPendingMessage,
-      } as TimelineRow,
-    ]
-  }, [projectedPendingMessage, timelineRows])
+    const base = projectedPendingMessage
+      ? [
+          ...timelineRows,
+          {
+            $key: `pending-inbox:${projectedPendingMessage.key}`,
+            inbox: projectedPendingMessage,
+          } as TimelineRow,
+        ]
+      : timelineRows
+    return projectedComments.length > 0 ? [...base, ...projectedComments] : base
+  }, [projectedPendingMessage, timelineRows, projectedComments])
 
   useEffect(() => {
     if (error && !isSpawning) {
@@ -146,8 +179,8 @@ export function ChatLogView({
   })
 
   const commentsTimeline = useMemo(
-    () => (commentsOnly ? buildCommentsTimeline(timelineRows) : null),
-    [commentsOnly, timelineRows]
+    () => (commentsOnly ? buildCommentsTimeline(visibleRows) : null),
+    [commentsOnly, visibleRows]
   )
 
   return (
