@@ -80,7 +80,7 @@ The spawn uses `wake: { on: 'runFinished', includeResponse: true }`, so the spaw
 ## What the handler does
 
 1. Parses `ctx.args` into `WorkerArgs`. Throws if `systemPrompt` is empty, if `tools` contains an unknown name, or if neither `tools` nor `sharedDb` is provided.
-2. Builds the requested tool instances against the worker's `workingDirectory` (and a fresh per-wake `readSet` for the read-first-then-edit guard).
+2. Builds the requested tool instances against the worker's `workingDirectory`.
 3. If `sharedDb` is present, connects with `ctx.observe(db(id, schema))` and exposes generated `read_*`, `write_*`, `update_*`, and `delete_*` tools (`write_*` only in `"write-only"` mode).
 4. Configures the agent with `HORTON_MODEL` (`claude-sonnet-4-6` by default), the provided system prompt (with a brief reporting-back footer appended), and the assembled tool list.
 5. Runs the agent until the LLM stops.

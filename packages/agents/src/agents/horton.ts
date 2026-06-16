@@ -382,7 +382,6 @@ function getToolName(tool: unknown): string | null {
 export function createHortonTools(
   sandbox: Sandbox,
   ctx: HandlerContext,
-  readSet: Set<string>,
   opts: {
     docsSearchTool?: AgentTool
     modelConfig?: ReturnType<typeof resolveBuiltinModelConfig>
@@ -392,8 +391,8 @@ export function createHortonTools(
 ): Array<AgentTool> {
   return [
     createBashTool(sandbox),
-    createReadFileTool(sandbox, readSet),
-    createWriteTool(sandbox, readSet),
+    createReadFileTool(sandbox),
+    createWriteTool(sandbox),
     createEditTool(sandbox),
     braveSearchTool,
     ...(opts.modelCatalog && opts.modelConfig
@@ -653,7 +652,6 @@ function createAssistantHandler(options: {
 
     const loadedSkills = await skillLoader.load(ctx)
 
-    const readSet = new Set<string>()
     const modelConfig = resolveBuiltinModelConfig(modelCatalog, ctx.args)
     const sourceBudget = resolveBuiltinModelSourceBudget(modelConfig)
     // The sandbox's own working directory is the single source of truth for
@@ -669,7 +667,7 @@ function createAssistantHandler(options: {
     // spawn time) and disposed when the wake-session ends.
     const tools = [
       ...ctx.electricTools,
-      ...createHortonTools(ctx.sandbox, ctx, readSet, {
+      ...createHortonTools(ctx.sandbox, ctx, {
         docsSearchTool,
         modelConfig,
         modelCatalog,

@@ -113,8 +113,7 @@ describe(`tool refactor to Sandbox`, () => {
     it(`edits via sandbox.readFile + writeFile`, async () => {
       const sandbox = await unrestrictedSandbox({ workingDirectory: cwd })
       await sandbox.writeFile(join(cwd, `f.txt`), `hello world`)
-      const readSet = new Set<string>()
-      const readTool = createReadFileTool(sandbox, readSet)
+      const readTool = createReadFileTool(sandbox)
       await readTool.execute(`r`, { path: `f.txt` })
       const editTool = createEditTool(sandbox)
       const result = await editTool.execute(`e`, {

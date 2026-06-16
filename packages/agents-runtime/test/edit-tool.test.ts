@@ -16,7 +16,7 @@ describe(`edit tool`, () => {
     await rm(cwd, { recursive: true, force: true })
   })
 
-  it(`edits a file without requiring a prior read`, async () => {
+  it(`edits a file`, async () => {
     await writeFile(join(cwd, `f.txt`), `hello world`, `utf-8`)
     const sandbox = await unrestrictedSandbox({ workingDirectory: cwd })
     const edit = createEditTool(sandbox)
@@ -29,19 +29,6 @@ describe(`edit tool`, () => {
     expect((await sandbox.readFile(`f.txt`)).toString(`utf-8`)).toBe(
       `hello there`
     )
-    await sandbox.dispose()
-  })
-
-  it(`does not depend on readSet contents`, async () => {
-    await writeFile(join(cwd, `g.txt`), `aaa bbb`, `utf-8`)
-    const sandbox = await unrestrictedSandbox({ workingDirectory: cwd })
-    const edit = createEditTool(sandbox)
-    const result = await edit.execute(`e`, {
-      path: `g.txt`,
-      old_string: `aaa`,
-      new_string: `xxx`,
-    })
-    expect((result.content[0] as { text: string }).text).toMatch(/Edited/)
     await sandbox.dispose()
   })
 

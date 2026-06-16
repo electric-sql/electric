@@ -1,4 +1,3 @@
-import { resolve } from 'node:path'
 import { Type } from '@sinclair/typebox'
 import { runtimeLog } from '../log'
 import { SandboxError } from '../sandbox/types'
@@ -128,10 +127,7 @@ function formatReadOutput(
   }
 }
 
-export function createReadFileTool(
-  sandbox: Sandbox,
-  readSet?: Set<string>
-): AgentTool {
+export function createReadFileTool(sandbox: Sandbox): AgentTool {
   return {
     name: `read`,
     label: `Read File`,
@@ -198,7 +194,6 @@ export function createReadFileTool(
           offset: positiveInteger(rawOffset, 1),
           limit: positiveInteger(rawLimit, DEFAULT_READ_LIMIT_LINES),
         })
-        readSet?.add(resolve(sandbox.workingDirectory, filePath))
         return {
           content: [{ type: `text` as const, text: formatted.text }],
           details: {

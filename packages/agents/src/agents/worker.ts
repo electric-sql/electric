@@ -118,7 +118,6 @@ function buildToolsForWorker(
   tools: ReadonlyArray<WorkerToolName>,
   sandbox: Sandbox,
   ctx: HandlerContext,
-  readSet: Set<string>,
   opts: {
     modelCatalog: BuiltinModelCatalog
     modelConfig: BuiltinAgentModelConfig
@@ -131,10 +130,10 @@ function buildToolsForWorker(
         out.push(createBashTool(sandbox))
         break
       case `read`:
-        out.push(createReadFileTool(sandbox, readSet))
+        out.push(createReadFileTool(sandbox))
         break
       case `write`:
-        out.push(createWriteTool(sandbox, readSet))
+        out.push(createWriteTool(sandbox))
         break
       case `edit`:
         out.push(createEditTool(sandbox))
@@ -319,7 +318,6 @@ export function registerWorker(
     },
     async handler(ctx) {
       const args = parseWorkerArgs(ctx.args)
-      const readSet = new Set<string>()
       // ctx.sandbox is provisioned and disposed by the runtime sandbox
       // pool — subsequent wakes for the same worker reuse the same
       // instance until idle-TTL eviction.
@@ -327,13 +325,10 @@ export function registerWorker(
         modelCatalog,
         args as unknown as Readonly<Record<string, unknown>>
       )
-      const builtinTools = buildToolsForWorker(
-        args.tools,
-        ctx.sandbox,
-        ctx,
-        readSet,
-        { modelCatalog, modelConfig }
-      )
+      const builtinTools = buildToolsForWorker(args.tools, ctx.sandbox, ctx, {
+        modelCatalog,
+        modelConfig,
+      })
 
       const sharedStateTools: Array<AgentTool> = []
       if (args.sharedDb) {

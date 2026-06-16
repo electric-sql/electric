@@ -16,7 +16,7 @@ export function createEditTool(sandbox: Sandbox): AgentTool {
         description: `File path (relative to working directory)`,
       }),
       old_string: Type.String({
-        description: `The literal text to find. Must be unique unless replace_all is true.`,
+        description: `The literal text to find, exactly as it appears in the file. Do not include read tool line-number prefixes like "42: "; those are display-only. Must be unique unless replace_all is true.`,
       }),
       new_string: Type.String({
         description: `The replacement text.`,

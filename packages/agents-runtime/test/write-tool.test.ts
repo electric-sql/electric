@@ -16,10 +16,9 @@ describe(`write tool`, () => {
     await rm(cwd, { recursive: true, force: true })
   })
 
-  it(`writes a new file and updates the readSet`, async () => {
+  it(`writes a new file`, async () => {
     const sandbox = await unrestrictedSandbox({ workingDirectory: cwd })
-    const readSet = new Set<string>()
-    const tool = createWriteTool(sandbox, readSet)
+    const tool = createWriteTool(sandbox)
     const result = await tool.execute(`call-1`, {
       path: `hello.txt`,
       content: `hi there`,
@@ -27,10 +26,6 @@ describe(`write tool`, () => {
     expect(result.content[0]).toMatchObject({ type: `text` })
     const written = await readFile(join(cwd, `hello.txt`), `utf-8`)
     expect(written).toBe(`hi there`)
-    // The readSet key is a pure-string normalization (resolve against the
-    // working directory) shared by read/write/edit — not realpath-canonical,
-    // since path resolution now lives inside the sandbox.
-    expect(readSet.has(join(cwd, `hello.txt`))).toBe(true)
     await sandbox.dispose()
   })
 

@@ -163,8 +163,7 @@ describe(`observe_pg_sync tool`, () => {
         send: vi.fn(),
         observe: vi.fn(),
         getGoal: vi.fn(() => undefined),
-      } as any,
-      new Set()
+      } as any
     )
 
     expect(tools.map((tool) => tool.name)).toContain(`observe_pg_sync`)
@@ -286,8 +285,7 @@ describe(`unobserve_pg_sync tool`, () => {
         send: vi.fn(),
         observe: vi.fn(),
         getGoal: vi.fn(() => undefined),
-      } as any,
-      new Set()
+      } as any
     )
 
     expect(tools.map((tool) => tool.name)).toContain(`unobserve_pg_sync`)

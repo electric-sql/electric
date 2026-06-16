@@ -6,10 +6,7 @@ import { SandboxError } from '../sandbox/types'
 import type { Sandbox } from '../sandbox/types'
 import type { AgentTool } from '@mariozechner/pi-agent-core'
 
-export function createWriteTool(
-  sandbox: Sandbox,
-  readSet?: Set<string>
-): AgentTool {
+export function createWriteTool(sandbox: Sandbox): AgentTool {
   return {
     name: `write`,
     label: `Write File`,
@@ -29,8 +26,7 @@ export function createWriteTool(
       }
       // Containment is enforced by the sandbox (it owns the filesystem);
       // an escaping path rejects with SandboxError('policy'), handled below.
-      // `key`/`rel` are pure-string normalizations for the readSet and the
-      // diff header — not a security check.
+      // `key`/`rel` are pure-string normalizations for the diff header — not a security check.
       const key = resolve(sandbox.workingDirectory, filePath)
       const rel = relative(sandbox.workingDirectory, key)
       try {
@@ -43,7 +39,6 @@ export function createWriteTool(
 
         await sandbox.mkdir(dirname(filePath), { recursive: true })
         await sandbox.writeFile(filePath, content)
-        readSet?.add(key)
 
         const bytesWritten = Buffer.byteLength(content, `utf-8`)
         const patch = createTwoFilesPatch(
