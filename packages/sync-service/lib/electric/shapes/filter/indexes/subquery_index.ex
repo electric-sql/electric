@@ -47,10 +47,10 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   def new(opts \\ []) do
     case Keyword.get(opts, :stack_id) do
       nil ->
-        :ets.new(:subquery_index, [:bag, :public])
+        :ets.new(:subquery_index, [:ordered_set, :public])
 
       stack_id ->
-        :ets.new(table_name(stack_id), [:bag, :public, :named_table])
+        :ets.new(table_name(stack_id), [:ordered_set, :public, :named_table])
     end
   end
 
@@ -94,10 +94,10 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   """
   @spec unregister_shape(t(), term()) :: :ok
   def unregister_shape(table, shape_handle) do
-    :ets.match_delete(table, {{:membership, shape_handle, :_, :_}, true})
-    :ets.match_delete(table, {{:polarity, shape_handle, :_}, :_})
-    :ets.match_delete(table, {{:shape_node, shape_handle}, :_})
-    :ets.match_delete(table, {{:shape_dep_node, shape_handle, :_}, :_})
+    delete_by_key_prefix(table, {:membership, shape_handle, :_, :_})
+    delete_by_key_prefix(table, {:polarity, shape_handle, :_})
+    delete_by_key_prefix(table, {:shape_node, shape_handle, :_, :_})
+    delete_by_key_prefix(table, {:shape_dep_node, shape_handle, :_, :_, :_})
     :ets.delete(table, {:fallback, shape_handle})
     :ok
   end
@@ -130,27 +130,27 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
 
     :ets.insert(
       table,
-      {{:node_shape, node_id},
-       {shape_id, optimisation.dep_index, optimisation.polarity, next_condition_id, branch_key}}
+      {{:node_shape, node_id, shape_id, branch_key},
+       {optimisation.dep_index, optimisation.polarity, next_condition_id}}
     )
 
     if optimisation.polarity == :negated do
-      :ets.insert(table, {{:node_negated_shape, node_id}, {shape_id, next_condition_id}})
+      :ets.insert(table, {{:node_negated_shape, node_id, shape_id, next_condition_id}, true})
     end
 
     :ets.insert(
       table,
-      {{:shape_node, shape_id},
-       {node_id, optimisation.dep_index, optimisation.polarity, next_condition_id, branch_key}}
+      {{:shape_node, shape_id, node_id, branch_key},
+       {optimisation.dep_index, optimisation.polarity, next_condition_id}}
     )
 
     :ets.insert(
       table,
-      {{:shape_dep_node, shape_id, optimisation.dep_index},
-       {node_id, optimisation.polarity, next_condition_id, branch_key}}
+      {{:shape_dep_node, shape_id, optimisation.dep_index, node_id, branch_key},
+       {optimisation.polarity, next_condition_id}}
     )
 
-    :ets.insert(table, {{:node_fallback, node_id}, {shape_id, next_condition_id}})
+    :ets.insert(table, {{:node_fallback, node_id, shape_id, next_condition_id}, true})
     :ok
   end
 
@@ -181,31 +181,24 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
             branch_key
           )
 
-        :ets.match_delete(
+        delete_node_members(
           table,
-          {{:node_shape, node_id}, {shape_id, dep_index, polarity, next_condition_id, branch_key}}
+          node_id,
+          shape_id,
+          polarity,
+          next_condition_id,
+          optimisation.subquery_ref
         )
+
+        :ets.delete(table, {:node_shape, node_id, shape_id, branch_key})
 
         if polarity == :negated do
-          :ets.match_delete(
-            table,
-            {{:node_negated_shape, node_id}, {shape_id, next_condition_id}}
-          )
+          :ets.delete(table, {:node_negated_shape, node_id, shape_id, next_condition_id})
         end
 
-        :ets.match_delete(
-          table,
-          {{:shape_node, shape_id}, {node_id, dep_index, polarity, next_condition_id, branch_key}}
-        )
-
-        :ets.match_delete(
-          table,
-          {{:shape_dep_node, shape_id, dep_index},
-           {node_id, polarity, next_condition_id, branch_key}}
-        )
-
-        :ets.match_delete(table, {{:node_fallback, node_id}, {shape_id, next_condition_id}})
-        delete_node_members(table, node_id, shape_id, polarity, next_condition_id)
+        :ets.delete(table, {:node_fallback, node_id, shape_id, next_condition_id})
+        :ets.delete(table, {:shape_node, shape_id, node_id, branch_key})
+        :ets.delete(table, {:shape_dep_node, shape_id, dep_index, node_id, branch_key})
 
         if node_empty?(table, node_id) do
           :ets.delete(table, {:node_meta, node_id})
@@ -237,7 +230,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
 
     for {node_id, _dep_index, _polarity, _next_condition_id, _branch_key} <-
           nodes_for_shape(table, shape_handle) do
-      :ets.match_delete(table, {{:node_fallback, node_id}, {shape_handle, :_}})
+      delete_by_key_prefix(table, {:node_fallback, node_id, shape_handle, :_})
     end
 
     :ok
@@ -250,19 +243,8 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   def add_value(table, shape_handle, subquery_ref, dep_index, value) do
     for {node_id, polarity, next_condition_id, _branch_key} <-
           nodes_for_shape_dependency(table, shape_handle, dep_index) do
-      case polarity do
-        :positive ->
-          :ets.insert(
-            table,
-            {{:node_positive_member, node_id, value}, {shape_handle, next_condition_id}}
-          )
-
-        :negated ->
-          :ets.insert(
-            table,
-            {{:node_negated_member, node_id, value}, {shape_handle, next_condition_id}}
-          )
-      end
+      tag = if polarity == :positive, do: :node_positive_member, else: :node_negated_member
+      :ets.insert(table, {{tag, node_id, value, shape_handle, next_condition_id}, true})
     end
 
     :ets.insert(table, {{:membership, shape_handle, subquery_ref, value}, true})
@@ -276,19 +258,8 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   def remove_value(table, shape_handle, subquery_ref, dep_index, value) do
     for {node_id, polarity, next_condition_id, _branch_key} <-
           nodes_for_shape_dependency(table, shape_handle, dep_index) do
-      case polarity do
-        :positive ->
-          :ets.match_delete(
-            table,
-            {{:node_positive_member, node_id, value}, {shape_handle, next_condition_id}}
-          )
-
-        :negated ->
-          :ets.match_delete(
-            table,
-            {{:node_negated_member, node_id, value}, {shape_handle, next_condition_id}}
-          )
-      end
+      tag = if polarity == :positive, do: :node_positive_member, else: :node_negated_member
+      :ets.delete(table, {tag, node_id, value, shape_handle, next_condition_id})
     end
 
     :ets.delete(table, {:membership, shape_handle, subquery_ref, value})
@@ -305,16 +276,15 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
     candidates =
       case evaluate_node_lhs(table, node_id, record) do
         {:ok, typed_value} ->
-          positive =
-            values_for_key(table, {:node_positive_member, node_id, typed_value}) |> MapSet.new()
+          positive = members_for(table, :node_positive_member, node_id, typed_value)
 
           negated =
             MapSet.difference(
-              values_for_key(table, {:node_negated_shape, node_id}) |> MapSet.new(),
-              values_for_key(table, {:node_negated_member, node_id, typed_value}) |> MapSet.new()
+              negated_shapes_for(table, node_id),
+              members_for(table, :node_negated_member, node_id, typed_value)
             )
 
-          fallback = values_for_key(table, {:node_fallback, node_id}) |> MapSet.new()
+          fallback = fallback_for(table, node_id)
 
           positive
           |> MapSet.union(negated)
@@ -407,61 +377,90 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
     end
   end
 
-  defp delete_node_members(table, node_id, shape_id, polarity, next_condition_id) do
-    case polarity do
-      :positive ->
-        :ets.match_delete(
-          table,
-          {{:node_positive_member, node_id, :_}, {shape_id, next_condition_id}}
-        )
+  # Range-bounded delete of every row whose key matches `key_pattern` (a tuple with a
+  # bound prefix and `:_` wildcards in trailing positions). On an :ordered_set this is
+  # O(log n + matched), never a full scan.
+  defp delete_by_key_prefix(table, key_pattern) do
+    :ets.select_delete(table, [{{key_pattern, :_}, [], [true]}])
+  end
 
-      :negated ->
-        :ets.match_delete(
-          table,
-          {{:node_negated_member, node_id, :_}, {shape_id, next_condition_id}}
-        )
+  # Delete this shape's node-local member rows for this node by enumerating the shape's
+  # own values (scoped to the node's subquery_ref) from its membership rows and
+  # point-deleting each. O(V_node · log n); touches only this shape's rows. Relies on
+  # membership rows still being present (consumer stopped before removal — see spec).
+  defp delete_node_members(table, node_id, shape_id, polarity, next_condition_id, subquery_ref) do
+    tag =
+      case polarity do
+        :positive -> :node_positive_member
+        :negated -> :node_negated_member
+      end
+
+    values =
+      :ets.select(table, [
+        {{{:membership, shape_id, subquery_ref, :"$1"}, :_}, [], [:"$1"]}
+      ])
+
+    for value <- values do
+      :ets.delete(table, {tag, node_id, value, shape_id, next_condition_id})
     end
+
+    :ok
   end
 
-  defp nodes_for_shape(table, shape_handle) do
-    table
-    |> :ets.lookup({:shape_node, shape_handle})
-    |> Enum.map(&elem(&1, 1))
+  defp members_for(table, tag, node_id, value) do
+    :ets.select(table, [
+      {{{tag, node_id, value, :"$1", :"$2"}, :_}, [], [{{:"$1", :"$2"}}]}
+    ])
+    |> MapSet.new()
   end
 
-  defp nodes_for_shape_dependency(table, shape_handle, dep_index) do
-    table
-    |> :ets.lookup({:shape_dep_node, shape_handle, dep_index})
-    |> Enum.map(&elem(&1, 1))
+  defp negated_shapes_for(table, node_id) do
+    :ets.select(table, [
+      {{{:node_negated_shape, node_id, :"$1", :"$2"}, :_}, [], [{{:"$1", :"$2"}}]}
+    ])
+    |> MapSet.new()
   end
 
-  defp node_shape_entry_for_shape(table, shape_id, node_id, branch_key) do
-    table
-    |> nodes_for_shape(shape_id)
-    |> Enum.find_value(fn
-      {^node_id, dep_index, polarity, next_condition_id, ^branch_key} ->
-        {dep_index, polarity, next_condition_id}
-
-      _ ->
-        nil
-    end)
-  end
-
-  defp node_empty?(table, node_id) do
-    :ets.lookup(table, {:node_shape, node_id}) == []
+  defp fallback_for(table, node_id) do
+    :ets.select(table, [
+      {{{:node_fallback, node_id, :"$1", :"$2"}, :_}, [], [{{:"$1", :"$2"}}]}
+    ])
+    |> MapSet.new()
   end
 
   defp all_node_shapes(table, node_id) do
-    table
-    |> :ets.lookup({:node_shape, node_id})
-    |> Enum.reduce(MapSet.new(), fn
-      {{:node_shape, ^node_id}, {shape_id, _dep_index, _polarity, next_condition_id, _branch_key}},
-      acc ->
-        MapSet.put(acc, {shape_id, next_condition_id})
+    :ets.select(table, [
+      {{{:node_shape, node_id, :"$1", :_}, {:_, :_, :"$2"}}, [], [{{:"$1", :"$2"}}]}
+    ])
+    |> MapSet.new()
+  end
 
-      _, acc ->
-        acc
-    end)
+  defp nodes_for_shape(table, shape_handle) do
+    :ets.select(table, [
+      {{{:shape_node, shape_handle, :"$1", :"$2"}, {:"$3", :"$4", :"$5"}}, [],
+       [{{:"$1", :"$3", :"$4", :"$5", :"$2"}}]}
+    ])
+  end
+
+  defp nodes_for_shape_dependency(table, shape_handle, dep_index) do
+    :ets.select(table, [
+      {{{:shape_dep_node, shape_handle, dep_index, :"$1", :"$2"}, {:"$3", :"$4"}}, [],
+       [{{:"$1", :"$3", :"$4", :"$2"}}]}
+    ])
+  end
+
+  defp node_shape_entry_for_shape(table, shape_id, node_id, branch_key) do
+    case :ets.lookup(table, {:shape_node, shape_id, node_id, branch_key}) do
+      [{_, {dep_index, polarity, next_condition_id}}] -> {dep_index, polarity, next_condition_id}
+      [] -> nil
+    end
+  end
+
+  defp node_empty?(table, node_id) do
+    case :ets.select(table, [{{{:node_shape, node_id, :_, :_}, :_}, [], [true]}], 1) do
+      :"$end_of_table" -> true
+      _ -> false
+    end
   end
 
   defp evaluate_node_lhs(table, node_id, record) do
@@ -483,12 +482,6 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
       [] ->
         :error
     end
-  end
-
-  defp values_for_key(table, key) do
-    table
-    |> :ets.lookup(key)
-    |> Enum.map(&elem(&1, 1))
   end
 
   defp shape_ready?(table, shape_handle) do

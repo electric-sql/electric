@@ -69,10 +69,15 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
       register_node_shape(filter, table, condition_id, "s3")
 
       assert [
-               {{:node_shape, {^condition_id, @field}}, {"s1", 0, :positive, _, []}},
-               {{:node_shape, {^condition_id, @field}}, {"s2", 0, :positive, _, []}},
-               {{:node_shape, {^condition_id, @field}}, {"s3", 0, :positive, _, []}}
-             ] = Enum.sort(:ets.lookup(table, {:node_shape, {condition_id, @field}}))
+               {{:node_shape, {^condition_id, @field}, "s1", []}, {0, :positive, _}},
+               {{:node_shape, {^condition_id, @field}, "s2", []}, {0, :positive, _}},
+               {{:node_shape, {^condition_id, @field}, "s3", []}, {0, :positive, _}}
+             ] =
+               Enum.sort(
+                 :ets.select(table, [
+                   {{{:node_shape, {condition_id, @field}, :_, :_}, :_}, [], [:"$_"]}
+                 ])
+               )
 
       assert :ok =
                SubqueryIndex.remove_shape(filter, condition_id, "s1", subquery_optimisation(), [])
@@ -85,7 +90,11 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
       assert :deleted =
                SubqueryIndex.remove_shape(filter, condition_id, "s3", subquery_optimisation(), [])
 
-      assert [] == :ets.lookup(table, {:node_shape, {condition_id, @field}})
+      assert [] ==
+               :ets.select(table, [
+                 {{{:node_shape, {condition_id, @field}, :_, :_}, :_}, [], [:"$_"]}
+               ])
+
       assert [] == :ets.lookup(table, {:node_meta, {condition_id, @field}})
     end
 
