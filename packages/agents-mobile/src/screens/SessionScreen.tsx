@@ -914,6 +914,28 @@ function NativeMessageComposer({
           </Pressable>
         </View>
       )}
+      {commentMode && commentTarget && (
+        <View style={styles.replyBanner}>
+          <View style={styles.replyBannerBody}>
+            <Text style={styles.replyLabel} numberOfLines={1}>
+              {formatReplyBannerLabel(commentTarget)}
+            </Text>
+            {commentTarget.snapshot.text ? (
+              <Text style={styles.replyText} numberOfLines={1}>
+                {commentTarget.snapshot.text}
+              </Text>
+            ) : null}
+          </View>
+          <Pressable
+            onPress={() => onClearCommentTarget?.()}
+            accessibilityRole="button"
+            accessibilityLabel="Cancel reply"
+            hitSlop={8}
+          >
+            <Icon name="close" size={16} color={tokens.text3} strokeWidth={2} />
+          </Pressable>
+        </View>
+      )}
       {entity && !commentOnly && (
         <NativeEntityContextDrawer
           entity={entity}
@@ -939,28 +961,6 @@ function NativeMessageComposer({
             hitSlop={8}
           >
             <Text style={styles.editingCancel}>Cancel</Text>
-          </Pressable>
-        </View>
-      )}
-      {commentMode && commentTarget && (
-        <View style={styles.replyBanner}>
-          <View style={styles.replyBannerBody}>
-            <Text style={styles.replyLabel} numberOfLines={1}>
-              {formatReplyBannerLabel(commentTarget)}
-            </Text>
-            {commentTarget.snapshot.text ? (
-              <Text style={styles.replyText} numberOfLines={1}>
-                {commentTarget.snapshot.text}
-              </Text>
-            ) : null}
-          </View>
-          <Pressable
-            onPress={() => onClearCommentTarget?.()}
-            accessibilityRole="button"
-            accessibilityLabel="Cancel reply"
-            hitSlop={8}
-          >
-            <Icon name="close" size={16} color={tokens.text3} strokeWidth={2} />
           </Pressable>
         </View>
       )}
