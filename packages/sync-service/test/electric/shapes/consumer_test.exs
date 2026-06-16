@@ -2652,6 +2652,332 @@ defmodule Electric.Shapes.ConsumerTest do
     )
   end
 
+  describe "process gc configuration" do
+    setup [
+      :with_registry,
+      :with_in_memory_storage,
+      :with_shape_status,
+      :with_lsn_tracker,
+      :with_persistent_kv,
+      :with_status_monitor,
+      :with_dynamic_consumer_supervisor,
+      :with_noop_publication_manager,
+      :with_shape_cleaner
+    ]
+
+    setup ctx do
+      start_link_supervised!({
+        ShapeLogCollector.Supervisor,
+        stack_id: ctx.stack_id, persistent_kv: ctx.persistent_kv, inspector: @base_inspector
+      })
+
+      ShapeLogCollector.mark_as_ready(ctx.stack_id)
+      [shape_position: @shape_position]
+    end
+
+    @tag process_spawn_opts: %{consumer: [fullsweep_after: 4, priority: :high]}
+    test "spawn_opts are correctly passed to consumer process", ctx do
+      support_test_storage_wrap(ctx, @shape_handle1, @shape1)
+
+      {:ok, consumer} =
+        start_supervised(
+          {Consumer,
+           %{
+             shape_handle: @shape_handle1,
+             stack_id: ctx.stack_id
+           }},
+          id: {Consumer, @shape_handle1}
+        )
+
+      Consumer.initialize_shape(consumer, @shape1, %{action: :create})
+      assert_receive {Support.TestStorage, :init_writer!, @shape_handle1, @shape1}
+      :started = Consumer.await_snapshot_start(ctx.stack_id, @shape_handle1)
+
+      info = Process.info(consumer)
+
+      assert info[:priority] == :high
+      assert info[:garbage_collection][:fullsweep_after] == 4
+    end
+  end
+
+  defp support_test_storage_wrap(ctx, shape_handle, shape) do
+    %{snapshot_xmin: xmin} = shape_status(shape_handle, ctx)
+    shapes = %{shape_handle => shape}
+
+    storage =
+      Support.TestStorage.wrap(ctx.storage, %{
+        shape_handle => [
+          {:mark_snapshot_as_started, []},
+          {:set_pg_snapshot, [%{xmin: xmin, xmax: xmin + 1, xip_list: [xmin]}]}
+        ]
+      })
+
+    Electric.StackConfig.put(ctx.stack_id, Electric.ShapeCache.Storage, storage)
+    Electric.StackConfig.put(ctx.stack_id, :inspector, @base_inspector)
+
+    patch_shape_status(fetch_shape_by_handle: fn _, sh -> Map.fetch(shapes, sh) end)
+
+    Support.TestUtils.activate_mocks_for_descendant_procs(Consumer)
+    Support.TestUtils.activate_mocks_for_descendant_procs(Electric.ShapeCache.ShapeCleaner)
+    :ok
+  end
+
+  describe "should_force_gc?/5" do
+    # All tests pass explicit now_ms / last_gc_at / min_interval_ms so they are
+    # fully deterministic and do not depend on wall-clock time.
+
+    test "false when threshold is nil (adaptive GC disabled)" do
+      refute Electric.Shapes.Consumer.should_force_gc?(1_000_000, nil, nil, 5_000, 1_000)
+    end
+
+    test "true when heap over threshold and consumer has never forced a GC (last_gc_at nil)" do
+      # 1_000 bytes > threshold of 1 byte
+      assert Electric.Shapes.Consumer.should_force_gc?(1_000, 1, nil, 5_000, 1_000)
+    end
+
+    test "false when heap over threshold but interval has not elapsed" do
+      # last_gc_at=4_500, now=5_000 → delta=500 < min_interval=1_000 → no GC
+      refute Electric.Shapes.Consumer.should_force_gc?(1_000, 1, 4_500, 5_000, 1_000)
+    end
+
+    test "true when heap over threshold and interval has elapsed" do
+      # last_gc_at=3_000, now=5_000 → delta=2_000 >= min_interval=1_000 → GC
+      assert Electric.Shapes.Consumer.should_force_gc?(1_000, 1, 3_000, 5_000, 1_000)
+    end
+
+    test "true at exactly the min interval boundary" do
+      # last_gc_at=4_000, now=5_000 → delta=1_000 == min_interval=1_000 → GC
+      assert Electric.Shapes.Consumer.should_force_gc?(1_000, 1, 4_000, 5_000, 1_000)
+    end
+
+    test "false when heap is under threshold regardless of timing" do
+      # heap=1 byte; threshold=1_000 bytes → under
+      refute Electric.Shapes.Consumer.should_force_gc?(1, 1_000, nil, 5_000, 1_000)
+    end
+
+    test "false when heap is under threshold even if interval would have elapsed" do
+      refute Electric.Shapes.Consumer.should_force_gc?(1, 1_000, 0, 5_000, 1_000)
+    end
+
+    test "false when heap exactly equals threshold (strict comparison)" do
+      refute Electric.Shapes.Consumer.should_force_gc?(1_000, 1_000, nil, 5_000, 1_000)
+    end
+  end
+
+  describe "adaptive GC after fragment processing" do
+    @describetag :tmp_dir
+
+    setup do
+      %{inspector: @base_inspector, pool: nil}
+    end
+
+    setup [
+      :with_registry,
+      :with_pure_file_storage,
+      :with_shape_status,
+      :with_lsn_tracker,
+      :with_log_chunking,
+      :with_persistent_kv,
+      :with_async_deleter,
+      :with_shape_cleaner,
+      :with_shape_log_collector,
+      :with_noop_publication_manager,
+      :with_status_monitor
+    ]
+
+    setup(ctx) do
+      delay_snapshot_creation? = Map.get(ctx, :delay_snapshot_creation?)
+      test_pid = self()
+
+      patch_snapshotter(fn parent, shape_handle, _shape, %{snapshot_fun: snapshot_fun} ->
+        if delay_snapshot_creation? do
+          receive do
+            {^test_pid, :resume} -> :ok
+          end
+        end
+
+        pg_snapshot = {10, 11, [10]}
+        GenServer.cast(parent, {:pg_snapshot_known, shape_handle, pg_snapshot})
+        GenServer.cast(parent, {:snapshot_started, shape_handle})
+        snapshot_fun.([])
+      end)
+
+      Electric.StackConfig.put(ctx.stack_id, :shape_hibernate_after, 10_000)
+      :ok
+    end
+
+    setup ctx do
+      %{consumer_supervisor: consumer_supervisor, shape_cache: shape_cache} =
+        Support.ComponentSetup.with_shape_cache(ctx)
+
+      %{
+        consumer_supervisor: consumer_supervisor,
+        shape_cache: shape_cache
+      }
+    end
+
+    test "GC runs when heap exceeds tiny threshold", ctx do
+      Electric.StackConfig.put(ctx.stack_id, :consumer_gc_heap_threshold, 1)
+
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape1, ctx.stack_id)
+      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
+
+      consumer_pid = Consumer.whereis(ctx.stack_id, shape_handle)
+      ref = Shapes.Consumer.register_for_changes(ctx.stack_id, shape_handle)
+
+      xid = 11
+      lsn = Lsn.from_integer(10)
+      large_binary = :binary.copy(<<0>>, 200_000)
+
+      txn =
+        complete_txn_fragment(xid, lsn, [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "1", "value" => large_binary},
+            log_offset: LogOffset.new(lsn, 0)
+          }
+        ])
+
+      assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
+      assert_receive {^ref, :new_changes, _}, @receive_timeout
+
+      # GC runs in the deferred {:continue, :maybe_gc} after the reply. A synchronous
+      # call is queued behind the pending continue, so :sys.get_state returns only
+      # once the GC has run — and lets us read last_forced_gc_at, which the consumer
+      # stamps iff it forced a sweep. That is a direct signal of our decision,
+      # immune to natural BEAM GCs and heap-size timing.
+      assert %{last_forced_gc_at: forced_at} = :sys.get_state(consumer_pid)
+
+      refute is_nil(forced_at),
+             "threshold=1 keeps the heap over threshold, so a forced GC should be recorded"
+    end
+
+    test "GC does not run when threshold is very large", ctx do
+      # 1 GB threshold — the consumer heap will never reach this, so GC must NOT fire.
+      Electric.StackConfig.put(ctx.stack_id, :consumer_gc_heap_threshold, 1_000_000_000)
+
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape1, ctx.stack_id)
+      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
+
+      consumer_pid = Consumer.whereis(ctx.stack_id, shape_handle)
+      ref = Shapes.Consumer.register_for_changes(ctx.stack_id, shape_handle)
+
+      xid = 11
+      lsn = Lsn.from_integer(10)
+      large_binary = :binary.copy(<<0>>, 200_000)
+
+      txn =
+        complete_txn_fragment(xid, lsn, [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "1", "value" => large_binary},
+            log_offset: LogOffset.new(lsn, 0)
+          }
+        ])
+
+      assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
+      assert_receive {^ref, :new_changes, _}, @receive_timeout
+
+      # Flush the deferred :maybe_gc continue and read the state. The heap stays well
+      # under the 1 GB threshold, so the consumer must not have forced a sweep.
+      assert %{last_forced_gc_at: forced_at} = :sys.get_state(consumer_pid)
+
+      assert is_nil(forced_at),
+             "no forced GC should be recorded while under threshold, got #{inspect(forced_at)}"
+    end
+
+    test "no GC by default (threshold=nil)", ctx do
+      # Ensure no threshold is set (default behaviour)
+      assert nil == Electric.StackConfig.lookup(ctx.stack_id, :consumer_gc_heap_threshold, nil)
+
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape1, ctx.stack_id)
+      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
+
+      ref = Shapes.Consumer.register_for_changes(ctx.stack_id, shape_handle)
+
+      xid = 11
+      lsn = Lsn.from_integer(10)
+
+      txn =
+        complete_txn_fragment(xid, lsn, [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "1"},
+            log_offset: LogOffset.new(lsn, 0)
+          }
+        ])
+
+      # Should process without error even when no GC threshold is configured
+      assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
+      assert_receive {^ref, :new_changes, _}, @receive_timeout
+    end
+
+    @tag delay_snapshot_creation?: true
+    test "GC runs during buffered-fragment drain when heap exceeds threshold", ctx do
+      # threshold=1 forces a GC once the buffered fragments are drained. The consumer
+      # starts with buffering?=true; fragments sent before pg_snapshot_known land in the
+      # buffer. When we unblock the snapshotter it fires pg_snapshot_known which triggers
+      # :consume_buffer → drains the buffer → {:continue, :maybe_gc} runs the GC once.
+      Electric.StackConfig.put(ctx.stack_id, :consumer_gc_heap_threshold, 1)
+
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape1, ctx.stack_id)
+
+      # The snapshotter is now running but blocked on `receive {^test_pid, :resume}`.
+      assert_receive {:snapshot, ^shape_handle, snapshotter_pid}
+
+      consumer_pid = Consumer.whereis(ctx.stack_id, shape_handle)
+
+      # Send a large-payload fragment while buffering?=true — it goes into the buffer.
+      large_binary = :binary.copy(<<0>>, 200_000)
+      xid = 11
+      lsn = Lsn.from_integer(10)
+
+      txn =
+        complete_txn_fragment(xid, lsn, [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "1", "value" => large_binary},
+            log_offset: LogOffset.new(lsn, 0)
+          }
+        ])
+
+      assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
+
+      # Unblock the snapshotter: fires pg_snapshot_known → :consume_buffer → drains the
+      # buffer, then defers a single GC via {:continue, :maybe_gc}.
+      send(snapshotter_pid, {self(), :resume})
+
+      ref = Shapes.Consumer.register_for_changes(ctx.stack_id, shape_handle)
+      assert_receive {^ref, :new_changes, _}, @receive_timeout
+
+      # The deferred GC runs in the :maybe_gc continue after the drain. Flush it with a
+      # synchronous call (queued behind the continue), then check last_forced_gc_at —
+      # the consumer stamps it iff it forced a sweep for the drained fragment.
+      assert %{last_forced_gc_at: forced_at} = :sys.get_state(consumer_pid)
+
+      refute is_nil(forced_at),
+             "expected a forced GC to be recorded after the buffered-fragment drain"
+    end
+  end
+
+  describe "set_gc_heap_threshold helpers" do
+    # with_stack_id_from_test (line 87) already starts ProcessRegistry + StackConfig
+    # for ctx.stack_id — no heavier setup is needed for these pure-config tests.
+
+    test "set_gc_heap_threshold/2 writes the value into StackConfig", ctx do
+      assert :ok = Electric.Shapes.Consumer.set_gc_heap_threshold(ctx.stack_id, 2_000_000)
+
+      assert 2_000_000 ==
+               Electric.StackConfig.lookup(ctx.stack_id, :consumer_gc_heap_threshold, nil)
+    end
+
+    test "set_gc_heap_threshold/2 accepts nil to disable", ctx do
+      Electric.Shapes.Consumer.set_gc_heap_threshold(ctx.stack_id, 123)
+      assert :ok = Electric.Shapes.Consumer.set_gc_heap_threshold(ctx.stack_id, nil)
+      assert nil == Electric.StackConfig.lookup(ctx.stack_id, :consumer_gc_heap_threshold, nil)
+    end
+  end
+
   defp get_log_items_from_storage(offset, shape_storage) do
     Storage.get_log_stream(offset, shape_storage) |> Enum.map(&Jason.decode!/1)
   end

@@ -47,7 +47,13 @@ defmodule Electric.Shapes.Consumer.State do
     # as any message arrives (activity), so at most one is ever live at a time.
     suspend_timer: nil,
     # How long after hibernation to suspend (in ms)
-    suspend_after: nil
+    suspend_after: nil,
+    # Monotonic millisecond timestamp of the last consumer-forced GC (nil if never).
+    # Used by hysteresis logic in maybe_garbage_collect/1 to cap forced-GC frequency.
+    last_forced_gc_at: nil,
+    # Adaptive-GC heap threshold (bytes) cached at consumer startup, or nil when
+    # disabled.
+    gc_heap_threshold: nil
   ]
 
   @type pg_snapshot() :: SnapshotQuery.pg_snapshot()
@@ -107,6 +113,7 @@ defmodule Electric.Shapes.Consumer.State do
           :shape_suspend_after,
           Electric.Config.default(:shape_suspend_after)
         ),
+      gc_heap_threshold: Electric.StackConfig.lookup(stack_id, :consumer_gc_heap_threshold, nil),
       buffering?: true
     }
   end

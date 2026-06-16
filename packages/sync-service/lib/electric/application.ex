@@ -156,7 +156,8 @@ defmodule Electric.Application do
         shape_suspend_after: get_env(opts, :shape_suspend_after),
         conn_max_requests: get_env(opts, :conn_max_requests),
         handler_fullsweep_after: get_env(opts, :handler_fullsweep_after),
-        process_spawn_opts: get_env(opts, :process_spawn_opts)
+        process_spawn_opts: get_env(opts, :process_spawn_opts),
+        consumer_gc_heap_threshold: get_env(opts, :consumer_gc_heap_threshold)
       ],
       manual_table_publishing?: get_env(opts, :manual_table_publishing?),
       shape_db_opts: [

@@ -33,7 +33,8 @@ defmodule Electric.StackConfig do
       shape_suspend_after: Electric.Config.default(:shape_suspend_after),
       chunk_bytes_threshold: Electric.ShapeCache.LogChunker.default_chunk_size_threshold(),
       feature_flags: [],
-      process_spawn_opts: %{}
+      process_spawn_opts: %{},
+      consumer_gc_heap_threshold: Electric.Config.default(:consumer_gc_heap_threshold)
     ]
   end
 

@@ -130,4 +130,43 @@ defmodule Electric.ConfigTest do
       end
     end
   end
+
+  describe "tweaks propagation" do
+    setup do
+      initial_config = Application.get_all_env(:electric)
+
+      for {key, _} <- initial_config do
+        Application.delete_env(:electric, key)
+      end
+
+      on_exit(fn ->
+        Application.put_all_env([{:electric, initial_config}])
+      end)
+
+      [initial_config: initial_config]
+    end
+
+    test "consumer_gc_heap_threshold opt is threaded into tweaks", ctx do
+      threshold = 209_715_200
+
+      config =
+        Electric.Application.configuration(
+          Keyword.merge(
+            Keyword.take(ctx.initial_config, [:replication_connection_opts]),
+            consumer_gc_heap_threshold: threshold
+          )
+        )
+
+      assert Keyword.fetch!(config[:tweaks], :consumer_gc_heap_threshold) == threshold
+    end
+
+    test "consumer_gc_heap_threshold defaults to nil in tweaks", ctx do
+      config =
+        Electric.Application.configuration(
+          Keyword.take(ctx.initial_config, [:replication_connection_opts])
+        )
+
+      assert Keyword.fetch!(config[:tweaks], :consumer_gc_heap_threshold) == nil
+    end
+  end
 end

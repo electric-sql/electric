@@ -38,6 +38,12 @@ defmodule Electric.Shapes.Consumer do
   @default_snapshot_timeout 45_000
   @stop_and_clean_timeout 30_000
   @stop_and_clean_reason ShapeCleaner.consumer_cleanup_reason()
+  @word_size :erlang.system_info(:wordsize)
+
+  # Minimum wall-clock interval (ms) between consumer-forced full GC sweeps. Caps how much CPU
+  # a busy consumer spends on full sweeps to at most one per @gc_min_interval_ms regardless of
+  # fragment rate.
+  @gc_min_interval_ms 1_000
 
   @type initialize_shape_opts() :: %{
           :action => :create | :restore,
@@ -110,9 +116,24 @@ defmodule Electric.Shapes.Consumer do
     ConsumerRegistry.whereis(stack_id, shape_handle)
   end
 
+  @doc """
+  Set the adaptive-GC heap threshold (bytes, or nil to disable) for a single stack.
+
+  Consumers cache this value at startup (see `State.new/2`), so the new threshold only
+  applies to consumers started after this call — already-running consumers keep the
+  threshold they read when they booted. Safe to call from IEx.
+  """
+  @spec set_gc_heap_threshold(Electric.stack_id(), non_neg_integer() | nil) :: :ok
+  def set_gc_heap_threshold(stack_id, threshold_bytes)
+      when is_nil(threshold_bytes) or (is_integer(threshold_bytes) and threshold_bytes >= 0) do
+    Electric.StackConfig.put(stack_id, :consumer_gc_heap_threshold, threshold_bytes)
+    :ok
+  end
+
   def start_link(%{stack_id: stack_id, shape_handle: shape_handle} = _config) do
     GenServer.start_link(__MODULE__, %{stack_id: stack_id, shape_handle: shape_handle},
-      name: name(stack_id, shape_handle)
+      name: name(stack_id, shape_handle),
+      spawn_opt: Electric.StackConfig.spawn_opts(stack_id, :consumer)
     )
   end
 
@@ -170,8 +191,17 @@ defmodule Electric.Shapes.Consumer do
     if state.terminating? do
       {:noreply, state, {:continue, :stop_and_clean}}
     else
-      {:noreply, state, state.hibernate_after}
+      {:noreply, state, {:continue, :maybe_gc}}
     end
+  end
+
+  # Deferred adaptive GC. Reached via {:continue, :maybe_gc} after a fragment (or a
+  # full buffer drain) has been processed, so a forced full sweep runs off the
+  # reply/critical path rather than blocking the ShapeLogCollector. Re-establishes
+  # the hibernate_after timeout that the {:continue, …} return could not carry.
+  def handle_continue(:maybe_gc, state) do
+    state = maybe_garbage_collect(state)
+    {:noreply, state, state.hibernate_after}
   end
 
   @impl GenServer
@@ -204,7 +234,7 @@ defmodule Electric.Shapes.Consumer do
         {:reply, :ok, state, {:continue, :stop_and_clean}}
 
       state ->
-        {:reply, :ok, state, state.hibernate_after}
+        {:reply, :ok, state, {:continue, :maybe_gc}}
     end
   end
 
@@ -518,6 +548,56 @@ defmodule Electric.Shapes.Consumer do
   defp handle_event(%TransactionFragment{} = txn_fragment, state) do
     Logger.debug(fn -> "Txn fragment received in Shapes.Consumer: #{inspect(txn_fragment)}" end)
     handle_txn_fragment(txn_fragment, state)
+  end
+
+  # Adaptive GC check. Always invoked from a {:continue, :maybe_gc} handler so the
+  # forced full sweep runs off the ShapeLogCollector's synchronous publish path: the
+  # SLC has already received :ok by the time this runs. Because the SLC publishes
+  # fragments to a given consumer sequentially, the continue typically completes
+  # before the next fragment arrives, so it does not block steady-state throughput.
+
+  # Fast path: adaptive GC is disabled — skip all process_info/time calls.
+  defp maybe_garbage_collect(%State{gc_heap_threshold: nil} = state), do: state
+
+  defp maybe_garbage_collect(%State{gc_heap_threshold: threshold_bytes} = state) do
+    {:total_heap_size, heap_words} = :erlang.process_info(self(), :total_heap_size)
+    heap_bytes = heap_words * @word_size
+    now = System.monotonic_time(:millisecond)
+
+    if should_force_gc?(heap_bytes, threshold_bytes, state.last_forced_gc_at, now) do
+      :erlang.garbage_collect()
+      %{state | last_forced_gc_at: now}
+    else
+      state
+    end
+  end
+
+  @doc false
+  # Decide whether to force a full GC sweep: heap (bytes) must be over the
+  # threshold (bytes) AND at least @gc_min_interval_ms must have elapsed since the
+  # last forced GC. last_gc_at / now_ms are monotonic milliseconds; last_gc_at is
+  # nil if this consumer has never forced a GC (always fire on first over-threshold
+  # event). Passing explicit min_interval_ms enables deterministic unit tests.
+  @spec should_force_gc?(
+          non_neg_integer(),
+          non_neg_integer() | nil,
+          integer() | nil,
+          integer(),
+          non_neg_integer()
+        ) :: boolean()
+  def should_force_gc?(
+        heap_bytes,
+        threshold_bytes,
+        last_gc_at,
+        now_ms,
+        min_interval_ms \\ @gc_min_interval_ms
+      )
+
+  def should_force_gc?(_heap_bytes, nil, _last_gc_at, _now_ms, _min_interval_ms), do: false
+
+  def should_force_gc?(heap_bytes, threshold_bytes, last_gc_at, now_ms, min_interval_ms) do
+    heap_bytes > threshold_bytes and
+      (is_nil(last_gc_at) or now_ms - last_gc_at >= min_interval_ms)
   end
 
   # A consumer process starts with buffering?=true before it has PG snapshot info (xmin, xmax, xip_list).
