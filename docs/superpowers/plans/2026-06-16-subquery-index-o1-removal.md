@@ -90,7 +90,7 @@ git commit -m "test: seed the subquery removal perf tests so they exercise node_
 
 ### Task 2: Unit-level flatness perf tests (the rigorous independence proof)
 
-A fixed `< budget` ceiling does not prove _independence_ from a dimension (an O(log n) or cheap-linear impl could pass). These tests measure removal at two well-separated sizes and assert the delta is within noise. They live at the `SubqueryIndex` unit level where setup is cheap (no SQL parsing), so they can scale to 50k shapes.
+A fixed `< budget` ceiling does not prove _independence_ from a dimension (an O(log n) or cheap-linear impl could pass). These tests measure removal at two well-separated sizes and assert the delta is within noise. They live at the `SubqueryIndex` unit level where setup is cheap (no SQL parsing), so they can scale to 20k shapes.
 
 **Files:**
 
@@ -102,7 +102,7 @@ Read this file first — it already has `register_node_shape/4`, `subquery_optim
 
 ```elixir
 # Removal must not scale with these dimensions. We measure removal reductions at a
-# small and a 50x-larger size and require the delta to stay within noise.
+# small and a 20x-larger size and require the delta to stay within noise.
 @perf_small 1_000
 @perf_large 20_000
 @flatness_tolerance 3_000
