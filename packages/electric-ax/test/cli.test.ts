@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { mkdtempSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { tmpdir, userInfo } from 'node:os'
 import { join } from 'node:path'
 import {
   createElectricCliHandlers,
@@ -132,7 +132,18 @@ async function parse(argv: Array<string>, handlers = createHandlers()) {
 }
 
 describe(`createElectricProgram`, () => {
-  it(`adds an optional principal header from the environment`, () => {
+  it(`uses system cli username as the default principal header`, () => {
+    const env = getElectricCliEnv({
+      ELECTRIC_AGENTS_URL: `https://agents.example.test`,
+      ELECTRIC_AGENTS_IDENTITY: `tester@example.com`,
+    })
+
+    expect(env.electricAgentsHeaders).toEqual({
+      'electric-principal': `system:cli-${userInfo().username}`,
+    })
+  })
+
+  it(`allows the principal header to be overridden from the environment`, () => {
     const env = getElectricCliEnv({
       ELECTRIC_AGENTS_URL: `https://agents.example.test`,
       ELECTRIC_AGENTS_IDENTITY: `tester@example.com`,
@@ -349,6 +360,33 @@ describe(`createElectricProgram`, () => {
         payload: `{"source":"test"}`,
       })
     )
+  })
+
+  it(`sends messages without legacy from attribution`, async () => {
+    const fetchMock = vi.spyOn(globalThis, `fetch`).mockResolvedValue(
+      new Response(JSON.stringify({ txid: `123` }), {
+        status: 200,
+        headers: { 'content-type': `application/json` },
+      })
+    )
+
+    try {
+      await createElectricCliHandlers(TEST_ENV).send(`/chat/test`, `hello`, {
+        type: `chat_message`,
+      })
+      expect(fetchMock).toHaveBeenCalledWith(
+        `http://localhost:4437/_electric/entities/chat/test/send`,
+        expect.objectContaining({
+          method: `POST`,
+          body: JSON.stringify({
+            payload: { text: `hello` },
+            type: `chat_message`,
+          }),
+        })
+      )
+    } finally {
+      fetchMock.mockRestore()
+    }
   })
 
   it(`sends signal requests to the entity signal endpoint`, async () => {
