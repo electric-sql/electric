@@ -135,6 +135,7 @@ export type DesktopSettings = {
   mcp?: { servers: Array<McpServerConfig> }
   seededDefaultMcpServerNames?: Array<string>
   pullWakeRunnerId?: string
+  pullWakeRunnerLabel?: string
 }
 
 export type LaunchAtLoginStatus = {

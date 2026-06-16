@@ -1,4 +1,5 @@
 import path from 'node:path'
+import os from 'node:os'
 import { app, powerSaveBlocker } from 'electron'
 import { AGENT_SKILLS_DIR } from '../shared/paths'
 import {
@@ -6,6 +7,7 @@ import {
   PULL_WAKE_OWNER_PRINCIPAL,
   PULL_WAKE_REGISTER_RUNNER,
   PULL_WAKE_RUNNER_ID,
+  PULL_WAKE_RUNNER_LABEL,
   RECONNECT_BASE_MS,
   RECONNECT_MAX_MS,
 } from '../shared/constants'
@@ -36,6 +38,7 @@ export type RuntimeLifecycleDeps = {
     workingDirectory?: string | null
     mcp?: { servers: Array<McpServerConfig> }
     pullWakeRunnerId?: string | null
+    pullWakeRunnerLabel?: string
     preventAppSuspension?: boolean
     enabledModelValues?: Array<string>
   }
@@ -266,13 +269,13 @@ export async function startRuntime(
 
   const serverWithPrincipal = deps.injectDevPrincipalHeaders(activeServer)
   const runtimeHeaders = mergeHeaders(serverWithPrincipal.headers)
-  const cloudAuthUserId =
-    activeServer.source === `electric-cloud`
-      ? (deps.getCloudAuthState()?.userId ?? null)
-      : null
+  const cloudAuthState =
+    activeServer.source === `electric-cloud` ? deps.getCloudAuthState() : null
   const runnerOwnerPrincipal =
-    runnerOwnerPrincipalFromUserId(cloudAuthUserId) ??
+    runnerOwnerPrincipalFromUserId(cloudAuthState?.userId ?? null) ??
     runnerOwnerPrincipalFromHeaders(runtimeHeaders, PULL_WAKE_OWNER_PRINCIPAL)
+  const runnerLabelPrefix =
+    cloudAuthState?.name ?? cloudAuthState?.email ?? `Electric Desktop`
   console.info(
     `[agents-desktop] Starting built-in agents runtime for server ${activeServer.url}`
   )
@@ -318,7 +321,10 @@ export async function startRuntime(
       ownerPrincipal: PULL_WAKE_REGISTER_RUNNER
         ? runnerOwnerPrincipal
         : undefined,
-      label: `Electric Agents Desktop`,
+      label:
+        PULL_WAKE_RUNNER_LABEL ??
+        deps.settings.pullWakeRunnerLabel ??
+        `${runnerLabelPrefix} · ${os.hostname()}`,
       headers: runtimeHeaders,
       claimHeaders: runtimeHeaders,
       claimTokenHeader:
