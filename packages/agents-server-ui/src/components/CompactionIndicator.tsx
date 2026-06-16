@@ -15,7 +15,7 @@ import styles from './CompactionIndicator.module.css'
 
 interface CheckpointRow {
   _seq?: number
-  attrs?: { kind?: string; status?: string }
+  attrs?: { kind?: string; status?: string; background?: boolean }
 }
 
 interface CompactionIndicatorProps {
@@ -33,7 +33,7 @@ export function CompactionIndicator({
     [db]
   )
 
-  const compacting = useMemo(() => {
+  const running = useMemo(() => {
     // The newest compaction checkpoint wins (later writes supersede earlier
     // ones for the same id). If it's still `running`, compaction is in flight.
     let latest: CheckpointRow | null = null
@@ -41,15 +41,31 @@ export function CompactionIndicator({
       if (row.attrs?.kind !== `compaction`) continue
       if (!latest || (row._seq ?? 0) > (latest._seq ?? 0)) latest = row
     }
-    return latest?.attrs?.status === `running`
+    if (latest?.attrs?.status !== `running`) return null
+    return { background: Boolean(latest.attrs?.background) }
   }, [rows])
 
-  if (!compacting) return null
+  if (!running) return null
 
+  // Background compaction is non-blocking, so it's shown subtly and distinctly
+  // from the blocking (sync, mid-turn) "Compacting context…".
   return (
-    <span className={styles.indicator} role="status" aria-live="polite">
+    <span
+      className={[
+        styles.indicator,
+        running.background ? styles.background : null,
+      ]
+        .filter(Boolean)
+        .join(` `)}
+      role="status"
+      aria-live="polite"
+    >
       <span className={styles.spinner} aria-hidden="true" />
-      <span className={styles.label}>Compacting context…</span>
+      <span className={styles.label}>
+        {running.background
+          ? `Compacting in background…`
+          : `Compacting context…`}
+      </span>
     </span>
   )
 }

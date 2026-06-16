@@ -28,9 +28,14 @@ import {
   COMPACTION_CHECKPOINT_ID,
   COMPACTION_CHECKPOINT_KIND,
   COMPACTION_CHECKPOINT_NAME,
+  type CompactionStatus,
 } from './compaction'
 import { createMidTurnCompactor } from './compaction-midturn'
-import { summarizeAgentMessages } from './compaction-summarize'
+import {
+  summarizeAgentMessages,
+  summarizeMessages,
+} from './compaction-summarize'
+import { CONTEXT_USAGE_BACKGROUND_START } from './token-accountant'
 
 /** Default minimum context size (tokens) before mid-turn compaction fires. */
 const DEFAULT_COMPACT_MIN_TOKENS = 2000
@@ -177,6 +182,19 @@ export interface HandlerContextConfig<TState extends StateProxy = StateProxy> {
 export interface HandlerContextResult<TState extends StateProxy = StateProxy> {
   ctx: HandlerContext<TState>
   getSleepRequested: () => boolean
+  /**
+   * Background (turn-end) compaction, driven by process-wake. Returns a handle
+   * whose promise resolves to the summary, or null when compaction isn't
+   * warranted (low usage / no agent / already compacted).
+   */
+  maybeStartBackgroundCompaction: () => {
+    watermark: number
+    promise: Promise<string>
+  } | null
+  /** Persist a completed background compaction checkpoint at its watermark. */
+  writeBackgroundCheckpoint: (watermark: number, summary: string) => void
+  /** Mark an in-flight background compaction (identified by its watermark) failed. */
+  failBackgroundCheckpoint: (watermark: number) => void
 }
 
 type DebugHandlerContext<TState extends StateProxy = StateProxy> =
@@ -1240,8 +1258,121 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
     },
   }
 
+  // ── Background compaction (turn-end, non-blocking) ──────────────────────
+  // Driven by process-wake: after a turn, maybeStartBackgroundCompaction kicks
+  // off a detached summarization if usage is high; when it resolves, the NEXT
+  // turn writes the checkpoint via writeBackgroundCheckpoint (so all event
+  // writes stay inside a handler invocation). The checkpoint stores the
+  // snapshot watermark so reconstruction places the summary before any messages
+  // that arrived while it ran (see timeline-context).
+  const writeCompactionCheckpoint = (
+    status: CompactionStatus,
+    content: string,
+    extraAttrs: Record<string, string | number | boolean> = {},
+    id: string = COMPACTION_CHECKPOINT_ID
+  ): void => {
+    contextApi.insertContext(id, {
+      name: COMPACTION_CHECKPOINT_NAME,
+      attrs: { kind: COMPACTION_CHECKPOINT_KIND, status, ...extraAttrs },
+      content,
+    })
+  }
+
+  // Each background generation gets a watermark-unique checkpoint id, so the
+  // NEXT background's `running` row never supersedes the PREVIOUS `complete`
+  // one. They otherwise share the fixed id (supersession keys on id alone), and
+  // a fresh `running` silently erased the last `complete` watermark — undoing
+  // every compaction and pinning the indicator to "running". running→complete→
+  // failed of ONE generation share this id so a generation supersedes itself.
+  const backgroundCheckpointId = (watermark: number): string =>
+    `${COMPACTION_CHECKPOINT_ID}-bg-${watermark}`
+
+  const latestCompleteCheckpointWatermark = (): number => {
+    let watermark = Number.NEGATIVE_INFINITY
+    for (const row of config.db.collections.contextInserted.toArray) {
+      const r = row as {
+        name?: string
+        attrs?: { kind?: string; status?: string; watermark?: unknown }
+      }
+      if (
+        r.name !== COMPACTION_CHECKPOINT_NAME ||
+        r.attrs?.kind !== COMPACTION_CHECKPOINT_KIND ||
+        r.attrs?.status !== `complete`
+      ) {
+        continue
+      }
+      const w =
+        typeof r.attrs.watermark === `number`
+          ? r.attrs.watermark
+          : Number(r.attrs.watermark)
+      if (Number.isFinite(w) && w > watermark) watermark = w
+    }
+    return watermark
+  }
+
+  const maybeStartBackgroundCompaction = (): {
+    watermark: number
+    promise: Promise<string>
+  } | null => {
+    const cfg = agentConfig
+    if (!cfg) return null
+    const usage = selectLatestContextUsage(
+      config.db.collections.steps.toArray as ReadonlyArray<ContextUsageStep>
+    )
+    if (!usage) return null
+    const ceiling = ratioFromEnv(
+      process.env.ELECTRIC_AGENTS_COMPACT_BG_CEILING,
+      CONTEXT_USAGE_BACKGROUND_START
+    )
+    if (usage.ratio < ceiling) return null
+    const timestamped = runtimeTimelineMessages(config.db)
+    if (timestamped.length === 0) return null
+    const head = timestamped.reduce(
+      (max, message) => Math.max(max, message.at),
+      Number.NEGATIVE_INFINITY
+    )
+    // Already summarized up to/past the head — nothing new to compact.
+    if (latestCompleteCheckpointWatermark() >= head) return null
+
+    const messages = timelineToMessages(config.db)
+    const provider = agentModelProvider(cfg)
+    // Background-flavored `running` checkpoint for the UI (subtle indicator).
+    writeCompactionCheckpoint(
+      `running`,
+      ``,
+      { background: true, watermark: head },
+      backgroundCheckpointId(head)
+    )
+    const promise = (async () => {
+      const apiKey = await cfg.getApiKey?.(provider)
+      return summarizeMessages({
+        model: cfg.model,
+        provider,
+        messages,
+        ...(apiKey ? { apiKey } : {}),
+        ...(cfg.summarizeComplete ? { complete: cfg.summarizeComplete } : {}),
+      })
+    })()
+    return { watermark: head, promise }
+  }
+
   return {
     ctx,
     getSleepRequested: () => sleepRequested,
+    maybeStartBackgroundCompaction,
+    writeBackgroundCheckpoint: (watermark: number, summary: string) =>
+      writeCompactionCheckpoint(
+        `complete`,
+        summary,
+        { background: true, watermark },
+        backgroundCheckpointId(watermark)
+      ),
+    failBackgroundCheckpoint: (watermark: number) =>
+      writeCompactionCheckpoint(
+        `failed`,
+        ``,
+        { background: true },
+        backgroundCheckpointId(watermark)
+      ),
   }
 }

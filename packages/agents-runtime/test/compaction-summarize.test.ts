@@ -41,6 +41,32 @@ describe(`summarizeMessages`, () => {
     expect(out).toContain(`SUMMARY_BODY`)
   })
 
+  it(`rejects (does not hang) when the model call stalls past the timeout`, async () => {
+    // A stalled stream that never resolves — the real failure mode that wedged
+    // background compaction. The timeout must turn it into a rejection.
+    let aborted = false
+    const complete: SummarizeCompleteFn = (_model, _context, options) =>
+      // Never settles on its own — models a stalled stream that ignores abort,
+      // so only the hard timer can break the wait.
+      new Promise(() => {
+        const signal = (options as { signal?: AbortSignal } | undefined)?.signal
+        signal?.addEventListener(`abort`, () => {
+          aborted = true
+        })
+      })
+
+    await expect(
+      summarizeMessages({
+        model: `claude-sonnet-4-5-20250929`,
+        messages,
+        complete,
+        timeoutMs: 20,
+      })
+    ).rejects.toThrow(/timed out after 20ms/)
+    // The caller is also signalled to abort so the underlying fetch can unwind.
+    expect(aborted).toBe(true)
+  })
+
   it(`throws when the model returns an empty summary`, async () => {
     const complete: SummarizeCompleteFn = async () => ({
       content: [{ type: `text`, text: `   ` }],

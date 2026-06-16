@@ -11,6 +11,18 @@ export type { SummarizeCompleteFn }
 const DEFAULT_SUMMARY_MAX_TOKENS = 2048
 
 /**
+ * Hard deadline for a single summarization request.
+ *
+ * pi-ai's anthropic provider applies a client-side timeout (and abort) ONLY
+ * when the caller passes `timeoutMs`/`signal`, and it never retries. Background
+ * compaction fires this call CONCURRENTLY with the agent's own streaming turn on
+ * the same (OAuth) token; if that concurrent stream stalls, an unbounded call
+ * hangs forever — wedging the pending slot and blocking all future attempts.
+ * Bounding it turns a stall into a failure the caller can retry next turn-end.
+ */
+const DEFAULT_SUMMARY_TIMEOUT_MS = 120_000
+
+/**
  * Summarize a conversation into a compaction handoff summary.
  *
  * Uses the **conversation's own model** by default (RFC Q2): a cheaper,
@@ -24,6 +36,8 @@ interface SummarizeCoreInput {
   provider?: string
   apiKey?: string
   maxTokens?: number
+  /** Hard deadline for the model call; defaults to {@link DEFAULT_SUMMARY_TIMEOUT_MS}. */
+  timeoutMs?: number
   complete?: SummarizeCompleteFn
 }
 
@@ -54,10 +68,35 @@ async function summarizeConverted(
     ],
   }
 
-  const res = await complete(model, context, {
+  // Bound the call: pass `timeoutMs`/`signal` (which the anthropic provider
+  // honours) AND race against a hard timer, so a stalled stream that ignores the
+  // abort still rejects rather than hanging the background slot forever.
+  const timeoutMs = input.timeoutMs ?? DEFAULT_SUMMARY_TIMEOUT_MS
+  const controller = new AbortController()
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort()
+      reject(new Error(`[compaction] summarize timed out after ${timeoutMs}ms`))
+    }, timeoutMs)
+  })
+
+  const call = complete(model, context, {
     maxTokens: input.maxTokens ?? DEFAULT_SUMMARY_MAX_TOKENS,
     ...(input.apiKey && { apiKey: input.apiKey }),
+    signal: controller.signal,
+    timeoutMs,
   })
+  // If the timeout wins the race, `call` rejects later (aborted) — swallow it so
+  // the loser doesn't surface as an unhandled rejection.
+  call.catch(() => {})
+
+  let res: Awaited<ReturnType<SummarizeCompleteFn>>
+  try {
+    res = await Promise.race([call, timeout])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
 
   const textBlock = res.content.find((block) => block.type === `text`)
   const text = textBlock && `text` in textBlock ? (textBlock.text ?? ``) : ``

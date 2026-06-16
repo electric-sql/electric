@@ -7,6 +7,13 @@
   user-select: none;
 }
 
+/* Background compaction is non-blocking — render it muted/subtle so it doesn't
+   read as "you're blocked" like the sync (amber) indicator. */
+.background {
+  color: var(--text-muted, rgba(0, 0, 0, 0.55));
+  opacity: 0.8;
+}
+
 .label {
   font-size: 0.72rem;
   line-height: 1;
