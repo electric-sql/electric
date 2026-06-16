@@ -23,7 +23,6 @@ interface HandlerContext<TState extends StateProxy = StateProxy> {
   entityType: string
   args: Readonly<Record<string, unknown>>
   db: EntityStreamDBWithActions
-  self: SelfHandle
   state: TState
   events: Array<ChangeEvent>
   actions: Record<string, (...args: unknown[]) => unknown>
@@ -37,6 +36,14 @@ interface HandlerContext<TState extends StateProxy = StateProxy> {
   removeContext(id: string): void
   getContext(id: string): ContextEntry | undefined
   listContext(): Array<ContextEntry>
+  setGoal(input: GoalInput): GoalEntry
+  clearGoal(): boolean
+  getGoal(): GoalEntry | undefined
+  markGoalComplete(summary?: string): GoalEntry | undefined
+  updateGoalUsage(
+    tokensUsed: number,
+    opts?: { status?: GoalEntry["status"] }
+  ): GoalEntry | undefined
   agent: AgentHandle
   spawn(
     type: string,
@@ -69,6 +76,7 @@ interface HandlerContext<TState extends StateProxy = StateProxy> {
     source: ObservationSource,
     opts?: { wake?: Wake }
   ): Promise<ObservationHandle>
+  unobserve(sourceRef: string): Promise<void>
   mkdb<T extends SharedStateSchemaMap>(
     id: string,
     schema: T
@@ -79,7 +87,6 @@ interface HandlerContext<TState extends StateProxy = StateProxy> {
     opts?: { type?: string; afterMs?: number }
   ): Promise<SendResult>
   attachments: AttachmentsApi
-  createEffect(functionRef: string, key: string, config: JsonValue): boolean
   onSignal(
     handler: (signal: {
       signal: EntitySignal
@@ -88,6 +95,7 @@ interface HandlerContext<TState extends StateProxy = StateProxy> {
     }) => void | Promise<void>
   ): void
   recordRun(): RunHandle
+  replyText(text: string): void
   setTag(key: string, value: string): Promise<void>
   deleteTag(key: string): Promise<void>
   sleep(): void
@@ -109,7 +117,6 @@ interface HandlerContext<TState extends StateProxy = StateProxy> {
 | `entityType` | `string`                                          | Registered type name (e.g. `"chat"`).                                                                         |
 | `args`       | `Readonly<Record<string, unknown>>`               | Spawn arguments passed when the entity was created.                                                           |
 | `db`         | `EntityStreamDBWithActions`                       | The entity's TanStack DB instance with registered actions.                                                    |
-| `self`       | `SelfHandle`                                      | Handle for this entity. Use `ctx.self.send(payload)` to send to yourself without spelling the entity URL.     |
 | `state`      | `TState`                                          | Proxy object keyed by collection name. Each property is a [`StateCollectionProxy`](./state-collection-proxy). |
 | `events`     | `Array<ChangeEvent>`                              | Change events that triggered this wake.                                                                       |
 | `actions`    | `Record<string, (...args: unknown[]) => unknown>` | Custom non-CRUD actions from the entity definition's `actions` factory. Auto-generated CRUD actions live on `ctx.db.actions` and `ctx.state`. |
@@ -150,16 +157,22 @@ type HandlerWake =
 | `removeContext(id)`               | `void`                                                            | Remove a context entry by id.                                                                                                                                                                                                              |
 | `getContext(id)`                  | `ContextEntry \| undefined`                                       | Get a context entry by id, or `undefined` if not found.                                                                                                                                                                                    |
 | `listContext()`                   | `Array<ContextEntry>`                                             | List all context entries.                                                                                                                                                                                                                  |
+| `setGoal(input)`                  | `GoalEntry`                                                       | Set or replace the active goal for this entity.                                                                                                                        |
+| `clearGoal()`                     | `boolean`                                                         | Clear the active goal. Returns whether a goal was removed.                                                                                                             |
+| `getGoal()`                       | `GoalEntry \| undefined`                                          | Read the active goal, if one exists.                                                                                                                                    |
+| `markGoalComplete(summary?)`      | `GoalEntry \| undefined`                                          | Mark the active goal complete, optionally recording a summary.                                                                                                        |
+| `updateGoalUsage(tokens, opts?)`  | `GoalEntry \| undefined`                                          | Add token usage to the active goal and optionally update its status.                                                                                                  |
 | `agent.run(input?)`               | `Promise<AgentRunResult>`                                         | Run the configured agent loop. Optional `input` string is appended as a user message before the loop starts.                                                                                                                               |
 | `spawn(type, id, args?, opts?)`   | `Promise<EntityHandle>`                                           | Spawn a child entity. `opts` accepts `tags`, `observe`, `initialMessage`, `initialMessageType`, `wake`, and `sandbox`. See [`EntityHandle`](./entity-handle).                                                                                                    |
 | `fork(sourceUrl, id, opts?)`      | `Promise<EntityHandle>`                                           | Fork another entity at its latest completed run. By default the fork becomes this entity's child and wakes this entity when the fork's next run finishes.                                                                                   |
 | `forkSelf(id, opts?)`             | `Promise<EntityHandle>`                                           | Convenience wrapper for `ctx.fork(ctx.entityUrl, id, opts)`.                                                                                                                                                                               |
 | `observe(source, opts?)`          | `Promise<EntityHandle \| SharedStateHandle \| ObservationHandle>` | Observe a source. Return type depends on source type: `EntityHandle` for entities, `SharedStateHandle & ObservationHandle` for db, `ObservationHandle` otherwise. Use `entity()`, `cron()`, `entities()`, `db()` helpers to build sources. |
+| `unobserve(sourceRef)`            | `Promise<void>`                                                   | Stop this entity from observing a pg-sync source by source reference.                                                                                                                            |
 | `mkdb(id, schema)`                | `SharedStateHandle<T>`                                            | Create a new shared state stream. See [`SharedStateHandle`](./shared-state-handle).                                                                                                                                                        |
 | `send(entityUrl, payload, opts?)` | `Promise<SendResult>`                                             | Send a message to another entity. `opts` accepts `type` and `afterMs` (delay in milliseconds).                                                                                                                                             |
-| `createEffect(ref, key, config)`  | `boolean`                                                         | Register an effect for the current entity definition. Returns whether the effect was newly created for this key.                                                                                                                           |
 | `onSignal(handler)`               | `void`                                                            | Register a handler for lifecycle signals delivered during this wake. Runtime-controlled signals such as `SIGINT`, `SIGSTOP`, `SIGCONT`, and `SIGKILL` are handled by the runtime.                                                         |
 | `recordRun()`                     | `RunHandle`                                                       | Record a non-LLM run in the built-in `runs` collection, so observers using `wake: { on: "runFinished", includeResponse: true }` are notified when external work completes.                                                                                               |
+| `replyText(text)`                 | `void`                                                            | Write a synthetic assistant text reply without invoking the LLM. Emits the same run/text rows used by chat UIs.                                                                                               |
 | `setTag(key, value)`              | `Promise<void>`                                                   | Set a tag on this entity.                                                                                                                                                                                                                  |
 | `deleteTag(key)`                  | `Promise<void>`                                                   | Delete a tag from this entity.                                                                                                                                                                                                             |
 | `sleep()`                         | `void`                                                            | End the handler without running an agent. The entity remains idle until the next wake.                                                                                                                                                     |

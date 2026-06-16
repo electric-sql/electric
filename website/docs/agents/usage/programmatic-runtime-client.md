@@ -164,10 +164,13 @@ interface SendEntityMessageOptions {
   afterMs?: number
   mode?: "immediate" | "queued" | "paused" | "steer"
   position?: string
+  fromPrincipal?: string
+  fromAgent?: string
+  writeToken?: string
 }
 ```
 
-`afterMs` asks the server to deliver the message later. `mode` controls how the server queues or applies the message.
+`afterMs` asks the server to deliver the message later. `mode` controls how the server queues or applies the message. `fromPrincipal`, `fromAgent`, and `writeToken` are advanced fields for claim-scoped runtime writes.
 
 ## Signals
 
@@ -272,6 +275,7 @@ This is the lower-level operation behind observing `entities({ tags })`.
 
 ```ts
 const source = await client.registerPgSyncSource({
+  url: "http://localhost:3000/v1/shape",
   table: "todos",
   where: "project_id = $1",
   params: ["docs"],
@@ -279,25 +283,34 @@ const source = await client.registerPgSyncSource({
 // { streamUrl, sourceRef }
 ```
 
-This is the lower-level operation behind observing `pgSync({ table, where, params })` sources. The server turns the Postgres shape into an Electric Agents observation stream.
+This is the lower-level operation behind observing `pgSync({ url, table, where, params })` sources. The server turns the Postgres shape into an Electric Agents observation stream.
 
-### Event sources
-
-Event-source APIs expose webhook-backed feeds that agents can subscribe to:
+Remove an entity's pg-sync observation by source reference:
 
 ```ts
-const sources = await client.listEventSources()
+await client.removePgSyncObservation({
+  entityUrl: "/horton/onboarding",
+  sourceRef: source.sourceRef,
+})
+```
 
-await client.subscribeToEventSource({
+### Webhook sources
+
+Webhook-source APIs expose webhook-backed feeds that agents can subscribe to:
+
+```ts
+const sources = await client.listWebhookSources()
+
+await client.subscribeToWebhookSource({
   entityUrl: "/horton/onboarding",
   id: "github-main",
-  sourceKey: "github",
+  webhookKey: "github",
   bucketKey: "repo",
   params: { repo: "electric-sql/electric" },
   lifetime: { kind: "until_entity_stopped" },
 })
 
-await client.unsubscribeFromEventSource({
+await client.unsubscribeFromWebhookSource({
   entityUrl: "/horton/onboarding",
   id: "github-main",
 })
@@ -331,7 +344,7 @@ await client.deleteSchedule({
 
 ## Tags
 
-`setTag()` and `deleteTag()` are primarily for handler/runtime-owned flows that already hold the current claim-scoped write token. External clients should prefer `send()` and write only to an entity's inbox rather than writing entity state directly.
+`setTag()` and `deleteTag()` are primarily for handler/runtime-owned flows that already hold the current claim-scoped write token. External clients should prefer `sendEntityMessage()` and write only to an entity's inbox rather than writing entity state directly.
 
 ```ts
 await client.setTag("/horton/onboarding", "title", "Onboarding", writeToken)

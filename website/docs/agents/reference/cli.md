@@ -244,8 +244,10 @@ import {
 } from "electric-ax"
 
 const env = getElectricCliEnv({
+  ...process.env,
   ELECTRIC_AGENTS_URL: "http://localhost:4437",
   ELECTRIC_AGENTS_IDENTITY: "docs@example.com",
+  ELECTRIC_AGENTS_PRINCIPAL: "user:docs@example.com",
 })
 
 const handlers = createElectricCliHandlers(env, "electric agents")
@@ -262,7 +264,7 @@ await program.parseAsync(["node", "electric", "agents", "types"])
 | Export                            | Purpose                                                                  |
 | --------------------------------- | ------------------------------------------------------------------------ |
 | `DEFAULT_ELECTRIC_AGENTS_URL`     | Default server URL (`"http://localhost:4437"`).                          |
-| `getElectricCliEnv(env?)`         | Reads `ELECTRIC_AGENTS_URL` and `ELECTRIC_AGENTS_IDENTITY`.              |
+| `getElectricCliEnv(env?)`         | Reads `ELECTRIC_AGENTS_URL`, `ELECTRIC_AGENTS_IDENTITY`, `ELECTRIC_AGENTS_PRINCIPAL`, and `ELECTRIC_AGENTS_SERVER_HEADERS`. |
 | `createElectricCliHandlers()`     | Creates the default command handlers.                                    |
 | `createElectricProgram()`         | Creates the Commander program.                                           |
 | `resolveCommandPrefix(argv, env?)` | Resolves help text examples for direct or package-manager invocation.    |

@@ -51,14 +51,20 @@ interface CollectionDefinition {
   schema?: StandardSchemaV1
   type?: string
   primaryKey?: string
+  externallyWritable?: boolean
+  contract?: string
+  operations?: Array<"insert" | "update" | "delete">
 }
 ```
 
-| Field        | Type               | Default          | Description                                        |
-| ------------ | ------------------ | ---------------- | -------------------------------------------------- |
-| `schema`     | `StandardSchemaV1` | -                | Zod or Standard Schema validator for the row type. |
-| `type`       | `string`           | `"state:{name}"` | Event type string used in the durable stream.      |
-| `primaryKey` | `string`           | `"key"`          | Primary key field name on the row.                 |
+| Field                | Type                                      | Default          | Description                                        |
+| -------------------- | ----------------------------------------- | ---------------- | -------------------------------------------------- |
+| `schema`             | `StandardSchemaV1`                        | -                | Zod or Standard Schema validator for the row type. |
+| `type`               | `string`                                  | `"state:{name}"` | Event type string used in the durable stream.      |
+| `primaryKey`         | `string`                                  | `"key"`          | Primary key field name on the row.                 |
+| `externallyWritable` | `boolean`                                 | `false`          | Opt in to HTTP writes for this collection.         |
+| `contract`           | `string`                                  | -                | Well-known contract implemented by the collection. |
+| `operations`         | `Array<"insert" \| "update" \| "delete">` | `["insert"]` for external writes | Allowlist of external write operations when `externallyWritable` is enabled. |
 
 ## Permission grants
 

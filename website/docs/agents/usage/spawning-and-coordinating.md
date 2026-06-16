@@ -92,7 +92,7 @@ async handler(ctx, wake) {
     )
 
     ctx.state.children.insert({
-      key: "analyst",
+      key: child.entityUrl,
       url: child.entityUrl,
       status: "running",
     })
@@ -149,7 +149,7 @@ The entity remains alive and can be woken again by incoming messages or observed
 After spawning children in `firstWake`, use `observe` on subsequent wakes to get handles:
 
 ```ts
-async handler(ctx) {
+async handler(ctx, wake) {
   if (ctx.firstWake) {
     await ctx.spawn(
       "worker",

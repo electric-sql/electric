@@ -2,13 +2,13 @@
 title: Built-in collections
 titleTemplate: "... - Electric Agents"
 description: >-
-  Reference for the 19 runtime-managed collections: runs, steps, texts, toolCalls, inbox, signals, errors, slashCommands, and more.
+  Reference for the 20 runtime-managed collections: runs, steps, texts, toolCalls, inbox, signals, errors, slashCommands, and more.
 outline: [2, 3]
 ---
 
 # Built-in collections
 
-Every entity automatically has these 19 collections, populated by the runtime as the agent operates. Custom state collections defined in `EntityDefinition.state` are merged with these at creation time.
+Every entity automatically has these 20 collections, populated by the runtime as the agent operates. Custom state collections defined in `EntityDefinition.state` are merged with these at creation time.
 
 **Source:** `@electric-ax/agents-runtime` -- `entity-schema.ts`
 
@@ -22,6 +22,7 @@ Every entity automatically has these 19 collections, populated by the runtime as
 | `textDeltas`       | `text_delta`       | `TextDelta`        | Incremental text content     |
 | `toolCalls`        | `tool_call`        | `ToolCall`         | Tool call lifecycle          |
 | `reasoning`        | `reasoning`        | `Reasoning`        | Reasoning block lifecycle    |
+| `reasoningDeltas`  | `reasoning_delta`  | `ReasoningDelta`   | Incremental reasoning content |
 | `errors`           | `error`            | `ErrorEvent`       | Diagnostic errors            |
 | `inbox`            | `inbox` | `MessageReceived`  | Inbound messages             |
 | `wakes`            | `wake`             | `WakeEntry`        | Wake delivery records        |
@@ -30,7 +31,7 @@ Every entity automatically has these 19 collections, populated by the runtime as
 | `signals`          | `signal`           | `Signal`           | Lifecycle signal records     |
 | `childStatus`      | `child_status`     | `ChildStatusEntry` | Child/observed entity status |
 | `tags`             | `tags`             | `TagEntry`         | Entity tags                  |
-| `slashCommands`    | `slash_command`    | `SlashCommand`     | Composer slash commands      |
+| `slashCommands`    | `slash_command`    | `SlashCommandEntry` | Composer slash commands      |
 | `manifests`        | `manifest`         | `Manifest`         | Durable resource manifests   |
 | `contextInserted`  | `context_inserted` | `ContextInserted`  | Context additions            |
 | `contextRemoved`   | `context_removed`  | `ContextRemoved`   | Context removals             |
@@ -109,7 +110,21 @@ interface ToolCall {
 ```ts
 interface Reasoning {
   key: string
+  run_id?: string
   status: "streaming" | "completed"
+  encrypted?: string
+  summary_title?: string
+}
+```
+
+### ReasoningDelta
+
+```ts
+interface ReasoningDelta {
+  key: string
+  reasoning_id: string
+  run_id: string
+  delta: string
 }
 ```
 
@@ -242,10 +257,10 @@ interface TagEntry {
 }
 ```
 
-### SlashCommand
+### SlashCommandEntry
 
 ```ts
-interface SlashCommand {
+interface SlashCommandEntry {
   key: string
   name: string
   description?: string
@@ -259,6 +274,19 @@ interface SlashCommand {
   owner?: string
   version?: string
   updated_at: string
+  dynamic_layers?: Array<{
+    name: string
+    description?: string
+    arguments?: Array<{
+      name: string
+      type: "string" | "number" | "boolean"
+      required?: boolean
+      description?: string
+    }>
+    owner?: string
+    version?: string
+    updated_at: string
+  }>
 }
 ```
 
@@ -300,6 +328,7 @@ type Manifest =
   | ManifestContextEntry
   | ManifestCronScheduleEntry
   | ManifestFutureSendScheduleEntry
+  | ManifestGoalEntry
 
 interface ManifestChildEntry {
   key: string
@@ -394,6 +423,19 @@ interface ManifestFutureSendScheduleEntry {
   sentAt?: string
   failedAt?: string
   lastError?: string
+}
+
+interface ManifestGoalEntry {
+  key: string
+  kind: "goal"
+  id: string
+  objective: string
+  status: "active" | "complete" | "budget_limited"
+  tokenBudget: number | null
+  tokensUsed: number
+  summary?: string
+  createdAt: string
+  updatedAt: string
 }
 ```
 

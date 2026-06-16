@@ -36,7 +36,7 @@ interface WorkerArgs {
 | `provider`         | No       | Model provider override paired with `model`.                                                  |
 | `reasoningEffort`  | No       | Reasoning effort override for compatible reasoning models.                                    |
 
-`registerWorker(registry, { workingDirectory, streamFn? })` is called by the dev server during bootstrap; you don't usually call it yourself.
+`registerWorker(registry, { workingDirectory, modelCatalog, streamFn? })` is called by the dev server during bootstrap; you don't usually call it yourself. The bootstrap path supplies the required `modelCatalog`.
 
 ## Valid tool names
 

@@ -87,7 +87,12 @@ import { db, pgSync } from "@electric-ax/agents-runtime"
 const shared = await client.observe(db("research-123", researchSchema))
 
 const todos = await client.observe(
-  pgSync({ table: "todos", where: "project_id = $1", params: ["docs"] })
+  pgSync({
+    url: "http://localhost:3000/v1/shape",
+    table: "todos",
+    where: "project_id = $1",
+    params: ["docs"],
+  })
 )
 ```
 

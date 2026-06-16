@@ -18,7 +18,7 @@ High level overview of the Electric&nbsp;Agents system and developer&nbsp;APIs.
 Agents are entities that handle events, defined as a:
 
 - `handler(ctx, wake)` with
-- `state` and [built in collections](#_8-built-in-collections)
+- `state` and [built in collections](#_9-built-in-collections)
 
 And schemas:
 
@@ -41,8 +41,8 @@ The context API passed into the handler:
 | `ctx.entityType`                    | Type name string                                                      |
 | `ctx.args`                          | Readonly spawn arguments                                              |
 | `ctx.tags`                          | Entity tags -- key/value metadata                                     |
+| `ctx.principal`                     | Principal that caused the current wake, when supplied by the server   |
 | `ctx.db`                            | Full TanStack DB: `db.actions` for writes, `db.collections` for reads |
-| `ctx.self`                          | Handle for sending messages to the current entity                     |
 | `ctx.state`                         | Proxy object keyed by collection name                                 |
 | `ctx.events`                        | Change events that triggered this wake                                |
 | `ctx.useAgent()`                    | Set up the LLM agent                                                  |
@@ -58,8 +58,9 @@ The context API passed into the handler:
 | `ctx.sleep()`                       | Return to idle                                                        |
 | `ctx.mkdb(id, schema)`              | Create cross-entity shared state                                      |
 | `ctx.observe(db(id, schema), opts)` | Join existing shared state                                            |
-| `ctx.createEffect(ref, key, config)` | Register an entity effect                                             |
 | `ctx.recordRun()`                   | Record non-LLM work as a run for `runFinished` observers              |
+| `ctx.replyText(text)`               | Emit a synthetic assistant text reply without invoking the LLM         |
+| `ctx.setGoal(input)` / `ctx.getGoal()` | Manage the active goal for long-running agents                     |
 | `ctx.setTag(key, value)`            | Set a tag on this entity                                              |
 | `ctx.deleteTag(key)`                | Delete a tag from this entity                                         |
 
@@ -71,11 +72,13 @@ See [Writing handlers](/docs/agents/usage/writing-handlers) and [HandlerContext 
 ctx.useAgent({
   systemPrompt: string,
   model: string | Model<any>, // e.g. 'claude-sonnet-4-6'
-  provider?: KnownProvider,   // defaults to 'anthropic' for string models
+  provider?: Provider,        // defaults to 'anthropic' for string models
   tools: AgentTool[],      // [...ctx.electricTools, ...custom]
   streamFn?: StreamFn,     // optional streaming callback
   getApiKey?: (provider: string) => string | Promise<string> | undefined,
   onPayload?: SimpleStreamOptions["onPayload"],
+  modelTimeoutMs?: number,
+  modelMaxRetries?: number,
   testResponses?: string[] | TestResponseFn // for testing without LLM
 })
 await ctx.agent.run()      // blocks until agent finishes
@@ -207,7 +210,7 @@ Use the dedicated guides for runtime features that cut across handlers, clients,
 - [Sandboxing](/docs/agents/usage/sandboxing) — filesystem, process, and network isolation for LLM-driven tools.
 - [Attachments](/docs/agents/usage/attachments) — upload, read, and hydrate files and images.
 - [Signals](/docs/agents/usage/signals) — interrupt, pause, resume, kill, and notify entities.
-- [Event sources](/docs/agents/usage/event-sources) — subscribe entities to external webhook-backed feeds.
+- [Webhook sources](/docs/agents/usage/webhook-sources) — subscribe entities to external webhook-backed feeds.
 
 ## 8. Shared state (cross-entity)
 
@@ -232,7 +235,7 @@ See [Shared state](/docs/agents/usage/shared-state) and [SharedStateHandle refer
 
 ## 9. Built-in collections
 
-Every entity automatically has 18 `ctx.db.collections`:
+Every entity automatically has 20 `ctx.db.collections`:
 
 | Collection         | Purpose                   | Key fields                                                             |
 | ------------------ | ------------------------- | ---------------------------------------------------------------------- |
@@ -242,6 +245,7 @@ Every entity automatically has 18 `ctx.db.collections`:
 | `textDeltas`       | Incremental text chunks   | `text_id, delta`                                                       |
 | `toolCalls`        | Tool invocation lifecycle | `tool_name, status, args, result`                                      |
 | `reasoning`        | Extended thinking blocks  | `status: streaming/completed`                                          |
+| `reasoningDeltas`  | Incremental reasoning chunks | `reasoning_id, delta`                                               |
 | `errors`           | Diagnostic errors         | `error_code, message`                                                  |
 | `inbox`            | Received messages         | `from, payload, message_type`                                          |
 | `wakes`            | Wake event history        | `source, timeout, changes`                                             |
@@ -249,6 +253,7 @@ Every entity automatically has 18 `ctx.db.collections`:
 | `entityStopped`    | Shutdown signal           | `timestamp, reason`                                                    |
 | `signals`          | Lifecycle signal records  | `signal, status, outcome`                                              |
 | `childStatus`      | Child entity status       | `entity_url, status`                                                   |
+| `slashCommands`    | Composer slash commands   | `name, description, args`                                              |
 | `manifests`        | Wiring declarations       | discriminated union: child/source/shared-state/effect/attachment/context/schedule |
 | `replayWatermarks` | Replay offset tracking    | `source_id, offset`                                                    |
 | `tags`             | Entity tags/labels        | `key, value`                                                           |

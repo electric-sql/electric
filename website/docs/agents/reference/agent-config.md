@@ -16,13 +16,20 @@ Configuration for the LLM agent loop. Passed to `ctx.useAgent()`.
 interface AgentConfig {
   systemPrompt: string
   model: string | Model<any>
-  provider?: KnownProvider
+  provider?: Provider
   tools: AgentTool[]
   streamFn?: StreamFn
   getApiKey?: (
     provider: string
   ) => Promise<string | undefined> | string | undefined
   onPayload?: SimpleStreamOptions["onPayload"]
+  onStepEnd?: (stats: {
+    input: number
+    uncachedInput: number
+    output: number
+  }) => void
+  modelTimeoutMs?: number
+  modelMaxRetries?: number
   testResponses?: string[] | TestResponseFn
 }
 ```
@@ -33,11 +40,14 @@ interface AgentConfig {
 | --------------- | ---------------------------- | -------- | --------------------------------------------------------------------------------------------------- |
 | `systemPrompt`  | `string`                     | Yes      | System prompt sent to the LLM on each step.                                                         |
 | `model`         | `string \| Model<any>`       | Yes      | Model identifier (e.g. `"claude-sonnet-4-6"`) or a resolved model object.                  |
-| `provider`      | `KnownProvider`              | No       | Provider to use when `model` is a string. Defaults to `"anthropic"`.                                |
+| `provider`      | `Provider`                   | No       | pi-ai provider to use when `model` is a string. Defaults to `"anthropic"`.                          |
 | `tools`         | `AgentTool[]`                | Yes      | Tools available to the LLM. Spread `ctx.electricTools` when your runtime host provides runtime-level tools. See [`AgentTool`](./agent-tool). |
 | `streamFn`      | `StreamFn`                   | No       | Optional streaming callback passed to the underlying agent.                                         |
 | `getApiKey`     | `(provider) => string \| Promise<string> \| undefined` | No | Optional API-key resolver passed through to the model layer. |
 | `onPayload`     | `SimpleStreamOptions["onPayload"]` | No | Optional callback for raw streaming payloads from the model layer. |
+| `onStepEnd`     | `(stats) => void`            | No       | Callback after each model step with provider-reported token counts.                                 |
+| `modelTimeoutMs` | `number`                    | No       | Timeout for individual model calls, in milliseconds.                                                |
+| `modelMaxRetries` | `number`                   | No       | Maximum retry count for model calls.                                                               |
 | `testResponses` | `string[] \| TestResponseFn` | No       | Mock LLM responses for testing. When set, no real LLM calls are made.                               |
 
 ## TestResponseFn

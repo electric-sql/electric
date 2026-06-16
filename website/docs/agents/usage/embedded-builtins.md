@@ -47,6 +47,7 @@ interface BuiltinAgentsServerOptions {
   agentServerUrl: string
   workingDirectory?: string
   mockStreamFn?: StreamFn
+  durableStreamsFetchCache?: DurableStreamsFetchCacheOptions | false
   pullWake: {
     runnerId: string
     ownerPrincipal?: string
@@ -76,10 +77,11 @@ interface BuiltinAgentsServerOptions {
 | `agentServerUrl`       | Electric Agents coordinator server URL.                                                                                                                                                                                                                                                |
 | `workingDirectory`     | Directory used by Horton and worker file tools. Defaults to `process.cwd()`.                                                                                                                                                                                                           |
 | `mockStreamFn`         | Optional test stream function. Lets you run without a real model provider.                                                                                                                                                                                                             |
+| `durableStreamsFetchCache` | Optional process-wide HTTP cache tuning for Undici-backed fetch calls. Pass `false` to leave the global dispatcher unchanged.                                                                                                                                                    |
 | `pullWake`             | Pull-wake runner configuration. `runnerId` identifies this runtime to the server. Set `registerRunner: true` when this process should create/update the runner record.                                                                                                                  |
 | `enabledModelValues`   | Optional allowlist of model values exposed by built-in agent creation schemas. Values use the model catalog's `provider:model` form.                                                                                                                                                    |
 | `baseSkillsDir`        | Override for the bundled skills directory, useful when an embedder packages `@electric-ax/agents`.                                                                                                                                                                                      |
-| `createElectricTools`  | Optional factory for tools injected into built-in agent handlers. The default built-in factory includes event-source and schedule tools; override or wrap it when adding host-specific tools.                                                                                                                                                                                                                |
+| `createElectricTools`  | Optional factory for tools injected into built-in agent handlers. The default built-in factory includes webhook-source and schedule tools; override or wrap it when adding host-specific tools.                                                                                                                                                                                                              |
 | `extraMcpServers`      | MCP servers contributed by the embedder. On name conflict with `mcp.json`, `mcp.json` wins. `authorizationCode` servers are auto-wired with `keychainPersistence`.                                                                                                                     |
 | `loadProjectMcpConfig` | Load `<workingDirectory>/mcp.json` (and watch it). Off by default because stdio MCP servers can spawn local commands, so embedders must opt in. The Electron desktop and `electric-ax` CLI opt in.                                                                                      |
 | `mcpOAuthRedirectBase` | Base for OAuth redirect URIs (full URI is `<base>/oauth/callback/<server-name>`). Must be stable across restarts so DCR client info stays valid. The runtime never listens at this URI; the embedder intercepts the redirect.                                                          |
@@ -148,14 +150,18 @@ interface AgentHandlerResult {
   registry: EntityRegistry
   typeNames: string[]
   skillsRegistry: SkillsRegistry | null
+  shutdownSandboxes: (() => Promise<void>) | null
+  modelCatalog: BuiltinModelCatalog
 }
 ```
+
+Call `shutdownSandboxes()` during process shutdown when it is present. `modelCatalog` is the catalog used by the built-in Horton and Worker definitions; pass it along if you register sibling built-in-style types directly with `registerHorton()` or `registerWorker()`. Most embedders should use `registerBuiltinAgentTypes()` instead.
 
 ## Extra Electric Tools
 
 Both `BuiltinAgentsServer` and `createBuiltinAgentHandler()` accept `createElectricTools`. The factory receives the same context shape as `RuntimeRouterConfig.createElectricTools` and can add host-specific tools to Horton.
 
-If you do not provide a custom factory, the built-in runtime injects event-source tools and schedule tools (`list_schedules`, `upsert_cron_schedule`, `upsert_future_send`, and `delete_schedule`). If you replace the factory entirely, include those tools yourself when Horton should keep that behavior.
+If you do not provide a custom factory, the built-in runtime injects webhook-source tools and schedule tools (`list_schedules`, `upsert_cron_schedule`, `upsert_future_send`, and `delete_schedule`). If you replace the factory entirely, include those tools yourself when Horton should keep that behavior.
 
 ```ts
 import { BuiltinAgentsServer } from "@electric-ax/agents"

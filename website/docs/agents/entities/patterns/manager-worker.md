@@ -92,10 +92,15 @@ Do not wait for worker output inside the same wake. Spawn workers with `wake: { 
 ```ts
 const finished = wake.payload?.finished_child
 if (finished) {
-  ctx.state.workers.update(finished.url, (draft) => {
-    draft.status = finished.run_status
-    draft.output = finished.response ?? ""
-  })
+  const child = ctx.state.children.toArray.find(
+    (entry) => entry.url === finished.url
+  )
+  if (child) {
+    ctx.state.children.update(child.key, (draft) => {
+      draft.status = finished.run_status
+      draft.output = finished.response ?? ""
+    })
+  }
 }
 ```
 

@@ -44,7 +44,7 @@ The runtime SDK is a layer over three foundations:
 - **[TanStack&nbsp;DB](https://tanstack.com/db)** — typed local reads and writes via collections.
 - **Mario Zechner's [pi](https://github.com/badlogic/pi-mono) toolkit** — `pi-ai` (unified multi-provider LLM API) and `pi-agent-core` (agent runtime) for the LLM agent loop.
 
-**One stream per entity.** The runtime projects that stream into a typed local DB of collections — an `EntityStreamDB`. Inside a handler, that DB is `ctx.db`: writes go through `ctx.db.actions` (which append events to the stream), reads come from `ctx.db.collections`. The runtime ships [built-in collections](#built-in-collections) for runs, tool calls, text deltas, errors, inbox, and more, and you add your own typed [state](#state) collections per entity type.
+**One stream per entity.** The runtime projects that stream into a typed local DB of collections — an `EntityStreamDB`. Inside a handler, that DB is `ctx.db`: writes go through `ctx.db.actions` (which append events to the stream), reads come from `ctx.db.collections`. The runtime ships [built-in collections](#built-in-collections) for runs, tool calls, text deltas, errors, inbox, and more, and you add your own typed [state](/docs/agents/usage/managing-state) collections per entity type.
 
 **Inside a handler.** When a handler calls `ctx.useAgent()`, the runtime configures the agent on its behalf and routes every step — model call, text delta, tool invocation, error — through the same projection, so the agent loop becomes durable events on the entity's stream.
 
@@ -229,6 +229,6 @@ See [Managing state](/docs/agents/usage/managing-state) for more information.
 - [Configuring the agent](/docs/agents/usage/configuring-the-agent) — `useAgent`, models, tools, and streaming.
 - [Spawning & coordinating](/docs/agents/usage/spawning-and-coordinating) — multi-entity topologies and shared state.
 - [Permissions & principals](/docs/agents/usage/permissions-and-principals) — entity access control and principal-scoped clients.
-- [Sandboxing](/docs/agents/usage/sandboxing), [Attachments](/docs/agents/usage/attachments), [Signals](/docs/agents/usage/signals), and [Event sources](/docs/agents/usage/event-sources) — newer runtime capabilities for hosted agents.
+- [Sandboxing](/docs/agents/usage/sandboxing), [Attachments](/docs/agents/usage/attachments), [Signals](/docs/agents/usage/signals), and [Webhook sources](/docs/agents/usage/webhook-sources) — newer runtime capabilities for hosted agents.
 - [Built-in agents](/docs/agents/entities/agents/horton) — Horton and Worker, the agents that ship with the runtime.
 - [Examples](/docs/agents/examples/playground) — pattern walkthroughs and demo apps.

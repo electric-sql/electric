@@ -120,12 +120,18 @@ Signal rows include the signal name, sender, reason, payload, handling status, o
 
 ```ts
 interface Signal {
+  key: string
   signal: "SIGINT" | "SIGHUP" | "SIGTERM" | "SIGKILL" | "SIGSTOP" | "SIGCONT" | "SIGUSR"
   status: "unhandled" | "handled"
   sender?: string
   reason?: string
   payload?: unknown
+  timestamp: string
+  handled_at?: string
+  handled_by?: string
   outcome?: "transitioned" | "ignored" | "invalid_for_state" | "delivered" | "aborted" | "shutdown_requested" | "failed"
+  previous_state?: ChildStatusEntry["status"]
+  new_state?: ChildStatusEntry["status"]
 }
 ```
 

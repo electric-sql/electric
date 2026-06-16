@@ -89,8 +89,36 @@ Inspect the payload to distinguish the sub-kind:
 | Observed change     | `ctx.observe(..., { wake: { on: 'change' } })` or `observe(db(...))`        | `payload.changes` is non-empty                                                            |
 | Shared-state change | `await ctx.observe(db(...), { wake: { on: 'change' } })`                    | `payload.changes` is non-empty, `payload.source` identifies the shared-state stream       |
 | Cron fired          | A cron schedule entry on the entity's manifest                              | `payload.source` identifies the schedule; `payload.changes` is empty                      |
+| Webhook source      | `subscribe_webhook_source` tool or `client.subscribeToWebhookSource()`      | `payload.type === "webhook_source_wake"` and `payload.events` contains matching webhook events |
 | Scheduled send      | A `future_send` schedule fires                                              | Arrives as `"inbox"` (not `"wake"`) — the schedule produces a message delivery |
 | Timeout             | `timeoutMs` on a `change` wake config elapsed with no changes               | `payload.timeout === true`, `payload.changes` is empty                                    |
+
+Webhook-source wakes use the hydrated payload from `HydratedWebhookSourceWake`:
+
+```ts
+type HydratedWebhookSourceWake = {
+  type: "webhook_source_wake"
+  source: string
+  sourceType: "webhook"
+  endpointKey: string
+  webhookKey: string
+  subscription: {
+    id: string
+    bucketKey?: string
+    params: Record<string, unknown>
+    filterKey?: string
+    reason?: string
+  }
+  bucket: string | null
+  changes: Array<{
+    collection: string
+    kind: "insert" | "update" | "delete"
+    key: string
+  }>
+  events: WebhookEventRow[]
+  missingEventKeys?: string[]
+}
+```
 
 For the narrative on how these are produced, see [Waking entities](../usage/waking-entities).
 

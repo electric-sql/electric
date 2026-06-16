@@ -289,7 +289,7 @@ const agentsDocsSidebar = [
         text: 'Embedded built-ins',
         link: '/docs/agents/usage/embedded-builtins',
       },
-      { text: 'Event sources', link: '/docs/agents/usage/event-sources' },
+      { text: 'Webhook sources', link: '/docs/agents/usage/webhook-sources' },
       { text: 'MCP servers', link: '/docs/agents/usage/mcp-servers' },
       { text: 'Testing', link: '/docs/agents/usage/testing' },
     ],

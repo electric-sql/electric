@@ -37,12 +37,13 @@ Horton is configured with `ctx.electricTools` plus the base Horton tool set:
 | `spawn_worker`    | Dispatch a subagent for an isolated subtask.             |
 | `fork`            | Branch a session at its latest completed response.       |
 | `observe_pg_sync` | Observe an Electric Postgres shape and wake on changes.  |
+| `unobserve_pg_sync` | Remove an existing pg-sync observation.                |
 | `send`            | Send a message to another entity.                        |
 | `set_title`       | Rename the current chat session title.                   |
 
 `web_search` uses the search provider configured by the built-in runtime; Brave search requires `BRAVE_SEARCH_API_KEY`.
 
-When docs support or skills are available, Horton also adds the docs search tool and skill tools during bootstrap. Built-in runtimes also provide `ctx.electricTools`, including schedule tools and event-source tools when configured.
+When docs support or skills are available, Horton also adds the docs search tool and skill tools during bootstrap. Built-in runtimes also provide `ctx.electricTools`, including schedule tools and webhook-source tools when configured.
 
 ## Title generation
 
@@ -79,7 +80,7 @@ registry.define("my-assistant", {
       model: HORTON_MODEL,
       tools: [
         ...ctx.electricTools,
-        ...createHortonTools(process.cwd(), ctx, readSet),
+        ...createHortonTools(ctx.sandbox, ctx, readSet),
         myCustomTool,
       ],
     })

@@ -64,15 +64,14 @@ interface RuntimeRouterConfig {
       payload: unknown
       targetUrl?: string
       fireAt: string
-      from?: string
       messageType?: string
     }): Promise<{ txid: string }>
     deleteSchedule(opts: { id: string }): Promise<{ txid: string }>
-    listEventSources(): Promise<Array<EventSourceContract>>
-    subscribeToEventSource(
-      opts: EventSourceSubscriptionInput
-    ): Promise<{ txid: string; subscription: EventSourceSubscription }>
-    unsubscribeFromEventSource(opts: { id: string }): Promise<{ txid: string }>
+    listWebhookSources(): Promise<Array<WebhookSourceContract>>
+    subscribeToWebhookSource(
+      opts: WebhookSourceSubscriptionInput
+    ): Promise<{ txid: string; subscription: WebhookSourceSubscription }>
+    unsubscribeFromWebhookSource(opts: { id: string }): Promise<{ txid: string }>
   }) => AgentTool[] | Promise<AgentTool[]> // factory for extra agent tools
   onWakeError?: (error: Error) => boolean | void // return true to mark handled
   registrationConcurrency?: number // max concurrent type registrations (default: 8)
@@ -135,12 +134,22 @@ interface RuntimeHandler {
   onEnter(req: IncomingMessage, res: ServerResponse): Promise<void>
   handleRequest(request: Request): Promise<Response | null>
   handleWebhookRequest(request: Request): Promise<Response>
+  dispatchWake(
+    notification: WakeNotification,
+    options?: Pick<ProcessWakeConfig, "claimHeaders" | "claimTokenHeader">
+  ): void
   dispatchWebhookWake(notification: WebhookNotification): void
   drainWakes(): Promise<void>
   waitForSettled(): Promise<void>
   abortWakes(): void
   debugState(): RuntimeDebugState
   readonly typeNames: string[]
+  readonly sandboxProfileDescriptors: Array<{
+    name: string
+    label: string
+    description?: string
+    remote?: boolean
+  }>
   registerTypes(): Promise<void>
 }
 
@@ -157,11 +166,13 @@ interface RuntimeDebugState {
 | `onEnter`              | Node HTTP adapter — reads the request body and delegates to `handleWebhookRequest` |
 | `handleRequest`        | Fetch-native router — returns `null` if the path does not match `webhookPath`      |
 | `handleWebhookRequest` | Processes a webhook POST directly, without path matching                           |
+| `dispatchWake`         | Dispatches a pre-parsed wake notification from any transport                       |
 | `dispatchWebhookWake`  | Dispatches a pre-parsed notification (fire-and-forget)                             |
 | `drainWakes`           | Waits for all in-flight wake handlers to settle; throws on errors                  |
 | `waitForSettled`       | Waits for all in-flight wakes; throws on errors                                    |
 | `abortWakes`           | Cancels all in-flight wake handlers immediately                                    |
 | `debugState`           | Returns a snapshot of internal runtime state for diagnostics                       |
+| `sandboxProfileDescriptors` | Sandbox profile descriptors advertised by this runtime                     |
 | `registerTypes`        | Registers entity types, schemas, permission grants, and default dispatch policy with the Electric Agents runtime server |
 
 ## createRuntimeRouter
