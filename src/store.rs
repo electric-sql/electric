@@ -11,9 +11,9 @@ use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::os::fd::AsRawFd;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex as StdMutex, RwLock};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use dashmap::DashMap;
 use tokio::sync::{watch, Mutex as AsyncMutex};
@@ -70,11 +70,26 @@ struct SyncInner {
     in_flight: bool,
 }
 
+/// Decrements the pending-appender counter on drop, covering every exit path of
+/// `sync_to` (including the early `synced >= target` return).
+struct PendingGuard<'a>(&'a AtomicUsize);
+
+impl Drop for PendingGuard<'_> {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::AcqRel);
+    }
+}
+
 /// Coalesces fsyncs: concurrent appenders share one in-flight barrier-fsync,
 /// mirroring the Node server's FileHandlePool.fsyncFile leader/follower scheme.
 pub struct SyncCoalescer {
     inner: StdMutex<SyncInner>,
     tx: watch::Sender<u64>,
+    /// Appenders currently inside `sync_to` (incremented on entry, decremented
+    /// on return). The leader snapshots this when it starts a barrier-fsync to
+    /// record how many appends coalesced into the one fsync — the group-commit
+    /// health signal (`ds.append.fsync.batch_size`).
+    pending: AtomicUsize,
 }
 
 impl SyncCoalescer {
@@ -86,11 +101,16 @@ impl SyncCoalescer {
                 in_flight: false,
             }),
             tx,
+            pending: AtomicUsize::new(0),
         }
     }
 
     /// Wait until at least `target` bytes are durable, issuing a sync if needed.
     pub async fn sync_to(&self, file: Arc<File>, stream: &StreamState, target: u64) {
+        // Count this caller as a pending appender for the whole call, so the
+        // leader's batch-size snapshot reflects everyone waiting on a fsync.
+        self.pending.fetch_add(1, Ordering::AcqRel);
+        let _guard = PendingGuard(&self.pending);
         loop {
             let lead = {
                 let mut s = self.inner.lock().unwrap();
@@ -105,11 +125,17 @@ impl SyncCoalescer {
                 }
             };
             if lead {
+                // Snapshot the coalesced batch size at the moment we commit to a
+                // fsync: every appender currently in `sync_to` (including this
+                // leader) folds into this one barrier-fsync.
+                let batch = self.pending.load(Ordering::Acquire) as u64;
                 // Sync covers everything written at the time the fsync starts
                 // (file-local bytes: logical tail minus the fork base).
                 let covers = stream.shared.read().unwrap().tail - stream.base_offset;
                 let f = file.clone();
+                let t0 = Instant::now();
                 let _ = tokio::task::spawn_blocking(move || barrier_fsync(&f)).await;
+                crate::telemetry::record_fsync(t0.elapsed().as_secs_f64(), batch);
                 {
                     let mut s = self.inner.lock().unwrap();
                     s.synced = s.synced.max(covers);

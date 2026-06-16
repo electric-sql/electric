@@ -297,7 +297,11 @@ async fn write_segments_blocking(
         }
         OwnedFd::from_raw_fd(fd)
     };
+    // Time spent queued before the blocking task actually starts — the
+    // blocking-pool wait, the cold-read / futex pressure signal.
+    let queued = std::time::Instant::now();
     let join = tokio::task::spawn_blocking(move || -> std::io::Result<()> {
+        crate::telemetry::record_offload_wait(queued.elapsed().as_secs_f64());
         let sock_fd = dup.as_raw_fd();
         for seg in &segments {
             blocking_sendfile(sock_fd, seg)?;

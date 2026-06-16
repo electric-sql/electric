@@ -25,6 +25,33 @@ libc = "0.2"
 percent-encoding = "2"
 ed25519-dalek = { version = "2", default-features = false, features = ["std", "fast"] }
 
+# Structured logging / tracing facade. Always compiled (it is light), but with
+# `release_max_level_info` so trace/debug records are stripped from release
+# builds at compile time — zero runtime cost when telemetry is off.
+tracing = { version = "0.1", features = ["release_max_level_info"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+
+# OpenTelemetry — opt-in via the `telemetry` feature, OFF BY DEFAULT. None of
+# these are pulled in (or compiled) for a default build, so the server keeps a
+# zero-dependency, zero-overhead telemetry path unless explicitly enabled.
+opentelemetry = { version = "0.32", optional = true }
+opentelemetry_sdk = { version = "0.32", optional = true }
+opentelemetry-otlp = { version = "0.32", optional = true, features = ["grpc-tonic"] }
+opentelemetry-semantic-conventions = { version = "0.32", optional = true }
+tracing-opentelemetry = { version = "0.33", optional = true }
+
+[features]
+default = []
+# Enable OTLP span + metric export over gRPC (tonic). Endpoint/protocol/timeout
+# and sampling are configured entirely via the standard OTEL_* env vars.
+telemetry = [
+    "dep:opentelemetry",
+    "dep:opentelemetry_sdk",
+    "dep:opentelemetry-otlp",
+    "dep:opentelemetry-semantic-conventions",
+    "dep:tracing-opentelemetry",
+]
+
 # io_uring engine (--http-engine uring): a thread-per-core current-thread tokio
 # runtime backed by io_uring for socket and file I/O. Linux-only.
 [target.'cfg(target_os = "linux")'.dependencies]

@@ -7,6 +7,7 @@ mod handlers;
 mod http1;
 mod store;
 mod subs;
+mod telemetry;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -89,6 +90,11 @@ fn main() {
     // it runs here instead of on the shared multi-threaded tokio runtime below.
     #[cfg(target_os = "linux")]
     if engine == "uring" {
+        // Telemetry is OFF by default (feature-gated); this is a no-op unless
+        // built with `--features telemetry`. The guard flushes on drop — for
+        // uring, `serve` blocks the calling thread until shutdown, after which
+        // the guard drops and the batch processor flushes.
+        let _telemetry = telemetry::init();
         let store = Arc::new(Store::new(data_dir.clone()).expect("failed to init store"));
         let _ = store.subs.set(Arc::new(subs::SubsManager::new()));
         let std_listener = std::net::TcpListener::bind((host, port)).expect("bind failed");
@@ -112,6 +118,11 @@ fn main() {
         .expect("failed to build runtime");
 
     rt.block_on(async move {
+        // Telemetry is OFF by default (feature-gated); a no-op unless built with
+        // `--features telemetry`. The guard is held across the run and flushed on
+        // Ctrl-C — `serve()` never returns on its own, so without the signal path
+        // the batch span processor would never get a chance to flush.
+        let mut telemetry_guard = telemetry::init();
         let store = Arc::new(Store::new(data_dir.clone()).expect("failed to init store"));
         let _ = store.subs.set(Arc::new(subs::SubsManager::new()));
         let addr: SocketAddr = (host, port).into();
@@ -126,10 +137,19 @@ fn main() {
             "note: __ds control plane is in-memory only — subscriptions and the \
              webhook-signing key reset on restart"
         );
-        match engine.as_str() {
-            "hyper" => engine_hyper::serve(store, listener).await,
-            "raw" => engine_raw::serve(store, listener).await,
-            _ => unreachable!(),
+        tokio::select! {
+            _ = async {
+                match engine.as_str() {
+                    "hyper" => engine_hyper::serve(store, listener).await,
+                    "raw" => engine_raw::serve(store, listener).await,
+                    _ => unreachable!(),
+                }
+            } => {}
+            // Flush telemetry on shutdown. serve() above never returns, so this
+            // signal branch is the only path that lets the batch processor flush.
+            _ = tokio::signal::ctrl_c() => {
+                telemetry_guard.shutdown();
+            }
         }
     });
 }
