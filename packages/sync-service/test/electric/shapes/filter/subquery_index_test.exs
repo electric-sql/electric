@@ -322,12 +322,9 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
     @tag :performance
     @tag timeout: @perf_timeout
     test "removal is O(1) in the number of shapes sharing each value" do
-      # Use a smaller scale than the other flatness tests: the current :bag impl is
-      # O(n²) even during setup (mark_ready does a full-table scan on the shared node),
-      # so @perf_large = 20_000 would time out before we can measure removal.
-      # 200 vs 1_000 is sufficient to prove the current O(n) removal cost.
-      n_small = 200
-      n_large = 1_000
+      # All shapes share the same values on one node, so each (node, value) is backed by
+      # n shapes — the seeded production case. Removing one shape must not scan the others
+      # sharing its values.
       shared = [1, 2, 3, 4, 5]
 
       measure = fn n ->
@@ -344,10 +341,10 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
         {condition_id, div(n, 2), filter}
       end
 
-      {cid_s, id_s, filter_s} = measure.(n_small)
+      {cid_s, id_s, filter_s} = measure.(@perf_small)
       small = reductions(fn -> remove_one(filter_s, cid_s, id_s) end)
 
-      {cid_l, id_l, filter_l} = measure.(n_large)
+      {cid_l, id_l, filter_l} = measure.(@perf_large)
       large = reductions(fn -> remove_one(filter_l, cid_l, id_l) end)
 
       assert abs(large - small) < @flatness_tolerance,
