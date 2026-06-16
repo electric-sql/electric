@@ -536,7 +536,6 @@ export function ShareEntityDialog({
             tone="neutral"
             onClick={() => void copySessionLink()}
             disabled={!baseUrl}
-            style={{ marginRight: `auto` }}
           >
             <Icon icon={Link2} size={1} />
             Copy session link
