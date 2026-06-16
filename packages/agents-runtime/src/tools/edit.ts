@@ -6,10 +6,7 @@ import { SandboxError } from '../sandbox/types'
 import type { Sandbox } from '../sandbox/types'
 import type { AgentTool } from '@mariozechner/pi-agent-core'
 
-export function createEditTool(
-  sandbox: Sandbox,
-  _readSet?: Set<string>
-): AgentTool {
+export function createEditTool(sandbox: Sandbox): AgentTool {
   return {
     name: `edit`,
     label: `Edit File`,

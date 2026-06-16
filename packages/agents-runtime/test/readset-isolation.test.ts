@@ -20,7 +20,7 @@ describe(`edit tool without readSet guard`, () => {
     await writeFile(join(cwd, `shared.txt`), `aaa bbb`, `utf-8`)
     const sandbox = await unrestrictedSandbox({ workingDirectory: cwd })
 
-    const edit = createEditTool(sandbox, new Set<string>())
+    const edit = createEditTool(sandbox)
     const result = await edit.execute(`b`, {
       path: `shared.txt`,
       old_string: `aaa`,

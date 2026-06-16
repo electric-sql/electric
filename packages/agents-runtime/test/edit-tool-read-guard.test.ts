@@ -35,7 +35,7 @@ describe(`edit tool`, () => {
   it(`does not depend on readSet contents`, async () => {
     await writeFile(join(cwd, `g.txt`), `aaa bbb`, `utf-8`)
     const sandbox = await unrestrictedSandbox({ workingDirectory: cwd })
-    const edit = createEditTool(sandbox, new Set<string>())
+    const edit = createEditTool(sandbox)
     const result = await edit.execute(`e`, {
       path: `g.txt`,
       old_string: `aaa`,

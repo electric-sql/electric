@@ -137,7 +137,7 @@ function buildToolsForWorker(
         out.push(createWriteTool(sandbox, readSet))
         break
       case `edit`:
-        out.push(createEditTool(sandbox, readSet))
+        out.push(createEditTool(sandbox))
         break
       case `web_search`:
         out.push(braveSearchTool)

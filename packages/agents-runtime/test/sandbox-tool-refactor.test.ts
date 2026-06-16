@@ -116,7 +116,7 @@ describe(`tool refactor to Sandbox`, () => {
       const readSet = new Set<string>()
       const readTool = createReadFileTool(sandbox, readSet)
       await readTool.execute(`r`, { path: `f.txt` })
-      const editTool = createEditTool(sandbox, readSet)
+      const editTool = createEditTool(sandbox)
       const result = await editTool.execute(`e`, {
         path: `f.txt`,
         old_string: `world`,

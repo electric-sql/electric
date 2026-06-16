@@ -394,7 +394,7 @@ export function createHortonTools(
     createBashTool(sandbox),
     createReadFileTool(sandbox, readSet),
     createWriteTool(sandbox, readSet),
-    createEditTool(sandbox, readSet),
+    createEditTool(sandbox),
     braveSearchTool,
     ...(opts.modelCatalog && opts.modelConfig
       ? [
