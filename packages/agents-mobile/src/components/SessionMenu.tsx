@@ -10,7 +10,8 @@ import { Icon } from './Icon'
 import { useCopyFeedback } from './useCopyFeedback'
 import { useDrillTransition } from './useDrillTransition'
 import { togglePin, usePinnedUrls } from '../lib/pinnedEntities'
-import { sessionIdFromEntityUrl } from '../lib/sessionLinks'
+import { useAgents } from '../lib/AgentsProvider'
+import { sessionAppUrl, sessionIdFromEntityUrl } from '../lib/sessionLinks'
 import { useTokens } from '../lib/ThemeProvider'
 import { monoFontFamily } from '../lib/theme'
 import type { ElectricEntity, EntitySignal } from '../lib/agentsClient'
@@ -137,6 +138,7 @@ export function SessionMenu({
   signalDisabled?: boolean
 }): React.ReactElement {
   const tokens = useTokens()
+  const { serverUrl } = useAgents()
   const { copiedKey, copy } = useCopyFeedback()
   const pinnedUrls = usePinnedUrls()
   const pinned = entity !== null && pinnedUrls.includes(entity.url)
@@ -373,6 +375,22 @@ export function SessionMenu({
                       togglePin(entity.url)
                       handleClose()
                     }}
+                  />
+                  <BottomSheetItem
+                    label={
+                      copiedKey === `link` ? `Copied link` : `Copy session link`
+                    }
+                    icon={
+                      <Icon
+                        name={copiedKey === `link` ? `check` : `link`}
+                        size={18}
+                        color={tokens.text2}
+                        strokeWidth={2}
+                      />
+                    }
+                    onPress={() =>
+                      copy(`link`, sessionAppUrl(serverUrl, entity.url))
+                    }
                   />
                   {onShare && (
                     <BottomSheetItem
