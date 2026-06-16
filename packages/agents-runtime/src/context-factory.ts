@@ -24,14 +24,18 @@ import {
   CONTEXT_USAGE_HARD_CEILING,
   type ContextUsageStep,
 } from './token-accountant'
-import { approxTokens } from './token-budget'
 import {
   COMPACTION_CHECKPOINT_ID,
   COMPACTION_CHECKPOINT_KIND,
   COMPACTION_CHECKPOINT_NAME,
-  type CompactionStatus,
 } from './compaction'
-import { summarizeMessages } from './compaction-summarize'
+import { createMidTurnCompactor } from './compaction-midturn'
+import { summarizeAgentMessages } from './compaction-summarize'
+
+/** Default minimum context size (tokens) before mid-turn compaction fires. */
+const DEFAULT_COMPACT_MIN_TOKENS = 2000
+/** Recent messages kept verbatim when compacting (the live tool-call tail). */
+const COMPACT_KEEP_TAIL = 6
 import { createContextTools } from './tools/context-tools'
 import { CACHE_TIERS } from './types'
 import { composeToolsWithProviders } from './tool-providers'
@@ -813,116 +817,74 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
           config.db.collections.steps.toArray as ReadonlyArray<ContextUsageStep>
         )
 
-        // Phase 2 hard ceiling: if the last turn left context at/over 90% of
-        // the window, compact synchronously before this model call. We surface
-        // the work as a status'd checkpoint row so the UI can show it live:
-        // insert a `running` checkpoint, summarize, then mark it `complete`
-        // with the summary (or `failed`). Only a `complete` checkpoint acts as
-        // the timeline watermark, so a crash mid-compaction never hides history.
-        // The current ask is delivered separately as runInput. The `approxTokens`
-        // guard avoids re-compacting an already compacted (small) history while
-        // the last step's usage is still high.
-        let workingMessages = messages
-        let didCompact = false
-        const estimatedHistoryTokens = messages.reduce(
-          (sum, message) => sum + approxTokens(message.content),
-          0
-        )
-        // Thresholds are overridable via env (RFC §12 tunables) so the sync
-        // compaction path can be exercised without filling a real window:
-        //   ELECTRIC_AGENTS_COMPACT_CEILING   (0..1, default 0.9)
-        //   ELECTRIC_AGENTS_COMPACT_MIN_TOKENS (default contextWindow/2)
+        // Phase 2 hard ceiling — enforced MID-TURN. Compaction runs before each
+        // model step via pi-agent's `transformContext` (wired in the adapter to
+        // the compactor below), so a single turn that balloons across many tool
+        // calls can't exhaust the window before the turn ends. The compactor
+        // anchors its token estimate on the last step's real usage (+ trailing),
+        // folds older messages into a summary, and persists the running/complete/
+        // failed checkpoint that drives the UI. Thresholds overridable via env
+        // (RFC §12 tunables):
+        //   ELECTRIC_AGENTS_COMPACT_CEILING    (0..1, default 0.9)
+        //   ELECTRIC_AGENTS_COMPACT_MIN_TOKENS (default 2000)
         const compactCeiling = ratioFromEnv(
           process.env.ELECTRIC_AGENTS_COMPACT_CEILING,
           CONTEXT_USAGE_HARD_CEILING
         )
-        const compactMinHistoryTokens = positiveFromEnv(
+        const compactMinTokens = positiveFromEnv(
           process.env.ELECTRIC_AGENTS_COMPACT_MIN_TOKENS,
-          (budgetUsage?.contextWindow ?? 0) / 2
+          DEFAULT_COMPACT_MIN_TOKENS
         )
-        if (
-          budgetUsage &&
-          budgetUsage.ratio >= compactCeiling &&
-          estimatedHistoryTokens > compactMinHistoryTokens
-        ) {
-          const logPrefix = `[${config.entityUrl}]`
-          const writeCheckpoint = (
-            status: CompactionStatus,
-            content: string
-          ): void => {
+        const compactProvider = agentModelProvider(activeAgentConfig)
+        const onCompactContext = createMidTurnCompactor({
+          ceiling: compactCeiling,
+          minTokens: compactMinTokens,
+          keepTail: COMPACT_KEEP_TAIL,
+          writeCheckpoint: (status, content) => {
             contextApi.insertContext(COMPACTION_CHECKPOINT_ID, {
               name: COMPACTION_CHECKPOINT_NAME,
               attrs: { kind: COMPACTION_CHECKPOINT_KIND, status },
               content,
             })
-          }
-          // Live: announce compaction is in progress (UI shows "Compacting…").
-          writeCheckpoint(`running`, ``)
-          try {
-            const provider = agentModelProvider(activeAgentConfig)
-            const apiKey = await activeAgentConfig.getApiKey?.(provider)
-            const summary = await summarizeMessages({
+          },
+          summarize: async (agentMessages) => {
+            const apiKey = await activeAgentConfig.getApiKey?.(compactProvider)
+            return summarizeAgentMessages({
               model: activeAgentConfig.model,
-              provider,
-              messages,
+              provider: compactProvider,
+              messages: agentMessages,
               ...(apiKey ? { apiKey } : {}),
               ...(activeAgentConfig.summarizeComplete
                 ? { complete: activeAgentConfig.summarizeComplete }
                 : {}),
             })
-            // Complete: this supersedes the `running` row and becomes the
-            // watermark; future turns reconstruct from it.
-            writeCheckpoint(`complete`, summary)
-            workingMessages = [
-              {
-                role: `user`,
-                content: `<${COMPACTION_CHECKPOINT_NAME}>\n${summary}\n</${COMPACTION_CHECKPOINT_NAME}>`,
-              },
-            ]
-            didCompact = true
-            runtimeLog.info(
-              logPrefix,
-              `compaction: summarized ${messages.length} messages at ratio=${budgetUsage.ratio.toFixed(2)} window=${budgetUsage.contextWindow}`
-            )
-          } catch (error) {
-            // Mark failed (clears the UI indicator) and proceed uncompacted.
-            writeCheckpoint(`failed`, ``)
-            runtimeLog.warn(
-              logPrefix,
-              `compaction failed; proceeding uncompacted: ${error instanceof Error ? error.message : String(error)}`
-            )
-          }
-        }
+          },
+        })
 
         // Cap any single oversized tool result (one huge output can fill the
-        // window on its own), then surface the budget notice. After a fresh
-        // compaction the last step's ratio is stale, so skip the notice this
-        // turn rather than report a misleading "~0% remaining".
+        // window on its own), then surface the budget notice.
         const outgoingMessages = withContextBudgetNotice(
-          truncateOversizedToolResults(workingMessages),
-          didCompact ? null : budgetUsage
+          truncateOversizedToolResults(messages),
+          budgetUsage
         )
 
         const adapterFactory = createPiAgentAdapter({
           systemPrompt: activeAgentConfig.systemPrompt,
           model: activeAgentConfig.model,
-
           provider: activeAgentConfig.provider,
-
           tools: [...composedTools, ...extraTools] as Array<never>,
-
           streamFn: activeAgentConfig.streamFn,
-
           getApiKey: activeAgentConfig.getApiKey,
-
           reasoning: activeAgentConfig.reasoning,
           thinkingBudgets: activeAgentConfig.thinkingBudgets,
-
           onPayload: activeAgentConfig.onPayload,
-
           onStepEnd: activeAgentConfig.onStepEnd,
           modelTimeoutMs: activeAgentConfig.modelTimeoutMs,
           modelMaxRetries: activeAgentConfig.modelMaxRetries,
+          onCompactContext,
+          ...(budgetUsage
+            ? { initialContextTokens: budgetUsage.usedTokens }
+            : {}),
         })
         const handle = adapterFactory({
           entityUrl: config.entityUrl,

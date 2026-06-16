@@ -1,10 +1,22 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { createAssistantMessageEventStream } from '@mariozechner/pi-ai'
 import {
   buildStreamFixture,
   createTestHandlerContext,
 } from './helpers/context-test-helpers'
 import type { ChangeEvent } from '@durable-streams/state'
+
+// The mid-turn compactor gates on (real last-step usage + trailing estimate) vs
+// the MODEL's context window. We can't shrink the real window in a unit test, so
+// we drive the trigger with the env override + a high seeded anchor instead.
+const savedEnv = {
+  ceiling: process.env.ELECTRIC_AGENTS_COMPACT_CEILING,
+  minTokens: process.env.ELECTRIC_AGENTS_COMPACT_MIN_TOKENS,
+}
+afterEach(() => {
+  process.env.ELECTRIC_AGENTS_COMPACT_CEILING = savedEnv.ceiling
+  process.env.ELECTRIC_AGENTS_COMPACT_MIN_TOKENS = savedEnv.minTokens
+})
 
 function completedAssistantMessage(): unknown {
   return {
@@ -26,25 +38,38 @@ function completedAssistantMessage(): unknown {
   }
 }
 
-describe(`synchronous compaction trigger`, () => {
-  it(`compacts at the 95% hard ceiling: model sees the summary, checkpoint persisted`, async () => {
-    // A large prior message (≈1000 tokens) and a step reporting 98% usage of a
-    // small (test) 1000-token window — over the 95% ceiling and worth
-    // compacting (approxTokens > window/2).
-    const db = buildStreamFixture([
-      { kind: `inbox`, at: 1, value: { payload: `A`.repeat(4000) } },
-    ])
-    ;(
-      db.collections as unknown as { steps: { insert: (r: unknown) => void } }
-    ).steps.insert({
-      key: `step-1`,
-      _seq: 1,
-      run_id: `r`,
-      step_number: 1,
-      status: `completed`,
-      context_input_tokens: 980,
-      context_window: 1000,
-    })
+function seedStep(
+  db: ReturnType<typeof buildStreamFixture>,
+  contextInputTokens: number
+): void {
+  ;(
+    db.collections as unknown as { steps: { insert: (r: unknown) => void } }
+  ).steps.insert({
+    key: `step-1`,
+    _seq: 1,
+    run_id: `r`,
+    step_number: 1,
+    status: `completed`,
+    context_input_tokens: contextInputTokens,
+    context_window: 200000,
+  })
+}
+
+describe(`mid-turn compaction trigger`, () => {
+  it(`compacts mid-turn: summarizer runs, model sees the summary, checkpoint persisted`, async () => {
+    // Ceiling tiny so any real model window is crossed by the seeded anchor.
+    process.env.ELECTRIC_AGENTS_COMPACT_CEILING = `0.0001`
+    process.env.ELECTRIC_AGENTS_COMPACT_MIN_TOKENS = `10`
+
+    // Enough messages that there's real content beyond the kept tail (6).
+    const db = buildStreamFixture(
+      Array.from({ length: 8 }, (_, i) => ({
+        kind: `inbox` as const,
+        at: i + 1,
+        value: { payload: `MESSAGE_${i}` },
+      }))
+    )
+    seedStep(db, 50_000) // high anchor → over the tiny ceiling
 
     const writes: Array<ChangeEvent> = []
     const { ctx } = createTestHandlerContext({
@@ -75,13 +100,8 @@ describe(`synchronous compaction trigger`, () => {
 
     await ctx.agent.run(`continue`)
 
-    // Summarizer ran…
     expect(summarizeCalled).toBe(true)
-    // …the model saw the summary, not the giant original message…
     expect(captured).toContain(`COMPACTED_SUMMARY`)
-    expect(captured).not.toContain(`AAAAAAAAAAAAAAAAAAAA`)
-    // …and the checkpoint went through the running → complete lifecycle
-    // (so the UI can show a live "compacting" entry then the final marker).
     const statuses = writes
       .map(
         (event) =>
@@ -97,21 +117,12 @@ describe(`synchronous compaction trigger`, () => {
     expect(statuses).toContain(`complete`)
   })
 
-  it(`does not compact below the hard ceiling`, async () => {
+  it(`does not compact when well under the ceiling`, async () => {
+    // Default ceiling (0.9); a small anchor against the real ~200k+ window.
     const db = buildStreamFixture([
-      { kind: `inbox`, at: 1, value: { payload: `A`.repeat(4000) } },
+      { kind: `inbox`, at: 1, value: { payload: `hello` } },
     ])
-    ;(
-      db.collections as unknown as { steps: { insert: (r: unknown) => void } }
-    ).steps.insert({
-      key: `step-1`,
-      _seq: 1,
-      run_id: `r`,
-      step_number: 1,
-      status: `completed`,
-      context_input_tokens: 500, // 50% — below the 95% ceiling
-      context_window: 1000,
-    })
+    seedStep(db, 500)
 
     let summarizeCalled = false
     const { ctx } = createTestHandlerContext({ db })
