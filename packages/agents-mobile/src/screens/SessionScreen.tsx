@@ -473,6 +473,13 @@ export function SessionScreen({
   )
 }
 
+// Mirrors agents-server-ui MessageInput's reply-banner label.
+function formatReplyBannerLabel(target: SelectedCommentTarget): string {
+  const label = target.snapshot.label.trim()
+  if (!label) return `Reply`
+  return `Reply to ${label.charAt(0).toLowerCase()}${label.slice(1)}`
+}
+
 function NativeMessageComposer({
   entityUrl,
   entity,
@@ -626,6 +633,12 @@ function NativeMessageComposer({
       },
     })
   }, [db, entityUrl, inlineQueuedSubmits, onOptimisticQueuedMessage, serverUrl])
+  // NOTE: unlike desktop, the composer (native) and the timeline (WebView
+  // embed) run in separate JS contexts with separate stream `db`s, so the
+  // optimistic row this inserts into the native `db.collections.comments`
+  // isn't rendered — the comment appears once the embed's stream syncs it
+  // from the server. Queued messages bridge this via `inlineQueuedMessages`;
+  // an equivalent comment bridge is a follow-up. The POST + sync are correct.
   const sendCommentAction = useMemo(() => {
     if (!db || !commentsEnabled) return null
     return createSendCommentAction({
@@ -769,6 +782,9 @@ function NativeMessageComposer({
       if (disabled || writeDisabled) return
       const queuedText = readTextPayload(message.payload)
       setError(null)
+      // Editing is a prompt-mode action; leave comment mode so `send()`'s
+      // comment branch can't hijack the edit (mirrors desktop `startEditing`).
+      if (!commentOnly) setMode(`prompt`)
       updateAction?.({
         key: message.key,
         mode: `paused`,
@@ -781,7 +797,7 @@ function NativeMessageComposer({
       setPendingSelection(null)
       slash.reset()
     },
-    [disabled, slash.reset, updateAction, writeDisabled]
+    [commentOnly, disabled, slash.reset, updateAction, writeDisabled]
   )
 
   const cancelEditing = useCallback((): void => {
@@ -896,7 +912,7 @@ function NativeMessageComposer({
         <View style={styles.replyBanner}>
           <View style={styles.replyBannerBody}>
             <Text style={styles.replyLabel} numberOfLines={1}>
-              Replying to {commentTarget.snapshot.label}
+              {formatReplyBannerLabel(commentTarget)}
             </Text>
             {commentTarget.snapshot.text ? (
               <Text style={styles.replyText} numberOfLines={1}>
@@ -1863,19 +1879,19 @@ function createComposerStyles(tokens: Tokens) {
     },
     modeToggle: {
       flexDirection: `row`,
-      alignSelf: `flex-start`,
+      alignSelf: `flex-end`,
       marginBottom: spacing.xs,
       padding: 2,
-      borderRadius: radii.lg,
+      borderRadius: radii.pill,
       backgroundColor: tokens.surface,
       borderWidth: 1,
       borderColor: tokens.border1,
       gap: 2,
     },
     modeButton: {
-      paddingHorizontal: spacing.md,
-      paddingVertical: spacing.xs,
-      borderRadius: radii.md,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 3,
+      borderRadius: radii.pill,
     },
     modeButtonActive: {
       backgroundColor: tokens.accentA3,
