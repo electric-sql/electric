@@ -55,6 +55,11 @@ export type WorkspaceAction =
       direction: `right` | `down` | `left` | `up`
     }
   | {
+      type: `split-tile-new-session`
+      tileId: string
+      direction: `right` | `down` | `left` | `up`
+    }
+  | {
       type: `resize-split`
       splitId: string
       sizes: Array<number>
@@ -89,6 +94,8 @@ export function workspaceReducer(
         action.viewId,
         action.direction
       )
+    case `split-tile-new-session`:
+      return splitTileNewSession(state, action.tileId, action.direction)
     case `resize-split`:
       return resizeSplit(state, action.splitId, action.sizes)
     case `replace-workspace`:
@@ -352,6 +359,19 @@ function splitTileWithView(
   )
   // Focus follows split.
   return { ...next, activeTileId: newTile.id }
+}
+
+function splitTileNewSession(
+  state: Workspace,
+  tileId: string,
+  direction: `right` | `down` | `left` | `up`
+): Workspace {
+  if (!findTile(state.root, tileId)) return state
+  return openTile(
+    state,
+    { entityUrl: null, viewId: NEW_SESSION_VIEW_ID },
+    { tileId, position: `split-${direction}` }
+  )
 }
 
 // ---------------------------------------------------------------------------

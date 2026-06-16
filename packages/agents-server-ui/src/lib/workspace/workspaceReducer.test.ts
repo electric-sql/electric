@@ -202,6 +202,35 @@ describe(`workspaceReducer`, () => {
     })
   })
 
+  describe(`split-tile-new-session`, () => {
+    it(`opens the new-session form in the new split and leaves the existing tile unchanged`, () => {
+      let ws = run(EMPTY_WORKSPACE, {
+        type: `open-tile`,
+        tile: { entityUrl: `/horton/foo`, viewId: `chat` },
+      })
+      const tileId = rootAsTile(ws).id
+      ws = workspaceReducer(ws, {
+        type: `split-tile-new-session`,
+        tileId,
+        direction: `right`,
+      })
+      const tiles = listTiles(ws.root)
+      expect(tiles).toHaveLength(2)
+      expect(tiles).toContainEqual(
+        expect.objectContaining({
+          id: tileId,
+          entityUrl: `/horton/foo`,
+          viewId: `chat`,
+        })
+      )
+      const newSessionTile = tiles.find((t) => t.entityUrl === null)
+      expect(newSessionTile).toEqual(
+        expect.objectContaining({ viewId: `new-session` })
+      )
+      expect(ws.activeTileId).toBe(newSessionTile?.id)
+    })
+  })
+
   describe(`split-tile-with-view`, () => {
     it(`opens a different view of the same entity in a new split`, () => {
       let ws = run(EMPTY_WORKSPACE, {
