@@ -209,6 +209,17 @@ defmodule Electric.AsyncDeleter do
       |> drain_pending_sources()
       |> maybe_arm_heal()
 
+    case state.pending_sources do
+      [] ->
+        :ok
+
+      sources ->
+        Logger.warning(
+          "AsyncDeleter: trash directory still un-writable, " <>
+            "#{length(sources)} deletion(s) queued for stack #{state.stack_id} - will keep retrying"
+        )
+    end
+
     {:noreply, state, {:continue, :schedule_cleanup}}
   end
 
