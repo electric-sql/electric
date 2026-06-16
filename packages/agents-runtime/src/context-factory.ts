@@ -86,6 +86,18 @@ function agentModelProvider(config: AgentConfig): string {
     : config.model.provider
 }
 
+/** Parse a 0..1 ratio from an env string, falling back when invalid. */
+function ratioFromEnv(raw: string | undefined, fallback: number): number {
+  const value = Number(raw)
+  return Number.isFinite(value) && value > 0 && value <= 1 ? value : fallback
+}
+
+/** Parse a positive number from an env string, falling back when invalid. */
+function positiveFromEnv(raw: string | undefined, fallback: number): number {
+  const value = Number(raw)
+  return Number.isFinite(value) && value > 0 ? value : fallback
+}
+
 const MAX_HYDRATED_IMAGE_ATTACHMENTS = 4
 const MAX_HYDRATED_IMAGE_ATTACHMENT_BYTES = 10 * 1024 * 1024
 
@@ -816,10 +828,22 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
           (sum, message) => sum + approxTokens(message.content),
           0
         )
+        // Thresholds are overridable via env (RFC §12 tunables) so the sync
+        // compaction path can be exercised without filling a real window:
+        //   ELECTRIC_AGENTS_COMPACT_CEILING   (0..1, default 0.9)
+        //   ELECTRIC_AGENTS_COMPACT_MIN_TOKENS (default contextWindow/2)
+        const compactCeiling = ratioFromEnv(
+          process.env.ELECTRIC_AGENTS_COMPACT_CEILING,
+          CONTEXT_USAGE_HARD_CEILING
+        )
+        const compactMinHistoryTokens = positiveFromEnv(
+          process.env.ELECTRIC_AGENTS_COMPACT_MIN_TOKENS,
+          (budgetUsage?.contextWindow ?? 0) / 2
+        )
         if (
           budgetUsage &&
-          budgetUsage.ratio >= CONTEXT_USAGE_HARD_CEILING &&
-          estimatedHistoryTokens > budgetUsage.contextWindow / 2
+          budgetUsage.ratio >= compactCeiling &&
+          estimatedHistoryTokens > compactMinHistoryTokens
         ) {
           const logPrefix = `[${config.entityUrl}]`
           const writeCheckpoint = (
