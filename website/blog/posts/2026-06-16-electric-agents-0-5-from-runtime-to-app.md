@@ -8,12 +8,12 @@ excerpt: >-
   Electric Agents 0.5 is out today. The release adds runtime and SDK primitives
   for building agent systems, plus in-development desktop and mobile devtools
   for inspecting and controlling them.
-authors: [samwillis]
+authors: [samwillis, kyle]
 image: /img/blog/electric-agents-0-5-from-runtime-to-app/header.jpg
 tags: [electric-agents, agents, durable-streams, sync, devtools]
 outline: [2, 3]
 post: true
-published: false
+published: true
 ---
 
 <script setup>
@@ -74,10 +74,10 @@ In Electric Agents, the agent is the durable stream, not the process currently h
 
 ### Logical entities
 
-See how Electric Agents models agents as durable, addressable entities.
+See how Electric Agents models agents as durable, addressable entities. Each entity is backed by a durable stream and has its own URL, so apps, agents, and runtime APIs can all refer to the same long-lived thing.
 
 <figure>
-  <div class="embed-container" style="padding-bottom: 56.25%">
+  <div class="embed-container" style="padding-bottom: 64.748201%">
     <YoutubeEmbed video-id="AhQRJ_9yOFw" title="Electric Agents logical entities demo" />
   </div>
 </figure>
@@ -97,27 +97,27 @@ Define your own entity types with custom state, handlers, permissions, and tools
 Inspect an entity's live StreamDB state: messages, runs, tool calls, child status, and custom collections.
 
 <figure>
-  <div class="embed-container" style="padding-bottom: 56.25%">
+  <div class="embed-container" style="padding-bottom: 69.587629%">
     <YoutubeEmbed video-id="GoADVUN_BAQ" title="Electric Agents state demo" />
   </div>
 </figure>
 
 ### Forking and spawning
 
-Spawning starts a fresh child entity. Forking branches an existing entity with its parent history intact.
+Spawning starts a fresh child entity. Forking branches an existing entity from a historical point in its stream, preserving the useful context while opening an alternative path forward.
 
 <figure>
-  <div class="embed-container" style="padding-bottom: 56.25%">
+  <div class="embed-container" style="padding-bottom: 69.587629%">
     <YoutubeEmbed video-id="sG8NHMX0NPM" title="Electric Agents spawn and fork demo" />
   </div>
 </figure>
 
 ### Child agents
 
-Use child agents to split work into separately owned streams that the parent can observe and coordinate.
+Use child agents to split work into separately owned streams that the parent can observe and coordinate. A spawned child can receive instructions, perform operations, and report back through its own durable state.
 
 <figure>
-  <div class="embed-container" style="padding-bottom: 56.25%">
+  <div class="embed-container" style="padding-bottom: 78.034682%">
     <YoutubeEmbed video-id="TwPFeDzX8S4" title="Electric Agents child agent demo" />
   </div>
 </figure>
@@ -127,7 +127,7 @@ Use child agents to split work into separately owned streams that the parent can
 Signals give operators and apps a control plane for active work: `SIGINT`, pause, resume, kill, and handler-level lifecycle events.
 
 <figure>
-  <div class="embed-container" style="padding-bottom: 56.25%">
+  <div class="embed-container" style="padding-bottom: 69.948187%">
     <YoutubeEmbed video-id="WqkmhQM2X-Q" title="Electric Agents signals demo" />
   </div>
 </figure>
@@ -137,7 +137,7 @@ Signals give operators and apps a control plane for active work: `SIGINT`, pause
 Postgres changes can flow through sync and wake an agent when the data it cares about changes.
 
 <figure>
-  <div class="embed-container" style="padding-bottom: 56.25%">
+  <div class="embed-container" style="padding-bottom: 64.748201%">
     <YoutubeEmbed video-id="0dH9tJDHvI0" title="Electric Agents PG sync triggers demo" />
   </div>
 </figure>
@@ -147,7 +147,7 @@ Postgres changes can flow through sync and wake an agent when the data it cares 
 An agent can send itself a future message to sleep now and continue work later.
 
 <figure>
-  <div class="embed-container" style="padding-bottom: 56.25%">
+  <div class="embed-container" style="padding-bottom: 74.792244%">
     <YoutubeEmbed video-id="B3pWzh6KouA" title="Electric Agents send to self demo" />
   </div>
 </figure>
@@ -157,7 +157,7 @@ An agent can send itself a future message to sleep now and continue work later.
 Cron schedules wake agents on recurring intervals without keeping a worker process alive.
 
 <figure>
-  <div class="embed-container" style="padding-bottom: 56.25%">
+  <div class="embed-container" style="padding-bottom: 78.034682%">
     <YoutubeEmbed video-id="iPczPCOLJLs" title="Electric Agents cron demo" />
   </div>
 </figure>
