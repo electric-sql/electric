@@ -60,7 +60,7 @@ Hot-read cost is **not** regressed by `:ordered_set` (50,000 rows):
 
 **Goals**
 
-- Removal cost = **O(V_shape · log n)**, where V_shape is the _removed shape's own_ view
+- Removal cost = **O(V_shape · log n)**, where V*shape is the \_removed shape's own* view
   size — independent of total shapes, shapes-on-node, and shapes-per-value.
 - No regression to hot reads (`affected_shapes`, `member?`).
 - Memory not increased (measured lower).
@@ -209,12 +209,29 @@ prefix `:ets.select`):
 
 ## Invariants (must hold; tested)
 
-1. **Remove-before-unregister.** `unregister_shape/2` runs only after all `remove_shape/5`
-   calls for a shape, so membership rows survive to drive node-member derivation
-   (`filter.ex:121–143`).
-2. **Membership ⊇ node-member** per `(shape, ref)`, guaranteed by `add_value/5` writing both
-   in one call.
-3. **Node drains atomically across row types.** Within `remove_shape/5` the order is: delete
+1. **No concurrent writer during removal (the load-bearing guarantee).** The shape's
+   consumer is the _only_ process that writes membership/`node_member` rows (via
+   `add_value`/`remove_value`/`seed_membership`). `ShapeCleaner.remove_shape_immediate`
+   stops it **synchronously and to completion** — `with :ok <- Consumer.stop(...)`, a
+   blocking `GenServer.call` (`shape_cleaner.ex:165`, `consumer.ex:98`) — _before_ the only
+   path that reaches `Filter.remove_shape` (`ShapeLogCollector.remove_shape`, run later on
+   the collector process). This matters because `add_value/5` writes the `node_member` row
+   **before** the `membership` row (`subquery_index.ex:251–269`): there is a transient
+   in-call window where `node_member ⊄ membership`. Derivation is correct only because no
+   such in-flight write can overlap removal — the sole writer is provably dead first. A
+   future refactor that let `Filter.remove_shape` run while a consumer is still alive (or
+   reordered cleanup to remove from the filter before stopping the consumer) would
+   reintroduce the orphan bug. `remove_value` deletes in the safe order (`node_member`
+   first), and a terminating consumer tears down rather than seeds, so neither produces the
+   dangerous window.
+2. **Remove-before-unregister (in-function).** Within `Filter.remove_shape`,
+   `WhereCondition.remove_shape` → `SubqueryIndex.remove_shape` (derivation) runs before
+   `maybe_unregister_subquery_shape` → `unregister_shape` (membership deletion), so
+   membership rows survive to drive derivation (`filter.ex:121–143`).
+3. **Membership ⊇ node-member** per `(shape, ref)` _at rest_ (between consumer writes),
+   guaranteed by `add_value/5` writing both in one call; relied on only because Invariant 1
+   rules out observing an in-flight write.
+4. **Node drains atomically across row types.** Within `remove_shape/5` the order is: delete
    this shape's member/fallback/negated rows → delete its `node_shape` row → only then
    `node_empty?` (range-exists on remaining `node_shape` rows) → delete `node_meta` if empty.
    `node_meta` is deleted iff no `node_shape` rows remain (`node_empty?` consults
@@ -251,7 +268,7 @@ Plus a positive control and the invariant guards (these run as ordinary, non-per
 4. **Cost scales with `V_shape`.** Remove a shape seeded with `V` vs `50·V` values; assert
    reductions grow ~linearly with `V` — pins the complexity class as O(V_shape), not a
    budget that hides regressions.
-5. **No orphan rows (invariant 1+3).** A full `Filter.remove_shape` of a seeded shape leaves
+5. **No orphan rows (invariants 1–4).** A full `Filter.remove_shape` of a seeded shape leaves
    zero `node_*_member`/membership rows; removing several seeded shapes from one node
    one-by-one ends with zero rows of every type for that `node_id` (assert via
    `:ets.tab2list` filtered by `node_id`).
@@ -274,7 +291,7 @@ term()}` 2-tuple and `value` a typed term, both internally type-consistent per n
 - **`select_delete` range optimization** is load-bearing; verified by measurement (flat 9
   reductions vs linear). Implementation must use a bound prefix, not a leading wildcard.
 - **Node-drain atomicity** (orphan `node_meta`/member rows) — addressed by the within-
-  `remove_shape` ordering in Invariant 3 and guarded by test 5.
+  `remove_shape` ordering in Invariant 4 and guarded by test 5.
 - **Concurrency.** Table stays `:public`: consumers write (`add_value`/`remove_value`),
   filter reads (`affected_shapes`). `:ordered_set` ops are atomic per-op as `:bag` was. A
   single ordered_set may contend more under heavy concurrent writes than a bag; this
