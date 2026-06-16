@@ -1,5 +1,11 @@
 # @electric-ax/agents-runtime
 
+## 0.6.1
+
+### Patch Changes
+
+- d2418d6: Add bounded, line-numbered read tool output with offset/limit support to reduce context bloat, and remove the edit tool's prior-read requirement.
+
 ## 0.6.0
 
 ### Minor Changes

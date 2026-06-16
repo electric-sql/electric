@@ -1,5 +1,12 @@
 # @electric-ax/agents-server
 
+## 0.6.1
+
+### Patch Changes
+
+- Updated dependencies [d2418d6]
+  - @electric-ax/agents-runtime@0.6.1
+
 ## 0.6.0
 
 ### Minor Changes
