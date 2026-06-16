@@ -1,15 +1,15 @@
 ---
-title: "Electric Agents 0.5"
+title: "Electric Agents 0.6"
 description: >-
-  Electric Agents 0.5 rounds out the platform launched in April with a broader
+  Electric Agents 0.6 rounds out the platform launched in April with a broader
   SDK and runtime surface for long-lived entities, StreamDB state, runners,
   wakes, signals, schedules, app APIs, and multi-agent coordination.
 excerpt: >-
-  Electric Agents 0.5 is out today. The release adds runtime and SDK primitives
+  Electric Agents 0.6 is out today. The release adds runtime and SDK primitives
   for building agent systems, plus in-development desktop and mobile devtools
   for inspecting and controlling them.
 authors: [samwillis, kyle]
-image: /img/blog/electric-agents-0-5-from-runtime-to-app/header.jpg
+image: /img/blog/electric-agents-0-6-from-runtime-to-app/header.jpg
 tags: [electric-agents, agents, durable-streams, sync, devtools]
 outline: [2, 3]
 post: true
@@ -21,9 +21,9 @@ import EntityStreamDemo from '../../src/components/agents-home/EntityStreamDemo.
 import YoutubeEmbed from '../../src/components/YoutubeEmbed.vue'
 </script>
 
-Electric Agents 0.5 is out today. It rounds out the [platform we launched in April](/blog/2026/04/29/introducing-electric-agents) with a broader SDK and runtime surface for building agentic systems.
+Electric Agents 0.6 is out today. It rounds out the [platform we launched in April](/blog/2026/04/29/introducing-electric-agents) with a broader SDK and runtime surface for building agentic systems.
 
-- **Core APIs.** [Long-lived entities](/docs/agents/usage/defining-entities), StreamDB state, local and remote runners, [spawning and forking](/docs/agents/usage/spawning-and-coordinating), [wakes](/docs/agents/usage/waking-entities), [signals](/docs/agents/usage/signals), schedules, self-sends, [app APIs](/docs/agents/usage/programmatic-runtime-client), and multi-agent coordination patterns.
+- **Core APIs.** [Long-lived entities](/docs/agents/usage/defining-entities), [StreamDB state](/docs/streams/stream-db), [local and remote runners](/docs/agents/usage/embedded-builtins), [spawning and forking](/docs/agents/usage/spawning-and-coordinating), [wakes](/docs/agents/usage/waking-entities), [signals](/docs/agents/usage/signals), [schedules](/docs/agents/usage/programmatic-runtime-client#schedules), [self-sends](/docs/agents/usage/writing-handlers#sending-messages), [app APIs](/docs/agents/usage/programmatic-runtime-client), and [multi-agent coordination patterns](/docs/agents/usage/spawning-and-coordinating).
 - **Apps in development.** Desktop and mobile devtools for inspecting and controlling agent systems. Download canary builds from [GitHub releases](https://github.com/electric-sql/electric/releases) or build from source.
 - **Cloud next.** Managed Agents servers in Electric Cloud are coming soon.
 
@@ -37,23 +37,23 @@ Electric Agents 0.5 is out today. It rounds out the [platform we launched in Apr
 The ecosystem is converging on a thesis: the agent is the log. If you accept that, the rest of the stack follows.
 
 <figure>
-  <a href="/img/blog/electric-agents-0-5-from-runtime-to-app/stack.jpg" class="no-visual">
+  <a href="/img/blog/electric-agents-0-6-from-runtime-to-app/stack.jpg" class="no-visual">
     <img
-      src="/img/blog/electric-agents-0-5-from-runtime-to-app/stack.jpg"
+      src="/img/blog/electric-agents-0-6-from-runtime-to-app/stack.jpg"
       alt="Electric Agents stack: Durable Streams, StreamDB, TanStack DB, Agents runtime, and Agents apps."
     />
   </a>
 </figure>
 
-If the agent is the log, the log has to outlive any single process or device — and if multiple readers need to observe it (UIs, supervisors, other agents), it has to sync. **Durable Streams** are append-only logs that do both.
+If the agent is the log, the log has to outlive any single process or device — and if multiple readers need to observe it (UIs, supervisors, other agents), it has to sync. **[Durable Streams](/docs/streams/)** are append-only logs that do both.
 
-Raw logs aren't ergonomic. You want typed projections — messages, runs, tool calls, errors, children — that update live as events land. **StreamDB** projects those collections over the stream.
+Raw logs aren't ergonomic. You want typed projections — messages, runs, tool calls, errors, children — that update live as events land. **[StreamDB](/docs/streams/stream-db)** projects those collections over the stream.
 
-Projections need queries: filter, join, aggregate for a UI timeline or an agent's context window. **TanStack DB** is the reactive query layer.
+Projections need queries: filter, join, aggregate for a UI timeline or an agent's context window. **[TanStack DB](/sync/tanstack-db)** is the reactive query layer.
 
-At this point you have durable, syncable, queryable agent state. What's missing is compute. Something has to run the LLM loop, call tools, and write the results back. And something has to track which entities exist, route messages, schedule wakes, and dispatch work. The **Agents runtime** is that control plane.
+At this point you have durable, syncable, queryable agent state. What's missing is compute. Something has to run the LLM loop, call tools, and write the results back. And something has to track which entities exist, route messages, [schedule wakes](/docs/agents/usage/waking-entities), and dispatch work. The **[Agents runtime](/docs/agents/usage/overview)** is that control plane.
 
-Runners do the compute; the runtime coordinates. A runner can live on your laptop, in your infrastructure, in CI, or anywhere you control. Because coordination and compute are separate, you can start a session on your machine, leave the runner there, then open the same session from your phone to send a follow-up or stop it.
+[Runners](/docs/agents/usage/embedded-builtins) do the compute; the runtime coordinates. A runner can live on your laptop, in your infrastructure, in CI, or anywhere you control. Because coordination and compute are separate, you can start a session on your machine, leave the runner there, then open the same session from your phone to send a follow-up or stop it.
 
 Managed Agents servers in Electric Cloud are coming soon — hosted coordination, user-owned compute.
 
@@ -63,7 +63,7 @@ In Electric Agents, the agent is the durable stream, not the process currently h
 
 - An [Electric Agents entity](/docs/agents/usage/defining-entities) is a long-lived, addressable thing: an assistant, worker, coding session, support ticket, lead researcher, orchestrator, monitor, or any agent type you define.
 - Every entity has a durable stream, which is the log of what happened.
-- Every entity also has a typed StreamDB projection. That projection gives you live state: timeline, inbox, runs, tool calls, context, errors, children, signals, and [custom collections](/docs/agents/usage/managing-state).
+- Every entity also has a typed [StreamDB projection](/docs/streams/stream-db). That projection gives you live state: timeline, inbox, runs, tool calls, context, errors, children, signals, and [custom collections](/docs/agents/usage/managing-state).
 - The process that handles a wake can come and go. The entity persists. It can sleep, wake, replay, fork, spawn children, and be observed by apps or other agents.
 
 <EntityStreamDemo class="md-exclude" />
@@ -74,7 +74,7 @@ In Electric Agents, the agent is the durable stream, not the process currently h
 
 ### Logical entities
 
-See how Electric Agents models agents as durable, addressable entities. Each entity is backed by a durable stream and has its own URL, so apps, agents, and runtime APIs can all refer to the same long-lived thing.
+See how Electric Agents models agents as durable, addressable entities. Each entity is backed by a durable stream and has its own URL, so apps, agents, and [runtime APIs](/docs/agents/usage/programmatic-runtime-client) can all refer to the same long-lived thing.
 
 <figure>
   <div class="embed-container" style="padding-bottom: 64.748201%">
@@ -84,7 +84,7 @@ See how Electric Agents models agents as durable, addressable entities. Each ent
 
 ### Custom entities
 
-Define your own entity types with custom state, handlers, permissions, and tools.
+Define your own [entity types](/docs/agents/usage/defining-entities) with [custom state](/docs/agents/usage/managing-state), [handlers](/docs/agents/usage/writing-handlers), [permissions](/docs/agents/usage/permissions-and-principals), and [tools](/docs/agents/usage/defining-tools).
 
 <figure>
   <div class="embed-container" style="padding-bottom: 56.25%">
@@ -94,7 +94,7 @@ Define your own entity types with custom state, handlers, permissions, and tools
 
 ### State
 
-Inspect an entity's live StreamDB state: messages, runs, tool calls, child status, and custom collections.
+Inspect an entity's live [StreamDB state](/docs/streams/stream-db): messages, runs, tool calls, child status, and custom collections.
 
 <figure>
   <div class="embed-container" style="padding-bottom: 69.587629%">
@@ -124,7 +124,7 @@ Use child agents to split work into separately owned streams that the parent can
 
 ### Signals
 
-Signals give operators and apps a control plane for active work: `SIGINT`, pause, resume, kill, and handler-level lifecycle events.
+[Signals](/docs/agents/usage/signals) give operators and apps a control plane for active work: `SIGINT`, pause, resume, kill, and handler-level lifecycle events.
 
 <figure>
   <div class="embed-container" style="padding-bottom: 69.948187%">
@@ -134,7 +134,7 @@ Signals give operators and apps a control plane for active work: `SIGINT`, pause
 
 ### PG sync triggers
 
-Postgres changes can flow through sync and wake an agent when the data it cares about changes.
+[Postgres changes](/docs/agents/usage/programmatic-runtime-client#registerpgsyncsource) can flow through sync and wake an agent when the data it cares about changes.
 
 <figure>
   <div class="embed-container" style="padding-bottom: 64.748201%">
@@ -154,7 +154,7 @@ An agent can send itself a future message to sleep now and continue work later.
 
 ### Cron
 
-Cron schedules wake agents on recurring intervals without keeping a worker process alive.
+[Cron schedules](/docs/agents/usage/programmatic-runtime-client#schedules) wake agents on recurring intervals without keeping a worker process alive.
 
 <figure>
   <div class="embed-container" style="padding-bottom: 78.034682%">
@@ -458,9 +458,9 @@ DELETE BEFORE PUBLISHING
 ## Intent
 
 - What is this post about?
-  - Electric Agents 0.5 launches the runtime and SDK for building durable, persistent agent systems: every entity is a StreamDB, compute runs on local or remote runners you control, the apps are in-development devtools surfaces, and managed Electric Cloud support for Agents servers is coming soon.
+  - Electric Agents 0.6 launches the runtime and SDK for building durable, persistent agent systems: every entity is a StreamDB, compute runs on local or remote runners you control, the apps are in-development devtools surfaces, and managed Electric Cloud support for Agents servers is coming soon.
 - What is interesting about it?
-  - Electric Agents 0.5 expands the core APIs: spawn, fork, wake, observe, signal, schedule, send-to-self, coordinate through StreamDB, and build apps on top.
+  - Electric Agents 0.6 expands the core APIs: spawn, fork, wake, observe, signal, schedule, send-to-self, coordinate through StreamDB, and build apps on top.
 - Reader takeaway:
   - Electric Agents is a platform for building agentic systems, with an SDK and runtime that now include a broader API surface: durable entities, StreamDB state, runners, coordination APIs, signals, scheduling, app APIs, and in-development devtools for inspecting and controlling the agents you build.
 - CTAs:
@@ -473,17 +473,17 @@ DELETE BEFORE PUBLISHING
 
 ## Title brief
 
-Direction: lead with the 0.5 platform release, especially the SDK and runtime, not the apps.
-Working title options: “Electric Agents 0.5 released”, “Electric Agents 0.5: agents as StreamDBs”.
+Direction: lead with the 0.6 platform release, especially the SDK and runtime, not the apps.
+Working title options: “Electric Agents 0.6 released”, “Electric Agents 0.6: agents as StreamDBs”.
 Titles must use sentence case.
 
 ## Description brief
 
-SEO description should say that Electric Agents 0.5 ships the runtime and SDK for building durable, persistent, StreamDB-backed agent systems, with local/remote runners, coordination APIs, app APIs, and in-development devtools. Mention managed Agents servers in Electric Cloud coming soon.
+SEO description should say that Electric Agents 0.6 ships the runtime and SDK for building durable, persistent, StreamDB-backed agent systems, with local/remote runners, coordination APIs, app APIs, and in-development devtools. Mention managed Agents servers in Electric Cloud coming soon.
 
 ## Excerpt brief
 
-Max three short sentences. Mention runtime/SDK first, then apps in development and Cloud coming soon. Example direction: “Electric Agents 0.5 is the runtime release for durable, persistent agents. Every entity is a StreamDB, every runner is yours to control, and the apps show how to inspect and steer the systems you build.”
+Max three short sentences. Mention runtime/SDK first, then apps in development and Cloud coming soon. Example direction: “Electric Agents 0.6 is the runtime release for durable, persistent agents. Every entity is a StreamDB, every runner is yours to control, and the apps show how to inspect and steer the systems you build.”
 
 ## Image prompt
 
