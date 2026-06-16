@@ -29,6 +29,9 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
     prepared_relation_filters: MapSet.new(),
     submitted_relation_filters: MapSet.new(),
     committed_relation_filters: MapSet.new(),
+    # The relations covered by the configuration request the Configurator is
+    # currently working on, or nil when none is outstanding.
+    in_flight_relation_filters: nil,
     waiters: %{},
     # start with optimistic assumption about what the
     # publication supports (altering and generated columns)
@@ -48,6 +51,7 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
            prepared_relation_filters: internal_relation_filters(),
            submitted_relation_filters: internal_relation_filters(),
            committed_relation_filters: internal_relation_filters(),
+           in_flight_relation_filters: internal_relation_filters() | nil,
            waiters: %{Electric.relation_id() => [waiter(), ...]},
            publication_name: String.t(),
            publishes_generated_columns?: boolean(),
@@ -265,16 +269,20 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
   def handle_cast({:relation_configuration_result, {oid, _rel}, {:ok, :dropped}}, state) do
     new_committed_filters = MapSet.delete(state.committed_relation_filters, oid)
 
-    {:noreply, %{state | committed_relation_filters: new_committed_filters},
-     state.publication_refresh_period}
+    state =
+      clear_in_flight_if_committed(%{state | committed_relation_filters: new_committed_filters})
+
+    {:noreply, state, state.publication_refresh_period}
   end
 
   def handle_cast({:relation_configuration_result, {oid, _} = oid_rel, {:ok, :configured}}, state) do
     state = reply_to_relation_waiters(oid_rel, :ok, state)
     new_committed_filters = MapSet.put(state.committed_relation_filters, oid)
 
-    {:noreply, %{state | committed_relation_filters: new_committed_filters},
-     state.publication_refresh_period}
+    state =
+      clear_in_flight_if_committed(%{state | committed_relation_filters: new_committed_filters})
+
+    {:noreply, state, state.publication_refresh_period}
   end
 
   def handle_cast({:relation_configuration_result, oid_rel, {:error, error}}, state) do
@@ -296,11 +304,12 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
       )
     end
 
-    {:noreply, state, state.publication_refresh_period}
+    {:noreply, %{state | in_flight_relation_filters: nil}, state.publication_refresh_period}
   end
 
   def handle_cast({:configuration_error, {:error, error}}, state) do
-    {:noreply, reply_to_all_waiters({:error, error}, state), state.publication_refresh_period}
+    state = %{reply_to_all_waiters({:error, error}, state) | in_flight_relation_filters: nil}
+    {:noreply, state, state.publication_refresh_period}
   end
 
   @impl true
@@ -328,7 +337,11 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
       expand_oids(state.prepared_relation_filters, state)
     )
 
-    %{state | submitted_relation_filters: state.prepared_relation_filters}
+    %{
+      state
+      | submitted_relation_filters: state.prepared_relation_filters,
+        in_flight_relation_filters: state.prepared_relation_filters
+    }
   end
 
   @spec expand_oids(MapSet.t(Electric.relation_id()), state()) ::
@@ -345,9 +358,34 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
   defp update_needed?(%__MODULE__{
          prepared_relation_filters: prepared,
          submitted_relation_filters: submitted,
-         committed_relation_filters: committed
+         committed_relation_filters: committed,
+         in_flight_relation_filters: in_flight
        }) do
-    not MapSet.equal?(prepared, submitted) or not MapSet.equal?(submitted, committed)
+    prepared_changed? = not MapSet.equal?(prepared, submitted)
+
+    # "submitted but not yet committed" is the legitimate "the last request
+    # didn't fully go through, retry it" signal. But we must not act on it while
+    # a request for the same relations is still outstanding, otherwise every
+    # add_shape/remove_shape in that window would send another duplicate request.
+    # If a request dies without ever reporting back, the publication_refresh_period
+    # inactivity timeout is the fallback that retries.
+    retry_needed? = is_nil(in_flight) and not MapSet.equal?(submitted, committed)
+
+    prepared_changed? or retry_needed?
+  end
+
+  @spec clear_in_flight_if_committed(state()) :: state()
+  defp clear_in_flight_if_committed(
+         %__MODULE__{
+           committed_relation_filters: committed,
+           in_flight_relation_filters: in_flight
+         } = state
+       ) do
+    if not is_nil(in_flight) and MapSet.equal?(committed, in_flight) do
+      %{state | in_flight_relation_filters: nil}
+    else
+      state
+    end
   end
 
   @spec add_shape_to_publication_filters(shape_handle(), publication_filter(), state()) :: state()
