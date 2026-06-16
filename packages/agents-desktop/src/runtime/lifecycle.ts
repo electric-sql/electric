@@ -275,7 +275,9 @@ export async function startRuntime(
     runnerOwnerPrincipalFromUserId(cloudAuthState?.userId ?? null) ??
     runnerOwnerPrincipalFromHeaders(runtimeHeaders, PULL_WAKE_OWNER_PRINCIPAL)
   const runnerLabelPrefix =
-    cloudAuthState?.name ?? cloudAuthState?.email ?? `Electric Desktop`
+    cloudAuthState?.name?.trim() ||
+    cloudAuthState?.email?.trim() ||
+    `Electric Desktop`
   console.info(
     `[agents-desktop] Starting built-in agents runtime for server ${activeServer.url}`
   )
