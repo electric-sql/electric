@@ -13,52 +13,27 @@ image: /img/blog/electric-agents-0-5-from-runtime-to-app/header.jpg
 tags: [electric-agents, agents, durable-streams, sync, devtools]
 outline: [2, 3]
 post: true
-published: true
+published: false
 ---
 
 <script setup>
 import EntityStreamDemo from '../../src/components/agents-home/EntityStreamDemo.vue'
 </script>
 
-<!--
-Release post outline.
+Electric Agents 0.5 is out today. It rounds out the [platform we launched in April](/blog/2026/04/29/introducing-electric-agents) with a broader SDK and runtime surface for building agentic systems.
 
-Prose this up in place, then delete the comments/meta footer before publishing.
-Keep the post factual and brisk: runtime/SDK release first, apps as in-development
-devtools/demo surfaces, managed Cloud Agents servers as coming soon.
--->
-
-Electric Agents 0.5 is out today. It rounds out the [platform we launched in April](/blog/2026/04/29/introducing-electric-agents), where agents are durable, addressable streams, with a broader SDK and runtime surface for building agentic systems.
-
-The release gives you the runtime and SDK primitives: [long-lived entities](/docs/agents/usage/defining-entities), StreamDB state, local and remote runners, [spawning and forking](/docs/agents/usage/spawning-and-coordinating), [wakes](/docs/agents/usage/waking-entities), [signals](/docs/agents/usage/signals), schedules, self-sends, [app APIs](/docs/agents/usage/programmatic-runtime-client), and multi-agent coordination patterns. We are also building the first Electric Agents desktop and mobile apps: in-development devtools and demo surfaces for inspecting, controlling, and dogfooding agent systems. You can download canary builds from [GitHub releases](https://github.com/electric-sql/electric/releases) or build them yourself from source. Managed Agents servers in Electric Cloud are coming soon.
+- **Core APIs.** [Long-lived entities](/docs/agents/usage/defining-entities), StreamDB state, local and remote runners, [spawning and forking](/docs/agents/usage/spawning-and-coordinating), [wakes](/docs/agents/usage/waking-entities), [signals](/docs/agents/usage/signals), schedules, self-sends, [app APIs](/docs/agents/usage/programmatic-runtime-client), and multi-agent coordination patterns.
+- **Apps in development.** Desktop and mobile devtools for inspecting and controlling agent systems. Download canary builds from [GitHub releases](https://github.com/electric-sql/electric/releases) or build from source.
+- **Cloud next.** Managed Agents servers in Electric Cloud are coming soon.
 
 > [!Info] Get started with Electric Agents
-> Run the [Quickstart](/docs/agents/quickstart), read the [docs](/docs/agents/), watch the demos in this post, or revisit the [original Electric Agents launch post](/blog/2026/04/29/introducing-electric-agents).
+> Run the [Quickstart](/docs/agents/quickstart), read the [docs](/docs/agents/), or revisit the [original launch post](/blog/2026/04/29/introducing-electric-agents).
 
 <!-- ASSET: Header image. Runtime/SDK release visual: durable streams / StreamDB entities, runners, and app/devtools surface. Could still include desktop UI + code, but app should not read as the launch headline. Dark theme, Electric brand colours, 16:9 or 16:10, center-safe composition. -->
 
-## What changed since April
-
-<!--
-Brief orientation only. Do not re-argue the April launch post. This should say
-what has become more complete since the April launch.
--->
-
-The April launch introduced the model: agents as durable, addressable streams of state. This release fills out the surface area around that model:
-
-- **Core APIs.** Define agents, run them on runners, wake them from events, spawn children, fork history, signal active work, schedule future work, and build app surfaces on top.
-- **Apps in development.** The new desktop and mobile apps show what those surfaces look like: devtools for inspecting and operating agent systems built on the SDK.
-- **Cloud next.** Managed Agents servers in Electric Cloud are coming soon, with hosted coordination and user-owned compute.
-- **Background.** For the deeper context, read the [April launch post](/blog/2026/04/29/introducing-electric-agents), [agents as data primitives](/blog/2026/04/08/data-primitive-agent-loop), [StreamDB](/blog/2026/03/26/stream-db), [forking durable streams](/blog/2026/04/15/fork-branching-for-durable-streams), and [durable sessions for collaborative AI](/blog/2026/01/12/durable-sessions-for-collaborative-ai).
-
 ## The Electric Agents stack
 
-<!--
-Explain local vs remote runners. This is important for Cloud coming soon and for
-the phone-controlling-local-compute story.
--->
-
-The stack starts with durable data and builds up to agents, runners, and application surfaces. 0.5 expands the runtime and SDK surface on top of that stack. The new in-development desktop and mobile apps show how the same state model can be used for devtools and product workflows.
+The ecosystem is converging on a thesis: the agent is the log. If you accept that, the rest of the stack follows.
 
 <figure>
   <a href="/img/blog/electric-agents-0-5-from-runtime-to-app/stack.jpg" class="no-visual">
@@ -69,25 +44,21 @@ The stack starts with durable data and builds up to agents, runners, and applica
   </a>
 </figure>
 
-At the base are **Durable Streams**: append-only logs that store what happened. **StreamDB** projects those events into typed, live state. **TanStack DB** gives those projections a query layer for filtering, joins, aggregation, and materialized client state.
+If the agent is the log, the log has to outlive any single process or device — and if multiple readers need to observe it (UIs, supervisors, other agents), it has to sync. **Durable Streams** are append-only logs that do both.
 
-The **Agents runtime** sits on top of that data layer. It provides the control plane for entities: messaging, scheduling, wakes, retry, permissions, signals, child coordination, and runner dispatch. Agents servers coordinate work; runners do the compute. A runner can live on your laptop, in your infrastructure, in CI, or in another worker environment you control.
+Raw logs aren't ergonomic. You want typed projections — messages, runs, tool calls, errors, children — that update live as events land. **StreamDB** projects those collections over the stream.
 
-The **Agents apps** are the top layer we are now starting to show: desktop and mobile surfaces for devtools, coding-agent workflows, remote control, and our own dogfooding. Because coordination and compute are separate, you can start a coding session on your machine, leave the runner there, then open the same session from your phone to send a follow-up, stop it, or ask it to fix something.
+Projections need queries: filter, join, aggregate for a UI timeline or an agent's context window. **TanStack DB** is the reactive query layer.
 
-Managed Agents servers in Electric Cloud are coming soon. The 0.5 runtime is built around the same local/remote runner model: hosted coordination, user-owned compute.
+At this point you have durable, syncable, queryable agent state. What's missing is compute. Something has to run the LLM loop, call tools, and write the results back. And something has to track which entities exist, route messages, schedule wakes, and dispatch work. The **Agents runtime** is that control plane.
 
-<!-- ASSET: Diagram or short video. Agents server/control plane in middle, local desktop runner on one side, remote/mobile/app clients on the other. Make clear compute stays with user-owned runners. -->
+Runners do the compute; the runtime coordinates. A runner can live on your laptop, in your infrastructure, in CI, or anywhere you control. Because coordination and compute are separate, you can start a session on your machine, leave the runner there, then open the same session from your phone to send a follow-up or stop it.
+
+Managed Agents servers in Electric Cloud are coming soon — hosted coordination, user-owned compute.
 
 ## Every entity is a StreamDB
 
-<!--
-This is the architectural core. Explain the durable entity model clearly before
-touring features. The reader should leave understanding that "agent = persistent
-StreamDB-backed entity", not a transient process.
--->
-
-In Electric Agents, the agent is the durable entity, not the process currently handling it.
+In Electric Agents, the agent is the durable stream, not the process currently handling it.
 
 - An [Electric Agents entity](/docs/agents/usage/defining-entities) is a long-lived, addressable thing: an assistant, worker, coding session, support ticket, lead researcher, orchestrator, monitor, or any agent type you define.
 - Every entity has a durable stream, which is the log of what happened.
@@ -99,11 +70,6 @@ In Electric Agents, the agent is the durable entity, not the process currently h
 <!-- ASSET: Diagram or animation. One entity path -> durable stream -> StreamDB collections -> UI/agent subscribers. Show built-in collections and custom state as projections over the same stream. -->
 
 ## Demos and videos
-
-<!--
-Use this section to place short demo videos. They do not all need to be polished.
-The post should show the primitives in motion without turning into a giant essay.
--->
 
 ### Forking and spawning
 
@@ -154,11 +120,6 @@ Show blackboard/shared state, orchestrator/worker, reactive observers, or map-re
 <!-- VIDEO PLACEHOLDER: Multi-agent patterns. Show one concrete pattern with shared state and observed child progress. -->
 
 ## Core APIs
-
-<!--
-This is the main feature tour. Keep samples compact and representative; link to
-the docs for full signatures and end-to-end examples.
--->
 
 ### Define
 
@@ -328,7 +289,7 @@ await ctx.observe(entity(reviewer.entityUrl), {
 Connect external tools and systems with [MCP servers](/docs/agents/usage/mcp-servers), [event-source subscriptions](/docs/agents/usage/event-sources), [webhooks](/docs/agents/usage/clients-and-react#observation-sources), and [PG sync-driven triggers](/docs/agents/usage/programmatic-runtime-client#registerpgsyncsource). Agents can subscribe to operational systems and wake when those systems change. `Runtime`
 
 ```ts
-await client.subscribeToEventSource({
+await client.subscribeToWebhookSource({
   entityUrl: "/horton/release-post",
   id: "github-pr",
   sourceKey: "github",
@@ -368,12 +329,9 @@ const attachments = await queryOnce((q) =>
 
 ## Apps in development
 
-<!--
-Apps are not the main launch now. Position them as in-development devtools/demo surfaces
-that prove the platform and show the product direction.
--->
+The desktop and mobile apps are built on the same APIs you use: `observe(entities())` to list agents, `observe(entity(...))` to load one, the runtime client to spawn, signal, and send. The app is a subscriber, not special infrastructure.
 
-The desktop and mobile apps are in development. We are using them to dogfood the SDK and runtime, and to build toward our own software factory: agents that shepherd PRs and issues, keep work moving, and let everyone connect to the same durable session.
+We're using them to dogfood the SDK and runtime, and to build toward our own software factory: agents that shepherd PRs and issues, keep work moving, and let everyone connect to the same durable session.
 
 - **Custom agent types:** build entities with `@electric-ax/agents-runtime` and inspect them in the desktop app.
 - **State explorer:** see each entity's runs, inbox, manifests, and custom state in one view.
@@ -392,11 +350,6 @@ You can download app canaries from [GitHub releases](https://github.com/electric
 <!-- ASSET: Mobile app screenshot/video. Label clearly as in development. -->
 
 ## How to try it
-
-<!--
-Make this practical. The reader should be able to try something immediately.
-Primary CTA: quickstart from the CLI. Apps are in development; link canary downloads if available.
--->
 
 Run the quickstart from the CLI:
 
@@ -442,19 +395,11 @@ Once registered, `assistant` appears as an entity type in the app. Spawn `/assis
 
 ## Coming next
 
-<!--
-Roadmap tease. Keep this grounded, not speculative.
--->
-
 - Managed Agents servers in Electric Cloud.
 - More examples and docs for app builders: PG sync triggers, [event sources](/docs/agents/usage/event-sources), [MCP](/docs/agents/usage/mcp-servers), [attachments](/docs/agents/usage/attachments), [sandbox profiles](/docs/agents/usage/sandboxing), and multi-agent patterns.
 - More app development polish: desktop builds, smoother downloads and updates, and richer mobile distribution.
 
 ## Next steps
-
-<!--
-Final CTA, not a second conclusion. Keep it short.
--->
 
 - Run `npx electric-ax agents quickstart`.
 - Read the [Electric Agents docs](/docs/agents/).
