@@ -82,6 +82,15 @@ export type SelectedCommentTarget = {
   snapshot: CommentSnapshot
 }
 
+/** Label for the composer's reply banner; `Reply` when there's no snapshot label. */
+export function formatReplyBannerLabel(
+  target: SelectedCommentTarget | null
+): string {
+  const label = target?.snapshot.label.trim()
+  if (!label) return `Reply`
+  return `Reply to ${label.charAt(0).toLowerCase()}${label.slice(1)}`
+}
+
 type SendCommentInput = {
   key: string
   body: string

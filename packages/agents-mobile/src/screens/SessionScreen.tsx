@@ -26,7 +26,10 @@ import {
   readTextPayload,
 } from '@electric-ax/agents-server-ui/src/lib/sendMessage'
 import type { OptimisticInboxMessage } from '@electric-ax/agents-server-ui/src/lib/sendMessage'
-import { createSendCommentAction } from '@electric-ax/agents-server-ui/src/lib/comments'
+import {
+  createSendCommentAction,
+  formatReplyBannerLabel,
+} from '@electric-ax/agents-server-ui/src/lib/comments'
 import type {
   EntityTimelineCommentRow,
   SelectedCommentTarget,
@@ -505,13 +508,6 @@ export function SessionScreen({
   )
 }
 
-// Mirrors agents-server-ui MessageInput's reply-banner label.
-function formatReplyBannerLabel(target: SelectedCommentTarget): string {
-  const label = target.snapshot.label.trim()
-  if (!label) return `Reply`
-  return `Reply to ${label.charAt(0).toLowerCase()}${label.slice(1)}`
-}
-
 function NativeMessageComposer({
   entityUrl,
   entity,
@@ -693,6 +689,7 @@ function NativeMessageComposer({
     return createSteerInboxMessageAction({ db, baseUrl: serverUrl, entityUrl })
   }, [db, serverUrl, entityUrl])
   const showStop =
+    !commentMode &&
     generationActive &&
     text.length === 0 &&
     !hasDraftAttachments &&

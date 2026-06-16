@@ -11,6 +11,7 @@ import {
 } from '../lib/sendMessage'
 import {
   createSendCommentAction,
+  formatReplyBannerLabel,
   type SelectedCommentTarget,
 } from '../lib/comments'
 import {
@@ -570,10 +571,4 @@ export function MessageInput({
       )}
     </Stack>
   )
-}
-
-function formatReplyBannerLabel(target: SelectedCommentTarget | null): string {
-  const label = target?.snapshot.label.trim()
-  if (!label) return `Reply`
-  return `Reply to ${label.charAt(0).toLowerCase()}${label.slice(1)}`
 }

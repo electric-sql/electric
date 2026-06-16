@@ -9,13 +9,18 @@ import {
   createCommentsTimelineSource,
   createSendCommentAction,
   decodeCommentTargetParam,
+  formatReplyBannerLabel,
 } from './comments'
 import type {
   CommentSnapshot,
   CommentTarget,
   EntityStreamDBWithActions,
 } from '@electric-ax/agents-runtime/client'
-import type { OptimisticComment, TimelineRow } from './comments'
+import type {
+  OptimisticComment,
+  SelectedCommentTarget,
+  TimelineRow,
+} from './comments'
 
 function createCommentsDb() {
   const comments = createCollection(
@@ -303,5 +308,23 @@ describe(`comment focus view params`, () => {
     )
 
     expect(decodeCommentTargetParam(encoded)).toBeNull()
+  })
+})
+
+describe(`formatReplyBannerLabel`, () => {
+  const target = (label: string): SelectedCommentTarget => ({
+    target: { kind: `comment`, key: `c1` },
+    snapshot: { label },
+  })
+
+  it(`lowercases the first character of the snapshot label`, () => {
+    expect(formatReplyBannerLabel(target(`User message`))).toBe(
+      `Reply to user message`
+    )
+  })
+
+  it(`falls back to "Reply" when null or label is blank`, () => {
+    expect(formatReplyBannerLabel(null)).toBe(`Reply`)
+    expect(formatReplyBannerLabel(target(`   `))).toBe(`Reply`)
   })
 })
