@@ -45,18 +45,17 @@ export function useForkFromHere({
           capturedRunKey,
           canFork
             ? {
-                onFork: () => {
-                  // forkEntity surfaces failures via a danger toast before
-                  // rejecting, so the caller just needs to swallow the rejection.
-                  void forkEntity(entityUrl, { pointer: capturedAnchor })
+                // Return the chain so the trigger can track in-flight state;
+                // forkEntity already toasts on failure, so swallow the rejection.
+                onFork: () =>
+                  forkEntity(entityUrl, { pointer: capturedAnchor })
                     .then((res) =>
                       navigate({
                         to: `/entity/$`,
                         params: { _splat: res.url.replace(/^\//, ``) },
                       })
                     )
-                    .catch(() => {})
-                },
+                    .catch(() => {}),
               }
             : { disabled: true }
         )

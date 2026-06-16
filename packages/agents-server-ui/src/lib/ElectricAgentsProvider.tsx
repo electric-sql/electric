@@ -780,11 +780,30 @@ function createSignalAction(
   })
 }
 
-function createForkEntity(baseUrl: string) {
+export type ForkEntityFn = (
+  entityUrl: string,
+  opts?: { pointer?: EventPointer }
+) => Promise<{ url: string }>
+
+function createForkEntity(
+  baseUrl: string,
+  // Optional transport override (mobile routes the fork over native RN
+  // networking). The failure toast lives here so both paths surface errors
+  // identically.
+  forkRequest?: ForkEntityFn
+): ForkEntityFn {
   return async (
     entityUrl: string,
     opts?: { pointer?: EventPointer }
   ): Promise<{ url: string }> => {
+    if (forkRequest) {
+      try {
+        return await forkRequest(entityUrl, opts)
+      } catch (err) {
+        showForkFailureToast({ entityUrl, error: err })
+        throw err
+      }
+    }
     // Wire convention is snake_case; in-code TS is camelCase.
     const body = opts?.pointer
       ? {
@@ -857,9 +876,13 @@ const ElectricAgentsContext = createContext<ElectricAgentsState>({
 export function ElectricAgentsProvider({
   baseUrl,
   children,
+  forkEntityImpl,
 }: {
   baseUrl: string | null
   children: ReactNode
+  // Optional fork transport (see `createForkEntity`); must be referentially
+  // stable, as it feeds the `state` memo below. Undefined in the full app.
+  forkEntityImpl?: ForkEntityFn
 }): React.ReactElement {
   const previousBaseUrlRef = useRef<string | null>(null)
 
@@ -926,9 +949,9 @@ export function ElectricAgentsProvider({
       signalEntity: createSignalAction(baseUrl, entities),
       setEntityTitle: createSetEntityTitleAction(baseUrl, entities),
       killEntity: createKillAction(baseUrl, entities),
-      forkEntity: createForkEntity(baseUrl),
+      forkEntity: createForkEntity(baseUrl, forkEntityImpl),
     }
-  }, [baseUrl])
+  }, [baseUrl, forkEntityImpl])
 
   return (
     <ElectricAgentsContext.Provider value={state}>

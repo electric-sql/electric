@@ -105,6 +105,72 @@ describe(`spawnEntity`, () => {
   })
 })
 
+describe(`forkEntity`, () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.serverFetch.mockResolvedValue(
+      new Response(JSON.stringify({ root: { url: `/horton/x-fork` } }), {
+        status: 200,
+      })
+    )
+  })
+
+  function lastRequestUrl(): string {
+    return mocks.serverFetch.mock.calls.at(-1)![0] as string
+  }
+
+  it(`posts an empty body to fork the whole subtree`, async () => {
+    const { forkEntity } = await import(`./agentsClient`)
+    const result = await forkEntity({
+      baseUrl: `http://server`,
+      entityUrl: `/horton/x`,
+    })
+
+    const [, init] = mocks.serverFetch.mock.calls.at(-1)!
+    expect((init as RequestInit).method).toBe(`POST`)
+    expect(lastRequestUrl()).toBe(
+      `http://server/_electric/entities/horton/x/fork`
+    )
+    expect(lastRequestBody()).toEqual({})
+    expect(result).toEqual({ url: `/horton/x-fork` })
+  })
+
+  it(`sends a snake_case fork_pointer when forking from a point`, async () => {
+    const { forkEntity } = await import(`./agentsClient`)
+    await forkEntity({
+      baseUrl: `http://server`,
+      entityUrl: `/horton/x`,
+      pointer: { offset: `0000000003_0`, subOffset: 1 },
+    })
+
+    expect(lastRequestBody()).toEqual({
+      fork_pointer: { offset: `0000000003_0`, sub_offset: 1 },
+    })
+  })
+
+  it(`throws the server message when the fork is rejected`, async () => {
+    mocks.serverFetch.mockResolvedValue(
+      new Response(JSON.stringify({ message: `Fork permission required` }), {
+        status: 403,
+      })
+    )
+    const { forkEntity } = await import(`./agentsClient`)
+    await expect(
+      forkEntity({ baseUrl: `http://server`, entityUrl: `/horton/x` })
+    ).rejects.toThrow(`Fork permission required`)
+  })
+
+  it(`throws when the response omits the new root url`, async () => {
+    mocks.serverFetch.mockResolvedValue(
+      new Response(JSON.stringify({ root: {} }), { status: 200 })
+    )
+    const { forkEntity } = await import(`./agentsClient`)
+    await expect(
+      forkEntity({ baseUrl: `http://server`, entityUrl: `/horton/x` })
+    ).rejects.toThrow()
+  })
+})
+
 describe(`schemas`, () => {
   it(`parses runner rows with advertised sandbox profiles`, async () => {
     const { runnerSchema } = await import(`./agentsClient`)

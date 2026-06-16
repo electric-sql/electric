@@ -39,7 +39,8 @@ export type UserMessageAttachment = {
 
 export type ForkFromHereAction = {
   disabled?: boolean
-  onFork?: () => void
+  // Returns the in-flight fork promise so the trigger can track pending state.
+  onFork?: () => void | Promise<unknown>
 }
 
 export const UserMessage = memo(function UserMessage({

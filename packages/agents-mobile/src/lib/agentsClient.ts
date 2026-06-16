@@ -3,6 +3,7 @@ import { electricCollectionOptions } from '@tanstack/electric-db-collection'
 import { appendPathToUrl } from '@electric-ax/agents-runtime/client'
 import type { ComposerInputPayload } from '@electric-ax/agents-runtime/client'
 import { serverFetch } from '@electric-ax/agents-server-ui/src/lib/auth-fetch'
+import { entityApiUrl } from '@electric-ax/agents-server-ui/src/lib/entity-api'
 import { z } from 'zod'
 
 export type EntityStatus =
@@ -422,6 +423,42 @@ export async function signalEntity({
   if (!res.ok) {
     throw new Error(await responseMessage(res, `Signal failed`))
   }
+}
+
+// Structurally matches agents-runtime's `EventPointer` so the re-routed
+// per-message fork can cross the DOM bridge without a runtime dependency.
+export type ForkPointer = { offset: string | null; subOffset: number }
+
+// No `pointer` clones the whole subtree (kebab "Fork subtree"); a pointer
+// forks from that point ("Fork from here"). Mirrors desktop `createForkEntity`.
+export async function forkEntity({
+  baseUrl,
+  entityUrl,
+  pointer,
+}: {
+  baseUrl: string
+  entityUrl: string
+  pointer?: ForkPointer
+}): Promise<{ url: string }> {
+  const body = pointer
+    ? {
+        fork_pointer: { offset: pointer.offset, sub_offset: pointer.subOffset },
+      }
+    : {}
+
+  const res = await serverFetch(entityApiUrl(baseUrl, entityUrl, `/fork`), {
+    method: `POST`,
+    headers: { 'content-type': `application/json` },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    throw new Error(await responseMessage(res, `Fork failed`))
+  }
+  const data = (await res.json()) as { root?: { url?: string } }
+  if (!data.root?.url) {
+    throw new Error(`Fork returned an invalid response`)
+  }
+  return { url: data.root.url }
 }
 
 export function getEntityDisplayTitle(entity: ElectricEntity): string {

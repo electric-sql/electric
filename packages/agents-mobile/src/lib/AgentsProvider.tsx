@@ -5,11 +5,13 @@ import {
   createEntityEffectivePermissionsCollection,
   createRunnersCollection,
   createUsersCollection,
+  forkEntity,
   signalEntity,
   type EntitiesCollection,
   type EntityEffectivePermissionsCollection,
   type EntityTypesCollection,
   type EntitySignal,
+  type ForkPointer,
   type RunnersCollection,
   type UsersCollection,
 } from './agentsClient'
@@ -27,6 +29,10 @@ type AgentsContextValue = {
     reason?: string
     payload?: unknown
   }) => Promise<void>
+  forkEntity: (input: {
+    entityUrl: string
+    pointer?: ForkPointer
+  }) => Promise<{ url: string }>
 }
 
 const AgentsContext = createContext<AgentsContextValue | null>(null)
@@ -48,6 +54,7 @@ export function AgentsProvider({
       entityEffectivePermissionsCollection:
         createEntityEffectivePermissionsCollection(serverUrl),
       signalEntity: (input) => signalEntity({ baseUrl: serverUrl, ...input }),
+      forkEntity: (input) => forkEntity({ baseUrl: serverUrl, ...input }),
     }
   }, [serverUrl])
 

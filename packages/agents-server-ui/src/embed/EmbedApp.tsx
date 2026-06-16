@@ -3,6 +3,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   type CSSProperties,
   type ReactElement,
 } from 'react'
@@ -18,11 +19,13 @@ import { eq } from '@tanstack/db'
 import {
   ElectricAgentsProvider,
   useElectricAgents,
+  type ForkEntityFn,
 } from '../lib/ElectricAgentsProvider'
 import { WorkspaceProvider } from '../hooks/useWorkspace'
 import { ThemeProvider } from '../ui/ThemeProvider'
 import { ChatLogView, ChatView } from '../components/views/ChatView'
 import { StateExplorerView } from '../components/views/StateExplorerView'
+import { ToastProvider } from '../components/ToastViewport'
 import { registerActiveServerHeaders } from '../lib/auth-fetch'
 import styles from './EmbedApp.module.css'
 import type { OptimisticInboxMessage } from '../lib/sendMessage'
@@ -34,10 +37,14 @@ type EmbedTheme = `light` | `dark`
 
 export type EmbedSessionProps = EmbedState & {
   onNavigatePathname?: (pathname: string) => void | Promise<void>
+  // Marshalled native fork transport — when present (mobile), the embed's
+  // fork runs over native RN networking instead of the WebView's fetch.
+  onRequestForkEntity?: ForkEntityFn
 }
 
 export function EmbedSessionRoot({
   onNavigatePathname,
+  onRequestForkEntity,
   ...state
 }: EmbedSessionProps): ReactElement {
   // Register the Cloud auth headers in THIS context's auth-fetch
@@ -49,19 +56,39 @@ export function EmbedSessionRoot({
   } else {
     registerActiveServerHeaders(null)
   }
+  // Keep a stable wrapper so the provider's action memo doesn't rebuild on
+  // every render (the marshalled prop's identity isn't guaranteed stable).
+  const forkRef = useRef(onRequestForkEntity)
+  forkRef.current = onRequestForkEntity
+  const hasNativeFork = Boolean(onRequestForkEntity)
+  const forkEntityImpl = useMemo<ForkEntityFn | undefined>(
+    () =>
+      hasNativeFork
+        ? (entityUrl, opts) => forkRef.current!(entityUrl, opts)
+        : undefined,
+    [hasNativeFork]
+  )
   return (
     <ThemeProvider appearance={state.theme}>
-      <ElectricAgentsProvider baseUrl={state.serverUrl}>
-        {/* The state-explorer view calls `useWorkspace`; the native shell owns
-            navigation, so this just satisfies the context (tile dispatches are
-            inert against the embed's fixed view). */}
-        <WorkspaceProvider>
-          <EmbeddedRouter
-            state={state}
-            onNavigatePathname={onNavigatePathname}
-          />
-        </WorkspaceProvider>
-      </ElectricAgentsProvider>
+      {/* The full app mounts the toast viewport in its router; the embed has
+          its own entry, so mount one here too — otherwise fork (and other)
+          failures fire into a bus with no listener and vanish in the WebView. */}
+      <ToastProvider>
+        <ElectricAgentsProvider
+          baseUrl={state.serverUrl}
+          forkEntityImpl={forkEntityImpl}
+        >
+          {/* The state-explorer view calls `useWorkspace`; the native shell owns
+              navigation, so this just satisfies the context (tile dispatches are
+              inert against the embed's fixed view). */}
+          <WorkspaceProvider>
+            <EmbeddedRouter
+              state={state}
+              onNavigatePathname={onNavigatePathname}
+            />
+          </WorkspaceProvider>
+        </ElectricAgentsProvider>
+      </ToastProvider>
     </ThemeProvider>
   )
 }
