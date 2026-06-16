@@ -59,14 +59,22 @@ defmodule Electric.AsyncDeleter do
         :ok
 
       {:error, :enoent} ->
-        Logger.debug("AsyncDeleter: path already gone #{path}")
-        :ok
+        if File.exists?(path) do
+          # The source still exists, so the :enoent is about the *trash dir*
+          # being missing — hand the live path to the deleter to capture later.
+          GenServer.cast(name(stack_id), {:capture_failed, path})
+          :ok
+        else
+          Logger.debug("AsyncDeleter: path already gone #{path}")
+          :ok
+        end
 
       {:error, reason} ->
-        # If this is happening then there's something bad going on and our
-        # storage is just accruing.
-        Logger.error("AsyncDeleter: rename failed for #{path}: #{inspect(reason)}")
-        {:error, reason}
+        # e.g. ENOSPC: cannot move into the trash dir right now. Hand off so the
+        # deleter retries the capture once space frees up.
+        Logger.error("AsyncDeleter: rename failed for #{path}: #{inspect(reason)} - will retry")
+        GenServer.cast(name(stack_id), {:capture_failed, path})
+        :ok
     end
   end
 

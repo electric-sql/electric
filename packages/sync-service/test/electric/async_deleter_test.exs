@@ -173,6 +173,31 @@ defmodule Electric.AsyncDeleterTest do
 
       assert Process.alive?(pid)
     end
+
+    test "delete hands off a live source when the trash dir is missing", ctx do
+      start_link_supervised!(
+        {AsyncDeleter,
+         stack_id: ctx.stack_id, storage_dir: ctx.tmp_dir, cleanup_interval_ms: @interval}
+      )
+
+      dir = Path.join(ctx.tmp_dir, "live_shape")
+      File.mkdir_p!(dir)
+      File.write!(Path.join(dir, "f.txt"), "data")
+
+      assert :ok = AsyncDeleter.delete(ctx.stack_id, dir)
+      assert File.exists?(dir)
+    end
+
+    test "deleting a missing source still returns ok with no trash dir", ctx do
+      start_link_supervised!(
+        {AsyncDeleter,
+         stack_id: ctx.stack_id, storage_dir: ctx.tmp_dir, cleanup_interval_ms: @interval}
+      )
+
+      gone = Path.join(ctx.tmp_dir, "never_existed")
+      refute File.exists?(gone)
+      assert :ok = AsyncDeleter.delete(ctx.stack_id, gone)
+    end
   end
 
   defp assert_dir_empty(dir, timeout \\ 500) do
