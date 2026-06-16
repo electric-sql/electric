@@ -959,6 +959,7 @@ defmodule Electric.Shapes.FilterTest do
           )
 
         Filter.add_shape(filter, i, shape)
+        seed_shape(filter, i, [1, 2, 3, 4, 5])
       end)
 
       Enum.each(1..@shape_count, fn i ->
@@ -983,12 +984,21 @@ defmodule Electric.Shapes.FilterTest do
           )
 
         Filter.add_shape(filter, i, shape)
+        seed_shape(filter, i, [i, i + 1_000_000])
       end)
 
       Enum.each(1..@shape_count, fn i ->
         remove_reductions = reductions(fn -> Filter.remove_shape(filter, i) end)
         assert remove_reductions < @max_reductions
       end)
+    end
+
+    @subquery_ref ["$sublink", "0"]
+
+    defp seed_shape(filter, shape_id, values) do
+      index = Filter.subquery_index(filter)
+      SubqueryIndex.seed_membership(index, shape_id, @subquery_ref, 0, MapSet.new(values))
+      SubqueryIndex.mark_ready(index, shape_id)
     end
 
     defp reductions(fun) do
