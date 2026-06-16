@@ -69,10 +69,15 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
       register_node_shape(filter, table, condition_id, "s3")
 
       assert [
-               {{:node_shape, {^condition_id, @field}}, {"s1", 0, :positive, _, []}},
-               {{:node_shape, {^condition_id, @field}}, {"s2", 0, :positive, _, []}},
-               {{:node_shape, {^condition_id, @field}}, {"s3", 0, :positive, _, []}}
-             ] = Enum.sort(:ets.lookup(table, {:node_shape, {condition_id, @field}}))
+               {{:node_shape, {^condition_id, @field}, "s1", []}, {0, :positive, _}},
+               {{:node_shape, {^condition_id, @field}, "s2", []}, {0, :positive, _}},
+               {{:node_shape, {^condition_id, @field}, "s3", []}, {0, :positive, _}}
+             ] =
+               Enum.sort(
+                 :ets.select(table, [
+                   {{{:node_shape, {condition_id, @field}, :_, :_}, :_}, [], [:"$_"]}
+                 ])
+               )
 
       assert :ok =
                SubqueryIndex.remove_shape(filter, condition_id, "s1", subquery_optimisation(), [])
@@ -85,7 +90,11 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
       assert :deleted =
                SubqueryIndex.remove_shape(filter, condition_id, "s3", subquery_optimisation(), [])
 
-      assert [] == :ets.lookup(table, {:node_shape, {condition_id, @field}})
+      assert [] ==
+               :ets.select(table, [
+                 {{{:node_shape, {condition_id, @field}, :_, :_}, :_}, [], [:"$_"]}
+               ])
+
       assert [] == :ets.lookup(table, {:node_meta, {condition_id, @field}})
     end
 
@@ -224,5 +233,145 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
       dependency_disjuncts: %{},
       dependency_polarities: %{dep_index => polarity}
     }
+  end
+
+  # Removal must not scale with these dimensions. We measure removal reductions at a
+  # small and a 20x-larger size and require the delta to stay within noise.
+  @perf_small 1_000
+  @perf_large 20_000
+  @flatness_tolerance 3_000
+  @perf_timeout 120_000
+
+  defp reductions(fun) do
+    {:reductions, before} = :erlang.process_info(self(), :reductions)
+    fun.()
+    {:reductions, after_} = :erlang.process_info(self(), :reductions)
+    after_ - before
+  end
+
+  # Replicates the index work done by Filter.remove_shape: per-node remove_shape,
+  # then unregister_shape. branch_key is [] throughout these tests.
+  defp remove_one(filter, condition_id, shape_id) do
+    table = Filter.subquery_index(filter)
+    SubqueryIndex.remove_shape(filter, condition_id, shape_id, subquery_optimisation(), [])
+    SubqueryIndex.unregister_shape(table, shape_id)
+  end
+
+  defp seed(table, shape_id, values) do
+    SubqueryIndex.seed_membership(table, shape_id, @subquery_ref, 0, MapSet.new(values))
+    SubqueryIndex.mark_ready(table, shape_id)
+  end
+
+  describe "performance" do
+    @tag :performance
+    @tag timeout: @perf_timeout
+    test "removal is O(1) in the total number of shapes" do
+      measure = fn n ->
+        filter = Filter.new()
+        table = Filter.subquery_index(filter)
+        condition_ids = for _ <- 1..n, do: make_ref()
+
+        condition_ids
+        |> Enum.with_index(1)
+        |> Enum.each(fn {condition_id, i} ->
+          WhereCondition.init(filter, condition_id)
+          register_node_shape(filter, table, condition_id, i)
+          seed(table, i, [1, 2, 3, 4, 5])
+        end)
+
+        {condition_ids |> Enum.at(div(n, 2)), div(n, 2) + 1, filter}
+      end
+
+      {cid_s, id_s, filter_s} = measure.(@perf_small)
+      small = reductions(fn -> remove_one(filter_s, cid_s, id_s) end)
+
+      {cid_l, id_l, filter_l} = measure.(@perf_large)
+      large = reductions(fn -> remove_one(filter_l, cid_l, id_l) end)
+
+      assert abs(large - small) < @flatness_tolerance,
+             "removal grew with total shapes: #{small} -> #{large} reductions"
+    end
+
+    @tag :performance
+    @tag timeout: @perf_timeout
+    test "removal is O(1) in the number of shapes on the node" do
+      measure = fn n ->
+        filter = Filter.new()
+        table = Filter.subquery_index(filter)
+        condition_id = make_ref()
+        WhereCondition.init(filter, condition_id)
+
+        for i <- 1..n do
+          register_node_shape(filter, table, condition_id, i)
+          seed(table, i, [i, i + 1_000_000])
+        end
+
+        {condition_id, div(n, 2), filter}
+      end
+
+      {cid_s, id_s, filter_s} = measure.(@perf_small)
+      small = reductions(fn -> remove_one(filter_s, cid_s, id_s) end)
+
+      {cid_l, id_l, filter_l} = measure.(@perf_large)
+      large = reductions(fn -> remove_one(filter_l, cid_l, id_l) end)
+
+      assert abs(large - small) < @flatness_tolerance,
+             "removal grew with shapes-on-node: #{small} -> #{large} reductions"
+    end
+
+    @tag :performance
+    @tag timeout: @perf_timeout
+    test "removal is O(1) in the number of shapes sharing each value" do
+      # All shapes share the same values on one node, so each (node, value) is backed by
+      # n shapes — the seeded production case. Removing one shape must not scan the others
+      # sharing its values.
+      shared = [1, 2, 3, 4, 5]
+
+      measure = fn n ->
+        filter = Filter.new()
+        table = Filter.subquery_index(filter)
+        condition_id = make_ref()
+        WhereCondition.init(filter, condition_id)
+
+        for i <- 1..n do
+          register_node_shape(filter, table, condition_id, i)
+          seed(table, i, shared)
+        end
+
+        {condition_id, div(n, 2), filter}
+      end
+
+      {cid_s, id_s, filter_s} = measure.(@perf_small)
+      small = reductions(fn -> remove_one(filter_s, cid_s, id_s) end)
+
+      {cid_l, id_l, filter_l} = measure.(@perf_large)
+      large = reductions(fn -> remove_one(filter_l, cid_l, id_l) end)
+
+      assert abs(large - small) < @flatness_tolerance,
+             "removal grew with shapes-per-value: #{small} -> #{large} reductions"
+    end
+
+    @tag :performance
+    @tag timeout: @perf_timeout
+    test "removal cost grows with the removed shape's own view size" do
+      measure = fn v ->
+        filter = Filter.new()
+        table = Filter.subquery_index(filter)
+        condition_id = make_ref()
+        WhereCondition.init(filter, condition_id)
+        register_node_shape(filter, table, condition_id, "s")
+        seed(table, "s", Enum.to_list(1..v))
+        {condition_id, filter}
+      end
+
+      {cid_small, filter_small} = measure.(20)
+      small = reductions(fn -> remove_one(filter_small, cid_small, "s") end)
+
+      {cid_big, filter_big} = measure.(20 * 50)
+      big = reductions(fn -> remove_one(filter_big, cid_big, "s") end)
+
+      assert big > small * 5,
+             "expected removal to scale with view size, got #{small} -> #{big}"
+    end
   end
 end
