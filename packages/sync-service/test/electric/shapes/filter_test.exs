@@ -630,6 +630,31 @@ defmodule Electric.Shapes.FilterTest do
     end)
   end
 
+  test "Filter.remove_shape/2 leaves no orphan subquery rows when draining a shared node" do
+    filter = Filter.new()
+    index = Filter.subquery_index(filter)
+    state_before = snapshot_filter_ets(filter)
+
+    shape_ids = ["a", "b", "c"]
+
+    for id <- shape_ids do
+      shape =
+        Shape.new!("table",
+          where: "id IN (SELECT id FROM another_table)",
+          inspector: @inspector,
+          feature_flags: ["allow_subqueries"]
+        )
+
+      Filter.add_shape(filter, id, shape)
+      SubqueryIndex.seed_membership(index, id, ["$sublink", "0"], 0, MapSet.new([1, 2, 3]))
+      SubqueryIndex.mark_ready(index, id)
+    end
+
+    for id <- shape_ids, do: Filter.remove_shape(filter, id)
+
+    assert snapshot_filter_ets(filter) == state_before
+  end
+
   test "Filter.remove_shape/2 removes seeded subquery index state" do
     filter = Filter.new()
     state_before = snapshot_filter_ets(filter)

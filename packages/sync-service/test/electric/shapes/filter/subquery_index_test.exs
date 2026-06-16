@@ -344,5 +344,28 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
       assert abs(large - small) < @flatness_tolerance,
              "removal grew with shapes-per-value: #{small} -> #{large} reductions"
     end
+
+    @tag :performance
+    @tag timeout: @perf_timeout
+    test "removal cost grows with the removed shape's own view size" do
+      measure = fn v ->
+        filter = Filter.new()
+        table = Filter.subquery_index(filter)
+        condition_id = make_ref()
+        WhereCondition.init(filter, condition_id)
+        register_node_shape(filter, table, condition_id, "s")
+        seed(table, "s", Enum.to_list(1..v))
+        {condition_id, filter}
+      end
+
+      {cid_small, filter_small} = measure.(20)
+      small = reductions(fn -> remove_one(filter_small, cid_small, "s") end)
+
+      {cid_big, filter_big} = measure.(20 * 50)
+      big = reductions(fn -> remove_one(filter_big, cid_big, "s") end)
+
+      assert big > small * 5,
+             "expected removal to scale with view size, got #{small} -> #{big}"
+    end
   end
 end
