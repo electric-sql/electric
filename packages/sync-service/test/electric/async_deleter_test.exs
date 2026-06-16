@@ -42,10 +42,12 @@ defmodule Electric.AsyncDeleterTest do
   end
 
   setup ctx do
-    start_link_supervised!(
-      {AsyncDeleter,
-       stack_id: ctx.stack_id, storage_dir: ctx.tmp_dir, cleanup_interval_ms: @interval}
-    )
+    unless ctx[:no_default_deleter] do
+      start_link_supervised!(
+        {AsyncDeleter,
+         stack_id: ctx.stack_id, storage_dir: ctx.tmp_dir, cleanup_interval_ms: @interval}
+      )
+    end
 
     :ok
   end
@@ -149,6 +151,28 @@ defmodule Electric.AsyncDeleterTest do
   test "performs initial cleanup", %{trash_dir: trash_dir} do
     # ensure no files exist after startup
     assert_dir_empty(trash_dir)
+  end
+
+  describe "resilient boot" do
+    @describetag :no_default_deleter
+
+    setup ctx do
+      # Put a regular file where the `.electric_trash` directory needs to go,
+      # so File.mkdir_p of the trash dir fails with :enotdir regardless of uid.
+      trash_base = Path.join(ctx.tmp_dir, ".electric_trash")
+      File.write!(trash_base, "obstruction")
+      [trash_base: trash_base]
+    end
+
+    test "boots without crashing when the trash dir cannot be created", ctx do
+      pid =
+        start_link_supervised!(
+          {AsyncDeleter,
+           stack_id: ctx.stack_id, storage_dir: ctx.tmp_dir, cleanup_interval_ms: @interval}
+        )
+
+      assert Process.alive?(pid)
+    end
   end
 
   defp assert_dir_empty(dir, timeout \\ 500) do

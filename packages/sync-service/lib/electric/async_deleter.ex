@@ -26,7 +26,10 @@ defmodule Electric.AsyncDeleter do
     timer_ref: nil,
     cleanup_task: nil,
     pending: [],
-    in_progress: []
+    in_progress: [],
+    trash_dir_ready: false,
+    pending_sources: [],
+    heal_timer_ref: nil
   ]
 
   @trash_dir_base ".electric_trash"
@@ -76,15 +79,39 @@ defmodule Electric.AsyncDeleter do
     Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
     trash_dir = trash_dir!(stack_id)
-    File.mkdir_p(trash_dir)
 
-    state = %__MODULE__{
-      stack_id: stack_id,
-      interval_ms: Keyword.get(opts, :cleanup_interval_ms, @default_cleanup_interval_ms),
-      pending: File.ls!(trash_dir)
-    }
+    {ready?, pending} =
+      case File.mkdir_p(trash_dir) do
+        :ok ->
+          {true, list_trash(trash_dir)}
+
+        {:error, reason} ->
+          Logger.error(
+            "AsyncDeleter: could not create trash directory #{trash_dir}: #{inspect(reason)} " <>
+              "- will retry. Deletes will be queued until the directory is writable."
+          )
+
+          {false, []}
+      end
+
+    state =
+      maybe_arm_heal(%__MODULE__{
+        stack_id: stack_id,
+        interval_ms: Keyword.get(opts, :cleanup_interval_ms, @default_cleanup_interval_ms),
+        trash_dir_ready: ready?,
+        pending: pending
+      })
 
     {:ok, state, {:continue, :initial_cleanup}}
+  end
+
+  # List trash contents without raising; an unreadable/absent dir means nothing
+  # pending to sweep right now.
+  defp list_trash(trash_dir) do
+    case File.ls(trash_dir) do
+      {:ok, entries} -> entries
+      {:error, _reason} -> []
+    end
   end
 
   @impl true
@@ -186,6 +213,16 @@ defmodule Electric.AsyncDeleter do
       {:error, :eexist} when attempts > 0 -> do_rename(path, trash_dir, attempts - 1)
       {:error, reason} -> {:error, reason}
     end
+  end
+
+  # Arm the self-heal timer iff we are degraded (dir not ready or sources waiting).
+  # Idempotent: never stacks timers; goes silent once healthy.
+  defp maybe_arm_heal(%{heal_timer_ref: ref} = state) when is_reference(ref), do: state
+
+  defp maybe_arm_heal(%{trash_dir_ready: true, pending_sources: []} = state), do: state
+
+  defp maybe_arm_heal(state) do
+    %{state | heal_timer_ref: Process.send_after(self(), :ensure_trash_dir, state.interval_ms)}
   end
 
   defp do_cleanup(%{pending: []} = state), do: state
