@@ -23,6 +23,11 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
   # refilling it at the same rate. Short, because a connection error may clear.
   @default_negative_cache_ttl_ms 1_000
 
+  # How often expired negative-cache entries are physically reclaimed from the
+  # table. They are bounded by this interval rather than living forever, even
+  # though the negative key space is client-controlled (distinct table names).
+  @negative_cache_sweep_interval_ms 60_000
+
   alias Electric.Postgres.Inspector
   alias Electric.PersistentKV
   alias Electric.Postgres.Inspector.DirectInspector
@@ -135,10 +140,13 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
         persistence_key: persistence_key,
         task_sup: task_sup,
         in_flight: %{},
+        in_flight_refs: %{},
         negative_cache_ttl_ms:
           Map.get(opts, :negative_cache_ttl_ms, @default_negative_cache_ttl_ms)
       }
       |> restore_persistent_state()
+
+    schedule_negative_cache_sweep()
 
     {:ok, state}
   end
@@ -234,8 +242,27 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
     end
   end
 
+  def handle_info(:sweep_negative_cache, state) do
+    # Negative entries are logically ignored once expired, but the table is
+    # `:protected` so only we can physically reclaim them. Without this sweep a
+    # client requesting many distinct non-existent tables would grow the table
+    # unboundedly. Reschedule unconditionally so the timer keeps running.
+    now = System.monotonic_time(:millisecond)
+
+    :ets.select_delete(inspector_table(state), [
+      {{{:negative, :_}, :_, :"$1"}, [{:<, :"$1", now}], [true]}
+    ])
+
+    schedule_negative_cache_sweep()
+    {:noreply, state}
+  end
+
   def handle_info({:EXIT, _, reason}, state) do
     {:stop, reason, state}
+  end
+
+  defp schedule_negative_cache_sweep do
+    Process.send_after(self(), :sweep_negative_cache, @negative_cache_sweep_interval_ms)
   end
 
   # Coalesce concurrent loads of the same key: the first waiter spawns one
@@ -243,7 +270,8 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
   # park their `from` and are all answered when the worker reports back. This
   # keeps the inspector's mailbox population proportional to unique in-flight
   # keys rather than to in-flight requests, and avoids head-of-line blocking on
-  # a single slow lookup.
+  # a single slow lookup. `in_flight_refs` maps the worker's monitor ref back to
+  # its key so completion/crash handling is O(1).
   defp enqueue_waiter(state, key, waiter) do
     case Map.fetch(state.in_flight, key) do
       {:ok, entry} ->
@@ -257,17 +285,23 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
           end)
 
         entry = %{waiters: [waiter], ref: ref}
-        %{state | in_flight: Map.put(state.in_flight, key, entry)}
+
+        %{
+          state
+          | in_flight: Map.put(state.in_flight, key, entry),
+            in_flight_refs: Map.put(state.in_flight_refs, ref, key)
+        }
     end
   end
 
   defp pop_in_flight_by_ref(state, ref) do
-    case Enum.find(state.in_flight, fn {_key, entry} -> entry.ref == ref end) do
-      nil ->
+    case Map.pop(state.in_flight_refs, ref) do
+      {nil, _refs} ->
         {nil, state}
 
-      {key, entry} ->
-        {{key, entry}, %{state | in_flight: Map.delete(state.in_flight, key)}}
+      {key, in_flight_refs} ->
+        {entry, in_flight} = Map.pop(state.in_flight, key)
+        {{key, entry}, %{state | in_flight: in_flight, in_flight_refs: in_flight_refs}}
     end
   end
 

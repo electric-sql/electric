@@ -763,6 +763,23 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
       assert :table_not_found = EtsInspector.load_relation_oid({"public", "ghost"}, opts)
       assert_receive :db_transaction
     end
+
+    test "physically reclaims expired negative-cache entries on sweep", %{opts: opts} do
+      table = EtsInspector.inspector_table(opts)
+      neg_key = {:negative, {:rel, {"public", "ghost"}}}
+
+      assert :table_not_found = EtsInspector.load_relation_oid({"public", "ghost"}, opts)
+      assert [{^neg_key, :table_not_found, _expires_at}] = :ets.lookup(table, neg_key)
+
+      Process.sleep(80)
+      send(opts[:server], :sweep_negative_cache)
+
+      # A subsequent synchronous call is processed after the sweep message, so the
+      # expired entry is guaranteed to be gone by the time it returns.
+      _ = EtsInspector.list_relations_with_stale_cache(opts)
+
+      assert [] = :ets.lookup(table, neg_key)
+    end
   end
 
   defp with_items_oid(%{db_conn: conn}) do
