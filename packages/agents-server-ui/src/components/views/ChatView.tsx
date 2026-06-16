@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { eq, useLiveQuery } from '@tanstack/react-db'
 import { useEntityTimeline } from '../../hooks/useEntityTimeline'
@@ -36,6 +36,9 @@ const CHAT_VIEW_PERMISSIONS: ReadonlyArray<EntityPermission> = [
   `signal`,
   `fork`,
 ]
+// Safety net: evict a latched optimistic comment that never syncs into this
+// embed's stream (e.g. the POST failed and the native side rolled back).
+const OPTIMISTIC_COMMENT_LATCH_MS = 15_000
 /**
  * The default view: chat / timeline + message composer.
  *
@@ -146,22 +149,88 @@ export function ChatLogView({
     pendingInboxByKey,
     processedInboxKeys,
   ])
-  // Optimistic comments not yet present in the timeline (deduped by key against
-  // comments already synced), so a posted comment renders before the stream
-  // catches up. `~pending` orders keep them in the same bottom band the shared
-  // query uses, so ordering still matches desktop.
+  // Comment keys this embed's own stream has already delivered.
+  const syncedCommentKeys = useMemo(
+    () =>
+      new Set(
+        timelineRows.filter((row) => row.comment).map((row) => row.comment!.key)
+      ),
+    [timelineRows]
+  )
+  // Latch optimistic comments until THIS embed's stream delivers them. The
+  // native side stops forwarding a comment once its own (separate) stream
+  // syncs it; without latching it would blink out in the gap before this
+  // embed's stream catches up. Render = (incoming ∪ latched) − synced, so a
+  // posted comment shows on the first frame and survives the hand-off.
+  const [latchedComments, setLatchedComments] = useState<
+    Map<string, EntityTimelineCommentRow>
+  >(() => new Map())
+  const latchTimersRef = useRef(
+    new Map<string, ReturnType<typeof setTimeout>>()
+  )
+  useEffect(() => {
+    for (const comment of inlineComments) {
+      if (syncedCommentKeys.has(comment.key)) continue
+      setLatchedComments((prev) => {
+        if (prev.has(comment.key)) return prev
+        const next = new Map(prev)
+        next.set(comment.key, comment)
+        return next
+      })
+      if (!latchTimersRef.current.has(comment.key)) {
+        const key = comment.key
+        latchTimersRef.current.set(
+          key,
+          setTimeout(() => {
+            latchTimersRef.current.delete(key)
+            setLatchedComments((prev) => {
+              if (!prev.has(key)) return prev
+              const next = new Map(prev)
+              next.delete(key)
+              return next
+            })
+          }, OPTIMISTIC_COMMENT_LATCH_MS)
+        )
+      }
+    }
+  }, [inlineComments, syncedCommentKeys])
+  // Unlatch the instant this embed's stream delivers the authoritative row.
+  useEffect(() => {
+    setLatchedComments((prev) => {
+      let next: Map<string, EntityTimelineCommentRow> | null = null
+      for (const key of prev.keys()) {
+        if (!syncedCommentKeys.has(key)) continue
+        next ??= new Map(prev)
+        next.delete(key)
+        const timer = latchTimersRef.current.get(key)
+        if (timer) {
+          clearTimeout(timer)
+          latchTimersRef.current.delete(key)
+        }
+      }
+      return next ?? prev
+    })
+  }, [syncedCommentKeys])
+  useEffect(() => {
+    const timers = latchTimersRef.current
+    return () => {
+      for (const timer of timers.values()) clearTimeout(timer)
+      timers.clear()
+    }
+  }, [])
   const projectedComments = useMemo<Array<TimelineRow>>(() => {
-    if (inlineComments.length === 0) return []
-    const syncedKeys = new Set(
-      timelineRows.filter((row) => row.comment).map((row) => row.comment!.key)
+    const byKey = new Map<string, EntityTimelineCommentRow>()
+    for (const comment of latchedComments.values()) {
+      if (!syncedCommentKeys.has(comment.key)) byKey.set(comment.key, comment)
+    }
+    for (const comment of inlineComments) {
+      if (!syncedCommentKeys.has(comment.key)) byKey.set(comment.key, comment)
+    }
+    return Array.from(byKey.values()).map(
+      (comment) =>
+        ({ $key: `pending-comment:${comment.key}`, comment }) as TimelineRow
     )
-    return inlineComments
-      .filter((comment) => !syncedKeys.has(comment.key))
-      .map(
-        (comment) =>
-          ({ $key: `pending-comment:${comment.key}`, comment }) as TimelineRow
-      )
-  }, [inlineComments, timelineRows])
+  }, [inlineComments, latchedComments, syncedCommentKeys])
 
   const visibleRows = useMemo<Array<TimelineRow>>(() => {
     const base = projectedPendingMessage
