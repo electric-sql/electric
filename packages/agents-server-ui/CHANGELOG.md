@@ -1,5 +1,14 @@
 # @electric-ax/agents-server-ui
 
+## 0.6.1
+
+### Patch Changes
+
+- a600b79: Stop CLI and web UI sends from posting legacy `from` attribution and derive message senders from the authenticated Electric principal instead. The CLI now sends a default `Electric-Principal` header of `system:cli-<os-username>` when no explicit principal is configured.
+- 2895121: Open the new agent/entity form when using the generic split action instead of cloning the current route.
+- Updated dependencies [d2418d6]
+  - @electric-ax/agents-runtime@0.6.1
+
 ## 0.6.0
 
 ### Minor Changes
