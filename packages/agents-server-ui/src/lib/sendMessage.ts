@@ -4,14 +4,8 @@ import {
   COMPOSER_INPUT_MESSAGE_TYPE,
   createPendingTimelineOrder,
 } from '@electric-ax/agents-runtime/client'
-import {
-  getActivePrincipal,
-  getConfiguredActivePrincipal,
-  getConfiguredServerHeaders,
-  serverFetch,
-} from './auth-fetch'
+import { getActivePrincipal, serverFetch } from './auth-fetch'
 import { entityApiUrl } from './entity-api'
-import { loadCloudAuthState } from './server-connection'
 import type { EntityStreamDBWithActions } from '@electric-ax/agents-runtime/client'
 import type { ComposerInputPayload } from '@electric-ax/agents-runtime/client'
 
@@ -309,7 +303,6 @@ export async function sendEntityMessage({
   mode = `queued`,
   position,
   attachments,
-  from,
 }: {
   baseUrl: string
   entityUrl: string
@@ -320,13 +313,8 @@ export async function sendEntityMessage({
   mode?: `immediate` | `queued` | `paused` | `steer`
   position?: string
   attachments?: Array<AttachmentInput>
-  from?: string
 }): Promise<{ txid: string; attachmentTxids: Array<string> }> {
   const url = entityApiUrl(baseUrl, entityUrl, `/send`)
-  const sender = await resolveSenderPrincipalUrl(
-    url,
-    from ?? getConfiguredActivePrincipal() ?? ``
-  )
   const uploadedAttachments = await uploadMessageAttachments({
     baseUrl,
     entityUrl,
@@ -339,7 +327,6 @@ export async function sendEntityMessage({
       method: `POST`,
       headers: { 'content-type': `application/json` },
       body: JSON.stringify({
-        from: sender,
         key,
         payload: effectivePayload,
         mode,
@@ -379,33 +366,6 @@ export function readTextPayload(payload: unknown): string {
     }
   }
   return ``
-}
-
-function principalUrl(principalKey: string): string {
-  return `/principal/${encodeURIComponent(principalKey)}`
-}
-
-function principalUrlFromConfiguredHeaders(url: string): string | null {
-  const headers = new Headers(getConfiguredServerHeaders(url))
-  const principal = headers.get(`electric-principal`)?.trim()
-  return principal ? principalUrl(principal) : null
-}
-
-async function resolveSenderPrincipalUrl(
-  url: string,
-  from: string
-): Promise<string> {
-  if (from.startsWith(`/principal/`)) return from
-
-  const headerPrincipal = principalUrlFromConfiguredHeaders(url)
-  if (headerPrincipal) return headerPrincipal
-
-  const cloudAuth = await loadCloudAuthState().catch(() => null)
-  if (cloudAuth?.status === `signed-in` && cloudAuth.userId) {
-    return principalUrl(`user:${cloudAuth.userId}`)
-  }
-
-  return principalUrl(`system:dev-local`)
 }
 
 export function createSendMessageAction({
@@ -455,7 +415,6 @@ export function createSendMessageAction({
           mode,
           position,
           attachments,
-          from,
         })
         await Promise.all([
           ...attachmentTxids.map((id) => db.utils.awaitTxId(id, 10_000)),
@@ -464,15 +423,10 @@ export function createSendMessageAction({
         return
       }
       const url = entityApiUrl(baseUrl, entityUrl, `/send`)
-      const sender = await resolveSenderPrincipalUrl(
-        url,
-        from ?? getConfiguredActivePrincipal() ?? ``
-      )
       const res = await serverFetch(url, {
         method: `POST`,
         headers: { 'content-type': `application/json` },
         body: JSON.stringify({
-          from: sender,
           key,
           payload,
           mode,

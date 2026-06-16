@@ -134,6 +134,10 @@ function getDefaultElectricAgentsIdentity(): string {
   return `${userInfo().username}@${hostname()}`
 }
 
+function getDefaultElectricAgentsPrincipal(): string {
+  return `system:cli-${userInfo().username}`
+}
+
 function parseElectricAgentsHeaders(
   raw: string | undefined
 ): Record<string, string> | undefined {
@@ -167,6 +171,7 @@ export function getElectricCliEnv(
   env: NodeJS.ProcessEnv = process.env
 ): ElectricCliEnv {
   const explicitIdentity = env.ELECTRIC_AGENTS_IDENTITY?.trim()
+  const explicitPrincipal = env.ELECTRIC_AGENTS_PRINCIPAL?.trim()
   const headers = parseElectricAgentsHeaders(env.ELECTRIC_AGENTS_SERVER_HEADERS)
   return {
     electricAgentsUrl: env.ELECTRIC_AGENTS_URL || DEFAULT_ELECTRIC_AGENTS_URL,
@@ -174,7 +179,7 @@ export function getElectricCliEnv(
       explicitIdentity || getDefaultElectricAgentsIdentity(),
     electricAgentsHeaders: mergeElectricPrincipalHeader(
       headers,
-      env.ELECTRIC_AGENTS_PRINCIPAL
+      explicitPrincipal || getDefaultElectricAgentsPrincipal()
     ),
   }
 }
@@ -571,7 +576,6 @@ async function sendMessage(
   const payload = parsePayload(message, options.json ?? false)
 
   const body: Record<string, unknown> = {
-    from: env.electricAgentsIdentity,
     payload,
   }
   if (options.type) {
@@ -825,7 +829,7 @@ function getHelpText(commandName: string): string {
 Environment:
   ELECTRIC_AGENTS_URL        Base URL of the server (default: ${DEFAULT_ELECTRIC_AGENTS_URL})
   ELECTRIC_AGENTS_IDENTITY   Sender identity for messages (default: ${getDefaultElectricAgentsIdentity()})
-  ELECTRIC_AGENTS_PRINCIPAL  Optional principal key sent as the Electric-Principal header
+  ELECTRIC_AGENTS_PRINCIPAL  Principal key sent as the Electric-Principal header (default: ${getDefaultElectricAgentsPrincipal()})
   ELECTRIC_AGENTS_SERVER_HEADERS  Optional JSON object of additional server headers
   ANTHROPIC_API_KEY          Required for '${agentsCommand} start-builtin' and '${agentsCommand} quickstart'
 
