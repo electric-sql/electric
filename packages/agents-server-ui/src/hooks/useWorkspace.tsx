@@ -63,7 +63,7 @@ export type WorkspaceHelpers = {
     viewId: ViewId,
     direction: SplitDirection
   ) => void
-  /** Convenience: split a tile, copying its current view into the new one. */
+  /** Convenience: split a tile with a standalone new-session form in the new pane. */
   splitTile: (tileId: string, direction: SplitDirection) => void
   resizeSplit: (splitId: string, sizes: Array<number>) => void
   replaceWorkspace: (workspace: Workspace) => void
@@ -146,16 +146,9 @@ export function WorkspaceProvider({
 
   const splitTile = useCallback<WorkspaceHelpers[`splitTile`]>(
     (tileId, direction) => {
-      const tile = findTile(workspace.root, tileId)
-      if (!tile) return
-      dispatch({
-        type: `split-tile-with-view`,
-        tileId,
-        viewId: tile.viewId,
-        direction,
-      })
+      dispatch({ type: `split-tile-new-session`, tileId, direction })
     },
-    [workspace.root]
+    []
   )
 
   const resizeSplit = useCallback<WorkspaceHelpers[`resizeSplit`]>(

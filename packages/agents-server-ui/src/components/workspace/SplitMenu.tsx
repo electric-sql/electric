@@ -139,8 +139,8 @@ const TILE_MENU_PERMISSIONS: ReadonlyArray<EntityPermission> = [
  *                                 (swap in place); the trailing two icon
  *                                 buttons split the tile to the side
  *                                 ([→]) or below ([↓]) with that view.
- * - **Split right / down**        duplicate the active tile into a new
- *                                 split (current view, right / down).
+ * - **Split right / down**        open the new agent/entity form in a new
+ *                                 split (right / down).
  * - **Copy URL · Copy layout link · Pin · Fork**  entity-level actions.
  * - **Close tile**                remove this tile (collapses parent split).
  * - **Kill entity**               (destructive) confirmation-gated.
