@@ -318,6 +318,15 @@ export function createPiAgentAdapter(
     const modelContextWindow =
       typeof model.contextWindow === `number` ? model.contextWindow : 0
 
+    // Approximate token cost of the stable, non-message request parts. These
+    // are constant for the whole call, so estimate once and persist on each
+    // step; the UI derives the "messages" bucket as the real cache-inclusive
+    // total minus these (see token-accountant computeContextBreakdown).
+    const tokenBreakdown = {
+      system: approxTokens(opts.systemPrompt),
+      tools: approxTokens(opts.tools),
+    }
+
     const transformContext =
       opts.onCompactContext && modelContextWindow > 0
         ? async (
@@ -627,6 +636,7 @@ export function createPiAgentAdapter(
                     tokenContext: usageContext,
                   }),
                   ...(contextWindow !== undefined && { contextWindow }),
+                  tokenBreakdown,
                 })
 
                 if (isError) {
