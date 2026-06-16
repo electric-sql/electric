@@ -857,7 +857,10 @@ fn closed_conflict(st: &StreamState, tail: u64) -> Resp {
 /// engines that support it). JSON ranges always end on a `,` boundary; the
 /// response is `[` + range-minus-comma + `]`. Logical ranges below the fork
 /// base resolve through the parent chain.
-fn read_range_body(st: &Arc<StreamState>, start: u64, end: u64) -> Body {
+/// Build a FileRange body for `[start, end)`. `hot` marks a live tail feed of
+/// freshly-appended bytes (a caught-up long-poll wake), which the raw engine
+/// can serve inline knowing it is page-cache resident.
+fn read_range_body(st: &Arc<StreamState>, start: u64, end: u64, hot: bool) -> Body {
     let json = st.is_json;
     if end <= start {
         return if json { full("[]") } else { empty() };
@@ -869,6 +872,7 @@ fn read_range_body(st: &Arc<StreamState>, start: u64, end: u64) -> Body {
         segments: segs,
         prefix: if json { b"[" } else { b"" },
         suffix: if json { b"]" } else { b"" },
+        hot,
     }
 }
 
@@ -929,7 +933,8 @@ async fn handle_catchup(st: Arc<StreamState>, offset: ParsedOffset, req: &Req) -
             return b.body(empty());
         }
     }
-    let body = read_range_body(&st, start, end);
+    // Catch-up read of historical bytes: not a live tail feed.
+    let body = read_range_body(&st, start, end, false);
     let mut b = ResponseBuilder::new(200)
         .h("content-type", st.config.content_type.clone())
         .h(H_NEXT_OFFSET, format_offset(end))
@@ -959,9 +964,10 @@ async fn handle_long_poll(st: Arc<StreamState>, offset: ParsedOffset, client_cur
     };
     let cursor = compute_cursor(client_cursor);
 
-    // Existing data → return immediately.
+    // Existing data → return immediately. This is a backlog (the consumer was
+    // behind the tail), so it may include cold historical bytes: not hot.
     if from < t0.bytes {
-        return long_poll_data(&st, from, t0, client_cursor).await;
+        return long_poll_data(&st, from, t0, client_cursor, false).await;
     }
     if t0.closed {
         return long_poll_close(t0.bytes, cursor);
@@ -973,7 +979,8 @@ async fn handle_long_poll(st: Arc<StreamState>, offset: ParsedOffset, client_cur
     loop {
         let t = *rx.borrow_and_update();
         if t.bytes > from {
-            return long_poll_data(&st, from, t, client_cursor).await;
+            // Caught-up consumer woken by new appends: freshly-written, hot.
+            return long_poll_data(&st, from, t, client_cursor, true).await;
         }
         if t.closed {
             return long_poll_close(t.bytes, cursor);
@@ -983,7 +990,7 @@ async fn handle_long_poll(st: Arc<StreamState>, offset: ParsedOffset, client_cur
                 if r.is_err() {
                     let t = st.tail();
                     if t.bytes > from {
-                        return long_poll_data(&st, from, t, client_cursor).await;
+                        return long_poll_data(&st, from, t, client_cursor, true).await;
                     }
                     return long_poll_timeout(t.bytes, cursor, t.closed);
                 }
@@ -996,9 +1003,15 @@ async fn handle_long_poll(st: Arc<StreamState>, offset: ParsedOffset, client_cur
     }
 }
 
-async fn long_poll_data(st: &Arc<StreamState>, from: u64, t: Tail, client_cursor: Option<u64>) -> Resp {
+async fn long_poll_data(
+    st: &Arc<StreamState>,
+    from: u64,
+    t: Tail,
+    client_cursor: Option<u64>,
+    hot: bool,
+) -> Resp {
     let cursor = compute_cursor(client_cursor);
-    let body = read_range_body(st, from, t.bytes);
+    let body = read_range_body(st, from, t.bytes, hot);
     let mut b = ResponseBuilder::new(200)
         .h("content-type", st.config.content_type.clone())
         .h(H_NEXT_OFFSET, format_offset(t.bytes))

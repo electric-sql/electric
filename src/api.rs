@@ -78,6 +78,11 @@ pub enum Body {
         segments: Vec<Segment>,
         prefix: &'static [u8],
         suffix: &'static [u8],
+        /// True when these bytes are a live tail feed of freshly-appended data
+        /// (a caught-up long-poll wake) — guaranteed page-cache resident. The
+        /// raw engine uses this to decide where sendfile runs; see
+        /// engine_raw::ReadOffload.
+        hot: bool,
     },
 }
 
@@ -92,6 +97,7 @@ impl Body {
                 segments,
                 prefix,
                 suffix,
+                ..
             } => Some(
                 prefix.len() as u64
                     + segments.iter().map(|s| s.len).sum::<u64>()

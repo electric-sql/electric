@@ -145,6 +145,9 @@ async fn to_hyper(resp: Resp) -> Response<RespBody> {
             segments,
             prefix,
             suffix,
+            // hyper always serves file ranges via its own spawn_blocking
+            // buffered path, so the raw engine's hot/cold hint is unused here.
+            hot: _,
         } => file_range_to_body(segments, prefix, suffix).await,
     };
     builder.body(body).unwrap()

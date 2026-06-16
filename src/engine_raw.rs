@@ -5,7 +5,16 @@
 // kernel copies page cache → socket directly), elsewhere via positioned
 // reads. Supports keep-alive, content-length and chunked request bodies,
 // Expect: 100-continue, and chunked streaming responses (SSE).
+//
+// sendfile blocks the calling thread on a page-cache miss (Linux has no async
+// buffered-file I/O without io_uring). A FileRange served inline runs sendfile
+// on the async worker — perfect when the data is resident (the hot tail), but
+// a disk fault stalls the worker (head-of-line blocking for every connection on
+// its run queue). Served via the blocking pool, sendfile still does the same
+// zero-copy page-cache → socket transfer, but a fault parks a pool thread
+// instead. ReadOffload picks where each read runs; see set_read_offload.
 
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Arc;
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
@@ -17,6 +26,52 @@ use crate::handlers;
 use crate::store::{Segment, Store};
 
 const MAX_HEADER_BYTES: usize = 64 * 1024;
+
+/// Where the raw engine runs sendfile for a FileRange read.
+///
+/// A live tail feed (`hot`) is always page-cache resident, so every mode serves
+/// it inline; the modes differ only in how they treat catch-up reads, which may
+/// fault on disk. `Inline` and `Always` are the endpoints (never / always
+/// offload to the blocking pool) — useful baselines for benchmarking. `Tail`
+/// is the default: keep the live tail inline (fast) and offload catch-up reads,
+/// so a cold backfill's disk fault parks a pool thread instead of an async
+/// worker.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum ReadOffload {
+    /// Never use the blocking pool (sendfile inline on the async worker).
+    Inline,
+    /// Live tail inline; catch-up reads on the blocking pool. (default)
+    Tail,
+    /// Always use the blocking pool.
+    Always,
+}
+
+impl ReadOffload {
+    pub fn parse(s: &str) -> Option<ReadOffload> {
+        match s {
+            "inline" => Some(ReadOffload::Inline),
+            "tail" => Some(ReadOffload::Tail),
+            "always" => Some(ReadOffload::Always),
+            _ => None,
+        }
+    }
+}
+
+static READ_OFFLOAD: AtomicU8 = AtomicU8::new(ReadOffload::Tail as u8);
+
+/// Set the read-offload strategy (process-global). Called once at startup.
+pub fn set_read_offload(mode: ReadOffload) {
+    READ_OFFLOAD.store(mode as u8, Ordering::Relaxed);
+}
+
+#[cfg(target_os = "linux")]
+fn read_offload() -> ReadOffload {
+    match READ_OFFLOAD.load(Ordering::Relaxed) {
+        x if x == ReadOffload::Inline as u8 => ReadOffload::Inline,
+        x if x == ReadOffload::Always as u8 => ReadOffload::Always,
+        _ => ReadOffload::Tail,
+    }
+}
 
 pub async fn serve(store: Arc<Store>, listener: TcpListener) {
     loop {
@@ -317,12 +372,11 @@ async fn write_response(
             segments,
             prefix,
             suffix,
+            hot,
         } => {
             head.put_slice(prefix);
             stream.write_all(&head).await?;
-            for seg in &segments {
-                write_segment(stream, seg).await?;
-            }
+            write_segments(stream, segments, hot).await?;
             if !suffix.is_empty() {
                 stream.write_all(suffix).await?;
             }
@@ -342,6 +396,129 @@ async fn write_response(
         }
     }
     Ok(())
+}
+
+/// Serve a FileRange body's segments, choosing where sendfile runs per the
+/// configured ReadOffload strategy. `hot` marks a live tail feed (freshly
+/// appended, page-cache resident). Non-Linux always uses the inline (buffered)
+/// fallback — there is no sendfile there and the pool buys nothing.
+async fn write_segments(
+    stream: &mut TcpStream,
+    segments: Vec<Segment>,
+    hot: bool,
+) -> std::io::Result<()> {
+    #[cfg(target_os = "linux")]
+    {
+        let pool = match read_offload() {
+            ReadOffload::Inline => false,
+            ReadOffload::Always => true,
+            // A live tail feed is resident, so inline either way; a catch-up
+            // read may be cold, so offload it to the pool.
+            ReadOffload::Tail => !hot,
+        };
+        if pool {
+            return write_segments_blocking(stream, segments).await;
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = hot;
+    for seg in &segments {
+        write_segment(stream, seg).await?;
+    }
+    Ok(())
+}
+
+/// Serve segments with sendfile(2) on the blocking pool.
+///
+/// We dup the socket fd into an OwnedFd moved into the blocking task. sendfile
+/// blocks the pool thread on a page-cache miss (the whole point: the async
+/// worker stays free) and the dup keeps the socket alive even if this future is
+/// cancelled mid-write while the detached task is still running — so the task
+/// can never write to a recycled, unrelated fd. The dup shares O_NONBLOCK with
+/// the original tokio socket, so the loop waits on POLLOUT for backpressure.
+#[cfg(target_os = "linux")]
+async fn write_segments_blocking(
+    stream: &mut TcpStream,
+    segments: Vec<Segment>,
+) -> std::io::Result<()> {
+    use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+    let dup = unsafe {
+        let fd = libc::dup(stream.as_raw_fd());
+        if fd < 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        OwnedFd::from_raw_fd(fd)
+    };
+    let join = tokio::task::spawn_blocking(move || -> std::io::Result<()> {
+        let sock_fd = dup.as_raw_fd();
+        for seg in &segments {
+            blocking_sendfile(sock_fd, seg)?;
+        }
+        Ok(()) // dup dropped here → closed
+    })
+    .await;
+    match join {
+        Ok(inner) => inner,
+        Err(e) => Err(std::io::Error::other(e)),
+    }
+}
+
+/// Blocking sendfile loop for one segment over a (possibly nonblocking) fd.
+#[cfg(target_os = "linux")]
+fn blocking_sendfile(sock_fd: std::os::fd::RawFd, seg: &Segment) -> std::io::Result<()> {
+    use std::os::fd::AsRawFd;
+    if seg.len == 0 {
+        return Ok(());
+    }
+    let file_fd = seg.file.as_raw_fd();
+    let mut offset = seg.file_start as libc::off_t;
+    let end = seg.file_end() as libc::off_t;
+    while offset < end {
+        let count = (end - offset) as usize;
+        let sent = unsafe { libc::sendfile(sock_fd, file_fd, &mut offset, count) };
+        if sent < 0 {
+            let err = std::io::Error::last_os_error();
+            match err.raw_os_error() {
+                Some(libc::EINTR) => continue,
+                // EAGAIN == EWOULDBLOCK on Linux: the dup inherits O_NONBLOCK, so
+                // wait for the socket to drain before retrying.
+                Some(libc::EAGAIN) => {
+                    wait_writable(sock_fd)?;
+                    continue;
+                }
+                _ => return Err(err),
+            }
+        }
+        if sent == 0 {
+            // No progress with bytes pending (e.g. file truncated under us).
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "sendfile made no progress",
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Block until the socket is writable (POLLOUT), retrying on EINTR.
+#[cfg(target_os = "linux")]
+fn wait_writable(sock_fd: std::os::fd::RawFd) -> std::io::Result<()> {
+    let mut pfd = libc::pollfd {
+        fd: sock_fd,
+        events: libc::POLLOUT,
+        revents: 0,
+    };
+    loop {
+        let r = unsafe { libc::poll(&mut pfd, 1, -1) };
+        if r < 0 {
+            let err = std::io::Error::last_os_error();
+            if err.raw_os_error() == Some(libc::EINTR) {
+                continue;
+            }
+            return Err(err);
+        }
+        return Ok(());
+    }
 }
 
 /// Serve one file segment to the socket.

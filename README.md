@@ -35,13 +35,14 @@ curl -N "$BASE?offset=0&live=sse"        # Server-Sent Events stream
 
 ## Flags
 
-| Flag                     | Default                        | Description                                                           |
-| ------------------------ | ------------------------------ | --------------------------------------------------------------------- |
-| `--host`                 | `127.0.0.1`                    | listen address                                                        |
-| `--port`                 | `4438`                         | listen port                                                           |
-| `--data-dir`             | `$TMPDIR/durable-streams-rust` | storage directory (persists across restarts)                          |
-| `--http-engine`          | `hyper`                        | `hyper` or `raw` (custom HTTP/1.1 loop; `sendfile(2)` reads on Linux) |
-| `--long-poll-timeout-ms` | `30000`                        | how long a long-poll request blocks before a 204                      |
+| Flag                     | Default                        | Description                                                                                                                                                                                                                                                                                |
+| ------------------------ | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `--host`                 | `127.0.0.1`                    | listen address                                                                                                                                                                                                                                                                             |
+| `--port`                 | `4438`                         | listen port                                                                                                                                                                                                                                                                                |
+| `--data-dir`             | `$TMPDIR/durable-streams-rust` | storage directory (persists across restarts)                                                                                                                                                                                                                                               |
+| `--http-engine`          | `hyper`                        | `hyper` or `raw` (custom HTTP/1.1 loop; `sendfile(2)` reads on Linux)                                                                                                                                                                                                                      |
+| `--long-poll-timeout-ms` | `30000`                        | how long a long-poll request blocks before a 204                                                                                                                                                                                                                                           |
+| `--read-offload`         | `tail`                         | raw engine, Linux: where reads run sendfile — `inline` (always on the async worker), `tail` (live tail inline, catch-up on the blocking pool), `always` (always on the blocking pool). `tail` keeps a cold backfill's disk fault off the async workers while serving the live tail inline. |
 
 ## What it implements
 

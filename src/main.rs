@@ -49,6 +49,18 @@ fn main() {
                     .expect("--long-poll-timeout-ms requires a number");
                 handlers::set_long_poll_timeout(ms);
             }
+            "--read-offload" => {
+                let v = args
+                    .next()
+                    .expect("--read-offload requires inline|tail|always");
+                match engine_raw::ReadOffload::parse(&v) {
+                    Some(mode) => engine_raw::set_read_offload(mode),
+                    None => {
+                        eprintln!("--read-offload must be inline|tail|always");
+                        std::process::exit(2);
+                    }
+                }
+            }
             other => {
                 eprintln!("unknown argument: {other}");
                 std::process::exit(2);
