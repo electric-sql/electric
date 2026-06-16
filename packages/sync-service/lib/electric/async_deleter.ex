@@ -142,6 +142,16 @@ defmodule Electric.AsyncDeleter do
     {:noreply, %{state | pending: [path | state.pending]}, {:continue, :schedule_cleanup}}
   end
 
+  def handle_cast({:capture_failed, source}, state) do
+    state =
+      state
+      |> add_pending_source(source)
+      |> drain_pending_sources()
+      |> maybe_arm_heal()
+
+    {:noreply, state, {:continue, :schedule_cleanup}}
+  end
+
   defp unique_destination(trash_dir, base) do
     suffix = System.unique_integer([:positive]) |> to_string()
     Path.join(trash_dir, base <> "_" <> suffix)
@@ -193,6 +203,15 @@ defmodule Electric.AsyncDeleter do
   # ignore down messages for normal task termination, already handled in result message
   def handle_info({:DOWN, _ref, :process, _pid, :normal}, state), do: {:noreply, state}
 
+  def handle_info(:ensure_trash_dir, state) do
+    state =
+      %{state | heal_timer_ref: nil}
+      |> drain_pending_sources()
+      |> maybe_arm_heal()
+
+    {:noreply, state, {:continue, :schedule_cleanup}}
+  end
+
   @impl true
   def terminate(reason, state) do
     # We want to avoid AsyncDeleter being brought back up while a cleanup task is still running,
@@ -231,6 +250,56 @@ defmodule Electric.AsyncDeleter do
 
   defp maybe_arm_heal(state) do
     %{state | heal_timer_ref: Process.send_after(self(), :ensure_trash_dir, state.interval_ms)}
+  end
+
+  defp add_pending_source(state, source) do
+    if source in state.pending_sources do
+      state
+    else
+      %{state | pending_sources: [source | state.pending_sources]}
+    end
+  end
+
+  # Ensure the trash dir exists, then try to move each still-live source into it.
+  # Captured sources become `pending` (to be swept); vanished sources are dropped;
+  # sources that still cannot be moved stay in `pending_sources`.
+  defp drain_pending_sources(%{pending_sources: []} = state), do: state
+
+  defp drain_pending_sources(state) do
+    trash_dir = trash_dir!(state.stack_id)
+
+    case File.mkdir_p(trash_dir) do
+      :ok ->
+        {captured, still_pending} =
+          Enum.reduce(state.pending_sources, {[], []}, fn source, {captured, still_pending} ->
+            case do_rename(source, trash_dir) do
+              {:ok, _dest} ->
+                {[source | captured], still_pending}
+
+              {:error, :enoent} ->
+                # Source vanished out from under us; nothing to reclaim.
+                if File.exists?(source) do
+                  {captured, [source | still_pending]}
+                else
+                  {captured, still_pending}
+                end
+
+              {:error, _reason} ->
+                {captured, [source | still_pending]}
+            end
+          end)
+
+        %{
+          state
+          | trash_dir_ready: true,
+            pending_sources: still_pending,
+            pending: captured ++ state.pending
+        }
+
+      {:error, _reason} ->
+        # Still cannot create the trash dir; keep everything queued.
+        %{state | trash_dir_ready: false}
+    end
   end
 
   defp do_cleanup(%{pending: []} = state), do: state

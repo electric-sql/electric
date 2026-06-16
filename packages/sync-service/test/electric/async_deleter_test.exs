@@ -198,7 +198,39 @@ defmodule Electric.AsyncDeleterTest do
       refute File.exists?(gone)
       assert :ok = AsyncDeleter.delete(ctx.stack_id, gone)
     end
+
+    test "recaptures and reclaims a handed-off source after the obstruction clears", ctx do
+      start_link_supervised!(
+        {AsyncDeleter,
+         stack_id: ctx.stack_id, storage_dir: ctx.tmp_dir, cleanup_interval_ms: @interval}
+      )
+
+      dir = Path.join(ctx.tmp_dir, "live_shape")
+      File.mkdir_p!(dir)
+      File.write!(Path.join(dir, "f.txt"), "data")
+
+      assert :ok = AsyncDeleter.delete(ctx.stack_id, dir)
+      assert File.exists?(dir)
+
+      # Clear the obstruction so the trash dir can be created on the next heal tick.
+      File.rm!(ctx.trash_base)
+
+      # Within a few heal/sweep intervals: dir captured into trash, then reaped.
+      wait_until(fn -> not File.exists?(dir) end, 5_000)
+      refute File.exists?(dir)
+    end
   end
+
+  defp wait_until(fun, timeout) when timeout > 0 do
+    if fun.() do
+      :ok
+    else
+      Process.sleep(@interval)
+      wait_until(fun, timeout - @interval)
+    end
+  end
+
+  defp wait_until(_fun, _timeout), do: :ok
 
   defp assert_dir_empty(dir, timeout \\ 500) do
     assert File.ls!(dir) == []
