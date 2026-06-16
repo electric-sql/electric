@@ -4,7 +4,6 @@ import {
   useEffect,
   useMemo,
   useRef,
-  type CSSProperties,
   type ReactElement,
 } from 'react'
 import {
@@ -110,7 +109,6 @@ type EmbedState = {
   entityUrl: string
   view: EmbedView
   theme: EmbedTheme
-  scrollToBottomSignal?: number
   inlineQueuedMessages?: Array<OptimisticInboxMessage>
   bottomInset?: number
   // Forwarded across the Expo-DOM boundary so the embed's auth-fetch
@@ -205,7 +203,6 @@ function EmbedSurface({ state }: { state: EmbedState }): ReactElement {
       entityUrl={state.entityUrl}
       view={state.view}
       serverUrl={state.serverUrl}
-      scrollToBottomSignal={state.scrollToBottomSignal}
       inlineQueuedMessages={state.inlineQueuedMessages}
       bottomInset={state.bottomInset}
     />
@@ -216,14 +213,12 @@ function EntityHost({
   entityUrl,
   view,
   serverUrl,
-  scrollToBottomSignal,
   inlineQueuedMessages,
   bottomInset,
 }: {
   entityUrl: string
   view: EmbedView
   serverUrl: string
-  scrollToBottomSignal?: number
   inlineQueuedMessages?: Array<OptimisticInboxMessage>
   bottomInset?: number
 }): ReactElement {
@@ -277,16 +272,11 @@ function EntityHost({
     )
   }
   if (view === `chat-log`) {
-    const style = {
-      '--mobile-chat-bottom-inset': `${Math.max(0, bottomInset ?? 0)}px`,
-    } as CSSProperties
+    // Inset var is seeded on the document root (above); resize updates arrive
+    // imperatively via setBottomInset — no inline value here, which would shadow it.
     return (
-      <div className={styles.column} style={style}>
-        <ChatLogView
-          {...props}
-          scrollToBottomSignal={scrollToBottomSignal}
-          inlineQueuedMessages={inlineQueuedMessages}
-        />
+      <div className={styles.column}>
+        <ChatLogView {...props} inlineQueuedMessages={inlineQueuedMessages} />
       </div>
     )
   }

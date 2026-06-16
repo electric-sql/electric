@@ -1956,6 +1956,10 @@ export function EntityTimeline({
     let frame: ReturnType<typeof requestAnimationFrame> | null = null
     const pinToBottom = () => {
       if (!isNearBottom.current) return
+      // Scroll synchronously (ResizeObserver fires before paint) so a growing
+      // inset doesn't paint one misaligned frame; the rAF re-pin then settles
+      // the virtualizer for new rows.
+      viewport.scrollTop = viewport.scrollHeight
       if (frame !== null) cancelAnimationFrame(frame)
       frame = requestAnimationFrame(() => {
         frame = null
@@ -1964,7 +1968,9 @@ export function EntityTimeline({
     }
 
     const observer = new ResizeObserver(pinToBottom)
-    observer.observe(contentElement)
+    // border-box, not content-box: the inset is bottom padding, which a
+    // content-box observation can't see — so composer-only growth would be missed.
+    observer.observe(contentElement, { box: `border-box` })
     return () => {
       observer.disconnect()
       if (frame !== null) cancelAnimationFrame(frame)

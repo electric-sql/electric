@@ -1,4 +1,13 @@
-import { useEffect, useMemo, useState, type ComponentType } from 'react'
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentType,
+  type Ref,
+} from 'react'
 import {
   Keyboard,
   Platform,
@@ -23,6 +32,7 @@ import {
 } from '../src/screens/SessionScreen'
 import type { EmbedViewId } from '../src/lib/embedView'
 import SessionChatLogDomEmbedModule from '@electric-ax/agents-server-ui/src/embed/SessionChatLogDomEmbed'
+import type { SessionChatLogDomRef } from '@electric-ax/agents-server-ui/src/embed/sessionChatLogDomRef'
 import SessionStateInspectorDomEmbedModule from '@electric-ax/agents-server-ui/src/embed/SessionStateInspectorDomEmbed'
 import { getActiveServerHeadersSnapshot } from '@electric-ax/agents-server-ui/src/lib/auth-fetch'
 import type { OptimisticInboxMessage } from '@electric-ax/agents-server-ui/src/lib/sendMessage'
@@ -33,8 +43,6 @@ type SessionDomEmbedProps = {
   serverUrl: string
   entityUrl: string
   theme: `light` | `dark`
-  scrollToBottomSignal?: number
-  inlineQueuedMessages?: Array<OptimisticInboxMessage>
   bottomInset?: number
   onRequestOpenEntity: (entityUrl: string) => Promise<void>
   // Marshalled so the per-message fork runs over native networking.
@@ -45,13 +53,20 @@ type SessionDomEmbedProps = {
   style?: StyleProp<ViewStyle>
   matchContents?: boolean
   serverHeaders?: { url: string; headers: Record<string, string> } | null
+  ref?: Ref<SessionChatLogDomRef>
   dom?: unknown
 }
 
-const SessionChatLogDomEmbed =
+// The timeline is an Expo DOM (WebView) embed that re-posts — and visibly
+// flickers — on any prop change or re-render. So we memo it, keep every prop
+// below reference-stable, and push the values that actually change (bottom
+// inset, queued messages, scroll) imperatively via the ref, not as props.
+const SessionChatLogDomEmbed = memo(
   SessionChatLogDomEmbedModule as ComponentType<SessionDomEmbedProps>
-const SessionStateInspectorDomEmbed =
+)
+const SessionStateInspectorDomEmbed = memo(
   SessionStateInspectorDomEmbedModule as ComponentType<SessionDomEmbedProps>
+)
 
 export default function SessionRoute(): React.ReactElement | null {
   const params = useLocalSearchParams<{
@@ -83,7 +98,6 @@ function SessionRouteInner({
   const [chatComposerHeight, setChatComposerHeight] = useState(
     CHAT_COMPOSER_BASE_HEIGHT + insets.bottom
   )
-  const [chatLogScrollSignal, setChatLogScrollSignal] = useState(0)
   const [inlineQueuedMessages, setInlineQueuedMessages] = useState<
     Array<OptimisticInboxMessage>
   >([])
@@ -93,9 +107,13 @@ function SessionRouteInner({
     : (params.entityUrl ?? ``)
   const view = params.view === `state-explorer` ? `state-explorer` : `chat`
 
-  // Read once per render — the DOM embed receives this as a prop and
-  // re-registers it on its side of the JS-context boundary.
-  const serverHeaders = getActiveServerHeadersSnapshot()
+  // A fresh object each call, so memo on its serialized value: stable identity
+  // across renders, but still updates if the auth headers actually change.
+  const serverHeadersSnapshot = getActiveServerHeadersSnapshot()
+  const serverHeadersKey = serverHeadersSnapshot
+    ? JSON.stringify(serverHeadersSnapshot)
+    : ``
+  const serverHeaders = useMemo(() => serverHeadersSnapshot, [serverHeadersKey])
 
   const embedTop = insets.top + HEADER_HEIGHT
   const composerInset =
@@ -117,17 +135,41 @@ function SessionRouteInner({
     }),
     [embedFrame.height, embedFrame.width]
   )
+  const embedStyle = useMemo(() => [styles.domEmbedWeb, embedSize], [embedSize])
+  const embedDom = useMemo(
+    () => domOptions(styles, embedSize, tokens.bg),
+    [embedSize, tokens.bg]
+  )
+  // The inset is also seeded once as a prop so the first paint is correct before
+  // the imperative handle (which registers after boot) takes over.
+  const chatLogRef = useRef<SessionChatLogDomRef>(null)
+  const initialComposerInsetRef = useRef(composerInset)
+  usePushToEmbed(chatLogRef, composerInset, pushBottomInset)
+  usePushToEmbed(chatLogRef, inlineQueuedMessages, pushInlineQueued)
+  const handleSend = useCallback((): void => {
+    chatLogRef.current?.scrollToBottom()
+  }, [])
+  // Reference-stable so it doesn't break the embed's memo (forkEntity itself is
+  // stable from the provider); marshals the fork over native networking.
+  const handleForkEntity = useCallback(
+    (targetUrl: string, opts?: { pointer?: ForkPointer }) =>
+      forkEntity({ entityUrl: targetUrl, pointer: opts?.pointer }),
+    [forkEntity]
+  )
 
   const goBack = (): void => {
     if (router.canGoBack()) router.back()
     else router.replace(`/`)
   }
-  const openSession = (target: string): void => {
-    router.push({
-      pathname: `/session`,
-      params: { entityUrl: target, view: `chat` },
-    })
-  }
+  const openSession = useCallback(
+    async (target: string): Promise<void> => {
+      router.push({
+        pathname: `/session`,
+        params: { entityUrl: target, view: `chat` },
+      })
+    },
+    [router]
+  )
   const openShare = (): void => {
     router.push({ pathname: `/session-share`, params: { entityUrl } })
   }
@@ -149,31 +191,28 @@ function SessionRouteInner({
       >
         {view === `chat` ? (
           <SessionChatLogDomEmbed
-            style={[styles.domEmbedWeb, embedSize]}
+            ref={chatLogRef}
+            style={embedStyle}
             matchContents={false}
             serverUrl={serverUrl}
             entityUrl={entityUrl}
             theme={scheme}
-            scrollToBottomSignal={chatLogScrollSignal}
-            inlineQueuedMessages={inlineQueuedMessages}
-            bottomInset={composerInset}
+            bottomInset={initialComposerInsetRef.current}
             serverHeaders={serverHeaders}
-            onRequestOpenEntity={async (target) => openSession(target)}
-            onRequestForkEntity={(targetUrl, opts) =>
-              forkEntity({ entityUrl: targetUrl, pointer: opts?.pointer })
-            }
-            dom={domOptions(styles, embedSize, tokens.bg)}
+            onRequestOpenEntity={openSession}
+            onRequestForkEntity={handleForkEntity}
+            dom={embedDom}
           />
         ) : (
           <SessionStateInspectorDomEmbed
-            style={[styles.domEmbedWeb, embedSize]}
+            style={embedStyle}
             matchContents={false}
             serverUrl={serverUrl}
             entityUrl={entityUrl}
             theme={scheme}
             serverHeaders={serverHeaders}
-            onRequestOpenEntity={async (target) => openSession(target)}
-            dom={domOptions(styles, embedSize, tokens.bg)}
+            onRequestOpenEntity={openSession}
+            dom={embedDom}
           />
         )}
       </View>
@@ -186,7 +225,7 @@ function SessionRouteInner({
           onOpenEntity={openSession}
           onOpenStateSource={openStateSource}
           onComposerHeightChange={setChatComposerHeight}
-          onSendMessage={() => setChatLogScrollSignal(Date.now())}
+          onSendMessage={handleSend}
           onInlineQueuedMessagesChange={setInlineQueuedMessages}
           onShare={openShare}
         />
@@ -227,6 +266,37 @@ function domOptions(
     webViewStyle: backgroundStyle,
   }
 }
+
+// Push a value into the chat-log embed's imperative handle, retrying on
+// animation frames until it registers (a beat after the WebView boots).
+function usePushToEmbed<T>(
+  ref: { current: SessionChatLogDomRef | null },
+  value: T,
+  push: (handle: SessionChatLogDomRef, value: T) => void
+): void {
+  useEffect(() => {
+    let frame = 0
+    let attempts = 0
+    const apply = (): void => {
+      if (ref.current) {
+        push(ref.current, value)
+        return
+      }
+      if (attempts++ < 120) frame = requestAnimationFrame(apply)
+    }
+    apply()
+    return () => {
+      if (frame) cancelAnimationFrame(frame)
+    }
+  }, [ref, value, push])
+}
+
+const pushBottomInset = (handle: SessionChatLogDomRef, px: number): void =>
+  handle.setBottomInset(px)
+const pushInlineQueued = (
+  handle: SessionChatLogDomRef,
+  messages: Array<OptimisticInboxMessage>
+): void => handle.setInlineQueuedMessages(messages)
 
 function useKeyboardBottomInset(windowHeight: number): number {
   const [keyboardInset, setKeyboardInset] = useState(0)

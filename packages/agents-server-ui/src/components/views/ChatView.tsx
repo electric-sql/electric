@@ -74,15 +74,20 @@ export function ChatLogView({
   entityStopped,
   isSpawning,
   tileId,
-  scrollToBottomSignal,
   inlineQueuedMessages = [],
 }: ViewProps & {
-  scrollToBottomSignal?: number
   inlineQueuedMessages?: Array<OptimisticInboxMessage>
 }): React.ReactElement {
   const connectUrl = isSpawning ? null : entityUrl
-  const { timelineRows, pendingInbox, entities, db, loading, error } =
-    useEntityTimeline(baseUrl || null, connectUrl)
+  const {
+    timelineRows,
+    pendingInbox,
+    entities,
+    generationActive,
+    db,
+    loading,
+    error,
+  } = useEntityTimeline(baseUrl || null, connectUrl)
   const canFork = useEntityPermission(entity, `fork`)
   const navigate = useNavigate()
   const processedInboxKeys = useMemo(
@@ -97,14 +102,15 @@ export function ChatLogView({
     [pendingInbox]
   )
   const projectedPendingMessage = useMemo(() => {
-    if (entity.status === `running`) return null
+    if (entityStopped || generationActive) return null
     for (const message of inlineQueuedMessages) {
       if (processedInboxKeys.has(message.key)) continue
       return pendingInboxByKey.get(message.key) ?? message
     }
     return null
   }, [
-    entity.status,
+    entityStopped,
+    generationActive,
     inlineQueuedMessages,
     pendingInboxByKey,
     processedInboxKeys,
@@ -140,11 +146,10 @@ export function ChatLogView({
       error={error}
       entityStopped={entityStopped}
       baseUrl={baseUrl}
-      cacheKey={`${baseUrl}${connectUrl ?? ``}:${scrollToBottomSignal ?? 0}`}
+      cacheKey={`${baseUrl}${connectUrl ?? ``}`}
       tileId={tileId}
       entityUrl={connectUrl}
       entities={entities}
-      scrollToBottomSignal={scrollToBottomSignal}
       forkFromHereByRunKey={forkFromHereByRunKey}
     />
   )
