@@ -14,6 +14,7 @@ import type {
   EntityTimelineCustomSource,
   EntityTimelineQueryRow,
 } from '@electric-ax/agents-runtime/client'
+import type { CompactionTimelineRow } from './compaction'
 
 /**
  * Comments are a UI-level concern: the runtime timeline query knows nothing
@@ -33,6 +34,7 @@ export type EntityTimelineCommentRow = {
 export type CommentTimelineRow = {
   $key: string
   comment: EntityTimelineCommentRow
+  compaction?: undefined
   inbox?: undefined
   run?: undefined
   wake?: undefined
@@ -41,10 +43,14 @@ export type CommentTimelineRow = {
   manifest?: undefined
 }
 
-/** Timeline row as consumed by UI views: runtime rows plus merged comment rows. */
+/**
+ * Timeline row as consumed by UI views: runtime rows plus merged custom-source
+ * rows (comments, compaction markers).
+ */
 export type TimelineRow =
-  | (EntityTimelineQueryRow & { comment?: undefined })
+  | (EntityTimelineQueryRow & { comment?: undefined; compaction?: undefined })
   | CommentTimelineRow
+  | CompactionTimelineRow
 
 /**
  * Timeline source for the `comments` collection, passed to the runtime's
