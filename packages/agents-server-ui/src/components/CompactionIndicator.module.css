@@ -1,0 +1,37 @@
+.indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0 0.25rem;
+  color: var(--warning-text, #b26a00);
+  user-select: none;
+}
+
+.label {
+  font-size: 0.72rem;
+  line-height: 1;
+  color: inherit;
+}
+
+.spinner {
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  opacity: 0.8;
+  animation: compaction-spin 0.7s linear infinite;
+}
+
+@keyframes compaction-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}

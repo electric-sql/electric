@@ -21,6 +21,7 @@ import {
 import { ComposerEditor } from './ComposerEditor'
 import { ComposerShell } from './ComposerShell'
 import { ContextUsageIndicator } from './ContextUsageIndicator'
+import { CompactionIndicator } from './CompactionIndicator'
 import { Icon, Stack, Text, Tooltip } from '../ui'
 import {
   AttachmentActionMenu,
@@ -484,6 +485,7 @@ export function MessageInput({
               />
             ) : null}
             <ContextUsageIndicator db={db} />
+            <CompactionIndicator db={db} />
           </>
         }
         send={
