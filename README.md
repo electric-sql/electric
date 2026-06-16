@@ -108,6 +108,30 @@ These numbers are preliminary. Measured 2026-06-13, both servers file-backed wit
 
 The zero-copy headline: at equal read throughput, the sendfile engine uses ~**10× less server CPU** (one core's worth of work shrinks to a tenth). Read throughput is _equal_ only because the Node load-generator processes saturate first — the raw engine has an order of magnitude more headroom that a heavier client (or kTLS, or more readers) would expose.
 
+### Read offload (`--read-offload`, Linux)
+
+`sendfile` blocks the calling thread on a page-cache miss, so _where_ it runs decides whether a cold backfill stalls unrelated requests. `--read-offload` picks the strategy (default `tail`): a live tail feed is always resident and served inline on the async worker; catch-up reads — which may be cold — run on the blocking pool under `tail`/`always` (still zero-copy), so a disk fault parks a pool thread instead of a worker. Measured on Linux (Docker, 10 cores, 7.8 GB, release, `wrk`).
+
+Hot-path read throughput — cached catch-up GETs (`wrk -t4 -c64`):
+
+| Read size | `inline`              | `tail`           | `always`             |
+| --------- | --------------------- | ---------------- | -------------------- |
+| 1 KB      | **272k /s**           | 150k /s          | 115k /s              |
+| 1 MB      | **28.7k /s**          | 26.7k /s         | 26.1k /s             |
+| 16 MB     | 1,131 /s (p99 212 ms) | 1,398 /s (98 ms) | **1,489 /s (67 ms)** |
+
+The pool handoff roughly halves small-read throughput, is a wash at 1 MB, and is a net win at 16 MB — there it also keeps long copies off the limited async workers, improving p99 ~3×.
+
+Cold isolation — hot 4 KB reads while concurrent cold 1 GB backfills fault on disk (pages continuously evicted via `fadvise(DONTNEED)`):
+
+| Mode     | hot-read p50 | p99        | max        |
+| -------- | ------------ | ---------- | ---------- |
+| `inline` | **140 µs**   | 2–94 ms    | 240–360 ms |
+| `tail`   | 220 µs       | **1.5 ms** | **~25 ms** |
+| `always` | 220 µs       | 1.4 ms     | ~17 ms     |
+
+`inline` has the best median, but its worst case collapses under cold load — a backfill's disk fault parks an async worker and hot reads queue behind it. `tail` caps the worst case ~10× for ~1.5× lower median on small catch-up reads, while still serving the live tail inline. `always` matches `tail` here but needlessly pools the live tail too; hence `tail` is the default.
+
 ### Running them
 
 The official suite (`@durable-streams/benchmarks`, latency + small/large-message throughput) runs against any server over HTTP. Run it against this server on each engine, and against the reference Node server for comparison:
