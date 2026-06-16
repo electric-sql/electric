@@ -36,7 +36,7 @@ The Expo-DOM bridge is simple and one-directional per channel:
 Because `ChatLogView` already calls `useEntityTimeline(baseUrl, connectUrl)` with no
 opts, and `useEntityTimeline` defaults `comments` on when `commentsEnabled`, **comment
 bubbles already render in the mobile chat log today**. What is missing on mobile is the
-*write* path, the *reply* affordance, and the *comments-only* view.
+_write_ path, the _reply_ affordance, and the _comments-only_ view.
 
 ## Reused, unchanged
 
@@ -94,15 +94,15 @@ Extend `NativeMessageComposer` (in `SessionScreen.tsx`) with a
   plain text, matching desktop).
 - Wire `createSendCommentAction({ db, baseUrl: serverUrl, entityUrl, from })` where
   `from` comes from `useCurrentPrincipal`. The optimistic insert + `POST
-  /collections/comments` is reused verbatim; on send, bump the existing
+/collections/comments` is reused verbatim; on send, bump the existing
   `onSendMessage` scroll signal.
 - **Reply target state**: a `selectedCommentTarget: SelectedCommentTarget | null`
   lives in the native session screen. When `onRequestReplyToComment` fires from the
   bridge: set the target, switch the composer to comment mode, focus the input, and
   render a native **reply banner** (snapshot label + truncated text + clear button),
   mirroring desktop. Clearing the target drops back to a top-level comment. The target
-  + snapshot are passed into `createSendCommentAction`'s call as `replyTo` /
-  `targetSnapshot`.
+  - snapshot are passed into `createSendCommentAction`'s call as `replyTo` /
+    `targetSnapshot`.
 
 ### 4. Comments-only view (parity)
 
