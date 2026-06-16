@@ -528,6 +528,11 @@ fn write_wire(st: &StreamState, ap: &mut Appender, wire: &Bytes) -> std::io::Res
         s.last_access = SystemTime::now();
         closed = s.closed;
     }
+    // Publish the resident chunk BEFORE waking subscribers, so a long-poll/SSE
+    // reader woken by the tail update reliably hits the cache (one shared copy)
+    // instead of racing ahead and falling back to a file read. The chunk spans
+    // [tail - wire.len(), tail).
+    st.set_last_chunk(tail - wire.len() as u64, wire.clone());
     st.tail_tx.send_replace(Tail {
         bytes: tail,
         closed,
@@ -866,6 +871,19 @@ fn read_range_body(st: &Arc<StreamState>, start: u64, end: u64, hot: bool) -> Bo
         return if json { full("[]") } else { empty() };
     }
     let (data_start, data_end) = if json { (start, end - 1) } else { (start, end) };
+    // Fast path: if the range is fully covered by the resident tail chunk
+    // (the common caught-up / just-appended case), serve it from memory — no
+    // file read, and shared across every concurrent reader of this append.
+    if let Some(bytes) = st.tail_chunk_slice(data_start, data_end) {
+        if json {
+            let mut out = BytesMut::with_capacity(bytes.len() + 2);
+            out.put_u8(b'[');
+            out.put_slice(&bytes);
+            out.put_u8(b']');
+            return Body::Full(out.freeze());
+        }
+        return Body::Full(bytes);
+    }
     let mut segs = Vec::new();
     collect_segments(st, data_start, data_end, &mut segs);
     Body::FileRange {
@@ -1121,8 +1139,13 @@ async fn handle_sse(st: Arc<StreamState>, offset: ParsedOffset, client_cursor: O
         loop {
             let t = *rxw.borrow_and_update();
             if t.bytes > pos {
-                // Read new range and emit data + control.
-                let data = read_range_bytes(&st, pos, t.bytes).await;
+                // Read new range and emit data + control. Caught-up subscribers
+                // share the resident tail chunk — one read for all of them —
+                // and fall back to a file read only when behind it.
+                let data = match st.tail_chunk_slice(pos, t.bytes) {
+                    Some(b) => b,
+                    None => read_range_bytes(&st, pos, t.bytes).await,
+                };
                 let mut ev = String::new();
                 match sse_encoding(&st) {
                     SseEncoding::Json => {

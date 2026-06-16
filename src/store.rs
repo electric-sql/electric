@@ -165,9 +165,53 @@ pub struct StreamState {
     pub sync: SyncCoalescer,
     /// True while a debounced meta flush is pending.
     pub meta_dirty: AtomicBool,
+    /// Most recently appended wire chunk, kept resident so caught-up live
+    /// readers (SSE / long-poll) and immediate catch-up reads are served from
+    /// memory — one read+encode shared across all subscribers — instead of a
+    /// per-subscriber file read. `(start, bytes)` covers `[start, start+len)`.
+    /// Only populated for chunks up to `TAIL_CHUNK_MAX` (large appends fall back
+    /// to file reads / sendfile). See set_last_chunk / tail_chunk_slice.
+    pub last_chunk: std::sync::Mutex<Option<(u64, bytes::Bytes)>>,
 }
 
+/// Upper bound on the resident tail chunk (bytes). Larger appends are served
+/// from the file (streamed / sendfile) rather than held in memory — this keeps
+/// the cache to the small live-tail appends it is meant to de-duplicate and
+/// avoids large in-memory copies on engines that must own the write buffer.
+pub const TAIL_CHUNK_MAX: usize = 256 * 1024;
+
 impl StreamState {
+    /// Record the just-appended wire chunk as the resident tail. `start` is the
+    /// logical offset where `bytes` begins. Chunks larger than `TAIL_CHUNK_MAX`
+    /// are not cached (the entry is cleared so a stale chunk is never served).
+    pub fn set_last_chunk(&self, start: u64, bytes: bytes::Bytes) {
+        let mut g = self.last_chunk.lock().unwrap();
+        *g = if bytes.len() <= TAIL_CHUNK_MAX {
+            Some((start, bytes))
+        } else {
+            None
+        };
+    }
+
+    /// Return the resident bytes for `[want_start, want_end)` iff the cached
+    /// tail chunk fully covers that range; otherwise None (caller reads the
+    /// file). Cheap: `Bytes::slice` is a refcount bump, no copy.
+    pub fn tail_chunk_slice(&self, want_start: u64, want_end: u64) -> Option<bytes::Bytes> {
+        if want_end <= want_start {
+            return None;
+        }
+        let g = self.last_chunk.lock().unwrap();
+        let (cstart, cbytes) = g.as_ref()?;
+        let cend = cstart + cbytes.len() as u64;
+        if *cstart <= want_start && want_end <= cend {
+            let a = (want_start - cstart) as usize;
+            let b = (want_end - cstart) as usize;
+            Some(cbytes.slice(a..b))
+        } else {
+            None
+        }
+    }
+
     pub fn tail(&self) -> Tail {
         let s = self.shared.read().unwrap();
         Tail {
@@ -341,6 +385,7 @@ impl Store {
             tail_tx,
             sync: SyncCoalescer::new(),
             meta_dirty: AtomicBool::new(false),
+            last_chunk: std::sync::Mutex::new(None),
             config: StreamConfig {
                 content_type: meta.content_type.clone(),
                 ttl_seconds: meta.ttl_seconds,
@@ -487,6 +532,7 @@ impl Store {
             tail_tx,
             sync: SyncCoalescer::new(),
             meta_dirty: AtomicBool::new(false),
+            last_chunk: std::sync::Mutex::new(None),
             config,
         });
         match self.streams.entry(path.to_string()) {

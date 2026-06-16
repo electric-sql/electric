@@ -1,1 +1,5 @@
 /target
+/bench/micro/out
+/bench/out
+/.profile-hot.sh
+benchmark-results.json

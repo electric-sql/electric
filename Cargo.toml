@@ -25,7 +25,16 @@ libc = "0.2"
 percent-encoding = "2"
 ed25519-dalek = { version = "2", default-features = false, features = ["std", "fast"] }
 
+# io_uring engine (--http-engine uring): a thread-per-core current-thread tokio
+# runtime backed by io_uring for socket and file I/O. Linux-only.
+[target.'cfg(target_os = "linux")'.dependencies]
+tokio-uring = "0.5"
+
 [profile.release]
 lto = true
 codegen-units = 1
-panic = "abort"
+# Unwind (the default), not abort: a panic in one connection task is caught by
+# the runtime and drops only that connection, instead of aborting the whole
+# process and killing every other in-flight request. For a network-facing
+# server the per-connection isolation is worth more than abort's small
+# binary-size / codegen win.

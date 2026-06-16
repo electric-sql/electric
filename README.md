@@ -40,7 +40,7 @@ curl -N "$BASE?offset=0&live=sse"        # Server-Sent Events stream
 | `--host`                 | `127.0.0.1`                    | listen address                                                                                                                                                                                                                                                                             |
 | `--port`                 | `4438`                         | listen port                                                                                                                                                                                                                                                                                |
 | `--data-dir`             | `$TMPDIR/durable-streams-rust` | storage directory (persists across restarts)                                                                                                                                                                                                                                               |
-| `--http-engine`          | `hyper`                        | `hyper` or `raw` (custom HTTP/1.1 loop; `sendfile(2)` reads on Linux)                                                                                                                                                                                                                      |
+| `--http-engine`          | `hyper`                        | `hyper`, `raw` (custom HTTP/1.1 loop; `sendfile(2)` reads on Linux), or `uring` (io_uring, thread-per-core; Linux only)                                                                                                                                                                    |
 | `--long-poll-timeout-ms` | `30000`                        | how long a long-poll request blocks before a 204                                                                                                                                                                                                                                           |
 | `--read-offload`         | `tail`                         | raw engine, Linux: where reads run sendfile — `inline` (always on the async worker), `tail` (live tail inline, catch-up on the blocking pool), `always` (always on the blocking pool). `tail` keeps a cold backfill's disk fault off the async workers while serving the live tail inline. |
 
@@ -58,7 +58,8 @@ Durable by default: an append returns only after the fsync that covers it. State
 - **Coalesced group-commit fsync** — concurrent appenders share one in-flight barrier fsync (`F_BARRIERFSYNC` on macOS, `fdatasync` on Linux), keeping the durability contract at a fraction of the syscall count.
 - **Per-stream serialization, lock-free reads** — one async mutex per stream orders appends; reads take a brief snapshot and do positioned `pread`s, never blocking the writer.
 - **watch-channel wakeups** drive long-poll and SSE subscribers, so there's no polling loop.
-- **Two HTTP engines** — `hyper` (default) and a custom `raw` HTTP/1.1 loop that owns the socket to serve reads with `sendfile(2)` on Linux. Both pass the full suite.
+- **Three HTTP engines** — `hyper` (default, portable), a custom `raw` HTTP/1.1 loop that owns the socket to serve reads with `sendfile(2)` on Linux, and `uring` (Linux): a thread-per-core current-thread runtime backed by **io_uring** (via tokio-uring) for socket and file I/O — batched submit/complete with no epoll round-trip and no blocking-pool handoff for cold reads. All three pass the full suite; the request handlers are shared, only the I/O loop differs.
+- **Resident tail cache** — the most recent appended chunk is kept in memory, so caught-up live readers (long-poll / SSE) and immediate catch-up reads are served from one shared copy instead of a per-subscriber file read.
 
 ## Conformance
 
@@ -68,7 +69,7 @@ RUST_SERVER_URL=http://localhost:4562 pnpm exec vitest run \
   --config packages/server-rust/conformance/vitest.config.ts
 ```
 
-Status: **332 passed / 0 failed**, on both engines.
+Status: **332 passed / 0 failed**, on all three engines (`hyper`, `raw`, `uring`).
 
 ## Releasing
 
@@ -86,70 +87,59 @@ and attaches the tarballs plus SHA-256 checksums to the release.
 
 ---
 
-## Benchmarks (preliminary)
+## Benchmarks
 
-These numbers are preliminary. Measured 2026-06-13, both servers file-backed with per-append durable fsync (Node: libuv `fdatasync` = `F_BARRIERFSYNC`; Rust: `F_BARRIERFSYNC` on macOS, `fdatasync` on Linux, coalesced/group-commit). The same Node-based load clients drive every server, so cross-server numbers are comparable. Rust built `--release`. `rust-hyper` is `--http-engine hyper` (tokio + hyper); `rust-raw` is `--http-engine raw` (custom HTTP/1.1 loop, `sendfile(2)` reads on Linux; on macOS it falls back to positioned reads, so there `rust-raw ≈ rust-hyper` minus framework overhead).
+Measured 2026-06-16, file-backed with per-append durable fsync. Rust built
+`--release`. Full tables, setup, and analysis: [`bench/RESULTS.md`](bench/RESULTS.md).
 
-### macOS (10 cores, 16 GB, Apple SSD) — official suite (`@durable-streams/benchmarks`, via the TS client)
+### Cross-server — macOS, official suite (`@durable-streams/benchmarks`, via the TS client)
 
 | Metric (mean)                    | Node     | rust-hyper | rust-raw   | best vs Node |
 | -------------------------------- | -------- | ---------- | ---------- | ------------ |
-| Latency overhead (RTT − ping)    | 19.76 ms | 0.85 ms    | 0.82 ms    | **24×**      |
-| Small messages (100 B, conc. 75) | 4,214 /s | 116,319 /s | 106,707 /s | **28×**      |
-| Large messages (1 MB)            | 324 /s   | 977 /s     | 1,112 /s   | **3.4×**     |
+| Latency overhead (RTT − ping)    | 23.19 ms | 1.10 ms    | 1.17 ms    | **21×**      |
+| Small messages (100 B, conc. 75) | 3,796 /s | 115,798 /s | 117,083 /s | **31×**      |
+| Large messages (1 MB)            | 420 /s   | 1,083 /s   | 1,244 /s   | **3.0×**     |
+| Unbatched appends (100 B, c75)   | 127 /s   | 30,740 /s  | 32,261 /s  | **254×**     |
+| Catch-up reads (10 MB)           | 472 MB/s | 3,252 MB/s | 3,502 MB/s | **7.4×**     |
 
-### Linux (Docker, release) — where sendfile applies
+On macOS `raw ≈ hyper` (no sendfile there). The engine differences show up on Linux:
 
-| Workload                           | rust-hyper  | rust-raw (sendfile) |
-| ---------------------------------- | ----------- | ------------------- |
-| Unbatched appends (100 B)          | 25,220 /s   | 25,661 /s           |
-| Catch-up reads (10 MB)             | 1,524 MB/s  | 1,556 MB/s          |
-| **Server CPU at ~1,580 MB/s read** | **113.9 %** | **11.8 %**          |
+### Engine micro-benchmarks — Linux (Docker, `wrk -t4 -c64`)
 
-The zero-copy headline: at equal read throughput, the sendfile engine uses ~**10× less server CPU** (one core's worth of work shrinks to a tenth). Read throughput is _equal_ only because the Node load-generator processes saturate first — the raw engine has an order of magnitude more headroom that a heavier client (or kTLS, or more readers) would expose.
+Hot reads (cached catch-up GETs):
 
-### Read offload (`--read-offload`, Linux)
+| Read size | hyper   | raw                   | uring       |
+| --------- | ------- | --------------------- | ----------- |
+| 1 KB      | 212k /s | 355k /s               | **419k /s** |
+| 16 KB     | 229k /s | 296k /s               | **365k /s** |
+| 1 MB      | 12k /s  | **35k /s** (sendfile) | 23k /s      |
 
-`sendfile` blocks the calling thread on a page-cache miss, so _where_ it runs decides whether a cold backfill stalls unrelated requests. `--read-offload` picks the strategy (default `tail`): a live tail feed is always resident and served inline on the async worker; catch-up reads — which may be cold — run on the blocking pool under `tail`/`always` (still zero-copy), so a disk fault parks a pool thread instead of a worker. Measured on Linux (Docker, 10 cores, 7.8 GB, release, `wrk`).
+Cold isolation — hot 4 KB reads under concurrent cold 1 GB backfills (`fadvise(DONTNEED)`):
 
-Hot-path read throughput — cached catch-up GETs (`wrk -t4 -c64`):
+| engine / mode | hot p50   | hot max      |
+| ------------- | --------- | ------------ |
+| raw `inline`  | 96 µs     | **714.9 ms** |
+| raw `tail`    | 103 µs    | **10.7 ms**  |
+| uring         | **78 µs** | 80.8 ms      |
 
-| Read size | `inline`              | `tail`           | `always`             |
-| --------- | --------------------- | ---------------- | -------------------- |
-| 1 KB      | **272k /s**           | 150k /s          | 115k /s              |
-| 1 MB      | **28.7k /s**          | 26.7k /s         | 26.1k /s             |
-| 16 MB     | 1,131 /s (p99 212 ms) | 1,398 /s (98 ms) | **1,489 /s (67 ms)** |
-
-The pool handoff roughly halves small-read throughput, is a wash at 1 MB, and is a net win at 16 MB — there it also keeps long copies off the limited async workers, improving p99 ~3×.
-
-Cold isolation — hot 4 KB reads while concurrent cold 1 GB backfills fault on disk (pages continuously evicted via `fadvise(DONTNEED)`):
-
-| Mode     | hot-read p50 | p99        | max        |
-| -------- | ------------ | ---------- | ---------- |
-| `inline` | **140 µs**   | 2–94 ms    | 240–360 ms |
-| `tail`   | 220 µs       | **1.5 ms** | **~25 ms** |
-| `always` | 220 µs       | 1.4 ms     | ~17 ms     |
-
-`inline` has the best median, but its worst case collapses under cold load — a backfill's disk fault parks an async worker and hot reads queue behind it. `tail` caps the worst case ~10× for ~1.5× lower median on small catch-up reads, while still serving the live tail inline. `always` matches `tail` here but needlessly pools the live tail too; hence `tail` is the default.
+Takeaways: **uring** wins small high-concurrency reads (io_uring batches recv/send
+— ~20% more throughput at lower latency); **raw/sendfile** wins large resident
+reads (zero-copy beats copy-streaming); for cold-read isolation **raw `tail`** has
+the tightest tail (the blocking-pool offload caps `inline`'s 715 ms worst case at
+11 ms) while **uring** has the best median and avoids the collapse natively with no
+offload knob (async io_uring file reads, no worker stall, bounded memory). The
+resident tail cache makes raw's offload modes identical for hot reads, so
+`--read-offload` now only affects cold reads (`tail` stays the raw default).
 
 ### Running them
 
-The official suite (`@durable-streams/benchmarks`, latency + small/large-message throughput) runs against any server over HTTP. Run it against this server on each engine, and against the reference Node server for comparison:
-
 ```bash
-# build the Rust server
-cargo build --release --manifest-path packages/server-rust/Cargo.toml
-BIN=packages/server-rust/target/release/durable-streams-server
+# Cross-server (Node vs hyper vs raw): official suite + scale-out
+packages/server-rust/bench/run-all.sh                    # -> bench/out/
 
-# Rust server — pick an engine with --http-engine {hyper|raw}
-$BIN --port 4564 --data-dir .streams-dev/bench-rust --http-engine raw &
-BENCH_URL=http://localhost:4564 BENCH_ENV=rust pnpm exec vitest bench --run \
-  --config packages/server-rust/bench/vitest.bench.config.ts
-
-# reference Node server, for comparison
-PORT=4565 DATA_DIR=.streams-dev/bench-node pnpm exec tsx packages/server-rust/bench/node-server.ts &
-BENCH_URL=http://localhost:4565 BENCH_ENV=node pnpm exec vitest bench --run \
-  --config packages/server-rust/bench/vitest.bench.config.ts
+# Engine micro-benchmarks (Linux/Docker): hyper vs raw vs uring
+ENGINES="hyper raw uring" packages/server-rust/bench/micro/docker-run.sh
 ```
 
-Each run writes `benchmark-results.json` to the cwd. Delete `.streams-dev/bench-*` and stop the backgrounded servers when done.
+Bench data dirs are gitignored; clean `.streams-dev/bench-*` and `bench/*/out`
+when done.

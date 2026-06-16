@@ -1,7 +1,10 @@
 mod api;
 mod engine_hyper;
 mod engine_raw;
+#[cfg(target_os = "linux")]
+mod engine_uring;
 mod handlers;
+mod http1;
 mod store;
 mod subs;
 
@@ -36,10 +39,20 @@ fn main() {
                 data_dir = args.next().expect("--data-dir requires a path").into();
             }
             "--http-engine" => {
-                engine = args.next().expect("--http-engine requires hyper|raw");
-                if engine != "hyper" && engine != "raw" {
-                    eprintln!("--http-engine must be 'hyper' or 'raw'");
-                    std::process::exit(2);
+                engine = args.next().expect("--http-engine requires hyper|raw|uring");
+                match engine.as_str() {
+                    "hyper" | "raw" => {}
+                    "uring" => {
+                        #[cfg(not(target_os = "linux"))]
+                        {
+                            eprintln!("--http-engine uring is Linux-only");
+                            std::process::exit(2);
+                        }
+                    }
+                    _ => {
+                        eprintln!("--http-engine must be 'hyper', 'raw', or 'uring'");
+                        std::process::exit(2);
+                    }
                 }
             }
             "--long-poll-timeout-ms" => {
@@ -71,6 +84,27 @@ fn main() {
     let workers = std::thread::available_parallelism()
         .map(|n| n.get())
         .unwrap_or(4);
+
+    // The io_uring engine manages its own per-core current-thread runtimes, so
+    // it runs here instead of on the shared multi-threaded tokio runtime below.
+    #[cfg(target_os = "linux")]
+    if engine == "uring" {
+        let store = Arc::new(Store::new(data_dir.clone()).expect("failed to init store"));
+        let _ = store.subs.set(Arc::new(subs::SubsManager::new()));
+        let std_listener = std::net::TcpListener::bind((host, port)).expect("bind failed");
+        let addr = std_listener.local_addr().unwrap_or_else(|_| (host, port).into());
+        println!(
+            "durable-streams-server listening on http://{addr} (engine: uring, data: {})",
+            data_dir.display()
+        );
+        println!(
+            "note: __ds control plane is in-memory only — subscriptions and the \
+             webhook-signing key reset on restart"
+        );
+        engine_uring::serve(store, std_listener, workers);
+        return;
+    }
+
     let rt = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(workers)
         .enable_all()
