@@ -8,6 +8,7 @@ import {
 } from '@electric-ax/agents-runtime/client'
 import type { EntityStreamDBWithActions } from '@electric-ax/agents-runtime/client'
 import { Tooltip } from '../ui/Tooltip'
+import { ContextUsageRing } from './ContextUsageRing'
 import styles from './ContextUsageIndicator.module.css'
 
 /**
@@ -83,7 +84,7 @@ export function ContextUsageIndicator({
         className={[styles.indicator, styles[level]].filter(Boolean).join(` `)}
         aria-label={`Context used: ${percent} (${tooltip})`}
       >
-        <span className={styles.dot} aria-hidden="true" />
+        <ContextUsageRing ratio={usage.ratio} />
         <span className={styles.percent}>{percent}</span>
       </span>
     </Tooltip>
