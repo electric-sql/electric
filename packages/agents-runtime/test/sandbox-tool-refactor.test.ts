@@ -73,7 +73,9 @@ describe(`tool refactor to Sandbox`, () => {
       await sandbox.writeFile(join(cwd, `f.txt`), `payload`)
       const tool = createReadFileTool(sandbox)
       const result = await tool.execute(`r`, { path: `f.txt` })
-      expect((result.content[0] as { text: string }).text).toBe(`payload`)
+      expect((result.content[0] as { text: string }).text).toContain(
+        `1: payload`
+      )
     })
 
     it(`rejects paths that escape the working directory`, async () => {

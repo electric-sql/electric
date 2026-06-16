@@ -3,92 +3,52 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createEditTool } from '../src/tools/edit'
-import { createReadFileTool } from '../src/tools/read-file'
 import { unrestrictedSandbox } from '../src/sandbox/unrestricted'
 
-describe(`edit tool read-first guard`, () => {
+describe(`edit tool`, () => {
   let cwd: string
 
   beforeEach(async () => {
-    cwd = await mkdtemp(join(tmpdir(), `edit-guard-`))
+    cwd = await mkdtemp(join(tmpdir(), `edit-tool-`))
   })
 
   afterEach(async () => {
     await rm(cwd, { recursive: true, force: true })
   })
 
-  it(`rejects edit if the file was not read in this session`, async () => {
+  it(`edits a file without requiring a prior read`, async () => {
     await writeFile(join(cwd, `f.txt`), `hello world`, `utf-8`)
     const sandbox = await unrestrictedSandbox({ workingDirectory: cwd })
-    const readSet = new Set<string>()
-    const edit = createEditTool(sandbox, readSet)
+    const edit = createEditTool(sandbox)
     const result = await edit.execute(`call`, {
       path: `f.txt`,
       old_string: `world`,
       new_string: `there`,
     })
-    expect((result.content[0] as { text: string }).text).toMatch(
-      /has not been read in this session/
+    expect((result.content[0] as { text: string }).text).toMatch(/Edited/)
+    expect((await sandbox.readFile(`f.txt`)).toString(`utf-8`)).toBe(
+      `hello there`
     )
     await sandbox.dispose()
   })
 
-  it(`allows edit after a read in the same session`, async () => {
-    await writeFile(join(cwd, `f.txt`), `hello world`, `utf-8`)
-    const sandbox = await unrestrictedSandbox({ workingDirectory: cwd })
-    const readSet = new Set<string>()
-    const read = createReadFileTool(sandbox, readSet)
-    const edit = createEditTool(sandbox, readSet)
-
-    await read.execute(`r`, { path: `f.txt` })
-    const result = await edit.execute(`e`, {
-      path: `f.txt`,
-      old_string: `world`,
-      new_string: `there`,
-    })
-    expect((result.content[0] as { text: string }).text).toMatch(
-      /Edited|Replaced/
-    )
-    await sandbox.dispose()
-  })
-
-  it(`rejects edit across a wake boundary (fresh readSet)`, async () => {
+  it(`does not depend on readSet contents`, async () => {
     await writeFile(join(cwd, `g.txt`), `aaa bbb`, `utf-8`)
     const sandbox = await unrestrictedSandbox({ workingDirectory: cwd })
-
-    const wake1ReadSet = new Set<string>()
-    const wake1Read = createReadFileTool(sandbox, wake1ReadSet)
-    const wake1Edit = createEditTool(sandbox, wake1ReadSet)
-    await wake1Read.execute(`r1`, { path: `g.txt` })
-    const editResult1 = await wake1Edit.execute(`e1`, {
+    const edit = createEditTool(sandbox, new Set<string>())
+    const result = await edit.execute(`e`, {
       path: `g.txt`,
       old_string: `aaa`,
       new_string: `xxx`,
     })
-    expect((editResult1.content[0] as { text: string }).text).toMatch(
-      /Edited|Replaced/
-    )
-
-    const wake2ReadSet = new Set<string>()
-    const wake2Edit = createEditTool(sandbox, wake2ReadSet)
-    const editResult2 = await wake2Edit.execute(`e2`, {
-      path: `g.txt`,
-      old_string: `xxx`,
-      new_string: `yyy`,
-    })
-    expect((editResult2.content[0] as { text: string }).text).toMatch(
-      /has not been read in this session/
-    )
+    expect((result.content[0] as { text: string }).text).toMatch(/Edited/)
     await sandbox.dispose()
   })
 
   it(`requires unique old_string when replace_all is false`, async () => {
     await writeFile(join(cwd, `dup.txt`), `foo foo`, `utf-8`)
     const sandbox = await unrestrictedSandbox({ workingDirectory: cwd })
-    const readSet = new Set<string>()
-    const read = createReadFileTool(sandbox, readSet)
-    const edit = createEditTool(sandbox, readSet)
-    await read.execute(`r`, { path: `dup.txt` })
+    const edit = createEditTool(sandbox)
     const result = await edit.execute(`e`, {
       path: `dup.txt`,
       old_string: `foo`,
@@ -103,10 +63,7 @@ describe(`edit tool read-first guard`, () => {
   it(`replaces all occurrences when replace_all is true`, async () => {
     await writeFile(join(cwd, `multi.txt`), `aa bb aa cc aa`, `utf-8`)
     const sandbox = await unrestrictedSandbox({ workingDirectory: cwd })
-    const readSet = new Set<string>()
-    const read = createReadFileTool(sandbox, readSet)
-    const edit = createEditTool(sandbox, readSet)
-    await read.execute(`r`, { path: `multi.txt` })
+    const edit = createEditTool(sandbox)
     const result = await edit.execute(`e`, {
       path: `multi.txt`,
       old_string: `aa`,

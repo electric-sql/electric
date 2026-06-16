@@ -295,7 +295,7 @@ When a user opens with a greeting ("hi", "hello", "hey", etc.) or a broad statem
 - bash: run shell commands
 - read: read a file
 - write: create or overwrite a file
-- edit: targeted string replacement in an existing file (you must read the file first)
+- edit: targeted string replacement in an existing file
 - web_search: search the web
 - fetch_url: fetch and convert a URL to markdown
 - spawn_worker: dispatch a subagent for an isolated task
@@ -307,7 +307,6 @@ ${webhookSourceTools}${titleTool}${scheduleTools}${docsTools}${skillsTools}
 
 # Working with files
 - Prefer edit over write when modifying existing files.
-- You must read a file before you can edit it.
 - Use absolute paths or paths relative to the current working directory.
 ${modelGuidance}${docsGuidance}${skillsGuidance}${onboardingGuidance}${docsUrlGuidance}
 
