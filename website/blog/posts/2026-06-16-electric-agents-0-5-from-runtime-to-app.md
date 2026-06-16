@@ -82,6 +82,16 @@ See how Electric Agents models agents as durable, addressable entities.
   </div>
 </figure>
 
+### Custom entities
+
+Define your own entity types with custom state, handlers, permissions, and tools.
+
+<figure>
+  <div class="embed-container" style="padding-bottom: 56.25%">
+    <YoutubeEmbed video-id="xKo3iqbDkI4" title="Electric Agents custom entities demo" />
+  </div>
+</figure>
+
 ### State
 
 Inspect an entity's live StreamDB state: messages, runs, tool calls, child status, and custom collections.
