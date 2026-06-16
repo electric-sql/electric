@@ -1,5 +1,13 @@
 # @core/sync-service
 
+## 1.7.1
+
+### Patch Changes
+
+- 7a8f8c8: Bound Shape.Consumer heap growth: make the consumer family's process spawn options (incl. `fullsweep_after`) configurable per process via `ELECTRIC_PROCESS_SPAWN_OPTS`, and add an opt-in adaptive GC that runs after a transaction fragment when the consumer's heap exceeds the runtime-tunable `ELECTRIC_CONSUMER_GC_HEAP_THRESHOLD` (off by default).
+- 48d3ba3: Fix subquery dependency deduplication for same-table subqueries that project different columns, preventing plain snapshots from silently dropping one arm of an `OR` filter.
+- 8750fa7: Avoid sending duplicate publication-configuration requests while one is already in progress. Under a burst of shape arrivals, the publication manager no longer issues a separate request for every shape added or removed, preventing the configurator's message queue from growing without bound (issue #4396).
+
 ## 1.7.0
 
 ### Minor Changes

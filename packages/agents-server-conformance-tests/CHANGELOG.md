@@ -1,5 +1,11 @@
 # @electric-ax/agents-server-conformance-tests
 
+## 0.6.0
+
+### Minor Changes
+
+- 15beffa: Release all Electric Agents packages as 0.6.
+
 ## 0.1.12
 
 ### Patch Changes

@@ -1,6 +1,6 @@
 {
   "name": "@electric-ax/agents-server",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "Electric Agents entity runtime server",
   "author": "Durable Stream contributors",
   "bin": {
