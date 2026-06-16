@@ -23,6 +23,7 @@ export default ({ config }: ConfigContext): ExpoConfig =>
       version: packageJson.version,
       runtimeVersion: packageJson.version,
       orientation: `portrait`,
+      icon: `./assets/icon.png`,
       userInterfaceStyle: `automatic`,
       newArchEnabled: true,
       plugins: [
@@ -64,6 +65,10 @@ export default ({ config }: ConfigContext): ExpoConfig =>
         package: applicationId,
         versionCode,
         edgeToEdgeEnabled: true,
+        adaptiveIcon: {
+          foregroundImage: `./assets/adaptive-icon.png`,
+          backgroundColor: `#101217`,
+        },
       },
       extra: {
         ...config.extra,
