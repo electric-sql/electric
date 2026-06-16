@@ -179,6 +179,11 @@ export async function loadDesktopSettings(
           )
         : undefined,
       pullWakeRunnerId,
+      pullWakeRunnerLabel:
+        typeof parsed.pullWakeRunnerLabel === `string` &&
+        parsed.pullWakeRunnerLabel.trim()
+          ? parsed.pullWakeRunnerLabel.trim()
+          : undefined,
     })
     if (parsed.apiKeys !== undefined) {
       Object.assign(deps.apiKeys, normalizeApiKeys(parsed.apiKeys))

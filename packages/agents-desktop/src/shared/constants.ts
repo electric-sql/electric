@@ -44,6 +44,8 @@ export const BACKGROUND_LAUNCH_ARG = `--electric-background-launch`
 
 export const PULL_WAKE_RUNNER_ID =
   process.env.ELECTRIC_DESKTOP_PULL_WAKE_RUNNER_ID?.trim() || null
+export const PULL_WAKE_RUNNER_LABEL =
+  process.env.ELECTRIC_DESKTOP_PULL_WAKE_RUNNER_LABEL?.trim() || null
 export const PULL_WAKE_REGISTER_RUNNER =
   process.env.ELECTRIC_DESKTOP_PULL_WAKE_REGISTER_RUNNER === undefined
     ? true
