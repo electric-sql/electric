@@ -149,6 +149,23 @@ defmodule Electric.ShapeCacheTest do
     end
   end
 
+  describe "shape-create lock table" do
+    setup [
+      :with_noop_publication_manager,
+      :with_log_chunking,
+      :with_registry,
+      :with_shape_log_collector
+    ]
+
+    test "is created empty when the ShapeCache starts", ctx do
+      with_shape_cache(ctx)
+
+      lock_table = :"shape_create_lock:#{ctx.stack_id}"
+      assert :ets.whereis(lock_table) != :undefined
+      assert :ets.tab2list(lock_table) == []
+    end
+  end
+
   describe "get_or_create_shape_handle/2 shape initialization" do
     setup [
       :with_noop_publication_manager,
@@ -271,6 +288,117 @@ defmodule Electric.ShapeCacheTest do
                GenServer.call(link_pid, {:create_or_wait_shape_handle, @shape, nil})
 
       assert_received {:called, :create_snapshot_fn}
+    end
+
+    test "concurrent callers for a fresh shape coalesce: leader creates, followers poll", ctx do
+      test_pid = self()
+
+      Support.TestUtils.patch_snapshotter(fn parent,
+                                             shape_handle,
+                                             _shape,
+                                             %{snapshot_fun: snapshot_fun} ->
+        send(test_pid, {:called, :create_snapshot_fn})
+        GenServer.cast(parent, {:pg_snapshot_known, shape_handle, @pg_snapshot_xmin_10})
+        snapshot_fun.([["test"]])
+        GenServer.cast(parent, {:snapshot_started, shape_handle})
+      end)
+
+      # Block the leader BEFORE the shape handle is registered (i.e. before
+      # ShapeStatus.add_shape), so the followers genuinely miss the fast path and
+      # must consult the lock. fetch_handle_by_shape_critical runs in the
+      # ShapeCache process at the very start of maybe_create_shape and returns
+      # :error for a not-yet-existing shape, so it is a safe block point.
+      Support.TestUtils.patch_calls(Electric.ShapeCache.ShapeStatus,
+        fetch_handle_by_shape_critical: fn _stack_id, _shape ->
+          send(test_pid, {:creation_blocked, self()})
+
+          receive do
+            :continue_creation -> :ok
+          end
+
+          :error
+        end
+      )
+
+      Support.TestUtils.activate_mocks_for_descendant_procs(Electric.Shapes.Consumer.Snapshotter)
+      Support.TestUtils.activate_mocks_for_descendant_procs(Electric.ShapeCache)
+
+      with_shape_cache(ctx)
+
+      shape_cache_pid = GenServer.whereis(ShapeCache.name(ctx.stack_id))
+      lock_table = :"shape_create_lock:#{ctx.stack_id}"
+
+      leader =
+        Task.async(fn -> ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id) end)
+
+      # Leader is now inside the handler, blocked before the handle is registered.
+      assert_receive {:creation_blocked, blocked_pid}, 2000
+
+      followers =
+        for _ <- 1..5,
+            do: Task.async(fn -> ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id) end)
+
+      # Give the followers time to miss the fast path, see the lock, and start
+      # polling. They must NOT have enqueued a GenServer.call: the mailbox stays
+      # empty even though the handler is busy creating the shape.
+      Process.sleep(100)
+      assert {:message_queue_len, 0} = Process.info(shape_cache_pid, :message_queue_len)
+
+      # Release the leader; it finishes creation, activates the shape, and clears
+      # the lock. Followers' poll predicate then becomes ready.
+      send(blocked_pid, :continue_creation)
+
+      {leader_handle, _offset} = Task.await(leader)
+
+      for follower <- followers do
+        assert {^leader_handle, _offset} = Task.await(follower)
+      end
+
+      refute :ets.member(lock_table, Shape.comparable(@shape))
+
+      # The expensive snapshot work ran exactly once.
+      assert_received {:called, :create_snapshot_fn}
+      refute_received {:called, :create_snapshot_fn}
+    end
+
+    test "waiters on a failed creation fail fast via the lock table, not a 30s timeout", ctx do
+      with_shape_cache(ctx)
+
+      lock_table = :"shape_create_lock:#{ctx.stack_id}"
+      lock_key = Shape.comparable(@shape)
+
+      # Simulate a leader that has just failed to create this shape and published
+      # the error into the lock table.
+      :ets.insert(lock_table, {lock_key, {:failed, :boom}})
+
+      task = Task.async(fn -> ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id) end)
+
+      # The caller misses the fast path, sees the lock set, polls, reads the
+      # published failure, and returns the real error promptly -- well under the
+      # 30s @call_timeout, and without ever issuing a GenServer.call.
+      assert {:error, :boom} = Task.await(task, 1_000)
+    end
+
+    test "sweep clears a published failure but leaves an in-progress claim", ctx do
+      with_shape_cache(ctx)
+
+      shape_cache_pid = GenServer.whereis(ShapeCache.name(ctx.stack_id))
+      lock_table = :"shape_create_lock:#{ctx.stack_id}"
+      lock_key = Shape.comparable(@shape)
+
+      # A published failure is swept.
+      :ets.insert(lock_table, {lock_key, {:failed, :boom}})
+      send(shape_cache_pid, {:sweep_failed_create_lock, lock_key})
+      # A synchronous call flushes the mailbox so the :sweep_failed_create_lock
+      # handle_info is guaranteed to have run before we assert.
+      _ = GenServer.call(shape_cache_pid, {:has_shape_handle?, "x"})
+      refute :ets.member(lock_table, lock_key)
+
+      # An in-progress claim is NOT swept (a new leader could be mid-creation).
+      :ets.insert(lock_table, {lock_key, :in_progress})
+      send(shape_cache_pid, {:sweep_failed_create_lock, lock_key})
+      _ = GenServer.call(shape_cache_pid, {:has_shape_handle?, "x"})
+      assert [{^lock_key, :in_progress}] = :ets.lookup(lock_table, lock_key)
     end
 
     test "shape gets cleaned up if terminated unexpectedly", %{storage: storage} = ctx do

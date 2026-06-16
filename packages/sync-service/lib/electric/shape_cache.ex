@@ -1,6 +1,7 @@
 defmodule Electric.ShapeCache do
   use GenServer
 
+  alias Electric.PollWait
   alias Electric.Replication.LogOffset
   alias Electric.Replication.ShapeLogCollector
   alias Electric.ShapeCache.ShapeStatus
@@ -36,6 +37,21 @@ defmodule Electric.ShapeCache do
   # unnecessary noise let's just cover those tail timings with our timeout.
   @call_timeout 30_000
 
+  # ShapeCache create-waiter polling is tuned for the sub-second shape-creation
+  # latency profile, NOT the StatusMonitor stack-readiness profile. Most shape
+  # creations are answered within the first 2-3 polls:
+  # 5 -> 10 -> 20 -> 40 -> 80 -> 100 -> 100 ... ms
+  @poll_initial_interval 5
+  @poll_max_interval 100
+  @poll_backoff 2.0
+
+  # When a creation fails, the leader publishes the error into the lock table so
+  # the polling waiters fail fast instead of waiting out @call_timeout. The
+  # failed entry is kept this long (comfortably above @poll_max_interval, so
+  # every already-waiting poller observes it) before being swept, after which a
+  # fresh request for the same shape becomes a leader again and retries.
+  @failed_create_grace_ms 1_000
+
   @max_snapshot_start_attempts 10
   @snapshot_start_retry_sleep_ms 50
 
@@ -70,11 +86,21 @@ defmodule Electric.ShapeCache do
       {handle, offset}
     else
       :error ->
-        GenServer.call(
-          name(stack_id),
-          {:create_or_wait_shape_handle, shape, opts[:otel_ctx]},
-          @call_timeout
-        )
+        lock_key = Shape.comparable(shape)
+
+        # If another caller is already creating this exact shape (or just failed
+        # to), don't pile a GenServer.call into the ShapeCache mailbox behind it
+        # -- observe the lock table and poll until the shape is ready or the
+        # failure is published.
+        if shape_create_in_progress?(stack_id, lock_key) do
+          wait_for_shape_creation(shape, stack_id, lock_key)
+        else
+          GenServer.call(
+            name(stack_id),
+            {:create_or_wait_shape_handle, shape, opts[:otel_ctx]},
+            @call_timeout
+          )
+        end
     end
   end
 
@@ -275,6 +301,8 @@ defmodule Electric.ShapeCache do
       feature_flags: Electric.StackConfig.lookup(stack_id, :feature_flags, [])
     }
 
+    create_shape_create_lock_table(stack_id)
+
     {:ok, state, {:continue, :wait_for_restore}}
   end
 
@@ -309,6 +337,10 @@ defmodule Electric.ShapeCache do
   def handle_call({:create_or_wait_shape_handle, shape, otel_ctx}, _from, state) do
     if not is_nil(otel_ctx), do: OpenTelemetry.set_current_context(otel_ctx)
 
+    lock_table = shape_create_lock_table(state.stack_id)
+    lock_key = Shape.comparable(shape)
+    :ets.insert(lock_table, {lock_key, :in_progress})
+
     case safe_maybe_create_shape(shape, %{
            stack_id: state.stack_id,
            otel_ctx: otel_ctx,
@@ -316,11 +348,20 @@ defmodule Electric.ShapeCache do
          }) do
       {:ok, {shape_handle, latest_offset}} ->
         Logger.debug("Returning shape id #{shape_handle} for shape #{inspect(shape)}")
+        # Success: drop the lock. Waiters resolve via the shape itself (their
+        # poll predicate sees the now-activated shape once the read connection
+        # catches up).
+        :ets.delete(lock_table, lock_key)
         {:reply, {shape_handle, latest_offset}, state}
 
       {:error, reason} ->
         Logger.warning("Failed to create shape for #{inspect(shape)}: #{inspect(reason)}")
-
+        # Failure: publish the error into the lock table so the waiters polling
+        # it fail fast with the real reason -- no GenServer.call stampede, no
+        # 30s timeout. Sweep the entry after a grace window so a later request
+        # for the same shape retries creation instead of seeing a stale error.
+        :ets.insert(lock_table, {lock_key, {:failed, reason}})
+        Process.send_after(self(), {:sweep_failed_create_lock, lock_key}, @failed_create_grace_ms)
         {:reply, {:error, reason}, state}
     end
   end
@@ -353,6 +394,23 @@ defmodule Electric.ShapeCache do
       :error ->
         {:reply, {:error, :no_shape}, state}
     end
+  end
+
+  @impl GenServer
+  def handle_info({:sweep_failed_create_lock, lock_key}, state) do
+    # Only sweep an entry that is still a published failure. By the time this
+    # fires, all writes to the lock table have been serialised through this
+    # process, so the entry is either still {:failed, _} (clear it) or already
+    # gone (a no-op). It can never be a fresh :in_progress claim, because a new
+    # leader only starts once this entry is absent.
+    table = shape_create_lock_table(state.stack_id)
+
+    case :ets.lookup(table, lock_key) do
+      [{^lock_key, {:failed, _reason}}] -> :ets.delete(table, lock_key)
+      _ -> :ok
+    end
+
+    {:noreply, state}
   end
 
   defp safe_maybe_create_shape(shape, opts) do
@@ -518,6 +576,72 @@ defmodule Electric.ShapeCache do
       end
 
     {descendents ++ [{handle, shape, start_shape_opts} | siblings], known}
+  end
+
+  # Per-stack, GenServer-owned, caller-readable lock keyed by Shape.comparable/1.
+  # Values: `:in_progress` while the leader is creating the shape, or
+  # `{:failed, reason}` briefly published on creation failure so waiters fail
+  # fast; the entry is deleted on success and swept after a grace window on
+  # failure. Only the ShapeCache process writes to it, so callers can read it
+  # for routing but can never strand a stale claim. Owned by the ShapeCache
+  # process, so it is destroyed and recreated empty on a GenServer restart.
+  defp shape_create_lock_table(stack_id), do: :"shape_create_lock:#{stack_id}"
+
+  defp create_shape_create_lock_table(stack_id) do
+    table = shape_create_lock_table(stack_id)
+
+    if :ets.whereis(table) == :undefined do
+      :ets.new(table, [
+        :named_table,
+        :public,
+        :set,
+        read_concurrency: true,
+        write_concurrency: :auto
+      ])
+    else
+      # Belt-and-suspenders crash recovery: if the table somehow outlived a
+      # previous owner, drop any stale in-progress claims.
+      :ets.delete_all_objects(table)
+    end
+  end
+
+  defp shape_create_in_progress?(stack_id, lock_key) do
+    :ets.member(shape_create_lock_table(stack_id), lock_key)
+  rescue
+    ArgumentError -> false
+  end
+
+  defp wait_for_shape_creation(shape, stack_id, lock_key) do
+    predicate = fn -> poll_shape_ready(stack_id, shape, lock_key) end
+
+    case PollWait.until(predicate, @call_timeout,
+           initial_interval: @poll_initial_interval,
+           max_interval: @poll_max_interval,
+           backoff: @poll_backoff
+         ) do
+      {:ready, result} -> result
+      :timeout -> {:error, :timeout}
+    end
+  end
+
+  # Cheap, caller-process readiness check. Resolves as soon as either the leader
+  # publishes a failure into the lock table (fail fast with the real reason) or
+  # the shape itself becomes activated. Reads only ETS + the read connection;
+  # never touches the write connection.
+  defp poll_shape_ready(stack_id, shape, lock_key) do
+    case :ets.lookup(shape_create_lock_table(stack_id), lock_key) do
+      [{^lock_key, {:failed, reason}}] ->
+        {:ready, {:error, reason}}
+
+      _ ->
+        with {:ok, handle} <- ShapeStatus.fetch_handle_by_shape(stack_id, shape),
+             true <- ShapeStatus.shape_has_been_activated?(stack_id, handle),
+             {:ok, offset} <- fetch_latest_offset(stack_id, handle) do
+          {:ready, {handle, offset}}
+        else
+          _ -> :not_ready
+        end
+    end
   end
 
   @spec fetch_latest_offset(stack_id(), shape_handle(), keyword()) ::
