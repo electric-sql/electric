@@ -468,6 +468,13 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
 
   @spec delete_relation_info(map(), Electric.relation_id()) :: map()
   defp delete_relation_info(state, oid) when is_relation_id(oid) do
+    # `clean` is the cache-invalidation primitive the schema reconciler calls when
+    # a relation diverges, so it must also drop any cached negative result for the
+    # oid — otherwise the next lookup would short-circuit on a stale `:table_not_found`
+    # / error for up to the negative-cache TTL. (Only the oid-keyed negative entry is
+    # addressable here; a relation-keyed one expires on its own short TTL.)
+    :ets.delete(inspector_table(state), negative_cache_key({:oid, oid}))
+
     case fetch_relation_info_from_ets(oid, state) do
       :not_in_cache ->
         state

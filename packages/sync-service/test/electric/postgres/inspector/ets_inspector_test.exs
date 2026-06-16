@@ -283,6 +283,29 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
       assert :ets.lookup(pg_inspector_table, {:oid_info, oid1}) == []
       refute :ets.lookup(pg_inspector_table, {:oid_info, oid2}) == []
     end
+
+    test "clears a cached negative result for the oid", %{opts: opts, db_conn: pool} do
+      test_pid = self()
+      missing_oid = 1_234_567_890
+
+      Repatch.patch(Postgrex, :transaction, [mode: :shared], fn p, fun, db_opts ->
+        if p == pool, do: send(test_pid, :db_transaction)
+        Repatch.real(Postgrex.transaction(p, fun, db_opts))
+      end)
+
+      allow_fill_workers(opts[:server])
+
+      # Cache a negative result for the missing oid.
+      assert :table_not_found = EtsInspector.load_relation_info(missing_oid, opts)
+      assert_receive :db_transaction
+
+      # `clean` must invalidate the negative cache, so the next lookup hits the DB
+      # again rather than short-circuiting on the stale `:table_not_found`.
+      assert EtsInspector.clean(missing_oid, opts)
+
+      assert :table_not_found = EtsInspector.load_relation_info(missing_oid, opts)
+      assert_receive :db_transaction
+    end
   end
 
   describe "load_column_info/2" do
