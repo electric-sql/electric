@@ -329,7 +329,7 @@ await ctx.observe(entity(reviewer.entityUrl), {
 
 ### Connect
 
-Connect external tools and systems with [MCP servers](/docs/agents/usage/mcp-servers), [event-source subscriptions](/docs/agents/usage/event-sources), [webhooks](/docs/agents/usage/clients-and-react#observation-sources), and [PG sync-driven triggers](/docs/agents/usage/programmatic-runtime-client#registerpgsyncsource). Agents can subscribe to operational systems and wake when those systems change. `Runtime`
+Connect external tools and systems with [MCP servers](/docs/agents/usage/mcp-servers), [webhook-source subscriptions](/docs/agents/usage/webhook-sources), [webhooks](/docs/agents/usage/clients-and-react#observation-sources), and [PG sync-driven triggers](/docs/agents/usage/programmatic-runtime-client#registerpgsyncsource). Agents can subscribe to operational systems and wake when those systems change. `Runtime`
 
 ```ts
 await client.subscribeToWebhookSource({
@@ -439,7 +439,7 @@ Once registered, `assistant` appears as an entity type in the app. Spawn `/assis
 ## Coming next
 
 - Managed Agents servers in Electric Cloud.
-- More examples and docs for app builders: PG sync triggers, [event sources](/docs/agents/usage/event-sources), [MCP](/docs/agents/usage/mcp-servers), [attachments](/docs/agents/usage/attachments), [sandbox profiles](/docs/agents/usage/sandboxing), and multi-agent patterns.
+- More examples and docs for app builders: PG sync triggers, [webhook sources](/docs/agents/usage/webhook-sources), [MCP](/docs/agents/usage/mcp-servers), [attachments](/docs/agents/usage/attachments), [sandbox profiles](/docs/agents/usage/sandboxing), and multi-agent patterns.
 - More app development polish: desktop builds, smoother downloads and updates, and richer mobile distribution.
 
 ## Next steps

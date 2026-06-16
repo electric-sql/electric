@@ -27,7 +27,7 @@
     "@types/turndown": "^5.0.6",
     "chart.js": "^4.4.7",
     "cheerio": "^1.2.0",
-    "jsdom": "^29.0.2",
+    "jsdom": "^28.1.0",
     "nodemon": "^3.1.4",
     "playwright": "^1.52.0",
     "pnpm": "^9.15.0",
