@@ -983,6 +983,41 @@ defmodule Electric.Shapes.ShapeTest do
     end
   end
 
+  describe "subquery dependency construction" do
+    test "does not deduplicate subqueries with different projected columns" do
+      inspector =
+        Support.StubInspector.new(%{
+          "item" => [
+            %{name: "id", pk_position: 0}
+          ],
+          "rel" => [
+            %{name: "a", pk_position: 0},
+            %{name: "b", pk_position: 1},
+            %{name: "kind", pk_position: 2}
+          ]
+        })
+
+      assert {:ok, %Shape{where: where, shape_dependencies: dependencies}} =
+               Shape.new("item",
+                 inspector: inspector,
+                 feature_flags: ["allow_subqueries"],
+                 where:
+                   "id IN (SELECT a FROM rel WHERE kind = 'k') OR id IN (SELECT b FROM rel WHERE kind = 'k')"
+               )
+
+      assert Enum.map(dependencies, & &1.explicitly_selected_columns) == [["a"], ["b"]]
+
+      assert where.query ==
+               "id IN (SELECT a FROM public.rel WHERE kind = 'k') OR id IN (SELECT b FROM public.rel WHERE kind = 'k')"
+
+      assert where.used_refs == %{
+               ["id"] => :text,
+               ["$sublink", "0"] => {:array, :text},
+               ["$sublink", "1"] => {:array, :text}
+             }
+    end
+  end
+
   describe "new!/2" do
     import Support.DbSetup
     import Support.DbStructureSetup
