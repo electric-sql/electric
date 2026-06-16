@@ -26,31 +26,36 @@ npx electric-ax agents observe /horton/my-horton
 
 Horton is configured with `ctx.electricTools` plus the base Horton tool set:
 
-| Tool           | Purpose                                                  |
-| -------------- | -------------------------------------------------------- |
-| `bash`         | Run shell commands in the working directory.             |
-| `read`         | Read a file. Tracked in a per-wake `readSet`.            |
-| `write`        | Create or overwrite a file.                              |
-| `edit`         | Targeted string replacement (file must be `read` first). |
-| `brave_search` | Web search via the Brave Search API.                     |
-| `fetch_url`    | Fetch a URL and return it as markdown.                   |
-| `spawn_worker` | Dispatch a subagent for an isolated subtask.             |
+| Tool              | Purpose                                                  |
+| ----------------- | -------------------------------------------------------- |
+| `bash`            | Run shell commands in the working directory.             |
+| `read`            | Read a file. Tracked in a per-wake `readSet`.            |
+| `write`           | Create or overwrite a file.                              |
+| `edit`            | Targeted string replacement (file must be `read` first). |
+| `web_search`      | Web search via the configured search provider.           |
+| `fetch_url`       | Fetch a URL and return it as markdown.                   |
+| `spawn_worker`    | Dispatch a subagent for an isolated subtask.             |
+| `fork`            | Branch a session at its latest completed response.       |
+| `observe_pg_sync` | Observe an Electric Postgres shape and wake on changes.  |
+| `unobserve_pg_sync` | Remove an existing pg-sync observation.                |
+| `send`            | Send a message to another entity.                        |
+| `set_title`       | Rename the current chat session title.                   |
 
-`brave_search` requires `BRAVE_SEARCH_API_KEY` in the environment; without it the tool errors at call time.
+`web_search` uses the search provider configured by the built-in runtime; Brave search requires `BRAVE_SEARCH_API_KEY`.
 
-When docs support or skills are available, Horton also adds the docs search tool and skill tools during bootstrap.
+When docs support or skills are available, Horton also adds the docs search tool and skill tools during bootstrap. Built-in runtimes also provide `ctx.electricTools`, including schedule tools and webhook-source tools when configured.
 
 ## Title generation
 
-After the first agent run completes, Horton calls `generateTitle()` (Haiku) to summarise the user's first message into a 3-5 word session title and stores it via `ctx.setTag('title', title)`. Failures are logged and ignored — the entity continues without a title.
+After the first agent run completes, Horton calls `generateTitle()` using the configured low-cost model to summarise the user's first message into a 3-5 word session title and stores it via `ctx.setTag('title', title)`. Failures are logged and ignored — the entity continues without a title.
 
 ## Details
 
 | Property          | Value                                             |
 | ----------------- | ------------------------------------------------- |
 | Type name         | `horton`                                          |
-| Model             | `HORTON_MODEL` (`claude-sonnet-4-5-20250929`)     |
-| Title model       | `claude-haiku-4-5-20251001`                       |
+| Model             | `HORTON_MODEL` (`claude-sonnet-4-6` by default)   |
+| Title model       | Configured low-cost model                         |
 | Tools             | `ctx.electricTools` + base Horton tool set, plus docs/skill tools when configured |
 | Working directory | Passed at bootstrap (defaults to `process.cwd()`) |
 | Title generation  | Yes, after the first run if no title tag exists   |
@@ -75,7 +80,7 @@ registry.define("my-assistant", {
       model: HORTON_MODEL,
       tools: [
         ...ctx.electricTools,
-        ...createHortonTools(process.cwd(), ctx, readSet),
+        ...createHortonTools(ctx.sandbox, ctx, readSet),
         myCustomTool,
       ],
     })

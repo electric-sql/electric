@@ -42,10 +42,15 @@ interface CollectionDefinition {
   schema?: StandardSchemaV1 // Zod or any Standard Schema validator
   type?: string // Event type in the stream. Defaults to "state:{name}"
   primaryKey?: string // Key field. Defaults to "key"
+  externallyWritable?: boolean // Opt in to HTTP writes for this collection
+  contract?: string // Well-known contract implemented by this collection
+  operations?: Array<"insert" | "update" | "delete"> // External write allowlist
 }
 ```
 
 All fields are optional. A minimal collection like `{ primaryKey: 'key' }` works without a schema — rows are untyped.
+
+Set `externallyWritable: true` only for collections that should accept writes through the entity collection HTTP routes. When enabled, `operations` controls which external write operations are allowed; if omitted, the server permits inserts only.
 
 ## Writing and reading state
 

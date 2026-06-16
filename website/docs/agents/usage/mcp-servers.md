@@ -26,8 +26,11 @@ import { BuiltinAgentsServer } from "@electric-ax/agents"
 
 const server = new BuiltinAgentsServer({
   agentServerUrl: "http://localhost:4437",
-  port: 4448,
   workingDirectory: process.cwd(),
+  pullWake: {
+    runnerId: "builtin-agents",
+    registerRunner: true,
+  },
 })
 
 await server.start()
@@ -44,7 +47,7 @@ const result = await server.mcpRegistry?.addServer({
 })
 ```
 
-`addServer` returns a discriminated [`AddServerResult`](#addserverresult) — `{ state: "ready" | "authenticating" | "error", … }`. The state landscape is described in [Server states](#server-states) below; the full lifecycle (hot-reload, reauthorize, timeouts) lives in [Lifecycle](#lifecycle).
+`addServer` returns a discriminated [`AddServerResult`](/docs/agents/reference/mcp-registry#addserverresult) — `{ state: "ready" | "authenticating" | "error", … }`. The state landscape is described in [Server states](#server-states) below; the full lifecycle (hot-reload, reauthorize, timeouts) lives in [Lifecycle](#lifecycle).
 
 The bulk methods are:
 
@@ -95,7 +98,7 @@ For static, project-scoped configuration the runtime can load `mcp.json` from th
 }
 ```
 
-For [`authorizationCode`](#authorization-code-oauth) servers in `mcp.json`, the runtime auto-wires `keychainPersistence` so OAuth tokens survive process restarts via the OS keychain.
+For [`authorizationCode`](#authorizationcode-oauth) servers in `mcp.json`, the runtime auto-wires `keychainPersistence` so OAuth tokens survive process restarts via the OS keychain.
 
 ### Desktop settings layer
 
@@ -117,10 +120,15 @@ Example shape:
 
 ```jsonc
 {
-  "servers": [...],
-  "activeServer": {...},
+  "servers": [
+    {
+      "id": "local",
+      "name": "Local",
+      "url": "http://localhost:4437"
+    }
+  ],
+  "defaultServerId": "local",
   "workingDirectory": "/Users/me/workspace/foo",
-  "apiKeys": {...},
   "mcp": {
     "servers": {
       "linear": {
@@ -137,10 +145,10 @@ Programmatic embedders (other than the desktop) pass the resolved set as an arra
 
 ## Per-agent allowlist
 
-Entity definitions opt into MCP servers explicitly via the `mcp.tools()` helper from `@electric-ax/agents-runtime`:
+Entity definitions opt into MCP servers explicitly via the `mcp.tools()` helper from `@electric-ax/agents-mcp`:
 
 ```ts
-import { mcp } from "@electric-ax/agents-runtime"
+import { mcp } from "@electric-ax/agents-mcp"
 
 registry.define("research-agent", {
   async handler(ctx) {

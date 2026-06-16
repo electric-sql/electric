@@ -40,8 +40,11 @@ interface RuntimeRouterConfig {
   handlerUrl?: string // legacy alias for serveEndpoint
   registry?: EntityRegistry
   subscriptionPathForType?: (typeName: string) => string
+  defaultDispatchPolicyForType?: (typeName: string) => DispatchPolicy | undefined
+  serverHeaders?: HeadersProvider
+  webhookSignature?: false | Partial<WebhookSignatureVerifierConfig>
   idleTimeout?: number // ms before closing idle wake (default: 20000)
-  heartbeatInterval?: number // ms between heartbeats (default: 30000)
+  heartbeatInterval?: number // ms between heartbeats (default: 10000)
   createElectricTools?: (context: {
     entityUrl: string
     entityType: string
@@ -61,15 +64,34 @@ interface RuntimeRouterConfig {
       payload: unknown
       targetUrl?: string
       fireAt: string
-      from?: string
       messageType?: string
     }): Promise<{ txid: string }>
     deleteSchedule(opts: { id: string }): Promise<{ txid: string }>
+    listWebhookSources(): Promise<Array<WebhookSourceContract>>
+    subscribeToWebhookSource(
+      opts: WebhookSourceSubscriptionInput
+    ): Promise<{ txid: string; subscription: WebhookSourceSubscription }>
+    unsubscribeFromWebhookSource(opts: { id: string }): Promise<{ txid: string }>
   }) => AgentTool[] | Promise<AgentTool[]> // factory for extra agent tools
   onWakeError?: (error: Error) => boolean | void // return true to mark handled
   registrationConcurrency?: number // max concurrent type registrations (default: 8)
+  sandboxProfiles?: ReadonlyArray<SandboxProfile>
+  publicUrl?: string
+  name?: string
 }
 ```
+
+Key fields:
+
+| Field                          | Description                                                                                                      |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| `serveEndpoint`                | Public webhook callback URL. When present, type registration includes webhook dispatch unless a default dispatch policy overrides it. |
+| `serverHeaders`                | Headers sent on control-plane requests to the agents server, including type registration and wake claims.        |
+| `webhookSignature`             | Webhook signature verification config. Enabled by default against `${baseUrl}/__ds/jwks.json`; set to `false` only for trusted in-process tests. |
+| `defaultDispatchPolicyForType` | Override the default dispatch policy registered per entity type. Use this for pull-wake runner targets.          |
+| `sandboxProfiles`              | Named sandbox profiles advertised by this runtime. Spawn requests can select one by profile name.                |
+| `publicUrl`                    | Public URL for this runtime, surfaced by server runtime metadata APIs when available.                            |
+| `name`                         | Human-readable runtime name. Defaults to `"default"`.                                                           |
 
 ## HTTP server
 
@@ -103,10 +125,7 @@ Must be called after your app starts listening.
 await runtime.registerTypes()
 ```
 
-This makes two requests per entity type:
-
-1. `POST /_electric/entity-types` — registers the type definition and schemas.
-2. `PUT /{type}/**?subscription={type}-handler` — creates a webhook subscription for the type.
+This sends `POST /_electric/entity-types` for each entity type. The request includes the type definition, state schemas, permission grants, optional `serve_endpoint`, and optional default dispatch policy. When `serveEndpoint` is set and no custom default dispatch policy is provided, registration uses webhook dispatch to that endpoint.
 
 ## RuntimeHandler
 
@@ -115,12 +134,22 @@ interface RuntimeHandler {
   onEnter(req: IncomingMessage, res: ServerResponse): Promise<void>
   handleRequest(request: Request): Promise<Response | null>
   handleWebhookRequest(request: Request): Promise<Response>
+  dispatchWake(
+    notification: WakeNotification,
+    options?: Pick<ProcessWakeConfig, "claimHeaders" | "claimTokenHeader">
+  ): void
   dispatchWebhookWake(notification: WebhookNotification): void
   drainWakes(): Promise<void>
   waitForSettled(): Promise<void>
   abortWakes(): void
   debugState(): RuntimeDebugState
   readonly typeNames: string[]
+  readonly sandboxProfileDescriptors: Array<{
+    name: string
+    label: string
+    description?: string
+    remote?: boolean
+  }>
   registerTypes(): Promise<void>
 }
 
@@ -137,12 +166,14 @@ interface RuntimeDebugState {
 | `onEnter`              | Node HTTP adapter — reads the request body and delegates to `handleWebhookRequest` |
 | `handleRequest`        | Fetch-native router — returns `null` if the path does not match `webhookPath`      |
 | `handleWebhookRequest` | Processes a webhook POST directly, without path matching                           |
+| `dispatchWake`         | Dispatches a pre-parsed wake notification from any transport                       |
 | `dispatchWebhookWake`  | Dispatches a pre-parsed notification (fire-and-forget)                             |
 | `drainWakes`           | Waits for all in-flight wake handlers to settle; throws on errors                  |
 | `waitForSettled`       | Waits for all in-flight wakes; throws on errors                                    |
 | `abortWakes`           | Cancels all in-flight wake handlers immediately                                    |
 | `debugState`           | Returns a snapshot of internal runtime state for diagnostics                       |
-| `registerTypes`        | Registers entity types and webhook subscriptions with the Electric Agents runtime server     |
+| `sandboxProfileDescriptors` | Sandbox profile descriptors advertised by this runtime                     |
+| `registerTypes`        | Registers entity types, schemas, permission grants, and default dispatch policy with the Electric Agents runtime server |
 
 ## createRuntimeRouter
 

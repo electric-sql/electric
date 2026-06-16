@@ -18,56 +18,7 @@ handler(ctx: HandlerContext, wake: WakeEvent) => void | Promise<void>
 
 ## HandlerContext
 
-```ts
-interface HandlerContext<TState extends StateProxy = StateProxy> {
-  firstWake: boolean
-  tags: Readonly<EntityTags>
-  entityUrl: string
-  entityType: string
-  args: Readonly<Record<string, unknown>>
-  db: EntityStreamDBWithActions
-  state: TState
-  events: Array<ChangeEvent>
-  actions: Record<string, (...args: unknown[]) => unknown>
-  electricTools: AgentTool[]
-  useAgent: (config: AgentConfig) => AgentHandle
-  useContext: (config: UseContextConfig) => void
-  timelineMessages: (opts?: TimelineProjectionOpts) => Array<TimestampedMessage>
-  insertContext: (id: string, entry: ContextEntryInput) => void
-  removeContext: (id: string) => void
-  getContext: (id: string) => ContextEntry | undefined
-  listContext: () => Array<ContextEntry>
-  agent: AgentHandle
-  spawn: (
-    type: string,
-    id: string,
-    args?: Record<string, unknown>,
-    opts?: {
-      initialMessage?: unknown
-      wake?: Wake
-      tags?: Record<string, string>
-      observe?: boolean
-    }
-  ) => Promise<EntityHandle>
-  observe: (
-    source: ObservationSource,
-    opts?: { wake?: Wake }
-  ) => Promise<EntityHandle | SharedStateHandle | ObservationHandle>
-  mkdb: <T extends SharedStateSchemaMap>(
-    id: string,
-    schema: T
-  ) => SharedStateHandle<T>
-  send: (
-    entityUrl: string,
-    payload: unknown,
-    opts?: { type?: string; afterMs?: number }
-  ) => void
-  recordRun: () => RunHandle
-  setTag: (key: string, value: string) => Promise<void>
-  removeTag: (key: string) => Promise<void>
-  sleep: () => void
-}
-```
+`HandlerContext` includes identity, state, agent configuration, context composition, coordination, signals, sandboxing, attachments, goals, and lifecycle helpers. The table below summarizes the most common members; see the [HandlerContext reference](../reference/handler-context) for the full interface.
 
 ### Property reference
 
@@ -97,7 +48,7 @@ interface HandlerContext<TState extends StateProxy = StateProxy> {
 | `send`             | Sends a message to another entity's inbox. Supports delayed delivery via `afterMs`.                                                                     |
 | `recordRun`        | Records non-LLM work in the built-in `runs` collection so `runFinished` observers are woken.                                                            |
 | `setTag`           | Sets a tag on this entity.                                                                                                                              |
-| `removeTag`        | Removes a tag from this entity.                                                                                                                         |
+| `deleteTag`        | Deletes a tag from this entity.                                                                                                                         |
 | `sleep`            | Returns the entity to idle without re-waking.                                                                                                           |
 
 ## WakeEvent
@@ -146,7 +97,7 @@ registry.define("assistant", {
 
     ctx.useAgent({
       systemPrompt: "You are a helpful assistant.",
-      model: "claude-sonnet-4-5-20250929",
+      model: "claude-sonnet-4-6",
       tools: [...ctx.electricTools],
     })
     await ctx.agent.run()
@@ -162,11 +113,18 @@ Passed to `ctx.useAgent()`:
 interface AgentConfig {
   systemPrompt: string
   model: string | Model<any>
-  provider?: KnownProvider
+  provider?: Provider
   tools: AgentTool[]
   streamFn?: StreamFn
   getApiKey?: (provider: string) => Promise<string | undefined> | string | undefined
   onPayload?: SimpleStreamOptions["onPayload"]
+  onStepEnd?: (stats: {
+    input: number
+    uncachedInput: number
+    output: number
+  }) => void
+  modelTimeoutMs?: number
+  modelMaxRetries?: number
   testResponses?: string[] | TestResponseFn
 }
 ```
@@ -242,7 +200,7 @@ async handler(ctx) {
   const { systemPrompt } = ctx.args as { systemPrompt: string }
   ctx.useAgent({
     systemPrompt,
-    model: 'claude-sonnet-4-5-20250929',
+    model: 'claude-sonnet-4-6',
     tools: [...ctx.electricTools],
   })
   await ctx.agent.run()
@@ -274,7 +232,7 @@ async handler(ctx) {
 
   ctx.useAgent({
     systemPrompt: 'You are an assistant with lookup capabilities.',
-    model: 'claude-sonnet-4-5-20250929',
+    model: 'claude-sonnet-4-6',
     tools: [...ctx.electricTools, myTool],
   })
   await ctx.agent.run()

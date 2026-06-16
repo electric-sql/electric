@@ -25,7 +25,7 @@ export function registerPipeline(registry: EntityRegistry) {
     async handler(ctx) {
       ctx.useAgent({
         systemPrompt: PIPELINE_SYSTEM_PROMPT,
-        model: `claude-sonnet-4-5-20250929`,
+        model: `claude-sonnet-4-6`,
         tools: [...ctx.electricTools, createRunStageTool(ctx)],
       })
       await ctx.agent.run()

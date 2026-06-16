@@ -83,6 +83,7 @@ https://next.electric-sql.com/* https://electric-sql.com/:splat 301!
 # Renamed pages on new site
 /product/ddn                          /product/cloud
 /product/sync                         /product/electric
+/docs/agents/usage/event-sources      /docs/agents/usage/webhook-sources 301
 
 # Site restructure (2026-01) - products and sync pages
 /product/electric                                   /products/postgres-sync

@@ -24,7 +24,7 @@ registry.define("assistant", {
   async handler(ctx) {
     ctx.useAgent({
       systemPrompt: "You are a helpful assistant.",
-      model: "claude-sonnet-4-5-20250929",
+      model: "claude-sonnet-4-6",
       tools: [...ctx.electricTools],
     })
     await ctx.agent.run()
@@ -45,7 +45,8 @@ interface EntityDefinition {
   ) => Record<string, (...args: unknown[]) => void>
   creationSchema?: StandardJSONSchemaV1
   inboxSchemas?: Record<string, StandardJSONSchemaV1>
-  outputSchemas?: Record<string, StandardJSONSchemaV1>
+  stateSchemas?: Record<string, StandardJSONSchemaV1>
+  permissionGrants?: EntityTypePermissionGrantDefinition[]
   handler: (ctx: HandlerContext, wake: WakeEvent) => void | Promise<void>
 }
 ```
@@ -57,8 +58,11 @@ interface EntityDefinition {
 | `actions`        | Factory that returns custom non-CRUD action functions exposed on `ctx.actions`.       |
 | `creationSchema` | JSON Schema for arguments passed when the entity is spawned.                          |
 | `inboxSchemas`   | JSON Schemas for typed inbox message categories.                                      |
-| `outputSchemas`  | JSON Schemas for typed output message categories.                                     |
+| `stateSchemas`   | Additional JSON Schemas registered with the entity type's state schema map.           |
+| `permissionGrants` | Initial permission grants applied when this entity type is registered.              |
 | `handler`        | The function that runs each time the entity wakes. Required.                          |
+
+See [Permissions & principals](./permissions-and-principals) for the access-control model behind `permissionGrants`.
 
 ## Custom state
 
@@ -145,7 +149,7 @@ export function registerAssistant(registry: EntityRegistry) {
     async handler(ctx) {
       ctx.useAgent({
         systemPrompt: "You are a helpful assistant.",
-        model: "claude-sonnet-4-5-20250929",
+        model: "claude-sonnet-4-6",
         tools: [...ctx.electricTools],
       })
       await ctx.agent.run()
@@ -158,7 +162,7 @@ This keeps each entity type isolated and the registry composition explicit.
 
 ## Schemas
 
-`creationSchema`, `inboxSchemas`, and `outputSchemas` accept [`StandardJSONSchemaV1`](https://github.com/standard-schema/standard-schema) objects. Any schema library implementing the Standard JSON Schema interface works (e.g. Zod v4). These schemas are used for validation and for generating UI and documentation in the Electric Agents dashboard.
+`creationSchema`, `inboxSchemas`, and `stateSchemas` accept [`StandardJSONSchemaV1`](https://github.com/standard-schema/standard-schema) objects. Any schema library implementing the Standard JSON Schema interface works (e.g. Zod v4). These schemas are used for validation and for generating UI and documentation in the Electric Agents dashboard.
 
 ```ts
 import { z } from "zod/v4"

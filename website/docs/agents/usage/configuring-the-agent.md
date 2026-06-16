@@ -16,11 +16,18 @@ Call `ctx.useAgent()` in your handler to set up the LLM, then `ctx.agent.run()` 
 interface AgentConfig {
   systemPrompt: string
   model: string | Model<any>
-  provider?: KnownProvider
+  provider?: Provider
   tools: AgentTool[]
   streamFn?: StreamFn
   getApiKey?: (provider: string) => Promise<string | undefined> | string | undefined
   onPayload?: SimpleStreamOptions["onPayload"]
+  onStepEnd?: (stats: {
+    input: number
+    uncachedInput: number
+    output: number
+  }) => void
+  modelTimeoutMs?: number
+  modelMaxRetries?: number
   testResponses?: string[] | TestResponseFn
 }
 ```
@@ -29,11 +36,14 @@ interface AgentConfig {
 | --------------- | -------- | ----------------------------------------------------------------------- |
 | `systemPrompt`  | Yes      | The system prompt passed to the LLM.                                    |
 | `model`         | Yes      | Model identifier string or resolved model object.                       |
-| `provider`      | No       | Provider to use when `model` is a string. Defaults to `"anthropic"`.    |
+| `provider`      | No       | pi-ai provider to use when `model` is a string. Defaults to `"anthropic"`. |
 | `tools`         | Yes      | Array of tools available to the agent. Spread `ctx.electricTools` when your runtime host provides runtime-level tools. |
 | `streamFn`      | No       | Optional streaming callback passed to the underlying agent.             |
 | `getApiKey`     | No       | Optional API-key resolver passed through to the model layer.            |
 | `onPayload`     | No       | Optional callback for raw streaming payloads from the model layer.      |
+| `onStepEnd`     | No       | Callback after each model step with provider-reported token counts.     |
+| `modelTimeoutMs` | No      | Timeout for individual model calls, in milliseconds.                    |
+| `modelMaxRetries` | No     | Maximum retry count for model calls.                                    |
 | `testResponses` | No       | Mock responses for testing without calling the LLM.                     |
 
 ## Basic usage
@@ -42,7 +52,7 @@ interface AgentConfig {
 async handler(ctx) {
   ctx.useAgent({
     systemPrompt: 'You are a helpful assistant.',
-    model: 'claude-sonnet-4-5-20250929',
+    model: 'claude-sonnet-4-6',
     tools: [...ctx.electricTools],
   })
   await ctx.agent.run()
@@ -106,7 +116,7 @@ You must call `useAgent` before calling `run()`. Calling `ctx.agent.run()` witho
 When `model` is a string, the runtime resolves it through the configured `provider` (default `"anthropic"`). You can also pass a resolved `Model` object directly.
 
 ```ts
-model: "claude-sonnet-4-5-20250929"
+model: "claude-sonnet-4-6"
 provider: "anthropic"
 ```
 
@@ -119,7 +129,7 @@ For testing handlers without making LLM calls, pass `testResponses`. Two forms a
 ```ts
 ctx.useAgent({
   systemPrompt: "...",
-  model: "claude-sonnet-4-5-20250929",
+  model: "claude-sonnet-4-6",
   tools: [...ctx.electricTools],
   testResponses: ["Hello! How can I help?", "Sure, I can do that."],
 })

@@ -25,15 +25,21 @@ const client = createRuntimeServerClient({
 interface RuntimeServerClientConfig {
   baseUrl: string
   fetch?: typeof globalThis.fetch
+  headers?: HeadersProvider
+  writeTokenHeader?: ClaimTokenHeader
   track?: <T>(promise: Promise<T>) => Promise<T>
+  principalKey?: string
 }
 ```
 
-| Field     | Description                                                               |
-| --------- | ------------------------------------------------------------------------- |
-| `baseUrl` | Base URL for the Electric Agents server.                                  |
-| `fetch`   | Optional fetch implementation, useful in tests or non-standard runtimes.  |
-| `track`   | Optional wrapper for all requests, useful for telemetry or pending state. |
+| Field              | Description                                                                 |
+| ------------------ | --------------------------------------------------------------------------- |
+| `baseUrl`          | Base URL for the Electric Agents server.                                    |
+| `fetch`            | Optional fetch implementation, useful in tests or non-standard runtimes.    |
+| `headers`          | Static or async headers added to requests, useful for auth or tenant scope. |
+| `writeTokenHeader` | Header transport for claim-scoped write tokens: `authorization`, `electric-claim-token`, or `both`. |
+| `track`            | Optional wrapper for all requests, useful for telemetry or pending state.   |
+| `principalKey`     | Principal key sent as `Electric-Principal` on requests.                     |
 
 ## Entity Lifecycle
 
@@ -46,6 +52,7 @@ const info = await client.spawnEntity({
   args: { timezone: "Europe/London" },
   initialMessage: "Help me get started.",
   tags: { project: "docs" },
+  sandbox: { profile: "local", scope: "entity" },
 })
 
 console.log(info.entityUrl) // "/horton/onboarding"
@@ -60,7 +67,17 @@ interface SpawnEntityOptions {
   args?: Record<string, unknown>
   parentUrl?: string
   initialMessage?: unknown
+  initialMessageType?: string
   tags?: Record<string, string>
+  sandbox?: {
+    profile?: string
+    key?: string
+    scope?: "entity" | "wake"
+    persistent?: boolean
+    owner?: boolean
+    inherit?: boolean
+  }
+  dispatch_policy?: DispatchPolicy
   wake?: {
     subscriberUrl: string
     condition:
@@ -73,14 +90,50 @@ interface SpawnEntityOptions {
     debounceMs?: number
     timeoutMs?: number
     includeResponse?: boolean
+    manifestKey?: string
   }
 }
 ```
 
-### getEntityInfo
+### forkEntity
+
+`forkEntity()` wraps `POST /_electric/entities/<type>/<id>/fork` and creates a new entity from a source entity's latest completed run:
 
 ```ts
-const info = await client.getEntityInfo("/horton/onboarding")
+const fork = await client.forkEntity({
+  sourceEntityUrl: "/horton/onboarding",
+  instanceId: "onboarding-variant",
+  initialMessage: { text: "Try a different approach." },
+  tags: { branch: "variant" },
+})
+
+console.log(fork.entityUrl)
+```
+
+```ts
+interface ForkEntityOptions {
+  sourceEntityUrl: string
+  instanceId?: string
+  parent?: string
+  wake?: {
+    subscriberUrl: string
+    condition: RegisterWakeOptions["condition"]
+    debounceMs?: number
+    timeoutMs?: number
+    includeResponse?: boolean
+    manifestKey?: string
+  }
+  initialMessage?: unknown
+  tags?: Record<string, string>
+}
+```
+
+`initialMessage` is sent after the fork has been created and dispatch subscriptions are linked, so a partial failure can leave an idle fork. Handler code should prefer `ctx.fork()` or `ctx.forkSelf()`.
+
+### getEntity
+
+```ts
+const info = await client.getEntity("/horton/onboarding")
 // { entityUrl, entityType, streamPath }
 ```
 
@@ -98,8 +151,8 @@ Deleting an already-missing entity is treated as success.
 await client.sendEntityMessage({
   targetUrl: "/horton/onboarding",
   payload: "What changed since last time?",
-  from: "support-ui",
   type: "user_message",
+  mode: "queued",
 })
 ```
 
@@ -107,13 +160,57 @@ await client.sendEntityMessage({
 interface SendEntityMessageOptions {
   targetUrl: string
   payload: unknown
-  from?: string
   type?: string
   afterMs?: number
+  mode?: "immediate" | "queued" | "paused" | "steer"
+  position?: string
+  fromPrincipal?: string
+  fromAgent?: string
+  writeToken?: string
 }
 ```
 
-`afterMs` asks the server to deliver the message later.
+`afterMs` asks the server to deliver the message later. `mode` controls how the server queues or applies the message. `fromPrincipal`, `fromAgent`, and `writeToken` are advanced fields for claim-scoped runtime writes.
+
+## Signals
+
+Send lifecycle signals to an entity:
+
+```ts
+await client.signalEntity({
+  entityUrl: "/horton/onboarding",
+  signal: "SIGINT",
+  reason: "User stopped the current run",
+})
+```
+
+`deleteEntity()` sends `SIGKILL` and treats an already-missing entity as success:
+
+```ts
+await client.deleteEntity("/horton/onboarding")
+```
+
+## Attachments
+
+Attachments are uploaded through entity routes, stored in private attachment streams, and referenced by manifest entries:
+
+```ts
+const { attachment } = await client.createAttachment({
+  entityUrl: "/horton/onboarding",
+  attachment: {
+    bytes: imageBytes,
+    mimeType: "image/png",
+    filename: "diagram.png",
+    subject: { type: "inbox", key: "message-1" },
+    role: "input",
+  },
+})
+
+const bytes = await client.readAttachment({
+  entityUrl: "/horton/onboarding",
+  id: attachment.id,
+})
+```
 
 ## Shared State
 
@@ -156,23 +253,68 @@ await client.registerWake({
 })
 ```
 
-### registerCronSource
+### ensureCronStream
 
 ```ts
-const streamUrl = await client.registerCronSource(
+const streamUrl = await client.ensureCronStream(
   "0 9 * * *",
   "Europe/London"
 )
 ```
 
-### registerEntitiesSource
+### ensureEntitiesMembershipStream
 
 ```ts
-const source = await client.registerEntitiesSource({ project: "docs" })
+const source = await client.ensureEntitiesMembershipStream({ project: "docs" })
 // { streamUrl, sourceRef }
 ```
 
 This is the lower-level operation behind observing `entities({ tags })`.
+
+### registerPgSyncSource
+
+```ts
+const source = await client.registerPgSyncSource({
+  url: "http://localhost:3000/v1/shape",
+  table: "todos",
+  where: "project_id = $1",
+  params: ["docs"],
+})
+// { streamUrl, sourceRef }
+```
+
+This is the lower-level operation behind observing `pgSync({ url, table, where, params })` sources. The server turns the Postgres shape into an Electric Agents observation stream.
+
+Remove an entity's pg-sync observation by source reference:
+
+```ts
+await client.removePgSyncObservation({
+  entityUrl: "/horton/onboarding",
+  sourceRef: source.sourceRef,
+})
+```
+
+### Webhook sources
+
+Webhook-source APIs expose webhook-backed feeds that agents can subscribe to:
+
+```ts
+const sources = await client.listWebhookSources()
+
+await client.subscribeToWebhookSource({
+  entityUrl: "/horton/onboarding",
+  id: "github-main",
+  webhookKey: "github",
+  bucketKey: "repo",
+  params: { repo: "electric-sql/electric" },
+  lifetime: { kind: "until_entity_stopped" },
+})
+
+await client.unsubscribeFromWebhookSource({
+  entityUrl: "/horton/onboarding",
+  id: "github-main",
+})
+```
 
 ## Schedules
 
@@ -202,11 +344,11 @@ await client.deleteSchedule({
 
 ## Tags
 
-`setTag()` and `removeTag()` are primarily for handler/runtime-owned flows that already hold the current claim-scoped write token. External clients should prefer `send()` and write only to an entity's inbox rather than writing entity state directly.
+`setTag()` and `deleteTag()` are primarily for handler/runtime-owned flows that already hold the current claim-scoped write token. External clients should prefer `sendEntityMessage()` and write only to an entity's inbox rather than writing entity state directly.
 
 ```ts
 await client.setTag("/horton/onboarding", "title", "Onboarding", writeToken)
-await client.removeTag("/horton/onboarding", "title", writeToken)
+await client.deleteTag("/horton/onboarding", "title", writeToken)
 ```
 
 ## Choosing a Client

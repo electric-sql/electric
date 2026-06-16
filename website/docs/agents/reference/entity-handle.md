@@ -14,6 +14,9 @@ Handle returned by `ctx.spawn()` and `ctx.observe(entity(...))`. It identifies a
 
 ```ts
 interface EntityHandle {
+  sourceType: string
+  sourceRef: string
+  streamUrl?: string
   entityUrl: string
   type?: string
   db: EntityStreamDB
@@ -27,6 +30,9 @@ interface EntityHandle {
 
 | Member      | Type                       | Description                                                     |
 | ----------- | -------------------------- | --------------------------------------------------------------- |
+| `sourceType` | `string`                  | Observation source type inherited from `ObservationHandle`.     |
+| `sourceRef` | `string`                   | Stable source reference inherited from `ObservationHandle`.     |
+| `streamUrl` | `string \| undefined`      | Source stream URL when available.                               |
 | `entityUrl` | `string`                   | URL path of the entity, e.g. `"/worker/child-1"`.              |
 | `type`      | `string \| undefined`      | Entity type name, if known.                                     |
 | `db`        | `EntityStreamDB`           | The entity's TanStack DB instance for querying its collections. |
@@ -50,7 +56,7 @@ const child = await ctx.spawn(
 )
 
 ctx.state.children.insert({
-  key: "analyst-1",
+  key: child.entityUrl,
   url: child.entityUrl,
   status: "running",
 })
@@ -87,3 +93,15 @@ interface ChildStatusEntry {
   status: "spawning" | "running" | "idle" | "paused" | "stopping" | "stopped" | "killed"
 }
 ```
+
+Status values:
+
+| Status     | Description                                                 |
+| ---------- | ----------------------------------------------------------- |
+| `spawning` | Entity creation is in progress.                             |
+| `running`  | Handler is currently executing.                             |
+| `idle`     | Handler has completed; entity is waiting for the next wake. |
+| `paused`   | Entity is paused.                                           |
+| `stopping` | Entity is stopping and rejects normal writes.                |
+| `stopped`  | Entity has been stopped or deleted.                         |
+| `killed`   | Entity was killed by a terminal lifecycle signal.            |

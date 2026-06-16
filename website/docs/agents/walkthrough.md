@@ -422,11 +422,15 @@ registry.define("manager", {
   description: "A manager agent that delegates work to assistants",
   async handler(ctx, wake) {
     if (wake.type === 'inbox') {
+      const message =
+        typeof wake.payload === "string"
+          ? wake.payload
+          : (wake.payload as { text?: string })?.text ?? wake.payload
       await ctx.spawn(
         'assistant',
         genId(),
         { systemPrompt: `Reverse the user message.` },
-        { initialMessage: wake.payload.text, wake: { on: 'runFinished', includeResponse: true } }
+        { initialMessage: message, wake: { on: 'runFinished', includeResponse: true } }
       )
     }
 
@@ -445,16 +449,20 @@ This is very similar to our `assistant` type but, as you can see, adds this impe
 
 ```ts
 if (wake.type === 'inbox') {
+  const message =
+    typeof wake.payload === "string"
+      ? wake.payload
+      : (wake.payload as { text?: string })?.text ?? wake.payload
   await ctx.spawn(
     'assistant',
     genId(),
     { systemPrompt: `Reverse the user message.` },
-    { initialMessage: wake.payload.text, wake: { on: 'runFinished', includeResponse: true } }
+    { initialMessage: message, wake: { on: 'runFinished', includeResponse: true } }
   )
 }
 ```
 
-What this does is say "if the notification you're responding to comes from the inbox stream", which means it's a user message, then spawn a sub-agent, specifically an `assistant` with a "Reverse the user message" systemPrompt, passing through the user message from `wake.payload.text`.
+What this does is say "if the notification you're responding to comes from the inbox stream", which means it's a user message, then spawn a sub-agent, specifically an `assistant` with a "Reverse the user message" systemPrompt, passing through the user message from `wake.payload`.
 
 Now if you go back to the web UI on [https://localhost:4438](https://localhost:4438) you can now also create `manager` agents:
 
@@ -828,7 +836,7 @@ const rebut = (arg: string) =>
 
 ### Debate collection
 
-Now let's add the `debate` [collection](https://tanstack.com/db/latest/docs/overview#defining-collections) to the entity definition's [`state`](/docs/agents/usage/shared-state). This allows us to track the progress and status of a debate in the [durable state layer](/streams/).
+Now let's add the `debate` [collection](https://tanstack.com/db/latest/docs/overview#defining-collections) to the entity definition's [`state`](/docs/agents/usage/managing-state). This allows us to track the progress and status of a debate in the [durable state layer](/streams/).
 
 Pull in two more imports from `@electric-ax/agents-runtime`:
 
@@ -1095,7 +1103,7 @@ registry.define(`manager`, {
   // ...,
   async handler(ctx, wake) {
     // When receiving wake notifications ...
-    if ((wake.type = `wake`)) {
+    if (wake.type === `wake`) {
       const finishedChild = wake.payload?.finished_child
 
       // ... from a judge sub-agent ...

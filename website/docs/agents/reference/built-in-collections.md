@@ -2,13 +2,13 @@
 title: Built-in collections
 titleTemplate: "... - Electric Agents"
 description: >-
-  Reference for the 17 runtime-managed collections: runs, steps, texts, toolCalls, inbox, errors, and more.
+  Reference for the 20 runtime-managed collections: runs, steps, texts, toolCalls, inbox, signals, errors, slashCommands, and more.
 outline: [2, 3]
 ---
 
 # Built-in collections
 
-Every entity automatically has these 17 collections, populated by the runtime as the agent operates. Custom state collections defined in `EntityDefinition.state` are merged with these at creation time.
+Every entity automatically has these 20 collections, populated by the runtime as the agent operates. Custom state collections defined in `EntityDefinition.state` are merged with these at creation time.
 
 **Source:** `@electric-ax/agents-runtime` -- `entity-schema.ts`
 
@@ -22,19 +22,22 @@ Every entity automatically has these 17 collections, populated by the runtime as
 | `textDeltas`       | `text_delta`       | `TextDelta`        | Incremental text content     |
 | `toolCalls`        | `tool_call`        | `ToolCall`         | Tool call lifecycle          |
 | `reasoning`        | `reasoning`        | `Reasoning`        | Reasoning block lifecycle    |
+| `reasoningDeltas`  | `reasoning_delta`  | `ReasoningDelta`   | Incremental reasoning content |
 | `errors`           | `error`            | `ErrorEvent`       | Diagnostic errors            |
 | `inbox`            | `inbox` | `MessageReceived`  | Inbound messages             |
 | `wakes`            | `wake`             | `WakeEntry`        | Wake delivery records        |
 | `entityCreated`    | `entity_created`   | `EntityCreated`    | Entity bootstrap metadata    |
 | `entityStopped`    | `entity_stopped`   | `EntityStopped`    | Entity shutdown signal       |
+| `signals`          | `signal`           | `Signal`           | Lifecycle signal records     |
 | `childStatus`      | `child_status`     | `ChildStatusEntry` | Child/observed entity status |
 | `tags`             | `tags`             | `TagEntry`         | Entity tags                  |
+| `slashCommands`    | `slash_command`    | `SlashCommandEntry` | Composer slash commands      |
+| `manifests`        | `manifest`         | `Manifest`         | Durable resource manifests   |
 | `contextInserted`  | `context_inserted` | `ContextInserted`  | Context additions            |
 | `contextRemoved`   | `context_removed`  | `ContextRemoved`   | Context removals             |
-| `manifests`        | `manifest`         | `Manifest`         | Durable resource manifests   |
 | `replayWatermarks` | `replay_watermark` | `ReplayWatermark`  | Replay progress tracking     |
 
-All collections use `key` as the primary key.
+All collections use `key` as the primary key. Runtime-managed timeline rows may also include `_timeline_order` for stable timeline sorting.
 
 ## Type definitions
 
@@ -60,6 +63,8 @@ interface Step {
   model_provider?: string
   model_id?: string
   duration_ms?: number
+  input_tokens?: number
+  output_tokens?: number
 }
 ```
 
@@ -90,6 +95,7 @@ interface TextDelta {
 interface ToolCall {
   key: string
   run_id?: string
+  tool_call_id?: string
   tool_name: string
   status: "started" | "args_complete" | "executing" | "completed" | "failed"
   args?: unknown
@@ -104,7 +110,21 @@ interface ToolCall {
 ```ts
 interface Reasoning {
   key: string
+  run_id?: string
   status: "streaming" | "completed"
+  encrypted?: string
+  summary_title?: string
+}
+```
+
+### ReasoningDelta
+
+```ts
+interface ReasoningDelta {
+  key: string
+  reasoning_id: string
+  run_id: string
+  delta: string
 }
 ```
 
@@ -126,10 +146,15 @@ interface ErrorEvent {
 ```ts
 interface MessageReceived {
   key: string
-  from: string
+  from?: string
   payload?: unknown
-  timestamp: string
+  timestamp?: string
   message_type?: string
+  mode?: "immediate" | "queued" | "paused" | "steer"
+  status?: "pending" | "processed" | "cancelled"
+  position?: string
+  processed_at?: string
+  cancelled_at?: string
 }
 ```
 
@@ -150,6 +175,10 @@ interface WakeChangeEntry {
   collection: string
   kind: "insert" | "update" | "delete"
   key: string
+  from?: string
+  payload?: unknown
+  timestamp?: string
+  message_type?: string
 }
 
 interface WakeFinishedChildEntry {
@@ -163,7 +192,7 @@ interface WakeFinishedChildEntry {
 interface WakeOtherChildEntry {
   url: string
   type: string
-  status: "spawning" | "running" | "idle" | "stopped"
+  status: "spawning" | "running" | "idle" | "paused" | "stopping" | "stopped" | "killed"
 }
 ```
 
@@ -189,6 +218,25 @@ interface EntityStopped {
 }
 ```
 
+### Signal
+
+```ts
+interface Signal {
+  key: string
+  signal: "SIGINT" | "SIGHUP" | "SIGTERM" | "SIGKILL" | "SIGSTOP" | "SIGCONT" | "SIGUSR"
+  status: "unhandled" | "handled"
+  sender?: string
+  reason?: string
+  payload?: unknown
+  timestamp: string
+  handled_at?: string
+  handled_by?: string
+  outcome?: "transitioned" | "ignored" | "invalid_for_state" | "delivered" | "aborted" | "shutdown_requested" | "failed"
+  previous_state?: ChildStatusEntry["status"]
+  new_state?: ChildStatusEntry["status"]
+}
+```
+
 ### ChildStatusEntry
 
 ```ts
@@ -196,7 +244,7 @@ interface ChildStatusEntry {
   key: string
   entity_url: string
   entity_type: string
-  status: "spawning" | "running" | "idle" | "stopped"
+  status: "spawning" | "running" | "idle" | "paused" | "stopping" | "stopped" | "killed"
 }
 ```
 
@@ -206,6 +254,39 @@ interface ChildStatusEntry {
 interface TagEntry {
   key: string
   value: string
+}
+```
+
+### SlashCommandEntry
+
+```ts
+interface SlashCommandEntry {
+  key: string
+  name: string
+  description?: string
+  arguments?: Array<{
+    name: string
+    type: "string" | "number" | "boolean"
+    required?: boolean
+    description?: string
+  }>
+  source: "static" | "dynamic"
+  owner?: string
+  version?: string
+  updated_at: string
+  dynamic_layers?: Array<{
+    name: string
+    description?: string
+    arguments?: Array<{
+      name: string
+      type: "string" | "number" | "boolean"
+      required?: boolean
+      description?: string
+    }>
+    owner?: string
+    version?: string
+    updated_at: string
+  }>
 }
 ```
 
@@ -243,9 +324,11 @@ type Manifest =
   | ManifestSourceEntry
   | ManifestSharedStateEntry
   | ManifestEffectEntry
+  | ManifestAttachmentEntry
   | ManifestContextEntry
   | ManifestCronScheduleEntry
   | ManifestFutureSendScheduleEntry
+  | ManifestGoalEntry
 
 interface ManifestChildEntry {
   key: string
@@ -260,7 +343,7 @@ interface ManifestChildEntry {
 interface ManifestSourceEntry {
   key: string
   kind: "source"
-  sourceType: string
+  sourceType: "entity" | "cron" | "entities" | "db" | "webhook" | "pgSync" | string
   sourceRef: string
   wake?: WakeConfig
   config: Record<string, unknown>
@@ -281,6 +364,27 @@ interface ManifestEffectEntry {
   id: string
   function_ref: string
   config: unknown
+}
+
+interface ManifestAttachmentEntry {
+  key: string
+  kind: "attachment"
+  id: string
+  streamPath: string
+  status: "pending" | "complete" | "failed"
+  subject: {
+    type: "inbox" | "run" | "text" | "tool_call" | "context"
+    key: string
+  }
+  role: "input" | "output"
+  mimeType: string
+  filename?: string
+  byteLength?: number
+  sha256?: string
+  createdAt: string
+  createdBy?: string
+  error?: string
+  meta?: Record<string, JsonValue>
 }
 
 interface ManifestContextEntry {
@@ -320,7 +424,22 @@ interface ManifestFutureSendScheduleEntry {
   failedAt?: string
   lastError?: string
 }
+
+interface ManifestGoalEntry {
+  key: string
+  kind: "goal"
+  id: string
+  objective: string
+  status: "active" | "complete" | "budget_limited"
+  tokenBudget: number | null
+  tokensUsed: number
+  summary?: string
+  createdAt: string
+  updatedAt: string
+}
 ```
+
+`pgSync()` observations are stored as `sourceType: "pgSync"` manifest rows and project matching Postgres shape changes into the observed source's `changes` collection.
 
 ### ReplayWatermark
 

@@ -217,7 +217,7 @@ registry.define("assistant", {
 
     ctx.useAgent({
       systemPrompt: "You are a helpful assistant with persistent memory.",
-      model: "claude-sonnet-4-5-20250929",
+      model: "claude-sonnet-4-6",
       tools: [...ctx.electricTools, memoryTool, dispatchTool, calculatorTool],
     })
     await ctx.agent.run()

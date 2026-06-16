@@ -17,10 +17,10 @@ Use the client APIs when you need to observe agents from application code rather
 
 ```ts
 import {
-  codingSession,
   createAgentsClient,
   entity,
   entities,
+  pgSync,
 } from "@electric-ax/agents-runtime"
 
 const client = createAgentsClient({ baseUrl: "http://localhost:4437" })
@@ -43,16 +43,26 @@ console.log(membersDb.collections.members.toArray)
 interface AgentsClientConfig {
   baseUrl: string
   fetch?: typeof globalThis.fetch
+  principalKey?: string
 }
 
 interface AgentsClient {
   observe(
     source: ObservationSource
   ): Promise<EntityStreamDB | ObservationStreamDB>
+  signal(options: {
+    entityUrl: string
+    signal: EntitySignal
+    reason?: string
+    payload?: unknown
+  }): Promise<{ txid: number }>
+  kill(entityUrl: string, reason?: string): Promise<{ txid: number }>
 }
 ```
 
 `observe(entity(url))` returns an `EntityStreamDB`. `observe(entities(...))` and `observe(db(...))` return an `ObservationStreamDB`.
+
+Use `principalKey` when observing or signalling against a server that enforces principal-scoped access.
 
 :::: warning
 `client.observe(cron(...))` is not currently supported. Use cron sources from handler wake subscriptions, or schedule tools exposed through `ctx.electricTools`.
@@ -67,12 +77,23 @@ The same source helpers used by `ctx.observe()` can be used with `AgentsClient`.
 | `entity(url)`       | Observe one entity by URL.                           |
 | `entities({ tags })` | Observe the entity membership stream matching tags. |
 | `db(id, schema)`    | Observe a shared-state stream.                       |
+| `webhook(endpointKey, opts?)` | Observe a webhook-backed stream.             |
+| `pgSync(options)`   | Observe an Electric Postgres shape stream.           |
 | `cron(expression)`  | Build a cron source for wake subscriptions.          |
 
 ```ts
-import { db } from "@electric-ax/agents-runtime"
+import { db, pgSync } from "@electric-ax/agents-runtime"
 
 const shared = await client.observe(db("research-123", researchSchema))
+
+const todos = await client.observe(
+  pgSync({
+    url: "http://localhost:3000/v1/shape",
+    table: "todos",
+    where: "project_id = $1",
+    params: ["docs"],
+  })
+)
 ```
 
 ## React useChat

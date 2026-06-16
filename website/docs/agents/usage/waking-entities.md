@@ -8,9 +8,9 @@ outline: [2, 3]
 
 # Waking entities
 
-Entities in Electric Agents are driven by **wakes**. A wake is a single handler invocation triggered by something outside the handler: a new message, a child finishing, a change in an observed stream, or a schedule. Between wakes the entity is idle — no process, no memory, no running handler.
+Entities in Electric Agents are driven by **wakes**. A wake is a single handler invocation triggered by something outside the handler: a new message, a child finishing, a change in an observed stream, a schedule, a webhook source, or a Postgres sync source. Between wakes the entity is idle — no process, no memory, no running handler.
 
-Everything you do to make an entity respond to something — `ctx.spawn(..., { wake })`, `ctx.observe(..., { wake })`, `ctx.send()`, `upsertCronSchedule()` — is ultimately a way to produce a wake.
+Everything you do to make an entity respond to something — `ctx.spawn(..., { wake })`, `ctx.observe(..., { wake })`, `ctx.send()`, the `upsert_cron_schedule` tool, `client.upsertCronSchedule()`, `subscribe_webhook_source`, or `pgSync()` observation — is ultimately a way to produce a wake.
 
 ## The mental model
 
@@ -18,7 +18,7 @@ Everything you do to make an entity respond to something — `ctx.spawn(..., { w
 external event  ─►  wake entry (persisted)  ─►  handler invocation  ─►  WakeEvent passed to handler
 ```
 
-1. **External event.** A message arrives, a child transitions, a watched collection changes, a cron fires.
+1. **External event.** A message arrives, a child transitions, a watched collection changes, a cron fires, or a subscribed webhook source receives matching data.
 2. **Wake entry is persisted** to the entity's stream. This is the durability guarantee — wakes survive process restarts, network blips, and crashes. A wake that was written will eventually be delivered to a handler.
 3. **Handler is invoked.** The runtime picks up the wake, loads the entity's state, and calls your handler with a `WakeEvent` describing what triggered this invocation.
 4. **Handler runs.** You read `ctx.events`, inspect `wake`, configure the agent, emit new events. When the handler returns (or calls `ctx.sleep()`), the entity goes idle until the next wake.
@@ -27,7 +27,7 @@ This means handlers are re-entrant: the same handler function is called fresh on
 
 ## What produces a wake
 
-There are five things that can wake an entity:
+There are seven things that can wake an entity:
 
 ### 1. An incoming message
 
@@ -85,6 +85,32 @@ await ctx.observe(db("board-1", schema), {
 
 Runtime hosts can expose schedule-management tools through `ctx.electricTools`. The current schedule tool set is `list_schedules`, `upsert_cron_schedule`, `upsert_future_send`, and `delete_schedule`. Schedule entries live on the entity's manifest, so they survive restarts and can be updated or cancelled idempotently.
 
+### 6. A webhook source
+
+Runtime hosts can expose webhook-source tools through `ctx.electricTools`. An entity can subscribe to external webhook-backed feeds with `subscribe_webhook_source`; matching future events wake the entity with hydrated event data.
+
+See [Webhook sources](./webhook-sources).
+
+### 7. A Postgres sync source
+
+`pgSync()` observes an Electric Postgres shape stream and wakes the entity when matching row changes arrive:
+
+```ts
+import { pgSync } from "@electric-ax/agents-runtime"
+
+await ctx.observe(
+  pgSync({
+    url: "http://localhost:3000/v1/shape",
+    table: "todos",
+    where: "project_id = $1",
+    params: ["docs"],
+  }),
+  { wake: { on: "change", ops: ["insert", "update"] } }
+)
+```
+
+Built-in Horton also exposes this as the `observe_pg_sync` tool when the runtime host has pg-sync configured, and `unobserve_pg_sync` to remove an existing pg-sync observation.
+
 ## Reading a WakeEvent
 
 Your handler signature is:
@@ -104,7 +130,7 @@ async handler(ctx, wake) {
     return
   }
 
-  // everything else (child finished, change, cron, timeout) arrives as type "wake".
+  // everything else (child finished, change, cron, webhook source, timeout) arrives as type "wake".
   // Inspect wake.payload for the specific sub-kind.
   ctx.sleep()
 }
@@ -113,7 +139,7 @@ async handler(ctx, wake) {
 Two wake types reach handlers directly:
 
 - `"inbox"` — an external message was delivered to this entity's inbox.
-- `"wake"` — a synthesised wake for anything else (child finished, collection change, cron, timeout). The specifics are on `wake.payload`. A future-send schedule delivers a message, so it arrives as `"inbox"`.
+- `"wake"` — a synthesised wake for anything else (child finished, collection change, cron, webhook source, timeout). The specifics are on `wake.payload`. A future-send schedule delivers a message, so it arrives as `"inbox"`.
 
 For the full payload shape (`changes[]`, `finished_child`, `other_children`, `timeout`), see the [wake-type catalog](../reference/wake-event#wake-type-catalog) in the reference.
 
@@ -145,4 +171,6 @@ When the handler finishes (or calls `ctx.sleep()`), the entity returns to idle. 
 - [WakeEvent](../reference/wake-event) — full type reference and wake-type catalog.
 - [Spawning & coordinating](./spawning-and-coordinating) — using `wake` with `spawn` and `observe`.
 - [Shared state](./shared-state) — using `wake` with `observe(db(...))`.
+- [Webhook sources](./webhook-sources) — subscribing entities to external webhook feeds.
+- [Signals](./signals) — lifecycle controls that can interrupt or notify active entities.
 - [Writing handlers](./writing-handlers) — `HandlerContext` and `firstWake` patterns.

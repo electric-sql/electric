@@ -25,7 +25,7 @@ export function registerMapReduce(registry: EntityRegistry) {
     async handler(ctx) {
       ctx.useAgent({
         systemPrompt: MAP_REDUCE_SYSTEM_PROMPT,
-        model: `claude-sonnet-4-5-20250929`,
+        model: `claude-sonnet-4-6`,
         tools: [...ctx.electricTools, createMapChunksTool(ctx)],
       })
       await ctx.agent.run()
