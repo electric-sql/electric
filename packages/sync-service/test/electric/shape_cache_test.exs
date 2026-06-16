@@ -361,6 +361,46 @@ defmodule Electric.ShapeCacheTest do
       refute_received {:called, :create_snapshot_fn}
     end
 
+    test "waiters on a failed creation fail fast via the lock table, not a 30s timeout", ctx do
+      with_shape_cache(ctx)
+
+      lock_table = :"shape_create_lock:#{ctx.stack_id}"
+      lock_key = Shape.comparable(@shape)
+
+      # Simulate a leader that has just failed to create this shape and published
+      # the error into the lock table.
+      :ets.insert(lock_table, {lock_key, {:failed, :boom}})
+
+      task = Task.async(fn -> ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id) end)
+
+      # The caller misses the fast path, sees the lock set, polls, reads the
+      # published failure, and returns the real error promptly -- well under the
+      # 30s @call_timeout, and without ever issuing a GenServer.call.
+      assert {:error, :boom} = Task.await(task, 1_000)
+    end
+
+    test "sweep clears a published failure but leaves an in-progress claim", ctx do
+      with_shape_cache(ctx)
+
+      shape_cache_pid = GenServer.whereis(ShapeCache.name(ctx.stack_id))
+      lock_table = :"shape_create_lock:#{ctx.stack_id}"
+      lock_key = Shape.comparable(@shape)
+
+      # A published failure is swept.
+      :ets.insert(lock_table, {lock_key, {:failed, :boom}})
+      send(shape_cache_pid, {:sweep_failed_create_lock, lock_key})
+      # A synchronous call flushes the mailbox so the :sweep_failed_create_lock
+      # handle_info is guaranteed to have run before we assert.
+      _ = GenServer.call(shape_cache_pid, {:has_shape_handle?, "x"})
+      refute :ets.member(lock_table, lock_key)
+
+      # An in-progress claim is NOT swept (a new leader could be mid-creation).
+      :ets.insert(lock_table, {lock_key, :in_progress})
+      send(shape_cache_pid, {:sweep_failed_create_lock, lock_key})
+      _ = GenServer.call(shape_cache_pid, {:has_shape_handle?, "x"})
+      assert [{^lock_key, :in_progress}] = :ets.lookup(lock_table, lock_key)
+    end
+
     test "shape gets cleaned up if terminated unexpectedly", %{storage: storage} = ctx do
       Support.TestUtils.patch_snapshotter(fn _, _, _, _ -> nil end)
       with_shape_cache(ctx)
