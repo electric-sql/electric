@@ -1,4 +1,5 @@
 mod api;
+mod blobstore;
 mod engine_hyper;
 mod engine_raw;
 #[cfg(target_os = "linux")]
@@ -8,6 +9,7 @@ mod http1;
 mod store;
 mod subs;
 mod telemetry;
+mod tier;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -21,6 +23,7 @@ fn main() {
     let mut host: std::net::IpAddr = [127, 0, 0, 1].into();
     let mut data_dir = std::env::temp_dir().join("durable-streams-rust");
     let mut engine = String::from("hyper");
+    let mut tier = tier::TierConfig::default();
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
@@ -78,11 +81,65 @@ fn main() {
                     }
                 }
             }
+            // ---- hot/cold tiering (OFF by default) ----
+            "--tier" => {
+                let v = args.next().expect("--tier requires off|local|s3");
+                tier.kind = match v.as_str() {
+                    "off" => tier::TierKind::Off,
+                    "local" => tier::TierKind::Local,
+                    "s3" => tier::TierKind::S3,
+                    _ => {
+                        eprintln!("--tier must be off|local|s3");
+                        std::process::exit(2);
+                    }
+                };
+            }
+            "--tier-segment-bytes" => {
+                tier.segment_bytes = args
+                    .next()
+                    .and_then(|v| v.parse().ok())
+                    .expect("--tier-segment-bytes requires a number");
+            }
+            "--tier-key-prefix" => {
+                tier.key_prefix = args.next().expect("--tier-key-prefix requires a value");
+            }
+            "--tier-endpoint" => {
+                tier.endpoint = Some(args.next().expect("--tier-endpoint requires a URL"));
+            }
+            "--tier-region" => {
+                tier.region = Some(args.next().expect("--tier-region requires a value"));
+            }
+            "--tier-bucket" => {
+                tier.bucket = Some(args.next().expect("--tier-bucket requires a value"));
+            }
+            "--tier-path-style" => {
+                tier.path_style = true;
+            }
+            "--tier-virtual-hosted" => {
+                tier.path_style = false;
+            }
+            "--tier-allow-http" => {
+                tier.allow_http = true;
+            }
+            "--tier-local-dir" => {
+                tier.local_dir = Some(args.next().expect("--tier-local-dir requires a path").into());
+            }
             other => {
                 eprintln!("unknown argument: {other}");
                 std::process::exit(2);
             }
         }
+    }
+
+    // S3 credentials come from env (never CLI flags), matching the OTEL_*/AWS
+    // convention. Honour both the DS_* names and the standard AWS_* fallbacks.
+    if tier.kind == tier::TierKind::S3 {
+        tier.access_key_id = std::env::var("DS_S3_ACCESS_KEY_ID")
+            .or_else(|_| std::env::var("AWS_ACCESS_KEY_ID"))
+            .ok();
+        tier.secret_access_key = std::env::var("DS_S3_SECRET_ACCESS_KEY")
+            .or_else(|_| std::env::var("AWS_SECRET_ACCESS_KEY"))
+            .ok();
     }
 
     let workers = std::thread::available_parallelism()
@@ -98,7 +155,7 @@ fn main() {
         // uring, `serve` blocks the calling thread until shutdown, after which
         // the guard drops and the batch processor flushes.
         let _telemetry = telemetry::init();
-        let store = Arc::new(Store::new(data_dir.clone()).expect("failed to init store"));
+        let store = Arc::new(Store::new_with_tier(data_dir.clone(), tier.clone()).expect("failed to init store"));
         let _ = store.subs.set(Arc::new(subs::SubsManager::new()));
         let std_listener = std::net::TcpListener::bind((host, port)).expect("bind failed");
         let addr = std_listener.local_addr().unwrap_or_else(|_| (host, port).into());
@@ -126,7 +183,7 @@ fn main() {
         // Ctrl-C — `serve()` never returns on its own, so without the signal path
         // the batch span processor would never get a chance to flush.
         let mut telemetry_guard = telemetry::init();
-        let store = Arc::new(Store::new(data_dir.clone()).expect("failed to init store"));
+        let store = Arc::new(Store::new_with_tier(data_dir.clone(), tier.clone()).expect("failed to init store"));
         let _ = store.subs.set(Arc::new(subs::SubsManager::new()));
         let addr: SocketAddr = (host, port).into();
         let listener = TcpListener::bind(addr).await.expect("bind failed");

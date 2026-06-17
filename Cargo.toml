@@ -40,6 +40,14 @@ opentelemetry-otlp = { version = "0.32", optional = true, features = ["grpc-toni
 opentelemetry-semantic-conventions = { version = "0.32", optional = true }
 tracing-opentelemetry = { version = "0.33", optional = true }
 
+# Hot/cold tiering S3-compatible object store — opt-in via the `tier` feature,
+# OFF BY DEFAULT. `object_store` (and its reqwest/aws transport) is only pulled
+# in and compiled when `--features tier` is requested, so a default build keeps
+# its existing dependency set and is byte-for-byte unchanged. The manifest /
+# sealing / reclaim logic is plain Rust and always compiled (but inactive unless
+# `--tier` is passed); only the S3 BlobStore adapter is behind this feature.
+object_store = { version = "0.11", optional = true, features = ["aws"] }
+
 [features]
 default = []
 # Enable OTLP span + metric export over gRPC (tonic). Endpoint/protocol/timeout
@@ -51,6 +59,10 @@ telemetry = [
     "dep:opentelemetry-semantic-conventions",
     "dep:tracing-opentelemetry",
 ]
+# S3-compatible cold-storage tier (--tier s3). Pulls in `object_store` with its
+# AWS/S3 transport, which works against any S3-compatible endpoint (AWS, R2,
+# Fly/Tigris, MinIO, Backblaze B2) via path-style + custom endpoint config.
+tier = ["dep:object_store"]
 
 # io_uring engine (--http-engine uring): a thread-per-core current-thread tokio
 # runtime backed by io_uring for socket and file I/O. Linux-only.

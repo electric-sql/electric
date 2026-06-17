@@ -20,6 +20,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use dashmap::DashMap;
 use tokio::sync::{watch, Mutex as AsyncMutex};
 
+use crate::tier::Placement;
+
 pub const MAX_SAFE_INT: u64 = (1u64 << 53) - 1;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -213,6 +215,12 @@ pub struct StreamState {
     /// Only populated for chunks up to `TAIL_CHUNK_MAX` (large appends fall back
     /// to file reads / sendfile). See set_last_chunk / tail_chunk_slice.
     pub last_chunk: std::sync::Mutex<Option<(u64, bytes::Bytes)>>,
+    /// Hot/cold tiering state: the per-stream sealing manifest. Always present;
+    /// empty and inert unless tiering is enabled (`--tier`). See tier.rs.
+    pub tier: crate::tier::TierState,
+    /// Remote tier handle, cloned from the Store. None when tiering is off, so
+    /// the read path stays a pure local-fd path in the default build.
+    pub blobstore: Option<crate::blobstore::SharedBlobStore>,
 }
 
 /// Upper bound on the resident tail chunk (bytes). Larger appends are served
@@ -296,6 +304,10 @@ pub struct Store {
     pub data_dir: PathBuf,
     pub subs: std::sync::OnceLock<Arc<crate::subs::SubsManager>>,
     next_id: AtomicU64,
+    /// Hot/cold tiering config (Off by default → fully inert).
+    pub tier_config: crate::tier::TierConfig,
+    /// Remote object-storage backend, present only when tiering is enabled.
+    pub blobstore: Option<crate::blobstore::SharedBlobStore>,
 }
 
 pub enum CreateResult {
@@ -305,21 +317,43 @@ pub enum CreateResult {
 }
 
 impl Store {
+    /// Build a Store with tiering off (single-contiguous-file behaviour). Kept as
+    /// the simple constructor for tests / external callers.
+    #[allow(dead_code)]
     pub fn new(data_dir: PathBuf) -> std::io::Result<Self> {
+        Store::new_with_tier(data_dir, crate::tier::TierConfig::default())
+    }
+
+    /// Build a Store with an explicit tiering configuration. When
+    /// `tier.kind == Off` (the default) this is identical to `new`: no
+    /// blobstore, no sealing, single contiguous file per stream.
+    pub fn new_with_tier(
+        data_dir: PathBuf,
+        tier_config: crate::tier::TierConfig,
+    ) -> std::io::Result<Self> {
         let streams_dir = data_dir.join("streams");
         std::fs::create_dir_all(&streams_dir)?;
         let seed = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos() as u64;
+        let blobstore = build_blobstore(&tier_config, &data_dir)?;
         let store = Store {
             streams: DashMap::new(),
             data_dir,
             subs: std::sync::OnceLock::new(),
             next_id: AtomicU64::new(seed & MAX_SAFE_INT),
+            tier_config,
+            blobstore,
         };
         store.recover(&streams_dir)?;
         Ok(store)
+    }
+
+    /// Directory holding staged sealed chunk files (separate from `streams/` so
+    /// recovery's data-file scan never trips over them).
+    pub fn segments_dir(&self) -> PathBuf {
+        self.data_dir.join("segments")
     }
 
     /// Rebuild stream state from data files + metadata sidecars. The data file
@@ -427,6 +461,12 @@ impl Store {
             sync: SyncCoalescer::new(),
             meta_dirty: AtomicBool::new(false),
             last_chunk: std::sync::Mutex::new(None),
+            tier: crate::tier::TierState::from_meta(
+                &meta.segments,
+                meta.sealed_offset,
+                &self.segments_dir(),
+            ),
+            blobstore: self.blobstore.clone(),
             config: StreamConfig {
                 content_type: meta.content_type.clone(),
                 ttl_seconds: meta.ttl_seconds,
@@ -440,6 +480,9 @@ impl Store {
                 fork_sub_offset: meta.fork_sub_offset,
             },
         });
+        // Re-enqueue any sealed-but-not-yet-offloaded segments left by a crash
+        // mid-offload (placement still Local while a remote tier is configured).
+        self.reconcile_manifest_on_boot(&state);
         self.streams.insert(path.to_string(), state.clone());
         Some(state)
     }
@@ -478,6 +521,10 @@ impl Store {
         } else {
             self.streams
                 .remove_if(&st.path, |_, v| Arc::ptr_eq(v, st));
+            // Reclaim this stream's offloaded segments (remote objects + any
+            // staged local chunk files) — safe only here, on a true hard delete
+            // with no remaining fork references.
+            self.gc_remote_segments(st);
             let fp = st.file_path.clone();
             tokio::task::spawn_blocking(move || {
                 let _ = std::fs::remove_file(meta_path(&fp));
@@ -507,6 +554,7 @@ impl Store {
             }
             self.streams
                 .remove_if(&parent.path, |_, v| Arc::ptr_eq(v, &parent));
+            self.gc_remote_segments(&parent);
             let fp = parent.file_path.clone();
             tokio::task::spawn_blocking(move || {
                 let _ = std::fs::remove_file(meta_path(&fp));
@@ -574,6 +622,8 @@ impl Store {
             sync: SyncCoalescer::new(),
             meta_dirty: AtomicBool::new(false),
             last_chunk: std::sync::Mutex::new(None),
+            tier: crate::tier::TierState::default(),
+            blobstore: self.blobstore.clone(),
             config,
         });
         match self.streams.entry(path.to_string()) {
@@ -679,6 +729,396 @@ pub fn materialize_segments(segments: &[Segment], prefix: &[u8], suffix: &[u8]) 
     buf.freeze()
 }
 
+// ---------------- hot/cold tiering: sealing, offload, resolution, GC ----------------
+
+/// Build the configured remote blobstore, if any. Off → None. Local → a
+/// filesystem-backed blobstore under `<data_dir>/cold` (or the configured dir).
+/// S3 → the object_store adapter (feature `tier` only).
+fn build_blobstore(
+    cfg: &crate::tier::TierConfig,
+    data_dir: &std::path::Path,
+) -> std::io::Result<Option<crate::blobstore::SharedBlobStore>> {
+    use crate::tier::TierKind;
+    match cfg.kind {
+        TierKind::Off => Ok(None),
+        TierKind::Local => {
+            let dir = cfg
+                .local_dir
+                .clone()
+                .unwrap_or_else(|| data_dir.join("cold"));
+            let bs = crate::blobstore::LocalFsBlobStore::new(dir)?;
+            Ok(Some(Arc::new(bs)))
+        }
+        TierKind::S3 => {
+            #[cfg(feature = "tier")]
+            {
+                let bs = crate::blobstore::S3BlobStore::new(cfg)?;
+                Ok(Some(Arc::new(bs)))
+            }
+            #[cfg(not(feature = "tier"))]
+            {
+                let _ = cfg;
+                Err(std::io::Error::other(
+                    "--tier s3 requires building with `--features tier`",
+                ))
+            }
+        }
+    }
+}
+
+/// The object key for a sealed segment of a stream: `<prefix><stream-file>/<16-digit logical_start>`.
+/// Keying by the unique data-file name (which embeds the stream id) namespaces
+/// every stream incarnation / fork separately, mirroring stratovolt's
+/// `{streamId}/{streamHash}/{chunkSeq}`.
+fn segment_key(prefix: &str, st: &StreamState, logical_start: u64) -> String {
+    let fname = st
+        .file_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("stream");
+    format!("{prefix}{fname}/{logical_start:016}")
+}
+
+/// Local staged chunk-file name for a sealed segment.
+fn segment_file_name(st: &StreamState, logical_start: u64) -> String {
+    let fname = st
+        .file_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("stream");
+    format!("{fname}.seg.{logical_start:016}")
+}
+
+impl Store {
+    /// On boot, re-enqueue any sealed-but-not-yet-offloaded segments (placement
+    /// still Local while a remote tier is configured) and log hard errors for
+    /// Remote segments whose object has gone missing.
+    fn reconcile_manifest_on_boot(&self, st: &Arc<StreamState>) {
+        if !self.tier_config.enabled() {
+            return;
+        }
+        let has_local = {
+            let m = st.tier.manifest.lock().unwrap();
+            m.segments.iter().any(|s| !s.remote)
+        };
+        if has_local {
+            // A crash left segments staged locally; offload them.
+            let store = self.clone_for_task();
+            let stc = st.clone();
+            tokio::spawn(async move {
+                store.offload_pending(&stc).await;
+            });
+        }
+    }
+
+    /// A lightweight clone of just what an offload background task needs.
+    fn clone_for_task(&self) -> TierTask {
+        TierTask {
+            tier_config: self.tier_config.clone(),
+            blobstore: self.blobstore.clone(),
+            segments_dir: self.segments_dir(),
+        }
+    }
+
+    /// Seal as many full `segment_bytes`-sized prefixes off the live tail as are
+    /// available, copying each to a chunk file, hole-punching the live file, and
+    /// (if a remote tier is configured) offloading. Runs after an append's
+    /// durability ack — never on the ack path itself. No-op when tiering is off.
+    pub async fn maybe_seal(self: &Arc<Self>, st: &Arc<StreamState>) {
+        if !self.tier_config.enabled() {
+            return;
+        }
+        // Only one sealing pass per stream at a time.
+        {
+            let mut m = st.tier.manifest.lock().unwrap();
+            if m.offloading {
+                return;
+            }
+            m.offloading = true;
+        }
+        let res = self.seal_loop(st).await;
+        {
+            let mut m = st.tier.manifest.lock().unwrap();
+            m.offloading = false;
+        }
+        if let Err(e) = res {
+            tracing::warn!(stream = %st.path, error = %e, "tier seal pass failed; will retry on next append");
+        }
+    }
+
+    async fn seal_loop(self: &Arc<Self>, st: &Arc<StreamState>) -> std::io::Result<()> {
+        let seg_bytes = self.tier_config.segment_bytes;
+        let seg_dir = self.segments_dir();
+        std::fs::create_dir_all(&seg_dir)?;
+        loop {
+            // Determine the next sealable prefix: bytes in the live data file
+            // between the current sealed watermark and the tail, capped at one
+            // segment. We need the appender lock briefly to read a consistent
+            // (written) length and the file-local region.
+            let (sealed_offset, tail, base) = {
+                let m = st.tier.manifest.lock().unwrap();
+                let s = st.shared.read().unwrap();
+                (m.sealed_offset.max(st.base_offset), s.tail, st.base_offset)
+            };
+            let unsealed = tail.saturating_sub(sealed_offset);
+            if unsealed < seg_bytes {
+                return Ok(());
+            }
+            // Candidate cut length within the live file region [sealed, tail).
+            let file_lo = sealed_offset - base; // file-local start of unsealed
+            let want = seg_bytes;
+            // Read the candidate region from the live file to find the boundary.
+            let region_len = want.min(unsealed);
+            let file = st.file.clone();
+            let region = tokio::task::spawn_blocking(move || {
+                use std::os::unix::fs::FileExt;
+                let mut buf = vec![0u8; region_len as usize];
+                file.read_exact_at(&mut buf, file_lo).map(|_| buf)
+            })
+            .await
+            .map_err(std::io::Error::other)??;
+
+            // For JSON streams the cut MUST land on a value boundary so the
+            // sealed segment is a whole number of values (wrappable as [ … ]).
+            let cut = if st.is_json {
+                let b = crate::tier::last_json_value_boundary(&region, region_len);
+                if b == 0 {
+                    // No value boundary within a whole segment — a single value
+                    // larger than segment_bytes. Wait for more / accept the
+                    // oversize value later; nothing to seal now.
+                    return Ok(());
+                }
+                b
+            } else {
+                region_len
+            };
+
+            let seg_start = sealed_offset;
+            let seg_len = cut;
+            let payload = bytes::Bytes::from(region[..cut as usize].to_vec());
+
+            // 1) Stage the sealed bytes to a separate chunk file (fsynced).
+            let file_name = segment_file_name(st, seg_start);
+            let chunk_path = seg_dir.join(&file_name);
+            {
+                let cp = chunk_path.clone();
+                let pl = payload.clone();
+                tokio::task::spawn_blocking(move || -> std::io::Result<()> {
+                    use std::io::Write;
+                    let tmp = cp.with_extension("tmp");
+                    {
+                        let mut f = std::fs::File::create(&tmp)?;
+                        f.write_all(&pl)?;
+                        f.sync_all()?;
+                    }
+                    std::fs::rename(&tmp, &cp)
+                })
+                .await
+                .map_err(std::io::Error::other)??;
+            }
+
+            // 2) Record the sealed segment in the manifest (Local) and advance
+            //    the watermark, then persist durably BEFORE reclaiming the live
+            //    file region — so a crash never loses the bytes.
+            {
+                let mut m = st.tier.manifest.lock().unwrap();
+                m.segments.push(crate::tier::SegmentEntry {
+                    logical_start: seg_start,
+                    len: seg_len,
+                    placement: crate::tier::Placement::Local(chunk_path.clone()),
+                    remote: false,
+                });
+                m.sealed_offset = seg_start + seg_len;
+            }
+            let stc = st.clone();
+            tokio::task::spawn_blocking(move || write_meta_sync(&stc, true))
+                .await
+                .map_err(std::io::Error::other)??;
+
+            // 3) Reclaim the live data file's sealed region (Linux hole-punch;
+            //    a no-op elsewhere — correctness holds either way since reads of
+            //    sealed bytes are routed to the chunk file/remote, never here).
+            punch_hole(&st.file, file_lo, seg_len);
+
+            // 4) Offload to the remote tier (upload → head verify → flip
+            //    Local→Remote durably → unlink the chunk file).
+            self.offload_one(st, seg_start, payload).await?;
+        }
+    }
+
+    /// Upload one sealed segment, verify, flip the manifest entry to Remote
+    /// durably, then unlink the local chunk file. If no blobstore is configured
+    /// (which cannot happen when enabled), this is a no-op leaving it Local.
+    async fn offload_one(
+        self: &Arc<Self>,
+        st: &Arc<StreamState>,
+        seg_start: u64,
+        payload: bytes::Bytes,
+    ) -> std::io::Result<()> {
+        let Some(bs) = &self.blobstore else {
+            return Ok(());
+        };
+        let key = segment_key(&self.tier_config.key_prefix, st, seg_start);
+        let len = payload.len() as u64;
+        // Upload.
+        bs.put(&key, payload).await?;
+        // Verify size before we ever delete the local copy.
+        match bs.head(&key).await? {
+            Some(sz) if sz == len => {}
+            other => {
+                return Err(std::io::Error::other(format!(
+                    "tier: head verify failed for {key}: expected {len}, got {other:?}"
+                )));
+            }
+        }
+        // Flip the manifest entry Local→Remote and capture the local path.
+        let local_path = {
+            let mut m = st.tier.manifest.lock().unwrap();
+            let mut path = None;
+            for seg in m.segments.iter_mut() {
+                if seg.logical_start == seg_start {
+                    if let crate::tier::Placement::Local(p) = &seg.placement {
+                        path = Some(p.clone());
+                    }
+                    seg.placement = crate::tier::Placement::Remote(key.clone());
+                    seg.remote = true;
+                    break;
+                }
+            }
+            path
+        };
+        // Persist the flip durably BEFORE unlinking the local file (so recovery
+        // never sees a Local entry whose file we already removed).
+        let stc = st.clone();
+        tokio::task::spawn_blocking(move || write_meta_sync(&stc, true))
+            .await
+            .map_err(std::io::Error::other)??;
+        // Now the local chunk file is reclaimable. unlink is safe even with
+        // in-flight reads (open fds stay valid after unlink on Unix).
+        if let Some(p) = local_path {
+            let _ = tokio::fs::remove_file(&p).await;
+        }
+        Ok(())
+    }
+
+    /// Delete every remote object backing a hard-deleted stream's sealed
+    /// segments. Called only on hard delete (ref_count == 0).
+    pub fn gc_remote_segments(&self, st: &Arc<StreamState>) {
+        if !self.tier_config.enabled() {
+            return;
+        }
+        let Some(bs) = self.blobstore.clone() else {
+            return;
+        };
+        let keys: Vec<String> = {
+            let m = st.tier.manifest.lock().unwrap();
+            m.segments
+                .iter()
+                .filter_map(|s| match &s.placement {
+                    crate::tier::Placement::Remote(k) => Some(k.clone()),
+                    crate::tier::Placement::Local(_) => None,
+                })
+                .collect()
+        };
+        // Also unlink any still-staged local chunk files.
+        let local_paths: Vec<std::path::PathBuf> = {
+            let m = st.tier.manifest.lock().unwrap();
+            m.segments
+                .iter()
+                .filter_map(|s| match &s.placement {
+                    crate::tier::Placement::Local(p) => Some(p.clone()),
+                    crate::tier::Placement::Remote(_) => None,
+                })
+                .collect()
+        };
+        if keys.is_empty() && local_paths.is_empty() {
+            return;
+        }
+        tokio::spawn(async move {
+            for k in keys {
+                let _ = bs.delete(&k).await;
+            }
+            for p in local_paths {
+                let _ = tokio::fs::remove_file(&p).await;
+            }
+        });
+    }
+}
+
+/// Helper bundle for background offload tasks that outlive the Store borrow.
+struct TierTask {
+    tier_config: crate::tier::TierConfig,
+    blobstore: Option<crate::blobstore::SharedBlobStore>,
+    segments_dir: PathBuf,
+}
+
+impl TierTask {
+    async fn offload_pending(&self, st: &Arc<StreamState>) {
+        let Some(bs) = &self.blobstore else {
+            return;
+        };
+        let pending: Vec<(u64, std::path::PathBuf)> = {
+            let m = st.tier.manifest.lock().unwrap();
+            m.segments
+                .iter()
+                .filter(|s| !s.remote)
+                .filter_map(|s| match &s.placement {
+                    crate::tier::Placement::Local(p) => Some((s.logical_start, p.clone())),
+                    _ => None,
+                })
+                .collect()
+        };
+        for (start, path) in pending {
+            let payload = match tokio::fs::read(&path).await {
+                Ok(b) => bytes::Bytes::from(b),
+                Err(_) => continue,
+            };
+            let key = segment_key(&self.tier_config.key_prefix, st, start);
+            let len = payload.len() as u64;
+            if bs.put(&key, payload).await.is_err() {
+                continue;
+            }
+            if !matches!(bs.head(&key).await, Ok(Some(sz)) if sz == len) {
+                continue;
+            }
+            {
+                let mut m = st.tier.manifest.lock().unwrap();
+                for seg in m.segments.iter_mut() {
+                    if seg.logical_start == start {
+                        seg.placement = crate::tier::Placement::Remote(key.clone());
+                        seg.remote = true;
+                    }
+                }
+            }
+            let stc = st.clone();
+            let _ = tokio::task::spawn_blocking(move || write_meta_sync(&stc, true)).await;
+            let _ = tokio::fs::remove_file(&path).await;
+        }
+        let _ = &self.segments_dir;
+    }
+}
+
+/// Reclaim a region of the live data file. On Linux, punch a hole (frees the
+/// backing blocks; the file keeps its length and offsets, and reads of the hole
+/// would return zeros — but the placement-aware resolver never reads sealed
+/// regions from the live file). Elsewhere a no-op (correct, just no reclaim).
+fn punch_hole(file: &Arc<File>, offset: u64, len: u64) {
+    #[cfg(target_os = "linux")]
+    unsafe {
+        let fd = file.as_raw_fd();
+        libc::fallocate(
+            fd,
+            libc::FALLOC_FL_PUNCH_HOLE | libc::FALLOC_FL_KEEP_SIZE,
+            offset as libc::off_t,
+            len as libc::off_t,
+        );
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (file, offset, len);
+    }
+}
+
 /// Resolve a logical byte range to physical file segments, walking the fork
 /// parent chain for ranges below `base_offset`. Source data past the fork
 /// point is never included (capped at base_offset).
@@ -699,6 +1139,123 @@ pub fn collect_segments(st: &Arc<StreamState>, start: u64, end: u64, out: &mut V
             file_start: s,
             len: e - s,
         });
+    }
+}
+
+/// A placement-resolved slice of a logical range: either a local file segment
+/// (the live data file OR an immutable sealed chunk file — both served
+/// zero-copy) or a remote object range (fetched via the BlobStore).
+pub enum ResolvedSlice {
+    Local(Segment),
+    Remote { key: String, offset: u64, len: u64 },
+}
+
+/// True iff the logical range `[start, end)` of `st` (including any inherited
+/// fork ranges) is entirely served from local fds — i.e. it never touches a
+/// Remote sealed segment. Always true when tiering is off (no segments exist).
+/// This is the fast-path gate: a fully-local range uses the unchanged
+/// `collect_segments` / `Body::FileRange` zero-copy path.
+pub fn range_is_all_local(st: &Arc<StreamState>, start: u64, end: u64) -> bool {
+    if end <= start {
+        return true;
+    }
+    if start < st.base_offset {
+        if let Some(p) = &st.parent {
+            if !range_is_all_local(p, start, end.min(st.base_offset)) {
+                return false;
+            }
+        }
+    }
+    if end > st.base_offset {
+        let lo = start.max(st.base_offset);
+        let m = st.tier.manifest.lock().unwrap();
+        for seg in &m.segments {
+            // Overlaps this stream's [lo, end) AND is remote → not all-local.
+            if seg.remote && seg.logical_end() > lo && seg.logical_start < end {
+                return false;
+            }
+        }
+    }
+    true
+}
+
+/// Resolve `[start, end)` to ordered placement-aware slices, walking the fork
+/// chain and the per-stream manifest. Mirrors `collect_segments` but routes
+/// sealed regions to their chunk file (Local) or remote object (Remote).
+pub fn resolve_range(st: &Arc<StreamState>, start: u64, end: u64, out: &mut Vec<ResolvedSlice>) {
+    if end <= start {
+        return;
+    }
+    // Inherited fork range below this stream's base resolves through the parent.
+    if start < st.base_offset {
+        if let Some(p) = &st.parent {
+            resolve_range(p, start, end.min(st.base_offset), out);
+        }
+    }
+    if end <= st.base_offset {
+        return;
+    }
+    let lo = start.max(st.base_offset);
+    let sealed_offset = {
+        let m = st.tier.manifest.lock().unwrap();
+        m.sealed_offset.max(st.base_offset)
+    };
+    // Sealed region: [lo, min(end, sealed_offset)) is covered by manifest segs.
+    if lo < sealed_offset {
+        let sealed_end = end.min(sealed_offset);
+        resolve_sealed(st, lo, sealed_end, out);
+    }
+    // Live region: [max(lo, sealed_offset), end) is in the live data file.
+    let live_lo = lo.max(sealed_offset);
+    if end > live_lo {
+        out.push(ResolvedSlice::Local(Segment {
+            file: st.file.clone(),
+            file_start: live_lo - st.base_offset,
+            len: end - live_lo,
+        }));
+    }
+}
+
+/// Resolve a sealed sub-range `[lo, hi)` (all below sealed_offset) to manifest
+/// slices. Segments are contiguous, so we walk them in order.
+fn resolve_sealed(st: &Arc<StreamState>, lo: u64, hi: u64, out: &mut Vec<ResolvedSlice>) {
+    let m = st.tier.manifest.lock().unwrap();
+    let mut cur = lo;
+    for seg in &m.segments {
+        if seg.logical_end() <= cur || seg.logical_start >= hi {
+            continue;
+        }
+        let s = cur.max(seg.logical_start);
+        let e = hi.min(seg.logical_end());
+        if e <= s {
+            continue;
+        }
+        let off_in_seg = s - seg.logical_start;
+        let len = e - s;
+        match &seg.placement {
+            Placement::Local(path) => {
+                // Open the immutable chunk file fresh; cheap and the fd is owned
+                // by the returned Segment (Arc<File>).
+                if let Ok(f) = OpenOptions::new().read(true).open(path) {
+                    out.push(ResolvedSlice::Local(Segment {
+                        file: Arc::new(f),
+                        file_start: off_in_seg,
+                        len,
+                    }));
+                }
+            }
+            Placement::Remote(key) => {
+                out.push(ResolvedSlice::Remote {
+                    key: key.clone(),
+                    offset: off_in_seg,
+                    len,
+                });
+            }
+        }
+        cur = e;
+        if cur >= hi {
+            break;
+        }
     }
 }
 
@@ -728,6 +1285,27 @@ pub struct Meta {
     pub last_access_unix: u64,
     pub ref_count: u32,
     pub soft_deleted: bool,
+    /// Hot/cold tiering manifest. Empty for streams that never sealed (the
+    /// default). `#[serde(default)]` keeps sidecars written by the pre-tiering
+    /// server fully forward/backward compatible.
+    #[serde(default)]
+    pub segments: Vec<MetaSegment>,
+    #[serde(default)]
+    pub sealed_offset: u64,
+}
+
+/// Serialized form of a sealed-segment manifest entry.
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+pub struct MetaSegment {
+    pub logical_start: u64,
+    pub len: u64,
+    /// When set, the segment is offloaded to the remote tier under this key.
+    /// When None, it is still a local chunk file (path derived from the stream's
+    /// data file + index, see segment_file_path).
+    pub remote_key: Option<String>,
+    /// File name of the local chunk file (relative to the segments dir) when not
+    /// yet remote. None once offloaded.
+    pub local_file: Option<String>,
 }
 
 fn unix_secs(t: SystemTime) -> u64 {
@@ -756,6 +1334,30 @@ impl Meta {
             last_access_unix: unix_secs(s.last_access),
             ref_count: s.ref_count,
             soft_deleted: s.soft_deleted,
+            segments: {
+                let m = st.tier.manifest.lock().unwrap();
+                m.segments
+                    .iter()
+                    .map(|seg| match &seg.placement {
+                        crate::tier::Placement::Local(p) => MetaSegment {
+                            logical_start: seg.logical_start,
+                            len: seg.len,
+                            remote_key: None,
+                            local_file: p
+                                .file_name()
+                                .and_then(|n| n.to_str())
+                                .map(|s| s.to_string()),
+                        },
+                        crate::tier::Placement::Remote(key) => MetaSegment {
+                            logical_start: seg.logical_start,
+                            len: seg.len,
+                            remote_key: Some(key.clone()),
+                            local_file: None,
+                        },
+                    })
+                    .collect()
+            },
+            sealed_offset: st.tier.manifest.lock().unwrap().sealed_offset,
         }
     }
 }
@@ -852,5 +1454,283 @@ pub fn compute_cursor(client_cursor: Option<u64>) -> u64 {
     match client_cursor {
         Some(c) if c >= interval => c + 1,
         _ => interval,
+    }
+}
+
+// ---------------- tiering integration tests ----------------
+
+#[cfg(test)]
+mod tier_tests {
+    use super::*;
+    use crate::tier::{TierConfig, TierKind};
+
+    fn tmp_dir(tag: &str) -> PathBuf {
+        let p = std::env::temp_dir().join(format!(
+            "ds-tier-test-{tag}-{}-{}",
+            std::process::id(),
+            SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        let _ = std::fs::remove_dir_all(&p);
+        p
+    }
+
+    fn local_tier(dir: &std::path::Path, segment_bytes: u64) -> TierConfig {
+        TierConfig {
+            kind: TierKind::Local,
+            segment_bytes,
+            local_dir: Some(dir.join("cold")),
+            ..Default::default()
+        }
+    }
+
+    /// Append raw wire bytes to a stream the same way the handler does: write to
+    /// the appender file, bump `written` + `tail`. (Test-only shortcut around the
+    /// HTTP handler.)
+    async fn append_wire(st: &Arc<StreamState>, wire: &[u8]) {
+        use std::io::Write;
+        let mut ap = st.appender.lock().await;
+        (&*ap.file).write_all(wire).unwrap();
+        ap.written += wire.len() as u64;
+        let tail = st.base_offset + ap.written;
+        st.shared.write().unwrap().tail = tail;
+    }
+
+    /// Read a logical range back through the placement-aware resolver, exactly as
+    /// the handler's mixed-range path does, and return the materialized bytes.
+    async fn read_logical(st: &Arc<StreamState>, start: u64, end: u64) -> Vec<u8> {
+        let mut slices = Vec::new();
+        resolve_range(st, start, end, &mut slices);
+        let mut out = Vec::new();
+        for sl in slices {
+            match sl {
+                ResolvedSlice::Local(seg) => {
+                    let b = tokio::task::spawn_blocking(move || {
+                        materialize_segments(&[seg], b"", b"")
+                    })
+                    .await
+                    .unwrap();
+                    out.extend_from_slice(&b);
+                }
+                ResolvedSlice::Remote { key, offset, len } => {
+                    let bs = st.blobstore.clone().unwrap();
+                    let b = bs.get_range(&key, offset, len).await.unwrap();
+                    out.extend_from_slice(&b);
+                }
+            }
+        }
+        out
+    }
+
+    #[tokio::test]
+    async fn round_trip_through_cold_storage() {
+        let dir = tmp_dir("roundtrip");
+        let store = Arc::new(
+            Store::new_with_tier(dir.clone(), local_tier(&dir, 64 * 1024)).unwrap(),
+        );
+        let cfg = StreamConfig {
+            content_type: "application/octet-stream".into(),
+            ttl_seconds: None,
+            expires_at: None,
+            expires_at_raw: None,
+            create_closed: false,
+            forked_from: None,
+            fork_offset_raw: None,
+            fork_sub_offset: None,
+        };
+        let st = match store.create("s/cold", cfg, None, 0).unwrap() {
+            CreateResult::Created(s) => s,
+            _ => panic!("create failed"),
+        };
+
+        // Build a deterministic payload > 2 segments.
+        let total = 200 * 1024usize;
+        let payload: Vec<u8> = (0..total).map(|i| (i % 251) as u8).collect();
+        // Append in chunks.
+        for chunk in payload.chunks(8 * 1024) {
+            append_wire(&st, chunk).await;
+        }
+
+        // Force sealing/offload.
+        store.maybe_seal(&st).await;
+
+        // The manifest should now hold remote segments covering a prefix.
+        let (sealed, n_remote, n_local) = {
+            let m = st.tier.manifest.lock().unwrap();
+            (
+                m.sealed_offset,
+                m.segments.iter().filter(|s| s.remote).count(),
+                m.segments.iter().filter(|s| !s.remote).count(),
+            )
+        };
+        assert!(sealed >= 64 * 1024, "expected sealed prefix, got {sealed}");
+        assert!(n_remote >= 1, "expected offloaded segments");
+        assert_eq!(n_local, 0, "all sealed segments should be offloaded");
+
+        // Full catch-up read must be byte-identical, spanning cold + hot.
+        let got = read_logical(&st, 0, total as u64).await;
+        assert_eq!(got, payload, "full round-trip mismatch");
+
+        // A read spanning the hot/cold boundary returns identical bytes.
+        let mid = sealed - 100;
+        let got2 = read_logical(&st, mid, sealed + 100).await;
+        assert_eq!(got2, payload[mid as usize..(sealed + 100) as usize]);
+
+        // range_is_all_local must be false for a cold range, true for a hot one.
+        assert!(!range_is_all_local(&st, 0, sealed));
+        assert!(range_is_all_local(&st, sealed, total as u64));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn json_seal_lands_on_value_boundary() {
+        let dir = tmp_dir("json");
+        // Small segment so a handful of values trigger a seal.
+        let store = Arc::new(
+            Store::new_with_tier(dir.clone(), local_tier(&dir, 1024)).unwrap(),
+        );
+        let cfg = StreamConfig {
+            content_type: "application/json".into(),
+            ttl_seconds: None,
+            expires_at: None,
+            expires_at_raw: None,
+            create_closed: false,
+            forked_from: None,
+            fork_offset_raw: None,
+            fork_sub_offset: None,
+        };
+        let st = match store.create("s/json", cfg, None, 0).unwrap() {
+            CreateResult::Created(s) => s,
+            _ => panic!(),
+        };
+        assert!(st.is_json);
+
+        // Each value contains commas and brackets INSIDE strings, which must not
+        // be treated as boundaries.
+        let mut wire = Vec::new();
+        let mut values: Vec<String> = Vec::new();
+        for i in 0..200 {
+            let v = format!(r#"{{"i":{i},"s":"a,b[c]{{d}}","arr":[1,2,3]}}"#);
+            wire.extend_from_slice(v.as_bytes());
+            wire.push(b',');
+            values.push(v);
+        }
+        for chunk in wire.chunks(128) {
+            append_wire(&st, chunk).await;
+        }
+        store.maybe_seal(&st).await;
+
+        let sealed = st.tier.manifest.lock().unwrap().sealed_offset;
+        assert!(sealed > 0, "expected JSON stream to seal");
+        // The sealed prefix must end exactly on a value boundary (a `,` right
+        // after a complete value) — i.e. wire[sealed-1] == b',' and the prefix
+        // parses as a whole number of values.
+        assert_eq!(wire[sealed as usize - 1], b',');
+
+        // Reconstruct the sealed prefix and confirm it is exactly the first K
+        // complete values + trailing comma.
+        let got = read_logical(&st, 0, sealed).await;
+        assert_eq!(got, &wire[..sealed as usize]);
+        // Wrap as [ … ] (drop trailing comma) and parse as JSON to prove it is a
+        // valid, complete array of values.
+        let inner = &got[..got.len() - 1];
+        let json = format!("[{}]", String::from_utf8_lossy(inner));
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert!(!parsed.as_array().unwrap().is_empty());
+
+        // Full read is byte-identical.
+        let full = read_logical(&st, 0, wire.len() as u64).await;
+        assert_eq!(full, wire);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn concurrent_reads_during_seal_are_consistent() {
+        let dir = tmp_dir("concurrent");
+        let store = Arc::new(
+            Store::new_with_tier(dir.clone(), local_tier(&dir, 32 * 1024)).unwrap(),
+        );
+        let cfg = StreamConfig {
+            content_type: "application/octet-stream".into(),
+            ttl_seconds: None,
+            expires_at: None,
+            expires_at_raw: None,
+            create_closed: false,
+            forked_from: None,
+            fork_offset_raw: None,
+            fork_sub_offset: None,
+        };
+        let st = match store.create("s/conc", cfg, None, 0).unwrap() {
+            CreateResult::Created(s) => s,
+            _ => panic!(),
+        };
+        let total = 256 * 1024usize;
+        let payload: Vec<u8> = (0..total).map(|i| (i % 251) as u8).collect();
+        for chunk in payload.chunks(8 * 1024) {
+            append_wire(&st, chunk).await;
+        }
+
+        // Launch readers concurrently with the sealing pass; none must see torn
+        // bytes regardless of unlink/hole-punch timing.
+        let st2 = st.clone();
+        let pl = payload.clone();
+        let reader = tokio::spawn(async move {
+            for _ in 0..50 {
+                let got = read_logical(&st2, 0, total as u64).await;
+                assert_eq!(got, pl, "torn read during seal");
+                tokio::task::yield_now().await;
+            }
+        });
+        store.maybe_seal(&st).await;
+        reader.await.unwrap();
+
+        // After seal, read again — fully served from cold + hot.
+        let got = read_logical(&st, 0, total as u64).await;
+        assert_eq!(got, payload);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn manifest_survives_recovery() {
+        let dir = tmp_dir("recovery");
+        {
+            let store = Arc::new(
+                Store::new_with_tier(dir.clone(), local_tier(&dir, 64 * 1024)).unwrap(),
+            );
+            let cfg = StreamConfig {
+                content_type: "application/octet-stream".into(),
+                ttl_seconds: None,
+                expires_at: None,
+                expires_at_raw: None,
+                create_closed: false,
+                forked_from: None,
+                fork_offset_raw: None,
+                fork_sub_offset: None,
+            };
+            let st = match store.create("s/rec", cfg, None, 0).unwrap() {
+                CreateResult::Created(s) => s,
+                _ => panic!(),
+            };
+            let payload: Vec<u8> = (0..200 * 1024).map(|i| (i % 251) as u8).collect();
+            for chunk in payload.chunks(8 * 1024) {
+                append_wire(&st, chunk).await;
+            }
+            store.maybe_seal(&st).await;
+        }
+        // Re-open the store; the manifest must rehydrate from the sidecar and
+        // cold reads must still work.
+        let store2 = Arc::new(
+            Store::new_with_tier(dir.clone(), local_tier(&dir, 64 * 1024)).unwrap(),
+        );
+        let st = store2.get("s/rec").expect("stream recovered");
+        let sealed = st.tier.manifest.lock().unwrap().sealed_offset;
+        assert!(sealed >= 64 * 1024, "manifest not recovered");
+        let payload: Vec<u8> = (0..200 * 1024).map(|i| (i % 251) as u8).collect();
+        let got = read_logical(&st, 0, payload.len() as u64).await;
+        assert_eq!(got, payload, "post-recovery cold read mismatch");
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

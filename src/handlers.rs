@@ -566,7 +566,22 @@ pub(crate) async fn internal_append_json(
     drop(ap);
     st.sync.sync_to(file, &st, target).await;
     st.schedule_meta_flush();
+    maybe_seal_bg(store, &st);
     Some(())
+}
+
+/// Fire a background sealing/offload pass for a stream after a durable append.
+/// No-op when tiering is off (checked inside `maybe_seal`); never blocks the
+/// append ack — the work runs on a detached task.
+fn maybe_seal_bg(store: &Arc<Store>, st: &Arc<StreamState>) {
+    if !store.tier_config.enabled() {
+        return;
+    }
+    let store = store.clone();
+    let st = st.clone();
+    tokio::spawn(async move {
+        store.maybe_seal(&st).await;
+    });
 }
 
 fn write_wire(st: &StreamState, ap: &mut Appender, wire: &Bytes) -> std::io::Result<()> {
@@ -934,6 +949,7 @@ async fn handle_append_inner(store: Arc<Store>, req: Req, path: String) -> (Resp
     }
     if !wire.is_empty() {
         crate::subs::on_activity(&store, &st.path);
+        maybe_seal_bg(&store, &st);
     }
 
     let tail = st.tail();
@@ -1219,6 +1235,7 @@ where
     st.sync.sync_to(file, &st, target).await;
     st.schedule_meta_flush();
     crate::subs::on_activity(&store, &st.path);
+    maybe_seal_bg(&store, &st);
 
     crate::telemetry::record_append(t0.elapsed_secs(), "accept", false);
 
@@ -1278,7 +1295,7 @@ fn parse_producer_headers_h(req: &BinaryAppendReq) -> Result<Option<ProducerHead
 /// Build a FileRange body for `[start, end)`. `hot` marks a live tail feed of
 /// freshly-appended bytes (a caught-up long-poll wake), which the raw engine
 /// can serve inline knowing it is page-cache resident.
-fn read_range_body(
+async fn read_range_body(
     st: &Arc<StreamState>,
     start: u64,
     end: u64,
@@ -1307,14 +1324,68 @@ fn read_range_body(
         }
         return Body::Full(bytes);
     }
-    let mut segs = Vec::new();
-    collect_segments(st, data_start, data_end, &mut segs);
-    Body::FileRange {
-        segments: segs,
-        prefix: if json { b"[" } else { b"" },
-        suffix: if json { b"]" } else { b"" },
-        hot,
+    let prefix: &'static [u8] = if json { b"[" } else { b"" };
+    let suffix: &'static [u8] = if json { b"]" } else { b"" };
+    // Fast path (and the only path when tiering is off): the range is entirely
+    // local fds → the unchanged zero-copy FileRange body. `range_is_all_local`
+    // is trivially true with no sealed remote segments, so the default build's
+    // behaviour is byte-for-byte identical.
+    if crate::store::range_is_all_local(st, data_start, data_end) {
+        let mut segs = Vec::new();
+        collect_segments(st, data_start, data_end, &mut segs);
+        return Body::FileRange {
+            segments: segs,
+            prefix,
+            suffix,
+            hot,
+        };
     }
+    // Mixed/cold range: resolve placement-aware slices and materialize them
+    // (local fds read directly, remote ranges fetched from the BlobStore),
+    // spliced in order. Served as one Full body (catch-up / long-poll reads).
+    let bytes = materialize_resolved(st, data_start, data_end, prefix, suffix).await;
+    Body::Full(bytes)
+}
+
+/// Materialize a placement-aware logical range into one contiguous buffer:
+/// local file segments via positioned reads, remote segments via the BlobStore,
+/// spliced in offset order, framed by `prefix`/`suffix`.
+async fn materialize_resolved(
+    st: &Arc<StreamState>,
+    start: u64,
+    end: u64,
+    prefix: &'static [u8],
+    suffix: &'static [u8],
+) -> Bytes {
+    use crate::store::ResolvedSlice;
+    let mut slices = Vec::new();
+    crate::store::resolve_range(st, start, end, &mut slices);
+    let mut out = BytesMut::new();
+    out.put_slice(prefix);
+    for sl in slices {
+        match sl {
+            ResolvedSlice::Local(seg) => {
+                let bytes = tokio::task::spawn_blocking(move || {
+                    crate::store::materialize_segments(&[seg], b"", b"")
+                })
+                .await
+                .unwrap_or_default();
+                out.put_slice(&bytes);
+            }
+            ResolvedSlice::Remote { key, offset, len } => {
+                if let Some(bs) = &st.blobstore {
+                    match bs.get_range(&key, offset, len).await {
+                        Ok(b) => out.put_slice(&b),
+                        Err(_) => return Bytes::new(),
+                    }
+                } else {
+                    return Bytes::new();
+                }
+            }
+        }
+    }
+    out.put_slice(suffix);
+    out.freeze()
 }
 
 // ---------- GET (catch-up / long-poll / SSE) ----------
@@ -1392,7 +1463,7 @@ async fn handle_catchup(
         }
     }
     // Catch-up read of historical bytes: not a live tail feed.
-    let body = read_range_body(&st, start, end, false, "catchup", cache_hit);
+    let body = read_range_body(&st, start, end, false, "catchup", cache_hit).await;
     let mut b = ResponseBuilder::new(200)
         .h("content-type", st.config.content_type.clone())
         .h(H_NEXT_OFFSET, format_offset(end))
@@ -1475,7 +1546,7 @@ async fn long_poll_data(
     cache_hit: &mut bool,
 ) -> Resp {
     let cursor = compute_cursor(client_cursor);
-    let body = read_range_body(st, from, t.bytes, hot, "long-poll", cache_hit);
+    let body = read_range_body(st, from, t.bytes, hot, "long-poll", cache_hit).await;
     let mut b = ResponseBuilder::new(200)
         .h("content-type", st.config.content_type.clone())
         .h(H_NEXT_OFFSET, format_offset(t.bytes))
@@ -1695,11 +1766,15 @@ async fn handle_sse(st: Arc<StreamState>, offset: ParsedOffset, client_cursor: O
 
 /// Read a logical byte range fully into memory (SSE batches are small).
 async fn read_range_bytes(st: &Arc<StreamState>, start: u64, end: u64) -> Bytes {
-    let mut segs = Vec::new();
-    collect_segments(st, start, end, &mut segs);
-    tokio::task::spawn_blocking(move || materialize_segments(&segs, b"", b""))
-        .await
-        .unwrap_or_default()
+    // Local-only fast path (always the case with tiering off).
+    if crate::store::range_is_all_local(st, start, end) {
+        let mut segs = Vec::new();
+        collect_segments(st, start, end, &mut segs);
+        return tokio::task::spawn_blocking(move || materialize_segments(&segs, b"", b""))
+            .await
+            .unwrap_or_default();
+    }
+    materialize_resolved(st, start, end, b"", b"").await
 }
 
 // ---------- HEAD ----------
