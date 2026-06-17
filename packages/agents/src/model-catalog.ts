@@ -260,6 +260,26 @@ const ANTHROPIC_THINKING_BUDGET_BY_EFFORT: Record<
   high: 24576,
 }
 
+/**
+ * Opus 4.6+/4.7 and Sonnet 4.6 use Anthropic's adaptive thinking API
+ * (`thinking.type: "adaptive"` + `output_config.effort`); the older budget-based
+ * `thinking.type: "enabled"` is rejected on Opus 4.7.
+ */
+function isAdaptiveThinkingModel(modelId: string): boolean {
+  return /(opus-4[-.]6|opus-4[-.]7|sonnet-4[-.]6)/.test(modelId)
+}
+
+/** `reasoningEffort` → Anthropic adaptive `output_config.effort` level. */
+const ANTHROPIC_ADAPTIVE_EFFORT_BY_REASONING: Record<
+  ExplicitReasoningEffort,
+  string
+> = {
+  minimal: `low`,
+  low: `low`,
+  medium: `medium`,
+  high: `high`,
+}
+
 function withProviderPayloadDefaults(
   config: PersistedModelConfig & { getApiKey?: AgentConfig[`getApiKey`] },
   choice: BuiltinModelChoice,
@@ -296,33 +316,52 @@ function withProviderPayloadDefaults(
   }
 
   if (choice.provider === `anthropic`) {
-    // `auto` maps to the minimal budget so extended thinking is always
-    // on for reasoning-capable Anthropic models, matching the OpenAI
-    // branch above (where `auto` falls through to a `minimal` default).
+    // `auto` falls through to a `minimal` default, matching the OpenAI branch.
     const effectiveEffort = reasoningEffort ?? `minimal`
-    const budgetTokens = ANTHROPIC_THINKING_BUDGET_BY_EFFORT[effectiveEffort]
+    // pi-ai writes `thinking: { type: "disabled" }` by default; we merge our
+    // enabled values last so they win.
+    const mergeThinking = (
+      body: Record<string, unknown>,
+      thinking: Record<string, unknown>,
+      extra?: Record<string, unknown>
+    ): Record<string, unknown> => {
+      const existing =
+        typeof body.thinking === `object` && body.thinking !== null
+          ? (body.thinking as Record<string, unknown>)
+          : {}
+      return { ...body, ...extra, thinking: { ...existing, ...thinking } }
+    }
 
+    if (isAdaptiveThinkingModel(String(config.model))) {
+      const effort = ANTHROPIC_ADAPTIVE_EFFORT_BY_REASONING[effectiveEffort]
+      return {
+        ...config,
+        onPayload: (payload) => {
+          if (typeof payload !== `object` || payload === null) return undefined
+          const body = payload as Record<string, unknown>
+          const existingOutputConfig =
+            typeof body.output_config === `object` &&
+            body.output_config !== null
+              ? (body.output_config as Record<string, unknown>)
+              : {}
+          return mergeThinking(
+            body,
+            { type: `adaptive` },
+            { output_config: { ...existingOutputConfig, effort } }
+          )
+        },
+      }
+    }
+
+    const budgetTokens = ANTHROPIC_THINKING_BUDGET_BY_EFFORT[effectiveEffort]
     return {
       ...config,
       onPayload: (payload) => {
         if (typeof payload !== `object` || payload === null) return undefined
-        const body = payload as Record<string, unknown>
-        // pi-ai writes `thinking: { type: "disabled" }` into the payload
-        // by default. Merge our enabled-thinking values last so they win
-        // — otherwise the API rejects `budget_tokens` for a disabled
-        // `thinking` block.
-        const existingThinking =
-          typeof body.thinking === `object` && body.thinking !== null
-            ? (body.thinking as Record<string, unknown>)
-            : {}
-        return {
-          ...body,
-          thinking: {
-            ...existingThinking,
-            type: `enabled`,
-            budget_tokens: budgetTokens,
-          },
-        }
+        return mergeThinking(payload as Record<string, unknown>, {
+          type: `enabled`,
+          budget_tokens: budgetTokens,
+        })
       },
     }
   }
