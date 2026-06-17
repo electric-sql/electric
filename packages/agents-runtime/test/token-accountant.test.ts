@@ -51,6 +51,24 @@ describe(`computeContextBreakdown`, () => {
     expect(segs.every((s) => s.tokens >= 0)).toBe(true)
   })
 
+  it(`clamps usedTokens to the window when the step is over the window`, () => {
+    const segs = computeContextBreakdown(
+      // A step can report usage above the window; usedTokens stays un-clamped on
+      // ContextUsage but the breakdown must clamp it so the segments still sum to
+      // the window and `free` doesn't go negative.
+      { usedTokens: 120_000, contextWindow: 100_000, ratio: 1 },
+      { systemTokens: 5_000, toolsTokens: 15_000 }
+    )
+    const tokens = Object.fromEntries(segs.map((s) => [s.key, s.tokens]))
+    expect(tokens).toEqual({
+      system: 5_000,
+      tools: 15_000,
+      messages: 80_000, // window (100k) − system − tools
+      free: 0,
+    })
+    expect(segs.reduce((n, s) => n + s.tokens, 0)).toBe(100_000)
+  })
+
   it(`parseContextBreakdown reads persisted JSON and tolerates junk`, () => {
     expect(parseContextBreakdown(`{"system":12,"tools":34}`)).toEqual({
       systemTokens: 12,
