@@ -63,6 +63,9 @@ fn main() {
                     .expect("--long-poll-timeout-ms requires a number");
                 handlers::set_long_poll_timeout(ms);
             }
+            "--splice-appends" => {
+                engine_raw::set_splice_appends(true);
+            }
             "--read-offload" => {
                 let v = args
                     .next()
