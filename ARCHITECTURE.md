@@ -212,3 +212,74 @@ Measured headlines (full tables and methodology in
   copy).
 - **Cold-read isolation:** `raw --read-offload tail` caps the worst-case hot-read
   latency at ~11 ms where serving cold reads inline collapses to ~700 ms.
+
+## Tiering: hot buffer → cold storage (optional)
+
+Opt-in (`--tier`, off by default). The append-only, immutable-by-position model
+makes tiering almost free: once data leaves the live tail it never changes, so the
+server breaks each stream into fixed-size, CDN-friendly **segments** (default
+8 MiB), **seals** them, and offloads them to object storage — keeping only the hot
+tail local. Catch-up reads of cold history come from the object store (and a CDN
+in front of it); the origin does little work for old data.
+
+```mermaid
+flowchart TB
+  subgraph HOT["Hot tier (local)"]
+    TAIL["active tail<br/>(unsealed, in the data file)"]
+    SEG2["sealed segment N<br/>(local chunk file, pending upload)"]
+  end
+  subgraph COLD["Cold tier (S3-compatible: R2 / Tigris / MinIO / B2)"]
+    OBJ0[("segment 0")]
+    OBJ1[("segment 1")]
+  end
+  MAN["per-stream manifest<br/>logical_start → Local | Remote(key)<br/>+ sealed_offset watermark"]
+
+  TAIL ==>|"crosses 8 MiB → seal"| SEG2
+  SEG2 ==>|"upload → head-verify → flip manifest → unlink local"| OBJ1
+
+  RD{{"GET ?offset"}} --> MAN
+  MAN -->|"offset ≥ sealed_offset<br/>(local)"| TAIL
+  MAN -->|"offset < sealed_offset<br/>(remote)"| COLD
+  TAIL --> OUT(["response<br/>(sendfile / io_uring, zero-copy)"])
+  COLD --> OUT2(["response<br/>(range-GET, buffered)"])
+```
+
+Key properties:
+
+- **The manifest is the authority.** A read resolves each requested offset against
+  the per-stream manifest (held in memory, persisted in the `.meta` sidecar): at or
+  above `sealed_offset` → local (zero-copy `sendfile`/io_uring, unchanged); below it
+  → the named object via range-GET, spliced into the response. A range spanning the
+  boundary yields a mix.
+- **Durability is never weakened.** An append still acks only after the local
+  group-commit fsync. Offload is strictly _post-durability_: seal → upload →
+  `head`-verify → durably flip `local → remote` → _only then_ reclaim local bytes.
+  So a read never routes to an object that isn't there, nor to bytes already
+  reclaimed.
+- **Clean reclaim.** Sealed segments are separate chunk files, so reclaim is an
+  `unlink` — safe even under an in-flight read (Unix keeps an open fd readable after
+  unlink); the active file is hole-punched (`fallocate`) on Linux.
+- **JSON-safe sealing.** A JSON seal boundary always lands on a whole-value
+  boundary (a byte-level scanner that ignores commas/brackets inside strings and
+  honours escapes), so a sealed segment still reads back wrapped as `[ … ]`.
+- **CDN-native.** Fully-sealed ranges are immutable, so they're served with
+  `Cache-Control: immutable` and a long max-age — the CDN absorbs repeat cold reads
+  before they reach the origin or the object store.
+
+Caveat (current): a cold read materializes its segments into memory (`Body::Full`)
+rather than streaming chunk-by-chunk (`Body::Channel`) — fine for moderate segment
+sizes, a planned follow-up for very large cold ranges.
+
+## Optional fast paths & observability
+
+- **`splice(2)` binary appends** (`--splice-appends`, raw + Linux, off by default).
+  Binary streams store the body verbatim, so the append body can move socket → file
+  in the kernel with no userspace copy. It's a **CPU** lever (same append rate at
+  roughly half to a third of the server CPU), not a throughput one — appends are
+  fsync-bound. JSON (which transforms the body) and chunked bodies fall back.
+- **OpenTelemetry** (`--features telemetry`, off by default, zero-cost when off).
+  A `ds.request` span plus lean, bounded-cardinality metrics aimed at the two
+  pivots this document keeps returning to: **`ds.append.fsync.batch_size`**
+  (group-commit health) and **`ds.read.offload.wait`** (cold-read pool pressure),
+  alongside fsync/lock-wait/append/read latency histograms and the tail-cache hit
+  ratio. This is how you watch the levers above in production.

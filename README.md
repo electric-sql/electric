@@ -43,6 +43,8 @@ curl -N "$BASE?offset=0&live=sse"        # Server-Sent Events stream
 | `--http-engine`          | `hyper`                        | `hyper`, `raw` (custom HTTP/1.1 loop; `sendfile(2)` reads on Linux), or `uring` (io_uring, thread-per-core; Linux only)                                                                                                                                                                    |
 | `--long-poll-timeout-ms` | `30000`                        | how long a long-poll request blocks before a 204                                                                                                                                                                                                                                           |
 | `--read-offload`         | `tail`                         | raw engine, Linux: where reads run sendfile — `inline` (always on the async worker), `tail` (live tail inline, catch-up on the blocking pool), `always` (always on the blocking pool). `tail` keeps a cold backfill's disk fault off the async workers while serving the live tail inline. |
+| `--splice-appends`       | off                            | raw engine, Linux: zero-copy `splice(2)` for **binary** appends (socket → file, no userspace copy). Off by default; JSON/chunked/non-Linux fall back. A CPU lever (same append rate at ~½–⅓ the server CPU), not a throughput lever — appends are fsync-bound.                             |
+| `--tier`                 | `off`                          | cold-storage tier: `off`, `local` (sealed segments to a local dir), or `s3` (S3-compatible object storage). See [Tiered storage](#tiered-storage-cold-offload). Off by default — behaviour is byte-identical to a single-file server.                                                      |
 
 ## What it implements
 
@@ -70,6 +72,23 @@ All three speak the same protocol and pass the full suite; they differ only in h
 - **`uring`** (Linux, **experimental**) — `io_uring` via tokio-uring, thread-per-core. Fastest on small high-concurrency reads (batched submit/complete, no epoll round-trip, no blocking-pool handoff). **Requires the `io_uring` syscalls to be permitted** — many container seccomp profiles, gVisor, and hardened/locked-down hosts block them, and the server will fail to start there. Enable it on bare metal or tuned hosts where `io_uring` is available; otherwise prefer `raw`.
 
 See [`bench/RESULTS.md`](bench/RESULTS.md) for the measured trade-offs (uring wins small reads; raw/sendfile wins large reads and has the tightest cold-read tail; uring uses more CPU for its throughput).
+
+## Tiered storage (cold offload)
+
+Opt-in (`--tier`, off by default). Because streams are append-only and immutable by position, the server can break a stream into fixed-size, CDN-friendly **segments** (`--tier-segment-bytes`, default 8 MiB): once data leaves the hot tail it is **sealed** and offloaded to object storage, and catch-up reads of cold history are served from there. Recent data stays local (the hot tier, served zero-copy as today). With `--tier off` the server is byte-identical to a single-file deployment.
+
+- **S3-compatible, not AWS-only.** The `s3` backend works with any S3-compatible endpoint — Cloudflare R2, Fly/Tigris, MinIO, Backblaze B2 — via a configurable endpoint + path-style addressing. It's built on the `object_store` crate behind the **`tier` Cargo feature** (so a default build pulls no object-storage dependencies): `cargo build --release --features tier`. A `local` backend (sealed segments to a directory) needs no feature/deps and is handy for testing.
+- **How it stays correct.** Each stream keeps a manifest of its sealed segments. The lifecycle is seal → upload → `head`-verify → durably flip the manifest entry `local → remote` → only then reclaim the local copy (`unlink` of a separate chunk file, safe even under an in-flight read; `fallocate` hole-punch on Linux for the active file). A read resolves each requested offset against the manifest — local ranges keep the zero-copy `sendfile`/io_uring path; remote ranges are fetched by range-GET and spliced in. JSON seals always land on a value boundary (never inside a string). Durability is unchanged: an append still acks only after the local fsync — offload is strictly post-durability. Fully-sealed ranges are stamped `Cache-Control: immutable` for long-lived CDN caching, and remote objects are GC'd ref-count-aware with forks.
+- **Flags:** `--tier {off|local|s3}`, `--tier-segment-bytes`, `--tier-key-prefix`, `--tier-local-dir` (local), `--tier-endpoint` / `--tier-region` / `--tier-bucket`, `--tier-path-style` / `--tier-virtual-hosted`, `--tier-allow-http`. S3 credentials come from `DS_S3_ACCESS_KEY_ID` / `DS_S3_SECRET_ACCESS_KEY` (with `AWS_*` fallback), env only.
+- **Current limitation:** large cold reads are materialized into memory (`Body::Full`) rather than streamed (`Body::Channel`) — fine for moderate segment/read sizes; streaming cold reads is a planned follow-up.
+
+Conformance passes with tiering on as well as off (verified with a small `--tier-segment-bytes` so streams seal and offload mid-suite; catch-up reads, ETag/304, closed-stream EOF, and forks are all served correctly from cold).
+
+## Observability (OpenTelemetry)
+
+Opt-in via the **`telemetry` Cargo feature** (off by default — a default build pulls no OpenTelemetry dependencies and adds zero hot-path overhead): `cargo build --release --features telemetry`. Configured entirely by the standard `OTEL_*` env vars (`OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_TRACES_SAMPLER`, …); spans + metrics export over OTLP/gRPC.
+
+The instrumentation is deliberately lean and aimed at finding bottlenecks: a single `ds.request` span (bounded attributes only — never the stream path/id) plus metrics. The two most useful are **`ds.append.fsync.batch_size`** (group-commit health — how many appends fold into one fsync) and **`ds.read.offload.wait`** (blocking-pool queue wait, the cold-read pressure signal); alongside append fsync/lock-wait/total duration, read duration by mode, tail-cache hit ratio, and a request counter. All labels are bounded (engine, live, cache, outcome, …).
 
 ## Conformance
 
