@@ -260,3 +260,155 @@ pub(crate) async fn decode_chunked<S: ByteSource>(src: &mut S) -> std::io::Resul
         src.consume(need); // chunk data + CRLF
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::VecDeque;
+
+    /// In-memory `ByteSource` that hands out the wire bytes in fixed-size slices
+    /// (one per `fill`), so tests can exercise reads that straddle fill
+    /// boundaries by varying `step`.
+    struct MockSource {
+        pending: VecDeque<Vec<u8>>,
+        buf: Vec<u8>,
+    }
+
+    impl MockSource {
+        fn new(wire: &[u8], step: usize) -> Self {
+            let step = step.max(1);
+            let pending = wire.chunks(step).map(|c| c.to_vec()).collect();
+            MockSource {
+                pending,
+                buf: Vec::new(),
+            }
+        }
+    }
+
+    impl ByteSource for MockSource {
+        fn buffered(&self) -> &[u8] {
+            &self.buf
+        }
+        fn consume(&mut self, n: usize) {
+            self.buf.drain(..n);
+        }
+        async fn fill(&mut self) -> std::io::Result<bool> {
+            match self.pending.pop_front() {
+                Some(slice) => {
+                    self.buf.extend_from_slice(&slice);
+                    Ok(true)
+                }
+                None => Ok(false),
+            }
+        }
+    }
+
+    async fn decode(wire: &[u8], step: usize) -> Option<Vec<u8>> {
+        let mut src = MockSource::new(wire, step);
+        decode_chunked(&mut src)
+            .await
+            .unwrap()
+            .map(|b| b.to_vec())
+    }
+
+    // Run a chunked-decode assertion across several fill granularities so a
+    // body that arrives split mid-size-line / mid-chunk still decodes.
+    async fn decode_all_steps(wire: &[u8]) -> Option<Vec<u8>> {
+        let mut result = None;
+        for step in [1usize, 2, 3, 7, wire.len().max(1)] {
+            let got = decode(wire, step).await;
+            if step == 1 {
+                result = got.clone();
+            } else {
+                assert_eq!(got, result, "decode differs at fill step {step}");
+            }
+        }
+        result
+    }
+
+    #[tokio::test]
+    async fn chunked_single() {
+        assert_eq!(
+            decode_all_steps(b"5\r\nhello\r\n0\r\n\r\n").await.as_deref(),
+            Some(&b"hello"[..])
+        );
+    }
+
+    #[tokio::test]
+    async fn chunked_multiple() {
+        assert_eq!(
+            decode_all_steps(b"3\r\nabc\r\n2\r\nde\r\n0\r\n\r\n")
+                .await
+                .as_deref(),
+            Some(&b"abcde"[..])
+        );
+    }
+
+    #[tokio::test]
+    async fn chunked_empty_body() {
+        assert_eq!(decode_all_steps(b"0\r\n\r\n").await.as_deref(), Some(&b""[..]));
+    }
+
+    #[tokio::test]
+    async fn chunked_hex_size() {
+        // 0x1a = 26 bytes.
+        let data: Vec<u8> = (b'a'..=b'z').collect();
+        let mut wire = b"1a\r\n".to_vec();
+        wire.extend_from_slice(&data);
+        wire.extend_from_slice(b"\r\n0\r\n\r\n");
+        assert_eq!(decode_all_steps(&wire).await, Some(data));
+    }
+
+    #[tokio::test]
+    async fn chunked_extension_ignored() {
+        // chunk-extension after `;` is ignored.
+        assert_eq!(
+            decode_all_steps(b"3;ext=1\r\nabc\r\n0\r\n\r\n")
+                .await
+                .as_deref(),
+            Some(&b"abc"[..])
+        );
+    }
+
+    #[tokio::test]
+    async fn chunked_trailers_consumed() {
+        assert_eq!(
+            decode_all_steps(b"3\r\nabc\r\n0\r\nTrailer: x\r\nMore: y\r\n\r\n")
+                .await
+                .as_deref(),
+            Some(&b"abc"[..])
+        );
+    }
+
+    #[tokio::test]
+    async fn chunked_malformed_size_rejected() {
+        assert_eq!(decode(b"zz\r\nabc\r\n0\r\n\r\n", 64).await, None);
+    }
+
+    #[tokio::test]
+    async fn chunked_early_eof_rejected() {
+        // size says 5 but only 3 bytes + EOF.
+        assert_eq!(decode(b"5\r\nabc", 64).await, None);
+        // terminating blank line never arrives.
+        assert_eq!(decode(b"3\r\nabc\r\n", 64).await, None);
+    }
+
+    #[tokio::test]
+    async fn chunked_size_overflow_rejected() {
+        // usize::MAX as hex: size.checked_add(2) overflows → rejected, no panic.
+        assert_eq!(decode(b"ffffffffffffffff\r\n", 64).await, None);
+    }
+
+    #[tokio::test]
+    async fn read_sized_across_fills() {
+        let mut src = MockSource::new(b"hello world", 2);
+        let body = read_sized(&mut src, 11).await.unwrap();
+        assert_eq!(body.as_deref(), Some(&b"hello world"[..]));
+    }
+
+    #[tokio::test]
+    async fn read_sized_over_limit_rejected() {
+        let mut src = MockSource::new(b"x", 1);
+        assert_eq!(read_sized(&mut src, MAX_BODY_BYTES + 1).await.unwrap(), None);
+    }
+}
