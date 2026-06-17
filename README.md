@@ -118,10 +118,15 @@ and attaches the tarballs plus SHA-256 checksums to the release.
 
 ## Benchmarks
 
-Measured 2026-06-16, file-backed with per-append durable fsync. Rust built
-`--release`. Full tables, setup, and analysis: [`bench/RESULTS.md`](bench/RESULTS.md).
+Two sources. **Cross-server vs Node** (macOS, 2026-06-16) for the headline gap,
+and the **engine matrix** (native Linux, 2026-06-17) measured with the autobench
+suite — server pinned to a cgroup (`AllowedCPUs` + `MemoryMax`, CPU read from
+`CPUUsageNSec`), `wrk` `taskset`-pinned to disjoint cores, `performance` governor,
+3 repeats per cell. Pinning client and server to separate cores is what exposes
+the real engine differences; running the load generator on the server's cores
+masks them. Full tables + methodology: [`bench/autobench/`](bench/autobench/).
 
-### Cross-server — macOS, official suite (`@durable-streams/benchmarks`, via the TS client)
+### Cross-server vs Node — macOS, official suite (`@durable-streams/benchmarks`)
 
 | Metric (mean)                    | Node     | rust-hyper | rust-raw   | best vs Node |
 | -------------------------------- | -------- | ---------- | ---------- | ------------ |
@@ -131,42 +136,60 @@ Measured 2026-06-16, file-backed with per-append durable fsync. Rust built
 | Unbatched appends (100 B, c75)   | 127 /s   | 30,740 /s  | 32,261 /s  | **254×**     |
 | Catch-up reads (10 MB)           | 472 MB/s | 3,252 MB/s | 3,502 MB/s | **7.4×**     |
 
-On macOS `raw ≈ hyper` (no sendfile there). The engine differences show up on Linux:
+### Engine matrix — native Linux (12-core Xeon, isolated)
 
-### Engine micro-benchmarks — Linux (Docker, `wrk -t4 -c64`)
+**Engine vs server cores** (hot 1 KB read, client on disjoint cores). The gap is
+real when the server is the bottleneck; it closes only once the 4-core load
+generator saturates first:
 
-Hot reads (cached catch-up GETs):
+| server cores | hyper   | raw         | uring       |
+| ------------ | ------- | ----------- | ----------- |
+| 2            | 118k /s | 184k /s     | **258k /s** |
+| 4            | 193k /s | 290k /s     | **361k /s** |
+| 8            | 258k /s | **287k /s** | 278k /s     |
 
-| Read size | hyper   | raw                   | uring       |
-| --------- | ------- | --------------------- | ----------- |
-| 1 KB      | 212k /s | 355k /s               | **419k /s** |
-| 16 KB     | 229k /s | 296k /s               | **365k /s** |
-| 1 MB      | 12k /s  | **35k /s** (sendfile) | 23k /s      |
+**Reads by size** (8 cores, conn 256). raw/sendfile dominates large reads at half
+the CPU:
 
-Cold isolation — hot 4 KB reads under concurrent cold 1 GB backfills (`fadvise(DONTNEED)`):
+| read size | hyper           | raw                  | uring           |
+| --------- | --------------- | -------------------- | --------------- |
+| 1 KB      | 259k /s         | **287k /s**          | 275k /s         |
+| 16 KB     | 186k /s         | **196k /s**          | 186k /s         |
+| 1 MB      | 7.1k /s (742 %) | **14.2k /s (379 %)** | 8.2k /s (691 %) |
 
-| engine / mode | hot p50   | hot max      |
-| ------------- | --------- | ------------ |
-| raw `inline`  | 96 µs     | **714.9 ms** |
-| raw `tail`    | 103 µs    | **10.7 ms**  |
-| uring         | **78 µs** | 80.8 ms      |
+**Appends** (100 B, 8 cores). raw scales cleanly; uring _regresses_ past 4 cores
+(thread-per-core contention on the per-stream fsync path):
 
-Takeaways: **uring** wins small high-concurrency reads (io_uring batches recv/send
-— ~20% more throughput at lower latency); **raw/sendfile** wins large resident
-reads (zero-copy beats copy-streaming); for cold-read isolation **raw `tail`** has
-the tightest tail (the blocking-pool offload caps `inline`'s 715 ms worst case at
-11 ms) while **uring** has the best median and avoids the collapse natively with no
-offload knob (async io_uring file reads, no worker stall, bounded memory). The
-resident tail cache makes raw's offload modes identical for hot reads, so
-`--read-offload` now only affects cold reads (`tail` stays the raw default).
+| conn | hyper   | raw         | uring   |
+| ---- | ------- | ----------- | ------- |
+| 64   | 97k /s  | **110k /s** | 75k /s  |
+| 256  | 166k /s | **207k /s** | 102k /s |
+
+**`--splice-appends`** (1 MB binary, raw): off 393/s @ **84 % CPU** vs on 380/s @
+**40 % CPU** — same throughput (fsync-bound), ~half the CPU. A CPU lever, not a
+throughput one.
+
+**Cold tier read** (`--tier local`, 32 MB stream served from the blobstore via
+`Body::Channel`): ~**5,100 MB/s**.
+
+Takeaways: **raw is the best all-rounder at full utilization** — top or tied on
+reads (and 2× on large reads via zero-copy `sendfile`, at half the CPU) and best
+on appends. **uring** wins small reads decisively only when the server is
+CPU-constrained (its `io_uring_enter` batches recv+send), and is the weakest on
+appends. So `raw` is the default fast engine; `uring` suits CPU-bound,
+small-read-heavy workloads on hosts where the `io_uring` syscalls are permitted.
 
 ### Running them
 
 ```bash
+# Engine matrix (native Linux host w/ systemd + cgroups; authoritative numbers)
+SR_DIR=packages/server-rust bash packages/server-rust/bench/autobench/run.sh
+PROFILE=smoke SR_DIR=… bash …/autobench/run.sh   # ~5-min pipeline check
+
 # Cross-server (Node vs hyper vs raw): official suite + scale-out
 packages/server-rust/bench/run-all.sh                    # -> bench/out/
 
-# Engine micro-benchmarks (Linux/Docker): hyper vs raw vs uring
+# Quick engine micro-bench anywhere via Docker (lower fidelity, no isolation)
 ENGINES="hyper raw uring" packages/server-rust/bench/micro/docker-run.sh
 ```
 
