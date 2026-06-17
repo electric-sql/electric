@@ -29,7 +29,10 @@ export {
 export { appendPathToUrl } from './url'
 export {
   getEntityAttachmentStreamPath,
+  getEntityMarkdownDocumentPath,
+  getEntityMarkdownDocumentUrlPath,
   manifestAttachmentKey,
+  manifestMarkdownDocumentKey,
 } from './manifest-helpers'
 export { buildSections, buildTimelineEntries } from './use-chat'
 export {
@@ -47,6 +50,7 @@ export {
 export { isGoalCommandText, parseGoalCommand } from './goal-command'
 export { formatTokenCount } from './token-budget'
 export type { GoalCommand } from './goal-command'
+export { MARKDOWN_DOCUMENT_AGENT_PRESENCE_TTL_MS } from './markdown-document-constants'
 
 export type {
   EntityStreamDB,
@@ -68,6 +72,7 @@ export type {
   GoalStatus,
   Manifest,
   ManifestAttachmentEntry,
+  ManifestDocumentEntry,
   ManifestGoalEntry,
 } from './entity-schema'
 export type {

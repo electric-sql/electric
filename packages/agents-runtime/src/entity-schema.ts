@@ -358,6 +358,23 @@ type ManifestAttachmentEntryValue = {
   error?: string
   meta?: Record<string, JsonValue>
 }
+type ManifestDocumentEntryValue = {
+  key?: string
+  kind: `document`
+  id: string
+  provider: `y-durable-streams`
+  docId: string
+  docPath: string
+  streamPath: string
+  transportMimeType: `application/vnd.electric-agents.markdown-yjs`
+  contentMimeType: `text/markdown`
+  yTextName: `markdown`
+  title: string
+  createdAt: string
+  createdBy?: string
+  updatedAt?: string
+  meta?: Record<string, JsonValue>
+}
 type ContextEntryAttrsValue = Record<string, string | number | boolean>
 type ManifestContextEntryValue = {
   key?: string
@@ -811,6 +828,7 @@ function createManifestSchema(): Schema<
   | ManifestSharedStateEntryValue
   | ManifestEffectEntryValue
   | ManifestAttachmentEntryValue
+  | ManifestDocumentEntryValue
   | ManifestContextEntryValue
   | ManifestCronScheduleEntryValue
   | ManifestFutureSendScheduleEntryValue
@@ -880,6 +898,26 @@ function createManifestSchema(): Schema<
     z.object({
       key: z.string().optional(),
       ...timelineOrderField,
+      kind: z.literal(`document`),
+      id: z.string(),
+      provider: z.literal(`y-durable-streams`),
+      docId: z.string(),
+      docPath: z.string(),
+      streamPath: z.string(),
+      transportMimeType: z.literal(
+        `application/vnd.electric-agents.markdown-yjs`
+      ),
+      contentMimeType: z.literal(`text/markdown`),
+      yTextName: z.literal(`markdown`),
+      title: z.string(),
+      createdAt: z.string(),
+      createdBy: z.string().optional(),
+      updatedAt: z.string().optional(),
+      meta: createAttachmentMetaSchema().optional(),
+    }),
+    z.object({
+      key: z.string().optional(),
+      ...timelineOrderField,
       kind: z.literal(`context`),
       id: z.string(),
       name: z.string(),
@@ -936,6 +974,7 @@ function createManifestSchema(): Schema<
     | ManifestSharedStateEntryValue
     | ManifestEffectEntryValue
     | ManifestAttachmentEntryValue
+    | ManifestDocumentEntryValue
     | ManifestContextEntryValue
     | ManifestCronScheduleEntryValue
     | ManifestFutureSendScheduleEntryValue
@@ -990,6 +1029,8 @@ export type AttachmentRole = AttachmentRoleValue
 export type AttachmentSubject = AttachmentSubjectValue
 export type ManifestAttachmentEntry =
   SequencedPersistedRow<ManifestAttachmentEntryValue>
+export type ManifestDocumentEntry =
+  SequencedPersistedRow<ManifestDocumentEntryValue>
 export type ManifestContextEntry =
   SequencedPersistedRow<ManifestContextEntryValue>
 export type ManifestCronScheduleEntry =
@@ -1004,6 +1045,7 @@ type ManifestUnion =
   | ManifestSharedStateEntry
   | ManifestEffectEntry
   | ManifestAttachmentEntry
+  | ManifestDocumentEntry
   | ManifestContextEntry
   | ManifestCronScheduleEntry
   | ManifestFutureSendScheduleEntry
@@ -1028,6 +1070,14 @@ export type Manifest = ManifestUnion & {
   createdBy?: string
   error?: string
   meta?: Record<string, JsonValue>
+  provider?: `y-durable-streams`
+  docId?: string
+  docPath?: string
+  transportMimeType?: `application/vnd.electric-agents.markdown-yjs`
+  contentMimeType?: `text/markdown`
+  yTextName?: `markdown`
+  title?: string
+  updatedAt?: string
   name?: string
   attrs?: ContextEntryAttrs
   content?: string
@@ -1047,7 +1097,6 @@ export type Manifest = ManifestUnion & {
   tokenBudget?: number | null
   tokensUsed?: number
   summary?: string
-  updatedAt?: string
 }
 export type ReplayWatermark = SequencedPersistedRow<ReplayWatermarkValue>
 

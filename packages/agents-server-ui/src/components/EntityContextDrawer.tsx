@@ -50,6 +50,7 @@ type DrawerEntry =
       action:
         | { kind: `entity`; url: string }
         | { kind: `state`; sourceId: string }
+        | { kind: `document`; id: string }
         | { kind: `inspect` }
       entity: DrawerEntity | null
     }
@@ -218,11 +219,21 @@ export function EntityContextDrawer({
     })
   }
 
+  const openDocument = (documentId: string, side = false): void => {
+    helpers.openEntity(entity.url, {
+      viewId: `markdown-doc`,
+      viewParams: { doc: documentId },
+      ...(side ? { target: { tileId, position: `split-right` as const } } : {}),
+    })
+  }
+
   const handleEntry = (entry: DrawerEntry): void => {
     if (entry.action.kind === `entity`) {
       openEntity(entry.action.url)
     } else if (entry.action.kind === `state`) {
       openStateInspector(entry.action.sourceId)
+    } else if (entry.action.kind === `document`) {
+      openDocument(entry.action.id)
     } else {
       setInspectTarget({ title: entry.title, value: entry.manifest })
     }
@@ -233,6 +244,8 @@ export function EntityContextDrawer({
       openEntity(entry.action.url, true)
     } else if (entry.action.kind === `state`) {
       openStateInspector(entry.action.sourceId, true)
+    } else if (entry.action.kind === `document`) {
+      openDocument(entry.action.id, true)
     }
   }
 
@@ -565,6 +578,8 @@ function manifestKindLabel(manifest: Manifest): string {
       return `Effect`
     case `attachment`:
       return `Attachment`
+    case `document`:
+      return `Markdown document`
     case `context`:
       return `Context`
     case `schedule`:
@@ -681,6 +696,18 @@ function createManifestEntry(
         meta: `${manifest.mimeType} · ${manifest.status}`,
         manifest,
         action: { kind: `inspect` },
+        entity: null,
+      }
+
+    case `document`:
+      return {
+        key: manifest.key,
+        groupKey: `document`,
+        groupLabel: `Documents`,
+        title: manifest.title,
+        meta: manifest.id,
+        manifest,
+        action: { kind: `document`, id: manifest.id },
         entity: null,
       }
 

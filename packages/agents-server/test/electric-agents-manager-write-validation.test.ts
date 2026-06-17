@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 import { EntityManager } from '../src/entity-manager'
 import { SchemaValidator } from '../src/electric-agents/schema-validator'
+import {
+  MARKDOWN_DOCUMENT_CONTENT_MIME,
+  MARKDOWN_DOCUMENT_PROVIDER,
+  MARKDOWN_DOCUMENT_TEXT_NAME,
+  MARKDOWN_DOCUMENT_TRANSPORT_MIME,
+} from '../src/markdown-documents'
 
 const observedItemSchema = {
   type: `object`,
@@ -94,6 +100,65 @@ function attachmentManifest(value: Record<string, unknown>) {
   }
 }
 
+function createMarkdownDocumentManager() {
+  const jsonStreams = new Map<string, Array<Record<string, unknown>>>()
+  const binaryStreams = new Map<string, Array<Uint8Array>>()
+  const streamClient = {
+    create: vi.fn(async (path: string) => {
+      if (binaryStreams.has(path)) {
+        const error = new Error(`Stream already exists`) as Error & {
+          status?: number
+        }
+        error.status = 409
+        throw error
+      }
+      binaryStreams.set(path, [])
+    }),
+    appendBytes: vi.fn(async (path: string, data: Uint8Array) => {
+      binaryStreams.get(path)?.push(data)
+    }),
+    append: vi.fn(async (path: string, data: Uint8Array) => {
+      const event = JSON.parse(new TextDecoder().decode(data))
+      const stream = jsonStreams.get(path) ?? []
+      stream.push(event)
+      jsonStreams.set(path, stream)
+    }),
+    delete: vi.fn(async (path: string) => {
+      binaryStreams.delete(path)
+    }),
+    read: vi.fn(async (path: string) => ({
+      messages: (binaryStreams.get(path) ?? []).map((data, index) => ({
+        data,
+        offset: String(index),
+      })),
+    })),
+    readJson: vi.fn(async (path: string) => jsonStreams.get(path) ?? []),
+  }
+
+  return {
+    manager: new EntityManager({
+      registry: {
+        getEntity: vi.fn().mockResolvedValue({
+          url: `/chat/session-1`,
+          status: `running`,
+          streams: { main: `/chat/session-1` },
+        }),
+        getEntityType: vi.fn(),
+        replaceEntityManifestSource: vi.fn(),
+        replaceSharedStateLink: vi.fn(),
+        close: vi.fn(),
+      } as any,
+      streamClient: streamClient as any,
+      validator: new SchemaValidator(),
+      wakeRegistry: {
+        setTimeoutCallback: vi.fn(),
+        setDebounceCallback: vi.fn(),
+      } as any,
+    }),
+    streamClient,
+  }
+}
+
 describe(`ElectricAgentsManager.validateWriteEvent`, () => {
   it(`validates delete events against old_value instead of value`, async () => {
     const manager = createManager()
@@ -137,6 +202,48 @@ describe(`ElectricAgentsManager.validateWriteEvent`, () => {
       false
     )
     expect((manager as any).isValidWriteToken(entity, `claim-token`)).toBe(true)
+  })
+})
+
+describe(`ElectricAgentsManager markdown documents`, () => {
+  it(`creates Yjs update and awareness streams and exposes a manifest document entry`, async () => {
+    const { manager, streamClient } = createMarkdownDocumentManager()
+
+    const created = await manager.createMarkdownDocument(`/chat/session-1`, {
+      id: `notes`,
+      title: `Session notes`,
+      createdBy: `/principal/agent:horton`,
+    })
+
+    expect(created.document).toMatchObject({
+      key: `document:notes`,
+      kind: `document`,
+      id: `notes`,
+      provider: MARKDOWN_DOCUMENT_PROVIDER,
+      docId: `agents/chat/session-1/documents/notes`,
+      docPath: `agents/chat/session-1/documents/notes`,
+      streamPath: `/v1/yjs/default/docs/agents/chat/session-1/documents/notes`,
+      transportMimeType: MARKDOWN_DOCUMENT_TRANSPORT_MIME,
+      contentMimeType: MARKDOWN_DOCUMENT_CONTENT_MIME,
+      yTextName: MARKDOWN_DOCUMENT_TEXT_NAME,
+      title: `Session notes`,
+      createdBy: `/principal/agent:horton`,
+    })
+    expect(streamClient.create).toHaveBeenCalledWith(
+      `/yjs/default/docs/agents/chat/session-1/documents/notes/.updates`,
+      { contentType: `application/octet-stream` }
+    )
+    expect(streamClient.create).toHaveBeenCalledWith(
+      `/yjs/default/docs/agents/chat/session-1/documents/notes/.awareness/default`,
+      { contentType: `application/octet-stream` }
+    )
+    expect(streamClient.appendBytes).not.toHaveBeenCalled()
+    await expect(
+      manager.getMarkdownDocument(`/chat/session-1`, `notes`)
+    ).resolves.toMatchObject({
+      id: `notes`,
+      title: `Session notes`,
+    })
   })
 })
 

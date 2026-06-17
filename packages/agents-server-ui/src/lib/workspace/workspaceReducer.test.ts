@@ -67,6 +67,33 @@ describe(`workspaceReducer`, () => {
       expect(right.entityUrl).toBe(`/horton/bar`)
     })
 
+    it(`opens a markdown document view in a right split`, () => {
+      const after1 = run(EMPTY_WORKSPACE, {
+        type: `open-tile`,
+        tile: { entityUrl: `/horton/foo`, viewId: `chat` },
+      })
+      const fooId = rootAsTile(after1).id
+      const ws = workspaceReducer(after1, {
+        type: `open-tile`,
+        tile: {
+          entityUrl: `/horton/foo`,
+          viewId: `markdown-doc`,
+          viewParams: { doc: `notes` },
+        },
+        target: { tileId: fooId, position: `split-right` },
+      })
+
+      const split = rootAsSplit(ws)
+      expect(split.direction).toBe(`horizontal`)
+      const right = split.children[1].node as Tile
+      expect(right).toMatchObject({
+        entityUrl: `/horton/foo`,
+        viewId: `markdown-doc`,
+        viewParams: { doc: `notes` },
+      })
+      expect(ws.activeTileId).toBe(right.id)
+    })
+
     it(`split-up places the new tile above the existing one`, () => {
       const after1 = run(EMPTY_WORKSPACE, {
         type: `open-tile`,

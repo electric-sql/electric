@@ -41,6 +41,7 @@ import type {
   ManifestAttachmentEntry as EntityManifestAttachmentEntry,
   ManifestChildEntry as EntityManifestChildEntry,
   ManifestContextEntry as EntityManifestContextEntry,
+  ManifestDocumentEntry as EntityManifestDocumentEntry,
   ManifestCronScheduleEntry as EntityManifestCronScheduleEntry,
   ManifestEffectEntry as EntityManifestEffectEntry,
   ManifestFutureSendScheduleEntry as EntityManifestFutureSendScheduleEntry,
@@ -79,6 +80,12 @@ export type ObservationStreamDB = BaseStreamDB<ObservationCollectionMap>
 export type EntitiesObservationHandle = ObservationHandle & {
   sourceType: `entities`
   db: ObservationStreamDB
+}
+
+export type MarkdownDocumentConnection = {
+  baseUrl: string
+  docId: string
+  headers?: Record<string, string>
 }
 
 export type JsonValue =
@@ -319,6 +326,7 @@ export type ManifestEntry = EntityManifest
 export type ManifestAttachmentEntry = EntityManifestAttachmentEntry
 export type ManifestChildEntry = EntityManifestChildEntry
 export type ManifestContextEntry = EntityManifestContextEntry
+export type ManifestDocumentEntry = EntityManifestDocumentEntry
 export type ManifestCronScheduleEntry = EntityManifestCronScheduleEntry
 export type ManifestEffectEntry = EntityManifestEffectEntry
 export type ManifestFutureSendScheduleEntry =
@@ -760,6 +768,7 @@ export interface ProcessWakeConfig {
   createElectricTools?: (context: {
     entityUrl: string
     entityType: string
+    principal?: RuntimePrincipal
     args: Readonly<Record<string, unknown>>
     db: EntityStreamDBWithActions
     events: Array<ChangeEvent>
@@ -786,6 +795,27 @@ export interface ProcessWakeConfig {
     unsubscribeFromWebhookSource: (opts: {
       id: string
     }) => Promise<{ txid: string }>
+    createMarkdownDocument: (opts: {
+      id?: string
+      title: string
+      meta?: Record<string, unknown>
+    }) => Promise<{ txid: string; document: ManifestDocumentEntry }>
+    getMarkdownDocumentConnection: (
+      streamPath: string
+    ) => Promise<MarkdownDocumentConnection>
+    readMarkdownDocumentStream: (
+      streamPath: string,
+      opts?: { offset?: string }
+    ) => Promise<{ bytes: Uint8Array; offset?: string }>
+    appendMarkdownDocumentUpdate: (
+      streamPath: string,
+      update: Uint8Array
+    ) => Promise<{ offset?: string }>
+    appendMarkdownDocumentAwareness: (
+      streamPath: string,
+      update: Uint8Array
+    ) => Promise<{ offset?: string }>
+    registerCleanup: (cleanup: () => void | Promise<void>) => void
   }) => Array<AgentTool> | Promise<Array<AgentTool>>
   /** Optional shutdown signal to end idle waits during host teardown. */
   shutdownSignal?: AbortSignal

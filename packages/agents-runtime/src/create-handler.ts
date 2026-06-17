@@ -20,7 +20,10 @@ import type {
   AnyEntityDefinition,
   EntityStreamDBWithActions,
   HeadersProvider,
+  ManifestDocumentEntry,
+  MarkdownDocumentConnection,
   ProcessWakeConfig,
+  RuntimePrincipal,
   WakeNotification,
   WebhookNotification,
 } from './types'
@@ -73,6 +76,7 @@ export interface RuntimeRouterConfig {
   createElectricTools?: (context: {
     entityUrl: string
     entityType: string
+    principal?: RuntimePrincipal
     args: Readonly<Record<string, unknown>>
     db: EntityStreamDBWithActions
     events: Array<ChangeEvent>
@@ -99,6 +103,27 @@ export interface RuntimeRouterConfig {
     unsubscribeFromWebhookSource: (opts: {
       id: string
     }) => Promise<{ txid: string }>
+    createMarkdownDocument: (opts: {
+      id?: string
+      title: string
+      meta?: Record<string, unknown>
+    }) => Promise<{ txid: string; document: ManifestDocumentEntry }>
+    getMarkdownDocumentConnection: (
+      streamPath: string
+    ) => Promise<MarkdownDocumentConnection>
+    readMarkdownDocumentStream: (
+      streamPath: string,
+      opts?: { offset?: string }
+    ) => Promise<{ bytes: Uint8Array; offset?: string }>
+    appendMarkdownDocumentUpdate: (
+      streamPath: string,
+      update: Uint8Array
+    ) => Promise<{ offset?: string }>
+    appendMarkdownDocumentAwareness: (
+      streamPath: string,
+      update: Uint8Array
+    ) => Promise<{ offset?: string }>
+    registerCleanup: (cleanup: () => void | Promise<void>) => void
   }) => Array<AgentTool> | Promise<Array<AgentTool>>
   /**
    * Optional observer for background wake failures. Return true to mark the
