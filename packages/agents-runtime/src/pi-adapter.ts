@@ -86,7 +86,7 @@ export interface PiAdapterOptions {
 }
 
 const DEFAULT_MODEL_TIMEOUT_MS = 30_000
-const DEFAULT_MODEL_MAX_RETRIES = 0
+const DEFAULT_MODEL_MAX_RETRIES = 2
 
 interface PiAgentAdapterConfig {
   entityUrl: string

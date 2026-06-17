@@ -127,6 +127,60 @@ describe(`createPiAgentAdapter`, () => {
     expect(handle.isRunning()).toBe(false)
   })
 
+  it(`passes default timeout and retry options to provider stream calls`, async () => {
+    let seenOptions: { timeoutMs?: number; maxRetries?: number } | undefined
+    const completedMessage: AssistantMessage = {
+      role: `assistant`,
+      content: [{ type: `text`, text: `ok` }],
+      api: `anthropic-messages`,
+      provider: `anthropic`,
+      model: `claude-sonnet-4-5-20250929`,
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          total: 0,
+        },
+      },
+      stopReason: `stop`,
+      timestamp: Date.now(),
+    }
+
+    const factory = createPiAgentAdapter({
+      systemPrompt: `Test system prompt`,
+      model: `claude-sonnet-4-5-20250929`,
+      tools: [],
+      streamFn: (_model, _context, options) => {
+        seenOptions = {
+          timeoutMs: options?.timeoutMs,
+          maxRetries: options?.maxRetries,
+        }
+        const stream = createAssistantMessageEventStream()
+        queueMicrotask(() => stream.end(completedMessage))
+        return stream
+      },
+    })
+
+    const handle = factory({
+      entityUrl: `test/entity-1`,
+      epoch: 1,
+      messages: [],
+      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0, reasoning: 0 },
+      writeEvent: (_event: ChangeEvent) => {},
+    })
+
+    await handle.run(`hello`)
+
+    expect(seenOptions).toEqual({ timeoutMs: 30_000, maxRetries: 2 })
+  })
+
   it(`passes timeout and retry options to each provider stream call`, async () => {
     const seenOptions: Array<{ timeoutMs?: number; maxRetries?: number }> = []
     const completedMessage: AssistantMessage = {
@@ -158,7 +212,7 @@ describe(`createPiAgentAdapter`, () => {
       model: `claude-sonnet-4-5-20250929`,
       tools: [],
       modelTimeoutMs: 1234,
-      modelMaxRetries: 2,
+      modelMaxRetries: 5,
       streamFn: (_model, _context, options) => {
         seenOptions.push({
           timeoutMs: options?.timeoutMs,
@@ -180,7 +234,7 @@ describe(`createPiAgentAdapter`, () => {
 
     await handle.run(`hello`)
 
-    expect(seenOptions).toEqual([{ timeoutMs: 1234, maxRetries: 2 }])
+    expect(seenOptions).toEqual([{ timeoutMs: 1234, maxRetries: 5 }])
   })
 
   it(`preserves existing stream options while injecting timeout and retry options`, async () => {
@@ -214,11 +268,11 @@ describe(`createPiAgentAdapter`, () => {
       model: `claude-sonnet-4-5-20250929`,
       tools: [],
       modelTimeoutMs: 1234,
-      modelMaxRetries: 2,
+      modelMaxRetries: 5,
       streamFn: (_model, _context, options) => {
         capturedSignal = options?.signal
         expect(options?.timeoutMs).toBe(1234)
-        expect(options?.maxRetries).toBe(2)
+        expect(options?.maxRetries).toBe(5)
         const stream = createAssistantMessageEventStream()
         queueMicrotask(() => stream.end(completedMessage))
         return stream
