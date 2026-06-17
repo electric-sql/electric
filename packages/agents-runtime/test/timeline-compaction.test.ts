@@ -67,6 +67,40 @@ describe(`timelineMessages compaction reconstruction`, () => {
     expect(iPrompt).toBeLessThan(iAnswer)
   })
 
+  it(`mid-turn checkpoint keeps messages produced after compaction (no tail loss)`, () => {
+    // Regression: the mid-turn (sync) checkpoint summarizes the WHOLE context and
+    // is stamped with watermark = timeline head at compaction (here 3). Messages
+    // written *after* it — the model's post-compaction output + the next prompt —
+    // must survive. Previously the checkpoint carried no watermark, so it fell
+    // back to its own (later) row order and silently dropped recent messages.
+    const db = buildStreamFixture([
+      { kind: `inbox`, at: 1, value: { payload: `EARLY_ONE` } },
+      { kind: `inbox`, at: 2, value: { payload: `EARLY_TWO` } },
+      { kind: `inbox`, at: 3, value: { payload: `EARLY_THREE` } },
+      {
+        kind: `context_inserted`,
+        at: 4,
+        value: {
+          id: `compaction`,
+          name: `compaction_summary`,
+          attrs: { kind: `compaction`, status: `complete`, watermark: 3 },
+          content: `MIDTURN_SUMMARY`,
+        },
+      },
+      { kind: `inbox`, at: 5, value: { payload: `POST_COMPACTION_ANSWER` } },
+      { kind: `inbox`, at: 6, value: { payload: `NEXT_PROMPT` } },
+    ])
+
+    const out = serialize(db)
+    // Everything <= head is folded into the summary…
+    expect(out).not.toContain(`EARLY_ONE`)
+    expect(out).not.toContain(`EARLY_THREE`)
+    expect(out).toContain(`MIDTURN_SUMMARY`)
+    // …and everything written after compaction is kept verbatim.
+    expect(out).toContain(`POST_COMPACTION_ANSWER`)
+    expect(out).toContain(`NEXT_PROMPT`)
+  })
+
   it(`does NOT hide history for a running (incomplete) checkpoint`, () => {
     // Crash-safety: an in-flight/crashed compaction must never drop history.
     const db = buildStreamFixture([

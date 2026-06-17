@@ -80,7 +80,7 @@ export type ContextUsageLevel = `normal` | `warning` | `critical`
 /**
  * Severity bucket for a usage ratio, aligned to the compaction thresholds:
  * `warning` once background compaction would start (85%), `critical` at the
- * hard ceiling (95%).
+ * hard ceiling (90%).
  */
 export function contextUsageLevel(ratio: number): ContextUsageLevel {
   if (ratio >= CONTEXT_USAGE_HARD_CEILING) return `critical`

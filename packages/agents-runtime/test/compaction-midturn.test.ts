@@ -17,7 +17,6 @@ describe(`createMidTurnCompactor`, () => {
       summarize,
       writeCheckpoint,
       ceiling: 0.9,
-      keepTail: 4,
     })
     const out = await compact({
       messages: msgs(10),
@@ -28,7 +27,7 @@ describe(`createMidTurnCompactor`, () => {
     expect(summarize).not.toHaveBeenCalled()
   })
 
-  it(`compacts over the ceiling: running→complete + [summary, ...tail]`, async () => {
+  it(`compacts over the ceiling: summarizes the WHOLE context, continues from [summary]`, async () => {
     const summarize = vi.fn().mockResolvedValue(`SUMMARY`)
     const statuses: Array<string> = []
     const writeCheckpoint = vi.fn((s: string) => statuses.push(s))
@@ -36,7 +35,6 @@ describe(`createMidTurnCompactor`, () => {
       summarize,
       writeCheckpoint,
       ceiling: 0.9,
-      keepTail: 4,
     })
     const messages = msgs(10)
     const out = await compact({
@@ -44,23 +42,22 @@ describe(`createMidTurnCompactor`, () => {
       currentTokens: 9500, // 95%
       contextWindow: 10000,
     })
-    // folded the first 6 (10 − keepTail 4)
+    // The entire context is folded (no verbatim tail kept), so the summary and
+    // the checkpoint's timeline-head watermark agree.
     expect(summarize).toHaveBeenCalledTimes(1)
-    expect((summarize.mock.calls[0]![0] as Array<unknown>).length).toBe(6)
+    expect((summarize.mock.calls[0]![0] as Array<unknown>).length).toBe(10)
     expect(statuses).toEqual([`running`, `complete`])
     expect(out).not.toBeNull()
-    expect(out!.length).toBe(1 + 4) // summary + recent tail
+    expect(out!.length).toBe(1) // summary only
     expect(JSON.stringify(out![0])).toContain(`SUMMARY`)
-    expect(out![1]).toBe(messages[6]) // tail begins at coveredCount=6
   })
 
-  it(`is sticky: reuses the cached summary below the ceiling`, async () => {
+  it(`is sticky: reuses the cached summary and appends messages added since`, async () => {
     const summarize = vi.fn().mockResolvedValue(`SUMMARY`)
     const compact = createMidTurnCompactor({
       summarize,
       writeCheckpoint: vi.fn(),
       ceiling: 0.9,
-      keepTail: 4,
     })
     const messages = msgs(10)
     await compact({ messages, currentTokens: 9500, contextWindow: 10000 })
@@ -73,7 +70,8 @@ describe(`createMidTurnCompactor`, () => {
     })
     expect(summarize).not.toHaveBeenCalled() // reused, not re-summarized
     expect(JSON.stringify(out![0])).toContain(`SUMMARY`)
-    expect(out!.length).toBe(1 + 5) // summary + (4 original tail + 1 new)
+    expect(out!.length).toBe(1 + 1) // summary + the one message added since
+    expect(out![1]).toBe(grown[10])
   })
 
   it(`re-summarizes by chaining off the previous summary`, async () => {
@@ -85,7 +83,6 @@ describe(`createMidTurnCompactor`, () => {
       summarize,
       writeCheckpoint: vi.fn(),
       ceiling: 0.9,
-      keepTail: 4,
     })
     await compact({
       messages: msgs(10),
@@ -98,33 +95,12 @@ describe(`createMidTurnCompactor`, () => {
       contextWindow: 10000,
     })
     expect(summarize).toHaveBeenCalledTimes(2)
-    // the re-summarization input starts with the prior summary (chained)
+    // The re-summarization input is [prior summary, ...the messages added since]
+    // (chained, not the whole already-summarized bulk re-read).
     const secondInput = summarize.mock.calls[1]![0] as Array<unknown>
+    expect(secondInput.length).toBe(1 + 10) // SUMMARY1 + msgs 10..19
     expect(JSON.stringify(secondInput[0])).toContain(`SUMMARY1`)
     expect(JSON.stringify(out![0])).toContain(`SUMMARY2`)
-  })
-
-  it(`never starts the kept tail with an orphaned tool_result`, async () => {
-    const summarize = vi.fn().mockResolvedValue(`SUMMARY`)
-    const compact = createMidTurnCompactor({
-      summarize,
-      writeCheckpoint: vi.fn(),
-      ceiling: 0.9,
-      keepTail: 4,
-    })
-    // Boundary would land at index 6 (10 − keepTail 4); make that a tool_result
-    // whose tool_use (index 5 assistant) is being folded. The fold boundary must
-    // advance past it so the tail starts on the assistant turn at index 7.
-    const messages = msgs(10)
-    messages[6] = { role: `toolResult`, content: `tr` }
-    const out = await compact({
-      messages,
-      currentTokens: 9500,
-      contextWindow: 10000,
-    })
-    expect((summarize.mock.calls[0]![0] as Array<unknown>).length).toBe(7)
-    expect(out![1]).toBe(messages[7])
-    expect((out![1] as { role: string }).role).toBe(`assistant`)
   })
 
   it(`on failure writes "failed" and leaves context untouched`, async () => {
@@ -134,7 +110,6 @@ describe(`createMidTurnCompactor`, () => {
       summarize,
       writeCheckpoint: (s: string) => statuses.push(s),
       ceiling: 0.9,
-      keepTail: 4,
     })
     const out = await compact({
       messages: msgs(10),

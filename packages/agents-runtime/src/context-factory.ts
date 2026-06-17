@@ -37,8 +37,6 @@ import {
 } from './compaction-summarize'
 import { CONTEXT_USAGE_BACKGROUND_START } from './token-accountant'
 
-/** Recent messages kept verbatim when compacting (the live tool-call tail). */
-const COMPACT_KEEP_TAIL = 6
 import { createContextTools } from './tools/context-tools'
 import { CACHE_TIERS } from './types'
 import { composeToolsWithProviders } from './tool-providers'
@@ -843,11 +841,27 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         const compactProvider = agentModelProvider(activeAgentConfig)
         const onCompactContext = createMidTurnCompactor({
           ceiling: compactCeiling,
-          keepTail: COMPACT_KEEP_TAIL,
           writeCheckpoint: (status, content) => {
+            const attrs: Record<string, string | number> = {
+              kind: COMPACTION_CHECKPOINT_KIND,
+              status,
+            }
+            // Stamp the completed checkpoint with the current timeline head as
+            // its watermark. The mid-turn summary covers the whole context, so
+            // reconstruction folds exactly that (items <= head) and keeps
+            // everything appended after — no verbatim tail is dropped. Without
+            // this, the watermark falls back to the checkpoint row's own (later)
+            // position and silently drops the most recent messages next turn.
+            if (status === `complete`) {
+              const head = runtimeTimelineMessages(config.db).reduce(
+                (max, message) => Math.max(max, message.at),
+                Number.NEGATIVE_INFINITY
+              )
+              if (Number.isFinite(head)) attrs.watermark = head
+            }
             contextApi.insertContext(COMPACTION_CHECKPOINT_ID, {
               name: COMPACTION_CHECKPOINT_NAME,
-              attrs: { kind: COMPACTION_CHECKPOINT_KIND, status },
+              attrs,
               content,
             })
           },

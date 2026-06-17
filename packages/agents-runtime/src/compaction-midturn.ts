@@ -15,8 +15,6 @@ export interface MidTurnCompactorDeps {
   writeCheckpoint: (status: CompactionStatus, content: string) => void
   /** Compaction fires at/above this fraction of the context window. */
   ceiling: number
-  /** Keep this many of the most recent messages verbatim (the live tail). */
-  keepTail: number
 }
 
 export interface CompactContextInput {
@@ -49,13 +47,20 @@ export function buildCompactionSummaryMessage(
  * Build the per-turn mid-turn compaction hook for one agent run. The returned
  * function is wired to pi-agent's `transformContext` — it runs before every
  * model step. Once the estimated outgoing context crosses the ceiling it folds
- * the older messages into a summary and returns `[summary, ...recent tail]`.
+ * the WHOLE context into a summary and continues from `[summary, ...anything
+ * appended since]` (Codex-style — no verbatim pre-compaction tail).
+ *
+ * Summarizing everything is what keeps the persisted checkpoint sound: the
+ * `writeCheckpoint` wiring stamps it with `watermark = timeline head`, and a
+ * verbatim tail kept below that head would be dropped on the next turn's
+ * reconstruction yet excluded from the summary — silently losing context. By
+ * covering everything up to the head, summary and watermark agree.
  *
  * The summary is cached for the rest of the turn: later steps reuse it
  * (returning the compacted view) instead of re-summarizing. Coverage is only
- * extended if the tail grows back over the ceiling, and a re-summarization
- * chains off the previous summary (prev summary + new middle) rather than
- * re-reading the whole already-summarized bulk.
+ * extended once new messages appended this turn push back over the ceiling, and
+ * a re-summarization chains off the previous summary (prev summary + new
+ * middle) rather than re-reading the whole already-summarized bulk.
  *
  * Returns `null` to leave the context untouched (no compaction needed/active).
  */
@@ -81,20 +86,9 @@ export function createMidTurnCompactor(
     // this turn, otherwise leave the context untouched.
     if (!overCeiling) return compactedView(messages)
 
-    const keepTail = Math.min(deps.keepTail, Math.max(0, messages.length - 1))
-    let coveredCount = messages.length - keepTail
-
-    // Don't split a tool_call/tool_result pair: the kept tail must not start
-    // with an orphaned tool_result, whose matching tool_use (in the assistant
-    // message) would be folded into the summary — Anthropic rejects that. Advance
-    // the fold boundary past any leading tool-result messages so the tail begins
-    // on a fresh user/assistant turn.
-    while (
-      coveredCount < messages.length &&
-      messages[coveredCount]?.role === `toolResult`
-    ) {
-      coveredCount++
-    }
+    // Fold the ENTIRE current context (everything maps to timeline items at or
+    // below the head the checkpoint will store), so summary and watermark agree.
+    const coveredCount = messages.length
 
     // Nothing new to fold beyond the existing summary's coverage.
     if (coveredCount <= 0) return compactedView(messages)

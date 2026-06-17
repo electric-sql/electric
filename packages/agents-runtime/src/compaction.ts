@@ -8,7 +8,7 @@
  * watermark: timeline reconstruction hides everything before it and emits the
  * summary in their place (see `timelineMessages`).
  *
- * Phase 2 wires this up synchronously at the 95% hard ceiling; Phase 3 adds the
+ * Phase 2 wires this up synchronously at the 90% hard ceiling; Phase 3 adds the
  * background trigger at 85%.
  */
 
