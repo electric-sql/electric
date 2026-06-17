@@ -330,6 +330,43 @@ function changeEventToWakeEvent(
   return null
 }
 
+function combineWakeEvents(
+  events: Array<ChangeEvent>,
+  fallbackSource: string
+): { wakeEvent: WakeEvent; offset: string | null } | null {
+  const wakeEvents = events.filter((event) => event.type === `wake`)
+  if (wakeEvents.length === 0) return null
+  if (wakeEvents.length === 1) {
+    const event = wakeEvents[0]!
+    const wakeEvent = changeEventToWakeEvent(event, fallbackSource)
+    return wakeEvent
+      ? { wakeEvent, offset: event.headers.offset ?? null }
+      : null
+  }
+
+  const messages = wakeEvents
+    .map((event) => event.value as WakeMessage | undefined)
+    .filter((message): message is WakeMessage => message !== undefined)
+  const sources = [...new Set(messages.map((message) => message.source))]
+
+  return {
+    wakeEvent: {
+      source: sources.length === 1 ? sources[0]! : fallbackSource,
+      type: `wake`,
+      fromOffset: 0,
+      toOffset: 0,
+      eventCount: wakeEvents.length,
+      payload: {
+        type: `wake_batch`,
+        sources,
+        wakes: messages,
+        changes: messages.flatMap((message) => message.changes ?? []),
+      },
+    },
+    offset: wakeEvents.at(-1)!.headers.offset ?? null,
+  }
+}
+
 function selectWakeFromEvents(
   events: Array<ChangeEvent>,
   fallbackSource: string,
@@ -1045,11 +1082,10 @@ export async function processWake(
       return null
     }
 
-    const selectedWake = selectWakeFromEvents(
-      deltaEvents,
-      entityUrl,
-      selectedKind
-    )
+    const selectedWake =
+      selectedKind === `wake`
+        ? combineWakeEvents(deltaEvents, entityUrl)
+        : selectWakeFromEvents(deltaEvents, entityUrl, selectedKind)
     if (!selectedWake) {
       log.warn(
         `fresh ${selectedKind} batch did not contain runnable wake input; acking as no-op`
@@ -1974,11 +2010,11 @@ export async function processWake(
     if (!skipInitialHandlerPass) {
       await waitForCurrentWakeInput()
       currentWakeEvents = computeCurrentNotificationEvents()
-      const initialWake = selectWakeFromEvents(
-        currentWakeEvents,
-        entityUrl,
-        getFreshKind(currentWakeEvents) ?? undefined
-      )
+      const initialFreshKind = getFreshKind(currentWakeEvents) ?? undefined
+      const initialWake =
+        initialFreshKind === `wake`
+          ? combineWakeEvents(currentWakeEvents, entityUrl)
+          : selectWakeFromEvents(currentWakeEvents, entityUrl, initialFreshKind)
       if (initialWake) {
         currentWakeEvent = initialWake.wakeEvent
         currentWakeOffset = initialWake.offset ?? currentWakeOffset
