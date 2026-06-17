@@ -21,7 +21,7 @@ export interface PullWakeEvent {
 export interface PullWakeRunnerConfig {
   baseUrl: string
   runnerId: string
-  runtime: Pick<RuntimeRouter, `dispatchWake` | `drainWakes` | `abortWakes`>
+  runtime: PullWakeRuntime
   offset?: string
   headers?: HeadersProvider
   claimHeaders?: ProcessWakeConfig[`claimHeaders`]
@@ -39,6 +39,13 @@ export interface PullWakeRunnerConfig {
     offset?: string
     signal: AbortSignal
   }) => Promise<PullWakeStreamResponse>
+}
+
+type PullWakeRuntime = Pick<
+  RuntimeRouter,
+  `dispatchWake` | `drainWakes` | `abortWakes`
+> & {
+  isWakeActive?: RuntimeRouter[`isWakeActive`]
 }
 
 export interface PullWakeStreamResponse {
@@ -89,6 +96,7 @@ export interface PullWakeRunnerHealth {
 const CLAIM_ACTOR_STOP_GRACE_MS = 1_000
 const DEFAULT_EVENT_HEARTBEAT_THROTTLE_MS = 2_000
 const HEARTBEAT_FAILURE_STREAM_RESET_THRESHOLD = 2
+const DEFERRED_WAKE_RETRY_MS = 25
 
 export function createPullWakeRunner(
   config: PullWakeRunnerConfig
@@ -119,6 +127,12 @@ export function createPullWakeRunner(
   let consecutiveHeartbeatFailures = 0
   let stopPromise: Promise<void> | null = null
   const claimActors = new Set<Promise<void>>()
+  const claimingStreamPaths = new Set<string>()
+  const deferredWakeEventsByStreamPath = new Map<string, PullWakeEvent>()
+  const deferredWakeTimersByStreamPath = new Map<
+    string,
+    ReturnType<typeof setTimeout>
+  >()
 
   const wakePath =
     config.wakeStreamPath ??
@@ -329,6 +343,50 @@ export function createPullWakeRunner(
     notifyHeartbeatChange()
   }
 
+  const normalizeStreamPath = (stream: string): string =>
+    stream.startsWith(`/`) ? stream : `/${stream}`
+
+  const hasActiveStreamClaim = (streamPath: string): boolean =>
+    claimingStreamPaths.has(streamPath) ||
+    config.runtime.isWakeActive?.(streamPath) === true
+
+  const clearDeferredWakeRetries = (): void => {
+    for (const timer of deferredWakeTimersByStreamPath.values()) {
+      clearTimeout(timer)
+    }
+    deferredWakeTimersByStreamPath.clear()
+    deferredWakeEventsByStreamPath.clear()
+  }
+
+  const scheduleDeferredWakeClaim = (
+    event: PullWakeEvent,
+    signal: AbortSignal
+  ): void => {
+    const streamPath = normalizeStreamPath(event.stream)
+    deferredWakeEventsByStreamPath.set(streamPath, event)
+    if (deferredWakeTimersByStreamPath.has(streamPath)) return
+
+    const retry = (): void => {
+      deferredWakeTimersByStreamPath.delete(streamPath)
+      const deferredEvent = deferredWakeEventsByStreamPath.get(streamPath)
+      if (!deferredEvent || signal.aborted || !isRunningState()) {
+        deferredWakeEventsByStreamPath.delete(streamPath)
+        return
+      }
+      if (hasActiveStreamClaim(streamPath)) {
+        scheduleDeferredWakeClaim(deferredEvent, signal)
+        return
+      }
+
+      deferredWakeEventsByStreamPath.delete(streamPath)
+      spawnClaimActor(deferredEvent, signal)
+    }
+
+    const timer = setTimeout(retry, DEFERRED_WAKE_RETRY_MS)
+    timer.unref?.()
+    deferredWakeTimersByStreamPath.set(streamPath, timer)
+  }
+
   const claimWake = async (
     event: PullWakeEvent,
     signal: AbortSignal
@@ -384,6 +442,13 @@ export function createPullWakeRunner(
     event: PullWakeEvent,
     signal: AbortSignal
   ): Promise<void> => {
+    const streamPath = normalizeStreamPath(event.stream)
+    if (hasActiveStreamClaim(streamPath)) {
+      recordClaimSkipped()
+      scheduleDeferredWakeClaim(event, signal)
+      return
+    }
+    claimingStreamPaths.add(streamPath)
     try {
       const notification = await claimWake(event, signal)
       if (!notification) return
@@ -406,6 +471,8 @@ export function createPullWakeRunner(
       if (!signal.aborted) {
         reportError(err)
       }
+    } finally {
+      claimingStreamPaths.delete(streamPath)
     }
   }
 
@@ -475,11 +542,15 @@ export function createPullWakeRunner(
     onStopping: () => {
       controller?.abort()
       controller = null
+      claimingStreamPaths.clear()
+      clearDeferredWakeRetries()
       stopHeartbeat()
     },
     shutdown: async () => {
       if (!(await waitForClaimActors())) {
         claimActors.clear()
+        claimingStreamPaths.clear()
+        clearDeferredWakeRetries()
       }
       config.runtime.abortWakes()
       try {
@@ -521,6 +592,8 @@ export function createPullWakeRunner(
       claimsSkipped = 0
       claimsFailed = 0
       consecutiveHeartbeatFailures = 0
+      claimingStreamPaths.clear()
+      clearDeferredWakeRetries()
       startedAt = new Date().toISOString()
       controller = new AbortController()
       startHeartbeat(controller.signal)

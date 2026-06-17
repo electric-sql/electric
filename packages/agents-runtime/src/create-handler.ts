@@ -148,6 +148,9 @@ export interface RuntimeRouter {
     options?: Pick<ProcessWakeConfig, `claimHeaders` | `claimTokenHeader`>
   ) => void
 
+  /** True when a wake for the stream path is already in flight. */
+  isWakeActive: (streamPath: string) => boolean
+
   /** Dispatch an already-parsed webhook wake notification. */
   dispatchWebhookWake: (notification: WebhookNotification) => void
 
@@ -406,7 +409,7 @@ export function createRuntimeRouter(
     notification,
     options
   ): void => {
-    const wakeLabel = notification.entity?.url ?? notification.streamPath
+    const wakeLabel = notification.streamPath
     const controller = new AbortController()
     const wake: Promise<void> = Promise.resolve(
       processWake(notification, {
@@ -437,6 +440,9 @@ export function createRuntimeRouter(
     pendingWakeLabels.set(wake, wakeLabel)
     pendingWakeControllers.set(wake, controller)
   }
+
+  const isWakeActive: RuntimeRouter[`isWakeActive`] = (streamPath) =>
+    [...pendingWakeLabels.values()].includes(streamPath)
 
   const dispatchWebhookWake: RuntimeRouter[`dispatchWebhookWake`] = dispatchWake
 
@@ -623,6 +629,7 @@ export function createRuntimeRouter(
     handleRequest,
     handleWebhookRequest,
     dispatchWake,
+    isWakeActive,
     dispatchWebhookWake,
     drainWakes,
     waitForSettled,
@@ -671,6 +678,7 @@ export function createRuntimeHandler(
     handleRequest: router.handleRequest,
     handleWebhookRequest: router.handleWebhookRequest,
     dispatchWake: router.dispatchWake,
+    isWakeActive: router.isWakeActive,
     dispatchWebhookWake: router.dispatchWebhookWake,
     drainWakes: router.drainWakes,
     waitForSettled: router.waitForSettled,

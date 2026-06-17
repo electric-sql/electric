@@ -820,6 +820,7 @@ export async function processWake(
         if (runAbortController) {
           log.info(`SIGINT received, aborting active handler invocation`)
           runAbortController.abort()
+          requestShutdown()
         } else if (notification.entity?.status === `running`) {
           // SIGINT may arrive in the small window before the handler invocation
           // controller exists. Only carry it forward for running entities; idle
@@ -828,6 +829,7 @@ export async function processWake(
             `SIGINT received before active run controller, queuing abort`
           )
           pendingRunAbortRequested = true
+          requestShutdown()
         } else {
           log.info(`SIGINT received with no active run, ignoring`)
           markSignalHandled(event, `ignored`, notification.entity?.status)

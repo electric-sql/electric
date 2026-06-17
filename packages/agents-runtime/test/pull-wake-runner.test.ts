@@ -84,6 +84,7 @@ async function waitFor(
 function runtime() {
   return {
     dispatchWake: vi.fn(),
+    isWakeActive: vi.fn(() => false),
     drainWakes: vi.fn(async () => undefined),
     abortWakes: vi.fn(),
   }
@@ -175,6 +176,106 @@ describe(`createPullWakeRunner`, () => {
 
     await runner.stop()
     expect(testRuntime.drainWakes).toHaveBeenCalledTimes(1)
+  })
+
+  it(`defers duplicate wake events while a stream is already being claimed`, async () => {
+    const event = wakeEvent(`one`)
+    const claimed = notification(`one`)
+    const claimResponse = deferred<Response>()
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(
+        (_input: RequestInfo | URL) => claimResponse.promise
+      )
+      .mockImplementationOnce(async (_input: RequestInfo | URL) =>
+        Response.json(
+          {
+            error: {
+              code: `NO_PENDING_WORK`,
+              message: `Subscription has no pending work`,
+            },
+          },
+          { status: 409 }
+        )
+      )
+    vi.stubGlobal(`fetch`, fetchMock)
+    const testRuntime = runtime()
+    const streamFactory = vi.fn(async () => ({
+      offset: `42`,
+      async *jsonStream() {
+        yield event
+        yield event
+      },
+      closed: Promise.resolve(),
+    }))
+
+    const runner = createPullWakeRunner({
+      baseUrl: `http://server`,
+      runnerId: `runner-1`,
+      runtime: testRuntime,
+      heartbeatIntervalMs: 0,
+      streamFactory,
+    })
+
+    runner.start()
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
+
+    claimResponse.resolve(Response.json(claimed))
+    await waitFor(() => {
+      expect(testRuntime.dispatchWake).toHaveBeenCalledTimes(1)
+    })
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    })
+    expect(runner.getHealth().claims_skipped).toBe(2)
+
+    await runner.stop()
+  })
+
+  it(`retries a locally skipped wake after the active stream wake drains`, async () => {
+    const event = wakeEvent(`one`)
+    const claimed = notification(`one`)
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL) =>
+      Response.json(claimed)
+    )
+    vi.stubGlobal(`fetch`, fetchMock)
+    let streamActive = true
+    const testRuntime = {
+      ...runtime(),
+      isWakeActive: vi.fn(() => streamActive),
+    }
+    const streamFactory = vi.fn(async () => ({
+      offset: `42`,
+      async *jsonStream() {
+        yield event
+      },
+      closed: Promise.resolve(),
+    }))
+
+    const runner = createPullWakeRunner({
+      baseUrl: `http://server`,
+      runnerId: `runner-1`,
+      runtime: testRuntime,
+      heartbeatIntervalMs: 0,
+      streamFactory,
+    })
+
+    runner.start()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(fetchMock).not.toHaveBeenCalled()
+
+    streamActive = false
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
+    await waitFor(() => {
+      expect(testRuntime.dispatchWake).toHaveBeenCalledTimes(1)
+    })
+    expect(runner.getHealth().claims_skipped).toBe(1)
+
+    await runner.stop()
   })
 
   it(`skips stale wake events when claim returns no pending work`, async () => {
