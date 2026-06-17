@@ -1,5 +1,6 @@
 /target
-/bench/micro/out
-/bench/out
 /.profile-hot.sh
+# the benchmark harness now lives in the separate durable-streams-bench repo;
+# the cross-server suite may still drop these here when run against this checkout:
+/bench/
 benchmark-results.json

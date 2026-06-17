@@ -204,18 +204,17 @@ choice (epoll + sendfile vs io_uring batching) is the lever, not the handler
 code. The append path is fsync-bound, which is why group-commit is the lever
 there.
 
-Measured headlines (full tables and methodology in
-[`bench/RESULTS.md`](bench/RESULTS.md)):
+Measured headlines (dedicated 12-core Xeon, Linux; server cgroup-pinned, client on
+disjoint cores, 3 repeats):
 
-- **vs the reference Node server:** ~21× lower latency, ~31× small-message
-  throughput, ~254× unbatched appends, ~7× read throughput.
-- **Small hot reads (Linux):** `uring` 419k req/s @ p50 103 µs > `raw` 355k @
-  148 µs > `hyper` 212k @ 202 µs — io_uring batching wins the syscall-bound case.
-- **Large resident reads:** `raw`/`sendfile` sustains ~30 GB/s at ~273% CPU vs
-  `hyper` ~14 GB/s at ~685% — **~5× less CPU per byte** (zero-copy vs userspace
-  copy).
-- **Cold-read isolation:** `raw --read-offload tail` caps the worst-case hot-read
-  latency at ~11 ms where serving cold reads inline collapses to ~700 ms.
+- **Small hot reads:** the engine choice matters most when the server is CPU-bound
+  — at 2 cores `uring` 257k req/s > `raw` 180k > `hyper` 123k (io_uring batches the
+  recv+send); the gap closes by 8 cores as the load generator saturates first.
+- **Large resident reads:** `raw`/`sendfile` does ~11.3k 1 MB reads/s at ~269% CPU
+  vs `hyper` ~6.7k at ~708% — **~2× the throughput at ~⅓ the CPU per byte**
+  (zero-copy vs userspace copy).
+- **Appends:** fsync-bound; `raw` leads (~208k/s @ 8 cores) and `uring` regresses
+  past 4 cores. `--splice-appends` holds the rate at ~half the CPU.
 
 ## Tiering: hot buffer → cold storage (optional)
 
