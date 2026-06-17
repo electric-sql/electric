@@ -53,9 +53,8 @@ describe(`computeContextBreakdown`, () => {
 
   it(`clamps usedTokens to the window when the step is over the window`, () => {
     const segs = computeContextBreakdown(
-      // A step can report usage above the window; usedTokens stays un-clamped on
-      // ContextUsage but the breakdown must clamp it so the segments still sum to
-      // the window and `free` doesn't go negative.
+      // A step can report usage above the window; the breakdown clamps `used` so
+      // the segments still sum to the window and `free` can't go negative.
       { usedTokens: 120_000, contextWindow: 100_000, ratio: 1 },
       { systemTokens: 5_000, toolsTokens: 15_000 }
     )
