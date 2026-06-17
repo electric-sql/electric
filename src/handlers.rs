@@ -758,7 +758,7 @@ async fn handle_append_inner(store: Arc<Store>, req: Req, path: String) -> (Resp
                     // closed check has precedence over content-type mismatch
                     let t = st.tail();
                     if t.closed && !close_req {
-                        ret!(closed_conflict(&st, t.bytes), Closed);
+                        ret!(closed_conflict(t.bytes), Closed);
                     }
                     ret!(text_response(409, "content-type mismatch"), Conflict);
                 }
@@ -803,7 +803,7 @@ async fn handle_append_inner(store: Arc<Store>, req: Req, path: String) -> (Resp
                         }
                     }
                     drop(s);
-                    ret!(closed_conflict(&st, tail), Closed);
+                    ret!(closed_conflict(tail), Closed);
                 }
                 if body.is_empty() {
                     // idempotent close of an already-closed stream
@@ -818,7 +818,7 @@ async fn handle_append_inner(store: Arc<Store>, req: Req, path: String) -> (Resp
                 }
             }
             drop(s);
-            ret!(closed_conflict(&st, tail), Closed);
+            ret!(closed_conflict(tail), Closed);
         }
     }
 
@@ -970,8 +970,7 @@ async fn handle_append_inner(store: Arc<Store>, req: Req, path: String) -> (Resp
     (b.body(empty()), Accept)
 }
 
-fn closed_conflict(st: &StreamState, tail: u64) -> Resp {
-    let _ = st;
+fn closed_conflict(tail: u64) -> Resp {
     ResponseBuilder::new(409)
         .hs(H_CLOSED, "true")
         .h(H_NEXT_OFFSET, format_offset(tail))
@@ -1097,7 +1096,7 @@ where
             if media_type(ct) != media_type(&st.config.content_type) {
                 let t = st.tail();
                 if t.closed {
-                    return Reject(closed_conflict(&st, t.bytes));
+                    return Reject(closed_conflict(t.bytes));
                 }
                 return Reject(text_response(409, "content-type mismatch"));
             }
@@ -1122,7 +1121,7 @@ where
         if s.closed {
             let tail = s.tail;
             drop(s);
-            return Reject(closed_conflict(&st, tail));
+            return Reject(closed_conflict(tail));
         }
     }
 
