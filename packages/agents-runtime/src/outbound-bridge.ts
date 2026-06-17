@@ -521,7 +521,7 @@ export function createOutboundBridge(
       argsPreview?: unknown
     ) {
       ensureToolCall(toolCallId, name, {
-        status: `args_streaming`,
+        status: `started`,
         argsPreview,
       })
     },
@@ -532,12 +532,18 @@ export function createOutboundBridge(
       delta: string,
       opts?: { contentIndex?: number; argsPreview?: unknown }
     ) {
-      const toolCall =
-        toolCallsById.get(toolCallId) ??
+      let toolCall = toolCallsById.get(toolCallId)
+      if (toolCall) {
         ensureToolCall(toolCallId, name, {
           status: `args_streaming`,
           argsPreview: opts?.argsPreview,
         })
+      } else {
+        toolCall = ensureToolCall(toolCallId, name, {
+          status: `args_streaming`,
+          argsPreview: opts?.argsPreview,
+        })
+      }
       const seq = toolCall.argSeq++
       writeEvent(
         entityStateSchema.toolArgDeltas.insert({
@@ -569,7 +575,9 @@ export function createOutboundBridge(
       maybeArgs?: unknown
     ) {
       const legacyCall = maybeArgs === undefined
-      const toolCallId = legacyCall ? `tc-${counters.tc}` : toolCallIdOrName
+      const toolCallId = legacyCall
+        ? `legacy-tc-${counters.tc}`
+        : toolCallIdOrName
       const name = legacyCall ? toolCallIdOrName : (nameOrArgs as string)
       const args = legacyCall ? nameOrArgs : maybeArgs
       if (legacyCall) {

@@ -273,6 +273,8 @@ export function createPiAgentAdapter(
     let reasoningStarted = false
     let reasoningAccum = ``
     let abortedRun = false
+    let activeRunSignal: AbortSignal | undefined
+    const pendingToolArgDeltaHooks = new Map<string, Promise<void>>()
 
     const model = resolvePiModel({
       model: opts.model,
@@ -288,11 +290,61 @@ export function createPiAgentAdapter(
         timeoutMs: modelTimeoutMs,
         maxRetries: modelMaxRetries,
       })
+    const awaitToolArgDeltaHooks = async (
+      toolCallId: string | undefined
+    ): Promise<void> => {
+      if (!toolCallId) return
+      await pendingToolArgDeltaHooks.get(toolCallId)
+    }
+    const enqueueToolArgDeltaHook = (
+      tool: AgentTool,
+      context: {
+        toolCallId: string
+        toolName: string
+        contentIndex?: number
+        delta: string
+        argsPreview?: unknown
+      },
+      logPrefix: string
+    ): void => {
+      if (!tool.onArgsDelta) return
+      const previous =
+        pendingToolArgDeltaHooks.get(context.toolCallId) ?? Promise.resolve()
+      const next = previous
+        .catch(() => undefined)
+        .then(async () => {
+          try {
+            await tool.onArgsDelta?.(context, activeRunSignal)
+          } catch (error) {
+            runtimeLog.warn(
+              logPrefix,
+              `streaming tool arg hook failed for ${context.toolName}:`,
+              error
+            )
+          }
+        })
+      pendingToolArgDeltaHooks.set(context.toolCallId, next)
+      void next.finally(() => {
+        if (pendingToolArgDeltaHooks.get(context.toolCallId) === next) {
+          pendingToolArgDeltaHooks.delete(context.toolCallId)
+        }
+      })
+    }
+    const agentTools = opts.tools.map(
+      (tool): AgentTool => ({
+        ...tool,
+        execute: (async (...args: Parameters<AgentTool[`execute`]>) => {
+          const toolCallId = typeof args[0] === `string` ? args[0] : undefined
+          await awaitToolArgDeltaHooks(toolCallId)
+          return tool.execute(...args)
+        }) as AgentTool[`execute`],
+      })
+    )
 
     const agentOptions = {
       initialState: {
         systemPrompt: opts.systemPrompt,
-        tools: opts.tools as Array<never>,
+        tools: agentTools as Array<never>,
         messages: history as Array<never>,
         model,
       },
@@ -443,22 +495,18 @@ export function createPiAgentAdapter(
                       const tool = opts.tools.find(
                         (candidate) => candidate.name === toolName
                       )
-                      if (tool?.onArgsDelta) {
-                        void Promise.resolve(
-                          tool.onArgsDelta({
+                      if (tool) {
+                        enqueueToolArgDeltaHook(
+                          tool,
+                          {
                             toolCallId,
                             toolName,
                             contentIndex,
                             delta,
                             argsPreview,
-                          })
-                        ).catch((error) => {
-                          runtimeLog.warn(
-                            logPrefix,
-                            `streaming tool arg hook failed for ${toolName}:`,
-                            error
-                          )
-                        })
+                          },
+                          logPrefix
+                        )
                       }
                     } else {
                       bridge.onToolCallArgsEnd(
@@ -467,6 +515,11 @@ export function createPiAgentAdapter(
                         argsPreview
                       )
                     }
+                  } else {
+                    runtimeLog.debug(
+                      logPrefix,
+                      `pi-adapter message_update missing tool call identity type=${assistantEvent.type}`
+                    )
                   }
                 } else {
                   runtimeLog.debug(
@@ -702,6 +755,7 @@ export function createPiAgentAdapter(
       async run(input?: string, abortSignal?: AbortSignal): Promise<void> {
         running = true
         abortedRun = false
+        activeRunSignal = abortSignal
 
         bridge.onRunStart()
 
@@ -719,6 +773,7 @@ export function createPiAgentAdapter(
             settled = true
             clearAbortFallback()
             running = false
+            activeRunSignal = undefined
             abortSignal?.removeEventListener(`abort`, abortRun)
             unsubscribe()
             bridge.onRunEnd({ finishReason })
@@ -752,6 +807,7 @@ export function createPiAgentAdapter(
               if (settled) return
               settled = true
               running = false
+              activeRunSignal = undefined
               clearAbortFallback()
               abortSignal?.removeEventListener(`abort`, abortRun)
               unsubscribe()

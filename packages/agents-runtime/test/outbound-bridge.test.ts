@@ -122,12 +122,24 @@ describe(`createOutboundBridge`, () => {
       value: {
         tool_call_id: `call-draft`,
         tool_name: `draft`,
-        status: `args_streaming`,
+        status: `started`,
         args_preview: { text: `He` },
         run_id: `run-0`,
       },
     })
     expect(writes[2]).toMatchObject({
+      type: `tool_call`,
+      key: `tc-0`,
+      headers: { operation: `update` },
+      value: {
+        tool_call_id: `call-draft`,
+        tool_name: `draft`,
+        status: `args_streaming`,
+        args_preview: { text: `Hello` },
+        run_id: `run-0`,
+      },
+    })
+    expect(writes[3]).toMatchObject({
       type: `tool_arg_delta`,
       key: `tc-0:args-0`,
       value: {
@@ -139,7 +151,7 @@ describe(`createOutboundBridge`, () => {
         content_index: 1,
       },
     })
-    expect(writes[3]).toMatchObject({
+    expect(writes[4]).toMatchObject({
       type: `tool_call`,
       key: `tc-0`,
       headers: { operation: `update` },
@@ -149,6 +161,104 @@ describe(`createOutboundBridge`, () => {
         status: `args_complete`,
         args: { text: `Hello` },
         run_id: `run-0`,
+      },
+    })
+  })
+
+  it(`transitions a streamed tool call to executing before completion`, () => {
+    const writes: Array<ChangeEvent> = []
+    const bridge = createOutboundBridge([], (e) => {
+      writes.push(e)
+    })
+
+    bridge.onRunStart()
+    bridge.onToolCallArgsStart(`call-draft`, `draft`, { text: `He` })
+    bridge.onToolCallArgsDelta(`call-draft`, `draft`, `llo`, {
+      argsPreview: { text: `Hello` },
+    })
+    bridge.onToolCallArgsEnd(`call-draft`, `draft`, { text: `Hello` })
+    bridge.onToolCallStart(`call-draft`, `draft`, { text: `Hello` })
+    bridge.onToolCallEnd(`call-draft`, `draft`, `ok`, false)
+
+    expect(writes[5]).toMatchObject({
+      type: `tool_call`,
+      key: `tc-0`,
+      headers: { operation: `update` },
+      value: {
+        tool_call_id: `call-draft`,
+        tool_name: `draft`,
+        status: `executing`,
+        args: { text: `Hello` },
+        run_id: `run-0`,
+      },
+    })
+    expect(writes[6]).toMatchObject({
+      type: `tool_call`,
+      key: `tc-0`,
+      value: {
+        status: `completed`,
+        args: { text: `Hello` },
+        result: `ok`,
+      },
+    })
+  })
+
+  it(`creates a streaming tool call when a delta arrives before start`, () => {
+    const writes: Array<ChangeEvent> = []
+    const bridge = createOutboundBridge([], (e) => {
+      writes.push(e)
+    })
+
+    bridge.onRunStart()
+    bridge.onToolCallArgsDelta(`call-draft`, `draft`, `He`, {
+      argsPreview: { text: `He` },
+    })
+
+    expect(writes[1]).toMatchObject({
+      type: `tool_call`,
+      key: `tc-0`,
+      headers: { operation: `insert` },
+      value: {
+        tool_call_id: `call-draft`,
+        tool_name: `draft`,
+        status: `args_streaming`,
+        args_preview: { text: `He` },
+      },
+    })
+    expect(writes[2]).toMatchObject({
+      type: `tool_arg_delta`,
+      key: `tc-0:args-0`,
+      value: {
+        tool_call_key: `tc-0`,
+        tool_call_id: `call-draft`,
+        seq: 0,
+        delta: `He`,
+      },
+    })
+  })
+
+  it(`keeps legacy synthetic tool ids distinct from provider ids`, () => {
+    const writes: Array<ChangeEvent> = []
+    const bridge = createOutboundBridge([], (e) => {
+      writes.push(e)
+    })
+
+    bridge.onRunStart()
+    bridge.onToolCallArgsStart(`tc-0`, `provider`, {})
+    bridge.onToolCallStart(`legacy`, {})
+
+    expect(writes[1]).toMatchObject({
+      key: `tc-0`,
+      value: {
+        tool_call_id: `tc-0`,
+        tool_name: `provider`,
+      },
+    })
+    expect(writes[2]).toMatchObject({
+      key: `tc-1`,
+      value: {
+        tool_call_id: `legacy-tc-1`,
+        tool_name: `legacy`,
       },
     })
   })

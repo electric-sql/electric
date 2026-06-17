@@ -195,6 +195,9 @@ type ToolCallValue = {
   error?: string
   duration_ms?: number
 }
+// Tool argument deltas intentionally mirror text deltas: every streamed chunk is
+// retained for replay/inspection, while the final parsed args are still stored
+// on the tool_call row for the normal result lifecycle.
 type ToolArgDeltaValue = {
   key?: string
   tool_call_key: string
