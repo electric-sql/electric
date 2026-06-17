@@ -228,7 +228,7 @@ describe(`createRuntimeHandler`, () => {
     expect(response.status).toBe(200)
     expect(handler.debugState()).toMatchObject({
       pendingWakeCount: 1,
-      pendingWakeLabels: [`http://localhost:3000/test-agent/test-1`],
+      pendingWakeLabels: [`/streams/entity:test-1`],
       wakeErrorCount: 0,
       typeNames: [`test-agent`],
     })
