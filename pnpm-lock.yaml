@@ -2543,6 +2543,9 @@ importers:
       '@electric-sql/pglite-repl':
         specifier: 0.3.5
         version: 0.3.5(@babel/runtime@7.29.7)(@codemirror/lint@6.8.4)(@codemirror/search@6.5.8)(@codemirror/state@6.6.0)(@codemirror/theme-one-dark@6.1.2)(@electric-sql/pglite@0.4.5)(@lezer/common@1.5.2)(codemirror@6.0.1(@lezer/common@1.5.2))
+      lucide-vue-next:
+        specifier: ^0.561.0
+        version: 0.561.0(vue@3.5.12(typescript@5.8.3))
       posthog-js:
         specifier: ^1.236.4
         version: 1.236.4
@@ -16344,6 +16347,12 @@ packages:
     resolution: {integrity: sha512-Y59gMY38tl4/i0qewcqohPdEbieBy7SovpBL9IFebhc2mDd8x4PZSOsiFRkpPcOq6bj1r/mjH/Rk73gSlIJP2A==}
     peerDependencies:
       react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
+
+  lucide-vue-next@0.561.0:
+    resolution: {integrity: sha512-c5HUckO0qHklVSOf/0vaSR3pEb8fYImRDCRDLde56uqS9js0D/e3RAvq0/YFWjkmyOBKCb0/IdskdoHZQEkT5g==}
+    deprecated: Package deprecated. Please use @lucide/vue instead.
+    peerDependencies:
+      vue: '>=3.0.1'
 
   lunr@2.3.9:
     resolution: {integrity: sha512-zTU3DaZaF3Rt9rhN3uBMGQD3dD2/vFQqnvZCDv4dl5iOzq2IZQqTxu90r4E5J+nP70J3ilqVCrbho2eWaeW8Ow==}
@@ -39657,6 +39666,10 @@ snapshots:
   lucide-react@0.561.0(react@19.1.0):
     dependencies:
       react: 19.1.0
+
+  lucide-vue-next@0.561.0(vue@3.5.12(typescript@5.8.3)):
+    dependencies:
+      vue: 3.5.12(typescript@5.8.3)
 
   lunr@2.3.9: {}
 

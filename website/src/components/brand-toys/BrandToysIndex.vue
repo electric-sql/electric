@@ -412,6 +412,10 @@ function shortPath(source: string): string {
   background: rgba(250, 204, 21, 0.14);
   color: #fde68a;
 }
+.bt-index-card-group.group-app {
+  background: rgba(117, 251, 253, 0.14);
+  color: #75fbfd;
+}
 .bt-index-card-group.group-misc {
   background: rgba(255, 255, 255, 0.08);
   color: rgba(255, 255, 255, 0.7);

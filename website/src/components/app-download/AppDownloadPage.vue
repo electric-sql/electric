@@ -23,15 +23,20 @@ import { VPButton } from 'vitepress/theme'
 
 import Section from '../agents-home/Section.vue'
 import BottomCtaStrap from '../BottomCtaStrap.vue'
+import AppMockupShadowHost from '../brand-toys/app/AppMockupShadowHost.vue'
+import HeroChatStateScene from '../brand-toys/app/scenes/desktop/HeroChatStateScene.vue'
+import HeroMobileChatScene from '../brand-toys/app/scenes/mobile/HeroMobileChatScene.vue'
 
 const githubReleaseBase = `https://github.com/electric-sql/electric/releases`
 const appReleaseNotesUrl = `${githubReleaseBase}?q=%22%40electric-ax%2Fagents-desktop%22&expanded=true`
+const agentsMobileRepoUrl = `https://github.com/electric-sql/electric/tree/main/packages/agents-mobile`
 
 type DesktopPlatformId =
   | 'macos-arm64'
   | 'macos-x64'
   | 'windows-x64'
   | 'linux-x64'
+type MobilePlatformId = 'ios' | 'android'
 
 type DownloadOption = {
   label: string
@@ -148,31 +153,6 @@ const canaryEntries: CanaryEntry[] = [
   },
 ]
 
-type MobilePlatform = {
-  id: 'ios' | 'android'
-  icon: 'apple' | 'android'
-  storeIcon: 'appstore' | 'googleplay'
-  name: string
-  storeLabel: string
-}
-
-const mobilePlatforms: MobilePlatform[] = [
-  {
-    id: `ios`,
-    icon: `apple`,
-    storeIcon: `appstore`,
-    name: `iOS`,
-    storeLabel: `App Store`,
-  },
-  {
-    id: `android`,
-    icon: `android`,
-    storeIcon: `googleplay`,
-    name: `Android`,
-    storeLabel: `Google Play`,
-  },
-]
-
 function releaseUrl(tag: string, assetName: string): string {
   return `${githubReleaseBase}/download/${encodeURIComponent(tag)}/${assetName}`
 }
@@ -184,6 +164,7 @@ function latestReleaseUrl(assetName: string): string {
 /* Detect the visitor's OS on mount; default to macOS Apple Silicon
    so SSR / first paint always renders a sensible primary. */
 const detectedId = ref<DesktopPlatformId>('macos-arm64')
+const detectedMobileId = ref<MobilePlatformId | null>(null)
 
 /* All Mac browsers still report `Intel Mac OS X` in the UA string on
    Apple Silicon for legacy compat (it's a deliberate Apple/browser
@@ -214,7 +195,13 @@ function detectMacArch(): 'macos-arm64' | 'macos-x64' {
 onMounted(() => {
   if (typeof navigator === 'undefined') return
   const ua = `${navigator.userAgent || ''} ${navigator.platform || ''}`
-  if (/Win(dows|64|32)|WOW64|WinNT/i.test(ua)) {
+  const isIPadDesktopMode =
+    /Mac|Macintosh/i.test(ua) && (navigator.maxTouchPoints ?? 0) > 1
+  if (/Android/i.test(ua)) {
+    detectedMobileId.value = 'android'
+  } else if (/iPhone|iPad|iPod/i.test(ua) || isIPadDesktopMode) {
+    detectedMobileId.value = 'ios'
+  } else if (/Win(dows|64|32)|WOW64|WinNT/i.test(ua)) {
     detectedId.value = 'windows-x64'
   } else if (
     /Linux|X11|Ubuntu|Fedora|Debian/i.test(ua) &&
@@ -231,6 +218,25 @@ const primaryPlatform = computed(
     desktopPlatforms.find((p) => p.id === detectedId.value) ??
     desktopPlatforms[0]
 )
+
+const primaryCta = computed(() => {
+  if (detectedMobileId.value === 'ios') {
+    return {
+      label: 'iOS preview',
+      href: '#mobile',
+    }
+  }
+  if (detectedMobileId.value === 'android') {
+    return {
+      label: 'Android preview',
+      href: '#mobile',
+    }
+  }
+  return {
+    label: primaryPlatform.value.downloads[0].label,
+    href: latestReleaseUrl(primaryPlatform.value.downloads[0].assetName),
+  }
+})
 </script>
 
 <template>
@@ -239,10 +245,12 @@ const primaryPlatform = computed(
     <section class="ad-hero">
       <div class="ad-hero-inner">
         <h1 class="ad-hero-name">
-          Electric&nbsp;<span class="ad-hero-accent">Agents</span>&nbsp;App
+          Electric Agents&nbsp;<span class="ad-hero-accent">App</span>
         </h1>
         <p class="ad-hero-text">
-          A native home for your long-running&nbsp;agents.
+          A desktop client for coding with Horton, inspecting agent&nbsp;runs,
+          and connecting to sessions on
+          <a href="/agents">Electric&nbsp;Agents</a>.
         </p>
 
         <div class="ad-hero-actions">
@@ -250,9 +258,13 @@ const primaryPlatform = computed(
             tag="a"
             size="medium"
             theme="brand"
-            :text="primaryPlatform.downloads[0].label"
-            :href="latestReleaseUrl(primaryPlatform.downloads[0].assetName)"
+            :text="primaryCta.label"
+            :href="primaryCta.href"
           />
+          <!-- TODO(phase 6): swap href to "#download" once §7 ships an
+               umbrella anchor on the download block. Pointing at
+               "#desktop" today lands users at the first sub-section,
+               which is the right scroll target for now. -->
           <VPButton
             tag="a"
             size="medium"
@@ -262,29 +274,395 @@ const primaryPlatform = computed(
           />
         </div>
 
-        <p class="ad-hero-meta">
-          <a
-            class="ad-meta-link"
-            :href="appReleaseNotesUrl"
-            target="_blank"
-            rel="noreferrer"
-            >Release notes</a
-          >
-        </p>
+        <!--
+          Platform glyph row.
+
+          Communicates multi-platform breadth above the fold without
+          relying on the downloads block further down. Five muted
+          glyph + label pairs in a CSS grid; the iOS + Android pair
+          gets a `Preview` pill in the second grid row beneath them
+          (one shared label rather than per-glyph clutter) because
+          the mobile apps don't have public App Store / Play
+          listings yet — see §7 mobile sub-section.
+        -->
+        <div
+          class="ad-hero-platforms"
+          aria-label="Available on macOS, Windows and Linux. Native iOS and Android apps in mobile preview."
+        >
+          <span class="ad-hero-glyph">
+            <span
+              class="ad-hero-glyph-icon ad-icon ad-icon--apple"
+              aria-hidden="true"
+            />
+            <span class="ad-hero-glyph-label mono">macOS</span>
+          </span>
+          <span class="ad-hero-glyph">
+            <span
+              class="ad-hero-glyph-icon ad-icon ad-icon--windows"
+              aria-hidden="true"
+            />
+            <span class="ad-hero-glyph-label mono">Windows</span>
+          </span>
+          <span class="ad-hero-glyph">
+            <span
+              class="ad-hero-glyph-icon ad-icon ad-icon--linux"
+              aria-hidden="true"
+            />
+            <span class="ad-hero-glyph-label mono">Linux</span>
+          </span>
+          <span class="ad-hero-glyph is-preview">
+            <span
+              class="ad-hero-glyph-icon ad-icon ad-icon--apple"
+              aria-hidden="true"
+            />
+            <span class="ad-hero-glyph-label mono">iOS</span>
+            <span class="ad-hero-glyph-preview mono" aria-hidden="true"
+              >Preview</span
+            >
+          </span>
+          <span class="ad-hero-glyph is-preview">
+            <span
+              class="ad-hero-glyph-icon ad-icon ad-icon--android"
+              aria-hidden="true"
+            />
+            <span class="ad-hero-glyph-label mono">Android</span>
+            <span class="ad-hero-glyph-preview mono" aria-hidden="true"
+              >Preview</span
+            >
+          </span>
+        </div>
       </div>
 
-      <!-- TODO(follow-up): app screenshot / mockup goes here. The
-           previous CSS-rendered agents-server-ui mockup was removed
-           to keep the hero clean ahead of a proper image asset. -->
+      <!--
+        Hero mockup pair — live HTML/CSS desktop mockup with a live
+        phone mockup overlapping its right edge. Both render the same
+        chat session: the desktop's `HeroChatStateScene` and the
+        mobile's `HeroMobileChatScene` import a shared
+        `heroChatProgress` ref + register against a singleton RAF
+        driver, so the typewriter ticks in lockstep across both
+        devices — same word stream, same beat, same pause. Sits
+        OUTSIDE `.ad-hero-inner` so it can break the inner column's
+        820-px cap and span the full hero width.
+      -->
+      <div class="ad-hero-mockup">
+        <div class="ad-hero-mockup-stage">
+          <div class="ad-hero-mockup-desktop">
+            <div class="ad-hero-mockup-desktop-inner">
+              <AppMockupShadowHost
+                :scene="HeroChatStateScene"
+                :scene-props="{
+                  os: 'auto',
+                  theme: 'dark',
+                  title: 'Refactor auth helpers',
+                  shareProgress: true,
+                }"
+              />
+            </div>
+          </div>
+          <div class="ad-hero-mockup-phone">
+            <AppMockupShadowHost
+              :scene="HeroMobileChatScene"
+              :scene-props="{ title: 'Refactor auth helpers' }"
+            />
+          </div>
+        </div>
+        <p class="ad-hero-mockup-caption mono">
+          Follow the same run from your&nbsp;desk or your&nbsp;phone.
+        </p>
+      </div>
     </section>
 
-    <!-- ─────────────────── §2 — Desktop ─────────────────── -->
-    <Section id="desktop">
-      <template #eyebrow>Desktop</template>
-      <template #title>Choose your platform</template>
+    <!--
+      Sections §2–§4 land their structure (this Section shell + an
+      <AdPlaceholder> inside) in phase 1, and have their real copy /
+      visuals filled in as the rewrite progresses (see
+      APP_PAGE_PLAN.md §7 for the phase schedule). The chrome stays
+      the same across phases, so each fill-in is a localised diff.
+
+      Phase ownership for each section:
+        §2   visual strap          → folded into the §1 hero — the
+                                      desktop+mobile pair lives there
+                                      now so visitors land directly
+                                      on the product shot.
+        §3   three ways to use it  → phase 3 ✓
+        §4   everything in the box → phase 4 ✓ (combines the earlier
+                                      "bundled Horton" + "built for
+                                      builders" sub-sections into one
+                                      unified feature grid)
+    -->
+
+    <!-- ─────────────────── §3 — Three ways to use it ─────────────────── *
+         Three side-by-side cards (Build with the SDK · Code locally ·
+         Attach remotely). Each card: lucide icon + sentence-form title
+         + body + 4-item "You can:" bullet list. No card-level eyebrows
+         — the titles carry the categorization on their own. Bodies
+         intentionally read as a sequence: card 1 frames the desktop
+         as a dev tool for *your* entities, card 2 introduces Horton
+         as the bundled coding agent in the same app, card 3 ties
+         both into the attach-remotely story. The strip beneath the
+         grid restates the one-integrated-platform line as the
+         section's takeaway. -->
+    <Section id="three-ways">
+      <template #title>Three ways to use it</template>
       <template #subtitle>
-        Install the desktop app to start, monitor and return to long-running
-        agents from your own computer.
+        Build your own agents, code with Horton, or connect to runs already
+        running on your&nbsp;servers.
+      </template>
+
+      <div class="ad-modes-grid">
+        <article class="ad-modes-card">
+          <span class="ad-modes-icon" aria-hidden="true">
+            <span class="ad-icon ad-icon--microscope" />
+          </span>
+          <h3 class="ad-modes-title">Build your own agents</h3>
+          <p class="ad-modes-body">
+            Use the desktop app to inspect entities you build with the
+            Electric&nbsp;Agents SDK: state, timelines, and forks.
+          </p>
+          <p class="ad-modes-list-label mono">You can:</p>
+          <ul class="ad-modes-list">
+            <li>Watch an entity's inbox and runs live</li>
+            <li>Fork from a past event and compare changes</li>
+            <li>Debug a failed worker without redeploying</li>
+            <li>Open a parent and its workers side&nbsp;by&nbsp;side</li>
+          </ul>
+        </article>
+
+        <article class="ad-modes-card">
+          <span class="ad-modes-icon" aria-hidden="true">
+            <span class="ad-icon ad-icon--code" />
+          </span>
+          <h3 class="ad-modes-title">Code with Horton, locally</h3>
+          <p class="ad-modes-body">
+            Horton, our open-source coding agent, is included. Choose a model,
+            pick a folder, edit files, and run commands from&nbsp;chat.
+          </p>
+          <p class="ad-modes-list-label mono">You can:</p>
+          <ul class="ad-modes-list">
+            <li>Refactor a folder with parallel workers</li>
+            <li>Bisect a regression while another worker fixes it</li>
+            <li>Edit code, run bash, and search the&nbsp;web</li>
+            <li>Learn Electric&nbsp;Agents with <code>/quickstart</code></li>
+          </ul>
+        </article>
+
+        <article class="ad-modes-card">
+          <span class="ad-modes-icon" aria-hidden="true">
+            <span class="ad-icon ad-icon--radio" />
+          </span>
+          <h3 class="ad-modes-title">Attach to remote sessions</h3>
+          <p class="ad-modes-body">
+            Connect to any agents-server. Runs started by CI, webhooks, issues,
+            or cron appear in the app.
+          </p>
+          <p class="ad-modes-list-label mono">You can:</p>
+          <ul class="ad-modes-list">
+            <li>
+              Check a GitHub issue run on your&nbsp;phone, finish at
+              your&nbsp;desk
+            </li>
+            <li>Steer a CI agent before its PR&nbsp;merges</li>
+            <li>Pause or resume a scheduled run</li>
+            <li>Hand a session off between devices mid-run</li>
+          </ul>
+        </article>
+      </div>
+
+      <p class="ad-modes-strip mono">
+        One place to build, run, and inspect&nbsp;agents.
+      </p>
+    </Section>
+
+    <!-- ─────────────────── §4 — Everything in the box ─────────────────── *
+         Comprehensive feature grid covering every shipping capability
+         of the desktop + mobile apps, organised loosely by row:
+           ▸ Build with the SDK   (custom entities · state · timeline)
+           ▸ Servers & sessions   (cloud / self-host · remote · MCP)
+           ▸ Configure & use      (provider · skills · phone)
+         3×3 at desktop widths, collapses to 2 cols then 1. Cards use
+         a single-line head (icon next to title) followed by a
+         one-sentence body. Smaller details (working-directory picker,
+         tile workspace, attachments, local discovery, CLI installer)
+         live in an inline `Plus: …` strip below the grid so they
+         don't take a card slot each. The Section is rendered with
+         `:dark="true"` so this block sits as a contrasting strip
+         between §3 above and §7a below — same pattern §3.5 used to
+         use before the merge. -->
+    <Section id="features" :dark="true">
+      <template #title>What the app includes</template>
+      <template #subtitle>
+        Connect your model provider, choose a server, and inspect the agents you
+        run&nbsp;today.
+      </template>
+
+      <div class="ad-features-grid">
+        <!-- Build with the SDK ────────────────────────────────── -->
+        <article class="ad-features-card">
+          <header class="ad-features-head">
+            <span class="ad-features-icon" aria-hidden="true">
+              <span class="ad-icon ad-icon--boxes" />
+            </span>
+            <h3 class="ad-features-title">Custom agent types</h3>
+          </header>
+          <p class="ad-features-body">
+            Build entities with <code>@electric-ax/agents-runtime</code> and
+            inspect them in the desktop app.
+          </p>
+        </article>
+
+        <article class="ad-features-card">
+          <header class="ad-features-head">
+            <span class="ad-features-icon" aria-hidden="true">
+              <span class="ad-icon ad-icon--database" />
+            </span>
+            <h3 class="ad-features-title">State explorer</h3>
+          </header>
+          <p class="ad-features-body">
+            See each entity's runs, inbox, manifests, and custom state in
+            one&nbsp;view.
+          </p>
+        </article>
+
+        <article class="ad-features-card">
+          <header class="ad-features-head">
+            <span class="ad-features-icon" aria-hidden="true">
+              <span class="ad-icon ad-icon--history" />
+            </span>
+            <h3 class="ad-features-title">Entity timeline</h3>
+          </header>
+          <p class="ad-features-body">
+            Replay a run event by event, then fork from any point to try a
+            different&nbsp;path.
+          </p>
+        </article>
+
+        <!-- Servers & sessions ────────────────────────────────── -->
+        <article class="ad-features-card">
+          <header class="ad-features-head">
+            <span class="ad-features-icon" aria-hidden="true">
+              <span class="ad-icon ad-icon--cloud" />
+            </span>
+            <h3 class="ad-features-title">Cloud or self-hosted</h3>
+          </header>
+          <p class="ad-features-body">
+            Use Electric&nbsp;Cloud, or point the app at an agents-server you
+            run&nbsp;yourself.
+          </p>
+        </article>
+
+        <article class="ad-features-card">
+          <header class="ad-features-head">
+            <span class="ad-features-icon" aria-hidden="true">
+              <span class="ad-icon ad-icon--radio" />
+            </span>
+            <h3 class="ad-features-title">Connect to remote sessions</h3>
+          </header>
+          <p class="ad-features-body">
+            Open sessions started by CI, webhooks, issues, cron, or another
+            machine.
+          </p>
+        </article>
+
+        <article class="ad-features-card">
+          <header class="ad-features-head">
+            <span class="ad-features-icon" aria-hidden="true">
+              <span class="ad-icon ad-icon--cable" />
+            </span>
+            <h3 class="ad-features-title">MCP servers</h3>
+          </header>
+          <p class="ad-features-body">
+            Add MCP servers with native OAuth. Workspace
+            <code>mcp.json</code> files are respected.
+          </p>
+        </article>
+
+        <!-- Configure &amp; use ───────────────────────────────── -->
+        <article class="ad-features-card ad-features-card--skills">
+          <header class="ad-features-head">
+            <span class="ad-features-icon" aria-hidden="true">
+              <span class="ad-icon ad-icon--key-round" />
+            </span>
+            <h3 class="ad-features-title">Pick your provider</h3>
+          </header>
+          <p class="ad-features-body">
+            Use an API key from your keychain, or sign in to Codex. Anthropic,
+            OpenAI, DeepSeek, and Moonshot are supported.
+          </p>
+        </article>
+
+        <article class="ad-features-card">
+          <header class="ad-features-head">
+            <span class="ad-features-icon" aria-hidden="true">
+              <span class="ad-icon ad-icon--wand" />
+            </span>
+            <h3 class="ad-features-title">Skills &amp; slash commands</h3>
+          </header>
+          <p class="ad-features-body">
+            Use <code>/quickstart</code> to get started, then save commands for
+            your&nbsp;workflows.
+          </p>
+        </article>
+
+        <article class="ad-features-card">
+          <header class="ad-features-head">
+            <span class="ad-features-icon" aria-hidden="true">
+              <span class="ad-icon ad-icon--smartphone" />
+            </span>
+            <h3 class="ad-features-title">Continue from your&nbsp;phone</h3>
+          </header>
+          <p class="ad-features-body">
+            Open a run on iOS or Android to steer it, send a message, or check
+            progress.
+          </p>
+        </article>
+      </div>
+
+      <p class="ad-features-more">
+        <span class="ad-features-more-label mono">Plus:</span>
+        <span class="ad-features-more-item"
+          >Working-directory picker <em>(any folder, no setup)</em></span
+        >
+        <span class="ad-features-more-item"
+          >Tile workspace <em>(split, fork-from-here, deep links)</em></span
+        >
+        <span class="ad-features-more-item"
+          >Attachments <em>(files, screenshots, folders into chat)</em></span
+        >
+        <span class="ad-features-more-item ad-features-more-item--skills">
+          Skills &amp; slash commands
+          <em>(<code>/quickstart</code>, saved workflows)</em>
+        </span>
+        <span class="ad-features-more-item"
+          >Local discovery <em>(dev servers on localhost)</em></span
+        >
+        <span class="ad-features-more-item"
+          >CLI installer
+          <em>(<code>electric</code> command system-wide)</em></span
+        >
+      </p>
+    </Section>
+
+    <!--
+      ═══════════════════ §7 — Download ═══════════════════
+
+      The three <Section> blocks below (desktop / mobile / canary)
+      collectively make up §7 of the new page. They keep their own
+      anchors (#desktop, #mobile, #canary) for backwards
+      compatibility with any external links; phase 6 verifies these
+      still resolve after the rest of the page is in place.
+
+      Desktop and canary keep their original cards / list verbatim.
+      The mobile sub-section is reframed as `Mobile · Preview`
+      pointing at packages/agents-mobile on GitHub (see
+      APP_PAGE_PLAN.md §7 for the locked body string).
+    -->
+
+    <!-- ─────────────────── §7a — Desktop App ─────────────────── -->
+    <Section id="desktop">
+      <template #title>Desktop App</template>
+      <template #subtitle>
+        Install the desktop app to start agents, monitor runs, and return to
+        work&nbsp;in&nbsp;progress.
       </template>
 
       <div class="ad-desktop-grid">
@@ -292,7 +670,9 @@ const primaryPlatform = computed(
           v-for="platform in desktopPlatforms"
           :key="platform.id"
           class="ad-platform-card"
-          :class="{ 'is-recommended': platform.id === detectedId }"
+          :class="{
+            'is-recommended': !detectedMobileId && platform.id === detectedId,
+          }"
         >
           <div class="ad-platform-head">
             <span class="ad-platform-icon" aria-hidden="true">
@@ -318,67 +698,138 @@ const primaryPlatform = computed(
         </article>
       </div>
 
-      <aside class="custom-block warning ad-signing-note">
-        <p class="custom-block-title">Unsigned Preview</p>
-        <p>
-          App signing is still in progress, so macOS and Windows may need an
-          extra confirmation before opening Electric Agents for the first time.
-        </p>
-        <ul>
-          <li>
-            <strong>macOS:</strong> try opening the app, then go to
+      <aside class="ad-signing-note">
+        <span class="ad-signing-icon" aria-hidden="true">
+          <span class="ad-icon ad-icon--shield-alert" />
+        </span>
+        <div class="ad-signing-body">
+          <p class="ad-signing-title">Unsigned Preview</p>
+          <p>
+            Signing is still in progress, so your OS may ask for one
+            extra&nbsp;confirmation.
+          </p>
+          <p class="ad-signing-step">
+            <strong>macOS:</strong> open the app, then
             <strong>System Settings → Privacy &amp; Security</strong> and choose
             <strong>Open Anyway</strong>.
-          </li>
-          <li>
+          </p>
+          <p class="ad-signing-step">
             <strong>Windows:</strong> choose <strong>More info</strong>, then
             <strong>Run anyway</strong>.
-          </li>
-        </ul>
+          </p>
+        </div>
       </aside>
+
+      <p class="ad-download-meta">
+        <a
+          class="ad-meta-link"
+          :href="appReleaseNotesUrl"
+          target="_blank"
+          rel="noreferrer"
+          >Release notes</a
+        >
+      </p>
     </Section>
 
-    <!-- ─────────────────── §3 — Mobile (coming soon) ─────────────────── -->
+    <!-- ─────────────────── §7b — Mobile · Preview ─────────────────── *
+         Two-card grid that mirrors §7a's desktop download visual: one
+         card per app store (App Store · iOS / Google Play · Android),
+         each carrying a small "Coming soon" badge in place of a real
+         download URL. The CTA underneath links the watcher to the
+         GitHub repo so they can star/watch and get notified when
+         the listings ship — that's the closest thing to a download
+         action we can offer today.
+
+         A small follow-up note below the grid points developers at
+         `packages/agents-mobile` so anyone willing to run the Expo
+         dev build can do so today. The two-card grid + repo note
+         is the honest "Preview" framing: same visual rhythm as §7a
+         (so the page reads as a coherent download section), but
+         no fake App Store badges and no marketing-only screenshot. -->
     <Section id="mobile" :dark="true">
-      <template #eyebrow>Mobile · Coming soon</template>
-      <template #title>Native iOS &amp; Android</template>
+      <template #eyebrow>Preview</template>
+      <template #title>Native iOS &amp; Android&nbsp;App</template>
       <template #subtitle>
-        Native mobile clients are in development. Same agents you run on the
-        desktop, in your&nbsp;pocket.
+        Check and steer running agents from your&nbsp;phone.
       </template>
 
       <div class="ad-mobile-grid">
         <article
-          v-for="platform in mobilePlatforms"
-          :key="platform.id"
           class="ad-mobile-card"
-          aria-disabled="true"
+          :class="{ 'is-recommended': detectedMobileId === 'ios' }"
         >
-          <span class="ad-mobile-icon" aria-hidden="true">
-            <span class="ad-icon" :class="`ad-icon--${platform.icon}`" />
-          </span>
-          <h3 class="ad-mobile-name">{{ platform.name }}</h3>
-          <span class="ad-soon-pill mono">Coming soon</span>
-          <span class="ad-store-badge">
-            <span
-              class="ad-store-glyph ad-icon"
-              :class="`ad-icon--${platform.storeIcon}`"
-              aria-hidden="true"
+          <div class="ad-mobile-head">
+            <span class="ad-mobile-icon" aria-hidden="true">
+              <span class="ad-icon ad-icon--apple" />
+            </span>
+            <div class="ad-mobile-title">
+              <h3>App&nbsp;Store</h3>
+              <p>iOS · iPadOS</p>
+            </div>
+            <span class="ad-mobile-badge mono">Coming soon</span>
+          </div>
+          <div class="ad-mobile-cta">
+            <VPButton
+              tag="a"
+              size="medium"
+              theme="alt"
+              text="Watch repo"
+              :href="agentsMobileRepoUrl"
             />
-            <span class="ad-store-label">{{ platform.storeLabel }}</span>
-          </span>
+          </div>
+        </article>
+
+        <article
+          class="ad-mobile-card"
+          :class="{ 'is-recommended': detectedMobileId === 'android' }"
+        >
+          <div class="ad-mobile-head">
+            <span class="ad-mobile-icon" aria-hidden="true">
+              <span class="ad-icon ad-icon--android" />
+            </span>
+            <div class="ad-mobile-title">
+              <h3>Google&nbsp;Play</h3>
+              <p>Android</p>
+            </div>
+            <span class="ad-mobile-badge mono">Coming soon</span>
+          </div>
+          <div class="ad-mobile-cta">
+            <VPButton
+              tag="a"
+              size="medium"
+              theme="alt"
+              text="Watch repo"
+              :href="agentsMobileRepoUrl"
+            />
+          </div>
         </article>
       </div>
+
+      <aside class="ad-mobile-repo-note">
+        <span class="ad-mobile-repo-icon" aria-hidden="true">
+          <span class="ad-icon ad-icon--github" />
+        </span>
+        <p class="ad-mobile-repo-body">
+          Want to try it now? The source lives in
+          <a
+            class="ad-mobile-repo-link"
+            :href="agentsMobileRepoUrl"
+            target="_blank"
+            rel="noreferrer"
+            >packages/agents-mobile</a
+          >
+          — clone the repo and run the Expo dev&nbsp;build.
+        </p>
+      </aside>
     </Section>
 
-    <!-- ─────────────────── §4 — Canary ─────────────────── -->
+    <!-- ─────────────────── §7c — Canary ─────────────────── -->
     <Section id="canary">
       <template #eyebrow>Pre-release</template>
       <template #title>Canary builds</template>
       <template #subtitle>
-        Moving builds from the <code>main</code>&nbsp;branch. Useful for
-        previewing the newest desktop changes — prefer the release builds above
-        for day-to-day&nbsp;use.
+        Builds from <code>main</code>. Use them to preview the newest desktop
+        changes; prefer release builds for daily&nbsp;work.
       </template>
 
       <ul class="ad-canary-list">
@@ -420,10 +871,10 @@ const primaryPlatform = computed(
       </p>
     </Section>
 
-    <!-- ─────────────────── §5 — Bottom CTA ─────────────────── -->
+    <!-- ─────────────────── §8 — Bottom CTA ─────────────────── -->
     <BottomCtaStrap id="get-started">
       <template #eyebrow>
-        <span>Durable · long-running · cloud-connected</span>
+        <span>Open source · local or cloud</span>
       </template>
       <template #title>Build with Electric&nbsp;Agents</template>
       <template #tagline>
@@ -492,11 +943,92 @@ const primaryPlatform = computed(
 .ad-icon--android {
   --icon-url: url('https://api.iconify.design/simple-icons/android.svg');
 }
-.ad-icon--appstore {
-  --icon-url: url('https://api.iconify.design/simple-icons/appstore.svg');
+.ad-icon--github {
+  --icon-url: url('https://api.iconify.design/simple-icons/github.svg');
 }
-.ad-icon--googleplay {
-  --icon-url: url('https://api.iconify.design/simple-icons/googleplay.svg');
+
+/* lucide icons — used by the §3 mode cards and the §6 builder grid.
+   `lucide` is already the icon set used inside `agents-server-ui`, so
+   the marketing page and the product share visual vocabulary. */
+.ad-icon--code {
+  --icon-url: url('https://api.iconify.design/lucide/code-2.svg');
+}
+.ad-icon--radio {
+  --icon-url: url('https://api.iconify.design/lucide/radio-tower.svg');
+}
+.ad-icon--microscope {
+  --icon-url: url('https://api.iconify.design/lucide/microscope.svg');
+}
+.ad-icon--layout {
+  --icon-url: url('https://api.iconify.design/lucide/layout-grid.svg');
+}
+.ad-icon--database {
+  --icon-url: url('https://api.iconify.design/lucide/database.svg');
+}
+.ad-icon--history {
+  --icon-url: url('https://api.iconify.design/lucide/history.svg');
+}
+.ad-icon--cable {
+  --icon-url: url('https://api.iconify.design/lucide/cable.svg');
+}
+.ad-icon--radar {
+  --icon-url: url('https://api.iconify.design/lucide/radar.svg');
+}
+.ad-icon--terminal {
+  --icon-url: url('https://api.iconify.design/lucide/terminal.svg');
+}
+
+/* §4 multi-device pillars + §5 Horton pillars + §5 ask-grid. Kept in
+   their own block (rather than appended to the lucide list above) so
+   it's obvious which icons are owned by phase 4 — easier to retire if
+   the sections ever get restructured. */
+.ad-icon--monitor-smartphone {
+  --icon-url: url('https://api.iconify.design/lucide/monitor-smartphone.svg');
+}
+.ad-icon--users {
+  --icon-url: url('https://api.iconify.design/lucide/users.svg');
+}
+.ad-icon--cpu {
+  --icon-url: url('https://api.iconify.design/lucide/cpu.svg');
+}
+.ad-icon--key-round {
+  --icon-url: url('https://api.iconify.design/lucide/key-round.svg');
+}
+.ad-icon--folder-tree {
+  --icon-url: url('https://api.iconify.design/lucide/folder-tree.svg');
+}
+.ad-icon--wand {
+  --icon-url: url('https://api.iconify.design/lucide/wand-2.svg');
+}
+.ad-icon--message-circle {
+  --icon-url: url('https://api.iconify.design/lucide/message-circle.svg');
+}
+.ad-icon--braces {
+  --icon-url: url('https://api.iconify.design/lucide/braces.svg');
+}
+.ad-icon--compass {
+  --icon-url: url('https://api.iconify.design/lucide/compass.svg');
+}
+
+/* §4 "Everything in the box" feature grid — extra lucide icons
+   used by the expanded 16-card grid. */
+.ad-icon--cloud {
+  --icon-url: url('https://api.iconify.design/lucide/cloud.svg');
+}
+.ad-icon--server {
+  --icon-url: url('https://api.iconify.design/lucide/server.svg');
+}
+.ad-icon--paperclip {
+  --icon-url: url('https://api.iconify.design/lucide/paperclip.svg');
+}
+.ad-icon--smartphone {
+  --icon-url: url('https://api.iconify.design/lucide/smartphone.svg');
+}
+.ad-icon--boxes {
+  --icon-url: url('https://api.iconify.design/lucide/boxes.svg');
+}
+.ad-icon--shield-alert {
+  --icon-url: url('https://api.iconify.design/lucide/shield-alert.svg');
 }
 
 /* ── §1 hero ────────────────────────────────────────────────── */
@@ -538,6 +1070,23 @@ const primaryPlatform = computed(
   text-wrap: balance;
 }
 
+/* Inline link inside the hero paragraph — points at the Agents
+   landing page. Sits in the muted sub-copy so a flat VitePress
+   default would disappear; lift it to brand-1 with a thin
+   underline to read as an unambiguous link without breaking the
+   sub-copy's quiet tone. */
+.ad-hero-text a {
+  color: var(--vp-c-brand-1);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  transition: color 120ms ease;
+}
+
+.ad-hero-text a:hover {
+  color: var(--vp-c-brand-2);
+}
+
 .ad-hero-actions {
   display: flex;
   justify-content: center;
@@ -546,10 +1095,16 @@ const primaryPlatform = computed(
   gap: 12px;
 }
 
-.ad-hero-meta {
-  margin: 18px 0 0;
+.ad-download-meta {
+  /* Small "Release notes" follow-up line that sits at the very
+     bottom of the §7a desktop download section, under the signing
+     note — previously sat above the signing note, but reads more
+     naturally as the section's last word. Centred + muted to match
+     the page's other small follow-up rows. */
+  margin: 20px 0 0;
   font-size: 13px;
   color: var(--vp-c-text-3);
+  text-align: center;
 }
 
 .ad-meta-link {
@@ -564,7 +1119,546 @@ const primaryPlatform = computed(
   border-bottom-color: var(--vp-c-brand-1);
 }
 
-/* ── §2 desktop ─────────────────────────────────────────────── */
+/* ── §1 hero — platform glyph row ───────────────────────────── *
+   Sits between the CTA buttons and the release-notes link, two
+   rows in a 5-column grid:
+     row 1 — five [icon + label] pairs (macOS · Windows · Linux ·
+             iOS · Android)
+     row 2 — a single `Preview` pill positioned beneath the iOS +
+             Android pair (columns 4–5), softly marking the native
+             mobile apps as not-yet-public.
+   The 5-column layout is preserved on narrow viewports — the per-
+   glyph `minmax(56px, auto)` columns compress comfortably down to
+   ~360px without label truncation, so a responsive collapse to a
+   2-row grid would only add complexity for no readability gain. */
+
+.ad-hero-platforms {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(56px, auto));
+  justify-content: center;
+  align-items: start;
+  gap: 14px 28px;
+  margin: 32px auto 0;
+  max-width: 540px;
+}
+
+.ad-hero-glyph {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  color: var(--vp-c-text-3);
+}
+
+/* Vertical divider centred in the 28px column gap between the
+   desktop trio (cols 1-3) and the mobile pair (cols 4-5). Sits as
+   an absolutely-positioned hairline on the iOS glyph, anchored
+   off its container's relative positioning. Top:0 + bottom:<badge
+   area> stretches the line from the top of the iOS icon down to
+   the bottom of its label — matching the desktop column height —
+   while clearing the small `Preview` chip that hangs below.  */
+.ad-hero-glyph:nth-child(4)::before {
+  content: '';
+  position: absolute;
+  left: -14px;
+  top: 0;
+  bottom: 17px;
+  width: 1px;
+  background: var(--vp-c-divider);
+}
+
+.ad-hero-glyph-icon {
+  font-size: 22px;
+  color: var(--vp-c-text-2);
+}
+
+.ad-hero-glyph.is-preview .ad-hero-glyph-icon {
+  /* Mobile glyphs are noticeably (but gently) more muted than the
+     desktop trio so the eye reads "this is a different cluster"
+     before it ever reaches the Preview pill below. */
+  color: color-mix(in srgb, var(--vp-c-text-2) 65%, transparent);
+}
+
+.ad-hero-glyph-label {
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--vp-c-text-3);
+}
+
+/* Per-glyph `Preview` chip — one tucked tight under each mobile
+   glyph's label (iOS, Android). Reads as a title-style badge on
+   each platform rather than a single anchor pill that left the
+   row feeling lopsided. Sized down to ~7px so the chip lives as
+   visual punctuation under the label, not a second mark
+   competing for attention with the icon. Negative margin-top
+   pulls the chip back through the parent's 6px flex `gap` so it
+   sits ~1px under the label rather than 6px below it. */
+.ad-hero-glyph-preview {
+  margin-top: -1px;
+  padding: 0 5px;
+  font-size: 7px;
+  line-height: 1.4;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--vp-c-brand-1) 80%, var(--vp-c-text-3));
+  background: color-mix(in srgb, var(--vp-c-brand-1) 10%, transparent);
+  border: 1px solid
+    color-mix(in srgb, var(--vp-c-brand-1) 32%, var(--vp-c-divider));
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+/* ── §1 hero mockup pair ────────────────────────────────────── *
+   Live desktop mockup + overlapping phone placeholder, sitting at
+   the bottom of the hero. The desktop scene is HeroChatStateScene
+   (real animated HTML/CSS, OS-reactive); the phone is a placeholder
+   until the mobile mockup primitive lands.
+
+   Layout:
+     ┌──────────────────────────────────────────────────────────┐
+     │                                                          │
+     │   [ HeroChatStateScene ]              ┌──────┐           │
+     │                                       │      │           │
+     │   …                                   │ 📱   │           │
+     │                                       │      │           │
+     │                                       └──────┘           │
+     │                                                          │
+     │             Same session. Two devices.                   │
+     └──────────────────────────────────────────────────────────┘
+
+   Stage uses `position: relative` + container queries so the phone
+   can absolute-overlap the desktop on wide viewports and tuck under
+   it (stacked) on narrow viewports without breaking the layout.
+   The desktop scene already runs its own internal container queries
+   (sidebar collapse, state-tile drop) — sizing the mockup wrapper to
+   a fixed width makes those breakpoints fire predictably regardless
+   of the surrounding column. */
+
+.ad-hero-mockup {
+  /* Break out of the hero's 820-px text column so the mockup can
+     fill the page width with breathing room. The 1240-px cap matches
+     the design — wider screens just centre the stage. */
+  max-width: 1240px;
+  margin: 56px auto 0;
+  padding: 0 24px;
+  container-type: inline-size;
+  container-name: hero-mockup;
+}
+
+.ad-hero-mockup-stage {
+  position: relative;
+  width: 100%;
+  /* Aspect roughly matches the desktop scene + phone overlap so the
+     stage reserves vertical space without depending on the scene's
+     intrinsic height. The desktop scene fills the stage; the phone
+     hangs off the right edge as an absolute overlay. */
+  aspect-ratio: 16 / 10;
+  display: flex;
+  align-items: stretch;
+}
+
+.ad-hero-mockup-desktop {
+  /* Desktop occupies most of the stage, leaving room on the right for
+     the phone to overlap. Width is a percentage so the scene's
+     internal container queries (sidebar / state-tile breakpoints)
+     fire predictably as the viewport shrinks. */
+  flex: 1 1 auto;
+  width: 86%;
+  max-width: 86%;
+  /* Keep the scene flush-left so the phone overlaps the chat tile's
+     right edge — the design intent in the reference. */
+  align-self: stretch;
+  transform: translateX(20px);
+  /* Clip the inner sizing wrapper, which renders at 125 % so the
+     scene's intrinsic layout box is bigger than this footprint —
+     anything that bleeds past the visible footprint is cut here. */
+  overflow: hidden;
+}
+
+/* Inner sizing wrapper. We render the scene at 125 % of the desktop
+   footprint and then scale it back down by 0.8, so the visible result
+   fills `.ad-hero-mockup-desktop` exactly while the scene itself is
+   rendered at a higher intrinsic resolution — every UI element
+   (sidebar, tile headers, message text, state inspector rows…) lands
+   on screen at 80 % of its native size, giving the same on-page
+   footprint as a full-resolution desktop screenshot but with finer
+   detail per pixel. The scene's internal `@container` queries still
+   fire at the larger intrinsic width (~107 % of the stage), so the
+   sidebar + state tile remain visible at any reasonable hero width. */
+.ad-hero-mockup-desktop-inner {
+  width: 125%;
+  height: 125%;
+  transform: scale(0.8);
+  transform-origin: top left;
+}
+
+.ad-hero-mockup-phone {
+  position: absolute;
+  /* Hang off the right edge of the desktop. The phone's left edge
+     overlaps the desktop's right column by ~40 px so the eye reads
+     "two devices, one workflow" rather than "two separate panels". */
+  right: 24px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 22%;
+  min-width: 200px;
+  max-width: 280px;
+  /* Lock the phone wrapper to the device aspect-ratio so the inner
+     shadow host (which sizes to 100 % × 100 %) renders the scene at
+     a known shape. The AppPhoneFrame inside also carries 9/19.5 so
+     the scene fits the wrapper exactly with no letterboxing. */
+  aspect-ratio: 9 / 19.5;
+  /* Drop shadow lifts the phone off the desktop visually so the
+     overlap reads as foreground, not as a clipped device. */
+  filter: drop-shadow(-8px 8px 24px rgba(0, 0, 0, 0.35))
+    drop-shadow(0 2px 6px rgba(0, 0, 0, 0.25));
+  z-index: 2;
+}
+
+/* The mobile mockup phone wrapper just needs a transparent
+   container — its inner `HeroMobileChatScene` brings its own
+   `AppPhoneFrame` chrome (bezels, dynamic island, home indicator),
+   so we don't paint anything here beyond the outer drop-shadow
+   that lifts the device off the desktop mockup behind it. */
+
+.ad-hero-mockup-caption {
+  margin: 22px 0 0;
+  text-align: center;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  color: var(--vp-c-text-3);
+}
+
+/* Below ~720 px container width keep the same overlapping desktop +
+   phone composition and let both devices scale down together. The
+   phone's desktop min-width is removed here so it stays proportional
+   instead of forcing the layout to stack or overflow. */
+@container hero-mockup (max-width: 720px) {
+  .ad-hero-mockup-stage {
+    aspect-ratio: 16 / 10;
+  }
+  .ad-hero-mockup-desktop {
+    width: 86%;
+    max-width: 86%;
+    transform: none;
+  }
+  .ad-hero-mockup-desktop-inner {
+    /* On narrow screens keep the full desktop window visible, but
+       render the internals smaller so more of the sidebar + split
+       workspace fits inside the same on-page footprint. Width/height
+       are the inverse of the visual scale. */
+    width: 200%;
+    height: 200%;
+    transform: scale(0.5);
+  }
+  .ad-hero-mockup-phone {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 24%;
+    min-width: 0;
+    max-width: none;
+    aspect-ratio: 9 / 19.5;
+  }
+}
+
+/* ── §3 three ways to use it ────────────────────────────────── *
+   Three equal-width cards in a row at desktop widths, collapsing
+   to two columns < 980px and one column on mobile. Each card is a
+   vertical stack of: icon · category eyebrow · title · body
+   paragraph · "You can:" label · 4-item bullet list.
+
+   List-bottoms alignment across cards is the product of TWO
+   mechanisms working together:
+     1. `align-items: stretch` on the grid → cards take the height
+        of the tallest one, so all three share a bottom edge.
+     2. `margin-top: auto` on `.ad-modes-list-label` (NOT the list)
+        → the (label + list) block anchors to the bottom of each
+        card's flex column, so when body copy is shorter the extra
+        space lands above the label, not between label and list.
+   Either mechanism alone is insufficient: stretching without the
+   auto-margin leaves lists floating mid-card; auto-margin without
+   stretching collapses each card's height to its content.
+
+   The strip beneath the grid restates the one-integrated-platform
+   takeaway as a centred, muted single line. */
+
+.ad-modes-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+  align-items: stretch;
+}
+
+.ad-modes-card {
+  display: flex;
+  flex-direction: column;
+  padding: 28px 26px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 16px;
+  background: var(--vp-c-bg);
+  transition:
+    transform 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.ad-modes-card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(
+    in srgb,
+    var(--vp-c-brand-1) 45%,
+    var(--vp-c-divider)
+  );
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.08);
+}
+
+.ad-modes-icon {
+  font-size: 22px;
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--vp-c-brand-1) 8%, transparent);
+  border: 1px solid
+    color-mix(in srgb, var(--vp-c-brand-1) 22%, var(--vp-c-divider));
+  color: var(--vp-c-brand-1);
+  margin-bottom: 18px;
+}
+
+.ad-modes-icon .ad-icon {
+  font-size: 22px;
+}
+
+.ad-modes-title {
+  margin: 0 0 12px;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  color: var(--vp-c-text-1);
+  text-wrap: balance;
+}
+
+.ad-modes-body {
+  margin: 0 0 20px;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--vp-c-text-2);
+  text-wrap: pretty;
+}
+
+/* "You can" mini-eyebrow above each bullet list. Same mono-uppercase
+   feel as the card eyebrow so the visual rhythm inside each card
+   stays consistent without introducing a second typographic
+   register.
+
+   `margin-top: auto` lives on the LABEL (not the list) so the whole
+   "You can …" block — label and bullets together — anchors to the
+   bottom of the card. Cards with shorter body copy get extra
+   whitespace BETWEEN body and label, not between label and list. */
+.ad-modes-list-label {
+  margin: auto 0 8px;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--vp-c-text-3);
+}
+
+.ad-modes-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.ad-modes-list li {
+  position: relative;
+  padding-left: 16px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--vp-c-text-2);
+}
+
+.ad-modes-list li::before {
+  content: '·';
+  position: absolute;
+  left: 4px;
+  top: -1px;
+  color: var(--vp-c-brand-1);
+  font-weight: 700;
+}
+
+.ad-modes-list code {
+  font-size: 12.5px;
+}
+
+.ad-modes-strip {
+  margin: 36px auto 0;
+  text-align: center;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  color: var(--vp-c-text-3);
+}
+
+/* ── §4 everything in the box ─────────────────────────────── *
+   Comprehensive feature grid — 4×4 at desktop widths, collapses
+   to 3 → 2 → 1 columns. Each card has an inline head row (icon
+   beside title) so the visual hierarchy reads as a single line
+   you can scan at a glance, with a one-sentence body below. The
+   Section is rendered with `:dark="true"`, so cards sit on the
+   dark `--ea-surface-alt` fill — `--vp-c-bg` is one rung BELOW
+   that fill in dark mode, giving cards a subtle recessed feel
+   without needing a heavy outline. */
+
+.ad-features-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.ad-features-card {
+  display: flex;
+  flex-direction: column;
+  padding: 18px 18px 20px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 14px;
+  background: var(--vp-c-bg);
+  transition:
+    transform 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.ad-features-card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(
+    in srgb,
+    var(--vp-c-brand-1) 45%,
+    var(--vp-c-divider)
+  );
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.07);
+}
+
+.ad-features-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  /* Allow the title to wrap to a second line below the icon if
+     the column gets narrow without dragging the icon down with
+     it; align-items: center keeps the chip vertically centred
+     against single-line titles which is the common case. */
+}
+
+.ad-features-icon {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--vp-c-brand-1) 12%, transparent);
+  border: 1px solid
+    color-mix(in srgb, var(--vp-c-brand-1) 28%, var(--vp-c-divider));
+  color: var(--vp-c-brand-1);
+}
+
+.ad-features-icon .ad-icon {
+  font-size: 16px;
+}
+
+.ad-features-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--vp-c-text-1);
+  line-height: 1.3;
+  text-wrap: balance;
+}
+
+.ad-features-body {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--vp-c-text-2);
+  text-wrap: pretty;
+}
+
+.ad-features-body code {
+  font-size: 12px;
+}
+
+/* "Plus: …" strip below the grid — compact way to mention smaller
+   features without giving each its own card. Safari can overflow long
+   inline/nowrap runs in a centred paragraph, so this is an explicit
+   wrapping flex row instead of relying on inline text layout. */
+
+.ad-features-more {
+  margin: 28px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: baseline;
+  gap: 2px 0;
+  max-width: 100%;
+  font-size: 13px;
+  line-height: 1.85;
+  text-align: center;
+  color: var(--vp-c-text-2);
+}
+
+.ad-features-more-label {
+  flex: 0 0 100%;
+  font-size: 11px;
+  line-height: 1.2;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--vp-c-text-3);
+}
+
+.ad-features-more-item {
+  display: inline-flex;
+  align-items: baseline;
+  max-width: 100%;
+  color: var(--vp-c-text-1);
+  font-weight: 500;
+  white-space: normal;
+}
+
+.ad-features-more-item--skills {
+  display: none;
+}
+
+.ad-features-more-item em {
+  margin-left: 4px;
+  font-style: normal;
+  color: var(--vp-c-text-3);
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.ad-features-more-item code {
+  font-size: 12px;
+}
+
+.ad-features-more-item:not(:last-child)::after {
+  content: '·';
+  flex: 0 0 auto;
+  margin: 0 8px;
+  color: var(--vp-c-text-3);
+}
+
+/* ── §7a desktop ────────────────────────────────────────────── */
 
 .ad-desktop-grid {
   display: grid;
@@ -659,45 +1753,122 @@ const primaryPlatform = computed(
   flex-wrap: wrap;
 }
 
+/* "Unsigned Preview" note — same hairline-dashed visual rhythm as
+   the §7b "Want it sooner?" repo note: small icon chip on the left,
+   body text on the right, dashed border so it reads as a sub-card
+   tip rather than a heavy warning callout. align-items: flex-start
+   here (vs `center` on the repo note) because this block carries
+   multiple lines + a bullet list. */
+
 .ad-signing-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
   margin-top: 24px;
-  padding-bottom: 18px;
+  padding: 14px 18px;
+  border: 1px dashed var(--vp-c-divider);
+  border-radius: 12px;
+  background: transparent;
 }
 
-.ad-signing-note p {
-  max-width: 700px;
+.ad-signing-icon {
+  flex-shrink: 0;
+  font-size: 18px;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--vp-c-bg-soft);
+  border: 1px solid var(--vp-c-divider);
+  color: var(--vp-c-text-2);
+  /* Pin the icon chip to the first text line rather than the visual
+     midpoint of the multi-line body. */
+  margin-top: 2px;
 }
 
-.ad-signing-note ul {
-  margin: 8px 0 0;
-  padding-left: 20px;
-  display: grid;
-  gap: 6px;
+.ad-signing-icon .ad-icon {
+  font-size: 18px;
 }
 
-/* ── §3 mobile ──────────────────────────────────────────────── */
+.ad-signing-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--vp-c-text-2);
+  text-wrap: pretty;
+}
+
+.ad-signing-title {
+  margin: 0 0 6px;
+  font-weight: 600;
+  color: var(--vp-c-text-1);
+}
+
+.ad-signing-body p {
+  margin: 0 0 6px;
+}
+
+.ad-signing-body p:last-of-type {
+  margin-bottom: 0;
+}
+
+.ad-signing-step {
+  /* Stacked platform-specific instructions — flush-left under the
+     intro paragraph, no bullet indent. Slightly muted vs. the
+     intro so the eye lands on "macOS:" / "Windows:" first. */
+  color: var(--vp-c-text-2);
+}
+
+/* ── §7b mobile · preview ───────────────────────────────────── *
+   Single card replacing the previous two-card iOS/Android grid.
+   Body text + GitHub CTA — body and actions sit side-by-side on
+   desktop, stack vertically below 768px. */
+
+/* §7b mobile preview — two-card grid mirroring §7a desktop downloads
+   (one card per app store) + a small repo-note strip beneath. The two
+   cards reuse the same visual tokens as `.ad-platform-card` so the
+   page reads as a coherent download section; the "Coming soon" badge
+   and the muted CTA replace the live download URL. */
 
 .ad-mobile-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 20px;
+  margin-top: 8px;
 }
 
 .ad-mobile-card {
-  display: grid;
-  grid-template-columns: 40px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 14px;
-  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  padding: 24px;
   border: 1px solid var(--vp-c-divider);
   border-radius: 16px;
   background: var(--vp-c-bg);
 }
 
+.ad-mobile-card.is-recommended {
+  border-color: color-mix(
+    in srgb,
+    var(--vp-c-brand-1) 40%,
+    var(--vp-c-divider)
+  );
+}
+
+.ad-mobile-head {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
 .ad-mobile-icon {
-  font-size: 22px;
-  width: 40px;
-  height: 40px;
+  font-size: 20px;
+  width: 36px;
+  height: 36px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -708,48 +1879,105 @@ const primaryPlatform = computed(
 }
 
 .ad-mobile-icon .ad-icon {
-  font-size: 22px;
+  font-size: 20px;
 }
 
-.ad-mobile-name {
+.ad-mobile-title h3 {
   margin: 0;
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--vp-c-text-1);
+  line-height: 1.2;
 }
 
-.ad-soon-pill {
-  padding: 3px 9px;
-  font-size: 10px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  background: color-mix(in srgb, var(--vp-c-brand-1) 16%, transparent);
-  color: var(--vp-c-brand-1);
+.ad-mobile-title p {
+  margin: 3px 0 0;
+  font-size: 13px;
+  color: var(--vp-c-text-2);
+  line-height: 1.4;
+}
+
+/* Small mono "Coming soon" badge in the head row. Sits to the right
+   of the title so the eye reads
+       [icon] App Store · iOS         [Coming soon]
+   in one sweep — same shape as the §1 hero `Preview` glyph chip but
+   muted further so it reads as status, not feature. */
+.ad-mobile-badge {
+  padding: 3px 8px;
   border-radius: 999px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--vp-c-text-3);
+  background: var(--vp-c-bg-soft);
+  border: 1px solid var(--vp-c-divider);
   white-space: nowrap;
-  justify-self: end;
 }
 
-.ad-store-badge {
-  grid-column: 1 / -1;
-  display: inline-flex;
+.ad-mobile-cta {
+  display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 14px;
-  border-radius: 10px;
-  background: var(--vp-c-bg-soft);
-  color: var(--vp-c-text-2);
-  font-size: 14px;
-  font-weight: 500;
+  flex-wrap: wrap;
 }
 
-.ad-store-glyph {
+/* Small "want it sooner?" strip beneath the two-card grid pointing
+   developers at the source repo so anyone willing to run the Expo
+   dev build can do so today. Visually a hairline-bordered note —
+   sub-card weight so it reads as a follow-up tip, not as a third
+   "store". */
+.ad-mobile-repo-note {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 20px;
+  padding: 14px 18px;
+  border: 1px dashed var(--vp-c-divider);
+  border-radius: 12px;
+  background: transparent;
+}
+
+.ad-mobile-repo-icon {
+  flex-shrink: 0;
   font-size: 18px;
-  color: var(--vp-c-text-1);
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--vp-c-bg-soft);
+  border: 1px solid var(--vp-c-divider);
+  color: var(--vp-c-text-2);
 }
 
-/* ── §4 canary ──────────────────────────────────────────────── *
+.ad-mobile-repo-icon .ad-icon {
+  font-size: 18px;
+}
+
+.ad-mobile-repo-body {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--vp-c-text-2);
+  text-wrap: pretty;
+}
+
+.ad-mobile-repo-link {
+  font-family: var(--vp-font-family-mono);
+  font-size: 13px;
+  color: var(--vp-c-brand-1);
+  text-decoration: none;
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--vp-c-brand-1) 30%, transparent);
+}
+
+.ad-mobile-repo-link:hover {
+  border-bottom-color: var(--vp-c-brand-1);
+}
+
+/* ── §7c canary ─────────────────────────────────────────────── *
    Single compact list rather than four mini-card boxes. Each row:
    icon + platform + inline download chips, hairline-separated
    like an engineering reference table. */
@@ -840,9 +2068,34 @@ const primaryPlatform = computed(
 
 /* ── Responsive ─────────────────────────────────────────────── */
 
+@media (max-width: 980px) {
+  /* The three §3 mode cards carry a lot of body + list text and
+     start to look cramped before the rest of the page does, so they
+     drop to a 2-up grid earlier than the desktop downloads. The §4
+     features grid also collapses here so the page reflows together
+     rather than at staggered breakpoints. */
+  .ad-modes-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ad-modes-card:last-child {
+    grid-column: 1 / -1;
+  }
+  .ad-features-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 601px) and (max-width: 980px) {
+  .ad-features-card--skills {
+    display: none;
+  }
+  .ad-features-more-item--skills {
+    display: inline;
+  }
+}
+
 @media (max-width: 900px) {
-  .ad-desktop-grid,
-  .ad-mobile-grid {
+  .ad-desktop-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -857,6 +2110,50 @@ const primaryPlatform = computed(
   .ad-hero-text {
     font-size: 18px;
   }
+  .ad-mobile-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .ad-mobile-repo-note {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .ad-modes-grid {
+    grid-template-columns: 1fr;
+  }
+  .ad-modes-card:last-child {
+    grid-column: auto;
+  }
+  .ad-modes-card {
+    padding: 24px 22px;
+  }
+  .ad-modes-title {
+    font-size: 20px;
+  }
+}
+
+@media (max-width: 640px) {
+  .ad-hero-mockup {
+    padding-inline: 8px;
+  }
+  .ad-hero-platforms {
+    transform: scale(0.82);
+    transform-origin: top center;
+    margin-top: 24px;
+  }
+}
+
+@media (max-width: 360px) {
+  .ad-hero-platforms {
+    transform: scale(0.74);
+  }
+}
+
+@media (max-width: 600px) {
+  .ad-features-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 560px) {
@@ -868,9 +2165,6 @@ const primaryPlatform = computed(
     align-items: stretch;
     max-width: 280px;
     margin: 0 auto;
-  }
-  .ad-mobile-card {
-    grid-template-columns: 36px minmax(0, 1fr) auto;
   }
   .ad-canary-item {
     grid-template-columns: 20px minmax(0, 1fr);

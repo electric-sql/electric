@@ -39,6 +39,8 @@ const NAV = [
     ],
   },
   '|',
+  { id: 'app', label: 'App', link: '/app' },
+  '|',
   {
     id: 'cloud',
     label: 'Cloud',

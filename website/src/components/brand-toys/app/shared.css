@@ -1,0 +1,53 @@
+/* App mockup — shared utility CSS.
+   ─────────────────────────────────────────────────────────────────
+   Imported once per mockup tree (typically by each scene SFC's
+   `<style scoped>` via `@import './shared.css'`, or by toy roots).
+   Bundles the rescoped `--ds-*` tokens and a baseline rule that
+   gives every `.app-mockup-root` instance the right background,
+   text colour and font family — so individual primitives only have
+   to think about their own surface.
+
+   See APP_DESKTOP_MOCKUP_PLAN.md §4 (token bridge) and §4.6
+   (architecture) for the why. */
+
+@import './tokens.css';
+
+/* Baseline applied to every mockup root.
+
+   Why scope this here rather than leaving it to scenes? Two reasons:
+
+   1. Every consumer (scene toy, in-page scene, OG raster) wraps
+      its content in `<div class="app-mockup-root" :data-theme="…">`.
+      Putting the baseline on this exact selector means a scene gets
+      sane defaults for free without each scene re-declaring them.
+
+   2. The brand-toys page forces `html.dark` while mounted, which
+      flips the website's `--vp-c-*` tokens to dark. Inside the
+      mockup root we deliberately ignore those — `color: var(--ds-text-1)`
+      reads from our own `--ds-*` cascade (whose dark/light is
+      controlled by `data-theme` on the root, NOT `html.dark`). This
+      keeps the brand-toys harness from forcing a dark mockup just
+      because the harness itself is forced dark. */
+.app-mockup-root {
+  background: var(--ds-bg);
+  color: var(--ds-text-1);
+  font-family: var(--ds-font-body);
+  font-size: var(--ds-text-base);
+  line-height: var(--ds-text-base-lh);
+  /* Anti-aliasing — the agents-server-ui body sets these on `<body>`;
+     we replicate at root level so the in-page mockup matches the live
+     product even when embedded in the website (which doesn't apply
+     these globally). */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Mono utility — used by the mockup's hand-styled code blocks and
+   any place we need monospaced labels. Mirrors the same `mono` helper
+   the website uses elsewhere; living in the mockup CSS means it
+   resolves to `--ds-font-mono` (and matches the agents-server-ui
+   bundle), not the website's `--vp-font-family-mono`. */
+.app-mockup-root .mono {
+  font-family: var(--ds-font-mono);
+}
