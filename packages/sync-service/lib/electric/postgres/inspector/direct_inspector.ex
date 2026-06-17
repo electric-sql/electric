@@ -95,9 +95,26 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
         {:ok, relations}
 
       {:error, err} ->
-        {:error, Exception.message(err)}
+        {:error, normalize_query_error(err)}
     end
   end
+
+  @doc false
+  # Convert an in-band query error into the inspector error contract.
+  # Connection-class errors (e.g. "ssl recv: closed") are returned by
+  # Postgrex as `{:error, %DBConnection.ConnectionError{}}` rather than
+  # raised, so without this they would bypass the `:connection_not_available`
+  # mapping that callers rely on for retries.
+  @spec normalize_query_error(Exception.t()) :: String.t() | :connection_not_available
+  def normalize_query_error(%DBConnection.ConnectionError{} = err) do
+    if Electric.DbConnectionError.from_error(err).type != :unknown do
+      :connection_not_available
+    else
+      Exception.message(err)
+    end
+  end
+
+  def normalize_query_error(err), do: Exception.message(err)
 
   defp load_relation_query(match) do
     # partitions can live in other namespaces from the parent/root table, so we
@@ -187,7 +204,7 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
         {:ok, rows}
 
       {:error, err} ->
-        {:error, err}
+        {:error, normalize_query_error(err)}
     end
   end
 
