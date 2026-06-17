@@ -1,5 +1,5 @@
 import { Type } from '@sinclair/typebox'
-import { nanoid } from 'nanoid'
+import { randomBytes } from 'node:crypto'
 import { serverLog } from '../log'
 import type { BuiltinAgentModelConfig } from '../model-catalog'
 import type { AgentTool } from '@mariozechner/pi-agent-core'
@@ -18,6 +18,21 @@ export const WORKER_TOOL_NAMES = [
 
 export type WorkerToolName = (typeof WORKER_TOOL_NAMES)[number]
 
+const MAX_WORKER_SLUG_LENGTH = 48
+
+function normalizeWorkerSlug(slug: unknown): string {
+  if (typeof slug !== `string`) return ``
+
+  return slug
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, `-`)
+    .replace(/-+/g, `-`)
+    .replace(/^-+|-+$/g, ``)
+    .slice(0, MAX_WORKER_SLUG_LENGTH)
+    .replace(/^-+|-+$/g, ``)
+}
+
 export function createSpawnWorkerTool(
   ctx: HandlerContext,
   modelConfig?: BuiltinAgentModelConfig
@@ -25,8 +40,11 @@ export function createSpawnWorkerTool(
   return {
     name: `spawn_worker`,
     label: `Spawn Worker`,
-    description: `Dispatch a subagent (worker) to perform an isolated subtask. Provide a brief system prompt to give it its role and then a detailed initialMessage which briefs the worker like a colleague who just walked into the room (file paths, line numbers, what specifically to do, what form of answer you want back) and pick the subset of tools the worker needs.`,
+    description: `Dispatch a subagent (worker) to perform an isolated subtask. Provide a meaningful slug for the worker path, a brief system prompt to give it its role, then a detailed initialMessage which briefs the worker like a colleague who just walked into the room (file paths, line numbers, what specifically to do, what form of answer you want back), and pick the subset of tools the worker needs. The slug is normalized and a few random bytes are appended to keep the worker path unique.`,
     parameters: Type.Object({
+      slug: Type.String({
+        description: `Short, meaningful slug for this worker, used as the start of its path. Use lowercase words separated by hyphens, e.g. "audit-auth-flow". A random suffix is added automatically for uniqueness.`,
+      }),
       systemPrompt: Type.String({
         description: `System prompt for the worker.`,
       }),
@@ -41,11 +59,25 @@ export function createSpawnWorkerTool(
       }),
     }),
     execute: async (_toolCallId, params) => {
-      const { systemPrompt, tools, initialMessage } = params as {
+      const { slug, systemPrompt, tools, initialMessage } = params as {
+        slug: string
         systemPrompt: string
         tools: Array<WorkerToolName>
         initialMessage: string
       }
+      const normalizedSlug = normalizeWorkerSlug(slug)
+      if (normalizedSlug.length === 0 || !/[a-z0-9]/.test(normalizedSlug)) {
+        return {
+          content: [
+            {
+              type: `text` as const,
+              text: `Error: slug is required and must contain at least one letter or number.`,
+            },
+          ],
+          details: { spawned: false },
+        }
+      }
+
       if (!Array.isArray(tools) || tools.length === 0) {
         return {
           content: [
@@ -69,7 +101,7 @@ export function createSpawnWorkerTool(
         }
       }
 
-      const id = nanoid(10)
+      const id = `${normalizedSlug}-${randomBytes(3).toString(`hex`)}`
       const workerModelArgs = modelConfig
         ? {
             provider: modelConfig.provider,

@@ -11,6 +11,7 @@ describe(`spawn_worker tool`, () => {
     const ctx = { spawn } as any
     const tool = createSpawnWorkerTool(ctx)
     const result = await tool.execute(`call-1`, {
+      slug: `file-size-check`,
       systemPrompt: `Read /tmp/foo and report its size`,
       tools: [`read`, `bash`],
       initialMessage: `Please check the size of /tmp/foo and report back`,
@@ -21,7 +22,7 @@ describe(`spawn_worker tool`, () => {
     const [type, id, args, opts] = call as Array<any>
     expect(type).toBe(`worker`)
     expect(typeof id).toBe(`string`)
-    expect(id.length).toBeGreaterThanOrEqual(10)
+    expect(id).toMatch(/^file-size-check-[0-9a-f]{6}$/)
     expect(args).toEqual({
       systemPrompt: `Read /tmp/foo and report its size`,
       tools: [`read`, `bash`],
@@ -52,6 +53,7 @@ describe(`spawn_worker tool`, () => {
     })
 
     await tool.execute(`call-model`, {
+      slug: `model-worker`,
       systemPrompt: `Do a thing`,
       tools: [`read`],
       initialMessage: `Please do it`,
@@ -67,11 +69,70 @@ describe(`spawn_worker tool`, () => {
     })
   })
 
+  it(`normalizes the slug before appending a random suffix`, async () => {
+    const spawn = vi.fn(async (type, id) => ({
+      entityUrl: `/${type}/${id}`,
+      writeToken: `tok`,
+      txid: 1,
+    }))
+    const ctx = { spawn } as any
+    const tool = createSpawnWorkerTool(ctx)
+
+    await tool.execute(`call-slug`, {
+      slug: `  Audit Auth Flow!!  `,
+      systemPrompt: `Do a thing`,
+      tools: [`read`],
+      initialMessage: `Please do it`,
+    })
+
+    const [, id] = spawn.mock.calls[0]! as Array<any>
+    expect(id).toMatch(/^audit-auth-flow-[0-9a-f]{6}$/)
+  })
+
+  it(`caps the normalized slug before appending a random suffix`, async () => {
+    const spawn = vi.fn(async (type, id) => ({
+      entityUrl: `/${type}/${id}`,
+      writeToken: `tok`,
+      txid: 1,
+    }))
+    const ctx = { spawn } as any
+    const tool = createSpawnWorkerTool(ctx)
+
+    await tool.execute(`call-long-slug`, {
+      slug: `this is a very long worker slug that should be capped before it reaches the worker path`,
+      systemPrompt: `Do a thing`,
+      tools: [`read`],
+      initialMessage: `Please do it`,
+    })
+
+    const [, id] = spawn.mock.calls[0]! as Array<any>
+    expect(id).toMatch(
+      /^this-is-a-very-long-worker-slug-that-should-be-c-[0-9a-f]{6}$/
+    )
+  })
+
+  it(`rejects when slug is missing or empty after normalization`, async () => {
+    const spawn = vi.fn()
+    const ctx = { spawn } as any
+    const tool = createSpawnWorkerTool(ctx)
+    const result = await tool.execute(`call-no-slug`, {
+      slug: `!!!`,
+      systemPrompt: `do something`,
+      tools: [`bash`],
+      initialMessage: `go`,
+    })
+    expect((result.content[0] as { text: string }).text).toMatch(
+      /slug is required/i
+    )
+    expect(spawn).not.toHaveBeenCalled()
+  })
+
   it(`rejects when tools is empty`, async () => {
     const spawn = vi.fn()
     const ctx = { spawn } as any
     const tool = createSpawnWorkerTool(ctx)
     const result = await tool.execute(`call-2`, {
+      slug: `empty-tools`,
       systemPrompt: `do something`,
       tools: [],
       initialMessage: `go`,
@@ -87,6 +148,7 @@ describe(`spawn_worker tool`, () => {
     const ctx = { spawn } as any
     const tool = createSpawnWorkerTool(ctx)
     const missing = await tool.execute(`call-3`, {
+      slug: `missing-message`,
       systemPrompt: `do something`,
       tools: [`bash`],
     } as any)
@@ -94,6 +156,7 @@ describe(`spawn_worker tool`, () => {
       /initialMessage is required/i
     )
     const empty = await tool.execute(`call-4`, {
+      slug: `empty-message`,
       systemPrompt: `do something`,
       tools: [`bash`],
       initialMessage: ``,

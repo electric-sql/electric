@@ -23,7 +23,7 @@ Omit 'entityUrl' to fork your own session. Pass a different session's URL to for
       ),
       id: Type.Optional(
         Type.String({
-          description: `Instance id for the new fork (the \`<id>\` in \`/horton/<id>\`). Mirrors spawn_worker's id parameter. Omit to let the server assign one.`,
+          description: `Instance id for the new fork (the \`<id>\` in \`/horton/<id>\`). Omit to let the server assign one.`,
         })
       ),
       initialMessage: Type.Optional(
@@ -52,8 +52,7 @@ Omit 'entityUrl' to fork your own session. Pass a different session's URL to for
         // The library API (`ctx.fork` / `ctx.forkSelf`) requires an id
         // — same shape as `ctx.spawn(type, id, ...)`. The model layer
         // doesn't need to know this; we generate one via nanoid when
-        // it's not supplied (same pattern `createSpawnWorkerTool` uses
-        // for the worker's id).
+        // it's not supplied.
         const forkId = id ?? `fork-${nanoid(10)}`
         const handle =
           entityUrl !== undefined
