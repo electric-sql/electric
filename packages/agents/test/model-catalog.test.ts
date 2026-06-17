@@ -119,7 +119,16 @@ describe(`model catalog`, () => {
       model: `gpt-5`,
       reasoning: `minimal`,
     })
-    expect(config.onPayload).toBeUndefined()
+    expect(config.onPayload).toBeTypeOf(`function`)
+
+    const payload = config.onPayload!(
+      { reasoning: { effort: `none` } },
+      {} as any
+    )
+
+    expect(payload).toEqual({
+      reasoning: { effort: `minimal`, summary: `auto` },
+    })
   })
 
   it(`uses explicit reasoning effort for OpenAI reasoning models`, async () => {
@@ -131,6 +140,31 @@ describe(`model catalog`, () => {
 
     expect(config.reasoningEffort).toBe(`high`)
     expect(config.reasoning).toBe(`high`)
+
+    const payload = config.onPayload!(
+      { reasoning: { effort: `none` } },
+      {} as any
+    )
+
+    expect(payload).toEqual({
+      reasoning: { effort: `high`, summary: `auto` },
+    })
+  })
+
+  it(`preserves an explicit OpenAI reasoning summary setting`, async () => {
+    const catalog = await createBuiltinModelCatalog()
+    const config = resolveBuiltinModelConfig(catalog!, {
+      model: `openai:gpt-5`,
+    })
+
+    const payload = config.onPayload!(
+      { reasoning: { effort: `none`, summary: `detailed` } },
+      {} as any
+    )
+
+    expect(payload).toEqual({
+      reasoning: { effort: `minimal`, summary: `detailed` },
+    })
   })
 
   it(`enables Anthropic reasoning through pi-ai when reasoningEffort is auto`, async () => {
