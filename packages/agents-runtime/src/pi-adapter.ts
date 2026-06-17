@@ -322,10 +322,6 @@ export function createPiAgentAdapter(
     // per step; the UI derives "messages" as the real total minus these.
     const tokenBreakdown = {
       system: approxTokens(opts.systemPrompt),
-      // Serialize first: approxTokens' array branch charges a flat ~64 per
-      // non-text block, so the raw AgentTool[] would estimate ~64×toolCount
-      // regardless of real schema size. JSON.stringify captures each tool's
-      // name + description + parameter schema, which is what fills the prompt.
       tools: approxTokens(JSON.stringify(opts.tools)),
     }
 
