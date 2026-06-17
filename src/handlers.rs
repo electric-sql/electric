@@ -1340,11 +1340,84 @@ async fn read_range_body(
             hot,
         };
     }
-    // Mixed/cold range: resolve placement-aware slices and materialize them
-    // (local fds read directly, remote ranges fetched from the BlobStore),
-    // spliced in order. Served as one Full body (catch-up / long-poll reads).
-    let bytes = materialize_resolved(st, data_start, data_end, prefix, suffix).await;
-    Body::Full(bytes)
+    // Mixed/cold range: stream placement-aware slices as a chunked channel
+    // instead of buffering the whole range. Peak memory is O(segment) — one
+    // range-GET per remote segment, windowed local reads — not O(read size).
+    stream_resolved_body(st, data_start, data_end, prefix, suffix)
+}
+
+/// Per-item read window for the local parts of a streamed cold/mixed read.
+/// Remote parts are already one range-GET per sealed segment (the natural unit:
+/// one object = one segment, so per-segment GETs minimize object-store
+/// round-trips); local parts are cheap preads, windowed here only to bound
+/// memory. Together peak memory stays O(segment).
+const COLD_LOCAL_WINDOW: usize = 1024 * 1024;
+
+/// Stream a placement-aware logical range as a chunked `Body::Channel`: one item
+/// per remote segment (a single range-GET) plus windowed local reads, framed by
+/// `prefix`/`suffix`. Memory stays bounded regardless of how large the cold
+/// range is (the failure mode of the old buffer-it-all `Body::Full` path).
+fn stream_resolved_body(
+    st: &Arc<StreamState>,
+    start: u64,
+    end: u64,
+    prefix: &'static [u8],
+    suffix: &'static [u8],
+) -> Body {
+    use crate::store::ResolvedSlice;
+    let (tx, rx) = mpsc::channel::<Bytes>(4);
+    let st = st.clone();
+    tokio::spawn(async move {
+        if !prefix.is_empty() && tx.send(Bytes::from_static(prefix)).await.is_err() {
+            return;
+        }
+        let mut slices = Vec::new();
+        crate::store::resolve_range(&st, start, end, &mut slices);
+        for sl in slices {
+            match sl {
+                ResolvedSlice::Local(seg) => {
+                    // Window the (possibly large) local slice so we never hold
+                    // more than COLD_LOCAL_WINDOW of it in memory at once.
+                    let mut off = 0u64;
+                    while off < seg.len {
+                        let n = (seg.len - off).min(COLD_LOCAL_WINDOW as u64);
+                        let win = Segment {
+                            file: seg.file.clone(),
+                            file_start: seg.file_start + off,
+                            len: n,
+                        };
+                        let bytes = tokio::task::spawn_blocking(move || {
+                            materialize_segments(&[win], b"", b"")
+                        })
+                        .await
+                        .unwrap_or_default();
+                        // materialize_segments yields empty bytes on a read
+                        // failure — a short item means we can't honour the
+                        // content; drop the connection rather than send garbage.
+                        if bytes.len() as u64 != n || tx.send(bytes).await.is_err() {
+                            return;
+                        }
+                        off += n;
+                    }
+                }
+                ResolvedSlice::Remote { key, offset, len } => {
+                    let Some(bs) = &st.blobstore else { return };
+                    match bs.get_range(&key, offset, len).await {
+                        Ok(b) => {
+                            if tx.send(b).await.is_err() {
+                                return;
+                            }
+                        }
+                        Err(_) => return,
+                    }
+                }
+            }
+        }
+        if !suffix.is_empty() {
+            let _ = tx.send(Bytes::from_static(suffix)).await;
+        }
+    });
+    Body::Channel(rx)
 }
 
 /// Materialize a placement-aware logical range into one contiguous buffer:
