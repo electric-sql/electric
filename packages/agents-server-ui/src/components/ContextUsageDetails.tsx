@@ -67,21 +67,25 @@ export function ContextUsageDetails({
       </div>
 
       <ul className={styles.legend}>
-        {segments.map((seg) => (
-          <li key={seg.key} className={styles.legendRow}>
-            <span
-              className={`${styles.swatch} ${styles[seg.key]}`}
-              aria-hidden="true"
-            />
-            <span className={styles.legendLabel}>{seg.label}</span>
-            <span className={styles.legendTokens}>
-              {formatTokenCount(seg.tokens)}
-            </span>
-            <span className={styles.legendPercent}>
-              {formatSegmentPercent(seg.ratio)}
-            </span>
-          </li>
-        ))}
+        {/* Omit empty buckets (e.g. system/tools for older steps with no
+            persisted breakdown), matching the stacked bar above. */}
+        {segments
+          .filter((seg) => seg.tokens > 0)
+          .map((seg) => (
+            <li key={seg.key} className={styles.legendRow}>
+              <span
+                className={`${styles.swatch} ${styles[seg.key]}`}
+                aria-hidden="true"
+              />
+              <span className={styles.legendLabel}>{seg.label}</span>
+              <span className={styles.legendTokens}>
+                {formatTokenCount(seg.tokens)}
+              </span>
+              <span className={styles.legendPercent}>
+                {formatSegmentPercent(seg.ratio)}
+              </span>
+            </li>
+          ))}
       </ul>
 
       <div className={styles.note}>System &amp; tools are estimates.</div>
