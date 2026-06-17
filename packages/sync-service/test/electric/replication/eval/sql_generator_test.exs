@@ -412,6 +412,14 @@ defmodule Electric.Replication.Eval.SqlGeneratorTest do
       assert SqlGenerator.to_sql(%Const{value: "it's"}) == "'it''s'"
     end
 
+    test "uuid" do
+      uuid = "550e8400-e29b-41d4-a716-446655440000"
+      {:ok, uuid_bytes} = Ecto.UUID.dump(uuid)
+
+      assert SqlGenerator.to_sql(%Const{type: :uuid, value: uuid_bytes}) ==
+               "'#{uuid}'::uuid"
+    end
+
     test "integer" do
       assert SqlGenerator.to_sql(%Const{value: 42}) == "42"
     end
@@ -434,6 +442,15 @@ defmodule Electric.Replication.Eval.SqlGeneratorTest do
     test "string array" do
       ast = %Array{elements: [%Const{value: "a"}, %Const{value: "b"}]}
       assert SqlGenerator.to_sql(ast) == "ARRAY['a', 'b']"
+    end
+
+    test "constant-folded uuid array" do
+      uuid = "550e8400-e29b-41d4-a716-446655440000"
+      {:ok, uuid_bytes} = Ecto.UUID.dump(uuid)
+
+      ast = %Const{type: {:array, :uuid}, value: [uuid_bytes]}
+
+      assert SqlGenerator.to_sql(ast) == "ARRAY['#{uuid}'::uuid]"
     end
 
     test "empty array" do

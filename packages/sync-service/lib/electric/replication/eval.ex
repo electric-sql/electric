@@ -72,10 +72,14 @@ defmodule Electric.Replication.Eval do
   for binary protocol encoding.
 
   Most types (integers, floats, booleans, dates, times, etc.) use native Elixir
-  types that Postgrex handles directly. UUID is a notable exception: the eval
-  system stores UUIDs as human-readable strings, but Postgrex expects 16-byte
-  raw binaries.
+  types that Postgrex handles directly. UUIDs are the notable type here because
+  Postgres exposes them as canonical text in decoded rows/API JSON, but Postgrex
+  expects 16-byte raw binaries when sending UUID query parameters. The eval
+  representation stores UUIDs in that compact Postgrex-ready form and converts
+  back to canonical text at type-aware output boundaries.
   """
+  def value_to_postgrex(<<_::128>> = value, :uuid), do: value
+
   def value_to_postgrex(value, :uuid) when is_binary(value) do
     {:ok, bin} = Ecto.UUID.dump(value)
     bin

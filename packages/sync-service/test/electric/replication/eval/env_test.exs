@@ -3,10 +3,37 @@ defmodule Electric.Replication.Eval.EnvTest do
 
   alias Electric.Replication.Eval.Env
 
-  describe "const_to_pg_string/3" do
+  describe "parse_const/3" do
     setup do
       env = Env.new()
-      %{env: env}
+      uuid = "550e8400-e29b-41d4-a716-446655440000"
+      {:ok, uuid_bytes} = Ecto.UUID.dump(uuid)
+      %{env: env, uuid: uuid, uuid_bytes: uuid_bytes}
+    end
+
+    test "parses uuid values as compact 16-byte binaries", %{
+      env: env,
+      uuid: uuid,
+      uuid_bytes: uuid_bytes
+    } do
+      assert {:ok, ^uuid_bytes} = Env.parse_const(env, uuid, :uuid)
+      assert byte_size(uuid_bytes) == 16
+    end
+
+    test "parses uuid arrays as compact 16-byte binaries", %{
+      env: env,
+      uuid: uuid,
+      uuid_bytes: uuid_bytes
+    } do
+      assert {:ok, [^uuid_bytes]} = Env.parse_const(env, "{#{uuid}}", {:array, :uuid})
+    end
+  end
+
+  describe "const_to_pg_string/3" do
+    setup do
+      uuid = "550e8400-e29b-41d4-a716-446655440000"
+      {:ok, uuid_bytes} = Ecto.UUID.dump(uuid)
+      %{env: Env.new(), uuid: uuid, uuid_bytes: uuid_bytes}
     end
 
     test "converts text type values as-is", %{env: env} do
@@ -62,9 +89,12 @@ defmodule Electric.Replication.Eval.EnvTest do
       assert Env.const_to_pg_string(env, timestamp, :timestamp) == "2025-01-15T14:30:00"
     end
 
-    test "converts uuid type as-is (noop)", %{env: env} do
-      uuid = "550e8400-e29b-41d4-a716-446655440000"
-      assert Env.const_to_pg_string(env, uuid, :uuid) == uuid
+    test "converts compact uuid values back to canonical text", %{
+      env: env,
+      uuid: uuid,
+      uuid_bytes: uuid_bytes
+    } do
+      assert Env.const_to_pg_string(env, uuid_bytes, :uuid) == uuid
     end
 
     test "converts simple arrays of integers", %{env: env} do

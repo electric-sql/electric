@@ -17,6 +17,7 @@ defmodule Electric.Replication.Eval.SqlGenerator do
   """
 
   alias Electric.Replication.Eval.Parser.{Const, Ref, Func, Array, RowExpr}
+  alias Electric.Replication.PostgresInterop.Casting
 
   # PostgreSQL operator precedence (higher number = tighter binding)
   # See: https://www.postgresql.org/docs/current/sql-syntax-lexical.html#SQL-PRECEDENCE
@@ -254,6 +255,15 @@ defmodule Electric.Replication.Eval.SqlGenerator do
   defp to_sql_prec(%Const{value: true}), do: {"true", @prec_atom}
   defp to_sql_prec(%Const{value: false}), do: {"false", @prec_atom}
 
+  defp to_sql_prec(%Const{type: :uuid, value: value}) when is_binary(value) do
+    {uuid_literal(value), @prec_atom}
+  end
+
+  defp to_sql_prec(%Const{type: {:array, type}, value: value}) when is_list(value) do
+    elements = Enum.map_join(value, ", ", &const_list_element_to_sql(&1, type))
+    {"ARRAY[#{elements}]", @prec_atom}
+  end
+
   defp to_sql_prec(%Const{value: value}) when is_binary(value) do
     escaped = String.replace(value, "'", "''")
     {"'#{escaped}'", @prec_atom}
@@ -351,6 +361,18 @@ defmodule Electric.Replication.Eval.SqlGenerator do
     elements = Enum.map_join(value, ", ", &const_list_element_to_sql/1)
     "ARRAY[#{elements}]"
   end
+
+  defp const_list_element_to_sql(value, :uuid) when is_binary(value), do: uuid_literal(value)
+  defp const_list_element_to_sql(nil, _type), do: "NULL"
+
+  defp const_list_element_to_sql(values, {:array, type}) when is_list(values) do
+    elements = Enum.map_join(values, ", ", &const_list_element_to_sql(&1, type))
+    "ARRAY[#{elements}]"
+  end
+
+  defp const_list_element_to_sql(value, _type), do: const_list_element_to_sql(value)
+
+  defp uuid_literal(value), do: "'#{Casting.uuid_to_string(value)}'::uuid"
 
   # Helper for ANY/ALL: extract the operator, left operand, and array right operand
   # from a Func with map_over_array_in_pos set

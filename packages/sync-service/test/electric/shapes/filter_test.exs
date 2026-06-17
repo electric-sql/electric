@@ -90,6 +90,38 @@ defmodule Electric.Shapes.FilterTest do
       assert Filter.affected_shapes(filter, insert) == MapSet.new(["s2"])
     end
 
+    test "returns shapes affected by uuid equality using compact index keys" do
+      uuid1 = "550e8400-e29b-41d4-a716-446655440000"
+      uuid2 = "550e8400-e29b-41d4-a716-446655440001"
+      {:ok, uuid1_bytes} = Ecto.UUID.dump(uuid1)
+
+      inspector =
+        StubInspector.new(
+          tables: ["uuid_table"],
+          columns: [%{name: "id", type: "uuid", pk_position: 0}]
+        )
+
+      filter =
+        Filter.new()
+        |> Filter.add_shape(
+          "s1",
+          Shape.new!("uuid_table", where: "id = '#{uuid1}'::uuid", inspector: inspector)
+        )
+        |> Filter.add_shape(
+          "s2",
+          Shape.new!("uuid_table", where: "id = '#{uuid2}'::uuid", inspector: inspector)
+        )
+
+      index_entries = :ets.tab2list(filter.eq_index_table)
+
+      assert Enum.any?(index_entries, &match?({{_, "id", ^uuid1_bytes}, _}, &1))
+      refute Enum.any?(index_entries, &match?({{_, "id", ^uuid1}, _}, &1))
+
+      insert = %NewRecord{relation: {"public", "uuid_table"}, record: %{"id" => uuid1}}
+
+      assert Filter.affected_shapes(filter, insert) == MapSet.new(["s1"])
+    end
+
     test "returns shapes affected by delete" do
       filter =
         Filter.new()
