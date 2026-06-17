@@ -1097,7 +1097,6 @@ export type Manifest = ManifestUnion & {
   tokenBudget?: number | null
   tokensUsed?: number
   summary?: string
-  updatedAt?: string
 }
 export type ReplayWatermark = SequencedPersistedRow<ReplayWatermarkValue>
 
