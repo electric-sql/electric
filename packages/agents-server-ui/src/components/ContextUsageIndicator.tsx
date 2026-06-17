@@ -6,6 +6,7 @@ import {
   parseContextBreakdown,
   contextUsageLevel,
   formatContextUsagePercent,
+  formatTokenCount,
 } from '@electric-ax/agents-runtime/client'
 import type { EntityStreamDBWithActions } from '@electric-ax/agents-runtime/client'
 import { HoverCard } from '../ui/HoverCard'
@@ -82,6 +83,15 @@ export function ContextUsageIndicator({
 
   const level = contextUsageLevel(usage.ratio)
   const percent = formatContextUsagePercent(usage.ratio)
+  // Keep the essential numbers in the trigger's own label: the breakdown popover
+  // is hover-only (Base UI PreviewCard), so keyboard/screen-reader users would
+  // otherwise get only the percent from the trigger.
+  const tokensLabel = `${formatTokenCount(usage.usedTokens)} / ${formatTokenCount(
+    usage.contextWindow
+  )} tokens`
+  const ariaLabel = `Context used: ${percent} (${tokensLabel}${
+    usage.modelId ? ` · ${usage.modelId}` : ``
+  }) — hover for breakdown`
 
   return (
     <HoverCard.Root>
@@ -91,7 +101,7 @@ export function ContextUsageIndicator({
             className={[styles.indicator, styles[level]]
               .filter(Boolean)
               .join(` `)}
-            aria-label={`Context used: ${percent} — hover for breakdown`}
+            aria-label={ariaLabel}
           >
             <ContextUsageRing ratio={usage.ratio} />
             <span className={styles.percent}>{percent}</span>
