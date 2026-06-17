@@ -110,9 +110,11 @@ until the data is durable.
 
 - **Catch-up** (`GET`, no `live`) — `read_range_body(start, tail)`. If the range
   is covered by the resident tail cache it returns `Body::Full` straight from
-  memory; otherwise `collect_segments` resolves the logical range to physical
-  file segments (walking the fork parent chain for forked streams) and returns
-  `Body::FileRange`.
+  memory; otherwise `tier::resolve_range` resolves the logical range to placement-
+  aware slices (walking the fork parent chain for forked streams). If every slice
+  is local (the live data file and/or sealed chunk files) it returns a zero-copy
+  `Body::FileRange`; if any slice is remote it streams a bounded `Body::Channel`
+  (one range-GET per remote segment).
 - **Long-poll** (`live=long-poll`) — if the consumer is behind the tail, return
   the backlog immediately. Otherwise park on the stream's `watch` receiver until
   the next append or the timeout (204).
@@ -255,12 +257,17 @@ Key properties:
   boundary yields a mix.
 - **Durability is never weakened.** An append still acks only after the local
   group-commit fsync. Offload is strictly _post-durability_: seal → upload →
-  `head`-verify → durably flip `local → remote` → _only then_ reclaim local bytes.
-  So a read never routes to an object that isn't there, nor to bytes already
-  reclaimed.
-- **Clean reclaim.** Sealed segments are separate chunk files, so reclaim is an
-  `unlink` — safe even under an in-flight read (Unix keeps an open fd readable after
-  unlink); the active file is hole-punched (`fallocate`) on Linux.
+  `head`-verify → durably flip `local → remote` → _only then_ unlink the staged
+  chunk file. So a read never routes to an object that isn't there.
+- **Chunk reclaim only; live-file reclaim deferred.** Sealed segments are separate
+  chunk files, so reclaiming a chunk is an `unlink` — safe even under an in-flight
+  read (Unix keeps an open fd readable after unlink). The live data file's sealed
+  region is **not** reclaimed: hole-punching (`fallocate`) a shared file races with
+  the engines' in-flight lazy reads (`sendfile` / `Body::FileRange`) into the
+  just-sealed tail, which would read zeros from the freed blocks. Safe live-file
+  reclaim needs read/punch coordination (epoch/refcount) or compaction and is a
+  planned follow-up; until then the live file retains the sealed prefix (extra disk,
+  no correctness or race risk).
 - **JSON-safe sealing.** A JSON seal boundary always lands on a whole-value
   boundary (a byte-level scanner that ignores commas/brackets inside strings and
   honours escapes), so a sealed segment still reads back wrapped as `[ … ]`.

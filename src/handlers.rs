@@ -1325,24 +1325,23 @@ async fn read_range_body(
     }
     let prefix: &'static [u8] = if json { b"[" } else { b"" };
     let suffix: &'static [u8] = if json { b"]" } else { b"" };
-    // Fast path (and the only path when tiering is off): the range is entirely
-    // local fds → the unchanged zero-copy FileRange body. `range_is_all_local`
-    // is trivially true with no sealed remote segments, so the default build's
-    // behaviour is byte-for-byte identical.
-    if crate::store::range_is_all_local(st, data_start, data_end) {
-        let mut segs = Vec::new();
-        collect_segments(st, data_start, data_end, &mut segs);
-        return Body::FileRange {
-            segments: segs,
+    // Resolve the range once. If it lands entirely on local fds (the live data
+    // file and/or sealed chunk files) serve it zero-copy via Body::FileRange —
+    // the only path when tiering is off, byte-for-byte the old behaviour.
+    // Otherwise stream the placement-aware slices as a chunked channel so peak
+    // memory stays O(segment) — one range-GET per remote segment, windowed local
+    // reads — never O(read size).
+    let mut slices = Vec::new();
+    crate::store::resolve_range(st, data_start, data_end, &mut slices);
+    match crate::store::into_local_segments(slices) {
+        Ok(segments) => Body::FileRange {
+            segments,
             prefix,
             suffix,
             hot,
-        };
+        },
+        Err(slices) => stream_resolved_body(st, slices, prefix, suffix),
     }
-    // Mixed/cold range: stream placement-aware slices as a chunked channel
-    // instead of buffering the whole range. Peak memory is O(segment) — one
-    // range-GET per remote segment, windowed local reads — not O(read size).
-    stream_resolved_body(st, data_start, data_end, prefix, suffix)
 }
 
 /// Per-item read window for the local parts of a streamed cold/mixed read.
@@ -1352,14 +1351,15 @@ async fn read_range_body(
 /// memory. Together peak memory stays O(segment).
 const COLD_LOCAL_WINDOW: usize = 1024 * 1024;
 
-/// Stream a placement-aware logical range as a chunked `Body::Channel`: one item
-/// per remote segment (a single range-GET) plus windowed local reads, framed by
-/// `prefix`/`suffix`. Memory stays bounded regardless of how large the cold
-/// range is (the failure mode of the old buffer-it-all `Body::Full` path).
+/// Stream pre-resolved placement-aware slices as a chunked `Body::Channel`: one
+/// item per remote segment (a single range-GET) plus windowed local reads, framed
+/// by `prefix`/`suffix`. Memory stays bounded regardless of how large the cold
+/// range is (the failure mode of the old buffer-it-all `Body::Full` path). The
+/// slices are resolved by the caller (which already opened any chunk-file fds
+/// under the manifest lock), so this never re-walks the manifest.
 fn stream_resolved_body(
     st: &Arc<StreamState>,
-    start: u64,
-    end: u64,
+    slices: Vec<crate::store::ResolvedSlice>,
     prefix: &'static [u8],
     suffix: &'static [u8],
 ) -> Body {
@@ -1370,8 +1370,6 @@ fn stream_resolved_body(
         if !prefix.is_empty() && tx.send(Bytes::from_static(prefix)).await.is_err() {
             return;
         }
-        let mut slices = Vec::new();
-        crate::store::resolve_range(&st, start, end, &mut slices);
         for sl in slices {
             match sl {
                 ResolvedSlice::Local(seg) => {
@@ -1419,19 +1417,16 @@ fn stream_resolved_body(
     Body::Channel(rx)
 }
 
-/// Materialize a placement-aware logical range into one contiguous buffer:
+/// Materialize pre-resolved placement-aware slices into one contiguous buffer:
 /// local file segments via positioned reads, remote segments via the BlobStore,
 /// spliced in offset order, framed by `prefix`/`suffix`.
 async fn materialize_resolved(
     st: &Arc<StreamState>,
-    start: u64,
-    end: u64,
+    slices: Vec<crate::store::ResolvedSlice>,
     prefix: &'static [u8],
     suffix: &'static [u8],
 ) -> Bytes {
     use crate::store::ResolvedSlice;
-    let mut slices = Vec::new();
-    crate::store::resolve_range(st, start, end, &mut slices);
     let mut out = BytesMut::new();
     out.put_slice(prefix);
     for sl in slices {
@@ -1838,15 +1833,16 @@ async fn handle_sse(st: Arc<StreamState>, offset: ParsedOffset, client_cursor: O
 
 /// Read a logical byte range fully into memory (SSE batches are small).
 async fn read_range_bytes(st: &Arc<StreamState>, start: u64, end: u64) -> Bytes {
-    // Local-only fast path (always the case with tiering off).
-    if crate::store::range_is_all_local(st, start, end) {
-        let mut segs = Vec::new();
-        collect_segments(st, start, end, &mut segs);
-        return tokio::task::spawn_blocking(move || materialize_segments(&segs, b"", b""))
+    let mut slices = Vec::new();
+    crate::store::resolve_range(st, start, end, &mut slices);
+    match crate::store::into_local_segments(slices) {
+        // Local-only fast path (always the case with tiering off): one blocking
+        // read across all local segments.
+        Ok(segs) => tokio::task::spawn_blocking(move || materialize_segments(&segs, b"", b""))
             .await
-            .unwrap_or_default();
+            .unwrap_or_default(),
+        Err(slices) => materialize_resolved(st, slices, b"", b"").await,
     }
-    materialize_resolved(st, start, end, b"", b"").await
 }
 
 // ---------- HEAD ----------
