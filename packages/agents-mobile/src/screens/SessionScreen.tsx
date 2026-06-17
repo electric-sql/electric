@@ -241,14 +241,14 @@ export function SessionScreen({
     [pendingInbox]
   )
   const projectedPendingMessage = useMemo(() => {
-    if (entity?.status === `running`) return null
+    if (generationActive) return null
     for (const [key, message] of inlineQueuedMessages) {
       if (processedInboxKeys.has(key)) continue
       return pendingInboxByKey.get(key) ?? message
     }
     return null
   }, [
-    entity?.status,
+    generationActive,
     inlineQueuedMessages,
     pendingInboxByKey,
     processedInboxKeys,
@@ -262,7 +262,7 @@ export function SessionScreen({
     [pendingInbox, projectedPendingMessage]
   )
   const inlineQueuedSubmits =
-    entity?.status !== `running` &&
+    !generationActive &&
     pendingInbox.length === 0 &&
     inlineQueuedMessages.size === 0
 
@@ -297,6 +297,9 @@ export function SessionScreen({
       let next: Map<string, OptimisticInboxMessage> | null = null
       for (const key of current.keys()) {
         if (!processedInboxKeys.has(key)) continue
+        // Still pending though in the timeline — keep tracking inline until it
+        // leaves the pending inbox, else it flashes back into the queue drawer.
+        if (pendingInboxByKey.has(key)) continue
         next ??= new Map(current)
         next.delete(key)
         inlineQueuedKeysRef.current.delete(key)
@@ -306,7 +309,7 @@ export function SessionScreen({
       }
       return next ?? current
     })
-  }, [inlineQueuedMessages.size, processedInboxKeys])
+  }, [inlineQueuedMessages.size, processedInboxKeys, pendingInboxByKey])
 
   useEffect(
     () => () => {
@@ -534,6 +537,10 @@ function NativeMessageComposer({
   const styles = useMemo(() => createComposerStyles(tokens), [tokens])
   const { keyboardVisible, keyboardTranslateY } = useKeyboardAttachment()
   const [value, setValue] = useState(``)
+  // Cleared imperatively on send: the input is controlled via children (for
+  // highlighting), not `value`, so a `setValue('')` while typing fast can be
+  // rejected by RN as stale (older event count) and leave the sent text behind.
+  const inputRef = useRef<TextInput>(null)
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [editingMessage, setEditingMessage] = useState<{
@@ -673,6 +680,7 @@ function NativeMessageComposer({
       }
 
       setValue(``)
+      inputRef.current?.clear()
       setPendingSelection(null)
       slash.reset()
       setEditingMessage(null)
@@ -692,6 +700,7 @@ function NativeMessageComposer({
     }
 
     setValue(``)
+    inputRef.current?.clear()
     setPendingSelection(null)
     slash.reset()
     setEditingMessage(null)
@@ -853,6 +862,7 @@ function NativeMessageComposer({
           />
         )}
         <TextInput
+          ref={inputRef}
           onChangeText={setValue}
           onSelectionChange={(event) => {
             slash.onSelectionChange(event)
