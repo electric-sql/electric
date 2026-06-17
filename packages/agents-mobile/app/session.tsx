@@ -144,10 +144,11 @@ function SessionRouteInner({
   // the imperative handle (which registers after boot) takes over.
   const chatLogRef = useRef<SessionChatLogDomRef>(null)
   const initialComposerInsetRef = useRef(composerInset)
-  usePushToEmbed(chatLogRef, composerInset, pushBottomInset)
-  usePushToEmbed(chatLogRef, inlineQueuedMessages, pushInlineQueued)
+  usePushToEmbed(chatLogRef, `setBottomInset`, composerInset)
+  usePushToEmbed(chatLogRef, `setInlineQueuedMessages`, inlineQueuedMessages)
   const handleSend = useCallback((): void => {
-    chatLogRef.current?.scrollToBottom()
+    // `?.()` guards the method too: the handle may not be registered yet.
+    chatLogRef.current?.scrollToBottom?.()
   }, [])
   // Reference-stable so it doesn't break the embed's memo (forkEntity itself is
   // stable from the provider); marshals the fork over native networking.
@@ -268,18 +269,21 @@ function domOptions(
 }
 
 // Push a value into the chat-log embed's imperative handle, retrying on
-// animation frames until it registers (a beat after the WebView boots).
-function usePushToEmbed<T>(
+// animation frames until the method exists. `ref.current` becomes a truthy
+// proxy a beat BEFORE `useDOMImperativeHandle` marshals its methods in, so we
+// must check the method itself — a truthy `ref.current` is not enough.
+function usePushToEmbed(
   ref: { current: SessionChatLogDomRef | null },
-  value: T,
-  push: (handle: SessionChatLogDomRef, value: T) => void
+  method: `setBottomInset` | `setInlineQueuedMessages`,
+  value: unknown
 ): void {
   useEffect(() => {
     let frame = 0
     let attempts = 0
     const apply = (): void => {
-      if (ref.current) {
-        push(ref.current, value)
+      const fn = ref.current?.[method]
+      if (typeof fn === `function`) {
+        fn(value)
         return
       }
       if (attempts++ < 120) frame = requestAnimationFrame(apply)
@@ -288,15 +292,8 @@ function usePushToEmbed<T>(
     return () => {
       if (frame) cancelAnimationFrame(frame)
     }
-  }, [ref, value, push])
+  }, [ref, method, value])
 }
-
-const pushBottomInset = (handle: SessionChatLogDomRef, px: number): void =>
-  handle.setBottomInset(px)
-const pushInlineQueued = (
-  handle: SessionChatLogDomRef,
-  messages: Array<OptimisticInboxMessage>
-): void => handle.setInlineQueuedMessages(messages)
 
 function useKeyboardBottomInset(windowHeight: number): number {
   const [keyboardInset, setKeyboardInset] = useState(0)
