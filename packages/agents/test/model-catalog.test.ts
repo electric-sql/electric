@@ -149,7 +149,7 @@ describe(`model catalog`, () => {
     })
   })
 
-  it(`enables Anthropic extended thinking with a minimal budget when reasoningEffort is auto`, async () => {
+  it(`enables Anthropic adaptive thinking at low effort when reasoningEffort is auto`, async () => {
     process.env.ANTHROPIC_API_KEY = `test-anthropic-key`
     vi.stubGlobal(
       `fetch`,
@@ -172,7 +172,8 @@ describe(`model catalog`, () => {
 
     expect(config.onPayload).toBeTypeOf(`function`)
     expect(config.onPayload!({}, {} as any)).toEqual({
-      thinking: { type: `enabled`, budget_tokens: 1024 },
+      thinking: { type: `adaptive` },
+      output_config: { effort: `low` },
     })
   })
 
@@ -200,11 +201,12 @@ describe(`model catalog`, () => {
     expect(
       config.onPayload!({ thinking: { type: `disabled` } }, {} as any)
     ).toEqual({
-      thinking: { type: `enabled`, budget_tokens: 1024 },
+      thinking: { type: `adaptive` },
+      output_config: { effort: `low` },
     })
   })
 
-  it(`scales Anthropic thinking budget with explicit reasoningEffort`, async () => {
+  it(`maps explicit reasoningEffort to the Anthropic adaptive effort level`, async () => {
     process.env.ANTHROPIC_API_KEY = `test-anthropic-key`
     vi.stubGlobal(
       `fetch`,
@@ -227,7 +229,8 @@ describe(`model catalog`, () => {
     })
 
     expect(config.onPayload!({}, {} as any)).toEqual({
-      thinking: { type: `enabled`, budget_tokens: 24576 },
+      thinking: { type: `adaptive` },
+      output_config: { effort: `high` },
     })
   })
 
