@@ -21,7 +21,6 @@ import type { ChangeEvent } from '@durable-streams/state'
 import type {
   AgentEvent,
   AgentMessage,
-  AgentTool,
   StreamFn,
 } from '@mariozechner/pi-agent-core'
 import type {
@@ -30,7 +29,12 @@ import type {
   Provider,
   SimpleStreamOptions,
 } from '@mariozechner/pi-ai'
-import type { LLMContentBlock, LLMMessage, LLMMessageContent } from './types'
+import type {
+  AgentTool,
+  LLMContentBlock,
+  LLMMessage,
+  LLMMessageContent,
+} from './types'
 
 /**
  * Split a streamed reasoning blob into `{ title, body }`.
@@ -269,6 +273,8 @@ export function createPiAgentAdapter(
     let reasoningStarted = false
     let reasoningAccum = ``
     let abortedRun = false
+    let activeRunSignal: AbortSignal | undefined
+    const pendingToolArgDeltaHooks = new Map<string, Promise<void>>()
 
     const model = resolvePiModel({
       model: opts.model,
@@ -284,11 +290,61 @@ export function createPiAgentAdapter(
         timeoutMs: modelTimeoutMs,
         maxRetries: modelMaxRetries,
       })
+    const awaitToolArgDeltaHooks = async (
+      toolCallId: string | undefined
+    ): Promise<void> => {
+      if (!toolCallId) return
+      await pendingToolArgDeltaHooks.get(toolCallId)
+    }
+    const enqueueToolArgDeltaHook = (
+      tool: AgentTool,
+      context: {
+        toolCallId: string
+        toolName: string
+        contentIndex?: number
+        delta: string
+        argsPreview?: unknown
+      },
+      logPrefix: string
+    ): void => {
+      if (!tool.onArgsDelta) return
+      const previous =
+        pendingToolArgDeltaHooks.get(context.toolCallId) ?? Promise.resolve()
+      const next = previous
+        .catch(() => undefined)
+        .then(async () => {
+          try {
+            await tool.onArgsDelta?.(context, activeRunSignal)
+          } catch (error) {
+            runtimeLog.warn(
+              logPrefix,
+              `streaming tool arg hook failed for ${context.toolName}:`,
+              error
+            )
+          }
+        })
+      pendingToolArgDeltaHooks.set(context.toolCallId, next)
+      void next.finally(() => {
+        if (pendingToolArgDeltaHooks.get(context.toolCallId) === next) {
+          pendingToolArgDeltaHooks.delete(context.toolCallId)
+        }
+      })
+    }
+    const agentTools = opts.tools.map(
+      (tool): AgentTool => ({
+        ...tool,
+        execute: (async (...args: Parameters<AgentTool[`execute`]>) => {
+          const toolCallId = typeof args[0] === `string` ? args[0] : undefined
+          await awaitToolArgDeltaHooks(toolCallId)
+          return tool.execute(...args)
+        }) as AgentTool[`execute`],
+      })
+    )
 
     const agentOptions = {
       initialState: {
         systemPrompt: opts.systemPrompt,
-        tools: opts.tools as Array<never>,
+        tools: agentTools as Array<never>,
         messages: history as Array<never>,
         model,
       },
@@ -347,7 +403,24 @@ export function createPiAgentAdapter(
               case `message_update`: {
                 const assistantEvent = (event as Record<string, unknown>)
                   .assistantMessageEvent as
-                  | { type: string; delta?: string }
+                  | {
+                      type: string
+                      contentIndex?: number
+                      delta?: string
+                      toolCall?: {
+                        id?: string
+                        name?: string
+                        arguments?: Record<string, unknown>
+                      }
+                      partial?: {
+                        content?: Array<{
+                          type?: string
+                          id?: string
+                          name?: string
+                          arguments?: Record<string, unknown>
+                        }>
+                      }
+                    }
                   | undefined
                 if (assistantEvent?.type === `text_delta`) {
                   if (!textStarted) {
@@ -391,6 +464,62 @@ export function createPiAgentAdapter(
                     )
                     reasoningStarted = false
                     reasoningAccum = ``
+                  }
+                } else if (
+                  assistantEvent?.type === `toolcall_start` ||
+                  assistantEvent?.type === `toolcall_delta` ||
+                  assistantEvent?.type === `toolcall_end`
+                ) {
+                  const contentIndex = assistantEvent.contentIndex
+                  const partialToolCall =
+                    typeof contentIndex === `number`
+                      ? assistantEvent.partial?.content?.[contentIndex]
+                      : undefined
+                  const toolCall = assistantEvent.toolCall ?? partialToolCall
+                  const toolCallId = toolCall?.id
+                  const toolName = toolCall?.name
+                  const argsPreview = toolCall?.arguments
+                  if (toolCallId && toolName) {
+                    if (assistantEvent.type === `toolcall_start`) {
+                      bridge.onToolCallArgsStart(
+                        toolCallId,
+                        toolName,
+                        argsPreview
+                      )
+                    } else if (assistantEvent.type === `toolcall_delta`) {
+                      const delta = assistantEvent.delta ?? ``
+                      bridge.onToolCallArgsDelta(toolCallId, toolName, delta, {
+                        contentIndex,
+                        argsPreview,
+                      })
+                      const tool = opts.tools.find(
+                        (candidate) => candidate.name === toolName
+                      )
+                      if (tool) {
+                        enqueueToolArgDeltaHook(
+                          tool,
+                          {
+                            toolCallId,
+                            toolName,
+                            contentIndex,
+                            delta,
+                            argsPreview,
+                          },
+                          logPrefix
+                        )
+                      }
+                    } else {
+                      bridge.onToolCallArgsEnd(
+                        toolCallId,
+                        toolName,
+                        argsPreview
+                      )
+                    }
+                  } else {
+                    runtimeLog.debug(
+                      logPrefix,
+                      `pi-adapter message_update missing tool call identity type=${assistantEvent.type}`
+                    )
                   }
                 } else {
                   runtimeLog.debug(
@@ -626,6 +755,7 @@ export function createPiAgentAdapter(
       async run(input?: string, abortSignal?: AbortSignal): Promise<void> {
         running = true
         abortedRun = false
+        activeRunSignal = abortSignal
 
         bridge.onRunStart()
 
@@ -643,6 +773,7 @@ export function createPiAgentAdapter(
             settled = true
             clearAbortFallback()
             running = false
+            activeRunSignal = undefined
             abortSignal?.removeEventListener(`abort`, abortRun)
             unsubscribe()
             bridge.onRunEnd({ finishReason })
@@ -676,6 +807,7 @@ export function createPiAgentAdapter(
               if (settled) return
               settled = true
               running = false
+              activeRunSignal = undefined
               clearAbortFallback()
               abortSignal?.removeEventListener(`abort`, abortRun)
               unsubscribe()

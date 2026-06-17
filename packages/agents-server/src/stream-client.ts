@@ -330,6 +330,49 @@ export class StreamClient {
     })
   }
 
+  async appendBytes(
+    path: string,
+    data: Uint8Array,
+    opts?: {
+      contentType?: string
+      producerId?: string
+      epoch?: number
+      seq?: number
+    }
+  ): Promise<StreamAppendResult> {
+    return await withSpan(`stream.appendBytes`, async (span) => {
+      span.setAttributes({
+        [ATTR.STREAM_PATH]: path,
+        [ATTR.STREAM_OP]: `appendBytes`,
+      })
+      const headers: Record<string, string> = {
+        'content-type': opts?.contentType ?? `application/octet-stream`,
+      }
+      if (opts?.producerId) headers[`Producer-Id`] = opts.producerId
+      if (opts?.epoch !== undefined) {
+        headers[`Producer-Epoch`] = String(opts.epoch)
+      }
+      if (opts?.seq !== undefined) {
+        headers[`Producer-Seq`] = String(opts.seq)
+      }
+      injectTraceHeaders(headers)
+
+      const response = await fetch(this.streamUrl(path), {
+        method: `POST`,
+        headers: await this.requestHeaders(headers),
+        body: data,
+      })
+      if (!response.ok) {
+        throw new Error(
+          `Stream append failed: ${response.status} ${await response.text()}`
+        )
+      }
+      return {
+        offset: response.headers.get(`stream-next-offset`) ?? ``,
+      }
+    })
+  }
+
   async appendIdempotent(
     path: string,
     data: Uint8Array | string,

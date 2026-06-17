@@ -7,8 +7,10 @@ import {
   getCronStreamPath,
   getSharedStateStreamPath,
   getNextCronFireAt,
+  getEntityMarkdownDocumentUrlPath,
   webhookSourceSubscriptionManifestKey,
   manifestChildKey,
+  manifestMarkdownDocumentKey,
   manifestSharedStateKey,
   manifestSourceKey,
   resolveCronScheduleSpec,
@@ -60,6 +62,16 @@ import {
 } from './manifest-side-effects.js'
 import { DEFAULT_TENANT_ID } from './tenant.js'
 import { ATTR, withSpan } from './tracing.js'
+import {
+  MARKDOWN_DOCUMENT_CONTENT_MIME,
+  MARKDOWN_DOCUMENT_PROVIDER,
+  MARKDOWN_DOCUMENT_TEXT_NAME,
+  MARKDOWN_DOCUMENT_TRANSPORT_MIME,
+  assertMarkdownDocumentMatchesEntity,
+  getMarkdownDocumentDocPath,
+  getMarkdownDocumentAwarenessStreamPath,
+  getMarkdownDocumentUpdateStreamPath,
+} from './markdown-documents.js'
 import type { queueAsPromised } from 'fastq'
 import type { SchedulerClient } from './scheduler.js'
 import type { WakeEvalResult, WakeRegistry } from './wake-registry.js'
@@ -218,6 +230,31 @@ type ManifestAttachmentEntry = {
   meta?: Record<string, unknown>
 }
 
+export interface CreateMarkdownDocumentRequest {
+  id?: string
+  title: string
+  createdBy?: string
+  meta?: Record<string, unknown>
+}
+
+export type ManifestMarkdownDocumentEntry = {
+  key: string
+  kind: `document`
+  id: string
+  provider: typeof MARKDOWN_DOCUMENT_PROVIDER
+  docId: string
+  docPath: string
+  streamPath: string
+  transportMimeType: typeof MARKDOWN_DOCUMENT_TRANSPORT_MIME
+  contentMimeType: typeof MARKDOWN_DOCUMENT_CONTENT_MIME
+  yTextName: typeof MARKDOWN_DOCUMENT_TEXT_NAME
+  title: string
+  createdAt: string
+  createdBy?: string
+  updatedAt?: string
+  meta?: Record<string, unknown>
+}
+
 function createInitialQueuePosition(date: Date): string {
   return `${String(date.getTime()).padStart(16, `0`)}:a0`
 }
@@ -280,6 +317,7 @@ type ForkStateSnapshot = {
   childStatusesByEntity: Map<string, Map<string, Record<string, unknown>>>
   replayWatermarksByEntity: Map<string, Map<string, Record<string, unknown>>>
   sharedStateIds: Set<string>
+  markdownDocumentDocPaths: Set<string>
 }
 
 type ForkResult = {
@@ -306,6 +344,16 @@ function maxAttachmentBytes(): number {
 
 function manifestAttachmentKey(id: string): string {
   return `attachment:${id}`
+}
+
+function validateMarkdownDocumentId(id: string): void {
+  if (!id || !/^[A-Za-z0-9_-]+$/.test(id)) {
+    throw new ElectricAgentsError(
+      ErrCodeInvalidRequest,
+      `document id must contain only letters, numbers, underscores, or hyphens`,
+      400
+    )
+  }
 }
 
 function getEntityAttachmentStreamPath(
@@ -1102,6 +1150,7 @@ export class EntityManager {
             childStatuses: Map<string, Record<string, unknown>>
             replayWatermarks: Map<string, Record<string, unknown>>
             sharedStateIds: Set<string>
+            markdownDocumentDocPaths: Set<string>
           }
         | undefined
       let effectiveForkPointer: EventPointer | undefined = opts.forkPointer
@@ -1135,8 +1184,13 @@ export class EntityManager {
         const filteredEvents = flat.slice(0, target)
         const rootManifests = this.reduceStateRows(filteredEvents, `manifest`)
         const sharedStateIds = new Set<string>()
+        const markdownDocumentDocPaths = new Set<string>()
         for (const manifest of rootManifests.values()) {
           this.collectSharedStateIds(manifest, sharedStateIds)
+          this.collectMarkdownDocumentDocPaths(
+            manifest,
+            markdownDocumentDocPaths
+          )
         }
         preFilteredRoot = {
           manifests: rootManifests,
@@ -1146,6 +1200,7 @@ export class EntityManager {
             `replay_watermark`
           ),
           sharedStateIds,
+          markdownDocumentDocPaths,
         }
       }
 
@@ -1193,6 +1248,9 @@ export class EntityManager {
         )
         for (const id of preFilteredRoot.sharedStateIds) {
           snapshot.sharedStateIds.add(id)
+        }
+        for (const docPath of preFilteredRoot.markdownDocumentDocPaths) {
+          snapshot.markdownDocumentDocPaths.add(docPath)
         }
       }
 
@@ -1243,7 +1301,14 @@ export class EntityManager {
       )
       this.addForkLocks(
         this.forkWriteLockedStreams,
-        [...snapshot.sharedStateIds].map((id) => getSharedStateStreamPath(id)),
+        [
+          ...[...snapshot.sharedStateIds].map((id) =>
+            getSharedStateStreamPath(id)
+          ),
+          ...[...snapshot.markdownDocumentDocPaths].map((docPath) =>
+            getMarkdownDocumentUpdateStreamPath(this.tenantId, docPath)
+          ),
+        ],
         writeStreamLocks
       )
 
@@ -1290,6 +1355,34 @@ export class EntityManager {
               manifest.id
             )
             await this.streamClient.fork(forkPath, manifest.streamPath)
+            createdStreams.push(forkPath)
+          }
+        }
+
+        for (const plan of entityPlans) {
+          const manifests =
+            snapshot.manifestsByEntity.get(plan.source.url) ?? new Map()
+          for (const manifest of manifests.values()) {
+            if (
+              manifest.kind !== `document` ||
+              typeof manifest.docPath !== `string` ||
+              typeof manifest.id !== `string`
+            ) {
+              continue
+            }
+            const forkDocPath = getMarkdownDocumentDocPath(
+              plan.fork.url,
+              manifest.id
+            )
+            const sourcePath = getMarkdownDocumentUpdateStreamPath(
+              this.tenantId,
+              manifest.docPath
+            )
+            const forkPath = getMarkdownDocumentUpdateStreamPath(
+              this.tenantId,
+              forkDocPath
+            )
+            await this.streamClient.fork(forkPath, sourcePath)
             createdStreams.push(forkPath)
           }
         }
@@ -1803,6 +1896,7 @@ export class EntityManager {
       Map<string, Record<string, unknown>>
     >()
     const sharedStateIds = new Set<string>()
+    const markdownDocumentDocPaths = new Set<string>()
 
     for (const entity of entitiesToFork) {
       const events = await this.streamClient.readJson<Record<string, unknown>>(
@@ -1818,6 +1912,7 @@ export class EntityManager {
 
       for (const manifest of manifests.values()) {
         this.collectSharedStateIds(manifest, sharedStateIds)
+        this.collectMarkdownDocumentDocPaths(manifest, markdownDocumentDocPaths)
       }
     }
 
@@ -1826,6 +1921,7 @@ export class EntityManager {
       childStatusesByEntity,
       replayWatermarksByEntity,
       sharedStateIds,
+      markdownDocumentDocPaths,
     }
   }
 
@@ -1875,6 +1971,16 @@ export class EntityManager {
     if (typeof config?.id === `string`) {
       sharedStateIds.add(config.id)
     }
+  }
+
+  private collectMarkdownDocumentDocPaths(
+    manifest: Record<string, unknown>,
+    docPaths: Set<string>
+  ): void {
+    if (manifest.kind !== `document` || typeof manifest.docPath !== `string`) {
+      return
+    }
+    docPaths.add(manifest.docPath)
   }
 
   private async buildForkEntityUrlMap(
@@ -2221,6 +2327,30 @@ export class EntityManager {
           continue
         }
         next.streamPath = getEntityAttachmentStreamPath(forkUrl, next.id)
+        return { key, value: next, changed: true }
+      }
+    }
+
+    if (
+      next.kind === `document` &&
+      typeof next.docPath === `string` &&
+      typeof next.id === `string`
+    ) {
+      for (const [sourceUrl, forkUrl] of entityUrlMap) {
+        const expectedSourceDocPath = getMarkdownDocumentDocPath(
+          sourceUrl,
+          next.id
+        )
+        if (next.docPath !== expectedSourceDocPath) {
+          continue
+        }
+        next.docPath = getMarkdownDocumentDocPath(forkUrl, next.id)
+        next.docId = next.docPath
+        next.streamPath = getEntityMarkdownDocumentUrlPath(
+          this.tenantId,
+          forkUrl,
+          next.id
+        )
         return { key, value: next, changed: true }
       }
     }
@@ -3074,6 +3204,131 @@ export class EntityManager {
     )
     await this.streamClient.delete(attachment.streamPath).catch(() => undefined)
     return { txid }
+  }
+
+  // ==========================================================================
+  // Markdown Documents
+  // ==========================================================================
+
+  isMarkdownDocumentUpdateStreamPath(path: string): boolean {
+    return /^\/yjs\/[^/]+\/docs\/agents\/[^/]+\/[^/]+\/documents\/[A-Za-z0-9_-]+\/\.updates$/.test(
+      path
+    )
+  }
+
+  async createMarkdownDocument(
+    entityUrl: string,
+    req: CreateMarkdownDocumentRequest
+  ): Promise<{ txid: string; document: ManifestMarkdownDocumentEntry }> {
+    const entity = await this.registry.getEntity(entityUrl)
+    if (!entity) {
+      throw new ElectricAgentsError(ErrCodeNotFound, `Entity not found`, 404)
+    }
+    if (rejectsNormalWrites(entity.status)) {
+      throw new ElectricAgentsError(
+        ErrCodeNotRunning,
+        `Entity is not accepting writes`,
+        409
+      )
+    }
+    if (this.isForkWorkLockedEntity(entityUrl)) {
+      this.assertEntityNotForkWorkLocked(entityUrl)
+    }
+
+    const id = req.id ?? randomUUID()
+    validateMarkdownDocumentId(id)
+
+    const docPath = getMarkdownDocumentDocPath(entityUrl, id)
+    const updateStreamPath = getMarkdownDocumentUpdateStreamPath(
+      this.tenantId,
+      docPath
+    )
+    const awarenessStreamPath = getMarkdownDocumentAwarenessStreamPath(
+      this.tenantId,
+      docPath,
+      `default`
+    )
+    const now = new Date().toISOString()
+    const txid = randomUUID()
+    const document: ManifestMarkdownDocumentEntry = {
+      key: manifestMarkdownDocumentKey(id),
+      kind: `document`,
+      id,
+      provider: MARKDOWN_DOCUMENT_PROVIDER,
+      docId: docPath,
+      docPath,
+      streamPath: getEntityMarkdownDocumentUrlPath(
+        this.tenantId,
+        entityUrl,
+        id
+      ),
+      transportMimeType: MARKDOWN_DOCUMENT_TRANSPORT_MIME,
+      contentMimeType: MARKDOWN_DOCUMENT_CONTENT_MIME,
+      yTextName: MARKDOWN_DOCUMENT_TEXT_NAME,
+      title: req.title.trim() || `Untitled document`,
+      createdAt: now,
+      ...(req.createdBy ? { createdBy: req.createdBy } : {}),
+      ...(req.meta ? { meta: req.meta } : {}),
+    }
+
+    let streamCreated = false
+    let awarenessStreamCreated = false
+    try {
+      await this.streamClient.create(updateStreamPath, {
+        contentType: `application/octet-stream`,
+      })
+      streamCreated = true
+      await this.streamClient.create(awarenessStreamPath, {
+        contentType: `application/octet-stream`,
+      })
+      awarenessStreamCreated = true
+      await this.writeManifestEntry(
+        entityUrl,
+        document.key,
+        `upsert`,
+        document as unknown as Record<string, unknown>,
+        { txid }
+      )
+    } catch (error) {
+      if (awarenessStreamCreated) {
+        await this.streamClient
+          .delete(awarenessStreamPath)
+          .catch(() => undefined)
+      }
+      if (streamCreated) {
+        await this.streamClient.delete(updateStreamPath).catch(() => undefined)
+      }
+      if (!streamCreated && isStreamCreateConflict(error)) {
+        throw new ElectricAgentsError(
+          ErrCodeInvalidRequest,
+          `Document already exists at id "${id}"`,
+          409
+        )
+      }
+      throw error
+    }
+
+    return { txid, document }
+  }
+
+  async getMarkdownDocument(
+    entityUrl: string,
+    id: string
+  ): Promise<ManifestMarkdownDocumentEntry | null> {
+    validateMarkdownDocumentId(id)
+    const entity = await this.registry.getEntity(entityUrl)
+    if (!entity) {
+      throw new ElectricAgentsError(ErrCodeNotFound, `Entity not found`, 404)
+    }
+    const events = await this.streamClient.readJson<Record<string, unknown>>(
+      entity.streams.main
+    )
+    const manifest = this.reduceStateRows(events, `manifest`).get(
+      manifestMarkdownDocumentKey(id)
+    )
+    if (!manifest || manifest.kind !== `document`) return null
+    assertMarkdownDocumentMatchesEntity(entity, manifest.docPath as string)
+    return manifest as unknown as ManifestMarkdownDocumentEntry
   }
 
   // ==========================================================================

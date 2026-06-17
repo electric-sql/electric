@@ -1,9 +1,16 @@
-import { Database, MessageCircle, MessageSquare, SquarePen } from 'lucide-react'
+import {
+  Database,
+  FileText,
+  MessageCircle,
+  MessageSquare,
+  SquarePen,
+} from 'lucide-react'
 import { entityTypeSupportsComments } from '../comments-capability'
 import { registerView } from './viewRegistry'
 import { NEW_SESSION_VIEW_ID } from './types'
 import { ChatView, CommentsView } from '../../components/views/ChatView'
 import { StateExplorerView } from '../../components/views/StateExplorerView'
+import { MarkdownDocumentView } from '../../components/views/MarkdownDocumentView'
 import { NewSessionView } from '../../components/views/NewSessionView'
 
 /**
@@ -43,6 +50,17 @@ registerView({
   icon: Database,
   description: `Inspect shared state and the event log`,
   Component: StateExplorerView,
+})
+
+registerView({
+  kind: `entity`,
+  id: `markdown-doc`,
+  label: `Markdown Doc`,
+  shortLabel: `Doc`,
+  icon: FileText,
+  description: `Collaborative markdown document editor`,
+  isAvailable: () => false,
+  Component: MarkdownDocumentView,
 })
 
 /**

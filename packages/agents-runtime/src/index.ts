@@ -7,6 +7,7 @@ export type {
   ManifestAttachmentEntry,
   ManifestChildEntry,
   ManifestContextEntry,
+  ManifestDocumentEntry,
   ManifestEntry,
   ManifestEffectEntry,
   ManifestRealtimeSessionEntry,
@@ -96,6 +97,7 @@ export type {
   GeneratedStateActions,
   HandlerActions,
   ManifestContextEntry as ManifestContextRow,
+  ManifestDocumentEntry as ManifestDocumentRow,
   SchemaInput,
   SchemaOutput,
   SourceConfig,
@@ -139,6 +141,7 @@ export type {
   AttachmentSubject,
   AttachmentSubjectType,
   ManifestContextEntry as ManifestContextEntryRow,
+  ManifestDocumentEntry as ManifestDocumentEntryRow,
   ManifestRealtimeSessionEntry as ManifestRealtimeSessionEntryRow,
   RealtimeAudioSpan as RealtimeAudioSpanRow,
   RealtimeSession as RealtimeSessionRow,
@@ -174,7 +177,10 @@ export type {
 } from './realtime-options'
 export {
   getEntityAttachmentStreamPath,
+  getEntityMarkdownDocumentPath,
+  getEntityMarkdownDocumentUrlPath,
   manifestAttachmentKey,
+  manifestMarkdownDocumentKey,
 } from './manifest-helpers'
 export {
   COMPOSER_INPUT_MESSAGE_TYPE,

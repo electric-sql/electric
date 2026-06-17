@@ -184,11 +184,30 @@ type ToolCallValue = {
   run_id?: string
   tool_call_id?: string
   tool_name: string
-  status: `started` | `args_complete` | `executing` | `completed` | `failed`
+  status:
+    | `started`
+    | `args_streaming`
+    | `args_complete`
+    | `executing`
+    | `completed`
+    | `failed`
   args?: unknown
+  args_preview?: unknown
   result?: unknown
   error?: string
   duration_ms?: number
+}
+// Tool argument deltas intentionally mirror text deltas: every streamed chunk is
+// retained for replay/inspection, while the final parsed args are still stored
+// on the tool_call row for the normal result lifecycle.
+type ToolArgDeltaValue = {
+  key?: string
+  tool_call_key: string
+  tool_call_id?: string
+  run_id?: string
+  seq: number
+  delta: string
+  content_index?: number
 }
 type ReasoningValue = {
   key?: string
@@ -339,6 +358,23 @@ type ManifestAttachmentEntryValue = {
   createdAt: string
   createdBy?: string
   error?: string
+  meta?: Record<string, JsonValue>
+}
+type ManifestDocumentEntryValue = {
+  key?: string
+  kind: `document`
+  id: string
+  provider: `y-durable-streams`
+  docId: string
+  docPath: string
+  streamPath: string
+  transportMimeType: `application/vnd.electric-agents.markdown-yjs`
+  contentMimeType: `text/markdown`
+  yTextName: `markdown`
+  title: string
+  createdAt: string
+  createdBy?: string
+  updatedAt?: string
   meta?: Record<string, JsonValue>
 }
 type ContextEntryAttrsValue = Record<string, string | number | boolean>
@@ -641,15 +677,30 @@ function createToolCallSchema(): Schema<ToolCallValue> {
     tool_name: z.string(),
     status: z.enum([
       `started`,
+      `args_streaming`,
       `args_complete`,
       `executing`,
       `completed`,
       `failed`,
     ]),
     args: z.unknown().optional(),
+    args_preview: z.unknown().optional(),
     result: z.unknown().optional(),
     error: z.string().optional(),
     duration_ms: z.number().int().optional(),
+  })
+}
+
+function createToolArgDeltaSchema(): Schema<ToolArgDeltaValue> {
+  return z.object({
+    key: z.string().optional(),
+    ...timelineOrderField,
+    tool_call_key: z.string(),
+    tool_call_id: z.string().optional(),
+    run_id: z.string().optional(),
+    seq: z.number().int(),
+    delta: z.string(),
+    content_index: z.number().int().optional(),
   })
 }
 
@@ -879,6 +930,7 @@ function createManifestSchema(): Schema<
   | ManifestSharedStateEntryValue
   | ManifestEffectEntryValue
   | ManifestAttachmentEntryValue
+  | ManifestDocumentEntryValue
   | ManifestContextEntryValue
   | ManifestCronScheduleEntryValue
   | ManifestFutureSendScheduleEntryValue
@@ -944,6 +996,26 @@ function createManifestSchema(): Schema<
       createdAt: z.string(),
       createdBy: z.string().optional(),
       error: z.string().optional(),
+      meta: createAttachmentMetaSchema().optional(),
+    }),
+    z.object({
+      key: z.string().optional(),
+      ...timelineOrderField,
+      kind: z.literal(`document`),
+      id: z.string(),
+      provider: z.literal(`y-durable-streams`),
+      docId: z.string(),
+      docPath: z.string(),
+      streamPath: z.string(),
+      transportMimeType: z.literal(
+        `application/vnd.electric-agents.markdown-yjs`
+      ),
+      contentMimeType: z.literal(`text/markdown`),
+      yTextName: z.literal(`markdown`),
+      title: z.string(),
+      createdAt: z.string(),
+      createdBy: z.string().optional(),
+      updatedAt: z.string().optional(),
       meta: createAttachmentMetaSchema().optional(),
     }),
     z.object({
@@ -1022,6 +1094,7 @@ function createManifestSchema(): Schema<
     | ManifestSharedStateEntryValue
     | ManifestEffectEntryValue
     | ManifestAttachmentEntryValue
+    | ManifestDocumentEntryValue
     | ManifestContextEntryValue
     | ManifestCronScheduleEntryValue
     | ManifestFutureSendScheduleEntryValue
@@ -1117,6 +1190,7 @@ export type Step = SequencedPersistedRow<StepValue>
 export type Text = SequencedPersistedRow<TextValue>
 export type TextDelta = SequencedPersistedRow<TextDeltaValue>
 export type ToolCall = SequencedPersistedRow<ToolCallValue>
+export type ToolArgDelta = SequencedPersistedRow<ToolArgDeltaValue>
 export type Reasoning = SequencedPersistedRow<ReasoningValue>
 export type ReasoningDelta = SequencedPersistedRow<ReasoningDeltaValue>
 export type ErrorEvent = SequencedPersistedRow<ErrorEventValue>
@@ -1145,6 +1219,8 @@ export type AttachmentRole = AttachmentRoleValue
 export type AttachmentSubject = AttachmentSubjectValue
 export type ManifestAttachmentEntry =
   SequencedPersistedRow<ManifestAttachmentEntryValue>
+export type ManifestDocumentEntry =
+  SequencedPersistedRow<ManifestDocumentEntryValue>
 export type ManifestContextEntry =
   SequencedPersistedRow<ManifestContextEntryValue>
 export type ManifestCronScheduleEntry =
@@ -1163,6 +1239,7 @@ type ManifestUnion =
   | ManifestSharedStateEntry
   | ManifestEffectEntry
   | ManifestAttachmentEntry
+  | ManifestDocumentEntry
   | ManifestContextEntry
   | ManifestCronScheduleEntry
   | ManifestFutureSendScheduleEntry
@@ -1188,6 +1265,14 @@ export type Manifest = ManifestUnion & {
   createdBy?: string
   error?: string
   meta?: Record<string, JsonValue>
+  provider?: string
+  docId?: string
+  docPath?: string
+  transportMimeType?: `application/vnd.electric-agents.markdown-yjs`
+  contentMimeType?: `text/markdown`
+  yTextName?: `markdown`
+  title?: string
+  updatedAt?: string
   name?: string
   attrs?: ContextEntryAttrs
   content?: string
@@ -1211,8 +1296,6 @@ export type Manifest = ManifestUnion & {
   tokenBudget?: number | null
   tokensUsed?: number
   summary?: string
-  updatedAt?: string
-  provider?: string
   model?: string
   startedAt?: string
   endedAt?: string | null
@@ -1261,6 +1344,8 @@ export const BUILT_IN_EVENT_SCHEMAS = {
   text_delta:
     createTextDeltaSchema() as unknown as BuiltInEntitySchema<TextDelta>,
   tool_call: createToolCallSchema() as unknown as BuiltInEntitySchema<ToolCall>,
+  tool_arg_delta:
+    createToolArgDeltaSchema() as unknown as BuiltInEntitySchema<ToolArgDelta>,
   reasoning:
     createReasoningSchema() as unknown as BuiltInEntitySchema<Reasoning>,
   reasoning_delta:
@@ -1305,6 +1390,7 @@ type EntityCollectionsDefinition = {
   texts: CollectionDefinition<Text>
   textDeltas: CollectionDefinition<TextDelta>
   toolCalls: CollectionDefinition<ToolCall>
+  toolArgDeltas: CollectionDefinition<ToolArgDelta>
   reasoning: CollectionDefinition<Reasoning>
   reasoningDeltas: CollectionDefinition<ReasoningDelta>
   errors: CollectionDefinition<ErrorEvent>
@@ -1355,6 +1441,12 @@ export const builtInCollections: EntityCollectionsDefinition = {
   toolCalls: {
     schema: BUILT_IN_EVENT_SCHEMAS.tool_call as StandardSchemaV1<ToolCall>,
     type: `tool_call`,
+    primaryKey: `key`,
+  },
+  toolArgDeltas: {
+    schema:
+      BUILT_IN_EVENT_SCHEMAS.tool_arg_delta as StandardSchemaV1<ToolArgDelta>,
+    type: `tool_arg_delta`,
     primaryKey: `key`,
   },
   reasoning: {

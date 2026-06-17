@@ -30,7 +30,8 @@ async function routeResponse(
     key: `system:dev-local`,
     url: `/principal/system:dev-local`,
   },
-  headers?: HeadersInit
+  headers?: HeadersInit,
+  ctxOverrides: Partial<TenantContext> = {}
 ): Promise<Response> {
   const result = await globalRouter.fetch(
     createRequest(method, path, body, rawBody, headers),
@@ -39,6 +40,7 @@ async function routeResponse(
       entityManager: manager,
       isShuttingDown: () => false,
       principal,
+      ...ctxOverrides,
     } as unknown as TenantContext
   )
   expect(result).toBeInstanceOf(Response)
@@ -277,6 +279,256 @@ describe(`ElectricAgentsRoutes attachment endpoints`, () => {
     await expect(response.arrayBuffer()).resolves.toEqual(
       new Uint8Array([1, 2, 3]).buffer
     )
+  })
+})
+
+describe(`ElectricAgentsRoutes markdown document endpoints`, () => {
+  it(`routes document create and metadata read requests to the manager`, async () => {
+    const document = {
+      key: `document:notes`,
+      kind: `document`,
+      id: `notes`,
+      provider: `y-durable-streams`,
+      docId: `agents/chat/test/documents/notes`,
+      docPath: `agents/chat/test/documents/notes`,
+      streamPath: `/v1/yjs/test/docs/agents/chat/test/documents/notes`,
+      transportMimeType: `application/vnd.electric-agents.markdown-yjs`,
+      contentMimeType: `text/markdown`,
+      yTextName: `markdown`,
+      title: `Notes`,
+      createdAt: `2026-01-01T00:00:00.000Z`,
+    }
+    const manager = {
+      registry: {
+        getEntity: vi.fn().mockResolvedValue({ url: `/chat/test` }),
+        getEntityType: vi.fn(),
+      },
+      createMarkdownDocument: vi
+        .fn()
+        .mockResolvedValue({ txid: `tx-create`, document }),
+      getMarkdownDocument: vi.fn().mockResolvedValue(document),
+    } as any
+
+    const createResponse = await routeResponse(
+      manager,
+      `POST`,
+      `/_electric/entities/chat/test/documents`,
+      { id: `notes`, title: `Notes` }
+    )
+    expect(createResponse.status).toBe(201)
+    expect(manager.createMarkdownDocument).toHaveBeenCalledWith(`/chat/test`, {
+      id: `notes`,
+      title: `Notes`,
+      createdBy: `/principal/system:dev-local`,
+      meta: undefined,
+    })
+
+    const readResponse = await routeResponse(
+      manager,
+      `GET`,
+      `/_electric/entities/chat/test/documents/notes`
+    )
+    expect(await responseJson(readResponse)).toEqual({
+      document,
+    })
+    expect(manager.getMarkdownDocument).toHaveBeenCalledWith(
+      `/chat/test`,
+      `notes`
+    )
+  })
+
+  it(`does not expose semantic markdown document write or edit endpoints`, async () => {
+    const manager = {
+      registry: {
+        getEntity: vi.fn().mockResolvedValue({ url: `/chat/test` }),
+        getEntityType: vi.fn(),
+      },
+    } as any
+
+    const putResponse = await routeResponse(
+      manager,
+      `PUT`,
+      `/_electric/entities/chat/test/documents/notes`,
+      { content: `# Ready` }
+    )
+    expect(putResponse.status).toBe(404)
+
+    const patchResponse = await routeResponse(
+      manager,
+      `PATCH`,
+      `/_electric/entities/chat/test/documents/notes`,
+      { oldString: `Ready`, newString: `Done`, replaceAll: true }
+    )
+    expect(patchResponse.status).toBe(404)
+  })
+
+  it(`guards public Yjs document routes and forwards authorized document streams`, async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, `fetch`)
+      .mockResolvedValue(new Response(null, { status: 204 }))
+    const manager = {
+      registry: {
+        getEntity: vi.fn().mockResolvedValue({
+          url: `/chat/test`,
+          created_by: `/principal/user:owner`,
+        }),
+        hasEntityPermission: vi.fn().mockResolvedValue(false),
+        pruneExpiredPermissionGrants: vi.fn(),
+      },
+      isForkWorkLockedEntity: vi.fn().mockReturnValue(false),
+    } as any
+
+    try {
+      const denied = await routeResponse(
+        manager,
+        `GET`,
+        `/v1/yjs/test/docs/agents/chat/test/documents/notes`,
+        undefined,
+        false,
+        {
+          kind: `user`,
+          id: `other`,
+          key: `user:other`,
+          url: `/principal/user:other`,
+        }
+      )
+      expect(denied.status).toBe(401)
+      expect(fetchSpy).not.toHaveBeenCalled()
+
+      const allowed = await routeResponse(
+        manager,
+        `GET`,
+        `/v1/yjs/test/docs/agents/chat/test/documents/notes?offset=-1`,
+        undefined,
+        false,
+        undefined,
+        undefined,
+        {
+          durableStreamsUrl: `http://durable.local`,
+        }
+      )
+      expect(allowed.status).toBe(204)
+      expect(fetchSpy).toHaveBeenCalledOnce()
+      const [url, init] = fetchSpy.mock.calls[0]!
+      expect(String(url)).toContain(
+        `/yjs/test/docs/agents/chat/test/documents/notes/.updates?offset=-1`
+      )
+      expect(init).toMatchObject({ method: `GET` })
+    } finally {
+      fetchSpy.mockRestore()
+    }
+  })
+
+  it(`forwards Yjs awareness document routes to the awareness stream`, async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, `fetch`)
+      .mockResolvedValue(new Response(null, { status: 204 }))
+    const manager = {
+      registry: {
+        getEntity: vi.fn().mockResolvedValue({
+          url: `/chat/test`,
+          created_by: `/principal/user:owner`,
+        }),
+        hasEntityPermission: vi.fn().mockResolvedValue(false),
+        pruneExpiredPermissionGrants: vi.fn(),
+      },
+      isForkWorkLockedEntity: vi.fn().mockReturnValue(false),
+    } as any
+
+    try {
+      const allowed = await routeResponse(
+        manager,
+        `GET`,
+        `/v1/yjs/test/docs/agents/chat/test/documents/notes?awareness=default&offset=-1`,
+        undefined,
+        false,
+        undefined,
+        undefined,
+        {
+          durableStreamsUrl: `http://durable.local`,
+        }
+      )
+      expect(allowed.status).toBe(204)
+      expect(fetchSpy).toHaveBeenCalledOnce()
+      const [url, init] = fetchSpy.mock.calls[0]!
+      expect(String(url)).toContain(
+        `/yjs/test/docs/agents/chat/test/documents/notes/.awareness/default?offset=-1`
+      )
+      expect(String(url)).not.toContain(`awareness=`)
+      expect(init).toMatchObject({ method: `GET` })
+    } finally {
+      fetchSpy.mockRestore()
+    }
+  })
+
+  it(`guards private Yjs document streams and forwards authorized awareness streams`, async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, `fetch`)
+      .mockResolvedValue(new Response(null, { status: 204 }))
+    const endRead = vi.fn()
+    const manager = {
+      registry: {
+        getEntity: vi.fn().mockResolvedValue({
+          url: `/chat/test`,
+          created_by: `/principal/user:owner`,
+        }),
+        hasEntityPermission: vi.fn().mockResolvedValue(false),
+        pruneExpiredPermissionGrants: vi.fn(),
+      },
+      isForkWorkLockedEntity: vi.fn().mockReturnValue(false),
+    } as any
+
+    try {
+      const denied = await routeResponse(
+        manager,
+        `GET`,
+        `/yjs/test/docs/agents/chat/test/documents/notes/.awareness/default`,
+        undefined,
+        false,
+        {
+          kind: `user`,
+          id: `other`,
+          key: `user:other`,
+          url: `/principal/user:other`,
+        },
+        undefined,
+        {
+          durableStreamsUrl: `http://durable.local`,
+          entityBridgeManager: {
+            beginClientRead: vi.fn().mockResolvedValue(endRead),
+            touchByStreamPath: vi.fn(),
+          } as any,
+        }
+      )
+      expect(denied.status).toBe(401)
+      expect(fetchSpy).not.toHaveBeenCalled()
+
+      const allowed = await routeResponse(
+        manager,
+        `GET`,
+        `/yjs/test/docs/agents/chat/test/documents/notes/.awareness/default`,
+        undefined,
+        false,
+        undefined,
+        undefined,
+        {
+          durableStreamsUrl: `http://durable.local`,
+          entityBridgeManager: {
+            beginClientRead: vi.fn().mockResolvedValue(endRead),
+            touchByStreamPath: vi.fn(),
+          } as any,
+        }
+      )
+      expect(allowed.status).toBe(204)
+      expect(fetchSpy).toHaveBeenCalledOnce()
+      const [url, init] = fetchSpy.mock.calls[0]!
+      expect(String(url)).toContain(
+        `/yjs/test/docs/agents/chat/test/documents/notes/.awareness/default`
+      )
+      expect(init).toMatchObject({ method: `GET` })
+    } finally {
+      fetchSpy.mockRestore()
+    }
   })
 })
 

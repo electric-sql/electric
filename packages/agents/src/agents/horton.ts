@@ -228,6 +228,7 @@ export function buildHortonSystemPrompt(
     hasDocsSupport?: boolean
     hasWebhookSourceTools?: boolean
     hasScheduleTools?: boolean
+    hasMarkdownDocumentTools?: boolean
     hasSkills?: boolean
     docsUrl?: string
     modelProvider?: string
@@ -245,8 +246,14 @@ export function buildHortonSystemPrompt(
   const scheduleTools = opts.hasScheduleTools
     ? `\n- upsert_cron_schedule: create or update a recurring cron wake for yourself. Always include payload with the concrete instruction/message you should receive when the cron fires.\n- delete_schedule: delete one of your cron or future-send schedules by stable id\n- list_schedules: list your manifest-backed cron and future-send schedules`
     : ``
+  const markdownDocumentTools = opts.hasMarkdownDocumentTools
+    ? `\n- create_markdown_doc: create a collaborative markdown document that appears in this entity's manifest and opens in the workspace editor\n- set_markdown_doc_cursor: choose a stateful Yjs-relative insertion cursor for a collaborative markdown document\n- insert_markdown_doc: stream or insert markdown into an existing collaborative document so open editors can watch content appear\n- replace_markdown_doc_range: delete a range and stream replacement markdown into that location\n- read_markdown_doc: read a collaborative markdown document\n- write_markdown_doc: replace a collaborative markdown document's full content\n- edit_markdown_doc: targeted string replacement in a collaborative markdown document`
+    : ``
   const skillsTools = opts.hasSkills
     ? `\n- use_skill: load a skill (knowledge, instructions, or a tutorial) into your context to help with the user's request\n- remove_skill: unload a skill from context when you're done with it`
+    : ``
+  const markdownDocumentGuidance = opts.hasMarkdownDocumentTools
+    ? `\n# Collaborative Markdown Docs\n- If the user asks you to create a markdown doc, notes, draft, brief, plan, report, or any document they should open/edit in the app UI, use create_markdown_doc. Do not use filesystem write unless they ask for a file path or repo/workspace file.\n- For larger document workflows, load the markdown-docs skill first with use_skill, then use the markdown document tools.\n- Use set_markdown_doc_cursor before insert_markdown_doc when inserting at a specific location; insert_markdown_doc can then stream content at that Yjs-relative cursor.\n- Use replace_markdown_doc_range when replacing existing prose with new content that should visibly stream into the deleted range.\n- When spawning a worker to read or edit a collaborative markdown doc, include the doc id in spawn_worker's markdownDocIds and include the specific markdown document tools that worker needs.\n- After creating a collaborative doc, mention that it is available from this entity's manifest/timeline.`
     : ``
   const docsGuidance = opts.hasDocsSupport
     ? `\n- For ANY question about Electric Agents or this framework, ALWAYS use search_electric_agents_docs FIRST. Do not use web_search or fetch_url for Electric Agents topics unless the docs search returns no useful results.\n- The search tool returns chunk content directly — you do not need to read the source files.\n- Use repo read/bash tools only for non-doc files or when you need to inspect exact implementation code in the workspace.`
@@ -313,12 +320,12 @@ When a user opens with a greeting ("hi", "hello", "hey", etc.) or a broad statem
 - observe_pg_sync: observe an Electric Postgres sync stream and wake on matching changes (see "Observing Postgres tables")
 - unobserve_pg_sync: stop being woken by a pg-sync stream you previously observed (see "Observing Postgres tables")
 - send: send a message to an Electric Agent/entity. To schedule future work for yourself, call send with self: true and afterMs.
-${webhookSourceTools}${titleTool}${scheduleTools}${docsTools}${skillsTools}
+${webhookSourceTools}${titleTool}${scheduleTools}${markdownDocumentTools}${docsTools}${skillsTools}
 
 # Working with files
 - Prefer edit over write when modifying existing files.
 - Use absolute paths or paths relative to the current working directory.
-${modelGuidance}${docsGuidance}${skillsGuidance}${onboardingGuidance}${docsUrlGuidance}
+${markdownDocumentGuidance}${modelGuidance}${docsGuidance}${skillsGuidance}${onboardingGuidance}${docsUrlGuidance}
 
 # Observing Postgres tables
 observe_pg_sync subscribes you to row changes in a Postgres table via an Electric shape stream:
@@ -741,6 +748,9 @@ function createAssistantHandler(options: {
     const hasScheduleTools = tools.some(
       (tool) => getToolName(tool) === `upsert_cron_schedule`
     )
+    const hasMarkdownDocumentTools = tools.some(
+      (tool) => getToolName(tool) === `create_markdown_doc`
+    )
 
     let titleGenerationStarted = Boolean(ctx.tags.title)
     let titlePromise: Promise<void> = Promise.resolve()
@@ -930,6 +940,7 @@ function createAssistantHandler(options: {
       hasWebhookSourceTools,
       hasScheduleTools,
       ...(activeGoalPromptInfo && { activeGoal: activeGoalPromptInfo }),
+      hasMarkdownDocumentTools,
     })
     const activeRealtimeSession = ctx.realtime?.activeSession?.()
     if (activeRealtimeSession) {

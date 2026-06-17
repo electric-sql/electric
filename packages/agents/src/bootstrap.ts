@@ -11,6 +11,7 @@ import {
 import {
   createWebhookSourceTools,
   createScheduleTools,
+  createMarkdownDocumentTools,
 } from '@electric-ax/agents-runtime/tools'
 import {
   chooseDefaultSandbox,
@@ -148,6 +149,7 @@ export function createBuiltinElectricTools(
     const builtinTools = [
       ...createWebhookSourceTools(context),
       ...createScheduleTools({ ...context, db: context.db as any }),
+      ...createMarkdownDocumentTools(context),
     ]
     const customTools = custom ? await custom(context) : []
     return dedupeToolsByName([...builtinTools, ...customTools])

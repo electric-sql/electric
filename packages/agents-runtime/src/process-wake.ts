@@ -584,6 +584,7 @@ export async function processWake(
     detachWrites?: () => Promise<void>
     close: () => void
   }> = []
+  const electricToolCleanups: Array<() => void | Promise<void>> = []
   let liveProcessError: Error | null = null
   let acceptLiveInputs = false
   const handledSignalKeys = new Set<string>()
@@ -2078,6 +2079,7 @@ export async function processWake(
         ? await config.createElectricTools({
             entityUrl,
             entityType: typeName,
+            principal: notification.principal,
             args: entityArgs,
             db,
             events: currentWakeEvents,
@@ -2107,6 +2109,22 @@ export async function processWake(
                 entityUrl,
                 ...opts,
               }),
+            createMarkdownDocument: (opts) =>
+              serverClient.createMarkdownDocument({
+                entityUrl,
+                ...opts,
+              }),
+            getMarkdownDocumentConnection: (streamPath) =>
+              serverClient.getMarkdownDocumentConnection(streamPath),
+            readMarkdownDocumentStream: (streamPath, opts) =>
+              serverClient.readMarkdownDocumentStream(streamPath, opts),
+            appendMarkdownDocumentUpdate: (streamPath, update) =>
+              serverClient.appendMarkdownDocumentUpdate(streamPath, update),
+            appendMarkdownDocumentAwareness: (streamPath, update) =>
+              serverClient.appendMarkdownDocumentAwareness(streamPath, update),
+            registerCleanup: (cleanup) => {
+              electricToolCleanups.push(cleanup)
+            },
           })
         : []
 
@@ -2377,6 +2395,13 @@ export async function processWake(
       await flushProducedWrites()
     } catch (err) {
       cleanupErrors.push(toError(err))
+    }
+    for (const cleanup of electricToolCleanups.splice(0).reverse()) {
+      try {
+        await cleanup()
+      } catch (err) {
+        cleanupErrors.push(toError(err))
+      }
     }
     // Updated by the handler-error path before control reaches this async cleanup.
 

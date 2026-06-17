@@ -21,9 +21,11 @@ import {
   Database,
   ExternalLink,
   FileJson,
+  FileText,
   GitBranch,
   Radio,
   Reply,
+  SplitSquareHorizontal,
 } from 'lucide-react'
 import {
   loadTimelineRowHeights,
@@ -838,6 +840,7 @@ function isTimelineFindMatch(
 function ManifestTimelineRow({
   manifest,
   entityUrl,
+  tileId,
   entityStatus,
   onReply,
 }: {
@@ -851,6 +854,8 @@ function ManifestTimelineRow({
   const navigate = useNavigate()
   const entityTarget = getManifestEntityUrl(manifest)
   const stateSourceId = getManifestStateSourceId(manifest)
+  const documentId = manifest.kind === `document` ? manifest.id : null
+  const splitTargetTileId = tileId ?? workspace?.helpers.activeTileId ?? null
   const isEntity = entityTarget !== null
   const title = manifestTitle(manifest)
   const meta = manifestMeta(manifest)
@@ -879,13 +884,62 @@ function ManifestTimelineRow({
     })
   }, [entityUrl, stateSourceId, workspace])
 
+  const openDocument = useCallback(() => {
+    if (!entityUrl || !documentId || !workspace) return
+    workspace.helpers.openEntity(entityUrl, {
+      viewId: `markdown-doc`,
+      viewParams: { doc: documentId },
+    })
+  }, [documentId, entityUrl, workspace])
+
+  const splitDocumentRight = useCallback(() => {
+    if (!entityUrl || !documentId || !workspace) return
+    if (!splitTargetTileId) return
+    workspace.helpers.openEntity(entityUrl, {
+      viewId: `markdown-doc`,
+      viewParams: { doc: documentId },
+      target: { tileId: splitTargetTileId, position: `split-right` },
+    })
+  }, [documentId, entityUrl, splitTargetTileId, workspace])
+
   const statusBadge = entityStatus ? (
     <InlineStatusBadge tone={statusTone(entityStatus)}>
       {entityStatus}
     </InlineStatusBadge>
   ) : null
 
-  const openAction = stateSourceId ? (
+  const openAction = documentId ? (
+    <>
+      <Tooltip content="Open document">
+        <IconButton
+          type="button"
+          size={1}
+          variant="ghost"
+          tone="neutral"
+          className={styles.manifestActionButton}
+          aria-label="Open document"
+          onClick={openDocument}
+          disabled={!entityUrl || !workspace}
+        >
+          <Icon icon={ExternalLink} size={1} />
+        </IconButton>
+      </Tooltip>
+      <Tooltip content="Split document right">
+        <IconButton
+          type="button"
+          size={1}
+          variant="ghost"
+          tone="neutral"
+          className={styles.manifestActionButton}
+          aria-label="Split document right"
+          onClick={splitDocumentRight}
+          disabled={!entityUrl || !workspace || !splitTargetTileId}
+        >
+          <Icon icon={SplitSquareHorizontal} size={1} />
+        </IconButton>
+      </Tooltip>
+    </>
+  ) : stateSourceId ? (
     <Tooltip content="Open State Explorer">
       <IconButton
         type="button"
@@ -939,10 +993,10 @@ function ManifestTimelineRow({
         title={manifestKindLabel(manifest)}
         summary={summary}
         actions={actions}
-        collapsible={!isEntity && !stateSourceId}
+        collapsible={!isEntity && !stateSourceId && !documentId}
         headerSurface
       >
-        {isEntity || stateSourceId ? (
+        {isEntity || stateSourceId || documentId ? (
           details
         ) : (
           <>
@@ -1000,6 +1054,8 @@ function manifestKindLabel(manifest: Manifest): string {
       return `Effect`
     case `attachment`:
       return `Attachment`
+    case `document`:
+      return `Markdown document`
     case `context`:
       return `Context`
     case `schedule`:
@@ -1019,6 +1075,7 @@ function manifestTitle(manifest: Manifest): string {
     case `shared-state`:
     case `effect`:
     case `attachment`:
+    case `document`:
     case `context`:
     case `schedule`:
     case `goal`:
@@ -1039,6 +1096,8 @@ function manifestMeta(manifest: Manifest): string {
       return manifest.function_ref
     case `attachment`:
       return `${manifest.mimeType} · ${manifest.status}`
+    case `document`:
+      return manifest.title
     case `context`:
       return `${Object.keys(manifest.attrs).length} attrs`
     case `schedule`:
@@ -1090,6 +1149,16 @@ function manifestDetails(
           value: `${manifest.subject.type}:${manifest.subject.key}`,
         },
       ]
+    case `document`:
+      return [
+        { label: `Title`, value: manifest.title },
+        { label: `MIME`, value: manifest.contentMimeType },
+        { label: `Transport`, value: manifest.transportMimeType },
+        { label: `Provider`, value: manifest.provider },
+        { label: `Y.Text`, value: manifest.yTextName },
+        { label: `Doc ID`, value: manifest.docId },
+        { label: `Path`, value: manifest.docPath },
+      ]
     case `context`:
       return [
         { label: `Name`, value: manifest.name },
@@ -1126,6 +1195,7 @@ function manifestIcon(manifest: Manifest) {
   if (getManifestStateSourceId(manifest)) return Database
   if (getManifestEntityUrl(manifest)) return GitBranch
   if (manifest.kind === `schedule`) return Radio
+  if (manifest.kind === `document`) return FileText
   if (manifest.kind === `attachment`) return FileJson
   return FileJson
 }

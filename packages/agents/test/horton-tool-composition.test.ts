@@ -88,9 +88,24 @@ async function captureToolset(args: Record<string, unknown> = {}) {
 }
 
 function createElectricToolsContext() {
+  const document = {
+    key: `document:notes`,
+    kind: `document`,
+    id: `notes`,
+    provider: `y-durable-streams`,
+    docId: `agents/horton/smoke/documents/notes`,
+    docPath: `agents/horton/smoke/documents/notes`,
+    streamPath: `/v1/yjs/default/docs/agents/horton/smoke/documents/notes`,
+    transportMimeType: `application/vnd.electric-agents.markdown-yjs`,
+    contentMimeType: `text/markdown`,
+    yTextName: `markdown`,
+    title: `Notes`,
+    createdAt: new Date(0).toISOString(),
+  }
   return {
     entityUrl: `/horton/smoke/main`,
     entityType: `horton`,
+    principal: { url: `/principal/agent:horton`, kind: `agent` },
     args: {},
     db: {
       collections: { manifests: { toArray: [] } },
@@ -121,6 +136,21 @@ function createElectricToolsContext() {
     unsubscribeFromWebhookSource: vi.fn(async () => ({
       txid: `tx-unsubscribe`,
     })),
+    createMarkdownDocument: vi.fn(async () => ({
+      txid: `tx-create-doc`,
+      document,
+    })),
+    getMarkdownDocumentConnection: vi.fn(async () => ({
+      baseUrl: `http://test.local/v1/yjs/default`,
+      docId: document.docId,
+      headers: {},
+    })),
+    readMarkdownDocumentStream: vi.fn(async () => ({
+      bytes: new Uint8Array(),
+    })),
+    appendMarkdownDocumentUpdate: vi.fn(async () => ({})),
+    appendMarkdownDocumentAwareness: vi.fn(async () => ({})),
+    registerCleanup: vi.fn(),
   } as any
 }
 
@@ -328,7 +358,7 @@ describe(`horton tool composition`, () => {
     )
   })
 
-  it(`adds webhook source and schedule tools through the built-in electric tool factory`, async () => {
+  it(`adds webhook source, schedule, and markdown document tools through the built-in electric tool factory`, async () => {
     const tools = await createBuiltinElectricTools()(
       createElectricToolsContext()
     )
@@ -343,6 +373,13 @@ describe(`horton tool composition`, () => {
         `upsert_cron_schedule`,
         `delete_schedule`,
         `list_schedules`,
+        `create_markdown_doc`,
+        `set_markdown_doc_cursor`,
+        `insert_markdown_doc`,
+        `replace_markdown_doc_range`,
+        `read_markdown_doc`,
+        `write_markdown_doc`,
+        `edit_markdown_doc`,
       ])
     )
     expect(
@@ -355,9 +392,12 @@ describe(`horton tool composition`, () => {
       tools.find((tool) => tool.name === `list_webhook_source_subscriptions`)
         ?.description
     ).not.toContain(`manifest-backed`)
+    expect(
+      tools.find((tool) => tool.name === `create_markdown_doc`)?.description
+    ).toContain(`not a filesystem file`)
   })
 
-  it(`includes webhook source and schedule electric tools in Horton and describes them in the prompt`, async () => {
+  it(`includes electric tools in Horton and describes them in the prompt`, async () => {
     const electricTools = await createBuiltinElectricTools()(
       createElectricToolsContext()
     )
@@ -376,6 +416,15 @@ describe(`horton tool composition`, () => {
     expect(cfg.systemPrompt).toContain(`upsert_cron_schedule`)
     expect(cfg.systemPrompt).toContain(`delete_schedule`)
     expect(cfg.systemPrompt).toContain(`list_schedules`)
+    expect(names).toContain(`create_markdown_doc`)
+    expect(names).toContain(`set_markdown_doc_cursor`)
+    expect(names).toContain(`replace_markdown_doc_range`)
+    expect(names).toContain(`insert_markdown_doc`)
+    expect(names).toContain(`edit_markdown_doc`)
+    expect(cfg.systemPrompt).toContain(`create_markdown_doc`)
+    expect(cfg.systemPrompt).toContain(`set_markdown_doc_cursor`)
+    expect(cfg.systemPrompt).toContain(`insert_markdown_doc`)
+    expect(cfg.systemPrompt).toContain(`Collaborative Markdown Docs`)
   })
 
   it(`includes the default built-in toolset`, async () => {

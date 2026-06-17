@@ -7,9 +7,8 @@ import {
 import { createAssistantMessageEventStream } from '@mariozechner/pi-ai'
 import { Type } from '@sinclair/typebox'
 import type { OutboundIdSeed } from '../src/outbound-bridge'
-import type { LLMMessage } from '../src/types'
+import type { AgentTool, LLMMessage } from '../src/types'
 import type { ChangeEvent } from '@durable-streams/state'
-import type { AgentTool } from '@mariozechner/pi-agent-core'
 import type {
   AssistantMessage,
   Model,
@@ -568,6 +567,387 @@ describe(`createPiAgentAdapter`, () => {
         }),
       })
     )
+  })
+
+  it(`dispatches streamed tool call arguments to the bridge and tool hook`, async () => {
+    let streamReadyResolve:
+      | ((stream: ReturnType<typeof createAssistantMessageEventStream>) => void)
+      | null = null
+    const streamReady = new Promise<
+      ReturnType<typeof createAssistantMessageEventStream>
+    >((resolve) => {
+      streamReadyResolve = resolve
+    })
+    const partialMessage: AssistantMessage = {
+      role: `assistant`,
+      content: [
+        {
+          type: `toolCall`,
+          id: `call-draft`,
+          name: `draft`,
+          arguments: { text: `Hello` },
+        },
+      ],
+      api: `anthropic-messages`,
+      provider: `anthropic`,
+      model: `claude-sonnet-4-5-20250929`,
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          total: 0,
+        },
+      },
+      stopReason: `toolUse`,
+      timestamp: Date.now(),
+    }
+    const completedMessage: AssistantMessage = {
+      ...partialMessage,
+      content: [{ type: `text`, text: `` }],
+      stopReason: `stop`,
+    }
+    const argDeltas: Array<unknown> = []
+    const signals: Array<AbortSignal | undefined> = []
+    const events: Array<ChangeEvent> = []
+    const controller = new AbortController()
+    const factory = createPiAgentAdapter({
+      systemPrompt: `Test system prompt`,
+      model: `claude-sonnet-4-5-20250929`,
+      tools: [
+        {
+          name: `draft`,
+          label: `Draft`,
+          description: `Draft text`,
+          parameters: {
+            type: `object`,
+            properties: { text: { type: `string` } },
+            required: [`text`],
+          } as never,
+          onArgsDelta: (context, signal) => {
+            argDeltas.push(context)
+            signals.push(signal)
+          },
+          execute: async () => ({
+            content: [{ type: `text`, text: `ok` }],
+            details: null,
+          }),
+        },
+      ],
+      streamFn: () => {
+        const stream = createAssistantMessageEventStream()
+        streamReadyResolve?.(stream)
+        return stream
+      },
+    })
+    const handle = factory({
+      entityUrl: `test/entity-1`,
+      epoch: 1,
+      messages: [],
+      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0, reasoning: 0 },
+      writeEvent: (event: ChangeEvent) => {
+        events.push(event)
+      },
+    })
+
+    const runPromise = handle.run(`hello`, controller.signal)
+    const stream = await streamReady
+    stream.push({
+      type: `start`,
+      partial: partialMessage,
+    })
+    stream.push({
+      type: `toolcall_start`,
+      contentIndex: 0,
+      partial: partialMessage,
+    })
+    stream.push({
+      type: `toolcall_delta`,
+      contentIndex: 0,
+      delta: `"Hello"`,
+      partial: partialMessage,
+    })
+    stream.push({
+      type: `toolcall_end`,
+      contentIndex: 0,
+      toolCall: partialMessage.content[0] as never,
+      partial: partialMessage,
+    })
+    stream.push({
+      type: `done`,
+      reason: `stop`,
+      message: completedMessage,
+    })
+    await runPromise
+
+    expect(argDeltas).toEqual([
+      {
+        toolCallId: `call-draft`,
+        toolName: `draft`,
+        contentIndex: 0,
+        delta: `"Hello"`,
+        argsPreview: { text: `Hello` },
+      },
+    ])
+    expect(signals).toEqual([controller.signal])
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: `tool_arg_delta`,
+        value: expect.objectContaining({
+          tool_call_id: `call-draft`,
+          delta: `"Hello"`,
+          content_index: 0,
+        }),
+      })
+    )
+  })
+
+  it(`serializes streamed tool argument hooks before tool execution`, async () => {
+    let streamReadyResolve:
+      | ((stream: ReturnType<typeof createAssistantMessageEventStream>) => void)
+      | null = null
+    const streamReady = new Promise<
+      ReturnType<typeof createAssistantMessageEventStream>
+    >((resolve) => {
+      streamReadyResolve = resolve
+    })
+    let releaseFirstDelta!: () => void
+    const firstDeltaBarrier = new Promise<void>((resolve) => {
+      releaseFirstDelta = resolve
+    })
+    const usage = {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 0,
+      cost: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        total: 0,
+      },
+    }
+    const toolCallMessage: AssistantMessage = {
+      role: `assistant`,
+      content: [
+        {
+          type: `toolCall`,
+          id: `call-draft`,
+          name: `draft`,
+          arguments: { text: `AB` },
+        },
+      ],
+      api: `anthropic-messages`,
+      provider: `anthropic`,
+      model: `claude-sonnet-4-5-20250929`,
+      usage,
+      stopReason: `toolUse`,
+      timestamp: Date.now(),
+    }
+    const completedMessage: AssistantMessage = {
+      ...toolCallMessage,
+      content: [{ type: `text`, text: `done` }],
+      stopReason: `stop`,
+    }
+    const order: Array<string> = []
+    let streamCount = 0
+    const factory = createPiAgentAdapter({
+      systemPrompt: `Test system prompt`,
+      model: `claude-sonnet-4-5-20250929`,
+      tools: [
+        {
+          name: `draft`,
+          label: `Draft`,
+          description: `Draft text`,
+          parameters: Type.Object({ text: Type.String() }),
+          onArgsDelta: async ({ delta }) => {
+            order.push(`start:${delta}`)
+            if (delta === `A`) {
+              await firstDeltaBarrier
+            }
+            order.push(`end:${delta}`)
+          },
+          execute: async () => {
+            order.push(`execute`)
+            return {
+              content: [{ type: `text`, text: `ok` }],
+              details: null,
+            }
+          },
+        },
+      ],
+      streamFn: () => {
+        const stream = createAssistantMessageEventStream()
+        streamCount++
+        if (streamCount === 1) {
+          streamReadyResolve?.(stream)
+        } else {
+          queueMicrotask(() => stream.end(completedMessage))
+        }
+        return stream
+      },
+    })
+    const handle = factory({
+      entityUrl: `test/entity-1`,
+      epoch: 1,
+      messages: [],
+      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0, reasoning: 0 },
+      writeEvent: (_event: ChangeEvent) => {},
+    })
+
+    const runPromise = handle.run(`hello`)
+    const stream = await streamReady
+    stream.push({ type: `start`, partial: toolCallMessage })
+    stream.push({
+      type: `toolcall_start`,
+      contentIndex: 0,
+      partial: toolCallMessage,
+    })
+    stream.push({
+      type: `toolcall_delta`,
+      contentIndex: 0,
+      delta: `A`,
+      partial: toolCallMessage,
+    })
+    stream.push({
+      type: `toolcall_delta`,
+      contentIndex: 0,
+      delta: `B`,
+      partial: toolCallMessage,
+    })
+    stream.push({
+      type: `toolcall_end`,
+      contentIndex: 0,
+      toolCall: toolCallMessage.content[0] as never,
+      partial: toolCallMessage,
+    })
+    stream.push({
+      type: `done`,
+      reason: `toolUse`,
+      message: toolCallMessage,
+    })
+
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(order).toEqual([`start:A`])
+
+    releaseFirstDelta()
+    await runPromise
+
+    expect(order).toEqual([`start:A`, `end:A`, `start:B`, `end:B`, `execute`])
+  })
+
+  it(`continues tool execution after a streamed argument hook rejects`, async () => {
+    let streamReadyResolve:
+      | ((stream: ReturnType<typeof createAssistantMessageEventStream>) => void)
+      | null = null
+    const streamReady = new Promise<
+      ReturnType<typeof createAssistantMessageEventStream>
+    >((resolve) => {
+      streamReadyResolve = resolve
+    })
+    const usage = {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 0,
+      cost: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        total: 0,
+      },
+    }
+    const toolCallMessage: AssistantMessage = {
+      role: `assistant`,
+      content: [
+        {
+          type: `toolCall`,
+          id: `call-draft`,
+          name: `draft`,
+          arguments: { text: `A` },
+        },
+      ],
+      api: `anthropic-messages`,
+      provider: `anthropic`,
+      model: `claude-sonnet-4-5-20250929`,
+      usage,
+      stopReason: `toolUse`,
+      timestamp: Date.now(),
+    }
+    const completedMessage: AssistantMessage = {
+      ...toolCallMessage,
+      content: [{ type: `text`, text: `done` }],
+      stopReason: `stop`,
+    }
+    let executed = false
+    let streamCount = 0
+    const factory = createPiAgentAdapter({
+      systemPrompt: `Test system prompt`,
+      model: `claude-sonnet-4-5-20250929`,
+      tools: [
+        {
+          name: `draft`,
+          label: `Draft`,
+          description: `Draft text`,
+          parameters: Type.Object({ text: Type.String() }),
+          onArgsDelta: async () => {
+            throw new Error(`hook failed`)
+          },
+          execute: async () => {
+            executed = true
+            return {
+              content: [{ type: `text`, text: `ok` }],
+              details: null,
+            }
+          },
+        },
+      ],
+      streamFn: () => {
+        const stream = createAssistantMessageEventStream()
+        streamCount++
+        if (streamCount === 1) {
+          streamReadyResolve?.(stream)
+        } else {
+          queueMicrotask(() => stream.end(completedMessage))
+        }
+        return stream
+      },
+    })
+    const handle = factory({
+      entityUrl: `test/entity-1`,
+      epoch: 1,
+      messages: [],
+      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0, reasoning: 0 },
+      writeEvent: (_event: ChangeEvent) => {},
+    })
+
+    const runPromise = handle.run(`hello`)
+    const stream = await streamReady
+    stream.push({ type: `start`, partial: toolCallMessage })
+    stream.push({
+      type: `toolcall_delta`,
+      contentIndex: 0,
+      delta: `A`,
+      partial: toolCallMessage,
+    })
+    stream.push({
+      type: `done`,
+      reason: `toolUse`,
+      message: toolCallMessage,
+    })
+
+    await expect(runPromise).resolves.toBeUndefined()
+    expect(executed).toBe(true)
   })
 
   it(`isRunning returns false initially`, () => {
