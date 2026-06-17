@@ -537,6 +537,10 @@ function NativeMessageComposer({
   const styles = useMemo(() => createComposerStyles(tokens), [tokens])
   const { keyboardVisible, keyboardTranslateY } = useKeyboardAttachment()
   const [value, setValue] = useState(``)
+  // Cleared imperatively on send: the input is controlled via children (for
+  // highlighting), not `value`, so a `setValue('')` while typing fast can be
+  // rejected by RN as stale (older event count) and leave the sent text behind.
+  const inputRef = useRef<TextInput>(null)
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [editingMessage, setEditingMessage] = useState<{
@@ -676,6 +680,7 @@ function NativeMessageComposer({
       }
 
       setValue(``)
+      inputRef.current?.clear()
       setPendingSelection(null)
       slash.reset()
       setEditingMessage(null)
@@ -695,6 +700,7 @@ function NativeMessageComposer({
     }
 
     setValue(``)
+    inputRef.current?.clear()
     setPendingSelection(null)
     slash.reset()
     setEditingMessage(null)
@@ -856,6 +862,7 @@ function NativeMessageComposer({
           />
         )}
         <TextInput
+          ref={inputRef}
           onChangeText={setValue}
           onSelectionChange={(event) => {
             slash.onSelectionChange(event)
