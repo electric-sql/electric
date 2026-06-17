@@ -94,7 +94,7 @@ defmodule Electric.Replication.Eval.Env.KnownFunctions do
     def bool_out(false), do: "f"
   end
 
-  defpostgres("uuidout(uuid) -> text", delegate: &BasicTypes.noop/1)
+  defpostgres("uuidout(uuid) -> text", delegate: &Casting.uuid_to_string/1)
 
   ## Comparison functions
 

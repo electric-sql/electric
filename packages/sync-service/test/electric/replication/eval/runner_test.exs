@@ -28,6 +28,14 @@ defmodule Electric.Replication.Eval.RunnerTest do
                  "null_int" => nil
                })
     end
+
+    test "parses uuid refs as compact 16-byte binaries" do
+      uuid = "550e8400-e29b-41d4-a716-446655440000"
+      {:ok, uuid_bytes} = Ecto.UUID.dump(uuid)
+
+      assert {:ok, %{["id"] => ^uuid_bytes}} =
+               Runner.record_to_ref_values(%{["id"] => :uuid}, %{"id" => uuid})
+    end
   end
 
   describe "execute/2" do
