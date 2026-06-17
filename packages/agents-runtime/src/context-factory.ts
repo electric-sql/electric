@@ -839,6 +839,14 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
           CONTEXT_USAGE_HARD_CEILING
         )
         const compactProvider = agentModelProvider(activeAgentConfig)
+        // The watermark the mid-turn summary actually covers, snapshotted when
+        // the `running` checkpoint is written — i.e. BEFORE the (slow) summarize
+        // await. Capturing it at `complete`-write time instead would let any
+        // event that materialized into the StreamDB during the summarize bump
+        // the head past what the summary covered, so that item would be dropped
+        // un-summarized next turn. Mirrors background compaction, which also
+        // snapshots its head before starting the summarize.
+        let midTurnWatermark: number | undefined
         const onCompactContext = createMidTurnCompactor({
           ceiling: compactCeiling,
           writeCheckpoint: (status, content) => {
@@ -846,18 +854,21 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
               kind: COMPACTION_CHECKPOINT_KIND,
               status,
             }
-            // Stamp the completed checkpoint with the current timeline head as
-            // its watermark. The mid-turn summary covers the whole context, so
-            // reconstruction folds exactly that (items <= head) and keeps
-            // everything appended after — no verbatim tail is dropped. Without
-            // this, the watermark falls back to the checkpoint row's own (later)
-            // position and silently drops the most recent messages next turn.
-            if (status === `complete`) {
+            if (status === `running`) {
               const head = runtimeTimelineMessages(config.db).reduce(
                 (max, message) => Math.max(max, message.at),
                 Number.NEGATIVE_INFINITY
               )
-              if (Number.isFinite(head)) attrs.watermark = head
+              midTurnWatermark = Number.isFinite(head) ? head : undefined
+            }
+            // Stamp the completed checkpoint with the snapshotted head as its
+            // watermark. The mid-turn summary covers the whole context up to that
+            // head, so reconstruction folds exactly that (items <= head) and
+            // keeps everything appended after. Without it, the watermark falls
+            // back to the checkpoint row's own (later) position and silently
+            // drops the most recent messages next turn.
+            if (status === `complete` && midTurnWatermark !== undefined) {
+              attrs.watermark = midTurnWatermark
             }
             contextApi.insertContext(COMPACTION_CHECKPOINT_ID, {
               name: COMPACTION_CHECKPOINT_NAME,
