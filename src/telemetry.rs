@@ -327,6 +327,21 @@ mod imp {
             m.read_offload_wait.record(secs, &[]);
         }
     }
+
+    /// Hot-path timer. Reads the monotonic clock only because telemetry is
+    /// compiled in; in a default build `Timer` is the ZST below and `start` /
+    /// `elapsed_secs` optimize away entirely (no `Instant::now()` on hot paths).
+    pub struct Timer(std::time::Instant);
+    impl Timer {
+        #[inline]
+        pub fn start() -> Self {
+            Timer(std::time::Instant::now())
+        }
+        #[inline]
+        pub fn elapsed_secs(&self) -> f64 {
+            self.0.elapsed().as_secs_f64()
+        }
+    }
 }
 
 // ===========================================================================
@@ -366,6 +381,20 @@ mod imp {
     pub fn record_tail_cache(_hit: bool, _live: &'static str) {}
     #[inline(always)]
     pub fn record_offload_wait(_secs: f64) {}
+
+    /// Zero-sized no-op timer: `start`/`elapsed_secs` compile to nothing, so a
+    /// default build reads no clock on hot paths.
+    pub struct Timer;
+    impl Timer {
+        #[inline(always)]
+        pub fn start() -> Self {
+            Timer
+        }
+        #[inline(always)]
+        pub fn elapsed_secs(&self) -> f64 {
+            0.0
+        }
+    }
 }
 
 // `Guard` and `record_offload_wait` are unused on some host/feature combinations
@@ -374,5 +403,5 @@ mod imp {
 #[allow(unused_imports)]
 pub use imp::{
     init, record_append, record_append_lock_wait, record_fsync, record_offload_wait, record_read,
-    record_request, record_tail_cache, Guard,
+    record_request, record_tail_cache, Guard, Timer,
 };

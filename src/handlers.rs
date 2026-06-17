@@ -480,9 +480,9 @@ async fn handle_create(store: Arc<Store>, req: Req, path: String) -> Resp {
         }
         CreateResult::Created(st) => {
             if let Some(wire) = wire {
-                let lock_t0 = Instant::now();
+                let lock_t0 = crate::telemetry::Timer::start();
                 let mut ap = st.appender.lock().await;
-                crate::telemetry::record_append_lock_wait(lock_t0.elapsed().as_secs_f64());
+                crate::telemetry::record_append_lock_wait(lock_t0.elapsed_secs());
                 if write_wire(&st, &mut ap, &wire).is_err() {
                     return text_response(500, "write failed");
                 }
@@ -699,12 +699,12 @@ impl AppendOutcome {
 }
 
 async fn handle_append(store: Arc<Store>, req: Req, path: String) -> Resp {
-    let t0 = Instant::now();
+    let t0 = crate::telemetry::Timer::start();
     // is_json is needed for the metric label even on the not-found path, where we
     // don't have a stream; default to false there.
     let is_json = store.get(&path).map(|s| s.is_json).unwrap_or(false);
     let (resp, outcome) = handle_append_inner(store, req, path).await;
-    crate::telemetry::record_append(t0.elapsed().as_secs_f64(), outcome.label(), is_json);
+    crate::telemetry::record_append(t0.elapsed_secs(), outcome.label(), is_json);
     resp
 }
 
@@ -762,9 +762,9 @@ async fn handle_append_inner(store: Arc<Store>, req: Req, path: String) -> (Resp
 
     // Serialize per stream: producer validation + write + state update under one
     // lock. Time the wait separately — lock contention is a key bottleneck.
-    let lock_t0 = Instant::now();
+    let lock_t0 = crate::telemetry::Timer::start();
     let mut ap = st.appender.lock().await;
-    crate::telemetry::record_append_lock_wait(lock_t0.elapsed().as_secs_f64());
+    crate::telemetry::record_append_lock_wait(lock_t0.elapsed_secs());
 
     // Closed checks (precedence: closed → seq regression → gap).
     {
@@ -1034,7 +1034,7 @@ async fn handle_read(store: Arc<Store>, req: Req, path: String) -> Resp {
     if live.is_some() && q.offset.is_none() {
         return text_response(400, "offset is required for live modes");
     }
-    let t0 = Instant::now();
+    let t0 = crate::telemetry::Timer::start();
     let mut cache_hit = false;
     let (resp, live_label) = match live {
         Some("long-poll") => (
@@ -1050,7 +1050,7 @@ async fn handle_read(store: Arc<Store>, req: Req, path: String) -> Resp {
             "catchup",
         ),
     };
-    crate::telemetry::record_read(t0.elapsed().as_secs_f64(), live_label, cache_hit);
+    crate::telemetry::record_read(t0.elapsed_secs(), live_label, cache_hit);
     resp
 }
 
@@ -1288,7 +1288,7 @@ async fn handle_sse(st: Arc<StreamState>, offset: ParsedOffset, client_cursor: O
                 // Read new range and emit data + control. Caught-up subscribers
                 // share the resident tail chunk — one read for all of them —
                 // and fall back to a file read only when behind it.
-                let read_t0 = Instant::now();
+                let read_t0 = crate::telemetry::Timer::start();
                 let cache_hit;
                 let data = match st.tail_chunk_slice(pos, t.bytes) {
                     Some(b) => {
@@ -1301,7 +1301,7 @@ async fn handle_sse(st: Arc<StreamState>, offset: ParsedOffset, client_cursor: O
                     }
                 };
                 crate::telemetry::record_tail_cache(cache_hit, "sse");
-                crate::telemetry::record_read(read_t0.elapsed().as_secs_f64(), "sse", cache_hit);
+                crate::telemetry::record_read(read_t0.elapsed_secs(), "sse", cache_hit);
                 let mut ev = String::new();
                 match sse_encoding(&st) {
                     SseEncoding::Json => {
