@@ -43,14 +43,8 @@ defmodule Electric.Replication.PostgresInterop.Casting do
   def parse_bool(x) when x in ~w|f fa fal fals false|, do: false
 
   def parse_uuid(maybe_uuid) do
-    case maybe_uuid do
-      <<_::128>> = uuid ->
-        uuid
-
-      _ ->
-        {:ok, value} = Ecto.UUID.dump(maybe_uuid)
-        value
-    end
+    {:ok, value} = Ecto.UUID.dump(maybe_uuid)
+    value
   end
 
   def uuid_to_string(maybe_uuid) do

@@ -20,12 +20,20 @@ defmodule Electric.Replication.Eval.EnvTest do
       assert byte_size(uuid_bytes) == 16
     end
 
+    test "rejects invalid 16-byte uuid text", %{env: env} do
+      assert :error = Env.parse_const(env, "abcdefghijklmnop", :uuid)
+    end
+
     test "parses uuid arrays as compact 16-byte binaries", %{
       env: env,
       uuid: uuid,
       uuid_bytes: uuid_bytes
     } do
       assert {:ok, [^uuid_bytes]} = Env.parse_const(env, "{#{uuid}}", {:array, :uuid})
+    end
+
+    test "rejects invalid 16-byte uuid text inside arrays", %{env: env} do
+      assert :error = Env.parse_const(env, "{abcdefghijklmnop}", {:array, :uuid})
     end
   end
 
