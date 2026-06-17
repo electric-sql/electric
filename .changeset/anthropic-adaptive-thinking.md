@@ -1,11 +1,6 @@
 ---
 '@electric-ax/agents': patch
+'@electric-ax/agents-runtime': patch
 ---
 
-Use Anthropic's adaptive thinking API for models that require it (Opus 4.6/4.7,
-Sonnet 4.6). The builtin model catalog previously injected budget-based
-`thinking: { type: "enabled", budget_tokens }` for every reasoning-capable
-Anthropic model, which Opus 4.7 rejects with a 400 — it needs
-`thinking: { type: "adaptive" }` + `output_config.effort`. Those models now emit
-the adaptive shape (reasoningEffort mapped to the effort level); older models
-keep budget-based thinking.
+Delegate built-in reasoning configuration to pi-ai instead of rewriting provider request payloads in the model catalog. Built-in OpenAI, OpenAI Codex, and Anthropic reasoning models now pass `reasoning` through the runtime adapter, preserving the existing `auto` defaults and Anthropic thinking budgets while letting pi-ai own provider-specific payload shapes such as OpenAI reasoning summaries and Anthropic adaptive thinking.

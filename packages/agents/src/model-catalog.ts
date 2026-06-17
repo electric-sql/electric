@@ -50,12 +50,13 @@ type ExplicitReasoningEffort = Exclude<BuiltinReasoningEffort, `auto`>
 
 export type BuiltinAgentModelConfig = Pick<
   AgentConfig,
-  `model` | `provider` | `onPayload` | `getApiKey`
+  | `model`
+  | `provider`
+  | `reasoning`
+  | `thinkingBudgets`
+  | `onPayload`
+  | `getApiKey`
 > & {
-  reasoningEffort?: ExplicitReasoningEffort
-}
-
-type PersistedModelConfig = Pick<AgentConfig, `model` | `provider`> & {
   reasoningEffort?: ExplicitReasoningEffort
 }
 
@@ -239,134 +240,34 @@ function filterChoicesByEnabledModels(
 }
 
 /**
- * Anthropic-specific budget mapping for `reasoningEffort`.
- *
- * Anthropic's `thinking.budget_tokens` is a hard cap on tokens spent
- * inside the thinking block before the model must commit to its
- * answer. Docs require ≥ 1024; we scale from there. Numbers tuned so
- * `medium` is the spot most "show your work" requests land, and
- * `high` covers tougher reasoning without uncapped spend.
- *
- * Keep in sync with provider doc updates — Anthropic has shifted the
- * minimum once already (older models capped lower).
+ * Keep the previous built-in Anthropic token budget tuning while delegating the
+ * provider-specific request shape to pi-ai. pi-ai only uses these budgets for
+ * older budget-based Anthropic thinking models; adaptive-thinking models ignore
+ * them and use the `reasoning` effort level directly.
  */
-const ANTHROPIC_THINKING_BUDGET_BY_EFFORT: Record<
-  ExplicitReasoningEffort,
-  number
-> = {
+const ANTHROPIC_THINKING_BUDGETS = {
   minimal: 1024,
   low: 2048,
   medium: 8192,
   high: 24576,
-}
+} satisfies NonNullable<AgentConfig[`thinkingBudgets`]>
 
-/**
- * Opus 4.6+/4.7 and Sonnet 4.6 use Anthropic's adaptive thinking API
- * (`thinking.type: "adaptive"` + `output_config.effort`); the older budget-based
- * `thinking.type: "enabled"` is rejected on Opus 4.7.
- */
-function isAdaptiveThinkingModel(modelId: string): boolean {
-  return /(opus-4[-.]6|opus-4[-.]7|sonnet-4[-.]6)/.test(modelId)
-}
-
-/** `reasoningEffort` → Anthropic adaptive `output_config.effort` level. */
-const ANTHROPIC_ADAPTIVE_EFFORT_BY_REASONING: Record<
-  ExplicitReasoningEffort,
-  string
-> = {
-  minimal: `low`,
-  low: `low`,
-  medium: `medium`,
-  high: `high`,
-}
-
-function withProviderPayloadDefaults(
-  config: PersistedModelConfig & { getApiKey?: AgentConfig[`getApiKey`] },
+function resolveBuiltinReasoning(
   choice: BuiltinModelChoice,
   reasoningEffort: ExplicitReasoningEffort | null
-): BuiltinAgentModelConfig {
-  if (!choice.reasoning) return config
-
-  if (choice.provider === `openai` || choice.provider === `openai-codex`) {
-    const defaultEffort = choice.provider === `openai-codex` ? `low` : `minimal`
-    const effort =
-      reasoningEffort === `minimal` && choice.provider === `openai-codex`
-        ? `low`
-        : (reasoningEffort ?? defaultEffort)
-
-    return {
-      ...config,
-      onPayload: (payload) => {
-        if (typeof payload !== `object` || payload === null) return undefined
-        const body = payload as Record<string, unknown>
-        const existingReasoning =
-          typeof body.reasoning === `object` && body.reasoning !== null
-            ? (body.reasoning as Record<string, unknown>)
-            : {}
-
-        return {
-          ...body,
-          reasoning: {
-            ...existingReasoning,
-            effort,
-          },
-        }
-      },
-    }
+): AgentConfig[`reasoning`] | undefined {
+  if (!choice.reasoning) return undefined
+  if (
+    choice.provider !== `openai` &&
+    choice.provider !== `openai-codex` &&
+    choice.provider !== `anthropic`
+  ) {
+    return undefined
   }
-
-  if (choice.provider === `anthropic`) {
-    // `auto` falls through to a `minimal` default, matching the OpenAI branch.
-    const effectiveEffort = reasoningEffort ?? `minimal`
-    // pi-ai writes `thinking: { type: "disabled" }` by default; we merge our
-    // enabled values last so they win.
-    const mergeThinking = (
-      body: Record<string, unknown>,
-      thinking: Record<string, unknown>,
-      extra?: Record<string, unknown>
-    ): Record<string, unknown> => {
-      const existing =
-        typeof body.thinking === `object` && body.thinking !== null
-          ? (body.thinking as Record<string, unknown>)
-          : {}
-      return { ...body, ...extra, thinking: { ...existing, ...thinking } }
-    }
-
-    if (isAdaptiveThinkingModel(String(config.model))) {
-      const effort = ANTHROPIC_ADAPTIVE_EFFORT_BY_REASONING[effectiveEffort]
-      return {
-        ...config,
-        onPayload: (payload) => {
-          if (typeof payload !== `object` || payload === null) return undefined
-          const body = payload as Record<string, unknown>
-          const existingOutputConfig =
-            typeof body.output_config === `object` &&
-            body.output_config !== null
-              ? (body.output_config as Record<string, unknown>)
-              : {}
-          return mergeThinking(
-            body,
-            { type: `adaptive` },
-            { output_config: { ...existingOutputConfig, effort } }
-          )
-        },
-      }
-    }
-
-    const budgetTokens = ANTHROPIC_THINKING_BUDGET_BY_EFFORT[effectiveEffort]
-    return {
-      ...config,
-      onPayload: (payload) => {
-        if (typeof payload !== `object` || payload === null) return undefined
-        return mergeThinking(payload as Record<string, unknown>, {
-          type: `enabled`,
-          budget_tokens: budgetTokens,
-        })
-      },
-    }
+  if (choice.provider === `openai-codex`) {
+    return reasoningEffort === `minimal` ? `low` : (reasoningEffort ?? `low`)
   }
-
-  return config
+  return reasoningEffort ?? `minimal`
 }
 
 function parseReasoningEffort(value: unknown): ExplicitReasoningEffort | null {
@@ -443,10 +344,16 @@ export function resolveBuiltinModelConfig(
       : undefined
 
   const choice = selected ?? catalog.defaultChoice
-  const config = {
+  const reasoning = resolveBuiltinReasoning(choice, reasoningEffort)
+  const config: BuiltinAgentModelConfig = {
     provider: choice.provider,
     model: choice.id,
     ...(reasoningEffort && { reasoningEffort }),
+    ...(reasoning && { reasoning }),
+    ...(choice.reasoning &&
+      choice.provider === `anthropic` && {
+        thinkingBudgets: ANTHROPIC_THINKING_BUDGETS,
+      }),
     ...(choice.provider === `openai-codex` && {
       getApiKey: () => readCodexAccessToken(),
     }),
@@ -455,7 +362,7 @@ export function resolveBuiltinModelConfig(
     }),
   }
 
-  return withProviderPayloadDefaults(config, choice, reasoningEffort)
+  return config
 }
 
 export function modelChoiceValues(

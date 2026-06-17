@@ -72,6 +72,8 @@ export interface PiAdapterOptions {
   getApiKey?: (
     provider: string
   ) => Promise<string | undefined> | string | undefined
+  reasoning?: SimpleStreamOptions[`reasoning`]
+  thinkingBudgets?: SimpleStreamOptions[`thinkingBudgets`]
   onPayload?: SimpleStreamOptions[`onPayload`]
   // Invoked after each step ends with the token counts reported by the
   // provider. Used by goal-budget enforcement to abort mid-run; see
@@ -281,6 +283,8 @@ export function createPiAgentAdapter(
     const streamFn: StreamFn = (streamModel, context, streamOptions) =>
       baseStreamFn(streamModel, context, {
         ...streamOptions,
+        ...(opts.reasoning && { reasoning: opts.reasoning }),
+        ...(opts.thinkingBudgets && { thinkingBudgets: opts.thinkingBudgets }),
         timeoutMs: modelTimeoutMs,
         maxRetries: modelMaxRetries,
       })
