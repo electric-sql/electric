@@ -134,8 +134,8 @@ function getDefaultElectricAgentsIdentity(): string {
   return `${userInfo().username}@${hostname()}`
 }
 
-function getDefaultElectricAgentsPrincipal(): string {
-  return `system:cli-${userInfo().username}`
+function defaultElectricAgentsPrincipalForIdentity(identity: string): string {
+  return `user:${identity}`
 }
 
 function parseElectricAgentsHeaders(
@@ -173,13 +173,15 @@ export function getElectricCliEnv(
   const explicitIdentity = env.ELECTRIC_AGENTS_IDENTITY?.trim()
   const explicitPrincipal = env.ELECTRIC_AGENTS_PRINCIPAL?.trim()
   const headers = parseElectricAgentsHeaders(env.ELECTRIC_AGENTS_SERVER_HEADERS)
+  const electricAgentsIdentity =
+    explicitIdentity || getDefaultElectricAgentsIdentity()
   return {
     electricAgentsUrl: env.ELECTRIC_AGENTS_URL || DEFAULT_ELECTRIC_AGENTS_URL,
-    electricAgentsIdentity:
-      explicitIdentity || getDefaultElectricAgentsIdentity(),
+    electricAgentsIdentity,
     electricAgentsHeaders: mergeElectricPrincipalHeader(
       headers,
-      explicitPrincipal || getDefaultElectricAgentsPrincipal()
+      explicitPrincipal ||
+        defaultElectricAgentsPrincipalForIdentity(electricAgentsIdentity)
     ),
   }
 }
@@ -829,7 +831,7 @@ function getHelpText(commandName: string): string {
 Environment:
   ELECTRIC_AGENTS_URL        Base URL of the server (default: ${DEFAULT_ELECTRIC_AGENTS_URL})
   ELECTRIC_AGENTS_IDENTITY   Sender identity for messages (default: ${getDefaultElectricAgentsIdentity()})
-  ELECTRIC_AGENTS_PRINCIPAL  Principal key sent as the Electric-Principal header (default: ${getDefaultElectricAgentsPrincipal()})
+  ELECTRIC_AGENTS_PRINCIPAL  Principal key sent as the Electric-Principal header (default: user:<ELECTRIC_AGENTS_IDENTITY>)
   ELECTRIC_AGENTS_SERVER_HEADERS  Optional JSON object of additional server headers
   ANTHROPIC_API_KEY          Required for '${agentsCommand} start-builtin' and '${agentsCommand} quickstart'
 

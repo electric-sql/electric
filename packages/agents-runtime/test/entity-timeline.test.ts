@@ -1835,6 +1835,61 @@ describe(`entity includes query`, () => {
       })
     })
 
+    it(`interleaves top-level live timeline rows by runtime timeline order`, async () => {
+      const { collections, sync } = createEntityCollections()
+      const liveQuery = createLiveQueryCollection({
+        query: createEntityTimelineQuery({ collections } as any),
+        startSync: true,
+      })
+      await liveQuery.preload()
+
+      sync.inbox.insert({
+        key: `msg-1`,
+        _timeline_order: order(1),
+        from: `user`,
+        payload: `first`,
+        timestamp: `2026-04-15T18:00:00.000Z`,
+        status: `processed`,
+      })
+      sync.runs.insert({
+        key: `run-1`,
+        _timeline_order: order(2),
+        status: `started`,
+      })
+      sync.texts.insert({
+        key: `text-1`,
+        _timeline_order: order(3),
+        run_id: `run-1`,
+        status: `streaming`,
+      })
+      sync.textDeltas.insert({
+        key: `td-1`,
+        text_id: `text-1`,
+        run_id: `run-1`,
+        delta: `First response`,
+      })
+      sync.inbox.insert({
+        key: `msg-2`,
+        _timeline_order: order(4),
+        from: `user`,
+        payload: `second`,
+        timestamp: `2026-04-15T18:01:00.000Z`,
+        status: `processed`,
+      })
+      await new Promise((r) => setTimeout(r, 50))
+
+      const rows = getData(liveQuery)
+      expect(
+        rows.map((row) =>
+          row.inbox
+            ? `inbox:${row.inbox.key}`
+            : row.run
+              ? `run:${row.run.key}`
+              : `other:${row.$key}`
+        )
+      ).toEqual([`inbox:msg-1`, `run:run-1`, `inbox:msg-2`])
+    })
+
     it(`reacts to toolCall updates`, async () => {
       const { collections, sync } = createEntityCollections()
       const queryFn = createEntityIncludesQuery({ collections } as any)
@@ -2495,6 +2550,91 @@ describe(`entity includes query`, () => {
       const item = items[0]
       expect(item.text?.key).toBe(`msg-0`)
       expect(item.text?.content).toBe(`Hello world`)
+    })
+
+    it(`live items.text.content orders deltas by stream sequence, not key`, async () => {
+      // Production regression: delta keys like `msg-0:10` sort before
+      // `msg-0:2` lexicographically. The live query must use stream
+      // sequence order so streamed text stays in model output order.
+      const { collections, sync } = createTimelineCollections()
+      const liveQuery = createLiveQueryCollection({
+        query: createEntityTimelineQuery({ collections } as any),
+        startSync: true,
+      })
+      await liveQuery.preload()
+
+      sync.runs.insert({ key: `run-0`, status: `started` })
+      sync.texts.insert({
+        key: `msg-0`,
+        run_id: `run-0`,
+        status: `streaming`,
+      })
+      for (let i = 0; i <= 10; i++) {
+        sync.textDeltas.insert({
+          key: `msg-0:${i}`,
+          text_id: `msg-0`,
+          run_id: `run-0`,
+          delta: `[${i}]`,
+        })
+      }
+      sync.texts.update({
+        key: `msg-0`,
+        run_id: `run-0`,
+        status: `completed`,
+      })
+      sync.runs.update({
+        key: `run-0`,
+        status: `completed`,
+        finish_reason: `stop`,
+      })
+      await new Promise((r) => setTimeout(r, 50))
+
+      const rows = getRows(liveQuery)
+      const runRow = rows.find((r) => r.run?.key === `run-0`)
+      expect(runRow).toBeTruthy()
+      const items = Array.from(runRow.run.items.toArray) as Array<any>
+      expect(items).toHaveLength(1)
+      expect(items[0].text?.content).toBe(`[0][1][2][3][4][5][6][7][8][9][10]`)
+    })
+
+    it(`orders live run text items by first delta sequence, not text row creation`, async () => {
+      const { collections, sync } = createTimelineCollections()
+      const liveQuery = createLiveQueryCollection({
+        query: createEntityTimelineQuery({ collections } as any),
+        startSync: true,
+      })
+      await liveQuery.preload()
+
+      sync.runs.insert({ key: `run-0`, status: `started` })
+      sync.texts.insert({
+        key: `msg-0`,
+        run_id: `run-0`,
+        status: `streaming`,
+      })
+      sync.toolCalls.insert({
+        key: `tc-0`,
+        run_id: `run-0`,
+        tool_call_id: `tc-0`,
+        tool_name: `bash`,
+        status: `completed`,
+        result: { content: [{ type: `text`, text: `/private/tmp\n` }] },
+      })
+      sync.textDeltas.insert({
+        key: `msg-0:0`,
+        text_id: `msg-0`,
+        run_id: `run-0`,
+        delta: `We're in /private/tmp.`,
+      })
+      await new Promise((r) => setTimeout(r, 50))
+
+      const rows = getRows(liveQuery)
+      const runRow = rows.find((r) => r.run?.key === `run-0`)
+      expect(runRow).toBeTruthy()
+      const items = Array.from(runRow.run.items.toArray) as Array<any>
+      expect(items.map((item) => item.toolCall?.key ?? item.text?.key)).toEqual(
+        [`tc-0`, `msg-0`]
+      )
+      expect(items[1]?.text?.content).toBe(`We're in /private/tmp.`)
     })
 
     it(`reasoning content survives multiple run-row updates in sequence`, async () => {

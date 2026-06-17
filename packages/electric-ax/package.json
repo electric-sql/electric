@@ -51,7 +51,7 @@
     "@electric-ax/agents": "workspace:*",
     "@electric-ax/agents-runtime": "workspace:*",
     "@electric-sql/client": "^1.5.21",
-    "@tanstack/db": "^0.6.4",
+    "@tanstack/db": "^0.6.6",
     "@tanstack/react-db": "^0.1.85",
     "commander": "^13.1.0",
     "ink": "^6.8.0",
@@ -66,7 +66,7 @@
     "ink-testing-library": "^4.0.0",
     "tsdown": "^0.9.0",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.2",
+    "typescript": "^5.9.3",
     "vitest": "^4.1.0"
   },
   "files": [

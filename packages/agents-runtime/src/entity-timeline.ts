@@ -10,12 +10,13 @@ import {
   isNull,
   isUndefined,
   like,
+  min,
   localOnlyCollectionOptions,
   or,
   sum,
   toArray,
 } from '@durable-streams/state/db'
-import { caseWhen } from '@tanstack/db'
+import { BasicIndex, caseWhen } from '@tanstack/db'
 import type {
   Collection,
   InitialQueryBuilder,
@@ -1316,6 +1317,47 @@ const getEntitySignalsCollection = cachedCollectionFactory(
 
 type EntityTimelineQueryBuilder = (q: InitialQueryBuilder) => QueryBuilder<any>
 
+const indexedTimelineDbs = new WeakSet<object>()
+
+type IndexableCollection = {
+  createIndex: (
+    index: (row: any) => unknown,
+    config: { indexType: typeof BasicIndex }
+  ) => void
+}
+
+function hasCreateIndex(value: unknown): value is IndexableCollection {
+  return (
+    !!value &&
+    typeof (value as { createIndex?: unknown }).createIndex === `function`
+  )
+}
+
+function createIndexIfAvailable(
+  collection: unknown,
+  index: (row: any) => unknown
+): void {
+  if (hasCreateIndex(collection)) {
+    collection.createIndex(index, { indexType: BasicIndex })
+  }
+}
+
+export function ensureEntityTimelineIndexes(db: EntityStreamDB): void {
+  if (indexedTimelineDbs.has(db as object)) return
+  indexedTimelineDbs.add(db as object)
+
+  createIndexIfAvailable(db.collections.texts, (row) => row.run_id)
+  createIndexIfAvailable(db.collections.textDeltas, (row) => row.text_id)
+  createIndexIfAvailable(db.collections.toolCalls, (row) => row.run_id)
+  createIndexIfAvailable(db.collections.reasoning, (row) => row.run_id)
+  createIndexIfAvailable(
+    db.collections.reasoningDeltas,
+    (row) => row.reasoning_id
+  )
+  createIndexIfAvailable(db.collections.steps, (row) => row.run_id)
+  createIndexIfAvailable(db.collections.errors, (row) => row.run_id)
+}
+
 /**
  * Builds a live timeline query for an entity stream.
  *
@@ -1339,6 +1381,7 @@ export function createEntityTimelineQuery(
   db: EntityStreamDB,
   opts: EntityTimelineQueryOptions = {}
 ): EntityTimelineQueryBuilder {
+  ensureEntityTimelineIndexes(db)
   return (q: InitialQueryBuilder) => buildEntityTimelineQuery(q, db, opts)
 }
 
@@ -1423,6 +1466,14 @@ function buildEntityTimelineQuery(
       run_id: error.run_id,
     }))
 
+  const textFirstDeltaSource = q
+    .from({ textDelta: db.collections.textDeltas })
+    .groupBy(({ textDelta }) => textDelta.text_id)
+    .select(({ textDelta }) => ({
+      text_id: textDelta.text_id,
+      order: min(coalesce(textDelta._seq, -1)),
+    }))
+
   // Union texts + tool calls into a single ordered stream. The
   // text-delta join lives at this level (vs. inside the consumer's
   // `items.select`) so the correlation key is `text.key` — a field
@@ -1435,13 +1486,16 @@ function buildEntityTimelineQuery(
       text: db.collections.texts,
       toolCall: db.collections.toolCalls,
     })
-    .select(({ text, toolCall }) => ({
-      order: coalesce(text._timeline_order, toolCall._timeline_order, `~`),
+    .leftJoin({ firstDelta: textFirstDeltaSource }, ({ text, firstDelta }) =>
+      eq(text.key, firstDelta.text_id)
+    )
+    .select(({ text, toolCall, firstDelta }) => ({
+      order: coalesce(firstDelta.order, text._seq, toolCall._seq, -1),
       run_id: coalesce(text.run_id, toolCall.run_id, ``),
       text: caseWhen(text.key, {
         key: text.key,
         run_id: text.run_id,
-        order: coalesce(text._timeline_order, `~`),
+        order: coalesce(firstDelta.order, text._seq, -1),
         status: text.status,
       }),
       textContent: concat(
@@ -1449,17 +1503,14 @@ function buildEntityTimelineQuery(
           q
             .from({ textChunk: db.collections.textDeltas })
             .where(({ textChunk }) => eq(textChunk.text_id, text.key))
-            .orderBy(({ textChunk }) =>
-              coalesce(textChunk._timeline_order, `~`)
-            )
-            .orderBy(({ textChunk }) => textChunk.key)
+            .orderBy(({ textChunk }) => coalesce(textChunk._seq, -1))
             .select(({ textChunk }) => textChunk.delta)
         )
       ),
       toolCall: caseWhen(toolCall.key, {
         key: toolCall.key,
         run_id: toolCall.run_id,
-        order: coalesce(toolCall._timeline_order, `~`),
+        order: coalesce(toolCall._seq, -1),
         tool_call_id: toolCall.tool_call_id,
         tool_name: toolCall.tool_name,
         status: toolCall.status,
@@ -1486,7 +1537,7 @@ function buildEntityTimelineQuery(
     .select(({ reasoning }) => ({
       key: reasoning.key,
       run_id: reasoning.run_id,
-      order: coalesce(reasoning._timeline_order, `~`),
+      order: coalesce(reasoning._seq, -1),
       status: reasoning.status,
       summary_title: reasoning.summary_title,
       encrypted: reasoning.encrypted,
@@ -1497,10 +1548,7 @@ function buildEntityTimelineQuery(
             .where(({ reasoningChunk }) =>
               eq(reasoningChunk.reasoning_id, reasoning.key)
             )
-            .orderBy(({ reasoningChunk }) =>
-              coalesce(reasoningChunk._timeline_order, `~`)
-            )
-            .orderBy(({ reasoningChunk }) => reasoningChunk.key)
+            .orderBy(({ reasoningChunk }) => coalesce(reasoningChunk._seq, -1))
             .select(({ reasoningChunk }) => reasoningChunk.delta)
         )
       ),
@@ -1667,6 +1715,7 @@ type EntityQueryBuilder = (q: InitialQueryBuilder) => QueryBuilder<any>
 export function createEntityIncludesQuery(
   db: EntityStreamDB
 ): EntityQueryBuilder {
+  ensureEntityTimelineIndexes(db)
   const seedCollection = getTimelineSeedCollection(db)
   const runsCollection = getEntityRunsCollection(db)
   const inboxCollection = getEntityInboxCollection(db)

@@ -1,18 +1,17 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Box, Newline, Text, render, useInput } from 'ink'
-import { useLiveQuery } from '@tanstack/react-db'
-import { createOptimisticAction } from '@durable-streams/state/db'
+import { createOptimisticAction, useLiveQuery } from '@tanstack/react-db'
 import {
-  buildSections,
-  createEntityIncludesQuery,
-  normalizeEntityTimelineData,
+  createEntityTimelineQuery,
+  createPendingTimelineOrder,
 } from '@electric-ax/agents-runtime'
 import { entityApiUrl } from './entity-api.js'
 import { createEntityStreamDB } from './entity-stream-db'
 import type {
-  EntityStopped,
   EntityTimelineContentItem,
-  EntityTimelineData,
+  EntityTimelineQueryRow,
+  EntityTimelineRunItem,
+  EntityTimelineRunRow,
   EntityTimelineSection,
   MessageReceived,
 } from '@electric-ax/agents-runtime'
@@ -45,6 +44,221 @@ export function truncate(s: string, max: number): string {
   return s.length > max ? s.slice(0, max - 3) + `...` : s
 }
 
+export function createMessageSendBody(
+  text: string,
+  opts?: { key?: string }
+): { key?: string; payload: { text: string } } {
+  return { ...(opts?.key ? { key: opts.key } : {}), payload: { text } }
+}
+
+const OPTIMISTIC_INBOX_ORDER_START = Number.MAX_SAFE_INTEGER - 1_000_000
+const SEND_TXID_TIMEOUT_MS = 10_000
+
+let optimisticInboxOrderIndex = OPTIMISTIC_INBOX_ORDER_START
+
+function nextOptimisticInboxOrderIndex(): number {
+  optimisticInboxOrderIndex += 1
+  if (optimisticInboxOrderIndex >= Number.MAX_SAFE_INTEGER) {
+    optimisticInboxOrderIndex = OPTIMISTIC_INBOX_ORDER_START
+  }
+  return optimisticInboxOrderIndex
+}
+
+function createOptimisticInboxKey(pendingOrderIndex: number): string {
+  return `optimistic-${Date.now()}-${pendingOrderIndex}`
+}
+
+async function readSendTxid(res: Response): Promise<string> {
+  const data = (await res.json().catch(() => null)) as { txid?: unknown } | null
+  const txid = data?.txid
+  if (typeof txid === `string` || typeof txid === `number`) {
+    return String(txid)
+  }
+  throw new Error(`Send response did not include txid`)
+}
+
+function GutterLine({
+  prefix = `│ `,
+  color,
+  dimColor,
+  children,
+}: {
+  prefix?: string
+  color?: string
+  dimColor?: boolean
+  children: string
+}): React.ReactElement {
+  return (
+    <Box width="100%">
+      <Text color={color} dimColor={dimColor}>
+        {prefix}
+      </Text>
+      <Box flexGrow={1} flexShrink={1}>
+        <Text color={color} dimColor={dimColor} wrap="wrap">
+          {children}
+        </Text>
+      </Box>
+    </Box>
+  )
+}
+
+function payloadText(payload: unknown): string {
+  if (typeof payload === `string`) return payload
+  if (typeof payload === `object` && payload !== null) {
+    const record = payload as Record<string, unknown>
+    return typeof record.text === `string`
+      ? record.text
+      : JSON.stringify(payload)
+  }
+  return String(payload ?? ``)
+}
+
+function resultText(result: unknown): string | undefined {
+  if (result === undefined) return undefined
+  return typeof result === `string` ? result : JSON.stringify(result)
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === `object` && value !== null && !Array.isArray(value)
+}
+
+type TimelineDisplayRow =
+  | { kind: `section`; key: string; section: EntityTimelineSection }
+  | { kind: `run`; key: string; run: EntityTimelineRunRow }
+
+function timelineRowsToDisplayRows(
+  rows: Array<EntityTimelineQueryRow>
+): Array<TimelineDisplayRow> {
+  let userMessageCount = 0
+  return rows.flatMap((row): Array<TimelineDisplayRow> => {
+    if (row.inbox) {
+      const section: EntityTimelineSection = {
+        kind: `user_message`,
+        from: row.inbox.from,
+        text: payloadText(row.inbox.payload),
+        timestamp: Date.parse(row.inbox.timestamp || ``) || Date.now(),
+        isInitial: userMessageCount === 0,
+      }
+      userMessageCount++
+      return [{ kind: `section`, key: row.$key, section }]
+    }
+
+    if (row.wake) {
+      const timestamp = Date.parse(row.wake.payload.timestamp)
+      return [
+        {
+          kind: `section`,
+          key: row.$key,
+          section: {
+            kind: `wake`,
+            payload: row.wake.payload,
+            timestamp: Number.isFinite(timestamp) ? timestamp : Date.now(),
+          },
+        },
+      ]
+    }
+
+    if (row.run) {
+      return [{ kind: `run`, key: row.$key, run: row.run }]
+    }
+
+    if (row.error) {
+      return [
+        {
+          kind: `section`,
+          key: row.$key,
+          section: {
+            kind: `agent_response`,
+            items: [],
+            error: row.error.error_code
+              ? `${row.error.error_code}: ${row.error.message}`
+              : row.error.message,
+          },
+        },
+      ]
+    }
+
+    return []
+  })
+}
+
+function textContent(item: { content?: unknown } | null | undefined): string {
+  return typeof item?.content === `string` ? item.content : ``
+}
+
+function compareTimelineOrderValues(
+  left: string | number,
+  right: string | number
+): number {
+  if (typeof left === `number` && typeof right === `number`) {
+    return left - right
+  }
+  return String(left).localeCompare(String(right))
+}
+
+export function runItemKind(item: EntityTimelineRunItem): `text` | `toolCall` {
+  return item.text ? `text` : `toolCall`
+}
+
+export function runItemKey(item: EntityTimelineRunItem): string {
+  return item.text?.key ?? item.toolCall?.key ?? ``
+}
+
+export function compareRunItems(
+  left: EntityTimelineRunItem,
+  right: EntityTimelineRunItem
+): number {
+  const orderCompare = compareTimelineOrderValues(
+    left.text?.order ?? left.toolCall?.order ?? `~`,
+    right.text?.order ?? right.toolCall?.order ?? `~`
+  )
+  if (orderCompare !== 0) return orderCompare
+
+  const kindCompare = runItemKind(left).localeCompare(runItemKind(right))
+  if (kindCompare !== 0) return kindCompare
+
+  return runItemKey(left).localeCompare(runItemKey(right))
+}
+
+export function runItemsToContentItems(
+  items: Array<EntityTimelineRunItem>
+): Array<EntityTimelineContentItem> {
+  const contentItems: Array<EntityTimelineContentItem> = []
+  for (const item of items) {
+    if (item.text) {
+      const content = textContent(item.text)
+      if (content.trim().length > 0) {
+        contentItems.push({ kind: `text`, text: content })
+      }
+      continue
+    }
+
+    if (!item.toolCall) continue
+    contentItems.push({
+      kind: `tool_call`,
+      toolCallId: item.toolCall.tool_call_id ?? item.toolCall.key,
+      toolName: item.toolCall.tool_name,
+      args: isPlainObject(item.toolCall.args) ? item.toolCall.args : {},
+      status: item.toolCall.status,
+      result: resultText(item.toolCall.result),
+      error: item.toolCall.error,
+      isError: item.toolCall.status === `failed`,
+    })
+  }
+  return contentItems
+}
+
+function runErrorsText(
+  errors: EntityTimelineRunRow[`errors`][`toArray`]
+): string | undefined {
+  const messages = errors
+    .map((error) =>
+      error.error_code ? `${error.error_code}: ${error.message}` : error.message
+    )
+    .filter(Boolean)
+  return messages.length > 0 ? messages.join(`; `) : undefined
+}
+
 // ============================================================================
 // Ink components
 // ============================================================================
@@ -71,9 +285,9 @@ export function UserMessageView({
         {time ? <Text dimColor>{`  ${time}`}</Text> : null}
       </Text>
       {text.split(`\n`).map((line, i) => (
-        <Text key={i} color="white">
-          {`│ ${line}`}
-        </Text>
+        <GutterLine key={i} color="white">
+          {line}
+        </GutterLine>
       ))}
     </Box>
   )
@@ -97,9 +311,9 @@ export function AgentTextView({
         <Text bold color="green">{`┌ ${label ?? `assistant`}`}</Text>
       </Text>
       {lines.map((line, i) => (
-        <Text key={i} color="white">
-          {`│ ${line}${i === lines.length - 1 ? cursor : ``}`}
-        </Text>
+        <GutterLine key={i} color="white">
+          {`${line}${i === lines.length - 1 ? cursor : ``}`}
+        </GutterLine>
       ))}
     </Box>
   )
@@ -158,9 +372,9 @@ export function ToolResultView({
   return (
     <Box flexDirection="column">
       {shown.map((line, i) => (
-        <Text key={i} dimColor>
-          {`    │ ${truncate(line, 100)}`}
-        </Text>
+        <GutterLine key={i} prefix="    │ " dimColor>
+          {truncate(line, 100)}
+        </GutterLine>
       ))}
       {remaining > 0 ? (
         <Text dimColor>{`    │ ... ${remaining} more lines`}</Text>
@@ -193,23 +407,33 @@ export function MessageInput({
 
   const sendAction = useMemo(
     () =>
-      createOptimisticAction<{ text: string }>({
-        onMutate: ({ text }) => {
+      createOptimisticAction<{
+        text: string
+        key: string
+        pendingOrderIndex: number
+      }>({
+        onMutate: ({ text, key, pendingOrderIndex }) => {
+          const now = new Date().toISOString()
           db.collections.inbox.insert({
-            key: `optimistic-${Date.now()}`,
+            key,
+            _timeline_order: createPendingTimelineOrder(pendingOrderIndex),
             from: identity,
+            from_principal: identity,
             payload: { text },
-            timestamp: new Date().toISOString(),
+            timestamp: now,
+            mode: `immediate`,
+            status: `processed`,
+            processed_at: now,
           } as any)
         },
-        mutationFn: async ({ text }) => {
+        mutationFn: async ({ text, key }) => {
           const res = await fetch(entityApiUrl(baseUrl, entityUrl, `/send`), {
             method: `POST`,
             headers: {
               'content-type': `application/json`,
               ...headers,
             },
-            body: JSON.stringify({ from: identity, payload: { text } }),
+            body: JSON.stringify(createMessageSendBody(text, { key })),
           })
           if (!res.ok) {
             const body = await res.text().catch(() => ``)
@@ -232,6 +456,10 @@ export function MessageInput({
             }
             throw new Error(message)
           }
+          await db.utils.awaitTxId(
+            await readSendTxid(res),
+            SEND_TXID_TIMEOUT_MS
+          )
         },
       }),
     [db, baseUrl, entityUrl, identity, headers]
@@ -244,7 +472,12 @@ export function MessageInput({
       if (key.return) {
         if (value.trim()) {
           setError(null)
-          const tx = sendAction({ text: value.trim() })
+          const pendingOrderIndex = nextOptimisticInboxOrderIndex()
+          const tx = sendAction({
+            text: value.trim(),
+            key: createOptimisticInboxKey(pendingOrderIndex),
+            pendingOrderIndex,
+          })
           setValue(``)
           tx.isPersisted.promise.catch((err: Error) => {
             setError(err.message)
@@ -289,7 +522,7 @@ function AgentResponseView({
   isStreaming: boolean
 }): React.ReactElement {
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" width="100%">
       {section.items.map((item, i) => {
         if (item.kind === `text`) {
           return (
@@ -320,6 +553,60 @@ function AgentResponseView({
         </Box>
       ) : null}
     </Box>
+  )
+}
+
+function AgentRunView({
+  run,
+  label,
+  isStreaming,
+}: {
+  run: EntityTimelineRunRow
+  label: string
+  isStreaming: boolean
+}): React.ReactElement {
+  const { data: items = [] } = useLiveQuery(
+    (q) => (run.items ? q.from({ item: run.items }) : undefined),
+    [run.items]
+  )
+  const { data: errors = [] } = useLiveQuery(
+    (q) => (run.errors ? q.from({ error: run.errors }) : undefined),
+    [run.errors]
+  )
+
+  const sortedItems = useMemo(
+    () => [...(items as Array<EntityTimelineRunItem>)].sort(compareRunItems),
+    [items]
+  )
+  const runErrors = useMemo(
+    () => runErrorsText(errors as EntityTimelineRunRow[`errors`][`toArray`]),
+    [errors]
+  )
+  const finishReason =
+    run.status === `failed` && run.finish_reason
+      ? `finish_reason=${run.finish_reason}`
+      : undefined
+  const section = useMemo<
+    Extract<EntityTimelineSection, { kind: `agent_response` }>
+  >(
+    () => ({
+      kind: `agent_response`,
+      items: runItemsToContentItems(sortedItems),
+      ...(run.status === `completed` && { done: true as const }),
+      ...(runErrors || finishReason
+        ? { error: runErrors || finishReason }
+        : {}),
+      ...(run.tokens && { tokens: run.tokens }),
+    }),
+    [finishReason, run.status, run.tokens, runErrors, sortedItems]
+  )
+
+  return (
+    <AgentResponseView
+      section={section}
+      label={label}
+      isStreaming={isStreaming}
+    />
   )
 }
 
@@ -390,70 +677,69 @@ function ObserveView({
   identity: string
   headers?: Record<string, string>
 }): React.ReactElement {
-  const timelineQuery = useMemo(
-    () => createEntityIncludesQuery(db as any),
-    [db]
-  )
-
+  const timelineQuery = useMemo(() => createEntityTimelineQuery(db), [db])
   const { data: timelineRows = [] } = useLiveQuery(timelineQuery as any, [
     timelineQuery,
   ])
-  const timelineData = normalizeEntityTimelineData(
-    (timelineRows as Array<EntityTimelineData>)[0] ?? {
-      runs: [],
-      inbox: [],
-      wakes: [],
-      signals: [],
-      contextInserted: [],
-      contextRemoved: [],
-      entities: [],
-    }
+  const displayRows = useMemo(
+    () =>
+      timelineRowsToDisplayRows(timelineRows as Array<EntityTimelineQueryRow>),
+    [timelineRows]
   )
 
-  const typedRuns = timelineData.runs
-  const typedInbox = timelineData.inbox
-  const typedWakes = timelineData.wakes
-
-  const timeline = useMemo(
-    () => buildSections(typedRuns, typedInbox, typedWakes),
-    [typedRuns, typedInbox, typedWakes]
-  )
-
-  const { data: stopped = [] } = useLiveQuery(
-    (q: any) => q.from({ entityStopped: db.collections.entityStopped as any }),
-    [db]
-  )
-
-  const closed = (stopped as Array<EntityStopped>).length > 0
+  const closed = db.collections.entityStopped.toArray.length > 0
 
   const lastAgentIndex = useMemo(() => {
-    for (let i = timeline.length - 1; i >= 0; i--) {
-      if (timeline[i]!.kind === `agent_response`) return i
+    for (let i = displayRows.length - 1; i >= 0; i--) {
+      const row = displayRows[i]!
+      if (
+        row.kind === `run` ||
+        (row.kind === `section` && row.section.kind === `agent_response`)
+      ) {
+        return i
+      }
     }
     return -1
-  }, [timeline])
+  }, [displayRows])
 
   return (
     <Box flexDirection="column">
-      <Box marginBottom={1}>
+      <Box marginBottom={1} width="100%">
         <Text dimColor>
           {`Observing ${entityUrl}${closed ? `` : ` (Ctrl+C to stop)`}`}
         </Text>
       </Box>
       <Box
+        width="100%"
         borderStyle="single"
         borderColor="gray"
         flexDirection="column"
         paddingX={1}
       >
-        {timeline.length === 0 ? (
+        {displayRows.length === 0 ? (
           <Text dimColor>Waiting for events...</Text>
         ) : null}
-        {timeline.map((section, i) => {
+        {displayRows.map((row, i) => {
+          if (row.kind === `run`) {
+            return (
+              <AgentRunView
+                key={row.key}
+                run={row.run}
+                label={entityUrl}
+                isStreaming={
+                  !closed &&
+                  i === lastAgentIndex &&
+                  row.run.status !== `completed`
+                }
+              />
+            )
+          }
+
+          const { section } = row
           if (section.kind === `user_message`) {
             return (
               <UserMessageView
-                key={`msg-${i}`}
+                key={row.key}
                 msg={{
                   key: `timeline-${i}`,
                   from: section.from ?? `user`,
@@ -465,12 +751,12 @@ function ObserveView({
           }
 
           if (section.kind === `wake`) {
-            return <WakeView key={`wake-${i}`} section={section} />
+            return <WakeView key={row.key} section={section} />
           }
 
           return (
             <AgentResponseView
-              key={`agent-${i}`}
+              key={row.key}
               section={section}
               label={entityUrl}
               isStreaming={!closed && i === lastAgentIndex && !section.done}

@@ -5,6 +5,9 @@ import {
   ObserveExitHotkey,
   ToolCallView,
   ToolResultView,
+  compareRunItems,
+  createMessageSendBody,
+  runItemsToContentItems,
   UserMessageView,
   formatTime,
   truncate,
@@ -60,6 +63,70 @@ describe(`ObserveExitHotkey`, () => {
     await new Promise<void>((resolve) => setImmediate(resolve))
 
     expect(onExit).toHaveBeenCalledOnce()
+  })
+})
+
+describe(`createMessageSendBody`, () => {
+  it(`omits legacy from attribution`, () => {
+    expect(createMessageSendBody(`hello`)).toEqual({
+      payload: { text: `hello` },
+    })
+    expect(createMessageSendBody(`hello`)).not.toHaveProperty(`from`)
+  })
+
+  it(`includes a stable client key when provided`, () => {
+    expect(createMessageSendBody(`hello`, { key: `optimistic-1` })).toEqual({
+      key: `optimistic-1`,
+      payload: { text: `hello` },
+    })
+  })
+})
+
+describe(`run item rendering helpers`, () => {
+  it(`ignores transient missing text content`, () => {
+    expect(
+      runItemsToContentItems([
+        {
+          text: {
+            key: `text-1`,
+            run_id: `run-1`,
+            order: `1`,
+            status: `streaming`,
+            content: undefined,
+          },
+          toolCall: null,
+        } as any,
+      ])
+    ).toEqual([])
+  })
+
+  it(`sorts numeric timeline orders numerically`, () => {
+    const items = [
+      {
+        text: {
+          key: `text-10`,
+          run_id: `run-1`,
+          order: 10,
+          status: `completed`,
+          content: `ten`,
+        },
+        toolCall: null,
+      },
+      {
+        text: {
+          key: `text-2`,
+          run_id: `run-1`,
+          order: 2,
+          status: `completed`,
+          content: `two`,
+        },
+        toolCall: null,
+      },
+    ] as any
+
+    expect(
+      [...items].sort(compareRunItems).map((item) => item.text.key)
+    ).toEqual([`text-2`, `text-10`])
   })
 })
 
