@@ -26,17 +26,12 @@ export function ContextUsageDetails({
   segments,
   modelId,
 }: ContextUsageDetailsProps): React.ReactElement {
-  const usedRatio =
-    usage.contextWindow > 0
-      ? Math.min(1, usage.usedTokens / usage.contextWindow)
-      : 0
-
   return (
     <div className={styles.panel}>
       <div className={styles.header}>
         <span className={styles.title}>Context usage</span>
         <span className={styles.headline}>
-          {formatContextUsagePercent(usedRatio)}
+          {formatContextUsagePercent(usage.ratio)}
         </span>
       </div>
       <div className={styles.subhead}>
