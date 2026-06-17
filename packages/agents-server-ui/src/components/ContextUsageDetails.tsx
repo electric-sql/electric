@@ -15,6 +15,16 @@ interface ContextUsageDetailsProps {
 }
 
 /**
+ * Percent label for a legend row. A non-zero segment that would round to `0%`
+ * shows `<1%` instead, so a visibly-coloured swatch/bar isn't labelled "0%".
+ */
+function formatSegmentPercent(ratio: number): string {
+  return ratio > 0 && Math.round(ratio * 100) === 0
+    ? `<1%`
+    : formatContextUsagePercent(ratio)
+}
+
+/**
  * The hover/click popover body for the context-usage indicator — a stacked
  * composition bar plus a legend of how each part of the prompt fills the
  * window (à la Claude Code's `/context`). System-prompt and tools figures are
@@ -68,7 +78,7 @@ export function ContextUsageDetails({
               {formatTokenCount(seg.tokens)}
             </span>
             <span className={styles.legendPercent}>
-              {formatContextUsagePercent(seg.ratio)}
+              {formatSegmentPercent(seg.ratio)}
             </span>
           </li>
         ))}
