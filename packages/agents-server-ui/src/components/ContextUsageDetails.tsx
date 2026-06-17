@@ -25,11 +25,9 @@ function formatSegmentPercent(ratio: number): string {
 }
 
 /**
- * The hover/click popover body for the context-usage indicator — a stacked
- * composition bar plus a legend of how each part of the prompt fills the
- * window (à la Claude Code's `/context`). System-prompt and tools figures are
- * approximate; the "Messages" bucket is the real cache-inclusive remainder, so
- * the segments always sum to the gauge.
+ * Popover body for the context-usage indicator: a stacked composition bar +
+ * legend (à la Claude Code's `/context`). System/tools are estimates; "Messages"
+ * is the real remainder, so the segments always sum to the gauge.
  */
 export function ContextUsageDetails({
   usage,

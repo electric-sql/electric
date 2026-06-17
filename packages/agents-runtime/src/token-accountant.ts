@@ -89,12 +89,10 @@ const CONTEXT_BREAKDOWN_LABELS: Record<ContextBreakdownKey, string> = {
 }
 
 /**
- * Decompose a step's context usage into display segments: the *estimated*
- * stable parts (system prompt + tools, char/4 approximations persisted on the
- * step) plus the real "messages" remainder and the free space. The used
- * segments (everything but `free`) sum to `usage.usedTokens` and all four sum
- * to the window — so the breakdown always agrees with the gauge even though the
- * part estimates are approximate. Modelled on Claude Code's `/context` view.
+ * Decompose a step's usage into display segments: the estimated stable parts
+ * (system + tools) plus the real "messages" remainder and free space. The used
+ * segments sum to `usedTokens` and all four to the window, so the breakdown
+ * always agrees with the gauge. Modelled on Claude Code's `/context`.
  */
 export function computeContextBreakdown(
   usage: ContextUsage,
