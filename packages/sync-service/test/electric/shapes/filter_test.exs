@@ -105,11 +105,11 @@ defmodule Electric.Shapes.FilterTest do
         Filter.new()
         |> Filter.add_shape(
           "s1",
-          Shape.new!("uuid_table", where: "id = '#{uuid1}'::uuid", inspector: inspector)
+          Shape.new!("uuid_table", where: "id = '#{uuid1}'", inspector: inspector)
         )
         |> Filter.add_shape(
           "s2",
-          Shape.new!("uuid_table", where: "id = '#{uuid2}'::uuid", inspector: inspector)
+          Shape.new!("uuid_table", where: "id = '#{uuid2}'", inspector: inspector)
         )
 
       index_entries = :ets.tab2list(filter.eq_index_table)
