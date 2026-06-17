@@ -143,6 +143,108 @@ describe(`horton tool composition`, () => {
     await expect(extractFirstUserMessage(ctx)).resolves.toBe(`first`)
   })
 
+  it(`uses realtime mode as an OpenAI orchestrator when a session is active`, async () => {
+    const registry = createEntityRegistry()
+    registerHorton(registry, { workingDirectory: `/tmp`, modelCatalog })
+    const previousOpenAIKey = process.env.OPENAI_API_KEY
+    process.env.OPENAI_API_KEY = `sk-test`
+    const realtimeRun = vi.fn(async () => {})
+    const useRealtime = vi.fn(() => ({ run: realtimeRun }))
+    const useAgent = vi.fn(() => ({ run: vi.fn(async () => {}) }))
+    const fakeCtx = {
+      args: {},
+      electricTools: [],
+      events: [],
+      firstWake: false,
+      tags: { title: `Existing title` },
+      db: { collections: { inbox: { toArray: [] } } },
+      sandbox: {
+        workingDirectory: `/work`,
+        readFile: vi.fn(async () => {
+          throw new Error(`ENOENT`)
+        }),
+      },
+      slashCommands: { replaceOwned: vi.fn() },
+      insertContext: vi.fn(),
+      removeContext: vi.fn(),
+      getContext: vi.fn(),
+      useContext: vi.fn(),
+      getGoal: vi.fn(() => undefined),
+      updateGoalUsage: vi.fn(),
+      useAgent,
+      useRealtime,
+      realtime: {
+        activeSession: () => ({
+          key: `realtime-session:rt-1`,
+          kind: `realtime-session`,
+          id: `rt-1`,
+          provider: `openai`,
+          model: `gpt-realtime-2`,
+          status: `active`,
+          startedAt: `2026-06-09T12:00:00.000Z`,
+          retention: `forever`,
+          streams: {
+            audio_in: `/horton/demo/realtime/rt-1/audio/in`,
+            audio_out: `/horton/demo/realtime/rt-1/audio/out`,
+            control_in: `/horton/demo/realtime/rt-1/control/in`,
+            control_out: `/horton/demo/realtime/rt-1/control/out`,
+          },
+        }),
+      },
+    } as any
+
+    try {
+      await registry
+        .get(`horton`)!
+        .definition.handler(fakeCtx, { type: `inbox` } as any)
+    } finally {
+      if (previousOpenAIKey === undefined) {
+        delete process.env.OPENAI_API_KEY
+      } else {
+        process.env.OPENAI_API_KEY = previousOpenAIKey
+      }
+    }
+
+    expect(useAgent).not.toHaveBeenCalled()
+    expect(useRealtime).toHaveBeenCalledTimes(1)
+    expect(realtimeRun).toHaveBeenCalledTimes(1)
+    const realtimeConfig = (
+      useRealtime.mock.calls as unknown as Array<
+        [
+          {
+            provider: { id: string; model: string }
+            audio: {
+              inputTranscription?: {
+                model?: string
+                delay?: string
+              }
+            }
+            toolPolicy: { direct: Array<string> }
+          },
+        ]
+      >
+    )[0]![0]
+    expect(realtimeConfig.provider).toMatchObject({
+      id: `openai`,
+      model: `gpt-realtime-2`,
+    })
+    expect(realtimeConfig.audio.inputTranscription).toEqual({
+      model: `gpt-realtime-whisper`,
+      delay: `minimal`,
+    })
+    expect(realtimeConfig.toolPolicy.direct).toEqual(
+      expect.arrayContaining([
+        `web_search`,
+        `fetch_url`,
+        `spawn_worker`,
+        `send`,
+      ])
+    )
+    expect(realtimeConfig.toolPolicy.direct).not.toEqual(
+      expect.arrayContaining([`bash`, `read`, `write`, `edit`])
+    )
+  })
+
   it(`orders title candidates with the _seq fallback convention`, async () => {
     const ctx = {
       db: {

@@ -94,6 +94,13 @@ function attachmentManifest(value: Record<string, unknown>) {
   }
 }
 
+function decodeAppend(call: unknown[]): Record<string, any> {
+  const body = call[1]
+  const bytes =
+    body instanceof Uint8Array ? body : new TextEncoder().encode(String(body))
+  return JSON.parse(new TextDecoder().decode(bytes)) as Record<string, any>
+}
+
 describe(`ElectricAgentsManager.validateWriteEvent`, () => {
   it(`validates delete events against old_value instead of value`, async () => {
     const manager = createManager()
@@ -137,6 +144,149 @@ describe(`ElectricAgentsManager.validateWriteEvent`, () => {
       false
     )
     expect((manager as any).isValidWriteToken(entity, `claim-token`)).toBe(true)
+  })
+})
+
+describe(`ElectricAgentsManager realtime sessions`, () => {
+  it(`creates durable IO streams and records a replayable session manifest`, async () => {
+    const create = vi.fn()
+    const append = vi.fn()
+    const { manager } = createAttachmentManager({
+      streamClient: { create, append },
+    })
+
+    const result = await manager.createRealtimeSession(`/chat/session-1`, {
+      id: `rt-1`,
+      provider: `openai`,
+      model: `gpt-realtime-2`,
+      voice: `cedar`,
+      reasoningEffort: `medium`,
+      interruptResponse: false,
+      inputAudio: { codec: `pcm16`, sampleRate: 16_000, channels: 1 },
+      outputAudio: { codec: `pcm16`, sampleRate: 24_000, channels: 1 },
+      meta: { source: `test` },
+    })
+
+    expect(result.streams).toEqual({
+      audio_in: `/chat/session-1/realtime/rt-1/audio/in`,
+      audio_out: `/chat/session-1/realtime/rt-1/audio/out`,
+      control_in: `/chat/session-1/realtime/rt-1/control/in`,
+      control_out: `/chat/session-1/realtime/rt-1/control/out`,
+    })
+    expect(create).toHaveBeenCalledTimes(4)
+    expect(create.mock.calls).toEqual([
+      [
+        `/chat/session-1/realtime/rt-1/audio/in`,
+        { contentType: `audio/pcm; rate=16000; channels=1` },
+      ],
+      [
+        `/chat/session-1/realtime/rt-1/audio/out`,
+        { contentType: `audio/pcm; rate=24000; channels=1` },
+      ],
+      [
+        `/chat/session-1/realtime/rt-1/control/in`,
+        { contentType: `application/json` },
+      ],
+      [
+        `/chat/session-1/realtime/rt-1/control/out`,
+        { contentType: `application/json` },
+      ],
+    ])
+
+    expect(append).toHaveBeenCalledTimes(3)
+    const manifestEvent = decodeAppend(append.mock.calls[0]!)
+    const sessionEvent = decodeAppend(append.mock.calls[1]!)
+    const wakeEvent = decodeAppend(append.mock.calls[2]!)
+
+    expect(manifestEvent).toMatchObject({
+      type: `manifest`,
+      key: `realtime-session:rt-1`,
+      headers: { operation: `upsert` },
+      value: {
+        kind: `realtime-session`,
+        id: `rt-1`,
+        provider: `openai`,
+        model: `gpt-realtime-2`,
+        voice: `cedar`,
+        reasoningEffort: `medium`,
+        interruptResponse: false,
+        status: `requested`,
+        streams: result.streams,
+        retention: `forever`,
+        meta: { source: `test` },
+      },
+    })
+    expect(sessionEvent).toMatchObject({
+      type: `realtime_session`,
+      key: `realtime-session:rt-1`,
+      value: {
+        session_id: `rt-1`,
+        provider: `openai`,
+        model: `gpt-realtime-2`,
+        voice: `cedar`,
+        reasoning_effort: `medium`,
+        interrupt_response: false,
+        status: `requested`,
+        streams: result.streams,
+      },
+    })
+    expect(wakeEvent).toMatchObject({
+      type: `wake`,
+      key: `wake-realtime-session-rt-1`,
+      value: {
+        source: `/chat/session-1`,
+        timeout: false,
+        changes: [
+          {
+            collection: `realtimeSessions`,
+            kind: `insert`,
+            key: `realtime-session:rt-1`,
+            from: `/_electric/server`,
+            payload: {
+              type: `realtime_session.started`,
+              sessionId: `rt-1`,
+              voice: `cedar`,
+              reasoningEffort: `medium`,
+              interruptResponse: false,
+              streams: result.streams,
+            },
+            message_type: `realtime_session.started`,
+          },
+        ],
+      },
+    })
+  })
+
+  it(`rejects non-OpenAI realtime providers in V1`, async () => {
+    const { manager } = createAttachmentManager()
+
+    await expect(
+      manager.createRealtimeSession(`/chat/session-1`, {
+        id: `rt-1`,
+        provider: `other`,
+        model: `other-realtime`,
+      })
+    ).rejects.toMatchObject({
+      status: 400,
+      message: `Realtime provider "other" is not supported; expected "openai"`,
+    })
+  })
+
+  it(`rejects realtime session ids that start with a dot`, async () => {
+    const { manager } = createAttachmentManager()
+
+    await expect(
+      manager.createRealtimeSession(`/chat/session-1`, {
+        id: `.rt-1`,
+        provider: `openai`,
+        model: `gpt-realtime-2`,
+      })
+    ).rejects.toMatchObject({
+      status: 400,
+      message:
+        `realtime session id must not be empty, must not start with ".", ` +
+        `and must not contain forward slashes`,
+    })
   })
 })
 

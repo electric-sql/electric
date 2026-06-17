@@ -2149,6 +2149,10 @@ export async function processWake(
           activeSignalHandler = handler
         },
         hydratedWebhookSourceWake: await hydrateCurrentWebhookSourceWake(),
+        realtimeStreams: {
+          baseUrl,
+          headers: serverHeaders,
+        },
         doObserve,
         doSpawn,
         doFork,

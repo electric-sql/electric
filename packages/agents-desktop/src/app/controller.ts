@@ -11,6 +11,7 @@ import * as DesktopIpc from '../ipc/register'
 import { ensureRuntimeEntry as ensureRuntimeEntryInStore } from '../runtime/entries'
 import { createRuntimeController } from '../runtime/controller'
 import * as SettingsBootstrap from '../settings/bootstrap'
+import * as RealtimeSettings from '../settings/realtime'
 import * as ServerSelection from '../settings/selection'
 import { saveDesktopSettings } from '../settings/store'
 import { desktopStateForWindow as desktopStateForWindowImpl } from '../state/desktop-state'
@@ -30,6 +31,7 @@ import type {
   DesktopMenuSection,
   DesktopMenuState,
   DesktopState,
+  RealtimeSettings as RealtimeSettingsConfig,
   RuntimeEntry,
   ServerConfig,
 } from '../shared/types'
@@ -328,6 +330,20 @@ export function createDesktopMainController(ctx: DesktopAppContext) {
     runtime.refreshPowerSaveBlocker()
   }
 
+  const getRealtimeSettingsStatus = async () =>
+    await RealtimeSettings.realtimeSettingsStatus({
+      settings,
+      apiKeys,
+      launchEnv: ctx.envApiKeysSnapshot,
+    })
+
+  const setRealtimeSettings = async (
+    next: RealtimeSettingsConfig
+  ): Promise<void> => {
+    settings.realtime = RealtimeSettings.normalizeRealtimeSettings(next)
+    await saveSettings()
+  }
+
   const syncLaunchAtLoginSetting = async (): Promise<void> => {
     await LoginItems.setLaunchAtLogin(settings.launchAtLogin === true)
   }
@@ -438,6 +454,8 @@ export function createDesktopMainController(ctx: DesktopAppContext) {
     setLaunchAtLogin,
     getPreventAppSuspension,
     setPreventAppSuspension,
+    getRealtimeSettingsStatus,
+    setRealtimeSettings,
   }
 
   const loadSettings = (): Promise<void> =>

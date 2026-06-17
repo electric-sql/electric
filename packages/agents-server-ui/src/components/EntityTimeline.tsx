@@ -46,7 +46,7 @@ import { useCurrentPrincipal } from '../hooks/useCurrentPrincipal'
 import { Icon, IconButton, ScrollArea, Stack, Text, Tooltip } from '../ui'
 import { UserMessage } from './UserMessage'
 import type { ForkFromHereAction, UserMessageAttachment } from './UserMessage'
-import { AgentResponseLive } from './AgentResponse'
+import { AgentResponse, AgentResponseLive } from './AgentResponse'
 import { CommentBubble } from './CommentBubble'
 import { InlineEventCard } from './InlineEventCard'
 import { InlineStatusBadge } from './InlineStatusBadge'
@@ -108,6 +108,20 @@ function readInboxText(payload: unknown): string {
 
 function readInboxPayloadDisplay(payload: unknown): string {
   return stringifyPayload(payload, 2)
+}
+
+function isRealtimeSessionWake(row: RenderTimelineRow): boolean {
+  const changes = row.wake?.payload.changes
+  if (!Array.isArray(changes)) return false
+  return changes.some((change) => {
+    if (!change || typeof change !== `object`) return false
+    const payload = (change as { payload?: unknown }).payload
+    return (
+      !!payload &&
+      typeof payload === `object` &&
+      (payload as { type?: unknown }).type === `realtime_session.started`
+    )
+  })
 }
 
 function stringifySearchPayload(value: unknown): string {
@@ -243,6 +257,13 @@ function estimateRowHeight(
     const lines = Math.max(1, Math.ceil(row.comment.body.length / charsPerLine))
     return Math.max(58, 42 + lines * lineHeight) + timelineRowGap(row, nextRow)
   }
+  if (row.realtimeTranscript) {
+    const lines = Math.max(
+      1,
+      Math.ceil(row.realtimeTranscript.text.length / charsPerLine)
+    )
+    return Math.max(64, 48 + lines * lineHeight) + timelineRowGap(row)
+  }
   if (row.wake || row.signal || row.manifest) {
     return 76 + timelineRowGap(row, nextRow)
   }
@@ -299,6 +320,7 @@ function timelineRowSearchText(
 ): string {
   if (row.comment) return row.comment.body
   if (row.inbox) return readInboxText(row.inbox.payload)
+  if (row.realtimeTranscript) return row.realtimeTranscript.text
   if (row.wake) {
     return wakeSectionText({
       kind: `wake`,
@@ -316,6 +338,7 @@ function timelineRowLabel(row: RenderTimelineRow): string {
   if (row.comment) return `Comment`
   if (row.inbox?.from_agent) return `Agent message`
   if (row.inbox) return `User message`
+  if (row.realtimeTranscript) return `Voice message`
   if (row.wake) return `Wake`
   if (row.signal) return `Signal`
   if (row.error) return `Error`
@@ -984,6 +1007,7 @@ function manifestKindLabel(manifest: Manifest): string {
     case `goal`:
       return `Goal`
   }
+  return manifest.kind
 }
 
 function manifestTitle(manifest: Manifest): string {
@@ -1000,6 +1024,7 @@ function manifestTitle(manifest: Manifest): string {
     case `goal`:
       return manifest.id
   }
+  return manifest.key
 }
 
 function manifestMeta(manifest: Manifest): string {
@@ -1023,6 +1048,7 @@ function manifestMeta(manifest: Manifest): string {
     case `goal`:
       return manifest.status ?? `active`
   }
+  return ``
 }
 
 function manifestDetails(
@@ -1093,6 +1119,7 @@ function manifestDetails(
         },
       ]
   }
+  return []
 }
 
 function manifestIcon(manifest: Manifest) {
@@ -1287,6 +1314,46 @@ const TimelineRow = memo(function TimelineRow({
         stopPending={stopPending}
         onStop={onStopGeneration}
         onReply={onReplyToRow}
+      />
+    )
+  }
+
+  if (row.realtimeTranscript) {
+    if (row.realtimeTranscript.text.trim().length === 0) {
+      return <></>
+    }
+    const timestamp = Date.parse(row.realtimeTranscript.created_at)
+    if (row.realtimeTranscript.direction === `output`) {
+      const isStreamingTranscript = row.realtimeTranscript.status !== `final`
+      return (
+        <AgentResponse
+          section={{
+            kind: `agent_response`,
+            items: [{ kind: `text`, text: row.realtimeTranscript.text }],
+            ...(isStreamingTranscript ? {} : { done: true as const }),
+          }}
+          isStreaming={!entityStopped && isStreamingTranscript}
+          timestamp={Number.isFinite(timestamp) ? timestamp : null}
+          renderWidth={renderWidth}
+        />
+      )
+    }
+    return (
+      <UserMessage
+        section={{
+          kind: `user_message`,
+          from: currentPrincipal,
+          text: row.realtimeTranscript.text,
+          timestamp: Number.isFinite(timestamp) ? timestamp : Date.now(),
+          isInitial: false,
+        }}
+        currentPrincipal={currentPrincipal}
+        usersById={usersById}
+        showStop={
+          stopUserMessageKey !== null && row.$key === stopUserMessageKey
+        }
+        stopPending={stopPending}
+        onStop={onStopGeneration}
       />
     )
   }
@@ -1492,7 +1559,11 @@ export function EntityTimeline({
   const previousStreamingAgentKeyRef = useRef<string | null>(null)
   const textColumnWidth = Math.max(0, contentWidth - CHAT_SURFACE_GUTTER)
   const displayRows = useMemo(
-    () => rows.filter((row) => !isAttachmentManifest(row.manifest)),
+    () =>
+      rows.filter(
+        (row) =>
+          !isAttachmentManifest(row.manifest) && !isRealtimeSessionWake(row)
+      ),
     [rows]
   )
   const attachmentsByInboxKey = useMemo(() => {
@@ -1548,7 +1619,7 @@ export function EntityTimeline({
     if (streamingIndex < 0) return null
     for (let index = streamingIndex - 1; index >= 0; index--) {
       const row = displayRows[index]
-      if (row?.inbox) {
+      if (row?.inbox || row?.realtimeTranscript) {
         return row.$key
       }
     }
@@ -1564,6 +1635,9 @@ export function EntityTimeline({
     for (const row of displayRows) {
       if (row.inbox) {
         const timestamp = Date.parse(row.inbox.timestamp)
+        lastUserTimestamp = Number.isFinite(timestamp) ? timestamp : null
+      } else if (row.realtimeTranscript) {
+        const timestamp = Date.parse(row.realtimeTranscript.created_at)
         lastUserTimestamp = Number.isFinite(timestamp) ? timestamp : null
       } else if (row.run) {
         timestampByRowKey.set(row.$key, lastUserTimestamp)

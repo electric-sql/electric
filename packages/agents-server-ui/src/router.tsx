@@ -53,6 +53,7 @@ import { GeneralPage } from './components/settings/pages/GeneralPage'
 import { AccountPage } from './components/settings/pages/AccountPage'
 import { AppearancePage } from './components/settings/pages/AppearancePage'
 import { CredentialsPage } from './components/settings/pages/CredentialsPage'
+import { RealtimePage } from './components/settings/pages/RealtimePage'
 import { CommandLinePage } from './components/settings/pages/CommandLinePage'
 import { ServersPage } from './components/settings/pages/ServersPage'
 import { McpServersPage } from './components/settings/pages/McpServersPage'
@@ -64,6 +65,7 @@ const SETTINGS_CATEGORY_IDS: ReadonlyArray<SettingsCategoryId> = [
   `account`,
   `servers`,
   `credentials`,
+  `realtime`,
   `command-line`,
   `appearance`,
   `local-runtime`,
@@ -564,6 +566,8 @@ function SettingsCategoryPage(): React.ReactElement {
       return <ServersPage />
     case `credentials`:
       return <CredentialsPage />
+    case `realtime`:
+      return <RealtimePage />
     case `command-line`:
       return <CommandLinePage />
     case `local-runtime`:

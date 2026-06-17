@@ -33,6 +33,7 @@ import { entityTypesRouter } from './entity-types-router.js'
 import { pgSyncRouter } from './pg-sync-router.js'
 import { getRequestSpan } from './hooks.js'
 import { observationsRouter } from './observations-router.js'
+import { realtimeRouter } from './realtime-router.js'
 import { runnersRouter } from './runners-router.js'
 import { routeBody, validateOptionalJsonBody, withSchema } from './schema.js'
 import { withLeadingSlash } from './tenant-stream-paths.js'
@@ -138,6 +139,7 @@ internalRouter.all(`/entities/*`, entitiesRouter.fetch)
 internalRouter.all(`/entity-types/*`, entityTypesRouter.fetch)
 internalRouter.all(`/pg-sync/*`, pgSyncRouter.fetch)
 internalRouter.all(`/observations/*`, observationsRouter.fetch)
+internalRouter.all(`/realtime/*`, realtimeRouter.fetch)
 internalRouter.get(`/electric/*`, electricProxyRouter.fetch)
 internalRouter.all(`*`, () => status(404))
 

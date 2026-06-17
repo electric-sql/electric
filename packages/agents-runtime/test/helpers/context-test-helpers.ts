@@ -304,6 +304,10 @@ export function createTestHandlerContext(
     wakeEvent?: WakeEvent
     hydratedWebhookSourceWake?: HydratedWebhookSourceWake | null
     prepareAgentRun?: () => Promise<void>
+    realtimeStreams?: {
+      baseUrl: string
+      headers?: Record<string, string>
+    }
   } = {}
 ) {
   const db = opts.db ?? buildStreamFixture([])
@@ -334,6 +338,7 @@ export function createTestHandlerContext(
       payload: `hi`,
     },
     hydratedWebhookSourceWake: opts.hydratedWebhookSourceWake,
+    realtimeStreams: opts.realtimeStreams,
     prepareAgentRun: opts.prepareAgentRun,
     doObserve: vi.fn(),
     doSpawn: vi.fn(),

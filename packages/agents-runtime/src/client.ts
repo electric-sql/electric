@@ -13,6 +13,24 @@ export {
   TIMELINE_ORDER_FALLBACK,
 } from './entity-timeline'
 export {
+  DEFAULT_OPENAI_REALTIME_MODEL,
+  DEFAULT_OPENAI_REALTIME_REASONING_EFFORT,
+  DEFAULT_OPENAI_REALTIME_VOICE,
+  OPENAI_REALTIME_MODELS,
+  OPENAI_REALTIME_REASONING_EFFORTS,
+  OPENAI_REALTIME_VOICES,
+  isOpenAIRealtimeModel,
+  isOpenAIRealtimeReasoningEffort,
+  isOpenAIRealtimeVoice,
+} from './realtime-options'
+export type {
+  OpenAIRealtimeReasoningEffort,
+  RealtimeModelChoice,
+  RealtimeProviderId,
+  RealtimeReasoningEffortChoice,
+  RealtimeVoiceChoice,
+} from './realtime-options'
+export {
   canonicalPgSyncOptions,
   db,
   entities,
@@ -60,6 +78,11 @@ export type {
   SlashCommandTrigger,
 } from './composer-input'
 export type { AgentsClient, AgentsClientConfig } from './agents-client'
+export type {
+  RealtimeAudioOptions,
+  RealtimeSessionStartResult,
+  StartRealtimeSessionOptions,
+} from './runtime-server-client'
 export type {
   AttachmentRole,
   AttachmentStatus,

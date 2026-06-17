@@ -9,6 +9,7 @@ const { mockState } = vi.hoisted(() => ({
     ensureCronStream: vi.fn(),
     registerPgSyncSource: vi.fn(),
     signalEntity: vi.fn(),
+    startRealtimeSession: vi.fn(),
     ensureStream: vi.fn(),
     createStreamDB: vi.fn(),
     preload: vi.fn(),
@@ -27,6 +28,7 @@ vi.mock(`../src/runtime-server-client`, () => ({
     ensureCronStream: mockState.ensureCronStream,
     registerPgSyncSource: mockState.registerPgSyncSource,
     signalEntity: mockState.signalEntity,
+    startRealtimeSession: mockState.startRealtimeSession,
     ensureStream: mockState.ensureStream,
   }),
 }))
@@ -55,6 +57,20 @@ describe(`createAgentsClient`, () => {
     mockState.ensureStream = vi.fn().mockResolvedValue(`/_webhooks/repo`)
     mockState.createStreamDB = vi.fn()
     mockState.signalEntity = vi.fn().mockResolvedValue({ txid: 123 })
+    mockState.startRealtimeSession = vi.fn().mockResolvedValue({
+      sessionId: `rt-1`,
+      entityUrl: `/horton/demo`,
+      provider: `openai`,
+      model: `gpt-realtime-2`,
+      status: `requested`,
+      startedAt: `2026-06-09T10:00:00.000Z`,
+      streams: {
+        audio_in: `/horton/demo/realtime/rt-1/audio/in`,
+        audio_out: `/horton/demo/realtime/rt-1/audio/out`,
+        control_in: `/horton/demo/realtime/rt-1/control/in`,
+        control_out: `/horton/demo/realtime/rt-1/control/out`,
+      },
+    })
     mockState.observedDb = {
       preload: vi.fn().mockResolvedValue(undefined),
       collections: {
@@ -188,6 +204,31 @@ describe(`createAgentsClient`, () => {
       entityUrl: `/chat/demo`,
       signal: `SIGKILL`,
       reason: `cleanup`,
+    })
+  })
+
+  it(`exposes realtime session start through the server client`, async () => {
+    const client = createAgentsClient({
+      baseUrl: `http://electric-agents.test`,
+    })
+
+    await expect(
+      client.startRealtimeSession({
+        entityUrl: `/horton/demo`,
+        provider: `openai`,
+        model: `gpt-realtime-2`,
+      })
+    ).resolves.toMatchObject({
+      sessionId: `rt-1`,
+      streams: {
+        audio_in: `/horton/demo/realtime/rt-1/audio/in`,
+      },
+    })
+
+    expect(mockState.startRealtimeSession).toHaveBeenCalledWith({
+      entityUrl: `/horton/demo`,
+      provider: `openai`,
+      model: `gpt-realtime-2`,
     })
   })
 

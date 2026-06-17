@@ -19,6 +19,26 @@ export interface StreamAppendResult {
   offset: string
 }
 
+export interface StreamAppendOptions {
+  close?: boolean
+  contentType?: string
+  batching?: boolean
+}
+
+export interface StreamIdempotentAppendOptions {
+  producerId: string
+  epoch?: number
+  contentType?: string
+  batching?: boolean
+}
+
+export interface StreamProducerHeaderAppendOptions {
+  producerId: string
+  epoch: number
+  seq: number
+  contentType?: string
+}
+
 export interface StreamMessage {
   data: Uint8Array
   offset: string
@@ -286,7 +306,7 @@ export class StreamClient {
   async append(
     path: string,
     data: Uint8Array | string,
-    opts?: { close?: boolean }
+    opts: StreamAppendOptions = {}
   ): Promise<StreamAppendResult> {
     return await withSpan(`stream.append`, async (span) => {
       span.setAttributes({
@@ -296,8 +316,8 @@ export class StreamClient {
       const handle = new DurableStream({
         url: this.streamUrl(path),
         headers: this.streamHeaders(),
-        contentType: `application/json`,
-        batching: false,
+        contentType: opts.contentType ?? `application/json`,
+        batching: opts.batching ?? false,
       })
       if (opts?.close) {
         const result = await handle.close({ body: data })
@@ -313,7 +333,7 @@ export class StreamClient {
   async appendIdempotent(
     path: string,
     data: Uint8Array | string,
-    opts: { producerId: string; epoch?: number }
+    opts: StreamIdempotentAppendOptions
   ): Promise<void> {
     return await withSpan(`stream.appendIdempotent`, async (span) => {
       span.setAttributes({
@@ -323,7 +343,8 @@ export class StreamClient {
       const stream = new DurableStream({
         url: this.streamUrl(path),
         headers: this.streamHeaders(),
-        contentType: `application/json`,
+        contentType: opts.contentType ?? `application/json`,
+        batching: opts.batching,
       })
       const producer = new IdempotentProducer(stream, opts.producerId, {
         epoch: opts.epoch ?? 0,
@@ -341,7 +362,7 @@ export class StreamClient {
   async appendWithProducerHeaders(
     path: string,
     data: Uint8Array | string,
-    opts: { producerId: string; epoch: number; seq: number }
+    opts: StreamProducerHeaderAppendOptions
   ): Promise<void> {
     return await withSpan(`stream.appendWithProducerHeaders`, async (span) => {
       span.setAttributes({
@@ -349,7 +370,7 @@ export class StreamClient {
         [ATTR.STREAM_OP]: `appendWithProducerHeaders`,
       })
       const headers: Record<string, string> = {
-        'content-type': `application/json`,
+        'content-type': opts.contentType ?? `application/json`,
         'Producer-Id': opts.producerId,
         'Producer-Epoch': String(opts.epoch),
         'Producer-Seq': String(opts.seq),

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowUp, Square } from 'lucide-react'
+import { ArrowUp, AudioLines, Square } from 'lucide-react'
 import { useLiveQuery } from '@tanstack/react-db'
 import type { EntityStreamDBWithActions } from '@electric-ax/agents-runtime/client'
 import {
@@ -18,6 +18,11 @@ import {
   parseGoalCommand,
   serializeComposerInput,
 } from '@electric-ax/agents-runtime/client'
+import {
+  startRealtimeAudioSession,
+  type RealtimeAudioSession,
+} from '../lib/realtime-audio'
+import { useRealtimeAvailability } from '../hooks/useRealtimeAvailability'
 import { ComposerEditor } from './ComposerEditor'
 import { ComposerShell } from './ComposerShell'
 import { Icon, Stack, Text, Tooltip } from '../ui'
@@ -70,6 +75,10 @@ export function MessageInput({
   drawer,
   onSend,
   onStop,
+  autoStartRealtimeSignal,
+  autoStartRealtimeInitialText,
+  autoStartRealtimeGreetIfSilent = false,
+  onRealtimeAutoStartConsumed,
 }: {
   db: EntityStreamDBWithActions | null
   baseUrl: string
@@ -91,6 +100,10 @@ export function MessageInput({
   onClearCommentTarget?: () => void
   onSend?: () => void
   onStop?: () => void
+  autoStartRealtimeSignal?: string | null
+  autoStartRealtimeInitialText?: string
+  autoStartRealtimeGreetIfSilent?: boolean
+  onRealtimeAutoStartConsumed?: () => void
   /**
    * Optional content rendered above the composer, sharing its docked
    * width and lift into the timeline above. The composer is z-indexed
@@ -117,7 +130,13 @@ export function MessageInput({
     key: string
     originalText: string
   } | null>(null)
+  const [realtimePending, setRealtimePending] = useState(false)
+  const [realtimeActive, setRealtimeActive] = useState(false)
+  const [realtimeInputLevel, setRealtimeInputLevel] = useState(0)
+  const realtimeSessionRef = useRef<RealtimeAudioSession | null>(null)
+  const handledAutoStartRealtimeRef = useRef<string | null>(null)
   const composerFocusRef = useRef<{ focus: () => void } | null>(null)
+  const realtimeAvailability = useRealtimeAvailability()
   const inputDisabled = disabled || writeDisabled
   const isCommentMode = composerMode === `comment`
   const attachmentsDisabled =
@@ -223,10 +242,25 @@ export function MessageInput({
   const showStop =
     !isCommentMode &&
     generationActive &&
+    !realtimeActive &&
     inputText.length === 0 &&
     attachmentCount === 0 &&
     !disabled
   const canStop = showStop && !stopPending && !stopDisabled
+  const canStartRealtime =
+    !inputDisabled &&
+    !editingMessage &&
+    !isCommentMode &&
+    attachmentCount === 0 &&
+    Boolean(baseUrl) &&
+    realtimeAvailability.canStart
+
+  useEffect(() => {
+    return () => {
+      void realtimeSessionRef.current?.stop()
+      realtimeSessionRef.current = null
+    }
+  }, [])
 
   const handleSubmit = useCallback(
     (composerPayload?: ComposerInputPayload) => {
@@ -254,6 +288,16 @@ export function MessageInput({
         return
       }
       const files = imageAttachmentsEnabled ? attachments : []
+      if (realtimeSessionRef.current && !editingMessage && files.length === 0) {
+        const session = realtimeSessionRef.current
+        setValue(``)
+        onSend?.()
+        session.sendText(text).catch((err: Error) => {
+          setError(err.message)
+          setValue((current) => (current ? current : text))
+        })
+        return
+      }
       const tx = editingMessage
         ? updateAction?.({
             key: editingMessage.key,
@@ -317,6 +361,102 @@ export function MessageInput({
     }
     handleSubmit()
   }, [canStop, handleSubmit, onStop])
+
+  const startRealtimeSession = useCallback(
+    ({
+      initialText,
+      greetIfSilent = false,
+    }: { initialText?: string; greetIfSilent?: boolean } = {}) => {
+      if (realtimePending) return
+      setError(null)
+      if (!canStartRealtime) {
+        if (realtimeAvailability.unavailableReason) {
+          setError(realtimeAvailability.unavailableReason)
+        }
+        return
+      }
+      setRealtimePending(true)
+      startRealtimeAudioSession({
+        baseUrl,
+        entityUrl,
+        onInputLevel: setRealtimeInputLevel,
+        initialText,
+        greetIfSilent,
+      })
+        .then((session) => {
+          realtimeSessionRef.current = session
+          setRealtimeActive(true)
+        })
+        .catch((err: Error) => {
+          setError(err.message)
+          setRealtimeInputLevel(0)
+        })
+        .finally(() => {
+          setRealtimePending(false)
+        })
+    },
+    [
+      baseUrl,
+      canStartRealtime,
+      entityUrl,
+      realtimeAvailability.unavailableReason,
+      realtimePending,
+    ]
+  )
+
+  const handleRealtimeToggle = useCallback(() => {
+    if (realtimePending) return
+    setError(null)
+    if (realtimeSessionRef.current) {
+      const session = realtimeSessionRef.current
+      realtimeSessionRef.current = null
+      setRealtimePending(true)
+      session
+        .stop()
+        .catch((err: Error) => setError(err.message))
+        .finally(() => {
+          setRealtimeActive(false)
+          setRealtimeInputLevel(0)
+          setRealtimePending(false)
+        })
+      return
+    }
+    startRealtimeSession()
+  }, [realtimePending, startRealtimeSession])
+
+  useEffect(() => {
+    if (!autoStartRealtimeSignal) return
+    if (handledAutoStartRealtimeRef.current === autoStartRealtimeSignal) return
+    if (realtimeAvailability.loading || realtimePending) return
+    if (!realtimeAvailability.canStart) {
+      handledAutoStartRealtimeRef.current = autoStartRealtimeSignal
+      onRealtimeAutoStartConsumed?.()
+      if (realtimeAvailability.unavailableReason) {
+        setError(realtimeAvailability.unavailableReason)
+      }
+      return
+    }
+    if (!canStartRealtime) return
+    handledAutoStartRealtimeRef.current = autoStartRealtimeSignal
+    onRealtimeAutoStartConsumed?.()
+    if (!realtimeSessionRef.current) {
+      startRealtimeSession({
+        initialText: autoStartRealtimeInitialText,
+        greetIfSilent: autoStartRealtimeGreetIfSilent,
+      })
+    }
+  }, [
+    autoStartRealtimeSignal,
+    autoStartRealtimeGreetIfSilent,
+    autoStartRealtimeInitialText,
+    canStartRealtime,
+    onRealtimeAutoStartConsumed,
+    realtimeAvailability.canStart,
+    realtimeAvailability.loading,
+    realtimeAvailability.unavailableReason,
+    realtimePending,
+    startRealtimeSession,
+  ])
 
   const startEditing = useCallback(
     (message: EntityTimelineData[`inbox`][number]) => {
@@ -394,6 +534,12 @@ export function MessageInput({
   )
 
   const isButtonActive = canSubmit || (showStop && !stopDisabled)
+  const voiceLevel = realtimeActive ? realtimeInputLevel : 0
+  const voiceBars = [
+    Math.max(0.18, Math.min(1, 0.24 + voiceLevel * 0.76)),
+    Math.max(0.24, Math.min(1, 0.34 + voiceLevel * 0.9)),
+    Math.max(0.16, Math.min(1, 0.2 + voiceLevel * 0.82)),
+  ]
   const sendTooltip = showStop
     ? stopDisabled
       ? `Signal permission required`
@@ -403,6 +549,15 @@ export function MessageInput({
       : `Send message`
   const replyPreviewLabel = formatReplyBannerLabel(commentTarget)
   const replyPreviewText = commentTarget?.snapshot.text
+  const realtimeTooltip = realtimeActive
+    ? `Stop voice mode`
+    : attachmentCount > 0
+      ? `Remove attachments to start voice mode`
+      : realtimeAvailability.loading
+        ? `Checking realtime credentials`
+        : (realtimeAvailability.unavailableReason ?? `Start voice mode`)
+  const realtimeButtonDisabled =
+    realtimePending || (!realtimeActive && !canStartRealtime)
   return (
     <Stack direction="column" gap={0} className={styles.root}>
       {drawer?.({
@@ -472,15 +627,61 @@ export function MessageInput({
           ) : null
         }
         controls={
-          imageAttachmentsEnabled && !isCommentMode ? (
-            <AttachmentActionMenu
-              disabled={!canAttachFiles}
-              accept={imageAttachmentDraftPolicy.accept}
-              fileInputRef={fileInputRef}
-              onFilesSelected={addAttachments}
-              onAttach={openAttachmentPicker}
-            />
-          ) : null
+          <>
+            {!isCommentMode ? (
+              <>
+                <Tooltip content={realtimeTooltip} side="top">
+                  <span className={styles.tooltipTrigger}>
+                    <button
+                      type="button"
+                      aria-label={
+                        realtimeActive ? `Stop voice mode` : `Start voice mode`
+                      }
+                      onClick={handleRealtimeToggle}
+                      disabled={realtimeButtonDisabled}
+                      className={[
+                        styles.inlineIconButton,
+                        realtimeActive ? styles.voiceActive : null,
+                      ]
+                        .filter(Boolean)
+                        .join(` `)}
+                    >
+                      <Icon icon={AudioLines} size={2} />
+                    </button>
+                  </span>
+                </Tooltip>
+                <div
+                  className={styles.voiceMeter}
+                  data-active={
+                    realtimeActive || realtimePending ? `true` : `false`
+                  }
+                  aria-hidden="true"
+                >
+                  {voiceBars.map((scale, index) => (
+                    <span
+                      key={index}
+                      className={styles.voiceMeterBar}
+                      style={{
+                        opacity: realtimeActive
+                          ? Math.max(0.38, Math.min(1, scale + 0.12))
+                          : 0.28,
+                        transform: `scaleY(${scale})`,
+                      }}
+                    />
+                  ))}
+                </div>
+              </>
+            ) : null}
+            {imageAttachmentsEnabled && !isCommentMode ? (
+              <AttachmentActionMenu
+                disabled={!canAttachFiles}
+                accept={imageAttachmentDraftPolicy.accept}
+                fileInputRef={fileInputRef}
+                onFilesSelected={addAttachments}
+                onAttach={openAttachmentPicker}
+              />
+            ) : null}
+          </>
         }
         send={
           <Tooltip content={sendTooltip} side="top">

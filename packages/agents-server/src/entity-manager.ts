@@ -14,8 +14,16 @@ import {
   resolveCronScheduleSpec,
   validateComposerInputPayload,
   validateSlashCommandDefinitions,
+  DEFAULT_OPENAI_REALTIME_REASONING_EFFORT,
+  DEFAULT_OPENAI_REALTIME_VOICE,
+  isOpenAIRealtimeModel,
+  isOpenAIRealtimeReasoningEffort,
+  isOpenAIRealtimeVoice,
 } from '@electric-ax/agents-runtime'
-import type { EventPointer } from '@electric-ax/agents-runtime'
+import type {
+  EventPointer,
+  OpenAIRealtimeReasoningEffort,
+} from '@electric-ax/agents-runtime'
 import {
   ErrCodeDuplicateURL,
   ErrCodeEntityPersistFailed,
@@ -113,6 +121,41 @@ type ServerSignalEvent = {
     operation: `insert`
     timestamp: string
     txid: string
+  }
+}
+type RealtimeAudioRequest = {
+  codec?: `pcm16`
+  sampleRate?: number
+  channels?: number
+}
+
+export type RealtimeSessionCreateRequest = {
+  id?: string
+  provider: string
+  model: string
+  voice?: string
+  reasoningEffort?: OpenAIRealtimeReasoningEffort
+  interruptResponse?: boolean
+  inputAudio?: RealtimeAudioRequest
+  outputAudio?: RealtimeAudioRequest
+  meta?: Record<string, unknown>
+}
+
+export type RealtimeSessionCreateResult = {
+  sessionId: string
+  entityUrl: string
+  provider: string
+  model: string
+  voice?: string
+  reasoningEffort?: OpenAIRealtimeReasoningEffort
+  interruptResponse?: boolean
+  status: `requested`
+  startedAt: string
+  streams: {
+    audio_in: string
+    audio_out: string
+    control_in: string
+    control_out: string
   }
 }
 type AttachmentSubjectType = `inbox` | `run` | `text` | `tool_call` | `context`
@@ -272,6 +315,19 @@ function getEntityAttachmentStreamPath(
   return `${entityUrl.replace(/\/+$/, ``)}/attachments/${attachmentId}`
 }
 
+function getRealtimeSessionBasePath(
+  entityUrl: string,
+  sessionId: string
+): string {
+  return `${entityUrl.replace(/\/+$/, ``)}/realtime/${sessionId}`
+}
+
+function realtimeAudioContentType(audio?: RealtimeAudioRequest): string {
+  const sampleRate = audio?.sampleRate ?? 24_000
+  const channels = audio?.channels ?? 1
+  return `audio/pcm; rate=${sampleRate}; channels=${channels}`
+}
+
 function isStreamCreateConflict(error: unknown): boolean {
   return (
     !!error &&
@@ -298,7 +354,17 @@ function validateAttachmentId(id: string): void {
   if (!id || id.includes(`/`) || id.startsWith(`.`)) {
     throw new ElectricAgentsError(
       ErrCodeInvalidRequest,
-      `attachment id must not be empty, start with ".", or contain forward slashes`,
+      `attachment id must not be empty, must not start with ".", and must not contain forward slashes`,
+      400
+    )
+  }
+}
+
+function validateRealtimeSessionId(id: string): void {
+  if (!id || id.includes(`/`) || id.startsWith(`.`)) {
+    throw new ElectricAgentsError(
+      ErrCodeInvalidRequest,
+      `realtime session id must not be empty, must not start with ".", and must not contain forward slashes`,
       400
     )
   }
@@ -2633,6 +2699,195 @@ export class EntityManager {
       this.encodeChangeEvent(envelope as Record<string, unknown>)
     )
     return { txid }
+  }
+
+  async createRealtimeSession(
+    entityUrl: string,
+    req: RealtimeSessionCreateRequest
+  ): Promise<RealtimeSessionCreateResult> {
+    const entity = await this.registry.getEntity(entityUrl)
+    if (!entity) {
+      throw new ElectricAgentsError(ErrCodeNotFound, `Entity not found`, 404)
+    }
+    if (rejectsNormalWrites(entity.status)) {
+      throw new ElectricAgentsError(
+        ErrCodeNotRunning,
+        `Entity is not accepting writes`,
+        409
+      )
+    }
+    if (this.isForkWorkLockedEntity(entityUrl)) {
+      this.assertEntityNotForkWorkLocked(entityUrl)
+    }
+
+    const provider = req.provider.trim()
+    const model = req.model.trim()
+    if (!provider || !model) {
+      throw new ElectricAgentsError(
+        ErrCodeInvalidRequest,
+        `provider and model are required`,
+        400
+      )
+    }
+    if (provider !== `openai`) {
+      throw new ElectricAgentsError(
+        ErrCodeInvalidRequest,
+        `Realtime provider "${provider}" is not supported; expected "openai"`,
+        400
+      )
+    }
+    if (!isOpenAIRealtimeModel(model)) {
+      throw new ElectricAgentsError(
+        ErrCodeInvalidRequest,
+        `OpenAI realtime model "${model}" is not supported`,
+        400
+      )
+    }
+    const voice = req.voice?.trim() || DEFAULT_OPENAI_REALTIME_VOICE
+    if (!isOpenAIRealtimeVoice(voice)) {
+      throw new ElectricAgentsError(
+        ErrCodeInvalidRequest,
+        `OpenAI realtime voice "${voice}" is not supported`,
+        400
+      )
+    }
+    const reasoningEffort =
+      req.reasoningEffort ?? DEFAULT_OPENAI_REALTIME_REASONING_EFFORT
+    if (!isOpenAIRealtimeReasoningEffort(reasoningEffort)) {
+      throw new ElectricAgentsError(
+        ErrCodeInvalidRequest,
+        `OpenAI realtime reasoning effort "${String(reasoningEffort)}" is not supported`,
+        400
+      )
+    }
+    const interruptResponse = req.interruptResponse !== false
+
+    const sessionId = req.id ?? `rt-${randomUUID()}`
+    validateRealtimeSessionId(sessionId)
+
+    const basePath = getRealtimeSessionBasePath(entityUrl, sessionId)
+    const streams = {
+      audio_in: `${basePath}/audio/in`,
+      audio_out: `${basePath}/audio/out`,
+      control_in: `${basePath}/control/in`,
+      control_out: `${basePath}/control/out`,
+    }
+    const startedAt = new Date().toISOString()
+    const manifestKey = `realtime-session:${sessionId}`
+    const txid = randomUUID()
+    const createdStreams: Array<string> = []
+
+    try {
+      for (const [path, contentType] of [
+        [streams.audio_in, realtimeAudioContentType(req.inputAudio)],
+        [streams.audio_out, realtimeAudioContentType(req.outputAudio)],
+        [streams.control_in, `application/json`],
+        [streams.control_out, `application/json`],
+      ] as const) {
+        await this.streamClient.create(path, { contentType })
+        createdStreams.push(path)
+      }
+
+      await this.writeManifestEntry(
+        entityUrl,
+        manifestKey,
+        `upsert`,
+        {
+          kind: `realtime-session`,
+          id: sessionId,
+          provider,
+          model,
+          voice,
+          reasoningEffort,
+          interruptResponse,
+          status: `requested`,
+          startedAt,
+          endedAt: null,
+          streams,
+          retention: `forever`,
+          ...(req.meta ? { meta: req.meta } : {}),
+        },
+        { txid }
+      )
+
+      const sessionEvent = entityStateSchema.realtimeSessions.insert({
+        key: manifestKey,
+        value: {
+          session_id: sessionId,
+          provider,
+          model,
+          voice,
+          reasoning_effort: reasoningEffort,
+          interrupt_response: interruptResponse,
+          status: `requested`,
+          started_at: startedAt,
+          streams,
+          ...(req.meta ? { meta: req.meta } : {}),
+        },
+      } as any)
+      await this.streamClient.append(
+        entity.streams.main,
+        this.encodeChangeEvent(sessionEvent as Record<string, unknown>)
+      )
+
+      const wakeEvent = entityStateSchema.wakes.insert({
+        key: `wake-realtime-session-${sessionId}`,
+        value: {
+          timestamp: startedAt,
+          source: entityUrl,
+          timeout: false,
+          changes: [
+            {
+              collection: `realtimeSessions`,
+              kind: `insert`,
+              key: manifestKey,
+              from: SERVER_SIGNAL_SENDER,
+              payload: {
+                type: `realtime_session.started`,
+                sessionId,
+                provider,
+                model,
+                voice,
+                reasoningEffort,
+                interruptResponse,
+                streams,
+              },
+              timestamp: startedAt,
+              message_type: `realtime_session.started`,
+            },
+          ],
+        },
+      } as any)
+      await this.streamClient.append(
+        entity.streams.main,
+        this.encodeChangeEvent(wakeEvent as Record<string, unknown>)
+      )
+    } catch (error) {
+      await Promise.allSettled(
+        createdStreams.map((path) => this.streamClient.delete(path))
+      )
+      if (isStreamCreateConflict(error)) {
+        throw new ElectricAgentsError(
+          ErrCodeInvalidRequest,
+          `Realtime session already exists at id "${sessionId}"`,
+          409
+        )
+      }
+      throw error
+    }
+
+    return {
+      sessionId,
+      entityUrl,
+      provider,
+      model,
+      voice,
+      reasoningEffort,
+      interruptResponse,
+      status: `requested`,
+      startedAt,
+      streams,
+    }
   }
 
   // ==========================================================================

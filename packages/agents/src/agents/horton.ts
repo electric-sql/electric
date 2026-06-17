@@ -21,6 +21,7 @@ import {
   GOAL_SLASH_COMMAND,
   buildSkillSlashCommands,
   createContextSkillLoader,
+  createOpenAIRealtimeProvider,
   completeWithLowCostModel,
   dispatchGoalCommand,
   formatTokenCount,
@@ -59,6 +60,15 @@ const TITLE_USER_PROMPT = (userMessage: string): string =>
   `User request:\n${userMessage}`
 const TITLE_GENERATION_TIMEOUT_MS = 8_000
 const HORTON_SKILLS_SLASH_COMMAND_OWNER = `horton:skills`
+const HORTON_REALTIME_DIRECT_TOOLS = new Set([
+  `web_search`,
+  `fetch_url`,
+  `spawn_worker`,
+  `send`,
+  `search_electric_agents_docs`,
+  `use_skill`,
+  `remove_skill`,
+])
 
 const TITLE_STOP_WORDS = new Set([
   `a`,
@@ -379,6 +389,25 @@ function getToolName(tool: unknown): string | null {
   return typeof name === `string` ? name : null
 }
 
+function hortonRealtimeDirectTools(tools: Array<AgentTool>): Array<string> {
+  return tools
+    .map((tool) => getToolName(tool))
+    .filter(
+      (name): name is string =>
+        name !== null && HORTON_REALTIME_DIRECT_TOOLS.has(name)
+    )
+}
+
+function hortonRealtimeSystemPrompt(systemPrompt: string): string {
+  return `${systemPrompt}
+
+# Realtime mode
+You are speaking with the user live. Keep responses concise enough for voice.
+Prefer dispatching workers for coding, shell, edit, or other long-running tasks.
+Use direct tools only for lightweight orchestration, lookup, context loading, and sending messages.
+When a task may change files, run commands, or take more than a short exchange, spawn a worker and tell the user you are handing it off.`
+}
+
 export function createHortonTools(
   sandbox: Sandbox,
   ctx: HandlerContext,
@@ -440,6 +469,18 @@ type InboxTitleMessage = {
   from?: unknown
   payload: unknown
   _seq?: unknown
+}
+
+type RealtimeTitleTranscript = {
+  direction?: unknown
+  status?: unknown
+  text?: unknown
+  _seq?: unknown
+}
+
+type TitleCandidate = {
+  text: string
+  seq: number
 }
 
 type TitleAttachment = {
@@ -513,15 +554,33 @@ function messageTitleText(
 export async function extractFirstUserMessage(
   ctx: HandlerContext
 ): Promise<string | null> {
-  const firstMessage = (
-    ctx.db.collections.inbox.toArray as Array<InboxTitleMessage>
-  )
-    .filter((message) => message.from !== `system`)
-    .sort((left, right) => messageSeq(left) - messageSeq(right))[0]
+  const candidates: Array<TitleCandidate> = []
 
-  if (!firstMessage) return null
-  const text = messageTitleText(ctx, firstMessage)
-  return text.length > 0 ? text : null
+  for (const message of ctx.db.collections.inbox
+    .toArray as Array<InboxTitleMessage>) {
+    if (message.from === `system`) continue
+    const text = messageTitleText(ctx, message).trim()
+    if (text.length === 0) continue
+    candidates.push({ text, seq: messageSeq(message) })
+  }
+
+  const realtimeTranscripts = (
+    ctx.db.collections as {
+      realtimeTranscripts?: { toArray?: Array<RealtimeTitleTranscript> }
+    }
+  ).realtimeTranscripts?.toArray
+  for (const transcript of realtimeTranscripts ?? []) {
+    if (transcript.direction !== `input` || transcript.status !== `final`) {
+      continue
+    }
+    const text =
+      typeof transcript.text === `string` ? transcript.text.trim() : ``
+    if (text.length === 0) continue
+    candidates.push({ text, seq: messageSeq(transcript) })
+  }
+
+  candidates.sort((left, right) => left.seq - right.seq)
+  return candidates[0]?.text ?? null
 }
 
 function messageSeq(message: { _seq?: unknown }): number {
@@ -683,54 +742,67 @@ function createAssistantHandler(options: {
       (tool) => getToolName(tool) === `upsert_cron_schedule`
     )
 
-    const titlePromise = !ctx.tags.title
-      ? (async () => {
-          const firstUserMessage = await extractFirstUserMessage(ctx)
-          if (!firstUserMessage) return
-
-          let title: string | null = null
-          try {
-            const result = await generateTitle(
-              firstUserMessage,
-              (prompt) =>
-                withTimeout(
-                  createConfiguredTitleCall(
-                    modelCatalog,
-                    modelConfig,
-                    `[horton ${ctx.entityUrl}]`
-                  )(prompt),
-                  TITLE_GENERATION_TIMEOUT_MS,
-                  `title generation`
-                ),
-              (reason) => {
-                serverLog.warn(
-                  `[horton ${ctx.entityUrl}] title generation fell back to local title: ${reason}`
-                )
-              }
-            )
-            if (result.length > 0) title = result
-          } catch (err) {
-            serverLog.warn(
-              `[horton ${ctx.entityUrl}] title generation failed: ${err instanceof Error ? err.message : String(err)}`
-            )
-            title = buildFallbackTitle(firstUserMessage)
-          }
-
-          if (title !== null) {
-            try {
-              await withTimeout(
-                ctx.setTag(`title`, title),
+    let titleGenerationStarted = Boolean(ctx.tags.title)
+    let titlePromise: Promise<void> = Promise.resolve()
+    const setTitleFromUserMessage = (userMessage: string): Promise<void> => {
+      const firstUserMessage = userMessage.trim()
+      if (titleGenerationStarted || firstUserMessage.length === 0) {
+        return titlePromise
+      }
+      titleGenerationStarted = true
+      titlePromise = (async () => {
+        let title: string | null = null
+        try {
+          const result = await generateTitle(
+            firstUserMessage,
+            (prompt) =>
+              withTimeout(
+                createConfiguredTitleCall(
+                  modelCatalog,
+                  modelConfig,
+                  `[horton ${ctx.entityUrl}]`
+                )(prompt),
                 TITLE_GENERATION_TIMEOUT_MS,
-                `set title tag`
-              )
-            } catch (err) {
+                `title generation`
+              ),
+            (reason) => {
               serverLog.warn(
-                `[horton ${ctx.entityUrl}] setTag failed: ${err instanceof Error ? err.message : String(err)}`
+                `[horton ${ctx.entityUrl}] title generation fell back to local title: ${reason}`
               )
             }
+          )
+          if (result.length > 0) title = result
+        } catch (err) {
+          serverLog.warn(
+            `[horton ${ctx.entityUrl}] title generation failed: ${err instanceof Error ? err.message : String(err)}`
+          )
+          title = buildFallbackTitle(firstUserMessage)
+        }
+
+        if (title !== null) {
+          try {
+            await withTimeout(
+              ctx.setTag(`title`, title),
+              TITLE_GENERATION_TIMEOUT_MS,
+              `set title tag`
+            )
+          } catch (err) {
+            serverLog.warn(
+              `[horton ${ctx.entityUrl}] setTag failed: ${err instanceof Error ? err.message : String(err)}`
+            )
           }
-        })()
-      : Promise.resolve()
+        }
+      })()
+      return titlePromise
+    }
+    const generateTitleFromHistory = async (): Promise<void> => {
+      if (titleGenerationStarted) return
+      const firstUserMessage = await extractFirstUserMessage(ctx)
+      if (!firstUserMessage) return
+      await setTitleFromUserMessage(firstUserMessage)
+    }
+
+    titlePromise = generateTitleFromHistory()
 
     if (docsSupport) {
       ctx.useContext({
@@ -849,17 +921,81 @@ function createAssistantHandler(options: {
         }
       : undefined
 
+    const systemPrompt = buildHortonSystemPrompt(sandboxCwd, {
+      hasDocsSupport: Boolean(docsSupport),
+      hasSkills,
+      docsUrl,
+      modelProvider: modelConfig.provider,
+      modelId: String(modelConfig.model),
+      hasWebhookSourceTools,
+      hasScheduleTools,
+      ...(activeGoalPromptInfo && { activeGoal: activeGoalPromptInfo }),
+    })
+    const activeRealtimeSession = ctx.realtime?.activeSession?.()
+    if (activeRealtimeSession) {
+      if (activeRealtimeSession.provider !== `openai`) {
+        throw new Error(
+          `Horton realtime currently supports provider "openai", got "${activeRealtimeSession.provider}"`
+        )
+      }
+      const realtime = ctx.useRealtime({
+        systemPrompt: hortonRealtimeSystemPrompt(systemPrompt),
+        provider: createOpenAIRealtimeProvider({
+          apiKey: () => {
+            const apiKey = process.env.OPENAI_API_KEY
+            if (!apiKey) {
+              throw new Error(
+                `OPENAI_API_KEY must be set before starting Horton realtime mode`
+              )
+            }
+            return apiKey
+          },
+          model: activeRealtimeSession.model,
+          ...(activeRealtimeSession.voice
+            ? { voice: activeRealtimeSession.voice }
+            : {}),
+          ...(activeRealtimeSession.reasoningEffort
+            ? { reasoningEffort: activeRealtimeSession.reasoningEffort }
+            : {}),
+        }),
+        tools: tools as AgentTool[],
+        audio: {
+          inputFormat: { codec: `pcm16`, sampleRate: 24_000, channels: 1 },
+          outputFormat: { codec: `pcm16`, sampleRate: 24_000, channels: 1 },
+          inputTranscription: {
+            model: `gpt-realtime-whisper`,
+            delay: `minimal`,
+          },
+          turnDetection: {
+            type: `server_vad`,
+            threshold: 0.55,
+            prefixPaddingMs: 300,
+            silenceDurationMs: 500,
+            createResponse: true,
+            interruptResponse:
+              activeRealtimeSession.interruptResponse !== false,
+          },
+        },
+        toolPolicy: {
+          direct: hortonRealtimeDirectTools(tools as AgentTool[]),
+        },
+        onTranscript: (transcript) => {
+          if (
+            transcript.direction !== `input` ||
+            transcript.status !== `final`
+          ) {
+            return
+          }
+          void setTitleFromUserMessage(transcript.text)
+        },
+      })
+      await realtime.run()
+      await titlePromise
+      return
+    }
+
     ctx.useAgent({
-      systemPrompt: buildHortonSystemPrompt(sandboxCwd, {
-        hasDocsSupport: Boolean(docsSupport),
-        hasSkills,
-        docsUrl,
-        modelProvider: modelConfig.provider,
-        modelId: String(modelConfig.model),
-        hasWebhookSourceTools,
-        hasScheduleTools,
-        ...(activeGoalPromptInfo && { activeGoal: activeGoalPromptInfo }),
-      }),
+      systemPrompt,
       ...modelConfig,
       // mcp.tools() inserts sentinel objects that the runtime's
       // composeToolsWithProviders resolves at wake time. The static type of

@@ -1,3 +1,15 @@
+import {
+  DEFAULT_OPENAI_REALTIME_MODEL,
+  DEFAULT_OPENAI_REALTIME_REASONING_EFFORT,
+  DEFAULT_OPENAI_REALTIME_VOICE,
+  OPENAI_REALTIME_MODELS,
+  OPENAI_REALTIME_REASONING_EFFORTS,
+  OPENAI_REALTIME_VOICES,
+  type OpenAIRealtimeReasoningEffort,
+  type RealtimeModelChoice,
+  type RealtimeReasoningEffortChoice,
+  type RealtimeVoiceChoice,
+} from '@electric-ax/agents-runtime/client'
 import type { ServerConfig } from './types'
 
 export type DesktopRuntimeStatus = `stopped` | `starting` | `running` | `error`
@@ -171,6 +183,47 @@ export interface ApiKeysStatus {
   suggested: ApiKeys
   codex: CodexStatus
   modelPicker: ModelPickerStatus
+}
+
+export type RealtimeSettings = {
+  provider: `openai`
+  model: string
+  voice: string
+  reasoningEffort: OpenAIRealtimeReasoningEffort
+  interruptResponse: boolean
+}
+
+export type RealtimeCredentialStatus =
+  | `missing`
+  | `valid`
+  | `invalid`
+  | `unknown`
+
+export type RealtimeSettingsStatus = {
+  settings: RealtimeSettings
+  availableModels: Array<RealtimeModelChoice>
+  availableVoices: Array<RealtimeVoiceChoice>
+  availableReasoningEfforts: Array<RealtimeReasoningEffortChoice>
+  hasOpenAIApiKey: boolean
+  openAIApiKeyStatus: RealtimeCredentialStatus
+  openAIApiKeyError?: string
+  codexEnabled: boolean
+}
+
+const DEFAULT_REALTIME_SETTINGS_STATUS: RealtimeSettingsStatus = {
+  settings: {
+    provider: `openai`,
+    model: DEFAULT_OPENAI_REALTIME_MODEL,
+    voice: DEFAULT_OPENAI_REALTIME_VOICE,
+    reasoningEffort: DEFAULT_OPENAI_REALTIME_REASONING_EFFORT,
+    interruptResponse: true,
+  },
+  availableModels: [...OPENAI_REALTIME_MODELS],
+  availableVoices: [...OPENAI_REALTIME_VOICES],
+  availableReasoningEfforts: [...OPENAI_REALTIME_REASONING_EFFORTS],
+  hasOpenAIApiKey: false,
+  openAIApiKeyStatus: `unknown`,
+  codexEnabled: false,
 }
 
 /**
@@ -376,6 +429,8 @@ declare global {
       setOnboardingDismissed?: (dismissed: boolean) => Promise<void>
       getPreventAppSuspension?: () => Promise<PreventAppSuspensionPreference>
       setPreventAppSuspension?: (enabled: boolean) => Promise<void>
+      getRealtimeSettings?: () => Promise<RealtimeSettingsStatus>
+      setRealtimeSettings?: (settings: RealtimeSettings) => Promise<void>
       getWorkingDirectory?: () => Promise<string | null>
       chooseWorkingDirectory?: () => Promise<string | null>
       /**
@@ -589,6 +644,19 @@ export async function saveApiKeys(keys: ApiKeys): Promise<void> {
 
 export async function saveEnabledModels(values: Array<string>): Promise<void> {
   await window.electronAPI?.saveEnabledModels?.(values)
+}
+
+export async function loadRealtimeSettingsStatus(): Promise<RealtimeSettingsStatus> {
+  return (
+    (await window.electronAPI?.getRealtimeSettings?.()) ??
+    DEFAULT_REALTIME_SETTINGS_STATUS
+  )
+}
+
+export async function saveRealtimeSettings(
+  settings: RealtimeSettings
+): Promise<void> {
+  await window.electronAPI?.setRealtimeSettings?.(settings)
 }
 
 export async function codexSignIn(): Promise<CodexStatus | null> {

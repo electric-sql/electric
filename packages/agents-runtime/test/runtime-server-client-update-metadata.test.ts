@@ -266,6 +266,84 @@ describe(`runtime-server-client.deleteTag`, () => {
   })
 })
 
+describe(`runtime-server-client realtime sessions`, () => {
+  it(`starts a realtime session through the control-plane route`, async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = []
+    const responseBody = {
+      sessionId: `rt-1`,
+      entityUrl: `/horton/demo`,
+      provider: `openai`,
+      model: `gpt-realtime-2`,
+      status: `requested`,
+      startedAt: `2026-06-09T10:00:00.000Z`,
+      streams: {
+        audio_in: `/horton/demo/realtime/rt-1/audio/in`,
+        audio_out: `/horton/demo/realtime/rt-1/audio/out`,
+        control_in: `/horton/demo/realtime/rt-1/control/in`,
+        control_out: `/horton/demo/realtime/rt-1/control/out`,
+      },
+    }
+    const fakeFetch = vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push({ url, init })
+      return new Response(JSON.stringify(responseBody), {
+        status: 201,
+        headers: { 'content-type': `application/json` },
+      })
+    }) as unknown as typeof fetch
+    const client = createRuntimeServerClient({
+      baseUrl: `http://test.example/t/tenant-a/v1`,
+      fetch: fakeFetch,
+      principalKey: `user:sam`,
+    })
+
+    await expect(
+      client.startRealtimeSession({
+        entityUrl: `/horton/demo`,
+        id: `rt-1`,
+        provider: `openai`,
+        model: `gpt-realtime-2`,
+        inputAudio: { codec: `pcm16`, sampleRate: 16_000, channels: 1 },
+        meta: { source: `button` },
+      })
+    ).resolves.toEqual(responseBody)
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0]!.url).toBe(
+      `http://test.example/t/tenant-a/v1/_electric/realtime/sessions`
+    )
+    expect(calls[0]!.init?.method).toBe(`POST`)
+    const headers = new Headers(calls[0]!.init?.headers)
+    expect(headers.get(`content-type`)).toBe(`application/json`)
+    expect(headers.get(`electric-principal`)).toBe(`user:sam`)
+    expect(JSON.parse(calls[0]!.init!.body as string)).toEqual({
+      entityUrl: `/horton/demo`,
+      id: `rt-1`,
+      provider: `openai`,
+      model: `gpt-realtime-2`,
+      inputAudio: { codec: `pcm16`, sampleRate: 16_000, channels: 1 },
+      meta: { source: `button` },
+    })
+  })
+
+  it(`surfaces realtime session start failures`, async () => {
+    const fakeFetch = vi.fn(
+      async () => new Response(`not allowed`, { status: 401 })
+    ) as unknown as typeof fetch
+    const client = createRuntimeServerClient({
+      baseUrl: `http://test.example`,
+      fetch: fakeFetch,
+    })
+
+    await expect(
+      client.startRealtimeSession({
+        entityUrl: `/horton/demo`,
+        provider: `openai`,
+        model: `gpt-realtime-2`,
+      })
+    ).rejects.toThrow(/startRealtimeSession.*401.*not allowed/)
+  })
+})
+
 describe(`runtime-server-client webhook sources`, () => {
   it(`lists webhook sources from the runtime server`, async () => {
     const fakeFetch = vi.fn(
