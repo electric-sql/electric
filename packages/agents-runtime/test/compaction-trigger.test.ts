@@ -11,11 +11,9 @@ import type { ChangeEvent } from '@durable-streams/state'
 // we drive the trigger with the env override + a high seeded anchor instead.
 const savedEnv = {
   ceiling: process.env.ELECTRIC_AGENTS_COMPACT_CEILING,
-  minTokens: process.env.ELECTRIC_AGENTS_COMPACT_MIN_TOKENS,
 }
 afterEach(() => {
   process.env.ELECTRIC_AGENTS_COMPACT_CEILING = savedEnv.ceiling
-  process.env.ELECTRIC_AGENTS_COMPACT_MIN_TOKENS = savedEnv.minTokens
 })
 
 function completedAssistantMessage(): unknown {
@@ -59,7 +57,6 @@ describe(`mid-turn compaction trigger`, () => {
   it(`compacts mid-turn: summarizer runs, model sees the summary, checkpoint persisted`, async () => {
     // Ceiling tiny so any real model window is crossed by the seeded anchor.
     process.env.ELECTRIC_AGENTS_COMPACT_CEILING = `0.0001`
-    process.env.ELECTRIC_AGENTS_COMPACT_MIN_TOKENS = `10`
 
     // Enough messages that there's real content beyond the kept tail (6).
     const db = buildStreamFixture(

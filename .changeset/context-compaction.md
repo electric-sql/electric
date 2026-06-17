@@ -23,4 +23,4 @@ into a summary):
   "Context compacted" entry in the conversation timeline.
 
 Thresholds are env-tunable (`ELECTRIC_AGENTS_COMPACT_CEILING`,
-`ELECTRIC_AGENTS_COMPACT_BG_CEILING`, `ELECTRIC_AGENTS_COMPACT_MIN_TOKENS`).
+`ELECTRIC_AGENTS_COMPACT_BG_CEILING`).

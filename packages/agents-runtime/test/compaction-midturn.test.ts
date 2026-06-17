@@ -17,7 +17,6 @@ describe(`createMidTurnCompactor`, () => {
       summarize,
       writeCheckpoint,
       ceiling: 0.9,
-      minTokens: 100,
       keepTail: 4,
     })
     const out = await compact({
@@ -37,7 +36,6 @@ describe(`createMidTurnCompactor`, () => {
       summarize,
       writeCheckpoint,
       ceiling: 0.9,
-      minTokens: 100,
       keepTail: 4,
     })
     const messages = msgs(10)
@@ -62,7 +60,6 @@ describe(`createMidTurnCompactor`, () => {
       summarize,
       writeCheckpoint: vi.fn(),
       ceiling: 0.9,
-      minTokens: 100,
       keepTail: 4,
     })
     const messages = msgs(10)
@@ -88,7 +85,6 @@ describe(`createMidTurnCompactor`, () => {
       summarize,
       writeCheckpoint: vi.fn(),
       ceiling: 0.9,
-      minTokens: 100,
       keepTail: 4,
     })
     await compact({
@@ -114,7 +110,6 @@ describe(`createMidTurnCompactor`, () => {
       summarize,
       writeCheckpoint: vi.fn(),
       ceiling: 0.9,
-      minTokens: 100,
       keepTail: 4,
     })
     // Boundary would land at index 6 (10 − keepTail 4); make that a tool_result
@@ -139,7 +134,6 @@ describe(`createMidTurnCompactor`, () => {
       summarize,
       writeCheckpoint: (s: string) => statuses.push(s),
       ceiling: 0.9,
-      minTokens: 100,
       keepTail: 4,
     })
     const out = await compact({

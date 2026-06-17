@@ -37,8 +37,6 @@ import {
 } from './compaction-summarize'
 import { CONTEXT_USAGE_BACKGROUND_START } from './token-accountant'
 
-/** Default minimum context size (tokens) before mid-turn compaction fires. */
-const DEFAULT_COMPACT_MIN_TOKENS = 2000
 /** Recent messages kept verbatim when compacting (the live tool-call tail). */
 const COMPACT_KEEP_TAIL = 6
 import { createContextTools } from './tools/context-tools'
@@ -99,12 +97,6 @@ function agentModelProvider(config: AgentConfig): string {
 function ratioFromEnv(raw: string | undefined, fallback: number): number {
   const value = Number(raw)
   return Number.isFinite(value) && value > 0 && value <= 1 ? value : fallback
-}
-
-/** Parse a positive number from an env string, falling back when invalid. */
-function positiveFromEnv(raw: string | undefined, fallback: number): number {
-  const value = Number(raw)
-  return Number.isFinite(value) && value > 0 ? value : fallback
 }
 
 const MAX_HYDRATED_IMAGE_ATTACHMENTS = 4
@@ -844,19 +836,13 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         // failed checkpoint that drives the UI. Thresholds overridable via env
         // (RFC §12 tunables):
         //   ELECTRIC_AGENTS_COMPACT_CEILING    (0..1, default 0.9)
-        //   ELECTRIC_AGENTS_COMPACT_MIN_TOKENS (default 2000)
         const compactCeiling = ratioFromEnv(
           process.env.ELECTRIC_AGENTS_COMPACT_CEILING,
           CONTEXT_USAGE_HARD_CEILING
         )
-        const compactMinTokens = positiveFromEnv(
-          process.env.ELECTRIC_AGENTS_COMPACT_MIN_TOKENS,
-          DEFAULT_COMPACT_MIN_TOKENS
-        )
         const compactProvider = agentModelProvider(activeAgentConfig)
         const onCompactContext = createMidTurnCompactor({
           ceiling: compactCeiling,
-          minTokens: compactMinTokens,
           keepTail: COMPACT_KEEP_TAIL,
           writeCheckpoint: (status, content) => {
             contextApi.insertContext(COMPACTION_CHECKPOINT_ID, {

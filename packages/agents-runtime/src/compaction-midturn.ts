@@ -15,8 +15,6 @@ export interface MidTurnCompactorDeps {
   writeCheckpoint: (status: CompactionStatus, content: string) => void
   /** Compaction fires at/above this fraction of the context window. */
   ceiling: number
-  /** Don't compact unless the context is at least this many tokens. */
-  minTokens: number
   /** Keep this many of the most recent messages verbatim (the live tail). */
   keepTail: number
 }
@@ -77,9 +75,7 @@ export function createMidTurnCompactor(
       : null
 
   return async ({ messages, currentTokens, contextWindow }) => {
-    const overCeiling =
-      currentTokens >= deps.ceiling * contextWindow &&
-      currentTokens > deps.minTokens
+    const overCeiling = currentTokens >= deps.ceiling * contextWindow
 
     // Under the ceiling: keep the compacted view sticky if we already compacted
     // this turn, otherwise leave the context untouched.
