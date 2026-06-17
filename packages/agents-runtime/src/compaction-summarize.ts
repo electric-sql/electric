@@ -25,11 +25,10 @@ const DEFAULT_SUMMARY_TIMEOUT_MS = 120_000
 /**
  * Summarize a conversation into a compaction handoff summary.
  *
- * Uses the **conversation's own model** by default (RFC Q2): a cheaper,
- * small-window model would overflow on a near-full context — the whole reason
- * we are compacting. The full history is sent followed by Codex's summarization
- * prompt; the returned summary is prefixed with Codex's summary preamble so the
- * resuming model knows it is reading a handoff.
+ * Uses the conversation's own model by default: a cheaper, small-window model
+ * would overflow on a near-full context — the whole reason we are compacting.
+ * The full history is sent followed by Codex's summarization prompt; the summary
+ * is prefixed with Codex's preamble so the resuming model knows it's a handoff.
  */
 interface SummarizeCoreInput {
   model: string | object
@@ -112,9 +111,8 @@ async function summarizeConverted(
 /**
  * Summarize a conversation (LLMMessage form) into a compaction handoff summary.
  *
- * Uses the **conversation's own model** by default (RFC Q2): a cheaper,
- * small-window model would overflow on a near-full context — the whole reason
- * we are compacting.
+ * Uses the conversation's own model by default: a cheaper, small-window model
+ * would overflow on a near-full context — the whole reason we are compacting.
  */
 export async function summarizeMessages(
   input: SummarizeCoreInput & { messages: ReadonlyArray<LLMMessage> }

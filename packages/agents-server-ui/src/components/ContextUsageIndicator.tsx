@@ -11,12 +11,9 @@ import { Tooltip } from '../ui/Tooltip'
 import styles from './ContextUsageIndicator.module.css'
 
 /**
- * Phase-0 context-window gauge for the composer footer (à la Claude Code's
- * "X% used"). It reads the *same* numbers the runtime persists for compaction
- * — the latest step's cache-inclusive prompt size and the model's context
- * window — and divides them through `computeContextUsage`, the shared source of
- * truth. Nothing acts on the ratio yet; this is purely observational and lets
- * us eyeball-validate the token accounting before later phases trigger off it.
+ * Context-window gauge for the composer footer ("X% used"). Reads the same
+ * numbers the runtime persists for compaction (the latest step's cache-inclusive
+ * prompt size and the model's window) through `computeContextUsage`.
  */
 
 interface StepRow {

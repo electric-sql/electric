@@ -1,31 +1,21 @@
 /**
- * Token accounting for context-window usage.
- *
- * This is the single source of truth for turning a step's reported token usage
- * into a "% of the context window used" figure. Both the runtime (telemetry +
- * the model-facing budget notice) and the UI (the composer usage gauge) compute
- * usage through here, so the number the user sees is exactly the number later
- * compaction phases will act on. If this drifts, everything downstream drifts
- * with it.
- *
- * Phase 0 reads it for display; Phase 1 surfaces it to the model as a budget
- * notice; later phases drive background compaction and the hard ceiling off the
- * same thresholds below.
+ * Token accounting for context-window usage — the single source of truth for
+ * turning a step's reported tokens into a "% of the context window used" figure.
+ * The runtime triggers and the UI gauge both compute through here, so the number
+ * the user sees is the number compaction acts on.
  */
 
 import { approxTokens, formatTokenCount } from './token-budget'
 import type { LLMMessage } from './types'
 
 /**
- * Fractions of the context window at which the compaction system changes
- * behaviour. Kept here (not scattered across call sites) so the UI gauge and
- * the runtime triggers share one set of numbers.
+ * Fractions of the context window at which compaction changes behaviour, kept
+ * here so the UI gauge and the runtime triggers share one set of numbers.
  *
- * - `AWARENESS` (25/50/75%): inject a budget notice so the model can pace
- *   itself (Phase 1).
- * - `BACKGROUND_START` (85%): kick off background compaction (Phase 3).
- * - `HARD_CEILING` (90%): compact synchronously before the next model call
- *   (Phase 2). Matches Codex's auto-compaction threshold.
+ * - `AWARENESS` (25/50/75%): inject a budget notice so the model can pace itself.
+ * - `BACKGROUND_START` (85%): kick off background compaction.
+ * - `HARD_CEILING` (90%): compact synchronously before the next model call.
+ *   Matches Codex's auto-compaction threshold.
  */
 export const CONTEXT_USAGE_AWARENESS_THRESHOLDS = [0.25, 0.5, 0.75] as const
 export const CONTEXT_USAGE_BACKGROUND_START = 0.85

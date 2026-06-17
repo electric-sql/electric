@@ -813,39 +813,24 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
           activeAgentConfig.tools
         )) as Array<AgentTool>
 
-        // Phase 1: surface the remaining context budget to the model once usage
-        // reaches the first awareness threshold (25%). Synthesized fresh each
-        // call from the latest persisted step — so it is always current, and we
-        // deliberately do NOT persist it as a context row (a self-superseding
-        // entry would leave `load_context_history(...)` tombstones, which are
-        // meaningless breadcrumbs for an ephemeral budget hint). The notice is
-        // injected just before the final message so the closing turn — and the
-        // runInput detection below, which reads `.at(-1)` — is unchanged.
+        // Drives the remaining-budget notice injected below. Synthesized fresh
+        // from the latest step, never persisted — a self-superseding context row
+        // would leave misleading load_context_history tombstones.
         const budgetUsage = selectLatestContextUsage(
           config.db.collections.steps.toArray as ReadonlyArray<ContextUsageStep>
         )
 
-        // Phase 2 hard ceiling — enforced MID-TURN. Compaction runs before each
-        // model step via pi-agent's `transformContext` (wired in the adapter to
-        // the compactor below), so a single turn that balloons across many tool
-        // calls can't exhaust the window before the turn ends. The compactor
-        // anchors its token estimate on the last step's real usage (+ trailing),
-        // folds older messages into a summary, and persists the running/complete/
-        // failed checkpoint that drives the UI. Thresholds overridable via env
-        // (RFC §12 tunables):
-        //   ELECTRIC_AGENTS_COMPACT_CEILING    (0..1, default 0.9)
+        // Mid-turn compaction: runs before every model step (the adapter's
+        // transformContext) so one tool-heavy turn can't exhaust the window
+        // before it ends. Overridable via ELECTRIC_AGENTS_COMPACT_CEILING.
         const compactCeiling = ratioFromEnv(
           process.env.ELECTRIC_AGENTS_COMPACT_CEILING,
           CONTEXT_USAGE_HARD_CEILING
         )
         const compactProvider = agentModelProvider(activeAgentConfig)
-        // The watermark the mid-turn summary actually covers, snapshotted when
-        // the `running` checkpoint is written — i.e. BEFORE the (slow) summarize
-        // await. Capturing it at `complete`-write time instead would let any
-        // event that materialized into the StreamDB during the summarize bump
-        // the head past what the summary covered, so that item would be dropped
-        // un-summarized next turn. Mirrors background compaction, which also
-        // snapshots its head before starting the summarize.
+        // Watermark for the mid-turn summary, snapshotted when the `running` row
+        // is written (before the slow summarize await) so an event materializing
+        // during the summarize can't bump the head past what the summary covered.
         let midTurnWatermark: number | undefined
         const onCompactContext = createMidTurnCompactor({
           ceiling: compactCeiling,
@@ -861,11 +846,9 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
               )
               midTurnWatermark = Number.isFinite(head) ? head : undefined
             }
-            // Stamp the completed checkpoint with the snapshotted head as its
-            // watermark. The mid-turn summary covers the whole context up to that
-            // head, so reconstruction folds exactly that (items <= head) and
-            // keeps everything appended after. Without it, the watermark falls
-            // back to the checkpoint row's own (later) position and silently
+            // Stamp `complete` with that head: reconstruction folds items <=
+            // head (what the summary covered) and keeps everything after. Without
+            // it the watermark falls back to the row's own (later) position and
             // drops the most recent messages next turn.
             if (status === `complete` && midTurnWatermark !== undefined) {
               attrs.watermark = midTurnWatermark
@@ -1289,12 +1272,9 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
     })
   }
 
-  // Each background generation gets a watermark-unique checkpoint id, so the
-  // NEXT background's `running` row never supersedes the PREVIOUS `complete`
-  // one. They otherwise share the fixed id (supersession keys on id alone), and
-  // a fresh `running` silently erased the last `complete` watermark — undoing
-  // every compaction and pinning the indicator to "running". running→complete→
-  // failed of ONE generation share this id so a generation supersedes itself.
+  // Watermark-unique id per background generation, so a new `running` row can't
+  // supersede the previous `complete` one (supersession keys on id alone).
+  // running→complete→failed of one generation share the id.
   const backgroundCheckpointId = (watermark: number): string =>
     `${COMPACTION_CHECKPOINT_ID}-bg-${watermark}`
 

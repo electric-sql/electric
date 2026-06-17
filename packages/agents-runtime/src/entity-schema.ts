@@ -156,25 +156,14 @@ type StepValue = {
   model_provider?: string
   model_id?: string
   duration_ms?: number
-  // Token usage for this step as reported by the provider's
-  // end-of-message `usage` payload. Populated on `onStepEnd` when the
-  // adapter has the data — older events without these fields stay
-  // valid (both optional), so this is a strictly additive change.
-  // `input_tokens` is the *uncached* input side (fresh tokens plus
-  // cache writes; cache reads excluded) — the cache-inclusive total
-  // would re-count the whole conversation on every step.
+  // Uncached input side (fresh tokens + cache writes; cache reads excluded, so
+  // it doesn't re-count the conversation every warm turn).
   input_tokens?: number
   output_tokens?: number
-  // Cache-inclusive prompt size for this step (`input + cacheRead +
-  // cacheWrite`) — i.e. how many tokens of the model's context window the
-  // request actually occupied. Unlike `input_tokens` (which excludes cache
-  // reads so budget accounting doesn't re-count the conversation every warm
-  // turn) this is the right number for a context-fullness gauge. Optional and
-  // additive, so older events without it stay valid.
+  // Cache-inclusive prompt size (input + cacheRead + cacheWrite) — how much of
+  // the window the request occupied; the number a fullness gauge needs.
   context_input_tokens?: number
-  // The model's context window at the time of this step. Persisted alongside
-  // the usage so consumers can render a fraction without resolving the model
-  // registry themselves.
+  // The model's context window for this step.
   context_window?: number
 }
 type TextValue = {
