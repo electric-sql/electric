@@ -367,10 +367,9 @@ function combineWakeEvents(
   }
 }
 
-function selectWakeFromEvents(
+function selectNextInboxWakeFromEvents(
   events: Array<ChangeEvent>,
-  fallbackSource: string,
-  preferredKind?: FreshKind
+  fallbackSource: string
 ): { wakeEvent: WakeEvent; offset: string | null } | null {
   const cancelledInboxKeys = new Set<string>()
   for (let i = events.length - 1; i >= 0; i--) {
@@ -382,12 +381,7 @@ function selectWakeFromEvents(
     if (isInboxEvent(event) && cancelledInboxKeys.has(inboxEventKey(event))) {
       continue
     }
-    const eventKind = isInboxEvent(event)
-      ? `inbox`
-      : event.type === `wake`
-        ? `wake`
-        : null
-    if (preferredKind && eventKind !== preferredKind) {
+    if (!isInboxEvent(event)) {
       continue
     }
 
@@ -1055,12 +1049,10 @@ export async function processWake(
       const changeEvents = toChangeEvents(batch)
       const freshKind = getFreshKind(changeEvents)
 
-      // Keep wake-only work together, but let a later inbox message start its own
-      // handler pass so message-triggered runs are not hidden behind older wakes.
-      if (selectedKind === `wake` && freshKind === `inbox`) {
-        break
-      }
-
+      // If an inbox message arrives while wake rows are pending, consume the
+      // wake rows alongside the inbox pass. The inbox is the runnable trigger,
+      // but the handler still needs the sibling child-completion wakes in
+      // ctx.events so no child result is silently acked without being visible.
       pendingLiveBatches.shift()
       batches.push(batch)
       deltaEvents.push(...changeEvents)
@@ -1085,7 +1077,9 @@ export async function processWake(
     const selectedWake =
       selectedKind === `wake`
         ? combineWakeEvents(deltaEvents, entityUrl)
-        : selectWakeFromEvents(deltaEvents, entityUrl, selectedKind)
+        : selectedKind === `inbox`
+          ? selectNextInboxWakeFromEvents(deltaEvents, entityUrl)
+          : null
     if (!selectedWake) {
       log.warn(
         `fresh ${selectedKind} batch did not contain runnable wake input; acking as no-op`
@@ -1650,12 +1644,21 @@ export async function processWake(
       eventsAtOrAfterNotification,
       forkReconciliationOffset
     )
+    const initialFreshKind = getFreshKind(actionableEventsAtOrAfterNotification)
     const initialFromCatchUp = notification.wakeEvent
       ? null
-      : selectWakeFromEvents(actionableEventsAtOrAfterNotification, entityUrl)
+      : initialFreshKind === `wake`
+        ? combineWakeEvents(actionableEventsAtOrAfterNotification, entityUrl)
+        : initialFreshKind === `inbox`
+          ? selectNextInboxWakeFromEvents(
+              actionableEventsAtOrAfterNotification,
+              entityUrl
+            )
+          : null
     if (initialFromCatchUp) {
       currentWakeEvent = initialFromCatchUp.wakeEvent
       currentWakeOffset = initialFromCatchUp.offset ?? notificationOffset
+      currentWakeEvents = actionableEventsAtOrAfterNotification
     } else {
       currentWakeEvent = constructWakeEvent(notification)
       currentWakeOffset = notificationOffset
@@ -2009,12 +2012,16 @@ export async function processWake(
 
     if (!skipInitialHandlerPass) {
       await waitForCurrentWakeInput()
-      currentWakeEvents = computeCurrentNotificationEvents()
+      if (currentWakeEvents.length === 0) {
+        currentWakeEvents = computeCurrentNotificationEvents()
+      }
       const initialFreshKind = getFreshKind(currentWakeEvents) ?? undefined
       const initialWake =
         initialFreshKind === `wake`
           ? combineWakeEvents(currentWakeEvents, entityUrl)
-          : selectWakeFromEvents(currentWakeEvents, entityUrl, initialFreshKind)
+          : initialFreshKind === `inbox`
+            ? selectNextInboxWakeFromEvents(currentWakeEvents, entityUrl)
+            : null
       if (initialWake) {
         currentWakeEvent = initialWake.wakeEvent
         currentWakeOffset = initialWake.offset ?? currentWakeOffset
