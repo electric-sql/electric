@@ -34,7 +34,7 @@
     "@tanstack/router-plugin": "^1.139.7",
     "@trpc/client": "^11.7.2",
     "@trpc/server": "^11.7.2",
-    "better-auth": "^1.4.3",
+    "better-auth": "^1.6.2",
     "drizzle-kit": "^0.30.0",
     "drizzle-orm": "^0.39.0",
     "drizzle-zod": "^0.7.1",
