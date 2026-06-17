@@ -2254,12 +2254,15 @@ export async function processWake(
         )
         if (spawnedChildren.length > 0) {
           log.warn(
-            `handler failed — attempting to close ${spawnedChildren.length} child(ren) spawned before the failure`
+            `handler failed — detaching ${spawnedChildren.length} child wake registration(s) created before the failure`
           )
           const cleanupErrors: Array<Error> = []
           for (const childEntry of spawnedChildren) {
             try {
-              await serverClient.deleteEntity(childEntry.entity_url)
+              await serverClient.unregisterWake({
+                subscriberUrl: entityUrl,
+                sourceUrl: childEntry.entity_url,
+              })
             } catch (err) {
               cleanupErrors.push(toError(err))
             }
@@ -2267,7 +2270,7 @@ export async function processWake(
           if (cleanupErrors.length > 0) {
             throw new AggregateError(
               [toError(setupErr), ...cleanupErrors],
-              `Wake handler failed and child cleanup also failed`
+              `Wake handler failed and child wake cleanup also failed`
             )
           }
         }

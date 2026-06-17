@@ -1667,6 +1667,46 @@ describe(`processWake`, () => {
     )
   })
 
+  it(`detaches newly spawned child wake registrations without killing children when the handler fails`, async () => {
+    defineEntity(`test-agent`, {
+      handler: async (ctx) => {
+        await ctx.spawn(
+          `child-worker`,
+          `worker-1`,
+          {},
+          { wake: { on: `runFinished`, includeResponse: true } }
+        )
+        throw new Error(`parent failed after spawn`)
+      },
+    })
+
+    await expect(processWake(makeNotification(), BASE_CONFIG)).rejects.toThrow(
+      `parent failed after spawn`
+    )
+
+    const unregisterCalls = fetchMock.mock.calls.filter(
+      ([url, opts]) =>
+        String(url).includes(`/_electric/wake/unregister`) &&
+        (opts as RequestInit | undefined)?.method === `POST`
+    )
+    expect(unregisterCalls).toHaveLength(1)
+    expect(JSON.parse(unregisterCalls[0]![1]!.body as string)).toEqual({
+      subscriberUrl: `http://localhost:3000/test-agent/agent-1`,
+      sourceUrl: `/child-worker/spawned-child`,
+    })
+
+    const signalCalls = fetchMock.mock.calls.filter(
+      ([url, opts]) =>
+        String(url).includes(`/signal`) &&
+        (opts as RequestInit | undefined)?.method === `POST`
+    )
+    expect(
+      signalCalls.some(([, opts]) =>
+        String((opts as RequestInit | undefined)?.body).includes(`SIGKILL`)
+      )
+    ).toBe(false)
+  })
+
   it(`does not fail the wake when an unawaited send fails`, async () => {
     defineEntity(`test-agent`, {
       handler: (ctx) => {

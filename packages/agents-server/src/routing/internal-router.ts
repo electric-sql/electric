@@ -70,6 +70,12 @@ const wakeRegistrationBodySchema = Type.Object({
   manifestKey: Type.Optional(Type.String()),
 })
 
+const wakeUnregisterBodySchema = Type.Object({
+  subscriberUrl: Type.String(),
+  sourceUrl: Type.Optional(Type.String()),
+  manifestKey: Type.Optional(Type.String()),
+})
+
 const subscriptionWebhookBodySchema = Type.Object(
   {
     subscription_id: Type.Optional(Type.String()),
@@ -101,6 +107,7 @@ const wakeCallbackBodySchema = Type.Object(
 )
 
 type WakeRegistrationBody = Static<typeof wakeRegistrationBodySchema>
+type WakeUnregisterBody = Static<typeof wakeUnregisterBodySchema>
 type SubscriptionWebhookBody = Static<typeof subscriptionWebhookBodySchema>
 type WakeCallbackBody = Static<typeof wakeCallbackBodySchema>
 
@@ -126,6 +133,11 @@ internalRouter.post(
   `/wake`,
   withSchema(wakeRegistrationBodySchema),
   registerWake
+)
+internalRouter.post(
+  `/wake/unregister`,
+  withSchema(wakeUnregisterBodySchema),
+  unregisterWake
 )
 internalRouter.post(
   `/subscription-webhooks/:subscriptionId`,
@@ -364,6 +376,36 @@ async function registerWake(
   const opts = routeBody<WakeRegistrationBody>(request)
   await ctx.entityManager.registerWake(opts)
   return status(204)
+}
+
+async function unregisterWake(
+  request: IRequest,
+  ctx: TenantContext
+): Promise<Response> {
+  const opts = routeBody<WakeUnregisterBody>(request)
+  if (opts.sourceUrl !== undefined) {
+    await ctx.entityManager.wakeRegistry.unregisterBySubscriberAndSource(
+      opts.subscriberUrl,
+      opts.sourceUrl,
+      ctx.service
+    )
+    return status(204)
+  }
+
+  if (opts.manifestKey !== undefined) {
+    await ctx.entityManager.wakeRegistry.unregisterByManifestKey(
+      opts.subscriberUrl,
+      opts.manifestKey,
+      ctx.service
+    )
+    return status(204)
+  }
+
+  return apiError(
+    400,
+    `INVALID_WAKE_UNREGISTER`,
+    `sourceUrl or manifestKey is required`
+  )
 }
 
 async function listWebhookSources(

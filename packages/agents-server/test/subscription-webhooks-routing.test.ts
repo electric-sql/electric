@@ -160,6 +160,32 @@ function buildContext(overrides: Partial<TenantContext> = {}): TenantContext {
 }
 
 describe(`subscription webhooks for Durable Streams subscriptions`, () => {
+  it(`unregisters a parent wake registration without signaling the source entity`, async () => {
+    const unregisterBySubscriberAndSource = vi.fn().mockResolvedValue(undefined)
+    const ctx = buildContext({
+      entityManager: {
+        wakeRegistry: {
+          unregisterBySubscriberAndSource,
+        },
+      } as any,
+    })
+
+    const response = await globalRouter.fetch(
+      request(`POST`, `/_electric/wake/unregister`, {
+        subscriberUrl: `/horton/parent`,
+        sourceUrl: `/worker/child`,
+      }),
+      ctx
+    )
+
+    expect(response.status).toBe(204)
+    expect(unregisterBySubscriberAndSource).toHaveBeenCalledWith(
+      `/horton/parent`,
+      `/worker/child`,
+      `tenant-a`
+    )
+  })
+
   it(`validates upstream Durable Streams webhook signatures before dispatching`, async () => {
     const select = selectDb([
       { webhookUrl: `http://runtime.local/_electric/builtin-agent-handler` },
