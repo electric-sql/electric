@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLiveQuery } from '@tanstack/react-db'
 import type { EntityStreamDBWithActions } from '@electric-ax/agents-runtime/client'
+import {
+  STALE_RUNNING_MS,
+  isRunningCheckpointOrphaned,
+} from '../lib/compactionIndicator'
 import styles from './CompactionIndicator.module.css'
 
 /**
@@ -16,11 +20,8 @@ import styles from './CompactionIndicator.module.css'
  * always written, so a `running` row that lingers well past that is orphaned —
  * its process crashed before writing the terminal row. We stop showing the
  * spinner for such a row (and self-clear via a timer so it disappears even with
- * no further events).
+ * no further events). See `lib/compactionIndicator` for the staleness rule.
  */
-
-/** Beyond this age a still-`running` checkpoint is treated as orphaned/crashed. */
-const STALE_RUNNING_MS = 150_000
 
 interface CheckpointRow {
   _seq?: number
@@ -70,10 +71,7 @@ export function CompactionIndicator({
   }, [latest, runningSince])
 
   if (!latest) return null
-  const orphaned =
-    Number.isFinite(runningSince) &&
-    Date.now() - runningSince >= STALE_RUNNING_MS
-  if (orphaned) return null
+  if (isRunningCheckpointOrphaned(latest.timestamp, Date.now())) return null
 
   // Background compaction is non-blocking, so it's shown subtly and distinctly
   // from the blocking (sync, mid-turn) "Compacting context…".
