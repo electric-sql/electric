@@ -165,11 +165,8 @@ type StepValue = {
   context_input_tokens?: number
   // The model's context window for this step.
   context_window?: number
-  // JSON-encoded estimate of how the prompt decomposes across the stable
-  // request parts — `{ system, tools }` token counts (approximate; char/4).
-  // The UI derives the remaining "messages" bucket as the real cache-inclusive
-  // total minus these, so the breakdown always sums to the gauge. Optional and
-  // additive; older events without it stay valid.
+  // JSON estimate of the prompt's stable parts — `{ system, tools }` token
+  // counts (char/4). The UI derives "messages" as the real total minus these.
   context_breakdown?: string
 }
 type TextValue = {

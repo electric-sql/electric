@@ -318,17 +318,14 @@ export function createPiAgentAdapter(
     const modelContextWindow =
       typeof model.contextWindow === `number` ? model.contextWindow : 0
 
-    // Approximate token cost of the stable, non-message request parts. These
-    // are constant for the whole call, so estimate once and persist on each
-    // step; the UI derives the "messages" bucket as the real cache-inclusive
-    // total minus these (see token-accountant computeContextBreakdown).
+    // Stable request parts (constant for the call), estimated once and persisted
+    // per step; the UI derives "messages" as the real total minus these.
     const tokenBreakdown = {
       system: approxTokens(opts.systemPrompt),
       // Serialize first: approxTokens' array branch charges a flat ~64 per
-      // non-text block, so passing the AgentTool[] directly would estimate
-      // ~64×toolCount regardless of the real schema size. JSON.stringify
-      // captures each tool's name + description + parameter schema (functions
-      // drop out), which is what actually occupies the prompt.
+      // non-text block, so the raw AgentTool[] would estimate ~64×toolCount
+      // regardless of real schema size. JSON.stringify captures each tool's
+      // name + description + parameter schema, which is what fills the prompt.
       tools: approxTokens(JSON.stringify(opts.tools)),
     }
 
