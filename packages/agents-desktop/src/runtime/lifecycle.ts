@@ -38,6 +38,7 @@ export type RuntimeLifecycleDeps = {
     pullWakeRunnerId?: string | null
     preventAppSuspension?: boolean
     enabledModelValues?: Array<string>
+    skillDirectories?: Array<string>
   }
   runtimeEntries: Map<string, RuntimeEntry>
   windowSelections: Map<number, string | null>
@@ -309,6 +310,10 @@ export async function startRuntime(
     loadProjectMcpConfig: true,
     mcpOAuthRedirectBase: MCP_OAUTH_REDIRECT_BASE,
     baseSkillsDir: AGENT_SKILLS_DIR,
+    appSkillsDirs: desktopSkillDirectories({
+      workingDirectory: deps.settings.workingDirectory ?? app.getPath(`home`),
+      configured: deps.settings.skillDirectories ?? [],
+    }),
     openAuthorizeUrl: (url, server) => {
       void deps.handleAuthorizeUrl(serverId, url, server)
     },
@@ -463,4 +468,38 @@ export async function stopRuntime(
   const id = serverId ?? deps.settings.defaultServerId
   if (!id) return
   await disconnectServer(deps, id)
+}
+
+export function desktopSkillDirectories(opts: {
+  workingDirectory: string
+  configured: ReadonlyArray<string>
+}): Array<string> {
+  const home = app.getPath(`home`)
+  return dedupePaths([
+    path.join(home, `.claude`, `skills`),
+    path.join(home, `.claude`, `commands`),
+    path.join(home, `.codex`, `skills`),
+    path.join(opts.workingDirectory, `.claude`, `skills`),
+    path.join(opts.workingDirectory, `.claude`, `commands`),
+    path.join(opts.workingDirectory, `.codex`, `skills`),
+    ...opts.configured.map((dir) => expandHome(dir, home)),
+  ])
+}
+
+function expandHome(dir: string, home: string): string {
+  if (dir === `~`) return home
+  if (dir.startsWith(`~/`)) return path.join(home, dir.slice(2))
+  return dir
+}
+
+function dedupePaths(paths: ReadonlyArray<string>): Array<string> {
+  const seen = new Set<string>()
+  const result: Array<string> = []
+  for (const entry of paths) {
+    const resolved = path.resolve(entry)
+    if (seen.has(resolved)) continue
+    seen.add(resolved)
+    result.push(resolved)
+  }
+  return result
 }

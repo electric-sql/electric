@@ -99,6 +99,42 @@ keywords: [app]
     expect(registry.catalog.has(`deployment`)).toBe(true)
   })
 
+  it(`recursively loads markdown from extra app skill directories`, async () => {
+    const baseDir = path.join(tmpDir, `base-skills`)
+    const extraDir = path.join(tmpDir, `extra-skills`)
+    await fs.mkdir(baseDir, { recursive: true })
+    await writeSkill(path.join(extraDir, `nested`), `gamma`, FULL_PREAMBLE)
+    await fs.mkdir(path.join(extraDir, `delta`), { recursive: true })
+    await fs.writeFile(
+      path.join(extraDir, `delta`, `SKILL.md`),
+      FULL_PREAMBLE,
+      `utf-8`
+    )
+
+    const registry = await createSkillsRegistry({
+      baseSkillsDir: baseDir,
+      appSkillsDirs: [extraDir],
+      cacheDir: path.join(tmpDir, `.electric-agents`),
+    })
+
+    expect(registry.catalog.has(`gamma`)).toBe(true)
+    expect(registry.catalog.get(`gamma`)!.userInvocable).toBe(true)
+    expect(registry.catalog.has(`delta`)).toBe(true)
+    expect(registry.catalog.get(`delta`)!.userInvocable).toBe(true)
+  })
+
+  it(`does not make base skills user invocable by default`, async () => {
+    const baseDir = path.join(tmpDir, `base-skills`)
+    await writeSkill(baseDir, `internal`, FULL_PREAMBLE)
+
+    const registry = await createSkillsRegistry({
+      baseSkillsDir: baseDir,
+      cacheDir: path.join(tmpDir, `.electric-agents`),
+    })
+
+    expect(registry.catalog.get(`internal`)!.userInvocable).toBe(false)
+  })
+
   it(`readContent returns file content`, async () => {
     const skillsDir = path.join(tmpDir, `skills`)
     await writeSkill(skillsDir, `alpha`, FULL_PREAMBLE)

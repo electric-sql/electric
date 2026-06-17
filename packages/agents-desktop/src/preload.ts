@@ -192,6 +192,10 @@ const api = {
     ipcRenderer.invoke(`desktop:set-prevent-app-suspension`, enabled),
   getWorkingDirectory: (): Promise<string | null> =>
     ipcRenderer.invoke(`desktop:get-working-directory`),
+  getSkillDirectories: (): Promise<Array<string>> =>
+    ipcRenderer.invoke(`desktop:get-skill-directories`),
+  saveSkillDirectories: (dirs: Array<string>): Promise<void> =>
+    ipcRenderer.invoke(`desktop:save-skill-directories`, dirs),
   chooseWorkingDirectory: (): Promise<string | null> =>
     ipcRenderer.invoke(`desktop:choose-working-directory`),
   pickDirectory: (options?: { defaultPath?: string }): Promise<string | null> =>

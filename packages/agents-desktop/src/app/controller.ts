@@ -1,4 +1,5 @@
-import { BrowserWindow } from 'electron'
+import { app, BrowserWindow } from 'electron'
+import fs from 'node:fs'
 import type { DesktopAppContext } from './context'
 import * as AppLifecycle from './lifecycle'
 import * as LoginItems from './login-items'
@@ -10,9 +11,13 @@ import { createLocalDiscoveryLoop } from '../discovery/local-discovery'
 import * as DesktopIpc from '../ipc/register'
 import { ensureRuntimeEntry as ensureRuntimeEntryInStore } from '../runtime/entries'
 import { createRuntimeController } from '../runtime/controller'
+import { desktopSkillDirectories } from '../runtime/lifecycle'
 import * as SettingsBootstrap from '../settings/bootstrap'
 import * as ServerSelection from '../settings/selection'
-import { saveDesktopSettings } from '../settings/store'
+import {
+  normalizeSkillDirectories,
+  saveDesktopSettings,
+} from '../settings/store'
 import { desktopStateForWindow as desktopStateForWindowImpl } from '../state/desktop-state'
 import * as DesktopStateModel from '../state/desktop-state'
 import { injectDevPrincipalHeaders as injectDevPrincipalHeadersForServer } from '../shared/headers'
@@ -63,6 +68,8 @@ export function createDesktopMainController(ctx: DesktopAppContext) {
   const runtimeEntries = ctx.runtimeEntries
   const lastMcpSnapshots = ctx.lastMcpSnapshots
   const explicitDevPrincipal = explicitDevPrincipalFromEnv()
+  let skillDirectoryWatchers: Array<fs.FSWatcher> = []
+  let skillReloadTimer: NodeJS.Timeout | null = null
 
   const saveSettings = async (): Promise<void> => {
     await saveDesktopSettings(settings)
@@ -199,7 +206,12 @@ export function createDesktopMainController(ctx: DesktopAppContext) {
       stopRuntimeEntry,
       restartRuntime,
       refreshDesktopState,
-      quitApp,
+      quitApp: async (): Promise<void> => {
+        for (const watcher of skillDirectoryWatchers) watcher.close()
+        skillDirectoryWatchers = []
+        if (skillReloadTimer) clearTimeout(skillReloadTimer)
+        await quitApp()
+      },
     })
   }
 
@@ -305,7 +317,12 @@ export function createDesktopMainController(ctx: DesktopAppContext) {
   const clearAllLocalDataAndRelaunch = (): Promise<void> =>
     AppLifecycle.clearAllLocalDataAndRelaunch({
       ctx,
-      quitApp,
+      quitApp: async (): Promise<void> => {
+        for (const watcher of skillDirectoryWatchers) watcher.close()
+        skillDirectoryWatchers = []
+        if (skillReloadTimer) clearTimeout(skillReloadTimer)
+        await quitApp()
+      },
     })
 
   const getLaunchAtLoginStatus = () => LoginItems.getLaunchAtLoginStatus()
@@ -317,6 +334,60 @@ export function createDesktopMainController(ctx: DesktopAppContext) {
     settings.launchAtLogin = enabled
     await saveSettings()
     return status
+  }
+
+  const restartRuntimesForSkillChange = (): void => {
+    if (skillReloadTimer) clearTimeout(skillReloadTimer)
+    skillReloadTimer = setTimeout(() => {
+      skillReloadTimer = null
+      void runtime
+        .restartConnectedRuntimes()
+        .catch((err) =>
+          console.warn(
+            `[agents-desktop] Failed to reload skills after file change:`,
+            err
+          )
+        )
+    }, 300)
+  }
+
+  const refreshSkillDirectoryWatchers = (): void => {
+    for (const watcher of skillDirectoryWatchers) watcher.close()
+    skillDirectoryWatchers = []
+    const dirs = desktopSkillDirectories({
+      workingDirectory: settings.workingDirectory ?? app.getPath(`home`),
+      configured: settings.skillDirectories ?? [],
+    })
+    for (const dir of dirs) {
+      try {
+        if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) continue
+        const watcher = fs.watch(
+          dir,
+          { recursive: true },
+          (_event, filename) => {
+            if (filename && !String(filename).endsWith(`.md`)) return
+            restartRuntimesForSkillChange()
+          }
+        )
+        skillDirectoryWatchers.push(watcher)
+      } catch (err) {
+        console.warn(
+          `[agents-desktop] Could not watch skill directory ${dir}:`,
+          err
+        )
+      }
+    }
+  }
+
+  const getSkillDirectories = (): Array<string> =>
+    settings.skillDirectories ?? []
+
+  const setSkillDirectories = async (dirs: Array<string>): Promise<void> => {
+    settings.skillDirectories = normalizeSkillDirectories(dirs)
+    await saveSettings()
+    refreshDesktopState()
+    refreshSkillDirectoryWatchers()
+    await runtime.restartConnectedRuntimes()
   }
 
   const getPreventAppSuspension = (): boolean =>
@@ -347,7 +418,12 @@ export function createDesktopMainController(ctx: DesktopAppContext) {
     windows,
     createWindow,
     sendCommand,
-    quitApp,
+    quitApp: async (): Promise<void> => {
+      for (const watcher of skillDirectoryWatchers) watcher.close()
+      skillDirectoryWatchers = []
+      if (skillReloadTimer) clearTimeout(skillReloadTimer)
+      await quitApp()
+    },
     showAboutDialog,
     checkForUpdates,
   }
@@ -438,6 +514,8 @@ export function createDesktopMainController(ctx: DesktopAppContext) {
     setLaunchAtLogin,
     getPreventAppSuspension,
     setPreventAppSuspension,
+    getSkillDirectories,
+    setSkillDirectories,
   }
 
   const loadSettings = (): Promise<void> =>
@@ -509,7 +587,10 @@ export function createDesktopMainController(ctx: DesktopAppContext) {
         }
       }
     },
-    loadSettings,
+    loadSettings: async (): Promise<void> => {
+      await loadSettings()
+      refreshSkillDirectoryWatchers()
+    },
     registerIpcHandlers,
     installCloudAuthHeaderInjection,
     createTray,
@@ -520,6 +601,11 @@ export function createDesktopMainController(ctx: DesktopAppContext) {
     connectConfiguredServers,
     startDiscoveryLoop: localDiscovery.startDiscoveryLoop,
     initializeUpdater: updater.initialize,
-    quitApp,
+    quitApp: async (): Promise<void> => {
+      for (const watcher of skillDirectoryWatchers) watcher.close()
+      skillDirectoryWatchers = []
+      if (skillReloadTimer) clearTimeout(skillReloadTimer)
+      await quitApp()
+    },
   }
 }

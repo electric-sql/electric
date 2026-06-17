@@ -5,6 +5,8 @@ import { appendPathToUrl } from '@electric-ax/agents-runtime/client'
 import { Play, RefreshCw, Square } from 'lucide-react'
 import {
   loadDesktopState,
+  loadSkillDirectories,
+  saveSkillDirectories,
   onDesktopStateChanged,
   type DesktopState,
   type LocalRuntimeStatus,
@@ -153,6 +155,8 @@ export function LocalRuntimePage(): React.ReactElement {
   const [state, setState] = useState<DesktopState | null>(null)
   const [selectedServerId, setSelectedServerId] = useState<string | null>(null)
   const [now, setNow] = useState(() => Date.now())
+  const [skillDirectories, setSkillDirectories] = useState<Array<string>>([])
+  const [skillDirsError, setSkillDirsError] = useState<string | null>(null)
   const { runnersCollection: activeRunnersCollection } = useElectricAgents()
   const runtimeServers = useMemo(
     () =>
@@ -241,7 +245,13 @@ export function LocalRuntimePage(): React.ReactElement {
       if (cancelled) return
       setState(s)
     })
-    const off = onDesktopStateChanged(setState)
+    void loadSkillDirectories().then((dirs) => {
+      if (!cancelled) setSkillDirectories(dirs)
+    })
+    const off = onDesktopStateChanged((s) => {
+      setState(s)
+      setSkillDirectories(s.skillDirectories ?? [])
+    })
     return () => {
       cancelled = true
       off?.()
@@ -268,6 +278,30 @@ export function LocalRuntimePage(): React.ReactElement {
       activeRuntimeServer?.id ?? runtimeServers[0]?.id ?? null
     )
   }, [requestedServerId, runtimeServers, selectedServerId, state])
+
+  const addSkillDirectory = async (): Promise<void> => {
+    setSkillDirsError(null)
+    try {
+      const picked = await window.electronAPI?.pickDirectory?.()
+      if (!picked || skillDirectories.includes(picked)) return
+      const next = [...skillDirectories, picked]
+      setSkillDirectories(next)
+      await saveSkillDirectories(next)
+    } catch (err) {
+      setSkillDirsError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  const removeSkillDirectory = async (dir: string): Promise<void> => {
+    setSkillDirsError(null)
+    const next = skillDirectories.filter((entry) => entry !== dir)
+    setSkillDirectories(next)
+    try {
+      await saveSkillDirectories(next)
+    } catch (err) {
+      setSkillDirsError(err instanceof Error ? err.message : String(err))
+    }
+  }
 
   if (!isDesktop) {
     return (
@@ -433,6 +467,55 @@ export function LocalRuntimePage(): React.ReactElement {
               </Text>
             }
           />
+        )}
+      </SettingsSection>
+
+      <SettingsSection
+        title="Skill directories"
+        description="Load Markdown files recursively as skills. Changes are watched and the local runtime restarts to expose updated slash commands."
+        action={
+          <Button
+            variant="soft"
+            tone="neutral"
+            onClick={() => void addSkillDirectory()}
+          >
+            Add directory
+          </Button>
+        }
+      >
+        {skillDirectories.length === 0 ? (
+          <SettingsPanel>
+            <Text size={2} tone="muted">
+              No extra skill directories configured. The built-in skills still
+              load.
+            </Text>
+          </SettingsPanel>
+        ) : (
+          skillDirectories.map((dir) => (
+            <SettingsRow
+              key={dir}
+              label={dir}
+              description="Markdown files in this directory and subdirectories are loaded as skills."
+              wrapControlValue
+              splitLayout
+              control={
+                <Button
+                  variant="soft"
+                  tone="neutral"
+                  onClick={() => void removeSkillDirectory(dir)}
+                >
+                  Remove
+                </Button>
+              }
+            />
+          ))
+        )}
+        {skillDirsError && (
+          <SettingsPanel>
+            <Text size={2} tone="danger">
+              {skillDirsError}
+            </Text>
+          </SettingsPanel>
         )}
       </SettingsSection>
 
