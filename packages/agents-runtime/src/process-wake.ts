@@ -591,19 +591,16 @@ export async function processWake(
   let idleTimer: ReturnType<typeof setTimeout> | null = null
   let idleController: AbortController | null = null
   let runAbortController: AbortController | null = null
-  // Turn-end background compaction: a detached summarization started after a
-  // turn whose result (or failure) is applied as a checkpoint either at the
-  // *next* turn's start, or — if the summarize finishes while the entity is
-  // idle — immediately by waking the idle loop (so the "Compacting…" indicator
-  // never lingers past completion). The checkpoint write always stays inside a
-  // handler/idle drain. Persists across loop iterations.
+  // Turn-end background compaction: a detached summarize, applied as a
+  // checkpoint at the next turn's start — or immediately if it settles while
+  // idle. Persists across loop iterations.
   let pendingBackgroundCompaction: {
     watermark: number
     status: `pending` | `ready` | `failed`
     summary: string
   } | null = null
-  // Set by the detached summarize when it settles while idle; signals the idle
-  // loop to apply the checkpoint without running the agent handler.
+  // Set when the detached summarize settles while idle; tells the idle loop to
+  // apply the checkpoint without running the handler.
   let backgroundApplyRequestedDuringIdle = false
   let activeSignalHandler:
     | ((
@@ -2462,9 +2459,15 @@ export async function processWake(
         break
       }
 
+      // Idle until a fresh wake resumes us or we genuinely go idle — re-entering
+      // each time a detached background compaction settles while idle, so its
+      // checkpoint is written (without an agent run) and the indicator doesn't
+      // linger.
       let resumedFromIdle = false
       let idleReason = `handler returned`
-      for (;;) {
+      let appliedBackgroundDuringIdle = false
+      do {
+        appliedBackgroundDuringIdle = false
         const resumed = await awaitIdleForFreshWork(
           `${idleReason}, entering idle (${idleTimeout / 1000}s timeout)`
         )
@@ -2472,29 +2475,26 @@ export async function processWake(
           resumedFromIdle = true
           break
         }
-        // Woke from idle because a detached background compaction settled with
-        // no turn to apply it at. Write its checkpoint now (NO agent run) so the
-        // indicator clears and the next turn starts compacted, then re-idle.
         const settled = backgroundApplyRequestedDuringIdle
           ? pendingBackgroundCompaction
           : null
         backgroundApplyRequestedDuringIdle = false
-        if (!settled || settled.status === `pending`) {
-          break
+        if (settled && settled.status !== `pending`) {
+          if (settled.status === `ready`) {
+            writeBackgroundCheckpoint(settled.watermark, settled.summary)
+            log.info(`background compaction applied during idle`)
+          } else {
+            failBackgroundCheckpoint(settled.watermark)
+            log.info(`background compaction failed; cleared during idle`)
+          }
+          pendingBackgroundCompaction = null
+          await drainAllPendingWrites()
+          await wakeSession.commitManifestEntries()
+          await flushProducedWrites()
+          idleReason = `background compaction applied`
+          appliedBackgroundDuringIdle = true
         }
-        if (settled.status === `ready`) {
-          writeBackgroundCheckpoint(settled.watermark, settled.summary)
-          log.info(`background compaction applied during idle`)
-        } else {
-          failBackgroundCheckpoint(settled.watermark)
-          log.info(`background compaction failed; cleared during idle`)
-        }
-        pendingBackgroundCompaction = null
-        await drainAllPendingWrites()
-        await wakeSession.commitManifestEntries()
-        await flushProducedWrites()
-        idleReason = `background compaction applied`
-      }
+      } while (appliedBackgroundDuringIdle)
       if (resumedFromIdle) {
         continue
       }
