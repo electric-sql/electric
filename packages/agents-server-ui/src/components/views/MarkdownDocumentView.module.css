@@ -268,30 +268,47 @@
   line-height: var(--ds-text-sm-lh);
 }
 
-:global(.yRemoteSelection) {
-  opacity: 0.24;
+.editor :global(.cm-ySelection) {
+  opacity: 0.32;
 }
 
-:global(.yRemoteSelectionHead) {
-  position: absolute;
-  box-sizing: border-box;
-  height: 1.2em;
-  border-left: 2px solid;
-  opacity: 0.95;
+.editor :global(.cm-ySelectionCaret) {
+  z-index: 20;
+  border-right: 0;
+  border-left-width: 2px;
+  display: inline-block;
+  min-height: 1.25em;
 }
 
-:global(.yRemoteSelectionHead)::after {
-  position: absolute;
-  top: -1.05em;
+.editor :global(.cm-ySelectionCaretDot) {
+  display: none;
+}
+
+.editor :global(.cm-ySelectionInfo) {
+  top: -1.35em;
   left: -2px;
-  z-index: 10;
-  padding: 1px 4px;
+  z-index: 21;
+  max-width: 180px;
+  overflow: hidden;
+  padding: 1px 5px 2px;
   border-radius: var(--ds-radius-1);
-  color: white;
-  content: attr(data-user-name);
+  color: #fff;
   font-family: var(--ds-font-body);
   font-size: var(--ds-text-2xs);
+  font-style: normal;
+  font-weight: 600;
   line-height: 1.2;
+  opacity: 1;
+  pointer-events: none;
+  text-overflow: ellipsis;
   white-space: nowrap;
   box-shadow: var(--ds-shadow-1);
+}
+
+.editor :global(.cm-ySelectionCaret:hover > .cm-ySelectionInfo) {
+  opacity: 1;
+}
+
+.editor :global(.cm-yLineSelection) {
+  opacity: 0.32;
 }

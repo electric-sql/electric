@@ -2060,6 +2060,86 @@ describe(`entity patterns`, () => {
     expect(handle.entityUrl).toContain(`dyn-child-1`)
   }, 5000)
 
+  it(`serializes inline spawn wiring before creating the next child`, async () => {
+    const db = mockDb()
+    let releaseFirst!: () => void
+    const firstRelease = new Promise<void>((resolve) => {
+      releaseFirst = resolve
+    })
+    let markFirstStarted!: () => void
+    const firstStarted = new Promise<void>((resolve) => {
+      markFirstStarted = resolve
+    })
+    let secondStarted = false
+
+    const createOrGetChild = vi.fn(async (_type: string, id: string) => {
+      if (id === `one`) {
+        markFirstStarted()
+        await firstRelease
+      } else {
+        secondStarted = true
+      }
+      return {
+        entityUrl: `/worker/${id}-server`,
+        streamPath: `/worker/${id}-server/main`,
+      }
+    })
+    const createChildDb = vi.fn(async () => mockDb())
+    const ctx = createSetupContext({
+      entityUrl: `test-inline-spawn`,
+      entityType: `test-agent`,
+      args: Object.freeze({}),
+      db,
+      events: [],
+      writeEvent: () => {},
+      serverBaseUrl: `http://localhost:3000`,
+      effectScope: {
+        register: vi.fn(),
+        activateAll: vi.fn(),
+        disposeAll: vi.fn().mockResolvedValue(undefined),
+      } as never,
+      customStateNames: [],
+      wiring: {
+        createOrGetChild,
+        forkEntity: vi.fn(),
+        createChildDb,
+        createSourceDb: vi.fn(),
+        createSharedStateDb: vi.fn(),
+      } as unknown as WiringConfig,
+    })
+
+    const first = ctx.spawn(`worker`, `one`)
+    await firstStarted
+    const second = ctx.spawn(`worker`, `two`)
+    await Promise.resolve()
+
+    expect(createOrGetChild).toHaveBeenCalledTimes(1)
+    expect(secondStarted).toBe(false)
+
+    releaseFirst()
+    const [firstHandle, secondHandle] = await Promise.all([first, second])
+
+    expect(secondStarted).toBe(true)
+    expect(createOrGetChild.mock.calls.map((call) => call[1])).toEqual([
+      `one`,
+      `two`,
+    ])
+    expect(firstHandle.entityUrl).toBe(`/worker/one-server`)
+    expect(secondHandle.entityUrl).toBe(`/worker/two-server`)
+    expect(db.collections.manifests.toArray).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: manifestChildKey(`worker`, `one`),
+          entity_url: `/worker/one-server`,
+        }),
+        expect.objectContaining({
+          key: manifestChildKey(`worker`, `two`),
+          entity_url: `/worker/two-server`,
+        }),
+      ])
+    )
+  })
+
   it(`active-phase observe stages an observe manifest row before completion`, async () => {
     const { createWakeSession } = await import(`../src/wake-session`)
     const db = mockDb()

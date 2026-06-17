@@ -6,6 +6,7 @@ import { loadRealtimeSettingsStatus } from './server-connection'
 export type RealtimeAudioSession = {
   sessionId: string
   sendText: (text: string) => Promise<void>
+  setInputLevelHandler: (handler: ((level: number) => void) | undefined) => void
   stop: () => Promise<void>
 }
 
@@ -444,6 +445,7 @@ export async function startRealtimeAudioSession({
   const abort = new AbortController()
   const micContext = createAudioContext()
   const playbackContext = createAudioContext()
+  let inputLevelHandler = onInputLevel
   const resumeAudioContexts = Promise.allSettled([
     micContext.resume(),
     playbackContext.resume(),
@@ -736,7 +738,7 @@ export async function startRealtimeAudioSession({
     cancelSilentGreeting()
     silentOutput?.disconnect()
     source?.disconnect()
-    onInputLevel?.(0)
+    inputLevelHandler?.(0)
     for (const track of media?.getTracks() ?? []) track.stop()
     audioInputStopping = true
     wakeAudioWriter()
@@ -805,7 +807,7 @@ export async function startRealtimeAudioSession({
 
     const handleInputAudio = (bytes: Uint8Array, level: number): void => {
       if (abort.signal.aborted) return
-      onInputLevel?.(level)
+      inputLevelHandler?.(level)
       micChunks += 1
       if (micChunks === 1) {
         console.info(
@@ -999,6 +1001,9 @@ export async function startRealtimeAudioSession({
       sessionId: session.sessionId,
       async sendText(text: string) {
         await sendTextTurn(text)
+      },
+      setInputLevelHandler(handler) {
+        inputLevelHandler = handler
       },
       async stop() {
         await cleanup(true)

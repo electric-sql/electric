@@ -20,6 +20,12 @@ const manifestDocument = {
 } as const
 
 describe(`spawn_worker tool`, () => {
+  it(`runs sequentially because spawning mutates the parent manifest`, () => {
+    const tool = createSpawnWorkerTool({ spawn: vi.fn() } as any)
+
+    expect(tool.executionMode).toBe(`sequential`)
+  })
+
   it(`spawns a worker entity with runFinished + includeResponse and forwards the initial message`, async () => {
     const spawn = vi.fn(async (type, id) => ({
       entityUrl: `/${type}/${id}`,
@@ -39,7 +45,7 @@ describe(`spawn_worker tool`, () => {
     const [type, id, args, opts] = call as Array<any>
     expect(type).toBe(`worker`)
     expect(typeof id).toBe(`string`)
-    expect(id.length).toBeGreaterThanOrEqual(10)
+    expect(id).toMatch(/^read-tmp-foo-report-its-size-check-size-[a-z0-9]{6}$/)
     expect(args).toEqual({
       systemPrompt: `Read /tmp/foo and report its size`,
       tools: [`read`, `bash`],
@@ -54,6 +60,26 @@ describe(`spawn_worker tool`, () => {
     expect(text).toMatch(/Worker dispatched/)
     expect(text).toContain(`/worker/${id}`)
     expect(text).toMatch(/end your turn/i)
+  })
+
+  it(`uses an optional descriptive worker name with a random suffix`, async () => {
+    const spawn = vi.fn(async (type, id) => ({
+      entityUrl: `/${type}/${id}`,
+      writeToken: `tok`,
+      txid: 1,
+    }))
+    const ctx = { spawn } as any
+    const tool = createSpawnWorkerTool(ctx)
+
+    await tool.execute(`call-name`, {
+      systemPrompt: `Write detailed prose for the first act.`,
+      name: `Act One Prose`,
+      tools: [`read_markdown_doc`, `insert_markdown_doc`],
+      initialMessage: `Expand Act I in the shared markdown document.`,
+    })
+
+    const [, id] = spawn.mock.calls[0]! as Array<any>
+    expect(id).toMatch(/^act-one-prose-[a-z0-9]{6}$/)
   })
 
   it(`passes the selected model config to the spawned worker`, async () => {
@@ -109,6 +135,54 @@ describe(`spawn_worker tool`, () => {
       systemPrompt: `Edit the shared doc.`,
       tools: [`read_markdown_doc`, `insert_markdown_doc`],
       markdownDocs: [manifestDocument],
+    })
+  })
+
+  it(`automatically passes current collaborative markdown documents to markdown workers`, async () => {
+    const spawn = vi.fn(async (type, id) => ({
+      entityUrl: `/${type}/${id}`,
+      writeToken: `tok`,
+      txid: 1,
+    }))
+    const ctx = {
+      spawn,
+      db: { collections: { manifests: { toArray: [manifestDocument] } } },
+    } as any
+    const tool = createSpawnWorkerTool(ctx)
+
+    await tool.execute(`call-doc-auto`, {
+      systemPrompt: `Edit the shared doc.`,
+      tools: [`read_markdown_doc`, `edit_markdown_doc`],
+      initialMessage: `Read notes and tighten the intro.`,
+    })
+
+    const [, , args] = spawn.mock.calls[0]! as Array<any>
+    expect(args).toMatchObject({
+      systemPrompt: `Edit the shared doc.`,
+      tools: [`read_markdown_doc`, `edit_markdown_doc`],
+      markdownDocs: [manifestDocument],
+    })
+  })
+
+  it(`does not inspect markdown docs for workers without markdown document tools`, async () => {
+    const spawn = vi.fn(async (type, id) => ({
+      entityUrl: `/${type}/${id}`,
+      writeToken: `tok`,
+      txid: 1,
+    }))
+    const ctx = { spawn } as any
+    const tool = createSpawnWorkerTool(ctx)
+
+    await tool.execute(`call-no-doc-auto`, {
+      systemPrompt: `Check the repo.`,
+      tools: [`read`],
+      initialMessage: `Read a file.`,
+    })
+
+    const [, , args] = spawn.mock.calls[0]! as Array<any>
+    expect(args).toEqual({
+      systemPrompt: `Check the repo.`,
+      tools: [`read`],
     })
   })
 

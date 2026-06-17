@@ -427,6 +427,50 @@ describe(`horton tool composition`, () => {
     expect(cfg.systemPrompt).toContain(`Collaborative Markdown Docs`)
   })
 
+  it(`lists current collaborative markdown documents in Horton context`, async () => {
+    const useContext = vi.fn()
+    const manifestDocument = {
+      key: `document:story-outline`,
+      kind: `document`,
+      id: `story-outline`,
+      provider: `y-durable-streams`,
+      docId: `agents/worker/worker-1/documents/story-outline`,
+      docPath: `agents/worker/worker-1/documents/story-outline`,
+      streamPath: `/v1/yjs/default/docs/agents/worker/worker-1/documents/story-outline`,
+      transportMimeType: `application/vnd.electric-agents.markdown-yjs`,
+      contentMimeType: `text/markdown`,
+      yTextName: `markdown`,
+      title: `Story Outline`,
+      createdAt: `2026-06-17T14:00:00.000Z`,
+      meta: {
+        sourceEntityUrl: `/worker/worker-1`,
+        sourceDocumentId: `story-outline`,
+      },
+    }
+
+    await captureAgentConfig({}, [{ name: `create_markdown_doc` }], {
+      useContext,
+      db: {
+        collections: {
+          inbox: { toArray: [] },
+          runs: { toArray: [] },
+          manifests: { toArray: [manifestDocument] },
+        },
+      },
+    })
+
+    expect(useContext).toHaveBeenCalledTimes(1)
+    const contextConfig = useContext.mock.calls[0]![0] as {
+      sources: Record<string, { content: () => string }>
+    }
+    const content = contextConfig.sources.markdown_documents!.content()
+
+    expect(content).toContain(`Story Outline`)
+    expect(content).toContain(`id: story-outline`)
+    expect(content).toContain(`sourceEntityUrl: /worker/worker-1`)
+    expect(content).toContain(`read_markdown_doc`)
+  })
+
   it(`includes the default built-in toolset`, async () => {
     const tools = await captureToolset()
     const names = tools

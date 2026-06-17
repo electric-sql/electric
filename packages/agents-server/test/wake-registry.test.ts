@@ -873,6 +873,15 @@ describe(`Wake Registry Integration`, () => {
     return (electricAgentsServer as any).electricAgentsManager as EntityManager
   }
 
+  function getTenantRuntime(): {
+    syncManifestWakes: (
+      subscriberUrl: string,
+      event: Record<string, unknown>
+    ) => Promise<void>
+  } {
+    return (electricAgentsServer as any).standaloneRuntime.runtime
+  }
+
   beforeAll(async () => {
     await timeStep(`wake-registry beforeAll`, async () => {
       receiver = createServer((req, res) => {
@@ -1050,6 +1059,159 @@ describe(`Wake Registry Integration`, () => {
     expect(secondWakeEvents).toHaveLength(2)
   }, 15_000)
 
+  it(`manifest wake sync preserves an existing matching runFinished registration`, async () => {
+    const ts = Date.now()
+    const typeName = `wakekeep${ts}`
+    const manifestKey = `child:worker:stable-${ts}`
+
+    const typeRes = await fetch(`${baseUrl}/_electric/entity-types`, {
+      method: `POST`,
+      headers: { 'content-type': `application/json` },
+      body: JSON.stringify({
+        name: typeName,
+        description: `wake registration stability test`,
+      }),
+    })
+    expect(typeRes.status).toBe(201)
+
+    await createWebhookSubscription(`wake-keep-${ts}`, `${typeName}/**`)
+
+    const parentRes = await fetch(
+      `${baseUrl}/_electric/entities/${typeName}/parent-keep-${ts}`,
+      {
+        method: `PUT`,
+        headers: { 'content-type': `application/json` },
+      }
+    )
+    expect(parentRes.status).toBe(201)
+    const parent = (await parentRes.json()) as {
+      url: string
+      streams: { main: string }
+    }
+
+    const childRes = await fetch(
+      `${baseUrl}/_electric/entities/${typeName}/child-keep-${ts}`,
+      {
+        method: `PUT`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({ parent: parent.url }),
+      }
+    )
+    expect(childRes.status).toBe(201)
+    const child = (await childRes.json()) as {
+      url: string
+      streams: { main: string }
+    }
+
+    const manager = getElectricAgentsManager()
+    await manager.wakeRegistry.register({
+      subscriberUrl: parent.url,
+      sourceUrl: child.url,
+      condition: `runFinished`,
+      oneShot: false,
+      includeResponse: true,
+      manifestKey,
+    })
+    const before = manager.wakeRegistry.evaluate(child.url, {
+      type: `run`,
+      key: `run-before`,
+      value: { status: `completed` },
+      headers: { operation: `update` },
+    })
+    expect(before).toHaveLength(1)
+    const registrationId = before[0]!.registrationDbId
+
+    await getTenantRuntime().syncManifestWakes(parent.url, {
+      type: `manifest`,
+      key: manifestKey,
+      value: {
+        kind: `child`,
+        entity_url: child.url,
+        wake: { on: `runFinished`, includeResponse: true },
+      },
+      headers: { operation: `insert` },
+    })
+
+    const after = manager.wakeRegistry.evaluate(child.url, {
+      type: `run`,
+      key: `run-after`,
+      value: { status: `completed` },
+      headers: { operation: `update` },
+    })
+    expect(after).toHaveLength(1)
+    expect(after[0]!.registrationDbId).toBe(registrationId)
+  }, 15_000)
+
+  it(`manifest runFinished registration replays a child run that already completed`, async () => {
+    const ts = Date.now()
+    const typeName = `wakelate${ts}`
+    const manifestKey = `child:worker:late-${ts}`
+
+    const typeRes = await fetch(`${baseUrl}/_electric/entity-types`, {
+      method: `POST`,
+      headers: { 'content-type': `application/json` },
+      body: JSON.stringify({
+        name: typeName,
+        description: `late wake replay test`,
+      }),
+    })
+    expect(typeRes.status).toBe(201)
+
+    await createWebhookSubscription(`wake-late-${ts}`, `${typeName}/**`)
+
+    const parentRes = await fetch(
+      `${baseUrl}/_electric/entities/${typeName}/parent-late-${ts}`,
+      {
+        method: `PUT`,
+        headers: { 'content-type': `application/json` },
+      }
+    )
+    expect(parentRes.status).toBe(201)
+    const parent = (await parentRes.json()) as {
+      url: string
+      streams: { main: string }
+    }
+
+    const childRes = await fetch(
+      `${baseUrl}/_electric/entities/${typeName}/child-late-${ts}`,
+      {
+        method: `PUT`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({ parent: parent.url }),
+      }
+    )
+    expect(childRes.status).toBe(201)
+    const child = (await childRes.json()) as {
+      url: string
+      streams: { main: string }
+    }
+
+    await appendInternalEvent(child.streams.main, {
+      type: `run`,
+      key: `run-already-done`,
+      value: { status: `completed` },
+      headers: { operation: `update` },
+    })
+
+    await getTenantRuntime().syncManifestWakes(parent.url, {
+      type: `manifest`,
+      key: manifestKey,
+      value: {
+        kind: `child`,
+        entity_url: child.url,
+        wake: { on: `runFinished`, includeResponse: true },
+      },
+      headers: { operation: `insert` },
+    })
+
+    const wakeEvents = await waitForWakeEvents(parent.streams.main, 1)
+    const wakeValue = wakeEvents[0]!.value as Record<string, unknown>
+    const finishedChild = wakeValue.finished_child as Record<string, unknown>
+    expect(wakeValue.source).toBe(child.url)
+    expect(finishedChild.url).toBe(child.url)
+    expect(finishedChild.run_status).toBe(`completed`)
+  }, 15_000)
+
   it(`runFinished wake includes child text response by default`, async () => {
     const ts = Date.now()
     const typeName = `wakeresp${ts}`
@@ -1153,6 +1315,123 @@ describe(`Wake Registry Integration`, () => {
     expect(finishedChild.run_status).toBe(`completed`)
     expect(finishedChild.response).toBe(`Hello from child!`)
     expect(finishedChild.error).toBeUndefined()
+  }, 15_000)
+
+  it(`runFinished wake mirrors child markdown documents into the parent manifest`, async () => {
+    const ts = Date.now()
+    const typeName = `wakedoc${ts}`
+
+    const typeRes = await fetch(`${baseUrl}/_electric/entity-types`, {
+      method: `POST`,
+      headers: { 'content-type': `application/json` },
+      body: JSON.stringify({
+        name: typeName,
+        description: `wake document manifest test`,
+      }),
+    })
+    expect(typeRes.status).toBe(201)
+
+    await createWebhookSubscription(`wake-doc-${ts}`, `${typeName}/**`)
+
+    const parentRes = await fetch(
+      `${baseUrl}/_electric/entities/${typeName}/parent`,
+      {
+        method: `PUT`,
+        headers: { 'content-type': `application/json` },
+      }
+    )
+    expect(parentRes.status).toBe(201)
+    const parent = (await parentRes.json()) as {
+      url: string
+      streams: { main: string }
+    }
+
+    const childRes = await fetch(
+      `${baseUrl}/_electric/entities/${typeName}/child`,
+      {
+        method: `PUT`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({ parent: parent.url }),
+      }
+    )
+    expect(childRes.status).toBe(201)
+    const child = (await childRes.json()) as {
+      url: string
+      streams: { main: string }
+    }
+
+    const manager = getElectricAgentsManager()
+    const { document } = await manager.createMarkdownDocument(child.url, {
+      id: `notes`,
+      title: `Worker Notes`,
+      createdBy: `/principal/agent:worker`,
+    })
+
+    await manager.wakeRegistry.register({
+      subscriberUrl: parent.url,
+      sourceUrl: child.url,
+      condition: `runFinished`,
+      oneShot: false,
+    })
+
+    const runId = `run-doc`
+    const runCompletedEvent = {
+      type: `run`,
+      key: runId,
+      value: { status: `completed` },
+      headers: { operation: `update` },
+    }
+    await appendInternalEvent(child.streams.main, runCompletedEvent)
+    await manager.evaluateWakes(child.url, runCompletedEvent)
+
+    const wakeEvents = await waitForWakeEvents(parent.streams.main, 1)
+    expect(wakeEvents.length).toBeGreaterThanOrEqual(1)
+
+    const parentEvents = await waitForStreamEvents(
+      baseUrl,
+      parent.streams.main,
+      (events) =>
+        events.some((event) => {
+          if (event.type !== `manifest`) return false
+          const value = event.value as Record<string, unknown> | undefined
+          return (
+            value?.kind === `document` && value.docPath === document.docPath
+          )
+        })
+    )
+    const mirrored = parentEvents
+      .filter((event) => event.type === `manifest`)
+      .map((event) => event.value as Record<string, unknown>)
+      .find(
+        (value) =>
+          value.kind === `document` && value.docPath === document.docPath
+      )
+
+    expect(mirrored).toMatchObject({
+      key: `document:notes`,
+      kind: `document`,
+      id: `notes`,
+      title: `Worker Notes`,
+      docPath: document.docPath,
+      streamPath: document.streamPath,
+      meta: {
+        sourceEntityUrl: child.url,
+        sourceDocumentId: `notes`,
+      },
+    })
+
+    const readRes = await fetch(
+      `${baseUrl}/_electric/entities/${typeName}/parent/documents/notes`
+    )
+    expect(readRes.status).toBe(200)
+    const readJson = (await readRes.json()) as {
+      document: Record<string, unknown>
+    }
+    expect(readJson.document).toMatchObject({
+      id: `notes`,
+      docPath: document.docPath,
+      streamPath: document.streamPath,
+    })
   }, 15_000)
 
   it(`runFinished wake omits response when includeResponse is false`, async () => {

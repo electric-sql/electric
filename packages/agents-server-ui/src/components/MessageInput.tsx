@@ -22,6 +22,13 @@ import {
   startRealtimeAudioSession,
   type RealtimeAudioSession,
 } from '../lib/realtime-audio'
+import {
+  adoptSharedRealtimeSession,
+  createRealtimeSessionKey,
+  releaseSharedRealtimeSession,
+  stopSharedRealtimeSession,
+  storeSharedRealtimeSession,
+} from '../lib/realtime-session-store'
 import { useRealtimeAvailability } from '../hooks/useRealtimeAvailability'
 import { ComposerEditor } from './ComposerEditor'
 import { ComposerShell } from './ComposerShell'
@@ -137,6 +144,10 @@ export function MessageInput({
   const handledAutoStartRealtimeRef = useRef<string | null>(null)
   const composerFocusRef = useRef<{ focus: () => void } | null>(null)
   const realtimeAvailability = useRealtimeAvailability()
+  const realtimeKey = useMemo(
+    () => createRealtimeSessionKey(baseUrl, entityUrl),
+    [baseUrl, entityUrl]
+  )
   const inputDisabled = disabled || writeDisabled
   const isCommentMode = composerMode === `comment`
   const attachmentsDisabled =
@@ -256,11 +267,21 @@ export function MessageInput({
     realtimeAvailability.canStart
 
   useEffect(() => {
+    const session = adoptSharedRealtimeSession(realtimeKey)
+    realtimeSessionRef.current = session
+    session?.setInputLevelHandler(setRealtimeInputLevel)
+    setRealtimeActive(Boolean(session))
+    if (!session) setRealtimeInputLevel(0)
+
     return () => {
-      void realtimeSessionRef.current?.stop()
+      const currentSession = realtimeSessionRef.current
+      currentSession?.setInputLevelHandler(undefined)
+      if (currentSession) {
+        releaseSharedRealtimeSession(realtimeKey, currentSession)
+      }
       realtimeSessionRef.current = null
     }
-  }, [])
+  }, [realtimeKey])
 
   const handleSubmit = useCallback(
     (composerPayload?: ComposerInputPayload) => {
@@ -375,6 +396,13 @@ export function MessageInput({
         }
         return
       }
+      const existingSession = adoptSharedRealtimeSession(realtimeKey)
+      if (existingSession) {
+        existingSession.setInputLevelHandler(setRealtimeInputLevel)
+        realtimeSessionRef.current = existingSession
+        setRealtimeActive(true)
+        return
+      }
       setRealtimePending(true)
       startRealtimeAudioSession({
         baseUrl,
@@ -384,6 +412,8 @@ export function MessageInput({
         greetIfSilent,
       })
         .then((session) => {
+          session.setInputLevelHandler(setRealtimeInputLevel)
+          storeSharedRealtimeSession(realtimeKey, session)
           realtimeSessionRef.current = session
           setRealtimeActive(true)
         })
@@ -399,6 +429,7 @@ export function MessageInput({
       baseUrl,
       canStartRealtime,
       entityUrl,
+      realtimeKey,
       realtimeAvailability.unavailableReason,
       realtimePending,
     ]
@@ -410,9 +441,9 @@ export function MessageInput({
     if (realtimeSessionRef.current) {
       const session = realtimeSessionRef.current
       realtimeSessionRef.current = null
+      session.setInputLevelHandler(undefined)
       setRealtimePending(true)
-      session
-        .stop()
+      stopSharedRealtimeSession(realtimeKey, session)
         .catch((err: Error) => setError(err.message))
         .finally(() => {
           setRealtimeActive(false)
@@ -422,7 +453,7 @@ export function MessageInput({
       return
     }
     startRealtimeSession()
-  }, [realtimePending, startRealtimeSession])
+  }, [realtimeKey, realtimePending, startRealtimeSession])
 
   useEffect(() => {
     if (!autoStartRealtimeSignal) return

@@ -2711,12 +2711,15 @@ t.define(TYPES.n1WakeTypeParent, {
       key: string
       wakeType: string
       source: string
+      payloadSources?: Array<string>
     }>(ctx.db, `wakeLog`)
 
+    const payload = wake.payload as { sources?: Array<string> } | undefined
     wakeLog.insert({
       key: `wake-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       wakeType: wake.type,
       source: wake.source,
+      ...(payload?.sources ? { payloadSources: payload.sources } : {}),
     })
 
     await runTestAgent(
@@ -2737,6 +2740,24 @@ t.define(TYPES.n1WakeTypeParent, {
               }
             )
             return `spawned:${childId}:wake.type=${wake.type}`
+          }
+          if (trimmed.startsWith(`spawn_two_and_observe `)) {
+            const childIds = trimmed
+              .slice(`spawn_two_and_observe `.length)
+              .split(/\s+/)
+              .filter(Boolean)
+            for (const childId of childIds) {
+              await ctx.spawn(
+                TYPES.n1WakeTypeChild,
+                childId,
+                {},
+                {
+                  initialMessage: `hello from parent`,
+                  wake: { on: `runFinished`, includeResponse: true },
+                }
+              )
+            }
+            return `spawned:${childIds.join(`,`)}:wake.type=${wake.type}`
           }
           return `echo:${trimmed}:wake.type=${wake.type}`
         },
@@ -6256,6 +6277,55 @@ describe(`N: wake primitives verification`, () => {
     const wakeEntry = wakeLogEntries.find((e) => e.wakeType === `wake`)
     expect(wakeEntry).toBeDefined()
     expect(wakeEntry!.wakeType).toBe(`wake`)
+  }, 30_000)
+
+  it(`N1b: parent handles both child completion wakes that arrive together`, async () => {
+    const parent = await t.spawn(TYPES.n1WakeTypeParent, `wake-type-two`)
+
+    await parent.send(`spawn_two_and_observe wt-child-2a wt-child-2b`)
+    await parent.waitForRun()
+
+    await Promise.all([
+      t.entity(`/${TYPES.n1WakeTypeChild}/wt-child-2a`).waitForRun(),
+      t.entity(`/${TYPES.n1WakeTypeChild}/wt-child-2b`).waitForRun(),
+    ])
+
+    const expectedSources = [
+      `/${TYPES.n1WakeTypeChild}/wt-child-2a`,
+      `/${TYPES.n1WakeTypeChild}/wt-child-2b`,
+    ]
+    const parentHistory = await parent.waitFor((history) => {
+      const wakeEntries = history.events
+        .filter((event) => event.type === `wake_log_entry`)
+        .map((event) => eventValueRecord(event))
+        .filter((value) => value?.wakeType === `wake`)
+      return (
+        wakeEntries.some((value) =>
+          expectedSources.every((source) =>
+            (value?.payloadSources as Array<string> | undefined)?.includes(
+              source
+            )
+          )
+        ) ||
+        expectedSources.every((source) =>
+          wakeEntries.some((value) => value?.source === source)
+        )
+      )
+    }, 15_000)
+
+    const wakeEntries = parentHistory.events
+      .filter((event) => event.type === `wake_log_entry`)
+      .map((event) => eventValueRecord(event))
+      .filter((value) => value?.wakeType === `wake`)
+    const combinedWakeEntry = wakeEntries.find((value) => value?.payloadSources)
+
+    if (combinedWakeEntry) {
+      expect(combinedWakeEntry.payloadSources).toEqual(expectedSources)
+    } else {
+      expect(new Set(wakeEntries.map((value) => value?.source))).toEqual(
+        new Set(expectedSources)
+      )
+    }
   }, 30_000)
 
   it(`N2: observe(db(...)) with wake option triggers re-wake on shared state write`, async () => {

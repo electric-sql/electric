@@ -77,6 +77,17 @@ function cursorHeadIndexFromAwarenessFrame(
   return undefined
 }
 
+function usersFromAwarenessFrame(
+  frame: Uint8Array
+): Array<Record<string, unknown>> {
+  const awareness = new Awareness(new Y.Doc())
+  applyFramedAwarenessUpdate(awareness, frame)
+  return Array.from(awareness.getStates().values()).flatMap((state) => {
+    const user = (state as { user?: Record<string, unknown> }).user
+    return user ? [user] : []
+  })
+}
+
 function createToolContext(
   opts: {
     manifestDocuments?: Array<unknown>
@@ -141,15 +152,7 @@ function createToolContext(
       headers: {},
     })),
     openMarkdownDocumentSession: vi.fn(
-      async ({
-        document,
-        entityUrl,
-        principal,
-      }: {
-        document: any
-        entityUrl: string
-        principal?: { url?: string }
-      }) => {
+      async ({ document, entityUrl }: { document: any; entityUrl: string }) => {
         const ydoc = createMarkdownYDoc(concatFrames(streamFrames))
         const text = markdownText(ydoc, document.yTextName)
         const onUpdate = (update: Uint8Array, origin: unknown): void => {
@@ -164,8 +167,11 @@ function createToolContext(
           doc: ydoc,
           off: () => ydoc.off(`update`, onUpdate),
         })
-        const principalUrl =
-          principal?.url ?? `/principal/entity:${encodeURIComponent(entityUrl)}`
+        const principalUrl = `/principal/entity:${encodeURIComponent(
+          entityUrl
+        )}`
+        const presenceName =
+          entityUrl.split(`/`).filter(Boolean).at(-1) ?? entityUrl
         return {
           document,
           doc: ydoc,
@@ -185,7 +191,7 @@ function createToolContext(
                   docPath: document.docPath,
                   principalUrl,
                   clientKey: `${principalUrl}\0${entityUrl}`,
-                  name: principalUrl,
+                  name: presenceName,
                   role: `agent`,
                   anchor: presence.anchor,
                   head: presence.head,
@@ -428,6 +434,35 @@ describe(`markdown document tools`, () => {
     expect(context.appendMarkdownDocumentAwareness).toHaveBeenCalledTimes(3)
     expect(getContent()).toContain(`Hello world`)
     expect(result.details).toMatchObject({ streamed: true })
+  })
+
+  it(`labels streamed markdown presence with the agent entity name`, async () => {
+    const { context, getAwarenessFrames } = createToolContext({
+      entityUrl: `/worker/expand-act-dsnosb`,
+      principalUrl: `/principal/system:dev-local`,
+    })
+    const insert = createMarkdownDocumentTools(context).find(
+      (tool) => tool.name === `insert_markdown_doc`
+    )!
+
+    await insert.onArgsDelta?.({
+      toolCallId: `tool-insert-labelled`,
+      toolName: `insert_markdown_doc`,
+      delta: `"Draft`,
+      argsPreview: { id: `notes`, content: `Draft` },
+    })
+    await waitForCondition(
+      () => context.appendMarkdownDocumentAwareness.mock.calls.length === 1,
+      `expected streamed insert presence update`
+    )
+
+    const users = usersFromAwarenessFrame(getAwarenessFrames().at(-1)!)
+    expect(users).toHaveLength(1)
+    expect(users[0]).toMatchObject({
+      name: `expand-act-dsnosb`,
+      principalUrl: `/principal/entity:%2Fworker%2Fexpand-act-dsnosb`,
+      role: `agent`,
+    })
   })
 
   it(`streams insert_markdown_doc at a saved Yjs-relative cursor`, async () => {

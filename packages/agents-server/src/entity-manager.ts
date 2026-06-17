@@ -356,6 +356,13 @@ function validateMarkdownDocumentId(id: string): void {
   }
 }
 
+function markdownDocumentAliasId(input: string): string {
+  const sanitized = input
+    .replace(/[^A-Za-z0-9_-]+/g, `-`)
+    .replace(/^-+|-+$/g, ``)
+  return sanitized.slice(0, 180) || randomUUID()
+}
+
 function getEntityAttachmentStreamPath(
   entityUrl: string,
   attachmentId: string
@@ -1951,6 +1958,15 @@ export class EntityManager {
     return rows
   }
 
+  private async readManifestRows(
+    entity: ElectricAgentsEntity
+  ): Promise<Map<string, Record<string, unknown>>> {
+    const events = await this.streamClient.readJson<Record<string, unknown>>(
+      entity.streams.main
+    )
+    return this.reduceStateRows(events, `manifest`)
+  }
+
   private collectSharedStateIds(
     manifest: Record<string, unknown>,
     sharedStateIds: Set<string>
@@ -1981,6 +1997,101 @@ export class EntityManager {
       return
     }
     docPaths.add(manifest.docPath)
+  }
+
+  private isManifestMarkdownDocumentEntry(
+    manifest: Record<string, unknown>
+  ): manifest is ManifestMarkdownDocumentEntry {
+    return (
+      manifest.kind === `document` &&
+      typeof manifest.id === `string` &&
+      typeof manifest.key === `string` &&
+      manifest.provider === MARKDOWN_DOCUMENT_PROVIDER &&
+      typeof manifest.docPath === `string` &&
+      typeof manifest.streamPath === `string` &&
+      manifest.transportMimeType === MARKDOWN_DOCUMENT_TRANSPORT_MIME &&
+      manifest.contentMimeType === MARKDOWN_DOCUMENT_CONTENT_MIME &&
+      manifest.yTextName === MARKDOWN_DOCUMENT_TEXT_NAME &&
+      typeof manifest.title === `string`
+    )
+  }
+
+  private uniqueChildDocumentAliasId(
+    sourceEntity: ElectricAgentsEntity,
+    documentId: string,
+    manifests: Map<string, Record<string, unknown>>
+  ): string {
+    const base = markdownDocumentAliasId(
+      `${sourceEntity.url.replace(/^\/+|\/+$/g, ``)}-${documentId}`
+    )
+    let candidate = base
+    let suffix = 2
+    while (manifests.has(manifestMarkdownDocumentKey(candidate))) {
+      candidate = markdownDocumentAliasId(`${base}-${suffix}`)
+      suffix += 1
+    }
+    return candidate
+  }
+
+  private async mirrorChildDocumentManifestsToParent(
+    parent: ElectricAgentsEntity,
+    child: ElectricAgentsEntity,
+    result: Pick<WakeEvalResult, `registrationDbId` | `sourceEventKey`>
+  ): Promise<void> {
+    const [childManifests, parentManifests] = await Promise.all([
+      this.readManifestRows(child),
+      this.readManifestRows(parent),
+    ])
+    const parentDocumentPaths = new Set(
+      Array.from(parentManifests.values())
+        .filter((manifest) => typeof manifest.docPath === `string`)
+        .map((manifest) => manifest.docPath as string)
+    )
+
+    for (const manifest of childManifests.values()) {
+      if (!this.isManifestMarkdownDocumentEntry(manifest)) {
+        continue
+      }
+      if (parentDocumentPaths.has(manifest.docPath)) {
+        continue
+      }
+
+      let id = manifest.id
+      let key = manifestMarkdownDocumentKey(id)
+      const existing = parentManifests.get(key)
+      if (existing && existing.docPath !== manifest.docPath) {
+        id = this.uniqueChildDocumentAliasId(
+          child,
+          manifest.id,
+          parentManifests
+        )
+        key = manifestMarkdownDocumentKey(id)
+      }
+
+      const meta = isRecord(manifest.meta) ? cloneRecord(manifest.meta) : {}
+      const document: ManifestMarkdownDocumentEntry = {
+        ...cloneRecord(manifest),
+        key,
+        id,
+        meta: {
+          ...meta,
+          sourceEntityUrl: child.url,
+          sourceDocumentId: manifest.id,
+        },
+      }
+
+      await this.writeManifestEntry(
+        parent.url,
+        key,
+        `upsert`,
+        document as unknown as Record<string, unknown>,
+        {
+          producerId: `wake-reg-${result.registrationDbId}-${result.sourceEventKey}-document-${id}`,
+        }
+      )
+      parentManifests.set(key, document as unknown as Record<string, unknown>)
+      parentDocumentPaths.add(document.docPath)
+    }
   }
 
   private async buildForkEntityUrlMap(
@@ -3327,7 +3438,10 @@ export class EntityManager {
       manifestMarkdownDocumentKey(id)
     )
     if (!manifest || manifest.kind !== `document`) return null
-    assertMarkdownDocumentMatchesEntity(entity, manifest.docPath as string)
+    const meta = isRecord(manifest.meta) ? manifest.meta : undefined
+    if (typeof meta?.sourceEntityUrl !== `string`) {
+      assertMarkdownDocumentMatchesEntity(entity, manifest.docPath as string)
+    }
     return manifest as unknown as ManifestMarkdownDocumentEntry
   }
 
@@ -3822,6 +3936,47 @@ export class EntityManager {
     })
   }
 
+  async replayLatestRunFinishedWake(sourceUrl: string): Promise<boolean> {
+    const sourceEntity = await this.registry.getEntity(sourceUrl)
+    if (!sourceEntity) return false
+
+    let events: Array<Record<string, unknown>>
+    try {
+      const sourceEvents = await this.streamClient.readJson<
+        Record<string, unknown> | Array<Record<string, unknown>>
+      >(sourceEntity.streams.main)
+      events = sourceEvents.flatMap((item) =>
+        Array.isArray(item) ? item : [item]
+      )
+    } catch (err) {
+      serverLog.warn(
+        `[agent-server] failed to replay runFinished wake for ${sourceUrl}:`,
+        err
+      )
+      return false
+    }
+
+    for (let index = events.length - 1; index >= 0; index -= 1) {
+      const event = events[index]!
+      if (!this.isRunFinishedEvent(event)) continue
+      await this.evaluateWakes(sourceUrl, event)
+      return true
+    }
+
+    return false
+  }
+
+  private isRunFinishedEvent(event: Record<string, unknown>): boolean {
+    if (event.type !== `run`) return false
+    const value = event.value as Record<string, unknown> | undefined
+    const headers = event.headers as Record<string, unknown> | undefined
+    const status = value?.status as string | undefined
+    const operation = headers?.operation as string | undefined
+    return (
+      operation === `update` && (status === `completed` || status === `failed`)
+    )
+  }
+
   /**
    * Deliver a wake result: append WakeMessage to subscriber's stream and
    * trigger webhook notification.
@@ -3845,6 +4000,17 @@ export class EntityManager {
           : Promise.resolve(null),
       ])
       if (!subscriber) return
+      if (
+        result.runFinishedStatus !== undefined &&
+        sourceEntity &&
+        sourceEntity.parent === subscriber.url
+      ) {
+        await this.mirrorChildDocumentManifestsToParent(
+          subscriber,
+          sourceEntity,
+          result
+        )
+      }
       const wakeMessage = await this.buildWakeMessage(
         subscriber,
         result,

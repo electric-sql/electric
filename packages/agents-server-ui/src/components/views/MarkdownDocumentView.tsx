@@ -4,6 +4,7 @@ import { EditorState } from '@codemirror/state'
 import { EditorView, basicSetup } from 'codemirror'
 import { keymap } from '@codemirror/view'
 import { YjsProvider } from '@durable-streams/y-durable-streams'
+import { useLiveQuery } from '@tanstack/react-db'
 import { Plug, TriangleAlert, Unplug } from 'lucide-react'
 import { yCollab, yUndoManagerKeymap } from 'y-codemirror.next'
 import * as decoding from 'lib0/decoding'
@@ -16,7 +17,12 @@ import {
 import * as Y from 'yjs'
 import { useCurrentPrincipal } from '../../hooks/useCurrentPrincipal'
 import { getConfiguredServerHeaders, serverFetch } from '../../lib/auth-fetch'
-import { principalKeyFromInput } from '../../lib/principals'
+import { useElectricAgents } from '../../lib/ElectricAgentsProvider'
+import {
+  principalKeyFromInput,
+  userDisplayName,
+  userIdFromPrincipal,
+} from '../../lib/principals'
 import { Icon, ScrollArea } from '../../ui'
 import styles from './MarkdownDocumentView.module.css'
 import type { EntityViewProps } from '../../lib/workspace/viewRegistry'
@@ -101,6 +107,15 @@ function connectionStatusIcon(status: DocumentConnectionStatus): LucideIcon {
     case `connected`:
       return Plug
   }
+}
+
+function principalPresenceLabel(principalKey: string): string {
+  const colon = principalKey.indexOf(`:`)
+  const id = colon >= 0 ? principalKey.slice(colon + 1) : principalKey
+  if (id.startsWith(`/`)) {
+    return id.split(`/`).filter(Boolean).at(-1) ?? id
+  }
+  return id || principalKey
 }
 
 export function applyMarkdownAwarenessFrames(
@@ -198,6 +213,18 @@ export function MarkdownDocumentView({
   const [status, setStatus] = useState<DocumentConnectionStatus>(`loading`)
   const [remoteUsers, setRemoteUsers] = useState<Array<RemoteUser>>([])
   const { principal } = useCurrentPrincipal()
+  const { usersCollection } = useElectricAgents()
+  const { data: users = [] } = useLiveQuery(
+    (q) => {
+      if (!usersCollection) return undefined
+      return q.from({ user: usersCollection })
+    },
+    [usersCollection]
+  )
+  const usersById = useMemo(
+    () => new Map(users.map((user) => [user.id, user] as const)),
+    [users]
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -227,10 +254,13 @@ export function MarkdownDocumentView({
     }
   }, [baseUrl, entityUrl, documentId])
 
-  const principalLabel = useMemo(
-    () => principalKeyFromInput(principal) ?? principal,
-    [principal]
-  )
+  const principalLabel = useMemo(() => {
+    const userId = userIdFromPrincipal(principal)
+    const user = userId ? usersById.get(userId) : undefined
+    const displayName = userDisplayName(user)
+    if (displayName) return displayName
+    return principalPresenceLabel(principalKeyFromInput(principal) ?? principal)
+  }, [principal, usersById])
 
   useEffect(() => {
     if (!editorRef.current || !documentEntry) return

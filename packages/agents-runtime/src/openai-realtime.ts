@@ -465,6 +465,14 @@ function openAINumber(value: unknown): number | undefined {
   return typeof value === `number` && Number.isFinite(value) ? value : undefined
 }
 
+function openAIResponseId(event: OpenAIRealtimeEvent): string | undefined {
+  return typeof event.response?.id === `string`
+    ? event.response.id
+    : typeof event.response_id === `string`
+      ? event.response_id
+      : undefined
+}
+
 function mapOpenAIEvent(
   event: OpenAIRealtimeEvent
 ): Array<RealtimeProviderEvent> {
@@ -537,10 +545,7 @@ function mapOpenAIEvent(
       return [
         {
           type: `response.started`,
-          responseId:
-            typeof event.response?.id === `string`
-              ? event.response.id
-              : undefined,
+          responseId: openAIResponseId(event),
         },
       ]
     case `response.audio.delta`:
@@ -603,22 +608,14 @@ function mapOpenAIEvent(
       return [
         {
           type: `response.completed`,
-          responseId:
-            typeof event.response?.id === `string`
-              ? event.response.id
-              : typeof event.response_id === `string`
-                ? event.response_id
-                : undefined,
+          responseId: openAIResponseId(event),
         },
       ]
     case `response.cancelled`:
       return [
         {
           type: `response.cancelled`,
-          responseId:
-            typeof event.response_id === `string`
-              ? event.response_id
-              : undefined,
+          responseId: openAIResponseId(event),
         },
       ]
     case `response.output_item.added`:
@@ -679,7 +676,76 @@ export function createOpenAIRealtimeProvider(
       let socketClosed = false
       let clientCloseRequested = false
       let responseEpoch = 0
+      let responseInFlight = false
+      let responseCreatePendingAck = false
+      let activeResponseId: string | undefined
+      let pendingResponseCreate = false
+      const finishedResponseIds: Array<string> = []
       let rejectOpen: ((error: Error) => void) | undefined
+      let sequentialToolQueue: Promise<void> = Promise.resolve()
+
+      const runSequentialTool = async <T>(fn: () => Promise<T>): Promise<T> => {
+        const run = sequentialToolQueue.then(fn, fn)
+        sequentialToolQueue = run.then(
+          () => undefined,
+          () => undefined
+        )
+        return run
+      }
+
+      const rememberFinishedResponse = (responseId: string | undefined) => {
+        if (!responseId || finishedResponseIds.includes(responseId)) return
+        finishedResponseIds.push(responseId)
+        if (finishedResponseIds.length > 32) {
+          finishedResponseIds.shift()
+        }
+      }
+
+      const requestResponse = (): void => {
+        if (clientCloseRequested || socketClosed || input.signal?.aborted) {
+          return
+        }
+        if (responseInFlight) {
+          pendingResponseCreate = true
+          return
+        }
+        pendingResponseCreate = false
+        responseInFlight = true
+        responseCreatePendingAck = true
+        activeResponseId = undefined
+        sendJson(ws, { type: `response.create` })
+      }
+
+      const finishActiveResponse = (responseId?: string): void => {
+        if (!responseInFlight) return
+        if (
+          responseId !== undefined &&
+          finishedResponseIds.includes(responseId)
+        ) {
+          return
+        }
+        if (
+          activeResponseId !== undefined &&
+          responseId !== undefined &&
+          responseId !== activeResponseId
+        ) {
+          return
+        }
+        if (
+          responseCreatePendingAck &&
+          activeResponseId === undefined &&
+          responseId === undefined
+        ) {
+          return
+        }
+        responseInFlight = false
+        responseCreatePendingAck = false
+        rememberFinishedResponse(responseId)
+        activeResponseId = undefined
+        if (pendingResponseCreate) {
+          requestResponse()
+        }
+      }
 
       const closeQueue = (reason?: string): void => {
         if (socketClosed) return
@@ -710,7 +776,7 @@ export function createOpenAIRealtimeProvider(
             output: toolResultOutput(result),
           },
         })
-        sendJson(ws, { type: `response.create` })
+        requestResponse()
       }
 
       const executeToolCall = async (
@@ -742,49 +808,60 @@ export function createOpenAIRealtimeProvider(
           return
         }
 
-        try {
-          const prepared =
-            typeof tool.prepareArguments === `function`
-              ? tool.prepareArguments(args)
-              : args
-          const result = await tool.execute(
-            toolCallId,
-            prepared as never,
-            input.signal
-          )
-          const realtimeResult: RealtimeToolResult = {
-            toolCallId,
-            name,
-            result,
+        const executeAndSendToolResult = async (): Promise<void> => {
+          try {
+            const prepared =
+              typeof tool.prepareArguments === `function`
+                ? tool.prepareArguments(args)
+                : args
+            const result = await tool.execute(
+              toolCallId,
+              prepared as never,
+              input.signal
+            )
+            const realtimeResult: RealtimeToolResult = {
+              toolCallId,
+              name,
+              result,
+            }
+            queue.push({ type: `tool_call.completed`, ...realtimeResult })
+            if (
+              clientCloseRequested ||
+              socketClosed ||
+              input.signal?.aborted ||
+              toolResponseEpoch !== responseEpoch
+            ) {
+              return
+            }
+            await sendToolResult(realtimeResult)
+          } catch (error) {
+            const realtimeResult: RealtimeToolResult = {
+              toolCallId,
+              name,
+              result: error instanceof Error ? error.message : String(error),
+              isError: true,
+            }
+            queue.push({ type: `tool_call.completed`, ...realtimeResult })
+            if (
+              clientCloseRequested ||
+              socketClosed ||
+              input.signal?.aborted ||
+              toolResponseEpoch !== responseEpoch
+            ) {
+              return
+            }
+            await sendToolResult(realtimeResult)
           }
-          queue.push({ type: `tool_call.completed`, ...realtimeResult })
-          if (
-            clientCloseRequested ||
-            socketClosed ||
-            input.signal?.aborted ||
-            toolResponseEpoch !== responseEpoch
-          ) {
-            return
-          }
-          await sendToolResult(realtimeResult)
-        } catch (error) {
-          const realtimeResult: RealtimeToolResult = {
-            toolCallId,
-            name,
-            result: error instanceof Error ? error.message : String(error),
-            isError: true,
-          }
-          queue.push({ type: `tool_call.completed`, ...realtimeResult })
-          if (
-            clientCloseRequested ||
-            socketClosed ||
-            input.signal?.aborted ||
-            toolResponseEpoch !== responseEpoch
-          ) {
-            return
-          }
-          await sendToolResult(realtimeResult)
         }
+
+        if (
+          (tool as { executionMode?: unknown }).executionMode === `sequential`
+        ) {
+          await runSequentialTool(executeAndSendToolResult)
+          return
+        }
+
+        await executeAndSendToolResult()
       }
 
       const opened = new Promise<void>((resolve, reject) => {
@@ -820,12 +897,21 @@ export function createOpenAIRealtimeProvider(
           }
           if (parsed.type === `response.created`) {
             responseEpoch += 1
+            responseInFlight = true
+            responseCreatePendingAck = false
+            activeResponseId = openAIResponseId(parsed)
           }
           if (parsed.type === `response.function_call_arguments.done`) {
             void executeToolCall(parsed).catch((error) => queue.fail(error))
             return
           }
           for (const event of mapOpenAIEvent(parsed)) queue.push(event)
+          if (
+            parsed.type === `response.done` ||
+            parsed.type === `response.cancelled`
+          ) {
+            finishActiveResponse(openAIResponseId(parsed))
+          }
         } catch (error) {
           queue.fail(error)
         }
@@ -871,7 +957,7 @@ export function createOpenAIRealtimeProvider(
         },
         commitInputAudio: async () => {
           sendJson(ws, { type: `input_audio_buffer.commit` })
-          sendJson(ws, { type: `response.create` })
+          requestResponse()
         },
         sendText: async (text) => {
           sendJson(ws, {
@@ -882,7 +968,7 @@ export function createOpenAIRealtimeProvider(
               content: [{ type: `input_text`, text }],
             },
           })
-          sendJson(ws, { type: `response.create` })
+          requestResponse()
         },
         sendToolResult,
         cancelResponse: async () => {

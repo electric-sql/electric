@@ -427,6 +427,19 @@ const githubWebhookSourceContract: WebhookSourceContract = {
   ],
 }
 
+async function waitFor(
+  predicate: () => boolean,
+  timeoutMs = 500
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (!predicate()) {
+    if (Date.now() > deadline) {
+      throw new Error(`timed out waiting for condition`)
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5))
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -1973,6 +1986,111 @@ describe(`processWake`, () => {
     }
     expect(body.acks).toEqual([
       { path: `/streams/entity:agent-1`, offset: `11_000` },
+    ])
+  })
+
+  it(`routes live wake batches to an active realtime session before the handler returns`, async () => {
+    const sentTexts: Array<string> = []
+    let resolveConnected!: () => void
+    const connected = new Promise<void>((resolve) => {
+      resolveConnected = resolve
+    })
+    let closeProvider!: () => void
+    const providerClosed = new Promise<void>((resolve) => {
+      closeProvider = resolve
+    })
+
+    defineEntity(`test-agent`, {
+      handler: async (ctx) => {
+        const realtime = ctx.useRealtime({
+          systemPrompt: `You are realtime.`,
+          provider: {
+            id: `test`,
+            model: `test-realtime`,
+            async connect() {
+              resolveConnected()
+              return {
+                events: (async function* () {
+                  yield { type: `session.started` as const }
+                  await providerClosed
+                  yield { type: `session.closed` as const }
+                })(),
+                sendText: async (text) => {
+                  sentTexts.push(text)
+                },
+              }
+            },
+          },
+          tools: [],
+          context: { includeTimeline: false },
+        })
+        await realtime.run()
+      },
+    })
+
+    const wakePromise = processWake(
+      makeNotification({ triggerEvent: `inbox` }),
+      BASE_CONFIG
+    )
+    await connected
+
+    mockEntityOnBatch.current?.({
+      items: [
+        ev(
+          `wake`,
+          `wake-worker-one`,
+          `insert`,
+          {
+            source: `/worker/one`,
+            timeout: false,
+            changes: [],
+            finished_child: {
+              url: `/worker/one`,
+              type: `worker`,
+              run_status: `completed`,
+              response: `The markdown document is ready.`,
+            },
+          },
+          { offset: `11_000` }
+        ),
+        ev(
+          `wake`,
+          `wake-worker-two`,
+          `insert`,
+          {
+            source: `/worker/two`,
+            timeout: false,
+            changes: [],
+            finished_child: {
+              url: `/worker/two`,
+              type: `worker`,
+              run_status: `completed`,
+              response: `The second markdown section is ready.`,
+            },
+          },
+          { offset: `11_001` }
+        ),
+      ],
+      offset: `11_001`,
+    })
+
+    await waitFor(() => sentTexts.length === 1)
+    expect(sentTexts[0]).toContain(`live Electric Agents notification`)
+    expect(sentTexts[0]).toContain(`The markdown document is ready.`)
+    expect(sentTexts[0]).toContain(`The second markdown section is ready.`)
+
+    closeProvider()
+    await wakePromise
+
+    const doneCalls = fetchMock.mock.calls.filter(([url]) =>
+      String(url).includes(`/_electric/wakes/wake-abc`)
+    )
+    const lastDoneCall = doneCalls[doneCalls.length - 1]!
+    const body = JSON.parse(lastDoneCall[1]!.body as string) as {
+      acks: Array<{ path: string; offset: string }>
+    }
+    expect(body.acks).toEqual([
+      { path: `/streams/entity:agent-1`, offset: `11_001` },
     ])
   })
 

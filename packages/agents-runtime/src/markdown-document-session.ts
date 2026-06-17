@@ -48,9 +48,7 @@ export async function openMarkdownDocumentSession(opts: {
     liveMode: `sse`,
     connect: false,
   })
-  const principalUrl =
-    opts.principal?.url ??
-    `/principal/entity:${encodeURIComponent(opts.entityUrl)}`
+  const principalUrl = `/principal/entity:${encodeURIComponent(opts.entityUrl)}`
   const color = principalColor(principalUrl)
 
   await provider.connect()
@@ -126,6 +124,9 @@ function principalDisplayName(principalUrl: string): string {
     // Keep the raw value when the URL segment is not URI encoded.
   }
   const withoutPrefix = decoded.replace(/^(user|agent|entity|system):/, ``)
+  if (withoutPrefix.startsWith(`/`)) {
+    return withoutPrefix.split(`/`).filter(Boolean).at(-1) ?? withoutPrefix
+  }
   return withoutPrefix || decoded || principalUrl
 }
 

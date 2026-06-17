@@ -5,6 +5,7 @@ import {
   createTestHandlerContext,
 } from './helpers/context-test-helpers'
 import type { ChangeEvent } from '@durable-streams/state'
+import type { WakeEvent } from '../src/types'
 
 const durableMock = vi.hoisted(() => {
   type StreamSource<T> = Iterable<T> | AsyncIterable<T>
@@ -680,6 +681,241 @@ describe(`ctx.useRealtime()`, () => {
     expect(ctx.db.collections.runs.toArray).toMatchObject([
       { status: `completed`, finish_reason: `stop` },
     ])
+  })
+
+  it(`does not create legacy tool rows for out-of-order realtime tool completions`, async () => {
+    const { ctx } = createTestHandlerContext()
+
+    const realtime = ctx.useRealtime({
+      systemPrompt: `You are realtime.`,
+      provider: createTestRealtimeProvider({
+        events: [
+          { type: `session.started` },
+          {
+            type: `tool_call.arguments_completed`,
+            toolCallId: `call-1`,
+            name: `first_tool`,
+            args: { value: 1 },
+          },
+          {
+            type: `tool_call.arguments_completed`,
+            toolCallId: `call-2`,
+            name: `second_tool`,
+            args: { value: 2 },
+          },
+          {
+            type: `tool_call.completed`,
+            toolCallId: `call-1`,
+            name: `first_tool`,
+            result: `first done`,
+          },
+          {
+            type: `tool_call.completed`,
+            toolCallId: `call-2`,
+            name: `second_tool`,
+            result: `second done`,
+          },
+          { type: `session.closed` },
+        ],
+      }),
+      tools: [],
+    })
+
+    await realtime.run()
+
+    expect(ctx.db.collections.toolCalls.toArray).toMatchObject([
+      {
+        tool_call_id: `call-1`,
+        tool_name: `first_tool`,
+        status: `completed`,
+      },
+      {
+        tool_call_id: `call-2`,
+        tool_name: `second_tool`,
+        status: `completed`,
+      },
+    ])
+    expect(
+      ctx.db.collections.toolCalls.toArray.some((toolCall) =>
+        toolCall.tool_call_id?.startsWith(`legacy-tc-`)
+      )
+    ).toBe(false)
+  })
+
+  it(`forwards live inbox notifications to the active realtime provider`, async () => {
+    let liveWakeHandler:
+      | ((wake: {
+          wakeEvent: WakeEvent
+          wakeOffset: string
+          ackOffset: string
+          events: Array<ChangeEvent>
+        }) => boolean | Promise<boolean>)
+      | undefined
+    let resolveRegistered!: () => void
+    const registered = new Promise<void>((resolve) => {
+      resolveRegistered = resolve
+    })
+    let closeProvider!: () => void
+    const providerClosed = new Promise<void>((resolve) => {
+      closeProvider = resolve
+    })
+    const sendText = vi.fn(async () => undefined)
+    const prepareAgentRun = vi.fn(async () => undefined)
+    const { ctx } = createTestHandlerContext({
+      prepareAgentRun,
+      registerLiveWakeHandler: (handler) => {
+        liveWakeHandler = handler
+        resolveRegistered()
+        return () => {
+          if (liveWakeHandler === handler) {
+            liveWakeHandler = undefined
+          }
+        }
+      },
+    })
+
+    const realtime = ctx.useRealtime({
+      systemPrompt: `You are realtime.`,
+      provider: {
+        id: `test`,
+        model: `test-realtime`,
+        async connect() {
+          return {
+            events: (async function* () {
+              yield { type: `session.started` as const }
+              await providerClosed
+              yield { type: `session.closed` as const }
+            })(),
+            sendText,
+          }
+        },
+      },
+      tools: [],
+    })
+
+    const run = realtime.run()
+    await registered
+
+    await expect(
+      liveWakeHandler?.({
+        wakeEvent: {
+          type: `inbox`,
+          source: `/user/alice`,
+          fromOffset: 0,
+          toOffset: 0,
+          eventCount: 1,
+          payload: `typed while realtime is active`,
+        },
+        wakeOffset: `10_0`,
+        ackOffset: `10_0`,
+        events: [],
+      })
+    ).resolves.toBe(true)
+
+    expect(sendText).toHaveBeenCalledWith(`typed while realtime is active`)
+    expect(prepareAgentRun).toHaveBeenCalled()
+
+    ctx.db.collections.manifests.insert({
+      key: `document:story-outline`,
+      kind: `document`,
+      id: `story-outline`,
+      provider: `y-durable-streams`,
+      docId: `agents/worker/worker-1/documents/story-outline`,
+      docPath: `agents/worker/worker-1/documents/story-outline`,
+      streamPath: `/v1/yjs/default/docs/agents/worker/worker-1/documents/story-outline`,
+      transportMimeType: `application/vnd.electric-agents.markdown-yjs`,
+      contentMimeType: `text/markdown`,
+      yTextName: `markdown`,
+      title: `Story Outline`,
+      createdAt: `2026-06-17T14:00:00.000Z`,
+      meta: {
+        sourceEntityUrl: `/worker/worker-1`,
+        sourceDocumentId: `story-outline`,
+      },
+    })
+    ctx.db.collections.manifests.insert({
+      key: `document:story-act-two`,
+      kind: `document`,
+      id: `story-act-two`,
+      provider: `y-durable-streams`,
+      docId: `agents/worker/worker-2/documents/story-act-two`,
+      docPath: `agents/worker/worker-2/documents/story-act-two`,
+      streamPath: `/v1/yjs/default/docs/agents/worker/worker-2/documents/story-act-two`,
+      transportMimeType: `application/vnd.electric-agents.markdown-yjs`,
+      contentMimeType: `text/markdown`,
+      yTextName: `markdown`,
+      title: `Story Act Two`,
+      createdAt: `2026-06-17T14:00:00.000Z`,
+      meta: {
+        sourceEntityUrl: `/worker/worker-2`,
+        sourceDocumentId: `story-act-two`,
+      },
+    })
+
+    await expect(
+      liveWakeHandler?.({
+        wakeEvent: {
+          type: `wake`,
+          source: `/horton/parent`,
+          fromOffset: 0,
+          toOffset: 0,
+          eventCount: 2,
+          payload: {
+            type: `wake_batch`,
+            sources: [`/worker/worker-1`, `/worker/worker-2`],
+            wakes: [
+              {
+                source: `/worker/worker-1`,
+                timeout: false,
+                changes: [],
+                finished_child: {
+                  url: `/worker/worker-1`,
+                  type: `worker`,
+                  run_status: `completed`,
+                  response: `The markdown document is ready.`,
+                },
+              },
+              {
+                source: `/worker/worker-2`,
+                timeout: false,
+                changes: [],
+                finished_child: {
+                  url: `/worker/worker-2`,
+                  type: `worker`,
+                  run_status: `completed`,
+                  response: `The second markdown document is ready.`,
+                },
+              },
+            ],
+          },
+        },
+        wakeOffset: `11_0`,
+        ackOffset: `11_0`,
+        events: [],
+      })
+    ).resolves.toBe(true)
+
+    expect(sendText).toHaveBeenLastCalledWith(
+      expect.stringContaining(`live Electric Agents notification`)
+    )
+    expect(sendText).toHaveBeenLastCalledWith(
+      expect.stringContaining(`The markdown document is ready.`)
+    )
+    expect(sendText).toHaveBeenLastCalledWith(
+      expect.stringContaining(`The second markdown document is ready.`)
+    )
+    expect(sendText).toHaveBeenLastCalledWith(
+      expect.stringContaining(`Story Outline (id: story-outline)`)
+    )
+    expect(sendText).toHaveBeenLastCalledWith(
+      expect.stringContaining(`Story Act Two (id: story-act-two)`)
+    )
+    expect(sendText).toHaveBeenLastCalledWith(
+      expect.stringContaining(`read_markdown_doc`)
+    )
+
+    closeProvider()
+    await run
   })
 
   it(`persists provider audio and control output to realtime durable streams`, async () => {

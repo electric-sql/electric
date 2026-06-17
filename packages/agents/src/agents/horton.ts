@@ -32,6 +32,8 @@ import {
 import type {
   EntityRegistry,
   HandlerContext,
+  ManifestDocumentEntry,
+  SourceConfig,
   WakeEvent,
 } from '@electric-ax/agents-runtime'
 import {
@@ -222,6 +224,76 @@ interface ActiveGoalPromptInfo {
   tokensUsed: number
 }
 
+function isMarkdownDocumentManifestEntry(
+  value: unknown
+): value is ManifestDocumentEntry {
+  if (!value || typeof value !== `object`) return false
+  const entry = value as Partial<ManifestDocumentEntry>
+  return (
+    entry.kind === `document` &&
+    typeof entry.id === `string` &&
+    entry.provider === `y-durable-streams` &&
+    typeof entry.docPath === `string` &&
+    typeof entry.streamPath === `string` &&
+    entry.transportMimeType ===
+      `application/vnd.electric-agents.markdown-yjs` &&
+    entry.contentMimeType === `text/markdown` &&
+    entry.yTextName === `markdown` &&
+    typeof entry.title === `string`
+  )
+}
+
+function markdownDocumentSourceEntity(
+  document: ManifestDocumentEntry
+): string | undefined {
+  const meta = document.meta
+  return meta && typeof meta === `object` && `sourceEntityUrl` in meta
+    ? typeof meta.sourceEntityUrl === `string`
+      ? meta.sourceEntityUrl
+      : undefined
+    : undefined
+}
+
+function currentMarkdownDocuments(
+  ctx: HandlerContext
+): Array<ManifestDocumentEntry> {
+  const manifests = ctx.db.collections.manifests?.toArray as
+    | Array<unknown>
+    | undefined
+  const injectedDocs = Array.isArray(ctx.args?.markdownDocs)
+    ? ctx.args.markdownDocs.filter(isMarkdownDocumentManifestEntry)
+    : []
+  const docsById = new Map<string, ManifestDocumentEntry>()
+  for (const document of [
+    ...(manifests?.filter(isMarkdownDocumentManifestEntry) ?? []),
+    ...injectedDocs,
+  ]) {
+    docsById.set(document.id, document)
+  }
+  return [...docsById.values()]
+}
+
+function renderCurrentMarkdownDocumentsContext(ctx: HandlerContext): string {
+  const documents = currentMarkdownDocuments(ctx)
+  if (documents.length === 0) {
+    return `No collaborative markdown documents are currently available in this entity's manifest.`
+  }
+
+  return [
+    `Current collaborative markdown documents available in this entity's manifest:`,
+    ...documents.map((document) => {
+      const sourceEntityUrl = markdownDocumentSourceEntity(document)
+      return [
+        `- ${document.title}`,
+        `  id: ${document.id}`,
+        `  docPath: ${document.docPath}`,
+        ...(sourceEntityUrl ? [`  sourceEntityUrl: ${sourceEntityUrl}`] : []),
+      ].join(`\n`)
+    }),
+    `Use read_markdown_doc with the id before editing, and pass markdown document tools to workers that should read or edit these docs.`,
+  ].join(`\n`)
+}
+
 export function buildHortonSystemPrompt(
   workingDirectory: string,
   opts: {
@@ -253,7 +325,7 @@ export function buildHortonSystemPrompt(
     ? `\n- use_skill: load a skill (knowledge, instructions, or a tutorial) into your context to help with the user's request\n- remove_skill: unload a skill from context when you're done with it`
     : ``
   const markdownDocumentGuidance = opts.hasMarkdownDocumentTools
-    ? `\n# Collaborative Markdown Docs\n- If the user asks you to create a markdown doc, notes, draft, brief, plan, report, or any document they should open/edit in the app UI, use create_markdown_doc. Do not use filesystem write unless they ask for a file path or repo/workspace file.\n- For larger document workflows, load the markdown-docs skill first with use_skill, then use the markdown document tools.\n- Use set_markdown_doc_cursor before insert_markdown_doc when inserting at a specific location; insert_markdown_doc can then stream content at that Yjs-relative cursor.\n- Use replace_markdown_doc_range when replacing existing prose with new content that should visibly stream into the deleted range.\n- When spawning a worker to read or edit a collaborative markdown doc, include the doc id in spawn_worker's markdownDocIds and include the specific markdown document tools that worker needs.\n- After creating a collaborative doc, mention that it is available from this entity's manifest/timeline.`
+    ? `\n# Collaborative Markdown Docs\n- If the user asks you to create a markdown doc, notes, draft, brief, plan, report, or any document they should open/edit in the app UI, use create_markdown_doc. Do not use filesystem write unless they ask for a file path or repo/workspace file.\n- For larger document workflows, load the markdown-docs skill first with use_skill, then use the markdown document tools.\n- Prefer streaming inserts for markdown edits that add or replace non-trivial content, so open editors can watch the content appear live.\n- Use set_markdown_doc_cursor before insert_markdown_doc when inserting at a specific location; insert_markdown_doc can then stream content at that Yjs-relative cursor.\n- Use replace_markdown_doc_range when replacing existing prose with new content that should visibly stream into the deleted range.\n- When spawning a worker to read or edit a collaborative markdown doc, include the specific markdown document tools that worker needs. Current markdown docs are passed to the worker automatically; use spawn_worker's markdownDocIds only when you need to restrict which docs it can access.\n- After creating a collaborative doc, mention that it is available from this entity's manifest/timeline.`
     : ``
   const docsGuidance = opts.hasDocsSupport
     ? `\n- For ANY question about Electric Agents or this framework, ALWAYS use search_electric_agents_docs FIRST. Do not use web_search or fetch_url for Electric Agents topics unless the docs search returns no useful results.\n- The search tool returns chunk content directly — you do not need to read the source files.\n- Use repo read/bash tools only for non-doc files or when you need to inspect exact implementation code in the workspace.`
@@ -350,7 +422,7 @@ Dispatch a worker when:
 - The subtask is independent and can run in parallel with other work.
 - You need an isolated context (e.g., focused coding on one file without pulling its full content into our chat).
 
-When you spawn a worker, write its system prompt the way you'd brief a colleague who just walked in: include file paths, line numbers, what specifically to do, and what form of answer you want back. The system prompt sets the worker's persona and constraints; the required initialMessage is the concrete task you're handing off — that's what kicks the worker off, so without it the worker sits idle.
+When you spawn a worker, give it a short descriptive name and write its system prompt the way you'd brief a colleague who just walked in: include file paths, line numbers, what specifically to do, and what form of answer you want back. The system prompt sets the worker's persona and constraints; the required initialMessage is the concrete task you're handing off — that's what kicks the worker off, so without it the worker sits idle.
 
 After spawning, end your turn (optionally with a brief "I've dispatched a worker for X; I'll respond when it finishes"). When the worker finishes, you'll receive a message describing which worker completed and what it returned. Multiple workers may finish at different times — check the message for the worker URL to know which one you're hearing about.
 
@@ -751,6 +823,13 @@ function createAssistantHandler(options: {
     const hasMarkdownDocumentTools = tools.some(
       (tool) => getToolName(tool) === `create_markdown_doc`
     )
+    const markdownDocumentSources: Record<string, SourceConfig> = {}
+    if (hasMarkdownDocumentTools) {
+      markdownDocumentSources.markdown_documents = {
+        content: () => renderCurrentMarkdownDocumentsContext(ctx),
+        cache: `volatile`,
+      }
+    }
 
     let titleGenerationStarted = Boolean(ctx.tags.title)
     let titlePromise: Promise<void> = Promise.resolve()
@@ -837,6 +916,7 @@ function createAssistantHandler(options: {
             content: () => ctx.timelineMessages(),
             cache: `volatile`,
           },
+          ...markdownDocumentSources,
           ...(agentsMd
             ? {
                 agents_md: {
@@ -860,6 +940,7 @@ function createAssistantHandler(options: {
             content: () => ctx.timelineMessages(),
             cache: `volatile`,
           },
+          ...markdownDocumentSources,
           ...(agentsMd
             ? {
                 agents_md: {
@@ -879,11 +960,23 @@ function createAssistantHandler(options: {
             content: () => ctx.timelineMessages(),
             cache: `volatile`,
           },
+          ...markdownDocumentSources,
           agents_md: {
             content: () => agentsMd,
             max: 20_000,
             cache: `stable`,
           },
+        },
+      })
+    } else if (hasMarkdownDocumentTools) {
+      ctx.useContext({
+        sourceBudget,
+        sources: {
+          conversation: {
+            content: () => ctx.timelineMessages(),
+            cache: `volatile`,
+          },
+          ...markdownDocumentSources,
         },
       })
     }

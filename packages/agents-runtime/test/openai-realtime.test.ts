@@ -48,6 +48,15 @@ function nextEvent(iterator: AsyncIterator<RealtimeProviderEvent>) {
   return iterator.next().then((result) => result.value)
 }
 
+function responseCreateEvents(socket: FakeWebSocket): Array<unknown> {
+  return socket.sent.filter(
+    (event) =>
+      typeof event === `object` &&
+      event !== null &&
+      (event as { type?: unknown }).type === `response.create`
+  )
+}
+
 describe(`createOpenAIRealtimeProvider`, () => {
   it(`connects over WebSocket and configures session state`, async () => {
     FakeWebSocket.instances = []
@@ -346,6 +355,99 @@ describe(`createOpenAIRealtimeProvider`, () => {
     expect(socket.sent.at(-3)).toEqual({ type: `input_audio_buffer.clear` })
     expect(socket.sent.at(-2)).toEqual({ type: `input_audio_buffer.commit` })
     expect(socket.sent.at(-1)).toEqual({ type: `response.create` })
+  })
+
+  it(`queues text-triggered response creation while a response is active`, async () => {
+    FakeWebSocket.instances = []
+    const provider = createOpenAIRealtimeProvider({
+      apiKey: `sk-test`,
+      WebSocket: FakeWebSocket,
+    })
+
+    const session = await provider.connect({
+      systemPrompt: `Talk`,
+      messages: [],
+      tools: [],
+    })
+    const socket = FakeWebSocket.instances[0]!
+    const iterator = session.events[Symbol.asyncIterator]()
+
+    socket.emitMessage({ type: `response.created`, response: { id: `resp-1` } })
+    await expect(nextEvent(iterator)).resolves.toEqual({
+      type: `response.started`,
+      responseId: `resp-1`,
+    })
+
+    await session.sendText?.(`worker finished`)
+    expect(socket.sent.at(-1)).toMatchObject({
+      type: `conversation.item.create`,
+      item: {
+        type: `message`,
+        role: `user`,
+        content: [{ type: `input_text`, text: `worker finished` }],
+      },
+    })
+    expect(socket.sent).not.toContainEqual({ type: `response.create` })
+
+    socket.emitMessage({ type: `response.done`, response: { id: `resp-1` } })
+    await expect(nextEvent(iterator)).resolves.toEqual({
+      type: `response.completed`,
+      responseId: `resp-1`,
+    })
+    expect(socket.sent.at(-1)).toEqual({ type: `response.create` })
+  })
+
+  it(`keeps queued response creation guarded against stale completions`, async () => {
+    FakeWebSocket.instances = []
+    const provider = createOpenAIRealtimeProvider({
+      apiKey: `sk-test`,
+      WebSocket: FakeWebSocket,
+    })
+
+    const session = await provider.connect({
+      systemPrompt: `Talk`,
+      messages: [],
+      tools: [],
+    })
+    const socket = FakeWebSocket.instances[0]!
+    const iterator = session.events[Symbol.asyncIterator]()
+
+    socket.emitMessage({ type: `response.created`, response: { id: `resp-1` } })
+    await expect(nextEvent(iterator)).resolves.toEqual({
+      type: `response.started`,
+      responseId: `resp-1`,
+    })
+
+    await session.sendText?.(`first queued`)
+    expect(responseCreateEvents(socket)).toHaveLength(0)
+
+    socket.emitMessage({ type: `response.done`, response: { id: `resp-1` } })
+    await expect(nextEvent(iterator)).resolves.toEqual({
+      type: `response.completed`,
+      responseId: `resp-1`,
+    })
+    expect(responseCreateEvents(socket)).toHaveLength(1)
+
+    socket.emitMessage({ type: `response.done`, response: { id: `resp-1` } })
+    await session.sendText?.(`second queued`)
+    expect(responseCreateEvents(socket)).toHaveLength(1)
+
+    await expect(nextEvent(iterator)).resolves.toEqual({
+      type: `response.completed`,
+      responseId: `resp-1`,
+    })
+    socket.emitMessage({ type: `response.created`, response: { id: `resp-2` } })
+    await expect(nextEvent(iterator)).resolves.toEqual({
+      type: `response.started`,
+      responseId: `resp-2`,
+    })
+
+    socket.emitMessage({ type: `response.done`, response: { id: `resp-2` } })
+    await expect(nextEvent(iterator)).resolves.toEqual({
+      type: `response.completed`,
+      responseId: `resp-2`,
+    })
+    expect(responseCreateEvents(socket)).toHaveLength(2)
   })
 
   it(`normalizes audio input chunks before appending them`, async () => {
@@ -660,6 +762,168 @@ describe(`createOpenAIRealtimeProvider`, () => {
         type: `function_call_output`,
         call_id: `call-1`,
       },
+    })
+    expect(socket.sent.at(-1)).toEqual({ type: `response.create` })
+  })
+
+  it(`runs realtime sequential tools one at a time`, async () => {
+    FakeWebSocket.instances = []
+    type ToolResult = {
+      content: Array<{ type: `text`; text: string }>
+      details: Record<string, unknown>
+    }
+    let releaseFirst!: (result: ToolResult) => void
+    const firstResult = new Promise<ToolResult>((resolve) => {
+      releaseFirst = resolve
+    })
+    let markFirstStarted!: () => void
+    const firstStarted = new Promise<void>((resolve) => {
+      markFirstStarted = resolve
+    })
+    let markSecondStarted!: () => void
+    const secondStarted = new Promise<void>((resolve) => {
+      markSecondStarted = resolve
+    })
+    let secondStartedFlag = false
+    const execute = vi.fn((toolCallId: string) => {
+      if (toolCallId === `call-1`) {
+        markFirstStarted()
+        return firstResult
+      }
+      secondStartedFlag = true
+      markSecondStarted()
+      return Promise.resolve({
+        content: [{ type: `text`, text: `second done` }],
+        details: { ok: true },
+      } satisfies ToolResult)
+    })
+    const tool: AgentTool = {
+      name: `lookup`,
+      label: `Lookup`,
+      description: `Look up a value`,
+      parameters: Type.Object({ q: Type.String() }),
+      executionMode: `sequential`,
+      execute,
+    }
+    const provider = createOpenAIRealtimeProvider({
+      apiKey: `sk-test`,
+      WebSocket: FakeWebSocket,
+    })
+
+    const session = await provider.connect({
+      systemPrompt: `Talk`,
+      messages: [],
+      tools: [tool],
+    })
+    const socket = FakeWebSocket.instances[0]!
+    const iterator = session.events[Symbol.asyncIterator]()
+
+    socket.emitMessage({
+      type: `response.function_call_arguments.done`,
+      call_id: `call-1`,
+      name: `lookup`,
+      arguments: JSON.stringify({ q: `first` }),
+    })
+    await expect(nextEvent(iterator)).resolves.toMatchObject({
+      type: `tool_call.arguments_completed`,
+      toolCallId: `call-1`,
+    })
+    await firstStarted
+
+    socket.emitMessage({
+      type: `response.function_call_arguments.done`,
+      call_id: `call-2`,
+      name: `lookup`,
+      arguments: JSON.stringify({ q: `second` }),
+    })
+    await expect(nextEvent(iterator)).resolves.toMatchObject({
+      type: `tool_call.arguments_completed`,
+      toolCallId: `call-2`,
+    })
+
+    expect(execute).toHaveBeenCalledTimes(1)
+    expect(secondStartedFlag).toBe(false)
+
+    releaseFirst({
+      content: [{ type: `text`, text: `first done` }],
+      details: { ok: true },
+    })
+
+    await expect(nextEvent(iterator)).resolves.toMatchObject({
+      type: `tool_call.completed`,
+      toolCallId: `call-1`,
+    })
+    await secondStarted
+    await expect(nextEvent(iterator)).resolves.toMatchObject({
+      type: `tool_call.completed`,
+      toolCallId: `call-2`,
+    })
+    expect(execute.mock.calls.map((call) => call[0])).toEqual([
+      `call-1`,
+      `call-2`,
+    ])
+  })
+
+  it(`queues tool-result response creation while a response is active`, async () => {
+    FakeWebSocket.instances = []
+    const execute = vi.fn().mockResolvedValue({
+      content: [{ type: `text`, text: `done` }],
+      details: { ok: true },
+    })
+    const tool: AgentTool = {
+      name: `lookup`,
+      label: `Lookup`,
+      description: `Look up a value`,
+      parameters: Type.Object({ q: Type.String() }),
+      execute,
+    }
+    const provider = createOpenAIRealtimeProvider({
+      apiKey: `sk-test`,
+      WebSocket: FakeWebSocket,
+    })
+
+    const session = await provider.connect({
+      systemPrompt: `Talk`,
+      messages: [],
+      tools: [tool],
+    })
+    const socket = FakeWebSocket.instances[0]!
+    const iterator = session.events[Symbol.asyncIterator]()
+
+    socket.emitMessage({ type: `response.created`, response: { id: `resp-1` } })
+    await expect(nextEvent(iterator)).resolves.toEqual({
+      type: `response.started`,
+      responseId: `resp-1`,
+    })
+
+    socket.emitMessage({
+      type: `response.function_call_arguments.done`,
+      call_id: `call-1`,
+      name: `lookup`,
+      arguments: JSON.stringify({ q: `status` }),
+    })
+
+    await expect(nextEvent(iterator)).resolves.toMatchObject({
+      type: `tool_call.arguments_completed`,
+      toolCallId: `call-1`,
+    })
+    await expect(nextEvent(iterator)).resolves.toMatchObject({
+      type: `tool_call.completed`,
+      toolCallId: `call-1`,
+    })
+    expect(socket.sent.at(-1)).toMatchObject({
+      type: `conversation.item.create`,
+      item: {
+        type: `function_call_output`,
+        call_id: `call-1`,
+      },
+    })
+    expect(socket.sent).not.toContainEqual({ type: `response.create` })
+
+    socket.emitMessage({ type: `response.done`, response: { id: `resp-1` } })
+    await expect(nextEvent(iterator)).resolves.toEqual({
+      type: `response.completed`,
+      responseId: `resp-1`,
     })
     expect(socket.sent.at(-1)).toEqual({ type: `response.create` })
   })

@@ -50,6 +50,7 @@ import type {
   HandlerWake,
   LLMMessage,
   ManifestAttachmentEntry,
+  ManifestDocumentEntry,
   ManifestRealtimeSessionEntry,
   ObservationHandle,
   ObservationSource,
@@ -69,6 +70,7 @@ import type {
   UseContextConfig,
   Wake,
   WakeEvent,
+  WakeMessage,
   WakeSession,
 } from './types'
 
@@ -703,6 +705,14 @@ export interface HandlerContextConfig<TState extends StateProxy = StateProxy> {
     baseUrl: string
     headers?: Record<string, string>
   }
+  registerLiveWakeHandler?: (
+    handler: (wake: {
+      wakeEvent: WakeEvent
+      wakeOffset: string
+      ackOffset: string
+      events: Array<ChangeEvent>
+    }) => boolean | Promise<boolean>
+  ) => () => void
   doObserve: (
     source: ObservationSource,
     wake?: Wake
@@ -760,6 +770,10 @@ function asMessageText(value: unknown): string {
   return typeof value === `string` ? value : JSON.stringify(value ?? ``)
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === `object` && value !== null && !Array.isArray(value)
+}
+
 function missingContextToolData(message: string): Promise<never> {
   return Promise.reject(new Error(message))
 }
@@ -793,6 +807,126 @@ function getCronScheduleTriggerPayload(
   }
 
   return undefined
+}
+
+function isMarkdownDocumentManifestEntry(
+  value: unknown
+): value is ManifestDocumentEntry {
+  if (!value || typeof value !== `object`) return false
+  const entry = value as Partial<ManifestDocumentEntry>
+  return (
+    entry.kind === `document` &&
+    typeof entry.id === `string` &&
+    entry.provider === `y-durable-streams` &&
+    typeof entry.docPath === `string` &&
+    typeof entry.streamPath === `string` &&
+    entry.transportMimeType ===
+      `application/vnd.electric-agents.markdown-yjs` &&
+    entry.contentMimeType === `text/markdown` &&
+    entry.yTextName === `markdown` &&
+    typeof entry.title === `string`
+  )
+}
+
+function markdownDocumentSourceEntity(
+  document: ManifestDocumentEntry
+): string | undefined {
+  const meta = document.meta
+  return meta && typeof meta === `object` && `sourceEntityUrl` in meta
+    ? typeof meta.sourceEntityUrl === `string`
+      ? meta.sourceEntityUrl
+      : undefined
+    : undefined
+}
+
+function markdownDocumentRefsForWakeSource(
+  db: Pick<EntityStreamDBWithActions, `collections`>,
+  sourceUrl: string
+): Array<ManifestDocumentEntry> {
+  const docsById = new Map<string, ManifestDocumentEntry>()
+  for (const entry of db.collections.manifests.toArray as Array<unknown>) {
+    if (!isMarkdownDocumentManifestEntry(entry)) continue
+    if (markdownDocumentSourceEntity(entry) !== sourceUrl) continue
+    docsById.set(entry.id, entry)
+  }
+  return [...docsById.values()]
+}
+
+function renderMarkdownDocumentWakeRefs(
+  db: Pick<EntityStreamDBWithActions, `collections`>,
+  wakeEvent: WakeEvent
+): string | null {
+  if (wakeEvent.type !== `wake`) {
+    return null
+  }
+  const documentsByPath = new Map<string, ManifestDocumentEntry>()
+  for (const source of wakeSourceUrls(wakeEvent)) {
+    for (const document of markdownDocumentRefsForWakeSource(db, source)) {
+      documentsByPath.set(document.docPath, document)
+    }
+  }
+  const documents = [...documentsByPath.values()]
+  if (documents.length === 0) return null
+
+  return [
+    `Collaborative markdown documents now available from this entity's manifest:`,
+    ...documents.map((document) => {
+      return `- ${document.title} (id: ${document.id})`
+    }),
+    `Use read_markdown_doc with the document id to inspect the current content before editing.`,
+  ].join(`\n`)
+}
+
+function wakeBatchMessages(wakeEvent: WakeEvent): Array<WakeMessage> {
+  const payload = wakeEvent.payload
+  if (!isRecord(payload) || payload.type !== `wake_batch`) {
+    return []
+  }
+  return Array.isArray(payload.wakes)
+    ? payload.wakes.filter(isRecord).map((wake) => wake as WakeMessage)
+    : []
+}
+
+function wakeSourceUrls(wakeEvent: WakeEvent): Array<string> {
+  const sources = new Set<string>()
+  if (typeof wakeEvent.source === `string`) {
+    sources.add(wakeEvent.source)
+  }
+
+  const payload = wakeEvent.payload
+  if (isRecord(payload) && payload.type === `wake_batch`) {
+    if (Array.isArray(payload.sources)) {
+      for (const source of payload.sources) {
+        if (typeof source === `string`) sources.add(source)
+      }
+    }
+    for (const wake of wakeBatchMessages(wakeEvent)) {
+      if (typeof wake.source === `string`) sources.add(wake.source)
+    }
+  }
+
+  return [...sources]
+}
+
+function renderWakeBatchText(wakeEvent: WakeEvent): string | null {
+  const wakes = wakeBatchMessages(wakeEvent)
+  if (wakes.length === 0) return null
+
+  return [
+    `Batched wake notification with ${wakes.length} child/source updates:`,
+    ...wakes.map((wake, index) => {
+      const finishedChild = wake.finished_child
+      if (finishedChild) {
+        const status = finishedChild.run_status ?? `completed`
+        const detail =
+          finishedChild.response ??
+          finishedChild.error ??
+          asMessageText({ changes: wake.changes })
+        return `- ${finishedChild.url} (${status}): ${detail}`
+      }
+      return `- ${wake.source ?? `source ${index + 1}`}: ${asMessageText(wake)}`
+    }),
+  ].join(`\n`)
 }
 
 function getTriggerMessageText(
@@ -844,7 +978,13 @@ function getTriggerMessageText(
     }
   }
 
-  return asMessageText({
+  const batchText = renderWakeBatchText(wakeEvent)
+  if (batchText) {
+    const documentRefs = renderMarkdownDocumentWakeRefs(db, wakeEvent)
+    return documentRefs ? `${batchText}\n\n${documentRefs}` : batchText
+  }
+
+  const text = asMessageText({
     type: wakeEvent.type,
     source: wakeEvent.source,
     payload: wakeEvent.payload,
@@ -854,6 +994,8 @@ function getTriggerMessageText(
     toOffset: wakeEvent.toOffset,
     eventCount: wakeEvent.eventCount,
   })
+  const documentRefs = renderMarkdownDocumentWakeRefs(db, wakeEvent)
+  return documentRefs ? `${text}\n\n${documentRefs}` : text
 }
 
 function combineAbortSignals(a: AbortSignal, b: AbortSignal): AbortSignal {
@@ -2157,6 +2299,36 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
       let realtimeIo: RealtimeStreamIo | undefined
       let realtimeSessionTerminalWritten = false
       let realtimeSessionLimitTimer: ReturnType<typeof setTimeout> | undefined
+      let unregisterLiveWakeHandler: (() => void) | undefined
+      let checkpointQueue: Promise<void> = Promise.resolve()
+
+      const checkpointRealtimeRun = async (): Promise<void> => {
+        checkpointQueue = checkpointQueue.then(async () => {
+          await config.prepareAgentRun?.()
+        })
+        await checkpointQueue
+      }
+
+      const liveWakeText = (wake: {
+        wakeEvent: WakeEvent
+        wakeOffset: string
+        events: Array<ChangeEvent>
+      }): string => {
+        const text = getTriggerMessageText(
+          config.db,
+          wake.wakeEvent,
+          wake.events,
+          wake.wakeOffset
+        )
+        if (wake.wakeEvent.type === `inbox`) {
+          return text
+        }
+        return [
+          `A live Electric Agents notification arrived while this realtime session is active.`,
+          `Treat it as fresh background context, not as user speech. If it changes what the user should know, respond briefly.`,
+          text,
+        ].join(`\n\n`)
+      }
 
       async function handleProviderEvent(
         event: RealtimeProviderEvent
@@ -2292,7 +2464,7 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
 
           case `tool_call.completed`: {
             if (currentToolCall?.toolCallId !== event.toolCallId) {
-              bridge.onToolCallStart(event.toolCallId, event.name, undefined)
+              bridge.onToolCallStart(event.toolCallId, event.name, {})
             }
             bridge.onToolCallEnd(
               event.toolCallId,
@@ -2300,6 +2472,7 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
               event.result,
               event.isError ?? false
             )
+            await checkpointRealtimeRun()
             break
           }
         }
@@ -2361,6 +2534,21 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
             activeRealtimeProviderSession,
             activeRealtimeConfig.audio
           )
+          unregisterLiveWakeHandler = config.registerLiveWakeHandler?.(
+            async (wake) => {
+              if (config.runSignal?.aborted) {
+                return false
+              }
+              const providerSession = activeRealtimeProviderSession
+              if (!providerSession?.sendText) {
+                return false
+              }
+              await checkpointRealtimeRun()
+              await providerSession.sendText(liveWakeText(wake))
+              await checkpointRealtimeRun()
+              return true
+            }
+          )
 
           for await (const event of activeRealtimeProviderSession.events) {
             if (config.runSignal?.aborted) {
@@ -2400,6 +2588,8 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         bridge.onRunEnd({ finishReason: `error` })
         throw error
       } finally {
+        unregisterLiveWakeHandler?.()
+        await checkpointQueue.catch(() => undefined)
         if (realtimeSessionLimitTimer) {
           clearTimeout(realtimeSessionLimitTimer)
         }

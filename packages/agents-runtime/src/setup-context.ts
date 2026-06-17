@@ -240,6 +240,16 @@ export function createSetupContext(
     executeSend: executeSendFn,
   } = config
   let inSetup = true
+  let inlineSpawnQueue: Promise<void> = Promise.resolve()
+
+  const runInlineSpawn = async <T>(fn: () => Promise<T>): Promise<T> => {
+    const run = inlineSpawnQueue.then(fn, fn)
+    inlineSpawnQueue = run.then(
+      () => undefined,
+      () => undefined
+    )
+    return run
+  }
 
   const dbActions =
     (
@@ -999,61 +1009,63 @@ export function createSetupContext(
 
       // ---- Inline wiring (production path) ----
       if (wiring) {
-        // Register spawn handle FIRST, then manifest entry
-        wakeSession.registerSpawnHandle(id, {
-          wireDb: () => {},
-          updateEntityUrl: (newUrl: string) => {
-            realEntityUrl = newUrl
-            wakeSession.registerManifestEntry(childRow(newUrl))
-          },
-        })
-        // Check dedup before creating child
-        const existingChild = await queryOnce((q) =>
-          q
-            .from({ manifests: db.collections.manifests })
-            .where(({ manifests }) => eq(manifests.key, childKey))
-            .findOne()
-        )
-        if (existingChild?.kind === `child`) {
-          throw new Error(
-            `[agent-runtime] child "${type}:${id}" already exists — use observe(entity("${existingChild.entity_url}")) to get a handle`
+        return runInlineSpawn(async () => {
+          // Register spawn handle FIRST, then manifest entry
+          wakeSession.registerSpawnHandle(id, {
+            wireDb: () => {},
+            updateEntityUrl: (newUrl: string) => {
+              realEntityUrl = newUrl
+              wakeSession.registerManifestEntry(childRow(newUrl))
+            },
+          })
+          // Check dedup before creating child
+          const existingChild = await queryOnce((q) =>
+            q
+              .from({ manifests: db.collections.manifests })
+              .where(({ manifests }) => eq(manifests.key, childKey))
+              .findOne()
           )
-        }
-
-        try {
-          const { entityUrl: childUrl, streamPath } =
-            await wiring.createOrGetChild(
-              type,
-              id,
-              spawnArgs ?? {},
-              entityUrl,
-              {
-                initialMessage: opts?.initialMessage,
-                initialMessageType: opts?.initialMessageType,
-                wake: opts?.wake,
-                tags: opts?.tags,
-                sandbox: opts?.sandbox,
-              }
+          if (existingChild?.kind === `child`) {
+            throw new Error(
+              `[agent-runtime] child "${type}:${id}" already exists — use observe(entity("${existingChild.entity_url}")) to get a handle`
             )
-          realEntityUrl = childUrl
-          wakeSession.registerManifestEntry(childRow(childUrl))
-
-          if (observeChild) {
-            const childDb = await wiring.createChildDb(
-              `${config.serverBaseUrl}${streamPath}`,
-              type,
-              () => {}
-            )
-            handle.db = childDb
           }
-        } catch (err) {
-          spawnError = err instanceof Error ? err : new Error(String(err))
-          throw spawnError
-        }
 
-        observeHandleCache.set(realEntityUrl, handle)
+          try {
+            const { entityUrl: childUrl, streamPath } =
+              await wiring.createOrGetChild(
+                type,
+                id,
+                spawnArgs ?? {},
+                entityUrl,
+                {
+                  initialMessage: opts?.initialMessage,
+                  initialMessageType: opts?.initialMessageType,
+                  wake: opts?.wake,
+                  tags: opts?.tags,
+                  sandbox: opts?.sandbox,
+                }
+              )
+            realEntityUrl = childUrl
+            wakeSession.registerManifestEntry(childRow(childUrl))
 
-        return handle
+            if (observeChild) {
+              const childDb = await wiring.createChildDb(
+                `${config.serverBaseUrl}${streamPath}`,
+                type,
+                () => {}
+              )
+              handle.db = childDb
+            }
+          } catch (err) {
+            spawnError = err instanceof Error ? err : new Error(String(err))
+            throw spawnError
+          }
+
+          observeHandleCache.set(realEntityUrl, handle)
+
+          return handle
+        })
       }
 
       // ---- Deferred wiring (unit test path) ----
