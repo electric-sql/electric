@@ -11,6 +11,8 @@ durable cheaply and the read leave the kernel as few times as possible.
 - [Read path in detail](#read-path-in-detail)
 - [Keeping I/O fast from ingestion to fan-out](#keeping-io-fast-from-ingestion-to-fan-out)
 - [Where the time goes](#where-the-time-goes)
+- [Tiering: hot buffer → cold storage](#tiering-hot-buffer--cold-storage-optional)
+- [Optional fast paths & observability](#optional-fast-paths--observability)
 
 ## The model
 
