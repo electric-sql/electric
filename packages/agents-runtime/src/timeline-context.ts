@@ -497,10 +497,8 @@ export function timelineMessages(
     if (item.at < since) {
       continue
     }
-    // The watermark is the order of the last summarized item (the snapshot
-    // head), so everything at or below it is folded into the summary.
     if (item.at <= compactionWatermark) {
-      continue
+      continue // folded into the summary
     }
     // Place the summary at the watermark boundary, before the first kept item.
     emitSummary()

@@ -8,19 +8,11 @@ import {
 import styles from './CompactionIndicator.module.css'
 
 /**
- * Live indicator shown while a context compaction is in flight.
- *
- * The runtime writes a compaction checkpoint row with `attrs.status: "running"`
- * before summarizing and supersedes it with a `complete` (or `failed`) row when
- * done. We read the latest such row reactively; while it's `running` we show
- * "Compacting context…" so the user understands the pause. It clears the moment
- * compaction completes.
- *
- * A summarize is bounded by a hard timeout (~120s) after which a terminal row is
- * always written, so a `running` row that lingers well past that is orphaned —
- * its process crashed before writing the terminal row. We stop showing the
- * spinner for such a row (and self-clear via a timer so it disappears even with
- * no further events). See `lib/compactionIndicator` for the staleness rule.
+ * Spinner shown while a context compaction is in flight. The runtime writes a
+ * `running` compaction checkpoint before summarizing and supersedes it with
+ * `complete`/`failed` when done; we show the spinner while the latest is
+ * `running`. Orphaned (crashed) running rows are cleared after a timeout — see
+ * `lib/compactionIndicator`.
  */
 
 interface CheckpointRow {

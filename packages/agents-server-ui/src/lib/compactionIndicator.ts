@@ -1,23 +1,14 @@
-/**
- * Staleness logic for the "Compacting…" indicator, extracted so it can be unit
- * tested without a DOM/render harness (this package has no React-render test
- * setup).
- */
+// Staleness logic for the "Compacting…" indicator, split out so it's unit
+// testable without a render harness.
 
-/**
- * Beyond this age a still-`running` compaction checkpoint is treated as orphaned
- * (its process crashed before writing a terminal `complete`/`failed` row). A
- * summarize is bounded by a ~120s hard timeout after which a terminal row is
- * always written, so 150s comfortably clears only genuinely-crashed runs.
- */
+/** A `running` checkpoint older than this is orphaned (its process crashed
+ * before a terminal row); comfortably above the summarize timeout. */
 export const STALE_RUNNING_MS = 150_000
 
 /**
- * Whether a `running` checkpoint with the given `timestamp` (ISO string) should
- * be treated as orphaned at `now` (ms). A missing or unparseable timestamp is
- * treated as NOT orphaned — we can't prove staleness, and hiding a genuinely
- * in-flight compaction is worse than briefly over-showing one. (insertContext
- * always stamps a timestamp, so this only guards against a schema regression.)
+ * Whether a `running` checkpoint with `timestamp` (ISO) is orphaned at `now`
+ * (ms). A missing/unparseable timestamp counts as live — we can't prove
+ * staleness, and hiding an in-flight compaction is worse than over-showing one.
  */
 export function isRunningCheckpointOrphaned(
   timestamp: string | undefined,
