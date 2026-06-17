@@ -32,6 +32,7 @@ defmodule Electric.Plug.ServeShapePlug do
 
   use Plug.Builder
 
+  alias Electric.Plug.TraceContextPlug
   alias Electric.ShapeCache
   alias Electric.ShapeCache.ShapeStatus
   alias Electric.Shapes.Api
@@ -495,9 +496,20 @@ defmodule Electric.Plug.ServeShapePlug do
 
   defp get_root_table(_assigns, _conn), do: nil
 
+  # Put the request's span attributes — the usual conn-derived attributes plus the
+  # `SampleRate` sampling weight when an upstream rate hint applies — onto the root span.
+  #
+  # Successful responses carry the upstream rate `N` (parsed from the client request's
+  # `tracestate` header), 5xx responses carry `1`. When the remote parent was not sampled
+  # the parent-based sampler left no recording span, so `add_span_attributes` is a no-op
+  # and nothing is stamped or exported.
+  #
+  # Called both at span start (status not yet known: the rate hint is stamped as-is) and
+  # at emit time, when the final attribute values overwrite the initial ones.
   defp add_span_attrs_from_conn(conn) do
     conn
     |> open_telemetry_attrs()
+    |> Map.merge(TraceContextPlug.sample_rate_attrs(conn, conn.status))
     |> OpenTelemetry.add_span_attributes()
 
     conn

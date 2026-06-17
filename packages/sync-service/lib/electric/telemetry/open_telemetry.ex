@@ -32,6 +32,14 @@ defmodule Electric.Telemetry.OpenTelemetry do
   alias Electric.Telemetry.Sampler
   alias Electric.Telemetry.IntervalTimer
 
+  require Record
+
+  Record.defrecordp(
+    :span_ctx_record,
+    :span_ctx,
+    Record.extract(:span_ctx, from_lib: "opentelemetry_api/include/opentelemetry.hrl")
+  )
+
   @typep span_name :: String.t()
   @typep attr_name :: String.t()
   @typep span_attrs :: :opentelemetry.attributes_map()
@@ -374,6 +382,22 @@ defmodule Electric.Telemetry.OpenTelemetry do
 
   defp get_interval_timer do
     Process.get(@interval_timer_key, [])
+  end
+
+  @doc """
+  Look up the value of the member with the given key in the W3C tracestate carried
+  by the given span context.
+
+  Returns the member's value as a string, or `nil` when the tracestate has no such
+  member.
+  """
+  @spec tracestate_value(span_ctx(), String.t()) :: String.t() | nil
+  def tracestate_value(span_ctx, key) when Record.is_record(span_ctx, :span_ctx) do
+    case :otel_tracestate.get(key, span_ctx_record(span_ctx, :tracestate)) do
+      value when is_binary(value) and value != "" -> value
+      [_ | _] = value -> IO.iodata_to_binary(value)
+      _ -> nil
+    end
   end
 
   @doc """

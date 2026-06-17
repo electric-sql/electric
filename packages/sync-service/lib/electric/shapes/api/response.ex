@@ -427,6 +427,12 @@ defmodule Electric.Shapes.Api.Response do
     validate_response_finalized!(response)
 
     stack_id = Api.stack_id(response)
+
+    # Per-chunk spans inherit the `SampleRate` attribute from the upstream tracestate hint
+    # (when present), same as the root request span — see
+    # Electric.Plug.TraceContextPlug.sample_rate_attrs/2.
+    sample_rate_attrs = Electric.Plug.TraceContextPlug.sample_rate_attrs(conn, status)
+
     conn = Plug.Conn.send_chunked(conn, status)
 
     {conn, bytes_sent} =
@@ -436,7 +442,7 @@ defmodule Electric.Shapes.Api.Response do
 
         OpenTelemetry.with_span(
           "shape_get.plug.stream_chunk",
-          [chunk_size: chunk_size],
+          Map.put(sample_rate_attrs, "chunk_size", chunk_size),
           stack_id,
           fn ->
             case Plug.Conn.chunk(conn, chunk) do
