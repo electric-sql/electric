@@ -119,7 +119,11 @@ function inboxEventKey(event: ChangeEvent): string {
 type ServerForkWake = NonNullable<
   Parameters<RuntimeServerClient[`forkEntity`]>[0][`wake`]
 >
-function normalizeForkWake(wake: Wake, subscriberUrl: string): ServerForkWake {
+function normalizeForkWake(
+  wake: Wake,
+  subscriberUrl: string,
+  manifestKey?: string
+): ServerForkWake {
   const isRunFinished =
     wake === `runFinished` ||
     (typeof wake === `object` && wake.on === `runFinished`)
@@ -129,6 +133,9 @@ function normalizeForkWake(wake: Wake, subscriberUrl: string): ServerForkWake {
   const result: ServerForkWake = {
     subscriberUrl,
     condition,
+  }
+  if (manifestKey !== undefined) {
+    result.manifestKey = manifestKey
   }
   if (typeof wake === `object` && wake.on === `runFinished`) {
     if (wake.includeResponse !== undefined) {
@@ -1404,7 +1411,7 @@ export async function processWake(
         // (the only valid target after the route's wake validation).
         const wakeOpt =
           opts?.wake && opts.parent
-            ? normalizeForkWake(opts.wake, opts.parent)
+            ? normalizeForkWake(opts.wake, opts.parent, opts.manifestKey)
             : undefined
         const result = await serverClient.forkEntity({
           sourceEntityUrl,
@@ -2261,7 +2268,7 @@ export async function processWake(
             try {
               await serverClient.unregisterWake({
                 subscriberUrl: entityUrl,
-                sourceUrl: childEntry.entity_url,
+                manifestKey: childEntry.key,
               })
             } catch (err) {
               cleanupErrors.push(toError(err))

@@ -7,7 +7,7 @@ import {
   resolveWebhookSourceSubscription,
   type WebhookSourceContract,
 } from '../src/webhook-sources'
-import { manifestSourceKey } from '../src/manifest-helpers'
+import { manifestChildKey, manifestSourceKey } from '../src/manifest-helpers'
 import { db, pgSync } from '../src/observation-sources'
 import { processWake } from '../src/process-wake'
 import { clearRegistry, defineEntity } from '../src/define-entity'
@@ -1692,7 +1692,7 @@ describe(`processWake`, () => {
     expect(unregisterCalls).toHaveLength(1)
     expect(JSON.parse(unregisterCalls[0]![1]!.body as string)).toEqual({
       subscriberUrl: `http://localhost:3000/test-agent/agent-1`,
-      sourceUrl: `/child-worker/spawned-child`,
+      manifestKey: manifestChildKey(`child-worker`, `worker-1`),
     })
 
     const signalCalls = fetchMock.mock.calls.filter(

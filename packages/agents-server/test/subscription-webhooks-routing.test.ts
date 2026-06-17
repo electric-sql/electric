@@ -162,10 +162,12 @@ function buildContext(overrides: Partial<TenantContext> = {}): TenantContext {
 describe(`subscription webhooks for Durable Streams subscriptions`, () => {
   it(`unregisters a parent wake registration without signaling the source entity`, async () => {
     const unregisterBySubscriberAndSource = vi.fn().mockResolvedValue(undefined)
+    const unregisterByManifestKey = vi.fn().mockResolvedValue(undefined)
     const ctx = buildContext({
       entityManager: {
         wakeRegistry: {
           unregisterBySubscriberAndSource,
+          unregisterByManifestKey,
         },
       } as any,
     })
@@ -184,6 +186,36 @@ describe(`subscription webhooks for Durable Streams subscriptions`, () => {
       `/worker/child`,
       `tenant-a`
     )
+    expect(unregisterByManifestKey).not.toHaveBeenCalled()
+  })
+
+  it(`unregisters a parent wake registration by manifest key`, async () => {
+    const unregisterBySubscriberAndSource = vi.fn().mockResolvedValue(undefined)
+    const unregisterByManifestKey = vi.fn().mockResolvedValue(undefined)
+    const ctx = buildContext({
+      entityManager: {
+        wakeRegistry: {
+          unregisterBySubscriberAndSource,
+          unregisterByManifestKey,
+        },
+      } as any,
+    })
+
+    const response = await globalRouter.fetch(
+      request(`POST`, `/_electric/wake/unregister`, {
+        subscriberUrl: `/horton/parent`,
+        manifestKey: `child:worker:child-1`,
+      }),
+      ctx
+    )
+
+    expect(response.status).toBe(204)
+    expect(unregisterByManifestKey).toHaveBeenCalledWith(
+      `/horton/parent`,
+      `child:worker:child-1`,
+      `tenant-a`
+    )
+    expect(unregisterBySubscriberAndSource).not.toHaveBeenCalled()
   })
 
   it(`validates upstream Durable Streams webhook signatures before dispatching`, async () => {
