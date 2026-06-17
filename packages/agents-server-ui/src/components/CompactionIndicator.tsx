@@ -1,20 +1,30 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useLiveQuery } from '@tanstack/react-db'
 import type { EntityStreamDBWithActions } from '@electric-ax/agents-runtime/client'
 import styles from './CompactionIndicator.module.css'
 
 /**
- * Live indicator shown while a synchronous context compaction is in flight.
+ * Live indicator shown while a context compaction is in flight.
  *
  * The runtime writes a compaction checkpoint row with `attrs.status: "running"`
- * before summarizing and supersedes it with a `complete` row when done. We read
- * the latest such row reactively; while it's `running` we show "Compacting
- * context…" so the user understands the pause (and knows their next prompt is
- * being queued). It clears the moment compaction completes.
+ * before summarizing and supersedes it with a `complete` (or `failed`) row when
+ * done. We read the latest such row reactively; while it's `running` we show
+ * "Compacting context…" so the user understands the pause. It clears the moment
+ * compaction completes.
+ *
+ * A summarize is bounded by a hard timeout (~120s) after which a terminal row is
+ * always written, so a `running` row that lingers well past that is orphaned —
+ * its process crashed before writing the terminal row. We stop showing the
+ * spinner for such a row (and self-clear via a timer so it disappears even with
+ * no further events).
  */
+
+/** Beyond this age a still-`running` checkpoint is treated as orphaned/crashed. */
+const STALE_RUNNING_MS = 150_000
 
 interface CheckpointRow {
   _seq?: number
+  timestamp?: string
   attrs?: { kind?: string; status?: string; background?: boolean }
 }
 
@@ -33,28 +43,44 @@ export function CompactionIndicator({
     [db]
   )
 
-  const running = useMemo(() => {
-    // The newest compaction checkpoint wins (later writes supersede earlier
-    // ones for the same id). If it's still `running`, compaction is in flight.
+  const latest = useMemo(() => {
+    // The newest compaction checkpoint wins (later writes supersede earlier ones
+    // for the same id). Only a `running` one drives the spinner.
     let latest: CheckpointRow | null = null
     for (const row of rows as Array<CheckpointRow>) {
       if (row.attrs?.kind !== `compaction`) continue
       if (!latest || (row._seq ?? 0) > (latest._seq ?? 0)) latest = row
     }
-    if (latest?.attrs?.status !== `running`) return null
-    return { background: Boolean(latest.attrs?.background) }
+    return latest?.attrs?.status === `running` ? latest : null
   }, [rows])
 
-  if (!running) return null
+  const runningSince = latest?.timestamp
+    ? Date.parse(latest.timestamp)
+    : Number.NaN
+
+  // Re-render once the running checkpoint crosses the staleness deadline, so an
+  // orphaned spinner clears itself even if no further events arrive.
+  const [, bump] = useState(0)
+  useEffect(() => {
+    if (!latest || !Number.isFinite(runningSince)) return
+    const remaining = STALE_RUNNING_MS - (Date.now() - runningSince)
+    if (remaining <= 0) return
+    const id = setTimeout(() => bump((n) => n + 1), remaining)
+    return () => clearTimeout(id)
+  }, [latest, runningSince])
+
+  if (!latest) return null
+  const orphaned =
+    Number.isFinite(runningSince) &&
+    Date.now() - runningSince >= STALE_RUNNING_MS
+  if (orphaned) return null
 
   // Background compaction is non-blocking, so it's shown subtly and distinctly
   // from the blocking (sync, mid-turn) "Compacting context…".
+  const background = Boolean(latest.attrs?.background)
   return (
     <span
-      className={[
-        styles.indicator,
-        running.background ? styles.background : null,
-      ]
+      className={[styles.indicator, background ? styles.background : null]
         .filter(Boolean)
         .join(` `)}
       role="status"
@@ -62,9 +88,7 @@ export function CompactionIndicator({
     >
       <span className={styles.spinner} aria-hidden="true" />
       <span className={styles.label}>
-        {running.background
-          ? `Compacting in background…`
-          : `Compacting context…`}
+        {background ? `Compacting in background…` : `Compacting context…`}
       </span>
     </span>
   )
