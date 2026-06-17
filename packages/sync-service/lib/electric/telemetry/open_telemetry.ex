@@ -395,7 +395,7 @@ defmodule Electric.Telemetry.OpenTelemetry do
   def tracestate_value(span_ctx, key) when Record.is_record(span_ctx, :span_ctx) do
     case :otel_tracestate.get(key, span_ctx_record(span_ctx, :tracestate)) do
       value when is_binary(value) and value != "" -> value
-      [_ | _] = value -> List.to_string(value)
+      [_ | _] = value -> IO.iodata_to_binary(value)
       _ -> nil
     end
   end
