@@ -241,13 +241,18 @@ async fn write_response(
             }
             Ok(())
         }
-        Body::Channel(mut rx) => {
+        Body::Channel(crate::api::StreamBody { mut rx, failed }) => {
             write_all(stream, head).await?;
             debug_assert!(body_len.is_none());
             while let Some(b) = rx.recv().await {
                 let mut frame = Vec::with_capacity(b.len() + 16);
                 http1::frame_chunk(&mut frame, &b);
                 write_all(stream, frame).await?;
+            }
+            if failed.load(std::sync::atomic::Ordering::Acquire) {
+                // Backend error mid-stream: abort instead of a clean terminator
+                // so the client sees an incomplete transfer (see BUG-1).
+                return Err(std::io::Error::other("read aborted mid-stream"));
             }
             write_all(stream, b"0\r\n\r\n".to_vec()).await
         }

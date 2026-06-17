@@ -1364,9 +1364,17 @@ fn stream_resolved_body(
     suffix: &'static [u8],
 ) -> Body {
     use crate::store::ResolvedSlice;
+    use std::sync::atomic::{AtomicBool, Ordering};
     let (tx, rx) = mpsc::channel::<Bytes>(4);
+    let failed = Arc::new(AtomicBool::new(false));
     let st = st.clone();
+    let failed_producer = failed.clone();
     tokio::spawn(async move {
+        // Mark the stream as aborted-due-to-error so the engine drops the
+        // connection (no clean chunked terminator) instead of serving a
+        // well-formed but truncated response. A `tx.send` failure is the client
+        // going away (not our error), so it does NOT set the flag.
+        let fail = || failed_producer.store(true, Ordering::Release);
         if !prefix.is_empty() && tx.send(Bytes::from_static(prefix)).await.is_err() {
             return;
         }
@@ -1388,24 +1396,36 @@ fn stream_resolved_body(
                         })
                         .await
                         .unwrap_or_default();
-                        // materialize_segments yields empty bytes on a read
-                        // failure — a short item means we can't honour the
-                        // content; drop the connection rather than send garbage.
-                        if bytes.len() as u64 != n || tx.send(bytes).await.is_err() {
+                        // A short read means we cannot honour the content — abort
+                        // (set the flag) so the engine drops the connection rather
+                        // than emitting a clean-but-truncated response.
+                        if bytes.len() as u64 != n {
+                            fail();
                             return;
+                        }
+                        if tx.send(bytes).await.is_err() {
+                            return; // client gone — not our failure
                         }
                         off += n;
                     }
                 }
                 ResolvedSlice::Remote { key, offset, len } => {
-                    let Some(bs) = &st.blobstore else { return };
+                    let Some(bs) = &st.blobstore else {
+                        fail();
+                        return;
+                    };
                     match bs.get_range(&key, offset, len).await {
-                        Ok(b) => {
+                        // Validate the object came back at full length — a
+                        // truncated cold read must abort, never be forwarded.
+                        Ok(b) if b.len() as u64 == len => {
                             if tx.send(b).await.is_err() {
-                                return;
+                                return; // client gone
                             }
                         }
-                        Err(_) => return,
+                        _ => {
+                            fail();
+                            return;
+                        }
                     }
                 }
             }
@@ -1414,7 +1434,7 @@ fn stream_resolved_body(
             let _ = tx.send(Bytes::from_static(suffix)).await;
         }
     });
-    Body::Channel(rx)
+    Body::Channel(crate::api::StreamBody { rx, failed })
 }
 
 /// Materialize pre-resolved placement-aware slices into one contiguous buffer:
@@ -1442,8 +1462,10 @@ async fn materialize_resolved(
             ResolvedSlice::Remote { key, offset, len } => {
                 if let Some(bs) = &st.blobstore {
                     match bs.get_range(&key, offset, len).await {
-                        Ok(b) => out.put_slice(&b),
-                        Err(_) => return Bytes::new(),
+                        // Validate full length — a truncated object must not be
+                        // forwarded as if complete.
+                        Ok(b) if b.len() as u64 == len => out.put_slice(&b),
+                        _ => return Bytes::new(),
                     }
                 } else {
                     return Bytes::new();
@@ -1828,7 +1850,9 @@ async fn handle_sse(st: Arc<StreamState>, offset: ParsedOffset, client_cursor: O
     if is_b64 {
         b = b.hs(H_SSE_ENCODING, "base64");
     }
-    b.body(Body::Channel(rx))
+    // SSE is a live feed: a mid-stream hiccup just ends the event stream and the
+    // client reconnects from its last offset, so there is no abort signal here.
+    b.body(Body::Channel(crate::api::StreamBody::infallible(rx)))
 }
 
 /// Read a logical byte range fully into memory (SSE batches are small).
@@ -1885,4 +1909,127 @@ fn handle_delete(store: Arc<Store>, path: String) -> Resp {
     }
     store.delete_or_soft_delete(&st);
     ResponseBuilder::new(204).body(empty())
+}
+
+#[cfg(test)]
+mod bug1_tests {
+    //! Regression for BUG-1: a cold-tier read that errors or returns a truncated
+    //! object must set the `StreamBody.failed` abort flag (so engines drop the
+    //! connection) instead of completing a clean-but-short chunked 200 — which
+    //! would let a client resume past `stream-next-offset` and silently skip the
+    //! gap. Found by the madsim DST harness.
+    use super::*;
+    use crate::blobstore::{BlobStore, BoxFuture};
+    use crate::store::{CreateResult, ResolvedSlice, Store, StreamConfig};
+    use crate::tier::TierConfig;
+    use std::sync::atomic::Ordering;
+    use std::sync::Arc;
+
+    #[derive(Clone, Copy)]
+    enum Mode {
+        Full,
+        Truncate,
+        Error,
+    }
+
+    struct TestBlob(Mode);
+    impl BlobStore for TestBlob {
+        fn put<'a>(&'a self, _k: &'a str, _b: bytes::Bytes) -> BoxFuture<'a, std::io::Result<()>> {
+            Box::pin(async { Ok(()) })
+        }
+        fn get_range<'a>(
+            &'a self,
+            _k: &'a str,
+            _s: u64,
+            len: u64,
+        ) -> BoxFuture<'a, std::io::Result<bytes::Bytes>> {
+            let mode = self.0;
+            Box::pin(async move {
+                match mode {
+                    Mode::Full => Ok(bytes::Bytes::from(vec![b'x'; len as usize])),
+                    // one byte short of the requested length
+                    Mode::Truncate => Ok(bytes::Bytes::from(vec![b'x'; len.saturating_sub(1) as usize])),
+                    Mode::Error => Err(std::io::Error::other("cold backend boom")),
+                }
+            })
+        }
+        fn head<'a>(&'a self, _k: &'a str) -> BoxFuture<'a, std::io::Result<Option<u64>>> {
+            Box::pin(async { Ok(None) })
+        }
+        fn delete<'a>(&'a self, _k: &'a str) -> BoxFuture<'a, std::io::Result<()>> {
+            Box::pin(async { Ok(()) })
+        }
+    }
+
+    fn stream_cfg() -> StreamConfig {
+        StreamConfig {
+            content_type: "application/octet-stream".into(),
+            ttl_seconds: None,
+            expires_at: None,
+            expires_at_raw: None,
+            create_closed: false,
+            forked_from: None,
+            fork_offset_raw: None,
+            fork_sub_offset: None,
+        }
+    }
+
+    /// Drive `stream_resolved_body` over a single 100-byte Remote slice backed by
+    /// a `TestBlob` in `mode`; return (bytes delivered, failed-flag).
+    async fn run(mode: Mode) -> (usize, bool) {
+        let dir = std::env::temp_dir().join(format!(
+            "ds-bug1-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut store = Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap();
+        store.blobstore = Some(Arc::new(TestBlob(mode)));
+        let store = Arc::new(store);
+        let st = match store.create("s", stream_cfg(), None, 0).unwrap() {
+            CreateResult::Created(s) => s,
+            _ => panic!("create failed"),
+        };
+        let slices = vec![ResolvedSlice::Remote {
+            key: "k".into(),
+            offset: 0,
+            len: 100,
+        }];
+        let body = stream_resolved_body(&st, slices, b"", b"");
+        let (n, failed) = match body {
+            Body::Channel(sb) => {
+                let mut rx = sb.rx;
+                let mut n = 0usize;
+                while let Some(b) = rx.recv().await {
+                    n += b.len();
+                }
+                (n, sb.failed.load(Ordering::Acquire))
+            }
+            _ => panic!("expected a channel body"),
+        };
+        let _ = std::fs::remove_dir_all(&dir);
+        (n, failed)
+    }
+
+    #[tokio::test]
+    async fn cold_read_full_is_not_flagged() {
+        let (n, failed) = run(Mode::Full).await;
+        assert!(!failed, "a full-length cold read must not be flagged failed");
+        assert_eq!(n, 100, "the full body is delivered");
+    }
+
+    #[tokio::test]
+    async fn cold_read_truncated_aborts() {
+        let (_n, failed) = run(Mode::Truncate).await;
+        assert!(failed, "a truncated cold read must set the abort flag (BUG-1)");
+    }
+
+    #[tokio::test]
+    async fn cold_read_error_aborts() {
+        let (_n, failed) = run(Mode::Error).await;
+        assert!(failed, "a cold-read backend error must set the abort flag (BUG-1)");
+    }
 }

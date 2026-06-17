@@ -9,7 +9,7 @@ use std::os::unix::fs::FileExt;
 use std::sync::Arc;
 
 use bytes::{Bytes, BytesMut};
-use http_body_util::{BodyExt, Either, Full};
+use http_body_util::{BodyExt, Full};
 use hyper::body::{Body as HyperBody, Frame, Incoming};
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
@@ -31,24 +31,51 @@ enum ReqError {
     TooLarge,
 }
 
-pub type RespBody = Either<Full<Bytes>, ChannelBody>;
+/// Response body: a buffered `Full` or a streamed `Channel`. The error type is
+/// `io::Error` (not `Infallible`) precisely so the streamed arm can ABORT: when
+/// the producer set the `failed` flag, `poll_frame` yields `Err`, which makes
+/// hyper drop the connection instead of emitting a clean chunked terminator —
+/// so a failed/short read is never served as a complete-looking response. The
+/// `Full` arm never errors (its `Infallible` is mapped away). See BUG-1.
+pub enum RespBody {
+    Full(Full<Bytes>),
+    Channel(ChannelBody),
+}
 
 pub struct ChannelBody {
     rx: mpsc::Receiver<Bytes>,
+    failed: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 
-impl HyperBody for ChannelBody {
+impl HyperBody for RespBody {
     type Data = Bytes;
-    type Error = Infallible;
+    type Error = std::io::Error;
 
     fn poll_frame(
-        mut self: std::pin::Pin<&mut Self>,
+        self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
-        match self.rx.poll_recv(cx) {
-            std::task::Poll::Ready(Some(b)) => std::task::Poll::Ready(Some(Ok(Frame::data(b)))),
-            std::task::Poll::Ready(None) => std::task::Poll::Ready(None),
-            std::task::Poll::Pending => std::task::Poll::Pending,
+        use std::task::Poll;
+        match self.get_mut() {
+            // Full<Bytes>::Error is Infallible; map it away.
+            RespBody::Full(f) => match std::pin::Pin::new(f).poll_frame(cx) {
+                Poll::Ready(Some(Ok(fr))) => Poll::Ready(Some(Ok(fr))),
+                Poll::Ready(Some(Err(e))) => match e {},
+                Poll::Ready(None) => Poll::Ready(None),
+                Poll::Pending => Poll::Pending,
+            },
+            RespBody::Channel(c) => match c.rx.poll_recv(cx) {
+                Poll::Ready(Some(b)) => Poll::Ready(Some(Ok(Frame::data(b)))),
+                Poll::Ready(None) => {
+                    if c.failed.load(std::sync::atomic::Ordering::Acquire) {
+                        // Abort: hyper drops the connection (no clean terminator).
+                        Poll::Ready(Some(Err(std::io::Error::other("read aborted mid-stream"))))
+                    } else {
+                        Poll::Ready(None)
+                    }
+                }
+                Poll::Pending => Poll::Pending,
+            },
         }
     }
 }
@@ -68,9 +95,11 @@ async fn file_range_to_body(
             tokio::task::spawn_blocking(move || materialize_segments(&segments, prefix, suffix))
                 .await
                 .unwrap_or_default();
-        Either::Left(Full::new(buf))
+        RespBody::Full(Full::new(buf))
     } else {
         let (tx, rx) = mpsc::channel::<Bytes>(4);
+        let failed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let failed_producer = failed.clone();
         tokio::task::spawn_blocking(move || {
             if !prefix.is_empty() {
                 let _ = tx.blocking_send(Bytes::from_static(prefix));
@@ -82,11 +111,14 @@ async fn file_range_to_body(
                     let n = ((seg_end - pos) as usize).min(STREAM_CHUNK);
                     let mut buf = BytesMut::zeroed(n);
                     if seg.file.read_exact_at(&mut buf, pos).is_err() {
+                        // Local read failed mid-stream — abort so the connection
+                        // drops rather than serving a truncated 200 (BUG-1).
+                        failed_producer.store(true, std::sync::atomic::Ordering::Release);
                         return;
                     }
                     pos += n as u64;
                     if tx.blocking_send(buf.freeze()).is_err() {
-                        return;
+                        return; // client gone
                     }
                 }
             }
@@ -94,7 +126,7 @@ async fn file_range_to_body(
                 let _ = tx.blocking_send(Bytes::from_static(suffix));
             }
         });
-        Either::Right(ChannelBody { rx })
+        RespBody::Channel(ChannelBody { rx, failed })
     }
 }
 
@@ -138,9 +170,12 @@ async fn to_hyper(resp: Resp) -> Response<RespBody> {
         builder = builder.header(*k, hyper::header::HeaderValue::from_static(v));
     }
     let body = match resp.body {
-        Body::Empty => Either::Left(Full::new(Bytes::new())),
-        Body::Full(b) => Either::Left(Full::new(b)),
-        Body::Channel(rx) => Either::Right(ChannelBody { rx }),
+        Body::Empty => RespBody::Full(Full::new(Bytes::new())),
+        Body::Full(b) => RespBody::Full(Full::new(b)),
+        Body::Channel(sb) => RespBody::Channel(ChannelBody {
+            rx: sb.rx,
+            failed: sb.failed,
+        }),
         Body::FileRange {
             segments,
             prefix,

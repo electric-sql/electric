@@ -5,10 +5,37 @@
 // as file segments + optional framing bytes, and the engine decides how to
 // serve them (buffered copy, or sendfile on engines/platforms that can).
 
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
+
 use bytes::Bytes;
 use tokio::sync::mpsc;
 
 use crate::store::Segment;
+
+/// A streamed (chunked) response body plus an abort signal.
+///
+/// `rx` carries the body frames. `failed` is set by the producer if it ends the
+/// stream early because of a backend error (a cold-tier `get_range` failure, a
+/// short/truncated object, a local read error). When `failed` is set the engine
+/// MUST abort the response — drop the connection without emitting the clean
+/// chunked terminator — so a client never mistakes a failed/short read for a
+/// complete one (it would otherwise resume past `stream-next-offset` and silently
+/// skip the missing bytes). See `handlers::stream_resolved_body`.
+pub struct StreamBody {
+    pub rx: mpsc::Receiver<Bytes>,
+    pub failed: Arc<AtomicBool>,
+}
+
+impl StreamBody {
+    /// A stream with no failure path (e.g. SSE, where the client reconnects).
+    pub fn infallible(rx: mpsc::Receiver<Bytes>) -> Self {
+        StreamBody {
+            rx,
+            failed: Arc::new(AtomicBool::new(false)),
+        }
+    }
+}
 
 /// Maximum accepted request body size; larger bodies get `413 Payload Too
 /// Large`. Shared by both HTTP engines so the limit is consistent regardless
@@ -70,8 +97,9 @@ pub enum Body {
     Empty,
     Full(Bytes),
     /// Streaming body (SSE / large dynamic responses); engine frames it
-    /// (e.g. chunked transfer-encoding) and ends when the channel closes.
-    Channel(mpsc::Receiver<Bytes>),
+    /// (e.g. chunked transfer-encoding) and ends when the channel closes. The
+    /// `failed` flag tells the engine to abort rather than terminate cleanly.
+    Channel(StreamBody),
     /// Byte ranges of data files plus optional framing (JSON `[` / `]`).
     /// Total body length is prefix + Σ segment.len + suffix.
     FileRange {

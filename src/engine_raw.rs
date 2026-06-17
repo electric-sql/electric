@@ -272,7 +272,7 @@ async fn write_response(
                 stream.write_all(suffix).await?;
             }
         }
-        Body::Channel(mut rx) => {
+        Body::Channel(crate::api::StreamBody { mut rx, failed }) => {
             stream.write_all(&head).await?;
             debug_assert!(body_len.is_none());
             let mut frame: Vec<u8> = Vec::with_capacity(8 * 1024);
@@ -280,6 +280,13 @@ async fn write_response(
                 frame.clear();
                 http1::frame_chunk(&mut frame, &b);
                 stream.write_all(&frame).await?;
+            }
+            if failed.load(std::sync::atomic::Ordering::Acquire) {
+                // The body ended early due to a backend error. Abort: omit the
+                // terminating chunk and return an error so the connection drops —
+                // the client sees an incomplete transfer, never a clean-but-
+                // truncated 200. (See api::StreamBody / BUG-1.)
+                return Err(std::io::Error::other("read aborted mid-stream"));
             }
             stream.write_all(b"0\r\n\r\n").await?;
         }
