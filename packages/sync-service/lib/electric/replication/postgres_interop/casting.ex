@@ -53,8 +53,6 @@ defmodule Electric.Replication.PostgresInterop.Casting do
     end
   end
 
-  def uuid_to_string(<<_::128>> = uuid), do: Ecto.UUID.load!(uuid)
-
   def uuid_to_string(maybe_uuid) do
     {:ok, uuid} = Ecto.UUID.cast(maybe_uuid)
     uuid
