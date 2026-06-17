@@ -328,6 +328,12 @@ export function createPiAgentAdapter(
               .slice(anchorMessageCount)
               .reduce((sum, m) => sum + estimateContent(m), 0)
             const currentTokens = anchorTokens + trailingTokens
+            // Anchor the NEXT step's trailing estimate on this step's *incoming*
+            // (uncompacted) message count — NOT the compacted list we may return.
+            // pi-agent hands transformContext the full conversation every step,
+            // so `list.slice(anchorMessageCount)` next step measures exactly the
+            // messages appended since. `anchorTokens` is separately re-anchored
+            // to the step's real cache-inclusive usage at message_end.
             pendingRequestMessageCount = messages.length
             const compacted = await opts.onCompactContext!({
               messages: list,
