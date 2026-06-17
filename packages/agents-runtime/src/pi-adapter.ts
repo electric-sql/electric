@@ -324,7 +324,12 @@ export function createPiAgentAdapter(
     // total minus these (see token-accountant computeContextBreakdown).
     const tokenBreakdown = {
       system: approxTokens(opts.systemPrompt),
-      tools: approxTokens(opts.tools),
+      // Serialize first: approxTokens' array branch charges a flat ~64 per
+      // non-text block, so passing the AgentTool[] directly would estimate
+      // ~64×toolCount regardless of the real schema size. JSON.stringify
+      // captures each tool's name + description + parameter schema (functions
+      // drop out), which is what actually occupies the prompt.
+      tools: approxTokens(JSON.stringify(opts.tools)),
     }
 
     const transformContext =
