@@ -21,6 +21,7 @@ import {
   GOAL_SLASH_COMMAND,
   buildSkillSlashCommands,
   createContextSkillLoader,
+  createOpenAIRealtimeProvider,
   completeWithLowCostModel,
   dispatchGoalCommand,
   formatTokenCount,
@@ -31,6 +32,8 @@ import {
 import type {
   EntityRegistry,
   HandlerContext,
+  ManifestDocumentEntry,
+  SourceConfig,
   WakeEvent,
 } from '@electric-ax/agents-runtime'
 import {
@@ -59,6 +62,15 @@ const TITLE_USER_PROMPT = (userMessage: string): string =>
   `User request:\n${userMessage}`
 const TITLE_GENERATION_TIMEOUT_MS = 8_000
 const HORTON_SKILLS_SLASH_COMMAND_OWNER = `horton:skills`
+const HORTON_REALTIME_DIRECT_TOOLS = new Set([
+  `web_search`,
+  `fetch_url`,
+  `spawn_worker`,
+  `send`,
+  `search_electric_agents_docs`,
+  `use_skill`,
+  `remove_skill`,
+])
 
 const TITLE_STOP_WORDS = new Set([
   `a`,
@@ -212,12 +224,83 @@ interface ActiveGoalPromptInfo {
   tokensUsed: number
 }
 
+function isMarkdownDocumentManifestEntry(
+  value: unknown
+): value is ManifestDocumentEntry {
+  if (!value || typeof value !== `object`) return false
+  const entry = value as Partial<ManifestDocumentEntry>
+  return (
+    entry.kind === `document` &&
+    typeof entry.id === `string` &&
+    entry.provider === `y-durable-streams` &&
+    typeof entry.docPath === `string` &&
+    typeof entry.streamPath === `string` &&
+    entry.transportMimeType ===
+      `application/vnd.electric-agents.markdown-yjs` &&
+    entry.contentMimeType === `text/markdown` &&
+    entry.yTextName === `markdown` &&
+    typeof entry.title === `string`
+  )
+}
+
+function markdownDocumentSourceEntity(
+  document: ManifestDocumentEntry
+): string | undefined {
+  const meta = document.meta
+  return meta && typeof meta === `object` && `sourceEntityUrl` in meta
+    ? typeof meta.sourceEntityUrl === `string`
+      ? meta.sourceEntityUrl
+      : undefined
+    : undefined
+}
+
+function currentMarkdownDocuments(
+  ctx: HandlerContext
+): Array<ManifestDocumentEntry> {
+  const manifests = ctx.db.collections.manifests?.toArray as
+    | Array<unknown>
+    | undefined
+  const injectedDocs = Array.isArray(ctx.args?.markdownDocs)
+    ? ctx.args.markdownDocs.filter(isMarkdownDocumentManifestEntry)
+    : []
+  const docsById = new Map<string, ManifestDocumentEntry>()
+  for (const document of [
+    ...(manifests?.filter(isMarkdownDocumentManifestEntry) ?? []),
+    ...injectedDocs,
+  ]) {
+    docsById.set(document.id, document)
+  }
+  return [...docsById.values()]
+}
+
+function renderCurrentMarkdownDocumentsContext(ctx: HandlerContext): string {
+  const documents = currentMarkdownDocuments(ctx)
+  if (documents.length === 0) {
+    return `No collaborative markdown documents are currently available in this entity's manifest.`
+  }
+
+  return [
+    `Current collaborative markdown documents available in this entity's manifest:`,
+    ...documents.map((document) => {
+      const sourceEntityUrl = markdownDocumentSourceEntity(document)
+      return [
+        `- ${document.title}`,
+        `  id: ${document.id}`,
+        `  docPath: ${document.docPath}`,
+        ...(sourceEntityUrl ? [`  sourceEntityUrl: ${sourceEntityUrl}`] : []),
+      ].join(`\n`)
+    }),
+    `Use read_markdown_doc with the id before editing, and pass markdown document tools to workers that should read or edit these docs.`,
+  ].join(`\n`)
+}
+
 export function buildHortonSystemPrompt(
   workingDirectory: string,
   opts: {
     hasDocsSupport?: boolean
     hasWebhookSourceTools?: boolean
     hasScheduleTools?: boolean
+    hasMarkdownDocumentTools?: boolean
     hasSkills?: boolean
     docsUrl?: string
     modelProvider?: string
@@ -235,8 +318,14 @@ export function buildHortonSystemPrompt(
   const scheduleTools = opts.hasScheduleTools
     ? `\n- upsert_cron_schedule: create or update a recurring cron wake for yourself. Always include payload with the concrete instruction/message you should receive when the cron fires.\n- delete_schedule: delete one of your cron or future-send schedules by stable id\n- list_schedules: list your manifest-backed cron and future-send schedules`
     : ``
+  const markdownDocumentTools = opts.hasMarkdownDocumentTools
+    ? `\n- create_markdown_doc: create a collaborative markdown document that appears in this entity's manifest and opens in the workspace editor\n- set_markdown_doc_cursor: choose a stateful Yjs-relative insertion cursor for a collaborative markdown document\n- insert_markdown_doc: stream or insert markdown into an existing collaborative document so open editors can watch content appear\n- replace_markdown_doc_range: delete a range and stream replacement markdown into that location\n- read_markdown_doc: read a collaborative markdown document\n- write_markdown_doc: replace a collaborative markdown document's full content\n- edit_markdown_doc: targeted string replacement in a collaborative markdown document`
+    : ``
   const skillsTools = opts.hasSkills
     ? `\n- use_skill: load a skill (knowledge, instructions, or a tutorial) into your context to help with the user's request\n- remove_skill: unload a skill from context when you're done with it`
+    : ``
+  const markdownDocumentGuidance = opts.hasMarkdownDocumentTools
+    ? `\n# Collaborative Markdown Docs\n- If the user asks you to create a markdown doc, notes, draft, brief, plan, report, or any document they should open/edit in the app UI, use create_markdown_doc. Do not use filesystem write unless they ask for a file path or repo/workspace file.\n- For larger document workflows, load the markdown-docs skill first with use_skill, then use the markdown document tools.\n- Prefer streaming inserts for markdown edits that add or replace non-trivial content, so open editors can watch the content appear live.\n- Use set_markdown_doc_cursor before insert_markdown_doc when inserting at a specific location; insert_markdown_doc can then stream content at that Yjs-relative cursor.\n- Use replace_markdown_doc_range when replacing existing prose with new content that should visibly stream into the deleted range.\n- When spawning a worker to read or edit a collaborative markdown doc, include the specific markdown document tools that worker needs. Current markdown docs are passed to the worker automatically; use spawn_worker's markdownDocIds only when you need to restrict which docs it can access.\n- After creating a collaborative doc, mention that it is available from this entity's manifest/timeline.`
     : ``
   const docsGuidance = opts.hasDocsSupport
     ? `\n- For ANY question about Electric Agents or this framework, ALWAYS use search_electric_agents_docs FIRST. Do not use web_search or fetch_url for Electric Agents topics unless the docs search returns no useful results.\n- The search tool returns chunk content directly — you do not need to read the source files.\n- Use repo read/bash tools only for non-doc files or when you need to inspect exact implementation code in the workspace.`
@@ -303,12 +392,12 @@ When a user opens with a greeting ("hi", "hello", "hey", etc.) or a broad statem
 - observe_pg_sync: observe an Electric Postgres sync stream and wake on matching changes (see "Observing Postgres tables")
 - unobserve_pg_sync: stop being woken by a pg-sync stream you previously observed (see "Observing Postgres tables")
 - send: send a message to an Electric Agent/entity. To schedule future work for yourself, call send with self: true and afterMs.
-${webhookSourceTools}${titleTool}${scheduleTools}${docsTools}${skillsTools}
+${webhookSourceTools}${titleTool}${scheduleTools}${markdownDocumentTools}${docsTools}${skillsTools}
 
 # Working with files
 - Prefer edit over write when modifying existing files.
 - Use absolute paths or paths relative to the current working directory.
-${modelGuidance}${docsGuidance}${skillsGuidance}${onboardingGuidance}${docsUrlGuidance}
+${markdownDocumentGuidance}${modelGuidance}${docsGuidance}${skillsGuidance}${onboardingGuidance}${docsUrlGuidance}
 
 # Observing Postgres tables
 observe_pg_sync subscribes you to row changes in a Postgres table via an Electric shape stream:
@@ -333,7 +422,7 @@ Dispatch a worker when:
 - The subtask is independent and can run in parallel with other work.
 - You need an isolated context (e.g., focused coding on one file without pulling its full content into our chat).
 
-When you spawn a worker, write its system prompt the way you'd brief a colleague who just walked in: include file paths, line numbers, what specifically to do, and what form of answer you want back. The system prompt sets the worker's persona and constraints; the required initialMessage is the concrete task you're handing off — that's what kicks the worker off, so without it the worker sits idle.
+When you spawn a worker, give it a short descriptive name and write its system prompt the way you'd brief a colleague who just walked in: include file paths, line numbers, what specifically to do, and what form of answer you want back. The system prompt sets the worker's persona and constraints; the required initialMessage is the concrete task you're handing off — that's what kicks the worker off, so without it the worker sits idle.
 
 After spawning, end your turn (optionally with a brief "I've dispatched a worker for X; I'll respond when it finishes"). When the worker finishes, you'll receive a message describing which worker completed and what it returned. Multiple workers may finish at different times — check the message for the worker URL to know which one you're hearing about.
 
@@ -377,6 +466,25 @@ function getToolName(tool: unknown): string | null {
   if (typeof tool !== `object` || tool === null) return null
   const name = (tool as { name?: unknown }).name
   return typeof name === `string` ? name : null
+}
+
+function hortonRealtimeDirectTools(tools: Array<AgentTool>): Array<string> {
+  return tools
+    .map((tool) => getToolName(tool))
+    .filter(
+      (name): name is string =>
+        name !== null && HORTON_REALTIME_DIRECT_TOOLS.has(name)
+    )
+}
+
+function hortonRealtimeSystemPrompt(systemPrompt: string): string {
+  return `${systemPrompt}
+
+# Realtime mode
+You are speaking with the user live. Keep responses concise enough for voice.
+Prefer dispatching workers for coding, shell, edit, or other long-running tasks.
+Use direct tools only for lightweight orchestration, lookup, context loading, and sending messages.
+When a task may change files, run commands, or take more than a short exchange, spawn a worker and tell the user you are handing it off.`
 }
 
 export function createHortonTools(
@@ -440,6 +548,18 @@ type InboxTitleMessage = {
   from?: unknown
   payload: unknown
   _seq?: unknown
+}
+
+type RealtimeTitleTranscript = {
+  direction?: unknown
+  status?: unknown
+  text?: unknown
+  _seq?: unknown
+}
+
+type TitleCandidate = {
+  text: string
+  seq: number
 }
 
 type TitleAttachment = {
@@ -513,15 +633,33 @@ function messageTitleText(
 export async function extractFirstUserMessage(
   ctx: HandlerContext
 ): Promise<string | null> {
-  const firstMessage = (
-    ctx.db.collections.inbox.toArray as Array<InboxTitleMessage>
-  )
-    .filter((message) => message.from !== `system`)
-    .sort((left, right) => messageSeq(left) - messageSeq(right))[0]
+  const candidates: Array<TitleCandidate> = []
 
-  if (!firstMessage) return null
-  const text = messageTitleText(ctx, firstMessage)
-  return text.length > 0 ? text : null
+  for (const message of ctx.db.collections.inbox
+    .toArray as Array<InboxTitleMessage>) {
+    if (message.from === `system`) continue
+    const text = messageTitleText(ctx, message).trim()
+    if (text.length === 0) continue
+    candidates.push({ text, seq: messageSeq(message) })
+  }
+
+  const realtimeTranscripts = (
+    ctx.db.collections as {
+      realtimeTranscripts?: { toArray?: Array<RealtimeTitleTranscript> }
+    }
+  ).realtimeTranscripts?.toArray
+  for (const transcript of realtimeTranscripts ?? []) {
+    if (transcript.direction !== `input` || transcript.status !== `final`) {
+      continue
+    }
+    const text =
+      typeof transcript.text === `string` ? transcript.text.trim() : ``
+    if (text.length === 0) continue
+    candidates.push({ text, seq: messageSeq(transcript) })
+  }
+
+  candidates.sort((left, right) => left.seq - right.seq)
+  return candidates[0]?.text ?? null
 }
 
 function messageSeq(message: { _seq?: unknown }): number {
@@ -682,55 +820,78 @@ function createAssistantHandler(options: {
     const hasScheduleTools = tools.some(
       (tool) => getToolName(tool) === `upsert_cron_schedule`
     )
+    const hasMarkdownDocumentTools = tools.some(
+      (tool) => getToolName(tool) === `create_markdown_doc`
+    )
+    const markdownDocumentSources: Record<string, SourceConfig> = {}
+    if (hasMarkdownDocumentTools) {
+      markdownDocumentSources.markdown_documents = {
+        content: () => renderCurrentMarkdownDocumentsContext(ctx),
+        cache: `volatile`,
+      }
+    }
 
-    const titlePromise = !ctx.tags.title
-      ? (async () => {
-          const firstUserMessage = await extractFirstUserMessage(ctx)
-          if (!firstUserMessage) return
-
-          let title: string | null = null
-          try {
-            const result = await generateTitle(
-              firstUserMessage,
-              (prompt) =>
-                withTimeout(
-                  createConfiguredTitleCall(
-                    modelCatalog,
-                    modelConfig,
-                    `[horton ${ctx.entityUrl}]`
-                  )(prompt),
-                  TITLE_GENERATION_TIMEOUT_MS,
-                  `title generation`
-                ),
-              (reason) => {
-                serverLog.warn(
-                  `[horton ${ctx.entityUrl}] title generation fell back to local title: ${reason}`
-                )
-              }
-            )
-            if (result.length > 0) title = result
-          } catch (err) {
-            serverLog.warn(
-              `[horton ${ctx.entityUrl}] title generation failed: ${err instanceof Error ? err.message : String(err)}`
-            )
-            title = buildFallbackTitle(firstUserMessage)
-          }
-
-          if (title !== null) {
-            try {
-              await withTimeout(
-                ctx.setTag(`title`, title),
+    let titleGenerationStarted = Boolean(ctx.tags.title)
+    let titlePromise: Promise<void> = Promise.resolve()
+    const setTitleFromUserMessage = (userMessage: string): Promise<void> => {
+      const firstUserMessage = userMessage.trim()
+      if (titleGenerationStarted || firstUserMessage.length === 0) {
+        return titlePromise
+      }
+      titleGenerationStarted = true
+      titlePromise = (async () => {
+        let title: string | null = null
+        try {
+          const result = await generateTitle(
+            firstUserMessage,
+            (prompt) =>
+              withTimeout(
+                createConfiguredTitleCall(
+                  modelCatalog,
+                  modelConfig,
+                  `[horton ${ctx.entityUrl}]`
+                )(prompt),
                 TITLE_GENERATION_TIMEOUT_MS,
-                `set title tag`
-              )
-            } catch (err) {
+                `title generation`
+              ),
+            (reason) => {
               serverLog.warn(
-                `[horton ${ctx.entityUrl}] setTag failed: ${err instanceof Error ? err.message : String(err)}`
+                `[horton ${ctx.entityUrl}] title generation fell back to local title: ${reason}`
               )
             }
+          )
+          if (result.length > 0) title = result
+        } catch (err) {
+          serverLog.warn(
+            `[horton ${ctx.entityUrl}] title generation failed: ${err instanceof Error ? err.message : String(err)}`
+          )
+          title = buildFallbackTitle(firstUserMessage)
+        }
+
+        if (title !== null) {
+          try {
+            await withTimeout(
+              ctx.setTag(`title`, title),
+              TITLE_GENERATION_TIMEOUT_MS,
+              `set title tag`
+            )
+          } catch (err) {
+            serverLog.warn(
+              `[horton ${ctx.entityUrl}] setTag failed: ${err instanceof Error ? err.message : String(err)}`
+            )
           }
-        })()
-      : Promise.resolve()
+        }
+      })()
+      return titlePromise
+    }
+    const generateTitleFromHistory = async (): Promise<void> => {
+      if (titleGenerationStarted) return
+      const firstUserMessage = await extractFirstUserMessage(ctx)
+      if (!firstUserMessage) return
+      await setTitleFromUserMessage(firstUserMessage)
+    }
+
+    titlePromise = generateTitleFromHistory()
 
     if (docsSupport) {
       ctx.useContext({
@@ -755,6 +916,7 @@ function createAssistantHandler(options: {
             content: () => ctx.timelineMessages(),
             cache: `volatile`,
           },
+          ...markdownDocumentSources,
           ...(agentsMd
             ? {
                 agents_md: {
@@ -778,6 +940,7 @@ function createAssistantHandler(options: {
             content: () => ctx.timelineMessages(),
             cache: `volatile`,
           },
+          ...markdownDocumentSources,
           ...(agentsMd
             ? {
                 agents_md: {
@@ -797,11 +960,23 @@ function createAssistantHandler(options: {
             content: () => ctx.timelineMessages(),
             cache: `volatile`,
           },
+          ...markdownDocumentSources,
           agents_md: {
             content: () => agentsMd,
             max: 20_000,
             cache: `stable`,
           },
+        },
+      })
+    } else if (hasMarkdownDocumentTools) {
+      ctx.useContext({
+        sourceBudget,
+        sources: {
+          conversation: {
+            content: () => ctx.timelineMessages(),
+            cache: `volatile`,
+          },
+          ...markdownDocumentSources,
         },
       })
     }
@@ -849,17 +1024,82 @@ function createAssistantHandler(options: {
         }
       : undefined
 
+    const systemPrompt = buildHortonSystemPrompt(sandboxCwd, {
+      hasDocsSupport: Boolean(docsSupport),
+      hasSkills,
+      docsUrl,
+      modelProvider: modelConfig.provider,
+      modelId: String(modelConfig.model),
+      hasWebhookSourceTools,
+      hasScheduleTools,
+      ...(activeGoalPromptInfo && { activeGoal: activeGoalPromptInfo }),
+      hasMarkdownDocumentTools,
+    })
+    const activeRealtimeSession = ctx.realtime?.activeSession?.()
+    if (activeRealtimeSession) {
+      if (activeRealtimeSession.provider !== `openai`) {
+        throw new Error(
+          `Horton realtime currently supports provider "openai", got "${activeRealtimeSession.provider}"`
+        )
+      }
+      const realtime = ctx.useRealtime({
+        systemPrompt: hortonRealtimeSystemPrompt(systemPrompt),
+        provider: createOpenAIRealtimeProvider({
+          apiKey: () => {
+            const apiKey = process.env.OPENAI_API_KEY
+            if (!apiKey) {
+              throw new Error(
+                `OPENAI_API_KEY must be set before starting Horton realtime mode`
+              )
+            }
+            return apiKey
+          },
+          model: activeRealtimeSession.model,
+          ...(activeRealtimeSession.voice
+            ? { voice: activeRealtimeSession.voice }
+            : {}),
+          ...(activeRealtimeSession.reasoningEffort
+            ? { reasoningEffort: activeRealtimeSession.reasoningEffort }
+            : {}),
+        }),
+        tools: tools as AgentTool[],
+        audio: {
+          inputFormat: { codec: `pcm16`, sampleRate: 24_000, channels: 1 },
+          outputFormat: { codec: `pcm16`, sampleRate: 24_000, channels: 1 },
+          inputTranscription: {
+            model: `gpt-realtime-whisper`,
+            delay: `minimal`,
+          },
+          turnDetection: {
+            type: `server_vad`,
+            threshold: 0.55,
+            prefixPaddingMs: 300,
+            silenceDurationMs: 500,
+            createResponse: true,
+            interruptResponse:
+              activeRealtimeSession.interruptResponse !== false,
+          },
+        },
+        toolPolicy: {
+          direct: hortonRealtimeDirectTools(tools as AgentTool[]),
+        },
+        onTranscript: (transcript) => {
+          if (
+            transcript.direction !== `input` ||
+            transcript.status !== `final`
+          ) {
+            return
+          }
+          void setTitleFromUserMessage(transcript.text)
+        },
+      })
+      await realtime.run()
+      await titlePromise
+      return
+    }
+
     ctx.useAgent({
-      systemPrompt: buildHortonSystemPrompt(sandboxCwd, {
-        hasDocsSupport: Boolean(docsSupport),
-        hasSkills,
-        docsUrl,
-        modelProvider: modelConfig.provider,
-        modelId: String(modelConfig.model),
-        hasWebhookSourceTools,
-        hasScheduleTools,
-        ...(activeGoalPromptInfo && { activeGoal: activeGoalPromptInfo }),
-      }),
+      systemPrompt,
       ...modelConfig,
       // mcp.tools() inserts sentinel objects that the runtime's
       // composeToolsWithProviders resolves at wake time. The static type of

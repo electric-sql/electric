@@ -17,11 +17,15 @@ import {
   saveApiKeysToSecret,
 } from '../credentials/api-keys'
 import { normalizeEnabledModelValues } from '../credentials/model-picker'
+import {
+  DEFAULT_REALTIME_SETTINGS,
+  normalizeRealtimeSettings,
+} from './realtime'
 import { normalizeServer, normalizeServers } from './servers'
 
 export { settingsPath } from '../shared/paths'
 
-export const SETTINGS_VERSION = 2
+export const SETTINGS_VERSION = 3
 
 export const DEFAULT_SETTINGS: DesktopSettings = {
   servers: [],
@@ -31,6 +35,7 @@ export const DEFAULT_SETTINGS: DesktopSettings = {
   launchAtLogin: false,
   preventAppSuspension: true,
   codex: { enabled: false, source: null },
+  realtime: DEFAULT_REALTIME_SETTINGS,
 }
 
 export function normalizeCodexSettings(value: unknown): CodexSettings {
@@ -165,6 +170,7 @@ export async function loadDesktopSettings(
       preventAppSuspension: parsed.preventAppSuspension !== false,
       onboardingDismissed: parsed.onboardingDismissed === true,
       codex: normalizeCodexSettings(parsed.codex),
+      realtime: normalizeRealtimeSettings(parsed.realtime),
       enabledModelValues:
         enabledModelValues.length > 0 ? enabledModelValues : undefined,
       mcp: normalizeMcp(parsed.mcp),

@@ -15,6 +15,7 @@ import type {
   LocalRuntimeStatus,
   ServerConnectionStatus,
 } from '../../lib/server-connection'
+import type { TileViewParams } from '../../lib/workspace/types'
 import type { ViewId } from '../../lib/workspace/viewRegistry'
 
 /**
@@ -37,6 +38,7 @@ export function Workspace(): React.ReactElement {
   const search = useSearch({ strict: false }) as {
     view?: string
     source?: string
+    doc?: string
     layout?: string
   }
   const navigate = useNavigate()
@@ -44,6 +46,7 @@ export function Workspace(): React.ReactElement {
   const entityUrl = splat ? `/${splat}` : null
   const requestedViewId = (search.view as ViewId | undefined) ?? null
   const requestedSource = (search.source as string | undefined) ?? null
+  const requestedDoc = (search.doc as string | undefined) ?? null
   const layoutParam = (search.layout as string | undefined) ?? null
 
   // ---- ?layout=<DSL> import -------------------------------------------
@@ -73,6 +76,7 @@ export function Workspace(): React.ReactElement {
         search: {
           ...(requestedViewId ? { view: requestedViewId } : {}),
           ...(requestedSource ? { source: requestedSource } : {}),
+          ...(requestedDoc ? { doc: requestedDoc } : {}),
         },
         replace: true,
       })
@@ -140,14 +144,21 @@ export function Workspace(): React.ReactElement {
     const availableViews = entity ? listViews(entity) : []
     const defaultViewId = availableViews[0]?.id ?? `chat`
     const desiredViewId =
-      requestedViewId && availableViews.some((v) => v.id === requestedViewId)
+      requestedViewId === `markdown-doc` && requestedDoc
         ? requestedViewId
-        : defaultViewId
-    const desiredViewParams =
+        : requestedViewId &&
+            availableViews.some((v) => v.id === requestedViewId)
+          ? requestedViewId
+          : defaultViewId
+    const desiredViewParams: TileViewParams | undefined =
       desiredViewId === `state-explorer` && requestedSource
         ? { source: requestedSource }
-        : undefined
-    const key = `${entityUrl}::${desiredViewId}::${requestedSource ?? ``}`
+        : desiredViewId === `markdown-doc` && requestedDoc
+          ? { doc: requestedDoc }
+          : undefined
+    const key = `${entityUrl}::${desiredViewId}::${viewParamsKey(
+      desiredViewParams
+    )}`
     if (lastSyncedKey.current === key) return
 
     const tiles = listTiles(workspace.root)
@@ -157,7 +168,7 @@ export function Workspace(): React.ReactElement {
       (t) =>
         t.entityUrl === entityUrl &&
         t.viewId === desiredViewId &&
-        (desiredViewParams?.source ?? ``) === (t.viewParams?.source ?? ``)
+        viewParamsKey(desiredViewParams) === viewParamsKey(t.viewParams)
     )
     if (exactMatch) {
       helpers.setActiveTile(exactMatch.id)
@@ -189,6 +200,7 @@ export function Workspace(): React.ReactElement {
     entityUrl,
     requestedViewId,
     requestedSource,
+    requestedDoc,
     entity,
     workspace.root,
     helpers,
@@ -209,7 +221,7 @@ export function Workspace(): React.ReactElement {
     const expectedKey =
       tile.entityUrl === null
         ? `::${tile.viewId}`
-        : `${tile.entityUrl}::${tile.viewId}::${tile.viewParams?.source ?? ``}`
+        : `${tile.entityUrl}::${tile.viewId}::${viewParamsKey(tile.viewParams)}`
     if (lastSyncedKey.current === expectedKey) return
     lastSyncedKey.current = expectedKey
     if (tile.entityUrl === null) {
@@ -222,6 +234,7 @@ export function Workspace(): React.ReactElement {
       search: {
         ...(tile.viewId === `chat` ? {} : { view: tile.viewId }),
         ...(tile.viewParams?.source ? { source: tile.viewParams.source } : {}),
+        ...(tile.viewParams?.doc ? { doc: tile.viewParams.doc } : {}),
       },
       replace: true,
     })
@@ -304,6 +317,14 @@ export function Workspace(): React.ReactElement {
       <NodeRenderer node={workspace.root} chromeInsetTarget />
     </div>
   )
+}
+
+function viewParamsKey(params: Record<string, string> | undefined): string {
+  if (!params) return ``
+  return Object.entries(params)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, value]) => `${key}=${value}`)
+    .join(`&`)
 }
 
 function getRemoteStatus(

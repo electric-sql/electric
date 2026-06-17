@@ -69,6 +69,7 @@ interface WakeDeltaWindow {
 }
 
 type FreshKind = `inbox` | `wake`
+type LiveWakeHandler = (wake: WakeDeltaWindow) => boolean | Promise<boolean>
 
 interface ClaimCallbackResponse {
   ok: boolean
@@ -330,6 +331,43 @@ function changeEventToWakeEvent(
   return null
 }
 
+function combineWakeEvents(
+  events: Array<ChangeEvent>,
+  fallbackSource: string
+): { wakeEvent: WakeEvent; offset: string | null } | null {
+  const wakeEvents = events.filter((event) => event.type === `wake`)
+  if (wakeEvents.length === 0) return null
+  if (wakeEvents.length === 1) {
+    const event = wakeEvents[0]!
+    const wakeEvent = changeEventToWakeEvent(event, fallbackSource)
+    return wakeEvent
+      ? { wakeEvent, offset: event.headers.offset ?? null }
+      : null
+  }
+
+  const messages = wakeEvents
+    .map((event) => event.value as WakeMessage | undefined)
+    .filter((message): message is WakeMessage => message !== undefined)
+  const sources = [...new Set(messages.map((message) => message.source))]
+
+  return {
+    wakeEvent: {
+      source: sources.length === 1 ? sources[0]! : fallbackSource,
+      type: `wake`,
+      fromOffset: 0,
+      toOffset: 0,
+      eventCount: wakeEvents.length,
+      payload: {
+        type: `wake_batch`,
+        sources,
+        wakes: messages,
+        changes: messages.flatMap((message) => message.changes ?? []),
+      },
+    },
+    offset: wakeEvents[0]!.headers.offset ?? null,
+  }
+}
+
 function selectWakeFromEvents(
   events: Array<ChangeEvent>,
   fallbackSource: string,
@@ -364,6 +402,16 @@ function selectWakeFromEvents(
   }
 
   return null
+}
+
+function selectWakeInputFromEvents(
+  events: Array<ChangeEvent>,
+  fallbackSource: string,
+  preferredKind?: FreshKind
+): { wakeEvent: WakeEvent; offset: string | null } | null {
+  return preferredKind === `wake`
+    ? combineWakeEvents(events, fallbackSource)
+    : selectWakeFromEvents(events, fallbackSource, preferredKind)
 }
 
 function createInFlightTracker() {
@@ -584,8 +632,11 @@ export async function processWake(
     detachWrites?: () => Promise<void>
     close: () => void
   }> = []
+  const electricToolCleanups: Array<() => void | Promise<void>> = []
   let liveProcessError: Error | null = null
   let acceptLiveInputs = false
+  let liveWakeHandler: LiveWakeHandler | null = null
+  let liveWakeDrain: Promise<void> | null = null
   const handledSignalKeys = new Set<string>()
 
   const compareOffsets = (left: string, right: string): number => {
@@ -1045,7 +1096,7 @@ export async function processWake(
       return null
     }
 
-    const selectedWake = selectWakeFromEvents(
+    const selectedWake = selectWakeInputFromEvents(
       deltaEvents,
       entityUrl,
       selectedKind
@@ -1073,6 +1124,54 @@ export async function processWake(
     if (queuedNextWake) {
       clearIdleTimer()
       idleController?.abort()
+    }
+  }
+
+  function scheduleLiveWakeDrain(): void {
+    if (!liveWakeHandler || liveWakeDrain || queuedNextWake || liveProcessError)
+      return
+
+    liveWakeDrain = (async () => {
+      while (!queuedNextWake) {
+        const handler = liveWakeHandler
+        if (!handler) return
+        const nextWake = dequeueNextWakeFromPending()
+        if (!nextWake) return
+
+        const accepted = await handler(nextWake)
+        if (!accepted) {
+          queuedNextWake = nextWake
+          clearIdleTimer()
+          idleController?.abort()
+          return
+        }
+
+        handleRuntimeSideEffectEvents(nextWake.events)
+        setSafeAckOffset(nextWake.ackOffset)
+      }
+    })()
+      .catch((err) => {
+        failBackgroundWake(err, `LIVE_WAKE_HANDLER_FAILED`)
+      })
+      .finally(() => {
+        liveWakeDrain = null
+        if (
+          liveWakeHandler &&
+          !liveProcessError &&
+          pendingLiveBatches.length > 0
+        ) {
+          scheduleLiveWakeDrain()
+        }
+      })
+  }
+
+  const registerLiveWakeHandler = (handler: LiveWakeHandler): (() => void) => {
+    liveWakeHandler = handler
+    scheduleLiveWakeDrain()
+    return () => {
+      if (liveWakeHandler === handler) {
+        liveWakeHandler = null
+      }
     }
   }
 
@@ -1108,7 +1207,11 @@ export async function processWake(
       ...batch,
       items: changeEvents as Array<StateEvent>,
     })
-    queueNextWakeIfReady()
+    if (liveWakeHandler) {
+      scheduleLiveWakeDrain()
+    } else {
+      queueNextWakeIfReady()
+    }
   }
 
   try {
@@ -1616,7 +1719,11 @@ export async function processWake(
     )
     const initialFromCatchUp = notification.wakeEvent
       ? null
-      : selectWakeFromEvents(actionableEventsAtOrAfterNotification, entityUrl)
+      : selectWakeInputFromEvents(
+          actionableEventsAtOrAfterNotification,
+          entityUrl,
+          getFreshKind(actionableEventsAtOrAfterNotification) ?? undefined
+        )
     if (initialFromCatchUp) {
       currentWakeEvent = initialFromCatchUp.wakeEvent
       currentWakeOffset = initialFromCatchUp.offset ?? notificationOffset
@@ -1974,7 +2081,7 @@ export async function processWake(
     if (!skipInitialHandlerPass) {
       await waitForCurrentWakeInput()
       currentWakeEvents = computeCurrentNotificationEvents()
-      const initialWake = selectWakeFromEvents(
+      const initialWake = selectWakeInputFromEvents(
         currentWakeEvents,
         entityUrl,
         getFreshKind(currentWakeEvents) ?? undefined
@@ -2078,6 +2185,7 @@ export async function processWake(
         ? await config.createElectricTools({
             entityUrl,
             entityType: typeName,
+            principal: notification.principal,
             args: entityArgs,
             db,
             events: currentWakeEvents,
@@ -2107,6 +2215,22 @@ export async function processWake(
                 entityUrl,
                 ...opts,
               }),
+            createMarkdownDocument: (opts) =>
+              serverClient.createMarkdownDocument({
+                entityUrl,
+                ...opts,
+              }),
+            getMarkdownDocumentConnection: (streamPath) =>
+              serverClient.getMarkdownDocumentConnection(streamPath),
+            readMarkdownDocumentStream: (streamPath, opts) =>
+              serverClient.readMarkdownDocumentStream(streamPath, opts),
+            appendMarkdownDocumentUpdate: (streamPath, update) =>
+              serverClient.appendMarkdownDocumentUpdate(streamPath, update),
+            appendMarkdownDocumentAwareness: (streamPath, update) =>
+              serverClient.appendMarkdownDocumentAwareness(streamPath, update),
+            registerCleanup: (cleanup) => {
+              electricToolCleanups.push(cleanup)
+            },
           })
         : []
 
@@ -2149,6 +2273,11 @@ export async function processWake(
           activeSignalHandler = handler
         },
         hydratedWebhookSourceWake: await hydrateCurrentWebhookSourceWake(),
+        realtimeStreams: {
+          baseUrl,
+          headers: serverHeaders,
+        },
+        registerLiveWakeHandler,
         doObserve,
         doSpawn,
         doFork,
@@ -2309,8 +2438,9 @@ export async function processWake(
         break
       }
 
-      const nextWake = dequeueNextWakeFromPending()
+      const nextWake = queuedNextWake ?? dequeueNextWakeFromPending()
       if (nextWake) {
+        queuedNextWake = null
         log.info(
           debugWakeTypes
             ? `fresh work already pending, continuing in-process (type=${nextWake.wakeEvent.type}, offset=${nextWake.wakeOffset}, ack=${nextWake.ackOffset})`
@@ -2353,6 +2483,11 @@ export async function processWake(
       clearInterval(heartbeat)
     }
     try {
+      await liveWakeDrain
+    } catch (err) {
+      cleanupErrors.push(toError(err))
+    }
+    try {
       await io.drain()
     } catch (err) {
       cleanupErrors.push(toError(err))
@@ -2373,6 +2508,13 @@ export async function processWake(
       await flushProducedWrites()
     } catch (err) {
       cleanupErrors.push(toError(err))
+    }
+    for (const cleanup of electricToolCleanups.splice(0).reverse()) {
+      try {
+        await cleanup()
+      } catch (err) {
+        cleanupErrors.push(toError(err))
+      }
     }
     // Updated by the handler-error path before control reaches this async cleanup.
 

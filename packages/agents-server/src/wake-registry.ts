@@ -58,6 +58,11 @@ export interface WakeEvalResult {
 export type WakeTimeoutCallback = (result: WakeEvalResult) => void
 export type WakeDebounceCallback = (result: WakeEvalResult) => void
 
+export interface WakeRegistrationChange {
+  created: boolean
+  unchanged: boolean
+}
+
 interface CachedWakeRegistration extends WakeRegistration {
   tenantId: string
   dbId: number
@@ -79,6 +84,8 @@ interface WakeRegistrationShapeRow extends Row<Date> {
   manifest_key: string | null
   created_at: Date
 }
+
+type WakeRegistrationDbRow = typeof wakeRegistrations.$inferSelect
 
 function wakeSourceEventId(event: Record<string, unknown>): string {
   const headers =
@@ -358,6 +365,163 @@ export class WakeRegistry {
       createdAt: new Date(),
       timeoutConsumed: false,
     })
+  }
+
+  async registerOrReplaceManifest(
+    reg: WakeRegistration
+  ): Promise<WakeRegistrationChange> {
+    if (!reg.manifestKey) {
+      await this.register(reg)
+      return { created: true, unchanged: false }
+    }
+
+    const tenantId = this.resolveTenantId(reg.tenantId)
+    const existingRows = await this.selectManifestRegistrations(
+      tenantId,
+      reg.subscriberUrl,
+      reg.manifestKey
+    )
+    const matchingRow = existingRows.find((row) =>
+      this.dbRowMatchesRegistration(row, reg, tenantId)
+    )
+    const hadSameSourceCondition = existingRows.some(
+      (row) =>
+        row.sourceUrl === reg.sourceUrl &&
+        JSON.stringify(row.condition) === JSON.stringify(reg.condition)
+    )
+
+    if (matchingRow) {
+      this.upsertCachedRegistration(this.normalizeDbRow(matchingRow))
+      for (const row of existingRows) {
+        if (row.id !== matchingRow.id) {
+          await this.deleteRegistrationByDbId(row.id, tenantId)
+        }
+      }
+      return {
+        created: false,
+        unchanged: existingRows.length === 1,
+      }
+    }
+
+    const result = await this.db
+      .insert(wakeRegistrations)
+      .values({
+        tenantId,
+        subscriberUrl: reg.subscriberUrl,
+        sourceUrl: reg.sourceUrl,
+        condition: reg.condition,
+        debounceMs: reg.debounceMs ?? 0,
+        timeoutMs: reg.timeoutMs ?? 0,
+        oneShot: reg.oneShot,
+        includeResponse: reg.includeResponse !== false,
+        manifestKey: reg.manifestKey,
+      })
+      .onConflictDoNothing()
+      .returning({ id: wakeRegistrations.id })
+
+    let activeId: number | undefined
+    let created = false
+    if (result.length > 0) {
+      activeId = result[0]!.id
+      created = !hadSameSourceCondition
+      this.upsertCachedRegistration({
+        ...reg,
+        tenantId,
+        dbId: activeId,
+        createdAt: new Date(),
+        timeoutConsumed: false,
+      })
+    } else {
+      const rowsAfterConflict = await this.selectManifestRegistrations(
+        tenantId,
+        reg.subscriberUrl,
+        reg.manifestKey
+      )
+      const rowAfterConflict = rowsAfterConflict.find((row) =>
+        this.dbRowMatchesRegistration(row, reg, tenantId)
+      )
+      if (rowAfterConflict) {
+        activeId = rowAfterConflict.id
+        this.upsertCachedRegistration(this.normalizeDbRow(rowAfterConflict))
+      } else {
+        await this.loadRegistrations()
+      }
+    }
+
+    for (const row of existingRows) {
+      if (row.id !== activeId) {
+        await this.deleteRegistrationByDbId(row.id, tenantId)
+      }
+    }
+
+    return { created, unchanged: false }
+  }
+
+  private async selectManifestRegistrations(
+    tenantId: string,
+    subscriberUrl: string,
+    manifestKey: string
+  ): Promise<Array<WakeRegistrationDbRow>> {
+    return await this.db
+      .select()
+      .from(wakeRegistrations)
+      .where(
+        and(
+          eq(wakeRegistrations.tenantId, tenantId),
+          eq(wakeRegistrations.subscriberUrl, subscriberUrl),
+          eq(wakeRegistrations.manifestKey, manifestKey)
+        )
+      )
+  }
+
+  private normalizeDbRow(row: WakeRegistrationDbRow): CachedWakeRegistration {
+    return {
+      tenantId: row.tenantId,
+      subscriberUrl: row.subscriberUrl,
+      sourceUrl: row.sourceUrl,
+      condition: row.condition as WakeRegistration[`condition`],
+      debounceMs: row.debounceMs || undefined,
+      timeoutMs: row.timeoutMs || undefined,
+      oneShot: row.oneShot,
+      includeResponse: row.includeResponse === false ? false : undefined,
+      manifestKey: row.manifestKey ?? undefined,
+      dbId: row.id,
+      createdAt: row.createdAt,
+      timeoutConsumed: row.timeoutConsumed,
+    }
+  }
+
+  private dbRowMatchesRegistration(
+    row: WakeRegistrationDbRow,
+    reg: WakeRegistration,
+    tenantId: string
+  ): boolean {
+    return (
+      row.tenantId === tenantId &&
+      row.subscriberUrl === reg.subscriberUrl &&
+      row.sourceUrl === reg.sourceUrl &&
+      row.oneShot === reg.oneShot &&
+      row.debounceMs === (reg.debounceMs ?? 0) &&
+      row.timeoutMs === (reg.timeoutMs ?? 0) &&
+      row.includeResponse === (reg.includeResponse !== false) &&
+      row.manifestKey === (reg.manifestKey ?? null) &&
+      JSON.stringify(row.condition) === JSON.stringify(reg.condition)
+    )
+  }
+
+  private async deleteRegistrationByDbId(
+    dbId: number,
+    tenantId: string
+  ): Promise<void> {
+    await this.db
+      .delete(wakeRegistrations)
+      .where(
+        and(
+          eq(wakeRegistrations.tenantId, tenantId),
+          eq(wakeRegistrations.id, dbId)
+        )
+      )
+    this.removeCachedRegistrationByDbId(dbId)
   }
 
   private startTimeoutTimer(reg: CachedWakeRegistration, dbId: number): void {

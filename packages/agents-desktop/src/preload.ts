@@ -21,6 +21,8 @@ import type {
   McpServerConfig,
   OnboardingState,
   PreventAppSuspensionPreference,
+  RealtimeSettings,
+  RealtimeSettingsStatus,
   ServerConfig,
 } from './shared/types'
 import type { CloudAgentServersState } from './cloud/cloud-agent-servers'
@@ -190,6 +192,10 @@ const api = {
     ipcRenderer.invoke(`desktop:get-prevent-app-suspension`),
   setPreventAppSuspension: (enabled: boolean): Promise<void> =>
     ipcRenderer.invoke(`desktop:set-prevent-app-suspension`, enabled),
+  getRealtimeSettings: (): Promise<RealtimeSettingsStatus> =>
+    ipcRenderer.invoke(`desktop:get-realtime-settings`),
+  setRealtimeSettings: (settings: RealtimeSettings): Promise<void> =>
+    ipcRenderer.invoke(`desktop:set-realtime-settings`, settings),
   getWorkingDirectory: (): Promise<string | null> =>
     ipcRenderer.invoke(`desktop:get-working-directory`),
   chooseWorkingDirectory: (): Promise<string | null> =>

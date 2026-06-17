@@ -490,6 +490,10 @@ export const AgentResponseLive = memo(function AgentResponseLive({
     (q) => (run.errors ? q.from({ error: run.errors }) : undefined),
     [run.errors]
   )
+  const { data: steps = [] } = useLiveQuery(
+    (q) => (run.steps ? q.from({ step: run.steps }) : undefined),
+    [run.steps]
+  )
   // Subscribe to the run's reasoning rows so the section ticks as
   // each `reasoning_delta` arrives. Empty array for runs without
   // any reasoning content (most non-extended-thinking models).
@@ -585,6 +589,13 @@ export const AgentResponseLive = memo(function AgentResponseLive({
   const toggleReasoning = useCallback((key: string) => {
     setExpandedReasoning((prev) => ({ ...prev, [key]: !prev[key] }))
   }, [])
+  const isRealtimeRun = useMemo(
+    () =>
+      (steps as Array<{ model_id?: string }>).some((step) =>
+        step.model_id?.includes(`realtime`)
+      ),
+    [steps]
+  )
   const contentItems = useMemo(
     () => liveRunItemsToContentItems(sortedItems),
     [sortedItems]
@@ -655,6 +666,10 @@ export const AgentResponseLive = memo(function AgentResponseLive({
     setCopied(true)
     if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current)
     copiedTimerRef.current = setTimeout(() => setCopied(false), 1200)
+  }
+
+  if (isRealtimeRun && sortedItems.length === 0 && !failureText) {
+    return <></>
   }
 
   return (

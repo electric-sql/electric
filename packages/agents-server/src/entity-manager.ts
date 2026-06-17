@@ -7,15 +7,25 @@ import {
   getCronStreamPath,
   getSharedStateStreamPath,
   getNextCronFireAt,
+  getEntityMarkdownDocumentUrlPath,
   webhookSourceSubscriptionManifestKey,
   manifestChildKey,
+  manifestMarkdownDocumentKey,
   manifestSharedStateKey,
   manifestSourceKey,
   resolveCronScheduleSpec,
   validateComposerInputPayload,
   validateSlashCommandDefinitions,
+  DEFAULT_OPENAI_REALTIME_REASONING_EFFORT,
+  DEFAULT_OPENAI_REALTIME_VOICE,
+  isOpenAIRealtimeModel,
+  isOpenAIRealtimeReasoningEffort,
+  isOpenAIRealtimeVoice,
 } from '@electric-ax/agents-runtime'
-import type { EventPointer } from '@electric-ax/agents-runtime'
+import type {
+  EventPointer,
+  OpenAIRealtimeReasoningEffort,
+} from '@electric-ax/agents-runtime'
 import {
   ErrCodeDuplicateURL,
   ErrCodeEntityPersistFailed,
@@ -52,6 +62,16 @@ import {
 } from './manifest-side-effects.js'
 import { DEFAULT_TENANT_ID } from './tenant.js'
 import { ATTR, withSpan } from './tracing.js'
+import {
+  MARKDOWN_DOCUMENT_CONTENT_MIME,
+  MARKDOWN_DOCUMENT_PROVIDER,
+  MARKDOWN_DOCUMENT_TEXT_NAME,
+  MARKDOWN_DOCUMENT_TRANSPORT_MIME,
+  assertMarkdownDocumentMatchesEntity,
+  getMarkdownDocumentDocPath,
+  getMarkdownDocumentAwarenessStreamPath,
+  getMarkdownDocumentUpdateStreamPath,
+} from './markdown-documents.js'
 import type { queueAsPromised } from 'fastq'
 import type { SchedulerClient } from './scheduler.js'
 import type { WakeEvalResult, WakeRegistry } from './wake-registry.js'
@@ -115,6 +135,41 @@ type ServerSignalEvent = {
     txid: string
   }
 }
+type RealtimeAudioRequest = {
+  codec?: `pcm16`
+  sampleRate?: number
+  channels?: number
+}
+
+export type RealtimeSessionCreateRequest = {
+  id?: string
+  provider: string
+  model: string
+  voice?: string
+  reasoningEffort?: OpenAIRealtimeReasoningEffort
+  interruptResponse?: boolean
+  inputAudio?: RealtimeAudioRequest
+  outputAudio?: RealtimeAudioRequest
+  meta?: Record<string, unknown>
+}
+
+export type RealtimeSessionCreateResult = {
+  sessionId: string
+  entityUrl: string
+  provider: string
+  model: string
+  voice?: string
+  reasoningEffort?: OpenAIRealtimeReasoningEffort
+  interruptResponse?: boolean
+  status: `requested`
+  startedAt: string
+  streams: {
+    audio_in: string
+    audio_out: string
+    control_in: string
+    control_out: string
+  }
+}
 type AttachmentSubjectType = `inbox` | `run` | `text` | `tool_call` | `context`
 type AttachmentRole = `input` | `output`
 
@@ -172,6 +227,31 @@ type ManifestAttachmentEntry = {
   createdAt: string
   createdBy?: string
   error?: string
+  meta?: Record<string, unknown>
+}
+
+export interface CreateMarkdownDocumentRequest {
+  id?: string
+  title: string
+  createdBy?: string
+  meta?: Record<string, unknown>
+}
+
+export type ManifestMarkdownDocumentEntry = {
+  key: string
+  kind: `document`
+  id: string
+  provider: typeof MARKDOWN_DOCUMENT_PROVIDER
+  docId: string
+  docPath: string
+  streamPath: string
+  transportMimeType: typeof MARKDOWN_DOCUMENT_TRANSPORT_MIME
+  contentMimeType: typeof MARKDOWN_DOCUMENT_CONTENT_MIME
+  yTextName: typeof MARKDOWN_DOCUMENT_TEXT_NAME
+  title: string
+  createdAt: string
+  createdBy?: string
+  updatedAt?: string
   meta?: Record<string, unknown>
 }
 
@@ -237,6 +317,7 @@ type ForkStateSnapshot = {
   childStatusesByEntity: Map<string, Map<string, Record<string, unknown>>>
   replayWatermarksByEntity: Map<string, Map<string, Record<string, unknown>>>
   sharedStateIds: Set<string>
+  markdownDocumentDocPaths: Set<string>
 }
 
 type ForkResult = {
@@ -265,11 +346,41 @@ function manifestAttachmentKey(id: string): string {
   return `attachment:${id}`
 }
 
+function validateMarkdownDocumentId(id: string): void {
+  if (!id || !/^[A-Za-z0-9_-]+$/.test(id)) {
+    throw new ElectricAgentsError(
+      ErrCodeInvalidRequest,
+      `document id must contain only letters, numbers, underscores, or hyphens`,
+      400
+    )
+  }
+}
+
+function markdownDocumentAliasId(input: string): string {
+  const sanitized = input
+    .replace(/[^A-Za-z0-9_-]+/g, `-`)
+    .replace(/^-+|-+$/g, ``)
+  return sanitized.slice(0, 180) || randomUUID()
+}
+
 function getEntityAttachmentStreamPath(
   entityUrl: string,
   attachmentId: string
 ): string {
   return `${entityUrl.replace(/\/+$/, ``)}/attachments/${attachmentId}`
+}
+
+function getRealtimeSessionBasePath(
+  entityUrl: string,
+  sessionId: string
+): string {
+  return `${entityUrl.replace(/\/+$/, ``)}/realtime/${sessionId}`
+}
+
+function realtimeAudioContentType(audio?: RealtimeAudioRequest): string {
+  const sampleRate = audio?.sampleRate ?? 24_000
+  const channels = audio?.channels ?? 1
+  return `audio/pcm; rate=${sampleRate}; channels=${channels}`
 }
 
 function isStreamCreateConflict(error: unknown): boolean {
@@ -298,7 +409,17 @@ function validateAttachmentId(id: string): void {
   if (!id || id.includes(`/`) || id.startsWith(`.`)) {
     throw new ElectricAgentsError(
       ErrCodeInvalidRequest,
-      `attachment id must not be empty, start with ".", or contain forward slashes`,
+      `attachment id must not be empty, must not start with ".", and must not contain forward slashes`,
+      400
+    )
+  }
+}
+
+function validateRealtimeSessionId(id: string): void {
+  if (!id || id.includes(`/`) || id.startsWith(`.`)) {
+    throw new ElectricAgentsError(
+      ErrCodeInvalidRequest,
+      `realtime session id must not be empty, must not start with ".", and must not contain forward slashes`,
       400
     )
   }
@@ -1036,6 +1157,7 @@ export class EntityManager {
             childStatuses: Map<string, Record<string, unknown>>
             replayWatermarks: Map<string, Record<string, unknown>>
             sharedStateIds: Set<string>
+            markdownDocumentDocPaths: Set<string>
           }
         | undefined
       let effectiveForkPointer: EventPointer | undefined = opts.forkPointer
@@ -1069,8 +1191,13 @@ export class EntityManager {
         const filteredEvents = flat.slice(0, target)
         const rootManifests = this.reduceStateRows(filteredEvents, `manifest`)
         const sharedStateIds = new Set<string>()
+        const markdownDocumentDocPaths = new Set<string>()
         for (const manifest of rootManifests.values()) {
           this.collectSharedStateIds(manifest, sharedStateIds)
+          this.collectMarkdownDocumentDocPaths(
+            manifest,
+            markdownDocumentDocPaths
+          )
         }
         preFilteredRoot = {
           manifests: rootManifests,
@@ -1080,6 +1207,7 @@ export class EntityManager {
             `replay_watermark`
           ),
           sharedStateIds,
+          markdownDocumentDocPaths,
         }
       }
 
@@ -1127,6 +1255,9 @@ export class EntityManager {
         )
         for (const id of preFilteredRoot.sharedStateIds) {
           snapshot.sharedStateIds.add(id)
+        }
+        for (const docPath of preFilteredRoot.markdownDocumentDocPaths) {
+          snapshot.markdownDocumentDocPaths.add(docPath)
         }
       }
 
@@ -1177,7 +1308,14 @@ export class EntityManager {
       )
       this.addForkLocks(
         this.forkWriteLockedStreams,
-        [...snapshot.sharedStateIds].map((id) => getSharedStateStreamPath(id)),
+        [
+          ...[...snapshot.sharedStateIds].map((id) =>
+            getSharedStateStreamPath(id)
+          ),
+          ...[...snapshot.markdownDocumentDocPaths].map((docPath) =>
+            getMarkdownDocumentUpdateStreamPath(this.tenantId, docPath)
+          ),
+        ],
         writeStreamLocks
       )
 
@@ -1224,6 +1362,34 @@ export class EntityManager {
               manifest.id
             )
             await this.streamClient.fork(forkPath, manifest.streamPath)
+            createdStreams.push(forkPath)
+          }
+        }
+
+        for (const plan of entityPlans) {
+          const manifests =
+            snapshot.manifestsByEntity.get(plan.source.url) ?? new Map()
+          for (const manifest of manifests.values()) {
+            if (
+              manifest.kind !== `document` ||
+              typeof manifest.docPath !== `string` ||
+              typeof manifest.id !== `string`
+            ) {
+              continue
+            }
+            const forkDocPath = getMarkdownDocumentDocPath(
+              plan.fork.url,
+              manifest.id
+            )
+            const sourcePath = getMarkdownDocumentUpdateStreamPath(
+              this.tenantId,
+              manifest.docPath
+            )
+            const forkPath = getMarkdownDocumentUpdateStreamPath(
+              this.tenantId,
+              forkDocPath
+            )
+            await this.streamClient.fork(forkPath, sourcePath)
             createdStreams.push(forkPath)
           }
         }
@@ -1737,6 +1903,7 @@ export class EntityManager {
       Map<string, Record<string, unknown>>
     >()
     const sharedStateIds = new Set<string>()
+    const markdownDocumentDocPaths = new Set<string>()
 
     for (const entity of entitiesToFork) {
       const events = await this.streamClient.readJson<Record<string, unknown>>(
@@ -1752,6 +1919,7 @@ export class EntityManager {
 
       for (const manifest of manifests.values()) {
         this.collectSharedStateIds(manifest, sharedStateIds)
+        this.collectMarkdownDocumentDocPaths(manifest, markdownDocumentDocPaths)
       }
     }
 
@@ -1760,6 +1928,7 @@ export class EntityManager {
       childStatusesByEntity,
       replayWatermarksByEntity,
       sharedStateIds,
+      markdownDocumentDocPaths,
     }
   }
 
@@ -1789,6 +1958,15 @@ export class EntityManager {
     return rows
   }
 
+  private async readManifestRows(
+    entity: ElectricAgentsEntity
+  ): Promise<Map<string, Record<string, unknown>>> {
+    const events = await this.streamClient.readJson<Record<string, unknown>>(
+      entity.streams.main
+    )
+    return this.reduceStateRows(events, `manifest`)
+  }
+
   private collectSharedStateIds(
     manifest: Record<string, unknown>,
     sharedStateIds: Set<string>
@@ -1808,6 +1986,111 @@ export class EntityManager {
     const config = isRecord(manifest.config) ? manifest.config : undefined
     if (typeof config?.id === `string`) {
       sharedStateIds.add(config.id)
+    }
+  }
+
+  private collectMarkdownDocumentDocPaths(
+    manifest: Record<string, unknown>,
+    docPaths: Set<string>
+  ): void {
+    if (manifest.kind !== `document` || typeof manifest.docPath !== `string`) {
+      return
+    }
+    docPaths.add(manifest.docPath)
+  }
+
+  private isManifestMarkdownDocumentEntry(
+    manifest: Record<string, unknown>
+  ): manifest is ManifestMarkdownDocumentEntry {
+    return (
+      manifest.kind === `document` &&
+      typeof manifest.id === `string` &&
+      typeof manifest.key === `string` &&
+      manifest.provider === MARKDOWN_DOCUMENT_PROVIDER &&
+      typeof manifest.docPath === `string` &&
+      typeof manifest.streamPath === `string` &&
+      manifest.transportMimeType === MARKDOWN_DOCUMENT_TRANSPORT_MIME &&
+      manifest.contentMimeType === MARKDOWN_DOCUMENT_CONTENT_MIME &&
+      manifest.yTextName === MARKDOWN_DOCUMENT_TEXT_NAME &&
+      typeof manifest.title === `string`
+    )
+  }
+
+  private uniqueChildDocumentAliasId(
+    sourceEntity: ElectricAgentsEntity,
+    documentId: string,
+    manifests: Map<string, Record<string, unknown>>
+  ): string {
+    const base = markdownDocumentAliasId(
+      `${sourceEntity.url.replace(/^\/+|\/+$/g, ``)}-${documentId}`
+    )
+    let candidate = base
+    let suffix = 2
+    while (manifests.has(manifestMarkdownDocumentKey(candidate))) {
+      candidate = markdownDocumentAliasId(`${base}-${suffix}`)
+      suffix += 1
+    }
+    return candidate
+  }
+
+  private async mirrorChildDocumentManifestsToParent(
+    parent: ElectricAgentsEntity,
+    child: ElectricAgentsEntity,
+    result: Pick<WakeEvalResult, `registrationDbId` | `sourceEventKey`>
+  ): Promise<void> {
+    const [childManifests, parentManifests] = await Promise.all([
+      this.readManifestRows(child),
+      this.readManifestRows(parent),
+    ])
+    const parentDocumentPaths = new Set(
+      Array.from(parentManifests.values())
+        .filter((manifest) => typeof manifest.docPath === `string`)
+        .map((manifest) => manifest.docPath as string)
+    )
+
+    for (const manifest of childManifests.values()) {
+      if (!this.isManifestMarkdownDocumentEntry(manifest)) {
+        continue
+      }
+      if (parentDocumentPaths.has(manifest.docPath)) {
+        continue
+      }
+
+      let id = manifest.id
+      let key = manifestMarkdownDocumentKey(id)
+      const existing = parentManifests.get(key)
+      if (existing && existing.docPath !== manifest.docPath) {
+        id = this.uniqueChildDocumentAliasId(
+          child,
+          manifest.id,
+          parentManifests
+        )
+        key = manifestMarkdownDocumentKey(id)
+      }
+
+      const meta = isRecord(manifest.meta) ? cloneRecord(manifest.meta) : {}
+      const document: ManifestMarkdownDocumentEntry = {
+        ...cloneRecord(manifest),
+        key,
+        id,
+        meta: {
+          ...meta,
+          sourceEntityUrl: child.url,
+          sourceDocumentId: manifest.id,
+        },
+      }
+
+      await this.writeManifestEntry(
+        parent.url,
+        key,
+        `upsert`,
+        document as unknown as Record<string, unknown>,
+        {
+          producerId: `wake-reg-${result.registrationDbId}-${result.sourceEventKey}-document-${id}`,
+        }
+      )
+      parentManifests.set(key, document as unknown as Record<string, unknown>)
+      parentDocumentPaths.add(document.docPath)
     }
   }
 
@@ -2155,6 +2438,30 @@ export class EntityManager {
           continue
         }
         next.streamPath = getEntityAttachmentStreamPath(forkUrl, next.id)
+        return { key, value: next, changed: true }
+      }
+    }
+
+    if (
+      next.kind === `document` &&
+      typeof next.docPath === `string` &&
+      typeof next.id === `string`
+    ) {
+      for (const [sourceUrl, forkUrl] of entityUrlMap) {
+        const expectedSourceDocPath = getMarkdownDocumentDocPath(
+          sourceUrl,
+          next.id
+        )
+        if (next.docPath !== expectedSourceDocPath) {
+          continue
+        }
+        next.docPath = getMarkdownDocumentDocPath(forkUrl, next.id)
+        next.docId = next.docPath
+        next.streamPath = getEntityMarkdownDocumentUrlPath(
+          this.tenantId,
+          forkUrl,
+          next.id
+        )
         return { key, value: next, changed: true }
       }
     }
@@ -2635,6 +2942,195 @@ export class EntityManager {
     return { txid }
   }
 
+  async createRealtimeSession(
+    entityUrl: string,
+    req: RealtimeSessionCreateRequest
+  ): Promise<RealtimeSessionCreateResult> {
+    const entity = await this.registry.getEntity(entityUrl)
+    if (!entity) {
+      throw new ElectricAgentsError(ErrCodeNotFound, `Entity not found`, 404)
+    }
+    if (rejectsNormalWrites(entity.status)) {
+      throw new ElectricAgentsError(
+        ErrCodeNotRunning,
+        `Entity is not accepting writes`,
+        409
+      )
+    }
+    if (this.isForkWorkLockedEntity(entityUrl)) {
+      this.assertEntityNotForkWorkLocked(entityUrl)
+    }
+
+    const provider = req.provider.trim()
+    const model = req.model.trim()
+    if (!provider || !model) {
+      throw new ElectricAgentsError(
+        ErrCodeInvalidRequest,
+        `provider and model are required`,
+        400
+      )
+    }
+    if (provider !== `openai`) {
+      throw new ElectricAgentsError(
+        ErrCodeInvalidRequest,
+        `Realtime provider "${provider}" is not supported; expected "openai"`,
+        400
+      )
+    }
+    if (!isOpenAIRealtimeModel(model)) {
+      throw new ElectricAgentsError(
+        ErrCodeInvalidRequest,
+        `OpenAI realtime model "${model}" is not supported`,
+        400
+      )
+    }
+    const voice = req.voice?.trim() || DEFAULT_OPENAI_REALTIME_VOICE
+    if (!isOpenAIRealtimeVoice(voice)) {
+      throw new ElectricAgentsError(
+        ErrCodeInvalidRequest,
+        `OpenAI realtime voice "${voice}" is not supported`,
+        400
+      )
+    }
+    const reasoningEffort =
+      req.reasoningEffort ?? DEFAULT_OPENAI_REALTIME_REASONING_EFFORT
+    if (!isOpenAIRealtimeReasoningEffort(reasoningEffort)) {
+      throw new ElectricAgentsError(
+        ErrCodeInvalidRequest,
+        `OpenAI realtime reasoning effort "${String(reasoningEffort)}" is not supported`,
+        400
+      )
+    }
+    const interruptResponse = req.interruptResponse !== false
+
+    const sessionId = req.id ?? `rt-${randomUUID()}`
+    validateRealtimeSessionId(sessionId)
+
+    const basePath = getRealtimeSessionBasePath(entityUrl, sessionId)
+    const streams = {
+      audio_in: `${basePath}/audio/in`,
+      audio_out: `${basePath}/audio/out`,
+      control_in: `${basePath}/control/in`,
+      control_out: `${basePath}/control/out`,
+    }
+    const startedAt = new Date().toISOString()
+    const manifestKey = `realtime-session:${sessionId}`
+    const txid = randomUUID()
+    const createdStreams: Array<string> = []
+
+    try {
+      for (const [path, contentType] of [
+        [streams.audio_in, realtimeAudioContentType(req.inputAudio)],
+        [streams.audio_out, realtimeAudioContentType(req.outputAudio)],
+        [streams.control_in, `application/json`],
+        [streams.control_out, `application/json`],
+      ] as const) {
+        await this.streamClient.create(path, { contentType })
+        createdStreams.push(path)
+      }
+
+      await this.writeManifestEntry(
+        entityUrl,
+        manifestKey,
+        `upsert`,
+        {
+          kind: `realtime-session`,
+          id: sessionId,
+          provider,
+          model,
+          voice,
+          reasoningEffort,
+          interruptResponse,
+          status: `requested`,
+          startedAt,
+          endedAt: null,
+          streams,
+          retention: `forever`,
+          ...(req.meta ? { meta: req.meta } : {}),
+        },
+        { txid }
+      )
+
+      const sessionEvent = entityStateSchema.realtimeSessions.insert({
+        key: manifestKey,
+        value: {
+          session_id: sessionId,
+          provider,
+          model,
+          voice,
+          reasoning_effort: reasoningEffort,
+          interrupt_response: interruptResponse,
+          status: `requested`,
+          started_at: startedAt,
+          streams,
+          ...(req.meta ? { meta: req.meta } : {}),
+        },
+      } as any)
+      await this.streamClient.append(
+        entity.streams.main,
+        this.encodeChangeEvent(sessionEvent as Record<string, unknown>)
+      )
+
+      const wakeEvent = entityStateSchema.wakes.insert({
+        key: `wake-realtime-session-${sessionId}`,
+        value: {
+          timestamp: startedAt,
+          source: entityUrl,
+          timeout: false,
+          changes: [
+            {
+              collection: `realtimeSessions`,
+              kind: `insert`,
+              key: manifestKey,
+              from: SERVER_SIGNAL_SENDER,
+              payload: {
+                type: `realtime_session.started`,
+                sessionId,
+                provider,
+                model,
+                voice,
+                reasoningEffort,
+                interruptResponse,
+                streams,
+              },
+              timestamp: startedAt,
+              message_type: `realtime_session.started`,
+            },
+          ],
+        },
+      } as any)
+      await this.streamClient.append(
+        entity.streams.main,
+        this.encodeChangeEvent(wakeEvent as Record<string, unknown>)
+      )
+    } catch (error) {
+      await Promise.allSettled(
+        createdStreams.map((path) => this.streamClient.delete(path))
+      )
+      if (isStreamCreateConflict(error)) {
+        throw new ElectricAgentsError(
+          ErrCodeInvalidRequest,
+          `Realtime session already exists at id "${sessionId}"`,
+          409
+        )
+      }
+      throw error
+    }
+
+    return {
+      sessionId,
+      entityUrl,
+      provider,
+      model,
+      voice,
+      reasoningEffort,
+      interruptResponse,
+      status: `requested`,
+      startedAt,
+      streams,
+    }
+  }
+
   // ==========================================================================
   // Attachments
   // ==========================================================================
@@ -2819,6 +3315,134 @@ export class EntityManager {
     )
     await this.streamClient.delete(attachment.streamPath).catch(() => undefined)
     return { txid }
+  }
+
+  // ==========================================================================
+  // Markdown Documents
+  // ==========================================================================
+
+  isMarkdownDocumentUpdateStreamPath(path: string): boolean {
+    return /^\/yjs\/[^/]+\/docs\/agents\/[^/]+\/[^/]+\/documents\/[A-Za-z0-9_-]+\/\.updates$/.test(
+      path
+    )
+  }
+
+  async createMarkdownDocument(
+    entityUrl: string,
+    req: CreateMarkdownDocumentRequest
+  ): Promise<{ txid: string; document: ManifestMarkdownDocumentEntry }> {
+    const entity = await this.registry.getEntity(entityUrl)
+    if (!entity) {
+      throw new ElectricAgentsError(ErrCodeNotFound, `Entity not found`, 404)
+    }
+    if (rejectsNormalWrites(entity.status)) {
+      throw new ElectricAgentsError(
+        ErrCodeNotRunning,
+        `Entity is not accepting writes`,
+        409
+      )
+    }
+    if (this.isForkWorkLockedEntity(entityUrl)) {
+      this.assertEntityNotForkWorkLocked(entityUrl)
+    }
+
+    const id = req.id ?? randomUUID()
+    validateMarkdownDocumentId(id)
+
+    const docPath = getMarkdownDocumentDocPath(entityUrl, id)
+    const updateStreamPath = getMarkdownDocumentUpdateStreamPath(
+      this.tenantId,
+      docPath
+    )
+    const awarenessStreamPath = getMarkdownDocumentAwarenessStreamPath(
+      this.tenantId,
+      docPath,
+      `default`
+    )
+    const now = new Date().toISOString()
+    const txid = randomUUID()
+    const document: ManifestMarkdownDocumentEntry = {
+      key: manifestMarkdownDocumentKey(id),
+      kind: `document`,
+      id,
+      provider: MARKDOWN_DOCUMENT_PROVIDER,
+      docId: docPath,
+      docPath,
+      streamPath: getEntityMarkdownDocumentUrlPath(
+        this.tenantId,
+        entityUrl,
+        id
+      ),
+      transportMimeType: MARKDOWN_DOCUMENT_TRANSPORT_MIME,
+      contentMimeType: MARKDOWN_DOCUMENT_CONTENT_MIME,
+      yTextName: MARKDOWN_DOCUMENT_TEXT_NAME,
+      title: req.title.trim() || `Untitled document`,
+      createdAt: now,
+      ...(req.createdBy ? { createdBy: req.createdBy } : {}),
+      ...(req.meta ? { meta: req.meta } : {}),
+    }
+
+    let streamCreated = false
+    let awarenessStreamCreated = false
+    try {
+      await this.streamClient.create(updateStreamPath, {
+        contentType: `application/octet-stream`,
+      })
+      streamCreated = true
+      await this.streamClient.create(awarenessStreamPath, {
+        contentType: `application/octet-stream`,
+      })
+      awarenessStreamCreated = true
+      await this.writeManifestEntry(
+        entityUrl,
+        document.key,
+        `upsert`,
+        document as unknown as Record<string, unknown>,
+        { txid }
+      )
+    } catch (error) {
+      if (awarenessStreamCreated) {
+        await this.streamClient
+          .delete(awarenessStreamPath)
+          .catch(() => undefined)
+      }
+      if (streamCreated) {
+        await this.streamClient.delete(updateStreamPath).catch(() => undefined)
+      }
+      if (!streamCreated && isStreamCreateConflict(error)) {
+        throw new ElectricAgentsError(
+          ErrCodeInvalidRequest,
+          `Document already exists at id "${id}"`,
+          409
+        )
+      }
+      throw error
+    }
+
+    return { txid, document }
+  }
+
+  async getMarkdownDocument(
+    entityUrl: string,
+    id: string
+  ): Promise<ManifestMarkdownDocumentEntry | null> {
+    validateMarkdownDocumentId(id)
+    const entity = await this.registry.getEntity(entityUrl)
+    if (!entity) {
+      throw new ElectricAgentsError(ErrCodeNotFound, `Entity not found`, 404)
+    }
+    const events = await this.streamClient.readJson<Record<string, unknown>>(
+      entity.streams.main
+    )
+    const manifest = this.reduceStateRows(events, `manifest`).get(
+      manifestMarkdownDocumentKey(id)
+    )
+    if (!manifest || manifest.kind !== `document`) return null
+    const meta = isRecord(manifest.meta) ? manifest.meta : undefined
+    if (typeof meta?.sourceEntityUrl !== `string`) {
+      assertMarkdownDocumentMatchesEntity(entity, manifest.docPath as string)
+    }
+    return manifest as unknown as ManifestMarkdownDocumentEntry
   }
 
   // ==========================================================================
@@ -3312,6 +3936,47 @@ export class EntityManager {
     })
   }
 
+  async replayLatestRunFinishedWake(sourceUrl: string): Promise<boolean> {
+    const sourceEntity = await this.registry.getEntity(sourceUrl)
+    if (!sourceEntity) return false
+
+    let events: Array<Record<string, unknown>>
+    try {
+      const sourceEvents = await this.streamClient.readJson<
+        Record<string, unknown> | Array<Record<string, unknown>>
+      >(sourceEntity.streams.main)
+      events = sourceEvents.flatMap((item) =>
+        Array.isArray(item) ? item : [item]
+      )
+    } catch (err) {
+      serverLog.warn(
+        `[agent-server] failed to replay runFinished wake for ${sourceUrl}:`,
+        err
+      )
+      return false
+    }
+
+    for (let index = events.length - 1; index >= 0; index -= 1) {
+      const event = events[index]!
+      if (!this.isRunFinishedEvent(event)) continue
+      await this.evaluateWakes(sourceUrl, event)
+      return true
+    }
+
+    return false
+  }
+
+  private isRunFinishedEvent(event: Record<string, unknown>): boolean {
+    if (event.type !== `run`) return false
+    const value = event.value as Record<string, unknown> | undefined
+    const headers = event.headers as Record<string, unknown> | undefined
+    const status = value?.status as string | undefined
+    const operation = headers?.operation as string | undefined
+    return (
+      operation === `update` && (status === `completed` || status === `failed`)
+    )
+  }
+
   /**
    * Deliver a wake result: append WakeMessage to subscriber's stream and
    * trigger webhook notification.
@@ -3335,6 +4000,17 @@ export class EntityManager {
           : Promise.resolve(null),
       ])
       if (!subscriber) return
+      if (
+        result.runFinishedStatus !== undefined &&
+        sourceEntity &&
+        sourceEntity.parent === subscriber.url
+      ) {
+        await this.mirrorChildDocumentManifestsToParent(
+          subscriber,
+          sourceEntity,
+          result
+        )
+      }
       const wakeMessage = await this.buildWakeMessage(
         subscriber,
         result,

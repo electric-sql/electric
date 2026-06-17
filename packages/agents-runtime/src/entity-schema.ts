@@ -11,6 +11,7 @@ import type {
 } from '@standard-schema/spec'
 import type { SlashCommandRow } from './composer-input'
 import type { JsonValue } from './types'
+import type { OpenAIRealtimeReasoningEffort } from './realtime-options'
 
 // ============================================================================
 // Passthrough Schema Utility
@@ -174,7 +175,8 @@ type TextValue = {
 type TextDeltaValue = {
   key?: string
   text_id: string
-  run_id: string
+  run_id?: string
+  realtime_transcript_id?: string
   delta: string
 }
 type ToolCallValue = {
@@ -182,11 +184,30 @@ type ToolCallValue = {
   run_id?: string
   tool_call_id?: string
   tool_name: string
-  status: `started` | `args_complete` | `executing` | `completed` | `failed`
+  status:
+    | `started`
+    | `args_streaming`
+    | `args_complete`
+    | `executing`
+    | `completed`
+    | `failed`
   args?: unknown
+  args_preview?: unknown
   result?: unknown
   error?: string
   duration_ms?: number
+}
+// Tool argument deltas intentionally mirror text deltas: every streamed chunk is
+// retained for replay/inspection, while the final parsed args are still stored
+// on the tool_call row for the normal result lifecycle.
+type ToolArgDeltaValue = {
+  key?: string
+  tool_call_key: string
+  tool_call_id?: string
+  run_id?: string
+  seq: number
+  delta: string
+  content_index?: number
 }
 type ReasoningValue = {
   key?: string
@@ -339,6 +360,23 @@ type ManifestAttachmentEntryValue = {
   error?: string
   meta?: Record<string, JsonValue>
 }
+type ManifestDocumentEntryValue = {
+  key?: string
+  kind: `document`
+  id: string
+  provider: `y-durable-streams`
+  docId: string
+  docPath: string
+  streamPath: string
+  transportMimeType: `application/vnd.electric-agents.markdown-yjs`
+  contentMimeType: `text/markdown`
+  yTextName: `markdown`
+  title: string
+  createdAt: string
+  createdBy?: string
+  updatedAt?: string
+  meta?: Record<string, JsonValue>
+}
 type ContextEntryAttrsValue = Record<string, string | number | boolean>
 type ManifestContextEntryValue = {
   key?: string
@@ -393,6 +431,91 @@ type ManifestGoalEntryValue = {
   // ISO strings, matching every other manifest kind.
   createdAt: string
   updatedAt: string
+}
+type RealtimeSessionStatusValue =
+  | `requested`
+  | `active`
+  | `closing`
+  | `closed`
+  | `failed`
+type RealtimeSessionStreamRefsValue = {
+  audio_in: string
+  audio_out: string
+  control_in: string
+  control_out: string
+}
+type ManifestRealtimeSessionEntryValue = {
+  key?: string
+  kind: `realtime-session`
+  id: string
+  provider: string
+  model: string
+  voice?: string
+  reasoningEffort?: OpenAIRealtimeReasoningEffort
+  interruptResponse?: boolean
+  status: RealtimeSessionStatusValue
+  startedAt: string
+  endedAt?: string | null
+  streams: RealtimeSessionStreamRefsValue
+  retention: `forever`
+  meta?: Record<string, JsonValue>
+}
+type RealtimeSessionValue = {
+  key?: string
+  session_id: string
+  provider: string
+  model: string
+  voice?: string
+  reasoning_effort?: OpenAIRealtimeReasoningEffort
+  interrupt_response?: boolean
+  status: RealtimeSessionStatusValue
+  started_at: string
+  ended_at?: string
+  streams: RealtimeSessionStreamRefsValue
+  reason?: string
+  error?: string
+  meta?: Record<string, JsonValue>
+}
+type RealtimeAudioSpanValue = {
+  key?: string
+  session_id: string
+  stream: `input` | `output`
+  producer_id: string
+  producer_epoch: number
+  seq: number
+  offset: string
+  next_offset?: string
+  byte_start?: number
+  byte_end?: number
+  byte_length: number
+  sample_start: number
+  sample_count: number
+  sample_rate: number
+  channels: number
+  codec: `pcm16`
+  timing_source: `client` | `runtime` | `provider`
+  captured_at?: string
+  received_at?: string
+  participant_id?: string
+  turn_id?: string
+  provider_item_id?: string
+  response_id?: string
+  created_at: string
+}
+type RealtimeTranscriptValue = {
+  key?: string
+  session_id: string
+  direction: `input` | `output`
+  text: string
+  status: `partial` | `final`
+  turn_id?: string
+  response_id?: string
+  audio_stream?: `input` | `output`
+  audio_offset?: string
+  audio_next_offset?: string
+  sample_start?: number
+  sample_end?: number
+  created_at: string
 }
 type ReplayWatermarkValue = {
   key?: string
@@ -539,7 +662,8 @@ function createTextDeltaSchema(): Schema<TextDeltaValue> {
     key: z.string().optional(),
     ...timelineOrderField,
     text_id: z.string(),
-    run_id: z.string(),
+    run_id: z.string().optional(),
+    realtime_transcript_id: z.string().optional(),
     delta: z.string(),
   })
 }
@@ -553,15 +677,30 @@ function createToolCallSchema(): Schema<ToolCallValue> {
     tool_name: z.string(),
     status: z.enum([
       `started`,
+      `args_streaming`,
       `args_complete`,
       `executing`,
       `completed`,
       `failed`,
     ]),
     args: z.unknown().optional(),
+    args_preview: z.unknown().optional(),
     result: z.unknown().optional(),
     error: z.string().optional(),
     duration_ms: z.number().int().optional(),
+  })
+}
+
+function createToolArgDeltaSchema(): Schema<ToolArgDeltaValue> {
+  return z.object({
+    key: z.string().optional(),
+    ...timelineOrderField,
+    tool_call_key: z.string(),
+    tool_call_id: z.string().optional(),
+    run_id: z.string().optional(),
+    seq: z.number().int(),
+    delta: z.string(),
+    content_index: z.number().int().optional(),
   })
 }
 
@@ -771,16 +910,32 @@ function createContextRemovedSchema(): Schema<ContextRemovedValue> {
     timestamp: z.string(),
   })
 }
+
+function createRealtimeSessionStreamRefsSchema(): Schema<RealtimeSessionStreamRefsValue> {
+  return z.object({
+    audio_in: z.string(),
+    audio_out: z.string(),
+    control_in: z.string(),
+    control_out: z.string(),
+  })
+}
+
+function createRealtimeSessionStatusSchema() {
+  return z.enum([`requested`, `active`, `closing`, `closed`, `failed`])
+}
+
 function createManifestSchema(): Schema<
   | ManifestChildEntryValue
   | ManifestSourceEntryValue
   | ManifestSharedStateEntryValue
   | ManifestEffectEntryValue
   | ManifestAttachmentEntryValue
+  | ManifestDocumentEntryValue
   | ManifestContextEntryValue
   | ManifestCronScheduleEntryValue
   | ManifestFutureSendScheduleEntryValue
   | ManifestGoalEntryValue
+  | ManifestRealtimeSessionEntryValue
 > {
   return z.union([
     z.object({
@@ -846,6 +1001,26 @@ function createManifestSchema(): Schema<
     z.object({
       key: z.string().optional(),
       ...timelineOrderField,
+      kind: z.literal(`document`),
+      id: z.string(),
+      provider: z.literal(`y-durable-streams`),
+      docId: z.string(),
+      docPath: z.string(),
+      streamPath: z.string(),
+      transportMimeType: z.literal(
+        `application/vnd.electric-agents.markdown-yjs`
+      ),
+      contentMimeType: z.literal(`text/markdown`),
+      yTextName: z.literal(`markdown`),
+      title: z.string(),
+      createdAt: z.string(),
+      createdBy: z.string().optional(),
+      updatedAt: z.string().optional(),
+      meta: createAttachmentMetaSchema().optional(),
+    }),
+    z.object({
+      key: z.string().optional(),
+      ...timelineOrderField,
       kind: z.literal(`context`),
       id: z.string(),
       name: z.string(),
@@ -896,17 +1071,105 @@ function createManifestSchema(): Schema<
       createdAt: z.string(),
       updatedAt: z.string(),
     }),
+    z.object({
+      key: z.string().optional(),
+      ...timelineOrderField,
+      kind: z.literal(`realtime-session`),
+      id: z.string(),
+      provider: z.string(),
+      model: z.string(),
+      voice: z.string().optional(),
+      reasoningEffort: z.enum([`low`, `medium`, `high`]).optional(),
+      interruptResponse: z.boolean().optional(),
+      status: createRealtimeSessionStatusSchema(),
+      startedAt: z.string(),
+      endedAt: z.string().nullable().optional(),
+      streams: createRealtimeSessionStreamRefsSchema(),
+      retention: z.literal(`forever`).default(`forever`),
+      meta: createJsonObjectSchema().optional(),
+    }),
   ]) as unknown as Schema<
     | ManifestChildEntryValue
     | ManifestSourceEntryValue
     | ManifestSharedStateEntryValue
     | ManifestEffectEntryValue
     | ManifestAttachmentEntryValue
+    | ManifestDocumentEntryValue
     | ManifestContextEntryValue
     | ManifestCronScheduleEntryValue
     | ManifestFutureSendScheduleEntryValue
     | ManifestGoalEntryValue
+    | ManifestRealtimeSessionEntryValue
   >
+}
+
+function createRealtimeSessionSchema(): Schema<RealtimeSessionValue> {
+  return z.object({
+    key: z.string().optional(),
+    ...timelineOrderField,
+    session_id: z.string(),
+    provider: z.string(),
+    model: z.string(),
+    voice: z.string().optional(),
+    reasoning_effort: z.enum([`low`, `medium`, `high`]).optional(),
+    interrupt_response: z.boolean().optional(),
+    status: createRealtimeSessionStatusSchema(),
+    started_at: z.string(),
+    ended_at: z.string().optional(),
+    streams: createRealtimeSessionStreamRefsSchema(),
+    reason: z.string().optional(),
+    error: z.string().optional(),
+    meta: createJsonObjectSchema().optional(),
+  })
+}
+
+function createRealtimeAudioSpanSchema(): Schema<RealtimeAudioSpanValue> {
+  return z.object({
+    key: z.string().optional(),
+    ...timelineOrderField,
+    session_id: z.string(),
+    stream: z.enum([`input`, `output`]),
+    producer_id: z.string(),
+    producer_epoch: z.number().int().nonnegative(),
+    seq: z.number().int().nonnegative(),
+    offset: z.string(),
+    next_offset: z.string().optional(),
+    byte_start: z.number().int().nonnegative().optional(),
+    byte_end: z.number().int().nonnegative().optional(),
+    byte_length: z.number().int().nonnegative(),
+    sample_start: z.number().int().nonnegative(),
+    sample_count: z.number().int().nonnegative(),
+    sample_rate: z.number().int().positive(),
+    channels: z.number().int().positive(),
+    codec: z.literal(`pcm16`),
+    timing_source: z.enum([`client`, `runtime`, `provider`]),
+    captured_at: z.string().optional(),
+    received_at: z.string().optional(),
+    participant_id: z.string().optional(),
+    turn_id: z.string().optional(),
+    provider_item_id: z.string().optional(),
+    response_id: z.string().optional(),
+    created_at: z.string(),
+  })
+}
+
+function createRealtimeTranscriptSchema(): Schema<RealtimeTranscriptValue> {
+  return z.object({
+    key: z.string().optional(),
+    ...timelineOrderField,
+    session_id: z.string(),
+    direction: z.enum([`input`, `output`]),
+    text: z.string(),
+    status: z.enum([`partial`, `final`]),
+    turn_id: z.string().optional(),
+    response_id: z.string().optional(),
+    audio_stream: z.enum([`input`, `output`]).optional(),
+    audio_offset: z.string().optional(),
+    audio_next_offset: z.string().optional(),
+    sample_start: z.number().int().nonnegative().optional(),
+    sample_end: z.number().int().nonnegative().optional(),
+    created_at: z.string(),
+  })
 }
 
 function createReplayWatermarkSchema(): Schema<ReplayWatermarkValue> {
@@ -927,6 +1190,7 @@ export type Step = SequencedPersistedRow<StepValue>
 export type Text = SequencedPersistedRow<TextValue>
 export type TextDelta = SequencedPersistedRow<TextDeltaValue>
 export type ToolCall = SequencedPersistedRow<ToolCallValue>
+export type ToolArgDelta = SequencedPersistedRow<ToolArgDeltaValue>
 export type Reasoning = SequencedPersistedRow<ReasoningValue>
 export type ReasoningDelta = SequencedPersistedRow<ReasoningDeltaValue>
 export type ErrorEvent = SequencedPersistedRow<ErrorEventValue>
@@ -955,6 +1219,8 @@ export type AttachmentRole = AttachmentRoleValue
 export type AttachmentSubject = AttachmentSubjectValue
 export type ManifestAttachmentEntry =
   SequencedPersistedRow<ManifestAttachmentEntryValue>
+export type ManifestDocumentEntry =
+  SequencedPersistedRow<ManifestDocumentEntryValue>
 export type ManifestContextEntry =
   SequencedPersistedRow<ManifestContextEntryValue>
 export type ManifestCronScheduleEntry =
@@ -963,16 +1229,22 @@ export type ManifestFutureSendScheduleEntry =
   SequencedPersistedRow<ManifestFutureSendScheduleEntryValue>
 export type GoalStatus = GoalStatusValue
 export type ManifestGoalEntry = SequencedPersistedRow<ManifestGoalEntryValue>
+export type RealtimeSessionStatus = RealtimeSessionStatusValue
+export type RealtimeSessionStreamRefs = RealtimeSessionStreamRefsValue
+export type ManifestRealtimeSessionEntry =
+  SequencedPersistedRow<ManifestRealtimeSessionEntryValue>
 type ManifestUnion =
   | ManifestChildEntry
   | ManifestSourceEntry
   | ManifestSharedStateEntry
   | ManifestEffectEntry
   | ManifestAttachmentEntry
+  | ManifestDocumentEntry
   | ManifestContextEntry
   | ManifestCronScheduleEntry
   | ManifestFutureSendScheduleEntry
   | ManifestGoalEntry
+  | ManifestRealtimeSessionEntry
 export type Manifest = ManifestUnion & {
   id?: string
   entity_url?: string
@@ -993,6 +1265,14 @@ export type Manifest = ManifestUnion & {
   createdBy?: string
   error?: string
   meta?: Record<string, JsonValue>
+  provider?: string
+  docId?: string
+  docPath?: string
+  transportMimeType?: `application/vnd.electric-agents.markdown-yjs`
+  contentMimeType?: `text/markdown`
+  yTextName?: `markdown`
+  title?: string
+  updatedAt?: string
   name?: string
   attrs?: ContextEntryAttrs
   content?: string
@@ -1004,7 +1284,11 @@ export type Manifest = ManifestUnion & {
   targetUrl?: string
   producerId?: string
   messageType?: string
-  status?: FutureSendScheduleStatus | AttachmentStatusValue | GoalStatusValue
+  status?:
+    | FutureSendScheduleStatus
+    | AttachmentStatusValue
+    | GoalStatusValue
+    | RealtimeSessionStatusValue
   sentAt?: string
   failedAt?: string
   lastError?: string
@@ -1012,8 +1296,15 @@ export type Manifest = ManifestUnion & {
   tokenBudget?: number | null
   tokensUsed?: number
   summary?: string
-  updatedAt?: string
+  model?: string
+  startedAt?: string
+  endedAt?: string | null
+  streams?: RealtimeSessionStreamRefs
+  retention?: `forever`
 }
+export type RealtimeSession = SequencedPersistedRow<RealtimeSessionValue>
+export type RealtimeAudioSpan = SequencedPersistedRow<RealtimeAudioSpanValue>
+export type RealtimeTranscript = SequencedPersistedRow<RealtimeTranscriptValue>
 export type ReplayWatermark = SequencedPersistedRow<ReplayWatermarkValue>
 
 // ============================================================================
@@ -1038,6 +1329,9 @@ export const ENTITY_COLLECTIONS = {
   tags: `tags`,
   slashCommands: `slashCommands`,
   manifests: `manifests`,
+  realtimeSessions: `realtimeSessions`,
+  realtimeAudioSpans: `realtimeAudioSpans`,
+  realtimeTranscripts: `realtimeTranscripts`,
   contextInserted: `contextInserted`,
   contextRemoved: `contextRemoved`,
   replayWatermarks: `replayWatermarks`,
@@ -1050,6 +1344,8 @@ export const BUILT_IN_EVENT_SCHEMAS = {
   text_delta:
     createTextDeltaSchema() as unknown as BuiltInEntitySchema<TextDelta>,
   tool_call: createToolCallSchema() as unknown as BuiltInEntitySchema<ToolCall>,
+  tool_arg_delta:
+    createToolArgDeltaSchema() as unknown as BuiltInEntitySchema<ToolArgDelta>,
   reasoning:
     createReasoningSchema() as unknown as BuiltInEntitySchema<Reasoning>,
   reasoning_delta:
@@ -1073,6 +1369,12 @@ export const BUILT_IN_EVENT_SCHEMAS = {
   context_removed:
     createContextRemovedSchema() as unknown as BuiltInEntitySchema<ContextRemoved>,
   manifest: createManifestSchema() as unknown as BuiltInEntitySchema<Manifest>,
+  realtime_session:
+    createRealtimeSessionSchema() as unknown as BuiltInEntitySchema<RealtimeSession>,
+  realtime_audio_span:
+    createRealtimeAudioSpanSchema() as unknown as BuiltInEntitySchema<RealtimeAudioSpan>,
+  realtime_transcript:
+    createRealtimeTranscriptSchema() as unknown as BuiltInEntitySchema<RealtimeTranscript>,
   replay_watermark:
     createReplayWatermarkSchema() as unknown as BuiltInEntitySchema<ReplayWatermark>,
 } as const
@@ -1088,6 +1390,7 @@ type EntityCollectionsDefinition = {
   texts: CollectionDefinition<Text>
   textDeltas: CollectionDefinition<TextDelta>
   toolCalls: CollectionDefinition<ToolCall>
+  toolArgDeltas: CollectionDefinition<ToolArgDelta>
   reasoning: CollectionDefinition<Reasoning>
   reasoningDeltas: CollectionDefinition<ReasoningDelta>
   errors: CollectionDefinition<ErrorEvent>
@@ -1100,6 +1403,9 @@ type EntityCollectionsDefinition = {
   tags: CollectionDefinition<TagEntry>
   slashCommands: CollectionDefinition<SlashCommandEntry>
   manifests: CollectionDefinition<Manifest>
+  realtimeSessions: CollectionDefinition<RealtimeSession>
+  realtimeAudioSpans: CollectionDefinition<RealtimeAudioSpan>
+  realtimeTranscripts: CollectionDefinition<RealtimeTranscript>
   contextInserted: CollectionDefinition<ContextInserted>
   contextRemoved: CollectionDefinition<ContextRemoved>
   replayWatermarks: CollectionDefinition<ReplayWatermark>
@@ -1135,6 +1441,12 @@ export const builtInCollections: EntityCollectionsDefinition = {
   toolCalls: {
     schema: BUILT_IN_EVENT_SCHEMAS.tool_call as StandardSchemaV1<ToolCall>,
     type: `tool_call`,
+    primaryKey: `key`,
+  },
+  toolArgDeltas: {
+    schema:
+      BUILT_IN_EVENT_SCHEMAS.tool_arg_delta as StandardSchemaV1<ToolArgDelta>,
+    type: `tool_arg_delta`,
     primaryKey: `key`,
   },
   reasoning: {
@@ -1202,6 +1514,24 @@ export const builtInCollections: EntityCollectionsDefinition = {
     type: `manifest`,
     primaryKey: `key`,
   },
+  realtimeSessions: {
+    schema:
+      BUILT_IN_EVENT_SCHEMAS.realtime_session as StandardSchemaV1<RealtimeSession>,
+    type: `realtime_session`,
+    primaryKey: `key`,
+  },
+  realtimeAudioSpans: {
+    schema:
+      BUILT_IN_EVENT_SCHEMAS.realtime_audio_span as StandardSchemaV1<RealtimeAudioSpan>,
+    type: `realtime_audio_span`,
+    primaryKey: `key`,
+  },
+  realtimeTranscripts: {
+    schema:
+      BUILT_IN_EVENT_SCHEMAS.realtime_transcript as StandardSchemaV1<RealtimeTranscript>,
+    type: `realtime_transcript`,
+    primaryKey: `key`,
+  },
   contextInserted: {
     schema:
       BUILT_IN_EVENT_SCHEMAS.context_inserted as StandardSchemaV1<ContextInserted>,
@@ -1238,6 +1568,8 @@ const MANAGEMENT_TYPES = new Set<string>([
   `entity_created`,
   `signal`,
   `manifest`,
+  `realtime_session`,
+  `realtime_audio_span`,
   `replay_watermark`,
   `ack`,
 ])

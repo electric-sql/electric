@@ -39,6 +39,29 @@ describe(`buildHortonSystemPrompt`, () => {
     expect(prompt).not.toContain(`subscribe_webhook_source`)
   })
 
+  it(`describes collaborative markdown docs when document tools are available`, () => {
+    const prompt = buildHortonSystemPrompt(`/tmp/test`, {
+      hasMarkdownDocumentTools: true,
+      hasSkills: true,
+    })
+
+    expect(prompt).toContain(`create_markdown_doc`)
+    expect(prompt).toContain(`set_markdown_doc_cursor`)
+    expect(prompt).toContain(`insert_markdown_doc`)
+    expect(prompt).toContain(`replace_markdown_doc_range`)
+    expect(prompt).toContain(`Collaborative Markdown Docs`)
+    expect(prompt).toContain(`Do not use filesystem write`)
+    expect(prompt).toContain(`markdown-docs skill`)
+    expect(prompt).toContain(`Current markdown docs are passed`)
+    expect(prompt).toContain(`Prefer streaming inserts`)
+  })
+
+  it(`omits collaborative markdown docs when document tools are unavailable`, () => {
+    const prompt = buildHortonSystemPrompt(`/tmp/test`)
+    expect(prompt).not.toContain(`create_markdown_doc`)
+    expect(prompt).not.toContain(`Collaborative Markdown Docs`)
+  })
+
   it(`includes docs URL guidance alongside local docs support`, () => {
     const prompt = buildHortonSystemPrompt(`/tmp/test`, {
       hasDocsSupport: true,
@@ -52,6 +75,11 @@ describe(`buildHortonSystemPrompt`, () => {
     const prompt = buildHortonSystemPrompt(`/tmp/test`, { hasSkills: true })
     expect(prompt).toContain(`/quickstart`)
     expect(prompt).not.toContain(`/tutorial`)
+  })
+
+  it(`tells Horton to name spawned workers`, () => {
+    const prompt = buildHortonSystemPrompt(`/tmp/test`)
+    expect(prompt).toContain(`give it a short descriptive name`)
   })
 
   it(`includes runtime model identity when provided`, () => {

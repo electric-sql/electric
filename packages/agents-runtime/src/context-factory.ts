@@ -1,4 +1,5 @@
 import { queryOnce } from '@durable-streams/state/db'
+import { DurableStream } from '@durable-streams/client'
 import { assembleContext } from './context-assembly'
 import { createContextEntriesApi } from './context-entries'
 import { entityStateSchema } from './entity-schema'
@@ -11,6 +12,7 @@ import {
 } from './outbound-bridge'
 import { createPiAgentAdapter } from './pi-adapter'
 import {
+  defaultProjection,
   timelineMessages as runtimeTimelineMessages,
   timelineToMessages,
 } from './timeline-context'
@@ -18,6 +20,7 @@ import { getCronStreamPath } from './cron-utils'
 import { runtimeLog } from './log'
 import { sliceChars } from './token-budget'
 import { createContextTools } from './tools/context-tools'
+import { appendPathToUrl } from './url'
 import { CACHE_TIERS } from './types'
 import { composeToolsWithProviders } from './tool-providers'
 import { validateSlashCommandDefinitions } from './composer-input'
@@ -47,8 +50,17 @@ import type {
   HandlerWake,
   LLMMessage,
   ManifestAttachmentEntry,
+  ManifestDocumentEntry,
+  ManifestRealtimeSessionEntry,
   ObservationHandle,
   ObservationSource,
+  RealtimeAudioConfig,
+  RealtimeAudioFormat,
+  RealtimeConfig,
+  RealtimeHandle,
+  RealtimeProviderEvent,
+  RealtimeProviderSession,
+  RealtimeRunResult,
   RunHandle,
   SendResult,
   SharedStateHandle,
@@ -58,8 +70,19 @@ import type {
   UseContextConfig,
   Wake,
   WakeEvent,
+  WakeMessage,
   WakeSession,
 } from './types'
+
+const REALTIME_MIN_INPUT_COMMIT_BYTES = 4_800
+const REALTIME_SESSION_SOFT_LIMIT_MS = 55 * 60 * 1000
+const REALTIME_AUDIO_SPAN_MAX_MS = 500
+const REALTIME_PCM16_BYTES_PER_SAMPLE = 2
+const REALTIME_DEFAULT_AUDIO_FORMAT: RealtimeAudioFormat = {
+  codec: `pcm16`,
+  sampleRate: 24_000,
+  channels: 1,
+}
 
 function agentModelId(model: AgentModel): string {
   return typeof model === `string` ? model : model.id
@@ -69,6 +92,582 @@ function agentModelProvider(config: AgentConfig): string {
   return typeof config.model === `string`
     ? (config.provider ?? `anthropic`)
     : config.model.provider
+}
+
+function isRealtimeSessionManifest(
+  entry: unknown
+): entry is ManifestRealtimeSessionEntry {
+  return (
+    typeof entry === `object` &&
+    entry !== null &&
+    (entry as { kind?: unknown }).kind === `realtime-session` &&
+    typeof (entry as { id?: unknown }).id === `string`
+  )
+}
+
+function realtimeManifestIsActive(
+  entry: ManifestRealtimeSessionEntry
+): boolean {
+  return entry.status === `requested` || entry.status === `active`
+}
+
+function getToolName(tool: AgentTool): string | null {
+  const name = (tool as { name?: unknown }).name
+  return typeof name === `string` ? name : null
+}
+
+function applyRealtimeToolPolicy(
+  tools: Array<AgentTool>,
+  policy: RealtimeConfig[`toolPolicy`]
+): Array<AgentTool> {
+  if (!policy) return tools
+  const allowed = new Set([...(policy.direct ?? []), ...(policy.confirm ?? [])])
+  if (allowed.size === 0) return []
+  return tools.filter((tool) => {
+    const name = getToolName(tool)
+    return name != null && allowed.has(name)
+  })
+}
+
+type RealtimeStreamConfig = NonNullable<HandlerContextConfig[`realtimeStreams`]>
+type RealtimeControlInput =
+  | { type: `input_text`; text: string }
+  | { type: `input_audio.commit`; afterAudioBytes?: number }
+  | { type: `response.cancel` }
+  | { type: `output_audio.truncate`; itemId: string; audioEndMs: number }
+  | { type: `session.close`; reason?: string }
+type RealtimeStreamIo = {
+  writeProviderEvent: (event: RealtimeProviderEvent) => Promise<void>
+  close: () => Promise<void>
+}
+type RealtimeAudioSpanDraft = {
+  stream: `input` | `output`
+  seq: number
+  producerId: string
+  producerEpoch: number
+  byteStart: number
+  byteEnd: number
+  sampleStart: number
+  sampleCount: number
+  sampleRate: number
+  channels: number
+  timingSource: `runtime` | `provider`
+  createdAt: string
+  capturedAt?: string
+  receivedAt?: string
+  participantId?: string
+  providerItemId?: string
+  responseId?: string
+}
+
+function trackRealtimeAppend(
+  pending: Set<Promise<void>>,
+  append: Promise<void>,
+  onError: (error: unknown) => void
+): void {
+  let tracked: Promise<void>
+  tracked = append.catch(onError).finally(() => {
+    pending.delete(tracked)
+  })
+  pending.add(tracked)
+}
+
+function isRealtimeControlInput(value: unknown): value is RealtimeControlInput {
+  if (!value || typeof value !== `object`) return false
+  const type = (value as { type?: unknown }).type
+  if (type === `output_audio.truncate`) {
+    return (
+      typeof (value as { itemId?: unknown }).itemId === `string` &&
+      typeof (value as { audioEndMs?: unknown }).audioEndMs === `number`
+    )
+  }
+  if (type === `input_audio.commit`) {
+    const afterAudioBytes = (value as { afterAudioBytes?: unknown })
+      .afterAudioBytes
+    return (
+      afterAudioBytes === undefined ||
+      (typeof afterAudioBytes === `number` &&
+        Number.isFinite(afterAudioBytes) &&
+        afterAudioBytes >= 0)
+    )
+  }
+  if (type === `input_text`) {
+    return typeof (value as { text?: unknown }).text === `string`
+  }
+  return type === `response.cancel` || type === `session.close`
+}
+
+function realtimeDurableStream(
+  streams: RealtimeStreamConfig,
+  path: string,
+  contentType: string
+): DurableStream {
+  return new DurableStream({
+    url: appendPathToUrl(streams.baseUrl, path),
+    headers: streams.headers,
+    contentType,
+    batching: true,
+  })
+}
+
+function jsonBytes(value: unknown): Uint8Array {
+  return new TextEncoder().encode(JSON.stringify(value))
+}
+
+function realtimeControlOutput(event: RealtimeProviderEvent): unknown {
+  if (event.type !== `output_audio.delta`) return event
+  return {
+    type: event.type,
+    responseId: event.responseId,
+    itemId: event.itemId,
+    byteLength: event.audio.byteLength,
+  }
+}
+
+function useManualRealtimeInputCommits(
+  audio: RealtimeAudioConfig | undefined
+): boolean {
+  return audio?.turnDetection === false || audio?.turnDetection?.type === `none`
+}
+
+function realtimeByteOffset(byte: number): string {
+  return `byte:${byte}`
+}
+
+function realtimeAudioFrameBytes(format: RealtimeAudioFormat): number {
+  return REALTIME_PCM16_BYTES_PER_SAMPLE * format.channels
+}
+
+function realtimeAudioSamples(
+  byteLength: number,
+  format: RealtimeAudioFormat
+): number {
+  return Math.floor(byteLength / realtimeAudioFrameBytes(format))
+}
+
+function createRealtimeStreamIo(
+  config: HandlerContextConfig,
+  session: ManifestRealtimeSessionEntry | undefined,
+  providerSession: RealtimeProviderSession,
+  audio: RealtimeAudioConfig | undefined
+): RealtimeStreamIo | undefined {
+  if (!config.realtimeStreams || !session) return undefined
+
+  const logPrefix = `[agent-runtime]`
+  const abort = new AbortController()
+  const abortFromRun = (): void => abort.abort()
+  if (config.runSignal?.aborted) {
+    abort.abort()
+  } else {
+    config.runSignal?.addEventListener(`abort`, abortFromRun, { once: true })
+  }
+
+  const audioIn = realtimeDurableStream(
+    config.realtimeStreams,
+    session.streams.audio_in,
+    `audio/pcm`
+  )
+  const audioOut = realtimeDurableStream(
+    config.realtimeStreams,
+    session.streams.audio_out,
+    `audio/pcm`
+  )
+  const controlIn = realtimeDurableStream(
+    config.realtimeStreams,
+    session.streams.control_in,
+    `application/json`
+  )
+  const controlOut = realtimeDurableStream(
+    config.realtimeStreams,
+    session.streams.control_out,
+    `application/json`
+  )
+  const tasks: Array<Promise<void>> = []
+  let audioInChunks = 0
+  let audioInBytes = 0
+  let committedAudioInBytes = 0
+  let controlInCommands = 0
+  let audioOutChunks = 0
+  let audioOutBytes = 0
+  let controlOutEvents = 0
+  const pendingOutputAppends = new Set<Promise<void>>()
+  const pendingInputCommits: Array<{ afterAudioBytes?: number }> = []
+  const pendingAudioChunks: Array<{
+    start: number
+    end: number
+    data: Uint8Array
+  }> = []
+  const inputAudioFormat = audio?.inputFormat ?? REALTIME_DEFAULT_AUDIO_FORMAT
+  const outputAudioFormat = audio?.outputFormat ?? REALTIME_DEFAULT_AUDIO_FORMAT
+  const audioSpanDrafts: Partial<
+    Record<`input` | `output`, RealtimeAudioSpanDraft>
+  > = {}
+  let inputAudioSpanSeq = 0
+  let outputAudioSpanSeq = 0
+  let processingInputCommits = false
+  const manualInputCommits = useManualRealtimeInputCommits(audio)
+
+  const trackOutputAppend = (append: Promise<void>, label: string): void => {
+    trackRealtimeAppend(pendingOutputAppends, append, (error) => {
+      if (!abort.signal.aborted) {
+        runtimeLog.warn(logPrefix, `${label}:`, error)
+      }
+    })
+  }
+
+  const flushAudioSpan = (stream: `input` | `output`): void => {
+    const draft = audioSpanDrafts[stream]
+    if (!draft || draft.byteEnd <= draft.byteStart) return
+    audioSpanDrafts[stream] = undefined
+    config.writeEvent(
+      entityStateSchema.realtimeAudioSpans.insert({
+        key: `realtime-audio-span:${session.id}:${stream}:${draft.seq}`,
+        value: {
+          session_id: session.id,
+          stream,
+          producer_id: draft.producerId,
+          producer_epoch: draft.producerEpoch,
+          seq: draft.seq,
+          offset: realtimeByteOffset(draft.byteStart),
+          next_offset: realtimeByteOffset(draft.byteEnd),
+          byte_start: draft.byteStart,
+          byte_end: draft.byteEnd,
+          byte_length: draft.byteEnd - draft.byteStart,
+          sample_start: draft.sampleStart,
+          sample_count: draft.sampleCount,
+          sample_rate: draft.sampleRate,
+          channels: draft.channels,
+          codec: `pcm16`,
+          timing_source: draft.timingSource,
+          created_at: draft.createdAt,
+          ...(draft.capturedAt ? { captured_at: draft.capturedAt } : {}),
+          ...(draft.receivedAt ? { received_at: draft.receivedAt } : {}),
+          ...(draft.participantId
+            ? { participant_id: draft.participantId }
+            : {}),
+          ...(draft.providerItemId
+            ? { provider_item_id: draft.providerItemId }
+            : {}),
+          ...(draft.responseId ? { response_id: draft.responseId } : {}),
+        } as never,
+      }) as ChangeEvent
+    )
+  }
+
+  const appendAudioSpan = (input: {
+    stream: `input` | `output`
+    byteStart: number
+    byteLength: number
+    format: RealtimeAudioFormat
+    producerId: string
+    timingSource: `runtime` | `provider`
+    capturedAt?: string
+    receivedAt?: string
+    participantId?: string
+    providerItemId?: string
+    responseId?: string
+  }): void => {
+    if (input.byteLength <= 0) return
+    const frameBytes = realtimeAudioFrameBytes(input.format)
+    const byteEnd = input.byteStart + input.byteLength
+    const sampleStart = Math.floor(input.byteStart / frameBytes)
+    const sampleCount = realtimeAudioSamples(input.byteLength, input.format)
+    const maxSampleCount = Math.max(
+      1,
+      Math.floor((input.format.sampleRate * REALTIME_AUDIO_SPAN_MAX_MS) / 1000)
+    )
+    const draft = audioSpanDrafts[input.stream]
+    const compatible =
+      draft &&
+      draft.producerId === input.producerId &&
+      draft.timingSource === input.timingSource &&
+      draft.participantId === input.participantId &&
+      draft.providerItemId === input.providerItemId &&
+      draft.responseId === input.responseId &&
+      draft.byteEnd === input.byteStart &&
+      draft.sampleRate === input.format.sampleRate &&
+      draft.channels === input.format.channels &&
+      draft.sampleCount + sampleCount <= maxSampleCount
+
+    if (compatible) {
+      draft.byteEnd = byteEnd
+      draft.sampleCount += sampleCount
+      draft.receivedAt = input.receivedAt ?? draft.receivedAt
+      return
+    }
+
+    flushAudioSpan(input.stream)
+    const seq =
+      input.stream === `input` ? inputAudioSpanSeq++ : outputAudioSpanSeq++
+    audioSpanDrafts[input.stream] = {
+      stream: input.stream,
+      seq,
+      producerId: input.producerId,
+      producerEpoch: config.epoch,
+      byteStart: input.byteStart,
+      byteEnd,
+      sampleStart,
+      sampleCount,
+      sampleRate: input.format.sampleRate,
+      channels: input.format.channels,
+      timingSource: input.timingSource,
+      createdAt: new Date().toISOString(),
+      capturedAt: input.capturedAt,
+      receivedAt: input.receivedAt,
+      participantId: input.participantId,
+      providerItemId: input.providerItemId,
+      responseId: input.responseId,
+    }
+  }
+
+  const discardCommittedAudioChunks = (): void => {
+    while (
+      pendingAudioChunks.length > 0 &&
+      pendingAudioChunks[0]!.end <= committedAudioInBytes
+    ) {
+      pendingAudioChunks.shift()
+    }
+  }
+
+  const appendAudioRangeToProvider = async (
+    start: number,
+    end: number
+  ): Promise<void> => {
+    if (!providerSession.appendInputAudio) return
+    for (const chunk of pendingAudioChunks) {
+      if (chunk.end <= start) continue
+      if (chunk.start >= end) break
+      const sliceStart = Math.max(0, start - chunk.start)
+      const sliceEnd = Math.min(chunk.data.byteLength, end - chunk.start)
+      if (sliceEnd <= sliceStart) continue
+      await providerSession.appendInputAudio(
+        chunk.data.subarray(sliceStart, sliceEnd)
+      )
+    }
+  }
+
+  const processPendingInputCommits = async (): Promise<void> => {
+    if (processingInputCommits) return
+    processingInputCommits = true
+    try {
+      while (pendingInputCommits.length > 0) {
+        const command = pendingInputCommits[0]!
+        const commitAudioBytes = command.afterAudioBytes ?? audioInBytes
+        if (audioInBytes < commitAudioBytes) return
+
+        pendingInputCommits.shift()
+        if (commitAudioBytes <= committedAudioInBytes) {
+          runtimeLog.info(
+            logPrefix,
+            `realtime input_audio.commit ignored session=${session.id} audioInBytes=${audioInBytes} committedAudioInBytes=${committedAudioInBytes} commitAudioBytes=${commitAudioBytes}`
+          )
+          continue
+        }
+
+        const pendingAudioBytes = commitAudioBytes - committedAudioInBytes
+        if (pendingAudioBytes < REALTIME_MIN_INPUT_COMMIT_BYTES) {
+          runtimeLog.info(
+            logPrefix,
+            `realtime input_audio.commit skipped session=${session.id} audioInBytes=${audioInBytes} committedAudioInBytes=${committedAudioInBytes} commitAudioBytes=${commitAudioBytes}`
+          )
+          await providerSession.clearInputAudio?.()
+          committedAudioInBytes = commitAudioBytes
+          discardCommittedAudioChunks()
+          continue
+        }
+
+        await appendAudioRangeToProvider(
+          committedAudioInBytes,
+          commitAudioBytes
+        )
+        await providerSession.commitInputAudio?.()
+        committedAudioInBytes = commitAudioBytes
+        discardCommittedAudioChunks()
+      }
+    } finally {
+      processingInputCommits = false
+    }
+  }
+
+  runtimeLog.info(
+    logPrefix,
+    `realtime stream bridge starting session=${session.id} inputMode=${manualInputCommits ? `manual-commit` : `provider-vad`} audioIn=${session.streams.audio_in} audioOut=${session.streams.audio_out}`
+  )
+
+  if (providerSession.appendInputAudio) {
+    tasks.push(
+      (async () => {
+        const response = await audioIn.stream({
+          live: true,
+          signal: abort.signal,
+          warnOnHttp: false,
+        })
+        try {
+          for await (const chunk of response.bodyStream()) {
+            if (abort.signal.aborted) break
+            const nextChunkCount = audioInChunks + 1
+            if (nextChunkCount === 1) {
+              runtimeLog.info(
+                logPrefix,
+                `realtime audio/in first chunk session=${session.id} bytes=${chunk.byteLength}`
+              )
+            }
+            const start = audioInBytes
+            audioInChunks = nextChunkCount
+            audioInBytes += chunk.byteLength
+            appendAudioSpan({
+              stream: `input`,
+              byteStart: start,
+              byteLength: chunk.byteLength,
+              format: inputAudioFormat,
+              producerId: session.streams.audio_in,
+              timingSource: `runtime`,
+              participantId: `user`,
+              receivedAt: new Date().toISOString(),
+            })
+            if (manualInputCommits) {
+              pendingAudioChunks.push({
+                start,
+                end: start + chunk.byteLength,
+                data: chunk,
+              })
+              await processPendingInputCommits()
+            } else {
+              await providerSession.appendInputAudio?.(chunk)
+            }
+          }
+        } finally {
+          response.cancel()
+        }
+      })().catch((error) => {
+        if (!abort.signal.aborted) {
+          runtimeLog.warn(
+            `[agent-runtime] realtime audio/in pump failed:`,
+            error
+          )
+        }
+      })
+    )
+  }
+
+  tasks.push(
+    (async () => {
+      const response = await controlIn.stream<RealtimeControlInput>({
+        live: true,
+        signal: abort.signal,
+        json: true,
+        warnOnHttp: false,
+      })
+      try {
+        for await (const command of response.jsonStream()) {
+          if (abort.signal.aborted || !isRealtimeControlInput(command)) {
+            continue
+          }
+          controlInCommands += 1
+          if (controlInCommands === 1) {
+            runtimeLog.info(
+              logPrefix,
+              `realtime control/in first command session=${session.id} type=${command.type}`
+            )
+          }
+          switch (command.type) {
+            case `input_text`:
+              await providerSession.sendText?.(command.text)
+              break
+            case `input_audio.commit`:
+              if (manualInputCommits) {
+                pendingInputCommits.push({
+                  afterAudioBytes: command.afterAudioBytes,
+                })
+                await processPendingInputCommits()
+              } else {
+                runtimeLog.info(
+                  logPrefix,
+                  `realtime input_audio.commit ignored in provider-vad mode session=${session.id}`
+                )
+              }
+              break
+            case `response.cancel`:
+              await providerSession.cancelResponse?.()
+              break
+            case `output_audio.truncate`:
+              await providerSession.truncateOutputAudio?.({
+                itemId: command.itemId,
+                audioEndMs: command.audioEndMs,
+              })
+              break
+            case `session.close`:
+              await providerSession.close?.(command.reason)
+              abort.abort()
+              break
+          }
+        }
+      } finally {
+        response.cancel()
+      }
+    })().catch((error) => {
+      if (!abort.signal.aborted) {
+        runtimeLog.warn(
+          `[agent-runtime] realtime control/in pump failed:`,
+          error
+        )
+      }
+    })
+  )
+
+  return {
+    async writeProviderEvent(event) {
+      controlOutEvents += 1
+      if (controlOutEvents === 1) {
+        runtimeLog.info(
+          logPrefix,
+          `realtime provider first event session=${session.id} type=${event.type}`
+        )
+      }
+      if (event.type === `output_audio.delta`) {
+        const byteStart = audioOutBytes
+        audioOutChunks += 1
+        audioOutBytes += event.audio.byteLength
+        if (audioOutChunks === 1) {
+          runtimeLog.info(
+            logPrefix,
+            `realtime audio/out first chunk session=${session.id} bytes=${event.audio.byteLength}`
+          )
+        }
+        appendAudioSpan({
+          stream: `output`,
+          byteStart,
+          byteLength: event.audio.byteLength,
+          format: outputAudioFormat,
+          producerId: session.streams.audio_out,
+          timingSource: `provider`,
+          participantId: `assistant`,
+          providerItemId: event.itemId,
+          responseId: event.responseId,
+          receivedAt: new Date().toISOString(),
+        })
+        trackOutputAppend(
+          audioOut.append(event.audio),
+          `realtime audio/out append failed`
+        )
+      }
+      trackOutputAppend(
+        controlOut.append(jsonBytes(realtimeControlOutput(event))),
+        `realtime control/out append failed`
+      )
+    },
+    async close() {
+      abort.abort()
+      config.runSignal?.removeEventListener(`abort`, abortFromRun)
+      await Promise.allSettled([...tasks, ...pendingOutputAppends])
+      flushAudioSpan(`input`)
+      flushAudioSpan(`output`)
+      runtimeLog.info(
+        logPrefix,
+        `realtime stream bridge closed session=${session.id} audioInChunks=${audioInChunks} audioInBytes=${audioInBytes} controlInCommands=${controlInCommands} providerEvents=${controlOutEvents} audioOutChunks=${audioOutChunks} audioOutBytes=${audioOutBytes}`
+      )
+    },
+  }
 }
 
 const MAX_HYDRATED_IMAGE_ATTACHMENTS = 4
@@ -102,6 +701,18 @@ export interface HandlerContextConfig<TState extends StateProxy = StateProxy> {
     }) => void | Promise<void>
   ) => void
   hydratedWebhookSourceWake?: HydratedWebhookSourceWake | null
+  realtimeStreams?: {
+    baseUrl: string
+    headers?: Record<string, string>
+  }
+  registerLiveWakeHandler?: (
+    handler: (wake: {
+      wakeEvent: WakeEvent
+      wakeOffset: string
+      ackOffset: string
+      events: Array<ChangeEvent>
+    }) => boolean | Promise<boolean>
+  ) => () => void
   doObserve: (
     source: ObservationSource,
     wake?: Wake
@@ -159,6 +770,10 @@ function asMessageText(value: unknown): string {
   return typeof value === `string` ? value : JSON.stringify(value ?? ``)
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === `object` && value !== null && !Array.isArray(value)
+}
+
 function missingContextToolData(message: string): Promise<never> {
   return Promise.reject(new Error(message))
 }
@@ -192,6 +807,126 @@ function getCronScheduleTriggerPayload(
   }
 
   return undefined
+}
+
+function isMarkdownDocumentManifestEntry(
+  value: unknown
+): value is ManifestDocumentEntry {
+  if (!value || typeof value !== `object`) return false
+  const entry = value as Partial<ManifestDocumentEntry>
+  return (
+    entry.kind === `document` &&
+    typeof entry.id === `string` &&
+    entry.provider === `y-durable-streams` &&
+    typeof entry.docPath === `string` &&
+    typeof entry.streamPath === `string` &&
+    entry.transportMimeType ===
+      `application/vnd.electric-agents.markdown-yjs` &&
+    entry.contentMimeType === `text/markdown` &&
+    entry.yTextName === `markdown` &&
+    typeof entry.title === `string`
+  )
+}
+
+function markdownDocumentSourceEntity(
+  document: ManifestDocumentEntry
+): string | undefined {
+  const meta = document.meta
+  return meta && typeof meta === `object` && `sourceEntityUrl` in meta
+    ? typeof meta.sourceEntityUrl === `string`
+      ? meta.sourceEntityUrl
+      : undefined
+    : undefined
+}
+
+function markdownDocumentRefsForWakeSource(
+  db: Pick<EntityStreamDBWithActions, `collections`>,
+  sourceUrl: string
+): Array<ManifestDocumentEntry> {
+  const docsById = new Map<string, ManifestDocumentEntry>()
+  for (const entry of db.collections.manifests.toArray as Array<unknown>) {
+    if (!isMarkdownDocumentManifestEntry(entry)) continue
+    if (markdownDocumentSourceEntity(entry) !== sourceUrl) continue
+    docsById.set(entry.id, entry)
+  }
+  return [...docsById.values()]
+}
+
+function renderMarkdownDocumentWakeRefs(
+  db: Pick<EntityStreamDBWithActions, `collections`>,
+  wakeEvent: WakeEvent
+): string | null {
+  if (wakeEvent.type !== `wake`) {
+    return null
+  }
+  const documentsByPath = new Map<string, ManifestDocumentEntry>()
+  for (const source of wakeSourceUrls(wakeEvent)) {
+    for (const document of markdownDocumentRefsForWakeSource(db, source)) {
+      documentsByPath.set(document.docPath, document)
+    }
+  }
+  const documents = [...documentsByPath.values()]
+  if (documents.length === 0) return null
+
+  return [
+    `Collaborative markdown documents now available from this entity's manifest:`,
+    ...documents.map((document) => {
+      return `- ${document.title} (id: ${document.id})`
+    }),
+    `Use read_markdown_doc with the document id to inspect the current content before editing.`,
+  ].join(`\n`)
+}
+
+function wakeBatchMessages(wakeEvent: WakeEvent): Array<WakeMessage> {
+  const payload = wakeEvent.payload
+  if (!isRecord(payload) || payload.type !== `wake_batch`) {
+    return []
+  }
+  return Array.isArray(payload.wakes)
+    ? payload.wakes.filter(isRecord).map((wake) => wake as WakeMessage)
+    : []
+}
+
+function wakeSourceUrls(wakeEvent: WakeEvent): Array<string> {
+  const sources = new Set<string>()
+  if (typeof wakeEvent.source === `string`) {
+    sources.add(wakeEvent.source)
+  }
+
+  const payload = wakeEvent.payload
+  if (isRecord(payload) && payload.type === `wake_batch`) {
+    if (Array.isArray(payload.sources)) {
+      for (const source of payload.sources) {
+        if (typeof source === `string`) sources.add(source)
+      }
+    }
+    for (const wake of wakeBatchMessages(wakeEvent)) {
+      if (typeof wake.source === `string`) sources.add(wake.source)
+    }
+  }
+
+  return [...sources]
+}
+
+function renderWakeBatchText(wakeEvent: WakeEvent): string | null {
+  const wakes = wakeBatchMessages(wakeEvent)
+  if (wakes.length === 0) return null
+
+  return [
+    `Batched wake notification with ${wakes.length} child/source updates:`,
+    ...wakes.map((wake, index) => {
+      const finishedChild = wake.finished_child
+      if (finishedChild) {
+        const status = finishedChild.run_status ?? `completed`
+        const detail =
+          finishedChild.response ??
+          finishedChild.error ??
+          asMessageText({ changes: wake.changes })
+        return `- ${finishedChild.url} (${status}): ${detail}`
+      }
+      return `- ${wake.source ?? `source ${index + 1}`}: ${asMessageText(wake)}`
+    }),
+  ].join(`\n`)
 }
 
 function getTriggerMessageText(
@@ -243,7 +978,13 @@ function getTriggerMessageText(
     }
   }
 
-  return asMessageText({
+  const batchText = renderWakeBatchText(wakeEvent)
+  if (batchText) {
+    const documentRefs = renderMarkdownDocumentWakeRefs(db, wakeEvent)
+    return documentRefs ? `${batchText}\n\n${documentRefs}` : batchText
+  }
+
+  const text = asMessageText({
     type: wakeEvent.type,
     source: wakeEvent.source,
     payload: wakeEvent.payload,
@@ -253,6 +994,8 @@ function getTriggerMessageText(
     toOffset: wakeEvent.toOffset,
     eventCount: wakeEvent.eventCount,
   })
+  const documentRefs = renderMarkdownDocumentWakeRefs(db, wakeEvent)
+  return documentRefs ? `${text}\n\n${documentRefs}` : text
 }
 
 function combineAbortSignals(a: AbortSignal, b: AbortSignal): AbortSignal {
@@ -476,6 +1219,8 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
 ): HandlerContextResult<TState> {
   let sleepRequested = false
   let agentConfig: AgentConfig | null = null
+  let realtimeConfig: RealtimeConfig | null = null
+  let activeRealtimeProviderSession: RealtimeProviderSession | null = null
   let useContextConfig: UseContextConfig | null = null
   let useContextHash = ``
   let useContextRegistrations = 0
@@ -540,6 +1285,85 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
       }
       return await config.doCreateAttachment(input)
     },
+  }
+
+  function realtimeSessions(): Array<ManifestRealtimeSessionEntry> {
+    const sessions: Array<ManifestRealtimeSessionEntry> = []
+    for (const entry of config.db.collections.manifests.toArray) {
+      if (isRealtimeSessionManifest(entry)) {
+        sessions.push(entry)
+      }
+    }
+    return sessions.sort((a, b) => a.startedAt.localeCompare(b.startedAt))
+  }
+
+  function activeRealtimeSession(): ManifestRealtimeSessionEntry | undefined {
+    return realtimeSessions().filter(realtimeManifestIsActive).at(-1)
+  }
+
+  async function updateRealtimeSessionStatus(
+    session: ManifestRealtimeSessionEntry | undefined,
+    status: `active` | `closed` | `failed`,
+    opts: { reason?: string; error?: string } = {}
+  ): Promise<void> {
+    if (!session) return
+
+    const key = session.key ?? `realtime-session:${session.id}`
+    const terminal = status === `closed` || status === `failed`
+    const endedAt = terminal ? new Date().toISOString() : session.endedAt
+    const meta = {
+      ...(session.meta ?? {}),
+      ...(opts.reason ? { reason: opts.reason } : {}),
+      ...(opts.error ? { error: opts.error } : {}),
+    }
+
+    const nextSession: ManifestRealtimeSessionEntry = {
+      key,
+      kind: `realtime-session`,
+      id: session.id,
+      provider: session.provider,
+      model: session.model,
+      ...(session.voice ? { voice: session.voice } : {}),
+      ...(session.reasoningEffort
+        ? { reasoningEffort: session.reasoningEffort }
+        : {}),
+      ...(typeof session.interruptResponse === `boolean`
+        ? { interruptResponse: session.interruptResponse }
+        : {}),
+      status,
+      startedAt: session.startedAt,
+      endedAt: endedAt ?? null,
+      streams: session.streams,
+      retention: `forever`,
+      ...(Object.keys(meta).length > 0 ? { meta } : {}),
+    }
+
+    config.wakeSession.registerManifestEntry(nextSession)
+    config.writeEvent(
+      entityStateSchema.realtimeSessions.update({
+        key,
+        value: {
+          session_id: session.id,
+          provider: session.provider,
+          model: session.model,
+          ...(session.voice ? { voice: session.voice } : {}),
+          ...(session.reasoningEffort
+            ? { reasoning_effort: session.reasoningEffort }
+            : {}),
+          ...(typeof session.interruptResponse === `boolean`
+            ? { interrupt_response: session.interruptResponse }
+            : {}),
+          status,
+          started_at: session.startedAt,
+          ...(endedAt ? { ended_at: endedAt } : {}),
+          streams: session.streams,
+          ...(opts.reason ? { reason: opts.reason } : {}),
+          ...(opts.error ? { error: opts.error } : {}),
+          ...(Object.keys(meta).length > 0 ? { meta } : {}),
+        } as never,
+      }) as ChangeEvent
+    )
+    await config.wakeSession.commitManifestEntries()
   }
 
   function structuralHash(nextConfig: UseContextConfig): string {
@@ -950,6 +1774,849 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
     },
   }
 
+  const realtimeHandle: RealtimeHandle = {
+    async run(): Promise<RealtimeRunResult> {
+      if (!realtimeConfig) {
+        throw new Error(
+          `[agent-runtime] realtime.run() called without useRealtime().`
+        )
+      }
+
+      if (config.prepareAgentRun) {
+        await config.prepareAgentRun()
+      }
+
+      const activeRealtimeConfig = realtimeConfig
+      const bridge = createOutboundBridge(
+        await loadOutboundIdSeed(config.db),
+        config.writeEvent
+      )
+      const startedAt = Date.now()
+      let textStarted = false
+      let currentToolCall:
+        | { toolCallId: string; name: string; args: unknown }
+        | undefined
+      const realtimeSession = activeRealtimeSession()
+
+      const endText = (): void => {
+        if (!textStarted) return
+        bridge.onTextEnd()
+        textStarted = false
+      }
+
+      const emitText = (delta: string): void => {
+        if (delta.length === 0) return
+        if (!textStarted) {
+          bridge.onTextStart()
+          textStarted = true
+        }
+        bridge.onTextDelta(delta)
+      }
+
+      const transcriptTextByKey = new Map<string, string>()
+      const transcriptCreatedAtByKey = new Map<string, string>()
+      const transcriptDeltaSeqByKey = new Map<string, number>()
+      const transcriptFallbackIds = new Map<`input` | `output`, string>()
+      const inputTranscriptKeyByTurnId = new Map<string, string>()
+      const outputTranscriptKeyByResponseId = new Map<string, string>()
+      const outputTranscriptKeysByResponseId = new Map<string, Array<string>>()
+      const outputTranscriptSegmentByResponseId = new Map<string, number>()
+      const outputTranscriptSourceByKey = new Map<string, string>()
+      let transcriptFallbackCounter = 0
+      let pendingInputTranscriptKey: string | undefined
+      let activeOutputTranscript:
+        | { key: string; responseId?: string }
+        | undefined
+      let providerSessionId = realtimeSession?.id
+
+      const currentTranscriptSessionId = (): string =>
+        realtimeSession?.id ?? providerSessionId ?? `ephemeral`
+
+      const transcriptKey = (
+        direction: `input` | `output`,
+        id?: string
+      ): string => {
+        let stableId = id
+        if (!stableId) {
+          stableId = transcriptFallbackIds.get(direction)
+          if (!stableId) {
+            stableId = `fallback-${transcriptFallbackCounter}`
+            transcriptFallbackCounter += 1
+            transcriptFallbackIds.set(direction, stableId)
+          }
+        }
+        return `realtime-transcript:${currentTranscriptSessionId()}:${direction}:${stableId}`
+      }
+
+      const inputTranscriptKey = (turnId?: string): string => {
+        if (turnId) {
+          const existing = inputTranscriptKeyByTurnId.get(turnId)
+          if (existing) return existing
+          if (pendingInputTranscriptKey) {
+            inputTranscriptKeyByTurnId.set(turnId, pendingInputTranscriptKey)
+            return pendingInputTranscriptKey
+          }
+          const key = transcriptKey(`input`, turnId)
+          inputTranscriptKeyByTurnId.set(turnId, key)
+          return key
+        }
+        const key = pendingInputTranscriptKey ?? transcriptKey(`input`)
+        pendingInputTranscriptKey = key
+        return key
+      }
+
+      const trackOutputTranscriptKey = (
+        responseId: string | undefined,
+        key: string
+      ): void => {
+        activeOutputTranscript = { key, responseId }
+        if (!responseId) return
+        const keys = outputTranscriptKeysByResponseId.get(responseId) ?? []
+        if (!keys.includes(key)) {
+          keys.push(key)
+          outputTranscriptKeysByResponseId.set(responseId, keys)
+        }
+      }
+
+      const outputTranscriptKey = (responseId?: string): string => {
+        if (responseId) {
+          const existing = outputTranscriptKeyByResponseId.get(responseId)
+          if (existing) return existing
+          const key = transcriptKey(`output`, responseId)
+          outputTranscriptKeyByResponseId.set(responseId, key)
+          trackOutputTranscriptKey(responseId, key)
+          return key
+        }
+        const key = activeOutputTranscript?.responseId
+          ? transcriptKey(`output`)
+          : (activeOutputTranscript?.key ?? transcriptKey(`output`))
+        trackOutputTranscriptKey(undefined, key)
+        return key
+      }
+
+      const rotateActiveOutputTranscript = (): void => {
+        const active = activeOutputTranscript
+        if (!active) return
+        const text = transcriptTextByKey.get(active.key) ?? ``
+        if (text.length === 0) return
+
+        if (active.responseId) {
+          const nextSegment =
+            (outputTranscriptSegmentByResponseId.get(active.responseId) ?? 0) +
+            1
+          outputTranscriptSegmentByResponseId.set(
+            active.responseId,
+            nextSegment
+          )
+          const key = transcriptKey(
+            `output`,
+            `${active.responseId}:segment-${nextSegment}`
+          )
+          outputTranscriptKeyByResponseId.set(active.responseId, key)
+          trackOutputTranscriptKey(active.responseId, key)
+          return
+        }
+
+        transcriptFallbackIds.delete(`output`)
+        activeOutputTranscript = undefined
+      }
+
+      const outputTranscriptSourceRank = (source: string): number => {
+        switch (source) {
+          case `response.output_audio_transcript`:
+            return 3
+          case `response.audio_transcript`:
+            return 2
+          case `response.output_text`:
+            return 1
+          default:
+            return 0
+        }
+      }
+
+      const outputTranscriptSourceKey = (input: {
+        responseId?: string
+        itemId?: string
+        contentIndex?: number
+      }): string | undefined => {
+        if (input.responseId) {
+          return `${input.responseId}:${input.itemId ?? ``}:${input.contentIndex ?? 0}`
+        }
+        if (input.itemId) {
+          return `${input.itemId}:${input.contentIndex ?? 0}`
+        }
+        return undefined
+      }
+
+      const resetOutputTranscriptText = (
+        responseId: string | undefined
+      ): void => {
+        const keys = responseId
+          ? (outputTranscriptKeysByResponseId.get(responseId) ?? [])
+          : activeOutputTranscript
+            ? [activeOutputTranscript.key]
+            : []
+        for (const key of keys) {
+          transcriptTextByKey.set(key, ``)
+          deleteRealtimeTranscriptDeltas(key)
+        }
+      }
+
+      const shouldUseOutputTranscriptSource = (input: {
+        responseId?: string
+        itemId?: string
+        contentIndex?: number
+        transcriptSource?: string
+      }): boolean => {
+        if (!input.transcriptSource) return true
+        const key = outputTranscriptSourceKey(input)
+        if (!key) return true
+        const existing = outputTranscriptSourceByKey.get(key)
+        if (!existing) {
+          outputTranscriptSourceByKey.set(key, input.transcriptSource)
+          return true
+        }
+        if (existing === input.transcriptSource) return true
+        if (
+          outputTranscriptSourceRank(input.transcriptSource) >
+          outputTranscriptSourceRank(existing)
+        ) {
+          outputTranscriptSourceByKey.set(key, input.transcriptSource)
+          resetOutputTranscriptText(input.responseId)
+          return true
+        }
+        return false
+      }
+
+      const writeRealtimeTranscript = (input: {
+        direction: `input` | `output`
+        key: string
+        text: string
+        status: `partial` | `final`
+        turnId?: string
+        responseId?: string
+        allowEmpty?: boolean
+      }): void => {
+        const collection = config.db.collections.realtimeTranscripts
+        if (
+          input.text.length === 0 &&
+          !input.allowEmpty &&
+          !collection.has(input.key)
+        ) {
+          return
+        }
+
+        const existing = collection.get(input.key) as
+          | { created_at?: string }
+          | undefined
+        const createdAt =
+          transcriptCreatedAtByKey.get(input.key) ??
+          existing?.created_at ??
+          new Date().toISOString()
+        transcriptCreatedAtByKey.set(input.key, createdAt)
+
+        const value = {
+          session_id: currentTranscriptSessionId(),
+          direction: input.direction,
+          text: input.text,
+          status: input.status,
+          audio_stream: input.direction,
+          ...(input.turnId ? { turn_id: input.turnId } : {}),
+          ...(input.responseId ? { response_id: input.responseId } : {}),
+          created_at: createdAt,
+        }
+        config.writeEvent(
+          (collection.has(input.key)
+            ? entityStateSchema.realtimeTranscripts.update({
+                key: input.key,
+                value: value as never,
+              })
+            : entityStateSchema.realtimeTranscripts.insert({
+                key: input.key,
+                value: value as never,
+              })) as ChangeEvent
+        )
+
+        emitRealtimeTranscript(input)
+      }
+
+      const emitRealtimeTranscript = (input: {
+        direction: `input` | `output`
+        key: string
+        text: string
+        status: `partial` | `final`
+        turnId?: string
+        responseId?: string
+      }): void => {
+        const onTranscript = activeRealtimeConfig.onTranscript
+        if (!onTranscript) return
+        void Promise.resolve(
+          onTranscript({
+            key: input.key,
+            sessionId: currentTranscriptSessionId(),
+            direction: input.direction,
+            text: input.text,
+            status: input.status,
+            ...(input.turnId ? { turnId: input.turnId } : {}),
+            ...(input.responseId ? { responseId: input.responseId } : {}),
+          })
+        ).catch((error) => {
+          runtimeLog.warn(
+            `[agent-runtime]`,
+            `realtime transcript callback failed:`,
+            error
+          )
+        })
+      }
+
+      const writeRealtimeTranscriptDelta = (input: {
+        key: string
+        delta: string
+      }): void => {
+        if (input.delta.length === 0) return
+        const seq = transcriptDeltaSeqByKey.get(input.key) ?? 0
+        transcriptDeltaSeqByKey.set(input.key, seq + 1)
+        config.writeEvent(
+          entityStateSchema.textDeltas.insert({
+            key: `${input.key}:delta-${seq}`,
+            value: {
+              text_id: input.key,
+              realtime_transcript_id: input.key,
+              delta: input.delta,
+            } as never,
+          }) as ChangeEvent
+        )
+      }
+
+      const deleteRealtimeTranscriptDeltas = (key: string): void => {
+        const deltaCount = transcriptDeltaSeqByKey.get(key) ?? 0
+        for (let index = 0; index < deltaCount; index += 1) {
+          config.writeEvent(
+            entityStateSchema.textDeltas.delete({
+              key: `${key}:delta-${index}`,
+            }) as ChangeEvent
+          )
+        }
+        transcriptDeltaSeqByKey.set(key, 0)
+      }
+
+      const reconcileRealtimeTranscriptDeltas = (
+        key: string,
+        finalText: string
+      ): void => {
+        const currentText = transcriptTextByKey.get(key) ?? ``
+        if (finalText === currentText) return
+        if (finalText.startsWith(currentText)) {
+          writeRealtimeTranscriptDelta({
+            key,
+            delta: finalText.slice(currentText.length),
+          })
+          return
+        }
+        deleteRealtimeTranscriptDeltas(key)
+        writeRealtimeTranscriptDelta({ key, delta: finalText })
+      }
+
+      const beginRealtimeTranscript = (input: {
+        direction: `input` | `output`
+        turnId?: string
+        responseId?: string
+      }): void => {
+        const key =
+          input.direction === `input`
+            ? inputTranscriptKey(input.turnId)
+            : outputTranscriptKey(input.responseId)
+        const existing = config.db.collections.realtimeTranscripts.get(key) as
+          | { text?: string }
+          | undefined
+        const text = transcriptTextByKey.get(key) ?? existing?.text ?? ``
+        transcriptTextByKey.set(key, text)
+        writeRealtimeTranscript({
+          direction: input.direction,
+          key,
+          text,
+          status: `partial`,
+          turnId: input.turnId,
+          responseId: input.responseId,
+          allowEmpty: true,
+        })
+      }
+
+      const appendRealtimeTranscript = (input: {
+        direction: `input` | `output`
+        delta: string
+        turnId?: string
+        responseId?: string
+        itemId?: string
+        contentIndex?: number
+        transcriptSource?: string
+      }): void => {
+        if (input.delta.length === 0) return
+        if (
+          input.direction === `output` &&
+          !shouldUseOutputTranscriptSource(input)
+        ) {
+          return
+        }
+        const key =
+          input.direction === `input`
+            ? inputTranscriptKey(input.turnId)
+            : outputTranscriptKey(input.responseId)
+        const text = `${transcriptTextByKey.get(key) ?? ``}${input.delta}`
+        transcriptTextByKey.set(key, text)
+        if (!config.db.collections.realtimeTranscripts.has(key)) {
+          writeRealtimeTranscript({
+            direction: input.direction,
+            key,
+            text: ``,
+            status: `partial`,
+            turnId: input.turnId,
+            responseId: input.responseId,
+            allowEmpty: true,
+          })
+        }
+        writeRealtimeTranscriptDelta({ key, delta: input.delta })
+        emitRealtimeTranscript({
+          direction: input.direction,
+          key,
+          text,
+          status: `partial`,
+          turnId: input.turnId,
+          responseId: input.responseId,
+        })
+      }
+
+      const completeRealtimeTranscript = (input: {
+        direction: `input` | `output`
+        text?: string
+        turnId?: string
+        responseId?: string
+      }): void => {
+        const key =
+          input.direction === `input`
+            ? inputTranscriptKey(input.turnId)
+            : outputTranscriptKey(input.responseId)
+        const text = input.text ?? transcriptTextByKey.get(key) ?? ``
+        reconcileRealtimeTranscriptDeltas(key, text)
+        transcriptTextByKey.set(key, text)
+        writeRealtimeTranscript({
+          direction: input.direction,
+          key,
+          text,
+          status: `final`,
+          turnId: input.turnId,
+          responseId: input.responseId,
+        })
+        if (
+          (input.direction === `input` && !input.turnId) ||
+          (input.direction === `output` && !input.responseId)
+        ) {
+          transcriptFallbackIds.delete(input.direction)
+        }
+        if (input.direction === `input` && pendingInputTranscriptKey === key) {
+          pendingInputTranscriptKey = undefined
+          if (input.turnId) {
+            transcriptFallbackIds.delete(`input`)
+          }
+        }
+      }
+
+      const completeOutputTranscript = (input: {
+        text?: string
+        responseId?: string
+        itemId?: string
+        contentIndex?: number
+        transcriptSource?: string
+      }): void => {
+        if (!shouldUseOutputTranscriptSource(input)) return
+        const existingKeys = input.responseId
+          ? outputTranscriptKeysByResponseId.get(input.responseId)
+          : activeOutputTranscript
+            ? [activeOutputTranscript.key]
+            : undefined
+        const keys =
+          existingKeys && existingKeys.length > 0
+            ? existingKeys
+            : [outputTranscriptKey(input.responseId)]
+
+        for (const [index, key] of keys.entries()) {
+          const existing = config.db.collections.realtimeTranscripts.get(
+            key
+          ) as { text?: string } | undefined
+          const text =
+            keys.length === 1 && input.text !== undefined
+              ? input.text
+              : (transcriptTextByKey.get(key) ??
+                existing?.text ??
+                (index === keys.length - 1 ? (input.text ?? ``) : ``))
+          reconcileRealtimeTranscriptDeltas(key, text)
+          transcriptTextByKey.set(key, text)
+          writeRealtimeTranscript({
+            direction: `output`,
+            key,
+            text,
+            status: `final`,
+            responseId: input.responseId,
+          })
+        }
+
+        if (!input.responseId) {
+          transcriptFallbackIds.delete(`output`)
+        }
+        if (
+          activeOutputTranscript &&
+          activeOutputTranscript.responseId === input.responseId
+        ) {
+          activeOutputTranscript = undefined
+        }
+      }
+
+      const composedTools = (await composeToolsWithProviders(
+        activeRealtimeConfig.tools ?? []
+      )) as Array<AgentTool>
+      const providerTools = applyRealtimeToolPolicy(
+        composedTools,
+        activeRealtimeConfig.toolPolicy
+      )
+      const activeRealtimeSessionId = realtimeSession?.id
+      let realtimeCloseReason: string | undefined
+      const messages =
+        activeRealtimeConfig.context?.includeTimeline === false
+          ? []
+          : await hydrateAttachmentBlocks(
+              runtimeTimelineMessages(config.db, {
+                projection: (item) => {
+                  if (
+                    item.kind === `realtime_transcript` &&
+                    item.sessionId === activeRealtimeSessionId
+                  ) {
+                    return null
+                  }
+                  return defaultProjection(item)
+                },
+              }).map(({ at: _at, ...message }) => message as LLMMessage)
+            )
+      let realtimeIo: RealtimeStreamIo | undefined
+      let realtimeSessionTerminalWritten = false
+      let realtimeSessionLimitTimer: ReturnType<typeof setTimeout> | undefined
+      let unregisterLiveWakeHandler: (() => void) | undefined
+      let checkpointQueue: Promise<void> = Promise.resolve()
+
+      const checkpointRealtimeRun = async (): Promise<void> => {
+        checkpointQueue = checkpointQueue.then(async () => {
+          await config.prepareAgentRun?.()
+        })
+        await checkpointQueue
+      }
+
+      const liveWakeText = (wake: {
+        wakeEvent: WakeEvent
+        wakeOffset: string
+        events: Array<ChangeEvent>
+      }): string => {
+        const text = getTriggerMessageText(
+          config.db,
+          wake.wakeEvent,
+          wake.events,
+          wake.wakeOffset
+        )
+        if (wake.wakeEvent.type === `inbox`) {
+          return text
+        }
+        return [
+          `A live Electric Agents notification arrived while this realtime session is active.`,
+          `Treat it as fresh background context, not as user speech. If it changes what the user should know, respond briefly.`,
+          text,
+        ].join(`\n\n`)
+      }
+
+      async function handleProviderEvent(
+        event: RealtimeProviderEvent
+      ): Promise<void> {
+        switch (event.type) {
+          case `session.started`:
+            providerSessionId =
+              realtimeSession?.id ?? event.sessionId ?? providerSessionId
+            break
+
+          case `session.updated`:
+          case `output_audio.delta`:
+          case `output_audio.completed`:
+          case `response.started`:
+          case `response.cancelled`:
+            break
+
+          case `input_audio.speech_started`:
+            rotateActiveOutputTranscript()
+            beginRealtimeTranscript({
+              direction: `input`,
+              turnId: event.turnId,
+            })
+            break
+
+          case `input_audio.speech_stopped`:
+            if (event.turnId || pendingInputTranscriptKey) {
+              beginRealtimeTranscript({
+                direction: `input`,
+                turnId: event.turnId,
+              })
+            }
+            break
+
+          case `input_audio.committed`:
+            beginRealtimeTranscript({
+              direction: `input`,
+              turnId: event.turnId,
+            })
+            break
+
+          case `input_transcript.delta`:
+            appendRealtimeTranscript({
+              direction: `input`,
+              delta: event.delta,
+              turnId: event.turnId,
+            })
+            break
+
+          case `input_transcript.completed`:
+            completeRealtimeTranscript({
+              direction: `input`,
+              text: event.text,
+              turnId: event.turnId,
+            })
+            break
+
+          case `session.closed`:
+            realtimeCloseReason = event.reason
+            endText()
+            break
+
+          case `response.completed`:
+            endText()
+            break
+
+          case `session.error`:
+            if (event.code === `response_cancel_not_active`) {
+              runtimeLog.warn(
+                `[agent-runtime]`,
+                `realtime provider ignored inactive response cancellation: ${event.error}`
+              )
+              break
+            }
+            if (
+              event.code === `invalid_value` &&
+              event.error.includes(`Audio content`) &&
+              event.error.includes(`already shorter than`)
+            ) {
+              runtimeLog.warn(
+                `[agent-runtime]`,
+                `realtime provider ignored stale output audio truncate: ${event.error}`
+              )
+              break
+            }
+            throw new Error(
+              `[agent-runtime] realtime provider error${event.code ? ` ${event.code}` : ``}: ${event.error}`
+            )
+
+          case `output_transcript.delta`:
+            appendRealtimeTranscript({
+              direction: `output`,
+              delta: event.delta,
+              responseId: event.responseId,
+              itemId: event.itemId,
+              contentIndex: event.contentIndex,
+              transcriptSource: event.transcriptSource,
+            })
+            break
+
+          case `output_transcript.completed`:
+            completeOutputTranscript({
+              text: event.text,
+              responseId: event.responseId,
+              itemId: event.itemId,
+              contentIndex: event.contentIndex,
+              transcriptSource: event.transcriptSource,
+            })
+            break
+
+          case `tool_call.started`:
+            currentToolCall = {
+              toolCallId: event.toolCallId,
+              name: event.name,
+              args: event.args,
+            }
+            if (event.args !== undefined) {
+              bridge.onToolCallStart(event.toolCallId, event.name, event.args)
+            }
+            break
+
+          case `tool_call.arguments_delta`:
+            break
+
+          case `tool_call.arguments_completed`:
+            currentToolCall = {
+              toolCallId: event.toolCallId,
+              name: event.name,
+              args: event.args,
+            }
+            bridge.onToolCallStart(event.toolCallId, event.name, event.args)
+            break
+
+          case `tool_call.completed`: {
+            if (currentToolCall?.toolCallId !== event.toolCallId) {
+              bridge.onToolCallStart(event.toolCallId, event.name, {})
+            }
+            bridge.onToolCallEnd(
+              event.toolCallId,
+              event.name,
+              event.result,
+              event.isError ?? false
+            )
+            await checkpointRealtimeRun()
+            break
+          }
+        }
+      }
+
+      try {
+        bridge.onRunStart()
+        bridge.onStepStart({
+          modelProvider: activeRealtimeConfig.provider.id,
+          modelId: activeRealtimeConfig.provider.model,
+        })
+
+        if (activeRealtimeConfig.testResponses) {
+          const messageText = getTriggerMessageText(
+            config.db,
+            config.wakeEvent,
+            config.events,
+            config.wakeOffset,
+            config.hydratedWebhookSourceWake
+          )
+          const responses = activeRealtimeConfig.testResponses
+          if (Array.isArray(responses)) {
+            const priorRunCount = (
+              await queryOnce((q) =>
+                q.from({ runs: config.db.collections.runs })
+              )
+            ).length
+            emitText(
+              responses[priorRunCount % Math.max(responses.length, 1)] ?? ``
+            )
+          } else {
+            const response = await responses(messageText, bridge)
+            if (response !== undefined) emitText(response)
+          }
+          endText()
+        } else {
+          activeRealtimeProviderSession =
+            await activeRealtimeConfig.provider.connect({
+              systemPrompt: activeRealtimeConfig.systemPrompt,
+              messages,
+              tools: providerTools,
+              audio: activeRealtimeConfig.audio,
+              session: realtimeSession,
+              signal: config.runSignal,
+            })
+          realtimeSessionLimitTimer = setTimeout(() => {
+            runtimeLog.info(
+              `[agent-runtime]`,
+              `realtime session soft limit reached session=${realtimeSession?.id ?? `ephemeral`}`
+            )
+            void activeRealtimeProviderSession?.close?.(
+              `session-duration-limit`
+            )
+          }, REALTIME_SESSION_SOFT_LIMIT_MS)
+          await updateRealtimeSessionStatus(realtimeSession, `active`)
+          realtimeIo = createRealtimeStreamIo(
+            config,
+            realtimeSession,
+            activeRealtimeProviderSession,
+            activeRealtimeConfig.audio
+          )
+          unregisterLiveWakeHandler = config.registerLiveWakeHandler?.(
+            async (wake) => {
+              if (config.runSignal?.aborted) {
+                return false
+              }
+              const providerSession = activeRealtimeProviderSession
+              if (!providerSession?.sendText) {
+                return false
+              }
+              await checkpointRealtimeRun()
+              await providerSession.sendText(liveWakeText(wake))
+              await checkpointRealtimeRun()
+              return true
+            }
+          )
+
+          for await (const event of activeRealtimeProviderSession.events) {
+            if (config.runSignal?.aborted) {
+              break
+            }
+            await realtimeIo?.writeProviderEvent(event)
+            await handleProviderEvent(event)
+          }
+        }
+
+        endText()
+        await updateRealtimeSessionStatus(realtimeSession, `closed`, {
+          reason: config.runSignal?.aborted
+            ? `aborted`
+            : (realtimeCloseReason ?? `completed`),
+        })
+        realtimeSessionTerminalWritten = true
+        bridge.onStepEnd({
+          finishReason: config.runSignal?.aborted ? `aborted` : `stop`,
+          durationMs: Date.now() - startedAt,
+        })
+        bridge.onRunEnd({
+          finishReason: config.runSignal?.aborted ? `aborted` : `stop`,
+        })
+      } catch (error) {
+        endText()
+        if (!realtimeSessionTerminalWritten) {
+          await updateRealtimeSessionStatus(realtimeSession, `failed`, {
+            error: error instanceof Error ? error.message : String(error),
+          })
+          realtimeSessionTerminalWritten = true
+        }
+        bridge.onStepEnd({
+          finishReason: `error`,
+          durationMs: Date.now() - startedAt,
+        })
+        bridge.onRunEnd({ finishReason: `error` })
+        throw error
+      } finally {
+        unregisterLiveWakeHandler?.()
+        await checkpointQueue.catch(() => undefined)
+        if (realtimeSessionLimitTimer) {
+          clearTimeout(realtimeSessionLimitTimer)
+        }
+        await realtimeIo?.close()
+        activeRealtimeProviderSession = null
+      }
+
+      return {
+        writes: [],
+        toolCalls: [],
+        usage: { tokens: 0, duration: Date.now() - startedAt },
+      }
+    },
+    async close(reason?: string): Promise<void> {
+      await activeRealtimeProviderSession?.close?.(reason)
+    },
+    async stop(reason?: string): Promise<void> {
+      await this.close(reason)
+    },
+    async cancelResponse(): Promise<void> {
+      await activeRealtimeProviderSession?.cancelResponse?.()
+    },
+    async sendText(text: string): Promise<void> {
+      await activeRealtimeProviderSession?.sendText?.(text)
+    },
+  }
+
   const ctx: DebugHandlerContext<TState> = {
     firstWake: config.firstWake,
     wake: toHandlerWake(config.wakeEvent),
@@ -969,6 +2636,10 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
     useAgent(cfg) {
       agentConfig = cfg
       return agent
+    },
+    useRealtime(cfg) {
+      realtimeConfig = cfg
+      return realtimeHandle
     },
     useContext(nextConfig) {
       assertValidUseContextConfig(nextConfig)
@@ -995,6 +2666,10 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
       useContextRegistrations: () => useContextRegistrations,
     },
     agent,
+    realtime: {
+      activeSession: activeRealtimeSession,
+      sessions: realtimeSessions,
+    },
     observe: ((source: ObservationSource, opts?: { wake?: Wake }) => {
       return config.doObserve(source, opts?.wake) as Promise<
         ObservationHandle & EntityHandle & SharedStateHandle

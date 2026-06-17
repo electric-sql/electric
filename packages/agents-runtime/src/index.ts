@@ -7,10 +7,33 @@ export type {
   ManifestAttachmentEntry,
   ManifestChildEntry,
   ManifestContextEntry,
+  ManifestDocumentEntry,
   ManifestEntry,
   ManifestEffectEntry,
+  ManifestRealtimeSessionEntry,
   ManifestSourceEntry,
   ManifestSharedStateEntry,
+  RealtimeAudioSpan,
+  RealtimeAudioConfig,
+  RealtimeAudioFormat,
+  RealtimeConfig,
+  RealtimeContextConfig,
+  RealtimeHandle,
+  RealtimeHelpers,
+  RealtimeProviderConfig,
+  RealtimeProviderConnectInput,
+  RealtimeProviderEvent,
+  RealtimeProviderSession,
+  RealtimeRunResult,
+  RealtimeSession,
+  RealtimeSessionPolicy,
+  RealtimeSessionStatus,
+  RealtimeSessionStreamRefs,
+  RealtimeToolPolicy,
+  RealtimeToolResult,
+  RealtimeTranscript,
+  RealtimeTranscriptEvent,
+  RealtimeTurnDetectionConfig,
   PendingSend,
   EffectConfig,
   ObservationSource,
@@ -74,6 +97,7 @@ export type {
   GeneratedStateActions,
   HandlerActions,
   ManifestContextEntry as ManifestContextRow,
+  ManifestDocumentEntry as ManifestDocumentRow,
   SchemaInput,
   SchemaOutput,
   SourceConfig,
@@ -117,14 +141,46 @@ export type {
   AttachmentSubject,
   AttachmentSubjectType,
   ManifestContextEntry as ManifestContextEntryRow,
+  ManifestDocumentEntry as ManifestDocumentEntryRow,
+  ManifestRealtimeSessionEntry as ManifestRealtimeSessionEntryRow,
+  RealtimeAudioSpan as RealtimeAudioSpanRow,
+  RealtimeSession as RealtimeSessionRow,
+  RealtimeSessionStatus as RealtimeSessionStatusRow,
+  RealtimeSessionStreamRefs as RealtimeSessionStreamRefsRow,
+  RealtimeTranscript as RealtimeTranscriptRow,
   ReplayWatermark,
   WakeConfigValue,
 } from './entity-schema'
 
 export { createEntityStreamDB } from './entity-stream-db'
+export { createTestRealtimeProvider } from './realtime'
+export type { TestRealtimeProviderOptions } from './realtime'
+export { createOpenAIRealtimeProvider } from './openai-realtime'
+export type { OpenAIRealtimeProviderOptions } from './openai-realtime'
+export {
+  DEFAULT_OPENAI_REALTIME_MODEL,
+  DEFAULT_OPENAI_REALTIME_REASONING_EFFORT,
+  DEFAULT_OPENAI_REALTIME_VOICE,
+  OPENAI_REALTIME_MODELS,
+  OPENAI_REALTIME_REASONING_EFFORTS,
+  OPENAI_REALTIME_VOICES,
+  isOpenAIRealtimeModel,
+  isOpenAIRealtimeReasoningEffort,
+  isOpenAIRealtimeVoice,
+} from './realtime-options'
+export type {
+  OpenAIRealtimeReasoningEffort,
+  RealtimeModelChoice,
+  RealtimeProviderId,
+  RealtimeReasoningEffortChoice,
+  RealtimeVoiceChoice,
+} from './realtime-options'
 export {
   getEntityAttachmentStreamPath,
+  getEntityMarkdownDocumentPath,
+  getEntityMarkdownDocumentUrlPath,
   manifestAttachmentKey,
+  manifestMarkdownDocumentKey,
 } from './manifest-helpers'
 export {
   COMPOSER_INPUT_MESSAGE_TYPE,
@@ -261,6 +317,9 @@ export type {
   DispatchPolicy,
   SpawnEntityOptions,
   SendEntityMessageOptions,
+  RealtimeAudioOptions,
+  RealtimeSessionStartResult,
+  StartRealtimeSessionOptions,
 } from './runtime-server-client'
 export {
   buildWebhookSourceManifestEntry,

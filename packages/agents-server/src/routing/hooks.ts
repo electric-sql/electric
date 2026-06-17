@@ -89,6 +89,15 @@ export function applyCors(
       `electric-owner-entity`,
       ELECTRIC_PRINCIPAL_HEADER,
       `ngrok-skip-browser-warning`,
+      `producer-id`,
+      `producer-epoch`,
+      `producer-seq`,
+      `producer-expected-seq`,
+      `producer-received-seq`,
+      `stream-closed`,
+      `stream-expires-at`,
+      `stream-seq`,
+      `stream-ttl`,
     ].join(`, `)
   )
   headers.set(`access-control-expose-headers`, `*`)

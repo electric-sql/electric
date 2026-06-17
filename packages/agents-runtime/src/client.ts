@@ -13,6 +13,24 @@ export {
   TIMELINE_ORDER_FALLBACK,
 } from './entity-timeline'
 export {
+  DEFAULT_OPENAI_REALTIME_MODEL,
+  DEFAULT_OPENAI_REALTIME_REASONING_EFFORT,
+  DEFAULT_OPENAI_REALTIME_VOICE,
+  OPENAI_REALTIME_MODELS,
+  OPENAI_REALTIME_REASONING_EFFORTS,
+  OPENAI_REALTIME_VOICES,
+  isOpenAIRealtimeModel,
+  isOpenAIRealtimeReasoningEffort,
+  isOpenAIRealtimeVoice,
+} from './realtime-options'
+export type {
+  OpenAIRealtimeReasoningEffort,
+  RealtimeModelChoice,
+  RealtimeProviderId,
+  RealtimeReasoningEffortChoice,
+  RealtimeVoiceChoice,
+} from './realtime-options'
+export {
   canonicalPgSyncOptions,
   db,
   entities,
@@ -29,7 +47,10 @@ export {
 export { appendPathToUrl } from './url'
 export {
   getEntityAttachmentStreamPath,
+  getEntityMarkdownDocumentPath,
+  getEntityMarkdownDocumentUrlPath,
   manifestAttachmentKey,
+  manifestMarkdownDocumentKey,
 } from './manifest-helpers'
 export { buildSections, buildTimelineEntries } from './use-chat'
 export {
@@ -47,6 +68,7 @@ export {
 export { isGoalCommandText, parseGoalCommand } from './goal-command'
 export { formatTokenCount } from './token-budget'
 export type { GoalCommand } from './goal-command'
+export { MARKDOWN_DOCUMENT_AGENT_PRESENCE_TTL_MS } from './markdown-document-constants'
 
 export type {
   EntityStreamDB,
@@ -61,6 +83,11 @@ export type {
 } from './composer-input'
 export type { AgentsClient, AgentsClientConfig } from './agents-client'
 export type {
+  RealtimeAudioOptions,
+  RealtimeSessionStartResult,
+  StartRealtimeSessionOptions,
+} from './runtime-server-client'
+export type {
   AttachmentRole,
   AttachmentStatus,
   AttachmentSubject,
@@ -68,6 +95,7 @@ export type {
   GoalStatus,
   Manifest,
   ManifestAttachmentEntry,
+  ManifestDocumentEntry,
   ManifestGoalEntry,
 } from './entity-schema'
 export type {

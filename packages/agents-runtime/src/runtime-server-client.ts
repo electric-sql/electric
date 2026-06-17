@@ -9,9 +9,13 @@ import type {
   AttachmentCreateInput,
   ClaimTokenHeader,
   HeadersProvider,
+  MarkdownDocumentConnection,
   ManifestAttachmentEntry,
+  ManifestDocumentEntry,
 } from './types'
 import type { EntitySignal } from './entity-schema'
+import type { RealtimeSessionStreamRefs } from './entity-schema'
+import type { OpenAIRealtimeReasoningEffort } from './realtime-options'
 import type {
   WebhookSourceContract,
   WebhookSourceSubscription,
@@ -20,6 +24,13 @@ import type {
 export type { EntitySignal } from './entity-schema'
 
 const ELECTRIC_PRINCIPAL_HEADER = `electric-principal`
+
+function bytesBody(bytes: Uint8Array): ArrayBuffer {
+  return bytes.buffer.slice(
+    bytes.byteOffset,
+    bytes.byteOffset + bytes.byteLength
+  ) as ArrayBuffer
+}
 
 export interface RuntimeServerClientConfig {
   baseUrl: string
@@ -95,6 +106,38 @@ export interface SendEntityMessageOptions {
   writeToken?: string
 }
 
+export interface RealtimeAudioOptions {
+  codec?: `pcm16`
+  sampleRate?: number
+  channels?: number
+}
+
+export interface StartRealtimeSessionOptions {
+  entityUrl: string
+  id?: string
+  provider: string
+  model: string
+  voice?: string
+  reasoningEffort?: OpenAIRealtimeReasoningEffort
+  interruptResponse?: boolean
+  inputAudio?: RealtimeAudioOptions
+  outputAudio?: RealtimeAudioOptions
+  meta?: Record<string, unknown>
+}
+
+export interface RealtimeSessionStartResult {
+  sessionId: string
+  entityUrl: string
+  provider: string
+  model: string
+  voice?: string
+  reasoningEffort?: OpenAIRealtimeReasoningEffort
+  interruptResponse?: boolean
+  status: `requested`
+  startedAt: string
+  streams: RealtimeSessionStreamRefs
+}
+
 export interface RegisterWakeOptions {
   subscriberUrl: string
   sourceUrl: string
@@ -120,6 +163,9 @@ export interface SignalEntityOptions {
 
 export interface RuntimeServerClient {
   sendEntityMessage: (options: SendEntityMessageOptions) => Promise<void>
+  startRealtimeSession: (
+    options: StartRealtimeSessionOptions
+  ) => Promise<RealtimeSessionStartResult>
   createAttachment: (options: {
     entityUrl: string
     attachment: AttachmentCreateInput
@@ -128,6 +174,27 @@ export interface RuntimeServerClient {
     entityUrl: string
     id: string
   }) => Promise<Uint8Array>
+  createMarkdownDocument: (options: {
+    entityUrl: string
+    id?: string
+    title: string
+    meta?: Record<string, unknown>
+  }) => Promise<{ txid: string; document: ManifestDocumentEntry }>
+  getMarkdownDocumentConnection: (
+    streamPath: string
+  ) => Promise<MarkdownDocumentConnection>
+  readMarkdownDocumentStream: (
+    streamPath: string,
+    opts?: { offset?: string }
+  ) => Promise<{ bytes: Uint8Array; offset?: string }>
+  appendMarkdownDocumentUpdate: (
+    streamPath: string,
+    update: Uint8Array
+  ) => Promise<{ offset?: string }>
+  appendMarkdownDocumentAwareness: (
+    streamPath: string,
+    update: Uint8Array
+  ) => Promise<{ offset?: string }>
   spawnEntity: (options: SpawnEntityOptions) => Promise<RuntimeEntityInfo>
   /**
    * Fork an entity at the server-resolved `latest_completed_run` anchor.
@@ -386,6 +453,24 @@ export function createRuntimeServerClient(
     }
   }
 
+  const startRealtimeSession = async (
+    options: StartRealtimeSessionOptions
+  ): Promise<RealtimeSessionStartResult> => {
+    const response = await request(`/_electric/realtime/sessions`, {
+      method: `POST`,
+      headers: { 'content-type': `application/json` },
+      body: JSON.stringify(options),
+    })
+
+    if (!response.ok) {
+      throw new Error(
+        `startRealtimeSession ${options.entityUrl} failed (${response.status}): ${await readErrorText(response)}`
+      )
+    }
+
+    return (await response.json()) as RealtimeSessionStartResult
+  }
+
   const createAttachment = async ({
     entityUrl,
     attachment,
@@ -455,6 +540,129 @@ export function createRuntimeServerClient(
       )
     }
     return new Uint8Array(await response.arrayBuffer())
+  }
+
+  const createMarkdownDocument = async ({
+    entityUrl,
+    id,
+    title,
+    meta,
+  }: {
+    entityUrl: string
+    id?: string
+    title: string
+    meta?: Record<string, unknown>
+  }): Promise<{ txid: string; document: ManifestDocumentEntry }> => {
+    const response = await request(`${entityRpcPath(entityUrl)}/documents`, {
+      method: `POST`,
+      headers: { 'content-type': `application/json` },
+      body: JSON.stringify({ id, title, meta }),
+    })
+    if (!response.ok) {
+      throw new Error(
+        `create markdown document on ${entityUrl} failed (${response.status}): ${await readErrorText(response)}`
+      )
+    }
+    return (await response.json()) as {
+      txid: string
+      document: ManifestDocumentEntry
+    }
+  }
+
+  const getMarkdownDocumentConnection = async (
+    streamPath: string
+  ): Promise<MarkdownDocumentConnection> => {
+    const docsIndex = streamPath.indexOf(`/docs/`)
+    if (docsIndex < 0) {
+      throw new Error(
+        `markdown document stream path is missing /docs/: ${streamPath}`
+      )
+    }
+    const prefix = streamPath.slice(0, docsIndex)
+    const docId = streamPath.slice(docsIndex + `/docs/`.length)
+    const headers = await resolveHeaders()
+    if (config.principalKey) {
+      headers.set(ELECTRIC_PRINCIPAL_HEADER, config.principalKey)
+    }
+    const headerRecord: Record<string, string> = {}
+    headers.forEach((value, key) => {
+      headerRecord[key] = value
+    })
+    return {
+      baseUrl: appendPathToUrl(config.baseUrl, prefix).replace(/\/+$/, ``),
+      docId,
+      headers: headerRecord,
+    }
+  }
+
+  const readMarkdownDocumentStream = async (
+    streamPath: string,
+    opts?: { offset?: string }
+  ): Promise<{ bytes: Uint8Array; offset?: string }> => {
+    const url = new URL(streamPath, `http://agent-runtime.local`)
+    if (opts?.offset !== undefined) {
+      url.searchParams.set(`offset`, opts.offset)
+    }
+    const path = `${url.pathname}${url.search}`
+    const response = await request(path, { method: `GET` })
+    if (!response.ok) {
+      throw new Error(
+        `read markdown document stream ${path} failed (${response.status}): ${await readErrorText(response)}`
+      )
+    }
+    return {
+      bytes: new Uint8Array(await response.arrayBuffer()),
+      offset: response.headers.get(`stream-next-offset`) ?? undefined,
+    }
+  }
+
+  const appendMarkdownDocumentUpdate = async (
+    streamPath: string,
+    update: Uint8Array
+  ): Promise<{ offset?: string }> => {
+    const response = await request(streamPath, {
+      method: `POST`,
+      headers: { 'content-type': `application/octet-stream` },
+      body: bytesBody(update),
+    })
+    if (!response.ok) {
+      throw new Error(
+        `append markdown document update ${streamPath} failed (${response.status}): ${await readErrorText(response)}`
+      )
+    }
+    return {
+      offset: response.headers.get(`stream-next-offset`) ?? undefined,
+    }
+  }
+
+  const appendMarkdownDocumentAwareness = async (
+    streamPath: string,
+    update: Uint8Array
+  ): Promise<{ offset?: string }> => {
+    const awarenessPath = `${streamPath}?awareness=default`
+    const append = () =>
+      request(awarenessPath, {
+        method: `POST`,
+        headers: { 'content-type': `application/octet-stream` },
+        body: bytesBody(update),
+      })
+    let response = await append()
+    if (response.status === 404) {
+      response = await request(awarenessPath, {
+        method: `PUT`,
+        headers: { 'content-type': `application/octet-stream` },
+        body: bytesBody(update),
+      })
+      if (response.status === 409) response = await append()
+    }
+    if (!response.ok) {
+      throw new Error(
+        `append markdown document awareness ${streamPath} failed (${response.status}): ${await readErrorText(response)}`
+      )
+    }
+    return {
+      offset: response.headers.get(`stream-next-offset`) ?? undefined,
+    }
   }
 
   const getEntity = async (entityUrl: string): Promise<RuntimeEntityInfo> => {
@@ -940,8 +1148,14 @@ export function createRuntimeServerClient(
 
   return {
     sendEntityMessage,
+    startRealtimeSession,
     createAttachment,
     readAttachment,
+    createMarkdownDocument,
+    getMarkdownDocumentConnection,
+    readMarkdownDocumentStream,
+    appendMarkdownDocumentUpdate,
+    appendMarkdownDocumentAwareness,
     spawnEntity,
     forkEntity,
     getEntity,

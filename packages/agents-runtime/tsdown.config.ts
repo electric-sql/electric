@@ -8,6 +8,8 @@ const config: Options = {
     `src/sandbox.ts`,
     `src/sandbox-docker.ts`,
     `src/client.ts`,
+    `src/use-chat.ts`,
+    `src/use-chat-hook.ts`,
     // First-class entry so its .d.ts is stable (raced chunk fails dts gen in CI).
     `src/skills/types.ts`,
   ],

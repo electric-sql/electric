@@ -1,0 +1,1064 @@
+import { createTwoFilesPatch } from 'diff'
+import { Type } from '@sinclair/typebox'
+import {
+  markdownIndexFromRelativePosition,
+  relativePositionAtMarkdownIndex,
+} from '../markdown-yjs'
+import {
+  openMarkdownDocumentSession,
+  type MarkdownDocumentSession,
+} from '../markdown-document-session'
+import type { AgentTool, ProcessWakeConfig } from '../types'
+import type { ManifestDocumentEntry } from '../entity-schema'
+import * as Y from 'yjs'
+
+type ElectricToolContextBase = Parameters<
+  NonNullable<ProcessWakeConfig[`createElectricTools`]>
+>[0]
+
+type ElectricToolContext = ElectricToolContextBase & {
+  openMarkdownDocumentSession?: (opts: {
+    document: ManifestDocumentEntry
+    entityUrl: string
+    principal: ElectricToolContextBase[`principal`]
+  }) => Promise<MarkdownDocumentSession>
+}
+
+function docLabel(id: string): string {
+  return `markdown-doc:${id}`
+}
+
+type InsertMarkdownArgs = {
+  id: string
+  content: string
+  index?: number
+}
+
+type ReplaceMarkdownArgs = {
+  id: string
+  content: string
+  old_string?: string
+  occurrence?: number
+  index?: number
+  length?: number
+}
+
+type SetCursorArgs = {
+  id: string
+  index?: number
+  before?: string
+  after?: string
+  occurrence?: number
+}
+
+type InsertSession = {
+  id?: string
+  inserted: string
+  nextIndex?: number
+  nextPosition?: Y.RelativePosition
+  seq: number
+  streamed: boolean
+  pending: Promise<void>
+  error?: unknown
+}
+
+type ReplaceSession = InsertSession & {
+  prepared?: boolean
+  deleted?: string
+  deleteIndex?: number
+  deleteLength?: number
+  beforeContent?: string
+}
+
+type MaterializedMarkdownDocument = {
+  document: ManifestDocumentEntry
+  session: MarkdownDocumentSession
+  textName: string
+}
+
+function injectedMarkdownDocuments(
+  args: Readonly<Record<string, unknown>>
+): Array<ManifestDocumentEntry> {
+  const docs = args.markdownDocs
+  if (!Array.isArray(docs)) return []
+  return docs.filter(isManifestDocumentEntry)
+}
+
+function isManifestDocumentEntry(
+  value: unknown
+): value is ManifestDocumentEntry {
+  if (!value || typeof value !== `object`) return false
+  const entry = value as Partial<ManifestDocumentEntry>
+  return (
+    entry.kind === `document` &&
+    typeof entry.id === `string` &&
+    entry.provider === `y-durable-streams` &&
+    typeof entry.docPath === `string` &&
+    typeof entry.streamPath === `string` &&
+    entry.transportMimeType ===
+      `application/vnd.electric-agents.markdown-yjs` &&
+    entry.contentMimeType === `text/markdown` &&
+    entry.yTextName === `markdown` &&
+    typeof entry.title === `string`
+  )
+}
+
+function asInsertArgs(value: unknown): Partial<InsertMarkdownArgs> {
+  if (!value || typeof value !== `object`) return {}
+  const input = value as Record<string, unknown>
+  return {
+    ...(typeof input.id === `string` && { id: input.id }),
+    ...(typeof input.content === `string` && { content: input.content }),
+    ...(typeof input.index === `number` && Number.isFinite(input.index)
+      ? { index: input.index }
+      : {}),
+  }
+}
+
+function asReplaceArgs(value: unknown): Partial<ReplaceMarkdownArgs> {
+  if (!value || typeof value !== `object`) return {}
+  const input = value as Record<string, unknown>
+  return {
+    ...(typeof input.id === `string` && { id: input.id }),
+    ...(typeof input.content === `string` && { content: input.content }),
+    ...(typeof input.old_string === `string` && {
+      old_string: input.old_string,
+    }),
+    ...(typeof input.occurrence === `number` &&
+    Number.isFinite(input.occurrence)
+      ? { occurrence: input.occurrence }
+      : {}),
+    ...(typeof input.index === `number` && Number.isFinite(input.index)
+      ? { index: input.index }
+      : {}),
+    ...(typeof input.length === `number` && Number.isFinite(input.length)
+      ? { length: input.length }
+      : {}),
+  }
+}
+
+export function createMarkdownDocumentTools(
+  context: ElectricToolContext
+): Array<AgentTool> {
+  const readDocs = new Map<string, string>()
+  const insertSessions = new Map<string, InsertSession>()
+  const replaceSessions = new Map<string, ReplaceSession>()
+  const materializedDocs = new Map<string, MaterializedMarkdownDocument>()
+  const cursorPositions = new Map<string, Y.RelativePosition>()
+
+  const findManifestDocument = (
+    id: string
+  ): ManifestDocumentEntry | undefined => {
+    const manifests = context.db.collections.manifests?.toArray as
+      | Array<unknown>
+      | undefined
+    return (
+      manifests?.find(
+        (entry): entry is ManifestDocumentEntry =>
+          isManifestDocumentEntry(entry) && entry.id === id
+      ) ??
+      injectedMarkdownDocuments(context.args).find(
+        (entry): entry is ManifestDocumentEntry =>
+          isManifestDocumentEntry(entry) && entry.id === id
+      )
+    )
+  }
+
+  context.registerCleanup(async () => {
+    const sessions = Array.from(materializedDocs.values())
+    materializedDocs.clear()
+    await Promise.all(
+      sessions.map((materialized) => materialized.session.close())
+    )
+  })
+
+  const openDocumentSession = async (
+    document: ManifestDocumentEntry
+  ): Promise<MaterializedMarkdownDocument> => {
+    const cached = materializedDocs.get(document.id)
+    if (cached) return cached
+    const session = context.openMarkdownDocumentSession
+      ? await context.openMarkdownDocumentSession({
+          document,
+          entityUrl: context.entityUrl,
+          principal: context.principal,
+        })
+      : await openMarkdownDocumentSession({
+          document,
+          connection: await context.getMarkdownDocumentConnection(
+            document.streamPath
+          ),
+          entityUrl: context.entityUrl,
+          principal: context.principal,
+        })
+    const materialized = {
+      document,
+      session,
+      textName: document.yTextName,
+    }
+    materializedDocs.set(document.id, materialized)
+    readDocs.set(document.id, contentOf(materialized))
+    return materialized
+  }
+
+  const materializeDocument = async (
+    id: string
+  ): Promise<MaterializedMarkdownDocument> => {
+    const cached = materializedDocs.get(id)
+    if (cached) return cached
+    const document = findManifestDocument(id)
+    if (!document) {
+      throw new Error(
+        `Markdown document ${JSON.stringify(
+          id
+        )} is not in this entity's manifest or injected document refs. Create it with create_markdown_doc first or pass the document ref to this worker.`
+      )
+    }
+    return openDocumentSession(document)
+  }
+
+  const contentOf = (materialized: MaterializedMarkdownDocument): string =>
+    materialized.session.content()
+
+  const appendPresence = async (
+    materialized: MaterializedMarkdownDocument,
+    opts: { anchor?: number; head?: number; clear?: boolean }
+  ): Promise<void> => {
+    await materialized.session.setPresence(opts).catch(() => undefined)
+  }
+
+  const applyInsertChunk = async (
+    id: string,
+    chunk: string,
+    session: InsertSession,
+    index?: number
+  ): Promise<void> => {
+    const materialized = await materializeDocument(id)
+    const text = materialized.session.text
+    const position =
+      session.nextPosition ??
+      (index === undefined ? cursorPositions.get(id) : undefined)
+    const absolute = position
+      ? Y.createAbsolutePositionFromRelativePosition(
+          position,
+          materialized.session.doc
+        )
+      : null
+    const insertIndex =
+      absolute && absolute.type === text
+        ? Math.max(0, Math.min(absolute.index, text.length))
+        : Math.max(
+            0,
+            Math.min(
+              session.nextIndex ?? (index !== undefined ? index : text.length),
+              text.length
+            )
+          )
+    if (chunk.length > 0) {
+      materialized.session.doc.transact(() => {
+        text.insert(insertIndex, chunk)
+      }, `agent`)
+    }
+    const nextIndex = insertIndex + chunk.length
+    const nextPosition = Y.createRelativePositionFromTypeIndex(text, nextIndex)
+    await appendPresence(materialized, {
+      anchor: nextIndex,
+      head: nextIndex,
+    })
+    session.nextIndex = nextIndex
+    session.nextPosition = nextPosition
+    cursorPositions.set(id, nextPosition)
+    session.streamed = true
+    readDocs.set(id, contentOf(materialized))
+  }
+
+  const setCursor = async (
+    id: string,
+    index: number
+  ): Promise<{ materialized: MaterializedMarkdownDocument; index: number }> => {
+    const materialized = await materializeDocument(id)
+    const text = materialized.session.text
+    const boundedIndex = Math.max(0, Math.min(index, text.length))
+    const position = relativePositionAtMarkdownIndex(
+      materialized.session.doc,
+      boundedIndex,
+      materialized.textName
+    )
+    cursorPositions.set(id, position)
+    return { materialized, index: boundedIndex }
+  }
+
+  const resolveCursorIndex = (
+    content: string,
+    args: SetCursorArgs
+  ): { index?: number; error?: string } => {
+    const locatorCount =
+      (args.index !== undefined ? 1 : 0) +
+      (args.before !== undefined ? 1 : 0) +
+      (args.after !== undefined ? 1 : 0)
+    if (locatorCount > 1) {
+      return { error: `Pass only one of index, before, or after.` }
+    }
+    if (args.index !== undefined) return { index: args.index }
+    const needle = args.before ?? args.after
+    if (needle === undefined) return { index: content.length }
+    if (needle.length === 0) {
+      return { error: `before/after must not be empty.` }
+    }
+    const occurrence = Math.max(1, Math.floor(args.occurrence ?? 1))
+    let from = 0
+    let found = -1
+    for (let count = 0; count < occurrence; count += 1) {
+      found = content.indexOf(needle, from)
+      if (found < 0) {
+        return {
+          error: `Could not find occurrence ${occurrence} of ${JSON.stringify(
+            needle
+          )}.`,
+        }
+      }
+      from = found + needle.length
+    }
+    return { index: args.after !== undefined ? found + needle.length : found }
+  }
+
+  const resolveReplaceRange = (
+    content: string,
+    args: Omit<ReplaceMarkdownArgs, `content`>
+  ): { index?: number; length?: number; deleted?: string; error?: string } => {
+    const hasOldString = args.old_string !== undefined
+    const hasRange = args.index !== undefined || args.length !== undefined
+    if (hasOldString && hasRange) {
+      return { error: `Pass either old_string or index/length, not both.` }
+    }
+    if (!hasOldString && !hasRange) {
+      return { error: `Pass old_string or index/length to choose a range.` }
+    }
+    if (hasOldString) {
+      const oldString = args.old_string!
+      if (oldString.length === 0) {
+        return { error: `old_string must not be empty.` }
+      }
+      const occurrence =
+        args.occurrence === undefined
+          ? undefined
+          : Math.max(1, Math.floor(args.occurrence))
+      let from = 0
+      let found = -1
+      let count = 0
+      while (true) {
+        const index = content.indexOf(oldString, from)
+        if (index < 0) break
+        count += 1
+        if (occurrence === undefined || count === occurrence) {
+          found = index
+          if (occurrence !== undefined) break
+        }
+        from = index + oldString.length
+      }
+      if (found < 0) {
+        return {
+          error:
+            occurrence === undefined
+              ? `old_string not found.`
+              : `Could not find occurrence ${occurrence} of old_string.`,
+        }
+      }
+      if (occurrence === undefined && count > 1) {
+        return {
+          error: `found ${count} matches for old_string; pass occurrence to choose one or provide a more specific old_string.`,
+        }
+      }
+      return {
+        index: found,
+        length: oldString.length,
+        deleted: oldString,
+      }
+    }
+
+    if (args.index === undefined || args.length === undefined) {
+      return { error: `Pass both index and length for explicit ranges.` }
+    }
+    const index = Math.max(0, Math.min(Math.floor(args.index), content.length))
+    const length = Math.max(
+      0,
+      Math.min(Math.floor(args.length), content.length - index)
+    )
+    if (length === 0) {
+      return { error: `Replacement range length must be greater than zero.` }
+    }
+    return {
+      index,
+      length,
+      deleted: content.slice(index, index + length),
+    }
+  }
+
+  const prepareReplaceSession = async (
+    session: ReplaceSession,
+    args: Omit<ReplaceMarkdownArgs, `content`>
+  ): Promise<MaterializedMarkdownDocument> => {
+    const materialized = await materializeDocument(args.id)
+    if (session.prepared) return materialized
+
+    const before = contentOf(materialized)
+    const range = resolveReplaceRange(before, args)
+    if (
+      range.error ||
+      range.index === undefined ||
+      range.length === undefined
+    ) {
+      throw new Error(range.error ?? `Could not resolve replacement range.`)
+    }
+
+    await appendPresence(materialized, {
+      anchor: range.index,
+      head: range.index + range.length,
+    })
+    const text = materialized.session.text
+    const deleteIndex = Math.max(0, Math.min(range.index, text.length))
+    const deleteLength = Math.max(
+      0,
+      Math.min(range.length, text.length - deleteIndex)
+    )
+    if (deleteLength > 0) {
+      materialized.session.doc.transact(() => {
+        text.delete(deleteIndex, deleteLength)
+      }, `agent`)
+    }
+    const deletePosition = Y.createRelativePositionFromTypeIndex(
+      text,
+      deleteIndex
+    )
+    await appendPresence(materialized, {
+      anchor: deleteIndex,
+      head: deleteIndex,
+    })
+
+    session.id = args.id
+    session.nextIndex = deleteIndex
+    session.nextPosition = deletePosition
+    session.prepared = true
+    session.deleted =
+      range.deleted ?? before.slice(range.index, range.index + range.length)
+    session.deleteIndex = deleteIndex
+    session.deleteLength = deleteLength
+    session.beforeContent = before
+    cursorPositions.set(args.id, deletePosition)
+    readDocs.set(args.id, contentOf(materialized))
+    return materialized
+  }
+
+  const enqueueInsert = (
+    toolCallId: string,
+    action: (session: InsertSession) => Promise<void>
+  ): void => {
+    const session =
+      insertSessions.get(toolCallId) ??
+      ({
+        inserted: ``,
+        seq: 0,
+        streamed: false,
+        pending: Promise.resolve(),
+      } satisfies InsertSession)
+    insertSessions.set(toolCallId, session)
+    session.pending = session.pending
+      .then(() => action(session))
+      .catch((error) => {
+        session.error = error
+      })
+  }
+
+  const awaitInsertSession = async (
+    toolCallId: string
+  ): Promise<InsertSession | undefined> => {
+    const session = insertSessions.get(toolCallId)
+    if (!session) return undefined
+    await session.pending
+    if (session.error) throw session.error
+    return session
+  }
+
+  const enqueueReplace = (
+    toolCallId: string,
+    action: (session: ReplaceSession) => Promise<void>
+  ): void => {
+    const session =
+      replaceSessions.get(toolCallId) ??
+      ({
+        inserted: ``,
+        seq: 0,
+        streamed: false,
+        pending: Promise.resolve(),
+      } satisfies ReplaceSession)
+    replaceSessions.set(toolCallId, session)
+    session.pending = session.pending
+      .then(() => action(session))
+      .catch((error) => {
+        session.error = error
+      })
+  }
+
+  const awaitReplaceSession = async (
+    toolCallId: string
+  ): Promise<ReplaceSession | undefined> => {
+    const session = replaceSessions.get(toolCallId)
+    if (!session) return undefined
+    await session.pending
+    if (session.error) throw session.error
+    return session
+  }
+
+  return [
+    {
+      name: `create_markdown_doc`,
+      label: `Create Markdown Doc`,
+      description: `Create a collaborative markdown document, persist it as Yjs updates, and add it to this entity's manifest so users can open it in the app. This is not a filesystem file.`,
+      parameters: Type.Object({
+        title: Type.String({ description: `Document title shown in the UI.` }),
+        content: Type.Optional(
+          Type.String({ description: `Initial markdown content.` })
+        ),
+        id: Type.Optional(
+          Type.String({
+            description: `Optional stable document id. Use letters, numbers, hyphens, or underscores.`,
+          })
+        ),
+      }),
+      execute: async (_toolCallId, params) => {
+        const { id, title, content } = params as {
+          id?: string
+          title: string
+          content?: string
+        }
+        const result = await context.createMarkdownDocument({
+          id,
+          title,
+        })
+        const materialized = await openDocumentSession(result.document)
+        if (content && content.length > 0) {
+          await appendPresence(materialized, { anchor: 0, head: 0 })
+          materialized.session.doc.transact(() => {
+            materialized.session.text.delete(
+              0,
+              materialized.session.text.length
+            )
+            materialized.session.text.insert(0, content)
+          }, `agent`)
+          await appendPresence(materialized, {
+            anchor: content.length,
+            head: content.length,
+          })
+          await materialized.session.flush()
+          await appendPresence(materialized, { clear: true })
+          readDocs.set(result.document.id, contentOf(materialized))
+        }
+        return {
+          content: [
+            {
+              type: `text` as const,
+              text: `Created markdown document ${result.document.id}: ${result.document.title}`,
+            },
+          ],
+          details: { document: result.document, txid: result.txid },
+        }
+      },
+    },
+    {
+      name: `set_markdown_doc_cursor`,
+      label: `Set Markdown Doc Cursor`,
+      description: `Set the stateful insertion cursor for a collaborative markdown document. The cursor is stored as a Yjs relative position for this wake, so later insert_markdown_doc calls can stream at that position even if the document changes around it. Pass exactly one of index, before, or after; omit all three to place the cursor at the end.`,
+      parameters: Type.Object({
+        id: Type.String({ description: `Document id.` }),
+        index: Type.Optional(
+          Type.Number({
+            description: `Optional UTF-16 text offset for the cursor.`,
+          })
+        ),
+        before: Type.Optional(
+          Type.String({
+            description: `Place the cursor before this literal markdown text.`,
+          })
+        ),
+        after: Type.Optional(
+          Type.String({
+            description: `Place the cursor after this literal markdown text.`,
+          })
+        ),
+        occurrence: Type.Optional(
+          Type.Number({
+            description: `1-based occurrence for before/after matching. Defaults to 1.`,
+          })
+        ),
+      }),
+      execute: async (_toolCallId, params) => {
+        const args = params as SetCursorArgs
+        const materialized = await materializeDocument(args.id)
+        const content = contentOf(materialized)
+        const resolved = resolveCursorIndex(content, args)
+        if (resolved.error || resolved.index === undefined) {
+          return {
+            content: [
+              {
+                type: `text` as const,
+                text: `Error: ${resolved.error ?? `could not resolve cursor`}`,
+              },
+            ],
+            details: { cursorSet: false },
+          }
+        }
+        const result = await setCursor(args.id, resolved.index)
+        return {
+          content: [
+            {
+              type: `text` as const,
+              text: `Set markdown document ${args.id} cursor at index ${result.index}`,
+            },
+          ],
+          details: {
+            document: result.materialized.document,
+            cursorSet: true,
+            index: result.index,
+          },
+        }
+      },
+    },
+    {
+      name: `insert_markdown_doc`,
+      label: `Insert Markdown Doc`,
+      description: `Insert markdown into a collaborative app document. When the model streams the content argument, the insertion is applied incrementally to the wake-local Yjs document and appended to the document stream so open editors can watch it appear. Put id and optional index before content in the tool arguments. If index is omitted, the current set_markdown_doc_cursor position is used; if no cursor is set, content is appended.`,
+      parameters: Type.Object({
+        id: Type.String({ description: `Document id.` }),
+        index: Type.Optional(
+          Type.Number({
+            description: `Optional UTF-16 text offset. Omit to append to the end of the current document.`,
+          })
+        ),
+        content: Type.String({ description: `Markdown content to insert.` }),
+      }),
+      onArgsDelta: ({ toolCallId, argsPreview }) => {
+        const args = asInsertArgs(argsPreview)
+        if (!args.id || typeof args.content !== `string`) return
+        enqueueInsert(toolCallId, async (session) => {
+          session.id = args.id
+          if (session.nextIndex === undefined && args.index !== undefined) {
+            session.nextIndex = args.index
+          }
+          if (!args.content!.startsWith(session.inserted)) return
+          const chunk = args.content!.slice(session.inserted.length)
+          if (chunk.length === 0) return
+          session.inserted = args.content!
+          await applyInsertChunk(args.id!, chunk, session, args.index)
+          session.seq++
+        })
+      },
+      execute: async (toolCallId, params) => {
+        const { id, content, index } = params as InsertMarkdownArgs
+        const session = await awaitInsertSession(toolCallId)
+        let inserted = session?.inserted ?? ``
+        let streamed = session?.streamed ?? false
+        let nextIndex = session?.nextIndex ?? index
+
+        if (content !== inserted) {
+          if (inserted.length === 0 || content.startsWith(inserted)) {
+            const remaining =
+              inserted.length === 0 ? content : content.slice(inserted.length)
+            if (remaining.length > 0) {
+              const finalSession =
+                session ??
+                ({
+                  inserted: ``,
+                  seq: 0,
+                  streamed: false,
+                  pending: Promise.resolve(),
+                } satisfies InsertSession)
+              await applyInsertChunk(id, remaining, finalSession, nextIndex)
+              nextIndex = finalSession.nextIndex
+              inserted = content
+              streamed = streamed || remaining.length !== content.length
+            }
+          } else {
+            const materialized = materializedDocs.get(id)
+            if (materialized) {
+              await appendPresence(materialized, { clear: true })
+            }
+            insertSessions.delete(toolCallId)
+            return {
+              content: [
+                {
+                  type: `text` as const,
+                  text: `Error: streamed content diverged from final insert content; no final reconciliation was applied.`,
+                },
+              ],
+              details: { inserted: inserted.length, expected: content.length },
+            }
+          }
+        }
+
+        const materialized = await materializeDocument(id)
+        await materialized.session.flush()
+        await appendPresence(materialized, { clear: true })
+        const finalContent = contentOf(materialized)
+        readDocs.set(id, finalContent)
+        insertSessions.delete(toolCallId)
+        return {
+          content: [
+            {
+              type: `text` as const,
+              text: `Inserted ${content.length} characters into markdown document ${id}`,
+            },
+          ],
+          details: {
+            document: materialized.document,
+            streamed,
+            insertedBytes: new TextEncoder().encode(content).length,
+            nextIndex,
+          },
+        }
+      },
+      executionMode: `sequential`,
+    },
+    {
+      name: `replace_markdown_doc_range`,
+      label: `Replace Markdown Doc Range`,
+      description: `Delete one range from a collaborative app markdown document, then stream or insert replacement markdown at that location. Use old_string for a unique literal match, old_string plus occurrence for repeated text, or index plus length for an explicit UTF-16 range. The agent cursor follows the end of streamed replacement text.`,
+      parameters: Type.Object({
+        id: Type.String({ description: `Document id.` }),
+        old_string: Type.Optional(
+          Type.String({
+            description: `Literal markdown text to replace. Must be unique unless occurrence is provided.`,
+          })
+        ),
+        occurrence: Type.Optional(
+          Type.Number({
+            description: `1-based occurrence to replace when old_string appears multiple times.`,
+          })
+        ),
+        index: Type.Optional(
+          Type.Number({
+            description: `Optional UTF-16 start offset for an explicit replacement range.`,
+          })
+        ),
+        length: Type.Optional(
+          Type.Number({
+            description: `UTF-16 length for an explicit replacement range. Required when index is used.`,
+          })
+        ),
+        content: Type.String({
+          description: `Replacement markdown content to stream into the deleted range.`,
+        }),
+      }),
+      onArgsDelta: ({ toolCallId, argsPreview }) => {
+        const args = asReplaceArgs(argsPreview)
+        if (!args.id || typeof args.content !== `string`) return
+        if (
+          args.old_string === undefined &&
+          (args.index === undefined || args.length === undefined)
+        ) {
+          return
+        }
+        enqueueReplace(toolCallId, async (session) => {
+          await prepareReplaceSession(session, {
+            id: args.id!,
+            old_string: args.old_string,
+            occurrence: args.occurrence,
+            index: args.index,
+            length: args.length,
+          })
+          if (!args.content!.startsWith(session.inserted)) return
+          const chunk = args.content!.slice(session.inserted.length)
+          if (chunk.length === 0) return
+          session.inserted = args.content!
+          await applyInsertChunk(args.id!, chunk, session)
+          session.seq++
+        })
+      },
+      execute: async (toolCallId, params) => {
+        const args = params as ReplaceMarkdownArgs
+        const session =
+          (await awaitReplaceSession(toolCallId)) ??
+          ({
+            inserted: ``,
+            seq: 0,
+            streamed: false,
+            pending: Promise.resolve(),
+          } satisfies ReplaceSession)
+
+        try {
+          await prepareReplaceSession(session, {
+            id: args.id,
+            old_string: args.old_string,
+            occurrence: args.occurrence,
+            index: args.index,
+            length: args.length,
+          })
+        } catch (error) {
+          replaceSessions.delete(toolCallId)
+          return {
+            content: [
+              {
+                type: `text` as const,
+                text: `Error: ${error instanceof Error ? error.message : `could not prepare replacement`}`,
+              },
+            ],
+            details: { replaced: false },
+          }
+        }
+
+        let inserted = session.inserted
+        let streamed = session.streamed
+        let nextIndex = session.nextIndex
+        if (args.content !== inserted) {
+          if (inserted.length === 0 || args.content.startsWith(inserted)) {
+            const remaining =
+              inserted.length === 0
+                ? args.content
+                : args.content.slice(inserted.length)
+            if (remaining.length > 0) {
+              await applyInsertChunk(args.id, remaining, session)
+              nextIndex = session.nextIndex
+              inserted = args.content
+              streamed = streamed || remaining.length !== args.content.length
+            }
+          } else {
+            const materialized = materializedDocs.get(args.id)
+            if (materialized) {
+              await appendPresence(materialized, { clear: true })
+            }
+            replaceSessions.delete(toolCallId)
+            return {
+              content: [
+                {
+                  type: `text` as const,
+                  text: `Error: streamed replacement content diverged from final content; no final reconciliation was applied.`,
+                },
+              ],
+              details: {
+                replaced: false,
+                inserted: inserted.length,
+                expected: args.content.length,
+              },
+            }
+          }
+        }
+
+        const materialized = await materializeDocument(args.id)
+        await materialized.session.flush()
+        await appendPresence(materialized, { clear: true })
+        const finalContent = contentOf(materialized)
+        readDocs.set(args.id, finalContent)
+        replaceSessions.delete(toolCallId)
+        const diff = createTwoFilesPatch(
+          docLabel(args.id),
+          docLabel(args.id),
+          session.beforeContent ?? finalContent,
+          finalContent,
+          undefined,
+          undefined,
+          { context: 3 }
+        )
+        return {
+          content: [
+            {
+              type: `text` as const,
+              text: `Replaced ${session.deleteLength ?? 0} characters in markdown document ${args.id}`,
+            },
+          ],
+          details: {
+            document: materialized.document,
+            replaced: true,
+            deleted: session.deleted,
+            deleteIndex: session.deleteIndex,
+            deleteLength: session.deleteLength,
+            streamed,
+            insertedBytes: new TextEncoder().encode(args.content).length,
+            nextIndex,
+            diff,
+          },
+        }
+      },
+      executionMode: `sequential`,
+    },
+    {
+      name: `read_markdown_doc`,
+      label: `Read Markdown Doc`,
+      description: `Read the current plain markdown content from a collaborative app document, not from the filesystem.`,
+      parameters: Type.Object({
+        id: Type.String({ description: `Document id.` }),
+      }),
+      execute: async (_toolCallId, params) => {
+        const { id } = params as { id: string }
+        const materialized = await materializeDocument(id)
+        const content = contentOf(materialized)
+        const cursorIndex = cursorPositions.has(id)
+          ? markdownIndexFromRelativePosition(
+              materialized.session.doc,
+              cursorPositions.get(id)!,
+              materialized.textName
+            )
+          : undefined
+        readDocs.set(id, content)
+        return {
+          content: [
+            {
+              type: `text` as const,
+              text: content,
+            },
+          ],
+          details: {
+            document: materialized.document,
+            bytes: new TextEncoder().encode(content).length,
+            cursorIndex,
+          },
+        }
+      },
+    },
+    {
+      name: `write_markdown_doc`,
+      label: `Write Markdown Doc`,
+      description: `Replace the full content of a collaborative app markdown document. This does not write a filesystem file.`,
+      parameters: Type.Object({
+        id: Type.String({ description: `Document id.` }),
+        content: Type.String({ description: `Full markdown content.` }),
+      }),
+      execute: async (_toolCallId, params) => {
+        const { id, content } = params as { id: string; content: string }
+        const materialized = await materializeDocument(id)
+        const before = contentOf(materialized)
+        await appendPresence(materialized, { anchor: 0, head: 0 })
+        materialized.session.doc.transact(() => {
+          materialized.session.text.delete(0, materialized.session.text.length)
+          if (content.length > 0) materialized.session.text.insert(0, content)
+        }, `agent`)
+        await appendPresence(materialized, {
+          anchor: content.length,
+          head: content.length,
+        })
+        await materialized.session.flush()
+        await appendPresence(materialized, { clear: true })
+        readDocs.set(id, content)
+        const diff = createTwoFilesPatch(
+          docLabel(id),
+          docLabel(id),
+          before,
+          content,
+          undefined,
+          undefined,
+          { context: 3 }
+        )
+        return {
+          content: [
+            {
+              type: `text` as const,
+              text: `Wrote markdown document ${id}`,
+            },
+          ],
+          details: { document: materialized.document, diff },
+        }
+      },
+      executionMode: `sequential`,
+    },
+    {
+      name: `edit_markdown_doc`,
+      label: `Edit Markdown Doc`,
+      description: `Replace text in a collaborative app markdown document by appending a Yjs update, not by writing a filesystem file. Read the document first when you need to inspect current content. By default old_string must occur exactly once; set replace_all to true to replace every occurrence.`,
+      parameters: Type.Object({
+        id: Type.String({ description: `Document id.` }),
+        old_string: Type.String({
+          description: `Literal markdown text to find. Must be unique unless replace_all is true.`,
+        }),
+        new_string: Type.String({ description: `Replacement markdown text.` }),
+        replace_all: Type.Optional(
+          Type.Boolean({ description: `Replace every occurrence.` })
+        ),
+      }),
+      execute: async (_toolCallId, params) => {
+        const { id, old_string, new_string, replace_all } = params as {
+          id: string
+          old_string: string
+          new_string: string
+          replace_all?: boolean
+        }
+        const materialized = await materializeDocument(id)
+        const before = contentOf(materialized)
+
+        const matches = before.split(old_string).length - 1
+        if (matches === 0) {
+          return {
+            content: [
+              { type: `text` as const, text: `Error: old_string not found` },
+            ],
+            details: { replacements: 0 },
+          }
+        }
+        if (!replace_all && matches > 1) {
+          return {
+            content: [
+              {
+                type: `text` as const,
+                text: `Error: found ${matches} matches for old_string; pass replace_all=true or provide a more specific old_string.`,
+              },
+            ],
+            details: { replacements: 0 },
+          }
+        }
+
+        const index = before.indexOf(old_string)
+        await appendPresence(materialized, { anchor: index, head: index })
+        let cursorIndex = index
+        materialized.session.doc.transact(() => {
+          if (replace_all) {
+            let cursor = 0
+            while (true) {
+              const nextIndex = materialized.session.text
+                .toString()
+                .indexOf(old_string, cursor)
+              if (nextIndex < 0) break
+              materialized.session.text.delete(nextIndex, old_string.length)
+              materialized.session.text.insert(nextIndex, new_string)
+              cursor = nextIndex + new_string.length
+              cursorIndex = cursor
+            }
+          } else {
+            materialized.session.text.delete(index, old_string.length)
+            materialized.session.text.insert(index, new_string)
+            cursorIndex = index + new_string.length
+          }
+        }, `agent`)
+        const resultContent = contentOf(materialized)
+        await appendPresence(materialized, {
+          anchor: cursorIndex,
+          head: cursorIndex,
+        })
+        await materialized.session.flush()
+        await appendPresence(materialized, { clear: true })
+        readDocs.set(id, resultContent)
+        const diff = createTwoFilesPatch(
+          docLabel(id),
+          docLabel(id),
+          before,
+          resultContent,
+          undefined,
+          undefined,
+          { context: 3 }
+        )
+        return {
+          content: [
+            {
+              type: `text` as const,
+              text: `Edited markdown document ${id}: ${matches} replacement${
+                matches === 1 ? `` : `s`
+              }`,
+            },
+          ],
+          details: {
+            replacements: matches,
+            document: materialized.document,
+            diff,
+          },
+        }
+      },
+      executionMode: `sequential`,
+    },
+  ]
+}

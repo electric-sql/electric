@@ -38,6 +38,7 @@ export type CommentTimelineRow = {
   wake?: undefined
   signal?: undefined
   error?: undefined
+  realtimeTranscript?: undefined
   manifest?: undefined
 }
 

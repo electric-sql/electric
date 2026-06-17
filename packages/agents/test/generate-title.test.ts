@@ -76,4 +76,40 @@ describe(`extractFirstUserMessage`, () => {
       `Help me test composer titles`
     )
   })
+
+  it(`uses the first finalized realtime input transcript`, async () => {
+    const ctx = {
+      db: {
+        collections: {
+          inbox: { toArray: [] },
+          realtimeTranscripts: {
+            toArray: [
+              {
+                direction: `output`,
+                status: `final`,
+                text: `Hello, I am Horton`,
+                _seq: 1,
+              },
+              {
+                direction: `input`,
+                status: `partial`,
+                text: `can you`,
+                _seq: 2,
+              },
+              {
+                direction: `input`,
+                status: `final`,
+                text: `Can you review this realtime branch?`,
+                _seq: 3,
+              },
+            ],
+          },
+        },
+      },
+    }
+
+    await expect(extractFirstUserMessage(ctx as any)).resolves.toBe(
+      `Can you review this realtime branch?`
+    )
+  })
 })

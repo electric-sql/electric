@@ -65,6 +65,43 @@
   color: var(--ds-text-1);
 }
 
+.inlineIconButton.voiceActive {
+  background: var(--ds-accent-a3);
+  color: var(--ds-accent-11);
+}
+
+.voiceMeter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 0;
+  height: 20px;
+  color: var(--ds-accent-11);
+  opacity: 0;
+  overflow: hidden;
+  transition:
+    opacity 0.12s ease,
+    width 0.12s ease;
+}
+
+.voiceMeter[data-active='true'] {
+  width: 18px;
+  opacity: 1;
+}
+
+.voiceMeterBar {
+  display: block;
+  width: 3px;
+  height: 14px;
+  border-radius: var(--ds-radius-full);
+  background: currentColor;
+  transform-origin: center bottom;
+  transition:
+    opacity 0.08s linear,
+    transform 0.08s linear;
+}
+
 .inlineIconButton:focus-visible {
   outline: 2px solid var(--ds-accent-a6);
   outline-offset: -2px;

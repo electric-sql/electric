@@ -27,6 +27,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@electric-ax/agents-runtime": "workspace:*",
     "@electric-sql/client": "^1.5.21",
     "@mixmark-io/domino": "^2.2.0",
     "better-sqlite3": "^12.9.0",

@@ -250,12 +250,6 @@ export class ElectricAgentsTenantRuntime {
         continue
       }
 
-      await this.manager.wakeRegistry.unregisterByManifestKey(
-        subscriberUrl,
-        manifestKey,
-        this.serviceId
-      )
-
       if (value) {
         const reg = buildManifestWakeRegistration(
           subscriberUrl,
@@ -264,7 +258,17 @@ export class ElectricAgentsTenantRuntime {
         )
         if (reg) {
           reg.tenantId = this.serviceId
-          await this.manager.wakeRegistry.register(reg)
+          const change =
+            await this.manager.wakeRegistry.registerOrReplaceManifest(reg)
+          if (change.created && reg.condition === `runFinished`) {
+            await this.manager.replayLatestRunFinishedWake(reg.sourceUrl)
+          }
+        } else {
+          await this.manager.wakeRegistry.unregisterByManifestKey(
+            subscriberUrl,
+            manifestKey,
+            this.serviceId
+          )
         }
 
         const cronSpec = extractManifestCronSpec(value)
@@ -275,6 +279,12 @@ export class ElectricAgentsTenantRuntime {
               serverLog.warn(`[agent-server] cron schedule failed:`, err)
             )
         }
+      } else {
+        await this.manager.wakeRegistry.unregisterByManifestKey(
+          subscriberUrl,
+          manifestKey,
+          this.serviceId
+        )
       }
     }
   }

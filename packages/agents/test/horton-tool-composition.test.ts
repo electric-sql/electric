@@ -88,9 +88,24 @@ async function captureToolset(args: Record<string, unknown> = {}) {
 }
 
 function createElectricToolsContext() {
+  const document = {
+    key: `document:notes`,
+    kind: `document`,
+    id: `notes`,
+    provider: `y-durable-streams`,
+    docId: `agents/horton/smoke/documents/notes`,
+    docPath: `agents/horton/smoke/documents/notes`,
+    streamPath: `/v1/yjs/default/docs/agents/horton/smoke/documents/notes`,
+    transportMimeType: `application/vnd.electric-agents.markdown-yjs`,
+    contentMimeType: `text/markdown`,
+    yTextName: `markdown`,
+    title: `Notes`,
+    createdAt: new Date(0).toISOString(),
+  }
   return {
     entityUrl: `/horton/smoke/main`,
     entityType: `horton`,
+    principal: { url: `/principal/agent:horton`, kind: `agent` },
     args: {},
     db: {
       collections: { manifests: { toArray: [] } },
@@ -121,6 +136,21 @@ function createElectricToolsContext() {
     unsubscribeFromWebhookSource: vi.fn(async () => ({
       txid: `tx-unsubscribe`,
     })),
+    createMarkdownDocument: vi.fn(async () => ({
+      txid: `tx-create-doc`,
+      document,
+    })),
+    getMarkdownDocumentConnection: vi.fn(async () => ({
+      baseUrl: `http://test.local/v1/yjs/default`,
+      docId: document.docId,
+      headers: {},
+    })),
+    readMarkdownDocumentStream: vi.fn(async () => ({
+      bytes: new Uint8Array(),
+    })),
+    appendMarkdownDocumentUpdate: vi.fn(async () => ({})),
+    appendMarkdownDocumentAwareness: vi.fn(async () => ({})),
+    registerCleanup: vi.fn(),
   } as any
 }
 
@@ -141,6 +171,108 @@ describe(`horton tool composition`, () => {
     } as any
 
     await expect(extractFirstUserMessage(ctx)).resolves.toBe(`first`)
+  })
+
+  it(`uses realtime mode as an OpenAI orchestrator when a session is active`, async () => {
+    const registry = createEntityRegistry()
+    registerHorton(registry, { workingDirectory: `/tmp`, modelCatalog })
+    const previousOpenAIKey = process.env.OPENAI_API_KEY
+    process.env.OPENAI_API_KEY = `sk-test`
+    const realtimeRun = vi.fn(async () => {})
+    const useRealtime = vi.fn(() => ({ run: realtimeRun }))
+    const useAgent = vi.fn(() => ({ run: vi.fn(async () => {}) }))
+    const fakeCtx = {
+      args: {},
+      electricTools: [],
+      events: [],
+      firstWake: false,
+      tags: { title: `Existing title` },
+      db: { collections: { inbox: { toArray: [] } } },
+      sandbox: {
+        workingDirectory: `/work`,
+        readFile: vi.fn(async () => {
+          throw new Error(`ENOENT`)
+        }),
+      },
+      slashCommands: { replaceOwned: vi.fn() },
+      insertContext: vi.fn(),
+      removeContext: vi.fn(),
+      getContext: vi.fn(),
+      useContext: vi.fn(),
+      getGoal: vi.fn(() => undefined),
+      updateGoalUsage: vi.fn(),
+      useAgent,
+      useRealtime,
+      realtime: {
+        activeSession: () => ({
+          key: `realtime-session:rt-1`,
+          kind: `realtime-session`,
+          id: `rt-1`,
+          provider: `openai`,
+          model: `gpt-realtime-2`,
+          status: `active`,
+          startedAt: `2026-06-09T12:00:00.000Z`,
+          retention: `forever`,
+          streams: {
+            audio_in: `/horton/demo/realtime/rt-1/audio/in`,
+            audio_out: `/horton/demo/realtime/rt-1/audio/out`,
+            control_in: `/horton/demo/realtime/rt-1/control/in`,
+            control_out: `/horton/demo/realtime/rt-1/control/out`,
+          },
+        }),
+      },
+    } as any
+
+    try {
+      await registry
+        .get(`horton`)!
+        .definition.handler(fakeCtx, { type: `inbox` } as any)
+    } finally {
+      if (previousOpenAIKey === undefined) {
+        delete process.env.OPENAI_API_KEY
+      } else {
+        process.env.OPENAI_API_KEY = previousOpenAIKey
+      }
+    }
+
+    expect(useAgent).not.toHaveBeenCalled()
+    expect(useRealtime).toHaveBeenCalledTimes(1)
+    expect(realtimeRun).toHaveBeenCalledTimes(1)
+    const realtimeConfig = (
+      useRealtime.mock.calls as unknown as Array<
+        [
+          {
+            provider: { id: string; model: string }
+            audio: {
+              inputTranscription?: {
+                model?: string
+                delay?: string
+              }
+            }
+            toolPolicy: { direct: Array<string> }
+          },
+        ]
+      >
+    )[0]![0]
+    expect(realtimeConfig.provider).toMatchObject({
+      id: `openai`,
+      model: `gpt-realtime-2`,
+    })
+    expect(realtimeConfig.audio.inputTranscription).toEqual({
+      model: `gpt-realtime-whisper`,
+      delay: `minimal`,
+    })
+    expect(realtimeConfig.toolPolicy.direct).toEqual(
+      expect.arrayContaining([
+        `web_search`,
+        `fetch_url`,
+        `spawn_worker`,
+        `send`,
+      ])
+    )
+    expect(realtimeConfig.toolPolicy.direct).not.toEqual(
+      expect.arrayContaining([`bash`, `read`, `write`, `edit`])
+    )
   })
 
   it(`orders title candidates with the _seq fallback convention`, async () => {
@@ -226,7 +358,7 @@ describe(`horton tool composition`, () => {
     )
   })
 
-  it(`adds webhook source and schedule tools through the built-in electric tool factory`, async () => {
+  it(`adds webhook source, schedule, and markdown document tools through the built-in electric tool factory`, async () => {
     const tools = await createBuiltinElectricTools()(
       createElectricToolsContext()
     )
@@ -241,6 +373,13 @@ describe(`horton tool composition`, () => {
         `upsert_cron_schedule`,
         `delete_schedule`,
         `list_schedules`,
+        `create_markdown_doc`,
+        `set_markdown_doc_cursor`,
+        `insert_markdown_doc`,
+        `replace_markdown_doc_range`,
+        `read_markdown_doc`,
+        `write_markdown_doc`,
+        `edit_markdown_doc`,
       ])
     )
     expect(
@@ -253,9 +392,12 @@ describe(`horton tool composition`, () => {
       tools.find((tool) => tool.name === `list_webhook_source_subscriptions`)
         ?.description
     ).not.toContain(`manifest-backed`)
+    expect(
+      tools.find((tool) => tool.name === `create_markdown_doc`)?.description
+    ).toContain(`not a filesystem file`)
   })
 
-  it(`includes webhook source and schedule electric tools in Horton and describes them in the prompt`, async () => {
+  it(`includes electric tools in Horton and describes them in the prompt`, async () => {
     const electricTools = await createBuiltinElectricTools()(
       createElectricToolsContext()
     )
@@ -274,6 +416,59 @@ describe(`horton tool composition`, () => {
     expect(cfg.systemPrompt).toContain(`upsert_cron_schedule`)
     expect(cfg.systemPrompt).toContain(`delete_schedule`)
     expect(cfg.systemPrompt).toContain(`list_schedules`)
+    expect(names).toContain(`create_markdown_doc`)
+    expect(names).toContain(`set_markdown_doc_cursor`)
+    expect(names).toContain(`replace_markdown_doc_range`)
+    expect(names).toContain(`insert_markdown_doc`)
+    expect(names).toContain(`edit_markdown_doc`)
+    expect(cfg.systemPrompt).toContain(`create_markdown_doc`)
+    expect(cfg.systemPrompt).toContain(`set_markdown_doc_cursor`)
+    expect(cfg.systemPrompt).toContain(`insert_markdown_doc`)
+    expect(cfg.systemPrompt).toContain(`Collaborative Markdown Docs`)
+  })
+
+  it(`lists current collaborative markdown documents in Horton context`, async () => {
+    const useContext = vi.fn()
+    const manifestDocument = {
+      key: `document:story-outline`,
+      kind: `document`,
+      id: `story-outline`,
+      provider: `y-durable-streams`,
+      docId: `agents/worker/worker-1/documents/story-outline`,
+      docPath: `agents/worker/worker-1/documents/story-outline`,
+      streamPath: `/v1/yjs/default/docs/agents/worker/worker-1/documents/story-outline`,
+      transportMimeType: `application/vnd.electric-agents.markdown-yjs`,
+      contentMimeType: `text/markdown`,
+      yTextName: `markdown`,
+      title: `Story Outline`,
+      createdAt: `2026-06-17T14:00:00.000Z`,
+      meta: {
+        sourceEntityUrl: `/worker/worker-1`,
+        sourceDocumentId: `story-outline`,
+      },
+    }
+
+    await captureAgentConfig({}, [{ name: `create_markdown_doc` }], {
+      useContext,
+      db: {
+        collections: {
+          inbox: { toArray: [] },
+          runs: { toArray: [] },
+          manifests: { toArray: [manifestDocument] },
+        },
+      },
+    })
+
+    expect(useContext).toHaveBeenCalledTimes(1)
+    const contextConfig = useContext.mock.calls[0]![0] as {
+      sources: Record<string, { content: () => string }>
+    }
+    const content = contextConfig.sources.markdown_documents!.content()
+
+    expect(content).toContain(`Story Outline`)
+    expect(content).toContain(`id: story-outline`)
+    expect(content).toContain(`sourceEntityUrl: /worker/worker-1`)
+    expect(content).toContain(`read_markdown_doc`)
   })
 
   it(`includes the default built-in toolset`, async () => {
