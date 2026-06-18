@@ -14,43 +14,42 @@ use tokio::net::TcpListener;
 
 use store::Store;
 
+/// Take a flag's value or exit(2) with a clean usage error (not a panic).
+fn val(o: Option<String>, flag: &str) -> String {
+    o.unwrap_or_else(|| {
+        eprintln!("error: {flag} requires a value");
+        std::process::exit(2);
+    })
+}
+
+/// Parse a flag's value or exit(2) with a clean error.
+fn parse_val<T: std::str::FromStr>(o: Option<String>, flag: &str) -> T {
+    let s = val(o, flag);
+    s.parse().unwrap_or_else(|_| {
+        eprintln!("error: {flag} got an invalid value: {s:?}");
+        std::process::exit(2);
+    })
+}
+
 fn main() {
-    let mut port: u16 = 4438;
+    let mut port: u16 = 4437; // protocol default (PROTOCOL.md §13.1)
     let mut host: std::net::IpAddr = [127, 0, 0, 1].into();
     let mut data_dir = std::env::temp_dir().join("durable-streams-rust");
     let mut tier = tier::TierConfig::default();
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
-            "--host" => {
-                host = args
-                    .next()
-                    .and_then(|v| v.parse().ok())
-                    .expect("--host requires an IP address");
-            }
-            "--port" => {
-                port = args
-                    .next()
-                    .and_then(|v| v.parse().ok())
-                    .expect("--port requires a number");
-            }
-            "--data-dir" => {
-                data_dir = args.next().expect("--data-dir requires a path").into();
-            }
+            "--host" => host = parse_val(args.next(), "--host"),
+            "--port" => port = parse_val(args.next(), "--port"),
+            "--data-dir" => data_dir = val(args.next(), "--data-dir").into(),
             "--long-poll-timeout-ms" => {
-                let ms: u64 = args
-                    .next()
-                    .and_then(|v| v.parse().ok())
-                    .expect("--long-poll-timeout-ms requires a number");
-                handlers::set_long_poll_timeout(ms);
+                handlers::set_long_poll_timeout(parse_val(args.next(), "--long-poll-timeout-ms"));
             }
             "--splice-appends" => {
                 engine_raw::set_splice_appends(true);
             }
             "--read-offload" => {
-                let v = args
-                    .next()
-                    .expect("--read-offload requires inline|tail|always");
+                let v = val(args.next(), "--read-offload");
                 match engine_raw::ReadOffload::parse(&v) {
                     Some(mode) => engine_raw::set_read_offload(mode),
                     None => {
@@ -61,7 +60,7 @@ fn main() {
             }
             // ---- hot/cold tiering (OFF by default) ----
             "--tier" => {
-                let v = args.next().expect("--tier requires off|local|s3");
+                let v = val(args.next(), "--tier");
                 tier.kind = match v.as_str() {
                     "off" => tier::TierKind::Off,
                     "local" => tier::TierKind::Local,
@@ -73,23 +72,12 @@ fn main() {
                 };
             }
             "--tier-segment-bytes" => {
-                tier.segment_bytes = args
-                    .next()
-                    .and_then(|v| v.parse().ok())
-                    .expect("--tier-segment-bytes requires a number");
+                tier.segment_bytes = parse_val(args.next(), "--tier-segment-bytes");
             }
-            "--tier-key-prefix" => {
-                tier.key_prefix = args.next().expect("--tier-key-prefix requires a value");
-            }
-            "--tier-endpoint" => {
-                tier.endpoint = Some(args.next().expect("--tier-endpoint requires a URL"));
-            }
-            "--tier-region" => {
-                tier.region = Some(args.next().expect("--tier-region requires a value"));
-            }
-            "--tier-bucket" => {
-                tier.bucket = Some(args.next().expect("--tier-bucket requires a value"));
-            }
+            "--tier-key-prefix" => tier.key_prefix = val(args.next(), "--tier-key-prefix"),
+            "--tier-endpoint" => tier.endpoint = Some(val(args.next(), "--tier-endpoint")),
+            "--tier-region" => tier.region = Some(val(args.next(), "--tier-region")),
+            "--tier-bucket" => tier.bucket = Some(val(args.next(), "--tier-bucket")),
             "--tier-path-style" => {
                 tier.path_style = true;
             }
@@ -100,7 +88,7 @@ fn main() {
                 tier.allow_http = true;
             }
             "--tier-local-dir" => {
-                tier.local_dir = Some(args.next().expect("--tier-local-dir requires a path").into());
+                tier.local_dir = Some(val(args.next(), "--tier-local-dir").into());
             }
             other => {
                 eprintln!("unknown argument: {other}");
@@ -145,9 +133,31 @@ fn main() {
         );
         tokio::select! {
             _ = engine_raw::serve(store, listener) => {}
-            _ = tokio::signal::ctrl_c() => {
+            _ = shutdown_signal() => {
+                // Stop accepting (the serve future is dropped here), let in-flight
+                // requests — including their group-commit fsync — finish, then flush
+                // telemetry. Bounded so a stuck request can't block shutdown forever.
+                engine_raw::drain(std::time::Duration::from_secs(25)).await;
                 telemetry_guard.shutdown();
             }
         }
     });
+}
+
+/// Resolve on SIGINT (Ctrl-C) or SIGTERM (systemd/Kubernetes stop). On non-Unix,
+/// only Ctrl-C.
+async fn shutdown_signal() {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{signal, SignalKind};
+        let mut term = signal(SignalKind::terminate()).expect("install SIGTERM handler");
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {}
+            _ = term.recv() => {}
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = tokio::signal::ctrl_c().await;
+    }
 }

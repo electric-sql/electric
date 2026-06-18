@@ -417,7 +417,10 @@ impl Store {
                         f.write_all(&pl)?;
                         f.sync_all()?;
                     }
-                    std::fs::rename(&tmp, &cp)
+                    std::fs::rename(&tmp, &cp)?;
+                    // Make the chunk-file rename crash-durable before the manifest
+                    // (persisted next) records it as Local at this path.
+                    crate::store::fsync_parent_dir(&cp)
                 })
                 .await
                 .map_err(std::io::Error::other)??;

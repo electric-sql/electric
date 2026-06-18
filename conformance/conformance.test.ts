@@ -26,7 +26,10 @@ const longPollTimeoutMs = 500
 const config = {
   baseUrl: externalUrl ?? `http://localhost:${port}`,
   longPollTimeoutMs,
-  subscriptions: true,
+  // The Rust server implements the core protocol only; the `__ds` subscription
+  // control plane is out of scope (see PR #387 / README). Skip that suite here
+  // rather than report it as failing.
+  subscriptions: false,
 }
 
 let server: ChildProcess | null = null

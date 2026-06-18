@@ -45,6 +45,19 @@ pub trait BlobStore: Send + Sync {
 /// Shared handle to a BlobStore.
 pub type SharedBlobStore = Arc<dyn BlobStore>;
 
+/// Validate a `[start, start+len)` byte-range request and return it as a usize
+/// `start..end`. Rejects `u64` overflow and ranges that exceed this platform's
+/// `usize` — defence against a corrupt/hostile manifest minting a wrapped or
+/// truncated range (which could otherwise read the wrong bytes or over-allocate).
+fn checked_range(start: u64, len: u64) -> io::Result<std::ops::Range<usize>> {
+    let end = start
+        .checked_add(len)
+        .ok_or_else(|| io::Error::other("blob range overflow"))?;
+    let s = usize::try_from(start).map_err(|_| io::Error::other("blob range start too large"))?;
+    let e = usize::try_from(end).map_err(|_| io::Error::other("blob range end too large"))?;
+    Ok(s..e)
+}
+
 // ---------------- local filesystem adapter ----------------
 
 /// A BlobStore backed by a local directory. Each object is a file whose name is
@@ -92,10 +105,11 @@ impl BlobStore for LocalFsBlobStore {
     ) -> BoxFuture<'a, io::Result<Bytes>> {
         let path = self.path_for(key);
         Box::pin(async move {
+            let range = checked_range(start, len)?;
             tokio::task::spawn_blocking(move || {
                 use std::os::unix::fs::FileExt;
                 let f = std::fs::File::open(&path)?;
-                let mut buf = vec![0u8; len as usize];
+                let mut buf = vec![0u8; range.len()];
                 f.read_exact_at(&mut buf, start)?;
                 Ok(Bytes::from(buf))
             })
@@ -198,10 +212,9 @@ mod s3 {
         ) -> BoxFuture<'a, io::Result<Bytes>> {
             let path = ObjPath::from(key);
             Box::pin(async move {
-                let s = start as usize;
-                let e = (start + len) as usize;
+                let range = super::checked_range(start, len)?;
                 let opts = GetOptions {
-                    range: Some(GetRange::Bounded(s..e)),
+                    range: Some(GetRange::Bounded(range)),
                     ..Default::default()
                 };
                 let res = self

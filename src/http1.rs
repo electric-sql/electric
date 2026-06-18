@@ -61,13 +61,29 @@ pub(crate) fn try_parse_head(buf: &[u8]) -> Result<Option<(ReqHead, usize)>, ()>
         expect_continue: false,
         keep_alive: http11,
     };
+    // Request-smuggling guards (RFC 9112 §6.1, §6.3.3, §6.3.5): a duplicate or
+    // non-numeric Content-Length, both CL and Transfer-Encoding, or any TE other
+    // than exactly `chunked` is a framing conflict — reject rather than risk a
+    // CL.TE / TE.CL desync with a front proxy.
+    let mut cl_bad = false;
+    let mut te_present = false;
+    let mut te_chunked = false;
     for h in preq.headers.iter() {
         let name = h.name.to_ascii_lowercase();
         let value = String::from_utf8_lossy(h.value).into_owned();
         match name.as_str() {
-            "content-length" => head.content_length = value.trim().parse().ok(),
+            "content-length" => {
+                if head.content_length.is_some() {
+                    cl_bad = true; // duplicate
+                }
+                match value.trim().parse() {
+                    Ok(n) => head.content_length = Some(n),
+                    Err(_) => cl_bad = true,
+                }
+            }
             "transfer-encoding" => {
-                head.chunked = value.to_ascii_lowercase().contains("chunked");
+                te_present = true;
+                te_chunked = value.trim().eq_ignore_ascii_case("chunked");
             }
             "expect" => {
                 head.expect_continue = value.eq_ignore_ascii_case("100-continue");
@@ -83,6 +99,17 @@ pub(crate) fn try_parse_head(buf: &[u8]) -> Result<Option<(ReqHead, usize)>, ()>
             _ => {}
         }
         head.headers.push((name, value));
+    }
+    if cl_bad {
+        return Err(());
+    }
+    if te_present {
+        // CL + TE is a desync vector; a TE we can't frame (not exactly `chunked`)
+        // is unsupported. Either way, refuse.
+        if head.content_length.is_some() || !te_chunked {
+            return Err(());
+        }
+        head.chunked = true;
     }
     Ok(Some((head, n)))
 }
@@ -139,6 +166,11 @@ pub(crate) fn write_head(
     }
     out.extend_from_slice(b"\r\n");
 }
+
+// Header-value response injection is structurally prevented, so no per-write
+// scrub is needed on the hot path: request-derived values (content-type, host →
+// location) are rejected by httparse if they contain CR/LF, and server-minted
+// values (offsets, ETags, cache-control) are CR/LF-free by construction.
 
 /// Append one `transfer-encoding: chunked` frame (`<hex-len>\r\n<data>\r\n`).
 /// The terminating `0\r\n\r\n` is written separately by the caller.
@@ -416,5 +448,47 @@ mod tests {
             read_sized(&mut reader, &mut buf, MAX_BODY_BYTES + 1).await.unwrap(),
             None
         );
+    }
+
+    // ---- request-smuggling / framing-conflict rejection (H6) ----
+
+    fn parse_ok(raw: &[u8]) -> ReqHead {
+        match try_parse_head(raw) {
+            Ok(Some((h, _))) => h,
+            other => panic!("expected a parsed head, got {:?}", other.is_err()),
+        }
+    }
+    fn parse_rejected(raw: &[u8]) -> bool {
+        matches!(try_parse_head(raw), Err(()))
+    }
+
+    #[test]
+    fn cl_and_te_together_rejected() {
+        assert!(parse_rejected(
+            b"POST /s HTTP/1.1\r\nContent-Length: 5\r\nTransfer-Encoding: chunked\r\n\r\n"
+        ));
+    }
+    #[test]
+    fn duplicate_content_length_rejected() {
+        assert!(parse_rejected(
+            b"POST /s HTTP/1.1\r\nContent-Length: 0\r\nContent-Length: 5\r\n\r\n"
+        ));
+    }
+    #[test]
+    fn non_numeric_content_length_rejected() {
+        assert!(parse_rejected(b"POST /s HTTP/1.1\r\nContent-Length: 5x\r\n\r\n"));
+    }
+    #[test]
+    fn non_chunked_transfer_encoding_rejected() {
+        assert!(parse_rejected(b"POST /s HTTP/1.1\r\nTransfer-Encoding: gzip\r\n\r\n"));
+        // substring `chunked` must not satisfy the framing check
+        assert!(parse_rejected(b"POST /s HTTP/1.1\r\nTransfer-Encoding: x-chunked\r\n\r\n"));
+    }
+    #[test]
+    fn plain_chunked_and_single_cl_accepted() {
+        let h = parse_ok(b"POST /s HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n");
+        assert!(h.chunked && h.content_length.is_none());
+        let h = parse_ok(b"POST /s HTTP/1.1\r\nContent-Length: 5\r\n\r\n");
+        assert!(!h.chunked && h.content_length == Some(5));
     }
 }

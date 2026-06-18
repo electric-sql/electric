@@ -389,7 +389,11 @@ async fn handle_create(store: Arc<Store>, req: Req, path: String) -> Resp {
             0 => anchor,
             sub if src.is_json => {
                 // Sub-offset counts messages past the anchor; each message ends with ','.
-                let data = read_range_bytes(&src, anchor, src_tail).await;
+                let data = match read_range_bytes(&src, anchor, src_tail).await {
+                    Ok(d) => d,
+                    // A short/cold read must not be miscounted as a value boundary.
+                    Err(_) => return text_response(503, "fork source read failed"),
+                };
                 let mut remaining = sub;
                 let mut adv = 0u64;
                 for (i, b) in data.iter().enumerate() {
@@ -481,7 +485,9 @@ async fn handle_create(store: Arc<Store>, req: Req, path: String) -> Resp {
                 let target = ap.written;
                 let file = ap.file.clone();
                 drop(ap);
-                st.sync.sync_to(file, &st, target).await;
+                if st.sync.sync_to(file, &st, target).await.is_err() {
+                    return text_response(500, "fsync failed");
+                }
             }
             let t = st.tail();
             let mut b = ResponseBuilder::new(201)
@@ -555,7 +561,7 @@ fn write_wire(st: &StreamState, ap: &mut Appender, wire: &Bytes) -> std::io::Res
         let mut s = st.shared.write().unwrap();
         s.tail = tail;
         s.last_access = SystemTime::now();
-        closed = s.closed;
+        closed = s.closed_durable;
     }
     // Publish the resident chunk BEFORE waking subscribers, so a long-poll/SSE
     // reader woken by the tail update reliably hits the cache (one shared copy)
@@ -884,27 +890,28 @@ async fn handle_append_inner(store: Arc<Store>, req: Req, path: String) -> (Resp
     let file = ap.file.clone();
     drop(ap);
 
-    if !wire.is_empty() {
-        st.sync.sync_to(file, &st, target).await;
+    // Covering fsync failed: not durable. Error out (and skip the close commit
+    // below) rather than ack 2xx.
+    if !wire.is_empty() && st.sync.sync_to(file, &st, target).await.is_err() {
+        ret!(text_response(500, "fsync failed"), Conflict);
     }
 
-    // Persist metadata: closure durably (monotonic state), producer/access
-    // updates debounced (documented crash window; see store::Meta).
-    //
-    // Closure ordering mirrors the Node reference (data fdatasync → durable
-    // metadata commit → only then notify readers): the data was fsynced above,
-    // the closure is made durable here, and only afterwards is the close signal
-    // broadcast on tail_tx. This guarantees readers never observe EOF for a
-    // closure that is not yet durable, preserving monotonicity across crashes.
+    // Closure ordering: data fdatasync (above) → durable meta commit → expose the
+    // closure to readers (closed_durable) and wake waiters. Readers never observe
+    // EOF for a closure that is not yet durable (PROTOCOL.md §4.1 monotonicity).
+    // Producer/access updates are debounced (documented crash window; see store::Meta).
     if close_req {
         let st2 = st.clone();
-        let _ = tokio::task::spawn_blocking(move || write_meta_sync(&st2, true)).await;
-        // Closure is now durable — safe to wake long-poll / SSE waiters.
-        let t = Tail {
-            bytes: st.shared.read().unwrap().tail,
-            closed: true,
+        let meta_res = tokio::task::spawn_blocking(move || write_meta_sync(&st2, true)).await;
+        if !matches!(meta_res, Ok(Ok(()))) {
+            ret!(text_response(500, "close not durable"), Conflict);
+        }
+        let tail = {
+            let mut s = st.shared.write().unwrap();
+            s.closed_durable = true;
+            s.tail
         };
-        st.tail_tx.send_replace(t);
+        st.tail_tx.send_replace(Tail { bytes: tail, closed: true });
     } else {
         st.schedule_meta_flush();
     }
@@ -1186,12 +1193,15 @@ where
     // caught-up reader falls through to a file read (sendfile) instead of being
     // served wrong bytes.
     st.set_last_chunk(tail, Bytes::new());
-    let closed = st.shared.read().unwrap().closed;
+    let closed = st.shared.read().unwrap().closed_durable;
     st.tail_tx.send_replace(Tail { bytes: tail, closed });
 
     let target = ap.written;
     drop(ap);
-    st.sync.sync_to(file, &st, target).await;
+    if st.sync.sync_to(file, &st, target).await.is_err() {
+        // Not durable. Body was fully consumed, so keep-alive framing is intact.
+        return Done(text_response(500, "fsync failed"));
+    }
     st.schedule_meta_flush();
     maybe_seal_bg(&store, &st);
 
@@ -1404,36 +1414,44 @@ async fn materialize_resolved(
     slices: Vec<crate::store::ResolvedSlice>,
     prefix: &'static [u8],
     suffix: &'static [u8],
-) -> Bytes {
+) -> std::io::Result<Bytes> {
     use crate::store::ResolvedSlice;
+    use std::io::{Error, ErrorKind};
     let mut out = BytesMut::new();
     out.put_slice(prefix);
     for sl in slices {
         match sl {
             ResolvedSlice::Local(seg) => {
+                let want = seg.len;
                 let bytes = tokio::task::spawn_blocking(move || {
                     crate::store::materialize_segments(&[seg], b"", b"")
                 })
                 .await
                 .unwrap_or_default();
+                // A short local read must not be forwarded as complete.
+                if bytes.len() as u64 != want {
+                    return Err(Error::new(ErrorKind::UnexpectedEof, "short local read"));
+                }
                 out.put_slice(&bytes);
             }
             ResolvedSlice::Remote { key, offset, len } => {
-                if let Some(bs) = &st.blobstore {
-                    match bs.get_range(&key, offset, len).await {
-                        // Validate full length — a truncated object must not be
-                        // forwarded as if complete.
-                        Ok(b) if b.len() as u64 == len => out.put_slice(&b),
-                        _ => return Bytes::new(),
+                let Some(bs) = &st.blobstore else {
+                    return Err(Error::other("remote slice but no blobstore configured"));
+                };
+                match bs.get_range(&key, offset, len).await {
+                    // Validate full length — a truncated object must not be
+                    // forwarded as if complete.
+                    Ok(b) if b.len() as u64 == len => out.put_slice(&b),
+                    Ok(_) => {
+                        return Err(Error::new(ErrorKind::UnexpectedEof, "truncated cold object"))
                     }
-                } else {
-                    return Bytes::new();
+                    Err(e) => return Err(e),
                 }
             }
         }
     }
     out.put_slice(suffix);
-    out.freeze()
+    Ok(out.freeze())
 }
 
 // ---------- GET (catch-up / long-poll / SSE) ----------
@@ -1446,8 +1464,10 @@ async fn handle_read(store: Arc<Store>, req: Req, path: String) -> Resp {
     if st.shared.read().unwrap().soft_deleted {
         return gone();
     }
-    st.touch();
+    // Only TTL is reset by a read, and touch() takes the write lock — skip it for
+    // non-TTL streams to keep their read path lock-free.
     if st.config.ttl_seconds.is_some() {
+        st.touch();
         st.schedule_meta_flush(); // sliding TTL must survive restarts
     }
     let q = parse_query(req.query.as_deref());
@@ -1497,11 +1517,12 @@ async fn handle_catchup(
         }
     };
     let end = t.bytes;
-    let etag = st.etag(start, end, t.closed);
-    if let Some(inm) = header_str(req, "if-none-match") {
-        if inm == etag {
+    // No ETag for offset=now (§10.1) — it's a tail sentinel, not a cacheable range.
+    let etag = (!now_mode).then(|| st.etag(start, end, t.closed));
+    if let Some(etag) = &etag {
+        if header_str(req, "if-none-match") == Some(etag.as_str()) {
             let mut b = ResponseBuilder::new(304)
-                .h("etag", etag)
+                .h("etag", etag.clone())
                 .h(H_NEXT_OFFSET, format_offset(end))
                 .hs(H_UP_TO_DATE, "true");
             if t.closed {
@@ -1516,11 +1537,13 @@ async fn handle_catchup(
         .h("content-type", st.config.content_type.clone())
         .h(H_NEXT_OFFSET, format_offset(end))
         .hs(H_UP_TO_DATE, "true")
-        .h("etag", etag)
         .h(
             "cache-control",
             if now_mode { "no-store".into() } else { CACHEABLE.to_string() },
         );
+    if let Some(etag) = etag {
+        b = b.h("etag", etag);
+    }
     if t.closed {
         b = b.hs(H_CLOSED, "true");
     }
@@ -1722,7 +1745,12 @@ async fn handle_sse(st: Arc<StreamState>, offset: ParsedOffset, client_cursor: O
                     }
                     None => {
                         cache_hit = false;
-                        read_range_bytes(&st, pos, t.bytes).await
+                        match read_range_bytes(&st, pos, t.bytes).await {
+                            Ok(d) => d,
+                            // End the stream without advancing `pos`: the client
+                            // reconnects from its last offset, never skipping a gap.
+                            Err(_) => return,
+                        }
                     }
                 };
                 crate::telemetry::record_tail_cache(cache_hit, "sse");
@@ -1815,17 +1843,31 @@ async fn handle_sse(st: Arc<StreamState>, offset: ParsedOffset, client_cursor: O
 }
 
 /// Read a logical byte range fully into memory (SSE batches are small).
-async fn read_range_bytes(st: &Arc<StreamState>, start: u64, end: u64) -> Bytes {
+/// Returns `Err` if the range could not be fully materialized (a short local
+/// read or a cold-storage error/truncation) so callers never advance past a gap.
+async fn read_range_bytes(
+    st: &Arc<StreamState>,
+    start: u64,
+    end: u64,
+) -> std::io::Result<Bytes> {
+    let want = end.saturating_sub(start) as usize;
     let mut slices = Vec::new();
     crate::store::resolve_range(st, start, end, &mut slices);
-    match crate::store::into_local_segments(slices) {
+    let out = match crate::store::into_local_segments(slices) {
         // Local-only fast path (always the case with tiering off): one blocking
         // read across all local segments.
         Ok(segs) => tokio::task::spawn_blocking(move || materialize_segments(&segs, b"", b""))
             .await
             .unwrap_or_default(),
-        Err(slices) => materialize_resolved(st, slices, b"", b"").await,
+        Err(slices) => materialize_resolved(st, slices, b"", b"").await?,
+    };
+    if out.len() != want {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::UnexpectedEof,
+            "short read while materializing range",
+        ));
     }
+    Ok(out)
 }
 
 // ---------- HEAD ----------
@@ -1990,5 +2032,58 @@ mod bug1_tests {
     async fn cold_read_error_aborts() {
         let (_n, failed) = run(Mode::Error).await;
         assert!(failed, "a cold-read backend error must set the abort flag (BUG-1)");
+    }
+
+    /// H4: the buffered cold-read path (`materialize_resolved` via
+    /// `read_range_bytes`, used by SSE and fork sub-offset) must surface a
+    /// truncated/errored cold read as `Err` — not silently return short bytes
+    /// that a caller would treat as a complete (advanced) read.
+    async fn run_buffered(mode: Mode) -> std::io::Result<bytes::Bytes> {
+        let dir = std::env::temp_dir().join(format!(
+            "ds-h4-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut store = Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap();
+        store.blobstore = Some(Arc::new(TestBlob(mode)));
+        let store = Arc::new(store);
+        let st = match store.create("s", stream_cfg(), None, 0).unwrap() {
+            CreateResult::Created(s) => s,
+            _ => panic!("create failed"),
+        };
+        let slices = vec![ResolvedSlice::Remote {
+            key: "k".into(),
+            offset: 0,
+            len: 100,
+        }];
+        let res = materialize_resolved(&st, slices, b"", b"").await;
+        let _ = std::fs::remove_dir_all(&dir);
+        res
+    }
+
+    #[tokio::test]
+    async fn buffered_cold_read_full_ok() {
+        let r = run_buffered(Mode::Full).await;
+        assert_eq!(r.unwrap().len(), 100, "a full cold read returns the bytes");
+    }
+
+    #[tokio::test]
+    async fn buffered_cold_read_truncated_errors() {
+        assert!(
+            run_buffered(Mode::Truncate).await.is_err(),
+            "a truncated cold object must surface as Err (H4)"
+        );
+    }
+
+    #[tokio::test]
+    async fn buffered_cold_read_backend_error_errors() {
+        assert!(
+            run_buffered(Mode::Error).await.is_err(),
+            "a cold-read backend error must surface as Err (H4)"
+        );
     }
 }
