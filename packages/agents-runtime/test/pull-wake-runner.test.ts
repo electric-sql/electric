@@ -278,6 +278,61 @@ describe(`createPullWakeRunner`, () => {
     await runner.stop()
   })
 
+  it(`retries every wake skipped while the same stream is already being claimed`, async () => {
+    const events = [
+      { ...wakeEvent(`parent`), generation: 1 },
+      { ...wakeEvent(`parent`), generation: 2 },
+      { ...wakeEvent(`parent`), generation: 3 },
+    ]
+    const claims = [`one`, `two`, `three`].map(notification)
+    const firstClaimResponse = deferred<Response>()
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(
+        (_input: RequestInfo | URL) => firstClaimResponse.promise
+      )
+      .mockImplementationOnce(async (_input: RequestInfo | URL) =>
+        Response.json(claims[1])
+      )
+      .mockImplementationOnce(async (_input: RequestInfo | URL) =>
+        Response.json(claims[2])
+      )
+    vi.stubGlobal(`fetch`, fetchMock)
+    const testRuntime = runtime()
+    const streamFactory = vi.fn(async () => ({
+      offset: `42`,
+      async *jsonStream() {
+        yield* events
+      },
+      closed: Promise.resolve(),
+    }))
+
+    const runner = createPullWakeRunner({
+      baseUrl: `http://server`,
+      runnerId: `runner-1`,
+      runtime: testRuntime,
+      heartbeatIntervalMs: 0,
+      eventHeartbeatThrottleMs: 0,
+      streamFactory,
+    })
+
+    runner.start()
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
+    expect(testRuntime.dispatchWake).not.toHaveBeenCalled()
+
+    firstClaimResponse.resolve(Response.json(claims[0]))
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(3)
+    })
+    await waitFor(() => {
+      expect(testRuntime.dispatchWake).toHaveBeenCalledTimes(3)
+    })
+
+    await runner.stop()
+  })
+
   it(`skips stale wake events when claim returns no pending work`, async () => {
     const event = wakeEvent(`one`)
     const fetchMock = vi.fn(async (_input: RequestInfo | URL) =>
