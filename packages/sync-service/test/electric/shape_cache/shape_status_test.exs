@@ -56,15 +56,15 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
   test "can add shapes", ctx do
     {:ok, state, []} = new_state(ctx)
     shape = shape!()
-    assert {:ok, shape_handle} = ShapeStatus.add_shape(state, shape)
+    assert {:ok, {shape_handle, _}} = ShapeStatus.add_shape(state, shape)
     assert [{^shape_handle, ^shape}] = ShapeStatus.list_shapes(state)
   end
 
   test "can count shapes by indexability", ctx do
     {:ok, state, []} = new_state(ctx)
 
-    assert {:ok, indexed_handle} = ShapeStatus.add_shape(state, shape!("indexed"))
-    assert {:ok, _unindexed_handle} = ShapeStatus.add_shape(state, shape2!())
+    assert {:ok, {indexed_handle, _}} = ShapeStatus.add_shape(state, shape!("indexed"))
+    assert {:ok, {_unindexed_handle, _}} = ShapeStatus.add_shape(state, shape2!())
 
     assert %{total: 2, indexed: 1, unindexed: 1} = ShapeStatus.shape_counts(state)
 
@@ -75,11 +75,11 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
   test "can delete shape instances", ctx do
     {:ok, state, []} = new_state(ctx)
     shape_1 = shape!()
-    assert {:ok, shape_handle_1} = ShapeStatus.add_shape(state, shape_1)
+    assert {:ok, {shape_handle_1, _}} = ShapeStatus.add_shape(state, shape_1)
 
     shape_2 = shape2!()
 
-    assert {:ok, shape_handle_2} = ShapeStatus.add_shape(state, shape_2)
+    assert {:ok, {shape_handle_2, _}} = ShapeStatus.add_shape(state, shape_2)
 
     assert Enum.sort_by([{shape_handle_1, shape_1}, {shape_handle_2, shape_2}], &elem(&1, 0)) ==
              ShapeStatus.list_shapes(state) |> Enum.sort_by(&elem(&1, 0))
@@ -104,7 +104,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
     assert :error = ShapeStatus.fetch_handle_by_shape(state, shape)
 
-    assert {:ok, shape_handle} = ShapeStatus.add_shape(state, shape)
+    assert {:ok, {shape_handle, _}} = ShapeStatus.add_shape(state, shape)
 
     assert {:ok, ^shape_handle} = ShapeStatus.fetch_handle_by_shape(state, shape)
 
@@ -152,9 +152,9 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
           inspector: @inspector
         )
 
-      {:ok, inner_handle} = ShapeStatus.add_shape(state, inner)
+      {:ok, {inner_handle, _}} = ShapeStatus.add_shape(state, inner)
       outer = %{outer | shape_dependencies_handles: [inner_handle]}
-      {:ok, outer_handle} = ShapeStatus.add_shape(state, outer)
+      {:ok, {outer_handle, _}} = ShapeStatus.add_shape(state, outer)
 
       assert [{^inner_handle, _}, {^outer_handle, _}] = ShapeStatus.list_shapes(state)
     end
@@ -167,8 +167,8 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     end
 
     test "returns the shape that was least recently updated", %{state: state} do
-      {:ok, shape1} = ShapeStatus.add_shape(state, shape!())
-      {:ok, shape2} = ShapeStatus.add_shape(state, shape2!())
+      {:ok, {shape1, _}} = ShapeStatus.add_shape(state, shape!())
+      {:ok, {shape2, _}} = ShapeStatus.add_shape(state, shape2!())
 
       now = System.monotonic_time()
       ShapeStatus.update_last_read_time(state, shape2, now)
@@ -181,8 +181,8 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
          %{
            state: state
          } do
-      {:ok, _} = ShapeStatus.add_shape(state, shape!())
-      {:ok, _} = ShapeStatus.add_shape(state, shape2!())
+      {:ok, {_, _}} = ShapeStatus.add_shape(state, shape!())
+      {:ok, {_, _}} = ShapeStatus.add_shape(state, shape2!())
 
       assert {[], _} = ShapeStatus.least_recently_used(state, _count = 1)
     end
@@ -192,8 +192,8 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     end
 
     test "returns empty list if all shapes have been deleted", %{state: state} do
-      {:ok, shape1} = ShapeStatus.add_shape(state, shape!())
-      {:ok, shape2} = ShapeStatus.add_shape(state, shape2!())
+      {:ok, {shape1, _}} = ShapeStatus.add_shape(state, shape!())
+      {:ok, {shape2, _}} = ShapeStatus.add_shape(state, shape2!())
 
       now = System.monotonic_time()
       ShapeStatus.update_last_read_time(state, shape2, now)
@@ -206,8 +206,8 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     end
 
     test "returns all shapes when count exceeds total shapes", %{state: state} do
-      {:ok, shape1} = ShapeStatus.add_shape(state, shape!())
-      {:ok, shape2} = ShapeStatus.add_shape(state, shape2!())
+      {:ok, {shape1, _}} = ShapeStatus.add_shape(state, shape!())
+      {:ok, {shape2, _}} = ShapeStatus.add_shape(state, shape2!())
 
       now = System.monotonic_time()
       ShapeStatus.update_last_read_time(state, shape2, now)
@@ -225,7 +225,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
       shapes =
         for i <- 1..5 do
-          {:ok, handle} = ShapeStatus.add_shape(state, shape!("test_#{i}"))
+          {:ok, {handle, _}} = ShapeStatus.add_shape(state, shape!("test_#{i}"))
           ShapeStatus.update_last_read_time(state, handle, now + i * 10)
           handle
         end
@@ -240,9 +240,9 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
     test "returns shapes in order from least to most recently used", %{state: state} do
       now = System.monotonic_time()
-      {:ok, shape1} = ShapeStatus.add_shape(state, shape!("oldest"))
-      {:ok, shape2} = ShapeStatus.add_shape(state, shape!("middle"))
-      {:ok, shape3} = ShapeStatus.add_shape(state, shape!("newest"))
+      {:ok, {shape1, _}} = ShapeStatus.add_shape(state, shape!("oldest"))
+      {:ok, {shape2, _}} = ShapeStatus.add_shape(state, shape!("middle"))
+      {:ok, {shape3, _}} = ShapeStatus.add_shape(state, shape!("newest"))
 
       ShapeStatus.update_last_read_time(state, shape1, now)
       ShapeStatus.update_last_read_time(state, shape2, now + 5)
@@ -252,9 +252,9 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     end
 
     test "returns shapes with same timestamp in arbitrary order", %{state: state} do
-      {:ok, shape1} = ShapeStatus.add_shape(state, shape!("1"))
-      {:ok, shape2} = ShapeStatus.add_shape(state, shape!("2"))
-      {:ok, shape3} = ShapeStatus.add_shape(state, shape!("3"))
+      {:ok, {shape1, _}} = ShapeStatus.add_shape(state, shape!("1"))
+      {:ok, {shape2, _}} = ShapeStatus.add_shape(state, shape!("2"))
+      {:ok, {shape3, _}} = ShapeStatus.add_shape(state, shape!("3"))
 
       now = System.monotonic_time()
       ShapeStatus.update_last_read_time(state, shape1, now + 10)
@@ -281,7 +281,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
             ) do
         shape_handles =
           for {timestamp, i} <- Enum.with_index(timestamps) do
-            {:ok, handle} = ShapeStatus.add_shape(state, shape!("property_test_#{i}"))
+            {:ok, {handle, _}} = ShapeStatus.add_shape(state, shape!("property_test_#{i}"))
             ShapeStatus.update_last_read_time(state, handle, timestamp)
             {handle, timestamp}
           end
@@ -413,6 +413,44 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     end
   end
 
+  describe "shape_id" do
+    setup ctx do
+      {:ok, stack_id, _} = new_state(ctx)
+      %{stack_id: stack_id}
+    end
+
+    test "add_shape assigns a monotonic id and returns {handle, id}", %{stack_id: stack_id} do
+      {:ok, {handle1, id1}} = ShapeStatus.add_shape(stack_id, shape!())
+      {:ok, {_handle2, id2}} = ShapeStatus.add_shape(stack_id, shape2!())
+      assert is_binary(handle1) and is_integer(id1)
+      assert id2 > id1
+      assert {:ok, ^id1} = ShapeStatus.id_for_handle(stack_id, handle1)
+      assert {:ok, ^handle1} = ShapeStatus.handle_for_id(stack_id, id1)
+    end
+
+    test "shape_handle_for_log returns the handle, or a fallback once removed", %{
+      stack_id: stack_id
+    } do
+      {:ok, {handle, id}} = ShapeStatus.add_shape(stack_id, shape!())
+      assert ShapeStatus.shape_handle_for_log(stack_id, id) == handle
+      :ok = ShapeStatus.remove_shape(stack_id, handle)
+      assert ShapeStatus.shape_handle_for_log(stack_id, id) == "unknown, id: #{id}"
+    end
+
+    test "ids minted on the restore path are resolvable both ways", %{stack_id: stack_id} do
+      {:ok, {handle, _id}} = ShapeStatus.add_shape(stack_id, shape!())
+      ShapeStatus.ShapeDb.mark_snapshot_complete(stack_id, handle)
+
+      # refresh/1 repopulates the meta table from SQLite via
+      # populate_shape_meta_table/2, which mints a fresh id per restored handle.
+      :ok = ShapeStatus.refresh(stack_id)
+
+      assert {:ok, restored_id} = ShapeStatus.id_for_handle(stack_id, handle)
+      assert is_integer(restored_id)
+      assert {:ok, ^handle} = ShapeStatus.handle_for_id(stack_id, restored_id)
+    end
+  end
+
   defp shape!, do: shape!("test")
 
   defp shape!(val) do
@@ -446,7 +484,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
     shape_handles =
       for shape <- shapes do
-        {:ok, shape_handle} = ShapeStatus.add_shape(ctx.stack_id, shape)
+        {:ok, {shape_handle, _}} = ShapeStatus.add_shape(ctx.stack_id, shape)
         shape_handle
       end
 

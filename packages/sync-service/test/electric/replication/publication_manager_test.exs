@@ -51,7 +51,7 @@ defmodule Electric.Replication.PublicationManagerTest do
     if ctx[:existing_where_clauses] do
       for where_clause <- ctx.existing_where_clauses do
         shape = generate_shape(ctx.relation_with_oid, where_clause)
-        {:ok, _shape_handle} = Electric.ShapeCache.ShapeStatus.add_shape(ctx.stack_id, shape)
+        {:ok, {_shape_handle, _}} = Electric.ShapeCache.ShapeStatus.add_shape(ctx.stack_id, shape)
       end
     end
 
@@ -642,7 +642,7 @@ defmodule Electric.Replication.PublicationManagerTest do
       shape = generate_shape(ctx.relation_with_oid, @where_clause_1)
 
       # Add the shape to ShapeStatus first - this is what allows restoration after restart
-      {:ok, shape_handle} = Electric.ShapeCache.ShapeStatus.add_shape(ctx.stack_id, shape)
+      {:ok, {shape_handle, _}} = Electric.ShapeCache.ShapeStatus.add_shape(ctx.stack_id, shape)
 
       # Add the shape to the publication manager
       assert :ok = PublicationManager.add_shape(ctx.stack_id, shape_handle, shape)

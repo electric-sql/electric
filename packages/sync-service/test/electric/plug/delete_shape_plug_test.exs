@@ -138,7 +138,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
     test "should clean shape based on shape definition", ctx do
       %{stack_id: stack_id} = ctx
 
-      {:ok, shape_handle} = Electric.ShapeCache.ShapeStatus.add_shape(stack_id, @test_shape)
+      {:ok, {shape_handle, _}} = Electric.ShapeCache.ShapeStatus.add_shape(stack_id, @test_shape)
 
       expect_shape_cache(clean_shape: fn ^shape_handle, ^stack_id -> :ok end)
 
@@ -154,7 +154,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
     test "should clean shape based only on shape_handle", ctx do
       %{stack_id: stack_id} = ctx
 
-      {:ok, shape_handle} = Electric.ShapeCache.ShapeStatus.add_shape(stack_id, @test_shape)
+      {:ok, {shape_handle, _}} = Electric.ShapeCache.ShapeStatus.add_shape(stack_id, @test_shape)
 
       expect_shape_cache(clean_shape: fn ^shape_handle, ^stack_id -> :ok end)
 

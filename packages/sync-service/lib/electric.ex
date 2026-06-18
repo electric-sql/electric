@@ -32,6 +32,7 @@ defmodule Electric do
   @type pg_connection_opts :: [unquote(NimbleOptions.option_typespec(opts_schema))]
   @type stack_id :: binary()
   @type shape_handle() :: binary()
+  @type shape_id() :: non_neg_integer()
 
   default = fn key -> inspect(Electric.Config.default(key)) end
 

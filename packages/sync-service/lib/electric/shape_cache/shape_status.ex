@@ -26,6 +26,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   @type stack_id() :: Electric.stack_id()
   @type shape_handle() :: Electric.shape_handle()
+  @type shape_id() :: Electric.shape_id()
   @type shape_counts() :: %{
           total: non_neg_integer(),
           indexed: non_neg_integer(),
@@ -35,8 +36,9 @@ defmodule Electric.ShapeCache.ShapeStatus do
   # MUST be updated when Shape.comparable/1 changes.
   @version 10
 
-  # Tuple format: {handle, hash, snapshot_started, last_read_time, generation}
+  # Tuple format: {handle, hash, snapshot_started, last_read_time, generation, id}
   @shape_last_used_time_pos 4
+  @shape_id_pos 6
   @shape_counts_key :counts
 
   @spec version() :: pos_integer()
@@ -107,14 +109,15 @@ defmodule Electric.ShapeCache.ShapeStatus do
       populate_shape_meta_table(stack_id, generation)
 
       :ets.select_delete(shape_meta_table(stack_id), [
-        {{:_, :_, :_, :_, :"$1"}, [{:"/=", :"$1", generation}], [true]}
+        {{:_, :_, :_, :_, :"$1", :_}, [{:"/=", :"$1", generation}], [true]}
       ])
 
       :ok
     end
   end
 
-  @spec add_shape(stack_id(), Shape.t()) :: {:ok, shape_handle()} | {:error, term()}
+  @spec add_shape(stack_id(), Shape.t()) ::
+          {:ok, {shape_handle(), shape_id()}} | {:error, term()}
   def add_shape(stack_id, shape) when is_stack_id(stack_id) do
     OpenTelemetry.with_child_span("shape_status.add_shape", [], stack_id, fn ->
       {_, shape_handle} = Shape.generate_id(shape)
@@ -122,16 +125,19 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
       # Add the lookup last as it is the one that enables clients to find the shape
       with {:ok, shape_hash} <- ShapeDb.add_shape(stack_id, shape, shape_handle) do
+        id = mint_id(stack_id)
+
         if :ets.insert_new(
              shape_meta_table(stack_id),
              # Generation 0 is safe here: add_shape only runs in active mode,
              # and refresh/1 (which sweeps by generation) only runs before active.
              # They are sequentially ordered by the Connection.Manager state machine.
-             {shape_handle, shape_hash, false, nil, 0}
+             {shape_handle, shape_hash, false, nil, 0, id}
            ) do
+          :ets.insert(shape_id_table(stack_id), {id, shape_handle})
           :ets.insert(shape_indexability_table(stack_id), {shape_handle, indexed?})
           increment_shape_counts(stack_id, indexed?)
-          {:ok, shape_handle}
+          {:ok, {shape_handle, id}}
         else
           {:error, "duplicate shape #{inspect(shape_handle)}: #{inspect(shape)}"}
         end
@@ -206,6 +212,11 @@ defmodule Electric.ShapeCache.ShapeStatus do
   @spec remove_shape(stack_id(), shape_handle()) :: :ok | {:error, term()}
   def remove_shape(stack_id, shape_handle) when is_stack_id(stack_id) do
     with :ok <- ShapeDb.remove_shape(stack_id, shape_handle) do
+      case id_for_handle(stack_id, shape_handle) do
+        {:ok, id} -> :ets.delete(shape_id_table(stack_id), id)
+        :error -> :ok
+      end
+
       :ets.delete(shape_meta_table(stack_id), shape_handle)
       decrement_shape_counts(stack_id, shape_cached_as_indexed?(stack_id, shape_handle))
       :ok
@@ -217,6 +228,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
     :ok = ShapeDb.reset(stack_id)
     :ets.delete_all_objects(shape_meta_table(stack_id))
     :ets.delete_all_objects(shape_indexability_table(stack_id))
+    :ets.delete_all_objects(shape_id_table(stack_id))
     put_shape_counts(stack_id, empty_shape_counts())
     :ok
   end
@@ -259,6 +271,42 @@ defmodule Electric.ShapeCache.ShapeStatus do
     end)
   end
 
+  @spec id_for_handle(stack_id(), shape_handle()) :: {:ok, shape_id()} | :error
+  def id_for_handle(stack_id, shape_handle) do
+    case :ets.lookup_element(shape_meta_table(stack_id), shape_handle, @shape_id_pos, nil) do
+      nil -> :error
+      id -> {:ok, id}
+    end
+  end
+
+  @spec handle_for_id(stack_id(), shape_id()) :: {:ok, shape_handle()} | :error
+  def handle_for_id(stack_id, id) do
+    case :ets.lookup_element(shape_id_table(stack_id), id, 2, nil) do
+      nil -> :error
+      handle -> {:ok, handle}
+    end
+  end
+
+  @doc """
+  Resolve a shape_id to its handle for logging/telemetry/process labels.
+  Returns a fallback string when the shape has been removed (the only expected
+  miss), so callers can log unconditionally.
+  """
+  @spec shape_handle_for_log(stack_id(), shape_id()) :: binary()
+  def shape_handle_for_log(stack_id, id) do
+    case handle_for_id(stack_id, id) do
+      {:ok, handle} -> handle
+      :error -> "unknown, id: #{id}"
+    end
+  end
+
+  @spec fetch_shape_by_id(stack_id(), shape_id()) :: {:ok, Shape.t()} | :error
+  def fetch_shape_by_id(stack_id, id) do
+    with {:ok, handle} <- handle_for_id(stack_id, id) do
+      fetch_shape_by_handle(stack_id, handle)
+    end
+  end
+
   @spec has_shape_handle?(stack_id(), shape_handle()) :: boolean()
   def has_shape_handle?(stack_id, shape_handle) do
     :ets.member(shape_meta_table(stack_id), shape_handle)
@@ -285,7 +333,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
   def validate_shape_handle(stack_id, shape_handle, %Shape{} = shape)
       when is_stack_id(stack_id) do
     case :ets.lookup(shape_meta_table(stack_id), shape_handle) do
-      [{^shape_handle, hash, _snapshot_started, _last_read, _gen}] ->
+      [{^shape_handle, hash, _snapshot_started, _last_read, _gen, _id}] ->
         if Shape.hash(shape) == hash, do: :ok, else: :error
 
       [] ->
@@ -304,7 +352,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   def snapshot_started?(stack_id, shape_handle) do
     case :ets.lookup(shape_meta_table(stack_id), shape_handle) do
-      [{^shape_handle, _hash, snapshot_started, _last_read, _gen}] -> snapshot_started
+      [{^shape_handle, _hash, snapshot_started, _last_read, _gen, _id}] -> snapshot_started
       [] -> false
     end
   end
@@ -351,10 +399,10 @@ defmodule Electric.ShapeCache.ShapeStatus do
         fn
           # This shape has only just been created, so it's too young to be considered for
           # expiration.
-          {_handle, _hash, _snapshot_started, nil, _gen}, tree ->
+          {_handle, _hash, _snapshot_started, nil, _gen, _id}, tree ->
             tree
 
-          {handle, _hash, _snapshot_started, last_read, _gen}, tree ->
+          {handle, _hash, _snapshot_started, last_read, _gen, _id}, tree ->
             last_read_tuple = {last_read, handle}
 
             if :gb_trees.size(tree) < shape_count do
@@ -406,6 +454,14 @@ defmodule Electric.ShapeCache.ShapeStatus do
   defp shape_counts_table(stack_id),
     do: :"shape_counts_table:#{stack_id}"
 
+  @spec shape_id_table(stack_id()) :: atom()
+  defp shape_id_table(stack_id),
+    do: :"shape_id_table:#{stack_id}"
+
+  defp mint_id(stack_id) do
+    :ets.update_counter(shape_id_table(stack_id), :seq, {2, 1}, {:seq, 0})
+  end
+
   defp create_shape_meta_table(stack_id) do
     ensure_state_table(shape_meta_table(stack_id),
       read_concurrency: true,
@@ -422,8 +478,14 @@ defmodule Electric.ShapeCache.ShapeStatus do
       write_concurrency: true
     )
 
+    ensure_state_table(shape_id_table(stack_id),
+      read_concurrency: true,
+      write_concurrency: :auto
+    )
+
     :ets.delete_all_objects(shape_meta_table(stack_id))
     :ets.delete_all_objects(shape_indexability_table(stack_id))
+    :ets.delete_all_objects(shape_id_table(stack_id))
     put_shape_counts(stack_id, empty_shape_counts())
   end
 
@@ -437,7 +499,12 @@ defmodule Electric.ShapeCache.ShapeStatus do
         # any shapes where the snapshot didn't complete have been deleted
         # so there is no intermediate started-but-not-complete state
         # and completed implies started
-        true = :ets.insert(table, {handle, hash, snapshot_complete?, start_time, generation})
+        id = mint_id(stack_id)
+        :ets.insert(shape_id_table(stack_id), {id, handle})
+
+        true =
+          :ets.insert(table, {handle, hash, snapshot_complete?, start_time, generation, id})
+
         table
       end
     )

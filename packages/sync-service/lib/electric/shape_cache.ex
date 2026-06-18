@@ -380,7 +380,7 @@ defmodule Electric.ShapeCache do
         with {:ok, shape_handles} <- safe_maybe_create_inner_shapes(shape, opts) do
           shape = %{shape | shape_dependencies_handles: shape_handles}
 
-          {:ok, shape_handle} = ShapeStatus.add_shape(stack_id, shape)
+          {:ok, {shape_handle, _shape_id}} = ShapeStatus.add_shape(stack_id, shape)
 
           Logger.info("Creating new shape for #{inspect(shape)} with handle #{shape_handle}")
 
