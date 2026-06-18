@@ -4,7 +4,6 @@ version = "0.1.0"
 edition = "2021"
 description = "High-performance Durable Streams server (Rust)"
 license = "Apache-2.0"
-# 1.75 for `async fn` in traits (the shared http1::ByteSource request reader).
 # CI builds on stable; this documents the supported minimum.
 rust-version = "1.75"
 repository = "https://github.com/durable-streams/durable-streams"
@@ -13,9 +12,6 @@ readme = "README.md"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
-hyper = { version = "1", features = ["http1", "server"] }
-hyper-util = { version = "0.1", features = ["tokio", "server", "http1"] }
-http-body-util = "0.1"
 bytes = "1"
 dashmap = "6"
 serde = { version = "1", features = ["derive"] }
@@ -23,7 +19,6 @@ serde_json = { version = "1", features = ["raw_value"] }
 httparse = "1"
 libc = "0.2"
 percent-encoding = "2"
-ed25519-dalek = { version = "2", default-features = false, features = ["std", "fast"] }
 
 # Structured logging / tracing facade. Always compiled (it is light), but with
 # `release_max_level_info` so trace/debug records are stripped from release
@@ -63,11 +58,6 @@ telemetry = [
 # AWS/S3 transport, which works against any S3-compatible endpoint (AWS, R2,
 # Fly/Tigris, MinIO, Backblaze B2) via path-style + custom endpoint config.
 tier = ["dep:object_store"]
-
-# io_uring engine (--http-engine uring): a thread-per-core current-thread tokio
-# runtime backed by io_uring for socket and file I/O. Linux-only.
-[target.'cfg(target_os = "linux")'.dependencies]
-tokio-uring = "0.5"
 
 [profile.release]
 lto = true

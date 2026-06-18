@@ -17,8 +17,8 @@
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Arc;
 
-use bytes::{Buf, Bytes, BytesMut};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use bytes::{Bytes, BytesMut};
+use tokio::io::AsyncWriteExt;
 use tokio::net::{TcpListener, TcpStream};
 
 use crate::api::{Body, Req, Resp};
@@ -101,25 +101,6 @@ pub async fn serve(store: Arc<Store>, listener: TcpListener) {
     }
 }
 
-/// Adapts a tokio `TcpStream` + reusable `BytesMut` to the shared `ByteSource`
-/// request reader. Reads land directly in the `BytesMut`'s spare capacity.
-struct RawSource<'a> {
-    stream: &'a mut TcpStream,
-    buf: &'a mut BytesMut,
-}
-
-impl http1::ByteSource for RawSource<'_> {
-    fn buffered(&self) -> &[u8] {
-        self.buf
-    }
-    fn consume(&mut self, n: usize) {
-        self.buf.advance(n);
-    }
-    async fn fill(&mut self) -> std::io::Result<bool> {
-        Ok(self.stream.read_buf(self.buf).await? > 0)
-    }
-}
-
 async fn conn_loop(store: Arc<Store>, mut stream: TcpStream) -> std::io::Result<()> {
     const BAD_REQUEST: &[u8] =
         b"HTTP/1.1 400 Bad Request\r\ncontent-length: 0\r\nconnection: close\r\n\r\n";
@@ -127,21 +108,14 @@ async fn conn_loop(store: Arc<Store>, mut stream: TcpStream) -> std::io::Result<
         b"HTTP/1.1 413 Payload Too Large\r\ncontent-length: 0\r\nconnection: close\r\n\r\n";
     let mut buf = BytesMut::with_capacity(16 * 1024);
     loop {
-        // ---- read request head ---- (Source scoped so `stream` is free to
-        // write the response / error once the read phase ends.)
-        let head = {
-            let mut src = RawSource {
-                stream: &mut stream,
-                buf: &mut buf,
-            };
-            match http1::read_head(&mut src).await? {
-                http1::HeadResult::Eof => return Ok(()),
-                http1::HeadResult::Bad => {
-                    let _ = stream.write_all(BAD_REQUEST).await;
-                    return Ok(());
-                }
-                http1::HeadResult::Head(h) => h,
+        // ---- read request head ----
+        let head = match http1::read_head(&mut stream, &mut buf).await? {
+            http1::HeadResult::Eof => return Ok(()),
+            http1::HeadResult::Bad => {
+                let _ = stream.write_all(BAD_REQUEST).await;
+                return Ok(());
             }
+            http1::HeadResult::Head(h) => h,
         };
 
         if head.expect_continue {
@@ -176,14 +150,7 @@ async fn conn_loop(store: Arc<Store>, mut stream: TcpStream) -> std::io::Result<
 
         // ---- read request body ----
         let body = if head.chunked {
-            let decoded = {
-                let mut src = RawSource {
-                    stream: &mut stream,
-                    buf: &mut buf,
-                };
-                http1::decode_chunked(&mut src).await?
-            };
-            match decoded {
+            match http1::decode_chunked(&mut stream, &mut buf).await? {
                 Some(b) => b,
                 None => {
                     let _ = stream.write_all(BAD_REQUEST).await;
@@ -193,22 +160,13 @@ async fn conn_loop(store: Arc<Store>, mut stream: TcpStream) -> std::io::Result<
         } else {
             match head.content_length.unwrap_or(0) {
                 0 => Bytes::new(),
-                n => {
-                    let read = {
-                        let mut src = RawSource {
-                            stream: &mut stream,
-                            buf: &mut buf,
-                        };
-                        http1::read_sized(&mut src, n).await?
-                    };
-                    match read {
-                        Some(b) => b,
-                        None => {
-                            let _ = stream.write_all(TOO_LARGE).await;
-                            return Ok(());
-                        }
+                n => match http1::read_sized(&mut stream, &mut buf, n).await? {
+                    Some(b) => b,
+                    None => {
+                        let _ = stream.write_all(TOO_LARGE).await;
+                        return Ok(());
                     }
-                }
+                },
             }
         };
 

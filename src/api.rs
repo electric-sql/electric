@@ -154,12 +154,8 @@ impl Resp {
 
 pub const BASE64_STD: &[u8; 64] =
     b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-pub const BASE64_URL: &[u8; 64] =
-    b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
-/// RFC 4648 base64. `pad` adds trailing `=` (standard, used for SSE binary
-/// frames); pass `false` with `BASE64_URL` for the unpadded base64url used by
-/// webhook signatures and JWKS keys.
+/// RFC 4648 base64. `pad` adds trailing `=` (standard, used for SSE binary frames).
 pub fn base64_encode(data: &[u8], charset: &[u8; 64], pad: bool) -> String {
     let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
     for chunk in data.chunks(3) {

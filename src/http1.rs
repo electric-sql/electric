@@ -5,7 +5,8 @@
 // strategy; everything here is a plain function over slices/Vecs so the two
 // engines can't drift on protocol details.
 
-use bytes::{Bytes, BytesMut};
+use bytes::{Buf, Bytes, BytesMut};
+use tokio::io::{AsyncRead, AsyncReadExt};
 
 use crate::api::{status_reason, Method, MAX_BODY_BYTES, SECURITY_HEADERS};
 
@@ -147,21 +148,11 @@ pub(crate) fn frame_chunk(out: &mut Vec<u8>, b: &[u8]) {
     out.extend_from_slice(b"\r\n");
 }
 
-// ---- request reading (shared over a byte source) ----
-
-/// A buffered, async byte source: the engine-specific transport seam. Each
-/// engine implements it over its own buffer + I/O primitive (tokio `BytesMut` +
-/// `read_buf`, or tokio-uring `Vec<u8>` + owned-buffer `read`); all request
-/// reading (head, sized body, chunked body) below is shared over this trait so
-/// the protocol logic lives in one place.
-pub(crate) trait ByteSource {
-    /// Bytes received but not yet consumed.
-    fn buffered(&self) -> &[u8];
-    /// Discard the first `n` buffered bytes (already parsed).
-    fn consume(&mut self, n: usize);
-    /// Read more bytes from the transport into the buffer; `false` on clean EOF.
-    async fn fill(&mut self) -> std::io::Result<bool>;
-}
+// ---- request reading ----
+//
+// Reads operate on an `AsyncRead` (the socket) plus a reusable `BytesMut` that
+// holds bytes received but not yet consumed: `&buf[..]` is the buffered slice,
+// `buf.advance(n)` consumes, `reader.read_buf(buf)` fills (returns 0 on EOF).
 
 pub(crate) enum HeadResult {
     /// Clean connection close (no partial request pending).
@@ -171,17 +162,20 @@ pub(crate) enum HeadResult {
     Head(ReqHead),
 }
 
-/// Read and parse the next request head, filling from the source as needed.
-pub(crate) async fn read_head<S: ByteSource>(src: &mut S) -> std::io::Result<HeadResult> {
+/// Read and parse the next request head, filling from `reader` as needed.
+pub(crate) async fn read_head<R: AsyncRead + Unpin>(
+    reader: &mut R,
+    buf: &mut BytesMut,
+) -> std::io::Result<HeadResult> {
     loop {
-        match try_parse_head(src.buffered()) {
+        match try_parse_head(buf) {
             Err(()) => return Ok(HeadResult::Bad),
             Ok(Some((head, consumed))) => {
-                src.consume(consumed);
+                buf.advance(consumed);
                 return Ok(HeadResult::Head(head));
             }
             Ok(None) => {
-                if !src.fill().await? {
+                if reader.read_buf(buf).await? == 0 {
                     return Ok(HeadResult::Eof);
                 }
             }
@@ -191,57 +185,61 @@ pub(crate) async fn read_head<S: ByteSource>(src: &mut S) -> std::io::Result<Hea
 
 /// Read a fixed-length request body. `Ok(None)` means the body exceeds
 /// `MAX_BODY_BYTES` or the connection ended early (caller sends 413 / closes).
-pub(crate) async fn read_sized<S: ByteSource>(
-    src: &mut S,
+pub(crate) async fn read_sized<R: AsyncRead + Unpin>(
+    reader: &mut R,
+    buf: &mut BytesMut,
     n: usize,
 ) -> std::io::Result<Option<Bytes>> {
     if n > MAX_BODY_BYTES {
         return Ok(None);
     }
-    while src.buffered().len() < n {
-        if !src.fill().await? {
+    while buf.len() < n {
+        if reader.read_buf(buf).await? == 0 {
             return Ok(None);
         }
     }
-    let body = Bytes::copy_from_slice(&src.buffered()[..n]);
-    src.consume(n);
+    let body = Bytes::copy_from_slice(&buf[..n]);
+    buf.advance(n);
     Ok(Some(body))
 }
 
 /// Decode a `transfer-encoding: chunked` request body. `Ok(None)` on a
 /// malformed body, an oversized body (`MAX_BODY_BYTES`), or early EOF — bounded
 /// so a client that never terminates the body can't grow memory without limit.
-pub(crate) async fn decode_chunked<S: ByteSource>(src: &mut S) -> std::io::Result<Option<Bytes>> {
+pub(crate) async fn decode_chunked<R: AsyncRead + Unpin>(
+    reader: &mut R,
+    buf: &mut BytesMut,
+) -> std::io::Result<Option<Bytes>> {
     let mut out = BytesMut::new();
     loop {
         // chunk-size line
         let line_end = loop {
-            if let Some(pos) = find_crlf(src.buffered()) {
+            if let Some(pos) = find_crlf(buf) {
                 break pos;
             }
-            if src.buffered().len() > MAX_HEADER_BYTES || !src.fill().await? {
+            if buf.len() > MAX_HEADER_BYTES || reader.read_buf(buf).await? == 0 {
                 return Ok(None);
             }
         };
         let size = {
-            let line = std::str::from_utf8(&src.buffered()[..line_end]).unwrap_or("");
+            let line = std::str::from_utf8(&buf[..line_end]).unwrap_or("");
             let s = line.split(';').next().unwrap_or("").trim();
             match usize::from_str_radix(s, 16) {
                 Ok(v) => v,
                 Err(_) => return Ok(None),
             }
         };
-        src.consume(line_end + 2);
+        buf.advance(line_end + 2);
         if size == 0 {
             // trailer section: consume until the terminating blank line, bounded
             // by MAX_HEADER_BYTES.
             loop {
-                if let Some(pos) = find_crlf(src.buffered()) {
-                    src.consume(pos + 2);
+                if let Some(pos) = find_crlf(buf) {
+                    buf.advance(pos + 2);
                     if pos == 0 {
                         return Ok(Some(out.freeze()));
                     }
-                } else if src.buffered().len() > MAX_HEADER_BYTES || !src.fill().await? {
+                } else if buf.len() > MAX_HEADER_BYTES || reader.read_buf(buf).await? == 0 {
                     return Ok(None);
                 }
             }
@@ -251,13 +249,13 @@ pub(crate) async fn decode_chunked<S: ByteSource>(src: &mut S) -> std::io::Resul
             Some(v) if out.len().checked_add(size).map(|t| t <= MAX_BODY_BYTES).unwrap_or(false) => v,
             _ => return Ok(None),
         };
-        while src.buffered().len() < need {
-            if !src.fill().await? {
+        while buf.len() < need {
+            if reader.read_buf(buf).await? == 0 {
                 return Ok(None);
             }
         }
-        out.extend_from_slice(&src.buffered()[..size]);
-        src.consume(need); // chunk data + CRLF
+        out.extend_from_slice(&buf[..size]);
+        buf.advance(need); // chunk data + CRLF
     }
 }
 
@@ -265,47 +263,50 @@ pub(crate) async fn decode_chunked<S: ByteSource>(src: &mut S) -> std::io::Resul
 mod tests {
     use super::*;
     use std::collections::VecDeque;
+    use std::pin::Pin;
+    use std::task::{Context, Poll};
+    use tokio::io::ReadBuf;
 
-    /// In-memory `ByteSource` that hands out the wire bytes in fixed-size slices
-    /// (one per `fill`), so tests can exercise reads that straddle fill
+    /// In-memory `AsyncRead` that hands out the wire bytes in fixed-size slices
+    /// (one per `poll_read`), so tests can exercise reads that straddle fill
     /// boundaries by varying `step`.
-    struct MockSource {
+    struct ChunkedReader {
         pending: VecDeque<Vec<u8>>,
-        buf: Vec<u8>,
     }
 
-    impl MockSource {
+    impl ChunkedReader {
         fn new(wire: &[u8], step: usize) -> Self {
             let step = step.max(1);
-            let pending = wire.chunks(step).map(|c| c.to_vec()).collect();
-            MockSource {
-                pending,
-                buf: Vec::new(),
+            ChunkedReader {
+                pending: wire.chunks(step).map(|c| c.to_vec()).collect(),
             }
         }
     }
 
-    impl ByteSource for MockSource {
-        fn buffered(&self) -> &[u8] {
-            &self.buf
-        }
-        fn consume(&mut self, n: usize) {
-            self.buf.drain(..n);
-        }
-        async fn fill(&mut self) -> std::io::Result<bool> {
-            match self.pending.pop_front() {
-                Some(slice) => {
-                    self.buf.extend_from_slice(&slice);
-                    Ok(true)
+    impl AsyncRead for ChunkedReader {
+        fn poll_read(
+            mut self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+            rbuf: &mut ReadBuf<'_>,
+        ) -> Poll<std::io::Result<()>> {
+            // read_buf always offers >= 64 spare bytes, so for the small test
+            // steps a slice fits; re-queue any remainder if it ever doesn't.
+            if let Some(mut slice) = self.pending.pop_front() {
+                let n = slice.len().min(rbuf.remaining());
+                rbuf.put_slice(&slice[..n]);
+                if n < slice.len() {
+                    slice.drain(..n);
+                    self.pending.push_front(slice);
                 }
-                None => Ok(false),
             }
+            Poll::Ready(Ok(()))
         }
     }
 
     async fn decode(wire: &[u8], step: usize) -> Option<Vec<u8>> {
-        let mut src = MockSource::new(wire, step);
-        decode_chunked(&mut src)
+        let mut reader = ChunkedReader::new(wire, step);
+        let mut buf = BytesMut::new();
+        decode_chunked(&mut reader, &mut buf)
             .await
             .unwrap()
             .map(|b| b.to_vec())
@@ -401,14 +402,19 @@ mod tests {
 
     #[tokio::test]
     async fn read_sized_across_fills() {
-        let mut src = MockSource::new(b"hello world", 2);
-        let body = read_sized(&mut src, 11).await.unwrap();
+        let mut reader = ChunkedReader::new(b"hello world", 2);
+        let mut buf = BytesMut::new();
+        let body = read_sized(&mut reader, &mut buf, 11).await.unwrap();
         assert_eq!(body.as_deref(), Some(&b"hello world"[..]));
     }
 
     #[tokio::test]
     async fn read_sized_over_limit_rejected() {
-        let mut src = MockSource::new(b"x", 1);
-        assert_eq!(read_sized(&mut src, MAX_BODY_BYTES + 1).await.unwrap(), None);
+        let mut reader = ChunkedReader::new(b"x", 1);
+        let mut buf = BytesMut::new();
+        assert_eq!(
+            read_sized(&mut reader, &mut buf, MAX_BODY_BYTES + 1).await.unwrap(),
+            None
+        );
     }
 }
