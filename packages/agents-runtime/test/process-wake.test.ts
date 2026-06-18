@@ -7,7 +7,7 @@ import {
   resolveWebhookSourceSubscription,
   type WebhookSourceContract,
 } from '../src/webhook-sources'
-import { manifestSourceKey } from '../src/manifest-helpers'
+import { manifestChildKey, manifestSourceKey } from '../src/manifest-helpers'
 import { db, pgSync } from '../src/observation-sources'
 import { processWake } from '../src/process-wake'
 import { clearRegistry, defineEntity } from '../src/define-entity'
@@ -985,6 +985,85 @@ describe(`processWake`, () => {
     )
   })
 
+  it(`does not continue fresh inbox work after SIGINT aborts an active run`, async () => {
+    const wakePayloads: Array<unknown> = []
+    let handlerStartedResolve: (() => void) | null = null
+    const handlerStarted = new Promise<void>((resolve) => {
+      handlerStartedResolve = resolve
+    })
+    let signalAbortedResolve: (() => void) | null = null
+    const signalAborted = new Promise<void>((resolve) => {
+      signalAbortedResolve = resolve
+    })
+
+    defineEntity(`test-agent`, {
+      handler: async (ctx, wake) => {
+        wakePayloads.push(wake.payload)
+        handlerStartedResolve?.()
+        if (ctx.signal.aborted) {
+          signalAbortedResolve?.()
+          return
+        }
+        await new Promise<void>((resolve) => {
+          ctx.signal.addEventListener(
+            `abort`,
+            () => {
+              signalAbortedResolve?.()
+              resolve()
+            },
+            { once: true }
+          )
+        })
+      },
+    })
+
+    const notification = makeNotification({ triggerEvent: `inbox` })
+    notification.entity!.status = `running`
+    const wakePromise = processWake(notification, BASE_CONFIG)
+    await handlerStarted
+
+    mockEntityOnBatch.current?.({
+      items: [
+        ev(
+          `signal`,
+          `sigint-handler`,
+          `insert`,
+          { signal: `SIGINT`, status: `unhandled` },
+          { offset: `10_500` }
+        ),
+      ],
+      offset: `10_500`,
+    })
+    mockEntityOnBatch.current?.({
+      items: [
+        ev(
+          `inbox`,
+          `m-after-sigint`,
+          `insert`,
+          { payload: `should run in a later wake` },
+          { offset: `10_600` }
+        ),
+      ],
+      offset: `10_600`,
+    })
+
+    await signalAborted
+    await wakePromise
+
+    expect(wakePayloads).toEqual([undefined])
+    const doneCalls = fetchMock.mock.calls.filter(
+      ([url, opts]) =>
+        String(url).includes(`/_electric/wakes/wake-abc`) &&
+        (opts?.body as string | undefined)?.includes(`"done":true`)
+    )
+    const body = JSON.parse(doneCalls.at(-1)![1]!.body as string) as {
+      acks: Array<{ path: string; offset: string }>
+    }
+    expect(body.acks).toEqual([
+      { path: `/streams/entity:agent-1`, offset: `10_500` },
+    ])
+  })
+
   it(`waits for async signal handlers even when the main handler fails`, async () => {
     let handlerStartedResolve: (() => void) | null = null
     const handlerStarted = new Promise<void>((resolve) => {
@@ -1586,6 +1665,46 @@ describe(`processWake`, () => {
     await expect(processWake(makeNotification(), BASE_CONFIG)).rejects.toThrow(
       /worker-fail/
     )
+  })
+
+  it(`detaches newly spawned child wake registrations without killing children when the handler fails`, async () => {
+    defineEntity(`test-agent`, {
+      handler: async (ctx) => {
+        await ctx.spawn(
+          `child-worker`,
+          `worker-1`,
+          {},
+          { wake: { on: `runFinished`, includeResponse: true } }
+        )
+        throw new Error(`parent failed after spawn`)
+      },
+    })
+
+    await expect(processWake(makeNotification(), BASE_CONFIG)).rejects.toThrow(
+      `parent failed after spawn`
+    )
+
+    const unregisterCalls = fetchMock.mock.calls.filter(
+      ([url, opts]) =>
+        String(url).includes(`/_electric/wake/unregister`) &&
+        (opts as RequestInit | undefined)?.method === `POST`
+    )
+    expect(unregisterCalls).toHaveLength(1)
+    expect(JSON.parse(unregisterCalls[0]![1]!.body as string)).toEqual({
+      subscriberUrl: `http://localhost:3000/test-agent/agent-1`,
+      manifestKey: manifestChildKey(`child-worker`, `worker-1`),
+    })
+
+    const signalCalls = fetchMock.mock.calls.filter(
+      ([url, opts]) =>
+        String(url).includes(`/signal`) &&
+        (opts as RequestInit | undefined)?.method === `POST`
+    )
+    expect(
+      signalCalls.some(([, opts]) =>
+        String((opts as RequestInit | undefined)?.body).includes(`SIGKILL`)
+      )
+    ).toBe(false)
   })
 
   it(`does not fail the wake when an unawaited send fails`, async () => {

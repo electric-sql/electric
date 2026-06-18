@@ -160,6 +160,64 @@ function buildContext(overrides: Partial<TenantContext> = {}): TenantContext {
 }
 
 describe(`subscription webhooks for Durable Streams subscriptions`, () => {
+  it(`unregisters a parent wake registration without signaling the source entity`, async () => {
+    const unregisterBySubscriberAndSource = vi.fn().mockResolvedValue(undefined)
+    const unregisterByManifestKey = vi.fn().mockResolvedValue(undefined)
+    const ctx = buildContext({
+      entityManager: {
+        wakeRegistry: {
+          unregisterBySubscriberAndSource,
+          unregisterByManifestKey,
+        },
+      } as any,
+    })
+
+    const response = await globalRouter.fetch(
+      request(`POST`, `/_electric/wake/unregister`, {
+        subscriberUrl: `/horton/parent`,
+        sourceUrl: `/worker/child`,
+      }),
+      ctx
+    )
+
+    expect(response.status).toBe(204)
+    expect(unregisterBySubscriberAndSource).toHaveBeenCalledWith(
+      `/horton/parent`,
+      `/worker/child`,
+      `tenant-a`
+    )
+    expect(unregisterByManifestKey).not.toHaveBeenCalled()
+  })
+
+  it(`unregisters a parent wake registration by manifest key`, async () => {
+    const unregisterBySubscriberAndSource = vi.fn().mockResolvedValue(undefined)
+    const unregisterByManifestKey = vi.fn().mockResolvedValue(undefined)
+    const ctx = buildContext({
+      entityManager: {
+        wakeRegistry: {
+          unregisterBySubscriberAndSource,
+          unregisterByManifestKey,
+        },
+      } as any,
+    })
+
+    const response = await globalRouter.fetch(
+      request(`POST`, `/_electric/wake/unregister`, {
+        subscriberUrl: `/horton/parent`,
+        manifestKey: `child:worker:child-1`,
+      }),
+      ctx
+    )
+
+    expect(response.status).toBe(204)
+    expect(unregisterByManifestKey).toHaveBeenCalledWith(
+      `/horton/parent`,
+      `child:worker:child-1`,
+      `tenant-a`
+    )
+    expect(unregisterBySubscriberAndSource).not.toHaveBeenCalled()
+  })
+
   it(`validates upstream Durable Streams webhook signatures before dispatching`, async () => {
     const select = selectDb([
       { webhookUrl: `http://runtime.local/_electric/builtin-agent-handler` },
@@ -852,6 +910,100 @@ describe(`subscription webhooks for Durable Streams subscriptions`, () => {
           `/horton/demo`,
           `idle`
         )
+      } finally {
+        vi.mocked(globalThis.fetch).mockRestore()
+      }
+    })
+
+    it(`uses the released claim stream, not the mutable callback primaryStream, when one consumer owns multiple streams`, async () => {
+      const select = selectDb([
+        {
+          callbackUrl: `http://durable.local/v1/stream-meta/subscriptions/horton-handler/callback?opaque=tenant-a`,
+          // Simulate consumer_callbacks being updated by a later claim for stream B
+          // before the earlier stream A done callback is processed.
+          primaryStream: `/horton/demo-b/main`,
+        },
+      ])
+      upstreamOk()
+      const ctx = buildContext({
+        pgDb: { select: select.select } as any,
+      })
+      ;(ctx.entityManager.registry.getEntityByStream as any).mockImplementation(
+        async (stream: string) => ({
+          url:
+            stream === `/horton/demo-a/main`
+              ? `/horton/demo-a`
+              : `/horton/demo-b`,
+          type: `horton`,
+          status: `idle`,
+          streams: { main: stream },
+          tags: {},
+          spawn_args: {},
+          write_token: `write-token`,
+        })
+      )
+      ;(
+        ctx.entityManager.registry.materializeReleasedClaim as any
+      ).mockResolvedValue({
+        claim: {
+          consumer_id: `wake-1`,
+          epoch: 7,
+          entity_url: `/horton/demo-a`,
+          stream_path: `/horton/demo-a/main`,
+        },
+        entityCleared: true,
+      })
+
+      ctx.runtime.claimWriteTokens.mint(
+        `tenant-a`,
+        `/horton/demo-a/main`,
+        `wake-1`
+      )
+      ctx.runtime.claimWriteTokens.mint(
+        `tenant-a`,
+        `/horton/demo-b/main`,
+        `wake-1`
+      )
+
+      try {
+        const response = await globalRouter.fetch(
+          new Request(`http://agents.local/_electric/wake-callbacks/wake-1`, {
+            method: `POST`,
+            headers: {
+              'content-type': `application/json`,
+              authorization: `Bearer callback-token`,
+            },
+            body: JSON.stringify({
+              epoch: 7,
+              acks: [{ path: `/horton/demo-a/main`, offset: `1` }],
+              done: true,
+            }),
+          }),
+          ctx
+        )
+
+        expect(response.status).toBe(200)
+        expect(
+          ctx.entityManager.registry.getEntityByStream
+        ).toHaveBeenCalledWith(`/horton/demo-a/main`)
+        expect(ctx.entityManager.registry.updateStatus).toHaveBeenCalledWith(
+          `/horton/demo-a`,
+          `idle`
+        )
+        expect(
+          ctx.runtime.claimWriteTokens.owns(
+            `tenant-a`,
+            `/horton/demo-a/main`,
+            `wake-1`
+          )
+        ).toBe(false)
+        expect(
+          ctx.runtime.claimWriteTokens.owns(
+            `tenant-a`,
+            `/horton/demo-b/main`,
+            `wake-1`
+          )
+        ).toBe(true)
       } finally {
         vi.mocked(globalThis.fetch).mockRestore()
       }

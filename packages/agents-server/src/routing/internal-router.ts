@@ -70,6 +70,12 @@ const wakeRegistrationBodySchema = Type.Object({
   manifestKey: Type.Optional(Type.String()),
 })
 
+const wakeUnregisterBodySchema = Type.Object({
+  subscriberUrl: Type.String(),
+  sourceUrl: Type.Optional(Type.String()),
+  manifestKey: Type.Optional(Type.String()),
+})
+
 const subscriptionWebhookBodySchema = Type.Object(
   {
     subscription_id: Type.Optional(Type.String()),
@@ -101,6 +107,7 @@ const wakeCallbackBodySchema = Type.Object(
 )
 
 type WakeRegistrationBody = Static<typeof wakeRegistrationBodySchema>
+type WakeUnregisterBody = Static<typeof wakeUnregisterBodySchema>
 type SubscriptionWebhookBody = Static<typeof subscriptionWebhookBodySchema>
 type WakeCallbackBody = Static<typeof wakeCallbackBodySchema>
 
@@ -126,6 +133,11 @@ internalRouter.post(
   `/wake`,
   withSchema(wakeRegistrationBodySchema),
   registerWake
+)
+internalRouter.post(
+  `/wake/unregister`,
+  withSchema(wakeUnregisterBodySchema),
+  unregisterWake
 )
 internalRouter.post(
   `/subscription-webhooks/:subscriptionId`,
@@ -364,6 +376,36 @@ async function registerWake(
   const opts = routeBody<WakeRegistrationBody>(request)
   await ctx.entityManager.registerWake(opts)
   return status(204)
+}
+
+async function unregisterWake(
+  request: IRequest,
+  ctx: TenantContext
+): Promise<Response> {
+  const opts = routeBody<WakeUnregisterBody>(request)
+  if (opts.sourceUrl !== undefined) {
+    await ctx.entityManager.wakeRegistry.unregisterBySubscriberAndSource(
+      opts.subscriberUrl,
+      opts.sourceUrl,
+      ctx.service
+    )
+    return status(204)
+  }
+
+  if (opts.manifestKey !== undefined) {
+    await ctx.entityManager.wakeRegistry.unregisterByManifestKey(
+      opts.subscriberUrl,
+      opts.manifestKey,
+      ctx.service
+    )
+    return status(204)
+  }
+
+  return apiError(
+    400,
+    `INVALID_WAKE_UNREGISTER`,
+    `sourceUrl or manifestKey is required`
+  )
 }
 
 async function listWebhookSources(
@@ -766,21 +808,13 @@ async function wakeCallback(
       serverLog.info(
         `[wake-callback] done received for stream=${target.primaryStream} consumer=${consumerId}`
       )
-      const stillOwnsClaim = ctx.runtime.claimWriteTokens.owns(
-        ctx.service,
-        target.primaryStream,
-        consumerId
-      )
-      const entity = await ctx.entityManager.registry.getEntityByStream(
-        target.primaryStream
-      )
-
       // Release the consumer_claims row by its DB identity (consumerId,
       // epoch). The in-memory write token is a separate concern (write
       // authorization during the run); release of the durable row must
       // succeed even if the token was lost (server restart) or evicted
       // (a later wake re-minted for the same stream).
       let entityCleared = false
+      let releasedClaimStream = target.primaryStream
       if (epoch !== undefined) {
         const result =
           await ctx.entityManager.registry.materializeReleasedClaim?.({
@@ -801,7 +835,16 @@ async function wakeCallback(
               : undefined,
           })
         entityCleared = result?.entityCleared ?? false
+        releasedClaimStream = result?.claim?.stream_path ?? releasedClaimStream
       }
+
+      const stillOwnsClaim = ctx.runtime.claimWriteTokens.owns(
+        ctx.service,
+        releasedClaimStream,
+        consumerId
+      )
+      const entity =
+        await ctx.entityManager.registry.getEntityByStream(releasedClaimStream)
 
       // Transition entity back to idle when either signal says it's safe:
       // - entityCleared: our release just cleared the entity's active
@@ -823,7 +866,7 @@ async function wakeCallback(
         )
       } else if (!entity) {
         serverLog.warn(
-          `[wake-callback] done received but no entity found for stream=${target.primaryStream}`
+          `[wake-callback] done received but no entity found for stream=${releasedClaimStream}`
         )
       }
 
@@ -833,11 +876,11 @@ async function wakeCallback(
       if (stillOwnsClaim) {
         ctx.runtime.claimWriteTokens.clearStream(
           ctx.service,
-          target.primaryStream
+          releasedClaimStream
         )
       } else if (entity) {
         serverLog.info(
-          `[wake-callback] done arrived after in-memory token evicted (stream=${target.primaryStream} consumer=${consumerId})`
+          `[wake-callback] done arrived after in-memory token evicted (stream=${releasedClaimStream} consumer=${consumerId})`
         )
       }
     } else if (requestBody?.done === true) {

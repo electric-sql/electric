@@ -169,6 +169,11 @@ export interface RuntimeServerClient {
   signalEntity: (options: SignalEntityOptions) => Promise<{ txid: number }>
   ensureStream: (streamPath: string, contentType?: string) => Promise<string>
   deleteEntity: (entityUrl: string) => Promise<void>
+  unregisterWake: (options: {
+    subscriberUrl: string
+    sourceUrl?: string
+    manifestKey?: string
+  }) => Promise<void>
   getSharedStateStreamPath: (sharedStateId: string) => string
   registerWake: (options: RegisterWakeOptions) => Promise<void>
   ensureCronStream: (expression: string, timezone?: string) => Promise<string>
@@ -645,6 +650,23 @@ export function createRuntimeServerClient(
     }
   }
 
+  const unregisterWake = async (options: {
+    subscriberUrl: string
+    sourceUrl?: string
+    manifestKey?: string
+  }): Promise<void> => {
+    const response = await request(`/_electric/wake/unregister`, {
+      method: `POST`,
+      headers: { 'content-type': `application/json` },
+      body: JSON.stringify(options),
+    })
+    if (!response.ok) {
+      throw new Error(
+        `unregisterWake failed (${response.status}): ${await readErrorText(response)}`
+      )
+    }
+  }
+
   const registerWake = async (options: RegisterWakeOptions): Promise<void> => {
     const response = await request(`/_electric/wake`, {
       method: `POST`,
@@ -949,6 +971,7 @@ export function createRuntimeServerClient(
     signalEntity,
     ensureStream,
     deleteEntity,
+    unregisterWake,
     getSharedStateStreamPath,
     registerWake,
     ensureCronStream,

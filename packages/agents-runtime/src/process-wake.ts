@@ -119,7 +119,11 @@ function inboxEventKey(event: ChangeEvent): string {
 type ServerForkWake = NonNullable<
   Parameters<RuntimeServerClient[`forkEntity`]>[0][`wake`]
 >
-function normalizeForkWake(wake: Wake, subscriberUrl: string): ServerForkWake {
+function normalizeForkWake(
+  wake: Wake,
+  subscriberUrl: string,
+  manifestKey?: string
+): ServerForkWake {
   const isRunFinished =
     wake === `runFinished` ||
     (typeof wake === `object` && wake.on === `runFinished`)
@@ -129,6 +133,9 @@ function normalizeForkWake(wake: Wake, subscriberUrl: string): ServerForkWake {
   const result: ServerForkWake = {
     subscriberUrl,
     condition,
+  }
+  if (manifestKey !== undefined) {
+    result.manifestKey = manifestKey
   }
   if (typeof wake === `object` && wake.on === `runFinished`) {
     if (wake.includeResponse !== undefined) {
@@ -851,6 +858,7 @@ export async function processWake(
         if (runAbortController) {
           log.info(`SIGINT received, aborting active handler invocation`)
           runAbortController.abort()
+          requestShutdown()
         } else if (notification.entity?.status === `running`) {
           // SIGINT may arrive in the small window before the handler invocation
           // controller exists. Only carry it forward for running entities; idle
@@ -859,6 +867,7 @@ export async function processWake(
             `SIGINT received before active run controller, queuing abort`
           )
           pendingRunAbortRequested = true
+          requestShutdown()
         } else {
           log.info(`SIGINT received with no active run, ignoring`)
           markSignalHandled(event, `ignored`, notification.entity?.status)
@@ -1432,7 +1441,7 @@ export async function processWake(
         // (the only valid target after the route's wake validation).
         const wakeOpt =
           opts?.wake && opts.parent
-            ? normalizeForkWake(opts.wake, opts.parent)
+            ? normalizeForkWake(opts.wake, opts.parent, opts.manifestKey)
             : undefined
         const result = await serverClient.forkEntity({
           sourceEntityUrl,
@@ -2295,12 +2304,15 @@ export async function processWake(
         )
         if (spawnedChildren.length > 0) {
           log.warn(
-            `handler failed — attempting to close ${spawnedChildren.length} child(ren) spawned before the failure`
+            `handler failed — detaching ${spawnedChildren.length} child wake registration(s) created before the failure`
           )
           const cleanupErrors: Array<Error> = []
           for (const childEntry of spawnedChildren) {
             try {
-              await serverClient.deleteEntity(childEntry.entity_url)
+              await serverClient.unregisterWake({
+                subscriberUrl: entityUrl,
+                manifestKey: childEntry.key,
+              })
             } catch (err) {
               cleanupErrors.push(toError(err))
             }
@@ -2308,7 +2320,7 @@ export async function processWake(
           if (cleanupErrors.length > 0) {
             throw new AggregateError(
               [toError(setupErr), ...cleanupErrors],
-              `Wake handler failed and child cleanup also failed`
+              `Wake handler failed and child wake cleanup also failed`
             )
           }
         }

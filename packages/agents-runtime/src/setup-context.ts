@@ -100,6 +100,8 @@ export interface WiringConfig {
        * — same translation `createOrGetChild` does for spawn.
        */
       wake?: Wake
+      /** Manifest key that owns this wake registration, when any. */
+      manifestKey?: string
       initialMessage?: unknown
       tags?: Record<string, string>
     }
@@ -1183,6 +1185,7 @@ export function createSetupContext(
               instanceId: id,
               ...(observeChild && { parent: entityUrl }),
               ...(wakeForFork && { wake: wakeForFork }),
+              ...(observeChild && { manifestKey: childKey }),
               ...(opts?.initialMessage !== undefined && {
                 initialMessage: opts.initialMessage,
               }),
