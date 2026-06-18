@@ -1,8 +1,16 @@
+import { sessionIdFromEntityUrl } from '@electric-ax/agents-runtime/session-links'
+
 const WEB_UI_PATH = `__agent_ui`
 
-export function sessionIdFromEntityUrl(entityUrl: string): string {
-  return entityUrl.replace(/^\/+/, ``)
-}
+// The app deep-link format (build/parse/match) is shared across the desktop,
+// mobile and web apps so the wire format can never drift. Re-exported here so
+// existing imports from `./sessionLinks` keep working.
+export {
+  sessionIdFromEntityUrl,
+  sessionAppUrl,
+  isSessionDeepLink,
+  parseSessionDeepLink,
+} from '@electric-ax/agents-runtime/session-links'
 
 /**
  * Browser-openable link to a session in the server's bundled web UI.

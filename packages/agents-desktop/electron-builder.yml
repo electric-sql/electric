@@ -38,6 +38,11 @@ asarUnpack:
   - '**/node_modules/better-sqlite3/**/*'
   - '**/node_modules/sqlite-vec/**/*'
 
+protocols:
+  - name: Electric Agents
+    schemes:
+      - electric-agents
+
 mac:
   category: public.app-category.developer-tools
   hardenedRuntime: true

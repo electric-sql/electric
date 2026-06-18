@@ -97,6 +97,10 @@ export default defineConfig({
         REPO_ROOT,
         `packages/agents-runtime/src/tools.ts`
       ),
+      '@electric-ax/agents-runtime/session-links': path.resolve(
+        REPO_ROOT,
+        `packages/agents-runtime/src/session-links.ts`
+      ),
     },
   },
   server: {

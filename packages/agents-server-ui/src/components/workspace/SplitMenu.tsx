@@ -11,6 +11,7 @@ import {
   Pin,
   PinOff,
   Radio,
+  Share2,
   SplitSquareHorizontal,
   SplitSquareVertical,
   X,
@@ -28,6 +29,8 @@ import { listViews } from '../../lib/workspace/viewRegistry'
 import { JsonInspectDialog } from '../JsonInspectDialog'
 import type { EntityViewDefinition } from '../../lib/workspace/viewRegistry'
 import { encodeLayout } from '../../lib/workspace/layoutCodec'
+import { sessionAppUrl } from '../../lib/sessionLinks'
+import { getActiveBaseUrl } from '../../lib/entity-connection'
 import {
   Button,
   Dialog,
@@ -264,6 +267,13 @@ export function SplitMenu({
     }
   }
 
+  const handleCopySessionLink = () => {
+    if (entityUrl === null) return
+    const baseUrl = getActiveBaseUrl()
+    if (!baseUrl) return
+    void navigator.clipboard.writeText(sessionAppUrl(baseUrl, entityUrl))
+  }
+
   const handleCopyLayoutLink = () => {
     // Encode the workspace into the DSL and append it as `?layout=…`
     // to the current URL. The receiving window's <Workspace> picks it
@@ -403,6 +413,10 @@ export function SplitMenu({
               >
                 <UiIcon icon={Copy} size={2} />
                 <Text size={2}>Copy URL</Text>
+              </Menu.Item>
+              <Menu.Item onSelect={handleCopySessionLink}>
+                <UiIcon icon={Share2} size={2} />
+                <Text size={2}>Copy session link</Text>
               </Menu.Item>
             </>
           )}

@@ -1,6 +1,11 @@
 import { BrowserWindow, ipcMain } from 'electron'
 import { normalizeServers } from '../settings/servers'
-import type { DesktopState, RuntimeEntry, ServerConfig } from '../shared/types'
+import type {
+  DesktopState,
+  OpenSessionPayload,
+  RuntimeEntry,
+  ServerConfig,
+} from '../shared/types'
 
 export type ServerIpcDeps = {
   settings: {
@@ -24,6 +29,12 @@ export type ServerIpcDeps = {
   ) => Promise<void>
   stopRuntimeEntry: (entry: RuntimeEntry) => Promise<void>
   restartRuntime: (serverId?: string | null) => Promise<void>
+  /**
+   * Returns and clears any open-session deep link captured before the
+   * renderer was ready (cold start). The renderer pulls this on mount — see
+   * the `desktop:get-pending-session` handler.
+   */
+  takePendingOpenSession: () => OpenSessionPayload | null
 }
 
 export function registerServerIpcHandlers(deps: ServerIpcDeps): void {
@@ -86,4 +97,7 @@ export function registerServerIpcHandlers(deps: ServerIpcDeps): void {
       typeof serverId === `string` ? serverId : null
     )
   })
+  ipcMain.handle(`desktop:get-pending-session`, () =>
+    deps.takePendingOpenSession()
+  )
 }

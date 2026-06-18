@@ -47,7 +47,7 @@ import {
   type EntityPermissionGrant,
   type ShareSubject,
 } from '../lib/entityGrants'
-import { sessionIdFromEntityUrl, sessionWebUrl } from '../lib/sessionLinks'
+import { sessionAppUrl, sessionIdFromEntityUrl } from '../lib/sessionLinks'
 import { useCurrentPrincipal } from '../lib/useCurrentPrincipal'
 import { useTokens } from '../lib/ThemeProvider'
 import { fontSize, monoFontFamily, radii, spacing } from '../lib/theme'
@@ -236,7 +236,7 @@ export function ShareSessionScreen({
   }
 
   const shareLink = async (): Promise<void> => {
-    const url = sessionWebUrl(serverUrl, entityUrl)
+    const url = sessionAppUrl(serverUrl, entityUrl)
     const title = entity
       ? getEntityDisplayTitle(entity)
       : sessionIdFromEntityUrl(entityUrl)
@@ -377,7 +377,7 @@ export function ShareSessionScreen({
               numberOfLines={1}
               ellipsizeMode="middle"
             >
-              {sessionWebUrl(serverUrl, entityUrl).replace(/^https?:\/\//, ``)}
+              {sessionAppUrl(serverUrl, entityUrl)}
             </Text>
             <Icon
               name="share"

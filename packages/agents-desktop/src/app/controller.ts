@@ -15,6 +15,7 @@ import * as ServerSelection from '../settings/selection'
 import { saveDesktopSettings } from '../settings/store'
 import { desktopStateForWindow as desktopStateForWindowImpl } from '../state/desktop-state'
 import * as DesktopStateModel from '../state/desktop-state'
+import { resolveOpenSessionPayload } from '../shared/open-session'
 import { injectDevPrincipalHeaders as injectDevPrincipalHeadersForServer } from '../shared/headers'
 import {
   DEFAULT_LOCAL_DEV_PRINCIPAL,
@@ -30,6 +31,7 @@ import type {
   DesktopMenuSection,
   DesktopMenuState,
   DesktopState,
+  OpenSessionPayload,
   RuntimeEntry,
   ServerConfig,
 } from '../shared/types'
@@ -223,6 +225,41 @@ export function createDesktopMainController(ctx: DesktopAppContext) {
     WindowManager.showOrCreateWindow(windows, createWindow)
   }
 
+  // The open-session payload always flows to the renderer through a single
+  // pull (`desktop:get-pending-session`), never a pushed payload. A pushed
+  // payload races the renderer: on a fresh launch the listener is registered
+  // only after React mounts and runs effects — not guaranteed to be after the
+  // window's `load` — so it could land before anyone is listening and be
+  // silently lost. Instead we stash the payload here and the renderer pulls it
+  // (on mount for a cold start, or on a `desktop:open-session` wake-up signal
+  // when a window is already up). Pulling clears it, so it's consumed once.
+  let pendingOpenSession: OpenSessionPayload | null = null
+
+  const takePendingOpenSession = (): OpenSessionPayload | null => {
+    const payload = pendingOpenSession
+    pendingOpenSession = null
+    return payload
+  }
+
+  const openSessionFromDeepLink = (url: string): void => {
+    const payload = resolveOpenSessionPayload(settings.servers, url)
+    if (!payload) {
+      console.warn(`[agents-desktop] Ignoring malformed deep link: ${url}`)
+      return
+    }
+    pendingOpenSession = payload
+    const existing = [...windows].find((win) => !win.isDestroyed())
+    if (existing) {
+      // A window is already up — wake it so its renderer pulls the payload.
+      existing.show()
+      existing.focus()
+      existing.webContents.send(`desktop:open-session`)
+      return
+    }
+    // No window yet: create one; its renderer pulls the payload on mount.
+    createWindow()
+  }
+
   const stopRuntimeEntry = (entry: RuntimeEntry): Promise<void> =>
     runtime.stopRuntimeEntry(entry)
 
@@ -407,6 +444,7 @@ export function createDesktopMainController(ctx: DesktopAppContext) {
     selectedServerIdForWindow,
     stopRuntimeEntry,
     restartRuntime,
+    takePendingOpenSession,
     connectServer,
     disconnectServer,
     forgetServer,
@@ -516,6 +554,7 @@ export function createDesktopMainController(ctx: DesktopAppContext) {
     buildApplicationMenu,
     createWindow,
     showOrCreateWindow,
+    openSessionFromDeepLink,
     syncLaunchAtLoginSetting,
     connectConfiguredServers,
     startDiscoveryLoop: localDiscovery.startDiscoveryLoop,

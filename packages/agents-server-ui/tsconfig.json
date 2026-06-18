@@ -16,7 +16,10 @@
     // alias). The index resolves via package exports to dist so its node-using
     // sandbox re-exports stay behind skipLibCheck instead of leaking into the UI.
     "paths": {
-      "@electric-ax/agents-runtime/client": ["../agents-runtime/src/client.ts"]
+      "@electric-ax/agents-runtime/client": ["../agents-runtime/src/client.ts"],
+      "@electric-ax/agents-runtime/session-links": [
+        "../agents-runtime/src/session-links.ts"
+      ]
     }
   },
   "include": ["src", "vite.config.ts"]

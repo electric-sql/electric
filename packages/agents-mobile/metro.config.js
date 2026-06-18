@@ -14,6 +14,10 @@ const forcedAliases = {
     workspaceRoot,
     `packages/agents-runtime/src/client.ts`
   ),
+  '@electric-ax/agents-runtime/session-links': path.resolve(
+    workspaceRoot,
+    `packages/agents-runtime/src/session-links.ts`
+  ),
   mermaid: path.resolve(serverUiRoot, `src/embed/stubs/mermaid.ts`),
   katex: path.resolve(serverUiRoot, `src/embed/stubs/katex.ts`),
   '@streamdown/math': path.resolve(

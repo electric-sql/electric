@@ -227,6 +227,15 @@ export type DesktopCommand =
   | `split-down`
   | `cycle-tile`
 
+export type OpenSessionPayload = {
+  /** Resolved saved-server id, or null when the link's server is unknown. */
+  serverId: string | null
+  /** The link's raw server base URL (used for the unknown-server message). */
+  serverUrl: string
+  /** Server-scoped entity url, e.g. `/horton/abc`. */
+  entityUrl: string
+}
+
 export type DesktopMenuSection = `File` | `Edit` | `View` | `Window` | `Help`
 
 export type DesktopMenuPopupBounds = {

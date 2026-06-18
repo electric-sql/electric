@@ -42,8 +42,13 @@ function RootLayout(): React.ReactElement {
 export default Sentry.wrap(RootLayout)
 
 function RootNavigator(): React.ReactElement {
-  const { loading, serverUrl, launchUrl, onboardingDismissed } =
-    useMobileAppState()
+  const {
+    loading,
+    serverUrl,
+    launchUrl,
+    onboardingDismissed,
+    pendingSessionLink,
+  } = useMobileAppState()
   const tokens = useTokens()
   const scheme = useColorSchemeMode()
   const pathname = usePathname()
@@ -83,6 +88,19 @@ function RootNavigator(): React.ReactElement {
     pathname !== `/oauth/callback`
   ) {
     return <Redirect href="/server-setup" />
+  }
+
+  // Onboarding is done and a server is configured here. A pending open-session
+  // deep link (cold-start seeded, or arrived mid-onboarding) is routed to its
+  // landing route, which switches server if needed and opens the session. The
+  // landing route clears the pending link, so this doesn't loop; `/session` is
+  // excluded so navigating to the opened session doesn't bounce back.
+  if (
+    pendingSessionLink &&
+    pathname !== `/open-session` &&
+    pathname !== `/session`
+  ) {
+    return <Redirect href="/open-session" />
   }
 
   const stack = (

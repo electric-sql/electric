@@ -7,8 +7,9 @@ import {
   type ComponentProps,
 } from 'react'
 import { useLiveQuery } from '@tanstack/react-db'
-import { Eye, MessageSquare, Share2, ShieldCheck, X } from 'lucide-react'
+import { Eye, Link2, MessageSquare, Share2, ShieldCheck, X } from 'lucide-react'
 import { entityApiUrl } from '../lib/entity-api'
+import { sessionAppUrl } from '../lib/sessionLinks'
 import { serverFetch } from '../lib/auth-fetch'
 import {
   SHARE_PERMISSIONS,
@@ -107,6 +108,18 @@ export function ShareEntityDialog({
   const { activeServer } = useServerConnection()
   const { usersCollection } = useElectricAgents()
   const baseUrl = activeServer?.url ?? ``
+
+  const copySessionLink = async (): Promise<void> => {
+    if (!baseUrl) return
+    const link = sessionAppUrl(baseUrl, entity.url)
+    try {
+      await navigator.clipboard.writeText(link)
+      showToast({ title: `Session link copied`, tone: `success` })
+    } catch {
+      showToast({ title: `Couldn't copy link`, tone: `danger` })
+    }
+  }
+
   const [open, setOpen] = useState(false)
   const [grants, setGrants] = useState<Array<EntityPermissionGrant>>([])
   const [loadingGrants, setLoadingGrants] = useState(false)
@@ -518,6 +531,15 @@ export function ShareEntityDialog({
         </Dialog.Body>
 
         <Dialog.Footer>
+          <Button
+            variant="soft"
+            tone="neutral"
+            onClick={() => void copySessionLink()}
+            disabled={!baseUrl}
+          >
+            <Icon icon={Link2} size={1} />
+            Copy session link
+          </Button>
           <Dialog.Close
             render={
               <Button variant="soft" tone="neutral" disabled={saving}>
