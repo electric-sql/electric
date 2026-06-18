@@ -808,21 +808,13 @@ async function wakeCallback(
       serverLog.info(
         `[wake-callback] done received for stream=${target.primaryStream} consumer=${consumerId}`
       )
-      const stillOwnsClaim = ctx.runtime.claimWriteTokens.owns(
-        ctx.service,
-        target.primaryStream,
-        consumerId
-      )
-      const entity = await ctx.entityManager.registry.getEntityByStream(
-        target.primaryStream
-      )
-
       // Release the consumer_claims row by its DB identity (consumerId,
       // epoch). The in-memory write token is a separate concern (write
       // authorization during the run); release of the durable row must
       // succeed even if the token was lost (server restart) or evicted
       // (a later wake re-minted for the same stream).
       let entityCleared = false
+      let releasedClaimStream = target.primaryStream
       if (epoch !== undefined) {
         const result =
           await ctx.entityManager.registry.materializeReleasedClaim?.({
@@ -843,7 +835,16 @@ async function wakeCallback(
               : undefined,
           })
         entityCleared = result?.entityCleared ?? false
+        releasedClaimStream = result?.claim?.stream_path ?? releasedClaimStream
       }
+
+      const stillOwnsClaim = ctx.runtime.claimWriteTokens.owns(
+        ctx.service,
+        releasedClaimStream,
+        consumerId
+      )
+      const entity =
+        await ctx.entityManager.registry.getEntityByStream(releasedClaimStream)
 
       // Transition entity back to idle when either signal says it's safe:
       // - entityCleared: our release just cleared the entity's active
@@ -865,7 +866,7 @@ async function wakeCallback(
         )
       } else if (!entity) {
         serverLog.warn(
-          `[wake-callback] done received but no entity found for stream=${target.primaryStream}`
+          `[wake-callback] done received but no entity found for stream=${releasedClaimStream}`
         )
       }
 
@@ -875,11 +876,11 @@ async function wakeCallback(
       if (stillOwnsClaim) {
         ctx.runtime.claimWriteTokens.clearStream(
           ctx.service,
-          target.primaryStream
+          releasedClaimStream
         )
       } else if (entity) {
         serverLog.info(
-          `[wake-callback] done arrived after in-memory token evicted (stream=${target.primaryStream} consumer=${consumerId})`
+          `[wake-callback] done arrived after in-memory token evicted (stream=${releasedClaimStream} consumer=${consumerId})`
         )
       }
     } else if (requestBody?.done === true) {
