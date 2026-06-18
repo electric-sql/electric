@@ -598,6 +598,17 @@ export async function processWake(
   let idleTimer: ReturnType<typeof setTimeout> | null = null
   let idleController: AbortController | null = null
   let runAbortController: AbortController | null = null
+  // Turn-end background compaction: a detached summarize, applied as a
+  // checkpoint at the next turn's start — or immediately if it settles while
+  // idle. Persists across loop iterations.
+  let pendingBackgroundCompaction: {
+    watermark: number
+    status: `pending` | `ready` | `failed`
+    summary: string
+  } | null = null
+  // Set when the detached summarize settles while idle; tells the idle loop to
+  // apply the checkpoint without running the handler.
+  let backgroundApplyRequestedDuringIdle = false
   let activeSignalHandler:
     | ((
         signal: Pick<Signal, `signal` | `reason` | `payload`>
@@ -2067,6 +2078,16 @@ export async function processWake(
       })
       armIdleTimer()
       queueNextWakeIfReady()
+      // A background compaction may have settled in the gap between the
+      // post-handler start and entering idle; wake immediately to apply it.
+      if (
+        queuedNextWake === null &&
+        pendingBackgroundCompaction &&
+        pendingBackgroundCompaction.status !== `pending`
+      ) {
+        backgroundApplyRequestedDuringIdle = true
+        idleController.abort()
+      }
       await idleWait
 
       acceptLiveInputs = false
@@ -2171,7 +2192,13 @@ export async function processWake(
         pendingRunAbortRequested = false
         runAbortController.abort()
       }
-      const { ctx: handlerCtx, getSleepRequested } = createHandlerContext({
+      const {
+        ctx: handlerCtx,
+        getSleepRequested,
+        maybeStartBackgroundCompaction,
+        writeBackgroundCheckpoint,
+        failBackgroundCheckpoint,
+      } = createHandlerContext({
         entityUrl,
         entityType: typeName,
         epoch,
@@ -2250,10 +2277,65 @@ export async function processWake(
             `payloadType=${typeof currentWakeEvent.payload} ` +
             `firstWake=${initialFirstWake && !setupComplete}`
         )
+        // Apply a ready (or failed) background compaction from a prior turn
+        // *before* the handler reconstructs its context, so this turn starts
+        // compacted. Always inside a handler invocation → normal write/flush.
+        if (
+          pendingBackgroundCompaction &&
+          pendingBackgroundCompaction.status !== `pending`
+        ) {
+          if (pendingBackgroundCompaction.status === `ready`) {
+            writeBackgroundCheckpoint(
+              pendingBackgroundCompaction.watermark,
+              pendingBackgroundCompaction.summary
+            )
+          } else {
+            failBackgroundCheckpoint(pendingBackgroundCompaction.watermark)
+          }
+          pendingBackgroundCompaction = null
+        }
+
         const handlerT0 = performance.now()
         await definition.handler(handlerCtx, currentWakeEvent)
         handlerMs += +(performance.now() - handlerT0).toFixed(2)
         log.info(`handler returned`)
+
+        // Kick off a turn-end background compaction if usage is high and none is
+        // already pending. Detached: the summarize runs off the critical path
+        // and its checkpoint is written at the next turn's start (above).
+        if (!pendingBackgroundCompaction) {
+          const started = maybeStartBackgroundCompaction()
+          if (started) {
+            const slot: {
+              watermark: number
+              status: `pending` | `ready` | `failed`
+              summary: string
+            } = { watermark: started.watermark, status: `pending`, summary: `` }
+            pendingBackgroundCompaction = slot
+            const onSettled = (): void => {
+              // If the summarize finished while we're idle (no turn to apply it
+              // at), wake the idle loop so the checkpoint is written now and the
+              // indicator clears. Otherwise the next turn's pre-handler applies.
+              if (acceptLiveInputs && pendingBackgroundCompaction === slot) {
+                backgroundApplyRequestedDuringIdle = true
+                idleController?.abort()
+              }
+            }
+            started.promise
+              .then((summary) => {
+                slot.status = `ready`
+                slot.summary = summary
+                onSettled()
+              })
+              .catch((err) => {
+                slot.status = `failed`
+                log.warn(
+                  `background compaction failed: ${toError(err).message}`
+                )
+                onSettled()
+              })
+          }
+        }
         await waitForSignalHandlers()
         activeSignalHandler = null
         await waitForSharedStateWiring()
@@ -2389,10 +2471,43 @@ export async function processWake(
         break
       }
 
-      const resumed = await awaitIdleForFreshWork(
-        `handler returned, entering idle (${idleTimeout / 1000}s timeout)`
-      )
-      if (resumed) {
+      // Idle until a fresh wake resumes us or we genuinely go idle — re-entering
+      // each time a detached background compaction settles while idle, so its
+      // checkpoint is written (without an agent run) and the indicator doesn't
+      // linger.
+      let resumedFromIdle = false
+      let idleReason = `handler returned`
+      let appliedBackgroundDuringIdle = false
+      do {
+        appliedBackgroundDuringIdle = false
+        const resumed = await awaitIdleForFreshWork(
+          `${idleReason}, entering idle (${idleTimeout / 1000}s timeout)`
+        )
+        if (resumed) {
+          resumedFromIdle = true
+          break
+        }
+        const settled = backgroundApplyRequestedDuringIdle
+          ? pendingBackgroundCompaction
+          : null
+        backgroundApplyRequestedDuringIdle = false
+        if (settled && settled.status !== `pending`) {
+          if (settled.status === `ready`) {
+            writeBackgroundCheckpoint(settled.watermark, settled.summary)
+            log.info(`background compaction applied during idle`)
+          } else {
+            failBackgroundCheckpoint(settled.watermark)
+            log.info(`background compaction failed; cleared during idle`)
+          }
+          pendingBackgroundCompaction = null
+          await drainAllPendingWrites()
+          await wakeSession.commitManifestEntries()
+          await flushProducedWrites()
+          idleReason = `background compaction applied`
+          appliedBackgroundDuringIdle = true
+        }
+      } while (appliedBackgroundDuringIdle)
+      if (resumedFromIdle) {
         continue
       }
       break

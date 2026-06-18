@@ -12,6 +12,8 @@ import { getModel, streamSimple } from '@mariozechner/pi-ai'
 import { createOutboundBridge } from './outbound-bridge'
 import { MOONSHOT_PROVIDER, getMoonshotModel } from './moonshot-models'
 import { runtimeLog } from './log'
+import { approxTokens } from './token-budget'
+import type { AgentMessageLike, CompactContextFn } from './compaction-midturn'
 import {
   ModelProviderError,
   toModelProviderError,
@@ -85,6 +87,14 @@ export interface PiAdapterOptions {
   }) => void
   modelTimeoutMs?: number
   modelMaxRetries?: number
+  // Mid-turn compaction hook. Called before each model step with the outgoing
+  // messages; may return a compacted message list to send instead. The adapter
+  // supplies `currentTokens` (real last-step usage + estimated trailing) and the
+  // model's context window so the hook can decide. See createMidTurnCompactor.
+  onCompactContext?: CompactContextFn
+  // Real cache-inclusive token usage entering this run (the previous turn's
+  // last step), used to anchor the first step's token estimate.
+  initialContextTokens?: number
 }
 
 const DEFAULT_MODEL_TIMEOUT_MS = 30_000
@@ -289,6 +299,53 @@ export function createPiAgentAdapter(
         maxRetries: modelMaxRetries,
       })
 
+    // Mid-turn compaction token accounting (Codex-style): anchor on the real
+    // cache-inclusive usage reported for the last model step, plus an estimate
+    // of only the items appended since (the trailing tail). `anchorMessageCount`
+    // marks the message-array length at that last step so the trailing slice can
+    // be measured. Initialised from the previous turn's usage for the first call.
+    const estimateContent = (m: AgentMessageLike): number =>
+      approxTokens((m as { content?: unknown }).content)
+    let anchorTokens =
+      opts.initialContextTokens ??
+      (history as Array<AgentMessageLike>).reduce(
+        (sum, m) => sum + estimateContent(m),
+        0
+      )
+    let anchorMessageCount = history.length
+    let pendingRequestMessageCount = anchorMessageCount
+
+    const modelContextWindow =
+      typeof model.contextWindow === `number` ? model.contextWindow : 0
+
+    const transformContext =
+      opts.onCompactContext && modelContextWindow > 0
+        ? async (
+            messages: Array<AgentMessage>
+          ): Promise<Array<AgentMessage>> => {
+            const list = messages as unknown as Array<AgentMessageLike>
+            const trailingTokens = list
+              .slice(anchorMessageCount)
+              .reduce((sum, m) => sum + estimateContent(m), 0)
+            const currentTokens = anchorTokens + trailingTokens
+            // Anchor the NEXT step's trailing estimate on this step's *incoming*
+            // (uncompacted) message count — NOT the compacted list we may return.
+            // pi-agent hands transformContext the full conversation every step,
+            // so `list.slice(anchorMessageCount)` next step measures exactly the
+            // messages appended since. `anchorTokens` is separately re-anchored
+            // to the step's real cache-inclusive usage at message_end.
+            pendingRequestMessageCount = messages.length
+            const compacted = await opts.onCompactContext!({
+              messages: list,
+              currentTokens,
+              contextWindow: modelContextWindow,
+            })
+            return compacted
+              ? (compacted as unknown as Array<AgentMessage>)
+              : messages
+          }
+        : undefined
+
     const agentOptions = {
       initialState: {
         systemPrompt: opts.systemPrompt,
@@ -297,6 +354,7 @@ export function createPiAgentAdapter(
         model,
       },
       streamFn,
+      ...(transformContext && { transformContext }),
       ...(opts.getApiKey && { getApiKey: opts.getApiKey }),
       ...(opts.onPayload && { onPayload: opts.onPayload }),
     }
@@ -531,6 +589,30 @@ export function createPiAgentAdapter(
                     : typeof usage?.outputTokens === `number`
                       ? usage.outputTokens
                       : undefined
+                // Cache-INCLUSIVE prompt size: every token the request put in
+                // the context window, including prompt-cache reads. This is
+                // what a "% of context used" gauge needs — cached tokens still
+                // occupy the window even though `usageInput` excludes them for
+                // budget accounting.
+                const usageContext =
+                  sumPresentNumbers([
+                    usage?.input,
+                    usage?.cacheWrite,
+                    usage?.cacheRead,
+                  ]) ??
+                  (typeof usage?.inputTokens === `number`
+                    ? usage.inputTokens
+                    : undefined)
+                const contextWindow =
+                  typeof model.contextWindow === `number`
+                    ? model.contextWindow
+                    : undefined
+                // Re-anchor the mid-turn token estimate on this step's real
+                // (cache-inclusive) usage and the message count we sent.
+                if (usageContext !== undefined) {
+                  anchorTokens = usageContext
+                  anchorMessageCount = pendingRequestMessageCount
+                }
                 bridge.onStepEnd({
                   finishReason,
                   durationMs: Date.now() - stepStartTime,
@@ -541,6 +623,10 @@ export function createPiAgentAdapter(
                   ...(usageOutput !== undefined && {
                     tokenOutput: usageOutput,
                   }),
+                  ...(usageContext !== undefined && {
+                    tokenContext: usageContext,
+                  }),
+                  ...(contextWindow !== undefined && { contextWindow }),
                 })
 
                 if (isError) {

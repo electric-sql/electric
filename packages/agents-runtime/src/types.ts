@@ -976,7 +976,27 @@ export interface AgentConfig {
   modelTimeoutMs?: number
   modelMaxRetries?: number
   testResponses?: TestResponses
+  // Model-call seam for context-compaction summarization. Defaults to pi-ai's
+  // completeSimple (i.e. the conversation model). Injected by tests, and a hook
+  // for routing summarization to a different model later.
+  summarizeComplete?: SummarizeCompleteFn
 }
+
+/**
+ * Model-call seam for compaction summarization. Typed loosely (only the text
+ * content is needed back) so it matches pi-ai's `completeSimple` without
+ * importing its types here. Defined in types.ts to keep `compaction-summarize`
+ * → `types` a one-way dependency.
+ */
+export type SummarizeCompleteFn = (
+  model: unknown,
+  context: { messages: Array<unknown>; systemPrompt?: string },
+  options?: Record<string, unknown>
+) => Promise<{
+  content: Array<{ type: string; text?: string }>
+  stopReason?: string
+  errorMessage?: string
+}>
 
 export type TestResponses = Array<string> | TestResponseFn
 

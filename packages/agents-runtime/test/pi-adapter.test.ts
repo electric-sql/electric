@@ -1227,5 +1227,30 @@ describe(`toAgentHistory`, () => {
       expect(stepValue?.input_tokens).toBe(100)
       expect(`output_tokens` in (stepValue ?? {})).toBe(false)
     })
+
+    it(`emits the cache-INCLUSIVE prompt size as context_input_tokens`, async () => {
+      // The context-usage gauge needs every token occupying the window,
+      // including prompt-cache reads — unlike `input_tokens`, which
+      // excludes cacheRead for budget accounting. Same split as the test
+      // above: 50 + 1200 + 100 = 1350, vs the uncached input_tokens of 150.
+      const events = await runOnce(
+        makeCompletedMessage({
+          input: 50,
+          cacheRead: 1200,
+          cacheWrite: 100,
+          output: 80,
+        })
+      )
+      const stepValue = findStepUpdate(events)
+      expect(stepValue?.context_input_tokens).toBe(1350)
+      expect(stepValue?.input_tokens).toBe(150)
+    })
+
+    it(`emits the model context window on the step`, async () => {
+      const events = await runOnce(makeCompletedMessage({ input: 100 }))
+      const stepValue = findStepUpdate(events)
+      expect(typeof stepValue?.context_window).toBe(`number`)
+      expect(stepValue?.context_window as number).toBeGreaterThan(0)
+    })
   })
 })

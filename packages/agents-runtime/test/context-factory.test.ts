@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { createAssistantMessageEventStream } from '@mariozechner/pi-ai'
 import { getCronStreamPath } from '../src/cron-utils'
 import { createHandlerContext } from '../src/context-factory'
 import { ENTITY_COLLECTIONS } from '../src/entity-schema'
@@ -494,5 +495,149 @@ describe(`createHandlerContext`, () => {
         },
       ],
     })
+  })
+
+  // === Phase 1: budget notice end-to-end through the real runAgent path ===
+  // Drives an actual agent run with a capturing streamFn and asserts the
+  // `<token_budget>` notice does (or doesn't) reach the model's context,
+  // gated on a seeded step's usage. This is the "prompt a model and check
+  // the notice is inserted" verification, made deterministic.
+
+  function seedStep(
+    db: EntityStreamDBWithActions,
+    step: {
+      _seq: number
+      context_input_tokens: number
+      context_window: number
+      output_tokens?: number
+    }
+  ): void {
+    ;(
+      db.collections as unknown as { steps: { insert: (r: unknown) => void } }
+    ).steps.insert({
+      key: `step-${step._seq}`,
+      run_id: `run-1`,
+      step_number: 1,
+      status: `completed`,
+      ...step,
+    })
+  }
+
+  function completedAssistantMessage(): unknown {
+    return {
+      role: `assistant`,
+      content: [{ type: `text`, text: `ok` }],
+      api: `anthropic-messages`,
+      provider: `anthropic`,
+      model: `claude-sonnet-4-5-20250929`,
+      usage: {
+        input: 10,
+        output: 5,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 15,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
+      stopReason: `stop`,
+      timestamp: Date.now(),
+    }
+  }
+
+  async function captureModelContext(
+    db: EntityStreamDBWithActions
+  ): Promise<string> {
+    const { ctx } = createHandlerContext({
+      entityUrl: `/chat/test`,
+      entityType: `chat`,
+      epoch: 1,
+      wakeOffset: `-1`,
+      firstWake: false,
+      args: {},
+      db,
+      sandbox: testSandboxStub,
+      state: {},
+      actions: {},
+      electricTools: [],
+      events: [] as Array<ChangeEvent>,
+      writeEvent: vi.fn(),
+      wakeSession: {
+        getPhase: () => `active`,
+        registerManifestEntry: vi.fn(() => true),
+        removeManifestEntry: vi.fn(() => false),
+        commitManifestEntries: vi.fn(),
+        rollbackManifestEntries: vi.fn(),
+        registerSharedStateHandle: vi.fn(),
+        registerSpawnHandle: vi.fn(),
+        registerSourceHandle: vi.fn(),
+        enqueueSend: vi.fn(),
+        getManifest: vi.fn(() => []),
+        getPendingSends: vi.fn(() => []),
+        getSharedStateHandles: vi.fn(() => new Map()),
+        getSpawnHandles: vi.fn(() => new Map()),
+        getSourceHandles: vi.fn(() => new Map()),
+        finishSetup: vi.fn(() => ({
+          manifest: [],
+          sharedStateHandles: new Map(),
+          spawnHandles: new Map(),
+          sourceHandles: new Map(),
+        })),
+        close: vi.fn(),
+      } as any,
+      wakeEvent: {
+        type: `inbox`,
+        payload: `hello`,
+        fromOffset: 0,
+        toOffset: 0,
+        eventCount: 1,
+      } as any,
+      doObserve: vi.fn(),
+      doSpawn: vi.fn(),
+      doFork: vi.fn(),
+      doMkdb: vi.fn(),
+      executeSend: vi.fn(),
+      tags: {},
+      doSetTag: vi.fn().mockResolvedValue(undefined),
+      doDeleteTag: vi.fn().mockResolvedValue(undefined),
+      doUnobserve: vi.fn().mockResolvedValue(undefined),
+    })
+
+    let captured: unknown = null
+    ctx.useAgent({
+      systemPrompt: `test`,
+      model: `claude-sonnet-4-5-20250929`,
+      tools: [],
+      streamFn: ((_model: unknown, context: unknown) => {
+        captured = context
+        const stream = createAssistantMessageEventStream()
+        queueMicrotask(() => stream.end(completedAssistantMessage() as never))
+        return stream
+      }) as never,
+    })
+
+    await ctx.agent.run(`hello`)
+    return JSON.stringify(captured)
+  }
+
+  it(`injects the token budget notice into the model context at >=25% usage`, async () => {
+    const db = createMockDb([])
+    seedStep(db, {
+      _seq: 1,
+      context_input_tokens: 80_000,
+      context_window: 100_000,
+    })
+    const contextJson = await captureModelContext(db)
+    expect(contextJson).toContain(`token_budget`)
+    expect(contextJson).toContain(`remaining`)
+  })
+
+  it(`does not inject the notice below 25% usage`, async () => {
+    const db = createMockDb([])
+    seedStep(db, {
+      _seq: 1,
+      context_input_tokens: 10_000,
+      context_window: 100_000,
+    })
+    const contextJson = await captureModelContext(db)
+    expect(contextJson).not.toContain(`token_budget`)
   })
 })

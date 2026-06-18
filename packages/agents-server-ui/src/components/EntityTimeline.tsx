@@ -21,6 +21,7 @@ import {
   Database,
   ExternalLink,
   FileJson,
+  FoldVertical,
   GitBranch,
   Radio,
   Reply,
@@ -243,7 +244,7 @@ function estimateRowHeight(
     const lines = Math.max(1, Math.ceil(row.comment.body.length / charsPerLine))
     return Math.max(58, 42 + lines * lineHeight) + timelineRowGap(row, nextRow)
   }
-  if (row.wake || row.signal || row.manifest) {
+  if (row.wake || row.signal || row.manifest || row.compaction) {
     return 76 + timelineRowGap(row, nextRow)
   }
   return 120 + timelineRowGap(row, nextRow)
@@ -261,7 +262,9 @@ function timelineRowGap(
   nextRow?: RenderTimelineRow
 ): number {
   if (shouldCollapseCommentMeta(row, nextRow)) return 6
-  return row.manifest || row.wake || row.signal ? MANIFEST_ROW_GAP : ROW_GAP
+  return row.manifest || row.wake || row.signal || row.compaction
+    ? MANIFEST_ROW_GAP
+    : ROW_GAP
 }
 
 function isPlainCommentRow(row: RenderTimelineRow | undefined): boolean {
@@ -309,11 +312,13 @@ function timelineRowSearchText(
   if (row.signal) return signalSearchText(row.signal)
   if (row.error) return `${row.error.error_code} ${row.error.message}`
   if (row.manifest) return manifestSearchText(row.manifest)
+  if (row.compaction) return `context compacted ${row.compaction.content}`
   return runSearchTextByKey.get(row.$key) ?? runSearchTextFromSnapshot(row.run)
 }
 
 function timelineRowLabel(row: RenderTimelineRow): string {
   if (row.comment) return `Comment`
+  if (row.compaction) return `Context compacted`
   if (row.inbox?.from_agent) return `Agent message`
   if (row.inbox) return `User message`
   if (row.wake) return `Wake`
@@ -672,6 +677,28 @@ function ErrorTimelineRow({
         summary={error.message}
         headerSurface
       />
+    </div>
+  )
+}
+
+function CompactionTimelineRow({
+  compaction,
+}: {
+  compaction: NonNullable<RenderTimelineRow[`compaction`]>
+}): React.ReactElement {
+  const summary = compaction.content.trim()
+  return (
+    <div className={styles.manifestRow}>
+      <InlineEventCard
+        icon={FoldVertical}
+        title="Context compacted"
+        summary="Earlier messages were summarized to fit the model's context window."
+        collapsible
+      >
+        {summary.length > 0 ? (
+          <pre className={styles.manifestJson}>{summary}</pre>
+        ) : undefined}
+      </InlineEventCard>
     </div>
   )
 }
@@ -1311,6 +1338,10 @@ const TimelineRow = memo(function TimelineRow({
 
   if (row.error) {
     return <ErrorTimelineRow error={row.error} />
+  }
+
+  if (row.compaction) {
+    return <CompactionTimelineRow compaction={row.compaction} />
   }
 
   if (row.manifest) {
