@@ -117,17 +117,9 @@ describe(`model catalog`, () => {
     expect(config).toMatchObject({
       provider: `openai`,
       model: `gpt-5`,
+      reasoning: `minimal`,
     })
-    expect(config.onPayload).toBeTypeOf(`function`)
-
-    const payload = config.onPayload!(
-      { reasoning: { effort: `none` } },
-      {} as any
-    )
-
-    expect(payload).toEqual({
-      reasoning: { effort: `minimal` },
-    })
+    expect(config.onPayload).toBeUndefined()
   })
 
   it(`uses explicit reasoning effort for OpenAI reasoning models`, async () => {
@@ -138,18 +130,10 @@ describe(`model catalog`, () => {
     })
 
     expect(config.reasoningEffort).toBe(`high`)
-
-    const payload = config.onPayload!(
-      { reasoning: { effort: `none` } },
-      {} as any
-    )
-
-    expect(payload).toEqual({
-      reasoning: { effort: `high` },
-    })
+    expect(config.reasoning).toBe(`high`)
   })
 
-  it(`enables Anthropic adaptive thinking at low effort when reasoningEffort is auto`, async () => {
+  it(`enables Anthropic reasoning through pi-ai when reasoningEffort is auto`, async () => {
     process.env.ANTHROPIC_API_KEY = `test-anthropic-key`
     vi.stubGlobal(
       `fetch`,
@@ -170,43 +154,17 @@ describe(`model catalog`, () => {
       model: `anthropic:claude-sonnet-4-6`,
     })
 
-    expect(config.onPayload).toBeTypeOf(`function`)
-    expect(config.onPayload!({}, {} as any)).toEqual({
-      thinking: { type: `adaptive` },
-      output_config: { effort: `low` },
+    expect(config.onPayload).toBeUndefined()
+    expect(config.reasoning).toBe(`minimal`)
+    expect(config.thinkingBudgets).toEqual({
+      minimal: 1024,
+      low: 2048,
+      medium: 8192,
+      high: 24576,
     })
   })
 
-  it(`overrides a pre-existing thinking.type=disabled in the Anthropic payload`, async () => {
-    process.env.ANTHROPIC_API_KEY = `test-anthropic-key`
-    vi.stubGlobal(
-      `fetch`,
-      vi.fn(async (url: string) => {
-        if (String(url).includes(`api.anthropic.com`)) {
-          return {
-            ok: true,
-            status: 200,
-            json: async () => ({ data: [{ id: `claude-sonnet-4-6` }] }),
-          }
-        }
-        return { ok: false, status: 401, json: async () => ({}) }
-      })
-    )
-
-    const catalog = await createBuiltinModelCatalog()
-    const config = resolveBuiltinModelConfig(catalog!, {
-      model: `anthropic:claude-sonnet-4-6`,
-    })
-
-    expect(
-      config.onPayload!({ thinking: { type: `disabled` } }, {} as any)
-    ).toEqual({
-      thinking: { type: `adaptive` },
-      output_config: { effort: `low` },
-    })
-  })
-
-  it(`maps explicit reasoningEffort to the Anthropic adaptive effort level`, async () => {
+  it(`maps explicit Anthropic reasoningEffort to pi-ai reasoning`, async () => {
     process.env.ANTHROPIC_API_KEY = `test-anthropic-key`
     vi.stubGlobal(
       `fetch`,
@@ -228,10 +186,8 @@ describe(`model catalog`, () => {
       reasoningEffort: `high`,
     })
 
-    expect(config.onPayload!({}, {} as any)).toEqual({
-      thinking: { type: `adaptive` },
-      output_config: { effort: `high` },
-    })
+    expect(config.reasoningEffort).toBe(`high`)
+    expect(config.reasoning).toBe(`high`)
   })
 
   it(`does not expose providers whose keys are rejected`, async () => {

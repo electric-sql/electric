@@ -959,6 +959,8 @@ export interface AgentConfig {
   getApiKey?: (
     provider: string
   ) => Promise<string | undefined> | string | undefined
+  reasoning?: SimpleStreamOptions[`reasoning`]
+  thinkingBudgets?: SimpleStreamOptions[`thinkingBudgets`]
   onPayload?: SimpleStreamOptions[`onPayload`]
   // Invoked after each step ends with the provider-reported token counts.
   // `input` is the full prompt volume (incl. prompt-cache reads/writes, as

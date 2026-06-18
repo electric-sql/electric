@@ -237,6 +237,71 @@ describe(`createPiAgentAdapter`, () => {
     expect(seenOptions).toEqual([{ timeoutMs: 1234, maxRetries: 5 }])
   })
 
+  it(`passes configured reasoning options to stream calls`, async () => {
+    const seenOptions: Array<{
+      reasoning?: string
+      thinkingBudgets?: unknown
+    }> = []
+    const completedMessage: AssistantMessage = {
+      role: `assistant`,
+      content: [{ type: `text`, text: `ok` }],
+      api: `anthropic-messages`,
+      provider: `anthropic`,
+      model: `claude-sonnet-4-5-20250929`,
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          total: 0,
+        },
+      },
+      stopReason: `stop`,
+      timestamp: Date.now(),
+    }
+
+    const thinkingBudgets = {
+      minimal: 1024,
+      low: 2048,
+      medium: 8192,
+      high: 24576,
+    }
+    const factory = createPiAgentAdapter({
+      systemPrompt: `Test system prompt`,
+      model: `claude-sonnet-4-5-20250929`,
+      tools: [],
+      reasoning: `high`,
+      thinkingBudgets,
+      streamFn: (_model, _context, options) => {
+        seenOptions.push({
+          reasoning: options?.reasoning,
+          thinkingBudgets: options?.thinkingBudgets,
+        })
+        const stream = createAssistantMessageEventStream()
+        queueMicrotask(() => stream.end(completedMessage))
+        return stream
+      },
+    })
+
+    const handle = factory({
+      entityUrl: `test/entity-1`,
+      epoch: 1,
+      messages: [],
+      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0, reasoning: 0 },
+      writeEvent: (_event: ChangeEvent) => {},
+    })
+
+    await handle.run(`hello`)
+
+    expect(seenOptions).toEqual([{ reasoning: `high`, thinkingBudgets }])
+  })
+
   it(`preserves existing stream options while injecting timeout and retry options`, async () => {
     let capturedSignal: AbortSignal | undefined
     const completedMessage: AssistantMessage = {

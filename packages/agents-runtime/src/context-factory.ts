@@ -785,6 +785,9 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
 
           getApiKey: activeAgentConfig.getApiKey,
 
+          reasoning: activeAgentConfig.reasoning,
+          thinkingBudgets: activeAgentConfig.thinkingBudgets,
+
           onPayload: activeAgentConfig.onPayload,
 
           onStepEnd: activeAgentConfig.onStepEnd,
