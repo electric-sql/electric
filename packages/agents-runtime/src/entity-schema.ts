@@ -165,6 +165,9 @@ type StepValue = {
   context_input_tokens?: number
   // The model's context window for this step.
   context_window?: number
+  // JSON estimate of the prompt's stable parts — `{ system, tools }` token
+  // counts (char/4). The UI derives "messages" as the real total minus these.
+  context_breakdown?: string
 }
 type TextValue = {
   key?: string
@@ -522,6 +525,7 @@ function createStepSchema(): Schema<StepValue> {
     duration_ms: z.number().int().optional(),
     input_tokens: z.number().int().nonnegative().optional(),
     output_tokens: z.number().int().nonnegative().optional(),
+    context_breakdown: z.string().optional(),
   })
 }
 

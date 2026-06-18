@@ -318,6 +318,13 @@ export function createPiAgentAdapter(
     const modelContextWindow =
       typeof model.contextWindow === `number` ? model.contextWindow : 0
 
+    // Stable request parts (constant for the call), estimated once and persisted
+    // per step; the UI derives "messages" as the real total minus these.
+    const tokenBreakdown = {
+      system: approxTokens(opts.systemPrompt),
+      tools: approxTokens(JSON.stringify(opts.tools)),
+    }
+
     const transformContext =
       opts.onCompactContext && modelContextWindow > 0
         ? async (
@@ -627,6 +634,7 @@ export function createPiAgentAdapter(
                     tokenContext: usageContext,
                   }),
                   ...(contextWindow !== undefined && { contextWindow }),
+                  tokenBreakdown,
                 })
 
                 if (isError) {

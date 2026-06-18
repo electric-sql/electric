@@ -163,6 +163,9 @@ export interface OutboundBridge {
     // Model context window for this step, persisted as `context_window`.
     contextWindow?: number
     durationMs?: number
+    // Approx token decomposition of the stable request parts (system + tools),
+    // persisted as `context_breakdown` for the usage-details popover.
+    tokenBreakdown?: { system: number; tools: number }
   }) => void
   onTextStart: () => void
   onTextDelta: (delta: string) => void
@@ -332,6 +335,8 @@ export function createOutboundBridge(
       tokenContext?: number
       contextWindow?: number
       durationMs?: number
+      /** Approximate token decomposition of the stable request parts. */
+      tokenBreakdown?: { system: number; tools: number }
     }) {
       if (!currentStepKey) return
       writeEvent(
@@ -356,6 +361,9 @@ export function createOutboundBridge(
             }),
             ...(opts?.contextWindow !== undefined && {
               context_window: opts.contextWindow,
+            }),
+            ...(opts?.tokenBreakdown !== undefined && {
+              context_breakdown: JSON.stringify(opts.tokenBreakdown),
             }),
           } as never,
         }) as ChangeEvent
