@@ -125,7 +125,7 @@ until the data is durable.
 
 The engine then serves the response body with the matching primitive:
 
-| body kind                | how it's written                                             |
+| body kind                | how it's written                                            |
 | ------------------------ | ----------------------------------------------------------- |
 | `Full` (cached / small)  | one coalesced write (head + body)                           |
 | `FileRange` (large/cold) | **`sendfile(2)`** zero-copy on Linux; positioned reads else |
@@ -258,7 +258,7 @@ Key properties:
   chunk files, so reclaiming a chunk is an `unlink` — safe even under an in-flight
   read (Unix keeps an open fd readable after unlink). The live data file's sealed
   region is **not** reclaimed: hole-punching (`fallocate`) a shared file races with
-  the engines' in-flight lazy reads (`sendfile` / `Body::FileRange`) into the
+  the engine's in-flight lazy reads (`sendfile` / `Body::FileRange`) into the
   just-sealed tail, which would read zeros from the freed blocks. Safe live-file
   reclaim needs read/punch coordination (epoch/refcount) or compaction and is a
   planned follow-up; until then the live file retains the sealed prefix (extra disk,
