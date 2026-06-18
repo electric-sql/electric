@@ -689,6 +689,145 @@ describe(`createPiAgentAdapter`, () => {
     )
   })
 
+  it(`writes reasoning rows for streamed thinking events`, async () => {
+    const events: Array<ChangeEvent> = []
+    const usage = {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 0,
+      cost: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        total: 0,
+      },
+    }
+    const startMessage: AssistantMessage = {
+      role: `assistant`,
+      content: [],
+      api: `openai-codex-responses`,
+      provider: `openai-codex`,
+      model: `gpt-5.4`,
+      usage,
+      stopReason: `stop`,
+      timestamp: Date.now(),
+    }
+    const partialMessage: AssistantMessage = {
+      ...startMessage,
+      content: [{ type: `thinking`, thinking: `**Updating PR**\n\n` }],
+    }
+    const finalMessage: AssistantMessage = {
+      ...startMessage,
+      content: [
+        {
+          type: `thinking`,
+          thinking: `**Updating PR**\n\nI'm updating the PR description.`,
+        },
+      ],
+    }
+
+    const factory = createPiAgentAdapter({
+      systemPrompt: `Test system prompt`,
+      provider: `openai-codex`,
+      model: `gpt-5.4`,
+      tools: [],
+      streamFn: () => {
+        const stream = createAssistantMessageEventStream()
+        queueMicrotask(() => {
+          stream.push({ type: `start`, partial: startMessage })
+          stream.push({
+            type: `thinking_start`,
+            contentIndex: 0,
+            partial: partialMessage,
+          })
+          stream.push({
+            type: `thinking_delta`,
+            contentIndex: 0,
+            delta: `**Updating PR**\n\n`,
+            partial: partialMessage,
+          })
+          stream.push({
+            type: `thinking_delta`,
+            contentIndex: 0,
+            delta: `I'm updating the PR description.`,
+            partial: finalMessage,
+          })
+          stream.push({
+            type: `thinking_end`,
+            contentIndex: 0,
+            content: `**Updating PR**\n\nI'm updating the PR description.`,
+            partial: finalMessage,
+          })
+          stream.end(finalMessage)
+        })
+        return stream
+      },
+    })
+
+    const handle = factory({
+      entityUrl: `test/entity-1`,
+      epoch: 1,
+      messages: [],
+      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0, reasoning: 0 },
+      writeEvent: (event: ChangeEvent) => {
+        events.push(event)
+      },
+    })
+
+    await handle.run(`hello`)
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: `reasoning`,
+        headers: expect.objectContaining({ operation: `insert` }),
+        key: `reasoning-0`,
+        value: expect.objectContaining({
+          status: `streaming`,
+          run_id: `run-0`,
+        }),
+      })
+    )
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: `reasoning_delta`,
+        headers: expect.objectContaining({ operation: `insert` }),
+        key: `reasoning-0:0`,
+        value: expect.objectContaining({
+          reasoning_id: `reasoning-0`,
+          run_id: `run-0`,
+          delta: `**Updating PR**\n\n`,
+        }),
+      })
+    )
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: `reasoning_delta`,
+        headers: expect.objectContaining({ operation: `insert` }),
+        key: `reasoning-0:1`,
+        value: expect.objectContaining({
+          reasoning_id: `reasoning-0`,
+          run_id: `run-0`,
+          delta: `I'm updating the PR description.`,
+        }),
+      })
+    )
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: `reasoning`,
+        headers: expect.objectContaining({ operation: `update` }),
+        key: `reasoning-0`,
+        value: expect.objectContaining({
+          status: `completed`,
+          run_id: `run-0`,
+          summary_title: `Updating PR`,
+        }),
+      })
+    )
+  })
+
   it(`isRunning returns false initially`, () => {
     const factory = createPiAgentAdapter({
       systemPrompt: `Test system prompt`,

@@ -270,6 +270,37 @@ function resolveBuiltinReasoning(
   return reasoningEffort ?? `minimal`
 }
 
+function resolveBuiltinPayloadMapper(
+  choice: BuiltinModelChoice,
+  reasoning: AgentConfig[`reasoning`] | undefined
+): AgentConfig[`onPayload`] | undefined {
+  if (
+    !choice.reasoning ||
+    (choice.provider !== `openai` && choice.provider !== `openai-codex`) ||
+    !reasoning
+  ) {
+    return undefined
+  }
+
+  return (payload) => {
+    if (typeof payload !== `object` || payload === null) return undefined
+    const body = payload as Record<string, unknown>
+    const existingReasoning =
+      typeof body.reasoning === `object` && body.reasoning !== null
+        ? (body.reasoning as Record<string, unknown>)
+        : {}
+
+    return {
+      ...body,
+      reasoning: {
+        ...existingReasoning,
+        effort: reasoning,
+        summary: existingReasoning.summary ?? `auto`,
+      },
+    }
+  }
+}
+
 function parseReasoningEffort(value: unknown): ExplicitReasoningEffort | null {
   return value === `minimal` ||
     value === `low` ||
@@ -345,11 +376,13 @@ export function resolveBuiltinModelConfig(
 
   const choice = selected ?? catalog.defaultChoice
   const reasoning = resolveBuiltinReasoning(choice, reasoningEffort)
+  const onPayload = resolveBuiltinPayloadMapper(choice, reasoning)
   const config: BuiltinAgentModelConfig = {
     provider: choice.provider,
     model: choice.id,
     ...(reasoningEffort && { reasoningEffort }),
     ...(reasoning && { reasoning }),
+    ...(onPayload && { onPayload }),
     ...(choice.reasoning &&
       choice.provider === `anthropic` && {
         thinkingBudgets: ANTHROPIC_THINKING_BUDGETS,
