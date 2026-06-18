@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 import { render } from 'ink-testing-library'
+import { createCollection, localOnlyCollectionOptions } from '@tanstack/db'
 import {
   AgentTextView,
+  ObserveView,
   ObserveExitHotkey,
   ToolCallView,
   ToolResultView,
@@ -13,9 +15,36 @@ import {
   truncate,
 } from '../src/observe-ui'
 
+const runtimeMocks = vi.hoisted(() => ({
+  timelineRows: undefined as any,
+}))
+
+vi.mock(`@electric-ax/agents-runtime`, async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import(`@electric-ax/agents-runtime`)>()
+  return {
+    ...actual,
+    createEntityTimelineQuery: () => (q: any) =>
+      q.from({ row: runtimeMocks.timelineRows }),
+  }
+})
+
 // ============================================================================
 // Helper functions
 // ============================================================================
+
+function createLocalCollection<TRow extends object>(
+  id: string,
+  getKey: (row: TRow) => string
+): any {
+  return createCollection(
+    localOnlyCollectionOptions({
+      id: `test-${id}-${Math.random().toString(36).slice(2)}`,
+      getKey: getKey as any,
+      initialData: [],
+    })
+  )
+}
 
 describe(`formatTime`, () => {
   it(`returns empty string for undefined`, () => {
@@ -63,6 +92,47 @@ describe(`ObserveExitHotkey`, () => {
     await new Promise<void>((resolve) => setImmediate(resolve))
 
     expect(onExit).toHaveBeenCalledOnce()
+  })
+})
+
+describe(`ObserveView`, () => {
+  it(`rerenders when an entity stopped event arrives without timeline events`, async () => {
+    runtimeMocks.timelineRows = createLocalCollection(
+      `timeline`,
+      (row: Record<string, unknown>) => String(row.$key ?? row.key ?? ``)
+    )
+    const entityStopped = createLocalCollection(
+      `stopped`,
+      (row: Record<string, unknown>) => String(row.key)
+    )
+    const db = {
+      collections: {
+        entityStopped,
+      },
+    } as any
+    const { lastFrame, unmount } = render(
+      <ObserveView
+        db={db}
+        entityUrl="/chat/closed"
+        baseUrl="http://localhost:4437"
+        identity="user"
+      />
+    )
+
+    expect(lastFrame()).toContain(`Waiting for events...`)
+    expect(lastFrame()).not.toContain(`Stream closed`)
+
+    entityStopped.insert({
+      key: `stop-1`,
+      timestamp: new Date().toISOString(),
+      reason: `done`,
+    })
+
+    await expect
+      .poll(() => lastFrame(), { timeout: 1000 })
+      .toContain(`Stream closed`)
+
+    unmount()
   })
 })
 

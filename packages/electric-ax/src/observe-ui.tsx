@@ -566,11 +566,11 @@ function AgentRunView({
   isStreaming: boolean
 }): React.ReactElement {
   const { data: items = [] } = useLiveQuery(
-    (q) => (run.items ? q.from({ item: run.items }) : undefined),
+    (q) => (run.items ? q.from({ item: run.items as any }) : undefined),
     [run.items]
   )
   const { data: errors = [] } = useLiveQuery(
-    (q) => (run.errors ? q.from({ error: run.errors }) : undefined),
+    (q) => (run.errors ? q.from({ error: run.errors as any }) : undefined),
     [run.errors]
   )
 
@@ -664,7 +664,7 @@ export function ObserveExitHotkey({
   return null
 }
 
-function ObserveView({
+export function ObserveView({
   db,
   entityUrl,
   baseUrl,
@@ -686,8 +686,11 @@ function ObserveView({
       timelineRowsToDisplayRows(timelineRows as Array<EntityTimelineQueryRow>),
     [timelineRows]
   )
-
-  const closed = db.collections.entityStopped.toArray.length > 0
+  const { data: entityStoppedRows = [] } = useLiveQuery(
+    (q) => q.from({ stopped: db.collections.entityStopped as any }),
+    [db.collections.entityStopped]
+  )
+  const closed = entityStoppedRows.length > 0
 
   const lastAgentIndex = useMemo(() => {
     for (let i = displayRows.length - 1; i >= 0; i--) {
