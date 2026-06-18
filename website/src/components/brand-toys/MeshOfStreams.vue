@@ -341,11 +341,11 @@ function startLoop() {
   const tick = (ts: number) => {
     nowMs.value = ts
     drawCanvas(ts / 1000)
-    if (typeof requestAnimationFrame !== "undefined") {
+    if (typeof requestAnimationFrame !== 'undefined') {
       frame = requestAnimationFrame(tick)
     }
   }
-  if (typeof requestAnimationFrame !== "undefined") {
+  if (typeof requestAnimationFrame !== 'undefined') {
     frame = requestAnimationFrame(tick)
   }
 }
@@ -375,7 +375,7 @@ onMounted(() => {
   // late hydration) before we measure. We then kick off the deferred
   // scene build so the page has already painted by the time the heavy
   // routing work runs on the idle queue.
-  if (typeof requestAnimationFrame !== "undefined") {
+  if (typeof requestAnimationFrame !== 'undefined') {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         measureExclusions()
