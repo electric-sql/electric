@@ -130,12 +130,14 @@ export default ({ config }: ConfigContext): ExpoConfig =>
         versionCode,
         edgeToEdgeEnabled: true,
         // expo-image-picker declares these, but the app uses the system
-        // photo picker (content URIs) and never records audio — block them
-        // so the AAB permission list / Play Data Safety form stays clean.
+        // photo picker (content URIs) and never records audio, so block
+        // them to keep the AAB permission list clean. WRITE_EXTERNAL_STORAGE
+        // is deliberately left in place: image-picker's pre-Android-10
+        // (API < 29) camera path hard-requires it, so blocking it breaks
+        // "take a photo" on Android 7–9.
         blockedPermissions: [
           `android.permission.RECORD_AUDIO`,
           `android.permission.READ_EXTERNAL_STORAGE`,
-          `android.permission.WRITE_EXTERNAL_STORAGE`,
         ],
         adaptiveIcon: {
           foregroundImage: `./assets/adaptive-icon.png`,
