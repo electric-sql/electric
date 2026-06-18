@@ -10,6 +10,7 @@ export type DesktopStateDeps = {
   settings: {
     servers: Array<ServerConfig>
     workingDirectory?: string | null
+    skillDirectories?: Array<string>
     pullWakeRunnerId?: string | null
   }
   state: DesktopState
@@ -42,6 +43,7 @@ export function desktopStateForWindow(
       ? deps.injectDevPrincipalHeaders(activeServer)
       : null,
     workingDirectory: deps.settings.workingDirectory ?? null,
+    skillDirectories: deps.settings.skillDirectories ?? [],
     error: entry?.lastError ?? null,
     discoveredServers: deps.state.discoveredServers,
     pullWakeRunnerId:

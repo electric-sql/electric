@@ -36,6 +36,7 @@ export interface DesktopState {
   runtimeUrl: string | null
   activeServer: ServerConfig | null
   workingDirectory: string | null
+  skillDirectories: Array<string>
   error: string | null
   discoveredServers: Array<DiscoveredServer>
   pullWakeRunnerId: string | null
@@ -377,6 +378,8 @@ declare global {
       getPreventAppSuspension?: () => Promise<PreventAppSuspensionPreference>
       setPreventAppSuspension?: (enabled: boolean) => Promise<void>
       getWorkingDirectory?: () => Promise<string | null>
+      getSkillDirectories?: () => Promise<Array<string>>
+      saveSkillDirectories?: (dirs: Array<string>) => Promise<void>
       chooseWorkingDirectory?: () => Promise<string | null>
       /**
        * One-shot native folder picker. Unlike `chooseWorkingDirectory`,
@@ -653,6 +656,14 @@ export async function savePreventAppSuspensionPreference(
   enabled: boolean
 ): Promise<void> {
   await window.electronAPI?.setPreventAppSuspension?.(enabled)
+}
+
+export async function loadSkillDirectories(): Promise<Array<string>> {
+  return (await window.electronAPI?.getSkillDirectories?.()) ?? []
+}
+
+export async function saveSkillDirectories(dirs: Array<string>): Promise<void> {
+  await window.electronAPI?.saveSkillDirectories?.(dirs)
 }
 
 export async function loadCloudAuthState(): Promise<CloudAuthState | null> {

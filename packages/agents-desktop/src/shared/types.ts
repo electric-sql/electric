@@ -61,6 +61,7 @@ export type DesktopState = {
   runtimeUrl: string | null
   activeServer: ServerConfig | null
   workingDirectory: string | null
+  skillDirectories: Array<string>
   error: string | null
   discoveredServers: Array<DiscoveredServer>
   pullWakeRunnerId: string | null
@@ -126,6 +127,7 @@ export type DesktopSettings = {
   servers: Array<ServerConfig>
   defaultServerId: string | null
   workingDirectory: string | null
+  skillDirectories: Array<string>
   apiKeysRef: string
   launchAtLogin?: boolean
   preventAppSuspension?: boolean

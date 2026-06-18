@@ -1,5 +1,3 @@
-import { completeWithLowCostModel } from '../model-runner'
-import { runtimeLog } from '../log'
 import { parsePreamble } from './preamble'
 
 interface ExtractedMeta {
@@ -32,67 +30,12 @@ export async function extractSkillMeta(
     }
   }
 
-  try {
-    return await llmExtract(name, content, preamble)
-  } catch (err) {
-    runtimeLog.warn(
-      `[skills]`,
-      `LLM metadata extraction failed for "${name}":`,
-      err instanceof Error ? err : new Error(String(err))
-    )
-  }
-
   return {
     description: preamble.description ?? humanize(name),
     whenToUse:
       preamble.whenToUse ?? `User asks about ${humanize(name).toLowerCase()}`,
     keywords: preamble.keywords ?? [name],
     max: preamble.max ?? DEFAULT_MAX,
-  }
-}
-
-async function llmExtract(
-  name: string,
-  content: string,
-  partial: {
-    description?: string
-    whenToUse?: string
-    keywords?: Array<string>
-    max?: number
-  }
-): Promise<ExtractedMeta> {
-  const truncated = content.slice(0, 8_000)
-
-  const prompt = `Analyze this skill document and extract metadata. The skill is named "${name}".
-
-<skill>
-${truncated}
-</skill>
-
-Return ONLY a JSON object with these fields:
-- "description": one-line summary of what this skill provides (max 100 chars)
-- "whenToUse": when should an AI agent load this skill (max 200 chars)
-- "keywords": array of 3-8 relevant keywords
-
-Return raw JSON, no markdown fences.`
-
-  const text = await completeWithLowCostModel({
-    purpose: `skill metadata extraction`,
-    systemPrompt: `Extract metadata from skill documents. Return only valid JSON that matches the requested schema.`,
-    prompt,
-    maxTokens: 256,
-    log: (message) => runtimeLog.info(`[skills]`, message),
-    logPrefix: `[skills]`,
-  })
-
-  const parsed = JSON.parse(text)
-
-  return {
-    description: partial.description ?? parsed.description ?? humanize(name),
-    whenToUse:
-      partial.whenToUse ?? parsed.whenToUse ?? `User asks about ${name}`,
-    keywords: partial.keywords ?? parsed.keywords ?? [name],
-    max: partial.max ?? DEFAULT_MAX,
   }
 }
 

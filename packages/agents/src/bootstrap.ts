@@ -114,6 +114,7 @@ export interface BuiltinAgentHandlerOptions {
   runtimeName?: string
   /** Override for the built-in skills directory; required when embedders bundle this package. */
   baseSkillsDir?: string
+  appSkillsDirs?: ReadonlyArray<string>
   serverHeaders?: HeadersProvider
   defaultDispatchPolicyForType?: (
     typeName: string
@@ -167,6 +168,7 @@ export async function createBuiltinAgentHandler(
     publicUrl,
     runtimeName,
     baseSkillsDir: baseSkillsDirOverride,
+    appSkillsDirs,
     serverHeaders,
     defaultDispatchPolicyForType,
     dockerSandbox: dockerSandboxOpts,
@@ -194,6 +196,7 @@ export async function createBuiltinAgentHandler(
     skillsRegistry = await createSkillsRegistry({
       baseSkillsDir,
       appSkillsDir: path.resolve(cwd, `skills`),
+      appSkillsDirs,
       cacheDir: path.resolve(cwd, `.electric-agents`),
     })
     if (skillsRegistry.catalog.size > 0) {

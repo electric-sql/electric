@@ -27,10 +27,25 @@ export const DEFAULT_SETTINGS: DesktopSettings = {
   servers: [],
   defaultServerId: null,
   workingDirectory: null,
+  skillDirectories: [],
   apiKeysRef: GLOBAL_API_KEYS_REF,
   launchAtLogin: false,
   preventAppSuspension: true,
   codex: { enabled: false, source: null },
+}
+
+export function normalizeSkillDirectories(value: unknown): Array<string> {
+  if (!Array.isArray(value)) return []
+  const seen = new Set<string>()
+  const dirs: Array<string> = []
+  for (const entry of value) {
+    if (typeof entry !== `string`) continue
+    const dir = entry.trim()
+    if (!dir || seen.has(dir)) continue
+    seen.add(dir)
+    dirs.push(dir)
+  }
+  return dirs
 }
 
 export function normalizeCodexSettings(value: unknown): CodexSettings {
@@ -160,6 +175,9 @@ export async function loadDesktopSettings(
         typeof parsed.workingDirectory === `string`
           ? parsed.workingDirectory
           : null,
+      skillDirectories: normalizeSkillDirectories(
+        (parsed as { skillDirectories?: unknown }).skillDirectories
+      ),
       apiKeysRef,
       launchAtLogin: parsed.launchAtLogin === true,
       preventAppSuspension: parsed.preventAppSuspension !== false,

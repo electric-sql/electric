@@ -11,27 +11,33 @@ const CACHE_FILENAME = `skills-cache.json`
 interface SkillsRegistryOptions {
   baseSkillsDir: string
   appSkillsDir?: string
+  appSkillsDirs?: ReadonlyArray<string>
   cacheDir: string
 }
 
 type CacheFile = Record<string, SkillMeta>
+type SkillFile = { source: string; userInvocableByDefault: boolean }
 
 export async function createSkillsRegistry(
   opts: SkillsRegistryOptions
 ): Promise<SkillsRegistry> {
-  const { baseSkillsDir, appSkillsDir, cacheDir } = opts
+  const { baseSkillsDir, appSkillsDir, appSkillsDirs, cacheDir } = opts
 
   const cachePath = path.join(cacheDir, CACHE_FILENAME)
   const existingCache = await loadCache(cachePath)
 
-  const files = new Map<string, string>()
-  await scanDir(baseSkillsDir, files)
+  const files = new Map<string, SkillFile>()
+  await scanDir(baseSkillsDir, files, { userInvocableByDefault: false })
   if (appSkillsDir) {
-    await scanDir(appSkillsDir, files)
+    await scanDir(appSkillsDir, files, { userInvocableByDefault: true })
+  }
+  for (const dir of appSkillsDirs ?? []) {
+    await scanDir(dir, files, { userInvocableByDefault: true })
   }
 
   const catalog = new Map<string, SkillMeta>()
-  for (const [name, filePath] of files) {
+  for (const [name, file] of files) {
+    const filePath = file.source
     const content = await fs.readFile(filePath, `utf-8`)
     const hash = sha256(content)
 
@@ -46,6 +52,7 @@ export async function createSkillsRegistry(
     const entry: SkillMeta = {
       name,
       ...meta,
+      userInvocable: meta.userInvocable ?? file.userInvocableByDefault,
       charCount: content.length,
       contentHash: hash,
       source: filePath,
@@ -84,17 +91,36 @@ export async function createSkillsRegistry(
   }
 }
 
-async function scanDir(dir: string, out: Map<string, string>) {
-  let entries: Array<{ name: string; isFile: () => boolean }>
+async function scanDir(
+  dir: string,
+  out: Map<string, SkillFile>,
+  opts: { userInvocableByDefault: boolean }
+) {
+  let entries: Array<{
+    name: string
+    isFile: () => boolean
+    isDirectory: () => boolean
+  }>
   try {
     entries = await fs.readdir(dir, { withFileTypes: true })
   } catch {
     return
   }
   for (const entry of entries) {
+    const entryPath = path.resolve(dir, entry.name)
+    if (entry.isDirectory()) {
+      if (entry.name === `node_modules` || entry.name === `.git`) continue
+      await scanDir(entryPath, out, opts)
+      continue
+    }
     if (!entry.isFile() || !entry.name.endsWith(`.md`)) continue
-    const name = entry.name.slice(0, -3)
-    out.set(name, path.resolve(dir, entry.name))
+    const parsed = path.parse(entryPath)
+    const name =
+      parsed.name === `SKILL` ? path.basename(parsed.dir) : parsed.name
+    out.set(name, {
+      source: entryPath,
+      userInvocableByDefault: opts.userInvocableByDefault,
+    })
   }
 }
 

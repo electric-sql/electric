@@ -64,6 +64,7 @@ export function createDesktopAppContext(
       runtimeUrl: null,
       activeServer: null,
       workingDirectory: null,
+      skillDirectories: [],
       error: null,
       discoveredServers: [],
       pullWakeRunnerId: null,
