@@ -37,7 +37,7 @@ const todoCollection = createCollection(
         transaction.mutations[0].modified
       )
 
-      return { txid: String(txid) }
+      return { txid }
     },
     onUpdate: async ({ transaction }) => {
       const {
@@ -46,13 +46,13 @@ const todoCollection = createCollection(
       } = transaction.mutations[0]
       const { txid } = await apiClient.updateTodo(id, changes)
 
-      return { txid: String(txid) }
+      return { txid }
     },
     onDelete: async ({ transaction }) => {
       const { id } = transaction.mutations[0].original
       const { txid } = await apiClient.deleteTodo(id)
 
-      return { txid: String(txid) }
+      return { txid }
     },
     getKey: (item) => item.id,
   })
