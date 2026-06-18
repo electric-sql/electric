@@ -380,11 +380,11 @@ defmodule Electric.ShapeCache do
         with {:ok, shape_handles} <- safe_maybe_create_inner_shapes(shape, opts) do
           shape = %{shape | shape_dependencies_handles: shape_handles}
 
-          {:ok, {shape_handle, _shape_id}} = ShapeStatus.add_shape(stack_id, shape)
+          {:ok, {shape_handle, shape_id}} = ShapeStatus.add_shape(stack_id, shape)
 
           Logger.info("Creating new shape for #{inspect(shape)} with handle #{shape_handle}")
 
-          case start_shape(shape_handle, shape, Map.put(opts, :action, :create)) do
+          case start_shape(shape_handle, shape_id, shape, Map.put(opts, :action, :create)) do
             {:ok, _pid} ->
               # We're guaranteed to have a newly started shape, so we can be sure
               # about its "latest offset" because it'll be in the snapshotting stage
@@ -416,39 +416,64 @@ defmodule Electric.ShapeCache do
     end
   end
 
-  defp start_shape(shape_handle, shape, %{stack_id: stack_id} = opts) do
-    Enum.zip(shape.shape_dependencies_handles, shape.shape_dependencies)
-    |> Enum.with_index(fn {shape_handle, inner_shape}, index ->
-      materialized_type =
-        shape.where.used_refs |> Map.fetch!(["$sublink", Integer.to_string(index)])
+  defp start_shape(shape_handle, shape_id, shape, %{stack_id: stack_id} = opts) do
+    with :ok <- start_materializers(shape_handle, shape, stack_id),
+         {:ok, consumer_pid} <-
+           Shapes.DynamicConsumerSupervisor.start_shape_consumer(stack_id, %{
+             stack_id: stack_id,
+             shape_handle: shape_handle,
+             shape_id: shape_id
+           }) do
+      Shapes.Consumer.initialize_shape(consumer_pid, shape, opts)
 
-      Shapes.DynamicConsumerSupervisor.start_materializer(stack_id, %{
-        stack_id: stack_id,
-        shape_handle: shape_handle,
-        columns: inner_shape.explicitly_selected_columns,
-        materialized_type: materialized_type
-      })
-    end)
+      # Now that the consumer process for this shape is running, we can finish initializing
+      # the ShapeStatus record by recording a "last_read" timestamp on it.
+      ShapeStatus.update_last_read_time_to_now(stack_id, shape_handle)
 
-    case Shapes.DynamicConsumerSupervisor.start_shape_consumer(stack_id, %{
-           stack_id: stack_id,
-           shape_handle: shape_handle
-         }) do
-      {:ok, consumer_pid} ->
-        Shapes.Consumer.initialize_shape(consumer_pid, shape, opts)
-
-        # Now that the consumer process for this shape is running, we can finish initializing
-        # the ShapeStatus record by recording a "last_read" timestamp on it.
-        ShapeStatus.update_last_read_time_to_now(stack_id, shape_handle)
-
-        {:ok, consumer_pid}
-
-      {:error, _reason} = error ->
+      {:ok, consumer_pid}
+    else
+      error ->
         Logger.error("Failed to start shape: #{inspect(error)}", shape_handle: shape_handle)
         # purge because we know the consumer isn't running
         clean_shape(shape_handle, stack_id)
         :error
     end
+  end
+
+  defp start_materializers(shape_handle, shape, stack_id) do
+    Enum.zip(shape.shape_dependencies_handles, shape.shape_dependencies)
+    |> Enum.with_index()
+    |> Enum.reduce_while(:ok, fn {{inner_shape_handle, inner_shape}, index}, :ok ->
+      materialized_type =
+        shape.where.used_refs |> Map.fetch!(["$sublink", Integer.to_string(index)])
+
+      # The inner shape is known to exist in ShapeStatus on both the create path
+      # (just added in this synchronous handle_call) and the restore path. A
+      # missing id is therefore a deletion race, handled gracefully here the same
+      # way as a failed consumer start (see start_shape/4) rather than crashing
+      # the ShapeCache GenServer.
+      case ShapeStatus.id_for_handle(stack_id, inner_shape_handle) do
+        {:ok, inner_shape_id} ->
+          Shapes.DynamicConsumerSupervisor.start_materializer(stack_id, %{
+            stack_id: stack_id,
+            shape_handle: inner_shape_handle,
+            shape_id: inner_shape_id,
+            columns: inner_shape.explicitly_selected_columns,
+            materialized_type: materialized_type
+          })
+
+          {:cont, :ok}
+
+        :error ->
+          Logger.warning(
+            "Failed to start materializer for inner shape: shape id not found",
+            shape_handle: shape_handle,
+            inner_shape_handle: inner_shape_handle
+          )
+
+          {:halt, {:error, {:no_shape_id, inner_shape_handle}}}
+      end
+    end)
   end
 
   # start_shape assumes that any dependent shapes already have running consumers
@@ -461,11 +486,15 @@ defmodule Electric.ShapeCache do
     |> Enum.reduce_while({:ok, %{}}, fn {handle, shape, start_shape_opts}, {:ok, acc} ->
       case Electric.Shapes.ConsumerRegistry.whereis(opts.stack_id, handle) do
         nil ->
-          case start_shape(handle, shape, Map.merge(opts, start_shape_opts)) do
-            {:ok, pid} ->
-              {:cont, {:ok, Map.put(acc, handle, pid)}}
-
-            :error ->
+          with {:ok, shape_id} <- ShapeStatus.id_for_handle(opts.stack_id, handle),
+               {:ok, pid} <-
+                 start_shape(handle, shape_id, shape, Map.merge(opts, start_shape_opts)) do
+            {:cont, {:ok, Map.put(acc, handle, pid)}}
+          else
+            # Either the shape's id has vanished from ShapeStatus (a deletion
+            # race) or starting the consumer failed; in both cases we can't
+            # bring this handle up, so treat it as a start failure.
+            _ ->
               {:halt, {:error, handle}}
           end
 

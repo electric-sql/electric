@@ -9,15 +9,16 @@ defmodule Electric.Shapes.Consumer.StateTest do
 
   @moduletag :tmp_dir
 
-  describe "new/3" do
+  describe "new/4" do
     setup [:with_stack_id_from_test]
 
     test "creates uninitialized state", %{stack_id: stack_id} do
       shape = %Electric.Shapes.Shape{root_table: {"public", "items"}, root_table_id: 1}
-      state = State.new(stack_id, "test-handle", shape)
+      state = State.new(stack_id, "test-handle", 1, shape)
 
       assert state.stack_id == stack_id
       assert state.shape_handle == "test-handle"
+      assert state.shape_id == 1
       assert state.shape == shape
       assert state.buffering? == true
       assert state.latest_offset == nil
@@ -32,7 +33,7 @@ defmodule Electric.Shapes.Consumer.StateTest do
 
     setup %{stack_id: stack_id} do
       shape = %Electric.Shapes.Shape{root_table: {"public", "items"}, root_table_id: 1}
-      state = State.new(stack_id, "test-handle", shape)
+      state = State.new(stack_id, "test-handle", 1, shape)
       %{state: state}
     end
 
@@ -79,7 +80,7 @@ defmodule Electric.Shapes.Consumer.StateTest do
 
     test "sets write_unit=txn_fragment for standalone shapes", %{stack_id: stack_id} do
       shape = %Shape{root_table: {"public", "items"}, root_table_id: 1}
-      state = State.new(stack_id, "test-handle") |> State.initialize_shape(shape, %{})
+      state = State.new(stack_id, "test-handle", 1) |> State.initialize_shape(shape, %{})
 
       assert state.write_unit == :txn_fragment
     end
@@ -93,7 +94,7 @@ defmodule Electric.Shapes.Consumer.StateTest do
         shape_dependencies: [dep_shape]
       }
 
-      state = State.new(stack_id, "test-handle") |> State.initialize_shape(shape, %{})
+      state = State.new(stack_id, "test-handle", 1) |> State.initialize_shape(shape, %{})
 
       assert state.write_unit == :txn
     end
@@ -102,7 +103,7 @@ defmodule Electric.Shapes.Consumer.StateTest do
       shape = %Shape{root_table: {"public", "items"}, root_table_id: 1}
 
       state =
-        State.new(stack_id, "test-handle")
+        State.new(stack_id, "test-handle", 1)
         |> State.initialize_shape(shape, %{is_subquery_shape?: true})
 
       assert state.write_unit == :txn
@@ -120,7 +121,7 @@ defmodule Electric.Shapes.Consumer.StateTest do
 
       # Shape without dependencies gets write_unit=:txn_fragment
       shape = %Shape{root_table: {"public", "items"}, root_table_id: 1}
-      state = State.new(stack_id, "test-handle", shape)
+      state = State.new(stack_id, "test-handle", 1, shape)
       assert state.write_unit == :txn_fragment
 
       shape_storage = Electric.ShapeCache.Storage.for_shape("test-handle", storage)

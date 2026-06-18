@@ -198,7 +198,7 @@ defmodule Electric.Shapes.ConsumerTest do
       Support.TestUtils.activate_mocks_for_descendant_procs(Electric.ShapeCache.ShapeCleaner)
 
       consumers =
-        for {shape_handle, shape} <- ctx.shapes do
+        for {{shape_handle, shape}, index} <- Enum.with_index(ctx.shapes) do
           %{latest_offset: _offset} = shape_status(shape_handle, ctx)
 
           {:ok, consumer} =
@@ -206,6 +206,7 @@ defmodule Electric.Shapes.ConsumerTest do
               {Shapes.Consumer,
                %{
                  shape_handle: shape_handle,
+                 shape_id: 100 + index,
                  stack_id: ctx.stack_id
                }},
               id: {Shapes.Consumer, shape_handle}
@@ -2684,6 +2685,7 @@ defmodule Electric.Shapes.ConsumerTest do
           {Consumer,
            %{
              shape_handle: @shape_handle1,
+             shape_id: 42,
              stack_id: ctx.stack_id
            }},
           id: {Consumer, @shape_handle1}
@@ -2692,6 +2694,8 @@ defmodule Electric.Shapes.ConsumerTest do
       Consumer.initialize_shape(consumer, @shape1, %{action: :create})
       assert_receive {Support.TestStorage, :init_writer!, @shape_handle1, @shape1}
       :started = Consumer.await_snapshot_start(ctx.stack_id, @shape_handle1)
+
+      assert %{shape_id: 42} = :sys.get_state(consumer)
 
       info = Process.info(consumer)
 

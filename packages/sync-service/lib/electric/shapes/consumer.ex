@@ -130,15 +130,17 @@ defmodule Electric.Shapes.Consumer do
     :ok
   end
 
-  def start_link(%{stack_id: stack_id, shape_handle: shape_handle} = _config) do
-    GenServer.start_link(__MODULE__, %{stack_id: stack_id, shape_handle: shape_handle},
+  def start_link(%{stack_id: stack_id, shape_handle: shape_handle, shape_id: shape_id} = _config) do
+    GenServer.start_link(
+      __MODULE__,
+      %{stack_id: stack_id, shape_handle: shape_handle, shape_id: shape_id},
       name: name(stack_id, shape_handle),
       spawn_opt: Electric.StackConfig.spawn_opts(stack_id, :consumer)
     )
   end
 
   @impl GenServer
-  def init(%{stack_id: stack_id, shape_handle: shape_handle}) do
+  def init(%{stack_id: stack_id, shape_handle: shape_handle, shape_id: shape_id}) do
     activate_mocked_functions_from_test_process()
 
     Process.set_label({:consumer, shape_handle})
@@ -151,7 +153,7 @@ defmodule Electric.Shapes.Consumer do
     # Shape initialization will be complete when we receive a message {:initialize_shape,
     # <shape>, <shape_opts>} which the ShapeCache is expected to send as soon as this process
     # is alive.
-    {:ok, State.new(stack_id, shape_handle)}
+    {:ok, State.new(stack_id, shape_handle, shape_id)}
   end
 
   @impl GenServer
@@ -1209,6 +1211,7 @@ defmodule Electric.Shapes.Consumer do
                 stack_id: state.stack_id,
                 shape: state.shape,
                 shape_handle: state.shape_handle,
+                shape_id: state.shape_id,
                 storage: state.storage,
                 otel_ctx: otel_ctx
               }

@@ -112,11 +112,11 @@ defmodule Electric.Shapes.DynamicConsumerSupervisor do
   end
 
   defp start_child(stack_id, {child_module, child_opts} = child_spec) do
-    %{shape_handle: shape_handle} = child_opts
+    %{shape_handle: _shape_handle, shape_id: shape_id} = child_opts
 
-    Logger.debug(fn -> "Starting #{inspect(child_module)} for #{shape_handle}" end)
+    Logger.debug(fn -> "Starting #{inspect(child_module)} for shape_id #{shape_id}" end)
 
-    DynamicSupervisor.start_child(partition_for(stack_id, shape_handle), child_spec)
+    DynamicSupervisor.start_child(partition_for(stack_id, shape_id), child_spec)
   end
 
   @impl true
@@ -133,9 +133,9 @@ defmodule Electric.Shapes.DynamicConsumerSupervisor do
 
   defp table(stack_id), do: :"Electric.Shapes.DynamicConsumerSupervisor:#{stack_id}"
 
-  defp partition_for(stack_id, shape_handle) do
+  defp partition_for(stack_id, shape_id) do
     partitions = :ets.lookup_element(table(stack_id), @partition_count_key, 2)
-    partition = :erlang.phash2(shape_handle, partitions)
+    partition = :erlang.phash2(shape_id, partitions)
     PartitionDynamicSupervisor.name(stack_id, partition)
   end
 

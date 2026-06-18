@@ -16,6 +16,7 @@ defmodule Electric.Shapes.Consumer.State do
   defstruct [
     :stack_id,
     :shape_handle,
+    :shape_id,
     :shape,
     :hibernate_after,
     :latest_offset,
@@ -89,18 +90,20 @@ defmodule Electric.Shapes.Consumer.State do
            when is_struct(state.initial_snapshot_state, InitialSnapshot) and
                   state.initial_snapshot_state.filtering?
 
-  @spec new(Electric.stack_id(), Shape.handle(), Shape.t()) :: uninitialized_t()
-  def new(stack_id, shape_handle, shape) do
+  @spec new(Electric.stack_id(), Shape.handle(), Electric.shape_id(), Shape.t()) ::
+          uninitialized_t()
+  def new(stack_id, shape_handle, shape_id, shape) do
     stack_id
-    |> new(shape_handle)
+    |> new(shape_handle, shape_id)
     |> initialize_shape(shape, %{})
   end
 
-  @spec new(Electric.stack_id(), Shape.handle()) :: uninitialized_t()
-  def new(stack_id, shape_handle) do
+  @spec new(Electric.stack_id(), Shape.handle(), Electric.shape_id()) :: uninitialized_t()
+  def new(stack_id, shape_handle, shape_id) do
     %__MODULE__{
       stack_id: stack_id,
       shape_handle: shape_handle,
+      shape_id: shape_id,
       hibernate_after:
         Electric.StackConfig.lookup(
           stack_id,
