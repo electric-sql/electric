@@ -4,7 +4,7 @@
 
 **Goal:** Introduce an in-memory, non-persisted numeric `shape_id` that replaces the binary `shape_handle` for all internal identity/routing, keeping `shape_handle` only at the external HTTP boundary and on-disk storage, to cut the memory cost of holding millions of binary handles in ETS/maps/sets.
 
-**Architecture:** `ShapeStatus` becomes the single authority that mints a monotonic integer `shape_id` (via `:ets.update_counter`) and holds the bidirectional `handle ↔ id` map in its ETS tables. The id is assigned in `add_shape/2` (new shapes) and in `populate_shape_meta_table/2` (shapes restored from SQLite on boot) — it is **never persisted**, so it is freshly minted each boot. The id threads from `ShapeCache` into each `Consumer`, which carries **both** id and handle in its state: it uses `handle` for storage calls + the client change-notification `Registry`, and `id` for everything else (the custom `ConsumerRegistry`, `EventRouter`, `Filter`, `FlushTracker`, `RequestBatcher`, `Partitions`, `PublicationManager`, subquery indexes). Logging/telemetry/process-name sites in id-only modules look up the handle via `ShapeStatus.shape_handle_for_log/2`, which returns `"unknown, id: <id>"` when the shape has already been removed.
+**Architecture:** `ShapeStatus` becomes the single authority that mints a monotonic integer `shape_id` (via `:ets.update_counter`) and holds the bidirectional `handle ↔ id` map in its ETS tables. The id is assigned in `add_shape/2` (new shapes) and in `populate_shape_meta_table/2` (shapes restored from SQLite on boot) — it is **never persisted**, so it is freshly minted each boot. The id threads from `ShapeCache` into each `Consumer`, which carries **both** id and handle in its state: it uses `handle` for storage calls + the client change-notification `Registry`, and `id` for everything else (the custom `ConsumerRegistry`, `EventRouter`, `Filter`, `FlushTracker`, `RequestBatcher`, `Partitions`, subquery indexes). `PublicationManager`/`RelationTracker` stay on handle (low memory value — deliberate scope cut). Logging/telemetry/process-name sites in id-only modules look up the handle via `ShapeStatus.shape_handle_for_log/2`, which returns `"unknown, id: <id>"` when the shape has already been removed.
 
 **Tech Stack:** Elixir, ETS, ExUnit. No new dependencies.
 
@@ -28,6 +28,7 @@
 - The client change-notification Elixir `Registry`
 - **Subquery tag hashing — MUST stay on handle (client + persistence + Postgres-side contract):** `lib/electric/shapes/subquery_tags.ex` and `lib/electric/shapes/consumer/subqueries/move_broadcast.ex`. `SubqueryTags.make_value_hash/3` computes `md5("#{stack_id}#{shape_handle}#{value}")`; this hash is emitted in `:tags`/`removed_tags` log headers (streamed to clients **and** persisted on disk) and **must byte-match** the Postgres-side hash built in `querying.ex` (`make_tags`/`tag_slot_sql`: `md5('#{stack_id}#{shape_handle}' || …)`). Both use the shape's *own* handle (`shape_info.shape_handle`), which the consumer already holds — no lookup needed. Switching to a per-boot id would corrupt the persisted log, break reconnecting clients, and diverge from the SQL side.
 - **The cleaner straddles both:** `lib/electric/shape_cache/shape_cleaner.ex` (+`shape_cleaner/cleanup_task_supervisor.ex`) is *driven* by handles (its public API and storage cleanup are handle-based) but calls id-keyed routing fns; it resolves handle→id internally (see Chunk 3, Task 3f).
+- **`PublicationManager` + `RelationTracker` stay on handle (deliberate scope cut):** their `tracked_handles` ETS holds *one entry per shape* (a low memory multiplier — unlike the filter/subquery indexes and per-shape MapSets that motivate this work), and converting them would force a `{handle, id}` pair to be threaded through the cleaner's *deferred* removal phase (where the id mapping is already gone). Not worth it. The consumer and snapshotter both already hold the handle and pass it directly; the deferred `cleanup_publication_manager` stays on handle.
 
 **Authority — gains the id and the `handle ↔ id` map:**
 - `lib/electric/shape_cache/shape_status.ex`
@@ -37,7 +38,7 @@
 
 **Converts to `shape_id`:**
 - Routing: `lib/electric/shapes/consumer_registry.ex`, `event_router.ex`, `dependency_layers.ex`, `partitions.ex`, `dynamic_consumer_supervisor.ex`
-- Replication: `lib/electric/replication/shape_log_collector.ex`, `shape_log_collector/request_batcher.ex`, `shape_log_collector/flush_tracker.ex`, `publication_manager.ex`, `publication_manager/relation_tracker.ex`
+- Replication: `lib/electric/replication/shape_log_collector.ex`, `shape_log_collector/request_batcher.ex`, `shape_log_collector/flush_tracker.ex` (NOT `publication_manager.ex`/`relation_tracker.ex` — see stays-on-handle)
 - Filter: `lib/electric/shapes/filter.ex`, `filter/index.ex`, `filter/where_condition.ex`, `filter/indexes/{equality,inclusion,subquery}_index.ex`
 - Subquery/materializer: `consumer/materializer.ex`, `consumer/subqueries/{shape_info,splice_plan}.ex`, `consumer/event_handler/subqueries/steady.ex`, `consumer/event_handler/default.ex`, `consumer/event_handler_builder.ex`, `consumer/ref_resolver.ex`, `consumer/effects.ex`, `consumer/setup_effects.ex`, `consumer/snapshotter.ex`, `consumer/initial_snapshot.ex` (note: `subquery_tags.ex` and `move_broadcast.ex` are **excluded** — see the stays-on-handle set above)
 
@@ -62,7 +63,7 @@ ETS layout in `ShapeStatus`:
 
 Ids are minted in **two** places, both must insert into the meta tuple (pos 6) and the reverse table:
 1. `add_shape/2` — brand-new shapes.
-2. `populate_shape_meta_table/2` — shapes restored from SQLite at boot/refresh. **On `refresh/1`, reuse an existing id if the handle already has one** (`id_for_handle/2`) so ids stay stable for already-running consumers; only mint when absent.
+2. `populate_shape_meta_table/2` — shapes restored from SQLite at boot (`initialize/1`) and on lock-acquisition (`refresh/1`). **Always mint a fresh id** — no reuse branch needed. This is safe because **no consumer is ever live when these run**: `initialize/1` runs at startup before anything else, and `refresh/1` runs during `connection_setup` on `:replication_client_lock_acquired` (manager.ex:778), which is *before* the stack reaches active mode; shape creation and lazy consumer-start both require active mode (`api.ex` `hold_until_stack_ready(require: :active)`), so a re-mint can never change the id out from under a running consumer. (Verified lifecycle — see the watch-point in Risks about the non-standard lock-re-acquisition edge.)
 
 `remove_shape/2` must look up the id (pos 6) before deleting the meta row, then delete the reverse `shape_id_table` entry too.
 
@@ -207,7 +208,7 @@ def remove_shape(stack_id, shape_handle) when is_stack_id(stack_id) do
 end
 ```
 
-- [ ] **Step 8: Mint/reuse ids in the restore path.** Update `populate_shape_meta_table/2` to assign an id per handle, reusing an existing one on refresh:
+- [ ] **Step 8: Mint ids in the restore path.** Update `populate_shape_meta_table/2` to mint a fresh id per restored handle (no reuse — no consumer is live here, see Design notes):
 
 ```elixir
 defp populate_shape_meta_table(stack_id, generation) do
@@ -217,15 +218,8 @@ defp populate_shape_meta_table(stack_id, generation) do
     stack_id,
     :ets.whereis(shape_meta_table(stack_id)),
     fn {handle, hash, snapshot_complete?}, table ->
-      id =
-        case id_for_handle(stack_id, handle) do
-          {:ok, existing} -> existing
-          :error ->
-            new_id = mint_id(stack_id)
-            :ets.insert(shape_id_table(stack_id), {new_id, handle})
-            new_id
-        end
-
+      id = mint_id(stack_id)
+      :ets.insert(shape_id_table(stack_id), {id, handle})
       true = :ets.insert(table, {handle, hash, snapshot_complete?, start_time, generation, id})
       table
     end
@@ -234,6 +228,8 @@ defp populate_shape_meta_table(stack_id, generation) do
   :ok
 end
 ```
+
+  Note: `refresh/1` re-runs this (it clears nothing first — it upserts by handle with a new generation, then sweeps the old generation). Re-minting gives restored shapes new ids on refresh, which is fine because no consumer holds an old id at that point.
 
 - [ ] **Step 9: Update remaining 5-tuple matches to 6-tuple.** In `shape_status.ex`:
   - `validate_shape_handle/3`: `[{^shape_handle, hash, _snapshot_started, _last_read, _gen, _id}]`
@@ -320,14 +316,14 @@ git commit -m "feat(consumer): carry numeric shape_id alongside shape_handle"
 
 ## Chunk 3: Convert the routing pipeline to `shape_id`
 
-**Outcome:** The SLC → EventRouter → ConsumerRegistry → Consumer routing path is keyed by id end-to-end. The consumer registers in `ConsumerRegistry` by id and adds itself to the SLC/EventRouter/Filter/Partitions/PublicationManager by id; it keeps the Elixir `Registry` (client changes) keyed by handle. This is the largest chunk — sub-tasks commit independently, but **certain flips must land in the same commit** (see the lockstep warning).
+**Outcome:** The SLC → EventRouter → ConsumerRegistry → Consumer routing path is keyed by id end-to-end. The consumer registers in `ConsumerRegistry` by id and adds itself to the SLC/EventRouter/Filter/Partitions by id; it keeps the Elixir `Registry` (client changes) keyed by handle and `PublicationManager` on handle. This is the largest chunk — sub-tasks commit independently, but **certain flips must land in the same commit** (see the lockstep warning).
 
 > Most target modules already type their identifier as `shape_id :: term()`/`any()` (`event_router.ex`, `flush_tracker.ex`, `partitions.ex`, `filter.ex`), so the edits are: stop passing the handle in, pass `state.shape_id` instead, rename `shape_handle` locals → `shape_id`, drop `is_shape_handle` guards. Behavior is identical — only the value carried changes.
 
 > **⚠ LOCKSTEP WARNING — key producers are scattered across files.** A data structure keyed by id is only consistent if **every** producer and consumer of that key flips in the same commit. The three keys and their (verified) call sites:
 > - **The routing/registration key** (ConsumerRegistry ETS + `{:via}` name + EventRouter/Filter add): produced by the consumer's `{:via, ConsumerRegistry, …}` name at `consumer.ex:56`, by `ShapeLogCollector.add_shape` called from **`consumer/setup_effects.ex:33`** (NOT `consumer.ex`), and consumed by SLC routing/`publish`. → Tasks 3a + 3c + 3d + 3e + **3f** must form one consistent set; commit them together if a sub-task would otherwise leave the EventRouter holding a mix of handle-keyed adds and id-keyed routing.
 > - **The flush key** (`{:writer_flushed, …}` cast → FlushTracker): produced by `ShapeLogCollector.notify_flushed` called from **`consumer.ex:1133`, `consumer.ex:1160`, AND `consumer/effects.ex:326`**. All three must flip with FlushTracker (Task 3f).
-> - **The removal key** (ConsumerRegistry/SLC/PublicationManager remove): driven by **`shape_cleaner.ex` / `cleanup_task_supervisor.ex`**, which hold only the handle and run *after* `ShapeStatus.remove_shape` has deleted the id mapping (Task 3f handles the ordering).
+> - **The removal key** (ConsumerRegistry/SLC remove — `Consumer.stop`, `SLC.remove_shape`): driven by **`shape_cleaner.ex`**, which holds only the handle and runs `ShapeStatus.remove_shape` (deleting the id mapping) in the same path. Task 3f resolves the id *before* that delete. (`PublicationManager.remove_shape` is NOT in this set — it stays on handle.)
 
 ### Task 3a: `ConsumerRegistry` keyed by id
 
@@ -351,13 +347,12 @@ git commit -m "feat(consumer): carry numeric shape_id alongside shape_handle"
 - [ ] These are already generic (`shape_id :: any()`). Confirm `filter.ex`'s `maybe_register_subquery_shape` passes the key straight through to `SubqueryIndex` without inspecting it (so leaving the subquery index on the old representation until Chunk 4 is safe — the key it receives is whatever the consumer passes). Rename `shape_handle` locals/specs → `shape_id`; rename `event_by_shape_handle/2` → `event_by_shape_id/2` and its result map. No guards to drop (none present).
 - [ ] Update tests to add/route by integer ids (they currently pass string handles as the generic id — swap to integers). Run `mix test test/electric/shapes/filter_test.exs test/electric/shapes/event_router_test.exs`.
 
-### Task 3d: SLC, `RequestBatcher`, `FlushTracker`, `Partitions`, `DependencyLayers`, `PublicationManager` keyed by id
+### Task 3d: SLC, `RequestBatcher`, `FlushTracker`, `Partitions`, `DependencyLayers` keyed by id
 
-**Files:** `lib/electric/replication/shape_log_collector.ex` (+`request_batcher.ex`, `flush_tracker.ex`), `lib/electric/shapes/partitions.ex`, `dependency_layers.ex`, `lib/electric/replication/publication_manager.ex` (+`relation_tracker.ex`); corresponding tests.
+**Files:** `lib/electric/replication/shape_log_collector.ex` (+`request_batcher.ex`, `flush_tracker.ex`), `lib/electric/shapes/partitions.ex`, `dependency_layers.ex`; corresponding tests. (`PublicationManager`/`RelationTracker` stay on handle — out of scope.)
 
-- [ ] **SLC core:** `add_shape(stack_id, shape_id, shape, operation)`, `remove_shape(stack_id, shape_id)`, the `{:writer_flushed, shape_id, offset}` cast + `notify_flushed/3` spec, and the `EventRouter`/`ConsumerRegistry`/`Partitions` calls switch to id. Delete the dead `pids_by_shape_handle` state field (declared SLC:244, `Map.delete`'d at :787, never inserted — verified dead). `request_batcher.ex`: `to_add`/`to_remove`/`to_schedule_waiters` keyed by id (rename type aliases). `flush_tracker.ex`: already `shape_id :: term()` — callers change only.
-- [ ] **SLC restore path (do not miss):** `handle_continue(:restore_shapes)` (SLC:277–298) and `restore_partitions_for_shape` (SLC:351) reduce over `ShapeStatus.list_shapes/1`, which returns `{handle, shape}` tuples, and feed `EventRouter.add_shape`/`Partitions.add_shape`/`DependencyLayers.add_dependency`. Resolve each handle → id via `ShapeStatus.id_for_handle/2` (ids were minted at boot in Chunk 1 Step 8) before adding, so restored structures are id-keyed like live routing.
-- [ ] **PublicationManager/RelationTracker:** `add_shape`/`remove_shape` and the tracked ETS switch to id; rename `tracked_handles_table` → `tracked_shapes_table`. **Its only callers are the snapshotter's `add_shape` and the cleaner's `remove_shape` (Task 3f)** — flip those in the same commit (verified: `add_shape` ← `snapshotter.ex:64`, `remove_shape` ← `cleanup_task_supervisor.ex:95`).
+- [ ] **SLC core:** `add_shape(stack_id, shape_id, shape, operation)`, `remove_shape(stack_id, shape_id)`, the `{:writer_flushed, shape_id, offset}` cast + `notify_flushed/3` spec, and the `EventRouter`/`ConsumerRegistry`/`Partitions` calls switch to id. The `{:writer_flushed, …}` handler body already names its var `shape_id` and passes it straight to `FlushTracker` (SLC:416) — only the `notify_flushed/3` producer spec/arg flips. Delete the dead `pids_by_shape_handle` state field (declared SLC:244, `Map.delete`'d at :787, never inserted — verified dead). `request_batcher.ex`: `to_add`/`to_remove`/`to_schedule_waiters` keyed by id (rename type aliases). `flush_tracker.ex`: already `shape_id :: term()` — callers change only.
+- [ ] **SLC restore path (do not miss):** `handle_continue(:restore_shapes)` (SLC:277–298) and `restore_partitions_for_shape` (SLC:351) reduce over `ShapeStatus.list_shapes/1`, which returns `{handle, shape}` tuples, and feed `EventRouter.add_shape`/`Partitions.add_shape`/`DependencyLayers.add_dependency`. Resolve each handle → id via `ShapeStatus.id_for_handle/2` (ids were minted at boot in Chunk 1 Step 8) before adding, so restored structures are id-keyed like live routing. (Note: `PublicationManager` interactions on this path, if any, stay on handle.)
 - [ ] Update tests to integer ids. Run `mix test test/electric/replication test/electric/shapes/partitions_test.exs`.
 
 ### Task 3e: Flip the Consumer's own routing calls to id
@@ -372,20 +367,18 @@ git commit -m "feat(consumer): carry numeric shape_id alongside shape_handle"
 
 The producers that live outside `consumer.ex`/`consumer_registry.ex` and the cleaner's id resolution. Land this with 3c/3d/3e so no structure is left mixed-key.
 
-**Files:** `lib/electric/shapes/consumer/setup_effects.ex`, `consumer/effects.ex`, `consumer/snapshotter.ex`, `lib/electric/shape_cache/shape_cleaner.ex`, `shape_cleaner/cleanup_task_supervisor.ex`; their tests.
+**Files:** `lib/electric/shapes/consumer/setup_effects.ex`, `consumer/effects.ex`, `lib/electric/shape_cache/shape_cleaner.ex`; their tests. (`cleanup_task_supervisor.ex` is **unchanged** — its deferred tasks stay on handle now that `PublicationManager` does too.)
 
 - [ ] **Add path:** `setup_effects.ex:33` — `ShapeLogCollector.add_shape(state.stack_id, state.shape_id, state.shape, action)` (was `state.shape_handle`). Also flip `SubqueryIndex.mark_ready(index, state.shape_id)` at `setup_effects.ex:64` only if Chunk 4 hasn't run yet — **NO**: the subquery index is still handle-keyed until Chunk 4, so `mark_ready` stays on `state.shape_handle` here and flips in Chunk 4. Be precise: in 3f, change only the `ShapeLogCollector.add_shape` arg in this file.
 - [ ] **Flush path:** `effects.ex:326` — `ShapeLogCollector.notify_flushed(state.stack_id, state.shape_id, log_offset)` (was `state.shape_handle`). With this + the two consumer.ex calls (3e) + FlushTracker (3d), the flush key is fully id.
-- [ ] **Publication add:** `snapshotter.ex:64` — `PublicationManager.add_shape(…, state.shape_id, …)`. Requires `shape_id` in snapshotter state (Chunk 2 Step 4).
-- [ ] **Removal path + ordering (the subtle one — two phases).** `ShapeStatus.remove_shape` deletes the id mapping, so the id must be captured *before* it and threaded to every id-keyed removal across **both** the immediate and deferred phases (`remove_shapes` → `remove_shapes_immediate` → `remove_shapes_deferred` → `CleanupTaskSupervisor.cleanup_async`):
+- [ ] **Removal path + ordering (now simple — `PublicationManager` stays on handle).** Only two removal calls are id-keyed (`Consumer.stop`, `ShapeLogCollector.remove_shape`), both in the **immediate** phase, so a single local lookup suffices — no `{handle, id}` pair threading, no deferred-phase changes:
   - In `remove_shape_immediate/3` (`shape_cleaner.ex`): resolve `id = ShapeStatus.id_for_handle(stack_id, shape_handle)` **before** `ShapeStatus.remove_shape`. Pass the id to the now-id-keyed `Consumer.stop` and `ShapeLogCollector.remove_shape` in the same `with` chain. `Storage.cleanup!` stays on handle. On `:error` (already gone) skip the id-keyed removals.
-  - Thread the id to the deferred phase: change `remove_shapes_immediate`'s return from bare `valid_handles` to **`[{handle, id}]` pairs**, and propagate through `remove_shapes_deferred` → `CleanupTaskSupervisor.cleanup_async(stack_id, [{handle, id}])`.
-  - In `cleanup_task_supervisor.ex`: `cleanup_publication_manager/2` uses the **id** → `PublicationManager.remove_shape(stack_id, id)`; `notify_shape_rotation/2` keeps the **handle** for the client `Registry.dispatch` (stays on handle). Both read from the same `{handle, id}` pair.
+  - `remove_shapes_immediate`'s return value and the **deferred** phase (`remove_shapes_deferred` → `CleanupTaskSupervisor.cleanup_async` → `notify_shape_rotation` + `cleanup_publication_manager`) are **unchanged** — both deferred tasks stay on handle (`notify_shape_rotation` drives the client `Registry.dispatch`; `cleanup_publication_manager` calls the still-handle-keyed `PublicationManager.remove_shape`).
 - [ ] **Suspend path (separate removal-key producer):** `shape_cleaner.ex:112` `handle_writer_termination(_, _, @shutdown_suspend)` calls `ConsumerRegistry.remove_consumer(shape_handle, stack_id)` directly, bypassing `remove_shape_immediate`. The shape is NOT removed from ShapeStatus here, so resolve `ShapeStatus.id_for_handle` (mapping intact) and pass the id to `remove_consumer`.
 - [ ] **Test-support producer (flip in the same commit — THREE touch points):** `test/support/transaction_consumer.ex` has three id-keyed sites: the `{:via}` name `ConsumerRegistry.name(stack_id, shape_handle)` (lines 8–9), `ShapeLogCollector.add_shape(stack_id, shape_handle, …)` (line 73), and the symmetric `ShapeLogCollector.remove_shape(stack_id, shape_handle)` in `terminate/2` (line 113). Add a `shape_id` opt, store it in state, and use it for **all three**. Flipping `add_shape` without `remove_shape` leaves an id-keyed add paired with a handle-keyed remove — a silent mixed-key leak (the very corruption the lockstep warning guards against), and the id-keyed SLC `publish` would never reach a handle-registered helper, failing the routing tests.
 - [ ] Update affected tests. Run the full routing surface: `mix test test/electric/replication test/electric/shapes test/electric/shape_cache test/electric/plug/router_test.exs`. Commit 3c–3f together: `refactor(routing): key shape routing, flush, and removal by shape_id`.
 
-> **Removal-key producer checklist (the lockstep set must be complete):** (1) `remove_shape_immediate` → `Consumer.stop` + `SLC.remove_shape`; (2) deferred `cleanup_publication_manager` → `PublicationManager.remove_shape`; (3) suspend clause `shape_cleaner.ex:112` → `ConsumerRegistry.remove_consumer`; (4) `consumer_registry.ex:99` suspend foldl (Task 3a); (5) `shape_log_collector.ex:799` SLC self-remove (Task 3d). All five flip together.
+> **Removal-key producer checklist (the lockstep set must be complete):** (1) `remove_shape_immediate` → `Consumer.stop` + `SLC.remove_shape`; (2) suspend clause `shape_cleaner.ex:112` → `ConsumerRegistry.remove_consumer`; (3) `consumer_registry.ex:99` suspend foldl (Task 3a); (4) `shape_log_collector.ex:799` SLC self-remove (Task 3d). All four flip together. (`PublicationManager.remove_shape` in the deferred `cleanup_publication_manager` stays on handle — not part of this set.)
 
 ---
 
@@ -445,10 +438,11 @@ Ordering is sound (verified): inner shapes are created — and their ids minted 
 ## Risks & watch-points
 
 - **Id re-minting on boot is intentional** — ids are not stable across restarts. Nothing may persist an id or send it to a client. The verification grep guards this.
-- **`refresh/1` must preserve ids** for handles already in the meta table (Chunk 1 Step 8) so running consumers don't have the id changed under them.
+- **`refresh/1` always re-mints (no reuse branch)** — verified safe because no consumer is live when `initialize/1` or `refresh/1` runs (both precede active mode; creation/lazy-start require active). **Watch-point:** the *only* way this breaks is a lock re-acquisition that re-runs `refresh/1` while consumers from a prior active period are still alive (a connection blip that doesn't restart the consumer tree). That is not the normal lifecycle. If that path is ever shown to exist, restore the reuse-existing-id branch in `populate_shape_meta_table/2`.
 - **Dependency handle→id resolution (Chunk 4)** assumes dependencies are registered before dependents start. If a future change makes dependency creation lazy, this resolution must move to first-use.
 - **Two registries** — the most likely mistake is converting the client `Registry.dispatch`/`register_for_changes` to id. It must stay on handle.
 - **Subquery tag hash is part of the client + Postgres contract** — `SubqueryTags.make_value_hash` (`md5("#{stack_id}#{shape_handle}…")`) is streamed/persisted in `:tags` headers and must byte-match `querying.ex`'s Postgres-side `md5('#{stack_id}#{shape_handle}' || …)`. `subquery_tags.ex` and `move_broadcast.ex` MUST stay on handle. The grep in Chunk 5 Step 1 is three-way precisely to avoid "fixing" these.
-- **Lockstep key flips** — the routing/flush/removal keys have producers scattered across `consumer.ex`, `setup_effects.ex`, `effects.ex`, `snapshotter.ex`, and the cleaner. Each key's producers + consumers must flip in one commit, or a structure ends up mixed handle/id-keyed (silent mis-route or stuck flush, not a compile error). See Chunk 3's lockstep warning.
-- **Cleaner ordering** — resolve `id_for_handle` BEFORE `ShapeStatus.remove_shape` deletes the mapping (Task 3f).
+- **Lockstep key flips** — the routing/flush/removal keys have producers scattered across `consumer.ex`, `setup_effects.ex`, `effects.ex`, and the cleaner. Each key's producers + consumers must flip in one commit, or a structure ends up mixed handle/id-keyed (silent mis-route or stuck flush, not a compile error). See Chunk 3's lockstep warning.
+- **Cleaner ordering** — resolve `id_for_handle` BEFORE `ShapeStatus.remove_shape` deletes the mapping (Task 3f); needed only for the immediate-phase `Consumer.stop` + `SLC.remove_shape`.
+- **`PublicationManager` deliberately left on handle** — one-entry-per-shape, low memory value, and converting it would force `{handle, id}` pairs through the deferred cleanup. If a future change makes its tracking per-value (high multiplier), revisit.
 - **`fetch_shape_by_id` adds an indirection** (id→handle→shape). It is only used at consumer-start (cold path), never per-change.
