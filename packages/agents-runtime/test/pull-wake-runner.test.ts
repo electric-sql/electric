@@ -899,6 +899,69 @@ describe(`createPullWakeRunner`, () => {
     await runner.stop()
   })
 
+  it(`forces the stream to reconnect when heartbeat timer observes a resume gap`, async () => {
+    vi.useFakeTimers()
+    const firstStreamOpened = deferred<void>()
+    const secondStreamOpened = deferred<void>()
+    const firstStreamClosed = deferred<void>()
+    const secondStreamClosed = deferred<void>()
+    const firstCancel = vi.fn(() => firstStreamClosed.resolve())
+    const streamFactory = vi.fn(async () => {
+      if (streamFactory.mock.calls.length === 1) {
+        firstStreamOpened.resolve()
+        return {
+          async *jsonStream() {
+            await firstStreamClosed.promise
+          },
+          cancel: firstCancel,
+          closed: firstStreamClosed.promise,
+        }
+      }
+      secondStreamOpened.resolve()
+      return {
+        async *jsonStream() {
+          await secondStreamClosed.promise
+        },
+        cancel: () => secondStreamClosed.resolve(),
+        closed: secondStreamClosed.promise,
+      }
+    })
+    vi.stubGlobal(
+      `fetch`,
+      vi.fn(async () => Response.json({}))
+    )
+
+    const runner = createPullWakeRunner({
+      baseUrl: `http://server`,
+      runnerId: `runner-1`,
+      runtime: runtime(),
+      heartbeatIntervalMs: 10,
+      resumeGapResetMs: 25,
+      eventHeartbeatThrottleMs: 0,
+      streamFactory,
+    })
+
+    runner.start()
+    await firstStreamOpened.promise
+
+    // Simulate the computer being asleep: wall-clock time jumps forward before
+    // the next heartbeat timer gets CPU again, while networking is healthy.
+    vi.setSystemTime(Date.now() + 60)
+    await vi.advanceTimersByTimeAsync(10)
+
+    await waitFor(() => {
+      expect(firstCancel).toHaveBeenCalledWith(expect.any(Error))
+    })
+
+    await vi.advanceTimersByTimeAsync(1_000)
+    await secondStreamOpened.promise
+
+    expect(streamFactory).toHaveBeenCalledTimes(2)
+    expect(runner.getHealth().reconnect_count).toBe(1)
+
+    await runner.stop()
+  })
+
   it(`forces the stream to reconnect after repeated heartbeat failures`, async () => {
     vi.useFakeTimers()
     const firstStreamOpened = deferred<void>()

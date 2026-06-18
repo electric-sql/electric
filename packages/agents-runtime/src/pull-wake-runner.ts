@@ -29,6 +29,12 @@ export interface PullWakeRunnerConfig {
   wakeStreamPath?: string
   heartbeatIntervalMs?: number
   eventHeartbeatThrottleMs?: number
+  /**
+   * If the heartbeat timer fires after a wall-clock gap larger than this,
+   * assume the process resumed from sleep or a long event-loop stall and force
+   * the long-lived wake stream to reconnect. Defaults to the runner lease.
+   */
+  resumeGapResetMs?: number
   leaseMs?: number
   heartbeatPath?: string
   claimPath?: string
@@ -146,6 +152,8 @@ export function createPullWakeRunner(
     config.eventHeartbeatThrottleMs ?? DEFAULT_EVENT_HEARTBEAT_THROTTLE_MS
   )
   const leaseMs = config.leaseMs ?? heartbeatIntervalMs * 3
+  const resumeGapResetMs = config.resumeGapResetMs ?? leaseMs
+  let lastHeartbeatTickAt = Date.now()
   const heartbeatPath =
     config.heartbeatPath ??
     `/_electric/runners/${encodeURIComponent(config.runnerId)}/heartbeat`
@@ -296,8 +304,25 @@ export function createPullWakeRunner(
 
   const startHeartbeat = (signal: AbortSignal): void => {
     if (heartbeatIntervalMs <= 0) return
+    lastHeartbeatTickAt = Date.now()
     requestHeartbeat(signal)
     heartbeatTimer = setInterval(() => {
+      const now = Date.now()
+      const elapsedMs = now - lastHeartbeatTickAt
+      lastHeartbeatTickAt = now
+      if (
+        resumeGapResetMs > 0 &&
+        elapsedMs > resumeGapResetMs &&
+        isRunningState() &&
+        !signal.aborted
+      ) {
+        actor.send({
+          type: `STREAM_RESET`,
+          error: new Error(
+            `Pull-wake runner heartbeat timer resumed after ${elapsedMs}ms gap`
+          ),
+        })
+      }
       requestHeartbeat(signal)
     }, heartbeatIntervalMs)
   }
