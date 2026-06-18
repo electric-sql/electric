@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { render } from 'ink-testing-library'
 import { createCollection, localOnlyCollectionOptions } from '@tanstack/db'
 import type { Collection, InitialQueryBuilder } from '@tanstack/db'
+import type * as AgentsRuntime from '@electric-ax/agents-runtime'
 import {
   AgentTextView,
   ObserveView,
@@ -29,8 +30,7 @@ const runtimeMocks = vi.hoisted(() => ({
 }))
 
 vi.mock(`@electric-ax/agents-runtime`, async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import(`@electric-ax/agents-runtime`)>()
+  const actual = await importOriginal<typeof AgentsRuntime>()
   return {
     ...actual,
     createEntityTimelineQuery: () => (q: InitialQueryBuilder) =>
