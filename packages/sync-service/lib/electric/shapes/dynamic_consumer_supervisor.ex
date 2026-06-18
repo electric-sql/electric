@@ -112,9 +112,11 @@ defmodule Electric.Shapes.DynamicConsumerSupervisor do
   end
 
   defp start_child(stack_id, {child_module, child_opts} = child_spec) do
-    %{shape_handle: _shape_handle, shape_id: shape_id} = child_opts
+    %{shape_handle: shape_handle, shape_id: shape_id} = child_opts
 
-    Logger.debug(fn -> "Starting #{inspect(child_module)} for shape_id #{shape_id}" end)
+    Logger.debug(fn ->
+      "Starting #{inspect(child_module)} for shape #{shape_handle} (id #{shape_id})"
+    end)
 
     DynamicSupervisor.start_child(partition_for(stack_id, shape_id), child_spec)
   end

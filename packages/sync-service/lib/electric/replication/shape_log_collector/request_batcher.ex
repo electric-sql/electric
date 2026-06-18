@@ -120,9 +120,11 @@ defmodule Electric.Replication.ShapeLogCollector.RequestBatcher do
 
   def handle_call({:remove_shape, shape_id}, _from, state) do
     if from = Map.get(state.to_schedule_waiters, shape_id) do
+      handle = Electric.ShapeCache.ShapeStatus.shape_handle_for_log(state.stack_id, shape_id)
+
       GenServer.reply(
         from,
-        {:error, "Shape #{shape_id} removed before registration completed"}
+        {:error, "Shape #{handle} removed before registration completed"}
       )
     end
 

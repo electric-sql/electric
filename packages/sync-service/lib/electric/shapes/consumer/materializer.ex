@@ -270,7 +270,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
   end
 
   @doc """
-  Removes the cached link values for `shape_handle` from the shared ETS table.
+  Removes the cached link values for `shape_id` from the shared ETS table.
   Safe to call even if the table does not exist (e.g. after a stack shutdown).
   """
   @spec delete_link_values(Electric.stack_id(), Electric.shape_id()) :: :ok

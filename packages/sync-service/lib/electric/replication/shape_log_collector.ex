@@ -811,7 +811,9 @@ defmodule Electric.Replication.ShapeLogCollector do
       state.stack_id,
       fn ->
         if EventRouter.has_shape?(state.event_router, shape_id) do
-          Logger.debug("Deleting shape #{shape_id}")
+          Logger.debug(fn ->
+            "Deleting shape #{Electric.ShapeCache.ShapeStatus.shape_handle_for_log(state.stack_id, shape_id)}"
+          end)
 
           OpenTelemetry.start_interval(:"unsubscribe_shape.remove_subscription.duration_µs")
 

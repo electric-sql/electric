@@ -127,8 +127,14 @@ defmodule Electric.Replication.ShapeLogCollector.RequestBatcherTest do
 
       assert_receive {^ref1, :ok}
 
-      assert_receive {^ref2,
-                      {:error, "Shape #{@shape_handle_2} removed before registration completed"}}
+      # The error message resolves the readable handle via ShapeStatus. In this
+      # isolated unit test there is no ShapeStatus entry for the shape, so it falls
+      # back to the "unknown, id: ..." form.
+      expected_handle =
+        Electric.ShapeCache.ShapeStatus.shape_handle_for_log(stack_id, @shape_handle_2)
+
+      assert_receive {^ref2, {:error, error_message}}
+      assert error_message == "Shape #{expected_handle} removed before registration completed"
     end
 
     @tag processor_delay: 20

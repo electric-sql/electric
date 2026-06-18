@@ -395,16 +395,18 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def handle_info(
-        {:materializer_changes, dep_handle, %{move_in: move_in, move_out: move_out} = payload},
+        {:materializer_changes, dep_id, %{move_in: move_in, move_out: move_out} = payload},
         state
       ) do
     Logger.debug(fn ->
+      dep_handle = ShapeCache.ShapeStatus.shape_handle_for_log(state.stack_id, dep_id)
+
       "Consumer reacting to #{length(move_in)} move ins and #{length(move_out)} move outs from its #{dep_handle} dependency"
     end)
 
     handle_apply_event_result(
       state,
-      apply_event(state, {:materializer_changes, dep_handle, payload})
+      apply_event(state, {:materializer_changes, dep_id, payload})
     )
   end
 
