@@ -4,7 +4,7 @@
   "version": "0.1.28",
   "type": "module",
   "scripts": {
-    "dev": "pnpm run --parallel \"/^dev:/\"",
+    "dev": "pnpm run dev:server & pnpm run dev:ui",
     "dev:server": "tsx watch src/server/index.ts",
     "dev:ui": "vite",
     "build:ui": "vite build",
